@@ -49,6 +49,8 @@ const SHARED_HOOK_ONLY = Object.freeze([
   "The late joiner has not joined",
   "The name is already given to another identity",
   "lateJoiner",
+  "joinerType",
+  "joinerUndo",
   "recoveryEntries",
   "nameIdentities",
   "nameBeat"

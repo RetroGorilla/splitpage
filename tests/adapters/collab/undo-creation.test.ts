@@ -590,3 +590,33 @@ for (const length of [1, 1000]) test(`creation retirement encoded storage growth
     t.diagnostic(JSON.stringify({ length, growth })); assert.equal(growth, length === 1 ? 668 : 17703);
   } finally { h.close(); }
 });
+
+for (const order of ORDERS) test(`a picture of an undone beat removed while another copy captions it: the recovery entry and the picture agree on every copy through the redo and a restore: ${order}`, () => {
+  const h = start(order);
+  try {
+    withRecords(h);
+    assert.deepEqual(h.owner.undo(), { ok: true, effective: true, label: "create", selection: null }); h.flush();
+    h.send([{ kind: "record-delete", id: "gone", by: "Alice", target: { collection: "gallery", record: "G1" } }], h.a);
+    h.send([setRecord("gallery", "G1", "picture", { imageRef: { sha256: "c".repeat(64) }, name: "cap" }, "Bob")]);
+    const held = (handle: SharedDocumentHandle) => projectSharedDocumentWithRecovery(handle).recovery.filter(entry => entry.kind === "deleted-record" && JSON.stringify(entry.fields).includes("\"cap\""));
+    const reading = (handle: SharedDocumentHandle) => {
+      const projected = projectSharedDocumentWithRecovery(handle), shown = JSON.stringify(projected.document.rows).includes("\"cap\""), holders = held(handle).length;
+      assert.ok(holders <= 1 && shown !== (holders === 1), JSON.stringify({ shown, holders }));
+      return projected;
+    };
+    const agreeing = (label: string) => {
+      h.flush(); const late = createMonitoredSharedDocument();
+      try {
+        assert.equal(applySharedUpdate(late, encodeSharedState(h.a)).ok, true);
+        const readings = [h.a, h.b, late].map(reading);
+        for (const value of readings.slice(1)) assert.deepEqual(value, readings[0], label);
+      } finally { destroySharedDocument(late); }
+    };
+    agreeing("raced");
+    assert.equal(held(h.a).length, 1);
+    const redo = h.owner.redo(); assert.equal(redo.ok, true); agreeing("redo");
+    const [entry] = held(h.b); assert.ok(entry && entry.kind === "deleted-record");
+    h.send([{ kind: "record-revive", id: "back", by: "Bob", target: { collection: "gallery", record: "G1" } }]); agreeing("restored");
+    assert.equal(held(h.a).length, 0);
+  } finally { h.close(); }
+});

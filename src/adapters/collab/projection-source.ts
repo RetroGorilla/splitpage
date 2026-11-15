@@ -1,12 +1,14 @@
 import * as Y from "yjs";
-import type { SharedRecordCollection, SharedStatusEvent } from "../../core/collab/operations.ts";
+import type { SharedContentRef, SharedRecordCollection, SharedStatusEvent } from "../../core/collab/operations.ts";
 import { projectSharedBlocks } from "../../core/collab/projection/blocks.ts";
 import { sharedJoinGlueRegisterField, isSharedJoinFormatRegisterField } from "../../core/collab/projection/join-glue.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { readProjectionBeatStructure, readProjectionFields, readProjectionStream } from "./projection-reader.ts";
 import { readProjectionUnits } from "./projection-text-reader.ts";
 import { readSharedHeadingActiveRemovals, readSharedHeadingRemovalState } from "./removal-state.ts";
-import { readStoredSharedGalleryRecord, readStoredSharedRecord } from "./record-codec.ts";
+import { readSharedDeletedEntryFields, readSharedDeletedRecordFields, readStoredSharedGalleryRecord, readStoredSharedRecord } from "./record-codec.ts";
+import { isSharedStatusScope, readStoredRecordDeletion, readStoredRecordObservation, sharedRecordChanges, sharedRecordState } from "./record-deletion.ts";
+import type { SharedRecordDeletion } from "./record-deletion.ts";
 import { isSharedGalleryShown, readSharedStoredPicture } from "./gallery-retirement.ts";
 import { sortSharedRecordReadings } from "./record-reader.ts";
 import { readNativeSharedStatus } from "./status.ts";
@@ -22,7 +24,7 @@ import { readSharedSplitHolds, readSharedSplitMarks, readSharedSplitObservationP
 import type { SharedSplitObservationPart } from "./split-retirement.ts";
 import { observeSharedStructureIndex } from "./structure-index.ts";
 import { isSharedCreationRecordShown, readSharedCreationRetirements } from "./creation-retirement.ts";
-import type { SharedActiveDiscard, SharedDeletedPerson } from "../../core/collab/recovery.ts";
+import type { SharedActiveDiscard, SharedDeletedPerson, SharedDeletedRecordEntry } from "../../core/collab/recovery.ts";
 
 export class SharedProjectionSource {
   readonly cache: SharedProjectionCache;
@@ -122,6 +124,32 @@ export class SharedProjectionSource {
   discards(): readonly SharedActiveDiscard[] {
     return this.cache.read(["discards"], [this.version("discards"), this.version("retiredDiscards")],
       () => readSharedActiveDiscards(this.inputRoots.discards, this.inputRoots.retiredDiscards));
+  }
+
+  // why: a removal that nothing raced lists nothing; one that an edit raced lists the record as it is now, once,
+  // and only a change to its collection or to statuses reads the collection again.
+  deletedRecords(): readonly SharedDeletedRecordEntry[] {
+    return (["comments", "replies", "people", "tags", "shots", "gallery"] as const).flatMap(collection => this.cache.read(["deleted-records", collection],
+      [this.version(collection), ...isSharedStatusScope(collection) ? [this.version("statusEvents"), this.version("retiredStatus")] : []],
+      () => this.keys(collection).flatMap(key => this.deletedRecord(collection, key))));
+  }
+
+  // why: every way a record or a list entry stops being shown leaves a mark on its own map, so each raced edit is in
+  // exactly one entry: an entry's in the entry's, also inside a removed record, and the rest in the record's.
+  private deletedRecord(collection: SharedDeletedRecordEntry["collection"], key: string): readonly SharedDeletedRecordEntry[] {
+    const raw: unknown = this.inputRoots[collection].get(key), deletion = readStoredRecordDeletion(raw), scope = isSharedStatusScope(collection);
+    const entry = (path: readonly string[], mark: SharedRecordDeletion, fields: Record<string, unknown> | null, field: "props" | "links" | null, nested: string | null) => {
+      const now = readStoredRecordObservation(this.inputRoots, collection, path), changed = sharedRecordChanges(mark.seen, now);
+      const shown = fields && scope && field === null ? { ...fields, status: this.status({ scope, record: key as SharedContentRef } as SharedStatusEvent["target"]) } : fields;
+      return changed.length && shown ? [{ kind: "deleted-record" as const, collection, record: key, field, entry: nested, fields: shown, by: mark.by, changed, state: sharedRecordState(mark, now) }] : [];
+    };
+    const removed = deletion ? readSharedDeletedRecordFields(collection, key, raw) : null;
+    const own = deletion ? entry([collection, key], deletion, removed, null, null) : [];
+    const field = collection === "shots" ? "props" as const : collection === "gallery" ? "links" as const : null, list: unknown = field && raw instanceof Y.Map ? raw.get(field) : null;
+    if (!field || !(list instanceof Y.Map)) return own;
+    const marked = [...list.keys()].sort().flatMap(item => { const mark = readStoredRecordDeletion(list.get(item)); return mark ? [[item, mark] as const] : []; });
+    if (!marked.length || !(deletion ? removed : readStoredSharedRecord(collection, key, raw))) return own;
+    return [...own, ...marked.flatMap(([item, mark]) => entry([collection, key, field, item], mark, readSharedDeletedEntryFields(field, item, list.get(item)), field, item))];
   }
 
   deletedPeople(): readonly SharedDeletedPerson[] {

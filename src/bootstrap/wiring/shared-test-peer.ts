@@ -4,6 +4,7 @@ import { observeSharedDeclined } from "../../adapters/collab/ingress.ts";
 import { registerSharedOperationFamilies } from "../../adapters/collab/operation-families.ts";
 import { createSharedReplica } from "../../adapters/collab/replica.ts";
 import { sharedBufferedTarget } from "../../adapters/collab/buffer.ts";
+import { bufferedFieldKey } from "../../core/collab/buffer.ts";
 import { readSharedPaintedText } from "../../adapters/collab/paint-base.ts";
 import { collabState } from "../../adapters/collab/state.ts";
 import type { SharedDocumentHandle } from "../../adapters/collab/types.ts";
@@ -32,6 +33,7 @@ import { sessionStamps } from "./session-owner.ts";
 import { projectSharedDocumentWithRecovery } from "../../adapters/collab/project.ts";
 
 type Side = "app" | "peer";
+type BufferedField = "audioText" | "visualText";
 type Order = "forward" | "reverse" | "duplicate";
 export type SharedTestReplica = Side | "joiner";
 
@@ -75,21 +77,36 @@ function range(rowId: string, from: number, endRow: string, to: number): FlowRan
   return { anchor: beatPos(rowId, from), head: beatPos(endRow, to) };
 }
 
-export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitchPorts) {
-  const handle = hydratedCopy(app.handle, ports);
-  let live = true, paused = false;
-  const author = sharedAuthorPort({ handle: () => live ? handle : null, name: () => "Peer" });
+function participantOn(handle: SharedDocumentHandle, ports: SharedSwitchPorts, name: string, live: () => boolean) {
+  const author = sharedAuthorPort({ handle: () => live() ? handle : null, name: () => name });
   const undo = sharedUndoOwner(handle, () => author.next(), ports.now, ports.report);
   const { replica, session } = sessionOn(handle, ports, undo);
   const history = sharedUndoActions(session, undo);
-  const stamps = { clock: sessionStamps.clock, editor: { name: () => "Peer" } };
+  const stamps = { clock: sessionStamps.clock, editor: { name: () => name } };
   const text = sharedBufferPorts(handle, session, { author: () => {
     const next = author.next(); if (!next) throw new Error(PEER_LEFT); return next;
   }, readers: productionReaders, stamps, missingBase: () => {}, recovered: () => {}, report: ports.report });
+  const buffered = (rowId: string, field: BufferedField, from: number, to: number, insert: string) => {
+    const key = bufferedFieldKey(rowId, field), base = text.paintedText.read(key, field);
+    if (!base) throw new Error("The peer beat is missing");
+    const edit = text.bufferedText.open(key, base);
+    if (!edit) throw new Error("The peer buffer is unavailable");
+    edit.replace(from, to, insert);
+    try { return edit.commit([{ text: edit.text(), marks: {} }], [from + insert.length, from + insert.length]); }
+    finally { if (edit.isOpen()) edit.cancel(); }
+  };
+  return { author, undo, replica, session, history, stamps, buffered };
+}
+
+export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitchPorts) {
+  const handle = hydratedCopy(app.handle, ports);
+  let live = true, paused = false;
+  const { author, undo, replica, session, history, stamps, buffered } = participantOn(handle, ports, "Peer", () => live);
   const structure = sharedStructurePorts({ handle: () => live ? handle : null, author: () => author.next(),
     stamps, cells: html => ports.structure.cells(html) });
   const flow = writerFlowCommands(PEER_FLOW, { author, writer: () => String(collabState(handle).doc.clientID), handle: () => live ? handle : null });
-  let joiner: { readonly handle: SharedDocumentHandle; readonly session: SharedDocumentSession; readonly dispose: () => void } | null = null;
+  let joiner: { readonly handle: SharedDocumentHandle; readonly session: SharedDocumentSession; readonly dispose: () => void;
+    readonly participant: ReturnType<typeof participantOn>; readonly written: Uint8Array[] } | null = null;
   const unitNames = new Map<string, string>(), beatNames = new Map<string, string>();
   const pending: { readonly side: Side; readonly id: number; readonly update: Uint8Array }[] = [];
   const applied: { readonly to: Side; readonly update: number }[] = [];
@@ -126,15 +143,10 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
     observeSharedUpdates(handle, (update, origin) => { if (shouldDeliverSharedUpdate(origin)) enqueue("app", update); }),
     observeSharedDeclined(app.handle, () => { resend("app"); }), observeSharedDeclined(handle, () => { resend("peer"); })
   ];
-  const buffered = (rowId: string, from: number, to: number, insert: string) => {
+  const joined = (): NonNullable<typeof joiner> => {
     alive();
-    const base = text.paintedText.read(rowId, "audioText");
-    if (!base) throw new Error("The peer beat is missing");
-    const edit = text.bufferedText.open(rowId, base);
-    if (!edit) throw new Error("The peer buffer is unavailable");
-    edit.replace(from, to, insert);
-    try { return edit.commit([{ text: edit.text(), marks: {} }], [from + insert.length, from + insert.length]); }
-    finally { if (edit.isOpen()) edit.cancel(); }
+    if (!joiner) throw new Error(NOT_JOINED);
+    return joiner;
   };
   const planned = (name: string, operation: (doc: FlowDoc) => FlowOutcome, before: FlowRange): string => {
     alive();
@@ -158,8 +170,8 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
   const leaveJoiner = (): void => { const left = joiner; joiner = null; left?.dispose(); };
   return {
     recovery: () => projectSharedDocumentWithRecovery(handle).recovery,
-    type: (rowId: string, offset: number, insert: string) => buffered(rowId, offset, offset, insert),
-    erase: (rowId: string, from: number, to: number) => buffered(rowId, from, to, "").kind,
+    type: (rowId: string, offset: number, insert: string, field: BufferedField = "audioText") => { alive(); return buffered(rowId, field, offset, offset, insert); },
+    erase: (rowId: string, from: number, to: number, field: BufferedField = "audioText") => { alive(); return buffered(rowId, field, from, to, "").kind; },
     format: (rowId: string, from: number, to: number, mark: MarkName = "b", endRow = rowId) => {
       const target = range(rowId, from, endRow, to);
       return planned("format", doc => setMarkAcross(doc, target, mark, flow.flow), target);
@@ -180,20 +192,25 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
     lateJoiner: (from: Side = "app") => {
       alive();
       leaveJoiner();
-      const joined = hydratedCopy(from === "app" ? app.handle : handle, ports), built = sessionOn(joined, ports);
-      joiner = { handle: joined, session: built.session, dispose: () => { built.session.dispose(); built.replica.dispose(); destroySharedDocument(joined); } };
+      const copied = hydratedCopy(from === "app" ? app.handle : handle, ports), built = participantOn(copied, ports, "Joiner", () => live);
+      const written: Uint8Array[] = [];
+      const stop = observeSharedUpdates(copied, (update, origin) => { if (shouldDeliverSharedUpdate(origin)) written.push(Uint8Array.from(update)); });
+      joiner = { handle: copied, session: built.session, participant: built, written,
+        dispose: () => { stop(); built.session.dispose(); built.replica.dispose(); destroySharedDocument(copied); } };
       return built.session.read(doc => doc ? copy(doc) as unknown : null);
     },
     catchUp: () => {
-      alive();
-      const joined = joiner;
-      if (!joined) throw new Error(NOT_JOINED);
+      const third = joined();
       for (const source of [app.handle, handle]) {
-        const result = applySharedUpdate(joined.handle, encodeSharedUpdate(source, encodeSharedStateVector(joined.handle)));
+        const result = applySharedUpdate(third.handle, encodeSharedUpdate(source, encodeSharedStateVector(third.handle)));
         if (!result.ok) throw new Error(result.reason);
       }
-      return joined.session.read(doc => doc ? copy(doc) as unknown : null);
+      for (const update of third.written.splice(0)) { receive("app", update); receive("peer", update); }
+      return third.session.read(doc => doc ? copy(doc) as unknown : null);
     },
+    joinerType: (rowId: string, offset: number, insert: string, field: BufferedField = "audioText") =>
+      joined().participant.buffered(rowId, field, offset, offset, insert).kind,
+    joinerUndo: () => joined().participant.history.undo(),
     read: (which: SharedTestReplica = "peer") => replicaOf(which)?.session.read(doc => doc ? copy(doc) as unknown : null) ?? null,
     recoveryEntries: (which: SharedTestReplica = "peer") => {
       const found = replicaOf(which);
@@ -238,8 +255,8 @@ export type SharedTestPeer = ReturnType<typeof createSharedTestPeer>;
 
 export function sharedTestPeerHook(current: () => SharedTestPeer | null) {
   return {
-    type: (rowId: string, offset: number, insert: string) => current()?.type(rowId, offset, insert),
-    erase: (rowId: string, from: number, to: number) => current()?.erase(rowId, from, to),
+    type: (rowId: string, offset: number, insert: string, field?: BufferedField) => current()?.type(rowId, offset, insert, field),
+    erase: (rowId: string, from: number, to: number, field?: BufferedField) => current()?.erase(rowId, from, to, field),
     format: (rowId: string, from: number, to: number, mark?: MarkName, endRow?: string) => current()?.format(rowId, from, to, mark, endRow),
     deleteRange: (rowId: string, from: number, endRow: string, to: number) => current()?.deleteRange(rowId, from, endRow, to),
     remove: (rowId: string) => current()?.remove(rowId),
@@ -250,6 +267,8 @@ export function sharedTestPeerHook(current: () => SharedTestPeer | null) {
     release: (order?: Order) => current()?.release(order),
     lateJoiner: (from?: Side) => current()?.lateJoiner(from),
     catchUp: () => current()?.catchUp(),
+    joinerType: (rowId: string, offset: number, insert: string, field?: BufferedField) => current()?.joinerType(rowId, offset, insert, field),
+    joinerUndo: () => current()?.joinerUndo(),
     joined: () => current()?.read("joiner") ?? null,
     recoveryEntries: (which?: SharedTestReplica) => current()?.recoveryEntries(which) ?? null,
     nameIdentities: (which: SharedTestReplica, rowId: string, from: number, names: readonly string[]) => { current()?.nameIdentities(which, rowId, from, names); },

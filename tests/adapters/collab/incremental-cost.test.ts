@@ -32,7 +32,7 @@ test("incremental typing reads zero unrelated texts, mark entries and records wi
       assertIncremental(run.a, projector);
       if (beats === 300) {
         const full = measureLibraryReads(run.a, "R0", () => projectSharedDocumentWithRecovery(run.a)), fresh = { units: 0 };
-        assert.deepEqual(full.totals, { texts: 2251, markEntries: 10202, records: 18308, statusEntries: 1200, orderEntries: 660 });
+        assert.deepEqual(full.totals, { texts: 2251, markEntries: 10202, records: 19821, statusEntries: 1200, orderEntries: 660 });
         createSharedIncrementalProjector(run.a, (_kind, _key, units) => { fresh.units += units ?? 0; }).dispose();
         assert.equal(fresh.units, 30275);
         t.diagnostic(JSON.stringify({ baseline: "full assembly", totals: full.totals, unrelated: full.unrelated, brollUnits: fresh.units }));
