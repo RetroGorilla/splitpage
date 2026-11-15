@@ -70,7 +70,7 @@ const PEER_ACTIONS = [
   { name: "the peer deletes a range across beats", run: p => p.deleteRange("r1", 3, "r2", 2), before: [["r1", "Hel"], ["r2", "rld"]],
     after: [["r1", "Hel!"], ["r2", "rld"]], units: [["r1", ["h1", "h2", "h3", "a1"]], ["r2", ["w3", "w4", "w5"]]], undoLabel: "delete-selection" },
   { name: "the peer removes the beat the app is typing in", run: p => p.remove("r1"), before: [["r2", "World"]],
-    after: [["r2", "World"]], units: [["r2", WORLD]], undoLabel: "delete-scene", removed: ["r1", "Hello!"] },
+    after: [["r2", "World"]], units: [["r2", WORLD]], undoLabel: "delete-scene", removed: ["r1", "Hello!"], announcedInD3: true },
   { name: "the peer removes the other beat", run: p => p.remove("r2"), before: [["r1", "Hello"]],
     after: [["r1", "Hello!"]], units: [["r1", [...HELLO, "a1"]]], undoLabel: "delete-scene", removed: ["r2", "World"] }
 ];
@@ -169,7 +169,7 @@ for (const action of PEER_ACTIONS) for (const order of ORDERS) {
     script();
     assert.deepEqual(await hook.enter(), { ok: true });
     try {
-      const p = hook.peer;
+      const p = hook.peer, counted = hook.counters();
       p.nameIdentities("app", "r1", 0, HELLO);
       p.nameIdentities("app", "r2", 0, WORLD);
       p.hold();
@@ -210,7 +210,9 @@ for (const action of PEER_ACTIONS) for (const order of ORDERS) {
       assert.deepEqual(rows(hook.read().app), [["r1", "Hello!"], ["r2", "World"]], "the peer's undo reverses only the peer's step");
       assert.ok(same(hook.read().app, hook.read().peer) && same(p.catchUp(), hook.read().app), "after the undo every copy agrees");
       assert.deepEqual([p.recoveryEntries("app"), p.recoveryEntries("peer"), p.recoveryEntries("joiner")], [[], [], []]);
-      assert.deepEqual([hook.counters().recovered, hook.counters().missingBase], [0, 0]);
+      const announced = order === "D3" && action.announcedInD3 ? 1 : 0;
+      assert.deepEqual([hook.counters().recovered - counted.recovered, hook.counters().missingBase - counted.missingBase], [announced, 0],
+        "only the commit that drains the removal of its own beat announces kept writing (rule 29)");
     } finally { if (sharedSession()) hook.leave(); }
   });
 }
