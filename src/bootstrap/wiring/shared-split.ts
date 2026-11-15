@@ -12,6 +12,9 @@ import { sharedCommandReport } from "./ports/shared-command-notices.ts";
 import { sessionStamps } from "./session-owner.ts";
 import type { SharedBindings, SharedSessionParts } from "./shared-session.ts";
 import { mountSharedSplitBuffer } from "./split-buffer.ts";
+import { timingMarks } from "../../../shared/timing-marks.ts";
+
+declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 export function sharedSplitBindings(effects: Pick<BufferedFieldPorts, "missingBase" | "recovered" | "report" | "ownershipScan">): SharedBindings & {
   readonly abandonable: () => number;
@@ -36,9 +39,12 @@ export function sharedSplitBindings(effects: Pick<BufferedFieldPorts, "missingBa
       const leftCell = (cell: Element): void => {
         const rowId = cell.getAttribute("data-id");
         if (closing || entered !== parts || !buffer || !rowId || !cell.isConnected || cell.getAttribute("data-field") !== "visualText") return;
-        for (const outcome of keySharedLeftCell(parts.session, rowId, keying)) {
-          if (outcome.kind === "failed" || outcome.kind === "rejected" || outcome.kind === "committed" && outcome.errors.length) notify(outcome);
-        }
+        if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-command:start");
+        try {
+          for (const outcome of keySharedLeftCell(parts.session, rowId, keying)) {
+            if (outcome.kind === "failed" || outcome.kind === "rejected" || outcome.kind === "committed" && outcome.errors.length) notify(outcome);
+          }
+        } finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-command:end"); }
       };
       mountCompositionFeature(true); mountFocusFeature({ leftCell }); mountRowsEditingFeature(true);
       const author = (): { readonly id: string; readonly by: string } => {
