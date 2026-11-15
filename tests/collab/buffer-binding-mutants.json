@@ -84,8 +84,8 @@
   }, {
     "label": "recovered typing is not announced",
     "file": "src/application/editing/buffered-field.ts",
-    "find": "ports.recovered(held.rowId);",
-    "replace": "void held.rowId;",
+    "find": "surface.changed();\n    ports.recovered(held.rowId);",
+    "replace": "surface.changed(); void held.rowId;",
     "tests": ["tests/features/writer/buffer-recovery.test.ts"]
   }, {
     "label": "recovered field keeps its native text",
@@ -764,8 +764,8 @@
   }, {
     "label": "Split sorts away a backward selection",
     "file": "src/features/editing/cell-buffer.ts",
-    "find": "{ anchor: anchor.offset, head: head.offset, affinity: previous.affinity }",
-    "replace": "{ anchor: Math.min(anchor.offset, head.offset), head: Math.max(anchor.offset, head.offset), affinity: previous.affinity }",
+    "find": "place(cell, end, anchor.offset, head.offset, previous.affinity);",
+    "replace": "place(cell, end, Math.min(anchor.offset, head.offset), Math.max(anchor.offset, head.offset), previous.affinity);",
     "tests": ["tests/features/editing/split-caret.test.ts"]
   }, {
     "label": "a disposed Split binding restores focus from a queued paint callback",
@@ -890,7 +890,7 @@
   }, {
     "label": "Split disposal leaves the visible space spans in standalone cells",
     "file": "src/features/editing/cell-buffer.ts",
-    "find": "for (const cell of root.querySelectorAll(CELLS)) clearTrailingCellSpaces(cell);",
+    "find": "for (const cell of root.querySelectorAll(CELLS)) {\n        const stored = forms?.get(cell)?.text;\n        const restored = stored === undefined ? null : readSharedCellSpaceForm(cell, stored);\n        if (restored && restored.html !== cell.innerHTML) ports.page.write(cell, restored.html);\n        else clearTrailingCellSpaces(cell);\n      }",
     "replace": "",
     "tests": ["src/test/shared-split-space-app.test.mjs", "tests/features/editing/split-caret-cost.test.ts"]
   }, {

@@ -1,10 +1,11 @@
 import { createBufferedField } from "../../application/editing/buffered-field.ts";
-import type { BufferedFieldPorts } from "../../application/editing/buffered-field.ts";
+import type { BufferedFieldBinding, BufferedFieldPorts } from "../../application/editing/buffered-field.ts";
 import { createPaintedBeats } from "../../application/editing/painted-beats.ts";
 import type { PaintedTextSource } from "../../application/editing/ports.ts";
 import { ensureTrailingCaretSpot } from "../../features/common/dom.ts";
 import { mountCellBuffer } from "../../features/editing/cell-buffer.ts";
 import type { CellBuffer } from "../../features/editing/cell-buffer.ts";
+import type { CellBufferPorts } from "../../features/editing/ports.ts";
 import { createCellPage } from "../../features/editing/cell-page.ts";
 import { noteFieldPainted, onBeforePaint, onPainted, paintedFromRow, render } from "../../features/rows/render.ts";
 import { fromHtml, storedHtmlFromDom } from "../richtext.ts";
@@ -15,13 +16,22 @@ import { connectSharedCellSpaceForm } from "./ports/shared-cell-space.ts";
 
 const MEDIA_CELL = Object.freeze({ media: true });
 
-export function mountSharedSplitBuffer(shared: { readonly paintedText: PaintedTextSource; readonly selectionText: PaintedTextSource; readonly bufferedText: BufferedFieldPorts }): CellBuffer {
+export function mountSharedSplitBuffer(shared: { readonly paintedText: PaintedTextSource; readonly selectionText: PaintedTextSource; readonly bufferedText: BufferedFieldPorts;
+  readonly refuseNative?: CellBufferPorts["refuseNative"] }): CellBuffer {
   let mounted: CellBuffer | null = null;
   const disconnect = connectSharedCellSpaceForm(cell => mounted?.spaceForm(cell) ?? null);
   try { mounted = mountCellBuffer({
     root: document.getElementById("rows") as HTMLElement,
     ports: {
-      field: surface => createBufferedField(shared.bufferedText, surface),
+      ...(shared.refuseNative ? { refuseNative: shared.refuseNative } : {}),
+      field: surface => {
+        const binding: BufferedFieldBinding = createBufferedField({ ...shared.bufferedText,
+          abandonment: abandon => shared.bufferedText.abandonment?.(final => {
+            if (final || !binding.finish()) abandon(final);
+          }) ?? (() => {})
+        }, surface);
+        return binding;
+      },
       painted: createPaintedBeats(shared.paintedText),
       report: shared.bufferedText.report,
       page: createCellPage({ storedHtml: storedHtmlFromDom, caretSpot: ensureTrailingCaretSpot }),

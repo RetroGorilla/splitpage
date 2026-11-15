@@ -107,7 +107,8 @@ ending at the first of two painted spaces, plus a freshly typed space before a
 remote repaint, in both columns and both formats.
 The existing row dragstart route calls the clipboard through a named port;
 there is no second drag listener. Successful disposal disconnects the reader,
-drops the map and unwraps every painted span. A stored-text attribute is never
+restores known native space forms, drops the map and unwraps every painted span.
+Both DOM selection endpoints are preserved across that cleanup. A stored-text attribute is never
 written. The span marker identifies display styling to remove, and carries no
 stored text. Copy and drag after leaving match standalone on the reused cell.
 The production paste decoder feeds existing shared text operations on another
@@ -134,9 +135,9 @@ cost tests remain unchanged. Writer visual buffers use their existing mapping
 and do not receive these ports.
 
 The booted space-form literals enter and leave through the real switch and
-binding. Their test fixture detaches the legacy input, focus and composition
-handlers and standalone undo tracking while shared: those callers are C7's
-pending composition work. With two and fifty rows, a key updates only the typed
+`sharedSplitBindings`, C7's production adapter. The adapter selects the shared
+input, focus and composition ports, using the common guard for render tracking;
+the fixture no longer detaches those paths itself. With two and fifty rows, a key updates only the typed
 cell's stored form. The standalone repaint spy also enters and leaves, checks
 that every marker and span is gone, and again expects zero shared paint work.
 
