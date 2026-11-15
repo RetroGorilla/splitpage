@@ -873,6 +873,27 @@
       "find": "      if ([...beatNames].some(([other, given]) => given === name && other !== rowId)) refuseName(name);\n",
       "replace": "",
       "tests": ["src/test/shared-hook-peer-app.test.mjs"]
+    },
+    {
+      "label": "peer: the joiner's typing never reaches the other copies",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "      for (const update of third.written.splice(0)) { receive(\"app\", update); receive(\"peer\", update); }\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-peer-app.test.mjs"]
+    },
+    {
+      "label": "peer: catching up hands the other copies everything the joiner holds",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "      for (const update of third.written.splice(0)) { receive(\"app\", update); receive(\"peer\", update); }\n",
+      "replace": "      for (const side of [\"app\", \"peer\"] as const) receive(side, encodeSharedUpdate(third.handle, encodeSharedStateVector(side === \"app\" ? app.handle : handle)));\n",
+      "tests": ["src/test/shared-hook-peer-app.test.mjs"]
+    },
+    {
+      "label": "peer: typing ignores the cell it is given",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "    const key = bufferedFieldKey(rowId, field), base = text.paintedText.read(key, field);\n",
+      "replace": "    const key = bufferedFieldKey(rowId, \"audioText\"), base = text.paintedText.read(key, \"audioText\");\n",
+      "tests": ["src/test/shared-hook-peer-app.test.mjs"]
     }
   ]
 }
