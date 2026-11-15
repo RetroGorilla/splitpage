@@ -1,12 +1,10 @@
 import type { BufferedFieldPorts } from "../../application/editing/buffered-field.ts";
-import { keySharedLeftCell } from "../../application/commands/shared-broll-keying.ts";
-import { scriptCellOf } from "../richtext.ts";
-import { sharedBrollKeyingPorts } from "./ports/shared-broll-keying.ts";
-import { text } from "./ports/text.ts";
+import { sharedLeftCellKeying, sharedScriptBrollKeyingPorts } from "./ports/shared-broll-keying.ts";
 import type { CellBuffer } from "../../features/editing/cell-buffer.ts";
 import { productionReaders } from "../document-ports.ts";
 import { mountCompositionFeature, mountFocusFeature, mountRowsEditingFeature, refuseSharedSplitNative } from "./editor.ts";
 import { notices } from "./ports/effects.ts";
+import { writerView } from "./ports/preferences.ts";
 import { sharedBufferPorts } from "./ports/shared-buffer.ts";
 import { sharedCommandReport } from "./ports/shared-command-notices.ts";
 import { sessionStamps } from "./session-owner.ts";
@@ -31,15 +29,9 @@ export function sharedSplitBindings(effects: Pick<BufferedFieldPorts, "missingBa
       closing = false;
       if (entered === parts && buffer) return;
       entered = parts;
-      const keying = sharedBrollKeyingPorts(parts.handle, { author: () => parts.author.next(), cells: scriptCellOf, readers: productionReaders,
-        plainTextOf: text.htmlToPlainText, stamps: sessionStamps });
-      const leftCell = (cell: Element): void => {
-        const rowId = cell.getAttribute("data-id");
-        if (closing || entered !== parts || !buffer || !rowId || !cell.isConnected || cell.getAttribute("data-field") !== "visualText") return;
-        for (const outcome of keySharedLeftCell(parts.session, rowId, keying)) {
-          if (outcome.kind === "failed" || outcome.kind === "rejected" || outcome.kind === "committed" && outcome.errors.length) notify(outcome);
-        }
-      };
+      // why: rule 198 on #1414: opening the Writer takes the caret out of the cell, and a view switch is not a leave
+      const leftCell = sharedLeftCellKeying(parts.session, sharedScriptBrollKeyingPorts(parts, sessionStamps),
+        { open: () => !closing && entered === parts && !!buffer && !writerView().writerOpen(), notify });
       mountCompositionFeature(true); mountFocusFeature({ leftCell }); mountRowsEditingFeature(true);
       const author = (): { readonly id: string; readonly by: string } => {
         const next = parts.author.next();

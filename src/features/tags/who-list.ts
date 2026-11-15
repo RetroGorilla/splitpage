@@ -131,7 +131,6 @@ export function startWhoList(ports: WhoListPorts): WhoListMount {
     const name = o.items[o.active];
     cancel();
     if (!name) return false;
-    if (ports.sharedCommands.refuseUnsupported()) return true;
     const done = ports.cells.edit(o.cellEl, function (cell, sel) {
       if (!sel || sel.from !== sel.to) return null;
       const text = projection(cell);

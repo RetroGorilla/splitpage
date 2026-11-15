@@ -1097,9 +1097,9 @@ test("lifecycle: start, stop and start again three times with the same owners an
 });
 
 const SURVIVING_GLOBAL_LISTENERS: Record<string, number> = {
-  "document beforecopy/C": 1, "document beforecut/C": 1, "document click/B": 1, "document click/C": 1, "document contextmenu/B": 1, "document copy/C": 1,
+  "document beforecopy/C": 1, "document beforecut/C": 1, "document click/B": 1, "document click/C": 2, "document contextmenu/B": 1, "document copy/C": 1,
   "document cut/C": 1, "document dragend/B": 1, "document dragover/B": 1, "document dragstart/C": 1, "document drop/B": 1, "document focusin/B": 1,
-  "document input/C": 1, "document keydown/C": 3, "document mousedown/B": 1, "document mousedown/C": 2, "document mousemove/B": 1,
+  "document input/B": 1, "document input/C": 2, "document keydown/C": 4, "document mousedown/B": 1, "document mousedown/C": 2, "document mousemove/B": 1,
   "document mouseup/B": 1, "document paste/C": 1, "document securitypolicyviolation/B": 1, "document selectionchange/B": 3,
   "document splitpage:pref/B": 7, "document undo-owner-cleared/B": 1, "document visibilitychange/B": 2, "window beforeinput/C": 1,
   "window blur/B": 2, "window click/C": 3, "window compositionstart/C": 1, "window cut/C": 1, "window dragstart/C": 1, "window drop/C": 1,

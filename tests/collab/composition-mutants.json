@@ -185,19 +185,28 @@
       "label": "one family left out of the composition",
       "file": "src/adapters/collab/operation-families.ts",
       "find": "  registerSharedJoinHandlers(handle);\n",
-      "replace": ""
+      "replace": "",
+      "tests": [
+        "tests/adapters/collab/operation-families.test.ts"
+      ]
     },
     {
       "label": "author ids without the replica's client number",
       "file": "src/bootstrap/wiring/ports/shared-author.ts",
       "find": "\"w\" + String(collabState(handle).doc.clientID) + \"_\" + String(++serial)",
-      "replace": "\"w_\" + String(++serial)"
+      "replace": "\"w_\" + String(++serial)",
+      "tests": [
+        "tests/bootstrap/shared-author.test.ts"
+      ]
     },
     {
       "label": "author port answers in a standalone session",
       "file": "src/bootstrap/wiring/ports/shared-author.ts",
       "find": "by: source.name() } : null;",
-      "replace": "by: source.name() } : { id: \"w0_\" + String(++serial), by: source.name() };"
+      "replace": "by: source.name() } : { id: \"w0_\" + String(++serial), by: source.name() };",
+      "tests": [
+        "tests/bootstrap/shared-author.test.ts"
+      ]
     },
     {
       "label": "flow command drops the planner operation list",
@@ -310,163 +319,244 @@
       "label": "the replica drops the command's undo record",
       "file": "src/adapters/collab/replica.ts",
       "find": "          kept = done.result.ok ? done.record : null;",
-      "replace": "          kept = null;"
+      "replace": "          kept = null;",
+      "tests": [
+        "tests/collab/undo-seam.test.ts"
+      ]
     },
     {
       "label": "the replica hands one record to the undo owner twice",
       "file": "src/adapters/collab/replica.ts",
-      "find": "      return kept;\n    });\n",
-      "replace": "      Object.assign(failed, { kept: kept });\n      return kept;\n    });\n    undo.perform(() => (failed as unknown as { kept: SharedUndoRecord | null }).kept);\n"
+      "find": "        return kept;\n      });\n",
+      "replace": "        Object.assign(failed, { kept: kept });\n        return kept;\n      });\n      undo.perform(() => (failed as unknown as { kept: SharedUndoRecord | null }).kept);\n",
+      "tests": [
+        "tests/collab/undo-seam.test.ts"
+      ]
     },
     {
       "label": "undo skips the session's admission",
       "file": "src/application/editing/undo/shared-undo-actions.ts",
       "find": "    const refused = session.admit();",
-      "replace": "    const refused = null as ReturnType<typeof session.admit>;"
+      "replace": "    const refused = null as ReturnType<typeof session.admit>;",
+      "tests": [
+        "tests/collab/undo-seam.test.ts"
+      ]
     },
     {
       "label": "a callback failing after the commit loses the command's record",
       "file": "src/adapters/collab/replica.ts",
       "find": "      } catch (error) { failed.thrown = true; failed.error = error; }",
-      "replace": "      } catch (error) { failed.thrown = true; failed.error = error; kept = null; }"
+      "replace": "      } catch (error) { failed.thrown = true; failed.error = error; kept = null; }",
+      "tests": [
+        "tests/collab/undo-seam.test.ts"
+      ]
     },
     {
       "label": "the shared undo owner swallows a callback's failure during undo",
       "file": "src/bootstrap/wiring/ports/shared-undo.ts",
       "find": "        report(error);\n",
-      "replace": ""
+      "replace": "",
+      "tests": [
+        "tests/collab/undo-seam.test.ts"
+      ]
     },
     {
       "label": "entering never detaches the standalone destination",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "  ports.detach();\n",
-      "replace": ""
+      "replace": "",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
     },
     {
       "label": "entering swaps the owner in the task that settled",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "  await Promise.resolve();\n",
-      "replace": ""
+      "replace": "",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
     },
     {
       "label": "leaving clears the author only after the owner swap",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "  now.live(false);\n  let swap: OwnerSwap;\n",
-      "replace": "  let swap: OwnerSwap;\n"
+      "replace": "  let swap: OwnerSwap;\n",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
     },
     {
       "label": "entry unwinding leaves the bridge shared",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "    if (made.swap) { const swap = made.swap; faults.attempt(() => { collectReplacementErrors(faults.errors, swap.restore); }); }\n",
-      "replace": ""
+      "replace": "",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
     },
     {
       "label": "entry unwinding keeps the undo route",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "    if (made.stopRoute) faults.attempt(made.stopRoute);\n",
-      "replace": ""
+      "replace": "",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
     },
     {
       "label": "entry unwinding leaves the shared bindings on",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "    if (made.bound) faults.attempt(() => { ports.bindings.leave(); });\n",
-      "replace": ""
+      "replace": "",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
     },
     {
       "label": "entry unwinding forgets the merge base",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "    faults.attempt(() => { holdMergeBase(base); });\n",
-      "replace": ""
+      "replace": "",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
     },
     {
       "label": "failed leaving leaves the bindings off",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "    faults.attempt(() => { ports.bindings.enter(now.parts); });\n",
-      "replace": ""
+      "replace": "",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
     },
     {
       "label": "leaving lands a copy taken before the bindings restarted",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "    const current = currentDocument();\n    landed = ports.migrate",
-      "replace": "    const current = null;\n    landed = ports.migrate"
+      "replace": "    const current = null;\n    landed = ports.migrate",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
     },
     {
       "label": "the undo route arrives only after the shared owner is seen",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "    made.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup, replayed: undo.replayed });\n    made.swap = collectReplacementErrors(faults.errors, () => adoptShared(owner => {\n      const session = createSharedSession({\n        replica: replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: jobs => { if (alive) owner.refresh(jobs); } },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after, refused: ports.commandRefused\n      });\n      made.session = session;\n      made.releaseSession = session.hold(SHARED_SWITCHING);\n      return session;\n    }, createSessionCapabilities(\"shared\", ports.common)));\n",
-      "replace": "    made.swap = collectReplacementErrors(faults.errors, () => adoptShared(owner => {\n      const session = createSharedSession({\n        replica: replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: jobs => { if (alive) owner.refresh(jobs); } },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after, refused: ports.commandRefused\n      });\n      made.session = session;\n      made.releaseSession = session.hold(SHARED_SWITCHING);\n      return session;\n    }, createSessionCapabilities(\"shared\", ports.common)));\n    made.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup, replayed: undo.replayed });\n"
+      "replace": "    made.swap = collectReplacementErrors(faults.errors, () => adoptShared(owner => {\n      const session = createSharedSession({\n        replica: replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: jobs => { if (alive) owner.refresh(jobs); } },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after, refused: ports.commandRefused\n      });\n      made.session = session;\n      made.releaseSession = session.hold(SHARED_SWITCHING);\n      return session;\n    }, createSessionCapabilities(\"shared\", ports.common)));\n    made.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup, replayed: undo.replayed });\n",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
     },
     {
       "label": "a failed entry resets the standalone undo",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "    ports.detach();\n    // why: the D34 reset belongs to a successful entry, so a failed one keeps the standalone history\n    undoOwner().adopt(null);\n",
-      "replace": "    undoOwner().adopt(null);\n    ports.detach();\n"
+      "replace": "    undoOwner().adopt(null);\n    ports.detach();\n",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
     },
     {
       "label": "a failed entry leaves the restored standalone undo untracked",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "    faults.attempt(() => { undoOwner().track(); });\n",
-      "replace": ""
+      "replace": "",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
     },
     {
       "label": "entry unwinding keeps the shared handle",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "    destroy(faults, handle);\n    releaseCommands();\n",
-      "replace": "    releaseCommands();\n"
+      "replace": "    releaseCommands();\n",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
     },
     {
       "label": "a throwing destroy listener keeps the handle's observers",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "  if (!faults.attempt(() => { destroySharedDocument(handle); })) faults.attempt(() => { destroySharedDocument(handle); });",
-      "replace": "  faults.attempt(() => { destroySharedDocument(handle); });"
+      "replace": "  faults.attempt(() => { destroySharedDocument(handle); });",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
     },
     {
       "label": "leaving accepts commands between the capture and the landing",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "  holds.session = now.parts.session.hold(SHARED_SWITCHING);\n  holds.commands = holdSessionCommands(SHARED_SWITCHING);\n",
-      "replace": "  holds.session = () => {};\n  holds.commands = () => {};\n"
+      "replace": "  holds.session = () => {};\n  holds.commands = () => {};\n",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
     },
     {
       "label": "entering accepts commands between the capture and the landing",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "  const releaseCommands = holdSessionCommands(SHARED_SWITCHING);\n  const prepared",
-      "replace": "  const releaseCommands = (): void => {};\n  const prepared"
+      "replace": "  const releaseCommands = (): void => {};\n  const prepared",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
     },
     {
       "label": "a listener's failure aborts entering",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "    made.swap = collectReplacementErrors(faults.errors, () => adoptShared(",
-      "replace": "    made.swap = ((errors: unknown[], run: () => OwnerSwap) => run())(faults.errors, () => adoptShared("
+      "replace": "    made.swap = ((errors: unknown[], run: () => OwnerSwap) => run())(faults.errors, () => adoptShared(",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
     },
     {
       "label": "a later failure is reported before the first",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "    faults.errors.unshift(error);\n    running = null;\n",
-      "replace": "    faults.errors.push(error);\n    running = null;\n"
+      "replace": "    faults.errors.push(error);\n    running = null;\n",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
     },
     {
       "label": "standalone undo replay goes round the command hold",
       "file": "src/bootstrap/wiring/session-owner.ts",
       "find": "      return heldOutcome() ?? refusedWhileShared(\"replay\") ?? swept(standalone(\"replay\").replay(task));",
-      "replace": "      return refusedWhileShared(\"replay\") ?? swept(standalone(\"replay\").replay(task));"
+      "replace": "      return refusedWhileShared(\"replay\") ?? swept(standalone(\"replay\").replay(task));",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
     },
     {
       "label": "a shared refresh acts after leaving when its timer was not cancelled",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "refresh: jobs => { if (alive) owner.refresh(jobs); }",
-      "replace": "refresh: owner.refresh"
+      "replace": "refresh: owner.refresh",
+      "tests": [
+        "tests/bootstrap/shared-switch.test.ts"
+      ]
     },
     {
       "label": "Ctrl+Z in a shared Writer ignores the returned selection",
       "file": "src/bootstrap/wiring/editor.ts",
       "find": "  if (!placeReplayedCaret(steps, recorded, dir) && outcome.selection) placeSharedSelection(outcome.selection);\n",
-      "replace": "  placeReplayedCaret(steps, recorded, dir);\n"
+      "replace": "  placeReplayedCaret(steps, recorded, dir);\n",
+      "tests": [
+        "src/test/shared-writer-app.test.mjs"
+      ]
     },
     {
       "label": "the row paint reads the standalone undo owner while shared",
       "file": "src/bootstrap/wiring/ports/editing.ts",
       "find": "track: (): void => { if (!sharedUndoRoute()) undoOwner().track(); }",
-      "replace": "track: (): void => { undoOwner().track(); }"
+      "replace": "track: (): void => { undoOwner().track(); }",
+      "tests": [
+        "src/test/shared-writer-app.test.mjs"
+      ]
     },
     {
       "label": "the shared undo caret comes from the undo record instead of the painted values",
@@ -474,7 +564,7 @@
       "find": "if (!placeReplayedCaret(steps, recorded, dir) && outcome.selection) placeSharedSelection(outcome.selection);",
       "replace": "if (outcome.selection) placeSharedSelection(outcome.selection);",
       "tests": [
-        "src/test/undo-caret-parity.test.mjs"
+        "src/test/undo-caret-parity-selection.test.mjs"
       ]
     },
     {
@@ -501,7 +591,7 @@
       "find": "placeReplayedCaret(steps, recorded, dir) && outcome.selection",
       "replace": "placeReplayedCaret(steps, null, dir) && outcome.selection",
       "tests": [
-        "src/test/undo-caret-parity.test.mjs"
+        "src/test/undo-caret-parity-selection.test.mjs"
       ]
     },
     {
@@ -519,7 +609,7 @@
       "find": "    if (input.recorded) return { kind: \"recorded\", range: input.dir === \"undo\" ? input.recorded.before ?? input.recorded.after : input.recorded.after };\n    const step = steps.find(item => item.op === \"rowField\" && item.key === \"audioText\");\n    return step && step.rowId ? { kind: \"step\", step: step as PlacedReplayStep } : null;",
       "replace": "    const step = steps.find(item => item.op === \"rowField\" && item.key === \"audioText\");\n    if (step && step.rowId) return { kind: \"step\", step: step as PlacedReplayStep };\n    return input.recorded ? { kind: \"recorded\", range: input.dir === \"undo\" ? input.recorded.before ?? input.recorded.after : input.recorded.after } : null;",
       "tests": [
-        "src/test/undo-caret-parity.test.mjs"
+        "src/test/undo-caret-parity-selection.test.mjs"
       ]
     },
     {
@@ -537,7 +627,7 @@
       "find": "  return caretAfterStep(decodeCell, step);",
       "replace": "  return caretAfterStep(html => fromHtml(html, { media: true }), step);",
       "tests": [
-        "src/test/undo-caret-parity.test.mjs"
+        "src/test/undo-caret-parity-selection.test.mjs"
       ]
     },
     {
@@ -858,8 +948,8 @@
     {
       "label": "route: the shared Writer binding abandons nothing",
       "file": "src/bootstrap/wiring/shared-writer.ts",
-      "find": "    abandon: () => { abandonAll(false); },",
-      "replace": "    abandon: () => {},",
+      "find": "    abandon: () => { closing = true; abandonAll(false); },",
+      "replace": "    abandon: () => { closing = true; },",
       "tests": [
         "src/test/shared-hook-routes-app.test.mjs"
       ]
@@ -1071,28 +1161,36 @@
       "file": "src/bootstrap/wiring/shared-test-peer.ts",
       "find": "      if ([...beatNames].some(([other, given]) => given === name && other !== rowId)) refuseName(name);\n",
       "replace": "",
-      "tests": ["src/test/shared-hook-peer-app.test.mjs"]
+      "tests": [
+        "src/test/shared-hook-peer-app.test.mjs"
+      ]
     },
     {
       "label": "peer: the joiner's typing never reaches the other copies",
       "file": "src/bootstrap/wiring/shared-test-peer.ts",
       "find": "      for (const update of third.written.splice(0)) { receive(\"app\", update); receive(\"peer\", update); }\n",
       "replace": "",
-      "tests": ["src/test/shared-hook-peer-app.test.mjs"]
+      "tests": [
+        "src/test/shared-hook-peer-app.test.mjs"
+      ]
     },
     {
       "label": "peer: catching up hands the other copies everything the joiner holds",
       "file": "src/bootstrap/wiring/shared-test-peer.ts",
       "find": "      for (const update of third.written.splice(0)) { receive(\"app\", update); receive(\"peer\", update); }\n",
       "replace": "      for (const side of [\"app\", \"peer\"] as const) receive(side, encodeSharedUpdate(third.handle, encodeSharedStateVector(side === \"app\" ? app.handle : handle)));\n",
-      "tests": ["src/test/shared-hook-peer-app.test.mjs"]
+      "tests": [
+        "src/test/shared-hook-peer-app.test.mjs"
+      ]
     },
     {
       "label": "peer: typing ignores the cell it is given",
       "file": "src/bootstrap/wiring/shared-test-peer.ts",
       "find": "    const key = bufferedFieldKey(rowId, field), base = text.paintedText.read(key, field);\n",
       "replace": "    const key = bufferedFieldKey(rowId, \"audioText\"), base = text.paintedText.read(key, \"audioText\");\n",
-      "tests": ["src/test/shared-hook-peer-app.test.mjs"]
+      "tests": [
+        "src/test/shared-hook-peer-app.test.mjs"
+      ]
     }
   ]
 }

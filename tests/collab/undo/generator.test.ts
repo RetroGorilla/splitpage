@@ -2,32 +2,10 @@ import test from "node:test";
 import assert from "node:assert/strict";
 import { generateUndoHistory, runUndoHistory, UNDO_COMMANDS, UNDO_DELIVERIES, UNDO_RECORD_COMMANDS, UNDO_RECORD_KEYS, UNDO_REVERSALS } from "./generator.ts";
 import { SHARED_UNDO_RECORDS } from "../../../src/adapters/collab/undo-executor.ts";
-import type { UndoHistory, UndoRun, UndoViolation } from "./generator.ts";
+import type { UndoHistory } from "./generator.ts";
 import { keptUndoSeeds, undoLimitFor } from "./limits.ts";
-import { ADAPTER_WORLD, MODEL_WORLD } from "./scenario.ts";
-import type { UndoWorldKind } from "./scenario.ts";
-
-const SEEDS = 300;
-
-function undeclared(run: UndoRun): UndoViolation[] {
-  return run.violations.filter(violation => !undoLimitFor(violation));
-}
-
-function sweep(writers: 2 | 3, kind: UndoWorldKind = MODEL_WORLD): { counts: Record<string, number>; steps: Record<string, number>; limited: Record<string, number[]>; copies: number } {
-  const counts: Record<string, number> = {}, steps: Record<string, number> = {}, limited: Record<string, number[]> = {};
-  let copies = 0;
-  for (let seed = 1; seed <= SEEDS; seed++) {
-    const history = generateUndoHistory(seed, writers, 40, kind === ADAPTER_WORLD), run = runUndoHistory(history, kind);
-    assert.deepEqual(undeclared(run), [], `writers ${writers} seed ${seed}: ${JSON.stringify(history)}`);
-    assert.equal(run.copies.length, history.writers + 1, `writers ${writers} seed ${seed}`);
-    for (const copy of run.copies) assert.deepEqual(copy, run.copies[0], `writers ${writers} seed ${seed}`);
-    copies += run.copies.length;
-    for (const step of history.steps) steps[step.op] = (steps[step.op] ?? 0) + 1;
-    for (const [name, value] of Object.entries(run.counts)) counts[name] = (counts[name] ?? 0) + value;
-    for (const id of new Set(run.violations.map(violation => undoLimitFor(violation)?.id ?? "undeclared"))) (limited[id] ??= []).push(seed);
-  }
-  return { counts, steps, limited, copies };
-}
+import { ADAPTER_WORLD } from "./scenario.ts";
+import { sweep, undeclared } from "./generator-sweep.ts";
 
 test("seeded histories, two writers: every copy ends equal and every violation is a declared limit", () => {
   const result = sweep(2);
@@ -56,46 +34,6 @@ test("seeded histories, three writers with a late joiner: every copy ends equal 
     type: 838, unbold: 409, undo: 1609, "undo-redo": 782, untag: 444
   });
   assert.deepEqual(result.limited, { "double-restore": [22, 28, 37, 49, 80, 102, 130, 140, 171, 173, 186, 191, 249, 257] });
-});
-
-test("seeded histories on the shared document, two writers: every copy ends equal and every violation is a declared limit", () => {
-  const result = sweep(2, ADAPTER_WORLD);
-  assert.equal(result.copies, 900);
-  assert.deepEqual(result.counts, {
-    command: 5586, "command changed nothing": 2717, deliver: 963, "deliver-dup": 223, "deliver-rev": 250, "effective redo": 506, "effective undo": 1300,
-    "empty redo": 476, "empty undo": 274, "identical change cancelled": 23, "nothing to deliver": 124,
-    "record command refused: duplicate-record": 48, "record command refused: foreign-author": 23, "record command refused: missing-or-invalid-record": 923,
-    "record command refused: missing-status-target": 659,
-    "record-create comments": 237, "record-create people": 215, "record-create replies": 227, "record-create shots": 261, "record-create tags": 230,
-    "record-delete comments": 64, "record-delete people": 44, "record-delete replies": 54, "record-delete shots": 62, "record-delete tags": 45,
-    "record-set comments": 55, "record-set people": 79, "record-set replies": 70, "record-set shots": 72, "record-set tags": 87,
-    "record-status shots": 129, "record-status tags": 135, "undo then redo": 443, "used up redo": 5, "used up undo": 19
-  });
-  assert.deepEqual(result.steps, {
-    bold: 557, delete: 588, deliver: 1055, "deliver-dup": 244, "deliver-rev": 261, insert: 639, "record-create": 1218, "record-delete": 628, "record-set": 950,
-    "record-status": 923, redo: 544, replace: 306, scalar: 332, status: 624, tag: 323, type: 613, unbold: 281, undo: 1059, "undo-redo": 534, untag: 321
-  });
-  assert.deepEqual(result.limited, { "typed-beside-restored": [29, 174, 181, 202, 213, 217, 238, 268, 274], "double-restore": [65, 148, 262] });
-});
-
-test("seeded histories on the shared document, three writers with a late joiner: every copy ends equal and every violation is a declared limit", () => {
-  const result = sweep(3, ADAPTER_WORLD);
-  assert.equal(result.copies, 1200);
-  assert.deepEqual(result.counts, {
-    command: 5098, "command changed nothing": 2557, deliver: 936, "deliver-dup": 266, "deliver-rev": 245, "effective redo": 422, "effective undo": 1118,
-    "empty redo": 446, "empty undo": 306, "identical change cancelled": 29, join: 136, "nothing to deliver": 145,
-    "record command refused: duplicate-record": 46, "record command refused: foreign-author": 38, "record command refused: missing-or-invalid-record": 830,
-    "record command refused: missing-status-target": 687,
-    "record-create comments": 248, "record-create people": 249, "record-create replies": 219, "record-create shots": 227, "record-create tags": 224,
-    "record-delete comments": 48, "record-delete people": 34, "record-delete replies": 41, "record-delete shots": 41, "record-delete tags": 38,
-    "record-set comments": 62, "record-set people": 66, "record-set replies": 47, "record-set shots": 56, "record-set tags": 68,
-    "record-status shots": 97, "record-status tags": 95, "skipped before joining": 810, "undo then redo": 368, "used up redo": 4, "used up undo": 15
-  });
-  assert.deepEqual(result.steps, {
-    bold: 607, delete: 587, deliver: 1034, "deliver-dup": 290, "deliver-rev": 268, insert: 628, join: 136, "record-create": 1303, "record-delete": 596, "record-set": 887,
-    "record-status": 955, redo: 545, replace: 296, scalar: 307, status: 616, tag: 302, type: 613, unbold: 313, undo: 1024, "undo-redo": 526, untag: 303
-  });
-  assert.deepEqual(result.limited, { "double-restore": [30, 32, 43, 73, 107, 167, 169], "typed-beside-restored": [59, 63, 68, 73, 135, 146, 147, 169, 212, 251, 261, 283] });
 });
 
 test("the generator draws every supported command kind, every reversal and every delivery mode", () => {

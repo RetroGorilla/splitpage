@@ -74,6 +74,10 @@ function typed(): TypedDrafts {
 
 function unsavedLabel(draft: TypedDraft): string {
   const what = UNSAVED_WHAT[draft.box] ?? "text";
+  if (draft.box === "broll-bulk-input") return "Selected shots: unsaved " + draft.record;
+  if (draft.box === "broll-add-input") return "New shot: unsaved name";
+  const shot = brollRecord(draft.record);
+  if (shot) return shot.name + ": unsaved " + what;
   return draft.record ? "The shot was removed, so its " + what + " was not saved" : "The selected shots were removed, so the " + what + " was not saved";
 }
 
@@ -580,7 +584,7 @@ function bulkBarHtml(entries: readonly PanelShot[]) {
     '</div>' +
     (bulkInput
       ? '<div class="broll-bulk-row">' +
-          '<input type="text" id="broll-bulk-input" class="ev-field" maxlength="' + (bulkInput === "person" ? 60 : 80) + '" placeholder="' +
+          '<input type="text" id="broll-bulk-input" data-kind="' + bulkInput + '" class="ev-field" maxlength="' + (bulkInput === "person" ? 60 : 80) + '" placeholder="' +
             (bulkInput === "person" ? 'Their name' : 'Where they get shot') + '" aria-label="' +
             (bulkInput === "person" ? 'New person' : 'New location') + '"' +
             (bulkInput === "location" ? ' list="broll-loc-options"' : '') + '>' +
@@ -593,7 +597,7 @@ function bulkBarHtml(entries: readonly PanelShot[]) {
 
 function focusKey(el: Element | null) {
   if (!el || el === document.body) return null;
-  if (el.id) return "#" + cssAttr(el.id);
+  if (el.id) return "#" + cssAttr(el.id) + (el.getAttribute("data-kind") ? '[data-kind="' + cssAttr(el.getAttribute("data-kind")) + '"]' : "");
   const cls = el.classList && el.classList[0];
   if (!cls) return null;
   let sel = "." + cls;
@@ -638,45 +642,49 @@ function fieldSave(id: string, field: "notes" | "audioRef" | "location"): TypedS
 function submitField(el: PanelInput): TypedWrite | null {
   const field = recordField(el), id = el.getAttribute("data-id");
   if (!field || id === null || !typedSinceDrawn(el)) return null;
-  return typed().submit(FIELD_BOX[field], id, el.value, fieldSave(id, field));
+  const wrote = typed().submit(FIELD_BOX[field], id, el.value, fieldSave(id, field));
+  if (wrote === "saved") {
+    el.defaultValue = el.value;
+    el.removeAttribute("data-unsaved");
+  }
+  return wrote;
 }
 
 let drawingPanel = 0;
 let typedLife: { readonly ports: BrollPanelPorts | null; readonly shared: object; readonly epoch: number } | null = null;
 
 function sameSharedLife(): boolean {
-  const shared = (ports as PanelPortUse).shared.ports(), epoch = (ports as PanelPortUse).lifetime.epoch();
+  const shared = (ports as PanelPortUse).shared.ports(), epoch = shared ? (ports as PanelPortUse).lifetime.epoch() : 0;
   const same = shared !== null && typedLife !== null && typedLife.ports === ports && typedLife.shared === shared && typedLife.epoch === epoch;
   typedLife = shared ? { ports, shared, epoch } : null;
   if (!same) typed().clear();
   return same;
 }
 
-function typingElsewhere(active: Element | null): boolean {
-  if (!active || active.closest("#broll-panel, #broll-page")) return false;
-  return active.tagName === "TEXTAREA" || active.tagName === "INPUT" || !!active.closest('[contenteditable="true"], [contenteditable=""]');
+function draftBoxes(container: HTMLElement, draft: TypedDraft, includeHidden = false): PanelInput[] {
+  const selector = draft.box === "broll-bulk-input" ? '#broll-bulk-input[data-kind="' + cssAttr(draft.record) + '"]'
+    : draft.record ? "." + draft.box + '[data-id="' + cssAttr(draft.record) + '"]' : "#" + draft.box;
+  return Array.from(container.querySelectorAll<PanelInput>(selector)).filter(box => includeHidden || !box.closest("[hidden]"));
 }
 
-function retryDrafts(): boolean {
-  const keeping = sameSharedLife();
-  // why: a retry runs a command, and its admission would settle typing the person has not finished in another box
-  if (keeping && !typingElsewhere(document.activeElement)) typed().retry();
-  return keeping;
-}
-
-function draftBoxes(container: HTMLElement, draft: TypedDraft): PanelInput[] {
-  const selector = draft.record ? "." + draft.box + '[data-id="' + cssAttr(draft.record) + '"]' : "#" + draft.box;
-  return Array.from(container.querySelectorAll<PanelInput>(selector));
+function reviseBox(box: PanelInput): void {
+  const kind = box.id === "broll-bulk-input" ? box.id : BROLL_BOXES.find(name => box.id === name || box.classList.contains(name));
+  if (!kind) return;
+  typed().revise(kind, kind === "broll-bulk-input" ? box.getAttribute("data-kind") ?? "location" : box.getAttribute("data-id") ?? "", box.value, box.defaultValue);
+  box.toggleAttribute("data-unsaved", box.value !== box.defaultValue);
 }
 
 function keepingFocus(container: HTMLElement, draw: () => void) {
-  const keeping = retryDrafts(), active = document.activeElement as PanelInput | null;
+  const keeping = sameSharedLife(), shared = (ports as PanelPortUse).shared.ports() !== null;
+  const active = document.activeElement as PanelInput | null;
+  if (shared && !keeping) for (const box of container.querySelectorAll<PanelInput>('input[type="text"], textarea:not([readonly])')) box.value = box.defaultValue;
+  if (keeping) for (const box of container.querySelectorAll<PanelInput>('input[type="text"], textarea:not([readonly])')) reviseBox(box);
   let kept = null;
   if (active && container.contains(active)) {
     const typedBox = active.tagName === "TEXTAREA" || (active.tagName === "INPUT" && active.type === "text");
     const field = recordField(active), ownValue = field ? typedSinceDrawn(active) : typedBox;
     const held = field && ownValue ? typed().draft(FIELD_BOX[field], active.getAttribute("data-id") as string) : null;
-    const saved = !field || !ownValue || held !== active.value && submitField(active) === "saved";
+    const saved = !field || !ownValue || !shared && held !== active.value && submitField(active) === "saved";
     kept = { key: focusKey(active), typed: typedBox, ownValue: ownValue, saved: saved, value: active.value,
              start: typedBox ? active.selectionStart : 0, end: typedBox ? active.selectionEnd : 0 };
   }
@@ -688,7 +696,12 @@ function keepingFocus(container: HTMLElement, draw: () => void) {
   } finally {
     drawingPanel--;
   }
-  for (const draft of typed().held()) for (const box of draftBoxes(container, draft)) box.value = draft.text;
+  const hidden = typed().hidden(draft => draftBoxes(container, draft).length > 0,
+    draft => draft.box === "broll-bulk-input" || !draft.record || !!brollRecord(draft.record));
+  for (const draft of typed().held()) for (const box of draftBoxes(container, draft)) { box.value = draft.text; box.setAttribute("data-unsaved", "true"); }
+  container.querySelector(".typed-unsaved")?.remove();
+  const strip = container.querySelector(container.id === "broll-panel" ? "#broll-list" : "#broll-page-table");
+  strip?.insertAdjacentHTML("afterbegin", typedOrphansHtml(hidden, unsavedLabel));
   for (const box of unsaved) {
     const again = box.key ? container.querySelector<PanelInput>(box.key) : null;
     if (again) again.value = box.value;
@@ -733,7 +746,7 @@ export function renderBroll() {
     controls.innerHTML = entries.length ? filterTabsHtml(entries) + groupMenuHtml() : '';
     const shown = entries.filter(function (e) { return matchesFilter(e, (ports as PanelPortUse).view.current().filter); });
     const starts = beatStarts();
-    listEl.innerHTML = typedOrphansHtml(typed().orphans(), unsavedLabel) + datalistsHtml() + (shown.length
+    listEl.innerHTML = datalistsHtml() + (shown.length
       ? brollGroups(shown, (ports as PanelPortUse).view.current().group).map(function (g) {
           return '<div class="broll-group" role="group" aria-label="' + escapeHtml(g.label || "Shots") + '">' +
             groupHeadHtml(g, starts) + g.items.map(function (e) { return rowHtml(e, starts); }).join("") + '</div>';
@@ -764,7 +777,7 @@ function renderBrollViews() {
 
 export function runBrollRefresh() {
   const panel = document.getElementById("broll-panel"), page = brollPageEl();
-  if ((!panel || panel.hidden) && (!page || page.hidden)) retryDrafts();
+  if ((!panel || panel.hidden) && (!page || page.hidden)) sameSharedLife();
   (ports as PanelPortUse).records.updateBrollBadge();
   renderBrollViews();
 }
@@ -866,6 +879,7 @@ function bulkAssignNewPerson(name: string, closing: () => void, quiet = false): 
 function bulkSave(kind: string): TypedSave {
   return (text, quiet) => {
     const closing = () => { if (bulkInput === kind) bulkInput = null; };
+    if (!(ports as PanelPortUse).shared.ports()) closing();
     if (!selectedIds((ports as PanelPortUse).records.brollEntries()).length) {
       closing();
       if (!quiet) renderBrollViews();
@@ -876,14 +890,16 @@ function bulkSave(kind: string): TypedSave {
 }
 
 function closeBulkInput() {
+  const box = document.getElementById("broll-bulk-input") as PanelInput | null;
+  if (box) box.value = box.defaultValue;
+  if (bulkInput) drafts?.drop("broll-bulk-input", bulkInput);
   bulkInput = null;
-  drafts?.drop("broll-bulk-input", "");
 }
 
 function clearSelection() {
   selection = Object.create(null);
   selectionAnchor = null;
-  closeBulkInput();
+  bulkInput = null;
 }
 
 function pruneSelection(entries: readonly PanelShot[]) {
@@ -952,7 +968,9 @@ function propSave(id: string): TypedSave {
 function commitPropInput(input: PanelInput) {
   const id = input.getAttribute("data-id") as string;
   const blank = !plainText(input.value).trim();
-  if (isHeld(typed().submit("broll-prop-input", id, input.value, propSave(id)))) return;
+  const text = input.value;
+  if (!(ports as PanelPortUse).shared.ports()) input.value = "";
+  if (isHeld(typed().submit("broll-prop-input", id, text, propSave(id)))) return;
   const selector = '.broll-prop-input[data-id="' + cssAttr(id) + '"]';
   input.value = "";
   if (blank) return;
@@ -962,6 +980,7 @@ function commitPropInput(input: PanelInput) {
 }
 
 function commitLocation(input: PanelInput) {
+  if (!(ports as PanelPortUse).shared.ports()) editingLocFor = null;
   if (isHeld(submitField(input))) return;
   editingLocFor = null;
   renderBrollViews();
@@ -980,6 +999,7 @@ function renameSave(id: string): TypedSave {
 }
 
 function renameShot(id: string | null, box: PanelInput | null) {
+  if (!(ports as PanelPortUse).shared.ports()) renamingId = null;
   (ports as PanelPortUse).undo.breakCoalescing();
   const wrote = box && id !== null ? typed().submit("broll-rename-input", id, box.value, renameSave(id)) : "saved";
   if (!isHeld(wrote)) renamingId = null;
@@ -1000,6 +1020,7 @@ function personSave(id: string): TypedSave {
 }
 
 function cancelRename(id: string | null) {
+  for (const box of document.querySelectorAll<PanelInput>('.broll-rename-input[data-id="' + cssAttr(id) + '"]')) box.value = box.defaultValue;
   if (id !== null) typed().drop("broll-rename-input", id);
   renamingId = null;
 }
@@ -1047,6 +1068,7 @@ function onBrollClick(e: PanelEvent & Partial<MouseEvent>, root: HTMLElement, ex
     const rec = brollRecord(id);
     if (!rec) return;
     const raising = !rec.reshoot;
+    if (!(ports as PanelPortUse).shared.ports()) openId = id;
     if (!writeRecord(id, { reshoot: raising })) return;
     openId = id;
     renderBrollViews();
@@ -1109,11 +1131,13 @@ function onBrollClick(e: PanelEvent & Partial<MouseEvent>, root: HTMLElement, ex
     if (pi) pi.focus();
   } else if (action === "broll-person-save") {
     const nameBox = root.querySelector<HTMLInputElement>('.broll-person-input[data-id="' + cssAttr(id) + '"]');
+    if (!(ports as PanelPortUse).shared.ports()) addingPersonFor = null;
     (ports as PanelPortUse).undo.breakCoalescing();
     if (isHeld(typed().submit("broll-person-input", id as string, nameBox ? nameBox.value : "", personSave(id as string)))) return;
     addingPersonFor = null;
     renderBrollViews();
   } else if (action === "broll-person-cancel") {
+    for (const box of root.querySelectorAll<PanelInput>(".broll-person-input")) box.value = box.defaultValue;
     if (addingPersonFor !== null) typed().drop("broll-person-input", addingPersonFor);
     addingPersonFor = null;
     renderBrollViews();
@@ -1127,13 +1151,17 @@ function onBrollClick(e: PanelEvent & Partial<MouseEvent>, root: HTMLElement, ex
   } else if (action === "broll-bulk-input-save") {
     const box = document.getElementById("broll-bulk-input") as HTMLInputElement | null;
     const value = box ? box.value : "";
-    if (bulkInput === "person" || bulkInput === "location" && plainText(value).trim()) typed().submit("broll-bulk-input", "", value, bulkSave(bulkInput));
+    if (bulkInput === "person" || bulkInput === "location" && plainText(value).trim()) typed().submit("broll-bulk-input", bulkInput, value, bulkSave(bulkInput));
     else { closeBulkInput(); renderBrollViews(); }
   } else if (action === "broll-bulk-input-cancel") {
     closeBulkInput();
     renderBrollViews();
   } else if (action === "typed-unsaved-dismiss") {
-    typed().dismiss(btn.getAttribute("data-box") ?? "", btn.getAttribute("data-record") ?? "");
+    const draft = { box: btn.getAttribute("data-box") ?? "", record: btn.getAttribute("data-record") ?? "", text: "" };
+    for (const root of document.querySelectorAll<HTMLElement>("#broll-panel, #broll-page")) {
+      for (const box of draftBoxes(root, draft, true)) { box.value = box.defaultValue; box.removeAttribute("data-unsaved"); }
+    }
+    typed().dismiss(draft.box, draft.record);
     renderBrollViews();
   } else {
     onBrollPageAction(action, btn, exportAs);
@@ -1170,29 +1198,47 @@ function onBrollFocusOut(e: PanelEvent) {
   if (wrote !== null || field === "audioRef") renderBrollViews();
 }
 
+function submitEscapeField(input: PanelInput): void {
+  if (!isHeld(submitField(input))) return;
+  const field = recordField(input);
+  if (!field) return;
+  const draft = { box: FIELD_BOX[field], record: input.getAttribute("data-id") ?? "", text: input.value };
+  for (const root of document.querySelectorAll<HTMLElement>("#broll-panel, #broll-page")) {
+    for (const box of draftBoxes(root, draft, true)) { box.value = draft.text; box.setAttribute("data-unsaved", "true"); }
+  }
+}
+
 function onBrollKeydown(e: PanelEvent, root: HTMLElement) {
   const t = e.target as PanelInput;
   const onPage = root.id === "broll-page";
   if (e.key === "Escape") {
-    let refocus = null;
-    if (groupMenuOpen) { groupMenuOpen = false; refocus = ".broll-group-btn"; }
-    else if (menuFor) { refocus = '[data-action="broll-menu"][data-id="' + cssAttr(menuFor) + '"]'; menuFor = null; }
-    else if (t.classList.contains("broll-loc-input")) { typed().drop("broll-loc-input", t.getAttribute("data-id") ?? ""); editingLocFor = null; }
-    else if (t.classList.contains("broll-ref-input")) { typed().drop("broll-ref-input", t.getAttribute("data-id") ?? ""); editingRefFor = null; }
-    else if (t.classList.contains("broll-rename-input")) cancelRename(t.getAttribute("data-id"));
-    else if (t.classList.contains("broll-person-input")) { typed().drop("broll-person-input", t.getAttribute("data-id") ?? ""); addingPersonFor = null; }
-    else if (t.id === "broll-bulk-input") closeBulkInput();
-    else if (!onPage && Object.keys(selection).length) clearSelection();
-    else if (!onPage && openId) {
-      refocus = '.broll-row-main[data-id="' + cssAttr(openId) + '"]';
-      openId = null;
-    } else return;
-    e.preventDefault();
-    e.stopPropagation();
-    renderBrollViews();
-    const back = refocus && root.querySelector<HTMLInputElement>(refocus);
-    if (back) back.focus();
-    return;
+    const shared = (ports as PanelPortUse).shared.ports() !== null;
+    if (shared) drawingPanel++;
+    try {
+      if (shared && recordField(t)) submitEscapeField(t);
+      let refocus = null;
+      if (groupMenuOpen) { groupMenuOpen = false; refocus = ".broll-group-btn"; }
+      else if (menuFor) { refocus = '[data-action="broll-menu"][data-id="' + cssAttr(menuFor) + '"]'; menuFor = null; }
+      else if (t.classList.contains("broll-loc-input")) editingLocFor = null;
+      else if (t.classList.contains("broll-ref-input")) editingRefFor = null;
+      else if (t.classList.contains("broll-rename-input")) cancelRename(t.getAttribute("data-id"));
+      else if (t.classList.contains("broll-person-input")) { t.value = t.defaultValue; typed().drop("broll-person-input", t.getAttribute("data-id") ?? ""); addingPersonFor = null; }
+      else if (t.id === "broll-bulk-input") closeBulkInput();
+      else if (!onPage && Object.keys(selection).length) clearSelection();
+      else if (!onPage && openId) {
+        if (shared && t.classList.contains("broll-prop-input")) { t.value = t.defaultValue; typed().drop("broll-prop-input", t.getAttribute("data-id") ?? ""); }
+        refocus = '.broll-row-main[data-id="' + cssAttr(openId) + '"]';
+        openId = null;
+      } else if (shared && onPage && recordField(t)) {
+        e.preventDefault(); e.stopPropagation(); closeBrollPage(); return;
+      } else return;
+      e.preventDefault();
+      e.stopPropagation();
+      renderBrollViews();
+      const back = refocus && root.querySelector<HTMLInputElement>(refocus);
+      if (back) back.focus();
+      return;
+    } finally { if (shared) drawingPanel--; }
   }
   if ((e.key === "ArrowDown" || e.key === "ArrowUp") && t.classList && t.classList.contains("broll-menu-item")) {
     const items: HTMLElement[] = Array.prototype.slice.call((t.parentNode as ParentNode).querySelectorAll(".broll-menu-item"));
@@ -1221,6 +1267,7 @@ function onBrollKeydown(e: PanelEvent, root: HTMLElement) {
 
 function onBrollInput(e: PanelEvent & Partial<Pick<InputEvent, "inputType">>) {
   const box = e.target as HTMLTextAreaElement;
+  if ((ports as PanelPortUse).shared.ports() && sameSharedLife()) reviseBox(box);
   if (box.tagName === "TEXTAREA" && box.classList.contains("ev-field")) fitTextarea(box);
   if (box.classList && box.classList.contains("broll-prop-input") &&
       (e.inputType === "insertReplacementText" || e.inputType === undefined)) {
@@ -1401,7 +1448,7 @@ function renderBrollPage() {
     const sel = document.getElementById("broll-page-group") as HTMLSelectElement | null;
     if (sel) sel.value = (ports as PanelPortUse).view.current().pageGroup;
     (document.getElementById("broll-page-filters") as HTMLElement).innerHTML = filterChipsHtml(entries);
-    (document.getElementById("broll-page-table") as HTMLElement).innerHTML = typedOrphansHtml(typed().orphans(), unsavedLabel) + (shown.length
+    (document.getElementById("broll-page-table") as HTMLElement).innerHTML = (shown.length
       ? '<table class="broll-page-table">' +
           '<colgroup><col class="broll-page-w-check"><col class="broll-page-w-shot"><col class="broll-page-w-scene">' +
           '<col class="broll-page-w-props"><col class="broll-page-w-cuts"><col class="broll-page-w-owner"><col class="broll-page-w-note"></colgroup>' +

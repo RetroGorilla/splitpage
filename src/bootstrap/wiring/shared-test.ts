@@ -12,7 +12,7 @@ import type { Home } from "../../application/location/document-location.ts";
 import { sharedWriterBindings } from "./shared-writer.ts";
 import { sharedSplitBindings } from "./shared-split.ts";
 import { sharedSplitSurfaces } from "./shared-split-surfaces.ts";
-import { createSharedTestPeer, sharedTestPeerHook } from "./shared-test-peer.ts";
+import { createSharedTestPeer, sharedTestBytes, sharedTestPeerHook } from "./shared-test-peer.ts";
 import { sharedCommandRefusalNotice } from "./ports/shared-command-notices.ts";
 import { notices } from "./ports/effects.ts";
 import { documentReader } from "./ports/document.ts";
@@ -25,6 +25,10 @@ import { draftSource } from "./drafts.ts";
 import { confirmSavedNow, noteSaveChange, unsavedChanges } from "./save-owners.ts";
 import { currentHome, documentLocation, setHome } from "./location-owner.ts";
 import { projectSharedDocumentWithRecovery } from "../../adapters/collab/project.ts";
+import { sharedIntakeStopped } from "../../adapters/collab/ingress.ts";
+import { hydrateSharedDocumentFromState } from "../../adapters/collab/hydrate.ts";
+import type { SharedDocumentHandle } from "../../adapters/collab/types.ts";
+import { timingMarks } from "../../../shared/timing-marks.ts";
 
 declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
@@ -101,7 +105,7 @@ function startSharedTestHook(): () => void {
     const marks = landed && kept ? [() => { noteSaveChange(); }, () => { noteDraftChange(); }] : [];
     runEvery([() => { ending?.dispose(); }, ...(kept ? [() => { draftSource.resumeWriting(); }] : []), ...marks]);
   };
-  const enter = async (): Promise<SharedSwitchOutcome> => {
+  const enter = async (stored?: Uint8Array): Promise<SharedSwitchOutcome> => {
     if (!live) return { ok: false, reason: APP_STOPPED };
     if (switching) return { ok: false, reason: SHARED_SWITCHING };
     if (sharedSessionParts()) return { ok: false, reason: SHARED_ALREADY };
@@ -136,6 +140,7 @@ function startSharedTestHook(): () => void {
         structure: { cells: html => fromHtml(html) }, report,
         timers: { now: () => Date.now(), start: (run, ms) => setTimeout(run, ms), stop: timer => { clearTimeout(timer as ReturnType<typeof setTimeout>); } },
         now: () => Date.now(),
+        ...(stored ? { hydrate: (handle: SharedDocumentHandle) => { hydrateSharedDocumentFromState(handle, stored); } } : {}),
         opening: openingStatus
       };
       const result = await enterSharedSession(entering);
@@ -158,14 +163,18 @@ function startSharedTestHook(): () => void {
     try { return leaveRunningSharedSession(); } finally { switching = false; }
   };
   const hook = {
-    enter, leave,
+    enter: () => enter(),
+    enterFrom: (state: string | Uint8Array | ArrayBuffer) => enter(sharedTestBytes(state)),
+    leave,
+    timing: (on: boolean) => { timingMarks.marksOn = on === true; },
     peer: sharedTestPeerHook(() => peer),
     read: () => ({ app: documentReader.read(doc => doc ? JSON.parse(JSON.stringify(doc)) as unknown : null), peer: peer?.read() ?? null }),
     recovery: () => {
       const parts = sharedSessionParts();
       return { app: parts ? projectSharedDocumentWithRecovery(parts.handle).recovery : [], peer: peer?.recovery() ?? [] };
     },
-    counters: () => ({ ...counts, queued: peer?.queued() ?? 0, abandonable: writing.abandonable() + splitting.abandonable() })
+    counters: () => ({ ...counts, queued: peer?.queued() ?? 0, abandonable: writing.abandonable() + splitting.abandonable() }),
+    intakeStopped: () => { const parts = sharedSessionParts(); return parts ? sharedIntakeStopped(parts.handle) : false; }
   };
   exposeTestHook("__sharedTest", () => hook, release => { withdraw = release; });
   return () => {

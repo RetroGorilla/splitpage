@@ -189,10 +189,13 @@ Two copies that type the same new line at once mint two keys and two shots, as t
 copies typing the same new `@Name` give two people. `tests/collab/broll-text-records.test.ts`
 holds the cases.
 
-### Keying a left Split cell
+### Keying a left visual cell
 
-In a shared session the only route that keys B-roll lines is leaving a Split visual
-cell. `keySharedLeftCell` in `application/commands/shared-broll-keying.ts` runs up to
+In a shared session the only route that keys B-roll lines is leaving a visual cell,
+in the Split or in the Writer's visual box. Both call `sharedLeftCellKeying` in
+`bootstrap/wiring/ports/shared-broll-keying.ts`, which checks that the binding still
+holds the cell open and then calls `keySharedLeftCell` in
+`application/commands/shared-broll-keying.ts`. It runs up to
 two shared commands through the session, so they pass the same admission and stale
 checks as any other:
 
@@ -200,7 +203,8 @@ checks as any other:
   first in text order regardless of id. A dropped id held nowhere else in the script
   loses its shot through normal record removal, but only while the shot is untouched
   since it was made (`sharedBrollShotUntouched` in `adapters/collab/broll-keying.ts`).
-  It has no undo entry and no stamp. A refusal or failure stops the leave there.
+  It has no undo entry and no stamp. A refusal or failure stops the commands there, so
+  nothing is keyed; it does not stop the leave itself.
 - `key-broll-lines` (`sharedBrollKeying` in `core/collab/broll-keying.ts`) keys each
   named unkeyed line, makes its shot authored by the leaving copy, and stamps the beat. It
   has an undo entry. Each keying mints its own ids from its command's author id
@@ -210,8 +214,8 @@ checks as any other:
   and no removal mark is replaced by a newly minted key in the same command, and the
   shot is made under the new id; a key whose shot was removed is never given one.
 
-Nothing to key runs no command. A leave during session end, row removal or teardown
-keys nothing. Assumed rules 196 to 199:
+Nothing to key runs no command. A leave during session end, row removal, teardown or a
+view switch keys nothing. Assumed rules 196 to 199:
 
 - **196:** two copies leaving one line at once each make a key and a shot under ids of
   their own, so an edit or removal one copy makes to its shot before the other's keying
@@ -229,7 +233,7 @@ keys nothing. Assumed rules 196 to 199:
   copy contributed a key, even after cleanup. Two real lines with equal text keep their keys and shots.
 - **197:** text another copy types into the line meanwhile stays after the key, and
   the shot keeps the name the leaving copy saw.
-- **198:** a leave caused by session end, row removal or teardown keys nothing.
+- **198:** a leave caused by session end, row removal, teardown or a view switch keys nothing.
   Row removal keeps its shots for restoring the recovered row, whether keying was
   seen by the remover or concurrent with removal.
 - **199:** undo of a keying after another copy changed its shot or its whole keyed
@@ -238,9 +242,36 @@ keys nothing. Assumed rules 196 to 199:
   Undoing the same copy's later line edit leaves it usable too: restored characters
   answer to their originals, while peer contributions remain evidence after deletion.
 
-`tests/collab/broll-keying.test.ts`, `tests/core/collab/broll-keying.test.ts` and
-`src/test/shared-broll-leave-app.test.mjs` hold the cases. The Writer's two leave
-points do not call it yet.
+In the Writer, leaving means closing the visual box: Escape, its Close button, a press
+anywhere outside the box (the Writer's own close button included), opening another
+visual, or Find leaving a visual match. These are the moments the standalone Writer
+keys at. A pending box commits first, which lets held remote updates in. Cleanup and
+keying then plan on that document. The caret goes back to the narration where the box
+was opened. Leaving a narration beat keys nothing in either mode. Assumed rules 217 to 221:
+
+- **217:** the Writer's leave keys through the same command as the Split's, with rules
+  196 to 199 unchanged.
+- **218:** in the shared Writer, a box closed by a view switch, by undo or redo (pressed in
+  the box or replayed from elsewhere) or by teardown commits its text and keys nothing.
+  The standalone Writer keys on those closes too, but folds the key into the step being
+  undone. Shared keying is its own undo step, so keying there would make Ctrl+Z take back
+  only the key, or replace a redo with a new keying under new ids.
+- **219:** a switch from the Split to the Writer keys nothing in the Split cell the caret
+  was in. A press on the Write button is a leave like any other press.
+- **220:** another copy removing the row under the open box closes the box and keys nothing.
+- **221:** when the box's text is committed and cleanup or keying is then refused or fails,
+  the box still closes and the caret goes where the standalone Writer puts it. One notice
+  shows, nothing is keyed, and the `B-roll:` line stays as typed text until a later leave
+  by any copy keys it. Holding the box open on a refusal that may never clear, such as a
+  read-only session, would trap the person in it, and the Split leave already behaves this
+  way. Only a refused commit of the box's own text keeps the box open, because there the
+  text is at stake.
+
+`tests/collab/broll-keying.test.ts` (each table runs once through the Split leave and
+once through the shared Writer's visual box), `tests/core/collab/broll-keying.test.ts`,
+`src/test/shared-broll-leave-app.test.mjs`, `src/test/shared-writer-broll-leave-app.test.mjs`
+and `src/test/writer-broll-leave-app.test.mjs` (the standalone Writer, as on `main`) hold
+the cases.
 
 ## Stamps
 

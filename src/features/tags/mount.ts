@@ -13,7 +13,7 @@ interface EntityPorts {
   readonly renaming: () => string | null;
   readonly setAddingPerson: (value: string | null) => void;
   readonly setTagOwner: (key: string | null, value: string) => void;
-  readonly setTagNotes: (key: string | null, value: string) => void;
+  readonly setTagNotes: (key: string | null, value: string, resubmit?: boolean) => void;
   readonly queueAutoSave: () => void;
   readonly sessionShared: () => boolean;
 }
@@ -138,7 +138,7 @@ export function mountTagEntityContainer(mount: { window: Window; id: string; por
     if (!e.target.classList || !e.target.classList.contains("tag-notes-input")) return;
     const box = e.target as unknown as HTMLTextAreaElement;
     // why: only a shared session can refuse the typing's own writes, so standalone the blur saves nothing new, as on main
-    if (ports.sessionShared() && box.value !== box.defaultValue) ports.setTagNotes(box.getAttribute("data-key"), box.value);
+    if (ports.sessionShared() && box.value !== box.defaultValue) ports.setTagNotes(box.getAttribute("data-key"), box.value, true);
     ports.queueAutoSave();
   });
   return life.dispose;
