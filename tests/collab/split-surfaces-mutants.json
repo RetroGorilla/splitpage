@@ -8,168 +8,195 @@
       "label": "the shared Split mounts the standalone title, whose whole-field command has no shared plan",
       "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
       "find": "const title = mountTitlesFeature(names);",
-      "replace": "const title = mountTitlesFeature();"
+      "replace": "const title = mountTitlesFeature();",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "the shared Split mounts the standalone scene name boxes",
       "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
       "find": "const scenes = mountSceneHeadersFeature(names, { ...sharedSceneCreation(parts.handle, parts.session, author), abandonment });",
-      "replace": "const scenes = mountSceneHeadersFeature();"
+      "replace": "const scenes = mountSceneHeadersFeature();",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "the shared Split's add-scene box gets no shared creation port",
       "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
       "find": "const scenes = mountSceneHeadersFeature(names, { ...sharedSceneCreation(parts.handle, parts.session, author), abandonment });",
-      "replace": "const scenes = mountSceneHeadersFeature(names);"
+      "replace": "const scenes = mountSceneHeadersFeature(names);",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "the shared Split mounts no empty-script surface",
       "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
       "find": "const empty = host ? mountSharedEmptyScript(",
-      "replace": "const empty = false ? mountSharedEmptyScript("
+      "replace": "const empty = false ? mountSharedEmptyScript(",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "the surfaces mount before hydration, while the title field does not exist yet",
       "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
       "find": "      if (parts.session.revision() !== 0) { mount(parts); return; }",
-      "replace": "      mount(parts); return;"
+      "replace": "      mount(parts); return;",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "entering again while the surfaces wait subscribes a second time",
       "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
       "find": "if (entered === parts && (surfaces || waiting)) return;",
-      "replace": "if (entered === parts && surfaces) return;"
+      "replace": "if (entered === parts && surfaces) return;",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "leaving before the first delivery keeps waiting for it",
       "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
       "find": "      waiting?.(); waiting = null;\n",
-      "replace": "      waiting = null;\n"
+      "replace": "      waiting = null;\n",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "settling ignores an open title composition",
       "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
-      "find": "!(surfaces.title.finish() && ",
-      "replace": "!(true && "
+      "find": "!surfaces || surfaces.title.finish() && ",
+      "replace": "!surfaces || true && ",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "settling ignores an open scene-name composition",
       "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
       "find": " && surfaces.scenes.finish() && ",
-      "replace": " && true && "
+      "replace": " && true && ",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "leaving keeps the shared title binding instead of the standalone title",
       "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
       "find": "[mounted.cuts, () => { mountTitlesFeature(); }, ",
-      "replace": "[mounted.cuts, () => {}, "
+      "replace": "[mounted.cuts, () => {}, ",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "leaving keeps the shared scene name boxes instead of the standalone ones",
       "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
       "find": ", () => { mountSceneHeadersFeature(); }]",
-      "replace": ", () => {}]"
+      "replace": ", () => {}]",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "the shared title reports itself finished during a composition",
       "file": "src/features/title/routes.ts",
       "find": "      finish: () => !open || bound.finish(),",
-      "replace": "      finish: () => true,"
+      "replace": "      finish: () => true,",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "the scene controls report themselves finished during a name composition",
       "file": "src/features/rows/scene-controls.ts",
       "find": "    finish: () => !naming?.bound || naming.bound.finish(),",
-      "replace": "    finish: () => true,"
+      "replace": "    finish: () => true,",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "the scene headers wiring drops the controls' finish",
       "file": "src/bootstrap/wiring/scene-headers.ts",
       "find": "finish: controls.finish,",
-      "replace": "finish: () => true,"
+      "replace": "finish: () => true,",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "a failed first-delivery mount does not end the session",
       "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
       "find": "      forceLeaveSharedSession();\n",
-      "replace": "\n"
+      "replace": "\n",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "a failed first-delivery mount leaves while the switch still holds its lock, so the forced leave drops instead of landing",
       "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
       "find": "    window.setTimeout(() => {\n      release();",
-      "replace": "    queueMicrotask(() => {\n      release();"
+      "replace": "    queueMicrotask(() => {\n      release();",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "a failed first-delivery mount ends the session without its notice",
       "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
       "find": "      notices.show(SHARED_SPLIT_SURFACE_NOTICES.failed, \"warn\");\n",
-      "replace": "\n"
+      "replace": "\n",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "the title and scene name boxes register no abandon step",
       "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
       "find": "stamps: sessionStamps, abandonment\n",
-      "replace": "stamps: sessionStamps\n"
+      "replace": "stamps: sessionStamps\n",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "the add-scene box gets no abandonment port",
       "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
       "find": "{ ...sharedSceneCreation(parts.handle, parts.session, author), abandonment }",
-      "replace": "sharedSceneCreation(parts.handle, parts.session, author)"
+      "replace": "sharedSceneCreation(parts.handle, parts.session, author)",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "the Split's empty-script input registers no abandon step",
       "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
       "find": "place: placeInSplit, abandonment }",
-      "replace": "place: placeInSplit }"
+      "replace": "place: placeInSplit }",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "abandoning the shared Split skips the title, scene name and empty-script steps",
       "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
       "find": "[() => { abandonAll(false); }, ",
-      "replace": "[() => {}, "
+      "replace": "[() => {}, ",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "dropping the shared Split skips the title, scene name and empty-script steps",
       "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
       "find": "[() => { abandonAll(true); }, ",
-      "replace": "[() => {}, "
+      "replace": "[() => {}, ",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "the abandonable count leaves out the title, scene name and empty-script steps",
       "file": "src/bootstrap/wiring/shared-split-surfaces.ts",
       "find": "abandons.size + (split",
-      "replace": "0 + (split"
+      "replace": "0 + (split",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "the add-scene box never registers its abandon step",
       "file": "src/features/rows/scene-controls.ts",
       "find": "const stopAbandon = ports.sharedScenes?.abandonment?.(settleBeforeAbandoning(finish, () => {",
-      "replace": "const stopAbandon = false && ports.sharedScenes?.abandonment?.(settleBeforeAbandoning(finish, () => {"
+      "replace": "const stopAbandon = false && ports.sharedScenes?.abandonment?.(settleBeforeAbandoning(finish, () => {",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "abandoning the add-scene box during a composition keeps it composing",
       "file": "src/features/rows/scene-controls.ts",
-      "find": "        if (composing) { composing = false; input.value = beforeComposition; }\n",
-      "replace": "\n"
+      "find": "        composing = false;\n        end();\n",
+      "replace": "        end();\n",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "abandoning the add-scene box keeps the composed text in the box",
       "file": "src/features/rows/scene-controls.ts",
-      "find": "composing = false; input.value = beforeComposition; }",
-      "replace": "composing = false; }"
+      "find": "input.value = composing ? beforeComposition : \"\";",
+      "replace": "input.value = input.value;",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "disposing the add-scene box keeps its abandon step registered",
       "file": "src/features/rows/scene-controls.ts",
       "find": "stopAdmission?.(); stopAbandon?.(); ",
-      "replace": "stopAdmission?.(); "
+      "replace": "stopAdmission?.(); ",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
     {
       "label": "rule 166: the add-scene box releases its hold at an exit without creating the scene the browser already wrote (finding 2)",
       "file": "src/features/rows/scene-controls.ts",
-      "find": "        if (!composing && release && !bound) create();\n",
+      "find": "        if (!composing && !bound && !create()) return false;\n",
       "replace": "\n",
       "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
     },
@@ -185,7 +212,10 @@
       "file": "src/features/empty-script/empty-script.ts",
       "find": "if (pending && input.value === beforeInput) {",
       "replace": "if (pending) {",
-      "tests": ["src/test/shared-split-surfaces-app.test.mjs", "tests/features/empty-script/guards.test.ts"]
+      "tests": [
+        "src/test/shared-split-surfaces-app.test.mjs",
+        "tests/features/empty-script/guards.test.ts"
+      ]
     },
     {
       "label": "an app stop in the failed-mount gap keeps the failure hold, so the shared copy does not land (finding 3)",
@@ -235,6 +265,48 @@
       "find": "      try { closeSplitCompletions(); } catch (error) { errors.push(error); }\n",
       "replace": "\n",
       "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
+    },
+    {
+      "label": "a nonempty native title skips settlement on blur because held only means an empty heading",
+      "file": "src/features/common/buffered-input.ts",
+      "find": "if (open) finish();",
+      "replace": "if (open && binding.held()) finish();",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
+    },
+    {
+      "label": "opening the Writer skips the shared surface settlement",
+      "file": "src/bootstrap/wiring/writer.ts",
+      "find": "prepareWriter: () => settleSharedSessionSurfaces() === null,",
+      "replace": "prepareWriter: () => true,",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
+    },
+    {
+      "label": "a pending add-scene event releases ingress before finishing the native name",
+      "file": "src/features/rows/scene-controls.ts",
+      "find": "input.addEventListener(type, event => { if (!composing && (event as KeyboardEvent).key !== \"Escape\") finish(); });",
+      "replace": "input.addEventListener(type, event => { if (!composing && (event as KeyboardEvent).key !== \"Escape\") settled(); });",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
+    },
+    {
+      "label": "Escape finishes a pending add-scene name instead of cancelling it",
+      "file": "src/features/rows/scene-controls.ts",
+      "find": "revert: () => { cancelled = true; return settled(); }",
+      "replace": "revert: finish",
+      "tests": ["src/test/shared-split-surfaces-app.test.mjs"]
+    },
+    {
+      "label": "an unrelated shared keystroke invalidates every scene name",
+      "file": "src/adapters/collab/name-cut-watch.ts",
+      "find": "for (const event of events) {\n      if (event.target instanceof Y.Text) {",
+      "replace": "structural = true;\n    for (const event of events) {\n      if (event.target instanceof Y.Text) {",
+      "tests": ["tests/adapters/collab/name-cut-watch.test.ts"]
+    },
+    {
+      "label": "the cut watch ignores edits to the hidden part of an existing text identity",
+      "file": "src/adapters/collab/name-cut-watch.ts",
+      "find": "for (const address of texts.get(event.target) ?? []) pending.add(address);\n      } else",
+      "replace": "for (const address of []) pending.add(address);\n      } else",
+      "tests": ["tests/adapters/collab/name-cut-watch.test.ts"]
     }
   ]
 }

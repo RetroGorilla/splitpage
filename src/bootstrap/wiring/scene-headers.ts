@@ -70,5 +70,8 @@ function mountedSceneHeaders(life: ReturnType<typeof createViewLifetime>, made: 
     if (!scene) { boundary.cancel(); return false; }
     return !boundary.press(scene.id, dir < 0 ? "Alt+ArrowUp" : "Alt+ArrowDown");
   }
-  return { confirmMove, finish: controls.finish, dispose() { offChange(); offReplaced(); input?.dispose(); boundary.dispose(); controls.dispose(); } };
+  return { confirmMove, finish: controls.finish, dispose() {
+    if (!controls.finish()) throw new Error("The scene name could not finish");
+    offChange(); offReplaced(); input?.dispose(); boundary.dispose(); controls.dispose();
+  } };
 }

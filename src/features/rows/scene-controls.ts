@@ -127,8 +127,9 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts, li
     function settle(focus: boolean): void {
       if (naming?.line !== made) return;
       if (!liveName()) { cancelName(false, false); return; }
-      if (bound) {
-        if (!bound.finish()) return;
+      const binding = bound ?? (input.value.trim() ? pending : null);
+      if (binding) {
+        if (!binding.finish()) return;
         cancelName(false, false);
         if (focus && sceneId !== null) header(sceneId)?.querySelector<HTMLButtonElement>(".section-name")?.focus();
         return;
@@ -145,12 +146,15 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts, li
       settle(true);
     });
     // why: Removing the focused line blurs before detaching it; only a real focus transfer may save here.
-    input.addEventListener("blur", event => { if (!pointerAway && event.relatedTarget) settle(false); });
+    input.addEventListener("blur", event => {
+      if (!pointerAway && event.relatedTarget) settle(false);
+      else if (shared) queueMicrotask(() => { if (!pointerAway && !made.contains(doc.activeElement)) settle(false); });
+    });
     made.addEventListener("keydown", event => {
       if (naming?.line !== made || event.isComposing) return;
       if (event.key === "Escape") {
         event.preventDefault(); event.stopPropagation();
-        if (!bound || bound.revert()) cancelName(true);
+        if (!(bound ?? pending) || (bound ?? pending)?.revert()) cancelName(true);
       }
     });
     const heading = parent.matches(".section-header") ? parent.querySelector('[role="heading"]') : null;
@@ -181,7 +185,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts, li
     }
     if (shared && sceneId !== null) bind(sceneId);
     if (shared && sceneId === null) {
-      let composing = false, creating = false, beforeComposition = "", release: (() => void) | null = null;
+      let composing = false, creating = false, cancelled = false, beforeComposition = "", release: (() => void) | null = null;
       let caret: readonly [number | null, number | null, "forward" | "backward" | "none"] | null = null;
       const end = (): void => { const done = release; release = null; done?.(); };
       const settled = (): boolean => {
@@ -189,17 +193,19 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts, li
         end(); return true;
       };
       const finish = (): boolean => {
-        if (!composing && release && !bound) create();
+        if (creating) return true;
+        if (cancelled) return settled();
+        if (!composing && !bound && !create()) return false;
         return settled();
       };
       const hold = (): void => { if (!bound && !release) release = ports.sharedScenes?.hold() ?? null; };
       const stopAdmission = ports.sharedScenes?.beforeCommand(() => creating || finish() || "announced");
       const stopAbandon = ports.sharedScenes?.abandonment?.(settleBeforeAbandoning(finish, () => {
-        if (composing) { composing = false; input.value = beforeComposition; }
+        input.value = composing ? beforeComposition : "";
+        composing = false;
         end();
       }));
       const stopCheck = shared.beforePaint(() => {
-        if (!composing) end();
         caret = doc.activeElement === input ? [input.selectionStart, input.selectionEnd, input.selectionDirection ?? "none"] : null;
       });
       const stopPainted = shared.onPainted(() => {
@@ -207,25 +213,25 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts, li
         if (caret && input.isConnected) { input.focus({ preventScroll: true }); input.setSelectionRange(...caret); }
         caret = null;
       });
-      pending = { held: () => release !== null, finish, revert: settled, dispose: () => {
-        if (!settled()) return false;
+      pending = { held: () => release !== null, finish, revert: () => { cancelled = true; return settled(); }, dispose: () => {
+        if (!finish()) return false;
         stopAdmission?.(); stopAbandon?.(); stopCheck(); stopPainted(); return true;
       } };
-      const create = (): void => {
-        if (bound || composing || naming?.line !== made) return;
+      const create = (): boolean => {
+        if (bound || composing || naming?.line !== made) return false;
         const current = ports.document.current();
-        if (current && sceneBeforeBeat(current, beatId)) { cancelName(false, false); return; }
+        if (current && sceneBeforeBeat(current, beatId)) { cancelled = true; cancelName(false, false); return true; }
         const verdict = unsettledHeading(input.value);
-        if (verdict?.hold) return;
-        if (verdict) { shared.report({ kind: "rejected", reason: verdict.reason }); return; }
+        if (verdict?.hold) return true;
+        if (verdict) { shared.report({ kind: "rejected", reason: verdict.reason }); return false; }
         const from = input.selectionStart, to = input.selectionEnd;
-        shared.shown(() => {
+        return shared.shown(() => {
           creating = true;
           let result: ReturnType<SharedSceneCreation["create"]> | undefined;
           try { result = ports.sharedScenes?.create(beatId, input.value); }
           finally { creating = false; }
           if (!result?.heading) {
-            shared.report(result?.outcome ?? { kind: "rejected", reason: NOT_SHARED }); return;
+            shared.report(result?.outcome ?? { kind: "rejected", reason: NOT_SHARED }); return false;
           }
           sceneId = result.heading;
           bind(sceneId);
@@ -233,13 +239,14 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts, li
           pending?.dispose(); pending = null;
           shared.repaint();
           input.setSelectionRange(from, to);
+          return true;
         });
       };
       input.addEventListener("compositionstart", () => { if (!bound) { beforeComposition = input.value; composing = true; hold(); } });
-      input.addEventListener("compositionend", () => { composing = false; create(); end(); });
-      input.addEventListener("input", () => { create(); if (!composing) end(); });
+      input.addEventListener("compositionend", () => { composing = false; finish(); });
+      input.addEventListener("input", () => { if (!composing) finish(); });
       for (const type of ["keydown", "keyup", "blur", "pointerdown", "focus", "cut", "paste", "drop"]) {
-        input.addEventListener(type, () => { if (!composing) end(); });
+        input.addEventListener(type, event => { if (!composing && (event as KeyboardEvent).key !== "Escape") finish(); });
       }
       input.addEventListener("beforeinput", event => {
         if (bound) return;
@@ -438,6 +445,8 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts, li
     },
     reset,
     finish: () => !naming?.bound || naming.bound.finish(),
-    dispose() { life.dispose(); reset(); }
+    dispose() {
+      reset(); life.dispose();
+    }
   };
 }

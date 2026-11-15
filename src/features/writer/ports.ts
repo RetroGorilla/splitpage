@@ -100,6 +100,7 @@ export interface FlowWriterPorts {
 }
 
 export interface FlowWriterMaker {
+  readonly prepareWriter: () => boolean;
   readonly prepareSplit: (rowId?: string) => void;
   readonly splitReady: () => boolean;
   readonly create: (root: HTMLElement, selectionMoved: () => void, undoStep: (dir: UndoDirection) => void) => FlowWriter;

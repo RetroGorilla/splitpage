@@ -516,7 +516,78 @@ const CONTRACT = [
     start: "abc", typed: "abcX", held: "buffer-composition", native: (cell, text) => { cellText(cell, text, false, false); }, buffered: (cell, text) => { cellText(cell, text, false, true); },
     composing: composeCell }
 ];
+for (const surface of CONTRACT.slice(0, 3)) for (const exit of ["blur", "outside press", "view switch"]) {
+  test(`C7 surface contract: ${surface.name}, native with queued peer, ${exit}`, async () => {
+    const f = await enter();
+    try {
+      const input = surface.open();
+      surface.native(input, surface.text);
+      const delivered = [];
+      const stop = f.parts.session.subscribe(() => {
+        if (currentDocument().rows[1].audioText === "ZOther") delivered.push(surface.read(currentDocument()));
+      });
+      remoteInsert(f.peer, "r2", "audioText", 0, "Z");
+      assert.equal(applySharedUpdate(f.parts.handle, encodeSharedState(f.peer)).ok, true);
+      assert.equal(currentDocument().rows[1].audioText, "Other", "the native edit holds the peer delivery");
+      if (exit === "blur") input.blur();
+      if (exit === "outside press") {
+        document.body.dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true }));
+        input.blur();
+        document.body.click();
+      }
+      if (exit === "view switch") writerControls().openWriter();
+      await Promise.resolve();
+      assert.deepEqual(surface.read(currentDocument()), surface.typed);
+      assert.equal(currentDocument().rows[1].audioText, "ZOther", "the exit finishes before releasing the peer delivery");
+      stop();
+      assert.ok(delivered.length > 0);
+      for (const value of delivered) assert.deepEqual(value, surface.typed, "no delivery sees the pending native edit discarded");
+      exchange(f, "local-first");
+      agree(f, withZ(edit(shape(SOURCE), doc => {
+        if (surface.name === "title") doc.title = surface.typed;
+        if (surface.name === "scene name") doc.scenes[0][0] = "SceneX";
+        if (surface.name === "add-scene box") doc.scenes.push(["N", "r2"]);
+      })));
+      assert.deepEqual(leaveSharedSession(ports), { ok: true });
+      assert.equal(surfaces.abandonable(), 0);
+      assert.equal(document.querySelector("#rows .section-rename"), null);
+    } finally {
+      writerControls().closeWriter();
+      destroySharedDocument(f.peer);
+      if (sharedSession()) forceLeaveSharedSession();
+    }
+  });
+}
+for (const surface of CONTRACT.slice(1, 3)) for (const state of ["native"]) {
+  test(`C7 surface contract: ${surface.name}, ${state} with queued peer, Escape cancels`, async () => {
+    const f = await enter();
+    try {
+      const input = surface.open();
+      surface[state](input, surface.text);
+      remoteInsert(f.peer, "r2", "audioText", 0, "Z");
+      assert.equal(applySharedUpdate(f.parts.handle, encodeSharedState(f.peer)).ok, true);
+      keys(input, "Escape");
+      await Promise.resolve();
+      assert.deepEqual(surface.read(currentDocument()), surface.start);
+      assert.equal(currentDocument().rows[1].audioText, "ZOther");
+      assert.equal(document.querySelector("#rows .section-rename"), null);
+      assert.deepEqual(leaveSharedSession(ports), { ok: true });
+      assert.equal(surfaces.abandonable(), 0);
+    } finally { destroySharedDocument(f.peer); if (sharedSession()) forceLeaveSharedSession(); }
+  });
+}
 const failedAt = new Map();
+test("C7 surface contract: title Escape keeps the title edit, as in standalone", async () => {
+  const f = await enter();
+  try {
+    const input = atEnd(title()); nativeInput(input, "X");
+    keys(input, "Escape");
+    assert.equal(input.isConnected, true);
+    assert.equal(input.value, "Shared SplitX");
+    input.blur(); await Promise.resolve();
+    assert.equal(currentDocument().title, "Shared SplitX");
+  } finally { f.close(); }
+});
 async function failedEntry(source) {
   if (!failedAt.has(source)) {
     probe = { inject: null, labels: [], live: [], recording: false };

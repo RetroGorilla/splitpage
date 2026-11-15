@@ -33,6 +33,7 @@ import { sessionStamps, standaloneSession } from "./session-owner.ts";
 import { writerFlowCommands } from "./ports/writer-flow.ts";
 import { writerVisualBuffer } from "./ports/writer-visual-buffer.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
+import { settleSharedSessionSurfaces } from "./shared-session.ts";
 import type { PaintedTextSource } from "../../application/editing/ports.ts";
 import type { BufferedFieldPorts } from "../../application/editing/buffered-field.ts";
 import type { SharedDocumentHandle } from "../../adapters/collab/types.ts";
@@ -102,6 +103,7 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
     if (!render) throw new Error("Writer needs the row renderer to be mounted");
     const ports: WriterFeaturePorts = {
       flow: {
+        prepareWriter: () => settleSharedSessionSurfaces() === null,
         splitReady: () => !screenIsStale(),
         prepareSplit: rowId => {
           releaseScriptPlace();

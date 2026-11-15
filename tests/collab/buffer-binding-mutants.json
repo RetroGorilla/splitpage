@@ -422,8 +422,8 @@
   }, {
     "label": "a blur the Split rename is refocused from still ends its hold",
     "file": "src/features/common/buffered-input.ts",
-    "find": "queueMicrotask(() => { if (!active()) settleHeld(); });",
-    "replace": "settleHeld();",
+    "find": "queueMicrotask(() => { if (!active()) settleInput(); });",
+    "replace": "settleInput();",
     "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
   }, {
     "label": "the selection leaving a held Split rename keeps the hold",

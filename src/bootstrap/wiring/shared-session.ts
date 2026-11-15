@@ -92,6 +92,10 @@ export function sharedSessionParts(): SharedSessionParts | null {
   return running ? running.parts : null;
 }
 
+export function settleSharedSessionSurfaces(): string | null {
+  return running?.ports.bindings.settle() ?? null;
+}
+
 function copyOf(doc: ValidatedDocument): Record<string, unknown> {
   return JSON.parse(JSON.stringify(doc)) as Record<string, unknown>;
 }

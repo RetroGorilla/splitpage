@@ -1,5 +1,6 @@
 import { sharedBufferedTarget } from "../../adapters/collab/buffer.ts";
-import { readSharedOwnClock, readSharedOwnHiddenUnits } from "../../adapters/collab/paint-base.ts";
+import { readSharedOwnClock } from "../../adapters/collab/paint-base.ts";
+import { createSharedNameCutWatch } from "../../adapters/collab/name-cut-watch.ts";
 import { collabState } from "../../adapters/collab/state.ts";
 import type { BufferedFieldPorts } from "../../application/editing/buffered-field.ts";
 import { TITLE_FIELD_KEY, headingFieldKey } from "../../application/editing/buffered-field-key.ts";
@@ -51,17 +52,22 @@ function closeSplitCompletions(): void {
 
 function watchCuts(parts: SharedSessionParts): () => void {
   const hidden = new Map<string, ReadonlySet<string>>(), since = readSharedOwnClock(parts.handle);
-  function check(key: string, notice: string): void {
-    const now: ReadonlySet<string> = new Set(readSharedOwnHiddenUnits(parts.handle, sharedBufferedTarget(parts.handle, key), since));
+  const watch = createSharedNameCutWatch(parts.handle, () => [TITLE_FIELD_KEY,
+    ...parts.session.read(doc => normalizeScenes(doc?.sections).map(scene => headingFieldKey(scene.id)))].map(key => sharedBufferedTarget(parts.handle, key)), since);
+  function check(key: string, notice: string, units: readonly string[]): void {
+    const now: ReadonlySet<string> = new Set(units);
     const before = hidden.get(key);
     if (now.size) hidden.set(key, now); else hidden.delete(key);
     if ([...now].some(unit => !before?.has(unit))) notices.show(notice, "warn");
   }
-  // why: a cut can hide my letter while the shown text stays the same, so every change is checked
-  return parts.session.subscribe(() => {
-    check(TITLE_FIELD_KEY, SHARED_SPLIT_SURFACE_NOTICES.titleCut);
-    for (const scene of parts.session.read(doc => normalizeScenes(doc?.sections)) ?? []) check(headingFieldKey(scene.id), SHARED_SPLIT_SURFACE_NOTICES.sceneCut);
-  });
+  try {
+    watch.check();
+    const stop = parts.session.subscribe(() => {
+      for (const { address, units } of watch.check()) check(address.field === "title" ? TITLE_FIELD_KEY : headingFieldKey(address.owner),
+        address.field === "title" ? SHARED_SPLIT_SURFACE_NOTICES.titleCut : SHARED_SPLIT_SURFACE_NOTICES.sceneCut, units);
+    });
+    return () => { stop(); watch.dispose(); };
+  } catch (error) { watch.dispose(); throw error; }
 }
 
 export function sharedSplitSurfaces(split: SharedBindings & { readonly abandonable?: () => number },
@@ -79,6 +85,9 @@ export function sharedSplitSurfaces(split: SharedBindings & { readonly abandonab
   function releaseFailure(): void {
     const release = failing; failing = null;
     release?.();
+  }
+  function finishSurfaces(): boolean {
+    return !surfaces || surfaces.title.finish() && surfaces.scenes.finish() && (surfaces.empty?.finish() ?? true);
   }
   function failed(parts: SharedSessionParts): void {
     const release = parts.session.hold(SHARED_SPLIT_SURFACE_FAILED);
@@ -142,7 +151,7 @@ export function sharedSplitSurfaces(split: SharedBindings & { readonly abandonab
     settle: () => {
       // why: a leave in the failed-mount gap would settle under the failure hold, so every exit lifts it before landing
       releaseFailure();
-      if (surfaces && !(surfaces.title.finish() && surfaces.scenes.finish() && (surfaces.empty?.finish() ?? true))) return SHARED_SPLIT_SURFACE_PENDING;
+      if (!finishSurfaces()) return SHARED_SPLIT_SURFACE_PENDING;
       return split.settle();
     },
     abandon: () => {
@@ -162,6 +171,7 @@ export function sharedSplitSurfaces(split: SharedBindings & { readonly abandonab
     },
     abandonable: () => abandons.size + (split.abandonable?.() ?? 0),
     leave: () => {
+      if (!finishSurfaces()) throw new Error(SHARED_SPLIT_SURFACE_PENDING);
       const mounted = surfaces;
       if (mounted?.empty && !mounted.empty.dispose()) throw new Error(SHARED_SPLIT_SURFACE_PENDING);
       waiting?.(); waiting = null;

@@ -177,6 +177,7 @@ export function applyWriterSize(px: number | null, remember: boolean) {
 }
 
 export function openWriter(keepMark?: number | null) {
+  if (!flowMaker?.prepareWriter()) return;
   const selection = window.getSelection();
   const node = selection?.focusNode;
   const cell = (node?.nodeType === 3 ? node.parentElement : node as Element | null)?.closest?.('#rows .cell-editable[data-id]');

@@ -202,25 +202,31 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
       : followPaintedCaret(caret.base, [{ key, base: after, length }], offset, key)?.offset ?? 0;
     input.setSelectionRange(map(caret.start), map(caret.end), caret.direction);
   }
-  function settleHeld(): void {
-    if (open && binding.held()) ports.shown(() => binding.finish());
+  function settleInput(): void {
+    if (open) finish();
+  }
+  function finish(): boolean {
+    return ports.shown(() => { discardClipboard(); return binding.finish(); });
   }
   function released(event: Event): void {
     if (clipboardPending) ports.shown(() => binding.native(event, discardClipboard));
     // why: some keys on an input send no input event (an empty Backspace, a redo with no history), so a key that
     // inserted nothing ends the hold once the browser's default has run
-    if (pressed) settleHeld();
+    if (pressed) settleInput();
     pressed = false;
   }
   function blurred(): void {
     ports.shown(discardClipboard);
     // why: a repaint re-homes the form, blurring it until the paint refocuses; the hold ends only if focus stays away
-    queueMicrotask(() => { if (!active()) settleHeld(); });
+    queueMicrotask(() => { if (!active()) settleInput(); });
   }
   function selectionMoved(): void {
     ports.shown(discardClipboard);
     const selection = doc.getSelection(), at = selection?.rangeCount ? selection.anchorNode : null, input = active();
-    if (!input || at && !(input.form ?? input).contains(at)) settleHeld();
+    if (!input || at && !(input.form ?? input).contains(at)) settleInput();
+  }
+  function pressedOutside(event: Event): void {
+    if (!inputs.some(input => input === event.target)) settleInput();
   }
   let stopPainted = (): void => {}, stopCheck = (): void => {};
   function unlisten(): void {
@@ -231,6 +237,7 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
       input.removeEventListener("keyup", released);
     }
     doc.removeEventListener("selectionchange", selectionMoved);
+    doc.removeEventListener("pointerdown", pressedOutside);
   }
   try {
     for (const input of inputs) {
@@ -239,6 +246,7 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
       input.addEventListener("keyup", released);
     }
     doc.addEventListener("selectionchange", selectionMoved);
+    doc.addEventListener("pointerdown", pressedOutside);
     stopPainted = ports.onPainted(painted);
     stopCheck = ports.beforePaint(() => {
       ports.shown(discardClipboard);
@@ -253,7 +261,7 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
   const opened = form.opening === undefined ? undefined : whole(expected) ?? form.opening;
   return {
     held: binding.held,
-    finish: () => ports.shown(() => { discardClipboard(); return binding.finish(); }),
+    finish,
     revert: () => ports.shown(() => {
       discardClipboard();
       if (!binding.finish()) return false;

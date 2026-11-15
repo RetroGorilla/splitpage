@@ -150,7 +150,7 @@ export function fakeWriterPorts(initial: DocumentView, visual: Pick<FlowWriterPo
   const calls: unknown[][] = [];
   const state = { open: false, allowed: true, size: null as number | null, lifetime: 1, serial: 0 };
   const ports: WriterFeaturePorts = {
-    flow: { prepareSplit: () => {}, splitReady: () => true, create: (root, selectionMoved, step) => createFlowWriter({
+    flow: { prepareWriter: () => true, prepareSplit: () => {}, splitReady: () => true, create: (root, selectionMoved, step) => createFlowWriter({
       ...visual,
       root, selectionMoved, doc: () => initial, lifetime: { epoch: () => 0 }, heldSelection: selection,
       flow: { cells: html => [{ text: String(html ?? ""), marks: {} }], newId: () => "new", hasVisual: row => !!row.visualText },
