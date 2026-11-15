@@ -2,6 +2,9 @@ import * as Y from "yjs";
 import { CollabDocumentState, collabState, guardSharedCallback } from "./state.ts";
 import type { IngressTrial, SharedAdmissionCount } from "./state.ts";
 import type { SharedDocumentHandle } from "./types.ts";
+import { timingMarks } from "../../../shared/timing-marks.ts";
+
+declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 export const SHARED_TRIAL_REBUILD_BUDGET = 3;
 
@@ -120,12 +123,15 @@ export class SharedTrialReplica implements IngressTrial {
   }
 
   #rebuild(): void {
-    const vector = this.#inflight.size ? vectorOf(this.#live.doc) : null;
-    const next = this.#build();
-    this.#replica.doc.destroy();
-    this.#replica = next;
-    this.#stale = false;
-    if (vector) this.#mirrored(vector);
+    if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:rebuild:start");
+    try {
+      const vector = this.#inflight.size ? vectorOf(this.#live.doc) : null;
+      const next = this.#build();
+      this.#replica.doc.destroy();
+      this.#replica = next;
+      this.#stale = false;
+      if (vector) this.#mirrored(vector);
+    } finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:rebuild:end"); }
   }
 
   #current(): boolean {
@@ -135,10 +141,13 @@ export class SharedTrialReplica implements IngressTrial {
       const vector = vectorOf(this.#live.doc);
       if (local.some(transaction => this.#reusesClock(transaction, vector))) this.#stale = true;
       else {
-        // why: A live transaction whose update is not announced yet is copied by what the replica lacks.
-        const missing = Y.encodeStateAsUpdate(this.#live.doc, Y.encodeStateVector(this.#replica.doc));
-        this.#count?.("encode", "flush", missing.byteLength); this.#count?.("apply", "flush", missing.byteLength);
-        try { Y.applyUpdate(this.#replica.doc, missing); this.#mirrored(vector); } catch { this.#stale = true; }
+        if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:rebuild:start");
+        try {
+          // why: A live transaction whose update is not announced yet is copied by what the replica lacks.
+          const missing = Y.encodeStateAsUpdate(this.#live.doc, Y.encodeStateVector(this.#replica.doc));
+          this.#count?.("encode", "flush", missing.byteLength); this.#count?.("apply", "flush", missing.byteLength);
+          try { Y.applyUpdate(this.#replica.doc, missing); this.#mirrored(vector); } catch { this.#stale = true; }
+        } finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:rebuild:end"); }
       }
     }
     if (this.#stale && !this.#rebuildBlocked && !this.#stopped) this.#recover(false);

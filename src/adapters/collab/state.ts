@@ -2,6 +2,9 @@ import * as Y from "yjs";
 import type { SharedDocumentHandle, SharedTransactionOrigin } from "./types.ts";
 import { declareCollabRoots } from "./roots.ts";
 import { CollabReadCaches } from "./read-cache.ts";
+import { timingMarks } from "../../../shared/timing-marks.ts";
+
+declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 function formattingCleanup(transaction: Y.Transaction): boolean {
   if (transaction.beforeState.size !== transaction.afterState.size) return false;
@@ -131,11 +134,16 @@ function settleIngress(state: CollabDocumentState): void {
         for (const listener of gate.declineListeners) guardSharedCallback(state, listener);
         continue;
       }
-      gate.holds.add("delivering");
-      drained = true;
-      try { applyAdmittedUpdate(state, next, apply => runCollabTransaction(state, "remote", apply)); }
-      catch (error) { gate.errors.push(error); }
-      if (gate.held[0] === next) { gate.held.shift(); gate.heldBytes -= next.byteLength; }
+      if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:drain:start");
+      try {
+        if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:live-apply:start");
+        gate.holds.add("delivering");
+        drained = true;
+        try { applyAdmittedUpdate(state, next, apply => runCollabTransaction(state, "remote", apply)); }
+        catch (error) { gate.errors.push(error); }
+        finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:live-apply:end"); }
+        if (gate.held[0] === next) { gate.held.shift(); gate.heldBytes -= next.byteLength; }
+      } finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:drain:end"); }
     }
   } finally { gate.holds.delete("delivering"); }
 }
@@ -197,6 +205,16 @@ function runCollabTransaction(state: CollabDocumentState, origin: Exclude<Shared
 export function transactCollabState(state: CollabDocumentState, origin: Exclude<SharedTransactionOrigin, "cleanup">, change: () => void, execution?: object): void {
   assertSharedDocumentIdle(state, execution);
   sharedWriteFrame(state, recordFailure => runCollabTransaction(state, origin, change, recordFailure));
+}
+
+// why: one live-apply span per remote transaction and its notifications, closed before the frame drains the next
+export function transactRemoteCollabState(state: CollabDocumentState, change: () => void): void {
+  assertSharedDocumentIdle(state);
+  sharedWriteFrame(state, recordFailure => {
+    if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:live-apply:start");
+    try { runCollabTransaction(state, "remote", change, recordFailure); }
+    finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:live-apply:end"); }
+  });
 }
 
 export function collabState(handle: SharedDocumentHandle): CollabDocumentState {

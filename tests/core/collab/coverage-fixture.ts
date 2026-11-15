@@ -96,6 +96,16 @@ export const builderOperationCoverage = [
     ["planner unwraps observed comment marks", ["mark"]],
     ["record retained / unstamped capability exception / no rewrites", []]
   ]]),
+  classified("serve", ["sharedBrollKeyingCommand", "text-mark", "text-insert,text-delete,record-create,scalar", [
+    ["key each unkeyed marker line with an atom over its observed marker", ["text-insert", "text-delete"]],
+    ["a shot for each new key, authored by the leaving copy", ["record-create"]],
+    ["beat stamp", ["scalar"]],
+    ["nothing to key / missing row / no author or line identity", []]
+  ]]),
+  classified("serve", ["sharedBrollRepeatCommand", "text-mark", "text-delete", [
+    ["delete a repeated key directly after the key it repeats, with no shot of its own", ["text-delete"]],
+    ["no repeat / missing row / no author", []]
+  ]]),
   classified("refuse", ["restoreConflictCommand", "text-mark", "text-insert,text-delete,mark,scalar,record-create,record-set,record-delete", [
     ["title or cell text replacement", ["text-insert", "text-delete"]],
     ["cell value restores different marks on observed words", ["mark"]],

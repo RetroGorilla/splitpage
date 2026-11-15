@@ -4,111 +4,133 @@
     "label": "local change skipped in the trial replica",
     "file": "src/adapters/collab/trial-replica.ts",
     "find": "    const local = transaction.origin !== \"remote\" && !this.#stale;",
-    "replace": "    const local = transaction.origin !== \"remote\" && transaction.origin !== \"local-command\" && !this.#stale;"
+    "replace": "    const local = transaction.origin !== \"remote\" && transaction.origin !== \"local-command\" && !this.#stale;",
+    "tests": ["tests/adapters/collab/trial-replica.test.ts"]
   }, {
     "label": "held update skipped in the trial replica",
     "file": "src/adapters/collab/document.ts",
-    "find": "      if (state.trial) state.trial.attempt(update, decoded, () => copyTrial(state, update, count));\n      else copyTrial(state, update, count);",
-    "replace": "      if (state.trial && !closed) state.trial.attempt(update, decoded, () => copyTrial(state, update, count));\n      else copyTrial(state, update, count);"
+    "find": "        if (state.trial) state.trial.attempt(update, decoded, () => copyTrial(state, update, count));\n        else copyTrial(state, update, count);",
+    "replace": "        if (state.trial && !closed) state.trial.attempt(update, decoded, () => copyTrial(state, update, count));\n        else copyTrial(state, update, count);",
+    "tests": ["tests/adapters/collab/trial-replica.test.ts"]
   }, {
     "label": "refused update left in the trial replica",
     "file": "src/adapters/collab/trial-replica.ts",
     "find": "catch (error) { this.#refused(); throw error; }",
-    "replace": "catch (error) { throw error; }"
+    "replace": "catch (error) { throw error; }",
+    "tests": ["tests/adapters/collab/trial-replica.test.ts"]
   }, {
     "label": "live written before the trial",
     "file": "src/adapters/collab/document.ts",
-    "find": "    if (state.trial) state.trial.attempt(update, decoded, () => copyTrial(state, update, count));",
-    "replace": "    if (state.trial) { if (!closed) Y.applyUpdate(state.doc, update, \"remote\"); state.trial.attempt(update, decoded, () => copyTrial(state, update, count)); }"
+    "find": "        if (state.trial) state.trial.attempt(update, decoded, () => copyTrial(state, update, count));",
+    "replace": "        if (state.trial) { if (!closed) Y.applyUpdate(state.doc, update, \"remote\"); state.trial.attempt(update, decoded, () => copyTrial(state, update, count)); }",
+    "tests": ["tests/adapters/collab/trial-replica.test.ts"]
   }, {
     "label": "rebuild skipped after a refusal",
     "file": "src/adapters/collab/trial-replica.ts",
     "find": "    this.#recover(true);",
-    "replace": "    this.#stale = false;"
+    "replace": "    this.#stale = false;",
+    "tests": ["tests/adapters/collab/trial-replica.test.ts"]
   }, {
     "label": "trial replica observers left after dispose",
     "file": "src/adapters/collab/trial-replica.ts",
     "find": "    for (const stop of this.#stops.splice(0)) stop();",
-    "replace": "    this.#stops.length = 0;"
+    "replace": "    this.#stops.length = 0;",
+    "tests": ["tests/adapters/collab/trial-replica.test.ts"]
   }, {
     "label": "trial replica started outside a shared session",
     "file": "src/adapters/collab/document.ts",
-    "find": "observeSharedStructureIndex } from \"./structure-index.ts\";\n\nexport function createSharedDocument(): SharedDocumentHandle {\n  const handle = new CollabDocumentState() as unknown as SharedDocumentHandle;\n  observeSharedStructureIndex(handle); return handle;",
-    "replace": "observeSharedStructureIndex } from \"./structure-index.ts\";\nimport { startSharedTrialReplica } from \"./trial-replica.ts\";\n\nexport function createSharedDocument(): SharedDocumentHandle {\n  const handle = new CollabDocumentState() as unknown as SharedDocumentHandle;\n  observeSharedStructureIndex(handle); startSharedTrialReplica(handle); return handle;"
+    "find": "observeSharedStructureIndex } from \"./structure-index.ts\";",
+    "replace": "observeSharedStructureIndex as observeIndex } from \"./structure-index.ts\";\nimport { startSharedTrialReplica } from \"./trial-replica.ts\";\nconst observeSharedStructureIndex = (handle: SharedDocumentHandle): void => { observeIndex(handle); startSharedTrialReplica(handle); };",
+    "tests": ["tests/adapters/collab/trial-replica.test.ts"]
   }, {
     "label": "rebuild budget not counted",
     "file": "src/adapters/collab/trial-replica.ts",
     "find": "    this.#spent++;",
-    "replace": "    void this.#spent;"
+    "replace": "    void this.#spent;",
+    "tests": ["tests/adapters/collab/trial-replica.test.ts"]
   }, {
     "label": "intake not stopped when the budget is spent",
     "file": "src/adapters/collab/trial-replica.ts",
     "find": "{ this.#stopped = true; this.#announce = true; }",
-    "replace": "{ this.#announce = true; }"
+    "replace": "{ this.#announce = true; }",
+    "tests": ["tests/adapters/collab/trial-replica.test.ts"]
   }, {
     "label": "trials and rebuilds after intake stopped",
     "file": "src/adapters/collab/document.ts",
-    "find": "  if (state.trial?.stopped()) return { ok: false, reason: \"intake-stopped\" };",
-    "replace": "  void state.trial?.stopped();"
+    "find": "    if (state.trial?.stopped()) return { ok: false, reason: \"intake-stopped\" };",
+    "replace": "    void state.trial?.stopped();",
+    "tests": ["tests/adapters/collab/trial-replica.test.ts"]
   }, {
     "label": "intake stop not announced",
     "file": "src/adapters/collab/document.ts",
-    "find": "    if (state.trial?.takeStop()) announceSharedIntakeStop(state);",
-    "replace": "    void state.trial?.takeStop();"
+    "find": "      if (state.trial?.takeStop()) announceSharedIntakeStop(state);",
+    "replace": "      void state.trial?.takeStop();",
+    "tests": ["tests/adapters/collab/trial-replica.test.ts"]
   }, {
     "label": "failed rebuild retried on every arrival",
     "file": "src/adapters/collab/trial-replica.ts",
     "find": "this.#stale && !this.#rebuildBlocked && !this.#stopped",
-    "replace": "this.#stale && !this.#stopped"
+    "replace": "this.#stale && !this.#stopped",
+    "tests": ["tests/adapters/collab/trial-replica.test.ts"]
   }, {
     "label": "blocked rebuild refuses no-ops instead of using live copy trial",
     "file": "src/adapters/collab/trial-replica.ts",
     "find": "if (!this.#current()) { copyTrial(); return; }",
-    "replace": "if (!this.#current()) throw new Error(\"blocked\");"
+    "replace": "if (!this.#current()) throw new Error(\"blocked\");",
+    "tests": ["tests/adapters/collab/trial-replica.test.ts"]
   }, {
     "label": "failed recovery spends no rebuild budget",
     "file": "src/adapters/collab/trial-replica.ts",
     "find": "      if (!refused) this.#spend();",
-    "replace": "      void refused;"
+    "replace": "      void refused;",
+    "tests": ["tests/adapters/collab/trial-replica.test.ts"]
   }, {
     "label": "held clocks hide invalid structs from the live trial",
     "file": "src/adapters/collab/trial-replica.ts",
     "find": "    if (overlapsHeld) copyTrial();",
-    "replace": "    void overlapsHeld;"
+    "replace": "    void overlapsHeld;",
+    "tests": ["tests/adapters/collab/trial-replica.test.ts"]
   }, {
     "label": "local reuse of a held clock trusts equal vectors",
     "file": "src/adapters/collab/trial-replica.ts",
     "find": "      if (clock > floor && Y.getState(this.#replica.doc.store, client) > floor) return true;",
-    "replace": "      void clock; void floor;"
+    "replace": "      void clock; void floor;",
+    "tests": ["tests/adapters/collab/trial-replica.test.ts"]
   }, {
     "label": "surrogate item normalization leaves the replica clean",
     "file": "src/adapters/collab/trial-replica.ts",
     "find": "    return low >= 0xdc00 && low <= 0xdfff && high >= 0xd800 && high <= 0xdbff;",
-    "replace": "    return low >= 0xdc00 && low <= 0xdfff && high >= 0xd800 && high <= 0xdbff && false;"
+    "replace": "    return low >= 0xdc00 && low <= 0xdfff && high >= 0xd800 && high <= 0xdbff && false;",
+    "tests": ["tests/adapters/collab/trial-replica.test.ts"]
   }, {
     "label": "any surrogate in a written text item rebuilds the replica",
     "file": "src/adapters/collab/trial-replica.ts",
     "find": "    if (!(item instanceof Y.Item) || !(item.content instanceof Y.ContentString) || item.id.clock === start) return false;",
-    "replace": "    if (!(item instanceof Y.Item) || !(item.content instanceof Y.ContentString)) return false;\n    if (/[\\ud800-\\udfff]/.test(item.content.str)) return true;"
+    "replace": "    if (!(item instanceof Y.Item) || !(item.content instanceof Y.ContentString)) return false;\n    if (/[\\ud800-\\udfff]/.test(item.content.str)) return true;",
+    "tests": ["tests/adapters/collab/trial-replica.test.ts"]
   }, {
     "label": "the surrogate check starts at the transaction's before-state",
     "file": "src/adapters/collab/trial-replica.ts",
     "find": "      for (const start of [before, ...copies.map(copy => copy.get(client) ?? 0)]) {",
-    "replace": "      for (const start of [before]) {"
+    "replace": "      for (const start of [before]) {",
+    "tests": ["tests/adapters/collab/trial-replica.test.ts"]
   }, {
     "label": "in-flight check reads the state the library fills only at cleanup",
     "file": "src/adapters/collab/trial-replica.ts",
     "find": "      if (local.some(transaction => this.#reusesClock(transaction, vector))) this.#stale = true;",
-    "replace": "      if (local.some(transaction => this.#reusesClock(transaction, transaction.afterState))) this.#stale = true;"
+    "replace": "      if (local.some(transaction => this.#reusesClock(transaction, transaction.afterState))) this.#stale = true;",
+    "tests": ["tests/adapters/collab/trial-replica.test.ts"]
   }, {
     "label": "flushed content counted as a held clock when its transaction ends",
     "file": "src/adapters/collab/trial-replica.ts",
-    "find": "        try { Y.applyUpdate(this.#replica.doc, missing); this.#mirrored(vector); } catch { this.#stale = true; }",
-    "replace": "        try { Y.applyUpdate(this.#replica.doc, missing); } catch { this.#stale = true; }"
+    "find": "          try { Y.applyUpdate(this.#replica.doc, missing); this.#mirrored(vector); } catch { this.#stale = true; }",
+    "replace": "          try { Y.applyUpdate(this.#replica.doc, missing); } catch { this.#stale = true; }",
+    "tests": ["tests/adapters/collab/trial-replica.test.ts"]
   }, {
     "label": "rebuilt content counted as a held clock when its transaction ends",
     "file": "src/adapters/collab/trial-replica.ts",
-    "find": "    if (vector) this.#mirrored(vector);",
-    "replace": "    void vector;"
+    "find": "      if (vector) this.#mirrored(vector);",
+    "replace": "      void vector;",
+    "tests": ["tests/adapters/collab/trial-replica.test.ts"]
   }]
 }

@@ -1,10 +1,13 @@
 import * as Y from "yjs";
 import { exceedsBufferQueue } from "../../core/collab/buffer.ts";
-import { CollabDocumentState, collabState, transactCollabState, announceSharedIntakeStop, applyAdmittedUpdate, assertNoSharedExecution, assertSharedIngressAllowed,
-  guardSharedCallback } from "./state.ts";
+import { CollabDocumentState, collabState, transactCollabState, transactRemoteCollabState, announceSharedIntakeStop, applyAdmittedUpdate,
+  assertNoSharedExecution, assertSharedIngressAllowed, guardSharedCallback } from "./state.ts";
 import type { SharedAdmissionCount } from "./state.ts";
 import type { SharedDocumentHandle, SharedTransactionOrigin, SharedApplyResult } from "./types.ts";
 import { observeSharedStructureIndex } from "./structure-index.ts";
+import { timingMarks } from "../../../shared/timing-marks.ts";
+
+declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 export function createSharedDocument(): SharedDocumentHandle {
   const handle = new CollabDocumentState() as unknown as SharedDocumentHandle;
@@ -63,34 +66,41 @@ function copyTrial(state: CollabDocumentState, update: Uint8Array, count?: Share
 }
 
 export function applySharedUpdate(handle: SharedDocumentHandle, update: Uint8Array, count?: SharedAdmissionCount): SharedApplyResult {
-  const state = collabState(handle), gate = state.ingress;
-  const closed = gate.holds.size > 0 || gate.frames > 0 && !state.execution;
-  assertSharedIngressAllowed(state);
-  if (state.trial?.stopped()) return { ok: false, reason: "intake-stopped" };
-  if (gate.holds.has("buffer") && (gate.declined || exceedsBufferQueue(gate.heldBytes, update.byteLength))) {
-    gate.declined = true;
-    return { ok: false, reason: "queue-full" };
-  }
+  if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:receive:start");
   try {
+    const state = collabState(handle), gate = state.ingress;
+    const closed = gate.holds.size > 0 || gate.frames > 0 && !state.execution;
+    assertSharedIngressAllowed(state);
+    if (state.trial?.stopped()) return { ok: false, reason: "intake-stopped" };
+    if (gate.holds.has("buffer") && (gate.declined || exceedsBufferQueue(gate.heldBytes, update.byteLength))) {
+      gate.declined = true;
+      return { ok: false, reason: "queue-full" };
+    }
     try {
-      const decoded = Y.decodeUpdate(update);
-      if (decoded.structs.some(struct => struct.length <= 0)) return { ok: false, reason: "invalid-update" };
-      // why: The standing replica holds live plus every held update, so the trial meets what the update will meet.
-      if (state.trial) state.trial.attempt(update, decoded, () => copyTrial(state, update, count));
-      else copyTrial(state, update, count);
-    } catch {
-      return { ok: false, reason: "invalid-update" };
+      if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:trial:start");
+      try {
+        const decoded = Y.decodeUpdate(update);
+        if (decoded.structs.some(struct => struct.length <= 0)) return { ok: false, reason: "invalid-update" };
+        // why: The standing replica holds live plus every held update, so the trial meets what the update will meet.
+        if (state.trial) state.trial.attempt(update, decoded, () => copyTrial(state, update, count));
+        else copyTrial(state, update, count);
+      } catch {
+        return { ok: false, reason: "invalid-update" };
+      } finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:trial:end"); }
+      // why: While the gate is closed the update waits its turn, so each revision is announced with exactly its own content.
+      if (closed) {
+        if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:queue:start");
+        try { gate.held.push(Uint8Array.from(update)); gate.heldBytes += update.byteLength; }
+        finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:queue:end"); }
+      } else {
+        count?.("apply", "live", update.byteLength);
+        applyAdmittedUpdate(state, update, apply => transactRemoteCollabState(state, apply));
+      }
+      return { ok: true };
+    } finally {
+      if (state.trial?.takeStop()) announceSharedIntakeStop(state);
     }
-    // why: While the gate is closed the update waits its turn, so each revision is announced with exactly its own content.
-    if (closed) { gate.held.push(Uint8Array.from(update)); gate.heldBytes += update.byteLength; }
-    else {
-      count?.("apply", "live", update.byteLength);
-      applyAdmittedUpdate(state, update, apply => transactCollabState(state, "remote", apply));
-    }
-    return { ok: true };
-  } finally {
-    if (state.trial?.takeStop()) announceSharedIntakeStop(state);
-  }
+  } finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:receive:end"); }
 }
 
 export function destroySharedDocument(handle: SharedDocumentHandle): void {

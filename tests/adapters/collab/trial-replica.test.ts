@@ -7,7 +7,7 @@ import * as Y from "yjs";
 import { applySharedUpdate, destroySharedDocument, encodeSharedState, encodeSharedStateVector, encodeSharedUpdate, observeSharedTransactions,
   readSharedRevision, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
-import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
+import { hydrateSharedDocument, hydrateSharedDocumentFromState } from "../../../src/adapters/collab/hydrate.ts";
 import { holdSharedBuffer, holdSharedCapture, observeSharedIntakeStopped, sharedIntakeStopped } from "../../../src/adapters/collab/ingress.ts";
 import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
 import { prepareSharedMarkRecord, writeSharedMarkRecord } from "../../../src/adapters/collab/mark-store.ts";
@@ -213,6 +213,18 @@ test("trial replica routes: hydration into a new shared document reaches the rep
   } finally { destroySharedDocument(handle); }
 });
 
+test("trial replica routes: hydration from stored state into a new shared document reaches the replica", () => {
+  const source = hydrated(1), handle = createMonitoredSharedDocument(), counts = counter();
+  try {
+    const trial = startSharedTrialReplica(handle, counts.count);
+    counts.reset();
+    hydrateSharedDocumentFromState(handle, encodeSharedState(source));
+    assert.deepEqual([counts.calls("apply:follow"), counts.calls("encode:flush"), counts.calls("encode:rebuild")], [1, 0, 0]);
+    assert.equal(same(trial.encode(), encodeSharedState(handle)), true);
+    assert.equal(counts.calls("encode:rebuild"), 0);
+  } finally { destroySharedDocument(handle); destroySharedDocument(source); }
+});
+
 test("trial replica routes: an arrival inside a local transaction's notification is tried against that transaction's change", () => {
   const handle = hydrated(1), counts = counter();
   try {
@@ -245,13 +257,13 @@ test("trial replica write inventory: every library write under the shared adapte
     if (hits) found[name] = hits;
   }
   const routes: Record<string, [number, string]> = {
-    "src/adapters/collab/document.ts": [5, "transactSharedDocument definition; copy trial outside a session; open remote apply after the trial"],
+    "src/adapters/collab/document.ts": [4, "transactSharedDocument definition; copy trial outside a session"],
     "src/adapters/collab/execute.ts": [1, "commands, buffer commits and recovery commands: live update event"],
-    "src/adapters/collab/hydrate.ts": [1, "hydration: live update event"],
+    "src/adapters/collab/hydrate.ts": [3, "hydration from a source and from stored state: live update event"],
     "src/adapters/collab/incremental-project.ts": [4, "the projector's own mirror and normalized copy, not the live document"],
     "src/adapters/collab/mark-store.ts": [1, "mark records: live update event"],
     "src/adapters/collab/snapshot.ts": [1, "a read copy, not the live document"],
-    "src/adapters/collab/state.ts": [6, "the write frame, held updates released after their trial, and the transaction helper"],
+    "src/adapters/collab/state.ts": [7, "the write frame, held updates released after their trial, the transaction helper, and the open remote apply after the trial"],
     "src/adapters/collab/text-edit.ts": [1, "native text edits inside an adapter transaction: live update event"],
     "src/adapters/collab/text-target.ts": [1, "text creation: live update event"],
     "src/adapters/collab/trial-replica.ts": [5, "the replica itself: rebuild, follow, flush and trial"]

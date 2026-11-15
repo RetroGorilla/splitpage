@@ -1,4 +1,8 @@
 import type { BufferedFieldPorts } from "../../application/editing/buffered-field.ts";
+import { keySharedLeftCell } from "../../application/commands/shared-broll-keying.ts";
+import { scriptCellOf } from "../richtext.ts";
+import { sharedBrollKeyingPorts } from "./ports/shared-broll-keying.ts";
+import { text } from "./ports/text.ts";
 import type { CellBuffer } from "../../features/editing/cell-buffer.ts";
 import { productionReaders } from "../document-ports.ts";
 import { mountCompositionFeature, mountFocusFeature, mountRowsEditingFeature, refuseSharedSplitNative } from "./editor.ts";
@@ -8,12 +12,15 @@ import { sharedCommandReport } from "./ports/shared-command-notices.ts";
 import { sessionStamps } from "./session-owner.ts";
 import type { SharedBindings, SharedSessionParts } from "./shared-session.ts";
 import { mountSharedSplitBuffer } from "./split-buffer.ts";
+import { timingMarks } from "../../../shared/timing-marks.ts";
+
+declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 export function sharedSplitBindings(effects: Pick<BufferedFieldPorts, "missingBase" | "recovered" | "report" | "ownershipScan">): SharedBindings & {
   readonly abandonable: () => number;
 } {
   let entered: SharedSessionParts | null = null, buffer: CellBuffer | null = null;
-  let refusal: string | null = null;
+  let refusal: string | null = null, closing = false;
   const abandons = new Set<(final: boolean) => void>();
   const abandonment = (abandon: (final: boolean) => void): (() => void) => { abandons.add(abandon); return () => { abandons.delete(abandon); }; };
   function abandonAll(final: boolean): void {
@@ -24,9 +31,22 @@ export function sharedSplitBindings(effects: Pick<BufferedFieldPorts, "missingBa
   const notify = sharedCommandReport(notices, effects.report);
   return {
     enter: parts => {
+      closing = false;
       if (entered === parts && buffer) return;
       entered = parts;
-      mountCompositionFeature(true); mountFocusFeature(true); mountRowsEditingFeature(true);
+      const keying = sharedBrollKeyingPorts(parts.handle, { author: () => parts.author.next(), cells: scriptCellOf, readers: productionReaders,
+        plainTextOf: text.htmlToPlainText, stamps: sessionStamps });
+      const leftCell = (cell: Element): void => {
+        const rowId = cell.getAttribute("data-id");
+        if (closing || entered !== parts || !buffer || !rowId || !cell.isConnected || cell.getAttribute("data-field") !== "visualText") return;
+        if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-command:start");
+        try {
+          for (const outcome of keySharedLeftCell(parts.session, rowId, keying)) {
+            if (outcome.kind === "failed" || outcome.kind === "rejected" || outcome.kind === "committed" && outcome.errors.length) notify(outcome);
+          }
+        } finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-command:end"); }
+      };
+      mountCompositionFeature(true); mountFocusFeature({ leftCell }); mountRowsEditingFeature(true);
       const author = (): { readonly id: string; readonly by: string } => {
         const next = parts.author.next();
         if (!next) throw new Error("The shared Split has no author");
@@ -42,10 +62,11 @@ export function sharedSplitBindings(effects: Pick<BufferedFieldPorts, "missingBa
       refusal = null;
       return !buffer || buffer.binding.finish() ? null : refusal ?? "buffer-pending";
     },
-    abandon: () => { abandonAll(false); },
-    drop: () => { abandonAll(true); },
+    abandon: () => { closing = true; abandonAll(false); },
+    drop: () => { closing = true; abandonAll(true); },
     abandonable: () => abandons.size,
     leave: () => {
+      closing = true;
       if (!entered && !buffer) return;
       if (buffer && entered?.session.read(doc => doc) === null) abandonAll(true);
       if (buffer && !buffer.dispose()) throw new Error(refusal ?? "buffer-pending");

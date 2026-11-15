@@ -77,13 +77,13 @@
     {
       "label": "C7 shared input uses standalone whole-field synchronization",
       "file": "src/bootstrap/wiring/editor.ts",
-      "find": "if (cell && isScriptCell(cell)) afterScriptCellChange(cell);\n      else onRootInput(event);",
+      "find": "if (cell && isScriptCell(cell)) afterScriptCellChange(cell);\n  else onRootInput(event);",
       "replace": "onRootInput(event);"
     },
     {
       "label": "C7 shared blur uses standalone whole-field synchronization",
       "file": "src/bootstrap/wiring/editor.ts",
-      "find": "blurredCell: (cell: Element) => { if (!cell.closest(\"#rows\")) editorFocusPorts.blurredCell(cell); }",
+      "find": "blurredCell: (cell: Element) => { if (!cell.closest(\"#rows\")) editorFocusPorts.blurredCell(cell); else sharedSplit.leftCell(cell); }",
       "replace": "blurredCell: editorFocusPorts.blurredCell"
     },
     {
@@ -101,8 +101,8 @@
     {
       "label": "C7 buffer refusals bypass the visible report port",
       "file": "src/bootstrap/wiring/shared-split.ts",
-      "find": "notify(outcome);",
-      "replace": "effects.report(outcome);"
+      "find": "report: outcome => { refusal = outcome.kind === \"rejected\" ? outcome.reason : null; notify(outcome); }",
+      "replace": "report: outcome => { refusal = outcome.kind === \"rejected\" ? outcome.reason : null; effects.report(outcome); }"
     },
     {
       "label": "C7 prevented copy or cut reaches standalone clipboard handlers",

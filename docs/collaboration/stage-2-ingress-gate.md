@@ -35,8 +35,9 @@ handle that is destroyed are discarded with it. They were acknowledged as valid,
 applied.
 
 The gate keeps its reasons for being closed in one set, `holds`, and has one queue.
-The set has two members, `delivering` and `buffer`. `holdSharedBuffer` acquires the
-buffer reason and returns an idempotent release. The drain starts only when the
+The set has three members, `delivering`, `buffer` and `capture`. `holdSharedBuffer`
+acquires the buffer reason and `holdSharedCapture` the capture reason; each returns an
+idempotent release. The drain starts only when the
 set is empty, and stops if a callback opens a buffer while draining. A local
 buffer commit may write while `buffer` is set; `delivering` still refuses local
 writes with `SharedExecutionWriteError`. A commit moment during delivery must
@@ -93,7 +94,7 @@ in the replica can still copy the whole live history.
 The live document, plus every accepted update (held or not), plus every local change. Local
 changes reach it through the live document's `update` event, one subscription that every
 write route shares: commands (buffer commits and recovery commands included), undo and redo,
-hydration, text creation, HTML import, mark records, plain adapter transactions and the
+hydration from a source or from stored state, text creation, HTML import, mark records, plain adapter transactions and the
 library's own formatting cleanup. Remote transactions are skipped: they apply only an update
 the replica already took at its trial, whether the gate was open or the update was held and
 released later. Every hold counts the same: an update accepted under `buffer`, `capture` or a
@@ -306,6 +307,13 @@ encodes and applies the whole document again: 1,938 bytes on the two-beat test d
 applies 52 bytes on both: the update once on the replica and once on live. These are bytes
 moved by the adapter for those exact fixtures. A stale recovery copies the whole live
 document plus held updates, and a nested arrival can encode the complete delete set.
+
+With timing marks on, the trial on the replica and a copy-trial fallback are both inside the
+`trial` span (validation), and the live apply is inside `live-apply` (apply). Every rebuild of
+the replica, after a refusal, as a stale recovery, or as the copy for a nested arrival, is
+inside a `rebuild` pair. `tests/collab/measure/mark-parts.mjs` counts it in validation and also
+publishes it as its own `rebuild` figure. A refused update on the replica path marks one
+`rebuild` inside its `trial` and `receive`; an ordinary arrival marks none.
 
 Each local transaction in a shared session adds this work, which the composed-editor
 measurement still has to time: a set insert and a set clear for the transaction; one pass over

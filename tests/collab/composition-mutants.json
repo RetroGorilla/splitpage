@@ -315,8 +315,8 @@
     {
       "label": "the replica hands one record to the undo owner twice",
       "file": "src/adapters/collab/replica.ts",
-      "find": "      return kept;\n    });\n",
-      "replace": "      Object.assign(failed, { kept: kept });\n      return kept;\n    });\n    undo.perform(() => (failed as unknown as { kept: SharedUndoRecord | null }).kept);\n"
+      "find": "        return kept;\n      });\n",
+      "replace": "        Object.assign(failed, { kept: kept });\n        return kept;\n      });\n      undo.perform(() => (failed as unknown as { kept: SharedUndoRecord | null }).kept);\n"
     },
     {
       "label": "undo skips the session's admission",
