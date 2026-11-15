@@ -120,6 +120,6 @@ export function reconcile(input) {
 
 if (isMain(import.meta.url)) {
   const input = process.argv[2] ? JSON.parse(readFileSync(process.argv[2], "utf8"))
-    : JSON.parse(execFileSync(process.execPath, ["prototypes/collab/src/perf/lifetime/byte-replay.ts"], { encoding: "utf8", maxBuffer: 32 * 1024 ** 2 }));
+    : JSON.parse(execFileSync(process.execPath, ["prototypes/collab/measure/byte-replay.ts"], { encoding: "utf8", maxBuffer: 32 * 1024 ** 2 }));
   writeFileSync(process.argv[3] ?? "docs/collaboration/stage-2-byte-reconciliation.json", JSON.stringify(reconcile(input), null, 2) + "\n");
 }

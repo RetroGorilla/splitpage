@@ -2,8 +2,8 @@ import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import process from "node:process";
 import * as Y from "yjs";
-import { LifetimeHistory, canonicalLifetimeSource } from "./workload.ts";
-import { lifetimeSize, lifetimeTyped } from "./counts.ts";
+import { LifetimeHistory, canonicalLifetimeSource } from "../src/perf/lifetime/workload.ts";
+import { lifetimeSize, lifetimeTyped } from "../src/perf/lifetime/counts.ts";
 
 const tape: unknown[] = [];
 const original = { insert: Y.Text.prototype.insert, delete: Y.Text.prototype.delete, insertEmbed: Y.Text.prototype.insertEmbed };
