@@ -15,7 +15,9 @@ import { prompterControls } from "./prompter.ts";
 import { prompterState } from "./ports/preferences.ts";
 import { writerControls } from "./writer.ts";
 import { sharedCommandGuard } from "./ports/shared-command-notices.ts";
-import { sharedSession } from "./session-owner.ts";
+import { sharedRewritePorts } from "./ports/shared-rewrites.ts";
+import { sessionStamps, sharedSession } from "./session-owner.ts";
+import { sharedSessionParts } from "./shared-session.ts";
 
 const find = owned<FindControls>();
 const events = owned<ReturnType<typeof mountFindEvents>>();
@@ -24,6 +26,13 @@ export function mountFindFeature(): FindControls {
   return find.replace(() => {
     const ports: FindPorts = {
       sharedCommands: sharedCommandGuard(sharedSession, portNotices),
+      shared: sharedRewritePorts({
+        handle: () => sharedSessionParts()?.handle ?? null,
+        author: () => sharedSessionParts()?.author.next() ?? null,
+        stamps: sessionStamps,
+        cells: portText.cellOf,
+        readers: portText.productionReaders
+      }),
       writer: () => writerControls()?.writerFlowControl()?.find ?? null,
       document: portDocument,
       edits: portEdits,

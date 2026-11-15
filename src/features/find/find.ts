@@ -2,7 +2,7 @@ import { countInPieces, countInTags, findInCell, matchesInPieces, searchablePiec
 import type { FindControls, FindPorts } from "./ports.ts";
 import type { FindOptions } from "../../application/find-options.ts";
 import type { BulkTagTotals } from "../../application/commands/bulk-tags.ts";
-import type { CellRewrite } from "../../application/commands/document-edit.ts";
+import type { CellRewrite, SharedRewritePorts } from "../../application/commands/document-edit.ts";
 import type { DocumentView } from "../../application/session/document-session.ts";
 import type { DocumentRow, DocumentTag } from "../../core/document/validated.ts";
 
@@ -28,9 +28,10 @@ import { tagCellsCommand } from "../../application/commands/production-records.t
 import { cssAttr } from "../common/dom.ts";
 import { idMap } from "../../core/document/id-map.ts";
 import { escapeHtml, withoutLoneSurrogates } from "../../core/document/text-policy.ts";
-import { replaceText } from "../../core/text/edits.ts";
+import { clampRange, deleteRange, replaceText, sliceCell } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
-import { projection } from "../../core/text/runs.ts";
+import { cellLength, projection } from "../../core/text/runs.ts";
+import type { SharedCellSplice } from "../../core/collab/cell-text-operations.ts";
 import { presentFindRanges } from "./present-ranges.ts";
 import { captureFindEscape } from "./keyboard-lock.ts";
 import type { WriterSearchMatch } from "../common/writer-find.ts";
@@ -39,6 +40,7 @@ import type { WriterFindAccess } from "../common/writer-find.ts";
 let ports: FindRuntimePorts | null = null;
 
 let findMatches: FindMatch[] = [];
+let searchedRows: FindDocumentView["rows"] = [];
 let findIndex = -1;
 let findInTags = 0;
 let presentRanges: Range[] = [];
@@ -110,6 +112,19 @@ export function replaceInHtml(html: string, needle: string, replacement: unknown
   return { html: toHtml(cell, hooks), changed: matches.length };
 }
 
+function sharedReplacement(html: string, needle: string, replacement: string, nth: number, matchCase: boolean, hooks: Parameters<typeof toHtml>[1]) {
+  const res = replaceInHtml(html, needle, replacement, nth, matchCase, hooks);
+  if (!res.changed) return { html: html, changed: 0, splices: [] as SharedCellSplice[] };
+  const cell = (ports as FindRuntimePorts).text.cellOf(html);
+  let matches = findInCell(cell, needle, matchCase);
+  if (nth !== -1) matches = matches[nth] ? [matches[nth]] : [];
+  const splices = matches.map(function (m): SharedCellSplice {
+    const next = replaceText(cell, m.from, m.to, replacement), range = clampRange(cell, m.from, m.to);
+    return { from: range.from, to: range.to, insert: sliceCell(next, range.from, range.from + cellLength(next) - cellLength(deleteRange(cell, m.from, m.to))) };
+  });
+  return { html: res.html, changed: res.changed, splices: splices };
+}
+
 function refreshFindMatches(keepIndex: boolean) {
   if (writerFind) {
     const found = writerFind.search(findNeedle(), (ports as FindRuntimePorts).options.matchesCase());
@@ -132,7 +147,8 @@ function refreshFindMatches(keepIndex: boolean) {
     updateFindCount();
     return;
   }
-  const found = findInRows((ports as FindRuntimePorts).document.current()?.rows ?? [], findNeedle(), (ports as FindRuntimePorts).options.matchesCase());
+  searchedRows = (ports as FindRuntimePorts).document.current()?.rows ?? [];
+  const found = findInRows(searchedRows, findNeedle(), (ports as FindRuntimePorts).options.matchesCase());
   findMatches = found.matches;
   findInTags = found.inTags;
   if (!findMatches.length) findIndex = -1;
@@ -240,6 +256,8 @@ function replaceCurrent() {
   if (idx === -1) return;
   const replacement = (document.getElementById("replace-input") as HTMLInputElement).value || "";
   const matchCase = (ports as FindRuntimePorts).options.matchesCase();
+  const shared = (ports as FindRuntimePorts).shared?.() ?? null;
+  if (shared) { replaceSharedMatch(m, needle, replacement, matchCase, shared); return; }
   function replaced(doc: FindDocumentView) {
     const row = doc.rows[rowIndexOf(doc, m.rowId)];
     if (!row) return [];
@@ -251,19 +269,48 @@ function replaceCurrent() {
   revealFindMatch();
 }
 
+function sharedOutcome(command: ReturnType<typeof rewriteCellsCommand>) {
+  const outcome = (ports as FindRuntimePorts).edits.run(command);
+  if (outcome.kind === "failed") throw outcome.error;
+  return outcome.kind;
+}
+
+function replaceSharedMatch(m: FindMatch, needle: string, replacement: string, matchCase: boolean, shared: SharedRewritePorts) {
+  const seen = searchedRows.find(function (row) { return row.id === m.rowId; })?.[m.field];
+  if (typeof seen !== "string") return;
+  function replaced(doc: FindDocumentView): CellRewrite[] {
+    const row = doc.rows[rowIndexOf(doc, m.rowId)];
+    if (!row) return [{ rowId: m.rowId, field: m.field, html: seen as string, seen: seen as string, splices: [] }];
+    const res = sharedReplacement(row[m.field] as string, needle, replacement, m.nth, matchCase, registryTagHooks(doc.productionTags));
+    return [{ rowId: m.rowId, field: m.field, html: res.html, seen: seen as string, splices: res.splices }];
+  }
+  const kind = sharedOutcome(rewriteCellsCommand("replace-match", replaced, (ports as FindRuntimePorts).edits.stamps, { needs: "edit", stamped: true }, shared));
+  if (kind === "noop") return;
+  refreshFindMatches(true);
+  revealFindMatch();
+}
+
 export function replaceAll() {
   if (findingInPresent()) return;
   if (writerFind) { replaceWriterMatches(true); return; }
-  if ((ports as FindRuntimePorts).sharedCommands.refuseUnsupported()) return;
+  const shared = (ports as FindRuntimePorts).shared?.() ?? null;
+  if (!shared && (ports as FindRuntimePorts).sharedCommands.refuseUnsupported()) return;
   const needle = findNeedle();
   if (!needle) return;
   const replacement = (document.getElementById("replace-input") as HTMLInputElement).value || "";
   const matchCase = (ports as FindRuntimePorts).options.matchesCase();
-  function replacedAll(doc: FindDocumentView | null) {
+  function replacedAll(doc: FindDocumentView | null, spliced?: boolean) {
     const hooks = registryTagHooks((doc as FindDocumentView).productionTags);
     const out: { total: number; rewrites: CellRewrite[] } = { total: 0, rewrites: [] };
     (doc as FindDocumentView).rows.forEach(function (row) {
       ["visualText", "audioText"].forEach(function (field) {
+        if (spliced) {
+          const done = sharedReplacement(row[field] as string, needle, replacement, -1, matchCase, hooks);
+          if (!done.changed) return;
+          out.total += done.changed;
+          out.rewrites.push({ rowId: row.id, field: field, html: done.html, splices: done.splices });
+          return;
+        }
         const res = replaceInHtml(row[field] as string, needle, replacement, -1, matchCase, hooks);
         if (!res.changed) return;
         out.total += res.changed;
@@ -280,6 +327,23 @@ export function replaceAll() {
   const tagNote = inTags
     ? " · " + inTags + " left inside tag" + (inTags === 1 ? "" : "s") + " — rename those in Production"
     : "";
+  if (shared) {
+    let replaced = 0;
+    const kind = total ? sharedOutcome(rewriteCellsCommand("replace-all", function (doc) {
+      const out = replacedAll(doc, true);
+      replaced = out.total;
+      return out.rewrites;
+    }, (ports as FindRuntimePorts).edits.stamps, { needs: "edit", stamped: true }, shared)) : "noop";
+    if (kind === "rejected") return;
+    if (kind === "noop") {
+      (ports as FindRuntimePorts).notices.show(inTags ? "Only found inside tags — rename it in Production instead." : "Nothing to replace.", "warn");
+      return;
+    }
+    refreshFindMatches(false);
+    revealFindMatch();
+    (ports as FindRuntimePorts).notices.show("Replaced " + replaced + " match" + (replaced === 1 ? "" : "es") + tagNote, "ok");
+    return;
+  }
   if (!total || !(ports as FindRuntimePorts).edits.edit(rewriteCellsCommand("replace-all", function (doc) { return replacedAll(doc).rewrites; }, (ports as FindRuntimePorts).edits.stamps, { needs: "edit", stamped: true }))) {
     (ports as FindRuntimePorts).notices.show(inTags
       ? "Only found inside tags — rename it in Production instead."
@@ -586,6 +650,7 @@ export function closeFindBar() {
   document.getElementById("findbar")?.classList.remove("is-writer");
   paintFindVisuals();
   findMatches = [];
+  searchedRows = [];
   findIndex = -1;
   findInTags = 0;
   closeBulkTag();
@@ -635,6 +700,7 @@ export function startFind(given: FindPorts): FindControls {
         given.present.setSearching(false);
         (ports as FindRuntimePorts).flags.setFindOpen(false);
         findMatches = [];
+        searchedRows = [];
         findIndex = -1;
         findInTags = 0;
         if (highlightsSupported()) CSS.highlights.delete(FIND_HL);
