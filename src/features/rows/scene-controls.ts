@@ -187,7 +187,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
         end(); return true;
       };
       const hold = (): void => { if (!bound && !release) release = ports.sharedScenes?.hold() ?? null; };
-      const stopAdmission = ports.sharedScenes?.beforeCommand(() => creating || finish());
+      const stopAdmission = ports.sharedScenes?.beforeCommand(() => creating || finish() || "announced");
       const stopCheck = shared.beforePaint(() => {
         if (!composing) end();
         caret = doc.activeElement === input ? [input.selectionStart, input.selectionEnd, input.selectionDirection ?? "none"] : null;

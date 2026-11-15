@@ -4,7 +4,6 @@ import type { SharedRecordCommands, SharedRecordPorts } from "../../../applicati
 import type { SharedStructureCommands } from "../../../application/commands/shared-structure.ts";
 import type { SharedValueCommands } from "../../../application/commands/shared-values.ts";
 import type { CommandOutcome } from "../../../application/session/document-session.ts";
-import { SHARED_LISTENER_REFUSAL } from "../../../application/session/shared-session.ts";
 import type { UndoControl } from "../../../application/editing/undo-control.ts";
 import { sessionStamps, sessionTextPorts } from "../session-owner.ts";
 import { sharedSessionParts } from "../shared-session.ts";
@@ -20,8 +19,14 @@ import { sharedStructurePorts, sharedValuePorts } from "./shared-values.ts";
 const refuse = sharedCommandRefusalNotice(notices);
 
 function refused(outcome: CommandOutcome): void {
-  // why: a listener that refuses admission has already announced its own reason, so announcing it here would warn twice
-  if (outcome.kind === "rejected" && !outcome.notified && outcome.reason !== SHARED_LISTENER_REFUSAL) refuse(outcome.reason);
+  if (outcome.kind === "rejected" && !outcome.notified) refuse(outcome.reason);
+}
+
+function settle(): boolean {
+  const refusal = sharedSessionParts()?.session.admit() ?? null;
+  if (refusal?.kind === "failed") throw refusal.error;
+  if (refusal) refused(refusal);
+  return refusal === null;
 }
 
 function source(parts: SharedSessionParts) {
@@ -72,7 +77,8 @@ export const sharedStructureCommands: SharedStructureCommands = {
     const parts = sharedSessionParts();
     return parts ? sharedStructurePorts({ ...source(parts), cells: html => sessionTextPorts.cells(html) })() : null;
   },
-  refused
+  refused,
+  settle
 };
 
 // why: while shared the standalone owner refuses its held document, so a control's own Ctrl+Z steps the shared owner

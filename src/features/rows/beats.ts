@@ -78,9 +78,10 @@ function splitField(cellEl: Element) {
   const field = cellEl.getAttribute("data-field");
   if ((ports as BeatPortUse).document.read(function (doc) { return rowIndexOf(doc, id); }) === -1 || (field !== "visualText" && field !== "audioText")) return null;
   const shared = (ports as BeatPortUse).shared.ports();
-  // why: in a shared session the command's admission settles the cell, and a second settle warns twice
   if (!shared) (ports as BeatPortUse).cells.sync(cellEl);
-  const sel = (ports as BeatPortUse).selection.of(cellEl);
+  // why: admission commits pending typing and drains held updates, so offsets are read after it, from the repainted cell
+  else if (!(ports as BeatPortUse).shared.settle()) return null;
+  const sel = (ports as BeatPortUse).selection.of(shared ? document.querySelector(rowCellSelector(id, field)) ?? cellEl : cellEl);
   if (!sel) return null;
   (ports as BeatPortUse).undo.breakCoalescing();
   const createdId = (ports as BeatPortUse).ids.id("r");
@@ -195,9 +196,11 @@ function moveRow(id: string, dir: number) {
 }
 
 function armDelete(btn: Element, id: string) {
-  const idx = (ports as BeatPortUse).document.read(function (doc) { return rowIndexOf(doc, id); });
   const rowEl = document.querySelector<HTMLElement>('#rows .row[data-id="' + safeId(id, "r", (ports as BeatPortUse).ids as IdSource) + '"]');
-  if (rowEl) rowEl.querySelectorAll(".cell-editable").forEach(function (cellEl) { (ports as BeatPortUse).cells.sync(cellEl); });
+  // why: one admission settles every cell and drains held updates, so the row is found after it and a refusal warns once
+  if ((ports as BeatPortUse).shared.ports()) { if (!(ports as BeatPortUse).shared.settle()) return; }
+  else if (rowEl) rowEl.querySelectorAll(".cell-editable").forEach(function (cellEl) { (ports as BeatPortUse).cells.sync(cellEl); });
+  const idx = (ports as BeatPortUse).document.read(function (doc) { return rowIndexOf(doc, id); });
   const doc = (ports as BeatPortUse).document.current() as BeatDocument;
   if (idx !== -1 && isBlankBeat(doc, doc.rows[idx], (ports as BeatPortUse).text)) {
     (ports as BeatPortUse).deletes.disarm("row");

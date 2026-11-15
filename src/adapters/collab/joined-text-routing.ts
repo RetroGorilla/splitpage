@@ -90,9 +90,9 @@ function baseline(view: SharedPreparationView, row: SharedJoinedTextReading, own
     if (!source) throw new SharedTextPreparationError("invalid-reference");
     const glue = projectSharedJoinSeparator(items.map(item => typeof item.unit.value === "string" ? item.unit.value : "\ufffc").join(""), source.value, part.glue, partIndex++, geometry.cyclic, part.glueSet);
     if (glue && part.group) items.push({ unit: glueUnit(view, part.group), plan: null, source: null, offset: 0, group: part.group });
-    items.push(...source.units.map((unit, offset) => ({ unit, plan, source, offset, group: null })));
+    for (const [offset, unit] of source.units.entries()) items.push({ unit, plan, source, offset, group: null });
   }
-  else for (const { plan, source } of inserted) items.push(...source.units.map((unit, offset) => ({ unit, plan, source, offset, group: null })));
+  else for (const { plan, source } of inserted) for (const [offset, unit] of source.units.entries()) items.push({ unit, plan, source, offset, group: null });
   if (!geometry && !inserted.length) throw new SharedTextPreparationError("invalid-reference");
   const result = { items, value: items.map(item => typeof item.unit.value === "string" ? item.unit.value : "\ufffc").join("") }; cache.set(owner, result); return result;
 }

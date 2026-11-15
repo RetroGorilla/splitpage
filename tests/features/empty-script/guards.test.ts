@@ -118,7 +118,7 @@ test("an empty-script target ignores a compositionend without its compositionsta
 test("an empty-script target cannot unmount pending native input and removes its hooks after cancellation", () => {
   const p = page();
   assert.equal(before(p.input), true); assert.equal(p.control.dispose(), false); assert.equal(p.state.held, 1);
-  assert.deepEqual([...p.commands].map(finish => finish()), [false]);
+  assert.deepEqual([...p.commands].map(finish => finish()), ["announced"]);
   p.input.dispatchEvent(new window.KeyboardEvent("keyup", { key: "x", bubbles: true }));
   assert.equal(p.control.dispose(), true); assert.equal(p.control.dispose(), true);
   assert.equal(p.area.isConnected, false); assert.equal(p.commands.size, 0); assert.equal(p.reader.listenerCount(), 0);

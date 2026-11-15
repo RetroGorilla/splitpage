@@ -23,6 +23,7 @@ export interface CreatedBeatCommand extends Command {
 export interface SharedStructureCommands {
   readonly ports: () => SharedStructurePorts | null;
   readonly refused: (outcome: CommandOutcome) => void;
+  readonly settle: () => boolean;
 }
 
 export function sharedStructureTrace(doc: DocumentView, ports: SharedStructurePorts, author: SharedStructureAuthor): FlowOperationTrace {

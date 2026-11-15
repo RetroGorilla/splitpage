@@ -45,7 +45,8 @@ const toastHost = () => { const host = document.getElementById("toast-host"); as
 const warnings = () => [...toastHost().querySelectorAll(".toast.warn")].map(el => el.firstChild.textContent);
 const clearWarnings = () => { toastHost().replaceChildren(); };
 const REFUSED = "This is not available in a shared session yet.";
-const allowed = { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) };
+let editRefusal = null;
+const allowed = { edit: () => editRefusal ? { allowed: false, reason: editRefusal } : { allowed: true }, comment: () => ({ allowed: true }) };
 let serial = 0, remoteSerial = 0;
 const ports = {
   opening: openingStatus,
@@ -79,10 +80,10 @@ function press(target, key, modifiers = {}) {
   target.dispatchEvent(new window.KeyboardEvent("keyup", { key, bubbles: true, ...modifiers }));
   return handled;
 }
-async function enter() {
+async function enter(source = SOURCE) {
   reports.length = 0; errors.length = 0; clearWarnings();
   writerControls().closeWriter();
-  adoptReplacement(migrateRows(structuredClone(SOURCE)));
+  adoptReplacement(migrateRows(structuredClone(source)));
   assert.deepEqual(await enterSharedSession(ports), { ok: true }, errors.map(error => error.stack).join("\n"));
   const parts = sharedSessionParts(); assert.ok(parts); assert.equal(screenIsStale(), false);
   const peer = createSharedDocument(); registerSharedOperationFamilies(peer, { cells: html => fromHtml(html) });
@@ -301,29 +302,179 @@ function copiedBeat(rowId) {
   return { getData: type => data.get(type) ?? "" };
 }
 
-const ADMISSION_REFUSALS = [
-  { name: "a visual split", arrange: () => { select(cellOf("visualText"), 1); }, act: () => { assert.equal(splitRowFieldCore(cellOf("visualText")), null); } },
-  { name: "a beat paste", arrange: () => copiedBeat("r2"), act: data => { assert.equal(pasteBeatsAt(data, cellOf("audioText", "r3")), true); } }
+function cutBeat(rowId) {
+  selectBeats(rowId, rowId);
+  if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+  const cut = new window.Event("cut", { bubbles: true, cancelable: true });
+  Object.defineProperty(cut, "clipboardData", { value: { setData: () => {}, getData: () => "" } });
+  document.body.dispatchEvent(cut);
+}
+const REFUSABLE = [
+  { name: "Ctrl+Enter", act: () => { select(cellOf("audioText"), 3); press(cellOf("audioText"), "Enter", { ctrlKey: true }); } },
+  { name: "the add bar", act: () => { addRow(null); } },
+  { name: "Alt+Enter", act: () => { select(cellOf("audioText"), 3); press(cellOf("audioText"), "Enter", { altKey: true }); } },
+  { name: "the split core", act: () => { select(cellOf("audioText"), 1); splitRowFieldCore(cellOf("audioText")); } },
+  { name: "the armed delete button", arrange: () => { const button = document.createElement("button"); armDelete(button, "r2"); return button; },
+    act: button => { armDelete(button, "r2"); } },
+  { name: "deleting selected beats", act: () => { selectBeats("r2", "r2"); deleteSelectedBeats(); } },
+  { name: "cutting selected beats", act: () => { cutBeat("r2"); } },
+  { name: "the scene menu", asksCapability: true, act: () => { document.querySelector('.section-header[data-section-id="s1"] [data-section-action="remove"]').click(); } },
+  { name: "the status chip", act: () => { cycleRowStatus("r1"); } },
+  { name: "the Filmed box", act: () => { setBeatFilmed("r1", true); } },
+  { name: "the read-time box", act: () => { setBeatLength("r1", 42); } },
+  { name: "the rundown target", act: () => { setTargetLength(90); } },
+  { name: "the title popover target", act: () => {
+    promptForTarget();
+    const input = document.getElementById("target-input"); input.value = "2:00"; press(input, "Enter");
+  } },
+  { name: "the title popover words per minute", act: () => {
+    promptForWpm();
+    document.getElementById("wpm-input").value = "180"; document.getElementById("wpm-save").click();
+  } },
+  { name: "a visual split", named: true, arrange: () => { select(cellOf("visualText"), 1); }, act: () => { splitRowFieldCore(cellOf("visualText")); } },
+  { name: "a beat paste", named: true, arrange: () => copiedBeat("r2"), act: data => { pasteBeatsAt(data, cellOf("audioText", "r3")); } }
+];
+const LISTENER_NOTICE = "Held by the listener.";
+const REFUSAL_SOURCES = [
+  { name: "the switch at decide time", capability: true, arm: () => { editRefusal = "Editing is paused for this test."; return () => { editRefusal = null; }; }, notice: REFUSED },
+  { name: "a listener that announces its refusal", arm: f => f.parts.session.beforeCommand(() => { notices.show(LISTENER_NOTICE, "warn"); return "announced"; }),
+    notice: LISTENER_NOTICE },
+  { name: "a listener that refuses silently", arm: f => f.parts.session.beforeCommand(() => false), notice: REFUSED },
+  { name: "a session hold", arm: f => f.parts.session.hold("held-for-test"), notice: REFUSED },
+  { name: "the command's own name", named: true, arm: () => () => {}, notice: REFUSED }
 ];
 
-const ADMISSIONS = [
-  { name: "a session hold", arm: f => f.parts.session.hold("held-for-test"), notices: [[REFUSED, "warn"]] },
-  { name: "a listener that announces its own refusal", arm: f => f.parts.session.beforeCommand(() => { notices.show("Held by the listener.", "warn"); return false; }),
-    notices: [["Held by the listener.", "warn"]] }
-];
+for (const caller of REFUSABLE) for (const source of REFUSAL_SOURCES) if (caller.named || !source.named) {
+  const gated = caller.asksCapability && source.capability;
+  test(`C7 one refusal, one notice: ${caller.name} ${gated ? "asks the capability itself and stays silent when" : "refused by"} ${source.name}`, async () => {
+    const f = await enter();
+    let stop = () => {};
+    try {
+      const data = caller.arrange?.();
+      stop = source.arm(f);
+      clearWarnings(); noticeCalls.length = 0;
+      const before = encodeSharedState(f.parts.handle), sizes = f.parts.undo.sizes(), standalone = undoOwner().sizes();
+      caller.act(data);
+      assert.deepEqual(noticeCalls, gated ? [] : [[source.notice, "warn"]]);
+      assert.deepEqual([encodeSharedState(f.parts.handle), f.parts.undo.sizes(), undoOwner().sizes()], [before, sizes, standalone]);
+    } finally { stop(); editRefusal = null; clearWarnings(); document.querySelectorAll(".title-popover").forEach(el => el.remove()); f.close(); }
+  });
+}
 
-for (const literal of ADMISSION_REFUSALS) for (const admission of ADMISSIONS) test(`C7 callers: ${literal.name} refused at admission by ${admission.name} is announced once`, async () => {
+test("C7 one refusal, one notice: Ctrl+Enter after a faulted typing buffer announces its own refusal", async () => {
   const f = await enter();
-  let stop = () => {};
   try {
-    const data = literal.arrange();
-    stop = admission.arm(f);
+    const cell = cellOf("audioText");
+    select(cell, 3);
+    const range = document.getSelection().getRangeAt(0).cloneRange();
+    const before = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertReplacementText", data: "X" });
+    Object.defineProperty(before, "getTargetRanges", { value: () => [range.cloneRange()] });
+    cell.dispatchEvent(before);
+    const start = posToDom(cell, 0);
+    start.node.parentNode.insertBefore(document.createTextNode("X"), start.offset === 0 ? start.node : start.node.nextSibling);
     clearWarnings(); noticeCalls.length = 0;
-    const before = encodeSharedState(f.parts.handle), sizes = f.parts.undo.sizes(), standalone = undoOwner().sizes();
-    literal.act(data);
-    assert.deepEqual(noticeCalls, admission.notices);
-    assert.deepEqual([encodeSharedState(f.parts.handle), f.parts.undo.sizes(), undoOwner().sizes()], [before, sizes, standalone]);
-  } finally { stop(); clearWarnings(); f.close(); }
+    cell.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertReplacementText", data: "X" }));
+    assert.deepEqual(noticeCalls, [[REFUSED, "warn"]]);
+    noticeCalls.length = 0;
+    const encoded = encodeSharedState(f.parts.handle), sizes = f.parts.undo.sizes();
+    assert.equal(press(cell, "Enter", { ctrlKey: true }), true);
+    assert.deepEqual(noticeCalls, [[REFUSED, "warn"]]);
+    assert.deepEqual([encodeSharedState(f.parts.handle), f.parts.undo.sizes()], [encoded, sizes]);
+  } finally { clearWarnings(); ports.bindings.abandon(); f.close(); }
+});
+
+for (const order of ORDERS) test(`C7 settled offsets: the delete button finds its beat after a held peer beat lands before it, and only arms, ${order}`, async () => {
+  const f = await enter();
+  try {
+    pendingTyping(cellOf("audioText"), 6);
+    remoteCreate(f.peer, "r1", "r2", "before");
+    assert.equal(applySharedUpdate(f.parts.handle, encodeSharedState(f.peer)).ok, true);
+    assert.equal(currentDocument().rows.length, 3, "the peer's beat is held until admission");
+    const button = document.createElement("button");
+    armDelete(button, "r2");
+    exchange(f, order);
+    const peer = currentDocument().rows[1].id;
+    agree(f, base([row("r1", "abcdefX", "Wide"), row(peer, ""), row("r2", "Other"), row("r3", "Third")]));
+    assert.deepEqual(warnings(), []);
+  } finally { f.close(); }
+});
+
+function pendingTyping(cell, at) {
+  select(cell, at);
+  const range = document.getSelection().getRangeAt(0).cloneRange();
+  const before = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: "X" });
+  Object.defineProperty(before, "getTargetRanges", { value: () => [range.cloneRange()] });
+  assert.equal(cell.dispatchEvent(before), true);
+  const text = document.createTextNode("X"); range.insertNode(text);
+  document.getSelection().setBaseAndExtent(text, 1, text, 1);
+  assert.equal(collabState(sharedSessionParts().handle).ingress.holds.has("buffer"), true, "the typing is pending");
+}
+const LONG = { ...SOURCE, rows: [{ ...SOURCE.rows[0], audioText: "abcdefgh" }, ...SOURCE.rows.slice(1)] };
+const TYPED = { before: 1, inside: 4, after: 7 }, PEER = { before: 0, inside: 3, after: 8 };
+const SELECTED = { before: [3, 7], inside: [2, 7], after: [2, 6] };
+const MERGED = {
+  before: { before: "ZaXbcdefgh", inside: "aXbcZdefgh", after: "aXbcdefghZ" },
+  inside: { before: "ZabcdXefgh", inside: "abcZdXefgh", after: "abcdXefghZ" },
+  after: { before: "ZabcdefgXh", inside: "abcZdefgXh", after: "abcdefgXhZ" }
+};
+const CUT = {
+  before: { before: ["ZaXb", "gh"], inside: ["aXb", "gh"], after: ["aXb", "ghZ"] },
+  inside: { before: ["Zab", "gh"], inside: ["ab", "gh"], after: ["ab", "ghZ"] },
+  after: { before: ["Zab", "gXh"], inside: ["ab", "gXh"], after: ["ab", "gXhZ"] }
+};
+const UNSPLIT = text => base([row("r1", text, "Wide"), row("r2", "Other"), row("r3", "Third")]);
+const PENDING_CALLERS = [
+  { name: "Alt+Enter", act: cell => { assert.equal(press(cell, "Enter", { altKey: true }), true); },
+    after: (id, typed, peer) => base([row("r1", CUT[typed][peer][0], "Wide"), row(id, CUT[typed][peer][1]), row("r2", "Other"), row("r3", "Third")]) },
+  { name: "the split core", act: (cell, f) => { const split = splitRowFieldCore(cell); assert.match(split?.id, f.beat); },
+    after: (id, typed, peer) => base([row("r1", CUT[typed][peer][0], "Wide"), row(id, CUT[typed][peer][1]), row("r2", "Other"), row("r3", "Third")]) },
+  { name: "Ctrl+Enter", act: cell => { assert.equal(press(cell, "Enter", { ctrlKey: true }), true); },
+    after: (id, typed, peer) => base([row("r1", MERGED[typed][peer], "Wide"), row(id, ""), row("r2", "Other"), row("r3", "Third")]) },
+  { name: "an in-cell beat paste", arrange: () => copiedBeat("r2"), act: (cell, f, data) => { assert.equal(pasteBeatsAt(data, cell), true); },
+    refused: true, after: (id, typed, peer) => UNSPLIT(MERGED[typed][peer]) }
+];
+async function settledCase(caller, order, typed, peer) {
+  const f = await enter(LONG);
+  try {
+    const data = caller.arrange?.();
+    const sizes = f.parts.undo.sizes(), text = LONG.rows[0].audioText;
+    pendingTyping(cellOf("audioText"), TYPED[typed]);
+    select(cellOf("audioText"), ...SELECTED[typed]);
+    remoteInsert(f.peer, "r1", "audioText", PEER[peer], "Z");
+    assert.equal(applySharedUpdate(f.parts.handle, encodeSharedState(f.peer)).ok, true);
+    assert.equal(currentDocument().rows[0].audioText, text, "the peer's text is held until admission");
+    clearWarnings();
+    caller.act(cellOf("audioText"), f, data);
+    assert.deepEqual(warnings(), caller.refused ? [REFUSED] : []);
+    clearWarnings();
+    exchange(f, order);
+    const id = caller.refused ? null : minted(f);
+    agree(f, caller.after(id, typed, peer));
+    assert.deepEqual(f.parts.undo.sizes(), { ...sizes, undo: sizes.undo + (caller.refused ? 1 : 2) });
+    if (caller.refused) return;
+    undoOnce(f, order);
+    agree(f, UNSPLIT(MERGED[typed][peer]));
+    assert.deepEqual(warnings(), []);
+  } finally { clearWarnings(); f.close(); }
+}
+for (const caller of PENDING_CALLERS) for (const order of ORDERS) for (const typed of Object.keys(TYPED)) for (const peer of Object.keys(PEER)) {
+  test(`C7 settled offsets: ${caller.name} with typing pending ${typed} the selection and a peer's insertion held ${peer} it, ${order}`, async () => {
+    await settledCase(caller, order, typed, peer);
+  });
+}
+for (const order of ORDERS) test(`C7 settled offsets: Alt+Enter over cXd with a peer's Z held at the start leaves Zab and ef, ${order}`, async () => {
+  const f = await enter();
+  try {
+    pendingTyping(cellOf("audioText"), 3);
+    select(cellOf("audioText"), 2, 5);
+    remoteInsert(f.peer, "r1", "audioText", 0, "Z");
+    assert.equal(applySharedUpdate(f.parts.handle, encodeSharedState(f.peer)).ok, true);
+    assert.equal(press(cellOf("audioText"), "Enter", { altKey: true }), true);
+    exchange(f, order);
+    const id = minted(f);
+    agree(f, base([row("r1", "Zab", "Wide"), row(id, "ef"), row("r2", "Other"), row("r3", "Third")]));
+    assert.deepEqual(warnings(), []);
+  } finally { f.close(); }
 });
 
 test("C7 callers: a refusal the session already announced is not announced again", () => {

@@ -449,7 +449,7 @@ test("rule 29: a refused recovery write shows its refusal and retains native tex
     assert.deepEqual(projectSharedDocumentWithRecovery(page.h.a).recovery, []);
     assert.deepEqual(page.a.session.run({ name: "must-wait", needs: "edit", plan: () => {
       assert.fail("A pending native edit must stop another command before planning");
-    } }), { kind: "rejected", reason: "buffer-pending" });
+    } }), { kind: "rejected", reason: "buffer-pending", notified: true });
     assert.equal(page.beat().textContent, "aZd");
     page.end("");
     assert.deepEqual([...collabState(page.h.a).ingress.holds], []);
