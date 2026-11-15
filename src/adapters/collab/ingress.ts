@@ -24,6 +24,16 @@ export function observeSharedDeclined(handle: SharedDocumentHandle, listener: ()
   return () => { gate.declineListeners.delete(listener); };
 }
 
+export function observeSharedIntakeStopped(handle: SharedDocumentHandle, listener: () => void): () => void {
+  const gate = collabState(handle).ingress;
+  gate.stopListeners.add(listener);
+  return () => { gate.stopListeners.delete(listener); };
+}
+
+export function sharedIntakeStopped(handle: SharedDocumentHandle): boolean {
+  return collabState(handle).trial?.stopped() ?? false;
+}
+
 export function sharedBufferDeliveryBusy(handle: SharedDocumentHandle): boolean {
   const state = collabState(handle);
   return state.ingress.frames > 0 || state.ingress.holds.has("delivering");

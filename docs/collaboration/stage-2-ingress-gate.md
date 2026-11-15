@@ -77,6 +77,125 @@ arrival, both reasons in both release orders, destroy and throwing callbacks.
 reversed and duplicated delivery. Dirty intervals also run in the seeded ingress
 generator, retaining its prefix oracle for each published revision.
 
+## Trial replica
+
+Every received update is tried before it may touch the live document. Outside a shared
+session (a handle with no replica) the trial is the old one: a throwaway document gets a
+copy of live, then the update. Inside a shared session the trial runs on one standing
+replica, `SharedTrialReplica` in `src/adapters/collab/trial-replica.ts`. `createSharedReplica`
+acquires it; ports on one document share it. The last port's `dispose`, or
+`destroySharedDocument`, releases it. A trial
+then costs about the size of the update instead of the whole history.
+
+### What the replica contains
+
+The live document, plus every accepted update (held or not), plus every local change. Local
+changes reach it through the live document's `update` event, one subscription that every
+write route shares: commands (buffer commits and recovery commands included), undo and redo,
+hydration, text creation, HTML import, mark records, plain adapter transactions and the
+library's own formatting cleanup. Remote transactions are skipped: they apply only an update
+the replica already took at its trial, whether the gate was open or the update was held and
+released later. `tests/adapters/collab/trial-replica.test.ts` checks each route and keeps an
+inventory of every library write under `src/adapters/collab/` that fails when a new one appears.
+
+Live plus held changes one case, and only towards refusing. Take an update B that depends on
+a held update A, and fails to integrate once A is present: for example, a struct cycle behind
+a struct whose origin is in A.
+
+- Before: the copy of live alone kept B's structs pending without integrating them, so B was
+  accepted and held. At the drain, B threw partway through on the live document: a partial
+  live write, reported and skipped.
+- After: the replica holds A, so B is refused at receipt and live never changes.
+
+This is assumed rule 210. No case goes the other way: against live alone, dependent structs
+only wait as pending, and the decode and zero-length checks do not depend on state.
+
+An update can arrive inside a live local transaction or its notifications, before that
+transaction's `update` event. The replica then first copies what it lacks
+(`encodeStateAsUpdate(live, replicaVector)`). That copy carries the whole delete set; it
+happens only on such nested arrivals and is counted.
+
+### Refusals and the rebuild budget
+
+An update refused before it reaches the replica costs nothing: an update that does not
+decode, a zero-length struct, a full buffer queue. An update whose application to the replica
+throws may have written part of itself there. That refusal rebuilds the replica at once from
+live plus held, one copy of each, and spends one unit of `SHARED_TRIAL_REBUILD_BUDGET` (3)
+for the replica's lifetime.
+
+The third such refusal stops intake (assumed rule 211). Every later received update is
+answered `{ ok: false, reason: "intake-stopped" }` with no trial, no rebuild and no write to
+live. Local editing and undo go on, held updates already accepted are still released, and
+nothing is lost. `observeSharedIntakeStopped` reports the stop once; `sharedIntakeStopped`
+reads it. The stop ends only with the replica (leave, replace, destroy); there is no timer.
+At the earlier adapter measurement of 142 to 315 ms per refusal and rebuild on heavily
+edited states, a whole session pays at most three of those.
+
+### When a hold ends
+
+When a drain has applied held updates and the queue is empty, live's state vector is
+compared with the replica's. A mismatch marks the replica stale and adds an error that the
+outermost write throws. A state vector does not cover deletions or pending structs, so this
+check catches a replica ahead of or behind live in inserted content only. It does not prove
+equality; the byte-for-byte comparisons in the tests do.
+
+### What happens when an accepted update fails on the live document
+
+The trial passed, but applying the update to live threw. This is not a refusal, and nothing
+about it is new.
+
+- Gate open: the error leaves the outermost write, so `applySharedUpdate` throws to its
+  caller. Live keeps whatever part of the update was integrated before the throw: it can be
+  partly written.
+- Held update: the drain records the error, drops that update from the queue, applies the
+  rest, and the write that released the hold throws, as an `AggregateError` if there are
+  several. Live can again be partly written by that one update.
+- A listener that throws after a full apply is different: live holds the whole update, and
+  the error is reported the same way.
+
+The shared session does not end by itself: `forceLeaveSharedSession` runs only when the app
+stops and as the fallback of a leave. The projector publishes whatever revision live reached,
+and the session takes it as remote. The person sees nothing beyond what that revision shows;
+no notice exists for it. The only new part is that the replica is marked stale, including when
+the remote transaction never ran, and is rebuilt from live plus held before the next trial.
+That rebuild does not spend the budget.
+
+### One mirror or two
+
+The incremental projector's mirror and the trial replica are two documents. The mirror takes
+updates after live and feeds the projection caches through deep observers. The trial replica
+must take an update before live does: a held update may never reach live, and a refused one
+leaves the replica partly written until it is rebuilt. Sharing one document would publish
+unaccepted or held content into the projection, invalidate its caches on every rebuild, and
+clash with the mirror being replaced when text is normalized. Each participant therefore keeps
+three copies: live, the mirror and the trial replica.
+
+### Memory
+
+Measured in Node with `--expose-gc`, adapter level only: heap after two forced collections,
+median of five passes, on the growth record's fixtures and its heavily edited states (same
+workload, `tests/collab/measure/run.mjs`). Each step is the heap added by that step. Live is
+`open(state)`, the mirror is `createSharedIncrementalProjector` (mirror document, projection
+and caches), and the trial replica is `startSharedTrialReplica`. The budget lines are from
+[Stage 0 audit 7](stage-0/7-performance-baseline.md): standalone after load is 7.13 MiB on long
+and 14.96 MiB on large, so the room for everything shared is 10 MiB on long and 14.96 MiB on
+large. These Node figures are not the browser application's heap.
+
+| Script / state | Encoded bytes | Live MiB | Mirror MiB | Trial replica MiB | Shared total without / with replica MiB | Room MiB |
+| --- | --- | --- | --- | --- | --- | --- |
+| short / fresh | 4,189 | 0.14 | 0.38 | 0.08 | 0.52 / 0.60 | none set |
+| short / edited | 9,161,362 | 27.61 | 39.48 | 29.53 | 67.09 / 96.62 | none set |
+| long / fresh | 73,161 | 0.90 | 4.83 | 0.80 | 5.73 / 6.52 | 10 |
+| long / edited | 7,924,346 | 25.79 | 41.66 | 27.62 | 67.44 / 95.06 | 10 |
+| large / fresh | 690,502 | 6.96 | 45.31 | 6.10 | 52.27 / 58.37 | 14.96 |
+| large / edited | 8,580,233 | 31.97 | 82.25 | 33.04 | 114.22 / 147.26 | 14.96 |
+
+The trial replica costs about as much as live itself. It fits on fresh long (0.80 of 10 MiB,
+6.52 in total). On fresh large it alone fits (6.10 of 14.96 MiB), but the session was already
+over without it (52.27 MiB, mostly the mirror's projection). On every heavily edited state the
+replica alone breaks the budget: 27.62 MiB on long and 33.04 MiB on large. The session already
+broke it there before this change (67.44 and 114.22 MiB).
+
 ## Errors
 
 A callback that throws inside the library's cleanup would abort it. Every listener the
@@ -113,10 +232,19 @@ where a throw aborts the cleanup.
 With nothing held, a received update costs one check of the gate before it is applied
 and one at the end of its write. No transaction is added and nothing is queued.
 
+The trial is counted in bytes through the optional `count` hook of `applySharedUpdate` and
+`startSharedTrialReplica`. For one received 26-byte update (a scalar change), the copy trial
+encodes and applies the whole document again: 1,938 bytes on the two-beat test document
+(943 copied) and 286,880 bytes on a 300-beat one (143,414 copied). The standing replica
+applies 52 bytes on both: the update once on the replica and once on live.
+
 ## Tests
 
 `tests/adapters/collab/ingress-gate.test.ts` holds the literal cases;
 `ingress-gate-generator.test.ts` places arrivals at random at the top, inside
 notifications and inside the drain, with callbacks that throw, and checks each announced
 revision against the same arrivals applied one by one. `tests/collab/ingress-gate-mutants.json`
-holds nine deliberate defects, listed in `tests/collab/mutants.md`.
+holds nine deliberate defects, listed in `tests/collab/mutants.md`. The trial replica's cases
+are in `tests/adapters/collab/trial-replica.test.ts`, with its session lifetime in
+`tests/bootstrap/shared-switch.test.ts`. `tests/collab/trial-replica-mutants.json` holds its
+eleven deliberate defects.

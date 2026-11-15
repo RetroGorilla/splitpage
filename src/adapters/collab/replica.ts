@@ -6,6 +6,7 @@ import type { SharedUndoRecord } from "../../core/collab/undo-record.ts";
 import { createSharedIncrementalProjector } from "./incremental-project.ts";
 import type { SharedProjectionWork } from "./projection-cache.ts";
 import type { SharedDocumentHandle } from "./types.ts";
+import { acquireSharedTrialReplica } from "./trial-replica.ts";
 
 export interface SharedReplica extends ReplicaPort {
   readonly dispose: () => void;
@@ -16,6 +17,8 @@ export const REPLICA_DISPOSED = "replica-disposed";
 export function createSharedReplica(handle: SharedDocumentHandle, count?: (work: SharedProjectionWork, key: string) => void,
   undo?: Pick<SharedUndo, "perform">): SharedReplica {
   const projector = createSharedIncrementalProjector(handle, count);
+  let releaseTrial: () => void;
+  try { releaseTrial = acquireSharedTrialReplica(handle); } catch (error) { projector.dispose(); throw error; }
   let disposed = false;
   // why: After a failed publication the pair is the revision being retried and a fresh attempt at its document,
   // never the live revision beside the older document.
@@ -48,6 +51,6 @@ export function createSharedReplica(handle: SharedDocumentHandle, count?: (work:
     execute: execute,
     observe: (listener: Parameters<ReplicaPort["observe"]>[0]) =>
       projector.observe((_projection, origin) => listener(origin), (error, origin) => listener(origin, { error })),
-    dispose: () => { disposed = true; projector.dispose(); }
+    dispose: () => { disposed = true; try { projector.dispose(); } finally { releaseTrial(); } }
   });
 }

@@ -1,6 +1,8 @@
 import * as Y from "yjs";
 import { exceedsBufferQueue } from "../../core/collab/buffer.ts";
-import { CollabDocumentState, collabState, transactCollabState, assertNoSharedExecution, assertSharedIngressAllowed, guardSharedCallback } from "./state.ts";
+import { CollabDocumentState, collabState, transactCollabState, announceSharedIntakeStop, applyAdmittedUpdate, assertNoSharedExecution, assertSharedIngressAllowed,
+  guardSharedCallback } from "./state.ts";
+import type { SharedAdmissionCount } from "./state.ts";
 import type { SharedDocumentHandle, SharedTransactionOrigin, SharedApplyResult } from "./types.ts";
 import { observeSharedStructureIndex } from "./structure-index.ts";
 
@@ -47,28 +49,44 @@ export function encodeSharedUpdate(handle: SharedDocumentHandle, vector: Uint8Ar
   return Y.encodeStateAsUpdate(collabState(handle).doc, vector);
 }
 
-export function applySharedUpdate(handle: SharedDocumentHandle, update: Uint8Array): SharedApplyResult {
+function copyTrial(state: CollabDocumentState, update: Uint8Array, count?: SharedAdmissionCount): void {
+  const trial = new CollabDocumentState();
+  try {
+    const copy = Y.encodeStateAsUpdate(state.doc);
+    count?.("encode", "copy", copy.byteLength); count?.("apply", "copy", copy.byteLength);
+    Y.applyUpdate(trial.doc, copy);
+    count?.("apply", "trial", update.byteLength);
+    Y.applyUpdate(trial.doc, update);
+  } finally {
+    trial.doc.destroy();
+  }
+}
+
+export function applySharedUpdate(handle: SharedDocumentHandle, update: Uint8Array, count?: SharedAdmissionCount): SharedApplyResult {
   const state = collabState(handle), gate = state.ingress;
   const closed = gate.holds.size > 0 || gate.frames > 0 && !state.execution;
   assertSharedIngressAllowed(state);
+  if (state.trial?.stopped()) return { ok: false, reason: "intake-stopped" };
   if (gate.holds.has("buffer") && (gate.declined || exceedsBufferQueue(gate.heldBytes, update.byteLength))) {
     gate.declined = true;
     return { ok: false, reason: "queue-full" };
   }
-  const trial = new CollabDocumentState();
   try {
     const decoded = Y.decodeUpdate(update);
     if (decoded.structs.some(struct => struct.length <= 0)) return { ok: false, reason: "invalid-update" };
-    Y.applyUpdate(trial.doc, Y.encodeStateAsUpdate(state.doc));
-    Y.applyUpdate(trial.doc, update);
+    // why: The standing replica holds live plus every held update, so the trial meets what the update will meet.
+    if (state.trial) state.trial.attempt(update);
+    else copyTrial(state, update, count);
   } catch {
+    if (state.trial?.takeStop()) announceSharedIntakeStop(state);
     return { ok: false, reason: "invalid-update" };
-  } finally {
-    trial.doc.destroy();
   }
   // why: While the gate is closed the update waits its turn, so each revision is announced with exactly its own content.
   if (closed) { gate.held.push(Uint8Array.from(update)); gate.heldBytes += update.byteLength; }
-  else transactCollabState(state, "remote", () => Y.applyUpdate(state.doc, update, "remote"));
+  else {
+    count?.("apply", "live", update.byteLength);
+    applyAdmittedUpdate(state, update, apply => transactCollabState(state, "remote", apply));
+  }
   return { ok: true };
 }
 
@@ -76,11 +94,13 @@ export function destroySharedDocument(handle: SharedDocumentHandle): void {
   const state = collabState(handle);
   assertNoSharedExecution(state);
   state.destroyed = true;
+  state.trial?.dispose();
   state.ingress.held.length = 0;
   state.ingress.heldBytes = 0;
   state.ingress.declined = false;
   state.ingress.declinedReports = 0;
   state.ingress.declineListeners.clear();
+  state.ingress.stopListeners.clear();
   state.ingress.holds.clear();
   state.doc.destroy();
 }
