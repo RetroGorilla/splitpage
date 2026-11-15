@@ -10,6 +10,7 @@ import { executeSharedCommand, reverseSharedUndoRecord } from "../../../src/adap
 import { readSharedRevision, transactSharedDocument, applySharedUpdate, encodeSharedState } from "../../../src/adapters/collab/document.ts";
 import { createSharedPreparation } from "../../../src/adapters/collab/prepare.ts";
 import { collabState, guardSharedCallback } from "../../../src/adapters/collab/state.ts";
+import { readSharedCreationDependencyCounts } from "../../../src/adapters/collab/creation-observation-cache.ts";
 import { sharedCreationRecordKeys } from "../../../src/adapters/collab/creation-record-index.ts";
 import { isSharedCreationRetired, sharedCreationObservationCost } from "../../../src/adapters/collab/creation-retirement.ts";
 import { SHARED_CREATION_RETIREMENT_FIELD } from "../../../src/adapters/collab/creation-marker.ts";
@@ -17,7 +18,7 @@ import { measureSharedReads } from "../../../src/adapters/collab/read-counts.ts"
 import { measureLibraryReads } from "../../collab/library-read-counts.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { sharedStructureKey } from "../../../src/core/collab/structure-key.ts";
-import { createRecord, setRecord } from "./record-support.ts";
+import { createRecord, setRecord, deleteRecord } from "./record-support.ts";
 import type { SharedUndoRecord } from "../../../src/core/collab/undo-record.ts";
 
 function fixture(unrelated: number) {
@@ -234,4 +235,28 @@ test("creation retirement sees a guarded callback before its dependency observer
     transactSharedDocument(h.a, "local-command", () => { record.set("lengthSeconds", 9); });
     assert.equal(callbacks, 1); assert.equal(isSharedCreationRetired(h.a, beat), false);
   } finally { state.doc.off("beforeObserverCalls", listener); h.close(); }
+});
+
+test("creation dependency index prunes empty slots after 1000 temporary comments", () => {
+  const h = fixture(0); let serial = 0;
+  try {
+    const result = executeSharedCommand(h.a, [operation({ kind: "segment-create", id: "create", by: "Alice", beat: "N1", segment: "N1",
+      at: { left: "R1", right: h.tails.get("R1"), affinity: "after" }, fields: { audioText: "x" } })],
+    { label: "create", selection: null, typing: null }, { base: readSharedRevision(h.a) });
+    assert.deepEqual(result.result, { ok: true }); assert.ok(result.record);
+    const part = result.record.parts[0]; assert.ok(part?.kind === "beat-create");
+    const writer = { by: "Alice", nextId: () => "undo-" + ++serial };
+    const undone = reverseSharedUndoRecord(h.a, result.record, writer); assert.ok(undone.ok); assert.equal(undone.effective, true);
+    assert.equal(isSharedCreationRetired(h.a, part.beat), true);
+    const baseline = readSharedCreationDependencyCounts(h.a); assert.equal(baseline.observations, 1); assert.equal(baseline.emptySlots, 0);
+    for (let index = 0; index < 1000; index++) {
+      const id = "temporary-" + index;
+      h.send([createRecord("comments", id, { id, author: "Alice", createdAt: 0, text: "temporary", rowId: part.beat, field: "audioText" })]);
+      assert.equal(isSharedCreationRetired(h.a, part.beat), false);
+      h.send([deleteRecord("comments", id)]); assert.equal(isSharedCreationRetired(h.a, part.beat), true);
+    }
+    assert.deepEqual(readSharedCreationDependencyCounts(h.a), baseline);
+    const redone = reverseSharedUndoRecord(h.a, undone.inverse, writer); assert.ok(redone.ok); assert.equal(redone.effective, true);
+    assert.deepEqual(readSharedCreationDependencyCounts(h.a), { observations: 0, slots: 0, rootMaps: 0, routes: 0, emptySlots: 0 });
+  } finally { h.close(); }
 });

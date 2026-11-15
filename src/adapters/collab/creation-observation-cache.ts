@@ -73,24 +73,29 @@ function joinsChanged(dependency: Joined, changes: ReadonlyMap<object, Set<strin
 
 interface OwnerRoute { readonly ownerOf: (raw: unknown) => string | null; readonly owners: Map<string, Set<string>> }
 class DependencyIndex {
+  private readonly totals = { slots: 0, rootMaps: 0, routes: 0 };
   private readonly identities = new WeakMap<object, Set<string>>();
   private readonly keys = new WeakMap<Y.Map<unknown>, Map<string, Set<string>>>();
   private readonly members = new WeakMap<Y.Map<unknown>, Map<string | undefined, OwnerRoute>>();
   private readonly joins = new WeakMap<Y.Map<unknown>, Map<string, Set<string>>>();
-  private readonly links = new Map<string, Set<Set<string>>>();
+  private readonly links = new Map<string, Map<Set<string>, () => void>>();
 
-  delete(beat: string): void { for (const slot of this.links.get(beat) ?? []) slot.delete(beat); this.links.delete(beat); }
-  private link(beat: string, slots: Map<string, Set<string>>, key: string): void {
-    let slot = slots.get(key); if (!slot) { slot = new Set(); slots.set(key, slot); } this.retain(beat, slot);
+  delete(beat: string): void {
+    for (const [slot, prune] of this.links.get(beat) ?? []) { slot.delete(beat); if (!slot.size) prune(); }
+    this.links.delete(beat);
   }
-  private retain(beat: string, slot: Set<string>): void {
-    slot.add(beat); let links = this.links.get(beat); if (!links) { links = new Set(); this.links.set(beat, links); } links.add(slot);
+  private link(beat: string, slots: Map<string, Set<string>>, key: string, empty: () => void): void {
+    let slot = slots.get(key); if (!slot) { slot = new Set(); slots.set(key, slot); this.totals.slots++; }
+    this.retain(beat, slot, () => { slots.delete(key); this.totals.slots--; if (!slots.size) empty(); });
+  }
+  private retain(beat: string, slot: Set<string>, prune: () => void): void {
+    slot.add(beat); let links = this.links.get(beat); if (!links) { links = new Map(); this.links.set(beat, links); } links.set(slot, prune);
   }
   private key(beat: string, root: Y.Map<unknown>, key: string): void {
-    let slots = this.keys.get(root); if (!slots) { slots = new Map(); this.keys.set(root, slots); } this.link(beat, slots, key);
+    let slots = this.keys.get(root); if (!slots) { slots = new Map(); this.keys.set(root, slots); this.totals.rootMaps++; } this.link(beat, slots, key, () => { this.keys.delete(root); this.totals.rootMaps--; });
   }
   private identity(beat: string, type: object): void {
-    let slot = this.identities.get(type); if (!slot) { slot = new Set(); this.identities.set(type, slot); } this.retain(beat, slot);
+    let slot = this.identities.get(type); if (!slot) { slot = new Set(); this.identities.set(type, slot); this.totals.slots++; } this.retain(beat, slot, () => { this.identities.delete(type); this.totals.slots--; });
   }
   set(beat: string, dependencies: Dependencies): void {
     this.delete(beat);
@@ -98,14 +103,21 @@ class DependencyIndex {
     for (const range of dependencies.ranges) this.identity(beat, range.text);
     for (const member of dependencies.members) {
       for (const key of member.keys) this.key(beat, member.root, key);
-      let fields = this.members.get(member.root); if (!fields) { fields = new Map(); this.members.set(member.root, fields); }
-      let route = fields.get(member.field); if (!route) { route = { ownerOf: member.ownerOf, owners: new Map() }; fields.set(member.field, route); }
-      this.link(beat, route.owners, member.owner);
+      let fields = this.members.get(member.root); if (!fields) { fields = new Map(); this.members.set(member.root, fields); this.totals.rootMaps++; }
+      let route = fields.get(member.field); if (!route) { route = { ownerOf: member.ownerOf, owners: new Map() }; fields.set(member.field, route); this.totals.routes++; }
+      this.link(beat, route.owners, member.owner, () => {
+        fields.delete(member.field); this.totals.routes--;
+        if (!fields.size) { this.members.delete(member.root); this.totals.rootMaps--; }
+      });
     }
     for (const join of dependencies.joins) {
-      let slots = this.joins.get(join.root); if (!slots) { slots = new Map(); this.joins.set(join.root, slots); }
-      for (const key of join.keys) { this.key(beat, join.root, key); this.link(beat, slots, key); }
+      let slots = this.joins.get(join.root); if (!slots) { slots = new Map(); this.joins.set(join.root, slots); this.totals.rootMaps++; }
+      for (const key of join.keys) { this.key(beat, join.root, key); this.link(beat, slots, key, () => { this.joins.delete(join.root); this.totals.rootMaps--; }); }
     }
+  }
+  counts() {
+    const live = new Set([...this.links.values()].flatMap(slots => [...slots.keys()]));
+    return { observations: this.links.size, ...this.totals, emptySlots: this.totals.slots - live.size };
   }
   affected(changes: ReadonlyMap<object, Set<string | null>>): ReadonlySet<string> {
     const affected = new Set<string>(), add = (slot?: ReadonlySet<string>) => { for (const beat of slot ?? []) affected.add(beat); };
@@ -219,4 +231,8 @@ export function cachedSharedCreationObservation(handle: SharedDocumentHandle, be
 export function readSharedCreationCandidates(handle: SharedDocumentHandle): ReadonlySet<string> {
   const held = cache(handle);
   return held.synchronize() ? held.candidates : new Set(collabState(handle).roots.creationRetired.keys());
+}
+
+export function readSharedCreationDependencyCounts(handle: SharedDocumentHandle) {
+  const held = cache(handle); held.synchronize(); return held.index.counts();
 }
