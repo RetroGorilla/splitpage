@@ -459,8 +459,8 @@
     {
       "label": "Ctrl+Z in a shared Writer ignores the returned selection",
       "file": "src/bootstrap/wiring/editor.ts",
-      "find": "  if (!placeReplayedCaret(steps) && outcome.selection) placeSharedSelection(outcome.selection);\n",
-      "replace": "  placeReplayedCaret(steps);\n"
+      "find": "  if (!placeReplayedCaret(steps, outcome.recorded ?? null, dir) && outcome.selection) placeSharedSelection(outcome.selection);\n",
+      "replace": "  placeReplayedCaret(steps, outcome.recorded ?? null, dir);\n"
     },
     {
       "label": "the row paint reads the standalone undo owner while shared",
@@ -471,7 +471,7 @@
     {
       "label": "the shared undo caret comes from the undo record instead of the painted values",
       "file": "src/bootstrap/wiring/editor.ts",
-      "find": "if (!placeReplayedCaret(steps) && outcome.selection) placeSharedSelection(outcome.selection);",
+      "find": "if (!placeReplayedCaret(steps, outcome.recorded ?? null, dir) && outcome.selection) placeSharedSelection(outcome.selection);",
       "replace": "if (outcome.selection) placeSharedSelection(outcome.selection);",
       "tests": [
         "src/test/undo-caret-parity.test.mjs"
@@ -480,8 +480,8 @@
     {
       "label": "the shared undo reads the before value after the step",
       "file": "src/bootstrap/wiring/editor.ts",
-      "find": "replayedTextSteps(before, after, changed)",
-      "replace": "replayedTextSteps(after, after, changed)",
+      "find": "replayedSteps(before, after, changed, dir)",
+      "replace": "replayedSteps(after, after, changed, dir)",
       "tests": [
         "src/test/undo-caret-parity.test.mjs"
       ]
@@ -489,8 +489,26 @@
     {
       "label": "the shared undo looks the row up by the saved address instead of the painted row",
       "file": "src/bootstrap/wiring/editor.ts",
-      "find": "replayedTextSteps(before, after, changed)",
-      "replace": "replayedTextSteps(before, after, outcome.selection ? { ...changed, cells: [{ rowId: String(sharedAnchorTarget(outcome.selection.focus)?.owner), field: \"audioText\" }] } : changed)",
+      "find": "replayedSteps(before, after, changed, dir)",
+      "replace": "replayedSteps(before, after, outcome.selection ? { ...changed, cells: [{ rowId: String(sharedAnchorTarget(outcome.selection.focus)?.owner), field: \"audioText\" }] } : changed, dir)",
+      "tests": [
+        "src/test/undo-caret-parity.test.mjs"
+      ]
+    },
+    {
+      "label": "the shared replay ignores a structural record's recorded selection",
+      "file": "src/bootstrap/wiring/editor.ts",
+      "find": "placeReplayedCaret(steps, outcome.recorded ?? null, dir) && outcome.selection",
+      "replace": "placeReplayedCaret(steps, null, dir) && outcome.selection",
+      "tests": [
+        "src/test/undo-caret-parity.test.mjs"
+      ]
+    },
+    {
+      "label": "the shared replay takes the changed cells in change-set order",
+      "file": "src/application/editing/undo/replayed-steps.ts",
+      "find": "  return dir === \"undo\" ? invertSteps(diffStates(now, was)) : diffStates(was, now);",
+      "replace": "  const order = (step: Step): number => changes.cells.findIndex(cell => step.op === \"rowField\" && cell.rowId === step.rowId && cell.field === step.key);\n  return (dir === \"undo\" ? invertSteps(diffStates(now, was)) : diffStates(was, now)).sort((a, b) => order(a) - order(b));",
       "tests": [
         "src/test/undo-caret-parity.test.mjs"
       ]

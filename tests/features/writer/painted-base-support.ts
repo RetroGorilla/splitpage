@@ -45,7 +45,7 @@ export function writerFor(source?: PaintedTextSource, rowCount = 2, sections?: r
     decode: fromHtml, storedHtml: html => html, moveBeat: swapBeatsCommand, run,
     shown: edit => edit(), editingBlocked: () => false, text, wholeFieldText: createWholeFieldTextCommit({ run, text }),
     undo: { step: () => {}, flush: () => {}, breakCoalescing: () => {}, last: () => null, nextRedo: () => null },
-    caretAfterStep: () => 0, notice: () => {}, changed: () => {}, selectionMoved: () => {},
+    caretAfterStep: () => 0, replayPlacement: () => null, notice: () => {}, changed: () => {}, selectionMoved: () => {},
     plainVisual: () => "", beatInput: () => {}, typeAtBeatEdge: () => false,
     beatKeydown: () => false, beatSelection: () => {}, leaveBeat: () => {},
     newCommentId: () => "c", openComment: () => {}

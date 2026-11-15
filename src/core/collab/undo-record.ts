@@ -3,6 +3,7 @@ import type {
   SharedRecordAddress, SharedRecoveryName, SharedScalarAddress, SharedStatusEvent, SharedTextAddress
 } from "./operations.ts";
 import type { FormatMark } from "../text/runs.ts";
+import type { FlowSelectionPair } from "../flow/flow.ts";
 
 export interface SharedUndoUnit {
   readonly identity: SharedContentRef;
@@ -139,6 +140,7 @@ export interface SharedCommandDescription {
   readonly label: string;
   readonly selection: SharedUndoSelection | null;
   readonly typing: string | null;
+  readonly recorded?: FlowSelectionPair;
 }
 
 export interface SharedUndoRecord {
@@ -146,6 +148,7 @@ export interface SharedUndoRecord {
   readonly parts: readonly SharedUndoPart[];
   readonly selection: SharedUndoSelection | null;
   readonly typing: string | null;
+  readonly recorded?: FlowSelectionPair;
 }
 
 export function sharedUndoPartName(part: SharedUndoPart): string {
@@ -186,5 +189,6 @@ export function mergeSharedUndoRecords(first: SharedUndoRecord, second: SharedUn
     parts.push(gone.size ? { ...part, deleted: part.deleted.filter(unit => !gone.has(unit.identity)) } : part);
   }
   const kept = parts.filter(part => part.kind !== "text" || part.inserted.length > 0 || part.deleted.length > 0);
-  return kept.length ? { label: first.label, parts: kept, selection: first.selection, typing: (first.typing ?? "") + (second.typing ?? "") } : null;
+  return kept.length ? { label: first.label, parts: kept, selection: first.selection, typing: (first.typing ?? "") + (second.typing ?? ""),
+    ...first.recorded ? { recorded: first.recorded } : {} } : null;
 }

@@ -51,7 +51,7 @@ function harness(initial?: Parameters<typeof migrateRows>[0]) {
     editingBlocked: () => false,
     text,
     undo: { step: () => {}, flush: () => {}, breakCoalescing: () => {}, last: () => null, nextRedo: () => null },
-    caretAfterStep: () => 0, notice: message => { notices.push(message); }, changed: () => {}, selectionMoved: () => {},
+    caretAfterStep: () => 0, replayPlacement: () => null, notice: message => { notices.push(message); }, changed: () => {}, selectionMoved: () => {},
     plainVisual: () => "", beatInput: () => {}, typeAtBeatEdge: () => false,
     beatKeydown: () => false, beatSelection: () => {}, leaveBeat: () => {}, newCommentId: () => "c", openComment: () => {}
   };
