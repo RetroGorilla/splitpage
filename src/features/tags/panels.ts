@@ -37,6 +37,8 @@ import { planQuickAdd } from "../../core/production/tags.ts";
 import { addPersonCommand, deletePersonCommand, deleteTagsCommand, gearQuickAddCommand, tagCellsCommand, updateTagsCommand } from "../../application/commands/production-records.ts";
 import { NOTHING_RAN, recordCommandRun } from "../../application/commands/shared-records.ts";
 import type { RecordCommandRun, SharedRecordBuild } from "../../application/commands/shared-records.ts";
+import { createTypedDrafts, heldWrite, isHeld, typedOrphansHtml } from "../common/typed-drafts.ts";
+import type { TypedDraft, TypedDrafts, TypedSave, TypedWrite } from "../common/typed-drafts.ts";
 import { PERSON_NAME_MAX, personById as personIn, personNamed, registryEntryOf } from "../../core/production/records.ts";
 import { retagMentions, retagRewrites } from "../../application/commands/tag-rewrites.ts";
 
@@ -202,20 +204,26 @@ function fillGearQuickAdd() {
 }
 
 export function applyGearQuickAdd() {
-  const raw = (document.getElementById("gear-quickadd-input") as HTMLTextAreaElement).value || "";
+  typed().submit("gear-quickadd-input", "", (document.getElementById("gear-quickadd-input") as HTMLTextAreaElement).value || "", gearSave);
+}
+
+function gearSave(raw: string, quiet: boolean): TypedWrite {
+  // why: the box replaces the whole gear list, so a silent retry could remove gear a collaborator added since
+  if (quiet) return "waits";
   function planned(doc: DocumentView | null) { return (planQuickAdd as PanelQuickAddRead)(doc, (ports as TagPanelPorts).text.productionReaders, raw, currentProductionIndex()); }
   const plan = (ports as TagPanelPorts).document.read(planned);
   const added = plan.added, removed = plan.removed;
 
   const run = editRecords(shared => gearQuickAddCommand(planned, shared));
-  if (run.held) return;
-  if (!run.changed) { fillGearQuickAdd(); return; }
+  if (run.held) return "waits";
+  if (!run.changed) { fillGearQuickAdd(); return "saved"; }
   renderProduction();
   fillGearQuickAdd();
   const parts = [];
   if (added) parts.push("added " + added);
   if (removed) parts.push("removed " + removed);
   (ports as TagPanelPorts).notices.show("Gear list updated — " + parts.join(", ") + ".", "ok");
+  return "saved";
 }
 
 function joinBeatLinks(rowIds: readonly string[], link: (rowId: string) => string) {
@@ -646,8 +654,60 @@ function renderProductionByShoot(entries?: readonly PresentedProductionEntry[]) 
 export function renderProduction() {
   const draw = (): void => { renderProductionPanel(); renderGearList(); };
   const shared = (ports as TagPanelPorts).shared.ports();
-  if (!shared) { typedLife = null; draw(); return; }
+  if (!shared) { typedLife = null; typed().clear(); draw(); return; }
   keepingTyped(shared, ["production-list", "production-bulk", "gear-list"], draw);
+}
+
+const TAG_DRAFT_BOXES = ["tag-notes-input", "tag-person-input", "tag-rename-input", "bulk-person-input", "gear-quickadd-input"];
+
+const TAG_UNSAVED_WHAT: Record<string, string> = {
+  "tag-notes-input": "notes", "tag-person-input": "new person", "tag-rename-input": "new name", "bulk-person-input": "new person", "gear-quickadd-input": "gear list"
+};
+
+let drafts: TypedDrafts | null = null;
+
+function typed(): TypedDrafts {
+  return drafts as TypedDrafts;
+}
+
+function tagUnsavedLabel(draft: TypedDraft): string {
+  const what = TAG_UNSAVED_WHAT[draft.box] ?? "text";
+  return draft.record ? "The item was removed, so its " + what + " was not saved" : "The selected items were removed, so the " + what + " was not saved";
+}
+
+function goneTagDraft(draft: TypedDraft): void {
+  if (!(ports as TagPanelPorts).shared.ports()) return;
+  (ports as TagPanelPorts).notices.show(tagUnsavedLabel(draft) + ". The text is kept at the top of the list.", "warn");
+}
+
+function typingElsewhere(active: Element | null): boolean {
+  if (!active || active.closest("#production-panel, #gear-panel")) return false;
+  return active.tagName === "TEXTAREA" || active.tagName === "INPUT" || !!active.closest('[contenteditable="true"], [contenteditable=""]');
+}
+
+function draftBoxes(roots: readonly string[], draft: TypedDraft): TypedBox[] {
+  const box = draft.record ? "." + draft.box + '[data-key="' + cssAttr(draft.record) + '"]' : "#" + draft.box;
+  return Array.from(document.querySelectorAll<TypedBox>(roots.map(root => root + " " + box).join(", ")));
+}
+
+function dropClosedDrafts(): void {
+  const view = (ports as TagPanelPorts).view, adding = view.tagAddingPersonKey(), renaming = view.tagRenamingKey();
+  for (const draft of typed().held()) {
+    const open = draft.box === "tag-rename-input" ? draft.record === renaming
+      : draft.box === "tag-person-input" ? draft.record === adding
+        : draft.box === "bulk-person-input" ? adding === "__bulk__" : true;
+    if (!open) typed().drop(draft.box, draft.record);
+  }
+}
+
+function showTagOrphans(rootIds: readonly string[]): void {
+  const html = typedOrphansHtml(typed().orphans(), tagUnsavedLabel);
+  for (const id of rootIds) document.getElementById(id)?.querySelector(".typed-unsaved")?.remove();
+  if (!html) return;
+  for (const id of ["production-list", "gear-list"]) {
+    const root = document.getElementById(id);
+    if (root && rootIds.includes(id) && !root.closest("[hidden]")) root.insertAdjacentHTML("afterbegin", html);
+  }
 }
 
 type TypedBox = HTMLInputElement | HTMLTextAreaElement;
@@ -682,15 +742,20 @@ function unsavedTyping(el: TypedBox): boolean {
 let typedLife: { readonly ports: TagPanelPorts | null; readonly shared: object; readonly epoch: number } | null = null;
 
 function keepingTyped(shared: object, rootIds: readonly string[], draw: () => void): void {
-  const active = document.activeElement, epoch = (ports as TagPanelPorts).lifetime.epoch();
+  const epoch = (ports as TagPanelPorts).lifetime.epoch();
   const sameLife = typedLife !== null && typedLife.ports === ports && typedLife.shared === shared && typedLife.epoch === epoch;
   typedLife = { ports, shared, epoch };
+  if (!sameLife) typed().clear();
+  // why: a retry runs a command, and its admission would settle typing the person has not finished in another box
+  else if (!typingElsewhere(document.activeElement)) typed().retry();
+  dropClosedDrafts();
+  const active = document.activeElement;
   const roots = rootIds.map(id => "#" + id), selector = roots.flatMap(root => TYPED_BOXES.map(box => root + " " + box)).join(", ");
   const boxes = Array.from(document.querySelectorAll<TypedBox>(selector));
   if (!sameLife) {
     // why: a draw that renders nothing leaves the boxes standing, and their text belongs to the lifetime before
     for (const el of boxes) el.value = el.defaultValue;
-    draw(); return;
+    draw(); showTagOrphans(rootIds); return;
   }
   const kept = boxes.flatMap(el => {
     const root = el.closest<HTMLElement>(roots.join(", ")), focused = el === active, unsaved = unsavedTyping(el);
@@ -698,6 +763,8 @@ function keepingTyped(shared: object, rootIds: readonly string[], draw: () => vo
       start: el.selectionStart, end: el.selectionEnd, direction: el.selectionDirection }] : [];
   });
   draw();
+  showTagOrphans(rootIds);
+  for (const draft of typed().held()) for (const box of draftBoxes(roots, draft)) box.value = draft.text;
   for (const box of kept) {
     const again = typedBoxAt(box.spot);
     if (!again) continue;
@@ -912,12 +979,13 @@ function entryValue(item: PresentedProductionEntry, field: "owner") {
   return entry ? entry[field] || "" : "";
 }
 
-function editRecords(build: SharedRecordBuild) {
-  return recordCommandRun((ports as TagPanelPorts).edits, (ports as TagPanelPorts).shared, build);
+function editRecords(build: SharedRecordBuild, quiet = false) {
+  const shared = (ports as TagPanelPorts).shared;
+  return recordCommandRun((ports as TagPanelPorts).edits, quiet ? { ports: shared.ports, refused: () => {} } : shared, build);
 }
 
-function updateTags(items: readonly PresentedProductionEntry[], change: TagChange) {
-  return editRecords(shared => updateTagsCommand(items.map(tagRef), change, (ports as TagPanelPorts).ids, shared));
+function updateTags(items: readonly PresentedProductionEntry[], change: TagChange, quiet = false) {
+  return editRecords(shared => updateTagsCommand(items.map(tagRef), change, (ports as TagPanelPorts).ids, shared), quiet);
 }
 
 function findTagByKey(key: string | null) {
@@ -1031,18 +1099,20 @@ export function bulkSetOwner(personId: string) {
   setOwnerOf(selectedEntries(), { id: personId });
 }
 
-function setOwnerOf(items: readonly PresentedProductionEntry[], choice: OwnerChoice, closing: () => void = () => {}) {
-  if (!items.length) { closing(); return; }
+function setOwnerOf(items: readonly PresentedProductionEntry[], choice: OwnerChoice, closing: () => void = () => {}, quiet = false): RecordCommandRun {
+  if (!items.length) { closing(); return NOTHING_RAN; }
   const known = "id" in choice ? personById(choice.id) : (ports as TagPanelPorts).document.read(function (doc) { return personNamed(doc, choice.name); });
   const owner = known ? known.id : "";
   const n = items.filter(function (item) { return (!known && "name" in choice) || entryValue(item, "owner") !== owner; }).length;
-  if (updateTags(items, { owner: choice }).held) return;
+  const run = updateTags(items, { owner: choice }, quiet);
+  if (run.held) return run;
   closing();
-  renderProduction();
-  if (!n) return;
+  if (!quiet) renderProduction();
+  if (!n) return run;
   const who = "id" in choice ? personById(choice.id) : (ports as TagPanelPorts).document.read(function (doc) { return personNamed(doc, choice.name); });
   (ports as TagPanelPorts).notices.show(who ? ("Assigned " + n + " item" + (n === 1 ? "" : "s") + " to " + who.name)
                 : ("Unassigned " + n + " item" + (n === 1 ? "" : "s")), "ok");
+  return run;
 }
 
 export function bulkSetStatus(statusId: string) {
@@ -1062,9 +1132,18 @@ export function bulkSetStatus(statusId: string) {
 export function bulkAddPerson() {
   const input = (document.getElementById("bulk-person-input") as HTMLInputElement | null);
   if (!input) return;
-  const close = () => { (ports as TagPanelPorts).view.setTagAddingPerson(null); };
-  if (!cappedText(input.value, PERSON_NAME_MAX)) { close(); renderProduction(); return; }
-  setOwnerOf(selectedEntries(), { name: input.value }, close);
+  if (!cappedText(input.value, PERSON_NAME_MAX)) { closeBulkPerson(); renderProduction(); return; }
+  typed().submit("bulk-person-input", "", input.value, bulkPersonSave);
+}
+
+function closeBulkPerson(): void {
+  if ((ports as TagPanelPorts).view.tagAddingPersonKey() === "__bulk__") (ports as TagPanelPorts).view.setTagAddingPerson(null);
+}
+
+function bulkPersonSave(text: string, quiet: boolean): TypedWrite {
+  const items = selectedEntries();
+  if (!items.length) { closeBulkPerson(); if (!quiet) renderProduction(); return "gone"; }
+  return heldWrite(setOwnerOf(items, { name: text }, closeBulkPerson, quiet));
 }
 
 export function bulkDeleteSelected() {
@@ -1171,19 +1250,33 @@ export function setTagOwner(key: string | null, personId: string) {
   renderProduction();
 }
 
+function notesSave(key: string): TypedSave {
+  return (text, quiet) => {
+    const item = findTagByKey(key);
+    if (!item) return plainText(text).trim() ? "gone" : "saved";
+    return heldWrite(updateTags([item], { notes: cappedLongText(plainText(text), 2000) }, quiet));
+  };
+}
+
 export function setTagNotes(key: string | null, text: string) {
-  const item = findTagByKey(key);
-  if (!item) return;
-  updateTags([item], { notes: cappedLongText(plainText(text), 2000) });
+  if (key === null || !findTagByKey(key)) return;
+  typed().submit("tag-notes-input", key, text, notesSave(key), typed().draft("tag-notes-input", key) !== null);
+}
+
+function personSave(key: string | null): TypedSave {
+  return (text, quiet) => {
+    const item = findTagByKey(key);
+    const run = item ? updateTags([item], { owner: { name: text } }, quiet) : editRecords(shared => addPersonCommand(text, (ports as TagPanelPorts).ids, shared), quiet);
+    if (run.held) return heldWrite(run);
+    if ((ports as TagPanelPorts).view.tagAddingPersonKey() === key) (ports as TagPanelPorts).view.setTagAddingPerson(null);
+    if (!quiet) renderProduction();
+    return "saved";
+  };
 }
 
 export function addPersonForTag(key: string | null, value: string): RecordCommandRun {
-  const item = findTagByKey(key);
-  const run = item ? updateTags([item], { owner: { name: value } }) : editRecords(shared => addPersonCommand(value, (ports as TagPanelPorts).ids, shared));
-  if (run.held) return run;
-  (ports as TagPanelPorts).view.setTagAddingPerson(null);
-  renderProduction();
-  return run;
+  const wrote = typed().submit("tag-person-input", key ?? "", value, personSave(key));
+  return { changed: wrote === "saved", held: isHeld(wrote) };
 }
 
 export function armPersonDelete(btn: Element, personId: string | null) {
@@ -1208,8 +1301,22 @@ function renamedNotes(context: string, key: string | null, nextKey: string | nul
 }
 
 export function saveTagRename(key: string | null, renamed: string): string | null {
+  let result: string | null = key;
+  typed().submit("tag-rename-input", key ?? "", renamed, (text, quiet) => {
+    const done = renameOnce(key, text, quiet);
+    result = done.key;
+    return done.wrote;
+  });
+  return result;
+}
+
+function renameOnce(key: string | null, renamed: string, quiet: boolean): { readonly key: string | null; readonly wrote: TypedWrite } {
   const item = findTagByKey(key);
-  if (!item) { (ports as TagPanelPorts).view.setTagRenaming(null); renderProduction(); return null; }
+  if (!item) {
+    if ((ports as TagPanelPorts).view.tagRenamingKey() === key) (ports as TagPanelPorts).view.setTagRenaming(null);
+    if (!quiet) renderProduction();
+    return { key: null, wrote: plainText(renamed).trim() ? "gone" : "saved" };
+  }
   const p = ports as TagPanelPorts;
   const previousExpanded = p.view.tagExpandedKey();
   const clean = cappedText(renamed, 80);
@@ -1219,24 +1326,26 @@ export function saveTagRename(key: string | null, renamed: string): string | nul
   const notes = prep.current().notes;
   const movedNotes = notes === null ? null : renamedNotes(notes, key, nextKey);
   if (notes !== null && movedNotes !== null) prep.renameNotes(notes, movedNotes);
+  const renaming = (ports as TagPanelPorts).view.tagRenamingKey();
   (ports as TagPanelPorts).view.setTagRenaming(null);
   (ports as TagPanelPorts).undo.breakCoalescing();
-  let held = false;
+  let wrote: TypedWrite = "saved";
   const changed = renameTag(item.cat.id, item.name, renamed, { ...(tagEditPorts as RemoveTagPorts), run: command => {
-    const run = editRecords(() => command);
-    held = run.held;
+    const run = editRecords(() => command, quiet);
+    wrote = heldWrite(run);
     return run.changed;
   } });
-  if (held) (ports as TagPanelPorts).view.setTagRenaming(key);
+  const held = isHeld(wrote);
+  if (held) (ports as TagPanelPorts).view.setTagRenaming(quiet ? renaming : key);
   if (changed) {
     (ports as TagPanelPorts).undo.breakCoalescing();
     (ports as TagPanelPorts).notices.show("Renamed to " + plainText(renamed).trim(), "ok");
   } else {
     p.view.setTagExpanded(previousExpanded);
     if (notes !== null && movedNotes !== null) prep.renameNotes(movedNotes, notes);
-    if (!held) renderProduction();
+    if (!held && !quiet) renderProduction();
   }
-  return changed ? nextKey : key;
+  return { key: changed ? nextKey : key, wrote };
 }
 
 let openTagMenu: HTMLElement | null = null;
@@ -1286,6 +1395,12 @@ function onTagMenuClick(e: MouseEvent) {
   if (!t || !t.closest) return;
   if (openTagMenu && !openTagMenu.isConnected) openTagMenu = null;
   const panel = document.querySelector("#production-panel:not([hidden]), #gear-panel:not([hidden])");
+  const dismiss = t.closest('#production-panel [data-action="typed-unsaved-dismiss"], #gear-panel [data-action="typed-unsaved-dismiss"]');
+  if (dismiss) {
+    typed().dismiss(dismiss.getAttribute("data-box") ?? "", dismiss.getAttribute("data-record") ?? "");
+    renderProduction();
+    return;
+  }
 
   const rename = t.closest('[data-action="tag-rename"]');
   if (rename) {
@@ -1380,6 +1495,8 @@ function syncGrouping(p: TagPanelPorts): void {
 
 export function startTagPanels(nextPorts: TagPanelPorts) {
   ports = nextPorts;
+  drafts = createTypedDrafts(TAG_DRAFT_BOXES, goneTagDraft);
+  typedLife = null;
   syncGrouping(nextPorts);
   const stopPreferenceChanges = nextPorts.changes.onChange(change => {
     if (change.name !== "panelGrouping") return;
@@ -1421,6 +1538,7 @@ export function startTagPanels(nextPorts: TagPanelPorts) {
       IS_TOUCH = undefined;
       tagEditPorts = null;
       ports = null;
+      drafts = null;
     }
   };
 }

@@ -157,10 +157,15 @@ export const sharedGalleryCommands: SharedGalleryCommands = {
   done: message => { notices.show(message, "ok"); }
 };
 
+const commentPorts = new WeakMap<SharedSessionParts, SharedCommentPorts>();
+
 export const sharedCommentCommands: SharedRecordCommands<SharedCommentPorts> = {
   ports: () => {
     const parts = sharedSessionParts();
-    return parts ? sharedCommentPorts({ ...source(parts), cells: html => sessionTextPorts.cells(html ?? "") })() : null;
+    if (!parts) return null;
+    const made = commentPorts.get(parts) ?? sharedCommentPorts({ ...source(parts), cells: html => sessionTextPorts.cells(html ?? "") })();
+    if (made) commentPorts.set(parts, made);
+    return made;
   },
   refused
 };

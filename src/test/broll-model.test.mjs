@@ -431,7 +431,7 @@ test("renaming: the line becomes the key and the new name, as the old rename wro
     before.forEach((b, ordinal) => {
       const id = b.id || "bsNew";
       const after = withRow(html, () => {
-        assert.ok(renameBrollInScript({ rowId: "r0", ordinal, id }, "a new <name> & more"));
+        assert.deepEqual(renameBrollInScript({ rowId: "r0", ordinal, id }, "a new <name> & more"), { changed: true, held: false });
         return currentDocument().rows[0].visualText;
       });
       assert.deepEqual(bareBreaks(cellOf(after)), bareBreaks(cellOf(oldRename(html, ordinal, id, "a new <name> & more"))), html);
@@ -443,8 +443,8 @@ test("renaming: the line becomes the key and the new name, as the old rename wro
   }
   assert.ok(renamed > 1000, "renamed " + renamed);
   withRow("no markers", () => {
-    assert.equal(renameBrollInScript({ rowId: "r0", ordinal: 0, id: "x" }, "n"), false);
-    assert.equal(renameBrollInScript({ rowId: "r0", ordinal: -1, id: "x" }, "n"), false);
+    assert.deepEqual(renameBrollInScript({ rowId: "r0", ordinal: 0, id: "x" }, "n"), { changed: false, held: false });
+    assert.deepEqual(renameBrollInScript({ rowId: "r0", ordinal: -1, id: "x" }, "n"), { changed: false, held: false });
   });
 });
 
@@ -457,7 +457,7 @@ test("anchoring and renaming in a cell still holding a video card keep the card"
     const read = brollInCell(cellOf(row.visualText));
     assert.deepEqual(read.map((b) => b.name), ["the gulls", "drone"]);
     assert.ok(read[0].id && read[1].id === "b9");
-    assert.ok(renameBrollInScript({ rowId: "r0", ordinal: 1, id: "b9" }, "high drone"));
+    assert.deepEqual(renameBrollInScript({ rowId: "r0", ordinal: 1, id: "b9" }, "high drone"), { changed: true, held: false });
     assert.match(row.visualText, /video-embed-card/);
     assert.deepEqual(brollInCell(cellOf(row.visualText)).map((b) => [b.id, b.name]), [[read[0].id, "the gulls"], ["b9", "high drone"]]);
   });

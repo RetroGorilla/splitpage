@@ -103,7 +103,7 @@ const WRITERS = {
   },
   "shot-from-line": {
     family: "records", shared: "operation",
-    reason: "A B-roll line with no shot gets one, seeded from its beat. Shared: record-create by the copy that typed or pasted the line, with the id of its key, built by sharedBrollIntroducedByText for a key the edited cell did not hold (callers in package 14)."
+    reason: "A B-roll line with no shot gets one, seeded from its beat. Shared: record-create by the copy that typed or pasted the line, with the id of its key, built by sharedBrollIntroducedByText for a key the edited cell did not hold (callers in package 14), and by sharedBrollKeying for a key the leaving copy makes."
   },
   "shot-name-from-line": {
     family: "records", shared: "derivation",
@@ -119,7 +119,7 @@ const WRITERS = {
   },
   "broll-key": {
     family: "records", shared: "operation",
-    reason: "An unkeyed B-roll marker is given an id by rewriting its text: a command of its own, with text operations. sharedBrollIntroducedByText keys the edited cell as the anchor plan does; its caller sends the keyed cell (package 14). A repeated key is settled by the projection (assumed rules 14 and 15)."
+    reason: "An unkeyed B-roll marker is given an id by rewriting its text: a command of its own, with text operations. sharedBrollIntroducedByText keys the edited cell as the anchor plan does; its caller sends the keyed cell (package 14). A repeated key is settled by the projection (assumed rules 14 and 15). In a shared Split, leaving a visual cell keys it (sharedBrollKeying), with an id from the line's first character; a doubled key is dropped by the next leave (assumed rule 196)."
   },
   "registry-heal-on-draw": {
     family: "records", shared: "not applicable",
@@ -256,8 +256,8 @@ const FIELDS: readonly Site[] = [
   ["core/text/anchors.ts#syncCommentAnchors", "field 1, rowId 1", "anchor-repair"],
   ["features/clipboard/beat-clip.ts#buildBeatPayload", "paragraphStart 1", "no-document"],
   ["features/clipboard/beat-clip.ts#insertBeats", "anchorId 1, name 1, owner 3, rowId 3", "record-with-text", "anchor-repair"],
-  ["features/comments/comments.ts#postComment", "anchorId 1, createdAt 1, field 1, resolvedAt 1, resolvedBy 1, rowId 1, updatedAt 1", "comment-stamp", "record-stated"],
-  ["features/comments/comments.ts#postReply", "createdAt 1", "comment-stamp"],
+  ["features/comments/comments.ts#commentSave", "anchorId 1, createdAt 1, field 1, resolvedAt 1, resolvedBy 1, rowId 1, updatedAt 1", "comment-stamp", "record-stated"],
+  ["features/comments/comments.ts#replySave", "createdAt 1", "comment-stamp"],
   ["features/merge/local-merge.ts#offerFileMerge", "docId 1", "local-merge"],
   ["features/rows/render.ts#captureRenderFocus", "field 1", "no-document"],
   ["features/writer/flow-visual-box.ts#bufferedVisualBox", "field 4", "no-document"]
@@ -366,6 +366,7 @@ const ENGINES: readonly Site[] = [
   ["application/commands/scenes.ts#removeSceneCommand", "Plan.shared (provided) 1", "stated-write"],
   ["application/commands/scenes.ts#sharedHeadingRemoval", "Plan.shared (provided) 1", "stated-write"],
   ["application/commands/shared-records.ts#withSharedRecords", "Plan.shared (provided) 2", "record-stated"],
+  ["application/commands/shared-broll-keying.ts#planned", "Plan.shared (provided) 1", "broll-key", "shot-from-line", "beat-stamp"],
   ["application/commands/shared-scenes.ts#sharedSceneCommand", "Plan.shared (provided) 1", "stated-write"],
   ["application/commands/shared-structure.ts#sharedRemoval", "Plan.shared (provided) 1", "stated-write"],
   ["application/commands/split-join.ts#joinBeatsCommand", "Plan.shared (provided) 1", "stated-write", "beat-stamp"],
@@ -382,11 +383,13 @@ const ENGINES: readonly Site[] = [
   ["bootstrap/wiring/clipboard.ts#mountCopyPasteFeature", "recordPastedBroll 1", "record-with-text"],
   ["bootstrap/wiring/ports/imports.ts#importFormats", "anchorBrollInRows 1", "file-entry"],
   ["bootstrap/wiring/ports/production.ts#production", "ProductionIndexOwner.recordsPlan 1, ProductionIndexOwner.recordsPlan (provided) 1", "tag-from-text", "cue-retitle"],
+  ["bootstrap/wiring/ports/shared-broll-keying.ts#sharedBrollKeyingPorts", "sharedBeatStamp 1", "beat-stamp"],
   ["bootstrap/wiring/ports/shared-gallery.ts#sharedGalleryPorts", "sharedBeatStamp 1", "beat-stamp"],
   ["bootstrap/wiring/ports/shared-rewrites.ts#sharedRewritePorts", "sharedBeatStamp 1", "beat-stamp"],
   ["bootstrap/wiring/ports/shared-values.ts#sharedValuePorts", "sharedBeatStamp 1", "beat-stamp"],
   ["bootstrap/wiring/ports/writer-flow.ts#writerFlowCommands", "sharedBeatStamp 1", "beat-stamp"],
   ["bootstrap/wiring/session-owner.ts#createSession", "ReconcilePort.anchors (provided) 1, ReconcilePort.records (provided) 1, syncCommentAnchors 1", "anchor-repair", ...FROM_TEXT],
+  ["core/collab/broll-keying.ts#sharedBrollKeying", "planBrollAnchorsInState 1, planBrollRecordsInState 1", "broll-key", "shot-from-line"],
   ["core/collab/text-records.ts#sharedBrollIntroducedByText", "planBrollAnchorsInState 1, planBrollRecordsInState 1", "broll-key", "shot-from-line"],
   ["core/collab/text-records.ts#sharedPeopleIntroducedByText", "addPerson 1, planOwnerSync 1", "person-from-name"],
   ["core/migrate.ts#migrateRows", "applyBrollRecords 1, planBrollRecords 1, syncCommentAnchors 1", "file-entry"],

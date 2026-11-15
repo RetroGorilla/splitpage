@@ -21,6 +21,7 @@ export type SharedRecordBuild = (shared?: SharedRecordPorts) => Command;
 export interface RecordCommandRun {
   readonly changed: boolean;
   readonly held: boolean;
+  readonly announced?: true;
 }
 
 export const NOTHING_RAN: RecordCommandRun = Object.freeze({ changed: false, held: false });
@@ -30,8 +31,9 @@ export function recordCommandRun<Ports>(edits: Pick<DocumentEdits, "edit" | "run
   if (!shared) return { changed: edits.edit(build()), held: false };
   const outcome = edits.run(build(shared));
   if (outcome.kind === "failed") throw outcome.error;
-  if (outcome.kind === "rejected") records.refused(outcome);
-  return { changed: outcome.kind === "applied" || outcome.kind === "committed", held: outcome.kind === "rejected" };
+  if (outcome.kind !== "rejected") return { changed: outcome.kind === "applied" || outcome.kind === "committed", held: false };
+  records.refused(outcome);
+  return outcome.notified ? { changed: false, held: true, announced: true } : { changed: false, held: true };
 }
 
 export function runRecordCommand<Ports>(edits: Pick<DocumentEdits, "edit" | "run">, records: SharedRecordCommands<Ports>, build: (shared?: Ports) => Command): boolean {

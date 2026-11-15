@@ -56,7 +56,7 @@ interface BrollRecords {
   readonly brollShotsByProp: () => Record<string, string[]>;
   readonly maybeCaptureBroll: (e: InputEvent, cellEl: Element) => void;
   readonly anchorBrollInLeftCell: (cellEl: Element) => number;
-  readonly renameBrollInScript: (entry: BrollEntry, newName: string) => boolean;
+  readonly renameBrollInScript: (entry: BrollEntry, newName: string, quiet?: boolean) => RecordCommandRun;
   readonly updateBrollBadge: () => void;
   readonly scheduleBrollRefresh: () => void;
 }
@@ -84,7 +84,7 @@ export interface BrollPanelPorts {
   readonly undo: Pick<UndoControl, "breakCoalescing">;
   readonly actions: Pick<ActionRegistry, "invoke">;
   readonly notices: Pick<NoticePort, "show">;
-  readonly records: Pick<BrollRecords, "brollEntries" | "addBrollProp" | "renameBrollInScript" | "updateBrollBadge">;
+  readonly records: Pick<BrollRecords, "brollEntries" | "renameBrollInScript" | "updateBrollBadge">;
   readonly rows: { readonly focusField: (rowId: string, field: string) => void };
 }
 

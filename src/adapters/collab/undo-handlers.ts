@@ -71,8 +71,10 @@ export function prepareSharedTextRestore(operation: SharedTextRestore, view: Sha
       const content = value as string | Readonly<Record<string, unknown>>, length = typeof content === "string" ? content.length : 1;
       if (!length) return;
       const observed = plan.additions.map(item => item.identity);
-      spliceSharedTextPlan(plan, offset, offset, typeof content === "string" ? content.split("") : [content]);
-      const marks = [prepareTextMarkWrite(plan, view, sharedTextRestoreOperation(operation.id, index, original), offset, offset + length,
+      const restoring = sharedTextRestoreOperation(operation.id, index, original);
+      // why: a joined row reads each character through the source that wrote it, so a restored one is given its own.
+      spliceSharedTextPlan(plan, offset, offset, typeof content === "string" ? content.split("") : [content], restoring);
+      const marks = [prepareTextMarkWrite(plan, view, restoring, offset, offset + length,
         { type: "birth", observed, born: "inserted" })];
       unit.marks.forEach((source, markIndex) => {
         const found = plan.additions.find(item => item.identity === source);

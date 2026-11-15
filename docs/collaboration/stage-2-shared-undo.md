@@ -30,6 +30,11 @@ names what the command changed by identity, never by offset.
 | `heading-creation` | the stored heading identity, the segment that holds its line, creating copy, initial observation and retirement direction |
 | `structure` | the command kind and the operation identity |
 
+A B-roll keying (`key-broll-lines`) records `text` and `record-create` parts, plus `keyedLines` (each keyed
+line's units and other copies' contributions) and `keyedShots` (the fields of each shot its lines hold), so
+its undo runs only while the lines and shots are as it left them; see
+[stage-2-commit-time-writers.md](stage-2-commit-time-writers.md).
+
 `typing` is the text a keystroke inserted (`""` for a deletion key), or `null`
 for a command that is not typing, such as cut or paste.
 
