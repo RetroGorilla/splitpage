@@ -396,7 +396,7 @@
       "replace": "statusSet(target.dataset[\"key\"] ?? null, (target as HTMLSelectElement).value); prepNotice(\"Requirement status updated\");"
     },
     {
-      "label": "rule 152: the shared scene-prep notice offers an Undo that reads the standalone owner",
+      "label": "rule 157: the shared scene-prep notice offers an Undo that reads the standalone owner",
       "file": "src/features/tags/panels.ts",
       "find": "  if (p.shared.ports()) { p.notices.show(message, \"ok\"); return; }",
       "replace": "  if (!p) { p.notices.show(message, \"ok\"); return; }"

@@ -617,7 +617,7 @@ for (const choice of PREP_CHOICES) for (const order of ORDERS) test(`C7 record h
   } finally { stop(); tidy(f); }
 });
 
-for (const choice of PREP_CHOICES) for (const order of ORDERS) test(`C7 record caller literal: ${choice.name} saves in a shared session with its notice and no Undo button (rule 152), ${order}`, async () => {
+for (const choice of PREP_CHOICES) for (const order of ORDERS) test(`C7 record caller literal: ${choice.name} saves in a shared session with its notice and no Undo button (rule 157), ${order}`, async () => {
   const f = await enter();
   try {
     openProductionPanel();
