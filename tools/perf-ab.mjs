@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { REPO } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
 import { KEY_GAP_MS, TYPED, buildArgs } from "./perf-record.mjs";
-import { GROUP_NAMES, REMOTE_RATES, SHARED_FIXTURES } from "./perf-shared.mjs";
+import { GROUP_NAMES, REMOTE_RATES, SHARED_FIXTURES, entryOutcome, stateOption } from "./perf-shared.mjs";
 import { TRACE_CATEGORIES } from "./perf-trace.mjs";
 import { EARLIER_RECORDS, PERCENTILE_RULE, median } from "./perf-stats.mjs";
 import { withRefTrees } from "./ref-trees.mjs";
@@ -23,12 +23,13 @@ export function parseArgs(argv) {
   const refs = [];
   let rounds = null;
   let only = null;
-  let shared = false, dryRun = false, out = null, minFreeMb = DEFAULT_MIN_FREE_MB;
+  let shared = false, dryRun = false, out = null, minFreeMb = DEFAULT_MIN_FREE_MB, states = [];
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--rounds") rounds = wholeNumber(argv[++i] ?? "", "--rounds");
     else if (arg === "--only") only = argv[++i] ?? "";
     else if (arg === "--shared") shared = true;
+    else if (arg === "--state") states = stateOption(argv[++i], states, SHARED_FIXTURES);
     else if (arg === "--dry-run") dryRun = true;
     else if (arg === "--out") { out = argv[++i] ?? ""; if (!out) throw new Error("--out needs a file"); }
     else if (arg === "--min-free-mb") minFreeMb = wholeNumber(argv[++i] ?? "", "--min-free-mb");
@@ -36,19 +37,19 @@ export function parseArgs(argv) {
     else refs.push(arg);
   }
   if (refs.length < 1 || refs.length > 2) {
-    throw new Error("usage: node tools/perf-ab.mjs <base> [head=HEAD] [--only short,long,images] [--rounds 3] | --shared [--only short,long,large,edited] [--rounds 5] [--out results.json] [--min-free-mb 3000] [--dry-run]");
+    throw new Error("usage: node tools/perf-ab.mjs <base> [head=HEAD] [--only short,long,images] [--rounds 3] | --shared [--only short,long,large,edited] [--state <name>=<file> ...] [--rounds 5] [--out results.json] [--min-free-mb 3000] [--dry-run]");
   }
-  const allowed = shared ? SHARED_FIXTURES : ["short", "long", "images"];
+  const allowed = shared ? [...SHARED_FIXTURES, ...states.map((s) => s.name)] : ["short", "long", "images"];
   only ??= allowed.join(",");
   const fixtures = only.split(",");
   if (fixtures.some((f) => !allowed.includes(f)) || new Set(fixtures).size !== fixtures.length) throw new Error(`--only needs distinct fixtures from ${allowed.join(",")}`);
   if (!shared) {
-    if (dryRun || out !== null || minFreeMb !== DEFAULT_MIN_FREE_MB) throw new Error("--dry-run, --out and --min-free-mb belong to --shared");
+    if (dryRun || out !== null || minFreeMb !== DEFAULT_MIN_FREE_MB || states.length) throw new Error("--dry-run, --out, --min-free-mb and --state belong to --shared");
     return { base: refs[0], head: refs[1] ?? "HEAD", rounds: rounds ?? 3, only };
   }
   rounds ??= SHARED_MIN_ROUNDS;
   if (rounds < SHARED_MIN_ROUNDS && !dryRun) throw new Error(`--shared needs at least ${SHARED_MIN_ROUNDS} rounds; fewer only with --dry-run, which is not evidence`);
-  return { base: refs[0], head: refs[1] ?? "HEAD", rounds, only, shared, dryRun, out: out && resolve(out), minFreeMb };
+  return { base: refs[0], head: refs[1] ?? "HEAD", rounds, only, shared, dryRun, out: out && resolve(out), minFreeMb, states };
 }
 
 export function writeRecord(path, record) {
@@ -137,6 +138,8 @@ export function sharedSummary(record) {
     `| Case | ${columns.map(([name]) => name).join(" | ")} |`,
     `| --- | ${columns.map(() => "---").join(" | ")} |`
   ];
+  const refused = [...new Map(record.rounds.flatMap((r) => r.rows.filter((x) => x.kind === "entry" && x.refused).map((x) => [`${r.side} ${x.fixture}`, `${r.side} ${x.fixture}: ${entryOutcome(x)}`]))).values()];
+  if (refused.length) lines.splice(lines.length - 2, 0, `Entries refused, their cases not run: ${refused.join("; ")}.`, "");
   for (const label of caseLabels(record)) {
     lines.push(`| ${label} | ${columns.map(([, pass, pick]) => {
       const [b, h] = sides.map((side) => stat(side, pass, label, pick));
@@ -161,7 +164,7 @@ async function sharedMain(args, repo) {
     for (const side of ["base", "head"]) placeTools(repo, dirs[side], SHARED_TOOL_PATHS);
     const data = join(scratch, "shared-data.json");
     console.error("perf-ab: preparing the entry states and replay bytes once, from head");
-    await run(process.execPath, ["tools/perf-shared.mjs", "--prepare", data, "--only", args.only], dirs.head);
+    await run(process.execPath, ["tools/perf-shared.mjs", "--prepare", data, "--only", args.only, ...args.states.flatMap((s) => ["--state", `${s.name}=${s.file}`])], dirs.head);
     const tree = async (sha, path) => (await run("git", ["rev-parse", `${sha}:${path}`])).trim();
     const revisions = { tool };
     for (const side of ["base", "head"]) revisions[side] = { commit: shas[side], adapters: await tree(shas[side], "src/adapters"), collab: await tree(shas[side], "src/adapters/collab") };
@@ -170,6 +173,8 @@ async function sharedMain(args, repo) {
       kind: "shared-composed-editor", dryRun: args.dryRun, startedAt: new Date().toISOString(),
       conditions: { node: process.version, arch: process.arch, platform: process.platform, typedCharacters: TYPED.length, keyGapMs: KEY_GAP_MS,
         remoteRates: REMOTE_RATES, fixtures: args.only.split(","), clients: prepared.clients, replayUpdates: prepared.replayUpdates, minFreeMb: args.minFreeMb, rounds: args.rounds,
+        states: Object.values(prepared.fixtures).map((f) => ({ name: f.name, fromFile: args.states.some((s) => s.name === f.name), stateBytes: f.stateBytes, stateSha256: f.stateSha256, plainBytes: f.plainBytes })),
+        entryCeilingBytes: prepared.entryCeilingBytes,
         passes: PASSES, traceCategories: TRACE_CATEGORIES, percentiles: PERCENTILE_RULE, earlierRecords: EARLIER_RECORDS },
       revisions, rounds: []
     };

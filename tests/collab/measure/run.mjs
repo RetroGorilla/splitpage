@@ -9,7 +9,7 @@ import { URL } from "node:url";
 import * as Y from "yjs";
 import { enterSharedDocument } from "../../../src/core/migrate.ts";
 import { readOperation } from "../../../src/core/collab/read-operation.ts";
-import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
+import { hydrateSharedDocument, hydrateSharedDocumentFromState } from "../../../src/adapters/collab/hydrate.ts";
 import { createSharedDocument, applySharedUpdate, encodeSharedState, destroySharedDocument, observeSharedUpdates } from "../../../src/adapters/collab/document.ts";
 import { CollabDocumentState, collabState, transactCollabState } from "../../../src/adapters/collab/state.ts";
 import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
@@ -66,9 +66,26 @@ export function fixtures() {
   ];
 }
 
+export const MEASUREMENT_CLIENTS = Object.freeze({ fresh: 0x81234567, opened: 0x81234568, sender: 0x81234569 });
+
+export function stateFixture(name, state) {
+  const writers = [...Y.decodeStateVector(Y.encodeStateVectorFromUpdate(state)).keys()];
+  const fixed = writers.filter(client => Object.values(MEASUREMENT_CLIENTS).includes(client));
+  if (fixed.length) throw new Error(`The ${name} state was written with the measurement's fixed client ids (${fixed.map(client => "0x" + client.toString(16)).join(", ")}); prepare it with other client ids`);
+  const handle = createSharedDocument();
+  try {
+    hydrateSharedDocumentFromState(handle, state);
+    const document = enterSharedDocument(projectSharedDocument(handle));
+    if (document.rows.length < 2) throw new Error(`The ${name} state holds ${document.rows.length} beat(s); the measurement needs at least two`);
+    const plainFile = copy(document);
+    inlineStateImages(plainFile);
+    return { name, document, plain: bytes(plainFile), state, sha256: createHash("sha256").update(state).digest("hex") };
+  } finally { destroySharedDocument(handle); }
+}
+
 export function open(state = null) {
   const handle = createSharedDocument();
-  collabState(handle).doc.clientID = state ? 0x81234568 : 0x81234567;
+  collabState(handle).doc.clientID = state ? MEASUREMENT_CLIENTS.opened : MEASUREMENT_CLIENTS.fresh;
   if (state) Y.applyUpdate(collabState(handle).doc, state);
   registerSharedTextOperationHandlers(handle); registerSharedUndoOperationHandlers(handle);
   registerSharedSplitHandlers(handle, { cells: () => { throw new Error("Workload supplies no initial HTML"); } });
@@ -187,7 +204,7 @@ export function growth(fixture) {
 
 export function updatesFor(state, owner) {
   const sender = open(state), updates = [];
-  collabState(sender).doc.clientID = 0x81234569;
+  collabState(sender).doc.clientID = MEASUREMENT_CLIENTS.sender;
   const stop = observeSharedUpdates(sender, update => updates.push(update));
   try {
     const edit = writer(sender);

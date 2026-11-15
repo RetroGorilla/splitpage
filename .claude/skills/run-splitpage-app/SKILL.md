@@ -632,6 +632,7 @@ buffered pipeline long after the driver has exited, which looks like a hang.
 | `shot <name>` | screenshot to `%TEMP%\splitpage-shots\<name>.png` |
 | `logs` | dump collected console output |
 | `trace start <categories>` / `trace stop <file>` | `driver.mjs` only: records a browser trace (`Tracing.start` with the comma-separated categories, events reported back) until `stop`, which writes the events as one JSON array to `<file>`. One trace at a time. `tools/perf-shared.mjs --trace` uses it |
+| `stop-unless <js>` | `driver.mjs` only: ends the script there, printing `STOPPED <js>`, when the expression is falsy; no assertion. `tools/perf-shared.mjs` uses it to skip a fixture's cases when its entry is refused |
 | `sleep <ms>`, `quit` | |
 
 Selectors are CSS, or `text=Exact Label` / `text*=Contains`. Prefer `text*=`

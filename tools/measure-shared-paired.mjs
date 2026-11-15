@@ -2,6 +2,7 @@ import { join, resolve } from "node:path";
 import { REPO } from "./source-scan.mjs";
 import { abbaOrder, placeTools, toolRevision, waitForMemory, writeRecord } from "./perf-ab.mjs";
 import { EARLIER_RECORDS, PERCENTILE_RULE, median } from "./perf-stats.mjs";
+import { stateOption } from "./perf-shared.mjs";
 import { withRefTrees } from "./ref-trees.mjs";
 
 const PAIRED_FIXTURES = ["short", "long", "large"];
@@ -11,7 +12,7 @@ const TOOL_PATHS = ["tools", "tests/collab/measure"];
 
 export function parsePairedArgs(argv) {
   const refs = [];
-  let rounds = MIN_ROUNDS, only = PAIRED_FIXTURES.join(","), out = null, minFreeMb = 3000, dryRun = false;
+  let rounds = MIN_ROUNDS, only = null, out = null, minFreeMb = 3000, dryRun = false, states = [];
   const whole = (raw, what) => {
     if (!/^[1-9]\d*$/.test(raw ?? "")) throw new Error(`${what} needs a positive whole number`);
     return Number(raw);
@@ -20,17 +21,20 @@ export function parsePairedArgs(argv) {
     const arg = argv[i];
     if (arg === "--rounds") rounds = whole(argv[++i], "--rounds");
     else if (arg === "--only") only = argv[++i] ?? "";
+    else if (arg === "--state") states = stateOption(argv[++i], states, PAIRED_FIXTURES);
     else if (arg === "--out") { out = argv[++i] ?? ""; if (!out) throw new Error("--out needs a file"); }
     else if (arg === "--min-free-mb") minFreeMb = whole(argv[++i], "--min-free-mb");
     else if (arg === "--dry-run") dryRun = true;
     else if (arg.startsWith("-")) throw new Error(`unknown option: ${arg}`);
     else refs.push(arg);
   }
-  if (refs.length < 1 || refs.length > 2) throw new Error("usage: node tools/measure-shared-admission.mjs --paired <base> [head=HEAD] [--only short,long,large] [--rounds 5] [--out results.json] [--min-free-mb 3000] [--dry-run]");
+  if (refs.length < 1 || refs.length > 2) throw new Error("usage: node tools/measure-shared-admission.mjs --paired <base> [head=HEAD] [--only short,long,large] [--state <name>=<file> ...] [--rounds 5] [--out results.json] [--min-free-mb 3000] [--dry-run]");
+  const known = [...PAIRED_FIXTURES, ...states.map((s) => s.name)];
+  only ??= known.join(",");
   const fixtures = only.split(",");
-  if (fixtures.some((f) => !PAIRED_FIXTURES.includes(f)) || new Set(fixtures).size !== fixtures.length) throw new Error(`--only needs distinct fixtures from ${PAIRED_FIXTURES.join(",")}`);
+  if (fixtures.some((f) => !known.includes(f)) || new Set(fixtures).size !== fixtures.length) throw new Error(`--only needs distinct fixtures from ${known.join(",")}`);
   if (rounds < MIN_ROUNDS && !dryRun) throw new Error(`the paired form needs at least ${MIN_ROUNDS} rounds; fewer only with --dry-run, which is not evidence`);
-  return { base: refs[0], head: refs[1] ?? "HEAD", rounds, only, out: out && resolve(out), minFreeMb, dryRun };
+  return { base: refs[0], head: refs[1] ?? "HEAD", rounds, only, out: out && resolve(out), minFreeMb, dryRun, states };
 }
 
 export function parseRound(stdout) {
@@ -74,7 +78,7 @@ export async function main(argv, repo = REPO) {
     for (const side of ["base", "head"]) placeTools(repo, dirs[side], TOOL_PATHS);
     const data = join(scratch, "paired-data.json");
     console.error("measure-shared-admission: preparing the states and update streams once, from head");
-    await run(process.execPath, ["--expose-gc", MEASURE, "--prepare", data, "--only", args.only], dirs.head);
+    await run(process.execPath, ["--expose-gc", MEASURE, "--prepare", data, "--only", args.only, ...args.states.flatMap((s) => ["--state", `${s.name}=${s.file}`])], dirs.head);
     const tree = async (sha, path) => (await run("git", ["rev-parse", `${sha}:${path}`])).trim();
     const revisions = { tool };
     for (const side of ["base", "head"]) revisions[side] = { commit: shas[side], adapters: await tree(shas[side], "src/adapters"), collab: await tree(shas[side], "src/adapters/collab") };

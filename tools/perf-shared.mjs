@@ -1,5 +1,6 @@
 import { Buffer } from "node:buffer";
 import { spawnSync } from "node:child_process";
+import { createHash } from "node:crypto";
 import { existsSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join, resolve } from "node:path";
@@ -25,6 +26,8 @@ const CHUNK = 60000;
 const CDP_PORT_OFFSET = 1000;
 const LOCAL_ROW = 1;
 export const CLIENTS = Object.freeze({ entry: 0x81234567, replay: 0x81234569 });
+export const ENTRY_CEILING_BYTES = 2 * 1024 ** 2;
+const STATE_NAME = /^[a-z][a-z0-9-]{0,31}$/;
 
 export function caseList() {
   const typing = (surface) => REMOTE_RATES.map((rate) => ({ label: `${surface} typing, remote ${rate}/s`, surface, kind: "typing", rate }));
@@ -52,7 +55,7 @@ export const PAGE = `(function () {
   if (window.__perfShared) return 'ready';
   var S = window.__sharedTest;
   var MODIFIERS = { Control: 1, Shift: 1, Alt: 1, Meta: 1 };
-  var perf = { since: Infinity, lat: [], long: [], data: '', fixture: null, cursor: 0, events: [], timers: [], replaying: null, structural: [], refused: null };
+  var perf = { since: Infinity, lat: [], long: [], data: '', fixture: null, cursor: 0, events: [], timers: [], replaying: null, structural: [], refused: null, entered: false };
   addEventListener('keydown', function (e) {
     if (MODIFIERS[e.key] || e.timeStamp < perf.since) return;
     var t0 = e.timeStamp;
@@ -75,13 +78,17 @@ export const PAGE = `(function () {
       perf.data = '';
       perf.fixture = data;
       var t0 = performance.now(), result = await S.enterFrom(data.state), ms = performance.now() - t0;
-      need(result.ok, 'entry refused: ' + result.reason);
+      var row = { kind: 'entry', label: data.name + ' entry', fixture: data.name, beats: null, stateBytes: data.stateBytes, stateSha256: data.stateSha256, plainBytes: data.plainBytes, ms: null, refused: null,
+        browser: (navigator.userAgent.match(/Edg\\/[\\d.]+/) || navigator.userAgent.match(/Chrome\\/[\\d.]+/) || ['unknown'])[0], viewport: innerWidth + 'x' + innerHeight, devicePixelRatio: devicePixelRatio };
+      if (!result.ok) { row.refused = result.reason; return 'PERF ' + JSON.stringify(row); }
+      perf.entered = true;
       var doc = S.read().app;
       need(doc.rows.length === data.rows, 'entered ' + doc.rows.length + ' beats, expected ' + data.rows);
       S.timing(true);
-      return 'PERF ' + JSON.stringify({ kind: 'entry', label: data.name + ' entry', fixture: data.name, beats: doc.rows.length, stateBytes: data.stateBytes, ms: +ms.toFixed(1),
-        browser: (navigator.userAgent.match(/Edg\\/[\\d.]+/) || navigator.userAgent.match(/Chrome\\/[\\d.]+/) || ['unknown'])[0], viewport: innerWidth + 'x' + innerHeight, devicePixelRatio: devicePixelRatio });
+      row.beats = doc.rows.length; row.ms = +ms.toFixed(1);
+      return 'PERF ' + JSON.stringify(row);
     },
+    entered: function () { return perf.entered === true; },
     writerCaret: function () {
       var id = rowId(${LOCAL_ROW}), at = plainLength(S.read().app.rows[${LOCAL_ROW}].audioText);
       window.__writerFlowTest.place({ anchor: { kind: 'beat', rowId: id, offset: at }, head: { kind: 'beat', rowId: id, offset: at } });
@@ -213,7 +220,7 @@ export function sharedSuiteText(data, traceDir = null) {
   const text = JSON.stringify(data);
   const lines = ["open", "viewport 1400 900", "wait document.querySelectorAll('#rows .row').length > 0", "sleep 1500", `eval ${oneLine(PAGE)}`];
   for (let at = 0; at < text.length; at += CHUNK) lines.push(`eval window.__perfShared.chunk(${JSON.stringify(text.slice(at, at + CHUNK))})`);
-  lines.push("eval window.__perfShared.enter()", `wait document.querySelectorAll('#rows .row').length === ${data.rows}`, "sleep 1000");
+  lines.push("eval window.__perfShared.enter()", "stop-unless window.__perfShared.entered()", `wait document.querySelectorAll('#rows .row').length === ${data.rows}`, "sleep 1000");
   const cases = caseList();
   lines.push(...caseLines(cases[1], "warm-up (discarded)"));
   cases.forEach((spec, index) => {
@@ -271,8 +278,8 @@ export function attachTraces(found, readTrace) {
   });
 }
 
-export async function prepareData(only) {
-  const { fixtures, growth, updatesFor, open } = await import("../tests/collab/measure/run.mjs");
+export async function prepareData(only, states = []) {
+  const { fixtures, growth, updatesFor, open, stateFixture } = await import("../tests/collab/measure/run.mjs");
   const { hydrateSharedDocument } = await import("../src/adapters/collab/hydrate.ts");
   const { destroySharedDocument, encodeSharedState } = await import("../src/adapters/collab/document.ts");
   const { enterSharedDocument } = await import("../src/core/migrate.ts");
@@ -286,20 +293,46 @@ export async function prepareData(only) {
     } finally { destroySharedDocument(handle); }
   };
   const out = {};
-  for (const name of only) {
+  const builtIn = (name) => {
     const source = sources.find((s) => s.name === (name === "edited" ? "long" : name));
+    if (name !== "edited") return { state: fresh(source), document: source.document, plain: source.plain };
+    const row = growth(source);
+    return { state: row.edited, document: source.document, plain: row.editedPlain };
+  };
+  for (const name of only) {
     process.stderr.write(`perf-shared: preparing ${name}\n`);
-    const state = name === "edited" ? growth(source).edited : fresh(source);
-    const remote = source.document.rows[0].id;
+    const file = states.find((s) => s.name === name);
+    const { state, document, plain } = file ? stateFixture(name, readFileSync(file.file)) : builtIn(name);
+    const remote = document.rows[0].id;
     const replay = updatesFor(state, remote).updates.slice(0, REPLAY_UPDATES);
-    out[name] = { name, state: base64(state), stateBytes: state.length, rows: source.document.rows.length, remoteRow: remote,
-      localRow: source.document.rows[LOCAL_ROW].id, replay: replay.map(base64) };
+    out[name] = { name, state: base64(state), stateBytes: state.length, stateSha256: createHash("sha256").update(state).digest("hex"), plainBytes: plain,
+      rows: document.rows.length, remoteRow: remote, localRow: document.rows[LOCAL_ROW].id, replay: replay.map(base64) };
   }
-  return { clients: CLIENTS, replayUpdates: REPLAY_UPDATES, fixtures: out };
+  return { clients: CLIENTS, replayUpdates: REPLAY_UPDATES, entryCeilingBytes: ENTRY_CEILING_BYTES, fixtures: out };
+}
+
+export function stateOption(raw, states, taken) {
+  const at = (raw ?? "").indexOf("=");
+  const name = at > 0 ? raw.slice(0, at) : "", file = at > 0 ? raw.slice(at + 1) : "";
+  if (!STATE_NAME.test(name) || !file) throw new Error("--state needs <name>=<file>, the name in lower-case letters, digits and hyphens");
+  if (taken.includes(name) || states.some((s) => s.name === name)) throw new Error(`--state ${name}: the name is already a fixture`);
+  return [...states, { name, file: resolve(file) }];
+}
+
+export function dataFixtures(data, only) {
+  const names = only ?? Object.keys(data.fixtures);
+  const missing = names.filter((name) => !Object.hasOwn(data.fixtures, name));
+  return missing.length ? { names: [], error: `the data file has no ${missing.join(", ")} fixture; it holds ${Object.keys(data.fixtures).join(", ")}` } : { names, error: null };
+}
+
+export function entryOutcome(entry) {
+  if (!entry.refused) return `${entry.ms} ms`;
+  const over = entry.stateBytes - ENTRY_CEILING_BYTES;
+  return `refused at entry (${entry.refused}), ${over > 0 ? `${over} bytes over` : `${-over} bytes under`} the 2 MiB ceiling`;
 }
 
 export function parseSharedArgs(argv) {
-  let built = false, trace = false, data = null, json = null, prepare = null, only = SHARED_FIXTURES;
+  let built = false, trace = false, data = null, json = null, prepare = null, only = null, states = [];
   for (let i = 0; i < argv.length; i++) {
     const arg = argv[i];
     if (arg === "--built") built = true;
@@ -308,14 +341,17 @@ export function parseSharedArgs(argv) {
     else if (arg === "--json") json = argv[++i] ?? "";
     else if (arg === "--prepare") prepare = argv[++i] ?? "";
     else if (arg === "--only") only = (argv[++i] ?? "").split(",").filter(Boolean);
-    else return { error: `unknown argument: ${arg}` };
+    else if (arg === "--state") {
+      try { states = stateOption(argv[++i], states, SHARED_FIXTURES); } catch (error) { return { error: error.message }; }
+    } else return { error: `unknown argument: ${arg}` };
   }
-  const unknown = only.filter((f) => !SHARED_FIXTURES.includes(f));
-  if (unknown.length || !only.length || new Set(only).size !== only.length) return { error: `--only needs distinct fixtures from ${SHARED_FIXTURES.join(",")}` };
   if (prepare === "" || data === "" || json === "") return { error: "--prepare, --data and --json each need a file" };
-  if (!prepare && !data) return { error: "usage: node tools/perf-shared.mjs --prepare <data.json> [--only ...] | --data <data.json> [--built] [--trace] [--json <out.json>] [--only ...]" };
+  if (!prepare && !data) return { error: "usage: node tools/perf-shared.mjs --prepare <data.json> [--only ...] [--state <name>=<file> ...] | --data <data.json> [--built] [--trace] [--json <out.json>] [--only ...]" };
   if (prepare && trace) return { error: "--trace belongs to a measuring run, not --prepare" };
-  return { built, trace, data: data && resolve(data), json: json && resolve(json), prepare: prepare && resolve(prepare), only, error: null };
+  if (data && states.length) return { error: "--state belongs to --prepare; a measuring run reads the states from its data file" };
+  const known = [...SHARED_FIXTURES, ...states.map((s) => s.name)];
+  if (only && (!only.length || new Set(only).size !== only.length || (prepare && only.some((f) => !known.includes(f))))) return { error: `--only needs distinct fixtures from ${known.join(",")}` };
+  return { built, trace, data: data && resolve(data), json: json && resolve(json), prepare: prepare && resolve(prepare), only: only ?? (prepare ? known : null), states, error: null };
 }
 
 export function sharedReport(rows, traced = false) {
@@ -333,9 +369,9 @@ export function sharedReport(rows, traced = false) {
       ? `- Traced pass (categories ${TRACE_CATEGORIES.join(", ")}). Parts: the five mark parts and the handler, command and write within input, read from the trace's user-timing marks. Outer: script time (outermost script records) in every task that holds a key event or a mark; remote updates also keep their receive and drain spans. Unattributed is outer minus the five parts. Style, layout and paint are the browser's records in the case, reported on their own`
       : "- Untraced pass: latency and long tasks only; the parts come from a traced pass",
     "",
-    "| Fixture | Beats | State bytes | Entry ms | Browser |",
-    "| --- | --- | --- | --- | --- |",
-    ...entries.map((e) => `| ${e.fixture} | ${e.beats} | ${e.stateBytes} | ${e.ms} | ${e.browser} |`),
+    "| Fixture | Beats | State bytes | State SHA-256 | Plain bytes | Entry | Browser |",
+    "| --- | --- | --- | --- | --- | --- | --- |",
+    ...entries.map((e) => `| ${e.fixture} | ${e.beats ?? "—"} | ${e.stateBytes} | ${e.stateSha256 ?? "—"} | ${e.plainBytes ?? "—"} | ${entryOutcome(e)} | ${e.browser} |`),
     "",
     `| Case | Keys | p50 | p95 | Max | Long tasks | Long-task ms | Remote delivered | ${GROUP_NAMES.map((g) => `${g} ms`).join(" | ")} |`,
     `| --- | --- | --- | --- | --- | --- | --- | --- | ${GROUP_NAMES.map(() => "---").join(" | ")} |`,
@@ -352,7 +388,7 @@ export async function main(argv) {
   const args = parseSharedArgs(argv);
   if (args.error) { console.error(`perf-shared: ${args.error}`); return 2; }
   if (args.prepare) {
-    writeFileSync(args.prepare, JSON.stringify(await prepareData(args.only)));
+    writeFileSync(args.prepare, JSON.stringify(await prepareData(args.only, args.states)));
     return 0;
   }
   const ports = parsePortBase(process.env.PERF_PORT_BASE);
@@ -366,9 +402,10 @@ export async function main(argv) {
   const work = mkdtempSync(join(tmpdir(), "splitpage-perf-shared-"));
   const rows = [];
   try {
-    for (const fixture of args.only) {
+    const chosen = dataFixtures(data, args.only);
+    if (chosen.error) { console.error(`perf-shared: ${chosen.error}`); return 2; }
+    for (const fixture of chosen.names) {
       const prepared = data.fixtures[fixture];
-      if (!prepared) { console.error(`perf-shared: the data file has no ${fixture} fixture`); return 2; }
       const suite = join(work, `${fixture}.txt`), traces = args.trace ? mkdtempSync(join(work, `${fixture}-traces-`)) : null;
       writeFileSync(suite, sharedSuiteText(prepared, traces));
       const r = spawnSync(process.execPath, [DRIVER, "--script", suite, "--port", String(ports.base), "--cdp-port", String(ports.base + CDP_PORT_OFFSET), "--shot-dir", work], {
@@ -377,6 +414,12 @@ export async function main(argv) {
       const parsed = parseShared(r.stdout ?? "");
       const found = traces ? attachTraces(parsed, (index) => JSON.parse(readFileSync(traceFile(traces, index), "utf8"))) : parsed;
       if (traces) rmSync(traces, { recursive: true, force: true });
+      const refused = found.find((row) => row.kind === "entry" && row.refused);
+      if (refused && r.status === 0) {
+        console.error(`perf-shared: ${fixture}: ${entryOutcome(refused)}; its cases were not run`);
+        rows.push({ ...refused, fixture });
+        continue;
+      }
       const problems = sharedProblems(found, fixture);
       if (r.status !== 0 || problems.length) {
         console.error((r.stdout ?? "").split("\n").filter((l) => !l.startsWith("pressed") && !l.startsWith("PERF ")).slice(-30).join("\n"));

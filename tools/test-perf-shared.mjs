@@ -1,14 +1,16 @@
 import assert from "node:assert/strict";
+import { Buffer } from "node:buffer";
+import { createHash } from "node:crypto";
 import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { isAbsolute, join } from "node:path";
 import { test } from "node:test";
 import { abbaOrder, passOrder, parseArgs, placeTools, sharedSummary, toolRevision, tracingNoise, waitForMemory, writeRecord } from "./perf-ab.mjs";
 import { parsePairedArgs, pairedSummary, parseRound } from "./measure-shared-paired.mjs";
 import { KEY_GAP_MS, PROBE, TYPED, parsePerf } from "./perf-record.mjs";
 import { EARLIER_RECORDS, PERCENTILE_RULE, latencyFigures, median, nearestRank } from "./perf-stats.mjs";
-import { GROUP_NAMES, PAGE, REMOTE_RATES, SEAMS, attachTraces, caseList, expectedKeys, parseShared, parseSharedArgs,
-  sharedProblems, sharedRecord, sharedReport, sharedRows, sharedSuiteText, traceFile, tracedCase } from "./perf-shared.mjs";
+import { ENTRY_CEILING_BYTES, GROUP_NAMES, PAGE, REMOTE_RATES, SEAMS, attachTraces, caseList, dataFixtures, entryOutcome, expectedKeys, parseShared, parseSharedArgs,
+  prepareData, sharedProblems, sharedRecord, sharedReport, sharedRows, sharedSuiteText, traceFile, tracedCase } from "./perf-shared.mjs";
 import { TASK_RECORD, TRACE_CATEGORIES, traceRecords } from "./perf-trace.mjs";
 
 const record = (name, at, dur, extra = {}) => ({ name, ph: "X", ts: at * 1000, dur: dur * 1000, pid: 1, tid: 1, cat: "devtools.timeline", ...extra });
@@ -139,7 +141,8 @@ test("a run is refused when keys go missing, a trace cannot be read, refusals ar
 test("arguments: perf-shared, the shared comparison and the paired adapter rerun", () => {
   assert.equal(parseSharedArgs(["--prepare", "x.json", "--only", "short"]).only[0], "short");
   assert.deepEqual([parseSharedArgs(["--data", "x.json"]).trace, parseSharedArgs(["--data", "x.json", "--trace"]).trace], [false, true]);
-  for (const args of [[], ["--data"], ["--data", "x", "--only", "huge"], ["--data", "x", "--only", "short,short"], ["--bogus"], ["--prepare", "x", "--trace"]]) assert.ok(parseSharedArgs(args).error);
+  for (const args of [[], ["--data"], ["--prepare", "x", "--only", "huge"], ["--data", "x", "--only", "short,short"], ["--bogus"], ["--prepare", "x", "--trace"]]) assert.ok(parseSharedArgs(args).error);
+  assert.match(dataFixtures({ fixtures: { short: {} } }, ["huge"]).error, /the data file has no huge fixture/, "a measuring run refuses a fixture its data file lacks");
   const shared = parseArgs(["base", "--shared"]);
   assert.deepEqual([shared.rounds, shared.only, shared.dryRun, shared.minFreeMb, shared.out], [5, "short,long,large,edited", false, 3000, null]);
   assert.equal(parseArgs(["base", "--shared", "--rounds", "1", "--only", "short", "--dry-run"]).rounds, 1);
@@ -266,4 +269,76 @@ test("summaries report base, head and the difference per case, mark a dry run as
   for (const summary of [paired, sharedSummary(record(0))]) assert.ok(summary.includes(PERCENTILE_RULE), "each summary states the percentile rule");
   assert.deepEqual(parseRound('noise\nROUND [{"name":"short"}]\n'), [{ name: "short" }]);
   assert.throws(() => parseRound("nothing"));
+});
+
+test("a state file is named on the command line, belongs to the preparation and joins the fixtures", () => {
+  const prepared = parseSharedArgs(["--prepare", "x.json", "--state", "day-30=day.bin"]);
+  assert.deepEqual([prepared.error, prepared.only, prepared.states.map((s) => s.name)], [null, ["short", "long", "large", "edited", "day-30"], ["day-30"]]);
+  assert.ok(isAbsolute(prepared.states[0].file) && prepared.states[0].file.endsWith("day.bin"), "the file is resolved before the tool changes directory");
+  assert.deepEqual(parseSharedArgs(["--prepare", "x.json", "--state", "day-30=day.bin", "--only", "day-30"]).only, ["day-30"]);
+  for (const args of [["--prepare", "x", "--state"], ["--prepare", "x", "--state", "Day=x"], ["--prepare", "x", "--state", "short=x"], ["--prepare", "x", "--state", "a="],
+    ["--prepare", "x", "--state", "a=x", "--state", "a=y"], ["--data", "x", "--state", "a=x"]]) assert.ok(parseSharedArgs(args).error, args.join(" "));
+  assert.deepEqual(parseSharedArgs(["--data", "x.json", "--only", "day-30"]).only, ["day-30"], "a measuring run takes the fixtures its data file holds");
+  assert.deepEqual(dataFixtures({ fixtures: { short: {}, "day-30": {} } }, null), { names: ["short", "day-30"], error: null });
+  assert.equal(parseArgs(["base", "--shared", "--state", "day-30=day.bin"]).only, "short,long,large,edited,day-30");
+  assert.equal(parseArgs(["base", "--shared", "--state", "day-30=day.bin", "--only", "day-30", "--rounds", "1", "--dry-run"]).states[0].name, "day-30");
+  assert.throws(() => parseArgs(["base", "--state", "day-30=day.bin"]), /belong to --shared/);
+  assert.equal(parsePairedArgs(["base", "--state", "day-30=day.bin"]).only, "short,long,large,day-30");
+  assert.throws(() => parsePairedArgs(["base", "--state", "large=day.bin"]), /already a fixture/);
+});
+
+async function stateFiles() {
+  const { fixtures, open } = await import("../tests/collab/measure/run.mjs");
+  const { createSharedDocument, destroySharedDocument, encodeSharedState } = await import("../src/adapters/collab/document.ts");
+  const { hydrateSharedDocument } = await import("../src/adapters/collab/hydrate.ts");
+  const { enterSharedDocument } = await import("../src/core/migrate.ts");
+  const short = fixtures().find((f) => f.name === "short");
+  const encode = (handle, document = short.document) => {
+    try { hydrateSharedDocument(handle, enterSharedDocument(structuredClone(document))); return encodeSharedState(handle); } finally { destroySharedDocument(handle); }
+  };
+  return { short, own: encode(createSharedDocument()), fixed: encode(open()), single: encode(createSharedDocument(), { ...short.document, rows: short.document.rows.slice(0, 1), comments: [], brollShots: [] }) };
+}
+
+test("a state file is projected for its beats, plain document and hash, and refused when the tools' own client ids wrote it or it holds one beat", async () => {
+  const { stateFixture } = await import("../tests/collab/measure/run.mjs");
+  const { short, own, fixed, single } = await stateFiles();
+  const fixture = stateFixture("day-30", own);
+  assert.deepEqual(fixture.document.rows.map((r) => r.id), short.document.rows.map((r) => r.id));
+  assert.equal(fixture.sha256, createHash("sha256").update(own).digest("hex"));
+  assert.ok(fixture.plain > 0);
+  assert.throws(() => stateFixture("day-30", fixed), /written with the measurement's fixed client ids \(0x81234567\)/);
+  assert.throws(() => stateFixture("day-30", single), /holds 1 beat\(s\); the measurement needs at least two/);
+});
+
+test("a prepared state file carries its size and hash, never its path, and the remote and local beats come from the state", async () => {
+  const { short, own } = await stateFiles();
+  const work = mkdtempSync(join(tmpdir(), "perf-shared-state-")), file = join(work, "day.bin");
+  try {
+    writeFileSync(file, own);
+    const data = await prepareData(["day-30"], [{ name: "day-30", file }]);
+    const day = data.fixtures["day-30"];
+    assert.deepEqual([day.stateBytes, day.stateSha256, day.rows, day.remoteRow, day.localRow, day.replay.length],
+      [own.length, createHash("sha256").update(own).digest("hex"), short.document.rows.length, short.document.rows[0].id, short.document.rows[1].id, 400]);
+    assert.equal(Buffer.from(day.state, "base64").equals(Buffer.from(own)), true);
+    assert.equal(data.entryCeilingBytes, ENTRY_CEILING_BYTES);
+    assert.ok(!JSON.stringify(data).includes(work) && !JSON.stringify(data).includes("day.bin"), "no path reaches the data");
+    const { prepare } = await import("../tests/collab/measure/paired.mjs");
+    const paired = prepare(["day-30"], [{ name: "day-30", file }]);
+    assert.deepEqual(paired.fixtures.map((f) => [f.name, Object.keys(f.states), f.updates.length, f.document.rows.length]), [["day-30", ["state"], 1000, short.document.rows.length]],
+      "the paired rerun measures a state file as one phase of its own, with its update stream generated against it");
+    assert.ok(!JSON.stringify(paired).includes(work), "no path reaches the paired data either");
+  } finally { rmSync(work, { recursive: true, force: true }); }
+});
+
+test("an entry the app refuses is reported with its distance from the 2 MiB ceiling, and its cases are skipped rather than failed", () => {
+  const lines = sharedSuiteText({ name: "day-30", state: "AAAA", stateBytes: 3, rows: 2, replay: [] }).trim().split("\n");
+  assert.equal(lines[lines.indexOf("eval window.__perfShared.enter()") + 1], "stop-unless window.__perfShared.entered()", "the script ends at a refused entry");
+  const over = { kind: "entry", fixture: "day-30", stateBytes: ENTRY_CEILING_BYTES + 10, refused: "enter-failed", beats: null, ms: null, browser: "Edg/1" };
+  assert.equal(entryOutcome(over), "refused at entry (enter-failed), 10 bytes over the 2 MiB ceiling");
+  assert.equal(entryOutcome({ ...over, stateBytes: ENTRY_CEILING_BYTES - 4 }), "refused at entry (enter-failed), 4 bytes under the 2 MiB ceiling");
+  assert.equal(entryOutcome({ ...over, refused: null, ms: 12.5 }), "12.5 ms");
+  assert.match(sharedReport([over]), /\| day-30 \| — \| 2097162 \| — \| — \| refused at entry \(enter-failed\), 10 bytes over the 2 MiB ceiling \| Edg\/1 \|/);
+  const revisions = { tool: { commit: "c".repeat(40) }, base: { commit: "a".repeat(40) }, head: { commit: "b".repeat(40) } };
+  const summary = sharedSummary({ dryRun: false, revisions, rounds: [{ side: "head", pass: "untraced", rows: [over] }] });
+  assert.match(summary, /Entries refused, their cases not run: head day-30: refused at entry \(enter-failed\), 10 bytes over the 2 MiB ceiling\./);
 });

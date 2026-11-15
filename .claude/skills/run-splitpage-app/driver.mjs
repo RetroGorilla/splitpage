@@ -699,6 +699,10 @@ async function invokeLine(line) {
       break;
     case "sleep": await sleep(parseInt(rest, 10)); break;
     case "trace": await traceCommand(rest); break;
+    case "stop-unless":
+      if (await js(rest)) break;
+      out1(`STOPPED ${rest}`);
+      return false;
     case "quit": return false;
     default: throw new Error(`unknown command: ${cmd}`);
   }
