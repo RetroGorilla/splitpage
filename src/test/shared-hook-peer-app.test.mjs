@@ -239,6 +239,40 @@ test("the peer's undo and redo walk its own history through the shared undo, and
   } finally { if (sharedSession()) hook.leave(); }
 });
 
+test("the peer types and erases in a visual cell, and the joiner types and undoes through its own shared undo; catching up carries only the joiner's own changes", async () => {
+  script([{ id: "r1", audioText: "Hello", visualText: "Look" }, { id: "r2", audioText: "World", visualText: "" }]);
+  assert.deepEqual(await hook.enter(), { ok: true });
+  try {
+    const p = hook.peer, cells = doc => doc.rows.map(row => [row.id, row.audioText, row.visualText]);
+    assert.equal(p.type("r1", 0, "B", "visualText").kind, "applied");
+    assert.equal(p.erase("r1", 4, 5, "visualText"), "applied");
+    p.deliver();
+    assert.deepEqual(cells(hook.read().app), [["r1", "Hello", "BLoo"], ["r2", "World", ""]]);
+    assert.throws(() => p.joinerType("r2", 0, "J"), /The late joiner has not joined/);
+    assert.throws(() => p.joinerUndo(), /The late joiner has not joined/);
+    p.lateJoiner("app");
+    p.hold();
+    assert.equal(p.type("r2", 5, "!").kind, "applied");
+    assert.equal(p.joinerType("r1", 4, "s", "visualText"), "applied");
+    assert.equal(p.joinerType("r2", 0, "J"), "applied");
+    assert.deepEqual(cells(p.catchUp()), [["r1", "Hello", "BLoos"], ["r2", "JWorld!", ""]]);
+    assert.deepEqual(cells(hook.read().app), [["r1", "Hello", "BLoos"], ["r2", "JWorld", ""]], "the peer's held typing stays held");
+    assert.deepEqual(cells(hook.read().peer), [["r1", "Hello", "BLoos"], ["r2", "JWorld!", ""]]);
+    assert.equal(p.release(), 1);
+    assert.ok(same(hook.read().app, hook.read().peer));
+    const undone = p.joinerUndo();
+    assert.deepEqual([undone.ok, undone.label], [true, "typing"]);
+    p.catchUp();
+    assert.deepEqual(cells(hook.read().app), [["r1", "Hello", "BLoos"], ["r2", "World!", ""]], "only the joiner's last typing is taken back");
+    p.joinerUndo(); p.catchUp();
+    assert.deepEqual(cells(hook.read().app), [["r1", "Hello", "BLoo"], ["r2", "World!", ""]]);
+    const empty = p.joinerUndo();
+    assert.equal(empty.ok === false || empty.effective === false, true);
+    assert.ok(same(hook.read().app, hook.read().peer) && same(p.catchUp(), hook.read().app));
+  } finally { if (sharedSession()) hook.leave(); }
+  assert.deepEqual([hook.peer.joinerType("r1", 0, "x"), hook.peer.joinerUndo()], [undefined, undefined]);
+});
+
 test("a joiner built at a chosen moment holds that moment until it catches up, and leaving the session disposes it", async () => {
   script();
   assert.deepEqual(await hook.enter(), { ok: true });

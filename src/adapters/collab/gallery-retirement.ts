@@ -3,6 +3,7 @@ import type { CollabRoots } from "./roots.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { sharedJson } from "./snapshot.ts";
 import { readSharedRemovalCommand } from "./removal-record.ts";
+import { readStoredRecordDeletion } from "./record-deletion.ts";
 
 export const SHARED_GALLERY_RETIREMENT_FIELD = "retired";
 type RetirementRoots = Pick<CollabRoots, "beats" | "removalRecords">;
@@ -65,7 +66,7 @@ export function readSharedRetirementObservation(record: unknown): string | null 
 }
 
 export function isSharedGalleryShown(roots: RetirementRoots, key: string, record: unknown): boolean {
-  return record instanceof Y.Map && !(record.has(SHARED_GALLERY_RETIREMENT_FIELD) && isSharedGalleryRetired(roots, key, record));
+  return record instanceof Y.Map && !readStoredRecordDeletion(record) && !(record.has(SHARED_GALLERY_RETIREMENT_FIELD) && isSharedGalleryRetired(roots, key, record));
 }
 
 export function readSharedBeatPictures(roots: Pick<CollabRoots, "beats" | "removalRecords" | "gallery">, beat: string): readonly (readonly [string, Y.Map<unknown>])[] {

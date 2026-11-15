@@ -10,6 +10,7 @@ import type { SharedPreparationView, SharedPreparationResult, SharedPreparedWrit
 import { isStableSharedIdentity } from "./identity.ts";
 import { countSharedRead } from "./read-counts.ts";
 import { sharedStructureReference } from "./structure-identity.ts";
+import { readPreparedRecordDeletion } from "./record-deletion.ts";
 
 function sameTarget(a: SharedStatusEvent["target"], b: SharedStatusEvent["target"]): boolean {
   return a.scope === b.scope && a.record === b.record;
@@ -38,6 +39,12 @@ function heads(events: ReadonlyMap<string, SharedStatusEvent>): string[] {
 
 function targetPath(target: SharedStatusEvent["target"]): string[] {
   return [target.scope === "beat" ? "beats" : target.scope === "tag" ? "tags" : "shots", target.record];
+}
+
+// why: a removed tag or shot keeps its map behind a removal mark, and is as missing as one whose map is gone.
+function targetStands(view: SharedPreparationView, target: SharedStatusEvent["target"]): boolean {
+  const path = targetPath(target);
+  return view.kind(path) === "map" && (target.scope === "beat" || !readPreparedRecordDeletion(view, path));
 }
 
 function storedStatus(view: SharedPreparationView, target: SharedStatusEvent["target"]): string {
@@ -135,7 +142,7 @@ export function readSharedStatusNotices(handle: SharedDocumentHandle, target: Sh
 export function prepareSharedStatusRetire(operation: SharedStatusRetire, view: SharedPreparationView): SharedPreparationResult {
   const { target } = operation;
   if (![operation.id, operation.by, operation.event, target.record].every(isStableSharedIdentity)) return { ok: false, reason: "unstable-identity" };
-  if (view.kind(targetPath(target)) !== "map") return { ok: false, reason: "missing-status-target" };
+  if (!targetStands(view, target)) return { ok: false, reason: "missing-status-target" };
   const events = eventsFor(view, target), retired = (id: string): boolean => view.kind(["retiredStatus", id]) !== "missing";
   const superseded = (id: string): boolean => [...events].some(([child, event]) => event.parents.some(parent => parent === id) && (!retired(child) || superseded(child)));
   const standing = [...events.keys()].filter(id => !retired(id) && !superseded(id)), now = resolveStatus(view, target, events);
@@ -154,7 +161,7 @@ export function prepareSharedStatusEvent(operation: SharedStatusEvent, view: Sha
     if (!owner) return { ok: false, reason: "missing-status-target" };
     event = readSharedStatusEvent({ ...event, target: { scope: "beat", record: owner.owner } });
   }
-  if (!event || view.kind(targetPath(event.target)) !== "map") return { ok: false, reason: "missing-status-target" };
+  if (!event || !targetStands(view, event.target)) return { ok: false, reason: "missing-status-target" };
   const key = JSON.stringify([view.writer, event.id]);
   if (view.kind(["statusEvents", key]) !== "missing") return { ok: false, reason: "duplicate-status-event" };
   const events = eventsFor(view, event.target);

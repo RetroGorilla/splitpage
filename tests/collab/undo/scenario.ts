@@ -36,6 +36,7 @@ export interface UndoReplica {
   readonly scalar: (beat: string, field: string, value: SharedJsonValue | undefined) => void;
   readonly snapshot: () => ModelSnapshot;
   readonly record?: (action: UndoRecordAction, collection: SharedRecordCollection, key: string, value: string) => string | null;
+  readonly kept?: (key: string) => string | undefined;
 }
 
 export type UndoRecordAction = "create" | "set" | "delete" | "status";

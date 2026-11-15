@@ -24,7 +24,7 @@ const PORTS = { cells: createFlowLoadRuntime().cells };
 
 const OWNERS: Readonly<Record<SharedOperation["kind"], string>> = {
   "text-insert": "text", "text-delete": "text", mark: "text",
-  "record-create": "record", "record-set": "record", "record-delete": "record",
+  "record-create": "record", "record-set": "record", "record-delete": "record", "record-revive": "record",
   split: "split", "split-before": "split", "segment-create": "split",
   remove: "removal", restore: "removal", "heading-remove": "removal", discard: "removal", "discard-retire": "removal",
   join: "join", "join-glue": "join", "join-retire": "join",
@@ -60,7 +60,7 @@ test("every operation kind has one owner: a family the composition registers, or
     const registered = Object.keys(registeredSharedOperationHandlers(handle)).sort();
     assert.deepEqual(registered, Object.entries(OWNERS).filter(([, owner]) => owner !== "executor").map(([kind]) => kind).sort());
     assert.deepEqual(registered, ["discard", "discard-retire", "gallery-restore", "gallery-retire", "heading-create", "heading-finalize", "heading-remove", "join", "join-glue", "join-retire",
-      "mark", "mark-retract", "record-create", "record-delete", "record-set", "remove", "restore", "segment-create", "segment-move", "segment-restore", "segment-retire", "split",
+      "mark", "mark-retract", "record-create", "record-delete", "record-revive", "record-set", "remove", "restore", "segment-create", "segment-move", "segment-restore", "segment-retire", "split",
       "split-before", "split-restore", "split-retire", "status-retire", "text-delete", "text-insert", "text-restore"]);
   } finally { destroySharedDocument(handle); }
 });

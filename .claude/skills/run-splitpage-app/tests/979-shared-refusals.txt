@@ -1,0 +1,108 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.KEY='<span class="broll-key" data-broll-id="S1" contenteditable="false">B-roll:</span>';F.openFile(new File([JSON.stringify({schema:2,title:'Shared refusals',paragraphsDecided:true,people:[{id:'p1',name:'Alice'}],brollShots:[{id:'S1',name:'Cup',status:'unshot',origin:'list'}],rows:[{id:'r1',audioText:'abcdef',visualText:'abcdef'},{id:'r2',audioText:KEY+' a cup',visualText:''},{id:'r3',audioText:'one',visualText:''},{id:'r4',audioText:'two',visualText:'mug'},{id:'r5',audioText:'green tea',visualText:''}],comments:[]})],'refusals.splitpage'))
+wait F.state().title === 'Shared refusals'
+eval window.Q=function(id,f){return document.querySelector('#rows .cell-editable[data-id="'+id+'"][data-field="'+f+'"]')};window.A=function(id,f){var r=S.read().app.rows.filter(function(x){return x.id===id})[0];return r?r[f]:null};window.same=function(){return JSON.stringify(S.read().app)===JSON.stringify(S.read().peer)};true
+eval window.at=function(id,f,o){var c=Q(id,f);c.focus();var w=document.createTreeWalker(c,4),n,k=o;while((n=w.nextNode())){if(k<=n.data.length){getSelection().setBaseAndExtent(n,k,n,k);return true}k-=n.data.length}getSelection().setBaseAndExtent(c,c.childNodes.length,c,c.childNodes.length);return true};window.C=function(id,f){var c=Q(id,f),s=getSelection();if(!s.rangeCount||!c.contains(s.focusNode))return -1;var r=document.createRange();r.setStart(c,0);r.setEnd(s.focusNode,s.focusOffset);return r.toString().replace(/​/g,'').length};true
+eval window.NOT='This is not available in a shared session yet.';window.MOVES='Moving beats and scenes is not available in a shared session.';window.CHANGED='This line changed. Try replacing again.';window.snap=function(){return JSON.stringify([S.read().app,S.read().peer,S.recovery(),S.counters().queued,S.peer.appliedUpdates().length])};window.clear=function(){document.querySelectorAll('#toast-host .toast').forEach(function(t){t.dismiss()});return true};window.one=function(m){var t=[].slice.call(document.querySelectorAll('#toast-host .toast'));return t.length===1&&t[0].classList.contains('warn')&&t[0].textContent===m};true
+eval window.clip=function(type,cell){var d=new DataTransfer();d.setData('text/plain','pasted');var e=new ClipboardEvent(type,{clipboardData:d,bubbles:true,cancelable:true});cell.dispatchEvent(e);return e.defaultPrevented};window.input=function(type,cell){var e=new InputEvent('beforeinput',{inputType:type,bubbles:true,cancelable:true});cell.dispatchEvent(e);return e.defaultPrevented};true
+eval S.enter()
+wait S.read().peer !== null
+expect !window.__writerFlowTest.on() && Q('r1','audioText').textContent === 'abcdef'
+eval clear();true
+wait document.querySelectorAll('#toast-host .toast').length === 0
+eval at('r1','audioText',3);window.before=snap();window.prevented=clip('paste',Q('r1','audioText'));true
+expect window.prevented && one(NOT) && snap() === window.before && Q('r1','audioText').textContent === 'abcdef'
+expect document.activeElement === Q('r1','audioText') && C('r1','audioText') === 3
+press q
+expect A('r1','audioText') === 'abcqdef' && C('r1','audioText') === 4
+eval S.peer.deliver();clear();true
+wait document.querySelectorAll('#toast-host .toast').length === 0
+eval at('r1','visualText',3);window.before=snap();window.prevented=input('formatBold',Q('r1','visualText'));true
+expect window.prevented && one(NOT) && snap() === window.before && Q('r1','visualText').textContent === 'abcdef'
+expect document.activeElement === Q('r1','visualText') && C('r1','visualText') === 3
+press q
+expect A('r1','visualText') === 'abcqdef'
+eval S.peer.deliver();clear();true
+wait document.querySelectorAll('#toast-host .toast').length === 0
+eval at('r1','audioText',4);window.before=snap();true
+key Enter
+expect one(NOT) && snap() === window.before && document.querySelectorAll('#rows .row').length === 5
+expect document.activeElement === Q('r1','audioText') && C('r1','audioText') === 4
+press w
+expect A('r1','audioText') === 'abcqwdef'
+eval S.peer.deliver();at('r1','visualText',7);clear();true
+wait document.querySelectorAll('#toast-host .toast').length === 0
+eval window.before=snap();true
+key ctrl KeyB
+expect one(NOT) && snap() === window.before && !Q('r1','visualText').querySelector('strong,b')
+expect document.activeElement === Q('r1','visualText') && C('r1','visualText') === 7
+press A
+expect A('r1','visualText') === 'abcqdefA'
+eval S.peer.deliver();clear();at('r1','audioText',5);true
+wait document.querySelectorAll('#toast-host .toast').length === 0
+ime set k
+eval window.before=snap();window.prevented=clip('paste',Q('r1','audioText'));true
+expect window.prevented && one(NOT) && snap() === window.before
+ime commit k
+expect A('r1','audioText') === 'abcqwkdef' && document.activeElement === Q('r1','audioText') && C('r1','audioText') === 6
+eval S.peer.deliver();true
+expect same()
+click #btn-write
+wait window.__writerFlowTest.on()
+eval document.getElementById('writer-doc').focus();window.__writerFlowTest.place({anchor:{kind:'beat',rowId:'r3',offset:1},head:{kind:'beat',rowId:'r3',offset:1}});clear();true
+wait document.querySelectorAll('#toast-host .toast').length === 0
+eval window.before=snap();true
+key alt ArrowUp
+expect one(MOVES) && snap() === window.before
+expect window.__writerFlowTest.selection().head.rowId === 'r3' && window.__writerFlowTest.selection().head.offset === 1
+press v
+eval S.peer.deliver();true
+expect same() && A('r3','audioText') === 'ovne' && S.read().app.rows.map(function(r){return r.id}).join() === 'r1,r2,r3,r4,r5'
+click #wr-close
+wait !window.__writerFlowTest.on()
+key ctrl KeyF
+wait !document.querySelector('.findbar').hidden
+eval window.FI=document.getElementById('find-input');window.RI=document.getElementById('replace-input');FI.select();true
+expect document.activeElement === FI
+press cup
+eval RI.focus();true
+press pot
+expect FI.value === 'cup' && RI.value === 'pot' && document.activeElement === RI
+eval clear();true
+wait document.querySelectorAll('#toast-host .toast').length === 0
+expect document.getElementById('find-count').textContent === '1 of 1'
+eval window.before=snap();true
+jsclick #find-replace
+expect one(NOT) && snap() === window.before
+expect document.activeElement === RI && !RI.disabled
+press s
+expect RI.value === 'pots' && snap() === window.before
+eval clear();true
+wait document.querySelectorAll('#toast-host .toast').length === 0
+jsclick #find-replace-all
+expect one(NOT) && snap() === window.before && document.getElementById('find-count').textContent === '1 of 1'
+expect document.activeElement === RI && !RI.disabled
+key Backspace
+expect RI.value === 'pot'
+eval FI.focus();FI.select();true
+press tea
+expect FI.value === 'tea' && document.getElementById('find-count').textContent === '1 of 1'
+eval RI.focus();true
+eval S.peer.type('r5',0,'X');S.peer.deliver();clear();true
+wait document.querySelectorAll('#toast-host .toast').length === 0
+expect A('r5','audioText') === 'Xgreen tea'
+eval window.before=snap();true
+jsclick #find-replace
+expect one(CHANGED) && snap() === window.before
+expect document.getElementById('find-count').textContent === '1 of 1'
+expect document.activeElement === RI && !RI.disabled
+key Backspace
+press t
+expect RI.value === 'pot' && snap() === window.before
+jsclick #find-replace
+eval S.peer.deliver();true
+expect A('r5','audioText') === 'Xgreen pot' && same()
+expect S.counters().recovered === 0 && S.counters().missingBase === 0
+eval S.leave()
+expect S.read().peer === null && Q('r5','audioText').textContent === 'Xgreen pot'
