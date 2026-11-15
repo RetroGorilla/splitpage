@@ -3,7 +3,7 @@ import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { abbaOrder, passOrder, parseArgs, sharedSummary, tracingNoise, waitForMemory, writeRecord } from "./perf-ab.mjs";
+import { abbaOrder, passOrder, parseArgs, sharedSummary, toolRevision, tracingNoise, waitForMemory, writeRecord } from "./perf-ab.mjs";
 import { parsePairedArgs, pairedSummary, parseRound } from "./measure-shared-paired.mjs";
 import { KEY_GAP_MS, TYPED } from "./perf-record.mjs";
 import { GROUP_NAMES, PAGE, REMOTE_RATES, SEAMS, attachTraces, caseList, expectedKeys, parseShared, parseSharedArgs,
@@ -155,6 +155,13 @@ test("both comparisons write their records into one results file, each under its
   } finally { rmSync(work, { recursive: true, force: true }); }
 });
 
+test("both trees measure with the running checkout's tools, and a real run refuses tools with local changes", async () => {
+  const git = (status) => async (command, args) => args[0] === "status" ? status : "d".repeat(40) + "\n";
+  assert.deepEqual(await toolRevision(git(""), ["tools"], false), { commit: "d".repeat(40), changed: false });
+  assert.deepEqual(await toolRevision(git(" M tools/perf-shared.mjs\n"), ["tools"], true), { commit: "d".repeat(40), changed: true });
+  await assert.rejects(toolRevision(git(" M tools/perf-shared.mjs\n?? tools/new.mjs\n"), ["tools"], false), /commit the measuring tools before a real run; changed: 2 path\(s\) under tools/);
+});
+
 test("rounds run in ABBA order and wait for free memory before each one", async () => {
   assert.deepEqual([1, 2, 3, 4].map(abbaOrder), [["base", "head"], ["head", "base"], ["base", "head"], ["head", "base"]]);
   const seen = [2000, 2500, 3200];
@@ -167,7 +174,7 @@ test("rounds run in ABBA order and wait for free memory before each one", async 
 test("summaries report base, head and the difference per case, mark a dry run as not evidence, and take the budget figures from the untraced pass only when tracing moved them past the noise rule", () => {
   const groups = Object.fromEntries(GROUP_NAMES.map((g) => [g, 1]));
   const row = (p50, traced) => ({ kind: "case", label: "short split typing, remote 1/s", p50, p95: p50 * 2, longTaskMs: 0, groups: traced ? groups : null });
-  const revisions = { base: { commit: "a".repeat(40) }, head: { commit: "b".repeat(40) } };
+  const revisions = { tool: { commit: "c".repeat(40), changed: false }, base: { commit: "a".repeat(40) }, head: { commit: "b".repeat(40) } };
   const both = (side, p50, shift) => [{ side, pass: "untraced", rows: [row(p50, false)] }, { side, pass: "traced", rows: [row(p50 + shift, true)] }];
   const record = (shift) => ({ dryRun: true, revisions, rounds: [...both("base", 10, shift), ...both("head", 12, shift), ...both("head", 14, shift), ...both("base", 20, shift)] });
   const quiet = sharedSummary(record(0.25));
@@ -186,8 +193,14 @@ test("summaries report base, head and the difference per case, mark a dry run as
   assert.deepEqual(passOrder(2), ["traced", "untraced"]);
   assert.doesNotMatch(sharedSummary({ ...record(0), dryRun: false }), /Dry run/);
   const run = (p50) => ({ current: { single: { p50, p95: p50 }, 1000: { total: p50 } }, direct: { single: { p50 }, 1000: { total: p50 } } });
-  const paired = pairedSummary({ dryRun: false, revisions, rounds: [{ side: "base", rows: [{ name: "short", phase: "fresh", run: run(1) }] }, { side: "head", rows: [{ name: "short", phase: "fresh", run: run(2) }] }] });
+  const parts = (validation, rebuild) => ({ validation: { p50: validation, total: validation * 500 }, rebuild: { p50: 0, total: rebuild } });
+  const paired = pairedSummary({ dryRun: false, revisions, rounds: [
+    { side: "base", rows: [{ name: "short", phase: "fresh", trial: "copy per update", run: run(1), parts: parts(0.5, 0) }] },
+    { side: "head", rows: [{ name: "short", phase: "fresh", trial: "standing replica", run: run(2), parts: parts(0.25, 3) }] }] });
   assert.match(paired, /\| short \/ fresh \| 1 \/ 2 \/ \+1 \|/);
+  assert.match(paired, /\| 0\.5 \/ 0\.25 \/ -0\.25 \| 250 \/ 125 \/ -125 \| 0 \/ 3 \/ \+3 \|$/m, "validation and the rebuild are their own columns");
+  assert.match(paired, /Trial before admission: base copy per update, head standing replica\. Tools from cccccccc in both trees\./);
+  assert.match(sharedSummary(record(0)), /tools from cccccccc in both trees/);
   assert.deepEqual(parseRound('noise\nROUND [{"name":"short"}]\n'), [{ name: "short" }]);
   assert.throws(() => parseRound("nothing"));
 });

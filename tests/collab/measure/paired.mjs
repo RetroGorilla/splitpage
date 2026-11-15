@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { Buffer } from "node:buffer";
 import { readFileSync, writeFileSync } from "node:fs";
 import process from "node:process";
-import { admissionRound, expectedAfter, fixtures, growth, updatesFor } from "./run.mjs";
+import { TRIAL_METHOD, admissionRound, expectedAfter, fixtures, growth, markedAdmission, updatesFor } from "./run.mjs";
 import { isMain } from "../../../tools/main-module.mjs";
 
 export const PAIRED_FIXTURES = ["short", "long", "large"];
@@ -29,7 +29,7 @@ export function round(data, index) {
     for (const phase of ["fresh", "edited"]) {
       const state = bytesOf(fixture[phase]), expected = expectedAfter(state, updates, owner);
       const measured = admissionRound(fixture, state, updates, expected, index - 1, index === 1);
-      rows.push({ name: fixture.name, phase, per1000Typed: expected.length - state.length, run: measured });
+      rows.push({ name: fixture.name, phase, trial: TRIAL_METHOD, per1000Typed: expected.length - state.length, run: measured, parts: markedAdmission(state, updates.slice(0, 500)) });
       process.stderr.write(`${fixture.name} ${phase}: round ${index} done\n`);
     }
   }

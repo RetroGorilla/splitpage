@@ -60,6 +60,12 @@ export function writeRecord(path, record) {
   writeFileSync(path, JSON.stringify({ ...kept, [record.kind]: record }, null, 2) + "\n");
 }
 
+export async function toolRevision(run, paths, dryRun) {
+  const changed = (await run("git", ["status", "--porcelain", "--", ...paths])).trim();
+  if (changed && !dryRun) throw new Error(`commit the measuring tools before a real run; changed: ${changed.split("\n").length} path(s) under ${paths.join(", ")}`);
+  return { commit: (await run("git", ["rev-parse", "HEAD"])).trim(), changed: changed.length > 0 };
+}
+
 export function abbaOrder(round) {
   return round % 2 === 1 ? ["base", "head"] : ["head", "base"];
 }
@@ -111,7 +117,7 @@ export function sharedSummary(record) {
     ...GROUP_NAMES.map((g) => [`${g} ms`, "traced", (x) => x.groups?.[g]])];
   const lines = [
     ...(record.dryRun ? ["Dry run: pipeline check only, not evidence.", ""] : []),
-    `Shared composed-editor comparison: base ${record.revisions.base.commit.slice(0, 8)}, head ${record.revisions.head.commit.slice(0, 8)}; median of ${caseRuns(record, "base", "traced").length} rounds per side and pass in ABBA order. Each cell is base / head / head minus base.`,
+    `Shared composed-editor comparison: base ${record.revisions.base.commit.slice(0, 8)}, head ${record.revisions.head.commit.slice(0, 8)}; median of ${caseRuns(record, "base", "traced").length} rounds per side and pass in ABBA order, tools from ${record.revisions.tool.commit.slice(0, 8)} in both trees. Each cell is base / head / head minus base.`,
     "",
     noise.within
       ? "Tracing moved no latency figure past the noise rule of audit 7 section 6, so one traced pass serves both: the budget figures and the parts both come from the traced pass. Both passes are given below."
@@ -132,18 +138,21 @@ export function sharedSummary(record) {
   return lines.join("\n");
 }
 
+const SHARED_TOOL_PATHS = ["tools", ".claude/skills/run-splitpage-app", "tests/collab/measure"];
+
 async function sharedMain(args, repo) {
   return withRefTrees(repo, "perf-ab", [["base", args.base], ["head", args.head]], async ({ dirs, shas, run, scratch }) => {
     for (const side of ["base", "head"]) {
       console.error(`perf-ab: ${side} building with node build.mjs --test`);
       await run(process.execPath, ["build.mjs", "--test"], dirs[side]);
     }
-    for (const path of ["tools", ".claude/skills/run-splitpage-app"]) cpSync(join(dirs.head, path), join(dirs.base, path), { recursive: true });
+    const tool = await toolRevision(run, SHARED_TOOL_PATHS, args.dryRun);
+    for (const side of ["base", "head"]) for (const path of SHARED_TOOL_PATHS) cpSync(join(repo, path), join(dirs[side], path), { recursive: true });
     const data = join(scratch, "shared-data.json");
     console.error("perf-ab: preparing the entry states and replay bytes once, from head");
     await run(process.execPath, ["tools/perf-shared.mjs", "--prepare", data, "--only", args.only], dirs.head);
     const tree = async (sha, path) => (await run("git", ["rev-parse", `${sha}:${path}`])).trim();
-    const revisions = {};
+    const revisions = { tool };
     for (const side of ["base", "head"]) revisions[side] = { commit: shas[side], adapters: await tree(shas[side], "src/adapters"), collab: await tree(shas[side], "src/adapters/collab") };
     const prepared = JSON.parse(readFileSync(data, "utf8"));
     const record = {

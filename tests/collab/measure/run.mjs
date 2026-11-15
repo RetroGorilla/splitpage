@@ -24,7 +24,14 @@ import { readSharedTextHistory } from "../../../src/adapters/collab/text-history
 import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 import { inlineStateImages } from "../../../src/adapters/storage/02c-blobs.ts";
 import { isMain } from "../../../tools/main-module.mjs";
+import { timingMarks } from "../../../shared/timing-marks.ts";
+import { markParts } from "./mark-parts.mjs";
 
+const REPLICA = new URL("../../../src/adapters/collab/trial-replica.ts", import.meta.url);
+// why: The paired run measures older revisions too, and those have no standing trial replica to hold.
+const acquireReplica = existsSync(REPLICA) ? (await import(REPLICA.href)).acquireSharedTrialReplica : null;
+export const TRIAL_METHOD = acquireReplica ? "standing replica" : "copy per update";
+const held = (handle, mode) => mode === "current" && acquireReplica ? acquireReplica(handle) : () => {};
 const MIB = 1024 ** 2;
 const CAP = 2 * MIB;
 const copy = value => globalThis.structuredClone(value);
@@ -219,7 +226,7 @@ export function quantile(values, fraction) {
 function collectedHeap() { globalThis.gc(); globalThis.gc(); return process.memoryUsage().heapUsed; }
 
 function timed(state, updates, mode, singles, expected) {
-  const handle = open(state);
+  const handle = open(state), release = held(handle, mode);
   try {
     collectedHeap();
     const samples = [], start = performance.now();
@@ -230,17 +237,33 @@ function timed(state, updates, mode, singles, expected) {
     const total = performance.now() - start;
     if (expected) assert.deepEqual(encodeSharedState(handle), expected);
     return { total, ...singles ? { p50: quantile(samples, 0.5), p95: quantile(samples, 0.95), max: Math.max(...samples) } : {} };
-  } finally { destroySharedDocument(handle); }
+  } finally { release(); destroySharedDocument(handle); }
+}
+
+export function markedAdmission(state, updates) {
+  const handle = open(state), release = held(handle, "current"), samples = [];
+  timingMarks.marksOn = true;
+  try {
+    for (const update of updates) {
+      performance.clearMarks();
+      apply(handle, [update], "current");
+      samples.push(markParts(performance.getEntriesByType("mark")));
+    }
+  } finally { timingMarks.marksOn = false; performance.clearMarks(); release(); destroySharedDocument(handle); }
+  return Object.fromEntries(["validation", "rebuild", "apply", "unattributed", "outer"].map(figure => {
+    const values = samples.map(parts => parts[figure]);
+    return [figure, { total: values.reduce((sum, value) => sum + value, 0), p50: quantile(values, 0.5), p95: quantile(values, 0.95) }];
+  }));
 }
 
 function burstHeap(state, updates) {
-  const handle = open(state);
+  const handle = open(state), release = held(handle, "current");
   try {
     const before = collectedHeap();
     let peak = before;
     for (const update of updates) { apply(handle, [update], "current"); peak = Math.max(peak, process.memoryUsage().heapUsed); }
     return { peak: (peak - before) / MIB, retained: (collectedHeap() - before) / MIB };
-  } finally { destroySharedDocument(handle); }
+  } finally { release(); destroySharedDocument(handle); }
 }
 
 function footprint(fixture, state) {

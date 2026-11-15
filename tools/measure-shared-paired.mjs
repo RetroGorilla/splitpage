@@ -1,12 +1,13 @@
 import { cpSync } from "node:fs";
 import { join, resolve } from "node:path";
 import { REPO } from "./source-scan.mjs";
-import { abbaOrder, median, waitForMemory, writeRecord } from "./perf-ab.mjs";
+import { abbaOrder, median, toolRevision, waitForMemory, writeRecord } from "./perf-ab.mjs";
 import { withRefTrees } from "./ref-trees.mjs";
 
 const PAIRED_FIXTURES = ["short", "long", "large"];
 const MIN_ROUNDS = 5;
 const MEASURE = "tests/collab/measure/paired.mjs";
+const TOOL_PATHS = ["tools", "tests/collab/measure"];
 
 export function parsePairedArgs(argv) {
   const refs = [];
@@ -42,7 +43,9 @@ export function pairedSummary(record) {
   const rowsOf = (side) => record.rounds.filter((r) => r.side === side).map((r) => r.rows);
   const keys = [...new Set(record.rounds.flatMap((r) => r.rows.map((x) => `${x.name} / ${x.phase}`)))];
   const columns = [["admission p50", (x) => x.run.current.single.p50], ["admission p95", (x) => x.run.current.single.p95],
-    ["direct p50", (x) => x.run.direct.single.p50], ["current 1000 total", (x) => x.run.current[1000].total], ["direct 1000 total", (x) => x.run.direct[1000].total]];
+    ["direct p50", (x) => x.run.direct.single.p50], ["current 1000 total", (x) => x.run.current[1000].total], ["direct 1000 total", (x) => x.run.direct[1000].total],
+    ["validation p50", (x) => x.parts.validation.p50], ["validation 500 total", (x) => x.parts.validation.total], ["rebuild 500 total", (x) => x.parts.rebuild.total]];
+  const method = (side) => [...new Set(record.rounds.filter((r) => r.side === side).flatMap((r) => r.rows.map((x) => x.trial)))].join(", ");
   const stat = (side, key, pick) => {
     const values = rowsOf(side).map((rows) => rows.find((x) => `${x.name} / ${x.phase}` === key)).filter(Boolean).map(pick);
     return values.length ? median(values) : null;
@@ -52,6 +55,7 @@ export function pairedSummary(record) {
   return [
     ...(record.dryRun ? ["Dry run: pipeline check only, not evidence.", ""] : []),
     `Adapter-level admission comparison (ms): base ${record.revisions.base.commit.slice(0, 8)}, head ${record.revisions.head.commit.slice(0, 8)}; median of ${rowsOf("base").length} rounds per side in ABBA order. Each cell is base / head / head minus base.`,
+    `Trial before admission: base ${method("base")}, head ${method("head")}. Tools from ${record.revisions.tool.commit.slice(0, 8)} in both trees.`,
     "",
     `| Script / state | ${columns.map(([name]) => name).join(" | ")} |`,
     `| --- | ${columns.map(() => "---").join(" | ")} |`,
@@ -66,12 +70,13 @@ export async function main(argv, repo = REPO) {
   let args;
   try { args = parsePairedArgs(argv); } catch (error) { console.error(`measure-shared-admission: ${error.message}`); return 1; }
   return withRefTrees(repo, "measure-shared-admission", [["base", args.base], ["head", args.head]], async ({ dirs, shas, run, scratch }) => {
-    for (const path of ["tools", "tests/collab/measure"]) cpSync(join(dirs.head, path), join(dirs.base, path), { recursive: true });
+    const tool = await toolRevision(run, TOOL_PATHS, args.dryRun);
+    for (const side of ["base", "head"]) for (const path of TOOL_PATHS) cpSync(join(repo, path), join(dirs[side], path), { recursive: true });
     const data = join(scratch, "paired-data.json");
     console.error("measure-shared-admission: preparing the states and update streams once, from head");
     await run(process.execPath, ["--expose-gc", MEASURE, "--prepare", data, "--only", args.only], dirs.head);
     const tree = async (sha, path) => (await run("git", ["rev-parse", `${sha}:${path}`])).trim();
-    const revisions = {};
+    const revisions = { tool };
     for (const side of ["base", "head"]) revisions[side] = { commit: shas[side], adapters: await tree(shas[side], "src/adapters"), collab: await tree(shas[side], "src/adapters/collab") };
     const record = { kind: "shared-admission-paired", dryRun: args.dryRun, startedAt: new Date().toISOString(),
       conditions: { node: process.version, arch: process.arch, platform: process.platform, fixtures: args.only.split(","), minFreeMb: args.minFreeMb, rounds: args.rounds },
