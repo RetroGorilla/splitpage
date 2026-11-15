@@ -96,7 +96,9 @@ write route shares: commands (buffer commits and recovery commands included), un
 hydration, text creation, HTML import, mark records, plain adapter transactions and the
 library's own formatting cleanup. Remote transactions are skipped: they apply only an update
 the replica already took at its trial, whether the gate was open or the update was held and
-released later. `tests/adapters/collab/trial-replica.test.ts` checks each route and keeps an
+released later. Every hold counts the same: an update accepted under `buffer`, `capture` or a
+delivering notification is in the replica from its trial, and each release drains the queue
+through the same path. `tests/adapters/collab/trial-replica.test.ts` checks each route and keeps an
 inventory of every library write under `src/adapters/collab/` that fails when a new one appears.
 
 Live plus held changes one case, and only towards refusing. Take an update B that depends on

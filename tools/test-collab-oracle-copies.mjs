@@ -70,6 +70,16 @@ function declarationsOf(text, path) {
   return { declarations, exports, refusals, problems };
 }
 
+function decide(pair, name, text, problems) {
+  let decided = text;
+  for (const decision of (pair.decided ?? []).filter((entry) => entry.declaration === name)) {
+    const start = decided.indexOf(decision.within), at = start === -1 ? -1 : decided.indexOf(decision.from, start);
+    if (start === -1 || decided.indexOf(decision.within, start + 1) !== -1 || at === -1) { problems.push(`${pair.original}: ${decision.name} does not apply`); continue; }
+    decided = decided.slice(0, at) + decision.to + decided.slice(at + decision.from.length);
+  }
+  return decided;
+}
+
 function compareCopy(pair, originalText, copyText) {
   const original = declarationsOf(originalText, pair.original);
   const copy = declarationsOf(copyText, pair.copy);
@@ -84,7 +94,7 @@ function compareCopy(pair, originalText, copyText) {
     const got = copy.declarations.get(name);
     if (!wanted) problems.push(`${pair.original}: no declaration ${name}`);
     else if (!got) problems.push(`${pair.copy}: missing ${name}`);
-    else if (got.text !== wanted.text) problems.push(`${pair.copy}: ${name} differs from the original`);
+    else if (got.text !== decide(pair, name, wanted.text, problems)) problems.push(`${pair.copy}: ${name} differs from the original`);
   }
   for (const name of copy.declarations.keys()) if (!expected.includes(name)) problems.push(`${pair.copy}: ${name} is not in the original`);
   const wantedExports = new Map();
@@ -114,6 +124,10 @@ for (const pair of COLLAB_ORACLE_COPIES) {
   const problems = compareCopy(pair, readFileSync(join(REPO, pair.original), "utf8"), readFileSync(join(REPO, pair.copy), "utf8"));
   eq(`${pair.copy} declares the data of ${pair.original} byte for byte`, problems, []);
 }
+for (const pair of COLLAB_ORACLE_COPIES) for (const decision of pair.decided ?? []) {
+  const original = readFileSync(join(REPO, pair.original), "utf8"), copy = readFileSync(join(REPO, pair.copy), "utf8");
+  eq(`${decision.name}: ${pair.copy} differs from ${pair.original} only there`, [original.includes(decision.from), copy.includes(decision.to)], [true, true]);
+}
 eq("every file under tests/collab/oracles is a pinned copy", filesUnder("tests/collab/oracles"), COLLAB_ORACLE_COPIES.map((pair) => pair.copy).sort());
 for (const pair of COLLAB_ORACLE_COPIES) eq(`a change to ${pair.original} alone runs the root tests`, needsRootTests([pair.original]), true);
 
@@ -135,6 +149,10 @@ eq("the same alias on both sides passes", compareCopy(control, original + "expor
 eq("an alias pointing at another declaration fails", compareCopy(control, original, copy.replace("export { local as listed }", "export { data as listed }")), ['tests/c.ts: exports ["Pair","data","listed=data"], expected ["Pair","data","listed=local"]']);
 eq("an original export of something not copied fails", compareCopy(control, original + 'export { assert as checked };\n', copy), ["prototypes/o.ts: exports checked as assert, which is not a copied declaration"]);
 eq("a name exported twice fails", compareCopy(control, original, copy + "export { data };\n"), ["tests/c.ts: data is exported twice"]);
+const decided = { ...control, decided: [{ name: "rule 0: data", declaration: "data", within: "data: Pair", from: "[1, 2]", to: "[1, 3]" }] };
+eq("a decided difference passes only as decided", compareCopy(decided, original, copy.replace("export const data: Pair = [1, 2]", "export const data: Pair = [1, 3]")), []);
+eq("the decided copy without its difference fails", compareCopy(decided, original, copy), ["tests/c.ts: data differs from the original"]);
+eq("a decision that no longer applies fails", compareCopy(decided, original.replace("export const data: Pair = [1, 2]", "export const data: Pair = [2, 2]"), copy), ["prototypes/o.ts: rule 0: data does not apply", "tests/c.ts: data differs from the original"]);
 eq("a type-only alias list counts as an export", compareCopy(control, original + "export type { Pair as Couple };\n", copy).at(-1), 'tests/c.ts: exports ["Pair","data","listed=local"], expected ["Couple=Pair","Pair","data","listed=local"]');
 const refused = [
   ["export default expression", "export default data;\n", "unsupported export form: export default"],

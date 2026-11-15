@@ -4,6 +4,7 @@ import type { DocumentReader } from "../../application/session/document-reader.t
 import type { ShotHiding } from "../../application/shot-hiding.ts";
 import type { TextServices } from "../../application/text/services.ts";
 import type { SessionChange } from "../../application/session/change-set.ts";
+import type { SharedValueCommands } from "../../application/commands/shared-values.ts";
 import { beatStatus, beatStatusCommand, setBeatFilmedCommand, shotGrace } from "../../application/commands/beat-status.ts";
 import { targetLengthOf } from "../../core/document/timing.ts";
 import { formatDuration, rowSeconds, targetClock, totalSeconds } from "../../core/production/timing.ts";
@@ -11,6 +12,7 @@ import { formatDuration, rowSeconds, targetClock, totalSeconds } from "../../cor
 interface BeatStatusPorts {
   readonly document: Pick<DocumentReader, "current" | "read">;
   readonly edits: Pick<DocumentEdits, "run" | "stamps">;
+  readonly shared: SharedValueCommands;
   readonly text: Pick<TextServices, "productionReaders">;
   readonly hideShot: () => boolean;
   readonly shots: Pick<ShotHiding, "armGrace" | "clearGrace">;
@@ -84,9 +86,10 @@ export function createBeatStatus(ports: BeatStatusPorts): BeatStatus {
 
   return {
     setFilmed: function (rowId, filmed) {
-      const before = ports.document.read(beatStatus(rowId));
-      const outcome = ports.edits.run(setBeatFilmedCommand(rowId, filmed, ports.edits.stamps));
+      const before = ports.document.read(beatStatus(rowId)), shared = ports.shared.ports();
+      const outcome = ports.edits.run(shared ? setBeatFilmedCommand(rowId, filmed, ports.edits.stamps, shared) : setBeatFilmedCommand(rowId, filmed, ports.edits.stamps));
       if (outcome.kind === "failed") throw outcome.error;
+      if (shared && outcome.kind === "rejected") ports.shared.refused(outcome);
       if (outcome.kind !== "applied" && outcome.kind !== "committed") return;
       if (ports.hideShot()) {
         const grace = shotGrace(before, ports.document.read(beatStatus(rowId)));
@@ -107,9 +110,10 @@ export function createBeatStatus(ports: BeatStatusPorts): BeatStatus {
       };
     },
     cycleRowStatus: function (rowId) {
-      const before = ports.document.read(beatStatus(rowId));
-      const outcome: CommandOutcome = ports.edits.run(beatStatusCommand(rowId, ports.edits.stamps));
+      const before = ports.document.read(beatStatus(rowId)), shared = ports.shared.ports();
+      const outcome: CommandOutcome = ports.edits.run(shared ? beatStatusCommand(rowId, ports.edits.stamps, shared) : beatStatusCommand(rowId, ports.edits.stamps));
       if (outcome.kind === "failed") throw outcome.error;
+      if (shared && outcome.kind === "rejected") ports.shared.refused(outcome);
       if (outcome.kind !== "applied" && outcome.kind !== "committed") return;
       if (ports.hideShot()) {
         const grace = shotGrace(before, ports.document.read(beatStatus(rowId)));

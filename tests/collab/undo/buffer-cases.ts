@@ -19,7 +19,7 @@ export function runBufferTrace(trace: UndoBufferTrace, order: DeliveryOrder, kin
   let caret: SharedUndoSelection = gap.selection;
   const writeA = (): void => {
     const text = trace === "T04" ? "xy" : trace === "T01 composition" ? "β" : trace === "T02" ? "c" : trace === "T02 boundary" ? "Z" : trace === "T03 replace" ? "a" : "";
-    const created = s.a.edit({ at, text, ...(backspaced ? { remove: backspaced } : {}) });
+    const created = s.a.edit({ at, text, ...(backspaced ? { remove: backspaced } : {}), standaloneCaret: true });
     s.world.name(created, created.map((_, index) => "a" + (index + 1)));
     const last = created.at(-1);
     if (last !== undefined) caret = s.a.caretAfter(last);

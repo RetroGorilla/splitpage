@@ -6,7 +6,7 @@ import type { ReadTimePorts } from "../../../src/features/rows/ports.ts";
 import { startReadTime as mountReadTime, readTimeEditing, setBeatLength } from "../../../src/features/rows/read-time.ts";
 import { productionReaders } from "../../../src/bootstrap/document-ports.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import { fakeDocument, fakeEdits, fakeNotices, fakeUndo } from "../fakes.ts";
+import { fakeDocument, fakeEdits, fakeNotices, fakeStandaloneValues, fakeUndo } from "../fakes.ts";
 
 function setup() {
   document.body.innerHTML = '<div id="rows"><div class="row" data-id="r1"><button class="row-read" data-id="r1">0:05</button></div></div>';
@@ -19,6 +19,7 @@ function setup() {
     document: fakeDocument(doc).document,
     text: { productionReaders },
     edits: edits.edits,
+    shared: fakeStandaloneValues(),
     undo: undo.undo,
     paint: { afterThisPaint: (fn) => { painted.push("after"); fn(); } },
     notices: notices.notices

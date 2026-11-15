@@ -8,7 +8,7 @@ import { applySharedUpdate, destroySharedDocument, encodeSharedState, encodeShar
   readSharedRevision, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
-import { holdSharedBuffer, observeSharedIntakeStopped, sharedIntakeStopped } from "../../../src/adapters/collab/ingress.ts";
+import { holdSharedBuffer, holdSharedCapture, observeSharedIntakeStopped, sharedIntakeStopped } from "../../../src/adapters/collab/ingress.ts";
 import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
 import { prepareSharedMarkRecord, writeSharedMarkRecord } from "../../../src/adapters/collab/mark-store.ts";
 import { createSharedReplica } from "../../../src/adapters/collab/replica.ts";
@@ -466,6 +466,30 @@ test("failed rebuilds wait for a drain: 1,000 no-ops use live copy trials and th
     assert.deepEqual(stoppedHeld, [2]);
     assert.deepEqual(applySharedUpdate(handle, Uint8Array.of(0, 0)), { ok: false, reason: "intake-stopped" });
   } finally { destroySharedDocument(handle); }
+});
+
+test("the capture hold is a hold like the others: updates accepted under it are in the replica, rule 210 applies, and its release drains", () => {
+  const outcomes: unknown[] = [];
+  for (const hold of [holdSharedBuffer, holdSharedCapture]) {
+    const handle = hydrated(1), counts = counter();
+    try {
+      const trial = startSharedTrialReplica(handle, counts.count), sender = senderOf(handle, 2);
+      counts.reset();
+      const release = hold(handle);
+      const base = crafted(8, [metaItem(8, 0, "base", 1)]);
+      const dependent = crafted(7, [metaItem(7, 0, "", 1, Y.createID(8, 0)),
+        new Y.Item(Y.createID(7, 1), null, Y.createID(7, 2), null, null, META, "cycle", new Y.ContentAny([2])),
+        new Y.Item(Y.createID(7, 2), null, Y.createID(7, 1), null, null, META, "cycle", new Y.ContentAny([3]))]);
+      const results = [applySharedUpdate(handle, scalarUpdate(sender, "held", 4)), applySharedUpdate(handle, base), applySharedUpdate(handle, dependent)];
+      const heldInReplica = [collabState(handle).ingress.held.length, matches(handle), trial.replica.getMap("meta").get("base")];
+      release();
+      outcomes.push([results, heldInReplica, collabState(handle).ingress.held.length, collabState(handle).roots.meta.get("base"),
+        same(trial.encode(), encodeSharedState(handle)), counts.calls("encode:rebuild"), trial.spent]);
+      destroySharedDocument(sender);
+    } finally { destroySharedDocument(handle); }
+  }
+  const expected = [[{ ok: true }, { ok: true }, { ok: false, reason: "invalid-update" }], [2, true, 1], 0, 1, true, 1, 1];
+  assert.deepEqual(outcomes, [expected, expected]);
 });
 
 test("held clock overlap checks live: hidden invalid structs are refused, genuine duplicates pass, disjoint updates copy no document", () => {

@@ -14,7 +14,7 @@ function formattingCleanup(transaction: Y.Transaction): boolean {
   return deleted && formatsOnly;
 }
 
-export type IngressHold = "delivering" | "buffer";
+export type IngressHold = "delivering" | "buffer" | "capture";
 
 export type SharedAdmissionWork = "encode" | "apply";
 export type SharedAdmissionCount = (work: SharedAdmissionWork, key: string, bytes: number) => void;
