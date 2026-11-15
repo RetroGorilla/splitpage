@@ -7,8 +7,9 @@ import { hydrateSharedDocument } from "../../../../src/adapters/collab/hydrate.t
 import { collabState } from "../../../../src/adapters/collab/state.ts";
 import { prepareSharedMarkRecord, writeSharedMarkRecord, readSharedMarkCharacters } from "../../../../src/adapters/collab/mark-store.ts";
 import { readSharedMarkRecord, sharedMarkRecordKey } from "../../../../src/adapters/collab/mark-record.ts";
-import { readSharedTextTarget } from "../../../../src/adapters/collab/text-target.ts";
-import { createSharedAnchor, resolveSharedTextAnchor, readSharedAnchor } from "../../../../src/adapters/collab/anchors.ts";
+import { readSharedTextTarget } from "../../../../src/adapters/collab/text-address.ts";
+import { createSharedAnchor, resolveSharedTextAnchor } from "../../../../src/adapters/collab/anchors.ts";
+import { readSharedAnchor } from "../../../../src/adapters/collab/anchor-codec.ts";
 import { monitorSharedFormatting, validatedFixture } from "../helpers.ts";
 import { assertReplicasAgree } from "../../../collab/agreement.ts";
 import { MarkTraceHistory } from "./driver.ts";

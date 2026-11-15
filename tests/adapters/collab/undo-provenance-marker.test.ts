@@ -10,7 +10,8 @@ import { captureSharedTextRange } from "../../../src/adapters/collab/executor-re
 import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
 import { readSharedMarkRecord, readSharedMarkRecordIdentity } from "../../../src/adapters/collab/mark-record.ts";
 import { SHARED_MARK_PROVENANCE_MARKER, sharedMarkProvenanceCost } from "../../../src/adapters/collab/mark-provenance.ts";
-import { prepareSharedMarkRecord, readCollabMarkState, writeSharedMarkRecord } from "../../../src/adapters/collab/mark-store.ts";
+import { prepareSharedMarkRecord, writeSharedMarkRecord } from "../../../src/adapters/collab/mark-store.ts";
+import { readCollabMarkState } from "../../../src/adapters/collab/mark-state.ts";
 import { createCollabTextFacade } from "../../../src/adapters/collab/prepare-text.ts";
 import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";

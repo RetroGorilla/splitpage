@@ -6,8 +6,9 @@ import type { SharedTextCommandPlan, SharedPlannedTextUnit } from "./executor-te
 import { sharedTextCommandPlan, sharedTextRange, sharedTextSource, SharedTextPreparationError } from "./executor-text-plan.ts";
 import { createSharedPreparation } from "./prepare.ts";
 import { readSharedRevision } from "./document.ts";
-import { createSharedAnchor, readSharedAnchor, sharedAnchorCharacterEnd } from "./anchors.ts";
-import { readSharedTextTarget } from "./text-target.ts";
+import { createSharedAnchor, sharedAnchorCharacterEnd } from "./anchors.ts";
+import { readSharedAnchor } from "./anchor-codec.ts";
+import { readSharedTextTarget } from "./text-address.ts";
 import { sharedStructureReference } from "./structure-identity.ts";
 import { collabProjectedTextTarget } from "./text-target.ts";
 import { readSharedPaintedText } from "./paint-base.ts";

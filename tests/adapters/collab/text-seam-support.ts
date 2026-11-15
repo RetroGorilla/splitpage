@@ -4,7 +4,7 @@ import type { SharedPreparationView } from "../../../src/adapters/collab/prepare
 import type { SharedPreparationText } from "../../../src/adapters/collab/prepare-text.ts";
 import { prepareSharedMarkWrite } from "../../../src/adapters/collab/mark-plan.ts";
 import { applySharedTextEdit } from "../../../src/adapters/collab/text-edit.ts";
-import { readSharedTextTarget } from "../../../src/adapters/collab/text-target.ts";
+import { readSharedTextTarget } from "../../../src/adapters/collab/text-address.ts";
 
 export function installTextSeamProbe(handle: SharedDocumentHandle, inspect?: (view: SharedPreparationView, text: SharedPreparationText) => void): void {
   registerSharedOperationHandlers(handle, { "text-insert": (op, view) => {

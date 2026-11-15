@@ -20,6 +20,7 @@ import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { holdSharedBuffer } from "../../../src/adapters/collab/ingress.ts";
 import { sharedCommandRefusalNotice } from "../../../src/bootstrap/wiring/ports/shared-command-notices.ts";
 import { fakeNotices } from "../fakes.ts";
+import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
 
 function mounted(handle: SharedDocumentHandle, session: ReturnType<typeof sharedHarness>["session"], host: HTMLElement, writer: string,
   place: EmptyScriptPorts["place"], author = sharedAuthorPort({ handle: () => handle, name: () => writer === "1" ? "Alice" : writer === "2" ? "Bob" : "Cara" })) {
@@ -49,6 +50,24 @@ function agrees(h: ReturnType<typeof removedEmptyScript>, name: typeof emptyScri
     return readings;
   } finally { destroySharedDocument(late); }
 }
+
+for (const name of emptyScriptHistories) for (const order of ["D1", "rev", "dup"] as const) test(`rule 91: first character undo returns the emptied script and redo keeps its beat: ${name}/${order}`, () => {
+  const h = removedEmptyScript(name, order); let serial = 0;
+  const owner = sharedUndoOwner(h.a, () => ({ id: "emptyUndo" + ++serial, by: "Alice" }), () => 0, error => { throw error; });
+  const a = sharedHarness(adapterReplica(h.a, owner));
+  document.body.innerHTML = '<section><div id="empty-host"></div></section>';
+  const host = document.getElementById("empty-host"); assert.ok(host);
+  const page = mounted(h.a, a.session, host, "1", () => true);
+  try {
+    type(page.input, "x"); agrees(h, name, [emptyScriptRow(firstEmptyScriptBeat, "x")], order);
+    assert.deepEqual(owner.sizes(), { undo: 1, redo: 0, dropped: 0 }); assert.equal(page.area.hidden, true);
+    assert.deepEqual(owner.undo(), { ok: true, effective: true, label: "empty-script-type", selection: null });
+    agrees(h, name, [], order); assert.equal(page.area.hidden, false); assert.equal(page.input.disabled, false);
+    assert.equal(inspectEmptyScriptViews(h.b).writerBeats, 0);
+    assert.deepEqual(owner.redo(), { ok: true, effective: true, label: "empty-script-type", selection: null });
+    agrees(h, name, [emptyScriptRow(firstEmptyScriptBeat, "x")], order);
+  } finally { assert.equal(page.control.dispose(), true); a.session.dispose(); h.close(); }
+});
 
 for (const name of emptyScriptHistories) for (const order of ["dup", "rev"] as const) for (const mode of ["writer", "split"] as const) {
   test("rule 91: " + name + " offers typing in " + mode + "/" + order, () => {

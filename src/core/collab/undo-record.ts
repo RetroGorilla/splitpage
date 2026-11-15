@@ -29,6 +29,13 @@ export interface SharedUndoTextPart {
 export type SharedUndoPart =
   | SharedUndoTextPart
   | {
+    readonly kind: "beat-create";
+    readonly beat: SharedContentRef;
+    readonly writer: string;
+    readonly retired: boolean;
+    readonly content: string;
+  }
+  | {
     readonly kind: "mark-add";
     readonly target: SharedTextAddress;
     readonly mark: SharedMarkValue;

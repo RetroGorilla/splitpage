@@ -3,6 +3,7 @@ import type { SharedDocumentHandle } from "./types.ts";
 import { withSharedSnapshot } from "./snapshot.ts";
 import { readStoredSharedGalleryRecord, readStoredSharedRecord } from "./record-codec.ts";
 import { isSharedGalleryShown, readSharedStoredPicture } from "./gallery-retirement.ts";
+import { isSharedCreationRecordShown } from "./creation-retirement.ts";
 
 export interface SharedRecordReading { readonly key: string; readonly fields: Readonly<Record<string, unknown>> }
 
@@ -29,7 +30,8 @@ export function readSharedRecords(handle: SharedDocumentHandle, collection: Shar
     for (const key of [...root.keys()].sort()) {
       const raw = root.get(key), gallery = collection === "gallery" ? readStoredSharedGalleryRecord(key, raw) : null;
       const fields = gallery ? gallery.fields : readStoredSharedRecord(collection, key, raw);
-      if (fields && !(gallery?.retired && !isSharedGalleryShown(copy.roots, key, raw))) result.push({ key, fields });
+      if (fields && !(gallery?.retired && !isSharedGalleryShown(copy.roots, key, raw))
+        && isSharedCreationRecordShown(copy as unknown as SharedDocumentHandle, collection, fields)) result.push({ key, fields });
     }
     return sortSharedRecordReadings(collection, result);
   });

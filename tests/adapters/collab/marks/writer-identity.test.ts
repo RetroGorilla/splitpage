@@ -8,7 +8,8 @@ import { MarkTraceReplica } from "./replica.ts";
 import { collabState } from "../../../../src/adapters/collab/state.ts";
 import { destroySharedDocument, transactSharedDocument } from "../../../../src/adapters/collab/document.ts";
 import { prepareSharedMarkRecord, readSharedMarkCharacters, writeSharedMarkRecord } from "../../../../src/adapters/collab/mark-store.ts";
-import { readSharedTextTarget, createCollabText } from "../../../../src/adapters/collab/text-target.ts";
+import { readSharedTextTarget } from "../../../../src/adapters/collab/text-address.ts";
+import { createCollabText } from "../../../../src/adapters/collab/text-target.ts";
 import { monitorSharedFormatting } from "../helpers.ts";
 
 for (const removal of [false, true]) test(removal ? "colliding operation ids: removals and births name the observed writer's addition" : "colliding operation ids: bold a and italic d both survive with either client-id assignment", () => {
