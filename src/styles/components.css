@@ -2325,3 +2325,4 @@ body:has(> .writer:not([hidden])) .tagging-help { z-index: 147; }
   resize: vertical;
 }
 .typed-unsaved-dismiss { justify-self: end; }
+[data-unsaved] { outline: 1px solid var(--accent); outline-offset: 2px; }

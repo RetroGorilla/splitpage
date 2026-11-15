@@ -493,7 +493,7 @@ for (const path of HELD_PATHS) for (const order of ORDERS) test(`C7 record held:
 const HELD_OWNER_CALLS = [
   { name: "registering a production tag", act: () => { assert.equal(registerProductionTag("location", "Park"), false); } },
   { name: "finding or adding a person", act: () => { assert.equal(findOrAddPerson("Cy"), ""); } },
-  { name: "adding a prop to a shot", act: (announced = {}) => { assert.deepEqual(currentBrollRecords()?.addBrollProp("b1", "Lamp"), { changed: false, held: true, ...announced }); }, reports: true },
+  { name: "adding a prop to a shot", act: () => { assert.deepEqual(currentBrollRecords()?.addBrollProp("b1", "Lamp"), { changed: false, held: true }); } },
   { name: "a picture edit", act: () => { assert.deepEqual(cellEditing().editGallery("r1", "Picture removed", row => removeGallerySlot(row, 1)), { changed: false, held: true }); } }
 ];
 
@@ -513,7 +513,7 @@ for (const call of HELD_OWNER_CALLS) for (const order of ORDERS) test(`C7 record
 for (const call of HELD_OWNER_CALLS) test(`C7 record held: the owner call for ${call.name} refused by a listener that announces it is not announced again`, async () => {
   const f = await enter();
   const stop = f.parts.session.beforeCommand(() => { notices.show(REFUSED, "warn"); return "announced"; });
-  try { refusedOnce(f, "local-first", () => { call.act(call.reports ? { announced: true } : undefined); }); } finally { stop(); tidy(f); }
+  try { refusedOnce(f, "local-first", call.act); } finally { stop(); tidy(f); }
 });
 
 const doc = () => currentDocument();
@@ -542,7 +542,7 @@ const TYPED_PATHS = [
   typedRow("the b-roll audio box, blur", REF, () => shotB1().audioRef, "0:12"),
   typedRow("the b-roll notes box, blur", NOTES, () => shotB1().notes, "Wide"),
   { name: "the b-roll notes box, typing then a redraw", box: NOTES, target: NOTES, saved: () => shotB1().notes, want: "Wide", redraw: runBrollRefresh,
-    setup: () => { brollOpen("b1"); typeIn(NOTES, "Wide", [1, 2]); }, refuse: () => { runBrollRefresh(); }, save: blurOut },
+    setup: () => { brollOpen("b1"); typeIn(NOTES, "Wide", [1, 2]); }, refuse: blurOut, save: blurOut },
   { name: "the b-roll page note, Enter", box: PAGE_NOTE, target: PAGE_NOTE, saved: () => shotB1().notes, want: "Wide", redraw: runBrollRefresh,
     setup: () => { openBrollPage(); typeIn(PAGE_NOTE, "Wide", [1, 2]); }, refuse: el => { press(el, "Enter"); }, save: blurOut },
   typedRow("the tag person box, Enter", `#production-panel .tag-person-input${MUG}`, cyOwns(() => tagById(M).owner), [1, "Cy"]),
@@ -573,6 +573,8 @@ for (const path of TYPED_PATHS) for (const order of ORDERS) test(`C7 record held
     path.redraw();
     assert.deepEqual([warned(), boxValue(path.box), path.saved()], [[], typed, before], "after a redraw");
     stop();
+    path.redraw();
+    assert.deepEqual([warned(), boxValue(path.box), path.saved()], [[], typed, before], "release and redraw still wait for a submit");
     path.save($(path.target));
     assert.deepEqual([warned(), path.saved()], [[], path.want], "saved once after release");
     exchange(f, order);
@@ -788,11 +790,17 @@ test("C7 record typed text: after a refused notes write and leaving, a standalon
   document.activeElement?.blur?.();
 });
 
-test("C7 record typed text: a refused notes write does not outlive its session, so the next session's redraw saves the same notes", async () => {
+test("C7 record typed text: a refused notes write does not outlive its session, and the next session saves the same notes only on blur", async () => {
   await refusedNotes();
   const f = await enter();
   try {
-    brollOpen("b1"); typeIn(NOTES, "Wide", [4, 4]); runBrollRefresh(); runBrollRefresh();
+    brollOpen("b1");
+    assert.deepEqual([$(NOTES).value, window.__brollTest.drafts()], ["", []]);
+    const before = f.parts.undo.sizes().undo;
+    typeIn(NOTES, "Wide", [4, 4]); runBrollRefresh(); runBrollRefresh();
+    assert.equal(shotB1().notes, "");
+    blurOut($(NOTES));
     assert.equal(shotB1().notes, "Wide");
+    assert.equal(f.parts.undo.sizes().undo - before, 1);
   } finally { tidy(f); }
 });

@@ -13,8 +13,10 @@ import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { sharedRecordCommands } from "../bootstrap/wiring/ports/shared-commands.ts";
 import { createSessionCapabilities } from "../application/session/capabilities.ts";
 import { fromHtml } from "../bootstrap/richtext.ts";
-import { openBrollPanel, runBrollRefresh } from "../features/broll/panel.ts";
-import { closeCommentComposer, openCommentsPanel, postReply, toggleReplyComposer } from "../features/comments/comments.ts";
+import { closeBrollPage, openBrollPage, openBrollPanel, runBrollRefresh } from "../features/broll/panel.ts";
+import { armDeleteComment, closeCommentComposer, openCommentComposer, openCommentsPanel, postComment, postReply, renderComments, setCommentFilterMode, toggleReplyComposer } from "../features/comments/comments.ts";
+import { applyGearQuickAdd, openGearPanel, openProductionPanel, renderProduction, toggleCardSelection } from "../features/tags/panels.ts";
+import { sidePanels } from "../bootstrap/wiring/ports/panels.ts";
 import { createSharedDocument, destroySharedDocument, applySharedUpdate, encodeSharedState } from "../adapters/collab/document.ts";
 import { projectSharedDocument } from "../adapters/collab/project.ts";
 import { registerSharedOperationFamilies } from "../adapters/collab/operation-families.ts";
@@ -52,7 +54,10 @@ const SOURCE = { schema: 2, title: "Shared drafts", paragraphsDecided: true, wor
   comments: [{ id: "C1", author: "Ann", createdAt: "2026-11-13T10:00:00.000Z", rowId: "r2", field: "audioText", anchorId: "C1", body: "note",
     quotedText: "Two", resolved: false, resolvedAt: null, resolvedBy: null, replies: [] }],
   people: [{ id: "p1", name: "Ann" }],
-  productionTags: [],
+  productionTags: [
+    { id: "T1", cat: "prop", name: "Mug", owner: "", notes: "", status: "needed" },
+    { id: "T3", cat: "prop", name: "Lamp", owner: "", notes: "", status: "needed" }
+  ],
   brollShots: [
     { id: "b1", name: "City", desc: "", status: "unshot", reshoot: false, notes: "", owner: "", audioRef: "", location: "", props: [], origin: "list" },
     { id: "b2", name: "Harbour", desc: "", status: "unshot", reshoot: false, notes: "", owner: "", audioRef: "", location: "", props: [], origin: "list" },
@@ -136,7 +141,7 @@ for (const redraw of REDRAWS) for (const order of ORDERS) test(`C7 typed draft: 
     if (redraw.show) { redraw.hide(f, order); runBrollRefresh(); assert.equal(notesBox(), null); }
     stop();
     runBrollRefresh();
-    assert.deepEqual([shot("b1").notes, undoCount(f) - undo, warned()], ["Wide", 1, []], "saved once after release, with or without its box");
+    assert.deepEqual([shot("b1").notes, undoCount(f) - undo, warned()], ["", 0, []], "release and redraw save nothing, with or without its box");
     runBrollRefresh();
     if (redraw.show) { redraw.show(f, order); runBrollRefresh(); }
     assert.equal(notesBox()?.value, "Wide");
@@ -145,6 +150,188 @@ for (const redraw of REDRAWS) for (const order of ORDERS) test(`C7 typed draft: 
     exchange(f, order);
     assert.equal(projectSharedDocument(f.peer).brollShots.find(s => s.id === "b1").notes, "Wide");
   } finally { stop(); tidy(f); }
+});
+
+const inputText = (box, value) => {
+  box.focus(); box.value = value;
+  box.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText" }));
+};
+const bodyText = (box, value) => { box.innerHTML = value; box.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText" })); };
+const stripText = root => [...document.querySelectorAll(root + " .typed-unsaved-text")].map(box => box.value);
+function tagsOpen() {
+  openProductionPanel();
+  $('#production-modes [data-group="cat"]').click();
+}
+function tagExpand(key) {
+  if (!document.querySelector('#production-panel .tag-entity.is-expanded[data-key="' + key + '"]')) $('#production-panel [data-action="tag-expand"][data-key="' + key + '"]').click();
+}
+
+for (const finalText of ["", "Wide shot"]) test(`manual draft a: held notes revised to ${JSON.stringify(finalText)} wait for blur, never redraw`, async () => {
+  const f = await enter(); let release = () => {};
+  try {
+    brollOpen("b1");
+    inputText(notesBox(), "Wide");
+    release = f.parts.session.hold(ADMISSION_HELD);
+    blurOut(notesBox());
+    inputText(notesBox(), finalText);
+    const undo = undoCount(f);
+    release(); runBrollRefresh();
+    assert.deepEqual([shot("b1").notes, notesBox().value, undoCount(f) - undo], ["", finalText, 0]);
+    assert.equal(brollHook().drafts().length, finalText ? 1 : 0);
+    assert.equal(notesBox().hasAttribute("data-unsaved"), !!finalText);
+    blurOut(notesBox());
+    assert.deepEqual([shot("b1").notes, undoCount(f) - undo, brollHook().drafts()], [finalText, finalText ? 1 : 0, []]);
+  } finally { release(); tidy(f); }
+});
+
+for (const reply of [false, true]) test(`manual draft b: ${reply ? "reply" : "comment"} remains open during an unrelated delete-confirm redraw`, async () => {
+  const f = await enter(); let release = () => {};
+  try {
+    openCommentsPanel();
+    if (reply) toggleReplyComposer("C1");
+    else openCommentComposer({ id: "C2", rowId: "r2", field: "audioText", quotedText: "Two" });
+    const selector = reply ? '.reply-composer[data-for="C1"] .cell-editable' : "#comment-body-editable";
+    $(reply ? '.reply-composer[data-for="C1"] .reply-name-input' : "#comment-name").value = "Alice";
+    bodyText($(selector), "First");
+    release = f.parts.session.hold(ADMISSION_HELD);
+    if (reply) postReply("C1"); else postComment();
+    bodyText($(selector), "First sec");
+    const undo = undoCount(f);
+    release();
+    armDeleteComment(document.createElement("button"), "C1");
+    renderComments();
+    assert.deepEqual([$(selector).textContent, currentDocument().comments.length, currentDocument().comments[0].replies.length, undoCount(f) - undo], ["First sec", 1, 0, 0]);
+    if (reply) postReply("C1"); else postComment();
+    assert.equal(reply ? currentDocument().comments[0].replies.length : currentDocument().comments.length, reply ? 1 : 2);
+    const stored = reply ? currentDocument().comments[0].replies[0].body : currentDocument().comments.find(c => c.id === "C2").body;
+    assert.equal(stored, "First sec");
+    assert.equal(reply ? currentDocument().comments[0].replies.length : currentDocument().comments.length, reply ? 1 : 2);
+    renderComments();
+    assert.equal(reply ? currentDocument().comments[0].replies.length : currentDocument().comments.length, reply ? 1 : 2);
+  } finally { release(); tidy(f); }
+});
+
+for (const rename of [false, true]) test(`manual draft c: a waiting tag ${rename ? "rename" : "person"} survives another expanded tag and returns from the strip`, async () => {
+  const f = await enter(); let release = () => {};
+  try {
+    tagsOpen(); tagExpand("prop mug");
+    $('#production-panel [data-action="' + (rename ? "tag-rename" : "tag-person-new") + '"][data-key="prop mug"]').click();
+    const selector = '#production-panel .' + (rename ? "tag-rename-input" : "tag-person-input") + '[data-key="prop mug"]';
+    inputText($(selector), rename ? "Cup" : "Cy");
+    release = rename ? f.parts.session.beforeCommand(() => { renderProduction(); notices.show(REFUSED, "warn"); return "announced"; })
+      : f.parts.session.hold(ADMISSION_HELD);
+    press($(selector), "Enter");
+    assert.equal(document.querySelector(selector)?.value, rename ? "Cup" : "Cy", "the submit's own redraw keeps its editor open");
+    tagExpand("prop lamp");
+    assert.deepEqual(stripText("#production-panel"), [rename ? "Cup" : "Cy"]);
+    assert.match($('#production-panel .typed-unsaved-label').textContent, /Mug.*(?:new name|new person)/);
+    release(); renderProduction();
+    assert.deepEqual(stripText("#production-panel"), [rename ? "Cup" : "Cy"]);
+    tagExpand("prop mug");
+    assert.equal($(selector).value, rename ? "Cup" : "Cy");
+    assert.equal($(selector).hasAttribute("data-unsaved"), true);
+    assert.deepEqual(stripText("#production-panel"), []);
+    assert.equal(currentDocument().people.some(p => p.name === "Cy"), false);
+  } finally { release(); tidy(f); }
+});
+
+for (const tagPanel of [false, true]) test(`manual draft d: ${tagPanel ? "tag bulk person" : "shot bulk location"} uses the current selection only on resubmit`, async () => {
+  const f = await enter(); let release = () => {};
+  try {
+    if (tagPanel) { tagsOpen(); toggleCardSelection("prop mug"); $('[data-action="bulk-person-new"]').click(); }
+    else {
+      brollOpen("b1");
+      $('#broll-panel [data-action="broll-expand"][data-id="b1"]').dispatchEvent(new window.MouseEvent("click", { bubbles: true, ctrlKey: true }));
+      const select = $("#broll-bulk-location"); select.value = "__new__"; select.dispatchEvent(new window.Event("change", { bubbles: true }));
+    }
+    const box = tagPanel ? "#bulk-person-input" : "#broll-bulk-input", text = tagPanel ? "Cy" : "Dock";
+    inputText($(box), text);
+    release = f.parts.session.hold(ADMISSION_HELD); press($(box), "Enter");
+    if (tagPanel) { toggleCardSelection("prop mug"); toggleCardSelection("prop lamp"); }
+    else for (const id of ["b1", "b2"]) $('#broll-panel [data-action="broll-expand"][data-id="' + id + '"]').dispatchEvent(new window.MouseEvent("click", { bubbles: true, ctrlKey: true }));
+    const undo = undoCount(f);
+    release(); if (tagPanel) renderProduction(); else runBrollRefresh();
+    assert.deepEqual([shot("b1").location, shot("b2").location, currentDocument().people.some(p => p.name === "Cy"), undoCount(f) - undo], ["", "", false, 0]);
+    if (!document.querySelector(box)) {
+      assert.ok(stripText(tagPanel ? "#production-panel" : "#broll-panel").includes(text));
+      if (tagPanel) $('[data-action="bulk-person-new"]').click();
+      else { const select = $("#broll-bulk-location"); select.value = "__new__"; select.dispatchEvent(new window.Event("change", { bubbles: true })); }
+    }
+    assert.equal($(box).value, text);
+    press($(box), "Enter");
+    assert.equal(undoCount(f) - undo, 1);
+    if (tagPanel) {
+      const person = currentDocument().people.find(p => p.name === "Cy");
+      assert.equal(currentDocument().productionTags.find(t => t.name === "Mug").owner, "");
+      assert.equal(currentDocument().productionTags.find(t => t.name === "Lamp").owner, person.id);
+    } else assert.deepEqual([shot("b1").location, shot("b2").location], ["", "Dock"]);
+  } finally { release(); tidy(f); }
+});
+
+test("manual draft e: tag notes follow the registry id through rename and reuse of its old name", async () => {
+  const f = await enter(); let release = () => {};
+  try {
+    tagsOpen(); tagExpand("prop mug");
+    release = f.parts.session.hold(ADMISSION_HELD);
+    inputText($('#production-panel .tag-notes-input[data-key="prop mug"]'), "Wide");
+    const record = currentDocument().productionTags.find(t => t.name === "Mug").id;
+    peerWrite(f, "remote-first", { kind: "record-set", target: { collection: "tags", record }, field: "name", value: "Cup" });
+    peerWrite(f, "remote-first", { kind: "record-create", target: { collection: "tags", record: "t_replacement" }, fields: { cat: "prop", name: "Mug", owner: "", notes: "", status: "needed", rank: "9999999999" } });
+    renderProduction();
+    assert.deepEqual(stripText("#production-panel"), ["Wide"]);
+    assert.match($('#production-panel .typed-unsaved-label').textContent, /Cup.*notes/);
+    tagExpand("prop mug");
+    assert.equal($('#production-panel .tag-notes-input[data-key="prop mug"]').value, "");
+    tagExpand("prop cup");
+    assert.equal($('#production-panel .tag-notes-input[data-key="prop cup"]').value, "Wide");
+    release(); renderProduction();
+    assert.deepEqual(currentDocument().productionTags.map(t => t.notes), ["", "", ""]);
+    assert.equal($('#production-panel .tag-notes-input[data-key="prop cup"]').defaultValue, "");
+    blurOut($('#production-panel .tag-notes-input[data-key="prop cup"]'));
+    assert.equal(currentDocument().productionTags.find(t => t.id === record).notes, "Wide", JSON.stringify(noticeCalls));
+    assert.equal(currentDocument().productionTags.find(t => t.id === "t_replacement").notes, "");
+  } finally { release(); tidy(f); }
+});
+
+test("manual draft e: a removed tag's held person goes to the strip without creating an unassigned person", async () => {
+  const f = await enter(); let release = () => {};
+  try {
+    tagsOpen(); tagExpand("prop mug");
+    $('#production-panel [data-action="tag-person-new"][data-key="prop mug"]').click();
+    inputText($('#production-panel .tag-person-input[data-key="prop mug"]'), "Cy");
+    release = f.parts.session.hold(ADMISSION_HELD);
+    press($('#production-panel .tag-person-input[data-key="prop mug"]'), "Enter");
+    const record = currentDocument().productionTags.find(t => t.name === "Mug").id;
+    peerWrite(f, "remote-first", { kind: "record-delete", target: { collection: "tags", record } });
+    release(); renderProduction();
+    assert.deepEqual(stripText("#production-panel"), ["Cy"]);
+    assert.equal(currentDocument().people.some(p => p.name === "Cy"), false);
+  } finally { release(); tidy(f); }
+});
+
+test("manual draft f: an announced refusal still gets one removal notice and the removed shot's text", async () => {
+  const f = await enter();
+  const stop = f.parts.session.beforeCommand(() => { notices.show(REFUSED, "warn"); return "announced"; });
+  try {
+    brollOpen("b1"); inputText(notesBox(), "Wide"); blurOut(notesBox()); noticeCalls.length = 0;
+    peerWrite(f, "remote-first", { kind: "record-delete", target: { collection: "shots", record: "b1" } });
+    runBrollRefresh(); runBrollRefresh();
+    assert.deepEqual([warned(), stripText("#broll-panel")], [[[GONE_NOTE, "warn"]], ["Wide"]]);
+  } finally { stop(); tidy(f); }
+});
+
+test("manual draft g: Gear filling keeps held quick-add text after closing and reopening", async () => {
+  const f = await enter(); let release = () => {};
+  try {
+    openGearPanel(); inputText($("#gear-quickadd-input"), "Wireless lav");
+    release = f.parts.session.hold(ADMISSION_HELD); applyGearQuickAdd();
+    sidePanels().close("gear-panel"); openProductionPanel(); renderProduction();
+    assert.ok(stripText("#production-panel").includes("Wireless lav"));
+    release(); openGearPanel();
+    assert.deepEqual([$("#gear-quickadd-input").value, currentDocument().productionTags.filter(t => t.cat === "gear")], ["Wireless lav", []]);
+    applyGearQuickAdd();
+    assert.deepEqual(currentDocument().productionTags.filter(t => t.cat === "gear").map(t => t.name), ["Wireless lav"]);
+  } finally { release(); tidy(f); }
 });
 
 for (const order of ORDERS) test(`C7 typed draft: a b-roll note refused by a listener that announces it waits through a focused redraw, and the next blur once allowed saves it once, ${order}`, async () => {
@@ -176,6 +363,53 @@ for (const order of ORDERS) test(`C7 typed draft: a b-roll note refused by a lis
 });
 
 const GONE_NOTE ="The shot was removed, so its note was not saved. The text is kept at the top of the b-roll list.";
+
+test("manual draft ninth: dismissing a hidden shot note clears stale boxes in both b-roll views", async () => {
+  const f = await enter(); let release = () => {};
+  try {
+    brollOpen("b1"); inputText(notesBox(), "Wide");
+    release = f.parts.session.hold(ADMISSION_HELD); blurOut(notesBox());
+    openBrollPage(); filter("shot"); runBrollRefresh();
+    assert.deepEqual(stripText("#broll-page"), ["Wide"]);
+    $('#broll-page [data-action="typed-unsaved-dismiss"]').click();
+    assert.deepEqual(stripText("#broll-page"), []);
+    release(); closeBrollPage(() => {}); filter("all"); brollOpen("b1"); runBrollRefresh();
+    assert.deepEqual([notesBox().value, shot("b1").notes, brollHook().drafts(), stripText("#broll-panel")], ["", "", [], []]);
+  } finally { release(); closeBrollPage(() => {}); tidy(f); }
+});
+
+test("manual draft ninth: dismissing hidden Gear text ends the draft when the panel reopens", async () => {
+  const f = await enter(); let release = () => {};
+  try {
+    openGearPanel(); inputText($("#gear-quickadd-input"), "Wireless lav");
+    release = f.parts.session.hold(ADMISSION_HELD); applyGearQuickAdd();
+    sidePanels().close("gear-panel"); openProductionPanel();
+    assert.ok(stripText("#production-panel").includes("Wireless lav"));
+    $('#production-panel [data-action="typed-unsaved-dismiss"][data-box="gear-quickadd-input"]').click();
+    assert.deepEqual(stripText("#production-panel"), []);
+    release(); renderProduction(); openGearPanel();
+    assert.equal($("#gear-quickadd-input").value, "");
+    assert.deepEqual(currentDocument().productionTags.filter(t => t.cat === "gear"), []);
+  } finally { release(); tidy(f); }
+});
+
+test("manual draft ninth: dismissing a filtered reply clears its composer state and text", async () => {
+  const f = await enter(); let release = () => {};
+  try {
+    openCommentsPanel(); toggleReplyComposer("C1");
+    $('.reply-composer[data-for="C1"] .reply-name-input').value = "Alice";
+    bodyText($('.reply-composer[data-for="C1"] .cell-editable'), "First");
+    release = f.parts.session.hold(ADMISSION_HELD); postReply("C1");
+    setCommentFilterMode("resolved");
+    assert.deepEqual(stripText("#comments-list"), ["First"]);
+    $('#comments-list [data-action="typed-unsaved-dismiss"]').click();
+    assert.deepEqual(stripText("#comments-list"), []);
+    release(); setCommentFilterMode("all");
+    if (!document.querySelector('.reply-composer[data-for="C1"]')) toggleReplyComposer("C1");
+    assert.equal($('.reply-composer[data-for="C1"] .cell-editable').textContent, "");
+    assert.deepEqual(currentDocument().comments[0].replies, []);
+  } finally { release(); setCommentFilterMode("all"); tidy(f); }
+});
 
 for (const order of ORDERS) test(`C7 typed draft: a held b-roll note whose shot a peer deletes gives one notice and stays readable in the panel, ${order}`, async () => {
   const f = await enter();
@@ -223,8 +457,7 @@ for (const rename of RENAMES) test(`C7 typed draft: a script-shot rename ${renam
     assert.deepEqual([warned(), kept()], [[], ["Jetty", "Pier", cell, 0]], "after a redraw");
     stop();
     runBrollRefresh();
-    const ownReason = rename.held ? [[REFUSED, "warn"]] : [];
-    assert.deepEqual([warned(), kept()], [ownReason, ["Jetty", "Pier", cell, 0]], "after the release, a held rename tries once and is refused for its own reason");
+    assert.deepEqual([warned(), kept()], [[], ["Jetty", "Pier", cell, 0]], "after release the draft waits for the person");
     noticeCalls.length = 0;
     runBrollRefresh();
     assert.deepEqual([warned(), kept()], [[], ["Jetty", "Pier", cell, 0]], "a rename refused when it is decided waits for the person");

@@ -8,234 +8,273 @@
   "mutants": [
     {
       "label": "registering a production tag still calls the standalone command in a shared session",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/tags/production-tags.ts",
       "find": "registerTagCommand({ cat: cat, name: String(name == null ? \"\" : name) }, shared)",
       "replace": "registerTagCommand({ cat: cat, name: String(name == null ? \"\" : name) })"
     },
     {
       "label": "finding or adding a person still calls the standalone command in a shared session",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/tags/production-tags.ts",
       "find": "addPersonCommand(name, (randomIds as NonNullable<typeof randomIds>), shared)",
       "replace": "addPersonCommand(name, (randomIds as NonNullable<typeof randomIds>))"
     },
     {
       "label": "adding a prop to a shot still calls the standalone command in a shared session",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/broll/records.ts",
       "find": "addShotPropCommand(shotId, rawName, shared)",
       "replace": "addShotPropCommand(shotId, rawName)"
     },
     {
       "label": "the b-roll status toggle still calls the standalone command in a shared session",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/broll/panel.ts",
       "find": "setShotsCommand([(id as string)], fields, undefined, undefined, shared)",
       "replace": "setShotsCommand([(id as string)], fields, undefined, undefined)"
     },
     {
       "label": "the b-roll bulk update still calls the standalone command in a shared session",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/broll/panel.ts",
       "find": "setShotsCommand(ids, fields, owner, (ports as PanelPortUse).ids, shared)",
       "replace": "setShotsCommand(ids, fields, owner, (ports as PanelPortUse).ids)"
     },
     {
       "label": "the b-roll bulk assign to a new person still calls the standalone command in a shared session",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/broll/panel.ts",
       "find": "setShotsCommand(ids, {}, { name: name }, (ports as PanelPortUse).ids, shared)",
       "replace": "setShotsCommand(ids, {}, { name: name }, (ports as PanelPortUse).ids)"
     },
     {
       "label": "the b-roll delete still calls the standalone command in a shared session",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/broll/panel.ts",
       "find": "deleteShotCommand((id as string), shared)",
       "replace": "deleteShotCommand((id as string))"
     },
     {
       "label": "the b-roll new person for a shot still calls the standalone command in a shared session",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/broll/panel.ts",
       "find": "setShotsCommand([id], {}, { name: text }, (ports as PanelPortUse).ids, shared)",
       "replace": "setShotsCommand([id], {}, { name: text }, (ports as PanelPortUse).ids)"
     },
     {
       "label": "adding a shot from the b-roll panel still calls the standalone command in a shared session",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/application/commands/production-actions.ts",
       "find": "return runRecord(ports, shared => addShotCommand(rec, shared)) ? rec : null;",
       "replace": "return ports.run(addShotCommand(rec)) ? rec : null;"
     },
     {
       "label": "removing a prop from a shot still calls the standalone command in a shared session",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/application/commands/production-actions.ts",
       "find": "return runRecord(ports, shared => removeShotPropCommand(shotId, ref, shared));",
       "replace": "return ports.run(removeShotPropCommand(shotId, ref));"
     },
     {
       "label": "the gear quick add still calls the standalone command in a shared session",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/tags/panels.ts",
       "find": "gearQuickAddCommand(planned, shared)",
       "replace": "gearQuickAddCommand(planned)"
     },
     {
       "label": "updating tags still calls the standalone command in a shared session",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/tags/panels.ts",
       "find": "updateTagsCommand(items.map(tagRef), change, (ports as TagPanelPorts).ids, shared)",
       "replace": "updateTagsCommand(items.map(tagRef), change, (ports as TagPanelPorts).ids)"
     },
     {
       "label": "deleting a tag from its card still calls the standalone command in a shared session",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/tags/panels.ts",
       "find": "function () { return []; }, (ports as TagPanelPorts).edits.stamps, shared)",
       "replace": "function () { return []; }, (ports as TagPanelPorts).edits.stamps)"
     },
     {
       "label": "bulk deleting selected tags still calls the standalone command in a shared session",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/tags/panels.ts",
       "find": "retagRewrites((ports as TagPanelPorts).text, labelled, null), (ports as TagPanelPorts).edits.stamps, build)",
       "replace": "retagRewrites((ports as TagPanelPorts).text, labelled, null), (ports as TagPanelPorts).edits.stamps)"
     },
     {
       "label": "adding a person from the production panel still calls the standalone command in a shared session",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/tags/panels.ts",
       "find": "addPersonCommand(text, (ports as TagPanelPorts).ids, shared)",
       "replace": "addPersonCommand(text, (ports as TagPanelPorts).ids)"
     },
     {
       "label": "deleting a person still calls the standalone command in a shared session",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/tags/panels.ts",
       "find": "(personId, shared)",
       "replace": "(personId)"
     },
     {
       "label": "editing the gallery still calls the standalone command in a shared session",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/application/editing/cell-editing.ts",
       "find": "const shared = ports.gallery.ports();",
       "replace": "const shared = null;"
     },
     {
       "label": "assigning a comment still calls the standalone command in a shared session",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/comments/comments.ts",
       "find": "setCommentAssigneeCommand(id as string, name, (ports as CommentsRuntimePorts).edits.stamps.clock, shared)",
       "replace": "setCommentAssigneeCommand(id as string, name, (ports as CommentsRuntimePorts).edits.stamps.clock)"
     },
     {
       "label": "cancelling a comment still calls the standalone unwrap in a shared session",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/comments/comments.ts",
       "find": "shared && { ports: shared, anchor: pending.id }",
       "replace": "undefined"
     },
     {
       "label": "posting a comment still calls the standalone command in a shared session",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/comments/comments.ts",
       "find": "      replies: []\n    }, shared), quiet);",
       "replace": "      replies: []\n    }), quiet);"
     },
     {
       "label": "resolving a comment still calls the standalone command in a shared session",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/comments/comments.ts",
       "find": "toggleResolveCommand(id as string, (ports as CommentsRuntimePorts).edits.stamps, shared)",
       "replace": "toggleResolveCommand(id as string, (ports as CommentsRuntimePorts).edits.stamps)"
     },
     {
       "label": "deleting a comment still calls the standalone command in a shared session",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/comments/comments.ts",
       "find": "deleteCommentCommand(id as string, anchorUnwrapped(c.rowId, c.field, c.anchorId), build)",
       "replace": "deleteCommentCommand(id as string, anchorUnwrapped(c.rowId, c.field, c.anchorId))"
     },
     {
       "label": "replying to a comment still calls the standalone command in a shared session",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/comments/comments.ts",
       "find": "addReplyCommand(id, reply, (ports as CommentsRuntimePorts).edits.stamps.clock, build)",
       "replace": "addReplyCommand(id, reply, (ports as CommentsRuntimePorts).edits.stamps.clock)"
     },
     {
       "label": "a refused record command shows no notice",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/application/commands/shared-records.ts",
       "find": "  records.refused(outcome);\n",
       "replace": "\n"
     },
     {
       "label": "a shared record command runs through the silent edit that drops its refusal",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/application/commands/shared-records.ts",
       "find": "  const outcome = edits.run(build(shared));",
       "replace": "  const outcome = edits.edit(build(shared)) ? { kind: \"applied\" as const } : { kind: \"noop\" as const };"
     },
     {
       "label": "a refused bulk tag delete still shows its success toast",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/tags/panels.ts",
       "find": "(ports as TagPanelPorts).edits.stamps, build)).held) return;",
       "replace": "(ports as TagPanelPorts).edits.stamps, build)).held && false) return;"
     },
     {
       "label": "a refused bulk tag delete drops the selection before the command runs",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/tags/panels.ts",
       "find": "  if (editRecords(build => deleteTagsCommand(items.map(",
       "replace": "  (ports as TagPanelPorts).selection.clear();\n  if (editRecords(build => deleteTagsCommand(items.map("
     },
     {
       "label": "rule 73: renaming a tag runs through the silent edit that drops the refusal",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/tags/panels.ts",
       "find": "    const run = editRecords(() => command, quiet);",
       "replace": "    const run = { changed: (ports as TagPanelPorts).edits.edit(command), held: false };"
     },
     {
       "label": "rule 73: removing a tag's labels in a shared session takes the standalone path, silent for a tag with no mentions",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/tags/panels.ts",
       "find": "    if ((ports as TagPanelPorts).shared.ports()) {\n      (ports as TagPanelPorts).shared.refused(",
       "replace": "    if (false) {\n      (ports as TagPanelPorts).shared.refused("
     },
     {
       "label": "a refused record command reports nothing held, so its caller closes and clears as if it had saved",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/application/commands/shared-records.ts",
-      "find": "  return outcome.notified ? { changed: false, held: true, announced: true } : { changed: false, held: true };",
-      "replace": "  return { changed: false, held: false };"
+      "find": "  records.refused(outcome);\n  return { changed: false, held: true };",
+      "replace": "  records.refused(outcome);\n  return { changed: false, held: false };"
     },
     {
       "label": "a shared record command that changes nothing reports itself held, so its caller keeps the box open instead of cleaning up",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/application/commands/shared-records.ts",
       "find": "outcome.kind === \"committed\", held: false };",
       "replace": "outcome.kind === \"committed\", held: outcome.kind !== \"applied\" && outcome.kind !== \"committed\" };"
     },
     {
       "label": "a refused picture edit reports nothing held, so the gallery moves its selection as if it had removed",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/application/editing/cell-editing.ts",
       "find": "return { changed: false, held: outcome.kind === \"rejected\" };",
       "replace": "return { changed: false, held: false };"
     },
     {
       "label": "the gallery remove moves the selection without the outcome",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/gallery/overlay.ts",
       "find": "function (row) { return removeGallerySlot(row, at); }).held) return;",
       "replace": "function (row) { return removeGallerySlot(row, at); }).held && false) return;"
     },
     {
       "label": "rule 154: a refused comment closes the composer and drops its text",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/comments/comments.ts",
       "find": "    if (run.held) return heldWrite(run);\n    if (pendingComment?.id === pending.id) {",
       "replace": "    if (run.held) { closeCommentComposer(); return heldWrite(run); }\n    if (pendingComment?.id === pending.id) {"
     },
     {
       "label": "rule 154: a refused reply drops its composer and draft before the outcome",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/comments/comments.ts",
       "find": "  replyDrafts[id as string] = { body: bodyEl.innerHTML, name: nameInput.value };\n  sameCommentLife();",
       "replace": "  dropCommentState(id, false);\n  sameCommentLife();"
     },
     {
       "label": "a refused reply drops its composer and draft",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/comments/comments.ts",
-      "find": "    if (run.held) return heldWrite(run);\n    dropCommentState(id, false);",
-      "replace": "    if (run.held) { dropCommentState(id, false); return heldWrite(run); }\n    dropCommentState(id, false);"
+      "find": "    if (run.held) return heldWrite(run);\n    if (!standalone) dropCommentState(id, false);",
+      "replace": "    if (run.held) { dropCommentState(id, false); return heldWrite(run); }\n    if (!standalone) dropCommentState(id, false);"
     },
     {
       "label": "a served reply leaves its composer open",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/comments/comments.ts",
-      "find": "replySave(id as string, author)) === \"saved\") renderComments();",
-      "replace": "replySave(id as string, author)) === \"saved\") sendNow();"
+      "find": "    if (!standalone) dropCommentState(id, false);\n    sendNow();",
+      "replace": "    if (standalone) dropCommentState(id, false);\n    sendNow();"
     },
     {
       "label": "a refused comment delete closes the comment's menu before the outcome",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/comments/comments.ts",
       "find": "  if (editComments(build => deleteCommentCommand(",
       "replace": "  dropCommentState(id, true);\n  if (editComments(build => deleteCommentCommand("
     },
     {
       "label": "a refused comment cancel closes the composer",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/comments/comments.ts",
       "find": "pending.id })).held) return;",
       "replace": "pending.id })).held && false) return;"
@@ -249,102 +288,119 @@
     },
     {
       "label": "a refused bulk assignment to a new person closes its box",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/broll/panel.ts",
       "find": "kind === \"person\" ? bulkAssignNewPerson(text, closing, quiet)",
       "replace": "kind === \"person\" ? (closing(), bulkAssignNewPerson(text, closing, quiet))"
     },
     {
       "label": "a refused bulk new location closes its box",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/broll/panel.ts",
       "find": ": bulkLocation(text, closing, quiet));",
       "replace": ": (closing(), bulkLocation(text, closing, quiet)));"
     },
     {
       "label": "the prop box clears the typed name before the outcome",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/broll/panel.ts",
-      "find": "  if (isHeld(typed().submit(\"broll-prop-input\", id, input.value, propSave(id)))) return;",
-      "replace": "  const typedName = input.value;\n  input.value = \"\";\n  if (isHeld(typed().submit(\"broll-prop-input\", id, typedName, propSave(id)))) return;"
+      "find": "  if (isHeld(typed().submit(\"broll-prop-input\", id, text, propSave(id)))) return;",
+      "replace": "  input.value = \"\";\n  if (isHeld(typed().submit(\"broll-prop-input\", id, text, propSave(id)))) return;"
     },
     {
       "label": "the prop box ignores the outcome and re-renders",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/broll/panel.ts",
       "find": "    return heldWrite(editShots(shared => addShotPropCommand(id, text, shared), quiet));",
       "replace": "    editShots(shared => addShotPropCommand(id, text, shared), quiet);\n    return \"saved\";"
     },
     {
       "label": "the tag person box moves focus to Add person whatever the outcome (Enter)",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/tags/mount.ts",
       "find": "if (!ports.addPersonForTag(e.target.getAttribute(\"data-key\"), e.target.value).held) refocus(",
       "replace": "if (!ports.addPersonForTag(e.target.getAttribute(\"data-key\"), e.target.value).held || true) refocus("
     },
     {
       "label": "the tag person box moves focus to Add person whatever the outcome (Add)",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/tags/mount.ts",
       "find": "if (!ports.addPersonForTag(personSaveBtn.getAttribute(\"data-key\"), input.value).held) refocus(",
       "replace": "if (!ports.addPersonForTag(personSaveBtn.getAttribute(\"data-key\"), input.value).held || true) refocus("
     },
     {
       "label": "a refused tag person box closes",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/tags/panels.ts",
       "find": "    if (run.held) return heldWrite(run);\n    if ((ports as TagPanelPorts).view.tagAddingPersonKey() === key)",
       "replace": "    if ((ports as TagPanelPorts).view.tagAddingPersonKey() === key)"
     },
     {
       "label": "a refused annotation removal adds its own warning to the refusal",
+      "tests": ["tests/features/gallery/overlay.test.ts"],
       "file": "src/features/gallery/overlay.ts",
       "find": "  if (run.held) return;\n  if (!run.changed) {\n    (ports as OverlayPortUse).notices.show(",
       "replace": "  if (!run.changed) {\n    (ports as OverlayPortUse).notices.show("
     },
     {
       "label": "a refused new person for a shot closes its box",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/broll/panel.ts",
       "find": "    if (run.held) return heldWrite(run);\n    if (addingPersonFor === id) addingPersonFor = null;",
       "replace": "    if (addingPersonFor === id) addingPersonFor = null;\n    if (run.held) return heldWrite(run);"
     },
     {
       "label": "a refused bulk Mark filmed drops the selection",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/broll/panel.ts",
       "find": "  if (run.held) return run;\n  closing();\n  if (!quiet) renderBrollViews();\n  if (run.changed)",
       "replace": "  if (run.held) { clearSelection(); return run; }\n  closing();\n  if (!quiet) renderBrollViews();\n  if (run.changed)"
     },
     {
       "label": "a refused gear quick add refills the box from the list",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/tags/panels.ts",
-      "find": "  if (run.held) return \"waits\";\n  if (!run.changed) { fillGearQuickAdd(); return \"saved\"; }",
-      "replace": "  if (!run.changed) { fillGearQuickAdd(); return \"saved\"; }"
+      "find": "  if (run.held) return heldWrite(run);\n  if (!run.changed) { fillGearQuickAdd(); return \"saved\"; }",
+      "replace": "  if (run.held) { (document.getElementById(\"gear-quickadd-input\") as HTMLTextAreaElement).value = gearEntries().map(e => e.name).join(\"\\n\"); return heldWrite(run); }\n  if (!run.changed) { fillGearQuickAdd(); return \"saved\"; }"
     },
     {
       "label": "assigning a tag's owner drops change.owner",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/application/commands/production-records.ts",
       "find": "const owner = change.owner === undefined ? undefined : chosenOwner(live, change.owner, ids);",
       "replace": "const owner = undefined;"
     },
     {
       "label": "assigning a known owner clears the owner instead",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/application/commands/production-records.ts",
       "find": "  return personById(live, owner.id) ? owner.id : \"\";",
       "replace": "  return \"\";"
     },
     {
       "label": "creating a person while assigning creates nobody",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/application/commands/production-records.ts",
       "find": "  if (\"name\" in owner) return addPerson(live, owner.name, ids);",
       "replace": "  if (\"name\" in owner) return \"\";"
     },
     {
       "label": "rule 152: the shared picture toast offers an Undo that reads the standalone owner",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/application/editing/cell-editing.ts",
       "find": "      ports.gallery.done(message);",
       "replace": "      ports.announce(message, null);"
     },
     {
       "label": "the comment wiring passes no shared port",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/bootstrap/wiring/comments.ts",
       "find": "      shared: sharedCommentCommands",
       "replace": "      shared: { ports: () => null, refused: () => {} }"
     },
     {
       "label": "the record wiring for the production tags passes no shared port",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/bootstrap/wiring/production-tags.ts",
       "find": "shared: sharedRecordCommands,",
       "replace": "shared: { ports: () => null, refused: () => {} },"
@@ -357,113 +413,144 @@
       "tests": ["src/test/shared-split-records-drafts-app.test.mjs"]
     },
     {
-      "label": "a b-roll redraw writes a refused typed value again and warns again",
-      "file": "src/features/broll/panel.ts",
-      "find": "const saved = !field || !ownValue || held !== active.value && submitField(active) === \"saved\";",
-      "replace": "const saved = !field || !ownValue || submitField(active) === \"saved\";"
-    },
-    {
       "label": "a b-roll redraw drops the unsaved text of a box that lost focus",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/broll/panel.ts",
       "find": "    if (again) again.value = box.value;",
-      "replace": "    if (again && !again) again.value = box.value;"
+      "replace": "    if (again) again.value = \"\";"
     },
     {
       "label": "a tag panel redraw drops a box's unsaved text",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/tags/panels.ts",
       "find": "    if (box.unsaved) again.value = box.value;",
       "replace": "    if (box.unsaved && !box.unsaved) again.value = box.value;"
     },
     {
       "label": "a blur in tag notes does not retry a refused write",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/tags/mount.ts",
       "find": "if (ports.sessionShared() && box.value !== box.defaultValue) ports.setTagNotes(",
       "replace": "if (!box) ports.setTagNotes("
     },
     {
       "label": "standalone, a blur in tag notes writes what its typing did not",
+      "tests": ["src/test/panel-drafts-standalone-app.test.mjs"],
       "file": "src/features/tags/mount.ts",
       "find": "if (ports.sessionShared() && box.value !== box.defaultValue) ports.setTagNotes(",
       "replace": "if (box.value !== box.defaultValue) ports.setTagNotes("
     },
     {
       "label": "the tag entity wiring reports no shared session, so a refused notes write is never retried on blur",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/bootstrap/wiring/production.ts",
       "find": "        queueAutoSave: portSaves.dueNow,\n        sessionShared: sharedSession",
       "replace": "        queueAutoSave: portSaves.dueNow,\n        sessionShared: () => false"
     },
     {
       "label": "a tag rename closes its box before the outcome",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/tags/panels.ts",
       "find": "  if (held) (ports as TagPanelPorts).view.setTagRenaming(quiet ? renaming : key);",
       "replace": "  if (held) (ports as TagPanelPorts).view.setTagRenaming(null);"
     },
     {
       "label": "a refused scene-prep Ready still shows its success notice",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/tags/panels.ts",
       "find": "if (!statusSet(id, \"have\").held) prepNotice(\"Marked as Have it\");",
       "replace": "statusSet(id, \"have\"); prepNotice(\"Marked as Have it\");"
     },
     {
       "label": "a refused scene-prep status choice still shows its success notice",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/tags/panels.ts",
       "find": "if (!statusSet(target.dataset[\"key\"] ?? null, (target as HTMLSelectElement).value).held) prepNotice(\"Requirement status updated\");",
       "replace": "statusSet(target.dataset[\"key\"] ?? null, (target as HTMLSelectElement).value); prepNotice(\"Requirement status updated\");"
     },
     {
       "label": "rule 157: the shared scene-prep notice offers an Undo that reads the standalone owner",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/tags/panels.ts",
       "find": "  if (p.shared.ports()) { p.notices.show(message, \"ok\"); return; }",
       "replace": "  if (!p) { p.notices.show(message, \"ok\"); return; }"
     },
     {
       "label": "the tag panels keep typed drafts across a redraw in standalone too",
+      "tests": ["src/test/panel-drafts-standalone-app.test.mjs"],
       "file": "src/features/tags/panels.ts",
       "find": "  const shared = (ports as TagPanelPorts).shared.ports();\n",
       "replace": "  const shared = (ports as TagPanelPorts).shared.ports() ?? ports;\n"
     },
     {
       "label": "the b-roll panel keeps typed drafts across a redraw in standalone too",
+      "tests": ["src/test/panel-drafts-standalone-app.test.mjs"],
       "file": "src/features/broll/panel.ts",
       "find": "const shared = (ports as PanelPortUse).shared.ports(), epoch",
       "replace": "const shared = (ports as PanelPortUse).shared.ports() ?? ports, epoch"
     },
     {
       "label": "a tag draft's key leaves out its scene, so two occurrences of one tag share a box",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/tags/panels.ts",
       "find": "selector: (scene === null ? \"\" : '[data-scene-group=\"' + cssAttr(scene) + '\"] ') + typedBoxKey(el) };",
       "replace": "selector: typedBoxKey(el) };"
     },
     {
       "label": "the tag panels keep drafts across a document or session lifetime",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/tags/panels.ts",
       "find": "const sameLife = typedLife !== null && typedLife.ports === ports && typedLife.shared === shared && typedLife.epoch === epoch;",
       "replace": "const sameLife = true;"
     },
     {
       "label": "the tag panels' first draw of a lifetime leaves the earlier lifetime's text in boxes it does not redraw",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/tags/panels.ts",
       "find": "    for (const el of boxes) el.value = el.defaultValue;\n",
       "replace": "\n"
     },
     {
       "label": "the b-roll panel keeps drafts across a document or session lifetime",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/broll/panel.ts",
       "find": "const same = shared !== null && typedLife !== null && typedLife.ports === ports && typedLife.shared === shared && typedLife.epoch === epoch;",
       "replace": "const same = shared !== null;"
     },
     {
       "label": "a refused b-roll write is remembered past its session",
+      "tests": ["src/test/shared-split-records-app.test.mjs"],
       "file": "src/features/broll/panel.ts",
-      "find": "  if (!same) typed().clear();\n  return same;\n}\n\nfunction typingElsewhere",
-      "replace": "  return same;\n}\n\nfunction typingElsewhere"
+      "find": "  if (!same) typed().clear();\n  return same;\n}",
+      "replace": "  return same;\n}"
     },
     {
-      "label": "a draft is dropped when its box is not rendered",
-      "file": "src/features/broll/panel.ts",
-      "find": "  for (const draft of typed().held()) for (const box of draftBoxes(container, draft)) box.value = draft.text;",
-      "replace": "  for (const draft of typed().held()) {\n    const boxes = draftBoxes(container, draft);\n    if (!boxes.length) typed().drop(draft.box, draft.record);\n    for (const box of boxes) box.value = draft.text;\n  }",
+      "label": "a hidden draft is dropped when its editor closes",
+      "file": "src/features/common/typed-drafts.ts",
+      "find": "      return [...orphaned.values(), ...[...held.values()].filter(draft => !rendered(draft))];",
+      "replace": "      for (const draft of held.values()) if (!rendered(draft)) held.delete(keyOf(draft.box, draft.record));\n      return [...orphaned.values()];",
       "tests": ["src/test/shared-split-records-drafts-app.test.mjs"]
+    },
+    {
+      "label": "a redraw saves a draft",
+      "file": "src/features/broll/panel.ts",
+      "find": "const saved = !field || !ownValue || !shared && held !== active.value && submitField(active) === \"saved\";",
+      "replace": "const saved = !field || !ownValue || submitField(active) === \"saved\";",
+      "tests": ["tests/features/common/typed-drafts-inventory.test.ts"]
+    },
+    {
+      "label": "a draft is keyed by the tag's name",
+      "file": "src/features/tags/panels.ts",
+      "find": "  const record = item.id ?? \"\";",
+      "replace": "  const record = item.key;",
+      "tests": ["src/test/shared-split-records-drafts-app.test.mjs"]
+    },
+    {
+      "label": "typing back to the drawn value keeps the draft",
+      "file": "src/features/common/typed-drafts.ts",
+      "find": "      if (text === drawn) held.delete(key);",
+      "replace": "      if (text === drawn) return;",
+      "tests": ["src/features/common/typed-drafts.test.ts"]
     },
     {
       "label": "rename mode is left before the outcome",

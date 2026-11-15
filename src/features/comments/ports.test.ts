@@ -3,7 +3,9 @@ import "../../test/_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
 import type { CommentStatePorts } from "./ports.ts";
-import { startComments, captureCommentComposer, openCommentComposer, postComment } from "./comments.ts";
+import { startComments, captureCommentComposer, openCommentComposer, postComment, postReply, toggleReplyComposer, renderComments, armDeleteComment, closeCommentComposer } from "./comments.ts";
+import { migrateRows } from "../../core/migrate.ts";
+import { fakeMigration } from "../../../tests/core/migrate-ports.ts";
 
 test("tagging help listeners stop on disposal and install once on remount", () => {
   const fake = fixture();
@@ -92,6 +94,62 @@ test("posting requests an immediate save", () => {
   } finally {
     owner.dispose();
   }
+});
+
+test("standalone reply removes composer state before synchronous repaint and sends immediately after the edit, as on main", () => {
+  const fake = fixture();
+  const doc = { ...migrateRows({}, fakeMigration().ports), comments: [{ id: "C1", rowId: "r1", field: "audioText", anchorId: "C1", author: "Ann", body: "First", replies: [] }] };
+  const panel = document.getElementById("comments-panel") as HTMLElement;
+  panel.hidden = false;
+  panel.innerHTML = '<div id="comments-list"></div>';
+  const calls: unknown[] = [];
+  const owner = startComments({ ...fake.ports,
+    document: { ...fake.ports.document, current: () => doc },
+    edits: { ...fake.ports.edits, edit: () => {
+      renderComments();
+      calls.push(["edit repaint", document.querySelector(".reply-composer") !== null]);
+      return true;
+    } },
+    saves: { dueNow: () => { calls.push(["send", document.querySelector(".reply-composer") !== null]); } }
+  });
+  try {
+    toggleReplyComposer("C1");
+    const body = document.querySelector(".reply-composer .cell-editable") as HTMLElement;
+    body.innerHTML = "Reply";
+    postReply("C1");
+    assert.deepEqual(calls, [["edit repaint", false], ["send", false]]);
+  } finally { owner.dispose(); }
+});
+
+test("standalone comment cancellation hides the modal before editing the anchor, as on main", () => {
+  const fake = fixture();
+  const calls: unknown[] = [];
+  const owner = startComments({ ...fake.ports, edits: { ...fake.ports.edits, edit: () => {
+    calls.push(["edit", document.getElementById("comment-modal")?.hidden]); return true;
+  } } });
+  try {
+    openCommentComposer({ id: "C1", rowId: "r1", field: "audioText", quotedText: "Words" });
+    closeCommentComposer(true);
+    assert.deepEqual(calls, [["edit", true]]);
+  } finally { owner.dispose(); }
+});
+
+test("standalone deletion removes reply state before synchronous repaint, as on main", () => {
+  const fake = fixture();
+  const doc = { ...migrateRows({}, fakeMigration().ports), comments: [{ id: "C1", rowId: "r1", field: "audioText", anchorId: "C1", author: "Ann", body: "First", replies: [] }] };
+  const panel = document.getElementById("comments-panel") as HTMLElement;
+  panel.hidden = false; panel.innerHTML = '<div id="comments-list"></div>';
+  const calls: unknown[] = [];
+  const owner = startComments({ ...fake.ports,
+    document: { ...fake.ports.document, current: () => doc },
+    deletion: { ...fake.ports.deletion, armedId: () => "C1" },
+    edits: { ...fake.ports.edits, edit: () => { renderComments(); calls.push(document.querySelector(".reply-composer") !== null); return true; } }
+  });
+  try {
+    toggleReplyComposer("C1");
+    armDeleteComment(document.createElement("button"), "C1");
+    assert.deepEqual(calls, [false]);
+  } finally { owner.dispose(); }
 });
 
 test("disposing cancels composer focus, then remounts once", async () => {

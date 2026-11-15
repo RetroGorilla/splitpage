@@ -1,6 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
+import ts from "typescript";
 import "../../../src/test/_dom.mjs";
 
 const HELPER = "typed draft";
@@ -116,4 +117,46 @@ test("every text box in the b-roll, comments, gallery and tags features saves th
       assert.ok(submitted.has(name), feature + ": " + name + " submits through the typed-draft helper");
     }
   }
+});
+
+function redrawSubmits(text: string, roots: readonly string[]): string[] {
+  const source = ts.createSourceFile("panel.ts", text, ts.ScriptTarget.Latest, true);
+  const functions = new Map<string, ts.FunctionDeclaration>();
+  for (const statement of source.statements) if (ts.isFunctionDeclaration(statement) && statement.name) functions.set(statement.name.text, statement);
+  const visited = new Set<string>(), submits: string[] = [];
+  function walk(node: ts.Node): void {
+    if (ts.isBinaryExpression(node) && node.operatorToken.kind === ts.SyntaxKind.AmpersandAmpersandToken && /!shared\b/.test(node.left.getText(source))) {
+      walk(node.left); return;
+    }
+    if (ts.isIfStatement(node) && /^(?:!shared|standalone)$/.test(node.expression.getText(source))) {
+      if (node.elseStatement) walk(node.elseStatement);
+      return;
+    }
+    if (ts.isCallExpression(node)) {
+      if (ts.isPropertyAccessExpression(node.expression) && ["submit", "retry"].includes(node.expression.name.text)) submits.push(node.getText(source));
+      if (ts.isIdentifier(node.expression)) reach(node.expression.text);
+    }
+    ts.forEachChild(node, walk);
+  }
+  function reach(name: string): void {
+    if (visited.has(name)) return;
+    visited.add(name);
+    const fn = functions.get(name);
+    if (fn?.body) walk(fn.body);
+  }
+  for (const root of roots) reach(root);
+  return submits;
+}
+
+test("shared redraw paths only present drafts and cannot submit a saving box", () => {
+  const redraws: Record<string, readonly string[]> = {
+    broll: ["renderBroll", "renderBrollPage", "runBrollRefresh"],
+    tags: ["renderProduction", "renderGearList"],
+    comments: ["renderComments"]
+  };
+  for (const [feature, roots] of Object.entries(redraws)) {
+    for (const file of sources(feature as Feature)) assert.deepEqual(redrawSubmits(file.text, roots), [], feature + "/" + file.name);
+  }
+  const helper = readFileSync("src/features/common/typed-drafts.ts", "utf8");
+  assert.doesNotMatch(helper, /\bretry\b|readonly save:|draft\.save\(/);
 });

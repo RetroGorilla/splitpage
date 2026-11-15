@@ -1,13 +1,13 @@
 import { escapeHtml } from "../../core/document/text-policy.ts";
 
-export type TypedWrite = "saved" | "kept" | "waits" | "gone";
+export type TypedWrite = "saved" | "kept" | "gone";
 
-export function heldWrite(run: { readonly held: boolean; readonly announced?: true }): TypedWrite {
-  return !run.held ? "saved" : run.announced ? "waits" : "kept";
+export function heldWrite(run: { readonly held: boolean }): TypedWrite {
+  return run.held ? "kept" : "saved";
 }
 
 export function isHeld(wrote: TypedWrite | null): boolean {
-  return wrote === "kept" || wrote === "waits";
+  return wrote === "kept";
 }
 
 export type TypedSave = (text: string, quiet: boolean) => TypedWrite;
@@ -22,17 +22,12 @@ export interface TypedDrafts {
   readonly submit: (box: string, record: string, text: string, save: TypedSave, quiet?: boolean) => TypedWrite;
   readonly draft: (box: string, record: string) => string | null;
   readonly drop: (box: string, record: string) => void;
-  readonly revise: (box: string, record: string, text: string) => void;
-  readonly retry: () => void;
+  readonly revise: (box: string, record: string, text: string, drawn: string) => void;
+  readonly hidden: (rendered: (draft: TypedDraft) => boolean, exists: (draft: TypedDraft) => boolean) => readonly TypedDraft[];
   readonly held: () => readonly TypedDraft[];
   readonly orphans: () => readonly TypedDraft[];
   readonly dismiss: (box: string, record: string) => void;
   readonly clear: () => void;
-}
-
-interface HeldDraft extends TypedDraft {
-  readonly save: TypedSave;
-  readonly waits?: boolean;
 }
 
 const keyOf = (box: string, record: string): string => JSON.stringify([box, record]);
@@ -40,13 +35,13 @@ const keyOf = (box: string, record: string): string => JSON.stringify([box, reco
 const plain = (draft: TypedDraft): TypedDraft => ({ box: draft.box, record: draft.record, text: draft.text });
 
 export function createTypedDrafts(boxes: readonly string[], gone: (draft: TypedDraft) => void): TypedDrafts {
-  const held = new Map<string, HeldDraft>(), orphaned = new Map<string, TypedDraft>();
-  let retrying = false;
-  function settle(draft: HeldDraft, outcome: TypedWrite): TypedWrite {
+  const held = new Map<string, TypedDraft>(), orphaned = new Map<string, TypedDraft>();
+  const submitting = new Set<string>();
+  function settle(draft: TypedDraft, outcome: TypedWrite): TypedWrite {
     const key = keyOf(draft.box, draft.record);
-    if (isHeld(outcome)) { held.set(key, { ...draft, waits: outcome === "waits" }); return outcome; }
+    if (isHeld(outcome)) { held.set(key, draft); return outcome; }
     held.delete(key);
-    if (outcome === "saved") return outcome;
+    if (outcome === "saved") { orphaned.delete(key); return outcome; }
     const text = plain(draft);
     const told = orphaned.has(key);
     orphaned.set(key, text);
@@ -56,31 +51,27 @@ export function createTypedDrafts(boxes: readonly string[], gone: (draft: TypedD
   return {
     submit: (box, record, text, save, quiet = false) => {
       if (!boxes.includes(box)) throw new Error("typed drafts: undeclared box " + box);
-      held.delete(keyOf(box, record));
-      const outer = retrying;
-      retrying = true;
-      try { return settle({ box, record, text, save }, save(text, quiet)); }
-      finally { retrying = outer; }
+      const key = keyOf(box, record);
+      held.delete(key);
+      submitting.add(key);
+      try { return settle({ box, record, text }, save(text, quiet)); }
+      finally { submitting.delete(key); }
     },
     draft: (box, record) => held.get(keyOf(box, record))?.text ?? null,
-    drop: (box, record) => { held.delete(keyOf(box, record)); },
-    revise: (box, record, text) => {
-      const key = keyOf(box, record), draft = held.get(key);
-      if (draft) held.set(key, { ...draft, text });
+    drop: (box, record) => { held.delete(keyOf(box, record)); orphaned.delete(keyOf(box, record)); },
+    revise: (box, record, text, drawn) => {
+      const key = keyOf(box, record);
+      if (submitting.has(key)) return;
+      if (text === drawn) held.delete(key);
+      else held.set(key, { box, record, text });
     },
-    retry: () => {
-      if (retrying) return;
-      retrying = true;
-      try {
-        for (const draft of [...held.values()]) {
-          if (!draft.waits && held.get(keyOf(draft.box, draft.record)) === draft) settle(draft, draft.save(draft.text, true));
-        }
-      }
-      finally { retrying = false; }
+    hidden: (rendered, exists) => {
+      for (const draft of [...held.values()]) if (!exists(draft)) settle(draft, "gone");
+      return [...orphaned.values(), ...[...held.values()].filter(draft => !rendered(draft))];
     },
     held: () => [...held.values()].map(plain),
     orphans: () => [...orphaned.values()],
-    dismiss: (box, record) => { orphaned.delete(keyOf(box, record)); },
+    dismiss: (box, record) => { held.delete(keyOf(box, record)); orphaned.delete(keyOf(box, record)); },
     clear: () => { held.clear(); orphaned.clear(); }
   };
 }

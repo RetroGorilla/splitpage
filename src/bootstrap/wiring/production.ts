@@ -100,7 +100,7 @@ export function mountTagPanelsFeature(): TagPanelMount {
         renaming: () => portView.tagRenamingKey(),
         setAddingPerson: portView.setTagAddingPerson,
         setTagOwner: (key, value) => tagPanelCommands.setTagOwner(key as string, value),
-        setTagNotes: (key, value) => tagPanelCommands.setTagNotes(key as string, value),
+        setTagNotes: (key, value, resubmit) => tagPanelCommands.setTagNotes(key as string, value, resubmit),
         queueAutoSave: portSaves.dueNow,
         sessionShared: sharedSession
       }
