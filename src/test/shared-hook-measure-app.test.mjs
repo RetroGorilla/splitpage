@@ -225,7 +225,7 @@ function probed(run) {
     for (const entry of restore.reverse()) entry.undo();
   }
   const names = recorded.map(entry => entry.name.slice(8));
-  try { return { parts: markParts(recorded), names }; } catch (error) { throw new Error(error.message + " in " + names.join(" "), { cause: error }); }
+  try { return { parts: markParts(recorded), names }; } catch (error) { assert.fail(error.message + " in " + names.join(" ")); }
 }
 
 const key = (element, name, options = {}) => element.dispatchEvent(new window.KeyboardEvent(name, { bubbles: true, cancelable: true, ...options }));
