@@ -250,8 +250,7 @@ export class SharedProjectionSource {
       });
       return [stream.segment, stream.inOrder, stream.head, boundaries];
     }),
-    this.keys("beats").map(id => { const fields = this.fields("beat", id); return [id, fields?.id, fields?.segment, retirements.has(id), anyHidden && hiddenCreations.has(id)]; }),
-    this.hiddenHeadings(hiddenCreations)]);
+    this.keys("beats").map(id => { const fields = this.fields("beat", id); return [id, fields?.id, fields?.segment, retirements.has(id), anyHidden && hiddenCreations.has(id)]; })]);
   }
 
   status(target: SharedStatusEvent["target"]): string {

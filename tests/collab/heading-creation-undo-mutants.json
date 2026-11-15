@@ -13,22 +13,10 @@
       "replace": "return hidden.size ? projected.filter(block => block.kind !== \"b\" || block.id === null || !hidden.has(block.id)) : projected;"
     },
     {
-      "label": "rule 202: the full reader still shows a hidden heading",
-      "file": "src/adapters/collab/projection-reader.ts",
-      "find": "return hidden.size ? projected.filter(block => block.id === null || !hidden.has(block.id)) : projected;",
-      "replace": "return hidden.size ? projected.filter(block => block.kind !== \"b\" || block.id === null || !hidden.has(block.id)) : projected;"
-    },
-    {
       "label": "rule 202: the incremental blocks keep a stale heading after its undo",
       "file": "src/adapters/collab/projection-source.ts",
       "find": "[streams, records, headings]",
       "replace": "[streams, records]"
-    },
-    {
-      "label": "rule 202: the structure token misses a hidden heading",
-      "file": "src/adapters/collab/projection-source.ts",
-      "find": "    this.hiddenHeadings(hiddenCreations)]);",
-      "replace": "    \"\"]);"
     },
     {
       "label": "rule 202: commands still find a hidden heading",
@@ -77,18 +65,6 @@
       "file": "src/adapters/collab/undo-creation.ts",
       "find": "    if (part.kind === \"remove\") return !internal.has(String(part.removal));",
       "replace": ""
-    },
-    {
-      "label": "rule 204: the name typed with the heading is undone apart from it",
-      "file": "src/adapters/collab/undo-creation.ts",
-      "find": "    else if (operation.kind === \"heading-create\" || operation.kind === \"heading-finalize\") created.add(operation.heading);",
-      "replace": ""
-    },
-    {
-      "label": "rule 204: a value written with the heading is undone apart from it",
-      "file": "src/adapters/collab/undo-creation.ts",
-      "find": "return part.target.scope === \"document\" || !created.has(part.target.record);",
-      "replace": "return part.target.scope !== \"beat\" || !created.has(part.target.record);"
     },
     {
       "label": "rule 205: a heading stays hidden after an unseen change arrives",

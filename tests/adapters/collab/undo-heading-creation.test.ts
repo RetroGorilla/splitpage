@@ -154,6 +154,25 @@ for (const change of under) for (const order of ORDERS) for (const seen of [true
   } finally { h.close(); }
 });
 
+for (const order of ORDERS) for (const seen of [true, false]) test(`rule 206: a heading made inside a segment, over a beat a split put there, ends at that beat: typing in the beat leaves the undo, seen=${seen}: ${order}`, () => {
+  const h = start(order);
+  try {
+    h.send([{ kind: "split", id: "cut", by: "Alice", target: { owner: "R1", segment: "b:R1", field: "audioText" },
+      at: { left: flowBaseReference("R1", "audioText", 0), right: flowBaseReference("R1", "audioText", 1), affinity: "before" }, observed: [], boundary: "N2", beat: "N2", fields: {} }], h.a);
+    h.flush();
+    const before = projectSharedDocumentWithRecovery(h.a), beat = before.document.rows.find(row => row.audioText === "b")?.id; assert.ok(typeof beat === "string");
+    const made = h.scene(beat);
+    assert.equal(made.segment, "b:R1");
+    h.send([{ kind: "text-insert", id: "bob_type", by: "Bob", target: { owner: beat, segment: "b:R1", field: "audioText" },
+      at: { left: flowBaseReference(beat, "audioText", 0), right: null, affinity: "after" }, content: [{ value: "Q", marks: [] }] }]);
+    if (seen) h.flush();
+    assert.deepEqual(h.owner.undo(), { ok: true, effective: true, label: "add-section", selection: null }); h.flush();
+    const now = projectSharedDocumentWithRecovery(h.a);
+    assert.deepEqual([now.document.rows.map(row => row.audioText), names(now), now.recovery], [["x", "a", "bQ", "c"], ["Open"], []]);
+    h.check(now);
+  } finally { h.close(); }
+});
+
 for (const order of ORDERS) test(`rule 203: the creator's own rename is undone first and leaves the creation undoable: ${order}`, () => {
   const h = start(order);
   try {

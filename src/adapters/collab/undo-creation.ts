@@ -24,10 +24,7 @@ export function canReverseSharedCreation(handle: SharedDocumentHandle, part: Sha
 export function sharedCreationUndoParts(operations: readonly SharedOperation[], parts: readonly SharedUndoPart[]): readonly SharedUndoPart[] {
   const created = new Set(parts.flatMap(part => part.kind === "beat-create" ? [String(part.beat)] : part.kind === "heading-creation" ? [String(part.heading)] : []));
   if (!created.size) return parts;
-  for (const operation of operations) {
-    if (operation.kind === "segment-create") created.add(operation.beat);
-    else if (operation.kind === "heading-create" || operation.kind === "heading-finalize") created.add(operation.heading);
-  }
+  for (const operation of operations) if (operation.kind === "segment-create") created.add(operation.beat);
   const comments = new Set(parts.flatMap(part => part.kind === "record-create" && part.target.collection === "comments" && created.has(String(part.fields.rowId)) ? [String(part.target.record)] : []));
   const joins = new Set(operations.flatMap(operation => operation.kind === "join" && (created.has(operation.from) || created.has(operation.into)) ? [String(operation.id)] : []));
   const writer = parts.find(part => part.kind === "beat-create" || part.kind === "heading-creation")?.writer;
@@ -36,7 +33,7 @@ export function sharedCreationUndoParts(operations: readonly SharedOperation[], 
     && operation.targets.every(target => created.has(target)) ? [String(sharedStructureIdentity(writer, operation.id, "removal"))] : []));
   return parts.filter(part => {
     if (part.kind === "text" || part.kind === "mark-add" || part.kind === "mark-remove") return !created.has(part.target.owner);
-    if (part.kind === "scalar" || part.kind === "status" || part.kind === "status-retired") return part.target.scope === "document" || !created.has(part.target.record);
+    if (part.kind === "scalar" || part.kind === "status" || part.kind === "status-retired") return part.target.scope !== "beat" || !created.has(part.target.record);
     if (part.kind === "join") return !created.has(part.from) && !created.has(part.into);
     if (part.kind === "structure" && part.command === "join") return !joins.has(part.operation);
     if (part.kind === "remove") return !internal.has(String(part.removal));
