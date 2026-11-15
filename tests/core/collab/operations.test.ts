@@ -9,7 +9,8 @@ const validators = [readers.readTextInsert, readers.readTextDelete, readers.read
   readers.readSegmentMove, readers.readHeadingCreate, readers.readHeadingFinalize, readers.readHeadingRemove,
   readers.readRecordCreate, readers.readRecordSet, readers.readRecordDelete, readers.readScalarSet, readers.readSharedStatusEvent, readers.readBeatSplitBefore,
   readers.readTextRestore, readers.readMarkRetract, readers.readStatusRetire, readers.readRecoveryDiscard,
-  (raw: unknown) => readers.readSegmentRetire(raw, "segment-retire"), (raw: unknown) => readers.readSegmentRetire(raw, "segment-restore")];
+  (raw: unknown) => readers.readSegmentRetire(raw, "segment-retire"), (raw: unknown) => readers.readSegmentRetire(raw, "segment-restore"),
+  (raw: unknown) => readers.readHeadingRetire(raw, "heading-retire"), (raw: unknown) => readers.readHeadingRetire(raw, "heading-restore")];
 
 for (const { fixture, operation } of operationExamples) {
   test(`${fixture}: accepts literal ${operation.kind} intent without positional indices`, () => {

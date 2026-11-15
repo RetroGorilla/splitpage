@@ -112,7 +112,9 @@ test("timing marks: after a projection failure, the failure delivery is a projec
       assert.ok(listeners.length === 1 && listeners[0] && receives.length === 1 && receives[0] && inside(receives[0], listeners[0]), "the failure is delivered inside a listener span");
       const [failed, retried] = assemblies;
       assert.ok(failed && retried && !inside(failed, listeners[0]) && inside(retried, receives[0]), "the retry's assembly runs inside the session receive");
-      for (const span of found) if (span !== live) assert.ok(inside(span, live) || span.seam === "trial", span.seam + " inside the live apply");
+      const [receive] = of(found, "receive");
+      assert.ok(receive && inside(live, receive), "the live apply runs inside the received update's outer span");
+      for (const span of found) if (span !== live && span !== receive) assert.ok(inside(span, live) || span.seam === "trial", span.seam + " inside the live apply");
     } finally { stop(); replica.dispose(); }
   });
 });

@@ -8,6 +8,7 @@ import type { SharedSceneCreation } from "../../application/commands/shared-scen
 import { documentReader } from "./ports/document.ts";
 import { edits } from "./ports/editing.ts";
 import { notices } from "./ports/effects.ts";
+import { sharedStructureCommands } from "./ports/shared-commands.ts";
 import { ids } from "./ports/identity.ts";
 import { focusMemory, rowDrag, sceneView } from "./editor-owners.ts";
 import { stopDragScroll, updateDragScroll } from "./rows.ts";
@@ -16,7 +17,7 @@ import { breakUndoGroup } from "./undo.ts";
 export function mountSceneHeaders(sharedNames?: BufferedInputPorts, sharedScenes?: SharedSceneCreation): { confirmMove: (rowId: string, dir: -1 | 1) => boolean; dispose: () => void } {
   const controls = mountSceneControls(window, {
     document: documentReader, edits, scenes: sceneView(), focus: focusMemory(),
-    drag: rowDrag(), ids, notices, scroll: updateDragScroll, stopScroll: stopDragScroll,
+    drag: rowDrag(), ids, notices, scroll: updateDragScroll, stopScroll: stopDragScroll, structure: sharedStructureCommands,
     ...sharedNames ? { sharedNames } : {}, ...sharedScenes ? { sharedScenes } : {}
   });
   const boundary = createSceneBoundaryRemoval({

@@ -13,7 +13,7 @@ import { deriveDocumentNumbering } from "../../../src/core/document/numbering.ts
 import { sceneGroups } from "../../../src/core/document/scenes.ts";
 import { registerSharedHeadingHandlers } from "../../../src/adapters/collab/heading-executor.ts";
 import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/removal-executor.ts";
-import { fakeNotices, fakeWriterBufferEffects } from "../fakes.ts";
+import { fakeNotices, fakeStandaloneStructure, fakeWriterBufferEffects } from "../fakes.ts";
 import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
 import { edgeInput } from "../edge-input.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
@@ -68,6 +68,7 @@ export function sceneCreationPages() {
       edits: { allowed: () => true, run: command => { standalone.push(command.name); return { kind: "noop" }; } },
       scenes: createSceneView(), focus: { focusedRow: () => {} }, drag: { dragging: () => null, end: () => {} },
       ids: { id: () => { standalone.push("id"); return "created"; } }, notices: fakeNotices().notices, scroll: () => {}, stopScroll: () => {},
+      structure: fakeStandaloneStructure(),
       sharedScenes: sharedSceneCreation(handle, a.session, author),
       sharedNames: {
         field: surface => createBufferedField(shared.bufferedText, surface), painted: createPaintedBeats(shared.paintedText), report: effects.report,

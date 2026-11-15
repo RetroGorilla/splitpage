@@ -11,7 +11,7 @@ import { createSceneView } from "../../../src/application/editing/scene-view.ts"
 import { deriveDocumentNumbering } from "../../../src/core/document/numbering.ts";
 import { sceneGroups } from "../../../src/core/document/scenes.ts";
 import type { DocumentView } from "../../../src/application/session/document-session.ts";
-import { fakeNotices, fakeWriterBufferEffects } from "../fakes.ts";
+import { fakeNotices, fakeStandaloneStructure, fakeWriterBufferEffects } from "../fakes.ts";
 import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
 import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
 import { sharedBufferedTarget } from "../../../src/adapters/collab/buffer.ts";
@@ -65,7 +65,7 @@ export function sharedRename(name = "Scene", options: {
     document: { current, numbering: () => deriveDocumentNumbering(current() ?? { rows: [] }) },
     edits: { allowed: () => true, run: command => { commands.push(command.name); return { kind: "noop" }; } },
     scenes: createSceneView(), focus: { focusedRow: () => {} }, drag: { dragging: () => null, end: () => {} },
-    ids: { id: () => "created" }, notices: fakeNotices().notices, scroll: () => {}, stopScroll: () => {},
+    ids: { id: () => "created" }, notices: fakeNotices().notices, scroll: () => {}, stopScroll: () => {}, structure: fakeStandaloneStructure(),
     ...options.creation === false ? {} : { sharedScenes: sharedSceneCreation(h.a, a.session, () => ({ id: "create_scene", by: "Alice" })) },
     sharedNames: {
       history: sharedBufferedInputHistory(h.a, a.session, owner),

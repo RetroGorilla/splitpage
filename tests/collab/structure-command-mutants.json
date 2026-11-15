@@ -10,8 +10,8 @@
     {
       "label": "a split drops its new beat stamp",
       "file": "src/application/commands/split-join.ts",
-      "find": "trace.split(row.id, cut.from, { id: createdId, ...sharedCreatedBeat(ports) });",
-      "replace": "trace.split(row.id, cut.from, { id: createdId, visualText: \"\", imageRef: null, status: \"todo\" });"
+      "find": "{ id: createdId, ...sharedCreatedBeat(ports) });",
+      "replace": "{ id: createdId, visualText: \"\", imageRef: null, status: \"todo\" });"
     },
     {
       "label": "a join drops its retained beat stamp",

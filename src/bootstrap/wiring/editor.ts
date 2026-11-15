@@ -82,7 +82,7 @@ import {
 } from "../../features/editing/draft-edit.ts";
 import {
   addRow,
-  addRowAndFocus,
+  addRowAtCaret,
   armDelete,
   capturePastePlace,
   clearDropMarkers,
@@ -143,6 +143,9 @@ import { replayedSteps } from "../../application/editing/undo/replayed-steps.ts"
 import { connectWriter } from "./writer.ts";
 import { mountSceneHeaders } from "./scene-headers.ts";
 import { sceneView } from "./editor-owners.ts";
+import { timingMarks } from "../../../shared/timing-marks.ts";
+
+declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 function inactiveWriter(): void {}
 function skipWriterUndo(): boolean { return false; }
@@ -534,11 +537,16 @@ function notAttachableText(names: readonly string[]): string {
 export function mountRowsEditingFeature(sharedSplit = false): ReturnType<typeof mountRowsEditor> {
   return rowsEditor.replace(function () {
     const ports = sharedSplit ? { ...rowsEditorPorts, keydown: (event: KeyboardEvent) => {
-      if (!event.isComposing && event.keyCode !== 229) onRootKeydown(event);
+      if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:start");
+      try { if (!event.isComposing && event.keyCode !== 229) onRootKeydown(event); }
+      finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:end"); }
     }, input: (event: Event) => {
-      const cell = event.target instanceof Element ? event.target.closest(".cell-editable") : null;
-      if (cell && isScriptCell(cell)) afterScriptCellChange(cell);
-      else onRootInput(event);
+      if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:start");
+      try {
+        const cell = event.target instanceof Element ? event.target.closest(".cell-editable") : null;
+        if (cell && isScriptCell(cell)) afterScriptCellChange(cell);
+        else onRootInput(event);
+      } finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:end"); }
     } } : rowsEditorPorts;
     return mountRowsEditor({ window: window, rows: document.getElementById("rows") as Element, addBar: document.querySelector(".add-row-bar"), ports });
   });
@@ -617,14 +625,17 @@ export function onRootInput(e: RootInput): void {
 }
 
 function afterScriptCellChange(cellEl: Element): void {
-  keepCaretInView(cellEl);
-  scheduleProductionRefresh();
-  scheduleBrollRefresh();
-  scheduleWriterStats();
-  focusMemory().unmutePrompt();
-  scheduleUntaggedScan();
-  updateTagGhost(cellEl);
-  currentPlainTags()?.refresh();
+  if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:cell-refresh:start");
+  try {
+    keepCaretInView(cellEl);
+    scheduleProductionRefresh();
+    scheduleBrollRefresh();
+    scheduleWriterStats();
+    focusMemory().unmutePrompt();
+    scheduleUntaggedScan();
+    updateTagGhost(cellEl);
+    currentPlainTags()?.refresh();
+  } finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:cell-refresh:end"); }
 }
 
 const composition = owned<ReturnType<typeof mountComposition>>();
@@ -856,7 +867,7 @@ export function refuseSharedSplitNative(event: Event, cell: Element | null): boo
   if (event.type !== "keydown") return false;
   const key = event as KeyboardEvent, mod = key.ctrlKey || key.metaKey;
   if (key.isComposing || key.keyCode === 229) return false;
-  if (key.key === "Enter" || mod && /^(b|i|u)$/i.test(key.key)
+  if (key.key === "Enter" && !mod && !key.altKey || mod && /^(b|i|u)$/i.test(key.key)
     || key.altKey && !mod && (key.key === "ArrowUp" || key.key === "ArrowDown")) return true;
   return key.key === "Tab" && (!!currentWhoList()?.isOpen(cell) || !!currentPlainTags()?.isOpen(cell)
     || shownTagGhost()?.cellEl === cell || shownUntaggedSuggestion()?.cellEl === cell)
@@ -913,7 +924,8 @@ export function onRootKeydown(e: KeyboardEvent): void {
   if (e.key === "Enter" && e.altKey && !mod && isScriptCell(cellEl)) {
     e.preventDefault();
     hideTagGhost();
-    cellEditing().sync(cellEl);
+    // why: in a shared session the command's admission settles the cell, and a second settle warns twice
+    if (!sharedSessionParts()) cellEditing().sync(cellEl);
     splitCellField(cellEl);
     return;
   }
@@ -934,8 +946,8 @@ export function onRootKeydown(e: KeyboardEvent): void {
   if (e.key === "Enter" && mod && isScriptCell(cellEl)) {
     e.preventDefault();
     hideTagGhost();
-    cellEditing().sync(cellEl);
-    addRowAndFocus(cellEl.getAttribute("data-id"), cellEl.getAttribute("data-field"));
+    if (!sharedSessionParts()) cellEditing().sync(cellEl);
+    addRowAtCaret(cellEl);
     return;
   }
   if (e.key === "Enter") {

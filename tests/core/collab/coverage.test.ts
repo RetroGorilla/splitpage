@@ -44,16 +44,16 @@ test("Stage 0: 24 flow operations retain the 22 known, one surface-built and one
   assert.deepEqual(flowOperationCoverage.filter(row => row[1] === "known-unused").map(row => row[0]), ["startBeat", "moveBeats", "replaceAll"]);
 });
 
-test("the six structure command builders await their C7 ports with their implemented lists and named visual refusal", () => {
+test("five structure command builders serve through their C7 callers; join has no caller and awaits one", () => {
   assert.deepEqual(sharedBuilderRefusalCoverage.map(row => row.refusal), ["visual-split-in-shared-session"]);
   const names = ["addBeatCommand", "deleteBeatCommand", "splitBeatCommand", "joinBeatsCommand", "removeBeatsCommand", "removeSceneCommand"];
   assert.deepEqual(builderOperationCoverage.filter(row => names.includes(row[0])).map(row => [row[0], row.shared, row[2]]), [
-    ["addBeatCommand", "serve pending composition", "segment-create"],
-    ["deleteBeatCommand", "serve pending composition", "remove,scalar"],
-    ["splitBeatCommand", "serve pending composition", "text-delete,split,scalar | visual-split-in-shared-session"],
+    ["addBeatCommand", "serve", "segment-create"],
+    ["deleteBeatCommand", "serve", "remove,scalar"],
+    ["splitBeatCommand", "serve", "text-delete,split,scalar | visual-split-in-shared-session"],
     ["joinBeatsCommand", "serve pending composition", "join,scalar"],
-    ["removeBeatsCommand", "serve pending composition", "remove,scalar"],
-    ["removeSceneCommand", "serve pending composition", "heading-remove,scalar"]
+    ["removeBeatsCommand", "serve", "remove,scalar"],
+    ["removeSceneCommand", "serve", "heading-remove,scalar"]
   ]);
 });
 

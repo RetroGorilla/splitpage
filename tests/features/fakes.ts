@@ -25,6 +25,16 @@ import type { SharedCommandGuard } from "../../src/application/session/document-
 export function fakeSharedCommands(): SharedCommandGuard {
   return { refuseUnsupported: () => false };
 }
+const standaloneRefusal = (): never => { throw new Error("a standalone caller reported a shared refusal"); };
+export function fakeStandaloneStructure(): SharedStructureCommands {
+  return { ports: () => null, refused: standaloneRefusal, settle: standaloneRefusal, settleSelection: standaloneRefusal };
+}
+export function fakeStandaloneValues(): SharedValueCommands {
+  return { ports: () => null, refused: standaloneRefusal };
+}
+import type { SharedStructureCommands } from "../../src/application/commands/shared-structure.ts";
+import type { SharedAdmissionAnswer } from "../../src/application/session/shared-session.ts";
+import type { SharedValueCommands } from "../../src/application/commands/shared-values.ts";
 import type { TextServices } from "../../src/application/text/services.ts";
 import type { PrompterFeaturePorts } from "../../src/features/prompter/ports.ts";
 import type { FindPorts } from "../../src/features/find/ports.ts";
@@ -98,7 +108,7 @@ export function fakePdfPrinter() {
 }
 
 export function fakeEmptyScriptPorts(initial: DocumentView) {
-  const reader = fakeDocument(initial), notices = fakeNotices(), commands = new Set<() => boolean>();
+  const reader = fakeDocument(initial), notices = fakeNotices(), commands = new Set<() => SharedAdmissionAnswer>();
   const created: string[] = [], placed: { rowId: string; offset: number }[] = [];
   const state = { epoch: 1, allowed: true, placeable: true, held: 0, holdRefusal: null as string | null, createRefusal: null as string | null };
   const ports: EmptyScriptPorts = {

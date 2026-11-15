@@ -1,12 +1,13 @@
 import { rowIndexOf } from "../../core/document/rows.ts";
 import { safeId } from "../../core/document/text-policy.ts";
 import { addBeatCommand, deleteBeatCommand, isBlankBeat, swapBeatsCommand } from "../../application/commands/rows.ts";
-import { splitBeatCommand, textCut } from "../../application/commands/split-join.ts";
+import { splitBeatCommand, textCut, unitsCut } from "../../application/commands/split-join.ts";
 import { armDeleteButton, disarmDeleteButton } from "./delete-button.ts";
 
 import type { BeatPorts, Beats } from "./ports.ts";
 import type { IdSource } from "../../core/document/ports.ts";
 import type { Command, DocumentView } from "../../application/session/document-session.ts";
+import type { CreatedBeatCommand } from "../../application/commands/shared-structure.ts";
 
 interface BeatDragScroll {
  dir: number;
@@ -38,8 +39,21 @@ function runRowCommand(command: Command) {
   return outcome.kind === "applied" || outcome.kind === "committed";
 }
 
+function runSharedCommand(command: Command) {
+  const outcome = (ports as BeatPortUse).edits.run(command);
+  if (outcome.kind === "failed") throw outcome.error;
+  if (outcome.kind === "rejected") (ports as BeatPortUse).shared.refused(outcome);
+  return outcome.kind === "applied" || outcome.kind === "committed";
+}
+
+// why: the executor mints the stored id of a beat created in a shared session; the command reports it
+function sharedCreated(command: CreatedBeatCommand) {
+  return runSharedCommand(command) ? command.created() : null;
+}
+
 function addRow(afterId: string | null | undefined) {
-  const createdId = (ports as BeatPortUse).ids.id("r");
+  const createdId = (ports as BeatPortUse).ids.id("r"), shared = (ports as BeatPortUse).shared.ports();
+  if (shared) return sharedCreated(addBeatCommand(afterId || null, createdId, (ports as BeatPortUse).edits.stamps, shared));
   if (!runRowCommand(addBeatCommand(afterId || null, createdId, (ports as BeatPortUse).edits.stamps))) return null;
   return createdId;
 }
@@ -59,15 +73,43 @@ function addRowAndFocus(afterId: string | null | undefined, field: string | null
   cell.scrollIntoView({ behavior: "smooth", block: "center" });
 }
 
+function seenSelection(id: string, field: string, cellEl: Element) {
+  return () => (ports as BeatPortUse).selection.of(document.querySelector(rowCellSelector(id, field)) ?? cellEl);
+}
+
+function addRowAtCaret(cellEl: Element) {
+  const id = cellEl.getAttribute("data-id"), field = cellEl.getAttribute("data-field");
+  if (!id || field !== "audioText" || !(ports as BeatPortUse).shared.ports()) { addRowAndFocus(id, field); return; }
+  const settled = (ports as BeatPortUse).shared.settleSelection(id, seenSelection(id, field, cellEl));
+  if (settled) addRowAndFocus(settled.rowId, field);
+}
+
+function splitSharedNarration(id: string, cellEl: Element, shared: NonNullable<ReturnType<BeatPorts["shared"]["ports"]>>) {
+  const settled = (ports as BeatPortUse).shared.settleSelection(id, seenSelection(id, "audioText", cellEl));
+  if (!settled) return null;
+  (ports as BeatPortUse).undo.breakCoalescing();
+  const createdId = (ports as BeatPortUse).ids.id("r");
+  const minted = sharedCreated(splitBeatCommand(settled.rowId, "audioText", unitsCut(settled.removed, settled.at), createdId, (ports as BeatPortUse).edits.text, shared));
+  return minted ? { id: minted, field: "audioText" } : null;
+}
+
 function splitField(cellEl: Element) {
   const id = cellEl.getAttribute("data-id");
   const field = cellEl.getAttribute("data-field");
   if ((ports as BeatPortUse).document.read(function (doc) { return rowIndexOf(doc, id); }) === -1 || (field !== "visualText" && field !== "audioText")) return null;
-  (ports as BeatPortUse).cells.sync(cellEl);
-  const sel = (ports as BeatPortUse).selection.of(cellEl);
+  const shared = (ports as BeatPortUse).shared.ports();
+  if (shared && field === "audioText" && id) return splitSharedNarration(id, cellEl, shared);
+  if (!shared) (ports as BeatPortUse).cells.sync(cellEl);
+  // why: a shared visual split is refused by name, so no offset it reads reaches a write
+  else if (!(ports as BeatPortUse).shared.settle()) return null;
+  const sel = (ports as BeatPortUse).selection.of(shared ? document.querySelector(rowCellSelector(id, field)) ?? cellEl : cellEl);
   if (!sel) return null;
   (ports as BeatPortUse).undo.breakCoalescing();
   const createdId = (ports as BeatPortUse).ids.id("r");
+  if (shared) {
+    const minted = sharedCreated((splitBeatCommand as BeatSplitCommand)(id, field, textCut(sel.from, sel.to), createdId, (ports as BeatPortUse).edits.text, shared));
+    return minted ? { id: minted, field: field } : null;
+  }
   const outcome = (ports as BeatPortUse).edits.run((splitBeatCommand as BeatSplitCommand)(id, field, textCut(sel.from, sel.to), createdId, (ports as BeatPortUse).edits.text));
   if (outcome.kind === "failed") throw outcome.error;
   return outcome.kind === "applied" || outcome.kind === "committed" ? { id: createdId, field: field } : null;
@@ -161,7 +203,9 @@ function updateDragScroll(clientX: number, clientY: number) {
 }
 
 function deleteRow(id: string) {
-  runRowCommand(deleteBeatCommand(id));
+  const shared = (ports as BeatPortUse).shared.ports();
+  if (shared) runSharedCommand(deleteBeatCommand(id, shared));
+  else runRowCommand(deleteBeatCommand(id));
 }
 
 function swapAdjacent(id: string | null, dir: number) {
@@ -172,10 +216,24 @@ function moveRow(id: string, dir: number) {
   swapAdjacent(id, dir);
 }
 
-function armDelete(btn: Element, id: string) {
-  const idx = (ports as BeatPortUse).document.read(function (doc) { return rowIndexOf(doc, id); });
-  const rowEl = document.querySelector<HTMLElement>('#rows .row[data-id="' + safeId(id, "r", (ports as BeatPortUse).ids as IdSource) + '"]');
-  if (rowEl) rowEl.querySelectorAll(".cell-editable").forEach(function (cellEl) { (ports as BeatPortUse).cells.sync(cellEl); });
+function rowElement(id: string) {
+  return document.querySelector<HTMLElement>('#rows .row[data-id="' + safeId(id, "r", (ports as BeatPortUse).ids as IdSource) + '"]');
+}
+
+function armDelete(given: Element, id: string) {
+  let btn = given, idx: number;
+  if (!(ports as BeatPortUse).shared.ports()) {
+    idx = (ports as BeatPortUse).document.read(function (doc) { return rowIndexOf(doc, id); });
+    const rowEl = rowElement(id);
+    if (rowEl) rowEl.querySelectorAll(".cell-editable").forEach(function (cellEl) { (ports as BeatPortUse).cells.sync(cellEl); });
+  } else {
+    // why: one admission settles every cell and drains held updates, which can redraw the row, so all is read after it
+    if (!(ports as BeatPortUse).shared.settle()) return;
+    idx = (ports as BeatPortUse).document.read(function (doc) { return rowIndexOf(doc, id); });
+    const live = given.isConnected ? given : rowElement(id)?.querySelector('[data-action="delete-row"]');
+    if (idx === -1 || !live) return;
+    btn = live;
+  }
   const doc = (ports as BeatPortUse).document.current() as BeatDocument;
   if (idx !== -1 && isBlankBeat(doc, doc.rows[idx], (ports as BeatPortUse).text)) {
     (ports as BeatPortUse).deletes.disarm("row");
@@ -198,6 +256,7 @@ export function startBeatRows(next: BeatPorts): Beats {
   return {
     addRow: addRow,
     addRowAndFocus: addRowAndFocus,
+    addRowAtCaret: addRowAtCaret,
     splitField: splitField,
     splitCellField: splitCellField,
     focusField: focusField,

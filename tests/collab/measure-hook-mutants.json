@@ -31,7 +31,7 @@
     {
       "label": "the trial is not marked",
       "file": "src/adapters/collab/document.ts",
-      "find": "  if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:trial:start\");\n",
+      "find": "    if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:trial:start\");\n",
       "replace": "",
       "tests": ["src/test/shared-hook-measure-app.test.mjs"]
     },
@@ -52,8 +52,8 @@
     {
       "label": "an open-gate live apply spans the updates its frame drains",
       "file": "src/adapters/collab/document.ts",
-      "find": "  else transactRemoteCollabState(state, () => Y.applyUpdate(state.doc, update, \"remote\"));",
-      "replace": "  else { if (timingMarks.marksOn) performance.mark(\"measure:live-apply:start\"); try { transactCollabState(state, \"remote\", () => Y.applyUpdate(state.doc, update, \"remote\")); } finally { if (timingMarks.marksOn) performance.mark(\"measure:live-apply:end\"); } }",
+      "find": "    } else transactRemoteCollabState(state, () => Y.applyUpdate(state.doc, update, \"remote\"));",
+      "replace": "    } else { if (timingMarks.marksOn) performance.mark(\"measure:live-apply:start\"); try { transactCollabState(state, \"remote\", () => Y.applyUpdate(state.doc, update, \"remote\")); } finally { if (timingMarks.marksOn) performance.mark(\"measure:live-apply:end\"); } }",
       "tests": ["tests/adapters/collab/timing-marks.test.ts"]
     },
     {
@@ -125,6 +125,132 @@
       "find": "duration - span.nested;",
       "replace": "duration;",
       "tests": ["tests/collab/measure/mark-parts.test.mjs", "src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "the held copy of a queued update is not marked",
+      "file": "src/adapters/collab/document.ts",
+      "find": "      if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:queue:start\");\n      try { gate.held.push(Uint8Array.from(update)); gate.heldBytes += update.byteLength; }\n      finally { if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:queue:end\"); }\n",
+      "replace": "      gate.held.push(Uint8Array.from(update)); gate.heldBytes += update.byteLength;\n",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "the held copy is marked after the copy is made",
+      "file": "src/adapters/collab/document.ts",
+      "find": "      if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:queue:start\");\n      try { gate.held.push(Uint8Array.from(update)); gate.heldBytes += update.byteLength; }",
+      "replace": "      const copy = Uint8Array.from(update);\n      if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:queue:start\");\n      try { gate.held.push(copy); gate.heldBytes += update.byteLength; }",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "the cell refresh after shared Split typing is not marked",
+      "file": "src/bootstrap/wiring/editor.ts",
+      "find": "  if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:cell-refresh:start\");\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "the cell refresh counts as input instead of rendering",
+      "file": "tests/collab/measure/mark-parts.mjs",
+      "find": "  rendering: Object.freeze([\"render\", \"cell-refresh\"]),\n  input: Object.freeze([\"input-handler\", \"input-command\", \"input-write\"])",
+      "replace": "  rendering: Object.freeze([\"render\"]),\n  input: Object.freeze([\"input-handler\", \"input-command\", \"input-write\", \"cell-refresh\"])",
+      "tests": ["tests/collab/measure/mark-parts.test.mjs"]
+    },
+    {
+      "label": "the shared Split input handler is not marked",
+      "file": "src/bootstrap/wiring/editor.ts",
+      "find": "      if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:input-handler:start\");\n      try {\n        const cell = event.target instanceof Element ? event.target.closest(\".cell-editable\") : null;\n",
+      "replace": "      try {\n        const cell = event.target instanceof Element ? event.target.closest(\".cell-editable\") : null;\n",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "a Split command's capture, settle and drain run outside the command span",
+      "file": "src/bootstrap/wiring/ports/shared-commands.ts",
+      "find": "function settleSelection(rowId: string, read: SelectionRead): SharedSettledSelection | null {\n  if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:input-command:start\");\n  try { return settledSelection(rowId, read); }\n  finally { if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:input-command:end\"); }\n",
+      "replace": "function settleSelection(rowId: string, read: SelectionRead): SharedSettledSelection | null {\n  return settledSelection(rowId, read);\n",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "a Split command's settle is not marked",
+      "file": "src/bootstrap/wiring/ports/shared-commands.ts",
+      "find": "function settle(): boolean {\n  if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:input-command:start\");\n",
+      "replace": "function settle(): boolean {\n",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "the event span opens on bubbling, after the handlers",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "  for (const type of MEASURED_EVENTS) window.addEventListener(type, opened, true);",
+      "replace": "  for (const type of MEASURED_EVENTS) window.addEventListener(type, opened);",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "the event span never closes",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "    window.addEventListener(event.type, closed);",
+      "replace": "    window.addEventListener(event.type, closed, true);",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "a nested event of the same type closes the outer event span",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "const closed = (seen: Event): void => { if (seen === event) close(); };",
+      "replace": "const closed = (seen: Event): void => { if (seen) close(); };",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "a stopped event never closes its span",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "      Object.defineProperty(event, name, { configurable: true, value: () => { stop(); queueMicrotask(close); } });",
+      "replace": "      Object.defineProperty(event, name, { configurable: true, value: () => { stop(); } });",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "a received update has no outer span",
+      "file": "src/adapters/collab/document.ts",
+      "find": "  if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:receive:start\");\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "a received update does unmarked work outside its parts",
+      "file": "src/adapters/collab/document.ts",
+      "find": "    assertSharedIngressAllowed(state);\n",
+      "replace": "    assertSharedIngressAllowed(state); Uint8Array.from(update);\n",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "a drained update has no outer span",
+      "file": "src/adapters/collab/state.ts",
+      "find": "      if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:drain:start\");\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "unattributed time is reported as zero",
+      "file": "tests/collab/measure/mark-parts.mjs",
+      "find": "unattributed: outer - attributed",
+      "replace": "unattributed: 0",
+      "tests": ["tests/collab/measure/mark-parts.test.mjs", "src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "an outer span nested in a part counts as that part's nested time",
+      "file": "tests/collab/measure/mark-parts.mjs",
+      "find": "      if (parent) parent.nested += span.nested;",
+      "replace": "      if (parent) parent.nested += duration;",
+      "tests": ["tests/collab/measure/mark-parts.test.mjs"]
+    },
+    {
+      "label": "a part outside every outer span is accepted",
+      "file": "tests/collab/measure/mark-parts.mjs",
+      "find": "      if (!bounding && !opened) throw new Error(\"Timing mark outside every outer span: \" + name);\n",
+      "replace": "",
+      "tests": ["tests/collab/measure/mark-parts.test.mjs"]
+    },
+    {
+      "label": "nested outer spans each add to the outer total",
+      "file": "tests/collab/measure/mark-parts.mjs",
+      "find": "      if (!opened) outer += duration;",
+      "replace": "      outer += duration;",
+      "tests": ["tests/collab/measure/mark-parts.test.mjs"]
     },
     {
       "label": "the peer splits at the start of the beat",
