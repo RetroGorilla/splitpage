@@ -6,6 +6,12 @@
     "src/test/shared-split-callers-boundaries-app.test.mjs",
     "src/test/shared-split-callers-structure-app.test.mjs",
     "src/test/shared-split-refusals-app.test.mjs",
+    "src/test/shared-split-refusals-drained-app.test.mjs",
+    "src/test/shared-split-refusals-ime-app.test.mjs",
+    "src/test/shared-split-refusals-audio-forward-app.test.mjs",
+    "src/test/shared-split-refusals-audio-reverse-app.test.mjs",
+    "src/test/shared-split-refusals-visual-forward-app.test.mjs",
+    "src/test/shared-split-refusals-visual-reverse-app.test.mjs",
     "tests/features/rows/beats.test.ts"
   ],
   "mutants": [
@@ -456,7 +462,7 @@
       "find": "key.key === \"Enter\" && !mod && !key.altKey ||",
       "replace": "key.key === \"Enter\" && false ||",
       "tests": [
-        "src/test/shared-split-refusals-app.test.mjs"
+        "src/test/shared-split-refusals-audio-forward-app.test.mjs"
       ]
     }
   ]

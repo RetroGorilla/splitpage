@@ -66,7 +66,7 @@ The guard is supplied as a named port only when Split is shared.
 | Unsupported beforeinput: clipboard, drag, line/paragraph, format, history, list and transpose types | The same four states | The same refusal before settling |
 | Enter, Ctrl/Alt+Enter, Alt+Up/Down, Ctrl+B/I/U, active person completion on Tab | The same four states; person completion in visual cells | The same refusal before the legacy key route |
 
-`shared-split-refusals-app.test.mjs` drives 424 literal table rows through the
+The four `shared-split-refusals-{audio,visual}-{forward,reverse}-app.test.mjs` files drive 424 literal table rows through the
 mounted hook, in both columns and both encoded delivery orders. Every public
 standalone undo method is instrumented while each native event runs, and a
 literal inventory pins the legacy key routes and undo access sites so additions
