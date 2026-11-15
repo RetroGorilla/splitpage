@@ -32,6 +32,7 @@ export interface SharedBindings {
   readonly settle: () => string | null;
   readonly leave: () => void;
   readonly abandon?: () => void;
+  readonly drop?: () => void;
 }
 
 export interface SharedSwitchPorts {
@@ -60,7 +61,8 @@ export function joinSharedBindings(first: SharedBindings, second: Pick<SharedBin
     enter: parts => { first.enter(parts); second.enter(parts); },
     settle: () => first.settle(),
     leave: () => { try { second.leave(); } finally { first.leave(); } },
-    abandon: () => { first.abandon?.(); }
+    abandon: () => { first.abandon?.(); },
+    drop: () => { first.drop?.(); }
   };
 }
 
@@ -295,6 +297,8 @@ function dropRunning(now: Running, reason: string): void {
   running = null;
   now.end();
   now.live(false);
+  // why: a dropped session releases every surface first, so the bindings tear down whatever the surfaces held
+  faults.attempt(() => { ports.bindings.drop?.(); });
   faults.attempt(() => { ports.bindings.leave(); });
   faults.attempt(now.stopRoute);
   faults.attempt(() => { now.replica.dispose(); });

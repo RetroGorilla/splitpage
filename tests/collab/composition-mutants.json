@@ -483,11 +483,11 @@
       "tests": ["src/test/shared-hook-app.test.mjs"]
     },
     {
-      "label": "entry ignores a failed draft flush",
+      "label": "a refused entry flush answers the detach check instead of draft-not-kept",
       "file": "src/bootstrap/wiring/shared-test.ts",
       "find": "  if (flushed.ok) return draftDetachRefusal();\n",
       "replace": "  if (flushed || true) return draftDetachRefusal();\n",
-      "tests": ["src/test/shared-hook-app.test.mjs"]
+      "tests": ["src/test/shared-hook-app.test.mjs", "src/test/shared-hook-routes-app.test.mjs"]
     },
     {
       "label": "a refused entry over an unsaved recovery copy shows no notice",
@@ -499,22 +499,22 @@
     {
       "label": "leaving keeps the landed copy clean, so the next flush discards the stored draft",
       "file": "src/bootstrap/wiring/shared-test.ts",
-      "find": "noteSaveChange(); noteDraftChange();",
-      "replace": "noteDraftChange();",
-      "tests": ["src/test/shared-hook-app.test.mjs"]
+      "find": "[() => { noteSaveChange(); }, () => { noteDraftChange(); }]",
+      "replace": "[() => { noteDraftChange(); }]",
+      "tests": ["src/test/shared-hook-app.test.mjs", "src/test/shared-hook-routes-app.test.mjs"]
     },
     {
       "label": "leaving does not resume the draft writer",
       "file": "src/bootstrap/wiring/shared-test.ts",
-      "find": "    if (!kept) return;\n    draftSource.resumeWriting();\n",
-      "replace": "    if (!kept) return;\n",
+      "find": "...(kept ? [() => { draftSource.resumeWriting(); }] : []), ",
+      "replace": "",
       "tests": ["src/test/shared-hook-app.test.mjs", "src/test/shared-hook-routes-app.test.mjs"]
     },
     {
       "label": "the hook leaves the recovery panel binding out",
       "file": "src/bootstrap/wiring/shared-test.ts",
-      "find": "}), recoveryPanelBinding);",
-      "replace": "}), { enter: () => {}, leave: () => {} });",
+      "find": "const bindings = joinSharedBindings(writing, recoveryPanelBinding);",
+      "replace": "const bindings = joinSharedBindings(writing, { enter: () => {}, leave: () => {} });",
       "tests": ["src/test/shared-hook-app.test.mjs"]
     },
     {
@@ -667,8 +667,8 @@
     {
       "label": "leaving schedules no draft for the landed copy",
       "file": "src/bootstrap/wiring/shared-test.ts",
-      "find": "noteSaveChange(); noteDraftChange();",
-      "replace": "noteSaveChange();",
+      "find": "[() => { noteSaveChange(); }, () => { noteDraftChange(); }]",
+      "replace": "[() => { noteSaveChange(); }]",
       "tests": ["src/test/shared-hook-app.test.mjs"]
     },
     {
@@ -709,7 +709,7 @@
     {
       "label": "route: the shared Writer binding abandons nothing",
       "file": "src/bootstrap/wiring/shared-writer.ts",
-      "find": "    abandon: () => { for (const abandon of [...abandons]) abandon(); },",
+      "find": "    abandon: () => { abandonAll(false); },",
       "replace": "    abandon: () => {},",
       "tests": ["src/test/shared-hook-routes-app.test.mjs"]
     },
@@ -756,20 +756,6 @@
       "tests": ["src/test/shared-hook-routes-app.test.mjs"]
     },
     {
-      "label": "failure: the hook enters after a refused entry flush",
-      "file": "src/bootstrap/wiring/shared-test.ts",
-      "find": "  if (flushed.ok) return draftDetachRefusal();\n",
-      "replace": "  if (flushed || true) return draftDetachRefusal();\n",
-      "tests": ["src/test/shared-hook-routes-app.test.mjs"]
-    },
-    {
-      "label": "failure: a binding failure after mounting is not unwound",
-      "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "    if (made.bound) faults.attempt(() => { ports.bindings.leave(); });\n",
-      "replace": "",
-      "tests": ["src/test/shared-hook-routes-app.test.mjs"]
-    },
-    {
       "label": "failure: the rollback never reattaches the draft writer",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "    if (made.detaching && ports.reattach) faults.attempt(ports.reattach);\n",
@@ -779,8 +765,8 @@
     {
       "label": "failure: reattaching keeps the cleared home",
       "file": "src/bootstrap/wiring/shared-test.ts",
-      "find": "  const steps = [() => { documentLocation().restoreHome(kept.home); }, ",
-      "replace": "  const steps = [",
+      "find": "  runEvery([() => { documentLocation().restoreHome(kept.home); }, ",
+      "replace": "  runEvery([",
       "tests": ["src/test/shared-hook-routes-app.test.mjs"]
     },
     {
@@ -800,9 +786,51 @@
     {
       "label": "failure: reattaching leaves the draft writer detached",
       "file": "src/bootstrap/wiring/shared-test.ts",
-      "find": " noteSaveChange(); }, () => { draftSource.resumeWriting(); }];",
-      "replace": " noteSaveChange(); }];",
+      "find": " noteSaveChange(); }, () => { draftSource.resumeWriting(); }]);",
+      "replace": " noteSaveChange(); }]);",
       "tests": ["src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "failure: reattaching stops at its first exception",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "  runEvery([() => { documentLocation().restoreHome(kept.home); }, () => { documentLocation().markWrittenOut(kept.writtenOut); },\n    () => { if (kept.unsaved && !unsavedChanges()) noteSaveChange(); }, () => { draftSource.resumeWriting(); }]);",
+      "replace": "  for (const step of [() => { documentLocation().restoreHome(kept.home); }, () => { documentLocation().markWrittenOut(kept.writtenOut); },\n    () => { if (kept.unsaved && !unsavedChanges()) noteSaveChange(); }, () => { draftSource.resumeWriting(); }]) step();",
+      "tests": ["src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "route: the way out stops at its first exception",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "    runEvery([() => { ending?.dispose(); }, ...(kept ? [() => { draftSource.resumeWriting(); }] : []), ...marks]);",
+      "replace": "    for (const step of [() => { ending?.dispose(); },...(kept ? [() => { draftSource.resumeWriting(); }] : []), ...marks]) step();",
+      "tests": ["src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "abandonment: the selection-visual edit is not registered",
+      "file": "src/bootstrap/wiring/ports/writer-visual-buffer.ts",
+      "find": "    const stopAbandonment = shared.bufferedText.abandonment?.(abandon);",
+      "replace": "    const stopAbandonment = shared.bufferedText.abandonment?.(() => {});",
+      "tests": ["src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "abandonment: an abandoned selection-visual box still saves on close",
+      "file": "src/features/writer/flow-visual-box.ts",
+      "find": "      if (binding?.discarded?.()) return null;\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "drop: a dropped session never releases its surfaces",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "  faults.attempt(() => { ports.bindings.drop?.(); });\n",
+      "replace": "",
+      "tests": ["tests/bootstrap/shared-switch.test.ts", "src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "drop: a released buffered field still refuses to finish",
+      "file": "src/application/editing/buffered-field.ts",
+      "find": "    if (released) return true;\n",
+      "replace": "",
+      "tests": ["tests/application/editing/buffered-field.test.ts", "src/test/shared-hook-routes-app.test.mjs"]
     }
   ]
 }

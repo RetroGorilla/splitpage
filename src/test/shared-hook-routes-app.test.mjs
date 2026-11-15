@@ -45,6 +45,7 @@ const { documentReader } = await import("../bootstrap/wiring/ports/document.ts")
 const { recoveryPanelBinding } = await import("../bootstrap/wiring/recovery-panel.ts");
 const { sharedSessionParts } = await import("../bootstrap/wiring/shared-session.ts");
 const { appActions } = await import("../bootstrap/wiring/ports/actions.ts");
+const { openingStatus } = await import("../bootstrap/wiring/ports/transitions.ts");
 let hook = window.__sharedTest;
 
 const ROWS = [{ id: "r1", audioText: "Hello", visualText: "" }];
@@ -91,6 +92,27 @@ function caretAtEnd() {
   return { element, node, range };
 }
 
+function retitle(title) {
+  assert.equal(runCommand({ name: "route-title", needs: "edit", plan: () => ({ changes: changeSet({ docFields: ["title"] }), apply: live => { live.title = title; } }) }).kind, "applied");
+  undoOwner().flush();
+}
+
+function selectionVisualComposition() {
+  const root = document.getElementById("writer-doc"), node = root.querySelector('.wr-beat[data-id="r1"]').lastChild;
+  root.focus();
+  const range = document.createRange();
+  range.setStart(node, node.data.length - 5); range.setEnd(node, node.data.length);
+  window.getSelection().removeAllRanges(); window.getSelection().addRange(range);
+  document.getElementById("wr-visual").click();
+  const cell = document.querySelector(".wr-flow-visual-text");
+  assert.equal(cell?.dataset.field, "selection-visual");
+  cell.focus();
+  cell.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
+  cell.textContent = "held";
+  cell.dispatchEvent(new window.InputEvent("input", { bubbles: true, isComposing: true, data: "held" }));
+  assert.equal(writerControls().writerFlowControl().settle(), false, "the selection-visual edit is open");
+}
+
 function emptyInput() {
   const input = document.querySelector(".empty-script-input");
   assert.ok(input);
@@ -122,6 +144,7 @@ const WAYS_OUT = [
     element.dispatchEvent(new window.InputEvent("input", { bubbles: true, isComposing: true, data: " held" }));
     assert.equal(writerControls().writerFlowControl().settle(), false);
   } },
+  { name: "stopping the app during a composition in the selection-visual box", rows: ROWS, stops: true, landed: ["Shared Hello"], arrange: selectionVisualComposition },
   { name: "stopping the app during an open composition", rows: [], stops: true, arrange: () => {
     const input = emptyInput();
     input.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
@@ -134,7 +157,8 @@ const WAYS_OUT = [
 function landing() {
   const doc = currentDocument();
   return { rows: doc.rows.map(row => row.audioText), docId: doc.docId, unsaved: unsavedChanges(), parts: sharedSessionParts() !== null, shared: sharedSession(),
-    peer: window.__sharedTest?.read().peer ?? null, drafting: draftSource.detachRefusal(), seq: draftsTesting().status().seq };
+    peer: window.__sharedTest?.read().peer ?? null, drafting: draftSource.detachRefusal(), seq: draftsTesting().status().seq, undo: undoOwner().sizes(),
+    title: doc.title };
 }
 
 for (const way of WAYS_OUT) {
@@ -143,6 +167,8 @@ for (const way of WAYS_OUT) {
     const before = documentEntry.before, remove = document.removeEventListener;
     try {
       script(way.rows);
+      retitle("Before entry");
+      assert.equal(undoOwner().sizes().undo > 0, true);
       await flushDraftNow();
       const listeners = listenerCounts();
       assert.deepEqual(await hook.enter(), { ok: true });
@@ -170,7 +196,12 @@ for (const way of WAYS_OUT) {
       assert.deepEqual([landed.rows, landed.unsaved, landed.shared, landed.parts, landed.peer], [last, true, false, false, null]);
       assert.notEqual(landed.docId, session.docId);
       assert.deepEqual([landed.drafting, landed.seq], ["pending", floor], "drafting resumed with the landed copy's draft scheduled and no sequence number used");
+      assert.deepEqual([landed.undo, landed.title], [{ undo: 0, redo: 0 }, "Before entry"], "D34: the landed copy starts a fresh undo history");
       assert.equal(sharedSessionParts() === null, true, "no shared parts");
+      if (!way.stops && !way.completes) {
+        undoOwner().undo();
+        assert.deepEqual([currentDocument().title, currentDocument().rows.map(row => row.audioText)], ["Before entry", last], "Ctrl+Z does not cross the boundary");
+      }
       if (way.stops) {
         assert.equal(window.__sharedTest, undefined);
         await restartApp();
@@ -207,22 +238,77 @@ test("rule 166: stopping the app when even the forced leave cannot land ends wit
     const listeners = listenerCounts();
     assert.deepEqual(await hook.enter(), { ok: true });
     hook.peer.type("r1", 0, "Shared "); hook.peer.deliver();
+    selectionVisualComposition();
     recoveryPanelBinding.leave = () => { throw new Error("the recovery panel cannot leave"); };
     console.error = error => { reported.push(String(error)); };
-    try { app.stopApp(); } finally { console.error = report; recoveryPanelBinding.leave = leave; }
+    const remove = document.removeEventListener;
+    let started = null, dropped = null;
+    document.removeEventListener = function (type, listener, options) {
+      if (type === "compositionstart" && options === true) started = listener;
+      else if (type === "compositionend" && options === true && listener === started) {
+        dropped ??= { selectionVisual: document.querySelectorAll('.wr-flow-visual-text[data-field="selection-visual"]').length,
+          shared: sharedSession(), writer: writerControls() !== null };
+      }
+      return remove.call(this, type, listener, options);
+    };
+    try { app.stopApp(); } finally { delete document.removeEventListener; console.error = report; recoveryPanelBinding.leave = leave; }
     assert.ok(reported.some(text => text.includes("ended without landing a standalone copy")), reported.join("\n"));
-    assert.deepEqual([sharedSessionParts() === null, window.__sharedTest === undefined], [true, true], "no shared parts and no hook");
+    assert.equal(reported.some(text => text.includes("could not finish")), false, "the Writer tore down whatever its surfaces held:\n" + reported.join("\n"));
+    assert.deepEqual(dropped, { selectionVisual: 0, shared: true, writer: true }, "at the drop the shared Writer and its Visual box were replaced by a standalone Writer");
+    assert.deepEqual([sharedSessionParts() === null, window.__sharedTest === undefined, document.querySelectorAll(".wr-flow-visual-box").length],
+      [true, true, 0], "no shared parts, no hook and no Visual box left mounted");
     assert.equal(store.writes.some(write => write.shared), false, "nothing from the shared stretch reached the draft store");
     await restartApp();
     assert.notEqual(draftSource.detachRefusal(), "detached", "the restarted app drafts again");
     draftStore();
     script(ROWS);
+    assert.ok(writerControls().writerFlowControl(), "a standalone Writer opens");
     assert.deepEqual(listenerCounts(), listeners);
     assert.deepEqual(await hook.enter(), { ok: true });
     assert.deepEqual(hook.leave(), { ok: true });
   } finally {
     console.error = report; recoveryPanelBinding.leave = leave;
     if (!window.__sharedTest) await restartApp();
+    if (sharedSession()) hook.leave();
+    await flushDraftNow();
+    restoreDesktop();
+  }
+});
+
+const SHARED_WRITER_SURFACES = ["narration buffer (flow-buffer.ts)", "visual buffer (writer-visual-buffer.ts)",
+  "selection-visual edit (writer-visual-buffer.ts)", "empty-script input (empty-script.ts)"];
+
+test("every surface the shared Writer mounts registers one abandon step, and leaving unregisters them all", async () => {
+  draftStore();
+  try {
+    script(ROWS);
+    assert.deepEqual(await hook.enter(), { ok: true });
+    assert.equal(hook.counters().abandonable, SHARED_WRITER_SURFACES.length, SHARED_WRITER_SURFACES.join(", "));
+    assert.deepEqual(hook.leave(), { ok: true });
+    assert.equal(hook.counters().abandonable, 0);
+  } finally {
+    if (sharedSession()) hook.leave();
+    await flushDraftNow();
+    restoreDesktop();
+  }
+});
+
+test("the way out runs every step: a draft resume that throws still disposes the peer, marks the landed copy unsaved, and is reported", async () => {
+  draftStore();
+  const report = console.error, reported = [];
+  let restore = () => {};
+  try {
+    script(ROWS);
+    assert.deepEqual(await hook.enter(), { ok: true });
+    hook.peer.type("r1", 0, "Shared "); hook.peer.deliver();
+    restore = throwOnce(draftSource, "resumeWriting", "the draft writer could not resume");
+    console.error = error => { reported.push(String(error)); };
+    try { assert.deepEqual(hook.leave(), { ok: true }); } finally { console.error = report; }
+    assert.deepEqual([currentDocument().rows.map(row => row.audioText), unsavedChanges(), hook.read().peer, sharedSession()], [["Shared Hello"], true, null, false]);
+    assert.ok(reported.some(text => text.includes("the draft writer could not resume")), reported.join("\n"));
+  } finally {
+    console.error = report; restore();
+    draftSource.resumeWriting();
     if (sharedSession()) hook.leave();
     await flushDraftNow();
     restoreDesktop();
@@ -239,9 +325,9 @@ function throwOnce(owner, key, message, seen = () => {}) {
   return () => { owner[key] = original; };
 }
 
-function locationSubscriberThrows(change) {
-  let armed = true;
-  return documentLocation().onChange(seen => { if (seen === change && armed) { armed = false; throw new Error("a " + change + " subscriber failed"); } });
+function locationSubscriberThrows(change, at = 1) {
+  let seen = 0;
+  return documentLocation().onChange(kind => { if (kind === change && ++seen === at) throw new Error("a " + change + " subscriber failed"); });
 }
 
 const FAILURES = [
@@ -284,13 +370,17 @@ const FAILURES = [
   }, observed: [["mounted", true, true]] },
   { name: "a home subscriber throwing at the home change", reason: "enter-failed", arrange: () => locationSubscriberThrows("home") },
   { name: "the detach continuation failing at the written-out change", reason: "enter-failed", arrange: () => locationSubscriberThrows("writtenOut") },
-  { name: "the standalone undo reset failing once the detach has finished", reason: "enter-failed", arrange: () => throwOnce(undoOwner(), "adopt", "the undo reset failed") }
+  { name: "the standalone undo reset failing once the detach has finished", reason: "enter-failed", arrange: () => throwOnce(undoOwner(), "adopt", "the undo reset failed") },
+  { name: "the undo reset failing, then the home and written-out subscribers both throwing during reattachment", reason: "enter-failed", arrange: () => {
+    const stops = [throwOnce(undoOwner(), "adopt", "the undo reset failed"), locationSubscriberThrows("home", 2), locationSubscriberThrows("writtenOut", 2)];
+    return () => { for (const stop of stops) stop(); };
+  } }
 ];
 
 function standaloneState() {
   return { doc: JSON.stringify(currentDocument()), epoch: liveSession().epoch(), generation: liveSession().generation(), undo: undoOwner().sizes(),
     home: JSON.stringify(currentHome()), writtenOut: documentLocation().writtenOut(), unsaved: unsavedChanges(), shared: sharedSession(), parts: sharedSessionParts() !== null,
-    listeners: listenerCounts() };
+    opening: openingStatus.openingPending(), listeners: listenerCounts() };
 }
 
 for (const failure of FAILURES) {

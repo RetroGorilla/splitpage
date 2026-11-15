@@ -57,12 +57,15 @@ interface Detached {
   readonly unsaved: boolean;
 }
 
-function reattachDraft(kept: Detached): void {
+function runEvery(steps: readonly (() => void)[]): void {
   const errors: unknown[] = [];
-  const steps = [() => { documentLocation().restoreHome(kept.home); }, () => { documentLocation().markWrittenOut(kept.writtenOut); },
-    () => { if (kept.unsaved && !unsavedChanges()) noteSaveChange(); }, () => { draftSource.resumeWriting(); }];
   for (const step of steps) { try { step(); } catch (error) { errors.push(error); } }
   if (errors.length) throw errors[0];
+}
+
+function reattachDraft(kept: Detached): void {
+  runEvery([() => { documentLocation().restoreHome(kept.home); }, () => { documentLocation().markWrittenOut(kept.writtenOut); },
+    () => { if (kept.unsaved && !unsavedChanges()) noteSaveChange(); }, () => { draftSource.resumeWriting(); }]);
 }
 
 function startSharedTestHook(): () => void {
@@ -74,19 +77,18 @@ function startSharedTestHook(): () => void {
   const composition = (event: Event): void => { composing = event.type === "compositionstart"; };
   document.addEventListener("compositionstart", composition, true);
   document.addEventListener("compositionend", composition, true);
-  const bindings = joinSharedBindings(sharedWriterBindings({
+  const writing = sharedWriterBindings({
     recovered: () => { counts.recovered++; notices.show("Your writing was kept in recovery.", "warn"); },
     missingBase: () => { counts.missingBase++; notices.show("This line changed. Try writing again.", "warn"); },
     ownershipScan: () => { counts.ownershipScans++; }, report
-  }), recoveryPanelBinding);
+  });
+  const bindings = joinSharedBindings(writing, recoveryPanelBinding);
   const left = (landed: boolean): void => {
-    peer?.dispose(); peer = null;
-    const kept = detached;
-    detached = null;
-    if (!kept) return;
-    draftSource.resumeWriting();
+    const ending = peer, kept = detached;
+    peer = null; detached = null;
     // why: the landed copy has a new docId and was never saved, so it is unsaved (rules 75 and 76)
-    if (landed) { noteSaveChange(); noteDraftChange(); }
+    const marks = landed && kept ? [() => { noteSaveChange(); }, () => { noteDraftChange(); }] : [];
+    runEvery([() => { ending?.dispose(); }, ...(kept ? [() => { draftSource.resumeWriting(); }] : []), ...marks]);
   };
   const enter = async (): Promise<SharedSwitchOutcome> => {
     if (!live) return { ok: false, reason: APP_STOPPED };
@@ -155,7 +157,7 @@ function startSharedTestHook(): () => void {
       appliedUpdates: () => peer?.appliedUpdates() ?? []
     },
     read: () => ({ app: documentReader.read(doc => doc ? JSON.parse(JSON.stringify(doc)) as unknown : null), peer: peer?.read() ?? null }),
-    counters: () => ({ ...counts, queued: peer?.queued() ?? 0 })
+    counters: () => ({ ...counts, queued: peer?.queued() ?? 0, abandonable: writing.abandonable() })
   };
   exposeTestHook("__sharedTest", () => hook, release => { withdraw = release; });
   return () => {

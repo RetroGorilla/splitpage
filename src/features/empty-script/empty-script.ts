@@ -7,7 +7,7 @@ export function startEmptyScript(ports: EmptyScriptPorts) {
   input.className = "empty-script-input"; input.rows = 2; input.placeholder = "Start writing";
   input.setAttribute("aria-label", "Start writing"); input.dataset.undoOwner = "document";
   ports.host.before(area);
-  let release: (() => void) | null = null, composing = false, pending = false, committing = false, beforeInput = "", beforeComposition = "", disposed = false;
+  let release: (() => void) | null = null, composing = false, pending = false, committing = false, beforeInput = "", beforeComposition = "", disposed = false, dropped = false;
   const current = () => ports.lifetime.epoch() === epoch;
   const empty = () => ports.document.current()?.rows.length === 0;
   const notify = (reason: string) => { ports.report({ kind: "rejected", reason }); };
@@ -27,7 +27,7 @@ export function startEmptyScript(ports: EmptyScriptPorts) {
     return true;
   }
   function finish(): boolean {
-    if (committing) return true;
+    if (committing || dropped) return true;
     if (composing) { notify("buffer-composition"); return false; }
     if (!current() && (input.value || pending)) { notify("empty-script-stale"); return false; }
     if (pending) { notify("buffer-pending"); return false; }
@@ -69,7 +69,8 @@ export function startEmptyScript(ports: EmptyScriptPorts) {
   const blur = (): void => { if (!composing) finish(); };
   const listeners: readonly (readonly [string, EventListener])[] = [["beforeinput", before], ["input", typed], ["compositionstart", start], ["compositionend", stop], ["keyup", released], ["blur", blur]];
   for (const [name, listener] of listeners) input.addEventListener(name, listener);
-  const abandon = (): void => {
+  const abandon = (final: boolean): void => {
+    if (final) dropped = true;
     if (committing) return;
     if (composing) input.value = beforeComposition;
     else if (pending) input.value = beforeInput;

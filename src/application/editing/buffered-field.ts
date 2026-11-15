@@ -12,7 +12,7 @@ export interface BufferedFieldPorts extends Pick<BufferedTextCommit, "open">, Pi
   readonly recovered: (rowId: string) => void;
   readonly report: (outcome: CommandOutcome) => void;
   readonly ownershipScan?: () => void;
-  readonly abandonment?: (abandon: () => void) => () => void;
+  readonly abandonment?: (abandon: (final: boolean) => void) => () => void;
 }
 
 export interface BufferedFieldEvent {
@@ -80,6 +80,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
   let committing = false;
   let refusedComposition = false;
   let composedFromHold: string | null = null;
+  let released = false;
   const keyOf = surface.key ?? ((pos: FlowPos) => pos.kind === "beat" ? pos.rowId : null);
   const at = surface.position ?? beatPos;
   const text = surface.text ?? ((field: E) => projection(surface.runs(field)));
@@ -217,6 +218,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
   }
 
   function finish(): boolean {
+    if (released) return true;
     const checked = ownership(checkpoint("settle"));
     return checked.ok && settle();
   }
@@ -230,7 +232,8 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
 
   const stopAdmission = ports.beforeCommand(() => committing || finish());
 
-  function abandon(): void {
+  function abandon(final: boolean): void {
+    if (final) released = true;
     if (committing) return;
     surface.composition(false); ended = false; refusedComposition = false; composedFromHold = null; target = null; label = undefined;
     const held = active;

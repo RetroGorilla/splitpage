@@ -91,6 +91,7 @@ function start(): Switch {
       },
       settle: () => { trip("bindings.settle"); return held; },
       abandon: () => { log.push("bindings.abandon"); if (held === "buffer-composition") held = null; },
+      drop: () => { log.push("bindings.drop"); },
       leave: () => { log.push("bindings.leave:" + String(sharedSession())); leaveHook(); trip("bindings.leave"); }
     },
     common: CAN,
@@ -639,6 +640,8 @@ test("a forced leave that still cannot land ends the session without a copy: no 
     assert.deepEqual([sharedSessionParts(), sharedUndoRoute(), s.log.filter(line => line.startsWith("left:") || line === "bindings.abandon")],
       [null, null, ["bindings.abandon", "left:false"]]);
     assert.ok(s.log.includes("bindings.leave:true"));
+    assert.deepEqual(s.log.filter(line => /^(bindings\.(abandon|drop|leave)|left:)/.test(line)).map(line => line.replace(/^bindings\.leave:.*/, "bindings.leave")).slice(-3),
+      ["bindings.drop", "bindings.leave", "left:false"]);
     assert.ok(s.reported.some(text => text.includes("ended without landing a standalone copy: buffer-stuck")));
     sharedGone(parts);
     assert.deepEqual([forceLeaveSharedSession(), leaveRunningSharedSession()], [{ ok: false, reason: SHARED_NOT_RUNNING }, { ok: false, reason: SHARED_NOT_RUNNING }]);
