@@ -224,14 +224,20 @@
     {
       "label": "the selection is looked up under a beat a peer's join removed",
       "file": "src/bootstrap/wiring/ports/shared-commands.ts",
-      "find": "  for (const id of rows.includes(rowId) ? [rowId, ...rows.filter(id => id !== rowId)] : rows) {",
-      "replace": "  for (const id of [rowId, ...rows.filter(id => id !== rowId)]) {"
+      "find": "  return rows.includes(rowId) ? [rowId, ...rows.filter(id => id !== rowId)] : rows;",
+      "replace": "  return [rowId, ...rows.filter(id => id !== rowId)];"
     },
     {
       "label": "a selection a peer's split now spans two beats is not refused",
       "file": "src/bootstrap/wiring/ports/shared-commands.ts",
-      "find": "if (!first || places.some(place => place.rowId !== first.rowId))",
-      "replace": "if (!first)"
+      "find": "if (first && places.some(place => place.rowId !== first.rowId))",
+      "replace": "if (false)"
+    },
+    {
+      "label": "the cut follows the first surviving selected character",
+      "file": "src/bootstrap/wiring/ports/shared-commands.ts",
+      "find": "at: Math.min(cut.at, offsets[0] ?? cut.at) };",
+      "replace": "at: offsets[0] ?? cut.at };"
     },
     {
       "label": "the shared delete button reads its row index before admission drains held updates",
