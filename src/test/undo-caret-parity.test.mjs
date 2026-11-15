@@ -125,10 +125,10 @@ function apply(view, edit) {
   else throw new Error("unknown edit " + kind);
 }
 
-function press(view, rowId, key) {
+function press(view, rowId, key, onCell = false) {
   const element = document.querySelector('#writer-doc .wr-beat[data-id="' + rowId + '"]') ?? document.getElementById("writer-doc");
   if (view === "writer") element.dispatchEvent(new window.KeyboardEvent("keydown", { key, ctrlKey: true, bubbles: true, cancelable: true }));
-  else document.body.dispatchEvent(new window.KeyboardEvent("keydown", { key, ctrlKey: true, bubbles: true, cancelable: true }));
+  else (onCell ? document.activeElement : document.body).dispatchEvent(new window.KeyboardEvent("keydown", { key, ctrlKey: true, bubbles: true, cancelable: true }));
 }
 
 function operate(other, input) {
@@ -171,12 +171,12 @@ function open(view) {
 
 const editView = view => view === "split" ? "split" : "writer", undoView = view => view === "writer" ? "writer" : "split";
 
-function undoRedo(view, rowId, again) {
+function undoRedo(view, rowId, again, onCell = false) {
   if (view === "writer>split") writerControls().closeWriter();
   const at = undoView(view), carets = [];
-  press(at, rowId, "z"); carets.push(caret(at));
-  press(at, rowId, "y"); carets.push(caret(at));
-  if (again) { press(at, rowId, "z"); carets.push(caret(at)); }
+  press(at, rowId, "z", onCell); carets.push(caret(at));
+  press(at, rowId, "y", onCell); carets.push(caret(at));
+  if (again) { press(at, rowId, "z", onCell); carets.push(caret(at)); }
   return carets;
 }
 
@@ -185,7 +185,7 @@ function runStandalone(row, view) {
   open(view);
   row.edits.forEach(edit => { apply(editView(view), edit); });
   undoOwner().flush();
-  return undoRedo(view, row.caretRow ?? row.edits[0][1], row.again);
+  return undoRedo(view, row.caretRow ?? row.edits[0][1], row.again, row.onCell);
 }
 
 async function runShared(row, view, order) {
@@ -206,7 +206,7 @@ async function runShared(row, view, order) {
     edits.forEach(edit => { apply(editView(view), edit); });
     if (order !== "peer first") { (shared.during ?? []).forEach(step => { step(other); }); exchange(); }
     const caretRow = row.caretRow ?? edits[0][1], watched = shared.watch ? watch(other, shared.watch) : null;
-    const carets = undoRedo(view, caretRow, row.again);
+    const carets = undoRedo(view, caretRow, row.again, row.onCell);
     if (watched) { assert.equal(applySharedUpdate(other, encodeSharedState(handle)).ok, true); watched(); }
     return carets;
   } finally {
@@ -247,7 +247,8 @@ const rows = [
     shared: { seed: [["R1", "abcd"]], during: [peer.bold("R1", 3, 4)], watch: ["R1", 1] } },
   { name: "Enter in the middle of a row", views: ["writer"], seed: [["R1", "abcd"], ["R2", "ef"]], edits: [["press", "R1", 2, 2, "Enter", {}]], caretRow: "R1", again: true },
   { name: "bold across two rows", views: ["writer", "writer>split"], seed: [["R1", "abcd"], ["R2", "efgh"]], edits: [["press", "R1", 2, 2, "b", { ctrlKey: true }, "R2"]], caretRow: "R1", again: true },
-  { name: "join two rows with Alt+Backspace", views: ["writer", "writer>split"], seed: [["R1", "abcd", "foo"], ["R2", "efgh", "bar"]], edits: [["press", "R2", 0, 0, "Backspace", { altKey: true }]], caretRow: "R1", again: true }
+  { name: "join two rows with Alt+Backspace", views: ["writer", "writer>split"], seed: [["R1", "abcd", "foo"], ["R2", "efgh", "bar"]], edits: [["press", "R2", 0, 0, "Backspace", { altKey: true }]], caretRow: "R1", again: true },
+  { name: "undo from the Split cell itself, with the Split binding mounted", views: ["split"], seed: [["R1", "abcd"]], edits: [["type", "R1", 1, 3, "Z"]], undo: 3, redo: 2, again: true, onCell: true }
 ];
 
 for (const row of rows) for (const view of row.views) for (const order of row.orders ?? ["mine first"]) {
