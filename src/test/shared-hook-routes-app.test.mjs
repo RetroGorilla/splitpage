@@ -120,6 +120,27 @@ function emptyInput() {
   return input;
 }
 
+function splitPending(field, composition) {
+  writerControls().closeWriter();
+  const cell = document.querySelector(`#rows .cell-editable[data-id="r1"][data-field="${field}"]`);
+  assert.ok(cell); cell.focus();
+  const node = cell.lastChild, range = document.createRange();
+  range.setStart(node, node.data.length); range.collapse(true);
+  document.getSelection().removeAllRanges(); document.getSelection().addRange(range);
+  if (composition) {
+    cell.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
+    cell.dispatchEvent(new window.CompositionEvent("compositionupdate", { bubbles: true, data: " held" }));
+  }
+  const before = new window.InputEvent("beforeinput", { bubbles: true, cancelable: !composition,
+    inputType: composition ? "insertCompositionText" : "insertText", isComposing: composition, data: composition ? " held" : "!" });
+  Object.defineProperty(before, "getTargetRanges", { value: () => [range.cloneRange()] });
+  assert.equal(cell.dispatchEvent(before), true);
+  node.data += composition ? " held" : "!";
+  if (composition) cell.dispatchEvent(new window.InputEvent("input", { bubbles: true, isComposing: true, inputType: "insertCompositionText", data: " held" }));
+  assert.equal(hook.read().app.rows[0][field], field === "audioText" ? "Shared Hello" : "Wide");
+  if (composition) assert.equal(sharedSessionParts().session.admit()?.kind, "rejected");
+}
+
 const WAYS_OUT = [
   { name: "the public leave", rows: ROWS, run: () => { assert.deepEqual(hook.leave(), { ok: true }); } },
   { name: "Open, cancelled at its dialog", rows: ROWS, leaveFirst: true, run: () => localFilesOwner().openLocalFile() },
@@ -127,6 +148,13 @@ const WAYS_OUT = [
   { name: "New, completed", rows: ROWS, leaveFirst: true, completes: true, run: () => { documentTransitions().startNew(arrival("Started")); } },
   { name: "File New, completed", rows: ROWS, leaveFirst: true, completes: true, run: () => { assert.equal(startNewScript(), true); } },
   { name: "stopping the app with nothing pending", rows: ROWS, stops: true },
+  ...["audioText", "visualText"].flatMap(field => [
+    { name: `stopping the app with a pending Split ${field} edit`, rows: [{ id: "r1", audioText: "Hello", visualText: "Wide" }],
+      stops: true, visual: [field === "visualText" ? "Wide!" : "Wide"], landed: [field === "audioText" ? "Shared Hello!" : "Shared Hello"],
+      arrange: () => splitPending(field, false) },
+    { name: `stopping the app during a Split ${field} composition`, rows: [{ id: "r1", audioText: "Hello", visualText: "Wide" }],
+      stops: true, visual: ["Wide"], landed: ["Shared Hello"], arrange: () => splitPending(field, true) }
+  ]),
   { name: "stopping the app with a pending buffered edit", rows: ROWS, stops: true, landed: ["Shared Hello!"], arrange: () => {
     const { element, node, range } = caretAtEnd();
     const before = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: "!" });
@@ -158,7 +186,7 @@ function landing() {
   const doc = currentDocument();
   return { rows: doc.rows.map(row => row.audioText), docId: doc.docId, unsaved: unsavedChanges(), parts: sharedSessionParts() !== null, shared: sharedSession(),
     peer: window.__sharedTest?.read().peer ?? null, drafting: draftSource.detachRefusal(), seq: draftsTesting().status().seq, undo: undoOwner().sizes(),
-    title: doc.title };
+    title: doc.title, visual: doc.rows.map(row => row.visualText ?? ""), abandonable: window.__sharedTest?.counters().abandonable };
 }
 
 for (const way of WAYS_OUT) {
@@ -194,6 +222,8 @@ for (const way of WAYS_OUT) {
       documentEntry.before = before;
       assert.ok(landed, "the way out was observed");
       assert.deepEqual([landed.rows, landed.unsaved, landed.shared, landed.parts, landed.peer], [last, true, false, false, null]);
+      assert.equal(landed.abandonable, 0);
+      if (way.visual) assert.deepEqual(landed.visual, way.visual);
       assert.notEqual(landed.docId, session.docId);
       assert.deepEqual([landed.drafting, landed.seq], ["pending", floor], "drafting resumed with the landed copy's draft scheduled and no sequence number used");
       assert.deepEqual([landed.undo, landed.title], [{ undo: 0, redo: 0 }, "Before entry"], "D34: the landed copy starts a fresh undo history");
@@ -276,9 +306,9 @@ test("rule 166: stopping the app when even the forced leave cannot land ends wit
 });
 
 const SHARED_WRITER_SURFACES = ["narration buffer (flow-buffer.ts)", "visual buffer (writer-visual-buffer.ts)",
-  "selection-visual edit (writer-visual-buffer.ts)", "empty-script input (empty-script.ts)"];
+  "selection-visual edit (writer-visual-buffer.ts)", "empty-script input (empty-script.ts)", "Split cell buffer (split-buffer.ts)"];
 
-test("every surface the shared Writer mounts registers one abandon step, and leaving unregisters them all", async () => {
+test("every surface the shared Writer and Split mount registers one abandon step, and leaving unregisters them all", async () => {
   draftStore();
   try {
     script(ROWS);

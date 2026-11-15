@@ -98,9 +98,9 @@ export function splitCaretPage(text = "abcdef", second = "uvwx") {
     execute(h.b, [{ kind: "split", id: "split", by: "Bob", target: address, at: { left: null, right, affinity: "before" }, observed: [], beat: "fresh", boundary: "fresh", fields: {} }]);
     deliver("dup");
   };
-  function type(field: Field, from: number, to: number, text: string): boolean {
-    select(field, from, to);
-    const el = cell(field), start = posToDom(el, from), end = posToDom(el, to), range = document.createRange();
+  function type(field: Field, from: number, to: number, text: string, row = "R1"): boolean {
+    select(field, from, to, row);
+    const el = cell(field, row), start = posToDom(el, from), end = posToDom(el, to), range = document.createRange();
     range.setStart(start.node, start.offset); range.setEnd(end.node, end.offset);
     const key = (kind: string) => el.dispatchEvent(new window.KeyboardEvent(kind, { key: text, bubbles: true, cancelable: true }));
     if (!key("keydown") || !key("keypress")) { key("keyup"); return false; }

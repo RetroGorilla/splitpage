@@ -25,6 +25,8 @@ test("standalone Split keystroke: no cell buffer, binding or painted record is b
     window.Element.prototype.scrollBy = function () {};
     window.Element.prototype.scrollIntoView = function () {};
     await bootApp();
+    const { sharedSplitBindings } = await import("./src/bootstrap/wiring/shared-split.ts");
+    sharedSplitBindings({ missingBase: () => {}, recovered: () => {}, report: () => {} });
     const { migrateRows } = await import("./src/bootstrap/document-ports.ts");
     const { exportDocumentOf } = await import("./src/bootstrap/wiring/export-capture.ts");
     const { buildSplitpageFile } = await import("./src/adapters/formats/project-file.ts");
@@ -69,9 +71,9 @@ test("standalone Split keystroke: no cell buffer, binding or painted record is b
   context.diagnostic("2 and 50 rows, narration and visual: one edit, one decode, no paint check and no repaint per native key; no buffered field, painted record or cell buffer");
 });
 
-test("the shared Split wiring is not called by the running app", () => {
+test("the shared Split buffer is owned by binding composition and the Writer visual adapter", () => {
   const files = (dir: string): string[] => readdirSync(REPO + dir, { withFileTypes: true }).flatMap(entry =>
     entry.isDirectory() ? files(dir + "/" + entry.name) : /\.ts$/.test(entry.name) ? [dir + "/" + entry.name] : []);
   const importers = files("src").filter(path => /split-buffer\.ts|mountSharedSplitBuffer|mountCellBuffer/.test(readFileSync(REPO + path, "utf8")));
-  assert.deepEqual(importers.sort(), ["src/bootstrap/wiring/ports/writer-visual-buffer.ts", "src/bootstrap/wiring/split-buffer.ts", "src/features/editing/cell-buffer.ts"]);
+  assert.deepEqual(importers.sort(), ["src/bootstrap/wiring/ports/writer-visual-buffer.ts", "src/bootstrap/wiring/shared-split.ts", "src/bootstrap/wiring/split-buffer.ts", "src/features/editing/cell-buffer.ts"]);
 });

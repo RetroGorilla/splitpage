@@ -209,6 +209,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
     active = null; target = null;
     surface.repaint(held.rowId); surface.restore(held.rowId, outcome.selection);
     surface.changed();
+    if (outcome.recovered) ports.recovered(held.rowId);
     if (outcome.kind === "failed" || outcome.kind === "rejected" || outcome.kind === "committed" && outcome.errors.length) ports.report(outcome);
     return true;
   }

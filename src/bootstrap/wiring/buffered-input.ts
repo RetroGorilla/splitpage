@@ -1,5 +1,5 @@
 import { createBufferedField } from "../../application/editing/buffered-field.ts";
-import type { BufferedFieldPorts } from "../../application/editing/buffered-field.ts";
+import type { BufferedFieldBinding, BufferedFieldPorts } from "../../application/editing/buffered-field.ts";
 import { createPaintedBeats } from "../../application/editing/painted-beats.ts";
 import type { PaintedTextSource } from "../../application/editing/ports.ts";
 import { onBeforePaint, onPainted, render } from "../../features/rows/render.ts";
@@ -23,7 +23,14 @@ export function sharedBufferedInputHistory(handle: SharedDocumentHandle, session
 export function sharedBufferedInputPorts(shared: { readonly paintedText: PaintedTextSource; readonly bufferedText: BufferedFieldPorts },
   history?: BufferedInputPorts["history"]): BufferedInputPorts {
   return {
-    field: surface => createBufferedField(shared.bufferedText, surface),
+    field: surface => {
+      const binding: BufferedFieldBinding = createBufferedField({ ...shared.bufferedText,
+        abandonment: abandon => shared.bufferedText.abandonment?.(final => {
+          if (final || !binding.finish()) abandon(final);
+        }) ?? (() => {})
+      }, surface);
+      return binding;
+    },
     painted: createPaintedBeats(shared.paintedText),
     report: shared.bufferedText.report,
     shown: edit => paintGuard().whileShown(edit),
