@@ -1,0 +1,19 @@
+{
+  "tests": [
+    "src/test/shared-split-refusals-app.test.mjs"
+  ],
+  "mutants": [
+    {
+      "label": "an unserved Split native route reaches standalone handlers",
+      "file": "src/bootstrap/wiring/shared-split.ts",
+      "find": "buffer = mountSharedSplitBuffer({ ...shared, refuseNative: refuseSharedSplitNative });",
+      "replace": "buffer = mountSharedSplitBuffer(shared);"
+    },
+    {
+      "label": "a successful commit's drained removal is not announced",
+      "file": "src/application/editing/buffered-field.ts",
+      "find": "if (outcome.recovered) ports.recovered(held.rowId);",
+      "replace": ""
+    }
+  ]
+}

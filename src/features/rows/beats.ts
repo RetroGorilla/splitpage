@@ -77,11 +77,13 @@ function splitField(cellEl: Element) {
   const id = cellEl.getAttribute("data-id");
   const field = cellEl.getAttribute("data-field");
   if ((ports as BeatPortUse).document.read(function (doc) { return rowIndexOf(doc, id); }) === -1 || (field !== "visualText" && field !== "audioText")) return null;
-  (ports as BeatPortUse).cells.sync(cellEl);
+  const shared = (ports as BeatPortUse).shared.ports();
+  // why: in a shared session the command's admission settles the cell, and a second settle warns twice
+  if (!shared) (ports as BeatPortUse).cells.sync(cellEl);
   const sel = (ports as BeatPortUse).selection.of(cellEl);
   if (!sel) return null;
   (ports as BeatPortUse).undo.breakCoalescing();
-  const createdId = (ports as BeatPortUse).ids.id("r"), shared = (ports as BeatPortUse).shared.ports();
+  const createdId = (ports as BeatPortUse).ids.id("r");
   if (shared) {
     const minted = sharedCreated((splitBeatCommand as BeatSplitCommand)(id, field, textCut(sel.from, sel.to), createdId, (ports as BeatPortUse).edits.text, shared));
     return minted ? { id: minted, field: field } : null;

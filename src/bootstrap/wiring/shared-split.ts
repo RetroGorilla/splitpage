@@ -1,7 +1,7 @@
 import type { BufferedFieldPorts } from "../../application/editing/buffered-field.ts";
 import type { CellBuffer } from "../../features/editing/cell-buffer.ts";
 import { productionReaders } from "../document-ports.ts";
-import { mountCompositionFeature, mountFocusFeature, mountRowsEditingFeature } from "./editor.ts";
+import { mountCompositionFeature, mountFocusFeature, mountRowsEditingFeature, refuseSharedSplitNative } from "./editor.ts";
 import { notices } from "./ports/effects.ts";
 import { sharedBufferPorts } from "./ports/shared-buffer.ts";
 import { sharedCommandReport } from "./ports/shared-command-notices.ts";
@@ -36,7 +36,7 @@ export function sharedSplitBindings(effects: Pick<BufferedFieldPorts, "missingBa
         ...effects, author, readers: productionReaders, stamps: sessionStamps, abandonment,
         report: outcome => { refusal = outcome.kind === "rejected" ? outcome.reason : null; notify(outcome); }
       });
-      buffer = mountSharedSplitBuffer(shared);
+      buffer = mountSharedSplitBuffer({ ...shared, refuseNative: refuseSharedSplitNative });
     },
     settle: () => {
       refusal = null;

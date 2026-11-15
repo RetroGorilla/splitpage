@@ -291,6 +291,41 @@ test("C7 callers: a refused structure command reports its reason once even when 
   } finally { f.close(); }
 });
 
+function copiedBeat(rowId) {
+  selectBeats(rowId, rowId);
+  if (document.activeElement && document.activeElement !== document.body) document.activeElement.blur();
+  const data = new Map(), copy = new window.Event("copy", { bubbles: true, cancelable: true });
+  Object.defineProperty(copy, "clipboardData", { value: { setData: (type, value) => { data.set(type, value); }, getData: type => data.get(type) ?? "" } });
+  document.body.dispatchEvent(copy);
+  assert.equal(copy.defaultPrevented, true);
+  return { getData: type => data.get(type) ?? "" };
+}
+
+const ADMISSION_REFUSALS = [
+  { name: "a visual split", arrange: () => { select(cellOf("visualText"), 1); }, act: () => { assert.equal(splitRowFieldCore(cellOf("visualText")), null); } },
+  { name: "a beat paste", arrange: () => copiedBeat("r2"), act: data => { assert.equal(pasteBeatsAt(data, cellOf("audioText", "r3")), true); } }
+];
+
+const ADMISSIONS = [
+  { name: "a session hold", arm: f => f.parts.session.hold("held-for-test"), notices: [[REFUSED, "warn"]] },
+  { name: "a listener that announces its own refusal", arm: f => f.parts.session.beforeCommand(() => { notices.show("Held by the listener.", "warn"); return false; }),
+    notices: [["Held by the listener.", "warn"]] }
+];
+
+for (const literal of ADMISSION_REFUSALS) for (const admission of ADMISSIONS) test(`C7 callers: ${literal.name} refused at admission by ${admission.name} is announced once`, async () => {
+  const f = await enter();
+  let stop = () => {};
+  try {
+    const data = literal.arrange();
+    stop = admission.arm(f);
+    clearWarnings(); noticeCalls.length = 0;
+    const before = encodeSharedState(f.parts.handle), sizes = f.parts.undo.sizes(), standalone = undoOwner().sizes();
+    literal.act(data);
+    assert.deepEqual(noticeCalls, admission.notices);
+    assert.deepEqual([encodeSharedState(f.parts.handle), f.parts.undo.sizes(), undoOwner().sizes()], [before, sizes, standalone]);
+  } finally { stop(); clearWarnings(); f.close(); }
+});
+
 test("C7 callers: a refusal the session already announced is not announced again", () => {
   clearWarnings();
   for (const commands of [sharedStructureCommands, sharedValueCommands]) {

@@ -4,6 +4,7 @@ import type { SharedRecordCommands, SharedRecordPorts } from "../../../applicati
 import type { SharedStructureCommands } from "../../../application/commands/shared-structure.ts";
 import type { SharedValueCommands } from "../../../application/commands/shared-values.ts";
 import type { CommandOutcome } from "../../../application/session/document-session.ts";
+import { SHARED_LISTENER_REFUSAL } from "../../../application/session/shared-session.ts";
 import type { UndoControl } from "../../../application/editing/undo-control.ts";
 import { sessionStamps, sessionTextPorts } from "../session-owner.ts";
 import { sharedSessionParts } from "../shared-session.ts";
@@ -19,7 +20,8 @@ import { sharedStructurePorts, sharedValuePorts } from "./shared-values.ts";
 const refuse = sharedCommandRefusalNotice(notices);
 
 function refused(outcome: CommandOutcome): void {
-  if (outcome.kind === "rejected" && !outcome.notified) refuse(outcome.reason);
+  // why: a listener that refuses admission has already announced its own reason, so announcing it here would warn twice
+  if (outcome.kind === "rejected" && !outcome.notified && outcome.reason !== SHARED_LISTENER_REFUSAL) refuse(outcome.reason);
 }
 
 function source(parts: SharedSessionParts) {

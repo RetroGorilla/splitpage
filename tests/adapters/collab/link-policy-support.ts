@@ -3,7 +3,7 @@ import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts
 import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
 import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
 import { readSharedMarkCharacters } from "../../../src/adapters/collab/mark-store.ts";
-import { readSharedTextTarget } from "../../../src/adapters/collab/text-target.ts";
+import { readSharedTextTarget } from "../../../src/adapters/collab/text-address.ts";
 import { explode } from "../../../src/core/text/edits.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 

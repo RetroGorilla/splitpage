@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Y from "yjs";
-import { createSharedAnchor, readSharedAnchor, resolveSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
+import { createSharedAnchor, resolveSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
+import { readSharedAnchor } from "../../../src/adapters/collab/anchor-codec.ts";
 import { applySharedUpdate, encodeSharedState, transactSharedDocument, destroySharedDocument } from "../../../src/adapters/collab/document.ts";
 import { prepareSharedMarkRecord, writeSharedMarkRecord } from "../../../src/adapters/collab/mark-store.ts";
-import { readSharedTextTarget } from "../../../src/adapters/collab/text-target.ts";
+import { readSharedTextTarget } from "../../../src/adapters/collab/text-address.ts";
 import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";

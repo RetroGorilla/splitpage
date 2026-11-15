@@ -26,6 +26,7 @@ names what the command changed by identity, never by offset.
 | `scalar`, `record-field` | the field, the value before and the value written |
 | `status`, `status-retired` | the beat, the status event and its value |
 | `record-create`, `record-delete` | the record and its fields |
+| `beat-create` | the stored beat identity, creating copy, initial observation and retirement direction |
 | `structure` | the command kind and the operation identity |
 
 `typing` is the text a keystroke inserted (`""` for a deletion key), or `null`
@@ -96,7 +97,7 @@ A refusal leaves both stacks as they were. The reasons:
   The executor is not called. Every structure command but a join, an unjoin, a
   separator change, a split, a beat removal, a heading removal without a new
   beat and a restore of either is refused this way until its executor lands:
-  `segment-create`, `segment-move`, `heading-create`, `heading-finalize`, and
+  `segment-move`, `heading-create`, `heading-finalize`, and
   `heading-remove` with a new beat (a demotion). A split whose part cannot be
   recorded keeps the generic part, named `split` or `split-before`. A
   removal of another kind (range, became-heading) is named `remove` and
@@ -574,10 +575,9 @@ Declared, refused by name (`undo-unsupported:split`): a command with two
 splits (a middle selection to its own beat, where the second split names the
 first's new beat by an alias), and Enter inside a scene heading name.
 
-Not undone yet: blank-beat creation, a heading created by paste and a
-demotion. Blank creation and every pasted heading add an entry to the segment
-order, which no operation takes back yet; a demotion also needs the heading
-removal raced with it to show what its undo writes.
+Not undone yet: a heading created by paste and a demotion. A pasted heading
+needs its own inverse; a demotion also needs the heading removal raced with
+it to show what its undo writes. Beat creation is supported below.
 
 ### Undo of a removal and a restore
 
@@ -633,9 +633,193 @@ and marks, and the first beat as compared for a beat. Literals in
 Not undone yet, each refused by name with a literal: a demotion (a
 `heading-remove` with a new beat), because restoring the removal leaves the
 name in the new beat and undoing the split has no operation yet; a heading
-created by paste, because every paste that creates a heading also creates a
-beat (`segment-create`); a command that removes a heading and a beat together;
+created by paste, because the heading creation has no inverse yet;
+a command that removes a heading and a beat together;
 and a restore of a heading removal and a beat removal at once.
+
+### Undo of beat creation
+
+`segment-create` records a `beat-create` part after the whole command has
+applied. The part names the stored beat and the creating copy, and keeps an
+observation of the result. A split still records only its `beat-split` part.
+The shared owner no longer skips an ordinary add or the first input in an
+emptied script. Rule 139's declared creation limit is lifted.
+
+The observation compares the beat's unstamped fields, its boundary and local
+heading, narration characters and active marks, incoming and
+outgoing joins, active status events, visuals, gallery, comments and replies.
+Joins include effective separators, format register values and causal writers
+(including deleted registers), and narration throughout the connected component.
+A split records its source on its new beat, so that source's creation guard
+also sees a split that was later undone. A new neighbouring beat is separate
+work and does not use the existing beat's creation undo up.
+A new heading names its first beat, so adding a scene above a newly created
+beat also uses its undo up, including when it is the script's only beat.
+Only the creator's own restorations compare by original character identity;
+another copy's restoration retains its new identity. Copied marks compare by
+their source. A value last written by another copy remains that copy's
+work even if it equals the original value; a same-value operation that writes
+nothing is no change. Stamps are excluded under rule 35.
+Own formatting is compared by its meaning after undo; a copied foreign mark
+still names its foreign source, including an identical format over the same
+characters. An initial join's retirement also uses the creation up.
+
+Assumed: a retained split boundary, join entry or removal flag counts as a
+structural change even after that change was undone, whoever made it. Later
+typing or value changes by the creator have their own later steps; undoing
+them first can leave the creation unchanged again. Attachments or comments
+that remain, and characters or marks from another copy, use the step up.
+Changes taken back completely leave no foreign content to protect.
+
+Before planning any inverse, every creation part is checked. If one has
+changed, the whole entry is used up: no write, no redo, and one result for
+that key press. The following press reaches the older step. A command with
+an unsupported heading part still follows rule 71 for that part.
+
+Undo emits `segment-retire`, retaining the beat, its segment, visual and
+identities. Its native `creationRetired` map entry carries what the undo saw; all
+structure and projection readers hide the beat only while that observation
+still matches. It is absent from both script and recovery. Redo emits
+`segment-restore`, clearing the marker and revealing the same beat. The
+initial text, values, pictures, comments, replies and joins are absorbed into
+that creation part. Their records remain stored and follow the parent beat's
+conditional visibility, so an unseen edit to an initial child cannot be lost
+to a separate record deletion. Comment `updatedAt` is excluded like other
+stamps; changing comment content or ownership still uses the creation up.
+The ownership index follows changed ownership fields as well as added and
+removed keys, so moving an existing picture or comment onto the beat also
+invalidates retirement, including an unseen concurrent move.
+
+Assumed rules 145 to 149, proposed for the plan review:
+
+145. An unchanged creation is compared with the whole command's result:
+     content, values, owned child records and joins. Current work from another
+     copy uses its undo up, including equal letters with different character
+     identities or an equal value last written by that copy. True no-write
+     operations and edit stamps are ignored. Later own edits undo first.
+146. Ownership means the copy that made a change, not its display name.
+     Two copies displaying the same name still protect each other's work.
+147. A structural change to the created beat by anyone uses its undo up, even after that
+     change was undone. A separately created neighbour is independent work.
+148. An unseen contribution can arrive after a locally effective undo. It
+     invalidates retirement on every copy; its content stays in the script
+     or in the recovery chosen by its own removal. Redo is then used up.
+149. Undo of an unchanged creation adds no recovery entry; redo reveals the
+     same identities, including initial children and joins. First input undo
+     returns the exact emptied script with its previous recovery. A changed
+     creation consumes the whole entry without writing or adding redo; the
+     next press reaches the older entry. A split has its own inverse only.
+
+Assumed for an unseen concurrent change: the local undo can succeed before
+that change arrives. Once delivered, the changed observation invalidates the
+retirement on every copy, keeping that person's content with the beat in the
+script (or in the recovery selected by their own removal). A subsequent
+redo reports used up and writes nothing. If the change was already seen,
+undo itself reports used up and writes nothing.
+
+Two copies, reversed and duplicated deliveries, an encoded late joiner and
+incremental projection are checked by
+`tests/adapters/collab/undo-creation.test.ts`. The structure command tests
+check add undo/redo through the session; the empty-script command and mounted
+feature tests check the first input returns to the emptied document with its
+previous recovery entries intact. C7 still passes the existing structure
+ports and resolves the minted beat identity for focus; no new port is needed.
+
+The guard and projection share the unchanged mark reader in `mark-state.ts`.
+Anchor decoding and physical text lookup now live in `anchor-codec.ts` and
+`text-address.ts`, below projected ownership; the write and projected anchor
+routes remain in `anchors.ts`, `text-target.ts` and `mark-store.ts`. The join
+index has one lazy observer in `shared-join-index.ts`, shared by structure and
+the guard. This keeps observation independent of structure interpretation
+and prevents a runtime import cycle. Every importer names the owning module.
+
+#### Typing path costs
+
+Creation retirement markers live in the native keyed map `creationRetired`.
+Its current size and membership answer presence at the moment of the read;
+there is no observer-populated presence set or revision-stamped empty result.
+Point reads first check the native marker key. Bulk projection checks the
+native store once before traversing comparison candidates.
+
+Before reusing a per-marker result, a synchronous pull applies the active
+native transactions' current changed identities to its dependencies. This
+also runs inside writes, before observers and in field observers, regardless
+of observer registration order. Dirty early reads compare current records
+and ownership/join data without storing a partial transaction's result.
+
+Dependencies name the marked record, owned child identities and ownership
+queries, joined component, exact status/join keys, and text ranges. Changing
+another visual's text does not dirty the marker. A settled false comparison
+leaves the comparison worklist; a marker replacement or a change to its own
+observed data makes it eligible for comparison again. Source membership is
+still read from the native map, including during redo and encoded arrival.
+
+`creation-retirement-cost-matrix.test.ts` pins **96 cases**: both text fields,
+plain/formatted insertion, effective/settled-invalidated markers, the six
+placements below, and zero/100 unrelated beats. R1 is edited; R1/R2 each start
+as three narration characters split after the first. A retired creation has
+one narration and one visual character. Each cell is **first-key checks/builds/visits
+then following-key checks/builds/visits**. Every row is tested separately with **0 and
+100 unrelated beats**, with identical results.
+
+| Marker state | Placement | Narration plain | Narration formatted | Visual plain | Visual formatted |
+| --- | --- | --- | --- | --- | --- |
+| Effective | None | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 |
+| Effective | One in edited R1 segment | 1/1/2 then 0/0/2 | 1/1/2 then 0/0/2 | 1/1/0 then 0/0/0 | 1/1/0 then 0/0/0 |
+| Effective | One in other R2 segment | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 |
+| Effective | Two in R1 | 2/2/4 then 0/0/4 | 2/2/4 then 0/0/4 | 2/2/0 then 0/0/0 | 2/2/0 then 0/0/0 |
+| Effective | Two in R2 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 |
+| Effective | One in each | 1/1/2 then 0/0/2 | 1/1/2 then 0/0/2 | 1/1/0 then 0/0/0 | 1/1/0 then 0/0/0 |
+| Settled invalidation | None | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 |
+| Settled invalidation | One in R1 | 0/0/2 then 0/0/2 | 0/0/2 then 0/0/2 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 |
+| Settled invalidation | One in R2 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 |
+| Settled invalidation | Two in R1 | 0/0/4 then 0/0/4 | 0/0/4 then 0/0/4 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 |
+| Settled invalidation | Two in R2 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 |
+| Settled invalidation | One in each | 0/0/2 then 0/0/2 | 0/0/2 then 0/0/2 | 0/0/0 then 0/0/0 | 0/0/0 then 0/0/0 |
+
+The reverse dependency index routes changed native identities, map keys,
+ownership fields and join targets to cached observations. It does not scan
+cached markers. Rebuilding or removing an observation removes its old links.
+The matrix also pins observation visits: narration sharing the marked
+physical text needs two range-maintenance visits per marker per key; visual
+text and narration in another physical segment need zero visits. Plain and
+formatted insertion have the same counts, including settled invalidations.
+
+An additional **24 cases** warm **0, 1 or 100 markers elsewhere**, effective
+or invalidated, then type **20 keys** in the unmarked beat. All **480 keys**
+pin checks/builds/visits together, including the first key:
+
+| Markers elsewhere | Narration plain | Narration formatted | Visual plain | Visual formatted |
+| --- | --- | --- | --- | --- |
+| 0 | 0/0/0 | 0/0/0 | 0/0/0 | 0/0/0 |
+| 1 | 0/0/0 | 0/0/0 | 0/0/0 | 0/0/0 |
+| 100 | 0/0/0 | 0/0/0 | 0/0/0 | 0/0/0 |
+
+Cold checks are only for markers in the segment needed to resolve the edit.
+Warm unrelated typing makes no comparison or observation build. The pins
+measure comparisons, observation builds and cached-observation visits; they
+exclude keyed index lookups and normal text/projection work. Native-read
+pins remain in `creation-undo-cost.test.ts`; there is no timing claim.
+
+`creation-retirement-phases.test.ts` generates **63 operations per delivery
+order**, in normal and reversed delivery. After every operation and through
+writes, beforeTransaction, beforeObserverCalls, field observers,
+afterTransaction and afterAllTransactions, guarded hidden/projection reads
+must equal a fresh encoded copy. The sequence covers creation, both text
+fields, formatting, values, joins, splits, undo/redo, concurrent delivery and
+encoded arrival. It was red at the first creation undo on 4fe13006.
+
+#### Retained storage limit
+
+The inverse retains the beat and children and persists the full canonical
+observation. The encoded-state growth literal pins **668 bytes for one
+character** and **17,703 bytes for 1,000 characters** in its fixture (including
+the fixed 30-byte increase from moving the marker to its native keyed store). Growth is per undo
+and scales with observed text and children; it is not a fixed-size record.
+A fixed-size digest would introduce collision semantics into the equality
+check, so this cut keeps the exact comparison. There is no persisted cleanup
+path for either effective or invalidated retirements. The plan review must
+decide that storage policy; this cut adds no cleanup mechanism.
 
 ### The provenance marker
 
@@ -799,6 +983,8 @@ the end of every generated history).
 | Field writes | `record-executor.ts` | notes the planned state |
 | Picture undo and redo | `undo-executor.ts` | shown pictures for the undo, the stored picture for the recorder and the redo's retirement |
 | Split and restore guards | `undo-removal.ts` | shown pictures, without the retirement key |
+| Creation undo guard | `creation-retirement.ts` | shown pictures, with their beat's text, fields and ownership |
+| Creation record ownership | `creation-record-index.ts` | ownership keys; the guard reads picture values through the shared gallery reader |
 | Identity occupancy | `structure-reservations.ts` | the stored record, hidden or not |
 | Undone split watch | `split-retirement.ts` | the stored record, hidden or not, through its read view of the store |
 | Preparation view | `prepare.ts` | stored state for every collection; pictures in it go through the planned read |

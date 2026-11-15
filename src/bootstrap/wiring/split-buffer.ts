@@ -5,6 +5,7 @@ import type { PaintedTextSource } from "../../application/editing/ports.ts";
 import { ensureTrailingCaretSpot } from "../../features/common/dom.ts";
 import { mountCellBuffer } from "../../features/editing/cell-buffer.ts";
 import type { CellBuffer } from "../../features/editing/cell-buffer.ts";
+import type { CellBufferPorts } from "../../features/editing/ports.ts";
 import { createCellPage } from "../../features/editing/cell-page.ts";
 import { noteFieldPainted, onBeforePaint, onPainted, paintedFromRow, render } from "../../features/rows/render.ts";
 import { fromHtml, storedHtmlFromDom } from "../richtext.ts";
@@ -15,12 +16,14 @@ import { connectSharedCellSpaceForm } from "./ports/shared-cell-space.ts";
 
 const MEDIA_CELL = Object.freeze({ media: true });
 
-export function mountSharedSplitBuffer(shared: { readonly paintedText: PaintedTextSource; readonly selectionText: PaintedTextSource; readonly bufferedText: BufferedFieldPorts }): CellBuffer {
+export function mountSharedSplitBuffer(shared: { readonly paintedText: PaintedTextSource; readonly selectionText: PaintedTextSource; readonly bufferedText: BufferedFieldPorts;
+  readonly refuseNative?: CellBufferPorts["refuseNative"] }): CellBuffer {
   let mounted: CellBuffer | null = null;
   const disconnect = connectSharedCellSpaceForm(cell => mounted?.spaceForm(cell) ?? null);
   try { mounted = mountCellBuffer({
     root: document.getElementById("rows") as HTMLElement,
     ports: {
+      ...(shared.refuseNative ? { refuseNative: shared.refuseNative } : {}),
       field: surface => {
         const binding: BufferedFieldBinding = createBufferedField({ ...shared.bufferedText,
           abandonment: abandon => shared.bufferedText.abandonment?.(final => {
