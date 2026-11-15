@@ -45,7 +45,12 @@ const SHARED_HOOK_ONLY = Object.freeze([
   "This line changed. Try writing again.",
   "The Writer could not settle",
   "ownershipScans",
-  "appliedUpdates"
+  "appliedUpdates",
+  "The late joiner has not joined",
+  "lateJoiner",
+  "recoveryEntries",
+  "nameIdentities",
+  "nameBeat"
 ]);
 
 let passed = 0;

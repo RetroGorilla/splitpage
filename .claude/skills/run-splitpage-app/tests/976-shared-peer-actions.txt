@@ -1,0 +1,44 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.T=function(id){var e=document.querySelector('#writer-doc .wr-beat[data-id="'+id+'"]');return e?e.textContent.replace(/​/g,''):null};F.openFile(new File([JSON.stringify({schema:2,title:'Shared peer actions',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello',visualText:''},{id:'r2',audioText:'World',visualText:''}],comments:[]})],'peer-actions.splitpage'))
+wait F.state().title === 'Shared peer actions'
+click #btn-write
+wait window.__writerFlowTest.on()
+eval S.enter()
+wait S.read().peer !== null
+eval S.peer.nameIdentities('app','r1',0,['h1','h2','h3','h4','h5']);S.peer.nameIdentities('app','r2',0,['w1','w2','w3','w4','w5']);window.joined=S.peer.lateJoiner('app');true
+expect JSON.stringify(window.joined) === JSON.stringify(S.read().app)
+eval window.formatted=S.peer.format('r1',0,5,'b');S.peer.deliver();true
+expect window.formatted === 'applied' && S.read().app.rows[0].audioText === '<strong>Hello</strong>'
+expect document.querySelector('#writer-doc .wr-beat[data-id="r1"] strong').textContent === 'Hello'
+eval window.erased=S.peer.erase('r1',1,3);S.peer.deliver();true
+expect window.erased === 'applied' && T('r1') === 'Hlo' && JSON.stringify(S.read().app) === JSON.stringify(S.read().peer)
+expect document.querySelector('#writer-doc .wr-beat[data-id="r1"] strong').textContent === 'Hlo'
+eval window.removed=S.peer.remove('r2');S.peer.deliver();true
+expect window.removed === 'applied' && S.read().app.rows.length === 1 && T('r2') === null
+expect (function(r){return r.length===1&&r[0].kind==='removed-beat'&&r[0].row.id==='r2'&&r[0].row.audioText==='World'})(S.peer.recoveryEntries('app'))
+expect JSON.stringify(S.peer.recoveryEntries('peer')) === JSON.stringify(S.peer.recoveryEntries('app'))
+expect JSON.stringify(S.peer.joined().rows.map(function(r){return r.audioText})) === JSON.stringify(['Hello','World'])
+expect JSON.stringify(S.peer.catchUp()) === JSON.stringify(S.read().app)
+expect JSON.stringify(S.peer.recoveryEntries('joiner')) === JSON.stringify(S.peer.recoveryEntries('app'))
+expect JSON.stringify(S.peer.identities('app')) === JSON.stringify([{beat:'r1',units:['h1','h4','h5']}])
+expect JSON.stringify(S.peer.identities('peer')) === JSON.stringify(S.peer.identities('app')) && JSON.stringify(S.peer.identities('joiner')) === JSON.stringify(S.peer.identities('app'))
+eval window.undone=S.peer.undo();S.peer.deliver();true
+expect window.undone.ok && window.undone.effective && window.undone.label === 'delete-scene'
+expect S.read().app.rows.length === 2 && T('r2') === 'World' && S.peer.recoveryEntries('app').length === 0
+expect JSON.stringify(S.peer.identities('app')[1]) === JSON.stringify({beat:'r2',units:['w1','w2','w3','w4','w5']})
+eval S.peer.hold();window.deleted=S.peer.deleteRange('r1',2,'r2',2);window.__writerFlowTest.place({anchor:{kind:'beat',rowId:'r1',offset:3},head:{kind:'beat',rowId:'r1',offset:3}});document.getElementById('writer-doc').focus();true
+press x
+expect window.deleted === 'applied' && T('r1') === 'Hlox' && T('r2') === 'World'
+expect S.counters().queued >= 2 && JSON.stringify(S.read().peer.rows.map(function(r){return r.audioText})) === JSON.stringify(['<strong>Hl</strong>','rld'])
+eval window.released=S.peer.release('reverse');true
+expect window.released >= 2 && JSON.stringify(S.read().app) === JSON.stringify(S.read().peer)
+expect T('r1') === 'Hlx' && T('r2') === 'rld'
+expect JSON.stringify(S.peer.lateJoiner('peer')) === JSON.stringify(S.read().app) && JSON.stringify(S.peer.lateJoiner('app')) === JSON.stringify(S.read().app)
+eval window.undone=S.peer.undo();S.peer.deliver();true
+expect window.undone.ok && window.undone.label === 'delete-selection' && T('r1') === 'Hlox' && T('r2') === 'World'
+expect JSON.stringify(S.read().app) === JSON.stringify(S.read().peer) && JSON.stringify(S.peer.catchUp()) === JSON.stringify(S.read().app)
+expect S.counters().recovered === 0 && S.counters().missingBase === 0
+eval S.leave()
+expect S.read().peer === null && S.peer.joined() === null && S.peer.identities('app') === null
+expect window.__writerFlowTest.on() && T('r1') === 'Hlox' && T('r2') === 'World'
