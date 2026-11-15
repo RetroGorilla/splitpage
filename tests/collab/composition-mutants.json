@@ -987,10 +987,49 @@
       "file": "src/application/editing/buffered-field.ts",
       "find": "    if (released) return true;\n",
       "replace": "",
-      "tests": [
-        "tests/application/editing/buffered-field.test.ts",
-        "src/test/shared-hook-routes-app.test.mjs"
-      ]
+      "tests": ["tests/application/editing/buffered-field.test.ts", "src/test/shared-hook-routes-app.test.mjs"]
+    },
+    {
+      "label": "peer: the peer breaks the group on every action",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "    edit.replace(from, to, insert);\n",
+      "replace": "    undo.breakGroup();\n    edit.replace(from, to, insert);\n",
+      "tests": ["src/test/shared-hook-peer-app.test.mjs"]
+    },
+    {
+      "label": "peer: a planned action ends the group even when its plan changes nothing",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "      const plan = command.plan(doc, capability);\n      if (plan && !(\"refused\" in plan)) undo.breakGroup();\n",
+      "replace": "      undo.breakGroup();\n      const plan = command.plan(doc, capability);\n",
+      "tests": ["src/test/shared-hook-peer-app.test.mjs"]
+    },
+    {
+      "label": "peer: identities are enumerated by code point",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "    return Array.from({ length: painted.text.length }, (_, index) => painted.identity(index) ?? \"\");\n",
+      "replace": "    return Array.from(painted.text, (_, index) => painted.identity(index) ?? \"\");\n",
+      "tests": ["src/test/shared-hook-peer-app.test.mjs"]
+    },
+    {
+      "label": "peer: one call may give a name to two characters",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "        if (chosen.some(([other, again], at) => at < index && again === name && other !== unit)) refuseName(name);\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-peer-app.test.mjs"]
+    },
+    {
+      "label": "peer: a name may move to another character",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "        if (owner) refuseName(name);\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-peer-app.test.mjs"]
+    },
+    {
+      "label": "peer: a beat name may move to another beat",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "      if ([...beatNames].some(([other, given]) => given === name && other !== rowId)) refuseName(name);\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-peer-app.test.mjs"]
     }
   ]
 }

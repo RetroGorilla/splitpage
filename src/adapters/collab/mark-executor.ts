@@ -25,7 +25,8 @@ export function prepareSharedMarkChange(operation: SharedMarkChange, view: Share
     // why: each range keeps its own position in the command, as in one text, so comment occurrences stay distinct.
     for (const part of selected.physical) {
       const planned = markSteps(operation, view, part.plan, unitRanges(view, part.plan, part.units), steps.length);
-      writes.push(...planned.writes); steps.push(...planned.steps);
+      for (const write of planned.writes) writes.push(write);
+      for (const step of planned.steps) steps.push(step);
     }
     const format = FORMAT_MARKS.find(kind => kind === operation.mark.kind);
     // why: a removal deletes only the value it saw, so a set made at the same time survives it;
@@ -34,7 +35,7 @@ export function prepareSharedMarkChange(operation: SharedMarkChange, view: Share
       const path = ["meta", sharedJoinFormatRegisterField(group, format)];
       return operation.mark.value === true ? [{ kind: "set", path, value: true }] : view.has(path) ? [{ kind: "delete", path }] : [];
     }) : [];
-    if (spaces.length) { writes.push(...spaces); steps.push({ kind: "map", writes: spaces }); }
+    if (spaces.length) { for (const space of spaces) writes.push(space); steps.push({ kind: "map", writes: spaces }); }
     return preparedTextDescription(writes, steps);
   });
 }
