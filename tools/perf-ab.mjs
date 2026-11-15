@@ -4,7 +4,7 @@ import { join, resolve } from "node:path";
 import { REPO } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
 import { KEY_GAP_MS, TYPED, buildArgs } from "./perf-record.mjs";
-import { GROUP_NAMES, PENDING_CASES, REMOTE_RATES, SHARED_FIXTURES } from "./perf-shared.mjs";
+import { GROUP_NAMES, REMOTE_RATES, SHARED_FIXTURES } from "./perf-shared.mjs";
 import { withRefTrees } from "./ref-trees.mjs";
 
 const SHARED_MIN_ROUNDS = 5;
@@ -120,7 +120,7 @@ async function sharedMain(args, repo) {
       kind: "shared-composed-editor", dryRun: args.dryRun, startedAt: new Date().toISOString(),
       conditions: { node: process.version, arch: process.arch, platform: process.platform, typedCharacters: TYPED.length, keyGapMs: KEY_GAP_MS,
         remoteRates: REMOTE_RATES, fixtures: args.only.split(","), clients: prepared.clients, replayUpdates: prepared.replayUpdates, minFreeMb: args.minFreeMb, rounds: args.rounds },
-      revisions, pending: PENDING_CASES, rounds: []
+      revisions, rounds: []
     };
     const persist = () => { if (args.out) writeRecord(args.out, record); };
     persist();

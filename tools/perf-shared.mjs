@@ -11,19 +11,19 @@ import { markParts } from "../tests/collab/measure/mark-parts.mjs";
 const DRIVER = join(REPO, ".claude", "skills", "run-splitpage-app", "driver.mjs");
 export const SHARED_FIXTURES = ["short", "long", "large", "edited"];
 export const REMOTE_RATES = [0, 1, 10];
-export const SEAMS = ["trial", "live-apply", "mirror-apply", "assembly", "projection-listeners", "session-receive", "document-entry", "render",
-  "input-handler", "input-command", "input-write"];
+export const SEAMS = ["trial", "live-apply", "queue", "mirror-apply", "assembly", "projection-listeners", "session-receive", "document-entry", "render",
+  "cell-refresh", "input-handler", "input-command", "input-write"];
 const REPLAY_UPDATES = 400;
 const BACKLOG_UPDATES = 200;
 const BACKLOG_AT_MS = 1500;
 const STRUCTURAL_CYCLES = 1;
 const UNDO_PRESSES = 10;
+const OWN_STRUCTURAL_PRESSES = 10;
 const SETTLE_MS = 1200;
 const CHUNK = 60000;
 const CDP_PORT_OFFSET = 1000;
 const LOCAL_ROW = 1;
 export const CLIENTS = Object.freeze({ entry: 0x81234567, replay: 0x81234569 });
-export const PENDING_CASES = Object.freeze([{ label: "split person structural edits", waitsFor: "#1584" }]);
 
 export function caseList() {
   const typing = (surface) => REMOTE_RATES.map((rate) => ({ label: `${surface} typing, remote ${rate}/s`, surface, kind: "typing", rate }));
@@ -31,6 +31,7 @@ export function caseList() {
     ...typing("split"),
     { label: "split undo and redo, remote 1/s", surface: "split", kind: "undo", rate: 1 },
     { label: "split typing, peer structural edits 1/s", surface: "split", kind: "structural", rate: 1 },
+    { label: "split beats added at the caret, remote 1/s", surface: "split", kind: "own-structural", rate: 1 },
     { label: `split typing, backlog of ${BACKLOG_UPDATES} released one by one`, surface: "split", kind: "backlog", order: "forward" },
     { label: `split typing, backlog of ${BACKLOG_UPDATES} released as one catch-up diff`, surface: "split", kind: "backlog", order: "catch-up" },
     ...typing("writer"),
@@ -47,7 +48,7 @@ export function markGroups(marks) {
   return {
     validation: round(parts.validation), apply: round(parts.apply), projection: round(parts.projection), rendering: round(parts.rendering),
     input: round(parts.input), route: round(exclusive("input-handler")), plan: round(exclusive("input-command")), write: round(exclusive("input-write")),
-    outer: round(parts.outer)
+    unattributed: round(parts.unattributed), outer: round(parts.outer)
   };
 }
 
@@ -55,7 +56,7 @@ export function markProblem(marks) {
   try { markGroups(marks); return null; } catch (error) { return error instanceof Error ? error.message : String(error); }
 }
 
-export const GROUP_NAMES = ["validation", "apply", "projection", "rendering", "input", "route", "plan", "write", "outer"];
+export const GROUP_NAMES = ["validation", "apply", "projection", "rendering", "input", "route", "plan", "write", "unattributed", "outer"];
 
 export const PAGE = `(function () {
   if (window.__perfShared) return 'ready';
@@ -183,8 +184,16 @@ function undoLines() {
   return lines;
 }
 
+function ownStructuralLines() {
+  const lines = [];
+  for (let i = 0; i < OWN_STRUCTURAL_PRESSES; i++) lines.push("key ctrl Enter", `sleep ${KEY_GAP_MS}`);
+  return lines;
+}
+
+const KEY_LINES = { undo: undoLines, "own-structural": ownStructuralLines };
+
 export function expectedKeys(spec) {
-  return spec.kind === "undo" ? 2 * UNDO_PRESSES : TYPED.length;
+  return spec.kind === "undo" ? 2 * UNDO_PRESSES : spec.kind === "own-structural" ? OWN_STRUCTURAL_PRESSES : TYPED.length;
 }
 
 function caret(surface) {
@@ -198,7 +207,7 @@ function caseLines(spec, label = spec.label) {
     `eval window.__perfShared.prepare(${JSON.stringify(spec)})`,
     ...caret(spec.surface),
     `eval window.__perfShared.begin(${JSON.stringify(spec)})`,
-    ...(spec.kind === "undo" ? undoLines() : typingLines()),
+    ...(KEY_LINES[spec.kind] ?? typingLines)(),
     `sleep ${SETTLE_MS}`,
     `eval window.__perfShared.end(${JSON.stringify(label)})`
   ];
@@ -311,7 +320,8 @@ export function sharedReport(rows) {
     `- Typing: ${TYPED.length} characters, one real key event every ${KEY_GAP_MS} ms; latency is key-down to the frame after it, modifier key-downs left out`,
     `- Remote rates: ${REMOTE_RATES.join(", ")} updates a second of pre-generated single-character edits to the first beat; peer structural edits are split, join, add and remove, pre-generated and delivered one update a second`,
     `- Backlog: ${BACKLOG_UPDATES} held peer updates released ${BACKLOG_AT_MS} ms into the typing, one by one or as one catch-up diff`,
-    `- Not measured yet: ${PENDING_CASES.map((c) => `${c.label} (waits for ${c.waitsFor})`).join("; ")}`,
+    `- Own structural edits: ${OWN_STRUCTURAL_PRESSES} presses of Ctrl+Enter in a Split narration cell, each adding a beat at the caret through the selection capture`,
+    "- Parts: the five mark parts, the handler, command and write within input, and unattributed (synchronous work inside an event or update span outside every part). Style, layout and paint after the task are in the latency and long-task figures, not in unattributed",
     "",
     "| Fixture | Beats | State bytes | Entry ms | Browser |",
     "| --- | --- | --- | --- | --- |",
@@ -362,7 +372,7 @@ export async function main(argv) {
       rows.push(...sharedRows(found, fixture));
     }
   } finally { rmSync(work, { recursive: true, force: true }); }
-  if (args.json) writeFileSync(args.json, JSON.stringify({ rows, pending: PENDING_CASES }, null, 2) + "\n");
+  if (args.json) writeFileSync(args.json, JSON.stringify({ rows }, null, 2) + "\n");
   console.log(sharedReport(rows));
   return 0;
 }

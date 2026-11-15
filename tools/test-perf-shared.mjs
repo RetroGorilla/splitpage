@@ -6,26 +6,28 @@ import { test } from "node:test";
 import { abbaOrder, parseArgs, sharedSummary, waitForMemory, writeRecord } from "./perf-ab.mjs";
 import { parsePairedArgs, pairedSummary, parseRound } from "./measure-shared-paired.mjs";
 import { KEY_GAP_MS, TYPED } from "./perf-record.mjs";
-import { GROUP_NAMES, PAGE, PENDING_CASES, REMOTE_RATES, SEAMS, caseList, expectedKeys, markGroups, markProblem, parseShared, parseSharedArgs,
+import { GROUP_NAMES, PAGE, REMOTE_RATES, SEAMS, caseList, expectedKeys, markGroups, markProblem, parseShared, parseSharedArgs,
   sharedProblems, sharedRows, sharedSuiteText } from "./perf-shared.mjs";
 
-test("mark groups are the shared disjoint parts of the page's raw marks, and the parts add up to the outermost spans", () => {
+test("mark groups are the shared disjoint parts of the page's raw marks, and what the event and update spans hold outside every part is unattributed", () => {
   const groups = markGroups([
-    ["trial:start", 0], ["trial:end", 1.5], ["live-apply:start", 2], ["mirror-apply:start", 3], ["mirror-apply:end", 5],
+    ["receive:start", 0], ["trial:start", 0], ["trial:end", 1.5], ["live-apply:start", 2], ["mirror-apply:start", 3], ["mirror-apply:end", 5],
     ["projection-listeners:start", 5], ["session-receive:start", 6], ["render:start", 7], ["render:end", 10], ["session-receive:end", 11],
-    ["projection-listeners:end", 11.5], ["live-apply:end", 12], ["input-handler:start", 20], ["input-command:start", 21], ["input-write:start", 22],
-    ["input-write:end", 25], ["input-command:end", 26], ["input-handler:end", 26.5]
+    ["projection-listeners:end", 11.5], ["live-apply:end", 12], ["receive:end", 12.5], ["event:start", 19], ["input-handler:start", 20],
+    ["input-command:start", 21], ["input-write:start", 22], ["input-write:end", 25], ["input-command:end", 26], ["input-handler:end", 26.5], ["event:end", 27]
   ]);
   assert.deepEqual(Object.keys(groups), GROUP_NAMES);
-  assert.deepEqual(groups, { validation: 1.5, apply: 1.5, projection: 2 + 1.5 + 2, rendering: 3, input: 1.5 + 2 + 3, route: 1.5, plan: 2, write: 3, outer: 1.5 + 10 + 6.5 });
-  assert.equal(groups.validation + groups.apply + groups.projection + groups.rendering + groups.input, groups.outer);
-  assert.equal(markProblem([["render:start", 0], ["input-write:start", 1], ["render:end", 2]]), "Unpaired timing mark: measure:render:end");
-  assert.equal(markProblem([["render:start", 2]]), "Unclosed timing mark: render");
+  assert.deepEqual(groups, { validation: 1.5, apply: 1.5, projection: 2 + 1.5 + 2, rendering: 3, input: 1.5 + 2 + 3, route: 1.5, plan: 2, write: 3,
+    unattributed: 0.5 + 0.5 + 1 + 0.5, outer: 12.5 + 8 });
+  assert.equal(groups.validation + groups.apply + groups.projection + groups.rendering + groups.input + groups.unattributed, groups.outer);
+  assert.equal(markProblem([["event:start", 0], ["render:start", 0], ["input-write:start", 1], ["render:end", 2]]), "Unpaired timing mark: measure:render:end");
+  assert.equal(markProblem([["event:start", 0], ["render:start", 2]]), "Unclosed timing mark: render");
+  assert.equal(markProblem([["render:start", 0], ["render:end", 1]]), "Timing mark outside every outer span: measure:render:start");
   assert.equal(markProblem([]), null);
-  assert.deepEqual(SEAMS.filter((seam) => markProblem([[seam + ":start", 0], [seam + ":end", 1]])), [], "every seam belongs to a part");
+  assert.deepEqual(SEAMS.filter((seam) => markProblem([["event:start", 0], [seam + ":start", 0], [seam + ":end", 1], ["event:end", 1]])), [], "every seam belongs to a part");
 });
 
-test("the cases cover typing on both surfaces at every rate, undo, structural edits, both backlog shapes and refusals", () => {
+test("the cases cover typing on both surfaces at every rate, undo, peer and own structural edits, both backlog shapes and refusals", () => {
   const cases = caseList(), labels = cases.map((c) => c.label);
   assert.equal(new Set(labels).size, labels.length);
   for (const surface of ["split", "writer"]) for (const rate of REMOTE_RATES) assert.ok(labels.includes(`${surface} typing, remote ${rate}/s`));
@@ -34,9 +36,10 @@ test("the cases cover typing on both surfaces at every rate, undo, structural ed
   assert.deepEqual(cases.filter((c) => c.kind === "undo").map((c) => c.surface), ["split", "writer"]);
   assert.equal(cases.at(-1).kind, "refused");
   assert.ok(REMOTE_RATES.includes(1));
-  assert.deepEqual(PENDING_CASES, [{ label: "split person structural edits", waitsFor: "#1584" }]);
+  assert.deepEqual(cases.filter((c) => c.kind === "own-structural").map((c) => [c.surface, c.rate]), [["split", 1]]);
   assert.equal(expectedKeys({ kind: "typing" }), TYPED.length);
   assert.equal(expectedKeys({ kind: "undo" }), 20);
+  assert.equal(expectedKeys({ kind: "own-structural" }), 10);
 });
 
 test("the suite enters from the stored state, warms up once, switches to the Writer once and ends every case", () => {
@@ -51,12 +54,14 @@ test("the suite enters from the stored state, warms up once, switches to the Wri
   assert.equal(lines.filter((l) => l === "click #btn-write").length, 1);
   assert.ok(lines.indexOf("click #btn-write") > lines.indexOf(ends[caseList().findIndex((c) => c.surface === "writer")]));
   const presses = TYPED.match(/ ?[^ ]/g).length, undos = caseList().filter((c) => c.kind === "undo").length;
-  assert.equal(lines.filter((l) => l === `sleep ${KEY_GAP_MS}`).length, (caseList().length + 1 - undos) * presses + undos * 20);
+  const own = caseList().filter((c) => c.kind === "own-structural").length;
+  assert.equal(lines.filter((l) => l === `sleep ${KEY_GAP_MS}`).length, (caseList().length + 1 - undos - own) * presses + undos * 20 + own * 10);
+  assert.equal(lines.filter((l) => l === "key ctrl Enter").length, own * 10);
   assert.doesNotThrow(() => new Function(`return ${PAGE};`));
 });
 
 test("a run is refused when keys go missing, marks do not pair, refusals are not refused or the backlog never lands", () => {
-  const good = (spec) => ({ kind: "case", label: spec.label, keys: expectedKeys(spec), marks: [["render:start", 1], ["render:end", 2]],
+  const good = (spec) => ({ kind: "case", label: spec.label, keys: expectedKeys(spec), marks: [["event:start", 0], ["render:start", 1], ["render:end", 2], ["event:end", 3]],
     replayed: spec.rate ? { source: "remote", delivered: 3, refused: 0, recovered: 0 } : null,
     events: spec.kind === "backlog" ? [{ release: spec.order, updates: 200, ms: 4 }]
       : spec.kind === "refused" ? [{ refused: "throws", ok: false, reason: "invalid-update" }, { refused: "zero-length", ok: false, reason: "invalid-update" }, { refused: "queue-full", ok: true, reason: null }] : [] });
@@ -72,7 +77,7 @@ test("a run is refused when keys go missing, marks do not pair, refusals are not
   assert.equal(sharedProblems(rows.filter((r) => r.kind !== "entry"), "short").length, 1);
   const kept = sharedRows(rows, "short");
   assert.equal(kept.length, caseList().length + 1);
-  assert.ok(kept.every((r) => r.kind === "entry" || (r.label.startsWith("short ") && r.groups.rendering === 1 && r.markCount === 2 && !("marks" in r))));
+  assert.ok(kept.every((r) => r.kind === "entry" || (r.label.startsWith("short ") && r.groups.rendering === 1 && r.groups.unattributed === 2 && r.markCount === 4 && !("marks" in r))));
   assert.deepEqual(parseShared('pressed a\nPERF {"kind":"entry"}\n'), [{ kind: "entry" }]);
 });
 
