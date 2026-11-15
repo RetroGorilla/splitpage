@@ -1,7 +1,7 @@
 import * as Y from "yjs";
 import type { SharedDocumentHandle } from "./types.ts";
 import { collabState, guardSharedCallback } from "./state.ts";
-import { readStoredRecordDeletion, SHARED_RECORD_DELETION_FIELD } from "./record-deletion.ts";
+import { readSharedRecordDeletion, SHARED_RECORD_DELETION_FIELD } from "./record-deletion.ts";
 
 interface CreationRecordOwners { readonly groups: Map<string, Set<string>>; readonly owners: Map<string, string>; readonly pending: Set<string> }
 type CreationOwnedCollection = "beats" | "headings" | "visuals" | "gallery" | "comments" | "replies";
@@ -16,7 +16,7 @@ function indexOf(handle: SharedDocumentHandle, collection: CreationOwnedCollecti
     const changed: Parameters<typeof root.observeDeep>[0] = events => guardSharedCallback(state, () => {
       for (const event of events) if (event instanceof Y.YMapEvent) {
         if (!event.path.length) for (const key of event.keysChanged) made.pending.add(String(key));
-        else if (event.path.length === 1 && (event.keysChanged.has(field) || event.keysChanged.has(SHARED_RECORD_DELETION_FIELD))) made.pending.add(String(event.path[0]));
+        else if (event.path.length === 1 && sharedCreationOwnerKeys(field).some(key => event.keysChanged.has(key))) made.pending.add(String(event.path[0]));
       }
     });
     root.observeDeep(changed);
@@ -45,9 +45,12 @@ export function sharedCreationRecordOwner(handle: SharedDocumentHandle, collecti
   return ownerOf(collabState(handle).roots[collection].get(key), field);
 }
 
-// why: a removed record keeps its map behind a removal mark, but it no longer belongs to the beat it names.
+// why: a removed record keeps its map behind a removal mark, but it no longer belongs to the beat it names. These are
+// the only keys the owner is read from, and every watch of a record's owner watches exactly these.
+export function sharedCreationOwnerKeys(field: string): readonly string[] { return [SHARED_RECORD_DELETION_FIELD, field]; }
 export function sharedCreationOwnerOf(record: unknown, field: string): string | null { return ownerOf(record, field); }
 function ownerOf(record: unknown, field: string): string | null {
-  const value: unknown = record instanceof Y.Map && !readStoredRecordDeletion(record) ? record.get(field) : null;
-  return typeof value === "string" ? value : null;
+  if (!(record instanceof Y.Map)) return null;
+  const [mark, value] = sharedCreationOwnerKeys(field).map(key => record.get(key));
+  return !readSharedRecordDeletion(mark) && typeof value === "string" ? value : null;
 }

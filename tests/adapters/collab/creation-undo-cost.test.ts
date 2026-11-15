@@ -10,8 +10,8 @@ import { executeSharedCommand, reverseSharedUndoRecord } from "../../../src/adap
 import { readSharedRevision, transactSharedDocument, applySharedUpdate, encodeSharedState } from "../../../src/adapters/collab/document.ts";
 import { createSharedPreparation } from "../../../src/adapters/collab/prepare.ts";
 import { collabState, guardSharedCallback } from "../../../src/adapters/collab/state.ts";
-import { readSharedCreationDependencyCounts } from "../../../src/adapters/collab/creation-observation-cache.ts";
-import { sharedCreationRecordKeys } from "../../../src/adapters/collab/creation-record-index.ts";
+import { readSharedCreationDependencyCounts, readSharedCreationWatchedFields } from "../../../src/adapters/collab/creation-observation-cache.ts";
+import { sharedCreationOwnerOf, sharedCreationRecordKeys } from "../../../src/adapters/collab/creation-record-index.ts";
 import { isSharedCreationRetired, sharedCreationObservationCost } from "../../../src/adapters/collab/creation-retirement.ts";
 import { SHARED_CREATION_RETIREMENT_FIELD } from "../../../src/adapters/collab/creation-marker.ts";
 import { measureSharedReads } from "../../../src/adapters/collab/read-counts.ts";
@@ -235,6 +235,32 @@ test("creation retirement sees a guarded callback before its dependency observer
     transactSharedDocument(h.a, "local-command", () => { record.set("lengthSeconds", 9); });
     assert.equal(callbacks, 1); assert.equal(isSharedCreationRetired(h.a, beat), false);
   } finally { state.doc.off("beforeObserverCalls", listener); h.close(); }
+});
+
+test("every key the owner of a child record is read from is a key the retired creation watches on that collection", t => {
+  const h = fixture(0); let serial = 0;
+  try {
+    const beat = sharedStructureKey(String(collabState(h.a).doc.clientID), "create", "beat"); assert.ok(beat);
+    const result = executeSharedCommand(h.a, [operation({ kind: "segment-create", id: "create", by: "Alice", beat: "N1", segment: "N1",
+      at: { left: "R1", right: h.tails.get("R1"), affinity: "after" }, fields: { audioText: "x" } }),
+    operation(createRecord("comments", "C1", { id: "C1", author: "Alice", createdAt: 0, text: "x", rowId: beat, field: "audioText" })),
+    operation(createRecord("replies", JSON.stringify(["C1", "A1"]), { id: "A1", commentId: "C1", author: "Alice", createdAt: 1, text: "y" })),
+    operation(createRecord("gallery", "G1", { beat, rank: "1", picture: { imageRef: { sha256: "c".repeat(64) } }, links: [] }))],
+    { label: "create", selection: null, typing: null }, { base: readSharedRevision(h.a) });
+    assert.ok(result.record); const part = result.record.parts[0]; assert.ok(part?.kind === "beat-create");
+    const undone = reverseSharedUndoRecord(h.a, result.record, { by: "Alice", nextId: () => "undo-" + ++serial }); assert.ok(undone.ok && undone.effective);
+    assert.equal(isSharedCreationRetired(h.a, part.beat), true);
+    const roots = collabState(h.a).roots;
+    for (const [collection, key, field] of [["comments", "C1", "rowId"], ["replies", JSON.stringify(["C1", "A1"]), "commentId"], ["gallery", "G1", "beat"]] as const) {
+      const record = roots[collection].get(key); assert.ok(record instanceof Y.Map);
+      const read: string[] = [], get = record.get.bind(record);
+      const mock = t.mock.method(record, "get", (name: string): unknown => { read.push(name); return get(name); });
+      sharedCreationOwnerOf(record, field); mock.mock.restore();
+      const watched = readSharedCreationWatchedFields(h.a, roots[collection]).filter(fields => fields?.includes(field));
+      assert.equal(watched.length, 1, collection);
+      assert.deepEqual(read.filter(name => !watched[0]?.includes(name)), [], collection + " reads a key the creation does not watch");
+    }
+  } finally { h.close(); }
 });
 
 test("creation dependency index prunes empty slots after 1000 temporary comments", () => {

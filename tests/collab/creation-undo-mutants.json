@@ -42,7 +42,7 @@
     {
       "label": "creation ownership ignores retargeted children",
       "file": "src/adapters/collab/creation-record-index.ts",
-      "find": "event.path.length === 1 && (event.keysChanged.has(field) || event.keysChanged.has(SHARED_RECORD_DELETION_FIELD))",
+      "find": "event.path.length === 1 && sharedCreationOwnerKeys(field).some(key => event.keysChanged.has(key))",
       "replace": "false"
     },
     {
@@ -246,8 +246,8 @@
     {
       "label": "retirement visuals watch every descendant instead of their owner",
       "file": "src/adapters/collab/creation-retirement.ts",
-      "find": "watchSharedCreationMembers(roots[collection], keys, raw => sharedCreationOwnerOf(raw, field) === owner, field, owner, raw => sharedCreationOwnerOf(raw, field));",
-      "replace": "watchSharedCreationMembers(roots[collection], keys, raw => collection === \"visuals\" || sharedCreationOwnerOf(raw, field) === owner, collection === \"visuals\" ? undefined : field, owner, raw => collection === \"visuals\" ? owner : sharedCreationOwnerOf(raw, field));"
+      "find": "watchSharedCreationMembers(roots[collection], keys, raw => sharedCreationOwnerOf(raw, field) === owner, sharedCreationOwnerKeys(field), owner, raw => sharedCreationOwnerOf(raw, field));",
+      "replace": "watchSharedCreationMembers(roots[collection], keys, raw => collection === \"visuals\" || sharedCreationOwnerOf(raw, field) === owner, collection === \"visuals\" ? undefined : sharedCreationOwnerKeys(field), owner, raw => collection === \"visuals\" ? owner : sharedCreationOwnerOf(raw, field));"
     },
     {
       "label": "invalidated retirement stays in the comparison worklist",

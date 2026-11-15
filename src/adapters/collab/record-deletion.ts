@@ -29,11 +29,11 @@ function digest(text: string): string {
   return (4294967296 * (2097151 & b) + (a >>> 0)).toString(36);
 }
 
-// why: a list entry removed with its own mark holds its own raced edits, so the record around it does not count them.
+const REMOVED = "~";
+
 function tree(view: SharedDeletionView, path: readonly string[]): unknown {
   if (view.kind(path) !== "map") return sharedJson(view.get(path)) ?? null;
-  return Object.fromEntries([...view.keys(path)].sort().filter(key => !readSharedRecordDeletion(view.get([...path, key, SHARED_RECORD_DELETION_FIELD])))
-    .map(key => [key, tree(view, [...path, key])]));
+  return Object.fromEntries([...view.keys(path)].sort().map(key => [key, tree(view, [...path, key])]));
 }
 
 export function readSharedRecordDeletion(raw: unknown): SharedRecordDeletion | null {
@@ -69,15 +69,26 @@ function watched(collection: string | null, field: string): boolean {
     && !(collection === "comments" && (field === "updatedAt" || field === "resolution" || isSharedResolutionKey(field)));
 }
 
+// why: a list is watched entry by entry, and an entry carrying its own removal mark is left out of both sides of the
+// comparison, so removing an entry is never an edit of the record around it and its raced edits are its own.
 export function sharedRecordObservation(view: SharedDeletionView, path: readonly string[], status: string | null, collection: string | null = null): SharedDeletionSeen {
   const seen: Record<string, string> = {};
-  for (const field of [...view.keys(path)].sort()) if (watched(collection, field)) seen[field] = digest(JSON.stringify(tree(view, [...path, field])));
+  for (const field of [...view.keys(path)].sort()) {
+    if (!watched(collection, field)) continue;
+    const at = [...path, field];
+    if (view.kind(at) !== "map") { seen[field] = digest(JSON.stringify(tree(view, at))); continue; }
+    seen[field] = digest("list");
+    for (const key of [...view.keys(at)].sort()) {
+      seen[field + "/" + key] = readSharedRecordDeletion(view.get([...at, key, SHARED_RECORD_DELETION_FIELD])) ? REMOVED : digest(JSON.stringify(tree(view, [...at, key])));
+    }
+  }
   if (status !== null) seen[STATUS] = digest(status);
   return seen;
 }
 
 export function sharedRecordChanges(seen: SharedDeletionSeen, now: SharedDeletionSeen): readonly string[] {
-  return [...new Set([...Object.keys(seen), ...Object.keys(now)])].filter(field => seen[field] !== now[field]).map(field => field === STATUS ? "status" : field).sort();
+  return [...new Set([...new Set([...Object.keys(seen), ...Object.keys(now)])].filter(field => now[field] !== REMOVED && seen[field] !== now[field])
+    .map(field => field === STATUS ? "status" : field.split("/")[0] ?? field))].sort();
 }
 
 export function sharedRecordState(deletion: SharedRecordDeletion, now: SharedDeletionSeen): string {

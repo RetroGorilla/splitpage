@@ -214,7 +214,7 @@ test("stored size: a removal keeps the record and adds its mark; an edit that ra
       sizes[kind.collection] = { removal: removed - start, edit: edited - removed };
     } finally { w.close(); }
   }
-  assert.deepEqual(sizes, { shots: { removal: 162, edit: 17 }, people: { removal: 126, edit: 9 } });
+  assert.deepEqual(sizes, { shots: { removal: 161, edit: 17 }, people: { removal: 126, edit: 9 } });
 });
 
 for (const order of ORDERS) test(`a tag created again with the id of a removed tag that an edit raced comes back with that edit: ${order}`, () => raced(KINDS[2] as Kind, order, w => {

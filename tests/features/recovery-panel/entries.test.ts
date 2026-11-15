@@ -5,6 +5,7 @@ import { fixture, send, removeBeat, mark, fragment, page, rows, click } from "./
 import { agree } from "../../adapters/collab/executor-support.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import { createRecord, deleteRecord } from "../../adapters/collab/record-support.ts";
+import { pictureA } from "../../adapters/collab/projection-record-support.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 
@@ -65,6 +66,14 @@ const EXAMPLES: readonly Example[] = [
     row: { kind: "deleted-record", label: "Deleted b-roll shot", by: "Deleted by Alice",
       text: "Street\nNotes: dusk\nLocation: rooftop\nOwner: Pat\nAudio cue: SFX: wind\nReshoot: yes\nProps: Cup\nStatus: shot\nChanged after it was deleted: location, status", actions: ["Restore", "Discard"] },
     restored: { rows: [["R1", "abcd"]], people: [["P1", "Pat"]], headings: [] } },
+  { kind: "deleted-record", name: "deleted-record picture", source: { rows: [{ id: "R1", audioText: "abcd", imageRef: pictureA, imageName: "Shot",
+    imageLinks: [{ href: "https://example.com/old", name: "Clip", duration: 1 }] }] },
+    prepare: handle => send(handle, deleteRecord("gallery", "R1:slot:0", "Alice")),
+    race: handle => send(handle, { kind: "record-set", id: "relink", by: "Bob", target: { collection: "gallery", record: "R1:slot:0" }, field: "links",
+      value: [{ href: "https://example.com/new", name: "Clip", duration: 13 }] }),
+    row: { kind: "deleted-record", label: "Deleted picture", by: "Deleted by Alice",
+      text: "Video link: Clip, https://example.com/new, 13 s\nCaption: Shot\nChanged after it was deleted: links", actions: ["Restore", "Discard"] },
+    restored: { rows: [["R1", "abcd"]], people: [], headings: [] } },
   { kind: "deleted-record", name: "deleted-record comment", source: { rows: [{ id: "R1", audioText: "abcd" }], people: [{ id: "P1", name: "Pat" }],
     comments: [{ id: "C1", rowId: "R1", field: "audioText", author: "Bob", body: "Check <this>", createdAt: 0 }] },
     prepare: handle => send(handle, deleteRecord("comments", "C1", "Alice")),
