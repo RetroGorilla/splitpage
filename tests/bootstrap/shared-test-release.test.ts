@@ -15,7 +15,7 @@ for (const enabled of [false, true]) test("shared hook build gate: release has n
   for (const text of ["__sharedTest", "The peer has left", "The peer beat is missing", "draft-not-kept", "The shared session did not start",
     "The draft writer did not detach", "ownershipScans", "appliedUpdates", "app-stopped", "The late joiner has not joined", "lateJoiner", "joinerType", "joinerUndo",
     "The name is already given to another identity", "recoveryEntries", "nameIdentities", "nameBeat", "enterFrom", "refusedUpdate", "replayed", "stopReplay",
-    "There is no refused update of that kind", "The stored shared state is incomplete", "splitpage.timingMarks", ...TIMING_MARKS]) {
+    "There is no refused update of that kind", "The stored shared state is incomplete", "The stored shared state holds no script", "marksOn", ...TIMING_MARKS]) {
     assert.equal(code.includes(text), enabled, text);
   }
 });

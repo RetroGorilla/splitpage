@@ -40,12 +40,21 @@ type BufferedField = "audioText" | "visualText";
 type Order = "forward" | "reverse" | "duplicate" | "catch-up";
 type RefusedKind = "throws" | "zero-length" | "queue-full";
 export type SharedTestReplica = Side | "joiner";
+interface ReplayClock {
+  readonly now: () => number;
+  readonly start: (run: () => void, ms: number) => unknown;
+  readonly stop: (timer: unknown) => void;
+}
+
+const WALL_CLOCK: ReplayClock = Object.freeze({ now: () => Date.now(), start: (run: () => void, ms: number) => setTimeout(run, ms),
+  stop: (timer: unknown) => { clearTimeout(timer as ReturnType<typeof setTimeout>); } });
 
 const PEER_LEFT = "The peer has left";
 const NOT_JOINED = "The late joiner has not joined";
 const NAME_TAKEN = "The name is already given to another identity";
 const UNKNOWN_REFUSAL = "There is no refused update of that kind";
 const MEDIA_CELL = Object.freeze({ media: true });
+const QUEUE_FILLER = "€";
 // why: a decodable item whose origin is a later clock of its own client, which native integration throws on
 const THROWS_WHILE_APPLYING: readonly number[] = [1, 1, 7, 0, 168, 7, 5, 1, 125, 1, 0];
 const ZERO_LENGTH_STRUCT: readonly number[] = [1, 1, 1, 0, 40, 1, 4, 109, 101, 116, 97, 1, 120, 0, 0];
@@ -145,8 +154,19 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
     const target = side === "app" ? app.handle : handle, source = side === "app" ? handle : app.handle;
     return encodeSharedUpdate(source, encodeSharedStateVector(target));
   };
+  let replaying: { readonly target: Side; readonly results: SharedApplyResult[]; readonly total: number; readonly clock: ReplayClock;
+    timer: { readonly id: unknown } | null; readonly refused: Uint8Array[]; recovered: number } | null = null;
+  const recover = (run: NonNullable<typeof replaying>): void => {
+    for (let next = run.refused[0]; next; next = run.refused[0]) {
+      if (!applySharedUpdate(run.target === "app" ? app.handle : handle, next).ok) return;
+      run.refused.shift(); run.recovered++;
+    }
+  };
   const resend = (side: Side): void => {
     if (!live) return;
+    const run = replaying;
+    // why: during a replay the declined side takes back only emitted bytes, never a diff of the sender's later state
+    if (run && run.target === side && (run.timer !== null || run.refused.length)) { recover(run); return; }
     receive(side, catchUpOf(side));
   };
   const taken = (to: Side): Uint8Array[] => {
@@ -213,27 +233,29 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
     const before = new Set(beatIds()), kind = structural(command);
     return { kind, id: beatIds().find(id => !before.has(id)) ?? null };
   };
-  let replaying: { readonly results: SharedApplyResult[]; total: number; timer: unknown } | null = null;
   const stopReplay = (): void => {
     const running = replaying;
-    if (running && running.timer !== null) ports.timers.stop(running.timer);
+    if (running && running.timer !== null) running.clock.stop(running.timer.id);
     if (running) running.timer = null;
   };
-  const replay = (updates: readonly (string | Uint8Array | readonly number[])[], everyMs: number, to: Side = "app"): number => {
+  const replay = (updates: readonly (string | Uint8Array | readonly number[])[], everyMs: number, to: Side = "app", clock: ReplayClock = WALL_CLOCK): number => {
     alive();
     stopReplay();
     paused = true;
-    const bytes = updates.map(sharedTestBytes), started = ports.now(), target = to === "app" ? app.handle : handle;
-    const running = { results: [] as SharedApplyResult[], total: bytes.length, timer: null as unknown };
+    const bytes = updates.map(sharedTestBytes), started = clock.now(), target = to === "app" ? app.handle : handle;
+    const running: NonNullable<typeof replaying> = { target: to, results: [], total: bytes.length, clock, timer: null, refused: [], recovered: 0 };
     replaying = running;
     const next = (): void => {
       const at = running.results.length, update = bytes[at];
       if (!update) { running.timer = null; return; }
-      running.timer = ports.timers.start(() => {
-        if (!live || replaying !== running || running.timer === null) return;
-        running.results.push(applySharedUpdate(target, update));
+      const timer = { id: clock.start(() => {
+        if (!live || replaying !== running || running.timer !== timer) return;
+        const result = running.refused.length ? { ok: false as const, reason: "queue-full" as const } : applySharedUpdate(target, update);
+        running.results.push(result);
+        if (!result.ok && result.reason === "queue-full") running.refused.push(update);
         next();
-      }, Math.max(0, started + (at + 1) * everyMs - ports.now()));
+      }, Math.max(0, started + (at + 1) * everyMs - clock.now())) };
+      running.timer = timer;
     };
     next();
     return bytes.length;
@@ -251,9 +273,10 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
       if (kind === "throws") return base64Of(Uint8Array.from(THROWS_WHILE_APPLYING));
       if (kind === "zero-length") return base64Of(Uint8Array.from(ZERO_LENGTH_STRUCT));
       if (kind !== "queue-full" || !rowId) throw new Error(UNKNOWN_REFUSAL);
-      const held = paused, before = sent;
+      const wasPaused = paused, before = sent;
       paused = true;
-      try { buffered(rowId, "audioText", 0, 0, "x".repeat(sharedBufferQueueBytes() + 1)); } finally { paused = held; }
+      // why: a three-byte character passes the byte limit with a third of the characters; write cost grows per character
+      try { buffered(rowId, "audioText", 0, 0, QUEUE_FILLER.repeat(Math.ceil((sharedBufferQueueBytes() + 1) / 3))); } finally { paused = wasPaused; }
       const made = pending.filter(item => item.side === "app" && item.id > before);
       for (const item of made) pending.splice(pending.indexOf(item), 1);
       if (made.length !== 1 || !made[0]) throw new Error(UNKNOWN_REFUSAL);
@@ -264,7 +287,7 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
     replayed: () => {
       const running = replaying;
       return running ? { delivered: running.results.filter(result => result.ok).length, refused: running.results.filter(result => !result.ok).length,
-        remaining: running.total - running.results.length, running: running.timer !== null } : null;
+        recovered: running.recovered, remaining: running.total - running.results.length, running: running.timer !== null } : null;
     },
     stopReplay,
     recovery: () => projectSharedDocumentWithRecovery(handle).recovery,
@@ -365,7 +388,8 @@ export function sharedTestPeerHook(current: () => SharedTestPeer | null) {
     inject: (update: string | Uint8Array | readonly number[], to?: Side) => current()?.inject(update, to),
     refusedUpdate: (kind: RefusedKind, rowId?: string) => current()?.refusedUpdate(kind, rowId),
     capture: (to?: Side) => current()?.capture(to) ?? [],
-    replay: (updates: readonly (string | Uint8Array | readonly number[])[], everyMs: number, to?: Side) => current()?.replay(updates, everyMs, to),
+    replay: (updates: readonly (string | Uint8Array | readonly number[])[], everyMs: number, to?: Side, clock?: ReplayClock) =>
+      current()?.replay(updates, everyMs, to, clock),
     replayed: () => current()?.replayed() ?? null,
     stopReplay: () => { current()?.stopReplay(); },
     undo: () => current()?.undo(),

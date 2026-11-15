@@ -26,6 +26,7 @@ import { currentHome, documentLocation, setHome } from "./location-owner.ts";
 import { projectSharedDocumentWithRecovery } from "../../adapters/collab/project.ts";
 import { hydrateSharedDocumentFromState } from "../../adapters/collab/hydrate.ts";
 import type { SharedDocumentHandle } from "../../adapters/collab/types.ts";
+import { timingMarks } from "../../../shared/timing-marks.ts";
 
 declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
@@ -163,7 +164,7 @@ function startSharedTestHook(): () => void {
     enter: () => enter(),
     enterFrom: (state: string | Uint8Array | ArrayBuffer) => enter(sharedTestBytes(state)),
     leave,
-    timing: (on: boolean) => { (globalThis as Record<PropertyKey, unknown>)[Symbol.for("splitpage.timingMarks")] = on === true; },
+    timing: (on: boolean) => { timingMarks.marksOn = on === true; },
     peer: sharedTestPeerHook(() => peer),
     read: () => ({ app: documentReader.read(doc => doc ? JSON.parse(JSON.stringify(doc)) as unknown : null), peer: peer?.read() ?? null }),
     recovery: () => {

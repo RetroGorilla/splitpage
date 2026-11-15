@@ -13,7 +13,7 @@ import { hasSetLength } from "../../core/document/timing.ts";
 import { formatDuration } from "../../core/production/timing.ts";
 import type { MarkName, Marks, Run } from "../../core/text/runs.ts";
 import { domKeys, domToPos, posToDom } from "../common/cell-dom.ts";
-import { markTestTiming } from "../common/test-hooks.ts";
+import { timingMarks } from "../../../shared/timing-marks.ts";
 import { createFlowBeatMenu } from "./flow-beat-menu.ts";
 import { createPaintedBeats } from "../../application/editing/painted-beats.ts";
 import { createWriterBuffer } from "./flow-buffer.ts";
@@ -22,6 +22,8 @@ import type { BufferedFieldPorts } from "../../application/editing/buffered-fiel
 import type { PaintedText, PaintedTextSource } from "../../application/editing/ports.ts";
 import type { EditorSelection } from "../../application/editing/selection.ts";
 import type { CommonDocumentSession } from "../../application/session/document-session.ts";
+
+declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 const ZWSP = String.fromCharCode(0x200B);
 const ZWSP_ALL = new RegExp(ZWSP, "g");
@@ -1375,8 +1377,9 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
   ];
   const guarded = buffered ? listeners.map(([target, name, handler]): [EventTarget, string, EventListener] =>
     [target, name, event => {
-      markTestTiming("measure:input-handler:start");
-      try { buffered.native(event, () => handler(event)); } finally { markTestTiming("measure:input-handler:end"); }
+      if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:start");
+      try { buffered.native(event, () => handler(event)); }
+      finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:end"); }
     }]) : listeners;
   guarded.forEach(([target, name, handler]) => target.addEventListener(name, handler));
   const clipboardHandlers = buffered ? {

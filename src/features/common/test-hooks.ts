@@ -4,10 +4,6 @@ declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 // source run without the bundler (the unit tests) leaves it undefined and keeps the hooks.
 const TEST_HOOKS: boolean = typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS;
 
-export function markTestTiming(name: string): void {
-  if (TEST_HOOKS && (globalThis as Record<PropertyKey, unknown>)[Symbol.for("splitpage.timingMarks")] === true) performance.mark(name);
-}
-
 export function exposeTestHook(name: string, make: () => unknown, hold: (withdraw: () => void) => void): void {
   if (!TEST_HOOKS) return;
   const global = window as unknown as Record<PropertyKey, unknown>;

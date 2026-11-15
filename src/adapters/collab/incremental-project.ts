@@ -7,8 +7,10 @@ import { freezeSharedProjection, SharedProjectionCache } from "./projection-cach
 import type { SharedProjectionWork } from "./projection-cache.ts";
 import { SharedProjectionSource } from "./projection-source.ts";
 import type { CollabRoots } from "./roots.ts";
-import { markSharedTiming } from "./timing-marks.ts";
 import type { SharedDocumentHandle, SharedTransactionOrigin } from "./types.ts";
+import { timingMarks } from "../../../shared/timing-marks.ts";
+
+declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 export interface SharedIncrementalProjection extends SharedDocumentProjectionStep { readonly revision: number }
 
@@ -66,33 +68,35 @@ export function createSharedIncrementalProjector(handle: SharedDocumentHandle,
   let pending: number | null = null;
   const publish = (): void => {
     if (pending === null) return;
-    if (normalize) {
-      const next = new CollabDocumentState(), replacement = next as unknown as SharedDocumentHandle;
-      try { count?.("snapshot", "normalized-input"); Y.applyUpdate(next.doc, Y.encodeStateAsUpdate(state.doc)); }
-      catch (error) { destroySharedDocument(replacement); throw error; }
-      source.normalizedInput(replacement);
-      if (normalized) destroySharedDocument(normalized); normalized = replacement;
-    }
-    current = freezeSharedProjection({ ...assembleSharedDocument(source, current.document), revision: pending });
-    pending = null;
+    if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:assembly:start");
+    try {
+      if (normalize) {
+        const next = new CollabDocumentState(), replacement = next as unknown as SharedDocumentHandle;
+        try { count?.("snapshot", "normalized-input"); Y.applyUpdate(next.doc, Y.encodeStateAsUpdate(state.doc)); }
+        catch (error) { destroySharedDocument(replacement); throw error; }
+        source.normalizedInput(replacement);
+        if (normalized) destroySharedDocument(normalized); normalized = replacement;
+      }
+      current = freezeSharedProjection({ ...assembleSharedDocument(source, current.document), revision: pending });
+      pending = null;
+    } finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:assembly:end"); }
   };
   stops.push(observeSharedUpdates(handle, (update, origin) => {
-    markSharedTiming("measure:mirror-apply:start");
-    transactSharedDocument(mirror, "remote", () => Y.applyUpdate(replica.doc, update));
-    markSharedTiming("measure:mirror-apply:end");
+    if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:mirror-apply:start");
+    try { transactSharedDocument(mirror, "remote", () => Y.applyUpdate(replica.doc, update)); }
+    finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:mirror-apply:end"); }
     pending = readSharedRevision(handle);
-    markSharedTiming("measure:assembly:start");
     try { publish(); }
     catch (error) {
-      markSharedTiming("measure:assembly:end");
       if (!failureListeners.size) throw error;
-      for (const listener of failureListeners) guardSharedCallback(state, () => listener(error, origin));
+      if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:projection-listeners:start");
+      try { for (const listener of failureListeners) guardSharedCallback(state, () => listener(error, origin)); }
+      finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:projection-listeners:end"); }
       return;
     }
-    markSharedTiming("measure:assembly:end");
-    markSharedTiming("measure:projection-listeners:start");
-    for (const listener of listeners) guardSharedCallback(state, () => listener(current, origin));
-    markSharedTiming("measure:projection-listeners:end");
+    if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:projection-listeners:start");
+    try { for (const listener of listeners) guardSharedCallback(state, () => listener(current, origin)); }
+    finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:projection-listeners:end"); }
   }));
   return Object.freeze({
     read: () => current,

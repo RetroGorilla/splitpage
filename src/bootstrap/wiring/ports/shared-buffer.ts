@@ -7,7 +7,6 @@ import type { BufferedFieldPorts } from "../../../application/editing/buffered-f
 import { bufferedFieldTarget } from "../../../application/editing/buffered-field-key.ts";
 import type { ProductionReaders } from "../../../core/production/ports.ts";
 import type { StampPorts } from "../../../application/session/ports.ts";
-import { markTestTiming } from "../../../features/common/test-hooks.ts";
 
 export function sharedBufferPorts(handle: SharedDocumentHandle, session: Pick<SharedDocumentSession, "run" | "read" | "readAt" | "epoch" | "beforeCommand">,
   effects: Pick<BufferedFieldPorts, "missingBase" | "recovered" | "report" | "ownershipScan" | "abandonment"> & {
@@ -16,11 +15,7 @@ export function sharedBufferPorts(handle: SharedDocumentHandle, session: Pick<Sh
     readonly stamps: StampPorts;
   }
 ): { readonly paintedText: PaintedTextSource; readonly selectionText: PaintedTextSource; readonly bufferedText: BufferedFieldPorts } {
-  const run: typeof session.run = command => {
-    markTestTiming("measure:input-command:start");
-    try { return session.run(command); } finally { markTestTiming("measure:input-command:end"); }
-  };
-  const commit = createSharedBufferedText(handle, { ...session, run }, { target: rowId => sharedBufferedTarget(handle, rowId), author: effects.author, readers: effects.readers,
+  const commit = createSharedBufferedText(handle, session, { target: rowId => sharedBufferedTarget(handle, rowId), author: effects.author, readers: effects.readers,
     stamps: effects.stamps });
   return {
     paintedText: {

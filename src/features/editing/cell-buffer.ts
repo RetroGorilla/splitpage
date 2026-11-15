@@ -7,11 +7,13 @@ import { toHtml } from "../../core/text/html.ts";
 import { projection } from "../../core/text/runs.ts";
 import { domToPos, posToDom, placeSelection, paintTrailingCellSpaces, clearTrailingCellSpaces, readSharedCellSpaceForm } from "../common/cell-dom.ts";
 import { cssAttr } from "../common/dom.ts";
-import { markTestTiming } from "../common/test-hooks.ts";
 import type { CellBufferPorts } from "./ports.ts";
 import type { PaintedText } from "../../application/editing/ports.ts";
 import { followPaintedCaret } from "../../application/editing/painted-selection.ts";
 import type { CellPoints } from "../../core/text/selection.ts";
+import { timingMarks } from "../../../shared/timing-marks.ts";
+
+declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 const CELLS = '.cell-editable[data-field="audioText"], .cell-editable[data-field="visualText"]';
 const TYPES = ["beforeinput", "input", "compositionstart", "compositionend", "keydown", "cut", "paste", "drop", "focusout"] as const;
@@ -229,19 +231,17 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
   }
 
   function listener(event: Event): void {
-    const cell = event.target instanceof Element ? event.target.closest(".cell-editable") : null;
-    if (ports.refuseNative?.(event, cell && root.contains(cell) ? cell : null)) {
-      refuse(event, "buffer-unsupported-input"); return;
-    }
-    ports.shown(() => { binding.native(event, () => { step(event, cell && root.contains(cell) ? cell : null); }); });
+    if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:start");
+    try {
+      const cell = event.target instanceof Element ? event.target.closest(".cell-editable") : null;
+      if (ports.refuseNative?.(event, cell && root.contains(cell) ? cell : null)) {
+        refuse(event, "buffer-unsupported-input"); return;
+      }
+      ports.shown(() => { binding.native(event, () => { step(event, cell && root.contains(cell) ? cell : null); }); });
+    } finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:end"); }
   }
 
-  function timed(event: Event): void {
-    markTestTiming("measure:input-handler:start");
-    try { listener(event); } finally { markTestTiming("measure:input-handler:end"); }
-  }
-
-  for (const type of TYPES) root.addEventListener(type, timed, true);
+  for (const type of TYPES) root.addEventListener(type, listener, true);
   if (caret) { root.addEventListener("focusin", focus); root.ownerDocument.addEventListener("selectionchange", selectionChanged); }
   const stopPainted = ports.onPainted(caret ? painted : record), stopCheck = ports.beforePaint(() => {
     binding.canPaint();
@@ -260,7 +260,7 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
       open = false;
       spaceForms = null;
       stopPainted(); stopCheck();
-      for (const type of TYPES) root.removeEventListener(type, timed, true);
+      for (const type of TYPES) root.removeEventListener(type, listener, true);
       root.removeEventListener("focusin", focus);
       root.ownerDocument.removeEventListener("selectionchange", selectionChanged);
       for (const cell of root.querySelectorAll(CELLS)) {

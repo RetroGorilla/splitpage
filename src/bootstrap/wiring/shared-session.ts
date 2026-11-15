@@ -176,7 +176,7 @@ function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { readonly ke
     made.replica = replica;
     const admission = { admit: () => made.session ? made.session.admit() : { kind: "rejected" as const, reason: SHARED_SWITCHING } };
     // why: replacement listeners may already see the shared owner, so Ctrl+Z must reach its undo owner first
-    made.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup });
+    made.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup, replayed: undo.replayed });
     made.swap = collectReplacementErrors(faults.errors, () => adoptShared(owner => {
       const session = createSharedSession({
         replica: replica, entry: owner.entry, undo: { record: () => {} },

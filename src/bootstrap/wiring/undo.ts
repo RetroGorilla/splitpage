@@ -1,4 +1,5 @@
 import { createUndo } from "../../application/editing/undo/undo.ts";
+import type { SharedUndoRecord } from "../../core/collab/undo-record.ts";
 import type { ReplayRunner, Undo, UndoDirection, UndoHooks, UndoPorts } from "../../application/editing/undo/undo.ts";
 import type { SharedUndo, SharedUndoOutcome } from "../../application/editing/undo/shared-undo.ts";
 import type { SharedUndoActions } from "../../application/editing/undo/shared-undo-actions.ts";
@@ -6,6 +7,9 @@ import { sharedUndoNotice } from "../../application/editing/undo/shared-undo-not
 import type { StampPorts, UndoPort } from "../../application/session/ports.ts";
 import { fromHtml } from "../richtext.ts";
 import { heldDocument, liveSession } from "./session-owner.ts";
+import { timingMarks } from "../../../shared/timing-marks.ts";
+
+declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 const WITH_MEDIA = Object.freeze({ media: true });
 
@@ -14,6 +18,7 @@ let started: Undo | null = null;
 export interface SharedUndoRoute {
   readonly actions: SharedUndoActions;
   readonly breakGroup: SharedUndo["breakGroup"];
+  readonly replayed: () => SharedUndoRecord | null;
 }
 
 let sharedRoute: SharedUndoRoute | null = null;
@@ -30,10 +35,13 @@ export function sharedUndoRoute(): SharedUndoRoute | null {
 }
 
 export function stepSharedUndo(route: SharedUndoRoute, direction: UndoDirection, warn: (message: string) => void): SharedUndoOutcome {
-  const outcome = direction === "undo" ? route.actions.undo() : route.actions.redo();
-  const notice = sharedUndoNotice(outcome, direction);
-  if (notice) warn(notice);
-  return outcome;
+  if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-command:start");
+  try {
+    const outcome = direction === "undo" ? route.actions.undo() : route.actions.redo();
+    const notice = sharedUndoNotice(outcome, direction);
+    if (notice) warn(notice);
+    return outcome;
+  } finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-command:end"); }
 }
 
 export function breakUndoGroup(): void {

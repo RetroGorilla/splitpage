@@ -25,6 +25,9 @@ import { observeSharedStructureIndex } from "./structure-index.ts";
 import { resolveIndexedRestorableBeat } from "./structure-plan.ts";
 import { readSharedContentRef } from "../../core/collab/read-operation.ts";
 import { projectSharedDocumentWithRecovery } from "./project.ts";
+import { timingMarks } from "../../../shared/timing-marks.ts";
+
+declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 export function sharedBufferSourceSegment(handle: SharedDocumentHandle, rowId: string): string | null {
   const segment = resolveIndexedRestorableBeat(observeSharedStructureIndex(handle), rowId)?.segment;
@@ -79,6 +82,7 @@ export function createSharedBufferedText(
           if (sharedBufferDeliveryBusy(handle)) return { kind: "rejected", reason: "buffer-delivery" };
           if (session.epoch() !== epoch) { stranded = true; return { kind: "rejected", reason: "buffer-epoch" }; }
           let outcome: CommandOutcome, planned = false;
+          if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-command:start");
           try {
             const commit = buffer.plan(), author = ports.author(), operations = bufferedTextOperations(commit, painted, target, runs, author);
             outcome = session.run({ name: "buffered-text", needs: "edit", plan: doc => {
@@ -95,6 +99,7 @@ export function createSharedBufferedText(
               };
             } });
           } catch (error) { return { kind: "failed", error }; }
+          finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-command:end"); }
           // why: a list the document refused after admission stays refused at this base; assumed rule 29 on #1414 places it.
           stranded = planned && outcome.kind === "rejected";
           if (outcome.kind === "applied" || outcome.kind === "committed" || outcome.kind === "noop") {
