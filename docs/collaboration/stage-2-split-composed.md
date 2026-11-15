@@ -139,7 +139,8 @@ commit's B-roll and name-derived people records. Structure commands are merged;
 their callers belong to that next part: pass named `sharedStructurePorts`, resolve minted ids in
 `addRow`, `addRowAndFocus`, `splitField` and `splitCellField`, and retain equivalent
 buffer and flow joins. A visual split is refused as
-`visual-split-in-shared-session`; adding a beat has the skipped undo refusal
-`undo-unsupported:segment-create`. Both notices must appear once when those
-callers are connected. Until a caller has its shared form, rule 73's visible
+`visual-split-in-shared-session`, with one notice. Beat creation undo now follows
+the merged [creation undo contract](stage-2-shared-undo.md#undo-of-beat-creation)
+from #1590, replacing the earlier skipped segment-create limit. Until a caller
+has its shared form, rule 73's visible
 refusal remains. No additional product rule is assumed here.
