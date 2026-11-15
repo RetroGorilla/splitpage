@@ -5,13 +5,17 @@ import { fixture, send, removeBeat, mark, fragment, page, rows, click } from "./
 import { agree } from "../../adapters/collab/executor-support.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import { createRecord, deleteRecord } from "../../adapters/collab/record-support.ts";
+import { pictureA } from "../../adapters/collab/projection-record-support.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 
 interface Example {
   readonly kind: string;
+  readonly name?: string;
+  readonly restored?: Readonly<Record<string, unknown>>;
   readonly source?: Record<string, unknown>;
   readonly prepare: (handle: SharedDocumentHandle) => void;
+  readonly race?: (handle: SharedDocumentHandle) => void;
   readonly row: { readonly kind: string; readonly label: string; readonly by: string; readonly text: string; readonly actions: readonly string[] };
 }
 
@@ -46,12 +50,42 @@ const EXAMPLES: readonly Example[] = [
   { kind: "deleted-person", source: { rows: [{ id: "R1", audioText: "abcd" }], people: [{ id: "P1", name: "Pat" }],
     productionTags: [{ id: "t_1", cat: "prop", name: "Cup", status: "needed", owner: "P1" }] },
     prepare: handle => send(handle, deleteRecord("people", "P1", "Alice")),
-    row: { kind: "deleted-person", label: "Deleted person", by: "Alice", text: "Pat", actions: ["Restore", "Discard"] } }
+    row: { kind: "deleted-person", label: "Deleted person", by: "Alice", text: "Pat", actions: ["Restore", "Discard"] } },
+  { kind: "deleted-record", source: { rows: [{ id: "R1", audioText: "abcd" }], people: [{ id: "P1", name: "Pat" }] },
+    prepare: handle => send(handle, deleteRecord("people", "P1", "Alice")),
+    race: handle => send(handle, { kind: "record-set", id: "rename", by: "Bob", target: { collection: "people", record: "P1" }, field: "name", value: "Patty" }),
+    row: { kind: "deleted-record", label: "Deleted person", by: "Deleted by Alice", text: "Patty\nChanged after it was deleted: name", actions: ["Restore", "Discard"] },
+    restored: { rows: [["R1", "abcd"]], people: [["P1", "Patty"]], headings: [] } },
+  { kind: "deleted-record", name: "deleted-record shot", source: { rows: [{ id: "R1", audioText: "abcd" }], people: [{ id: "P1", name: "Pat" }],
+    brollShots: [{ id: "S1", name: "Street", status: "unshot", origin: "list", owner: "P1", notes: "dusk", audioRef: "SFX: wind", reshoot: true, props: [{ id: "pr1", name: "Cup" }] }] },
+    prepare: handle => send(handle, deleteRecord("shots", "S1", "Alice")),
+    race: handle => {
+      send(handle, { kind: "record-set", id: "where", by: "Bob", target: { collection: "shots", record: "S1" }, field: "location", value: "rooftop" });
+      send(handle, { kind: "status", id: "done", by: "Bob", target: { scope: "shot", record: "S1" }, value: "shot", parents: [] });
+    },
+    row: { kind: "deleted-record", label: "Deleted b-roll shot", by: "Deleted by Alice",
+      text: "Street\nNotes: dusk\nLocation: rooftop\nOwner: Pat\nAudio cue: SFX: wind\nReshoot: yes\nProps: Cup\nStatus: shot\nChanged after it was deleted: location, status", actions: ["Restore", "Discard"] },
+    restored: { rows: [["R1", "abcd"]], people: [["P1", "Pat"]], headings: [] } },
+  { kind: "deleted-record", name: "deleted-record picture", source: { rows: [{ id: "R1", audioText: "abcd", imageRef: pictureA, imageName: "Shot",
+    imageLinks: [{ href: "https://example.com/old", name: "Clip", duration: 1 }] }] },
+    prepare: handle => send(handle, deleteRecord("gallery", "R1:slot:0", "Alice")),
+    race: handle => send(handle, { kind: "record-set", id: "relink", by: "Bob", target: { collection: "gallery", record: "R1:slot:0" }, field: "links",
+      value: [{ href: "https://example.com/new", name: "Clip", duration: 13 }] }),
+    row: { kind: "deleted-record", label: "Deleted picture", by: "Deleted by Alice",
+      text: "Video link: Clip, https://example.com/new, 13 s\nCaption: Shot\nChanged after it was deleted: links", actions: ["Restore", "Discard"] },
+    restored: { rows: [["R1", "abcd"]], people: [], headings: [] } },
+  { kind: "deleted-record", name: "deleted-record comment", source: { rows: [{ id: "R1", audioText: "abcd" }], people: [{ id: "P1", name: "Pat" }],
+    comments: [{ id: "C1", rowId: "R1", field: "audioText", author: "Bob", body: "Check <this>", createdAt: 0 }] },
+    prepare: handle => send(handle, deleteRecord("comments", "C1", "Alice")),
+    race: handle => send(handle, { kind: "record-set", id: "assign", by: "Bob", target: { collection: "comments", record: "C1" }, field: "assignee", value: "P1" }),
+    row: { kind: "deleted-record", label: "Deleted comment", by: "Deleted by Alice",
+      text: "Check <this>\nAssigned to: Pat\nChanged after it was deleted: assignee", actions: ["Restore", "Discard"] },
+    restored: { rows: [["R1", "abcd"]], people: [["P1", "Pat"]], headings: [] } }
 ];
 
-for (const example of EXAMPLES) for (const order of ["D1", "rev"] as const) test("C9 literal entry, copyable content and discard undo: " + example.kind + "/" + order, () => {
+for (const example of EXAMPLES) for (const order of ["D1", "rev"] as const) test("C9 literal entry, copyable content and discard undo: " + (example.name ?? example.kind) + "/" + order, () => {
   const set = fixture(example.source);
-  example.prepare(set.a); set.queue.flush(order);
+  example.prepare(set.a); example.race?.(set.b); set.queue.flush(order);
   const one = page(set.a), two = page(set.b);
   try {
     one.open(); two.open();
@@ -84,8 +118,8 @@ for (const example of EXAMPLES) for (const order of ["D1", "rev"] as const) test
 });
 
 for (const example of EXAMPLES.filter(item => item.row.actions.includes("Restore"))) for (const order of ["D1", "rev"] as const) {
-  test("C9 restore, undo and redo keep the content at its original place: " + example.kind + "/" + order, () => {
-    const set = fixture(example.source); example.prepare(set.a); set.queue.flush(order);
+  test("C9 restore, undo and redo keep the content at its original place: " + (example.name ?? example.kind) + "/" + order, () => {
+    const set = fixture(example.source); example.prepare(set.a); example.race?.(set.b); set.queue.flush(order);
     const one = page(set.a), two = page(set.b);
     try {
       one.open(); two.open(); click(one.host, example.kind, "Restore"); set.queue.flush(order);
@@ -96,13 +130,14 @@ for (const example of EXAMPLES.filter(item => item.row.actions.includes("Restore
         return { rows: document.rows.map(row => [row.id, row.audioText]), people: document.people.map(person => [person.id, person.name]),
           headings: (sections ?? []).map((heading: Readonly<Record<string, unknown>>) => [heading.id, heading.name, heading.firstSceneId]) };
       };
-      const expected = example.kind === "removed-beat" ? { rows: [["R1", "abcd"], ["R2", "ef"]], people: [], headings: [] }
+      const expected = example.restored ?? (example.kind === "removed-beat" ? { rows: [["R1", "abcd"], ["R2", "ef"]], people: [], headings: [] }
         : example.kind === "removed-heading" ? { rows: [["R1", "abcd"]], people: [], headings: [["H1", "Scene", "R1"]] }
-          : { rows: [["R1", "abcd"]], people: [["P1", "Pat"]], headings: [] };
+          : { rows: [["R1", "abcd"]], people: [["P1", "Pat"]], headings: [] });
       agree("C9 restored content", order, [set.a, set.b], content, expected);
       agree("C9 restored document", order, [set.a, set.b], projectSharedDocumentWithRecovery);
       const undone = one.undo.undo(); assert.equal(undone.ok && undone.effective, true); set.queue.flush(order);
-      for (const mounted of [one, two]) assert.equal(rows(mounted.host).filter(row => row.kind === example.kind).length, 1);
+      // why: undoing the restore removes the record again with a mark that saw the edit, so nothing raced it.
+      for (const mounted of [one, two]) assert.equal(rows(mounted.host).filter(row => row.kind === example.kind).length, example.kind === "deleted-record" ? 0 : 1);
       agree("C9 restore undone", order, [set.a, set.b], projectSharedDocumentWithRecovery);
       const redone = one.undo.redo(); assert.equal(redone.ok && redone.effective, true); set.queue.flush(order);
       agree("C9 restore redone content", order, [set.a, set.b], content, expected);
