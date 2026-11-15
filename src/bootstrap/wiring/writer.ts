@@ -91,6 +91,7 @@ export interface SharedWriterSource {
   readonly writer: () => string;
   readonly handle: () => SharedDocumentHandle | null;
   readonly lifetime: Pick<SharedDocumentSession, "epoch" | "read" | "run" | "subscribe" | "beforeCommand">;
+  readonly leftVisual: (cell: Element) => void;
 }
 
 export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
@@ -135,7 +136,7 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
               currentWhoList()?.maybeOpen(event, cell);
               updateTagGhost(cell);
             },
-            visualLeave: cell => {
+            visualLeave: shared ? shared.leftVisual : cell => {
               currentWhoList()?.cancel();
               if (currentPlainTags()?.isOpen(cell)) currentPlainTags()?.close();
               cell.innerHTML = text.sanitizeHtml(cell.innerHTML);

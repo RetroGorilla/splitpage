@@ -416,6 +416,27 @@ test("unattributed time is zero when leaving a shared Split visual cell keys its
   }, [{ id: "r1", audioText: "Hello", visualText: "Close up" }, { id: "r2", audioText: "World", visualText: "" }]);
 });
 
+test("unattributed time is zero when leaving the shared Writer's visual box keys its b-roll line, and the keying runs as an input command with its write", async () => {
+  await shared(p => {
+    p.hold();
+    hook.timing(true);
+    writerControls().writerFlowControl().openVisual("r1");
+    const box = document.querySelector(".wr-flow-visual-box"), visual = box?.querySelector(".wr-flow-visual-text");
+    assert.ok(box && visual && !box.hidden);
+    dispatched(() => { visual.focus(); });
+    const first = document.createTreeWalker(visual, window.NodeFilter.SHOW_TEXT).nextNode();
+    window.getSelection().setBaseAndExtent(first, 0, first, 0);
+    for (const character of "B-roll: ") press(visual, character, inserted(character));
+    assert.equal(hook.read().app.rows[0].visualText, "B-roll: Close up");
+    const left = probed(() => { key(visual, "keydown", { key: "Escape" }); });
+    assert.equal(left.parts.unattributed, 0, JSON.stringify(left.parts) + " " + left.names.join(" "));
+    const found = spans(left.names.map(name => "measure:" + name)), writes = of(found, "input-write");
+    assert.ok(writes.length >= 1 && writes.every(write => insideOne(write, of(found, "input-command"))), "the keying writes inside its command: " + left.names.join(" "));
+    assert.equal(box.hidden, true, "Escape left the box");
+    assert.match(hook.read().app.rows[0].visualText, /class="broll-key"/, "leaving the box keyed the line");
+  }, [{ id: "r1", audioText: "Hello", visualText: "Close up" }, { id: "r2", audioText: "World", visualText: "" }]);
+});
+
 const STRUCTURE = [
   { name: "splits a beat", run: p => p.split("r1", 2), label: "split-scene", after: id => [["r1", "He"], [id, "llo"], ["r2", "World"]] },
   { name: "adds a beat", run: p => p.add("r2"), label: "add-scene", after: id => [["r1", "Hello"], ["r2", "World"], [id, ""]] },

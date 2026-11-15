@@ -177,16 +177,23 @@
     },
     {
       "label": "the b-roll keying on leaving a shared Split cell runs outside a command span",
-      "file": "src/bootstrap/wiring/shared-split.ts",
-      "find": "        if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:input-command:start\");\n        try {\n          for (const outcome of keySharedLeftCell(parts.session, rowId, keying)) {\n            if (outcome.kind === \"failed\" || outcome.kind === \"rejected\" || outcome.kind === \"committed\" && outcome.errors.length) notify(outcome);\n          }\n        } finally { if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:input-command:end\"); }\n",
-      "replace": "        for (const outcome of keySharedLeftCell(parts.session, rowId, keying)) {\n          if (outcome.kind === \"failed\" || outcome.kind === \"rejected\" || outcome.kind === \"committed\" && outcome.errors.length) notify(outcome);\n        }\n",
+      "file": "src/bootstrap/wiring/ports/shared-broll-keying.ts",
+      "find": "    if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:input-command:start\");\n    try {\n      for (const outcome of keySharedLeftCell(session, rowId, keying)) {\n        if (outcome.kind === \"failed\" || outcome.kind === \"rejected\" || outcome.kind === \"committed\" && outcome.errors.length) source.notify(outcome);\n      }\n    } finally { if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:input-command:end\"); }\n",
+      "replace": "    for (const outcome of keySharedLeftCell(session, rowId, keying)) {\n      if (outcome.kind === \"failed\" || outcome.kind === \"rejected\" || outcome.kind === \"committed\" && outcome.errors.length) source.notify(outcome);\n    }\n",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "the shared Writer visual box's listeners run outside an input-handler span",
+      "file": "src/features/writer/flow-visual-box.ts",
+      "find": "  const listening = listen ? listeners.map(([element, event, handler]): [EventTarget, string, EventListener] => [element, event, listen(handler)]) : listeners;\n",
+      "replace": "  const listening = listeners;\n",
       "tests": ["src/test/shared-hook-measure-app.test.mjs"]
     },
     {
       "label": "jsdom's own event construction is not app work, but an app Date.now is",
-      "file": "src/bootstrap/wiring/shared-split.ts",
-      "find": "        const rowId = cell.getAttribute(\"data-id\");\n",
-      "replace": "        const rowId = cell.getAttribute(\"data-id\"); Date.now();\n",
+      "file": "src/bootstrap/wiring/ports/shared-broll-keying.ts",
+      "find": "    const rowId = cell.getAttribute(\"data-id\");\n",
+      "replace": "    const rowId = cell.getAttribute(\"data-id\"); Date.now();\n",
       "tests": ["src/test/shared-hook-measure-app.test.mjs"]
     },
     {

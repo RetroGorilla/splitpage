@@ -1,0 +1,63 @@
+# A B-roll marker typed in the shared Writer's visual is keyed when the box is left, with its shot, on both copies and a late joiner.
+# Undo from the Writer takes the key and shot back on both copies and redo brings back the same key. A view switch keys nothing.
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=window.__writerFlowTest;window.v=function(){return document.querySelector('.wr-flow-visual-text');};window.box=function(){return document.querySelector('.wr-flow-visual-box');};window.keyOf=function(d,i){var m=/data-broll-id="([^"]+)"/.exec(d.rows[i].visualText);return m?m[1]:null;};window.keyed=function(d,i,name){var id=keyOf(d,i);return !!id&&d.rows[i].visualText==='<span class="broll-key" data-broll-id="'+id+'" contenteditable="false">B-roll:</span> '+name&&d.brollShots.some(function(s){return s.id===id&&s.name===name;});};window.same=function(){return JSON.stringify(S.read().app)===JSON.stringify(S.read().peer);};F.openFile(new File([JSON.stringify({'schema':2,'title':'Writer leave','paragraphsDecided':true,'rows':[{'id':'r1','audioText':'Pour the coffee','visualText':''},{'id':'r2','audioText':'Drink it','visualText':''},{'id':'r3','audioText':'Wash up','visualText':''}],'comments':[]})],'trace.splitpage'))
+wait F.state().title === 'Writer leave'
+click #btn-write
+wait W.on()
+eval S.enter()
+wait S.read().peer !== null
+# Type the marker in the visual box and leave it with Escape
+eval W.openVisual('r1');true
+wait box() && !box().hidden && document.activeElement === v()
+type B-roll: Close up
+wait S.read().app.rows[0].visualText === 'B-roll: Close up'
+expect S.read().app.brollShots.length === 0
+key Escape
+wait box().hidden
+wait keyed(S.read().app,0,'Close up')
+wait same()
+expect keyed(S.read().peer,0,'Close up')
+expect S.read().app.brollShots.length === 1 && S.read().peer.brollShots.length === 1
+expect keyed(S.peer.lateJoiner('app'),0,'Close up')
+expect W.selection().head.rowId === 'r1'
+shot 982-keyed
+eval window.made=keyOf(S.read().app,0);true
+# Undo from the Writer takes the key and the shot back on both copies and reopens the box
+key ctrl KeyZ
+wait S.read().app.rows[0].visualText === 'B-roll: Close up'
+wait same()
+expect S.read().app.brollShots.length === 0 && S.read().peer.brollShots.length === 0
+expect !box().hidden && document.activeElement === v()
+# Redo pressed in the reopened box closes it without keying and brings back the same key and shot
+key ctrl KeyY
+wait keyOf(S.read().app,0) === made && keyed(S.read().app,0,'Close up')
+wait same()
+expect keyed(S.read().peer,0,'Close up')
+expect keyed(S.peer.catchUp(),0,'Close up')
+# A press outside the box is an ordinary leave: the close button keys the line before the Writer closes
+eval W.openVisual('r2');true
+wait box() && !box().hidden && document.activeElement === v()
+type B-roll: Mug
+wait S.read().app.rows[1].visualText === 'B-roll: Mug'
+click #wr-close
+wait !W.on() || document.getElementById('writer').hidden
+wait keyed(S.read().app,1,'Mug')
+wait same()
+expect keyed(S.read().peer,1,'Mug')
+# A view switch with the box still open commits its text and keys nothing
+click #btn-write
+wait W.on() && !document.getElementById('writer').hidden
+eval W.openVisual('r3');true
+wait box() && !box().hidden && document.activeElement === v()
+type B-roll: Pour
+wait S.read().app.rows[2].visualText === 'B-roll: Pour'
+jsclick #wr-close
+wait document.getElementById('writer').hidden
+wait same()
+expect S.read().app.rows[2].visualText === 'B-roll: Pour' && S.read().peer.rows[2].visualText === 'B-roll: Pour'
+expect S.read().app.brollShots.length === 2
+eval S.leave()
+expect S.read().peer === null
+quit
