@@ -16,6 +16,7 @@ export interface DraftEditPorts {
 }
 
 export interface CellBufferPorts {
+  readonly refuseNative?: (event: Event, cell: Element | null) => boolean;
   readonly field: (surface: BufferedFieldSurface<HTMLElement>) => BufferedFieldBinding;
   readonly painted: Pick<PaintedBeats, "record" | "base" | "text" | "field" | "clear">;
   readonly report: BufferedFieldPorts["report"];

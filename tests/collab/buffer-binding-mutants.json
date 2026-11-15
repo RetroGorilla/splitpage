@@ -84,8 +84,8 @@
   }, {
     "label": "recovered typing is not announced",
     "file": "src/application/editing/buffered-field.ts",
-    "find": "ports.recovered(held.rowId);",
-    "replace": "void held.rowId;",
+    "find": "surface.changed();\n    ports.recovered(held.rowId);",
+    "replace": "surface.changed(); void held.rowId;",
     "tests": ["tests/features/writer/buffer-recovery.test.ts"]
   }, {
     "label": "recovered field keeps its native text",
