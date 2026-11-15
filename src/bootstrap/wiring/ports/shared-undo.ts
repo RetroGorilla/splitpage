@@ -3,6 +3,9 @@ import type { SharedDocumentHandle } from "../../../adapters/collab/types.ts";
 import { createSharedUndo } from "../../../application/editing/undo/shared-undo.ts";
 import type { SharedUndo, SharedUndoReversal } from "../../../application/editing/undo/shared-undo.ts";
 import type { SharedUndoRecord } from "../../../core/collab/undo-record.ts";
+import { timingMarks } from "../../../../shared/timing-marks.ts";
+
+declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 export const SHARED_UNDO_NO_AUTHOR = "undo-no-author";
 
@@ -18,6 +21,7 @@ export function sharedUndoOwner(handle: SharedDocumentHandle, author: () => { re
       if (!writer) return { ok: false, reason: SHARED_UNDO_NO_AUTHOR };
       let serial = 0;
       const taken: { reversal: SharedUndoReversal | null } = { reversal: null };
+      if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-write:start");
       try {
         const reversal = reverseSharedUndoRecord(handle, record, { by: writer.by, nextId: () => writer.id + "_" + String(++serial) }, done => { taken.reversal = done; });
         if (reversal.ok && reversal.effective) replayed = record;
@@ -28,7 +32,7 @@ export function sharedUndoOwner(handle: SharedDocumentHandle, author: () => { re
         report(error);
         if (taken.reversal.ok && taken.reversal.effective) replayed = record;
         return taken.reversal;
-      }
+      } finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-write:end"); }
     }
   });
   return Object.freeze({ ...owner, replayed: () => replayed });

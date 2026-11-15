@@ -1,9 +1,12 @@
 import * as Y from "yjs";
 import { exceedsBufferQueue } from "../../core/collab/buffer.ts";
-import { CollabDocumentState, collabState, transactCollabState, assertNoSharedExecution, assertSharedIngressAllowed, guardSharedCallback } from "./state.ts";
+import { CollabDocumentState, collabState, transactCollabState, transactRemoteCollabState, assertNoSharedExecution, assertSharedIngressAllowed,
+  guardSharedCallback } from "./state.ts";
 import type { SharedDocumentHandle, SharedTransactionOrigin, SharedApplyResult } from "./types.ts";
 import { observeSharedStructureIndex } from "./structure-index.ts";
-import { markSharedTiming } from "./timing-marks.ts";
+import { timingMarks } from "../../../shared/timing-marks.ts";
+
+declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 export function createSharedDocument(): SharedDocumentHandle {
   const handle = new CollabDocumentState() as unknown as SharedDocumentHandle;
@@ -56,7 +59,7 @@ export function applySharedUpdate(handle: SharedDocumentHandle, update: Uint8Arr
     gate.declined = true;
     return { ok: false, reason: "queue-full" };
   }
-  markSharedTiming("measure:trial:start");
+  if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:trial:start");
   const trial = new CollabDocumentState();
   try {
     const decoded = Y.decodeUpdate(update);
@@ -67,15 +70,11 @@ export function applySharedUpdate(handle: SharedDocumentHandle, update: Uint8Arr
     return { ok: false, reason: "invalid-update" };
   } finally {
     trial.doc.destroy();
-    markSharedTiming("measure:trial:end");
+    if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:trial:end");
   }
   // why: While the gate is closed the update waits its turn, so each revision is announced with exactly its own content.
   if (closed) { gate.held.push(Uint8Array.from(update)); gate.heldBytes += update.byteLength; }
-  else {
-    markSharedTiming("measure:live-apply:start");
-    transactCollabState(state, "remote", () => Y.applyUpdate(state.doc, update, "remote"));
-    markSharedTiming("measure:live-apply:end");
-  }
+  else transactRemoteCollabState(state, () => Y.applyUpdate(state.doc, update, "remote"));
   return { ok: true };
 }
 

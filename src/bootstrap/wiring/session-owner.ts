@@ -14,7 +14,9 @@ import { cellOf, scriptCellOf } from "../richtext.ts";
 import { documentGuardOn, documentView, unwrapped } from "../../application/identity/document-guard.ts";
 import { createNumberingReader } from "../../application/session/numbering.ts";
 import type { DocumentNumberingReader } from "../../application/session/numbering.ts";
-import { markTestTiming } from "../../features/common/test-hooks.ts";
+import { timingMarks } from "../../../shared/timing-marks.ts";
+
+declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 export type SessionReplayRunner = StandaloneDocumentSession["replay"];
 
@@ -86,9 +88,11 @@ const stampListeners: ((changes: ChangeSet) => void)[] = [];
 
 function hearing(entry: Hearing): SessionListener {
   return function (change) {
-    if (!entry.on) return;
-    markTestTiming("measure:render:start");
-    try { entry.listener(change); } finally { markTestTiming("measure:render:end"); }
+    if (entry.on) {
+      if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:render:start");
+      try { entry.listener(change); }
+      finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:render:end"); }
+    }
   };
 }
 
@@ -257,7 +261,11 @@ const session: DocumentSession = {
   absorbMerged: function (kind: "disk" | "recovery", merged: ValidatedDocument | null) { return standalone("absorbMerged").absorbMerged(kind, unwrapped(merged)); },
   absorbReload: function (content: ReloadedContent) { return standalone("absorbReload").absorbReload(unwrapped(content)); },
   settle: function (kind: AbsorbedKind) { standalone("settle").settle(kind); },
-  run: function (command: Command) { return heldOutcome() ?? swept(owner().run(command)); },
+  run: function (command: Command) {
+    if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-command:start");
+    try { return heldOutcome() ?? swept(owner().run(command)); }
+    finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-command:end"); }
+  },
   replay: function (task: Replay) { return refusedWhileShared("replay") ?? swept(standalone("replay").replay(task)); },
   amend: function (task: Replay) { return refusedWhileShared("amend") ?? swept(standalone("amend").amend(task)); },
   stamp: function (task: Stamp) { return refusedWhileShared("stamp") ?? swept(standalone("stamp").stamp(task)); },
@@ -345,11 +353,12 @@ export function adoptShared(build: (ports: SharedOwnerPorts) => SharedDocumentSe
   const entered = new WeakMap<object, ValidatedDocument>();
   const made = build({
     entry: function (raw) {
-      markTestTiming("measure:document-entry:start");
-      const doc = enterSharedDocument(raw);
-      markTestTiming("measure:document-entry:end");
-      entered.set(doc, doc);
-      return doc;
+      if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:document-entry:start");
+      try {
+        const doc = enterSharedDocument(raw);
+        entered.set(doc, doc);
+        return doc;
+      } finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:document-entry:end"); }
     },
     capability: nextCapability,
     after: { epoch: old.epoch(), generation: old.generation() },

@@ -6,7 +6,9 @@ import type { SharedUndoRecord } from "../../core/collab/undo-record.ts";
 import { createSharedIncrementalProjector } from "./incremental-project.ts";
 import type { SharedProjectionWork } from "./projection-cache.ts";
 import type { SharedDocumentHandle } from "./types.ts";
-import { markSharedTiming } from "./timing-marks.ts";
+import { timingMarks } from "../../../shared/timing-marks.ts";
+
+declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 export interface SharedReplica extends ReplicaPort {
   readonly dispose: () => void;
@@ -21,33 +23,28 @@ export function createSharedReplica(handle: SharedDocumentHandle, count?: (work:
   // why: After a failed publication the pair is the revision being retried and a fresh attempt at its document,
   // never the live revision beside the older document.
   const published = () => projector.pending() === null ? projector.read() : projector.retry();
-  const write: ReplicaPort["execute"] = (operations, options) => {
-    const description = options.description;
-    if (!undo || !description) return executeSharedOperations(handle, operations, { base: options.base });
-    let result: ReplicaExecution = { ok: false, reason: "undo-not-run" };
-    const failed: { thrown: boolean; error: unknown } = { thrown: false, error: undefined };
-    // why: a document callback that throws after the commit is rethrown by the write frame; the record is taken first
-    undo.perform(() => {
-      let kept: SharedUndoRecord | null = null;
-      try {
-        executeSharedCommand(handle, operations, description, { base: options.base, done: done => {
-          result = done.result;
-          kept = done.result.ok ? done.record : null;
-        } });
-      } catch (error) { failed.thrown = true; failed.error = error; }
-      return kept;
-    });
-    if (failed.thrown) throw failed.error;
-    return result;
-  };
   const execute: ReplicaPort["execute"] = (operations, options) => {
     if (disposed) return { ok: false, reason: REPLICA_DISPOSED };
-    markSharedTiming("measure:input-write:start");
-    try { return write(operations, options); } finally { markSharedTiming("measure:input-write:end"); }
-  };
-  const receive = (listener: Parameters<ReplicaPort["observe"]>[0], ...heard: Parameters<Parameters<ReplicaPort["observe"]>[0]>): void => {
-    markSharedTiming("measure:session-receive:start");
-    try { listener(...heard); } finally { markSharedTiming("measure:session-receive:end"); }
+    if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-write:start");
+    try {
+      const description = options.description;
+      if (!undo || !description) return executeSharedOperations(handle, operations, { base: options.base });
+      let result: ReplicaExecution = { ok: false, reason: "undo-not-run" };
+      const failed: { thrown: boolean; error: unknown } = { thrown: false, error: undefined };
+      // why: a document callback that throws after the commit is rethrown by the write frame; the record is taken first
+      undo.perform(() => {
+        let kept: SharedUndoRecord | null = null;
+        try {
+          executeSharedCommand(handle, operations, description, { base: options.base, done: done => {
+            result = done.result;
+            kept = done.result.ok ? done.record : null;
+          } });
+        } catch (error) { failed.thrown = true; failed.error = error; }
+        return kept;
+      });
+      if (failed.thrown) throw failed.error;
+      return result;
+    } finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-write:end"); }
   };
   return Object.freeze({
     revision: () => projector.pending() ?? projector.read().revision,
@@ -55,8 +52,15 @@ export function createSharedReplica(handle: SharedDocumentHandle, count?: (work:
     changes: () => published().changes,
     recovery: () => published().recovery,
     execute: execute,
-    observe: (listener: Parameters<ReplicaPort["observe"]>[0]) =>
-      projector.observe((_projection, origin) => { receive(listener, origin); }, (error, origin) => { receive(listener, origin, { error }); }),
+    observe: (listener: Parameters<ReplicaPort["observe"]>[0]) => projector.observe((_projection, origin) => {
+      if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:session-receive:start");
+      try { return listener(origin); }
+      finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:session-receive:end"); }
+    }, (error, origin) => {
+      if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:session-receive:start");
+      try { return listener(origin, { error }); }
+      finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:session-receive:end"); }
+    }),
     dispose: () => { disposed = true; projector.dispose(); }
   });
 }

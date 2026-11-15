@@ -1,65 +1,130 @@
 {
   "tests": [
     "src/test/shared-hook-measure-app.test.mjs",
+    "tests/adapters/collab/timing-marks.test.ts",
     "tests/bootstrap/shared-test-release.test.ts",
-    "tests/bootstrap/timing-marks-release.test.ts"
+    "tests/bootstrap/timing-marks-release.test.ts",
+    "tests/collab/measure/mark-parts.test.mjs"
   ],
   "mutants": [
     {
-      "label": "adapter timing marks are written while switched off",
-      "file": "src/adapters/collab/timing-marks.ts",
-      "find": "[Symbol.for(\"splitpage.timingMarks\")] === true) performance.mark(name);",
-      "replace": "[Symbol.for(\"splitpage.timingMarks\")] !== 2) performance.mark(name);",
+      "label": "a mark line looks up a symbol while switched off",
+      "file": "src/adapters/collab/document.ts",
+      "find": "SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:trial:start\");",
+      "replace": "SPLITPAGE_TEST_HOOKS) && (Symbol.for(\"splitpage.timing\"), timingMarks.marksOn)) performance.mark(\"measure:trial:start\");",
       "tests": ["src/test/shared-hook-measure-app.test.mjs"]
     },
     {
-      "label": "release build keeps the adapter timing marks",
-      "file": "src/adapters/collab/timing-marks.ts",
-      "find": "  if (TEST_HOOKS && (globalThis",
-      "replace": "  if ((globalThis",
-      "tests": ["tests/bootstrap/timing-marks-release.test.ts"]
+      "label": "a mark is written while switched off",
+      "file": "src/adapters/collab/document.ts",
+      "find": "SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:trial:end\");",
+      "replace": "SPLITPAGE_TEST_HOOKS) || timingMarks.marksOn) performance.mark(\"measure:trial:end\");",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs", "tests/adapters/collab/timing-marks.test.ts"]
     },
     {
-      "label": "release build keeps the input and render timing marks",
-      "file": "src/features/common/test-hooks.ts",
-      "find": "  if (TEST_HOOKS && (globalThis",
-      "replace": "  if ((globalThis",
+      "label": "release build keeps the render mark",
+      "file": "src/bootstrap/wiring/session-owner.ts",
+      "find": "      if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:render:start\");",
+      "replace": "      if (timingMarks.marksOn) performance.mark(\"measure:render:start\");",
       "tests": ["tests/bootstrap/timing-marks-release.test.ts"]
     },
     {
       "label": "the trial is not marked",
       "file": "src/adapters/collab/document.ts",
-      "find": "  markSharedTiming(\"measure:trial:start\");\n",
+      "find": "  if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:trial:start\");\n",
       "replace": "",
       "tests": ["src/test/shared-hook-measure-app.test.mjs"]
     },
     {
       "label": "the live apply mark closes before the update is applied",
-      "file": "src/adapters/collab/document.ts",
-      "find": "    markSharedTiming(\"measure:live-apply:start\");\n    transactCollabState",
-      "replace": "    markSharedTiming(\"measure:live-apply:start\");\n    markSharedTiming(\"measure:live-apply:end\");\n    transactCollabState",
+      "file": "src/adapters/collab/state.ts",
+      "find": "performance.mark(\"measure:live-apply:start\");\n    try { runCollabTransaction(state, \"remote\", change, recordFailure); }",
+      "replace": "performance.mark(\"measure:live-apply:start\");\n    performance.mark(\"measure:live-apply:end\");\n    try { runCollabTransaction(state, \"remote\", change, recordFailure); }",
       "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "the live apply closes only after its write frame, so a thrown listener leaves it open",
+      "file": "src/adapters/collab/state.ts",
+      "find": "    try { runCollabTransaction(state, \"remote\", change, recordFailure); }\n    finally { if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:live-apply:end\"); }\n  });\n",
+      "replace": "    runCollabTransaction(state, \"remote\", change, recordFailure);\n  });\n  if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:live-apply:end\");\n",
+      "tests": ["tests/adapters/collab/timing-marks.test.ts"]
+    },
+    {
+      "label": "an open-gate live apply spans the updates its frame drains",
+      "file": "src/adapters/collab/document.ts",
+      "find": "  else transactRemoteCollabState(state, () => Y.applyUpdate(state.doc, update, \"remote\"));",
+      "replace": "  else { if (timingMarks.marksOn) performance.mark(\"measure:live-apply:start\"); try { transactCollabState(state, \"remote\", () => Y.applyUpdate(state.doc, update, \"remote\")); } finally { if (timingMarks.marksOn) performance.mark(\"measure:live-apply:end\"); } }",
+      "tests": ["tests/adapters/collab/timing-marks.test.ts"]
+    },
+    {
+      "label": "the buffered command span starts after the buffer plans",
+      "file": "src/adapters/collab/buffer.ts",
+      "find": "          if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:input-command:start\");\n          try {\n            const commit = buffer.plan(), author = ports.author(), operations = bufferedTextOperations(commit, painted, target, runs, author);\n",
+      "replace": "          try {\n            const commit = buffer.plan(), author = ports.author(), operations = bufferedTextOperations(commit, painted, target, runs, author);\n            if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:input-command:start\");\n",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "a structural command is not marked",
+      "file": "src/bootstrap/wiring/session-owner.ts",
+      "find": "    if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:input-command:start\");\n    try { return heldOutcome()",
+      "replace": "    try { return heldOutcome()",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "undo and redo are not marked",
+      "file": "src/bootstrap/wiring/undo.ts",
+      "find": "  if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:input-command:start\");\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "the undo write is not marked",
+      "file": "src/bootstrap/wiring/ports/shared-undo.ts",
+      "find": "      if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:input-write:start\");\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "a failed publication leaves its assembly open",
+      "file": "src/adapters/collab/incremental-project.ts",
+      "find": "      pending = null;\n    } finally { if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:assembly:end\"); }",
+      "replace": "      pending = null;\n      if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:assembly:end\");\n    } finally {}",
+      "tests": ["tests/adapters/collab/timing-marks.test.ts"]
+    },
+    {
+      "label": "a projection failure is delivered outside a listener span",
+      "file": "src/adapters/collab/incremental-project.ts",
+      "find": "      if (!failureListeners.size) throw error;\n      if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:projection-listeners:start\");\n      try { for (const listener of failureListeners) guardSharedCallback(state, () => listener(error, origin)); }\n      finally { if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:projection-listeners:end\"); }\n",
+      "replace": "      if (!failureListeners.size) throw error;\n      for (const listener of failureListeners) guardSharedCallback(state, () => listener(error, origin));\n",
+      "tests": ["tests/adapters/collab/timing-marks.test.ts"]
     },
     {
       "label": "the session receive is not marked",
       "file": "src/adapters/collab/replica.ts",
-      "find": "    markSharedTiming(\"measure:session-receive:start\");\n",
-      "replace": "",
+      "find": "projector.observe((_projection, origin) => {\n      if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:session-receive:start\");\n",
+      "replace": "projector.observe((_projection, origin) => {\n",
       "tests": ["src/test/shared-hook-measure-app.test.mjs"]
     },
     {
       "label": "the local write is not marked",
       "file": "src/adapters/collab/replica.ts",
-      "find": "    markSharedTiming(\"measure:input-write:start\");\n",
-      "replace": "",
+      "find": "    if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:input-write:start\");\n    try {\n      const description",
+      "replace": "    try {\n      const description",
       "tests": ["src/test/shared-hook-measure-app.test.mjs"]
     },
     {
       "label": "render subscribers are not marked",
       "file": "src/bootstrap/wiring/session-owner.ts",
-      "find": "    markTestTiming(\"measure:render:start\");\n",
+      "find": "      if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:render:start\");\n",
       "replace": "",
       "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "the parts count each seam's whole span",
+      "file": "tests/collab/measure/mark-parts.mjs",
+      "find": "duration - span.nested;",
+      "replace": "duration;",
+      "tests": ["tests/collab/measure/mark-parts.test.mjs", "src/test/shared-hook-measure-app.test.mjs"]
     },
     {
       "label": "the peer splits at the start of the beat",
@@ -106,8 +171,8 @@
     {
       "label": "the queue-full update fits the buffer queue",
       "file": "src/bootstrap/wiring/shared-test-peer.ts",
-      "find": "\"x\".repeat(sharedBufferQueueBytes() + 1)",
-      "replace": "\"x\".repeat(sharedBufferQueueBytes() / 2)",
+      "find": "QUEUE_FILLER.repeat(Math.ceil((sharedBufferQueueBytes() + 1) / 3))",
+      "replace": "QUEUE_FILLER.repeat(sharedBufferQueueBytes() / 6)",
       "tests": ["src/test/shared-hook-measure-app.test.mjs"]
     },
     {
@@ -134,8 +199,15 @@
     {
       "label": "replay delivers every update at once",
       "file": "src/bootstrap/wiring/shared-test-peer.ts",
-      "find": "Math.max(0, started + (at + 1) * everyMs - ports.now())",
+      "find": "Math.max(0, started + (at + 1) * everyMs - clock.now())",
       "replace": "0",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "replay ignores the injected clock",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "current()?.replay(updates, everyMs, to, clock)",
+      "replace": "current()?.replay(updates, everyMs, to)",
       "tests": ["src/test/shared-hook-measure-app.test.mjs"]
     },
     {
@@ -148,7 +220,21 @@
     {
       "label": "stopping a replay does nothing",
       "file": "src/bootstrap/wiring/shared-test-peer.ts",
-      "find": "    const running = replaying;\n    if (running && running.timer !== null) ports.timers.stop(running.timer);\n    if (running) running.timer = null;\n",
+      "find": "    if (running && running.timer !== null) running.clock.stop(running.timer.id);\n    if (running) running.timer = null;\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "a side declined during a replay is caught up from the live peer",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "    if (run && run.target === side && (run.timer !== null || run.refused.length)) { recover(run); return; }\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "a replayed update refused for a full queue is dropped",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "        if (!result.ok && result.reason === \"queue-full\") running.refused.push(update);\n",
       "replace": "",
       "tests": ["src/test/shared-hook-measure-app.test.mjs"]
     },
@@ -170,6 +256,13 @@
       "label": "an incomplete stored state is accepted",
       "file": "src/adapters/collab/hydrate.ts",
       "find": "  if (state.doc.store.pendingStructs || state.doc.store.pendingDs) throw new Error(\"The stored shared state is incomplete\");\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "a stored state without a script is entered",
+      "file": "src/adapters/collab/hydrate.ts",
+      "find": "  if (typeof projected.docId !== \"string\" || !projected.docId) throw new Error(\"The stored shared state holds no script\");\n",
       "replace": "",
       "tests": ["src/test/shared-hook-measure-app.test.mjs"]
     }

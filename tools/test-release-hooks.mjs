@@ -59,7 +59,8 @@ const SHARED_HOOK_ONLY = Object.freeze([
   "stopReplay",
   "There is no refused update of that kind",
   "The stored shared state is incomplete",
-  "splitpage.timingMarks"
+  "The stored shared state holds no script",
+  "marksOn"
 ]);
 
 const TIMING_MARKS = Object.freeze(["trial", "live-apply", "mirror-apply", "assembly", "projection-listeners", "session-receive", "document-entry", "render",
