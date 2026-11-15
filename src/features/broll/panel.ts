@@ -1198,34 +1198,47 @@ function onBrollFocusOut(e: PanelEvent) {
   if (wrote !== null || field === "audioRef") renderBrollViews();
 }
 
+function submitEscapeField(input: PanelInput): void {
+  if (!isHeld(submitField(input))) return;
+  const field = recordField(input);
+  if (!field) return;
+  const draft = { box: FIELD_BOX[field], record: input.getAttribute("data-id") ?? "", text: input.value };
+  for (const root of document.querySelectorAll<HTMLElement>("#broll-panel, #broll-page")) {
+    for (const box of draftBoxes(root, draft, true)) { box.value = draft.text; box.setAttribute("data-unsaved", "true"); }
+  }
+}
+
 function onBrollKeydown(e: PanelEvent, root: HTMLElement) {
   const t = e.target as PanelInput;
   const onPage = root.id === "broll-page";
   if (e.key === "Escape") {
-    if ((ports as PanelPortUse).shared.ports() && (t.classList.contains("broll-notes-input") || t.classList.contains("broll-prop-input") || t.id === "broll-add-input")) {
-      t.value = t.defaultValue;
-      reviseBox(t);
-      e.preventDefault(); e.stopPropagation(); renderBrollViews(); return;
-    }
-    let refocus = null;
-    if (groupMenuOpen) { groupMenuOpen = false; refocus = ".broll-group-btn"; }
-    else if (menuFor) { refocus = '[data-action="broll-menu"][data-id="' + cssAttr(menuFor) + '"]'; menuFor = null; }
-    else if (t.classList.contains("broll-loc-input")) { t.value = t.defaultValue; typed().drop("broll-loc-input", t.getAttribute("data-id") ?? ""); editingLocFor = null; }
-    else if (t.classList.contains("broll-ref-input")) { t.value = t.defaultValue; typed().drop("broll-ref-input", t.getAttribute("data-id") ?? ""); editingRefFor = null; }
-    else if (t.classList.contains("broll-rename-input")) cancelRename(t.getAttribute("data-id"));
-    else if (t.classList.contains("broll-person-input")) { t.value = t.defaultValue; typed().drop("broll-person-input", t.getAttribute("data-id") ?? ""); addingPersonFor = null; }
-    else if (t.id === "broll-bulk-input") closeBulkInput();
-    else if (!onPage && Object.keys(selection).length) clearSelection();
-    else if (!onPage && openId) {
-      refocus = '.broll-row-main[data-id="' + cssAttr(openId) + '"]';
-      openId = null;
-    } else return;
-    e.preventDefault();
-    e.stopPropagation();
-    renderBrollViews();
-    const back = refocus && root.querySelector<HTMLInputElement>(refocus);
-    if (back) back.focus();
-    return;
+    const shared = (ports as PanelPortUse).shared.ports() !== null;
+    if (shared) drawingPanel++;
+    try {
+      if (shared && recordField(t)) submitEscapeField(t);
+      let refocus = null;
+      if (groupMenuOpen) { groupMenuOpen = false; refocus = ".broll-group-btn"; }
+      else if (menuFor) { refocus = '[data-action="broll-menu"][data-id="' + cssAttr(menuFor) + '"]'; menuFor = null; }
+      else if (t.classList.contains("broll-loc-input")) editingLocFor = null;
+      else if (t.classList.contains("broll-ref-input")) editingRefFor = null;
+      else if (t.classList.contains("broll-rename-input")) cancelRename(t.getAttribute("data-id"));
+      else if (t.classList.contains("broll-person-input")) { t.value = t.defaultValue; typed().drop("broll-person-input", t.getAttribute("data-id") ?? ""); addingPersonFor = null; }
+      else if (t.id === "broll-bulk-input") closeBulkInput();
+      else if (!onPage && Object.keys(selection).length) clearSelection();
+      else if (!onPage && openId) {
+        if (shared && t.classList.contains("broll-prop-input")) { t.value = t.defaultValue; typed().drop("broll-prop-input", t.getAttribute("data-id") ?? ""); }
+        refocus = '.broll-row-main[data-id="' + cssAttr(openId) + '"]';
+        openId = null;
+      } else if (shared && onPage && recordField(t)) {
+        e.preventDefault(); e.stopPropagation(); closeBrollPage(); return;
+      } else return;
+      e.preventDefault();
+      e.stopPropagation();
+      renderBrollViews();
+      const back = refocus && root.querySelector<HTMLInputElement>(refocus);
+      if (back) back.focus();
+      return;
+    } finally { if (shared) drawingPanel--; }
   }
   if ((e.key === "ArrowDown" || e.key === "ArrowUp") && t.classList && t.classList.contains("broll-menu-item")) {
     const items: HTMLElement[] = Array.prototype.slice.call((t.parentNode as ParentNode).querySelectorAll(".broll-menu-item"));

@@ -734,7 +734,8 @@ function dismissTypedBox(event: Event): void {
   const cancel = target.closest('[data-action="tag-person-cancel"], [data-action="tag-rename-cancel"], [data-action="bulk-person-cancel"]');
   const selector = cancel?.getAttribute("data-action") === "tag-rename-cancel" ? ".tag-rename-input" : ".tag-person-input, #bulk-person-input";
   const box = event.type === "keydown" ? target as TypedBox : cancel?.closest(".tag-entity, #production-bulk")?.querySelector<TypedBox>(selector);
-  if (!box?.matches(TYPED_BOXES.join(", ")) || event.type === "keydown" && (event as KeyboardEvent).key !== "Escape") return;
+  if (!box?.matches(event.type === "keydown" ? ".tag-rename-input, .tag-person-input, #bulk-person-input" : TYPED_BOXES.join(", ")) ||
+    event.type === "keydown" && (event as KeyboardEvent).key !== "Escape") return;
   box.value = box.defaultValue;
   reviseTagBox(box);
 }

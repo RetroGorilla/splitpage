@@ -575,18 +575,6 @@ function onTypedComment(event: Event): void {
   if (reply) captureReplyDrafts();
 }
 
-function dismissCommentBox(event: KeyboardEvent): void {
-  if (event.key !== "Escape" || !(ports as CommentsRuntimePorts).shared.ports()) return;
-  const box = (event.target as HTMLElement)?.closest?.<HTMLElement>("#comment-body-editable, .reply-composer .cell-editable");
-  if (!box) return;
-  const reply = box.closest(".reply-composer"), record = reply?.getAttribute("data-for") ?? pendingComment?.id;
-  if (!record) return;
-  typed().drop(reply ? "reply-composer" : "comment-body-editable", record);
-  box.innerHTML = "";
-  box.removeAttribute("data-unsaved");
-  if (reply) { dropCommentState(record, false); renderComments(); }
-}
-
 function anchorUnwrapped(rowId: string, field: string, cmtId: string): RewritePlanner {
   return function (doc) {
     const row = doc.rows[rowIndexOf(doc, rowId)];
@@ -1208,7 +1196,6 @@ export function startComments(nextPorts: CommentStatePorts) {
   listen(document, "mousedown", onCommentMenuMouseDown, true);
   listen(document, "keydown", onCommentMenuKeydown, true);
   listen(document, "input", onTypedComment);
-  listen(document, "keydown", dismissCommentBox, true);
 
   initTaggingHelp();
   let active = true;
