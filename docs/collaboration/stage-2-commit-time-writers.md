@@ -189,6 +189,59 @@ Two copies that type the same new line at once mint two keys and two shots, as t
 copies typing the same new `@Name` give two people. `tests/collab/broll-text-records.test.ts`
 holds the cases.
 
+### Keying a left Split cell
+
+In a shared session the only route that keys B-roll lines is leaving a Split visual
+cell. `keySharedLeftCell` in `application/commands/shared-broll-keying.ts` runs up to
+two shared commands through the session, so they pass the same admission and stale
+checks as any other:
+
+- `drop-repeated-broll-keys` deletes any key directly after another key, keeping the
+  first in text order regardless of id. A dropped id held nowhere else in the script
+  loses its shot through normal record removal, but only while the shot is untouched
+  since it was made (`sharedBrollShotUntouched` in `adapters/collab/broll-keying.ts`).
+  It has no undo entry and no stamp. A refusal or failure stops the leave there.
+- `key-broll-lines` (`sharedBrollKeying` in `core/collab/broll-keying.ts`) keys each
+  named unkeyed line, makes its shot authored by the leaving copy, and stamps the beat. It
+  has an undo entry. Each keying mints its own ids from its command's author id
+  (`bs_<author>_<n>`), so two keyings never write the same shot record. Replacement
+  covers only marker characters; other atoms stay in place. A line naming an unclaimed
+  shot takes that shot's id and makes no shot. A named existing key with no shot record
+  and no removal mark is replaced by a newly minted key in the same command, and the
+  shot is made under the new id; a key whose shot was removed is never given one.
+
+Nothing to key runs no command. A leave during session end, row removal or teardown
+keys nothing. Assumed rules 196 to 199:
+
+- **196:** two copies leaving one line at once each make a key and a shot under ids of
+  their own, so an edit or removal one copy makes to its shot before the other's keying
+  arrives is never overwritten. The text shows two keys side by side until any copy
+  next leaves that cell. That leave drops the later key in text order. It removes that
+  key's shot only when no key holds its id and, as far as the cleaning copy has seen,
+  nobody changed the shot after it was made: no field written again, added or cleared,
+  no prop, no status; a change of rank alone is order, not a change. A changed shot stays in the list
+  without a key, as standalone shows a shot whose line is gone ("The line this came
+  from is no longer in the script"), and nothing goes to recovery. An edit that races
+  the cleanup unseen follows rule 171: the removal stands and the edit is kept in one
+  recovery entry. A removed shot stays removed; the line may keep the other copy's
+  key and shot. A shot brought back by redo or a revive counts as changed, so a dropped
+  key's revived shot stays without a key. Both keying undos are used up after another
+  copy contributed a key, even after cleanup. Two real lines with equal text keep their keys and shots.
+- **197:** text another copy types into the line meanwhile stays after the key, and
+  the shot keeps the name the leaving copy saw.
+- **198:** a leave caused by session end, row removal or teardown keys nothing.
+  Row removal keeps its shots for restoring the recovered row, whether keying was
+  seen by the remover or concurrent with removal.
+- **199:** undo of a keying after another copy changed its shot or its whole keyed
+  line's text or keys is used up: the existing notice, nothing written, no redo.
+  A peer edit on a different line leaves the keying undo usable.
+  Undoing the same copy's later line edit leaves it usable too: restored characters
+  answer to their originals, while peer contributions remain evidence after deletion.
+
+`tests/collab/broll-keying.test.ts`, `tests/core/collab/broll-keying.test.ts` and
+`src/test/shared-broll-leave-app.test.mjs` hold the cases. The Writer's two leave
+points do not call it yet.
+
 ## Stamps
 
 A beat's stamp is who changed it last and when. In a shared session it is an

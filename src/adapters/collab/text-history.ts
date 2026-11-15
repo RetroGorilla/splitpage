@@ -33,6 +33,7 @@ export interface SharedTextHistory {
   readonly shown: (unit: SharedTextIdentity) => readonly SharedContentRef[];
   readonly showing: (occurrence: SharedContentRef) => readonly SharedHistoryUnit[];
   readonly offset: (anchor: SharedContentRef) => number | null;
+  readonly contributions: (before: SharedTextIdentity | null, after: SharedTextIdentity | null, exceptWriter: number) => string;
 }
 
 function key(unit: SharedTextIdentity): string { return unit.client + ":" + unit.clock; }
@@ -140,6 +141,18 @@ export function readSharedTextHistory(handle: SharedDocumentHandle, raw: SharedT
     };
     return {
       target, units, records,
+      contributions: (before, after, exceptWriter) => {
+        // why: an undone local edit must not consume keying; peer births remain evidence even after deletion.
+        const from = before ? (places.get(key(before)) ?? -1) + 1 : 0, to = after ? places.get(key(after)) ?? sequence.length : sequence.length;
+        const result: string[] = [];
+        let at = 0;
+        for (let item = found.text._start; item && at < to; item = item.right) {
+          for (let unit = 0; unit < item.length; unit++, at++) if (at >= from && at < to && item.id.client !== exceptWriter) {
+            result.push(key({ client: item.id.client, clock: item.id.clock + unit }));
+          }
+        }
+        return JSON.stringify(result);
+      },
       known: unit => places.has(key(unit)),
       live: unit => alive.get(key(unit)) ?? null,
       follow,

@@ -167,6 +167,8 @@ export interface SharedUndoRecord {
   readonly parts: readonly SharedUndoPart[];
   readonly selection: SharedUndoSelection | null;
   readonly typing: string | null;
+  readonly keyedLines?: readonly { readonly target: SharedTextAddress; readonly anchor: SharedContentRef; readonly units: readonly SharedUndoUnit[]; readonly contributions: string; readonly writer: number }[];
+  readonly keyedShots?: readonly { readonly target: SharedRecordAddress; readonly fields: SharedJsonFields | null }[];
   readonly recorded?: SharedRecordedSelection;
   readonly cells?: readonly SharedRecordedCell[];
 }
