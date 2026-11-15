@@ -17,18 +17,19 @@ import { applyStashedWork, captureRestore, desktopDrafts, draftResume, stillRest
 import type { LegacyDraftPorts } from "./recovery-owners.ts";
 import { saveChanges, unsavedChanges } from "./save-owners.ts";
 import { mergeBase, noteAbsorbedDirty } from "./session-owner.ts";
-import { openDocument } from "./transition-owners.ts";
+import { documentOpenings, openDocument } from "./transition-owners.ts";
 import { documentReader as portDocument } from "./ports/document.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { place as portPlace } from "./ports/location.ts";
 import { transitions as portTransitions } from "./ports/transitions.ts";
-import { capabilities as portCapabilities } from "./ports/capabilities.ts";
+import { capabilities as portCapabilities, entryCapabilities } from "./ports/capabilities.ts";
 
 const drafts = owned<DraftsMount>();
 
 function draftsPorts(): DraftsPorts {
   return {
     capability: portCapabilities,
+    entryCapability: entryCapabilities,
     running: presence.running,
     clock: { now: () => Date.now() },
     timers: {
@@ -106,6 +107,7 @@ export function draftsTesting(): DraftsMount["testing"] | undefined {
 export function draftRecoveryPorts() {
   return {
     capability: portCapabilities,
+    entryCapability: entryCapabilities,
     desktop: desktopPort,
     sessionStorage: function () { return sessionStorage; },
     localStorage: function () { return localStorage; },
@@ -120,6 +122,12 @@ const draftPorts: LegacyDraftPorts = {
   noteChange: () => { drafts.owner()?.noteChange(); }
 };
 
+export const draftSource: Pick<DraftsMount, "detachRefusal" | "detachSource" | "resumeWriting"> = {
+  detachRefusal: () => { const mounted = drafts.owner(); return mounted ? mounted.detachRefusal() : "no-owner"; },
+  detachSource: () => drafts.owner()?.detachSource() ?? { ok: false, reason: "no-owner" },
+  resumeWriting: () => drafts.owner()?.resumeWriting() ?? false
+};
+
 export function draftTaker(): ReturnType<DraftsMount["taker"]> {
   const mounted = drafts.owner();
   return mounted ? mounted.taker() : null;
@@ -127,5 +135,5 @@ export function draftTaker(): ReturnType<DraftsMount["taker"]> {
 
 export function applyTakenDraft(taken: unknown): Promise<string> {
   const mounted = drafts.owner();
-  return mounted ? mounted.applyTaken(taken) : Promise.resolve("failed");
+  return mounted ? documentOpenings.track(() => mounted.applyTaken(taken)) : Promise.resolve("failed");
 }

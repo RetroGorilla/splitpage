@@ -31,18 +31,21 @@ after(closeApp);
 
 const ALLOWED = { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) };
 let ids = 0, opIds = 0;
+const reported = [];
 const writerPorts = {
+  opening: { openingPending: () => false },
   refusal: () => null,
+  commandRefused: undefined,
   settle: () => { undoOwner().flush(); },
   detach: () => {},
-  bindings: sharedWriterBindings({ missingBase: () => {}, recovered: () => {}, report: () => {} }),
+  bindings: sharedWriterBindings({ missingBase: () => {}, recovered: () => {}, report: outcome => { reported.push(outcome); } }),
   common: ALLOWED,
   standalone: createSessionCapabilities("standalone", ALLOWED),
   migrate: raw => migrateRows(raw),
   docId: () => "p" + String(++ids).padStart(32, "0"),
   editor: () => "Ada",
   structure: { cells: html => fromHtml(html) },
-  report: () => {},
+  report: error => { reported.push(error); },
   timers: { now: () => Date.now(), start: (run, ms) => setTimeout(run, ms), stop: handle => { clearTimeout(handle); } },
   now: () => Date.now()
 };
@@ -173,7 +176,8 @@ function runStandalone(row, view) {
 async function runShared(row, view, order) {
   const shared = row.shared ?? {};
   seedDocument(shared.seed ?? row.seed);
-  assert.deepEqual(await enterSharedSession(view === "writer" ? writerPorts : splitPorts), { ok: true });
+  reported.length = 0;
+  assert.deepEqual(await enterSharedSession(view === "writer" ? writerPorts : splitPorts), { ok: true }, String(reported.map(error => error?.stack ?? JSON.stringify(error))));
   const handle = sharedSessionParts().handle, other = createSharedDocument();
   try {
     registerSharedOperationFamilies(other, { cells: html => fromHtml(html) });

@@ -29,7 +29,7 @@ function document() {
 test("shared stash storage refuses capture, read, clear, accept and reload-guard changes without accessing storage or blobs", () => {
   const calls: unknown[][] = [];
   const unused = recorder(calls);
-  const stash = createConflictStash({ capability: SHARED, storage: unused("storage"), internImage: unused("intern") });
+  const stash = createConflictStash({ capability: SHARED, entryCapability: SHARED, storage: unused("storage"), internImage: unused("intern") });
   const input = { mine: { rows: [{ id: "r1", visualImage: "__IMAGE__" }] }, blobs: { ["a".repeat(64)]: "data:image/png;base64,AA==" }, imagesStripped: true };
   assert.equal(stash.save(input), false);
   assert.equal(stash.read(), null);
@@ -83,7 +83,7 @@ test("shared document merge refuses planning, applying and reporting before docu
   const calls: unknown[][] = [];
   const unused = recorder(calls);
   const ports: DocumentMergePorts<unknown> = {
-    capability: SHARED, states: unused("states"), entry: unused("entry"), isDocument: unused("validate"), snapshot: unused("snapshot"),
+    capability: SHARED, entryCapability: SHARED, states: unused("states"), entry: unused("entry"), isDocument: unused("validate"), snapshot: unused("snapshot"),
     current: unused("current"), adopt: unused("adopt"), documentId: unused("id"), noteHistoryFrom: unused("history"), armUndo: unused("undo"),
     setBase: unused("base"), capture: unused("capture"), stillOwns: unused("owns"),
     view: { banner: unused("banner"), absorbed: unused("absorbed"), autoSave: unused("autosave"), toast: unused("toast") }
@@ -104,10 +104,12 @@ test("shared reload refuses the project and import routes before conflict, desti
   const unused = recorder(calls);
   const notices = fakeNotices();
   const ports: LocalFilesOwnerPorts = {
+    opening: { track: work => work() },
+    entry: { before: () => null },
     capability: SHARED, document: { current: unused("current") }, session: { noteAbsorbedDirty: unused("dirty"), noteReload: unused("reload") },
     transitions: { open: unused("open") }, history: { keep: unused("snapshot") }, saving: { confirmSavedNow: unused("confirm") }, saves: { unsaved: unused("unsaved") },
     conflicts: { close: unused("close") }, location: { amendHome: unused("amend home"), setHome: unused("set home"), fileHome: unused("file home"), importHome: unused("import home") },
-    lastFile: { load: unused("last file"), remember: unused("remember") }, syncIdentity: unused("identity"), stamps: { stampRow: unused("stamp") },
+    lastFile: { permitted: () => true, load: unused("last file"), remember: unused("remember") }, syncIdentity: unused("identity"), stamps: { stampRow: unused("stamp") },
     notices: { ...notices.notices, busy: { begin: unused("busy"), end: unused("end busy") } }, resetProductionPanel: unused("reset"), panels: { close: unused("panel") }, undo: { flush: unused("flush") },
     imports: { parseProjectFileState: unused("parse"), docxToRows: unused("docx"), csvToRows: unused("csv"), detectTwoColumnFormat: unused("detect"), parseImportRows: unused("rows"), normalizeImportedRows: unused("normalize") },
     text: { sanitizeHtml: unused("sanitize") }, resumeNeeded: unused("resume"), desktop: { running: unused("desktop"), openFileDialog: unused("dialog"), routeOpen: unused("route") },

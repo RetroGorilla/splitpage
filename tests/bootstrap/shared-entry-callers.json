@@ -1,0 +1,470 @@
+{
+  "calls": {
+    "application/commands/cell-text.ts#plan:capability.comment": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/commands/cell-text.ts#plan:capability.edit": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/commands/comments.ts#plan:capability.comment": {
+      "kind": "bookkeeping",
+      "count": 3
+    },
+    "application/commands/rows.ts#plan:capability.moves": {
+      "kind": "bookkeeping",
+      "count": 2
+    },
+    "application/commands/scenes.ts#moveSceneCommand:capability.moves": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/recovery/conflict-stash.ts#accept:ports.entryCapability.stash": {
+      "kind": "entry",
+      "count": 1
+    },
+    "application/recovery/conflict-stash.ts#read:ports.entryCapability.stash": {
+      "kind": "entry",
+      "count": 1
+    },
+    "application/recovery/conflict-stash.ts#refused:ports.capability.stash": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/recovery/drafts.ts#draftEntryRefused:live().entryCapability.drafts": {
+      "kind": "entry",
+      "count": 1
+    },
+    "application/recovery/drafts.ts#draftsRefused:live().capability.drafts": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/recovery/history.ts#historyRefused:ports.capability.history": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/recovery/stashed-work.ts#createLocalWorkStash:ports.capability.stash": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/recovery/stashed-work.ts#createStashedWork:ports.capability.merge": {
+      "kind": "entry",
+      "count": 1
+    },
+    "application/recovery/stashed-work.ts#createStashedWork:ports.capability.stash": {
+      "kind": "entry",
+      "count": 1
+    },
+    "application/save/autosave.ts#due:ports.capability.autosave": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/save/autosave.ts#isOn:ports.capability.autosave": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/save/autosave.ts#may:ports.capability.autosave": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/save/autosave.ts#schedule:ports.capability.autosave": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/save/autosave.ts#setEnabled:ports.capability.autosave": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/save/destinations.ts#register:capability.saveDestinations": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/save/destinations.ts#taking:capability.saveDestinations": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/save/destinations.ts#write:capability.saveDestinations": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/save/file-saving.ts#currentSavePermitted:mountedPorts().capability.saveDestinations": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/save/file-saving.ts#writeDoc:mountedPorts().capability.autosave": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/save/file-saving.ts#writeDoc:mountedPorts().capability.saveDestinations": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/save/import-saving.ts#saveBackItemState:ports.capability.saveDestinations": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/save/import-saving.ts#saveBackToFile:ports.capability.saveDestinations": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/save/import-saving.ts#writeBackToFile:ports.capability.saveDestinations": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/save/session-effects.ts#save:ports.capability.autosave": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/save/session-effects.ts#save:ports.capability.saveDestinations": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/session/capabilities.ts#captureSessionCapabilities:hold": {
+      "kind": "bookkeeping",
+      "count": 10
+    },
+    "application/session/capabilities.ts#comment:common.comment": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/session/capabilities.ts#comment:source.comment": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/session/capabilities.ts#edit:common.edit": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/session/capabilities.ts#edit:source.edit": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/session/capabilities.ts#hold:source[name]": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/session/document-merge.ts#apply:ports.entryCapability.merge": {
+      "kind": "entry",
+      "count": 1
+    },
+    "application/session/document-merge.ts#report:ports.capability.merge": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/session/document-merge.ts#states:ports.entryCapability.merge": {
+      "kind": "entry",
+      "count": 1
+    },
+    "application/session/document-session.ts#run:ports.capability.edit": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/session/session-merge.ts#historyRefused:ports.capability.history": {
+      "kind": "entry",
+      "count": 1
+    },
+    "application/session/shared-session.ts#decide:ports.capability.edit": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "application/transitions/local-files.ts#reloadPermitted:ports.capability.reload": {
+      "kind": "entry",
+      "count": 1
+    },
+    "bootstrap/wiring.ts#edit:effects.edit": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/ports/capabilities.ts#autosave:currentCapabilities().autosave": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/ports/capabilities.ts#bundles:currentCapabilities().bundles": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/ports/capabilities.ts#comment:currentCapabilities().comment": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/ports/capabilities.ts#drafts:currentCapabilities().drafts": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/ports/capabilities.ts#edit:currentCapabilities().edit": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/ports/capabilities.ts#entryRead:read": {
+      "kind": "entry",
+      "count": 1
+    },
+    "bootstrap/wiring/ports/capabilities.ts#folders:currentCapabilities().folders": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/ports/capabilities.ts#history:currentCapabilities().history": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/ports/capabilities.ts#merge:currentCapabilities().merge": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/ports/capabilities.ts#module:capabilities[name]": {
+      "kind": "entry",
+      "count": 1
+    },
+    "bootstrap/wiring/ports/capabilities.ts#moves:currentCapabilities().moves": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/ports/capabilities.ts#reload:currentCapabilities().reload": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/ports/capabilities.ts#saveDestinations:currentCapabilities().saveDestinations": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/ports/capabilities.ts#stash:currentCapabilities().stash": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/ports/document-entry.ts#before:entryCapabilities.documentEntry": {
+      "kind": "entry",
+      "count": 1
+    },
+    "bootstrap/wiring/ports/local-files.ts#permitted:entryCapabilities.lastFileResume": {
+      "kind": "entry",
+      "count": 1
+    },
+    "bootstrap/wiring/save-owners.ts#autoSaveTarget:now.capability.autosave": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/save-owners.ts#autoSaveTarget:now.capability.saveDestinations": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/save-owners.ts#requestSave:now.capability.autosave": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/save-owners.ts#requestSave:now.capability.saveDestinations": {
+      "kind": "bookkeeping",
+      "count": 2
+    },
+    "bootstrap/wiring/save-owners.ts#saveDoc:live().capability.saveDestinations": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/save-owners.ts#setAutoSaveEnabled:live().capability.autosave": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/save-owners.ts#toggleAutoSave:live().capability.autosave": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/save-owners.ts#writeAutoSave:mine.capability.autosave": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/save-owners.ts#writeThrough:mine.capability.autosave": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/save-owners.ts#writeThrough:mine.capability.saveDestinations": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/session-owner.ts#editAllowed:running().capability.edit": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/transition-owners.ts#entered:entryCapabilities.documentEntry": {
+      "kind": "entry",
+      "count": 1
+    },
+    "features/file-menu/actions.ts#availability:ports.capability.autosave": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "features/file-menu/actions.ts#availability:ports.capability.saveDestinations": {
+      "kind": "bookkeeping",
+      "count": 2
+    },
+    "features/file-menu/actions.ts#run:ports.capability.autosave": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "features/file-menu/actions.ts#run:ports.capability.saveDestinations": {
+      "kind": "bookkeeping",
+      "count": 2
+    },
+    "features/file-menu/mount.ts#mountConflicts:ports.capability.saveDestinations": {
+      "kind": "bookkeeping",
+      "count": 2
+    },
+    "features/gallery/create-bundle.ts#refused:ports.capability.bundles": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "features/gallery/video-bundles.ts#answer:ports.capability.folders": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "features/gallery/video-bundles.ts#copied:ports.capability.bundles": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "features/gallery/video-bundles.ts#copied:ports.capability.folders": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "features/gallery/video-bundles.ts#exportPlan:ports.capability.bundles": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "features/gallery/video-bundles.ts#exportRefused:ports.capability.bundles": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "features/gallery/video-bundles.ts#offer:ports.capability.folders": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "features/history/panel.ts#restoreSnapshotFromCard:ports.capability.history": {
+      "kind": "entry",
+      "count": 1
+    },
+    "features/merge/banner.ts#show:ports.capability.merge": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "features/merge/banner.ts#undoMerge:ports.entryCapability.history": {
+      "kind": "entry",
+      "count": 1
+    },
+    "features/merge/banner.ts#undoMerge:ports.entryCapability.merge": {
+      "kind": "entry",
+      "count": 1
+    },
+    "features/merge/local-merge.ts#cancelMergeReview:(ports as MergeReviewPorts).capability.merge": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "features/merge/local-merge.ts#mergeAllowed:(ports as MergeReviewPorts).entryCapability.merge": {
+      "kind": "entry",
+      "count": 1
+    },
+    "features/merge/local-merge.ts#mergePermitted:current.entryCapability.merge": {
+      "kind": "entry",
+      "count": 1
+    }
+  },
+  "bindings": {
+    "bootstrap/wiring.ts#merge:[capability]capabilities": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring.ts#merge:[entryCapability]entryCapabilities": {
+      "kind": "entry",
+      "count": 1
+    },
+    "bootstrap/wiring/drafts.ts#draftRecoveryPorts:[capability]capabilities": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/drafts.ts#draftRecoveryPorts:[entryCapability]entryCapabilities": {
+      "kind": "entry",
+      "count": 1
+    },
+    "bootstrap/wiring/drafts.ts#draftsPorts:[capability]capabilities": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/drafts.ts#draftsPorts:[entryCapability]entryCapabilities": {
+      "kind": "entry",
+      "count": 1
+    },
+    "bootstrap/wiring/editor.ts#mountMergeBannerFeature:[capability]capabilities": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/editor.ts#mountMergeBannerFeature:[entryCapability]entryCapabilities": {
+      "kind": "entry",
+      "count": 1
+    },
+    "bootstrap/wiring/file-menu.ts#autosaveActions:[capability]capabilities": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/file-menu.ts#fileMenuActions:[capability]capabilities": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/file-saving.ts#fileSavingPorts:[capability]capabilities": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/gallery.ts#mountGalleryVideoFeature:[capability]capabilities": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/history-panel.ts#mountHistoryPanelFeature:[capability]entryCapabilities": {
+      "kind": "entry",
+      "count": 1
+    },
+    "bootstrap/wiring/merge-review.ts#mergeReviewPorts:[capability]capabilities": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/merge-review.ts#mergeReviewPorts:[entryCapability]entryCapabilities": {
+      "kind": "entry",
+      "count": 1
+    },
+    "bootstrap/wiring/ports/capabilities.ts#module:capabilities": {
+      "kind": "bookkeeping",
+      "count": 3
+    },
+    "bootstrap/wiring/ports/document-entry.ts#before:entryCapabilities": {
+      "kind": "entry",
+      "count": 1
+    },
+    "bootstrap/wiring/ports/history.ts#historyPorts:[capability]capabilities": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/ports/local-files.ts#importSavingPorts:[capability]capabilities": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/ports/local-files.ts#localFilesOwnerPorts:[capability]entryCapabilities": {
+      "kind": "entry",
+      "count": 1
+    },
+    "bootstrap/wiring/ports/local-files.ts#permitted:entryCapabilities": {
+      "kind": "entry",
+      "count": 1
+    },
+    "bootstrap/wiring/ports/session-merge.ts#sessionMergeOwnerPorts:[capability]entryCapabilities": {
+      "kind": "entry",
+      "count": 1
+    },
+    "bootstrap/wiring/session-effects.ts#sessionEffects:[capability]capabilities": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
+    "bootstrap/wiring/transition-owners.ts#entered:entryCapabilities": {
+      "kind": "entry",
+      "count": 1
+    },
+    "bootstrap/wiring/views.ts#mountConflictsFeature:[capability]capabilities": {
+      "kind": "bookkeeping",
+      "count": 1
+    }
+  }
+}

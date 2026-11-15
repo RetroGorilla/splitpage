@@ -10,7 +10,7 @@ import type { CapabilityPort } from "../session/ports.ts";
 import type { SessionMergeOwner } from "../session/session-merge-ports.ts";
 import type { SidePanels } from "../side-panels.ts";
 import type { TextServices } from "../text/services.ts";
-import type { DocumentDestination, HistoryPort } from "./ports.ts";
+import type { DocumentDestination, DocumentEntryAdmission, DocumentOpeningActivity, HistoryPort } from "./ports.ts";
 import type { DocumentSource } from "./sources.ts";
 import type { Transitions } from "./transitions.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
@@ -36,6 +36,8 @@ export interface LocalFileImports {
 }
 
 export interface LocalFilesOwnerPorts {
+  readonly opening: Pick<DocumentOpeningActivity, "track">;
+  readonly entry: DocumentEntryAdmission;
   readonly capability: Pick<CapabilityPort, "reload">;
   readonly document: Pick<DocumentReader, "current">;
   readonly session: {
@@ -48,7 +50,7 @@ export interface LocalFilesOwnerPorts {
   readonly saves: Pick<SaveState, "unsaved">;
   readonly conflicts: Pick<FileConflicts, "close">;
   readonly location: Pick<DocumentLocation, "amendHome" | "setHome" | "fileHome" | "importHome">;
-  readonly lastFile: { readonly load: () => Promise<LocalFileReference | null>; readonly remember: (handle: LocalFileReference | null | undefined) => Promise<void> };
+  readonly lastFile: { readonly permitted: () => boolean; readonly load: () => Promise<LocalFileReference | null>; readonly remember: (handle: LocalFileReference | null | undefined) => Promise<void> };
   readonly syncIdentity: () => void;
   readonly stamps: Pick<SessionMergeOwner, "stampRow">;
   readonly notices: Pick<NoticePort, "show"> & { readonly busy: Pick<BusyNotices, "begin" | "end"> };

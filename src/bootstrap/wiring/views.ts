@@ -1,4 +1,5 @@
 import { updateControls } from "./update.ts";
+import { documentEntry } from "./ports/document-entry.ts";
 import type { Disposable, Owned } from "../../features/routing/owned.ts";
 import type { NoticesPorts } from "../../features/notices/mount.ts";
 import type { PrompterVisibilityPorts } from "../../features/prompter/mount.ts";
@@ -27,7 +28,7 @@ import { mountTopbar } from "../../features/title/topbar.ts";
 import { mountCellReach } from "../../features/editing/cell-reach.ts";
 import { mountPhoneBar } from "../../features/notices/phone-bar.ts";
 import { importMode, prompterState } from "./ports/preferences.ts";
-import { captureOperation, openDocument, stillOwns } from "./transition-owners.ts";
+import { captureOperation, documentOpenings, openDocument, stillOwns } from "./transition-owners.ts";
 import { importHome } from "./location-owner.ts";
 import { promptForName, promptForWpm } from "./title-chrome.ts";
 import { restoreSnapshotFromCard } from "./history-panel.ts";
@@ -164,6 +165,8 @@ export function mountHistoryFeature(): ReturnType<typeof mountHistory> {
 export function mountSaveRecoveryFeature(): ReturnType<typeof mountSaveRecovery> {
   return replaceViewMount("mountSaveRecovery", function () {
     const ports: SaveRecoveryPorts = {
+      entry: documentEntry,
+      opening: documentOpenings,
       hideResumeBanner: (...args: Parameters<ReturnType<typeof localFileMenuControls>["hideResumeBanner"]>) => localFileMenuControls().hideResumeBanner(...args),
       resumeFromHandle: (...args: Parameters<ReturnType<typeof localFilesOwner>["resumeFromHandle"]>) => localFilesOwner().resumeFromHandle(...args),
       showToast: showToast,

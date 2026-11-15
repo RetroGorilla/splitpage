@@ -49,12 +49,13 @@ function loadMain(world) {
       if (channel !== "splitpage:draft-flush") return;
       const tag = tagOfContents(wc);
       log(`flush ${tag} keep=${keep}`);
-      if (world.flushAnswer(tag) !== "ok") return;
+      const mode = world.flushAnswer(tag);
+      if (mode !== "ok" && mode !== "ok-without-copy") return;
       setTimeout(() => {
         const answer = world.main.pendingDraftFlushes.get(reqId);
         if (!answer) return;
         world.main.pendingDraftFlushes.delete(reqId);
-        world.kept.add(world.idOf(tag));
+        if (mode === "ok") world.kept.add(world.idOf(tag));
         log(`flush answered ${tag}`);
         if (typeof world.onFlushAnswer === "function") world.onFlushAnswer(tag);
         answer({ ok: true });
@@ -339,6 +340,29 @@ test("window close with a gone file whose copy is kept in time asks once", async
     "closed W1",
     ...QUITS_AFTER_LAST_WINDOW
   ]);
+});
+
+test("a gone file whose flush answers ok with no copy on disk is asked about again, and Stay keeps the window", async (w) => {
+  const rec = w.window();
+  w.tab(rec, "T1", { file: w.gone, dirty: true });
+  w.flushes.set("T1", "ok-without-copy");
+  w.answers.push("discard", "cancel");
+  w.start();
+  rec.win.close();
+  await w.until("flush answered T1");
+  await wait(100);
+  w.main.persistShellState();
+  assert.deepEqual(w.entries, [
+    "close W1",
+    "close prevented W1",
+    ASK_ONE_LEAVE,
+    "flush T1 keep=true",
+    "flush answered T1",
+    ASK_ONE_LEAVE,
+    "state-write"
+  ]);
+  assert.equal(w.kept.has(w.idOf("T1")), false);
+  assert.equal(w.main.tabs.get(w.idOf("T1")).keepDraftOnClose, false, "the keep hold is released");
 });
 
 test("a gone file's late copy and a cancelled recheck keep the window open", async (w) => {
