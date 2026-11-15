@@ -1,4 +1,6 @@
 import assert from "node:assert/strict";
+import type { Run } from "../../../src/core/text/runs.ts";
+import { markRuns, standaloneCaretOffset } from "./standalone-caret.ts";
 import type { SharedContentRef, SharedJsonValue, SharedMarkValue, SharedOperation, SharedRecordCollection, SharedTextAddress } from "../../../src/core/collab/operations.ts";
 import type { SharedCommandDescription, SharedUndoRecord, SharedUndoSelection } from "../../../src/core/collab/undo-record.ts";
 import { createSharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
@@ -18,6 +20,7 @@ import type { SharedTextHistory } from "../../../src/adapters/collab/text-histor
 import { readSharedTextRestoreOperation } from "../../../src/adapters/collab/mark-provenance.ts";
 import { createSharedAnchor, readSharedAnchorUnit } from "../../../src/adapters/collab/anchors.ts";
 import { captureSharedTextRange } from "../../../src/adapters/collab/executor-references.ts";
+import { readSharedMarkCharacters } from "../../../src/adapters/collab/mark-store.ts";
 import { readSharedStatus, readSharedStatusHeads, readSharedStatusNotices } from "../../../src/adapters/collab/status.ts";
 import { scalarTarget } from "../../../src/adapters/collab/scalar-executor.ts";
 import { createMonitoredSharedDocument, deliveryReplica, validatedFixture } from "../../adapters/collab/helpers.ts";
@@ -50,6 +53,7 @@ export class AdapterReplica {
   failNextReversal: string | null = null;
   refuseNextReversal: string | null = null;
   typing = false;
+  private standaloneBeat: string | null = null;
   private readonly world: AdapterWorld;
   private readonly spans = new WeakMap<ModelObservation, SharedContentRef | null>();
   private serial = 0;
@@ -114,12 +118,13 @@ export class AdapterReplica {
 
   edit(input: { readonly at: ModelObservation; readonly remove?: ModelObservation; readonly text?: string; readonly marks?: readonly SharedMarkValue[]; readonly caret?: ModelObservation; readonly command?: string;
     readonly standaloneCaret?: true }): string[] {
+    if (input.standaloneCaret) this.standaloneBeat = input.at.beat;
     const target = address(input.at.beat), operations: SharedOperation[] = [], removed = (input.remove ?? input.at).ids;
     if (input.text) operations.push(operation({ kind: "text-insert", ...this.author(), target, at: { left: input.at.left, right: null, affinity: "after" },
       content: [{ value: input.text, marks: input.marks ?? [] }] }));
     if (removed.length) operations.push(operation({ kind: "text-delete", ...this.author(), target, observed: removed }));
     const record = this.command(operations, { label: input.command ?? "typing", selection: (input.caret ?? input.at).selection,
-      typing: input.command === undefined ? input.text ?? "" : null, ...input.standaloneCaret ? { caretText: target } : {} });
+      typing: input.command === undefined ? input.text ?? "" : null });
     return (record?.parts ?? []).flatMap(part => part.kind === "text" ? part.inserted : []).map(identity => {
       const unit = readSharedAnchorUnit(identity);
       assert.ok(unit);
@@ -205,9 +210,18 @@ export class AdapterReplica {
       this.failNextReversal = null;
       throw new Error(message);
     }
+    const beat = this.standaloneBeat, before = beat === null ? null : this.shownRuns(beat);
     const reversal = reverseSharedUndoRecord(this.handle, record, { by: modelWriters[this.name].by, nextId: () => this.author().id });
     this.world.nameRestorations(this);
-    return reversal;
+    const offset = reversal.ok && beat !== null && before ? standaloneCaretOffset(before, this.shownRuns(beat)) : null;
+    if (!reversal.ok || beat === null || offset === null) return reversal;
+    const caret = offset > 0 ? this.anchor(beat, offset, "before") : this.anchor(beat, 0, "after");
+    return { ...reversal, selection: { anchor: caret, focus: caret } };
+  }
+
+  private shownRuns(beat: string): Run[] {
+    const characters = readSharedMarkCharacters(this.handle, address(beat)) ?? [];
+    return markRuns(characters.map(character => ({ value: character.value, marks: character.marks.map(group => [group.kind, group.values.length === 1 ? group.values[0] : group.values] as const) })));
   }
 
   caret(selection: SharedUndoSelection): CollabCaret {

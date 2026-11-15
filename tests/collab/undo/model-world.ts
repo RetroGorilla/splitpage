@@ -1,3 +1,5 @@
+import type { Run } from "../../../src/core/text/runs.ts";
+import { markRuns, standaloneCaretOffset } from "./standalone-caret.ts";
 import type { SharedContentRef, SharedFieldValue, SharedJsonValue, SharedMarkValue, SharedTextAddress } from "../../../src/core/collab/operations.ts";
 import type { SharedUndoMarkOccurrence, SharedUndoPart, SharedUndoRecord, SharedUndoSelection, SharedUndoUnit } from "../../../src/core/collab/undo-record.ts";
 import { createSharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
@@ -44,6 +46,7 @@ export class ModelReplica implements DeliveryReplica<ModelOp[]> {
   failNextReversal: string | null = null;
   refuseNextReversal: string | null = null;
   typing = false;
+  private standaloneBeat: string | null = null;
   private readonly world: ModelWorld;
   private readonly listeners = new Set<(update: ModelOp[]) => void>();
   private readonly waiting = new Map<string, ModelOp>();
@@ -162,6 +165,7 @@ export class ModelReplica implements DeliveryReplica<ModelOp[]> {
 
   edit(input: { readonly at: ModelObservation; readonly remove?: ModelObservation; readonly text?: string; readonly marks?: readonly SharedMarkValue[]; readonly caret?: ModelObservation; readonly command?: string;
     readonly standaloneCaret?: true }): string[] {
+    if (input.standaloneCaret) this.standaloneBeat = input.at.beat;
     const created: string[] = [];
     this.command(() => {
       let after = input.at.left;
@@ -172,7 +176,7 @@ export class ModelReplica implements DeliveryReplica<ModelOp[]> {
       const deleted = (input.remove ?? input.at).ids.filter(id => this.view.live(id)).map(id => this.remove(id));
       if (!created.length && !deleted.length) return null;
       return { label: input.command ?? "typing", selection: (input.caret ?? input.at).selection, typing: input.command === undefined ? input.text ?? "" : null,
-        parts: [{ kind: "text", target: address(input.at.beat), inserted: created.map(ref), deleted }], ...input.standaloneCaret ? { caretText: address(input.at.beat) } : {} };
+        parts: [{ kind: "text", target: address(input.at.beat), inserted: created.map(ref), deleted }] };
     });
     return created;
   }
@@ -266,7 +270,7 @@ export class ModelReplica implements DeliveryReplica<ModelOp[]> {
         throw new Error(message);
       }
       const inverse: SharedUndoPart[] = [];
-      const beat = record.caretText ? String(record.caretText.owner) : null, shown = beat === null ? null : this.shownText(beat);
+      const beat = this.standaloneBeat, shown = beat === null ? null : this.shownRuns(beat);
       let effective = false;
       for (const part of [...record.parts].reverse()) {
         const reversed = this.reversePart(part);
@@ -274,21 +278,18 @@ export class ModelReplica implements DeliveryReplica<ModelOp[]> {
         inverse.unshift(reversed.inverse);
       }
       const caret = beat === null || shown === null ? null : this.stepCaret(beat, shown);
-      return { ok: true, effective, inverse: { label: record.label, parts: inverse, selection: record.selection, typing: null, ...record.caretText ? { caretText: record.caretText } : {} },
-        selection: caret ?? record.selection };
+      return { ok: true, effective, inverse: { label: record.label, parts: inverse, selection: record.selection, typing: null }, selection: caret ?? record.selection };
     });
   }
 
-  private shownText(beat: string): string[] {
-    return this.view.visible(beat).map(id => JSON.stringify([this.view.characters.get(id)?.value ?? "", this.marksOf(id)]));
+  private shownRuns(beat: string): Run[] {
+    return markRuns(this.view.visible(beat).map(id => ({ value: this.view.characters.get(id)?.value ?? "", marks: this.marksOf(id).map(mark => [mark.kind, mark.value] as const) })));
   }
 
-  private stepCaret(beat: string, before: readonly string[]): SharedUndoSelection | null {
-    const visible = this.view.visible(beat), after = this.shownText(beat);
-    if (after.length === before.length && after.every((key, index) => key === before[index])) return null;
-    let same = 0;
-    while (same < before.length && same < after.length && before[before.length - 1 - same] === after[after.length - 1 - same]) same++;
-    const offset = after.length - same, previous = visible[offset - 1], next = visible[offset];
+  private stepCaret(beat: string, before: readonly Run[]): SharedUndoSelection | null {
+    const visible = this.view.visible(beat), offset = standaloneCaretOffset(before, this.shownRuns(beat));
+    if (offset === null) return null;
+    const previous = visible[offset - 1], next = visible[offset];
     const caret = previous !== undefined ? point(previous, "after") : next !== undefined ? point(next, "before") : ref(JSON.stringify({ b: beat }));
     return { anchor: caret, focus: caret };
   }
