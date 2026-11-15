@@ -165,6 +165,9 @@ export function readJoinRetire(raw: unknown) {
 export function readSplitRetire(raw: unknown) {
   return readKind(raw, "split-retire", { beat: ref });
 }
+export function readSegmentRetire(raw: unknown, kind: "segment-retire" | "segment-restore") {
+  return readKind(raw, kind, { beat: ref, creator: ref, observed: ref });
+}
 export function readSplitRestore(raw: unknown) {
   return readKind(raw, "split-restore", { beat: ref });
 }
@@ -245,6 +248,8 @@ export function readOperation(raw: unknown): SharedOperation | null {
       case "text-delete": return readTextDelete(value);
       case "mark": return readMarkChange(value);
       case "segment-create": return readSegmentCreate(value);
+      case "segment-retire": return readSegmentRetire(value, "segment-retire");
+      case "segment-restore": return readSegmentRetire(value, "segment-restore");
       case "split": return readBeatSplit(value);
       case "split-before": return readBeatSplitBefore(value);
       case "join": return readBeatJoin(value);
