@@ -35,7 +35,7 @@ import { idMap } from "../../core/document/id-map.ts";
 import { cappedLongText, cappedText, escapeHtml, plainText, safeId as safeIdFrom } from "../../core/document/text-policy.ts";
 import { planQuickAdd } from "../../core/production/tags.ts";
 import { addPersonCommand, deletePersonCommand, deleteTagsCommand, gearQuickAddCommand, tagCellsCommand, updateTagsCommand } from "../../application/commands/production-records.ts";
-import { recordCommandRun } from "../../application/commands/shared-records.ts";
+import { NOTHING_RAN, recordCommandRun } from "../../application/commands/shared-records.ts";
 import type { RecordCommandRun, SharedRecordBuild } from "../../application/commands/shared-records.ts";
 import { PERSON_NAME_MAX, personById as personIn, personNamed, registryEntryOf } from "../../core/production/records.ts";
 import { retagMentions, retagRewrites } from "../../application/commands/tag-rewrites.ts";
@@ -644,8 +644,55 @@ function renderProductionByShoot(entries?: readonly PresentedProductionEntry[]) 
 }
 
 export function renderProduction() {
-  renderProductionPanel();
-  renderGearList();
+  keepingTyped(["production-list", "production-bulk", "gear-list"], () => {
+    renderProductionPanel();
+    renderGearList();
+  });
+}
+
+type TypedBox = HTMLInputElement | HTMLTextAreaElement;
+
+function typedBoxKey(el: TypedBox): string {
+  let selector = (el.classList[0] ? "." + cssAttr(el.classList[0]) : el.tagName.toLowerCase()) + (el.id ? '[id="' + cssAttr(el.id) + '"]' : "");
+  for (const name of ["data-key", "data-id", "data-prep", "data-row", "data-registry-id"]) {
+    const value = el.getAttribute(name);
+    if (value !== null) selector += "[" + name + '="' + cssAttr(value) + '"]';
+  }
+  return selector;
+}
+
+function unsavedTyping(el: TypedBox): boolean {
+  if (el.value === el.defaultValue) return false;
+  if (!el.classList.contains("tag-notes-input")) return true;
+  return findTagByKey(el.getAttribute("data-key"))?.notes !== cappedLongText(plainText(el.value), 2000);
+}
+
+let typedLife: { readonly ports: TagPanelPorts | null; readonly epoch: number } | null = null;
+
+function keepingTyped(rootIds: readonly string[], draw: () => void): void {
+  const active = document.activeElement, epoch = (ports as TagPanelPorts).lifetime.epoch();
+  const sameLife = typedLife !== null && typedLife.ports === ports && typedLife.epoch === epoch;
+  typedLife = { ports, epoch };
+  if (!sameLife) { draw(); return; }
+  const kept = rootIds.flatMap(id => {
+    const root = document.getElementById(id);
+    if (!root) return [];
+    return Array.from(root.querySelectorAll<TypedBox>(".tag-notes-input, .tag-person-input, .tag-rename-input, #bulk-person-input")).flatMap(el => {
+      const focused = el === active, unsaved = unsavedTyping(el);
+      return focused || unsaved ? [{ root, key: typedBoxKey(el), focused, unsaved, value: el.value,
+        start: el.selectionStart, end: el.selectionEnd, direction: el.selectionDirection }] : [];
+    });
+  });
+  draw();
+  for (const box of kept) {
+    const again = box.root.isConnected ? box.root.querySelector<TypedBox>(box.key) : null;
+    if (!again) continue;
+    if (box.unsaved) again.value = box.value;
+    const lost = !document.activeElement || document.activeElement === document.body;
+    if (!box.focused || again.disabled || !lost) continue;
+    again.focus({ preventScroll: true });
+    if (box.start !== null && box.end !== null) again.setSelectionRange(box.start, box.end, box.direction ?? undefined);
+  }
 }
 
 function renderProductionPanel() {
@@ -817,7 +864,7 @@ export function clickProductionOutline(e: MouseEvent): boolean {
     case "select": p.selection.toggle(id); break;
     case "jump": p.beats.reveal(id); return true;
     case "shot": p.footage.open(id); return true;
-    case "ready": setTagStatus(id, "have"); prepNotice("Marked as Have it"); return true;
+    case "ready": if (!statusSet(id, "have").held) prepNotice("Marked as Have it"); return true;
     default: return false;
   }
   renderProduction();
@@ -826,8 +873,7 @@ export function clickProductionOutline(e: MouseEvent): boolean {
 
 export function changeProductionOutline(target: HTMLElement): void {
   if (target.tagName === "SELECT" && target.classList.contains("prep-status-select")) {
-    setTagStatus(target.dataset["key"] ?? null, (target as HTMLSelectElement).value);
-    prepNotice("Requirement status updated");
+    if (!statusSet(target.dataset["key"] ?? null, (target as HTMLSelectElement).value).held) prepNotice("Requirement status updated");
   } else if (target.tagName === "INPUT" && target.classList.contains("prep-film-input")) {
     (ports as TagPanelPorts).undo.breakCoalescing();
     (ports as TagPanelPorts).beats.setFilmed(target.dataset["row"] ?? "", (target as HTMLInputElement).checked);
@@ -1092,9 +1138,15 @@ function renderBulkBar(entries?: readonly PresentedProductionEntry[]) {
 }
 
 export function setTagStatus(key: string | null, statusId: string | null) {
+  statusSet(key, statusId);
+}
+
+function statusSet(key: string | null, statusId: string | null): RecordCommandRun {
   const item = findTagByKey(key);
-  if (!item) return;
-  if (updateTags([item], { status: statusId === null ? { next: true } : (tagStatus(statusId) || (TAG_STATUSES[0] as PanelTagStatus)).id }).changed) renderProduction();
+  if (!item) return NOTHING_RAN;
+  const run = updateTags([item], { status: statusId === null ? { next: true } : (tagStatus(statusId) || (TAG_STATUSES[0] as PanelTagStatus)).id });
+  if (run.changed) renderProduction();
+  return run;
 }
 
 export function setTagOwner(key: string | null, personId: string) {
@@ -1154,14 +1206,20 @@ export function saveTagRename(key: string | null, renamed: string): string | nul
   if (notes !== null && movedNotes !== null) prep.renameNotes(notes, movedNotes);
   (ports as TagPanelPorts).view.setTagRenaming(null);
   (ports as TagPanelPorts).undo.breakCoalescing();
-  const changed = renameTag(item.cat.id, item.name, renamed, tagEditPorts as RemoveTagPorts);
+  let held = false;
+  const changed = renameTag(item.cat.id, item.name, renamed, { ...(tagEditPorts as RemoveTagPorts), run: command => {
+    const run = editRecords(() => command);
+    held = run.held;
+    return run.changed;
+  } });
+  if (held) (ports as TagPanelPorts).view.setTagRenaming(key);
   if (changed) {
     (ports as TagPanelPorts).undo.breakCoalescing();
     (ports as TagPanelPorts).notices.show("Renamed to " + plainText(renamed).trim(), "ok");
   } else {
     p.view.setTagExpanded(previousExpanded);
     if (notes !== null && movedNotes !== null) prep.renameNotes(movedNotes, notes);
-    renderProduction();
+    if (!held) renderProduction();
   }
   return changed ? nextKey : key;
 }

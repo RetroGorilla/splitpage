@@ -15,7 +15,7 @@ import { clearProductionSelection, selectedKeys } from "../bootstrap/wiring/prod
 import { sharedCommentCommands, sharedGalleryCommands, sharedRecordCommands } from "../bootstrap/wiring/ports/shared-commands.ts";
 import { findOrAddPerson, registerProductionTag } from "../features/tags/production-tags.ts";
 import { addPersonForTag, applyGearQuickAdd, armDeleteTag, armPersonDelete, armRemoveTag, bulkDeleteSelected, openGearPanel, openProductionPanel, renderProduction, saveTagRename, setTagOwner, setTagStatus, toggleCardSelection } from "../features/tags/panels.ts";
-import { openBrollPanel } from "../features/broll/panel.ts";
+import { closeBrollPage, openBrollPage, openBrollPanel, runBrollRefresh } from "../features/broll/panel.ts";
 import { armDeleteComment, closeCommentComposer, openCommentComposer, openCommentsPanel, postComment, postReply, setCommentAssignee, toggleReplyComposer, toggleResolve } from "../features/comments/comments.ts";
 import { moveGallerySlot, removeGallerySlot } from "../core/document/gallery.ts";
 import { tagKey } from "../core/document/tags.ts";
@@ -501,6 +501,94 @@ for (const call of HELD_OWNER_CALLS) for (const order of ORDERS) test(`C7 record
     agree(f, withZ(start));
     assert.deepEqual(warnings(), []);
   } finally { stop(); tidy(f); }
+});
+
+const doc = () => currentDocument();
+const nameOf = id => doc().people.find(p => p.id === id)?.name ?? "";
+const shotB1 = () => doc().brollShots.find(s => s.id === "b1");
+const tagById = id => doc().productionTags.find(t => t?.id === id);
+const cyOwns = owner => () => [doc().people.filter(p => p.name === "Cy").length, nameOf(owner())];
+const blurOut = el => { el.focus(); el.blur(); };
+const NOTES = `#broll-panel .broll-notes-input${B1}`, PAGE_NOTE = `#broll-page .broll-page-note${B1}`, TAG_NOTES = `#production-panel .tag-notes-input${MUG}`;
+const RENAME = `#production-panel .tag-rename-input${MUG}`;
+const heldPath = name => { const path = HELD_PATHS.find(p => p.name === name); assert.ok(path, name); return path; };
+const typedRow = (name, box, saved, want, how = {}) => {
+  const path = heldPath(name), real = path.how === "blur" ? blurOut : FIRE[path.how];
+  return { ...path, box, saved, want, refuse: how.refuse ?? real, save: how.save ?? real, redraw: how.redraw ?? (path.state === brollState ? runBrollRefresh : path.render) };
+};
+const TYPED_PATHS = [
+  typedRow("the b-roll bulk new person box", "#broll-bulk-input", cyOwns(() => shotB1().owner), [1, "Cy"]),
+  typedRow("the b-roll bulk new location box", "#broll-bulk-input", () => shotB1().location, "Quay"),
+  typedRow("the b-roll shot person box, Enter", `#broll-panel .broll-person-input${B1}`, cyOwns(() => shotB1().owner), [1, "Cy"]),
+  typedRow("the b-roll shot person box, Add", `#broll-panel .broll-person-input${B1}`, cyOwns(() => shotB1().owner), [1, "Cy"]),
+  typedRow("the b-roll add box", "#broll-add-input", () => doc().brollShots.filter(s => s.name === "Park").length, 1),
+  typedRow("the b-roll prop box, Enter", `#broll-panel .broll-prop-input${B1}`, () => shotB1().props.map(p => p.name), ["Mug", "Lamp"]),
+  typedRow("the b-roll prop box, a suggestion pick", `#broll-panel .broll-prop-input${B1}`, () => shotB1().props.map(p => p.name), ["Mug", "Lamp"]),
+  typedRow("the b-roll location box, Enter", LOC, () => shotB1().location, "Quay"),
+  typedRow("the b-roll location box, blur", LOC, () => shotB1().location, "Quay"),
+  typedRow("the b-roll audio box, blur", REF, () => shotB1().audioRef, "0:12"),
+  typedRow("the b-roll notes box, blur", NOTES, () => shotB1().notes, "Wide"),
+  { name: "the b-roll notes box, typing then a redraw", box: NOTES, target: NOTES, saved: () => shotB1().notes, want: "Wide", redraw: runBrollRefresh,
+    setup: () => { brollOpen("b1"); typeIn(NOTES, "Wide", [1, 2]); }, refuse: () => { runBrollRefresh(); }, save: blurOut },
+  { name: "the b-roll page note, Enter", box: PAGE_NOTE, target: PAGE_NOTE, saved: () => shotB1().notes, want: "Wide", redraw: runBrollRefresh,
+    setup: () => { openBrollPage(); typeIn(PAGE_NOTE, "Wide", [1, 2]); }, refuse: el => { press(el, "Enter"); }, save: blurOut },
+  typedRow("the tag person box, Enter", `#production-panel .tag-person-input${MUG}`, cyOwns(() => tagById(M).owner), [1, "Cy"]),
+  typedRow("the tag person box, Add", `#production-panel .tag-person-input${MUG}`, cyOwns(() => tagById(M).owner), [1, "Cy"]),
+  typedRow("the gear tag person box, Enter", `#gear-panel .tag-person-input${DRONE}`, cyOwns(() => tagById(D).owner), [1, "Cy"]),
+  typedRow("the tag bulk person box, Enter", "#bulk-person-input", cyOwns(() => tagById(M).owner), [1, "Cy"]),
+  typedRow("the tag bulk person box, Add", "#bulk-person-input", cyOwns(() => tagById(M).owner), [1, "Cy"]),
+  { name: "the tag notes box, typing then blur", box: TAG_NOTES, target: TAG_NOTES, saved: () => tagById(M).notes, want: "Wide", redraw: renderProduction,
+    setup: () => { productionCards(); expandedCard("#production-panel", "prop mug"); typeIn(TAG_NOTES, "Wide", [1, 2]); },
+    refuse: el => { el.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: "e" })); }, save: blurOut },
+  typedRow("the gear quick add", "#gear-quickadd-input", () => doc().productionTags.filter(t => t?.cat === "gear").map(t => t.name).sort(), ["Crane", "Drone"]),
+  typedRow("the comment Post button", "#comment-name", () => doc().comments.map(c => c.id), ["C1", "C9"]),
+  typedRow("the reply Post button", '.reply-composer[data-for="C1"] .reply-name-input', () => doc().comments[0].replies.map(r => r.body), ["ok"])
+];
+const boxValue = selector => $(selector).value;
+
+for (const path of TYPED_PATHS) for (const order of ORDERS) test(`C7 record held, typed text: ${path.name} keeps the typed text after the refusal and after a redraw, then saves it once after release and blur or Enter, ${order}`, async () => {
+  const f = await enter();
+  let stop = () => {};
+  try {
+    path.setup();
+    const typed = boxValue(path.box), before = path.saved(), warned = () => noticeCalls.filter(call => call[1] === "warn");
+    stop = f.parts.session.beforeCommand(() => false);
+    noticeCalls.length = 0;
+    path.refuse($(path.target));
+    assert.deepEqual([warned(), boxValue(path.box), path.saved()], [[[REFUSED, "warn"]], typed, before], "after the refusal");
+    noticeCalls.length = 0;
+    path.redraw();
+    assert.deepEqual([warned(), boxValue(path.box), path.saved()], [[], typed, before], "after a redraw");
+    stop();
+    path.save($(path.target));
+    assert.deepEqual([warned(), path.saved()], [[], path.want], "saved once after release");
+    exchange(f, order);
+    agree(f, shape(currentDocument()));
+  } finally { stop(); closeBrollPage(() => {}); tidy(f); }
+});
+
+test("C7 record held, typed text: renaming a tag keeps its box, text, focus and selection after the rule 73 refusal and after a redraw", async () => {
+  const f = await enter();
+  try {
+    productionCards();
+    $(`#production-panel [data-action="tag-rename"]${MUG}`).click();
+    typeIn(RENAME, "Cup", [1, 2]);
+    const view = focused(), before = shape(currentDocument());
+    noticeCalls.length = 0;
+    press($(RENAME), "Enter");
+    assert.deepEqual(noticeCalls.filter(call => call[1] === "warn"), [[REFUSED, "warn"]]);
+    const kept = () => { const now = focused(); assert.equal(now.active, $(RENAME)); assert.deepEqual([now.value, now.range], [view.value, view.range]); };
+    assert.equal(document.activeElement, view.active, "the box itself stays");
+    kept();
+    noticeCalls.length = 0;
+    renderProduction();
+    kept();
+    assert.deepEqual(noticeCalls, []);
+    assert.deepEqual(shape(currentDocument()), before);
+    press($(RENAME), "Escape");
+    exchange(f, "local-first");
+    agree(f, before);
+  } finally { tidy(f); }
 });
 
 const NOOPS = [

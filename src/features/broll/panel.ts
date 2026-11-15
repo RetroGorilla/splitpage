@@ -606,6 +606,7 @@ function typedChange(el: PanelInput) {
 }
 
 let drawingPanel = 0;
+let refusedTyped: string | null = null;
 
 function keepingFocus(container: HTMLElement, draw: () => void) {
   const active = document.activeElement as PanelInput | null;
@@ -613,24 +614,28 @@ function keepingFocus(container: HTMLElement, draw: () => void) {
   if (active && container.contains(active)) {
     const typed = active.tagName === "TEXTAREA" || (active.tagName === "INPUT" && active.type === "text");
     const ownValue = recordField(active) ? typedSinceDrawn(active) : typed;
-    if (ownValue) {
-      const change = typedChange(active);
-      if (change) writeRecord(active.getAttribute("data-id"), change);
-    }
-    kept = { key: focusKey(active), typed: typed, ownValue: ownValue, value: active.value,
+    const change = ownValue ? typedChange(active) : null;
+    const saved = !change || typedAttempt(active, change) !== refusedTyped && writeTyped(active, change);
+    kept = { key: focusKey(active), typed: typed, ownValue: ownValue, saved: saved, value: active.value,
              start: typed ? active.selectionStart : 0, end: typed ? active.selectionEnd : 0 };
   }
+  const unsaved = Array.from(container.querySelectorAll<PanelInput>('input[type="text"], textarea'))
+    .filter(el => el !== active && typedSinceDrawn(el) && (!recordField(el) || typedChange(el))).map(el => ({ key: focusKey(el), value: el.value }));
   drawingPanel++;
   try {
     draw();
   } finally {
     drawingPanel--;
   }
+  for (const box of unsaved) {
+    const again = box.key ? container.querySelector<PanelInput>(box.key) : null;
+    if (again) again.value = box.value;
+  }
   if (!kept || !kept.key) return;
   const again = container.querySelector<PanelInput>(kept.key);
   if (!again) return;
   if (kept.ownValue) again.value = kept.value;
-  if (kept.ownValue && recordField(again)) again.defaultValue = kept.value;
+  if (kept.ownValue && kept.saved && recordField(again)) again.defaultValue = kept.value;
   if (kept.typed) {
     try { again.setSelectionRange(kept.start, kept.end); } catch (e) { }
   }
@@ -717,6 +722,16 @@ function personById(id: unknown) {
 function writeRecord(id: string | null, fields: ShotFields) {
   if (!brollRecord(id)) return false;
   return !editShots(shared => setShotsCommand([(id as string)], fields, undefined, undefined, shared)).held;
+}
+
+function typedAttempt(el: PanelInput, change: ShotFields): string {
+  return JSON.stringify([el.getAttribute("data-id"), change]);
+}
+
+function writeTyped(el: PanelInput, change: ShotFields): boolean {
+  const saved = writeRecord(el.getAttribute("data-id"), change);
+  refusedTyped = saved ? null : typedAttempt(el, change);
+  return saved;
 }
 
 function updateRecord(id: string | null, fields: ShotFields) {
@@ -860,7 +875,7 @@ function commitPropInput(input: PanelInput) {
 
 function commitLocation(input: PanelInput) {
   const change = typedChange(input);
-  if (change && !writeRecord(input.getAttribute("data-id"), change) && brollRecord(input.getAttribute("data-id"))) return;
+  if (change && !writeTyped(input, change) && brollRecord(input.getAttribute("data-id"))) return;
   editingLocFor = null;
   renderBrollViews();
 }
@@ -1034,7 +1049,7 @@ function onBrollFocusOut(e: PanelEvent) {
   if (!field || !brollRecord(el.getAttribute("data-id"))) return;
   if (field === "location") { commitLocation(el); return; }
   const change = typedChange(el);
-  if (change && !writeRecord(el.getAttribute("data-id"), change)) return;
+  if (change && !writeTyped(el, change)) return;
   if (field === "audioRef") editingRefFor = null;
   if (change || field === "audioRef") renderBrollViews();
 }

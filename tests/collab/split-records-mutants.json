@@ -170,8 +170,8 @@
     {
       "label": "rule 73: renaming a tag runs through the silent edit that drops the refusal",
       "file": "src/features/tags/panels.ts",
-      "find": "    run: command => editRecords(() => command).changed,",
-      "replace": "    run: (ports as TagPanelPorts).edits.edit,"
+      "find": "    const run = editRecords(() => command);",
+      "replace": "    const run = { changed: (ports as TagPanelPorts).edits.edit(command), held: false };"
     },
     {
       "label": "rule 73: removing a tag's labels in a shared session takes the standalone path, silent for a tag with no mentions",
@@ -346,6 +346,42 @@
       "file": "src/bootstrap/wiring/production-tags.ts",
       "find": "shared: sharedRecordCommands,",
       "replace": "shared: { ports: () => null, refused: () => {} },"
+    },
+    {
+      "label": "a b-roll redraw takes the typed value as the comparison base even when its write was refused",
+      "file": "src/features/broll/panel.ts",
+      "find": "if (kept.ownValue && kept.saved && recordField(again)) again.defaultValue = kept.value;",
+      "replace": "if (kept.ownValue && recordField(again)) again.defaultValue = kept.value;"
+    },
+    {
+      "label": "a b-roll redraw writes a refused typed value again and warns again",
+      "file": "src/features/broll/panel.ts",
+      "find": "const saved = !change || typedAttempt(active, change) !== refusedTyped && writeTyped(active, change);",
+      "replace": "const saved = !change || writeTyped(active, change);"
+    },
+    {
+      "label": "a b-roll redraw drops the unsaved text of a box that lost focus",
+      "file": "src/features/broll/panel.ts",
+      "find": "    if (again) again.value = box.value;",
+      "replace": "    if (again && !again) again.value = box.value;"
+    },
+    {
+      "label": "a tag panel redraw drops a box's unsaved text",
+      "file": "src/features/tags/panels.ts",
+      "find": "    if (box.unsaved) again.value = box.value;",
+      "replace": "    if (box.unsaved && !box.unsaved) again.value = box.value;"
+    },
+    {
+      "label": "a blur in tag notes does not retry a refused write",
+      "file": "src/features/tags/mount.ts",
+      "find": "if (box.value !== box.defaultValue) ports.setTagNotes(box.getAttribute(\"data-key\"), box.value);",
+      "replace": "if (!box) ports.setTagNotes(box.getAttribute(\"data-key\"), box.value);"
+    },
+    {
+      "label": "a tag rename closes its box before the outcome",
+      "file": "src/features/tags/panels.ts",
+      "find": "  if (held) (ports as TagPanelPorts).view.setTagRenaming(key);",
+      "replace": "  if (held) (ports as TagPanelPorts).view.setTagRenaming(null);"
     }
   ]
 }
