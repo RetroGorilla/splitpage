@@ -134,11 +134,15 @@ export const PAGE = `(function () {
       });
       return true;
     },
-    end: function (label) {
+    stop: function () {
       perf.since = Infinity;
       perf.timers.forEach(clearTimeout); perf.timers = [];
-      var replayed = S.peer.replayed();
+      perf.replayed = S.peer.replayed();
       S.peer.stopReplay();
+      return true;
+    },
+    end: function (label) {
+      var replayed = perf.replayed;
       var consumed = replayed ? replayed.delivered + replayed.refused : 0;
       if (perf.replaying === 'remote') perf.cursor += consumed;
       var lat = perf.lat.slice().sort(function (a, b) { return a - b; });
@@ -197,6 +201,7 @@ function caseLines(spec, label = spec.label, trace = null) {
     `eval window.__perfShared.begin(${JSON.stringify(spec)})`,
     ...(KEY_LINES[spec.kind] ?? typingLines)(),
     `sleep ${SETTLE_MS}`,
+    "eval window.__perfShared.stop()",
     ...(trace ? [`trace stop ${trace}`] : []),
     `eval window.__perfShared.end(${JSON.stringify(label)})`
   ];

@@ -82,12 +82,14 @@ test("the suite enters from the stored state, warms up once, switches to the Wri
   assert.equal(lines.filter((l) => l === "key ctrl Enter").length, own * 10);
   assert.doesNotThrow(() => new Function(`return ${PAGE};`));
   assert.equal(lines.filter((l) => l.startsWith("trace ")).length, 0, "an untraced pass records no trace");
+  assert.equal(lines.filter((l) => l === "eval window.__perfShared.stop()").length, caseList().length + 1, "both passes stop the feed the same way");
   const traced = sharedSuiteText(data, "traces").trim().split("\n"), starts = traced.filter((l) => l === `trace start ${TRACE_CATEGORIES.join(",")}`);
   assert.equal(starts.length, caseList().length, "every case but the warm-up is traced");
   caseList().forEach((spec, index) => {
     const stop = traced.indexOf(`trace stop ${traceFile("traces", index)}`), ended = traced.indexOf(`eval window.__perfShared.end(${JSON.stringify(spec.label)})`);
     const begun = traced.findLastIndex((l, at) => at < stop && l.startsWith("eval window.__perfShared.begin("));
     assert.ok(stop > 0 && stop === ended - 1 && traced[begun - 1] === starts[0], `${spec.label}: the trace starts just before begin and stops just before end`);
+    assert.equal(traced[stop - 1], "eval window.__perfShared.stop()", `${spec.label}: the remote feed and timers stop before the trace does`);
   });
 });
 
