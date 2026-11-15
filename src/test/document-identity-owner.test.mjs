@@ -17,7 +17,12 @@ function fake() {
   const ports = {
     session: {
       currentDocument: () => document,
-      stampDocument: (stamp) => { log.push(["stamp", stamp.name]); stamp.plan(document).apply(document); }
+      stampDocument: (stamp) => {
+        log.push(["stamp", stamp.name]);
+        const plan = stamp.plan(document);
+        plan.apply(document);
+        return { kind: "applied", generation: 0, changes: plan.changes };
+      }
     },
     location: { home: () => home, writtenOut: () => writtenOut, markWrittenOut: (value) => { log.push(["written", value]); writtenOut = value; } },
     history: { copyHistory: (from, to) => { log.push(["copy", from, to]); return copy(); }, historyDocumentChanged: () => log.push(["changed"]) },
@@ -71,6 +76,17 @@ test("reassignment stamps, clears written-out, copies history, synchronizes, ann
   assert.equal(f.log[5][3], true);
   assert.match(f.log[5][1], /Other script/);
   stop();
+});
+
+test("rejected identity stamps leave the document, written-out flag, history and announcement untouched", () => {
+  const f = fake();
+  const stop = f.owner.startIdentity({ ...f.ports, session: { ...f.ports.session,
+    stampDocument: () => ({ kind: "rejected", reason: "shared-session" }) } });
+  try {
+    assert.equal(f.owner.reassignDocId(B, { fromId: A, otherTitle: "Other script" }), false);
+    assert.equal(f.document.docId, A); assert.equal(f.ports.location.writtenOut(), true);
+    assert.deepEqual(f.owner.docIdEvents(), []); assert.deepEqual(f.log, [["nonce", 16]]);
+  } finally { stop(); }
 });
 
 test("invalid and stale reassignment refuse without effects", () => {

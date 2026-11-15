@@ -65,6 +65,7 @@ import { mountPreferenceWatchFeature, stopPreferenceWatchFeature } from "./wirin
 import { mountDocumentChromeFeature, stopDocumentChromeFeature } from "./wiring/document-chrome.ts";
 import { mountPanelListenersFeature, stopPanelListenersFeature } from "./wiring/panels.ts";
 import { mountSidePanelsFeature, stopSidePanelsFeature } from "./wiring/side-panels.ts";
+import { mountSharedSessionFeature, stopSharedSessionFeature } from "./wiring/shared-test.ts";
 
 let running: (() => void) | null = null;
 
@@ -156,6 +157,8 @@ export function startApp(wiring: Wiring, onFail?: (error: unknown) => void): () 
     overlay.mountWriterBar();
     run(view("mountWriterClose", mountWriterCloseFeature));
     overlay.mountWriterFocus();
+    // why: the shared session hook stops first, so it leaves the session while the owners it lands on are still running
+    run([mountSharedSessionFeature, stopSharedSessionFeature]);
     startup.finish();
   } catch (error) {
     const failures = stopAll();

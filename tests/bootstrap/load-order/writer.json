@@ -1,7 +1,8 @@
 {
   "loadOnly": [
     "src/features/writer/writer.ts",
-    "src/bootstrap/wiring/writer.ts"
+    "src/bootstrap/wiring/writer.ts",
+    "src/bootstrap/wiring/writer-empty-script.ts"
   ],
-  "expectedLoads": 2
+  "expectedLoads": 3
 }

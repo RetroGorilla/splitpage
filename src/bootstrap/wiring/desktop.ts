@@ -18,7 +18,8 @@ import { awaitHandedDocument, handDesktopTo, handedDocumentSettled, legacyDeskto
 import { draftsTesting } from "./drafts.ts";
 import { flushDraftNow } from "./recovery-owners.ts";
 import { saveDoc } from "./save-owners.ts";
-import { openDocument } from "./transition-owners.ts";
+import { documentOpenings, openDocument } from "./transition-owners.ts";
+import { documentEntry } from "./ports/document-entry.ts";
 import { documentReader as portDocument, legacyEdit } from "./ports/document.ts";
 import { notices as portNotices } from "./ports/effects.ts";
 import { place as portPlace } from "./ports/location.ts";
@@ -32,6 +33,8 @@ const desktop = owned<DesktopMount>();
 
 function desktopPorts(): DesktopPorts {
   return {
+    entry: documentEntry,
+    opening: documentOpenings,
     running: presence.running,
     shell: desktopPort,
     canOpenPrompterInBrowser: canOpenPrompterInBrowser,

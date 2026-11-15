@@ -358,12 +358,13 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     place: (range, scroll) => { surface.place(range, scroll); },
     check: surface.domCheck,
     dispose: () => {
-      if (visual?.settle && !visual.settle()) return;
-      if (surface.settle && !surface.settle()) return;
+      if (visual?.settle && !visual.settle()) return false;
+      if (surface.settle && !surface.settle()) return false;
       ports.closeFind?.();
       observer.disconnect();
       visual?.dispose();
       surface.dispose();
+      return true;
     }
   };
   return writer;

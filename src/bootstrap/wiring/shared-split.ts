@@ -9,9 +9,18 @@ import { sessionStamps } from "./session-owner.ts";
 import type { SharedBindings, SharedSessionParts } from "./shared-session.ts";
 import { mountSharedSplitBuffer } from "./split-buffer.ts";
 
-export function sharedSplitBindings(effects: Pick<BufferedFieldPorts, "missingBase" | "recovered" | "report">): SharedBindings {
+export function sharedSplitBindings(effects: Pick<BufferedFieldPorts, "missingBase" | "recovered" | "report" | "ownershipScan">): SharedBindings & {
+  readonly abandonable: () => number;
+} {
   let entered: SharedSessionParts | null = null, buffer: CellBuffer | null = null;
   let refusal: string | null = null;
+  const abandons = new Set<(final: boolean) => void>();
+  const abandonment = (abandon: (final: boolean) => void): (() => void) => { abandons.add(abandon); return () => { abandons.delete(abandon); }; };
+  function abandonAll(final: boolean): void {
+    const errors: unknown[] = [];
+    for (const abandon of [...abandons]) { try { abandon(final); } catch (error) { errors.push(error); } }
+    if (errors.length) throw errors[0];
+  }
   const notify = sharedCommandReport(notices, effects.report);
   return {
     enter: parts => {
@@ -24,7 +33,7 @@ export function sharedSplitBindings(effects: Pick<BufferedFieldPorts, "missingBa
         return next;
       };
       const shared = sharedBufferPorts(parts.handle, parts.session, {
-        ...effects, author, readers: productionReaders, stamps: sessionStamps,
+        ...effects, author, readers: productionReaders, stamps: sessionStamps, abandonment,
         report: outcome => { refusal = outcome.kind === "rejected" ? outcome.reason : null; notify(outcome); }
       });
       buffer = mountSharedSplitBuffer(shared);
@@ -33,8 +42,12 @@ export function sharedSplitBindings(effects: Pick<BufferedFieldPorts, "missingBa
       refusal = null;
       return !buffer || buffer.binding.finish() ? null : refusal ?? "buffer-pending";
     },
+    abandon: () => { abandonAll(false); },
+    drop: () => { abandonAll(true); },
+    abandonable: () => abandons.size,
     leave: () => {
       if (!entered && !buffer) return;
+      if (buffer && entered?.session.read(doc => doc) === null) abandonAll(true);
       if (buffer && !buffer.dispose()) throw new Error(refusal ?? "buffer-pending");
       buffer = null; entered = null;
       const errors: unknown[] = [];
