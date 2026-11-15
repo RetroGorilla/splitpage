@@ -1,5 +1,4 @@
 import * as Y from "yjs";
-import { SHARED_RECORD_DELETION_FIELD } from "./record-deletion.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { collabState, guardSharedCallback } from "./state.ts";
 import { readSharedTextRestoreOperation } from "./mark-provenance.ts";
@@ -60,8 +59,7 @@ function membershipChanged(dependency: Membership, changes: ReadonlyMap<object, 
   for (const key of changes.get(dependency.root) ?? []) if (key !== null && (dependency.keys.has(key) || dependency.belongs(peek(dependency.root, key)))) return true;
   for (const [type, fields] of changes) {
     const at = child(dependency.root, type);
-    if (at && (dependency.field === undefined || at.field === dependency.field || at.field === SHARED_RECORD_DELETION_FIELD
-      || at.field === null && (fields.has(dependency.field) || fields.has(SHARED_RECORD_DELETION_FIELD)))
+    if (at && (dependency.field === undefined || at.field === dependency.field || at.field === null && fields.has(dependency.field))
       && (dependency.keys.has(at.key) || dependency.belongs(peek(dependency.root, at.key)))) return true;
   }
   return false;
@@ -125,9 +123,7 @@ class DependencyIndex {
     const affected = new Set<string>(), add = (slot?: ReadonlySet<string>) => { for (const beat of slot ?? []) affected.add(beat); };
     const route = (root: Y.Map<unknown>, key: string, field: string | null | undefined, fields: ReadonlySet<string | null>) => {
       for (const [watched, query] of this.members.get(root) ?? []) {
-        // why: a removal mark changes whom a record belongs to, as a change of its owner field does.
-        if (field !== undefined && watched !== undefined && field !== watched && field !== SHARED_RECORD_DELETION_FIELD
-          && !(field === null && (fields.has(watched) || fields.has(SHARED_RECORD_DELETION_FIELD)))) continue;
+        if (field !== undefined && watched !== undefined && field !== watched && !(field === null && fields.has(watched))) continue;
         add(this.keys.get(root)?.get(key)); const owner = query.ownerOf(peek(root, key)); if (owner !== null) add(query.owners.get(owner));
       }
       const joins = this.joins.get(root);
