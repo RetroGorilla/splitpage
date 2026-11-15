@@ -1,7 +1,7 @@
 import { buildBenchmarkDocument, typeBenchmarkCharacter } from "./benchmark-document.ts";
 import { measureLibraryReads } from "./library-read-counts.ts";
 import { measureSharedReads } from "../../src/adapters/collab/read-counts.ts";
-import { readCollabMarkState } from "../../src/adapters/collab/mark-store.ts";
+import { readCollabMarkState } from "../../src/adapters/collab/mark-state.ts";
 import { createSharedPreparation } from "../../src/adapters/collab/prepare.ts";
 import { cacheText } from "../adapters/collab/read-cache-support.ts";
 

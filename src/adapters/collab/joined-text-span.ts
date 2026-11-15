@@ -1,6 +1,7 @@
 import type { SharedContentRef, SharedTextAddress } from "../../core/collab/operations.ts";
-import { readSharedAnchor, sharedAnchorCharacterEnd } from "./anchors.ts";
-import { readSharedTextTarget } from "./text-target.ts";
+import { readSharedAnchor } from "./anchor-codec.ts";
+import { sharedAnchorCharacterEnd } from "./anchors.ts";
+import { readSharedTextTarget } from "./text-address.ts";
 import { readSharedJoinGlueReference } from "./join-glue-reference.ts";
 
 export function readSharedJoinedSpan(reference: unknown): { readonly target: SharedTextAddress; readonly units: readonly SharedContentRef[] } | null {

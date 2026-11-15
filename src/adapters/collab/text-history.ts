@@ -2,7 +2,7 @@ import * as Y from "yjs";
 import type { SharedContentRef, SharedInlineValue, SharedTextAddress } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import type { SharedMarkGroup, SharedTextIdentity } from "./mark-record.ts";
-import type { SharedResolvedMarkRecord } from "./mark-store.ts";
+import type { SharedResolvedMarkRecord } from "./mark-state.ts";
 import { sharedMarkContains } from "./mark-record.ts";
 import { createSharedPreparation } from "./prepare.ts";
 import { sharedTextCommandPlan, SharedTextPreparationError } from "./executor-text-plan.ts";
