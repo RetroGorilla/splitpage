@@ -1,0 +1,52 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;F.openFile(new File([JSON.stringify({schema:2,title:'Shared late joiner',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello',visualText:'Look'},{id:'r2',audioText:'Gone words',visualText:''},{id:'r3',audioText:'Keep',visualText:''}],comments:[]})],'joiner.splitpage'))
+wait F.state().title === 'Shared late joiner'
+eval window.Q=function(id,f){return document.querySelector('#rows .cell-editable[data-id="'+id+'"][data-field="'+f+'"]')};window.A=function(id,f){var r=S.read().app.rows.filter(function(x){return x.id===id})[0];return r?r[f]:null};window.T=function(id,f){return Q(id,f).textContent.replace(/​/g,'')};window.ids=function(w){return S.read()[w].rows.map(function(r){return r.id}).join()};window.same=function(){return JSON.stringify(S.read().app)===JSON.stringify(S.read().peer)};true
+eval window.at=function(id,f,o){var c=Q(id,f);c.focus();var w=document.createTreeWalker(c,4),n,k=o;while((n=w.nextNode())){if(k<=n.data.length){getSelection().setBaseAndExtent(n,k,n,k);return true}k-=n.data.length}getSelection().setBaseAndExtent(c,c.childNodes.length,c,c.childNodes.length);return true};window.kept=function(w){var e=S.peer.recoveryEntries(w);return e&&e.length===1&&e[0].kind==='removed-beat'?[e[0].row.id,e[0].row.audioText].join('|'):JSON.stringify(e)};true
+eval S.enter()
+wait S.read().peer !== null
+eval at('r1','audioText',5);true
+press !
+eval window.typed=[S.peer.type('r1',0,'B','visualText').kind,S.peer.type('r3',0,'P').kind];S.peer.deliver();true
+expect JSON.stringify(window.typed) === '["applied","applied"]' && same() && A('r1','audioText') === 'Hello!' && A('r1','visualText') === 'BLook' && A('r3','audioText') === 'PKeep'
+eval window.undone=S.peer.undo();S.peer.deliver();true
+expect window.undone.ok && window.undone.label === 'typing' && A('r3','audioText') === 'Keep' && A('r1','visualText') === 'BLook' && same()
+eval at('r1','audioText',6);true
+key ctrl KeyZ
+eval S.peer.deliver();true
+expect A('r1','audioText') === 'Hello' && A('r1','visualText') === 'BLook' && same()
+press ?
+eval S.peer.deliver();S.peer.hold();at('r2','audioText',10);true
+press x
+eval window.removed=S.peer.remove('r2');window.released=S.peer.release('reverse');true
+expect window.removed === 'applied' && window.released >= 2 && same() && ids('app') === 'r1,r3'
+expect kept('app') === 'r2|Gone wordsx' && kept('peer') === kept('app')
+expect JSON.stringify(S.read().app.rows.map(function(r){return [r.id,r.audioText,r.visualText]})) === JSON.stringify([['r1','Hello?','BLook'],['r3','Keep','']])
+eval window.fromApp=S.peer.lateJoiner('app');true
+expect JSON.stringify(window.fromApp) === JSON.stringify(S.read().app) && kept('joiner') === kept('app')
+eval window.fromPeer=S.peer.lateJoiner('peer');true
+expect JSON.stringify(window.fromPeer) === JSON.stringify(S.read().app) && JSON.stringify(S.peer.recoveryEntries('joiner')) === JSON.stringify(S.peer.recoveryEntries('app'))
+expect JSON.stringify(S.recovery().app) === JSON.stringify(S.recovery().peer)
+eval window.R=JSON.stringify(S.peer.recoveryEntries('app'));window.RP=JSON.stringify(S.recovery());window.three=function(){var j=JSON.stringify(S.peer.joined());return j===JSON.stringify(S.read().app)&&j===JSON.stringify(S.read().peer)};window.rec=function(){return ['app','peer','joiner'].every(function(w){return JSON.stringify(S.peer.recoveryEntries(w))===R})&&JSON.stringify(S.recovery())===RP};true
+expect kept('app') === 'r2|Gone wordsx' && rec()
+eval window.joinerTyped=S.peer.joinerType('r3',4,'!');true
+expect window.joinerTyped === 'applied' && S.peer.joined().rows[1].audioText === 'Keep!' && A('r3','audioText') === 'Keep' && rec()
+eval window.caught=S.peer.catchUp();true
+expect A('r3','audioText') === 'Keep!' && T('r3','audioText') === 'Keep!' && three() && JSON.stringify(window.caught) === JSON.stringify(S.read().app) && rec()
+eval window.joinerTyped=S.peer.joinerType('r1',5,'s','visualText');S.peer.catchUp();true
+expect window.joinerTyped === 'applied' && A('r1','visualText') === 'BLooks' && T('r1','visualText') === 'BLooks' && three() && rec()
+eval window.joinerUndone=S.peer.joinerUndo();S.peer.catchUp();true
+expect window.joinerUndone.ok && window.joinerUndone.label === 'typing' && A('r1','visualText') === 'BLook' && A('r3','audioText') === 'Keep!' && three() && rec()
+eval window.joinerUndone=S.peer.joinerUndo();window.caught=S.peer.catchUp();true
+expect window.joinerUndone.ok && window.joinerUndone.label === 'typing' && A('r1','visualText') === 'BLook' && A('r3','audioText') === 'Keep' && three() && rec()
+expect JSON.stringify(window.caught) === JSON.stringify(S.read().app) && T('r3','audioText') === 'Keep' && T('r1','visualText') === 'BLook'
+eval window.empty=S.peer.joinerUndo();true
+expect (window.empty.ok === false || window.empty.effective === false) && three() && rec()
+eval at('r3','audioText',4);true
+press .
+eval S.peer.deliver();window.caught=S.peer.catchUp();true
+expect A('r3','audioText') === 'Keep.' && three() && JSON.stringify(window.caught) === JSON.stringify(S.read().app) && rec()
+expect S.counters().missingBase === 0
+eval S.leave()
+expect S.read().peer === null && S.peer.joined() === null && T('r3','audioText') === 'Keep.'

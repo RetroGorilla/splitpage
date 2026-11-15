@@ -55,12 +55,22 @@ assert.deepEqual(mutants.strategy.matrix.shard, [1, 2, 3, 4, 5, 6]);
 assert.equal(mutants.strategy["fail-fast"], false);
 assert.equal(mutants["timeout-minutes"], 30);
 const prMutants = mutants.steps.find((s) => s.run?.includes("tools/mutants.mjs")).run;
-assert.equal(prMutants, 'shopt -s extglob\nnode tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --shard "${{ matrix.shard }}/6" --concurrency 4 --baseline-timeout 900 --fail-on-survivor\n');
+assert.equal(prMutants, 'shopt -s extglob\nnode tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --shard "${{ matrix.shard }}/6" --concurrency 4 --no-baseline --fail-on-survivor\n');
+const mutantsBaseline = workflow.jobs["mutants-baseline"];
+assert.equal(mutantsBaseline.name, "Collaboration mutants baseline");
+assert.equal(mutantsBaseline.needs, mutants.needs);
+assert.equal(mutantsBaseline.if, mutants.if);
+assert.equal(mutantsBaseline["runs-on"], mutants["runs-on"]);
+assert.equal(mutantsBaseline["timeout-minutes"], 30);
+assert.deepEqual(mutantsBaseline.steps.slice(0, 3), mutants.steps.slice(0, 3));
+assert.equal(mutantsBaseline.steps.length, 4);
+const prBaseline = mutantsBaseline.steps[3].run;
+assert.equal(prBaseline, 'shopt -s extglob\nnode tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --baseline-only --baseline-timeout 1500\n');
 const nightly = parse(readFileSync(join(REPO, ".github/workflows/nightly.yml"), "utf8"));
 const nightlyMutants = nightly.jobs.mutants.steps.find((s) => s.run?.includes("tools/mutants.mjs")).run;
 assert.equal(nightlyMutants, 'set -o pipefail\nnode tools/mutants.mjs tests/collab/undo-slow-mutants.json --concurrency 2 --timeout 600 --baseline-timeout 900 --fail-on-survivor 2>&1 | tee "$RUNNER_TEMP/nightly-mutants.log"\n');
 assert.equal(nightly.jobs.mutants["runs-on"], nightly.jobs.suites["runs-on"]);
-assert.deepEqual(gate.needs, ["changes", "checks", "tests", "desktop-smoke", "mutants"]);
+assert.deepEqual(gate.needs, ["changes", "checks", "tests", "desktop-smoke", "mutants", "mutants-baseline"]);
 assert.equal(gate.if, "always()");
 const step = gate.steps[0];
 assert.equal(step.env.SMOKE, "${{ needs.desktop-smoke.result }}");
@@ -73,6 +83,7 @@ assert.equal(step.env.ROOT_TESTS, "${{ needs.changes.outputs.root_tests }}");
 assert.equal(step.env.TESTED, "${{ needs.changes.outputs.tested }}");
 assert.equal(step.env.MUTANTS_NEEDED, "${{ needs.changes.outputs.mutants }}");
 assert.equal(step.env.MUTANTS, "${{ needs.mutants.result }}");
+assert.equal(step.env.MUTANTS_BASELINE, "${{ needs.mutants-baseline.result }}");
 assert.equal(checks.if, "needs.changes.outputs.code == 'true' && needs.changes.outputs.tested != 'true'");
 assert.equal(changes.outputs.tested, "${{ steps.tested.outputs.tested }}");
 assert.equal(changes.outputs.tree, "${{ steps.tested.outputs.tree }}");
@@ -80,7 +91,8 @@ assert.equal(changes.permissions.actions, "read");
 const lookup = changes.steps.find((s) => s.id === "tested");
 assert.equal(lookup.run, "node tools/ci-tested-tree.mjs ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && '--lookup' || '' }}");
 const ran = "needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped')"
-  + " && (needs.mutants.result == 'success' || needs.mutants.result == 'skipped') && needs.changes.outputs.tree != ''";
+  + " && (needs.mutants.result == 'success' || needs.mutants.result == 'skipped')"
+  + " && (needs.mutants-baseline.result == 'success' || needs.mutants-baseline.result == 'skipped') && needs.changes.outputs.tree != ''";
 const upload = gate.steps.find((s) => s.uses?.startsWith("actions/upload-artifact@"));
 assert.equal(upload.with.name, "ci-passed-tree-${{ needs.changes.outputs.tree }}");
 assert.equal(upload.if, ran);
@@ -103,7 +115,7 @@ for (const change of bash ? results : []) {
             for (const smokeResult of others) {
               const result = spawnSync(bash, ["-e", "-c", step.run], {
                 env: { ...process.env, CHANGES: change, CODE: code, ROOT_TESTS: code, TESTED: tested, DESKTOP: desktop, CHECKS: check, TESTS: test, SMOKE: smokeResult,
-                  MUTANTS_NEEDED: "false", MUTANTS: "skipped" },
+                  MUTANTS_NEEDED: "false", MUTANTS: "skipped", MUTANTS_BASELINE: "skipped" },
                 encoding: "utf8",
                 timeout: 5000
               });
@@ -124,7 +136,7 @@ for (const check of bash ? results : []) {
     for (const smokeResult of results) {
       const result = spawnSync(bash, ["-e", "-c", step.run], {
         env: { ...process.env, CHANGES: "success", CODE: "true", ROOT_TESTS: "false", TESTED: "false", DESKTOP: "false", CHECKS: check, TESTS: test, SMOKE: smokeResult,
-          MUTANTS_NEEDED: "false", MUTANTS: "skipped" },
+          MUTANTS_NEEDED: "false", MUTANTS: "skipped", MUTANTS_BASELINE: "skipped" },
         encoding: "utf8",
         timeout: 5000
       });
@@ -136,15 +148,18 @@ for (const check of bash ? results : []) {
 for (const needed of bash ? ["true", "false"] : []) {
   for (const tested of ["true", "false", ""]) {
     for (const mutantResult of results) {
-      const fresh = tested !== "true", ran = fresh ? "success" : "skipped";
-      const result = spawnSync(bash, ["-e", "-c", step.run], {
-        env: { ...process.env, CHANGES: "success", CODE: "true", ROOT_TESTS: "true", TESTED: tested, DESKTOP: "false", CHECKS: ran, TESTS: ran, SMOKE: "skipped",
-          MUTANTS_NEEDED: needed, MUTANTS: mutantResult },
-        encoding: "utf8",
-        timeout: 5000
-      });
-      assert.equal(result.status === 0, mutantResult === (needed === "true" && fresh ? "success" : "skipped"), JSON.stringify({ needed, tested, mutants: mutantResult, error: result.error?.message }));
-      cases++;
+      for (const baselineResult of results) {
+        const fresh = tested !== "true", ran = fresh ? "success" : "skipped";
+        const result = spawnSync(bash, ["-e", "-c", step.run], {
+          env: { ...process.env, CHANGES: "success", CODE: "true", ROOT_TESTS: "true", TESTED: tested, DESKTOP: "false", CHECKS: ran, TESTS: ran, SMOKE: "skipped",
+            MUTANTS_NEEDED: needed, MUTANTS: mutantResult, MUTANTS_BASELINE: baselineResult },
+          encoding: "utf8",
+          timeout: 5000
+        });
+        const wantMutants = needed === "true" && fresh ? "success" : "skipped";
+        assert.equal(result.status === 0, mutantResult === wantMutants && baselineResult === wantMutants, JSON.stringify({ needed, tested, mutants: mutantResult, baseline: baselineResult, error: result.error?.message }));
+        cases++;
+      }
     }
   }
 }
@@ -161,6 +176,7 @@ if (bash) {
     }
   };
   const pr = manifestsRunBy(prMutants), night = manifestsRunBy(nightlyMutants);
+  assert.deepEqual(manifestsRunBy(prBaseline), pr);
   const manifests = readdirSync(join(REPO, "tests/collab")).filter((name) => name.endsWith("-mutants.json")).map((name) => `tests/collab/${name}`).sort();
   for (const file of manifests) assert.equal(pr.filter((f) => f === file).length + night.filter((f) => f === file).length, 1, `${file} must be run by exactly one of ci.yml and nightly.yml`);
   assert.deepEqual([...pr, ...night].sort(), manifests);

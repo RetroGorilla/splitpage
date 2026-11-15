@@ -3,6 +3,7 @@ import type {
   SharedRecordAddress, SharedRecoveryName, SharedScalarAddress, SharedStatusEvent, SharedTextAddress
 } from "./operations.ts";
 import type { FormatMark } from "../text/runs.ts";
+import type { FlowSelectionPair } from "../flow/flow.ts";
 
 export interface SharedUndoUnit {
   readonly identity: SharedContentRef;
@@ -147,6 +148,18 @@ export interface SharedCommandDescription {
   readonly label: string;
   readonly selection: SharedUndoSelection | null;
   readonly typing: string | null;
+  readonly recorded?: FlowSelectionPair;
+  readonly cells?: readonly SharedRecordedCell[];
+}
+
+export interface SharedRecordedCell {
+  readonly rowId: string;
+  readonly field: string;
+}
+
+export interface SharedRecordedSelection {
+  readonly before: SharedUndoSelection;
+  readonly after: SharedUndoSelection;
 }
 
 export interface SharedUndoRecord {
@@ -154,6 +167,8 @@ export interface SharedUndoRecord {
   readonly parts: readonly SharedUndoPart[];
   readonly selection: SharedUndoSelection | null;
   readonly typing: string | null;
+  readonly recorded?: SharedRecordedSelection;
+  readonly cells?: readonly SharedRecordedCell[];
 }
 
 export function sharedUndoPartName(part: SharedUndoPart): string {
@@ -176,6 +191,12 @@ function sameTarget(a: SharedTextAddress, b: SharedTextAddress): boolean {
   return a.owner === b.owner && a.segment === b.segment && a.field === b.field;
 }
 
+function cellsOf(first: SharedUndoRecord, second: SharedUndoRecord): { readonly cells?: readonly SharedRecordedCell[] } {
+  const cells = [...first.cells ?? []];
+  for (const cell of second.cells ?? []) if (!cells.some(kept => kept.rowId === cell.rowId && kept.field === cell.field)) cells.push(cell);
+  return cells.length ? { cells } : {};
+}
+
 export function mergeSharedUndoRecords(first: SharedUndoRecord, second: SharedUndoRecord): SharedUndoRecord | null {
   const parts: SharedUndoPart[] = [...first.parts];
   for (const part of second.parts) {
@@ -194,5 +215,6 @@ export function mergeSharedUndoRecords(first: SharedUndoRecord, second: SharedUn
     parts.push(gone.size ? { ...part, deleted: part.deleted.filter(unit => !gone.has(unit.identity)) } : part);
   }
   const kept = parts.filter(part => part.kind !== "text" || part.inserted.length > 0 || part.deleted.length > 0);
-  return kept.length ? { label: first.label, parts: kept, selection: first.selection, typing: (first.typing ?? "") + (second.typing ?? "") } : null;
+  return kept.length ? { label: first.label, parts: kept, selection: first.selection, typing: (first.typing ?? "") + (second.typing ?? ""),
+    ...first.recorded ? { recorded: first.recorded } : {}, ...cellsOf(first, second) } : null;
 }

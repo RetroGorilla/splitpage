@@ -2,7 +2,7 @@ import type {
   SharedContentRef, SharedFieldValue, SharedJsonFields, SharedJsonValue, SharedMarkValue, SharedOperation, SharedRecordAddress, SharedRecordCollection, SharedStatusEvent,
   SharedTextAddress
 } from "../../core/collab/operations.ts";
-import type { SharedCommandDescription, SharedUndoMarkOccurrence, SharedUndoPart, SharedUndoRecord, SharedUndoUnit } from "../../core/collab/undo-record.ts";
+import type { SharedCommandDescription, SharedUndoMarkOccurrence, SharedUndoPart, SharedUndoRecord, SharedUndoSelection, SharedUndoUnit } from "../../core/collab/undo-record.ts";
 import { sharedUndoPartName } from "../../core/collab/undo-record.ts";
 import type { SharedUndoReversal } from "../../application/editing/undo/shared-undo.ts";
 import { readOperation } from "../../core/collab/read-operation.ts";
@@ -16,6 +16,7 @@ import { scalarTarget } from "./scalar-executor.ts";
 import { sharedStampOperation } from "./stamp.ts";
 import { readSharedStatus, readSharedStatusHeads } from "./status.ts";
 import { readSharedAnchorUnit } from "./anchors.ts";
+import { anchorSharedRecordedSide } from "./recorded-selection.ts";
 import { sharedPreparedValue } from "./prepare-value.ts";
 import { readSharedTextHistory, readSharedVisibleUnits } from "./text-history.ts";
 import { readSharedRecords, readSharedStoredPictureFields } from "./record-reader.ts";
@@ -411,7 +412,8 @@ function reverseRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, w
   };
   const parts = planned.map(plan => plan.inverse(after));
   return { ok: true, effective: parts.some(part => part.effective), selection: record.selection,
-    inverse: { label: record.label, parts: parts.map(part => part.part), selection: record.selection, typing: null } };
+    inverse: { label: record.label, parts: parts.map(part => part.part), selection: record.selection, typing: null,
+      ...record.recorded ? { recorded: record.recorded } : {}, ...record.cells ? { cells: record.cells } : {} } };
 }
 
 function statusKinds(operation: SharedOperation): operation is SharedStatusEvent { return operation.kind === "status"; }
@@ -419,7 +421,10 @@ function statusKinds(operation: SharedOperation): operation is SharedStatusEvent
 export function executeSharedCommand(handle: SharedDocumentHandle, operations: readonly SharedOperation[], description: SharedCommandDescription,
   options: { readonly base?: number; readonly done?: (execution: SharedCommandExecution) => void } = {}): SharedCommandExecution {
   return beforeHeldUpdates(handle, () => {
-    const execution = executeCommand(handle, operations, description, options);
+    const before = description.recorded ? anchorSharedRecordedSide(handle, description.recorded.before) : null;
+    const made = executeCommand(handle, operations, description, options);
+    const after = before && description.recorded && made.record ? anchorSharedRecordedSide(handle, description.recorded.after) : null;
+    const execution = after && made.record ? { ...made, record: { ...made.record, recorded: { before: before as SharedUndoSelection, after } } } : made;
     options.done?.(execution);
     return execution;
   });
@@ -569,5 +574,6 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       parts.push({ kind: "join-glue", join: item.join as SharedContentRef, from: item.from as SharedContentRef, prior: item.separator, written: now.separator });
     }
   }
-  return { result, record: parts.length ? { label: description.label, parts: sharedCreationUndoParts(operations, parts), selection: description.selection, typing: description.typing } : null };
+  return { result, record: parts.length ? { label: description.label, parts: sharedCreationUndoParts(operations, parts), selection: description.selection, typing: description.typing,
+    ...description.cells ? { cells: description.cells } : {} } : null };
 }
