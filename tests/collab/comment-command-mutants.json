@@ -97,8 +97,8 @@
     {
       "label": "comment feature passes no shared ports",
       "file": "src/features/comments/comments.ts",
-      "find": "return (ports as CommentsRuntimePorts).shared() ?? undefined;",
-      "replace": "return undefined;"
+      "find": "return recordCommandRun((ports as CommentsRuntimePorts).edits, (ports as CommentsRuntimePorts).shared, build);",
+      "replace": "return recordCommandRun((ports as CommentsRuntimePorts).edits, { ...(ports as CommentsRuntimePorts).shared, ports: () => null }, build);"
     }
   ]
 }
