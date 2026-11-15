@@ -14,11 +14,11 @@ const SURFACES: Readonly<Record<string, Row>> = {
   "application/editing/buffered-field.ts": { registers: "const stopAbandonment = ports.abandonment?.(abandon);" },
   "features/writer/flow-buffer.ts": { registers: "createBufferedField(ports" },
   "bootstrap/wiring/ports/writer-visual-buffer.ts": { registers: "const stopAbandonment = shared.bufferedText.abandonment?.(abandon);" },
-  "features/empty-script/empty-script.ts": { registers: "abandoning = ports.abandonment?.(abandon);" },
+  "features/empty-script/empty-script.ts": { registers: "abandoning = ports.abandonment?.(settleBeforeAbandoning(finish, abandon));" },
   "bootstrap/wiring/shared-test-peer.ts": { holdsNothing: "the test peer opens an edit and commits it in the same call" },
-  "bootstrap/wiring/split-buffer.ts": { registers: "abandonment: abandon => shared.bufferedText.abandonment?.(final => {" },
-  "bootstrap/wiring/buffered-input.ts": { registers: "abandonment: abandon => shared.bufferedText.abandonment?.(final => {" },
-  "features/rows/scene-controls.ts": { registers: "const stopAbandon = ports.sharedScenes?.abandonment?.(() => {" }
+  "bootstrap/wiring/split-buffer.ts": { registers: "abandonment: abandon => shared.bufferedText.abandonment?.(settleBeforeAbandoning(() => binding.finish(), abandon))" },
+  "bootstrap/wiring/buffered-input.ts": { registers: "abandonment: abandon => shared.bufferedText.abandonment?.(settleBeforeAbandoning(() => binding.finish(), abandon))" },
+  "features/rows/scene-controls.ts": { registers: "const stopAbandon = ports.sharedScenes?.abandonment?.(settleBeforeAbandoning(finish, () => {" }
 };
 
 function modules(path = ""): string[] {

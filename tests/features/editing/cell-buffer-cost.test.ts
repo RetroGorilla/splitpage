@@ -17,7 +17,7 @@ test("standalone Split keystroke: no cell buffer, binding or painted record is b
     const cells = await import("./src/features/editing/cell-buffer.ts");
     const rich = await import("./src/bootstrap/richtext.ts");
     let built = 0, records = 0, mounts = 0, decodes = 0;
-    mock.module(url("src/application/editing/buffered-field.ts"), { namedExports: { createBufferedField: (...args) => { built++; return field.createBufferedField(...args); } } });
+    mock.module(url("src/application/editing/buffered-field.ts"), { namedExports: { ...field, createBufferedField: (...args) => { built++; return field.createBufferedField(...args); } } });
     mock.module(url("src/application/editing/painted-beats.ts"), { namedExports: { createPaintedBeats: (...args) => { records++; return beats.createPaintedBeats(...args); } } });
     mock.module(url("src/features/editing/cell-buffer.ts"), { namedExports: { mountCellBuffer: (...args) => { mounts++; return cells.mountCellBuffer(...args); } } });
     mock.module(url("src/bootstrap/richtext.ts"), { namedExports: { ...rich, fromHtml: (...args) => { decodes++; return rich.fromHtml(...args); } } });

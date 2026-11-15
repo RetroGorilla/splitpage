@@ -147,7 +147,7 @@ test("the shared empty Writer keeps an unfinished composition and places the fir
   assert.equal(document.querySelector(".empty-script-input"), null);
   assert.deepEqual(await hook.enter(), { ok: true });
   try {
-    const input = document.querySelector(".empty-script-input");
+    const input = [...document.querySelectorAll(".empty-script-input")].find(box => box.closest(".empty-script")?.nextElementSibling?.id !== "rows");
     assert.ok(input);
     input.focus();
     input.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
