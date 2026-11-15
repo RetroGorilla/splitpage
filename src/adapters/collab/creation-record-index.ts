@@ -51,6 +51,6 @@ export function sharedCreationOwnerKeys(field: string): readonly string[] { retu
 export function sharedCreationOwnerOf(record: unknown, field: string): string | null { return ownerOf(record, field); }
 function ownerOf(record: unknown, field: string): string | null {
   if (!(record instanceof Y.Map)) return null;
-  const [mark, value] = sharedCreationOwnerKeys(field).map(key => record.get(key));
+  const [mark, value] = sharedCreationOwnerKeys(field).map((key): unknown => record.get(key));
   return !readSharedRecordDeletion(mark) && typeof value === "string" ? value : null;
 }
