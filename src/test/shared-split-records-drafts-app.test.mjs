@@ -163,12 +163,12 @@ for (const order of ORDERS) test(`C7 typed draft: a b-roll note refused by a lis
     blurOut(box);
     assert.deepEqual([warned(), shot("b1").notes], [[[REFUSED, "warn"]], ""], "refused once by the listener");
     noticeCalls.length = 0;
+    refusing = false;
+    runBrollRefresh();
+    assert.deepEqual([notesBox()?.value, shot("b1").notes, warned()], ["Wide", "", []], "a waiting draft is not retried by a redraw");
     notesBox().focus();
     runBrollRefresh();
     assert.deepEqual([notesBox()?.value, document.activeElement === notesBox(), shot("b1").notes, warned()], ["Wide", true, "", []], "a focused redraw keeps the text and does not retry");
-    refusing = false;
-    runBrollRefresh();
-    assert.equal(shot("b1").notes, "", "a waiting draft is not retried by a redraw");
     blurOut(notesBox());
     assert.deepEqual([shot("b1").notes, undoCount(f) - undo, warned(), brollHook().drafts()], ["Wide", 1, [], []], "the next blur saves it once");
     exchange(f, order);
