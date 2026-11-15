@@ -60,6 +60,7 @@ function preparePhysicalBeatSplit(operation: SharedBeatSplit | SharedBeatSplitBe
     if (view.has(path) || view.has(["visuals", visual])) throw new SharedTextPreparationError("existing-identity");
     const writes: SharedPreparedWrite[] = [{ kind: "map", path }, { kind: "set", path: [...path, "id"], value: beat },
       { kind: "set", path: [...path, "segment"], value: plan.target.segment }, { kind: "set", path: [...path, "splitBy"], value: operation.by },
+      { kind: "set", path: [...path, "splitSource"], value: plan.target.owner },
       { kind: "set", path: [...path, "visual"], value: visual }, { kind: "map", path: [...path, "joins"] }, { kind: "map", path: [...path, "removals"] },
       { kind: "map", path: ["visuals", visual] }, { kind: "set", path: ["visuals", visual, "beat"], value: beat }, { kind: "set", path: ["visuals", visual, "rank"], value: "0000000000" }];
     for (const [field, value] of Object.entries(operation.fields)) {

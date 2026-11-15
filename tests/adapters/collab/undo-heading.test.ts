@@ -148,7 +148,8 @@ test("declared: a heading created by paste stays refused by name, since the past
     { ...runtime.ports, newId: () => "fresh" + ++next, operations: { id: "paste", by: "Writer" } });
   assert.ok(outcome && "rows" in outcome && outcome.ops);
   const record = run.command(run.set.a, [...outcome.ops], "paste"); run.flush();
-  assert.deepEqual(record.parts.filter(part => part.kind === "structure").map(part => part.kind === "structure" ? part.command : ""), ["segment-create", "segment-create", "heading-create"]);
+  assert.deepEqual(record.parts.filter(part => part.kind === "structure").map(part => part.kind === "structure" ? part.command : ""), ["heading-create"]);
+  assert.equal(record.parts.filter(part => part.kind === "beat-create").length, 2);
   refused(run, record, "undo-unsupported:heading-create");
   assert.deepEqual(["heading-create", "segment-create"].map(supportsSharedUndoPart), [false, false]);
 }));

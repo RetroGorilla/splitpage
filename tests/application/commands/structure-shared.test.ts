@@ -179,7 +179,7 @@ const cases: readonly StructureLiteral[] = [
     same: { document: documentWith([beat("R1"), beat(ADD_A, { audio: "", stamp: ALICE }), beat(ADD_B, { audio: "", stamp: BOB }), ...startRows().slice(1)]), recovery: [] },
     typed: { document: documentWith([beat("R1", { audio: "Xabc" }), beat(ADD_A, { audio: "", stamp: ALICE }), ...startRows().slice(1)]), recovery: [] },
     gone: { document: documentWith([beat(ADD_A, { audio: "", stamp: ALICE }), ...startRows().slice(1)]), recovery: [removed(beat("R1"))] },
-    undone: "undo-unsupported:segment-create" },
+    undone: { document: documentWith(startRows()), recovery: [] } },
   { name: "add a beat at the end", make: (stamps, shared) => addBeatCommand(null, "N1", stamps, shared),
     operations: (who, by, second) => [{ kind: "segment-create", segment: "N1", beat: "N1", at: { left: "R5", right: null, affinity: "after" },
       fields: { audioText: "", ...created(by, second) }, id: who + "_o_0", by }],
@@ -188,7 +188,7 @@ const cases: readonly StructureLiteral[] = [
     same: { document: documentWith([...startRows(), beat(ADD_A, { audio: "", stamp: ALICE }), beat(ADD_B, { audio: "", stamp: BOB })]), recovery: [] },
     typed: { document: documentWith([...startRows().slice(0, 4), beat("R5", { audio: "Xij" }), beat(ADD_A, { audio: "", stamp: ALICE })]), recovery: [] },
     gone: { document: documentWith([...startRows().slice(0, 4), beat(ADD_A, { audio: "", stamp: ALICE })]), recovery: [removed(beat("R5"))] },
-    undone: "undo-unsupported:segment-create" },
+    undone: { document: documentWith(startRows()), recovery: [] } },
   { name: "delete a beat that starts a paragraph", make: (_stamps, shared) => deleteBeatCommand("R2", shared),
     operations: (who, by) => [beatRemoval(who, by, ["R2"], [2], 1), flag(who, by, "R3")],
     after: { document: documentWith([beat("R1"), beat("R3", { flag: true }), beat("R4"), beat("R5")]), recovery: [removed(beat("R2"))] },
@@ -334,20 +334,19 @@ for (const literal of cases) for (const order of ORDERS) test(`shared structure 
   } finally { a.session.dispose(); h.close(); }
 });
 
-for (const order of ORDERS) test(`unsupported add undo is skipped and the next undo reaches the preceding command: ${order}`, () => {
+for (const order of ORDERS) test(`add undo removes its beat and the next undo reaches the preceding command: ${order}`, () => {
   const h = setup(), owner = undoOwner(h.a), a = sharedHarness(adapterReplica(h.a, owner));
   try {
     assert.equal(a.session.run(run(h.a, cases[4] as StructureLiteral, "Alice", 5)).kind, "applied");
     assert.equal(a.session.run(run(h.a, cases[2] as StructureLiteral, "Alice", 5)).kind, "applied");
     assert.deepEqual(owner.sizes(), { undo: 2, redo: 0, dropped: 0 });
     flush(h.queue, order);
-    const before = encodeSharedState(h.a);
-    assert.deepEqual(owner.undo(), { ok: false, reason: "undo-unsupported:segment-create", skipped: true });
-    assert.deepEqual(encodeSharedState(h.a), before);
+    assert.deepEqual(owner.undo(), { ok: true, effective: true, label: "add-scene", selection: null });
+    flush(h.queue, order);
+    assert.deepEqual(agreeing("undo add", [h.a, h.b], order), (cases[4] as StructureLiteral).after);
     assert.deepEqual(owner.undo(), { ok: true, effective: true, label: "delete-scene", selection: null });
     flush(h.queue, order);
-    const added = "structure_1_00770031005f0032005f006f005f0030_beat_0";
-    assert.deepEqual(agreeing("skip add", [h.a, h.b], order), { document: documentWith([beat("R1"), beat("R2"), beat(added, { stamp: ALICE }), ...startRows().slice(2)]), recovery: [] });
+    assert.deepEqual(agreeing("undo add and previous", [h.a, h.b], order), { document: documentWith(startRows()), recovery: [] });
   } finally { a.session.dispose(); h.close(); }
 });
 

@@ -2,10 +2,10 @@ import type * as Y from "yjs";
 import type { SharedDocumentHandle } from "./types.ts";
 import type { SharedMarkedCharacter } from "./mark-record.ts";
 import { collabState } from "./state.ts";
-import type { SharedResolvedMarkRecord } from "./mark-store.ts";
-import { readCollabMarkState } from "./mark-store.ts";
-import type { SharedTextAnchorLocation } from "./anchors.ts";
-import { resolveCollabTextAnchor } from "./anchors.ts";
+import type { SharedResolvedMarkRecord } from "./mark-state.ts";
+import { readCollabMarkState } from "./mark-state.ts";
+import type { SharedTextAnchorLocation } from "./anchor-codec.ts";
+import { resolveCollabTextAnchor } from "./anchor-codec.ts";
 import { freezeSharedPreparedValue, sharedPreparedTextInsert } from "./prepare-value.ts";
 
 export interface SharedPreparedTextUnit {

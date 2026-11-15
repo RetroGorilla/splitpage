@@ -7,7 +7,8 @@ import type { SharedDocumentHandle } from "./types.ts";
 import { transactSharedDocument } from "./document.ts";
 import { collabState, assertSharedDocumentIdle } from "./state.ts";
 import { insertSharedHtml } from "./text-import.ts";
-import { createCollabText, readSharedTextTarget } from "./text-target.ts";
+import { createCollabText } from "./text-target.ts";
+import { readSharedTextTarget } from "./text-address.ts";
 import { editCollabText } from "./text-edit.ts";
 
 type ImportBag = Record<string, unknown>;

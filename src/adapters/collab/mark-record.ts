@@ -2,7 +2,7 @@ import { readSharedContentRef } from "../../core/collab/read-operation.ts";
 import type { SharedContentRef } from "../../core/collab/operations.ts";
 import type { SharedStoredMarkValue } from "./stored-mark.ts";
 import { readSharedStoredMark } from "./stored-mark.ts";
-import { readSharedAnchor } from "./anchors.ts";
+import { readSharedAnchor } from "./anchor-codec.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 
 export interface SharedTextIdentity { readonly client: number; readonly clock: number }
