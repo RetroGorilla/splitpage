@@ -167,10 +167,46 @@
       "replace": "const entry = shared ? (ports as BeatSelectPorts).undo.last() : takeOut(w.ids);"
     },
     {
-      "label": "a listener that refused admission and announced it is announced again by the caller",
+      "label": "the guard skips a silent listener refusal, so nobody announces it",
       "file": "src/bootstrap/wiring/ports/shared-commands.ts",
-      "find": " && outcome.reason !== SHARED_LISTENER_REFUSAL",
-      "replace": ""
+      "find": "  if (outcome.kind === \"rejected\" && !outcome.notified) refuse(outcome.reason);",
+      "replace": "  if (outcome.kind === \"rejected\" && !outcome.notified && outcome.reason !== \"buffer-pending\") refuse(outcome.reason);"
+    },
+    {
+      "label": "the caller announces after an announcing listener",
+      "file": "src/bootstrap/wiring/ports/shared-commands.ts",
+      "find": "  if (outcome.kind === \"rejected\" && !outcome.notified) refuse(outcome.reason);",
+      "replace": "  if (outcome.kind === \"rejected\") refuse(outcome.reason);"
+    },
+    {
+      "label": "the session drops a listener's announced answer, so the caller announces it again",
+      "file": "src/application/session/shared-session.ts",
+      "find": "...(answer === SHARED_ADMISSION_ANNOUNCED ? { notified: true as const } : {})",
+      "replace": "...({})"
+    },
+    {
+      "label": "a faulted typing buffer claims to have announced a refusal it never reported",
+      "file": "src/application/editing/buffered-field.ts",
+      "find": "return finish() || (reported === before ? false : SHARED_ADMISSION_ANNOUNCED);",
+      "replace": "return finish() || SHARED_ADMISSION_ANNOUNCED;"
+    },
+    {
+      "label": "the split reads its selection before admission commits typing and drains held updates",
+      "file": "src/features/rows/beats.ts",
+      "find": "  else if (!(ports as BeatPortUse).shared.settle()) return null;",
+      "replace": "  else if (false) return null;"
+    },
+    {
+      "label": "the delete button reads its row index before admission drains held updates",
+      "file": "src/features/rows/beats.ts",
+      "find": "  if ((ports as BeatPortUse).shared.ports()) { if (!(ports as BeatPortUse).shared.settle()) return; }\n  else if (rowEl) rowEl.querySelectorAll(\".cell-editable\").forEach(function (cellEl) { (ports as BeatPortUse).cells.sync(cellEl); });\n  const idx = (ports as BeatPortUse).document.read(function (doc) { return rowIndexOf(doc, id); });",
+      "replace": "  const idx = (ports as BeatPortUse).document.read(function (doc) { return rowIndexOf(doc, id); });\n  if ((ports as BeatPortUse).shared.ports()) { if (!(ports as BeatPortUse).shared.settle()) return; }\n  else if (rowEl) rowEl.querySelectorAll(\".cell-editable\").forEach(function (cellEl) { (ports as BeatPortUse).cells.sync(cellEl); });"
+    },
+    {
+      "label": "the delete button settles each cell in a shared session, so one refusal warns once per cell",
+      "file": "src/features/rows/beats.ts",
+      "find": "  if ((ports as BeatPortUse).shared.ports()) { if (!(ports as BeatPortUse).shared.settle()) return; }\n  else if (rowEl)",
+      "replace": "  if (false) { }\n  else if (rowEl)"
     },
     {
       "label": "Ctrl+Enter in a shared session settles the cell before its command too, so a refusal warns twice",
@@ -187,8 +223,8 @@
     {
       "label": "the split in a shared session settles the cell before its command too, so a refusal warns twice",
       "file": "src/features/rows/beats.ts",
-      "find": "  if (!shared) (ports as BeatPortUse).cells.sync(cellEl);",
-      "replace": "  (ports as BeatPortUse).cells.sync(cellEl);"
+      "find": "  if (!shared) (ports as BeatPortUse).cells.sync(cellEl);\n",
+      "replace": "  (ports as BeatPortUse).cells.sync(cellEl);\n  if (!shared) { }\n"
     },
     {
       "label": "the beat paste in a shared session settles the cell before its command too, so a refusal warns twice",
