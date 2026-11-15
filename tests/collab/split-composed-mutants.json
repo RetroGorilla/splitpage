@@ -77,7 +77,7 @@
     {
       "label": "C7 shared input uses standalone whole-field synchronization",
       "file": "src/bootstrap/wiring/editor.ts",
-      "find": "if (cell && isScriptCell(cell)) afterScriptCellChange(cell);\n      else onRootInput(event);",
+      "find": "if (cell && isScriptCell(cell)) afterScriptCellChange(cell);\n  else onRootInput(event);",
       "replace": "onRootInput(event);"
     },
     {

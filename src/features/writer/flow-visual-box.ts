@@ -6,9 +6,13 @@ import { posToDom } from "../common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../common/cell-selection.ts";
 import { ensureTrailingCaretSpot } from "../common/dom.ts";
 import type { CellRange } from "../../application/editing/cell-editing.ts";
+import { timingMarks } from "../../../shared/timing-marks.ts";
+
+declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 export interface FlowVisualBoxPorts {
   readonly buffer?: FlowVisualBufferMount;
+  readonly listen?: (handler: EventListener) => EventListener;
   readonly opened?: (cell: HTMLElement, range: FlowRange, first: boolean) => void;
   readonly closing?: () => boolean;
   readonly closeForReplay?: () => void;
@@ -60,6 +64,11 @@ function bufferedVisualBox(ports: FlowVisualBoxPorts, mount: FlowVisualBufferMou
   };
   const control = standaloneVisualBox({ ...ports,
     input: () => {}, leave: cell => { if (!abandoning) ports.leave(cell); }, keydown: () => false, beforeWrite: () => null,
+    listen: handler => event => {
+      if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:start");
+      try { handler(event); }
+      finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:end"); }
+    },
     closeForReplay: () => { abandoned(() => { control.close(); }); },
     opened: (cell, range, first) => { selection = first ? range : null; cell.dataset.field = first ? "selection-visual" : "visualText"; binding?.selectionKeep(selection); binding?.painted(); },
     closing: () => { if (binding && !binding.finish()) return false; binding?.selectionEnd(); return true; },
@@ -379,7 +388,9 @@ function standaloneVisualBox(ports: FlowVisualBoxPorts) {
     [closeButton, "click", onClose], [doc, "mousedown", outside], [window, "resize", refresh]
   ];
   if (parent) listeners.push([parent, "scroll", refresh]);
-  listeners.forEach(([element, event, handler]) => element.addEventListener(event, handler));
+  const listen = ports.listen;
+  const listening = listen ? listeners.map(([element, event, handler]): [EventTarget, string, EventListener] => [element, event, listen(handler)]) : listeners;
+  listening.forEach(([element, event, handler]) => element.addEventListener(event, handler));
   return {
     element: box,
     retarget: (range: FlowRange) => { target = range; if (range.head.kind === "beat") cell.dataset.id = range.head.rowId; },
@@ -388,7 +399,7 @@ function standaloneVisualBox(ports: FlowVisualBoxPorts) {
     close,
     dispose(): void {
       close(false);
-      listeners.forEach(([element, event, handler]) => element.removeEventListener(event, handler));
+      listening.forEach(([element, event, handler]) => element.removeEventListener(event, handler));
       button.remove(); note.remove(); box.remove();
     }
   };

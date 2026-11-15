@@ -9,6 +9,9 @@ import type { CommonDocumentSession } from "../../../application/session/documen
 import { productionReaders } from "../../document-ports.ts";
 import { scriptCellOf } from "../../richtext.ts";
 import { text } from "./text.ts";
+import { timingMarks } from "../../../../shared/timing-marks.ts";
+
+declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 export function sharedBrollKeyingPorts(handle: SharedDocumentHandle, source: Pick<SharedBrollKeyingPorts, "author" | "cells" | "readers" | "plainTextOf"> & {
   readonly stamps: StampPorts }): SharedBrollKeyingPorts {
@@ -37,8 +40,11 @@ export function sharedLeftCellKeying(session: Pick<CommonDocumentSession, "read"
   return cell => {
     const rowId = cell.getAttribute("data-id");
     if (!source.open() || !rowId || !cell.isConnected || cell.getAttribute("data-field") !== "visualText") return;
-    for (const outcome of keySharedLeftCell(session, rowId, keying)) {
-      if (outcome.kind === "failed" || outcome.kind === "rejected" || outcome.kind === "committed" && outcome.errors.length) source.notify(outcome);
-    }
+    if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-command:start");
+    try {
+      for (const outcome of keySharedLeftCell(session, rowId, keying)) {
+        if (outcome.kind === "failed" || outcome.kind === "rejected" || outcome.kind === "committed" && outcome.errors.length) source.notify(outcome);
+      }
+    } finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-command:end"); }
   };
 }
