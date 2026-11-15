@@ -1,4 +1,9 @@
 import type { DocumentShape } from "../../core/document/validated.ts";
+import type { SharedContentRef, SharedOperation } from "../../core/collab/operations.ts";
+import { sharedCellTextOperations } from "../../core/collab/cell-text-operations.ts";
+import type { SharedCellSplice } from "../../core/collab/cell-text-operations.ts";
+import type { ProductionReaders } from "../../core/production/ports.ts";
+import type { CellDecoder } from "../../core/text/ports.ts";
 import { changeSet, combined } from "../session/change-set.ts";
 import type { CellChange, ChangeSet } from "../session/change-set.ts";
 import type { Command, CommandRefusal, DocumentView, Plan, SharedPlan } from "../session/document-session.ts";
@@ -9,7 +14,20 @@ export interface CellRewrite {
   readonly rowId: string;
   readonly field: string;
   readonly html: string;
+  readonly seen?: string;
+  readonly splices?: readonly SharedCellSplice[];
 }
+
+export interface SharedRewritePorts {
+  readonly author: () => { readonly id: string; readonly by: string } | null;
+  readonly beatStamp: (beat: SharedContentRef, author: { readonly id: string; readonly by: string }) => SharedOperation;
+  readonly cells: CellDecoder;
+  readonly readers: Pick<ProductionReaders, "whoInField" | "tagsInField" | "cueNamesInField" | "brollInField" | "brollPropsInField">;
+}
+
+export const REWRITE_CELL_CHANGED = "rewrite-cell-changed";
+export const REWRITE_WITHOUT_SPLICES = "rewrite-without-splices";
+export const REWRITE_RECORDS_FROM_TEXT = "rewrite-records-from-text";
 
 export type RewritePlanner = (doc: DocumentView) => readonly CellRewrite[];
 
@@ -82,17 +100,53 @@ export interface RewriteOptions {
   readonly stamped: boolean;
 }
 
-export function rewriteCellsCommand(name: string, planner: RewritePlanner, stamps: StampPorts, options: RewriteOptions): Command {
+function textRecords(readers: SharedRewritePorts["readers"], html: string | undefined): string {
+  return JSON.stringify([readers.whoInField(html), readers.tagsInField(html), readers.cueNamesInField(html), readers.brollInField(html), readers.brollPropsInField(html)]);
+}
+
+function sharedRewrites(doc: DocumentView, rewrites: readonly CellRewrite[], stamped: boolean, shared: SharedRewritePorts,
+  by: { readonly id: string; readonly by: string }): SharedPlan | CommandRefusal {
+  const operations: SharedOperation[] = [], beats: string[] = [];
+  for (const rewrite of rewrites) {
+    const row = doc.rows.find(function (x) { return x.id === rewrite.rowId; });
+    const field = rewrite.field, before = row?.[field];
+    if (!row || (field !== "audioText" && field !== "visualText") || typeof before !== "string" || !rewrite.splices) return { refused: REWRITE_WITHOUT_SPLICES };
+    if (textRecords(shared.readers, before) !== textRecords(shared.readers, rewrite.html)) return { refused: REWRITE_RECORDS_FROM_TEXT };
+    const cell = { owner: row.id, field: field as "audioText" | "visualText", before: shared.cells(before), after: shared.cells(rewrite.html) };
+    const written = sharedCellTextOperations(cell, rewrite.splices);
+    if (!written) return { refused: REWRITE_WITHOUT_SPLICES };
+    for (const operation of written) operations.push({ ...operation, id: (by.id + ":" + operations.length) as SharedContentRef, by: by.by });
+    if (stamped && written.length && !beats.includes(row.id)) beats.push(row.id);
+  }
+  beats.forEach(function (beat, index) { operations.push(shared.beatStamp(beat as SharedContentRef, { id: by.id + "_stamp_" + index, by: by.by })); });
+  return { operations: operations };
+}
+
+function changedUnderneath(doc: DocumentView, planned: readonly CellRewrite[]): boolean {
+  return planned.some(function (rewrite) {
+    if (rewrite.seen === undefined) return false;
+    const row = doc.rows.find(function (x) { return x.id === rewrite.rowId; });
+    return !row || row[rewrite.field] !== rewrite.seen;
+  });
+}
+
+export function rewriteCellsCommand(name: string, planner: RewritePlanner, stamps: StampPorts, options: RewriteOptions, shared?: SharedRewritePorts | null): Command {
   return {
     name: name,
     needs: options.needs,
-    plan: function (doc): Plan | null {
-      const rewrites = realRewrites(doc, planner(doc));
+    plan: function (doc): Plan | CommandRefusal | null {
+      const planned = planner(doc);
+      if (shared && changedUnderneath(doc, planned)) return { refused: REWRITE_CELL_CHANGED };
+      const rewrites = realRewrites(doc, planned);
       if (!rewrites.length) return null;
-      return {
+      const plan: Plan = {
         changes: withFields(rewriteChanges(rewrites, options.stamped), [], true),
         apply: function (live) { applyRewrites(live, rewrites, options.stamped ? stamps : null); }
       };
+      const by = shared ? shared.author() : null;
+      if (!shared || !by) return plan;
+      const written = sharedRewrites(doc, rewrites, options.stamped, shared, by);
+      return "refused" in written ? written : { ...plan, shared: written };
     }
   };
 }

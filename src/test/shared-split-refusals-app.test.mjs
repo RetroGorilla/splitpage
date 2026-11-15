@@ -2,6 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
+import ts from "typescript";
 import { adoptReplacement, currentDocument, sharedSession } from "../bootstrap/wiring/session-owner.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
@@ -220,9 +221,119 @@ for (const field of ["audioText", "visualText"]) for (const order of ["forward",
 }
 test("Split legacy event and undo inventories require a new native route to be classified", () => {
   const editor = readFileSync(new URL("../bootstrap/wiring/editor.ts", import.meta.url), "utf8");
-  const root = editor.slice(editor.indexOf("export function onRootKeydown"));
-  assert.deepEqual([...new Set([...root.matchAll(/e\.key === "([^"]+)"/g)].map(match => match[1]))].sort(),
-    ["ArrowDown", "ArrowUp", "Enter", "Escape", "Tab"]);
+  const source = ts.createSourceFile("editor.ts", editor, ts.ScriptTarget.Latest, true, ts.ScriptKind.TS);
+  const keys = new Set(), references = [];
+  function scope(node) {
+    for (let at = node; at; at = at.parent) if (ts.isFunctionDeclaration(at)) return at.name?.text ?? "anonymous";
+    return "module";
+  }
+  function visit(node) {
+    const owner = scope(node);
+    if ((owner === "onRootKeydown" || owner === "mountRowsEditingFeature") && ts.isBinaryExpression(node)
+      && ts.isPropertyAccessExpression(node.left) && node.left.name.text === "key" && ts.isStringLiteral(node.right)) keys.add(node.right.text);
+    if (ts.isIdentifier(node) && node.text === "undoOwner"
+      && !(ts.isImportSpecifier(node.parent) && !node.parent.propertyName)) {
+      const parent = node.parent;
+      const use = ts.isCallExpression(parent) && parent.expression === node ? "call"
+        : ts.isVariableDeclaration(parent) && parent.name === node ? "binding" : "reference";
+      references.push([owner, use]);
+    }
+    ts.forEachChild(node, visit);
+  }
+  visit(source);
+  assert.deepEqual([...keys].sort(), ["ArrowDown", "ArrowUp", "Enter", "Escape", "Tab"]);
   const methods = [...editor.matchAll(/undoOwner\(\)\.(\w+)\(/g)].map(match => match[1]);
   assert.deepEqual(methods, ["flush", "last", "redo", "undo", "last", "settleAfterApply", "compositionMark", "dropEmptySince", "last", "last", "last", "last"]);
+  assert.deepEqual(references, [
+    ["mountCellEditingFeature", "call"], ["mountCellEditingFeature", "call"],
+    ["module", "call"], ["module", "call"], ["module", "call"],
+    ["afterUndoApplied", "call"], ["mountCompositionFeature", "call"], ["mountCompositionFeature", "call"],
+    ["insertIntoScriptCellNow", "call"], ["insertIntoScriptCellNow", "call"], ["insertIntoScriptCellNow", "call"],
+    ["announceAttached", "call"], ["announceAttached", "binding"], ["announceAttached", "reference"], ["announceAttached", "reference"],
+    ["onRootKeydown", "binding"], ["onRootKeydown", "reference"], ["onRootKeydown", "reference"]
+  ]);
 });
+
+for (const field of ["audioText", "visualText"]) for (const order of ["forward", "reverse"]) {
+  test(`Split IME key table: ${field}, ${order}, composing keys never reach legacy handlers`, async t => {
+    let rows = 0;
+    for (const key of ["Enter", "Backspace", "Escape", "ArrowLeft"]) for (const signal of ["isComposing", "229"]) {
+      await enter(order);
+      const cell = cellOf(field); let committed = false;
+      try {
+        select(cell, 3); pending(cell, true);
+        const before = snapshot(cell);
+        const event = new window.KeyboardEvent("keydown", { bubbles: true, cancelable: true, key,
+          isComposing: signal === "isComposing", keyCode: signal === "229" ? 229 : 0 });
+        assert.equal(event.isComposing, signal === "isComposing");
+        assert.equal(event.keyCode, signal === "229" ? 229 : 0);
+        warningCalls.length = 0; calls.length = 0; errors.length = 0; watching = true;
+        assert.doesNotThrow(() => { cell.dispatchEvent(event); });
+        await tick(); watching = false;
+        const label = key + "/" + signal;
+        assert.equal(event.defaultPrevented, false, label);
+        assert.deepEqual([warningCalls, calls, errors], [[], [], []], label);
+        assert.deepEqual(hook.read(), before.doc, label);
+        assert.deepEqual(encodeSharedState(sharedSessionParts().handle), before.encoded, label);
+        assert.deepEqual(hook.peer.appliedUpdates(), before.updates, label);
+        assert.equal(cell.innerHTML, before.html, label);
+        assert.equal(document.activeElement, before.active, label);
+        assert.equal(document.getSelection().anchorNode, before.anchor, label);
+        assert.equal(document.getSelection().focusNode, before.head, label);
+        assert.deepEqual([document.getSelection().anchorOffset, document.getSelection().focusOffset], before.offsets, label);
+        cell.dispatchEvent(new window.CompositionEvent("compositionupdate", { bubbles: true, data: "X" }));
+        cell.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertCompositionText", data: "X", isComposing: true }));
+        cell.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "X" }));
+        committed = true;
+        await tick(); hook.peer.deliver(order);
+        assert.deepEqual([warningCalls, calls, errors], [[], [], []], label);
+        assert.equal(hook.read().app.rows[0][field], "abcXdef", label);
+        assert.deepEqual(hook.read().app, hook.read().peer, label);
+        rows++;
+      } finally {
+        watching = false;
+        if (!committed) cell.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "" }));
+        assert.deepEqual(hook.leave(), { ok: true });
+      }
+    }
+    assert.equal(rows, 8);
+    t.diagnostic("8 composing rows: Enter, Backspace, Escape, ArrowLeft, each signal");
+  });
+}
+
+for (const field of ["audioText", "visualText"]) for (const order of ["forward", "reverse"]) {
+  test(`Split IME 229 precedes compositionstart: ${field}, ${order}, key bypass and paragraph refusal`, async t => {
+    let rows = 0;
+    for (const key of ["Enter", "Backspace", "Escape", "ArrowLeft"]) for (const inputType of ["insertParagraph", "insertLineBreak"]) {
+      await enter(order);
+      const cell = cellOf(field);
+      try {
+        select(cell, 3);
+        const before = snapshot(cell);
+        const event = new window.KeyboardEvent("keydown", { bubbles: true, cancelable: true, key, keyCode: 229 });
+        assert.equal(event.isComposing, false);
+        assert.equal(event.keyCode, 229);
+        warningCalls.length = 0; calls.length = 0; errors.length = 0; watching = true;
+        assert.doesNotThrow(() => { cell.dispatchEvent(event); });
+        await tick();
+        const label = key + "/" + inputType;
+        assert.equal(event.defaultPrevented, false, label);
+        assert.deepEqual([warningCalls, calls, errors], [[], [], []], label);
+        assert.deepEqual(snapshot(cell), before, label);
+        const input = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType });
+        assert.doesNotThrow(() => { cell.dispatchEvent(input); });
+        await tick(); watching = false;
+        assert.equal(input.defaultPrevented, true, label);
+        assert.deepEqual(warningCalls, [["This is not available in a shared session yet.", "warn"]], label);
+        assert.deepEqual([calls, errors], [[], []], label);
+        assert.deepEqual(snapshot(cell), before, label);
+        rows++;
+      } finally {
+        watching = false;
+        assert.deepEqual(hook.leave(), { ok: true });
+      }
+    }
+    assert.equal(rows, 8);
+    t.diagnostic("8 pre-composition rows: 229 keydown bypass, then paragraph or line-break refusal");
+  });
+}

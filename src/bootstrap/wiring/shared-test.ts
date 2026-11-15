@@ -11,7 +11,7 @@ import type { SharedBindings, SharedSwitchOutcome, SharedSwitchPorts } from "./s
 import type { Home } from "../../application/location/document-location.ts";
 import { sharedWriterBindings } from "./shared-writer.ts";
 import { sharedSplitBindings } from "./shared-split.ts";
-import { createSharedTestPeer } from "./shared-test-peer.ts";
+import { createSharedTestPeer, sharedTestPeerHook } from "./shared-test-peer.ts";
 import { sharedCommandRefusalNotice } from "./ports/shared-command-notices.ts";
 import { notices } from "./ports/effects.ts";
 import { documentReader } from "./ports/document.ts";
@@ -158,14 +158,7 @@ function startSharedTestHook(): () => void {
   };
   const hook = {
     enter, leave,
-    peer: {
-      type: (rowId: string, offset: number, text: string) => peer?.type(rowId, offset, text),
-      remove: (rowId: string) => peer?.remove(rowId),
-      hold: () => { peer?.hold(); },
-      deliver: (order?: "forward" | "reverse" | "duplicate") => peer?.deliver(order),
-      release: (order?: "forward" | "reverse" | "duplicate") => peer?.release(order),
-      appliedUpdates: () => peer?.appliedUpdates() ?? []
-    },
+    peer: sharedTestPeerHook(() => peer),
     read: () => ({ app: documentReader.read(doc => doc ? JSON.parse(JSON.stringify(doc)) as unknown : null), peer: peer?.read() ?? null }),
     recovery: () => {
       const parts = sharedSessionParts();

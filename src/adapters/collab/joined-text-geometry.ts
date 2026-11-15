@@ -21,7 +21,7 @@ export function readSharedJoinedTextGeometry(view: SharedStructureReadView, owne
   const blocks: ReturnType<typeof interpretSharedStructure> = [];
   while (names.length) {
     const name = names.pop(); if (name === undefined || visited.has(name)) continue; visited.add(name);
-    names.push(...joins.neighbors(name));
+    for (const neighbor of joins.neighbors(name)) names.push(neighbor);
     for (const item of planned.values()) if (item.from === name || item.entry.into === name) names.push(item.from, item.entry.into);
     const staged = resolveSharedRestorableBeat(view, name);
     const keys = [...index.candidates(name, false), ...(staged ? [staged.segment] : [])];
@@ -33,8 +33,8 @@ export function readSharedJoinedTextGeometry(view: SharedStructureReadView, owne
       for (const id of index.segmentJoins(key)) for (const source of joins.locations(id)) if (joins.entries(source).some(entry => entry.id === id)) names.push(source);
       segments.add(key); const stream = readSharedStructureStream(view, key); if (!stream) continue;
       const parts = interpretSharedStructure(view, [], stream, "restore-membership");
-      blocks.push(...parts.filter(block => block.segment === key));
-      names.push(...parts.flatMap(block => block.kind === "b" && block.id !== null && !block.reason ? [block.id] : []));
+      for (const block of parts) if (block.segment === key) blocks.push(block);
+      for (const block of parts) if (block.kind === "b" && block.id !== null && !block.reason) names.push(block.id);
     }
   }
   const ordered = blocks.filter(block => block.kind === "b" && block.id !== null && !block.reason).sort((a, b) =>
