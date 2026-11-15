@@ -115,7 +115,11 @@ function joinedRow(handle: SharedDocumentHandle, recorded: SharedTextAddress, ro
     if (!usesSharedJoinedText(prep.view, target)) return null;
     const row = readSharedJoinedText(prep.view, target), pieces = new Map<string, SharedTextAddress>();
     if (!row) return null;
-    for (const span of row.spans) if (!pieces.has(span.plan.path.join("\0"))) pieces.set(span.plan.path.join("\0"), { ...span.plan.target, owner: span.owner as SharedContentRef });
+    // why: one text gives a row a span per beat a split made in it; each beat's characters are read through its own span.
+    for (const span of row.spans) {
+      const key = JSON.stringify([...span.plan.path, span.owner]);
+      if (!pieces.has(key)) pieces.set(key, { ...span.plan.target, owner: span.owner as SharedContentRef });
+    }
     return { target, pieces: [...pieces.values()], groups: row.items.flatMap(item => item.group ? [item.group] : []) };
   } catch (error) {
     if (error instanceof SharedTextPreparationError) return null;
@@ -218,7 +222,10 @@ function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: Sh
     }
     case "text": {
       const histories = segmentHistoriesOf(handle, part.target), history = histories[0] as SharedTextHistory;
-      const shown = (unit: SharedTextIdentity) => histories.flatMap(beat => { const live = beat.live(beat.follow(unit)); return live ? [{ beat, live }] : []; })[0] ?? null;
+      const retiring = new Set(operations.flatMap(operation => operation.kind === "split-retire" || operation.kind === "segment-retire" ? [operation.beat as string] : []));
+      // why: a beat this undo retires is planned first and runs first; its characters are then in the beat it went back into.
+      const standing = (beat: SharedTextHistory) => retiring.has(beat.target.owner) ? history : beat;
+      const shown = (unit: SharedTextIdentity) => histories.flatMap(beat => { const live = beat.live(beat.follow(unit)); return live ? [{ beat: standing(beat), live }] : []; })[0] ?? null;
       const removed = new Map<SharedTextHistory, SharedHistoryUnit[]>();
       for (const identity of part.inserted) {
         const unit = readSharedAnchorUnit(identity), found = unit && shown(unit), held = found ? removed.get(found.beat) ?? [] : [];
@@ -230,7 +237,7 @@ function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: Sh
         if (!original || original.after || !history.known(original) || histories.some(beat => beat.live(original) || beat.back(original))) continue;
         // why: a restored character sits beside its deleted original, so it goes in the beat of the character before it.
         const left = histories.flatMap(beat => { const found = beat.left(original); return found ? [{ beat, found }] : []; })
-          .sort((a, b) => history.order(b.found.unit) - history.order(a.found.unit))[0], beat = left?.beat ?? history;
+          .sort((a, b) => history.order(b.found.unit) - history.order(a.found.unit))[0], beat = left ? standing(left.beat) : history;
         restores.set(beat, [...restores.get(beat) ?? [], { original, unit: unit.identity, left: left?.found.identity ?? null, value: unit.value, marks: history.shown(original) }]);
       }
       const restoring = [...restores].map(([beat, units]) => ({ beat, id: author(), units: units.sort((a, b) => history.order(a.original) - history.order(b.original)) }));
@@ -449,6 +456,12 @@ export function executeSharedCommand(handle: SharedDocumentHandle, operations: r
 
 function executeCommand(handle: SharedDocumentHandle, operations: readonly SharedOperation[], description: SharedCommandDescription,
   options: { readonly base?: number }): SharedCommandExecution {
+  // why: an insert addressed by row and a delete by joined text are recorded as two texts, and undo loses a character.
+  const mixed = operations.findIndex(operation => operation.kind === "text-delete" && operation.target.segment !== operation.target.owner
+    && operations.some(other => other.kind === "text-insert" && other.target.owner === operation.target.owner && other.target.field === operation.target.field
+      && other.target.segment === other.target.owner));
+  const refused = operations[mixed];
+  if (refused) return { result: { ok: false, index: mixed, operation: refused, reason: "mixed-text-address" }, record: null };
   const before = new Map<string, SharedTextHistory | null>(), priors = new Map<SharedOperation, SharedFieldValue>(), typed = new Map<string, ReadonlySet<string>>();
   const textKey = (target: SharedTextAddress): string => JSON.stringify([target.owner, target.segment, target.field]);
   const records = new Map<string, SharedJsonFields | null>(), recorded = new Set<string>();
