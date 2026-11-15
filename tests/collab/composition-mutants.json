@@ -459,8 +459,8 @@
     {
       "label": "Ctrl+Z in a shared Writer ignores the returned selection",
       "file": "src/bootstrap/wiring/editor.ts",
-      "find": "  if (!placeReplayedCaret(steps, outcome.recorded ?? null, dir) && outcome.selection) placeSharedSelection(outcome.selection);\n",
-      "replace": "  placeReplayedCaret(steps, outcome.recorded ?? null, dir);\n"
+      "find": "  if (!placeReplayedCaret(steps, recorded, dir) && outcome.selection) placeSharedSelection(outcome.selection);\n",
+      "replace": "  placeReplayedCaret(steps, recorded, dir);\n"
     },
     {
       "label": "the row paint reads the standalone undo owner while shared",
@@ -471,7 +471,7 @@
     {
       "label": "the shared undo caret comes from the undo record instead of the painted values",
       "file": "src/bootstrap/wiring/editor.ts",
-      "find": "if (!placeReplayedCaret(steps, outcome.recorded ?? null, dir) && outcome.selection) placeSharedSelection(outcome.selection);",
+      "find": "if (!placeReplayedCaret(steps, recorded, dir) && outcome.selection) placeSharedSelection(outcome.selection);",
       "replace": "if (outcome.selection) placeSharedSelection(outcome.selection);",
       "tests": [
         "src/test/undo-caret-parity.test.mjs"
@@ -480,8 +480,8 @@
     {
       "label": "the shared undo reads the before value after the step",
       "file": "src/bootstrap/wiring/editor.ts",
-      "find": "replayedSteps(before, after, changed, dir)",
-      "replace": "replayedSteps(after, after, changed, dir)",
+      "find": "replayedSteps(before, after, cells, dir)",
+      "replace": "replayedSteps(after, after, cells, dir)",
       "tests": [
         "src/test/undo-caret-parity.test.mjs"
       ]
@@ -489,8 +489,8 @@
     {
       "label": "the shared undo looks the row up by the saved address instead of the painted row",
       "file": "src/bootstrap/wiring/editor.ts",
-      "find": "replayedSteps(before, after, changed, dir)",
-      "replace": "replayedSteps(before, after, outcome.selection ? { ...changed, cells: [{ rowId: String(sharedAnchorTarget(outcome.selection.focus)?.owner), field: \"audioText\" }] } : changed, dir)",
+      "find": "replayedSteps(before, after, cells, dir)",
+      "replace": "replayedSteps(before, after, outcome.cells ?? [], dir)",
       "tests": [
         "src/test/undo-caret-parity.test.mjs"
       ]
@@ -498,17 +498,44 @@
     {
       "label": "the shared replay ignores a structural record's recorded selection",
       "file": "src/bootstrap/wiring/editor.ts",
-      "find": "placeReplayedCaret(steps, outcome.recorded ?? null, dir) && outcome.selection",
+      "find": "placeReplayedCaret(steps, recorded, dir) && outcome.selection",
       "replace": "placeReplayedCaret(steps, null, dir) && outcome.selection",
       "tests": [
         "src/test/undo-caret-parity.test.mjs"
       ]
     },
     {
-      "label": "the shared replay takes the changed cells in change-set order",
+      "label": "the shared replay keeps the written order on undo",
       "file": "src/application/editing/undo/replayed-steps.ts",
-      "find": "  return dir === \"undo\" ? invertSteps(diffStates(now, was)) : diffStates(was, now);",
-      "replace": "  const order = (step: Step): number => changes.cells.findIndex(cell => step.op === \"rowField\" && cell.rowId === step.rowId && cell.field === step.key);\n  return (dir === \"undo\" ? invertSteps(diffStates(now, was)) : diffStates(was, now)).sort((a, b) => order(a) - order(b));",
+      "find": "for (const cell of dir === \"undo\" ? [...cells].reverse() : cells) {",
+      "replace": "for (const cell of cells) {",
+      "tests": [
+        "src/test/undo-caret-parity.test.mjs"
+      ]
+    },
+    {
+      "label": "the replay decider prefers the measured narration step over a recorded selection",
+      "file": "src/features/undo/caret.ts",
+      "find": "    if (input.recorded) return { kind: \"recorded\", range: input.dir === \"undo\" ? input.recorded.before ?? input.recorded.after : input.recorded.after };\n    const step = steps.find(item => item.op === \"rowField\" && item.key === \"audioText\");\n    return step && step.rowId ? { kind: \"step\", step: step as PlacedReplayStep } : null;",
+      "replace": "    const step = steps.find(item => item.op === \"rowField\" && item.key === \"audioText\");\n    if (step && step.rowId) return { kind: \"step\", step: step as PlacedReplayStep };\n    return input.recorded ? { kind: \"recorded\", range: input.dir === \"undo\" ? input.recorded.before ?? input.recorded.after : input.recorded.after } : null;",
+      "tests": [
+        "src/test/undo-caret-parity.test.mjs"
+      ]
+    },
+    {
+      "label": "the replay decider restores the redo-side selection on undo",
+      "file": "src/features/undo/caret.ts",
+      "find": "range: input.dir === \"undo\" ? input.recorded.before ?? input.recorded.after : input.recorded.after };",
+      "replace": "range: input.recorded.after };",
+      "tests": [
+        "src/test/undo-caret-parity.test.mjs"
+      ]
+    },
+    {
+      "label": "Split measures the undo caret with the Writer's media decoder",
+      "file": "src/bootstrap/wiring/editor.ts",
+      "find": "  return caretAfterStep(decodeCell, step);",
+      "replace": "  return caretAfterStep(html => fromHtml(html, { media: true }), step);",
       "tests": [
         "src/test/undo-caret-parity.test.mjs"
       ]
@@ -575,7 +602,9 @@
       "file": "src/bootstrap/wiring/shared-test.ts",
       "find": "const bindings = joinSharedBindings(editing, recoveryPanelBinding);",
       "replace": "const bindings = joinSharedBindings(editing, { enter: () => {}, leave: () => {} });",
-      "tests": ["src/test/shared-hook-app.test.mjs"]
+      "tests": [
+        "src/test/shared-hook-app.test.mjs"
+      ]
     },
     {
       "label": "a throwing second leave skips the first binding",
@@ -990,6 +1019,60 @@
       "tests": [
         "tests/application/editing/buffered-field.test.ts",
         "src/test/shared-hook-routes-app.test.mjs"
+      ]
+    },
+    {
+      "label": "peer: the peer breaks the group on every action",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "    edit.replace(from, to, insert);\n",
+      "replace": "    undo.breakGroup();\n    edit.replace(from, to, insert);\n",
+      "tests": [
+        "src/test/shared-hook-peer-app.test.mjs"
+      ]
+    },
+    {
+      "label": "peer: a planned action ends the group even when its plan changes nothing",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "      const plan = command.plan(doc, capability);\n      if (plan && !(\"refused\" in plan)) undo.breakGroup();\n",
+      "replace": "      undo.breakGroup();\n      const plan = command.plan(doc, capability);\n",
+      "tests": [
+        "src/test/shared-hook-peer-app.test.mjs"
+      ]
+    },
+    {
+      "label": "peer: identities are enumerated by code point",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "    return Array.from({ length: painted.text.length }, (_, index) => painted.identity(index) ?? \"\");\n",
+      "replace": "    return Array.from(painted.text, (_, index) => painted.identity(index) ?? \"\");\n",
+      "tests": [
+        "src/test/shared-hook-peer-app.test.mjs"
+      ]
+    },
+    {
+      "label": "peer: one call may give a name to two characters",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "        if (chosen.some(([other, again], at) => at < index && again === name && other !== unit)) refuseName(name);\n",
+      "replace": "",
+      "tests": [
+        "src/test/shared-hook-peer-app.test.mjs"
+      ]
+    },
+    {
+      "label": "peer: a name may move to another character",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "        if (owner) refuseName(name);\n",
+      "replace": "",
+      "tests": [
+        "src/test/shared-hook-peer-app.test.mjs"
+      ]
+    },
+    {
+      "label": "peer: a beat name may move to another beat",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "      if ([...beatNames].some(([other, given]) => given === name && other !== rowId)) refuseName(name);\n",
+      "replace": "",
+      "tests": [
+        "src/test/shared-hook-peer-app.test.mjs"
       ]
     }
   ]

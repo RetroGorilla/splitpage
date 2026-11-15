@@ -191,7 +191,9 @@ function rollbackPoint(doc: ValidatedDocument, changes: ChangeSet): Restore {
   changes.docFields.forEach(function (key) { undo.push(keepField(doc, key)); });
   if (changes.rowsInserted.length || changes.rowsRemoved.length || changes.rowsMoved || changes.runsMoved) {
     const rows = doc.rows.slice();
-    undo.push(function () { doc.rows.splice(0, doc.rows.length, ...rows); });
+    undo.push(function () {
+      for (let at = 0; at === 0 || at < rows.length; at += 1024) doc.rows.splice(at, at ? 0 : doc.rows.length, ...rows.slice(at, at + 1024));
+    });
   }
   return function () { undo.reverse().forEach(function (restore) { restore(); }); };
 }
@@ -200,7 +202,7 @@ function anchorPoint(doc: ValidatedDocument): Restore {
   const comments = doc.comments.slice();
   const places = comments.map(function (c) { return { rowId: c.rowId, field: c.field }; });
   return function () {
-    doc.comments.splice(0, doc.comments.length, ...comments);
+    for (let at = 0; at === 0 || at < comments.length; at += 1024) doc.comments.splice(at, at ? 0 : doc.comments.length, ...comments.slice(at, at + 1024));
     comments.forEach(function (c, i) {
       const place = places[i];
       if (place) { c.rowId = place.rowId; c.field = place.field; }

@@ -133,11 +133,11 @@ import { viewFlags } from "./preferences-owner.ts";
 import { breakUndoGroup, configureUndo, sharedUndoRoute, stepSharedUndo, undoOwner } from "./undo.ts";
 import { sharedSessionParts } from "./shared-session.ts";
 import { resolveSharedBufferedSelection } from "../../adapters/collab/buffer-selection.ts";
+import { resolveSharedRecordedSelection, sharedRowShowing } from "../../adapters/collab/recorded-selection.ts";
 import { sharedAnchorTarget } from "../../adapters/collab/anchors.ts";
 import type { SharedUndoSelection } from "../../core/collab/undo-record.ts";
 import type { FlowRange, FlowSelectionPair } from "../../core/flow/flow.ts";
 import { beatPos } from "../../core/flow/flow.ts";
-import type { ChangeSet } from "../../application/session/change-set.ts";
 import type { UndoDirection } from "../../application/editing/undo/undo.ts";
 import { replayedSteps } from "../../application/editing/undo/replayed-steps.ts";
 import { connectWriter } from "./writer.ts";
@@ -555,13 +555,17 @@ function undoCellStep(steps: readonly unknown[]): PlacedReplayStep | null {
   return placed?.kind === "step" ? placed.step : null;
 }
 
+export function cellCaretAfterStep(step: { readonly before?: unknown; readonly after?: unknown }): number {
+  return caretAfterStep(decodeCell, step);
+}
+
 function placeCellCaret(cellStep: PlacedReplayStep | null): boolean {
   if (!cellStep) return false;
   const sel = '.cell-editable[data-id="' + cssAttr(cellStep.rowId) + '"][data-field="' + cellStep.key + '"]';
   const cell = document.querySelector<HTMLElement>((viewFlags().writerOpen() ? "#writer-doc " : "#rows ") + sel) || document.querySelector<HTMLElement>(sel);
   if (!cell) return false;
   cell.focus();
-  placeCaretAtTextOffset(cell, caretAfterStep(decodeCell, cellStep));
+  placeCaretAtTextOffset(cell, cellCaretAfterStep(cellStep));
   return true;
 }
 
@@ -586,14 +590,13 @@ function placeReplayedCaret(steps: readonly unknown[], recorded: FlowSelectionPa
 
 function replaySharedStep(shared: NonNullable<ReturnType<typeof sharedUndoRoute>>, dir: UndoDirection): void {
   const before = liveDocument.current();
-  let replayed: ChangeSet | null = null;
-  const stop = liveSession().subscribe(change => { if (change.kind === "replay") replayed = change.changes; });
-  let outcome: ReturnType<typeof stepSharedUndo>;
-  try { outcome = stepSharedUndo(shared, dir, message => { showToast(message, "warn"); }); } finally { stop(); }
+  const outcome = stepSharedUndo(shared, dir, message => { showToast(message, "warn"); });
   if (!outcome.ok || !outcome.effective) return;
-  const after = liveDocument.current(), changed: ChangeSet | null = replayed;
-  const steps = before && after && changed ? replayedSteps(before, after, changed, dir) : [];
-  if (!placeReplayedCaret(steps, outcome.recorded ?? null, dir) && outcome.selection) placeSharedSelection(outcome.selection);
+  const after = liveDocument.current(), parts = sharedSessionParts();
+  const cells = (outcome.cells ?? []).map(cell => parts ? { ...cell, rowId: sharedRowShowing(parts.handle, cell.rowId) } : cell);
+  const steps = before && after ? replayedSteps(before, after, cells, dir) : [];
+  const recorded = parts && outcome.recorded ? resolveSharedRecordedSelection(parts.handle, outcome.recorded) : null;
+  if (!placeReplayedCaret(steps, recorded, dir) && outcome.selection) placeSharedSelection(outcome.selection);
 }
 
 export function onRootInput(e: RootInput): void {

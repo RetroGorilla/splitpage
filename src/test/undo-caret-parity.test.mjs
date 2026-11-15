@@ -26,6 +26,7 @@ const { readOperation } = await import("../core/collab/read-operation.ts");
 const { beatPos } = await import("../core/flow/flow.ts");
 const { cellSelection, setCellSelection } = await import("../features/common/cell-selection.ts");
 const { splitSpaceSwitch } = await import("./_shared-split-space.mjs");
+const { cellCaretAfterStep } = await import("../bootstrap/wiring/editor.ts");
 
 after(closeApp);
 
@@ -152,6 +153,11 @@ const peer = {
     operate(other, { kind: "text-insert", target, at: { left: null, right: painted.identity(offset), affinity: "before" },
       content: [{ value: { atom: "image", ref: { sha256: "c".repeat(64), width: 3, height: 3, mime: "image/png" } }, marks: [] }] });
   },
+  erase: (rowId, from, to) => other => {
+    const target = sharedBufferedTarget(other, rowId), observed = captureSharedTextRange(other, target, from, to);
+    assert.ok(observed);
+    operate(other, { kind: "text-delete", target, observed: [observed] });
+  },
   bold: (rowId, from, to) => other => {
     const target = sharedBufferedTarget(other, rowId), observed = captureSharedTextRange(other, target, from, to);
     assert.ok(observed);
@@ -159,9 +165,9 @@ const peer = {
   }
 };
 
-function seedDocument(rows) {
+function seedDocument(rows, written = false) {
   writerControls().closeWriter();
-  adoptReplacement(migrateRows({ schema: 2, rows: rows.map(([id, audioText, visualText = ""]) => ({ id, audioText, visualText, status: "todo" })) }));
+  adoptReplacement(migrateRows({ schema: 2, rows: rows.map(([id, audioText, visualText = ""]) => written ? { id, visualText, audioText, status: "todo" } : { id, audioText, visualText, status: "todo" }) }));
   undoOwner().flush();
 }
 
@@ -181,7 +187,7 @@ function undoRedo(view, rowId, again, onCell = false) {
 }
 
 function runStandalone(row, view) {
-  seedDocument(row.seed);
+  seedDocument(row.seed, row.written);
   open(view);
   row.edits.forEach(edit => { apply(editView(view), edit); });
   undoOwner().flush();
@@ -190,7 +196,7 @@ function runStandalone(row, view) {
 
 async function runShared(row, view, order) {
   const shared = row.shared ?? {};
-  seedDocument(shared.seed ?? row.seed);
+  seedDocument(shared.seed ?? row.seed, row.written);
   reported.length = 0;
   assert.deepEqual(await enterSharedSession(view === "split" ? splitPorts : writerPorts), { ok: true }, String(reported.map(error => error?.stack ?? JSON.stringify(error))));
   const handle = sharedSessionParts().handle, other = createSharedDocument();
@@ -245,9 +251,15 @@ const rows = [
   { name: "delete the middle of aaa", views: ["writer", "split"], seed: [["R1", "aaa"]], edits: [["delete", "R1", 1, 2]], undo: 1, redo: 0 },
   { name: "the other person bolds the kept end", views: ["writer", "split"], seed: [["R1", "abc<b>d</b>"]], edits: [["delete", "R1", 1, 3]], undo: 3, redo: 1, again: true,
     shared: { seed: [["R1", "abcd"]], during: [peer.bold("R1", 3, 4)], watch: ["R1", 1] } },
-  { name: "Enter in the middle of a row", views: ["writer"], seed: [["R1", "abcd"], ["R2", "ef"]], edits: [["press", "R1", 2, 2, "Enter", {}]], caretRow: "R1", again: true },
-  { name: "bold across two rows", views: ["writer", "writer>split"], seed: [["R1", "abcd"], ["R2", "efgh"]], edits: [["press", "R1", 2, 2, "b", { ctrlKey: true }, "R2"]], caretRow: "R1", again: true },
-  { name: "join two rows with Alt+Backspace", views: ["writer", "writer>split"], seed: [["R1", "abcd", "foo"], ["R2", "efgh", "bar"]], edits: [["press", "R2", 0, 0, "Backspace", { altKey: true }]], caretRow: "R1", again: true },
+  { name: "Enter in the middle of a row", views: ["writer"], seed: [["R1", "abcd"], ["R2", "ef"]], edits: [["press", "R1", 2, 2, "Enter", {}]], caretRow: "R1", again: true,
+    expect: { writer: [["R1", 2, 2, "R1"], ["new row", 0, 0, "new row"], ["R1", 2, 2, "R1"]] } },
+  { name: "bold across two rows", views: ["writer", "writer>split"], seed: [["R1", "abcd"], ["R2", "efgh"]], edits: [["press", "R1", 2, 2, "b", { ctrlKey: true }, "R2"]], caretRow: "R1", again: true,
+    expect: { writer: [["R1", 2, 2, "R2"], ["R1", 2, 2, "R2"], ["R1", 2, 2, "R2"]], "writer>split": [["R2", 2, 2, "audioText"], ["R1", 4, 4, "audioText"], ["R2", 2, 2, "audioText"]] } },
+  { name: "join two rows with Alt+Backspace", views: ["writer", "writer>split"], written: true, seed: [["R1", "abcd", "foo"], ["R2", "efgh", "bar"]], edits: [["press", "R2", 0, 0, "Backspace", { altKey: true }]], caretRow: "R1", again: true,
+    expect: { writer: [["R2", 0, 0, "R2"], ["R1", 5, 5, "R1"], ["R2", 0, 0, "R2"]] } },
+  { name: "Enter, then join the next row into the new one with Alt+Backspace", views: ["writer", "writer>split"], written: true, seed: [["R1", "abcd", "foo"], ["R2", "efgh", "bar"]],
+    edits: [["press", "R1", 2, 2, "Enter", {}], ["press", "R2", 0, 0, "Backspace", { altKey: true }]], caretRow: "R1", again: true,
+    expect: { "writer>split": [["new row", 2, 2, "audioText"], ["new row", 3, 3, "visualText"], ["new row", 2, 2, "audioText"]] } },
   { name: "undo from the Split cell itself, with the Split binding mounted", views: ["split"], seed: [["R1", "abcd"]], edits: [["type", "R1", 1, 3, "Z"]], undo: 3, redo: 2, again: true, onCell: true }
 ];
 
@@ -258,6 +270,7 @@ for (const row of rows) for (const view of row.views) for (const order of row.or
     const rowId = row.caretRow ?? row.edits[0][1];
     if (row.undo !== undefined) assert.deepEqual(standalone.slice(0, 2).map(at => at?.slice(0, 3)), [[rowId, row.undo, row.undo], [rowId, row.redo, row.redo]], "standalone gives the literal");
     const seeded = new Set([...row.seed, ...(row.shared?.seed ?? [])].map(([id]) => id)), named = carets => carets.map(at => at?.map((part, index) => (index === 0 || index === 3) && typeof part === "string" && !["audioText", "visualText"].includes(part) && !seeded.has(part) ? "new row" : part));
+    if (row.expect?.[view]) assert.deepEqual(named(standalone), row.expect[view], "standalone gives the literal selections");
     assert.deepEqual(named(shared), named(standalone));
     assert.ok(currentDocument());
   });
@@ -267,4 +280,30 @@ test("undo caret, the other person adds a picture before the change, split: the 
   const row = { name: "picture", seed: [["R1", "abcdef"]], edits: [["delete", "R1", 4, 5]], shared: { before: [peer.picture("R1", 2)] } };
   const carets = await runShared(row, "split", "mine first");
   assert.deepEqual(carets, [["R1", 5, 5, "audioText"], ["R1", 4, 4, "audioText"]]);
+});
+
+const KEPT = [
+  ["before the range", peer.insert("R1", 0, "X"), [2, 4]],
+  ["inside the range", peer.insert("R1", 2, "X"), [1, 4]],
+  ["after the range", peer.insert("R1", 4, "X"), [1, 3]],
+  ["deleting the character before it", peer.erase("R1", 0, 1), [0, 2]],
+  ["deleting part of it", peer.erase("R1", 1, 2), [1, 2]]
+];
+for (const [where, change, [from, to]] of KEPT) for (const order of ["mine first", "peer first"]) {
+  test(`undo selection, bold over bc, the other person changes the text ${where}: the recorded range follows its characters, ${order}`, async () => {
+    const row = { seed: [["R1", "abcd"]], edits: [], caretRow: "R1", again: true,
+      shared: { during: [change], edits: { "mine first": [["press", "R1", 1, 3, "b", { ctrlKey: true }]], "peer first": [] } } };
+    if (order === "peer first") {
+      const after = { "before the range": [2, 4], "inside the range": [1, 4], "after the range": [1, 3], "deleting the character before it": [0, 2], "deleting part of it": [1, 2] }[where];
+      row.shared.edits["peer first"] = [["press", "R1", after[0], after[1], "b", { ctrlKey: true }]];
+    }
+    const carets = await runShared(row, "writer", order);
+    assert.deepEqual(carets, [["R1", from, to, "R1"], ["R1", from, to, "R1"], ["R1", from, to, "R1"]]);
+  });
+}
+
+test("undo caret: a cell is measured with the Split decoder, not the Writer media decoder (comment removed in a tag with a picture)", () => {
+  const picture = '<img class="comment-img" data-blob="' + "c".repeat(64) + '" data-w="3" data-h="3" data-mime="image/png">';
+  const tagged = inner => '<span class="tag-anchor" data-tag-cat="cast" data-tag-name="Ada">' + inner + picture + "b</span>";
+  assert.equal(cellCaretAfterStep({ before: tagged('<span class="cmt-anchor" data-cmt="c1">a</span>'), after: tagged("a") }), 2);
 });

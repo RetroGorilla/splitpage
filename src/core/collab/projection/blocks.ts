@@ -54,7 +54,7 @@ export function projectSharedBlocks(streams: readonly SharedProjectionStream[], 
     const seen = new Set<string>();
     for (const block of local) {
       const parts = units.get(block) ?? [];
-      const build = (): SharedProjectionUnit[] => { const value: SharedProjectionUnit[] = []; for (const part of parts) value.push(...part); return value; };
+      const build = (): SharedProjectionUnit[] => { const value: SharedProjectionUnit[] = []; for (const part of parts) for (const unit of part) value.push(unit); return value; };
       block.units = collect ? collect(parts, build) : build();
       if (block.id === null && !block.units.length && block.from === block.to) continue;
       if (!block.reason && block.id !== null) {
