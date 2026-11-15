@@ -34,6 +34,7 @@ export class CollabDocumentState {
   fresh = true;
   destroyed = false;
   revision = 0;
+  readonly transactions = new Set<Y.Transaction>();
   readonly adapterTransactions = new WeakSet<Y.Transaction>();
   readonly hydrationTransactions = new WeakSet<Y.Transaction>();
   hydrating = false;
@@ -46,7 +47,7 @@ export class CollabDocumentState {
   readonly reads = new CollabReadCaches();
 
   constructor() {
-    this.doc.on("beforeTransaction", () => guardSharedCallback(this, () => { this.reads.begin(); }));
+    this.doc.on("beforeTransaction", transaction => guardSharedCallback(this, () => { this.transactions.add(transaction); this.reads.begin(); }));
     this.doc.on("beforeObserverCalls", transaction => guardSharedCallback(this, () => {
       this.reads.settle(transaction.changed);
       if (this.ingress.frames) this.ingress.holds.add("delivering");
@@ -57,6 +58,7 @@ export class CollabDocumentState {
       if (this.adapterBatch && transaction.origin === null && transaction.local && formattingCleanup(transaction)) transaction.origin = "cleanup";
     }));
     this.doc.on("afterAllTransactions", () => guardSharedCallback(this, () => { this.adapterBatch = false; }));
+    this.doc.on("afterTransaction", transaction => guardSharedCallback(this, () => { this.transactions.delete(transaction); }));
   }
 }
 

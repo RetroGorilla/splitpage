@@ -9,7 +9,7 @@ import type { SharedTextCommandPlan, SharedPlannedTextUnit, SharedTextProvenance
 import { sharedStructureSpans } from "./structure-spans.ts";
 import { readSharedJoinedTextGeometry, sharedJoinedTextBaseline } from "./joined-text-geometry.ts";
 import { sharedJoinGlueRegisterField } from "../../core/collab/projection/join-glue.ts";
-import { readSharedAnchor } from "./anchors.ts";
+import { readSharedAnchor } from "./anchor-codec.ts";
 import { projectSharedJoinSeparator } from "../../core/collab/projection/joins.ts";
 import { resolveSharedTextReference } from "./executor-references.ts";
 import { isPlannedStructureOwner } from "./structure-plan.ts";

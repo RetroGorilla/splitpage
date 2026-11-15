@@ -229,6 +229,9 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
 
   function listener(event: Event): void {
     const cell = event.target instanceof Element ? event.target.closest(".cell-editable") : null;
+    if (ports.refuseNative?.(event, cell && root.contains(cell) ? cell : null)) {
+      refuse(event, "buffer-unsupported-input"); return;
+    }
     ports.shown(() => { binding.native(event, () => { step(event, cell && root.contains(cell) ? cell : null); }); });
   }
 

@@ -53,6 +53,41 @@ clipboard commands remain; a blocked paste, cut or drop during composition now
 reaches no standalone clipboard work and gives one warning. This first part
 does not supply their command builders.
 
+## Refusals
+
+The composed Split binding refuses unserved native routes before the native
+ownership check or finish. A pending edit or composition therefore stays as it
+was; a drop cannot focus its target or change the selection before refusing.
+The guard is supplied as a named port only when Split is shared.
+
+| Route | States | Result |
+| --- | --- | --- |
+| Paste, cut, plain-text drop | Idle caret, idle selection, pending text, open composition; drops also target another cell | One notice, no clipboard access or standalone work, no stored/DOM/focus/selection change |
+| Unsupported beforeinput: clipboard, drag, line/paragraph, format, history, list and transpose types | The same four states | The same refusal before settling |
+| Enter, Ctrl/Alt+Enter, Alt+Up/Down, Ctrl+B/I/U, active person completion on Tab | The same four states; person completion in visual cells | The same refusal before the legacy key route |
+
+`shared-split-refusals-app.test.mjs` drives 424 literal table rows through the
+mounted hook, in both columns and both encoded delivery orders. Every public
+standalone undo method is instrumented while each native event runs, and a
+literal inventory pins the legacy key routes and undo access sites so additions
+require classification. IME keydown remains with the native composition, and
+ordinary navigation and copy remain served.
+
+## Rule 29 announcements
+
+| Commit outcome | Recovery writes | Announcement |
+| --- | --- | --- |
+| A successful buffered commit releases its hold and drains a removal that keeps its owner in removed-beat recovery | No new recovery write or entry | One recovered callback, notice and counter increment |
+
+The adapter records the revision immediately before release. Only a changed
+revision during that release needs the recovery-membership check; ordinary
+typing does not run a new full projection. The successful commit reports the
+result to the binding, which announces after repaint. Four literals pin both
+columns and delivery orders, exact recovery text, both replicas and an encoded
+late joiner. Repeated delivery announces nothing further. The Split and Writer
+T01 tests retain their exact operations and recovery row, and now require this
+announcement instead of the former silence.
+
 ## Evidence and event sources
 
 `src/test/shared-split-app.test.mjs` boots the application, enters through the
@@ -104,7 +139,8 @@ commit's B-roll and name-derived people records. Structure commands are merged;
 their callers belong to that next part: pass named `sharedStructurePorts`, resolve minted ids in
 `addRow`, `addRowAndFocus`, `splitField` and `splitCellField`, and retain equivalent
 buffer and flow joins. A visual split is refused as
-`visual-split-in-shared-session`; adding a beat has the skipped undo refusal
-`undo-unsupported:segment-create`. Both notices must appear once when those
-callers are connected. Until a caller has its shared form, rule 73's visible
+`visual-split-in-shared-session`, with one notice. Beat creation undo now follows
+the merged [creation undo contract](stage-2-shared-undo.md#undo-of-beat-creation)
+from #1590, replacing the earlier skipped segment-create limit. Until a caller
+has its shared form, rule 73's visible
 refusal remains. No additional product rule is assumed here.

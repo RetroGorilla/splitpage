@@ -540,7 +540,9 @@ function notAttachableText(names: readonly string[]): string {
 
 export function mountRowsEditingFeature(sharedSplit = false): ReturnType<typeof mountRowsEditor> {
   return rowsEditor.replace(function () {
-    const ports = sharedSplit ? { ...rowsEditorPorts, input: (event: Event) => {
+    const ports = sharedSplit ? { ...rowsEditorPorts, keydown: (event: KeyboardEvent) => {
+      if (!event.isComposing && event.keyCode !== 229) onRootKeydown(event);
+    }, input: (event: Event) => {
       const cell = event.target instanceof Element ? event.target.closest(".cell-editable") : null;
       if (cell && isScriptCell(cell)) afterScriptCellChange(cell);
       else onRootInput(event);
@@ -814,6 +816,27 @@ function announceAttached(attached: PasteAttached, rowIndex: number, before: unk
 export function onRootPaste(e: ClipboardEvent): void {
   const clipboard = clipboardRoutes.owner();
   if (clipboard) clipboard.paste(e);
+}
+
+export function refuseSharedSplitNative(event: Event, cell: Element | null): boolean {
+  if (!cell || !isScriptCell(cell)) {
+    return event.type === "drop" && event.target instanceof Element && !!event.target.closest(".visual-cell")
+      && !event.target.closest("input,textarea");
+  }
+  if (event.type === "paste" || event.type === "cut" || event.type === "drop") return true;
+  if (event.type === "beforeinput") {
+    const type = (event as InputEvent).inputType;
+    return type === "deleteByCut" || type === "deleteByDrag"
+      || !/^(insertText|insertReplacementText|insertCompositionText|insertFromComposition|delete.*)$/.test(type);
+  }
+  if (event.type !== "keydown") return false;
+  const key = event as KeyboardEvent, mod = key.ctrlKey || key.metaKey;
+  if (key.isComposing || key.keyCode === 229) return false;
+  if (key.key === "Enter" || mod && /^(b|i|u)$/i.test(key.key)
+    || key.altKey && !mod && (key.key === "ArrowUp" || key.key === "ArrowDown")) return true;
+  return key.key === "Tab" && (!!currentWhoList()?.isOpen(cell) || !!currentPlainTags()?.isOpen(cell)
+    || shownTagGhost()?.cellEl === cell || shownUntaggedSuggestion()?.cellEl === cell)
+    || key.key === "Escape" && !!currentPlainTags()?.isOpen(cell);
 }
 
 const videoPopover = owned<ReturnType<typeof mountVideoPopover>>();

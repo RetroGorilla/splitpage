@@ -11,7 +11,7 @@ import { prepareSharedMarkWrite } from "../../../src/adapters/collab/mark-plan.t
 import { applySharedMarkWrite, readSharedMarkCharacters } from "../../../src/adapters/collab/mark-store.ts";
 import { applySharedTextEdit } from "../../../src/adapters/collab/text-edit.ts";
 import { applySharedTextAnchor } from "../../../src/adapters/collab/anchors.ts";
-import { readSharedTextTarget } from "../../../src/adapters/collab/text-target.ts";
+import { readSharedTextTarget } from "../../../src/adapters/collab/text-address.ts";
 import { operation } from "./executor-support.ts";
 
 for (const phase of ["idle", "prepare", "observer"] as const) for (const writer of ["text", "mark", "anchor"] as const) {

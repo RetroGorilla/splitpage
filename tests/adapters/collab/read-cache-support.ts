@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import * as Y from "yjs";
 import { collabState } from "../../../src/adapters/collab/state.ts";
-import { readCollabMarkState } from "../../../src/adapters/collab/mark-store.ts";
+import { readCollabMarkState } from "../../../src/adapters/collab/mark-state.ts";
 import { createSharedPreparation } from "../../../src/adapters/collab/prepare.ts";
 import { readSharedContentRef } from "../../../src/core/collab/read-operation.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
