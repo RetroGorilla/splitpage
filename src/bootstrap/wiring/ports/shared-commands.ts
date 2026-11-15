@@ -164,7 +164,7 @@ export const sharedCommentCommands: SharedRecordCommands<SharedCommentPorts> = {
     const parts = sharedSessionParts();
     if (!parts) return null;
     const made = commentPorts.get(parts) ?? sharedCommentPorts({ ...source(parts), cells: html => sessionTextPorts.cells(html ?? "") })();
-    commentPorts.set(parts, made);
+    if (made) commentPorts.set(parts, made);
     return made;
   },
   refused

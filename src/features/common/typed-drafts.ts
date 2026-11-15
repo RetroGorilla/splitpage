@@ -37,6 +37,8 @@ interface HeldDraft extends TypedDraft {
 
 const keyOf = (box: string, record: string): string => JSON.stringify([box, record]);
 
+const plain = (draft: TypedDraft): TypedDraft => ({ box: draft.box, record: draft.record, text: draft.text });
+
 export function createTypedDrafts(boxes: readonly string[], gone: (draft: TypedDraft) => void): TypedDrafts {
   const held = new Map<string, HeldDraft>(), orphaned = new Map<string, TypedDraft>();
   let retrying = false;
@@ -45,7 +47,7 @@ export function createTypedDrafts(boxes: readonly string[], gone: (draft: TypedD
     if (isHeld(outcome)) { held.set(key, { ...draft, waits: outcome === "waits" }); return outcome; }
     held.delete(key);
     if (outcome === "saved") return outcome;
-    const { save: _save, waits: _waits, ...text } = draft;
+    const text = plain(draft);
     const told = orphaned.has(key);
     orphaned.set(key, text);
     if (!told) gone(text);
@@ -76,7 +78,7 @@ export function createTypedDrafts(boxes: readonly string[], gone: (draft: TypedD
       }
       finally { retrying = false; }
     },
-    held: () => [...held.values()].map(({ save: _save, waits: _waits, ...text }) => text),
+    held: () => [...held.values()].map(plain),
     orphans: () => [...orphaned.values()],
     dismiss: (box, record) => { orphaned.delete(keyOf(box, record)); },
     clear: () => { held.clear(); orphaned.clear(); }

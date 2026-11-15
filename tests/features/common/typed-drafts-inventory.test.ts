@@ -62,7 +62,7 @@ function sourceBoxes(text: string): string[] {
   for (const found of text.matchAll(/<\w+\b[^<>]*\scontenteditable="(?:true|)"[^<>]*/g)) {
     boxes.push(attribute(found[0], "id") ?? attribute(found[0], "class")?.split(/\s+/)[0] ?? "unnamed contenteditable");
   }
-  for (const _ of text.matchAll(/\beditableCellHtml\(/g)) boxes.push("editableCellHtml");
+  if (/\beditableCellHtml\(/.test(text)) boxes.push("editableCellHtml");
   for (const found of text.matchAll(/createElement\("(input|textarea)"\)/g)) boxes.push("createElement:" + found[1]);
   return boxes;
 }
