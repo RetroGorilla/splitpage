@@ -4,6 +4,18 @@
   ],
   "mutants": [
     {
+      "label": "a new shared keydown branch aliases the standalone undo owner",
+      "file": "src/bootstrap/wiring/editor.ts",
+      "find": "keydown: (event: KeyboardEvent) => {\n      if (!event.isComposing",
+      "replace": "keydown: (event: KeyboardEvent) => {\n      if (event.key === \"F2\") { const owner = undoOwner(); owner.last(); return; }\n      if (!event.isComposing"
+    },
+    {
+      "label": "the IME bypass is removed",
+      "file": "src/bootstrap/wiring/editor.ts",
+      "find": "if (!event.isComposing && event.keyCode !== 229) onRootKeydown(event);",
+      "replace": "onRootKeydown(event);"
+    },
+    {
       "label": "an unserved Split native route reaches standalone handlers",
       "file": "src/bootstrap/wiring/shared-split.ts",
       "find": "buffer = mountSharedSplitBuffer({ ...shared, refuseNative: refuseSharedSplitNative });",
