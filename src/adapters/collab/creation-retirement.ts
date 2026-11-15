@@ -9,7 +9,7 @@ import { readSharedStatusEvent } from "../../core/collab/read-operation.ts";
 import { isSharedGalleryShown } from "./gallery-retirement.ts";
 import { sharedJoinRetirementGroup } from "./join-record.ts";
 import { observeSharedJoinIndex } from "./shared-join-index.ts";
-import { sharedCreationRecordKeys, sharedCreationRecordOwner } from "./creation-record-index.ts";
+import { sharedCreationOwnerOf, sharedCreationRecordKeys, sharedCreationRecordOwner } from "./creation-record-index.ts";
 import { sharedStatusEventKeys } from "./status-index.ts";
 import type { SharedContentRef, SharedRecordCollection } from "../../core/collab/operations.ts";
 import { readSharedCreationMarkers, SHARED_CREATION_RETIREMENT_FIELD } from "./creation-marker.ts";
@@ -88,7 +88,7 @@ export function readSharedCreationContent(handle: SharedDocumentHandle, beat: st
   watchSharedCreationMap(roots.beats, beat);
   const owned = (collection: "beats" | "headings" | "visuals" | "gallery" | "comments" | "replies", field: string, owner: string) => {
     const keys = sharedCreationRecordKeys(handle, collection, field, owner);
-    watchSharedCreationMembers(roots[collection], keys, raw => raw instanceof Y.Map && raw.get(field) === owner, field, owner, raw => { const value: unknown = raw instanceof Y.Map ? raw.get(field) : null; return typeof value === "string" ? value : null; }); return keys;
+    watchSharedCreationMembers(roots[collection], keys, raw => sharedCreationOwnerOf(raw, field) === owner, field, owner, raw => sharedCreationOwnerOf(raw, field)); return keys;
   };
   if (!(record instanceof Y.Map)) return "null";
   const attachments = (["visuals", "gallery"] as const).flatMap(collection => owned(collection, "beat", beat).flatMap(id => {

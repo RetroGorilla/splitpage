@@ -1,13 +1,14 @@
 import * as Y from "yjs";
 import type { SharedDocumentHandle } from "./types.ts";
 import { collabState, guardSharedCallback } from "./state.ts";
+import { readStoredRecordDeletion, SHARED_RECORD_DELETION_FIELD } from "./record-deletion.ts";
 
 interface CreationRecordOwners { readonly groups: Map<string, Set<string>>; readonly owners: Map<string, string>; readonly pending: Set<string> }
 type CreationOwnedCollection = "beats" | "headings" | "visuals" | "gallery" | "comments" | "replies";
 
 function indexOf(handle: SharedDocumentHandle, collection: CreationOwnedCollection, field: string): CreationRecordOwners | null {
   const state = collabState(handle), { roots, reads } = state, root = roots[collection], consumer = "creation-owner:" + field;
-  const belongs = (key: string): string | null => { const record = root.get(key), value: unknown = record instanceof Y.Map ? record.get(field) : null; return typeof value === "string" ? value : null; };
+  const belongs = (key: string): string | null => ownerOf(root.get(key), field);
   // why: writes in the same undo are already visible in the store; its indexes refresh only after the transaction.
   if (!reads.settled || state.transactions.size > 0) return null;
   const index = reads.keep<CreationRecordOwners>(root, consumer, () => {
@@ -15,7 +16,7 @@ function indexOf(handle: SharedDocumentHandle, collection: CreationOwnedCollecti
     const changed: Parameters<typeof root.observeDeep>[0] = events => guardSharedCallback(state, () => {
       for (const event of events) if (event instanceof Y.YMapEvent) {
         if (!event.path.length) for (const key of event.keysChanged) made.pending.add(String(key));
-        else if (event.path.length === 1 && event.keysChanged.has(field)) made.pending.add(String(event.path[0]));
+        else if (event.path.length === 1 && (event.keysChanged.has(field) || event.keysChanged.has(SHARED_RECORD_DELETION_FIELD))) made.pending.add(String(event.path[0]));
       }
     });
     root.observeDeep(changed);
@@ -41,6 +42,12 @@ export function sharedCreationRecordKeys(handle: SharedDocumentHandle, collectio
 
 export function sharedCreationRecordOwner(handle: SharedDocumentHandle, collection: CreationOwnedCollection, field: string, key: string): string | null {
   const index = indexOf(handle, collection, field); if (index) return index.owners.get(key) ?? null;
-  const record = collabState(handle).roots[collection].get(key), value: unknown = record instanceof Y.Map ? record.get(field) : null;
+  return ownerOf(collabState(handle).roots[collection].get(key), field);
+}
+
+// why: a removed record keeps its map behind a removal mark, but it no longer belongs to the beat it names.
+export function sharedCreationOwnerOf(record: unknown, field: string): string | null { return ownerOf(record, field); }
+function ownerOf(record: unknown, field: string): string | null {
+  const value: unknown = record instanceof Y.Map && !readStoredRecordDeletion(record) ? record.get(field) : null;
   return typeof value === "string" ? value : null;
 }

@@ -210,7 +210,7 @@ for (const unrelated of [0, 100]) test(`creation ownership index reads only a re
     assert.equal(sharedCreationRecordKeys(h.a, "gallery", "beat", "R1").includes("G0"), false);
     assert.equal(sharedCreationRecordKeys(h.a, "gallery", "beat", "R2").includes("G0"), true);
     assert.deepEqual(visited, ["G0"]); visited.length = 0;
-    assert.deepEqual(fields, ["beat"]); fields.length = 0;
+    assert.deepEqual(fields, ["deletion", "beat"]); fields.length = 0;
     assert.equal(sharedCreationRecordKeys(h.a, "gallery", "beat", "R2").includes("G0"), true);
     assert.deepEqual(visited, []);
     assert.deepEqual(fields, []);
