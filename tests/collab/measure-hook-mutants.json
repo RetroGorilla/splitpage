@@ -157,8 +157,8 @@
     {
       "label": "the shared Split input handler is not marked",
       "file": "src/bootstrap/wiring/editor.ts",
-      "find": "      if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:input-handler:start\");\n      try {\n        const cell = event.target instanceof Element ? event.target.closest(\".cell-editable\") : null;\n",
-      "replace": "      try {\n        const cell = event.target instanceof Element ? event.target.closest(\".cell-editable\") : null;\n",
+      "find": "      if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:input-handler:start\");\n      try { sharedSplitInput(event); }\n",
+      "replace": "      try { sharedSplitInput(event); }\n",
       "tests": ["src/test/shared-hook-measure-app.test.mjs"]
     },
     {
@@ -176,31 +176,17 @@
       "tests": ["src/test/shared-hook-measure-app.test.mjs"]
     },
     {
-      "label": "the event span opens on bubbling, after the handlers",
-      "file": "src/bootstrap/wiring/shared-test.ts",
-      "find": "  for (const type of MEASURED_EVENTS) window.addEventListener(type, opened, true);",
-      "replace": "  for (const type of MEASURED_EVENTS) window.addEventListener(type, opened);",
+      "label": "the outer total counts only the parts inside it",
+      "file": "tests/collab/measure/mark-parts.mjs",
+      "find": "      if (!opened) outer += duration;",
+      "replace": "      if (!opened) outer += span.nested;",
       "tests": ["src/test/shared-hook-measure-app.test.mjs"]
     },
     {
-      "label": "the event span never closes",
-      "file": "src/bootstrap/wiring/shared-test.ts",
-      "find": "    window.addEventListener(event.type, closed);",
-      "replace": "    window.addEventListener(event.type, closed, true);",
-      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
-    },
-    {
-      "label": "a nested event of the same type closes the outer event span",
-      "file": "src/bootstrap/wiring/shared-test.ts",
-      "find": "const closed = (seen: Event): void => { if (seen === event) close(); };",
-      "replace": "const closed = (seen: Event): void => { if (seen) close(); };",
-      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
-    },
-    {
-      "label": "a stopped event never closes its span",
-      "file": "src/bootstrap/wiring/shared-test.ts",
-      "find": "      Object.defineProperty(event, name, { configurable: true, value: () => { stop(); queueMicrotask(close); } });",
-      "replace": "      Object.defineProperty(event, name, { configurable: true, value: () => { stop(); } });",
+      "label": "the Writer's selectionchange handler runs unmarked",
+      "file": "src/features/writer/flow-surface.ts",
+      "find": "  const guarded = buffered ? listeners.map(([target, name, handler]): [EventTarget, string, EventListener] =>\n    [target, name, event => {",
+      "replace": "  const guarded = buffered ? listeners.map(([target, name, handler]): [EventTarget, string, EventListener] => name === \"selectionchange\" ? [target, name, handler] :\n    [target, name, event => {",
       "tests": ["src/test/shared-hook-measure-app.test.mjs"]
     },
     {
