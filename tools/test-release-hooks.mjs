@@ -47,6 +47,7 @@ const SHARED_HOOK_ONLY = Object.freeze([
   "ownershipScans",
   "appliedUpdates",
   "The late joiner has not joined",
+  "The name is already given to another identity",
   "lateJoiner",
   "recoveryEntries",
   "nameIdentities",

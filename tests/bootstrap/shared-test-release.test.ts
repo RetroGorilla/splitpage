@@ -11,7 +11,7 @@ for (const enabled of [false, true]) test("shared hook build gate: release has n
   const code = result.outputFiles[0]?.text; assert.ok(code);
   for (const text of ["__sharedTest", "The peer has left", "The peer beat is missing", "draft-not-kept", "The shared session did not start",
     "The draft writer did not detach", "ownershipScans", "appliedUpdates", "app-stopped", "The late joiner has not joined", "lateJoiner",
-    "recoveryEntries", "nameIdentities", "nameBeat"]) {
+    "The name is already given to another identity", "recoveryEntries", "nameIdentities", "nameBeat"]) {
     assert.equal(code.includes(text), enabled, text);
   }
 });

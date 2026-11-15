@@ -36,6 +36,7 @@ export type SharedTestReplica = Side | "joiner";
 
 const PEER_LEFT = "The peer has left";
 const NOT_JOINED = "The late joiner has not joined";
+const NAME_TAKEN = "The name is already given to another identity";
 const MEDIA_CELL = Object.freeze({ media: true });
 
 // why: the same flow ports as the Writer's (writer.ts), so the peer plans what a second Writer would plan
@@ -63,6 +64,10 @@ function hydratedCopy(source: SharedDocumentHandle, ports: SharedSwitchPorts): S
   const hydrated = applySharedUpdate(handle, encodeSharedState(source));
   if (!hydrated.ok) { destroySharedDocument(handle); throw new Error(hydrated.reason); }
   return handle;
+}
+
+function refuseName(name: string): never {
+  throw new Error(NAME_TAKEN + ": " + name);
 }
 
 function range(rowId: string, from: number, endRow: string, to: number): FlowRange {
@@ -122,7 +127,6 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
   ];
   const buffered = (rowId: string, from: number, to: number, insert: string) => {
     alive();
-    undo.breakGroup();
     const base = text.paintedText.read(rowId, "audioText");
     if (!base) throw new Error("The peer beat is missing");
     const edit = text.bufferedText.open(rowId, base);
@@ -133,8 +137,13 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
   };
   const planned = (name: string, operation: (doc: FlowDoc) => FlowOutcome, before: FlowRange): string => {
     alive();
-    undo.breakGroup();
-    return session.run(flow.commands.prepare(name, operation, stamps, before).command).kind;
+    const command = flow.commands.prepare(name, operation, stamps, before).command;
+    // why: as the Writer's runPlanned (flow-writer.ts): only a plan that was not refused ends the open undo group
+    return session.run({ ...command, plan: (doc, capability) => {
+      const plan = command.plan(doc, capability);
+      if (plan && !("refused" in plan)) undo.breakGroup();
+      return plan;
+    } }).kind;
   };
   const replicaOf = (which: SharedTestReplica): { readonly handle: SharedDocumentHandle; readonly session: SharedDocumentSession } | null =>
     which === "app" ? app : which === "peer" ? { handle, session } : joiner;
@@ -143,7 +152,7 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
     if (!found) return null;
     const painted = readSharedPaintedText(found.handle, sharedBufferedTarget(found.handle, rowId));
     if (!painted) return null;
-    return Array.from(painted.text, (_, index) => painted.identity(index) ?? "");
+    return Array.from({ length: painted.text.length }, (_, index) => painted.identity(index) ?? "");
   };
   const leaveJoiner = (): void => { const left = joiner; joiner = null; left?.dispose(); };
   return {
@@ -159,7 +168,6 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
     },
     remove: (rowId: string) => {
       alive();
-      undo.breakGroup();
       return session.run(deleteBeatCommand(rowId, structure() ?? undefined)).kind;
     },
     undo: () => { alive(); return history.undo(); },
@@ -192,13 +200,22 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
     nameIdentities: (which: SharedTestReplica, rowId: string, from: number, names: readonly string[]) => {
       const units = unitsOf(which, rowId);
       if (!units) throw new Error("The beat has no painted text on " + which);
-      names.forEach((name, index) => {
+      const chosen = names.map((name, index) => {
         const unit = units[from + index];
         if (!unit) throw new Error("No character at " + String(from + index) + " in " + rowId + " on " + which);
-        unitNames.set(unit, name);
+        return [unit, name] as const;
       });
+      chosen.forEach(([unit, name], index) => {
+        if (chosen.some(([other, again], at) => at < index && again === name && other !== unit)) refuseName(name);
+        const owner = [...unitNames].find(([other, given]) => given === name && other !== unit);
+        if (owner) refuseName(name);
+      });
+      for (const [unit, name] of chosen) unitNames.set(unit, name);
     },
-    nameBeat: (rowId: string, name: string) => { beatNames.set(rowId, name); },
+    nameBeat: (rowId: string, name: string) => {
+      if ([...beatNames].some(([other, given]) => given === name && other !== rowId)) refuseName(name);
+      beatNames.set(rowId, name);
+    },
     identities: (which: SharedTestReplica = "peer") => {
       const found = replicaOf(which);
       if (!found) return null;
