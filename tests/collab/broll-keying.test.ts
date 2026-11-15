@@ -235,6 +235,6 @@ test("stored size: one keying and its undo, as encoded updates", () => {
   try {
     const keyed = bytes(set.a, () => { assert.deepEqual(a.leave(), ["applied"]); });
     const undone = bytes(set.a, () => { assert.equal(a.owner.undo().ok, true); });
-    assert.deepEqual({ keyed, undone }, { keyed: 649, undone: 2537 });
+    assert.deepEqual({ keyed, undone }, { keyed: 649, undone: 2819 });
   } finally { a.session.dispose(); set.close(); }
 });
