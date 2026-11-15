@@ -57,7 +57,7 @@ export const bufferOracles: Record<BufferTrace, BufferTraceOracle> = {
     },
     undo: {
       rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2*", "b", {}], ["b1", "X", {}], ["s3*", "c", {}], ["s4", "d", {}]] }],
-      carets: { A: { beat: "R1", offset: 1, selection: { beat: "R1", from: 1, to: 4 } } }, recovery: []
+      carets: { A: { beat: "R1", offset: 4 } }, recovery: []
     }
   },
   "T01 composition": {
@@ -69,7 +69,7 @@ export const bufferOracles: Record<BufferTrace, BufferTraceOracle> = {
     },
     undo: {
       rows: [{ id: "R1", characters: [["s1", "a", {}], ["s2*", "b", {}], ["b1", "X", {}], ["s3*", "c", {}], ["s4", "d", {}]] }],
-      carets: { A: { beat: "R1", offset: 1, selection: { beat: "R1", from: 1, to: 4 } } }, recovery: []
+      carets: { A: { beat: "R1", offset: 4 } }, recovery: []
     }
   },
   T02: {
@@ -121,7 +121,7 @@ export const bufferOracles: Record<BufferTrace, BufferTraceOracle> = {
     },
     undo: {
       rows: [{ id: "R1", characters: [["s1", "t", {}], ["s2", "h", {}], ["s3", "e", {}], ["s4", " ", {}], ["s5*", "t", {}], ["s6*", "h", {}], ["s7*", "e", {}], ["b1", "n", {}]] }],
-      carets: { A: { beat: "R1", offset: 4, selection: { beat: "R1", from: 4, to: 7 } } }, recovery: []
+      carets: { A: { beat: "R1", offset: 7 } }, recovery: []
     }
   }
 };
