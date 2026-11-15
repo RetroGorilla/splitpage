@@ -835,6 +835,7 @@ function isPrepTextField(el: Element): el is HTMLInputElement | HTMLTextAreaElem
 
 function prepNotice(message: string): void {
   const p = ports as TagPanelPorts;
+  if (p.shared.ports()) { p.notices.show(message, "ok"); return; }
   const epoch = p.lifetime.epoch();
   const last = p.undo.last();
   p.notices.showAction(message, "ok", "Undo", () => {

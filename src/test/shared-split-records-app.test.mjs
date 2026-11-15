@@ -14,7 +14,7 @@ import { cellEditing } from "../bootstrap/wiring/editor-owners.ts";
 import { clearProductionSelection, selectedKeys } from "../bootstrap/wiring/production-editing-owners.ts";
 import { sharedCommentCommands, sharedGalleryCommands, sharedRecordCommands } from "../bootstrap/wiring/ports/shared-commands.ts";
 import { findOrAddPerson, registerProductionTag } from "../features/tags/production-tags.ts";
-import { addPersonForTag, applyGearQuickAdd, armDeleteTag, armPersonDelete, armRemoveTag, bulkDeleteSelected, openGearPanel, openProductionPanel, renderProduction, saveTagRename, setTagOwner, setTagStatus, toggleCardSelection } from "../features/tags/panels.ts";
+import { addPersonForTag, applyGearQuickAdd, changeProductionOutline, clickProductionOutline, armDeleteTag, armPersonDelete, armRemoveTag, bulkDeleteSelected, openGearPanel, openProductionPanel, renderProduction, saveTagRename, setTagOwner, setTagStatus, toggleCardSelection } from "../features/tags/panels.ts";
 import { closeBrollPage, openBrollPage, openBrollPanel, runBrollRefresh } from "../features/broll/panel.ts";
 import { armDeleteComment, closeCommentComposer, openCommentComposer, openCommentsPanel, postComment, postReply, setCommentAssignee, toggleReplyComposer, toggleResolve } from "../features/comments/comments.ts";
 import { moveGallerySlot, removeGallerySlot } from "../core/document/gallery.ts";
@@ -588,6 +588,49 @@ test("C7 record held, typed text: renaming a tag keeps its box, text, focus and 
     press($(RENAME), "Escape");
     exchange(f, "local-first");
     agree(f, before);
+  } finally { tidy(f); }
+});
+
+const PREP_CHOICES = [
+  { name: "the scene-prep Ready button", notice: "Marked as Have it", act: () => {
+    const button = $("#production-list").appendChild(document.createElement("button"));
+    button.dataset.prep = "ready"; button.dataset.id = "prop mug";
+    try { assert.equal(clickProductionOutline({ target: button }), true); } finally { button.remove(); }
+  } },
+  { name: "the scene-prep status choice", notice: "Requirement status updated", act: () => {
+    const select = $("#production-list").appendChild(document.createElement("select"));
+    select.className = "prep-status-select"; select.dataset.key = "prop mug"; select.add(new window.Option("Have it", "have", true, true));
+    try { changeProductionOutline(select); } finally { select.remove(); }
+  } }
+];
+
+for (const choice of PREP_CHOICES) for (const order of ORDERS) test(`C7 record held: ${choice.name} refused by a pending buffer shows the refusal once and no success notice, ${order}`, async () => {
+  const f = await enter();
+  const stop = f.parts.session.beforeCommand(() => false);
+  try {
+    openProductionPanel();
+    const start = refusedOnce(f, order, choice.act);
+    stop();
+    clearWarnings();
+    exchange(f, order);
+    agree(f, withZ(start));
+  } finally { stop(); tidy(f); }
+});
+
+for (const choice of PREP_CHOICES) for (const order of ORDERS) test(`C7 record caller literal: ${choice.name} saves in a shared session with its notice and no Undo button (rule 152), ${order}`, async () => {
+  const f = await enter();
+  try {
+    openProductionPanel();
+    remoteInsert(f.peer, "r2", "audioText", 0, "Z");
+    const start = shape(currentDocument());
+    noticeCalls.length = 0; clearWarnings();
+    assert.doesNotThrow(choice.act);
+    assert.deepEqual(noticeCalls, [[choice.notice, "ok"]]);
+    const toast = [...toastHost().querySelectorAll(".toast")].find(el => el.firstChild.textContent === choice.notice);
+    assert.ok(toast, "the notice shows");
+    assert.equal(toast.querySelector(".toast-action"), null, "the notice has no Undo button");
+    exchange(f, order);
+    agree(f, edit(withZ(start), n => { n.tags.find(t => t[1] === "Mug")[3] = "have"; }));
   } finally { tidy(f); }
 });
 

@@ -382,6 +382,24 @@
       "file": "src/features/tags/panels.ts",
       "find": "  if (held) (ports as TagPanelPorts).view.setTagRenaming(key);",
       "replace": "  if (held) (ports as TagPanelPorts).view.setTagRenaming(null);"
+    },
+    {
+      "label": "a refused scene-prep Ready still shows its success notice",
+      "file": "src/features/tags/panels.ts",
+      "find": "if (!statusSet(id, \"have\").held) prepNotice(\"Marked as Have it\");",
+      "replace": "statusSet(id, \"have\"); prepNotice(\"Marked as Have it\");"
+    },
+    {
+      "label": "a refused scene-prep status choice still shows its success notice",
+      "file": "src/features/tags/panels.ts",
+      "find": "if (!statusSet(target.dataset[\"key\"] ?? null, (target as HTMLSelectElement).value).held) prepNotice(\"Requirement status updated\");",
+      "replace": "statusSet(target.dataset[\"key\"] ?? null, (target as HTMLSelectElement).value); prepNotice(\"Requirement status updated\");"
+    },
+    {
+      "label": "rule 152: the shared scene-prep notice offers an Undo that reads the standalone owner",
+      "file": "src/features/tags/panels.ts",
+      "find": "  if (p.shared.ports()) { p.notices.show(message, \"ok\"); return; }",
+      "replace": "  if (!p) { p.notices.show(message, \"ok\"); return; }"
     }
   ]
 }
