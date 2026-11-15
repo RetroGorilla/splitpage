@@ -10,6 +10,7 @@ import type { SharedPreparationView } from "./prepare.ts";
 import { isStableSharedIdentity } from "./identity.ts";
 import { isSharedResolutionKey, readSharedResolution, sharedResolutionAccepted } from "./stamp.ts";
 import { SHARED_GALLERY_RETIREMENT_FIELD } from "./gallery-retirement.ts";
+import { readPreparedRecordDeletion, readSharedRecordDeletion, readStoredRecordDeletion, SHARED_RECORD_DELETION_FIELD } from "./record-deletion.ts";
 
 interface RecordFieldSource {
   readonly keys: () => readonly string[];
@@ -60,7 +61,8 @@ function extra(value: unknown): boolean {
 function identity(value: unknown): value is string { return typeof value === "string" && isStableSharedIdentity(value); }
 
 function storedOnly(kind: SharedRecordCollection, field: string): boolean {
-  return kind === "visuals" && ["text", "html", "markRecords"].includes(field) || kind === "gallery" && field === SHARED_GALLERY_RETIREMENT_FIELD;
+  return kind === "visuals" && ["text", "html", "markRecords"].includes(field) || kind === "gallery" && field === SHARED_GALLERY_RETIREMENT_FIELD
+    || field === SHARED_RECORD_DELETION_FIELD;
 }
 
 export function sharedRecordFieldAccepted(kind: SharedRecordCollection, field: string, value: unknown): boolean {
@@ -122,28 +124,35 @@ export function readSharedNestedInput(field: "links" | "props", input: unknown):
   return entries;
 }
 
+function nestedEntry(field: "links" | "props", key: string, source: RecordFieldSource): { key: string; rank: string; fields: Record<string, unknown> } | null {
+  if (source.keys().some(field => !isStableSharedIdentity(field))) return null;
+  const rank = jsonField(source, "rank");
+  if (typeof rank !== "string") return null;
+  const value = field === "props" ? jsonField(source, "value")
+    : sharedJson(Object.fromEntries(source.keys().filter(key => key !== "rank" && key !== "extra" && key !== SHARED_RECORD_DELETION_FIELD).map(key => [key, jsonField(source, key)])));
+  const validated = readSharedNestedInput(field, [value]);
+  if (!validated || validated[0]?.[0] !== key) return null;
+  const fields: [string, unknown][] = [];
+  for (const name of field === "props" ? ["id", "name"] : ["href", "name", "size", "duration", "poster"]) {
+    if (bag(value) && Object.hasOwn(value, name)) fields.push([name, value[name]]);
+  }
+  if (bag(value)) for (const name of Object.keys(value).sort()) if (!fields.some(([key]) => key === name)) fields.push([name, value[name]]);
+  fields.push(["rank", rank]);
+  const metadata = jsonField(source, "extra");
+  if (extra(metadata)) fields.push(["extra", metadata]);
+  return { key, rank, fields: Object.fromEntries(fields) };
+}
+
+// why: an entry removed from a list keeps its map with a mark, so an edit someone made to it at once stays stored.
 function nested(field: "links" | "props", raw: RecordFieldSource | null): unknown[] | null {
   if (!raw) return null;
   const entries: { key: string; rank: string; fields: Record<string, unknown> }[] = [];
   for (const key of raw.keys()) {
     if (!isStableSharedIdentity(key)) continue;
     const source = raw.child(key);
-    if (!source) continue;
-    if (source.keys().some(field => !isStableSharedIdentity(field))) continue;
-    const rank = jsonField(source, "rank");
-    if (typeof rank !== "string") continue;
-    const value = field === "props" ? jsonField(source, "value") : sharedJson(Object.fromEntries(source.keys().filter(key => key !== "rank" && key !== "extra").map(key => [key, jsonField(source, key)])));
-    const validated = readSharedNestedInput(field, [value]);
-    if (!validated || validated[0]?.[0] !== key) continue;
-    const fields: [string, unknown][] = [];
-    for (const name of field === "props" ? ["id", "name"] : ["href", "name", "size", "duration", "poster"]) {
-      if (bag(value) && Object.hasOwn(value, name)) fields.push([name, value[name]]);
-    }
-    if (bag(value)) for (const name of Object.keys(value).sort()) if (!fields.some(([key]) => key === name)) fields.push([name, value[name]]);
-    fields.push(["rank", rank]);
-    const metadata = jsonField(source, "extra");
-    if (extra(metadata)) fields.push(["extra", metadata]);
-    entries.push({ key, rank, fields: Object.fromEntries(fields) });
+    if (!source || readSharedRecordDeletion(source.get(SHARED_RECORD_DELETION_FIELD))) continue;
+    const entry = nestedEntry(field, key, source);
+    if (entry) entries.push(entry);
   }
   return entries.sort((a, b) => a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : a.key < b.key ? -1 : a.key > b.key ? 1 : 0)
     .map(entry => ({ key: entry.key, fields: entry.fields }));
@@ -176,14 +185,25 @@ function readRecordFields(kind: SharedRecordCollection, key: string, raw: Record
 }
 
 export function readStoredSharedRecord(kind: SharedRecordCollection, key: string, raw: unknown): Record<string, unknown> | null {
-  return readRecordFields(kind, key, nativeSource(raw));
+  return readStoredRecordDeletion(raw) ? null : readRecordFields(kind, key, nativeSource(raw));
+}
+export function readSharedDeletedRecordFields(kind: SharedRecordCollection, key: string, raw: unknown): Record<string, unknown> | null {
+  return readStoredRecordDeletion(raw) ? readRecordFields(kind, key, nativeSource(raw)) : null;
+}
+export function readSharedDeletedEntryFields(field: "links" | "props", key: string, raw: unknown): Record<string, unknown> | null {
+  const source = nativeSource(raw);
+  return source && readStoredRecordDeletion(raw) && isStableSharedIdentity(key) ? nestedEntry(field, key, source)?.fields ?? null : null;
 }
 // why: whether a picture carries an undo's retirement is read from the keys the record reading lists anyway.
 export function readStoredSharedGalleryRecord(key: string, raw: unknown): { readonly fields: Record<string, unknown>; readonly retired: boolean } | null {
   let retired = false;
+  if (readStoredRecordDeletion(raw)) return null;
   const fields = readRecordFields("gallery", key, nativeSource(raw), keys => { retired = keys.includes(SHARED_GALLERY_RETIREMENT_FIELD); });
   return fields ? { fields, retired } : null;
 }
 export function readPreparedSharedRecord(kind: SharedRecordCollection, key: string, view: Pick<SharedPreparationView, "get" | "kind" | "keys">): Record<string, unknown> | null {
-  return readRecordFields(kind, key, preparedSource(view, [kind, key]));
+  return readPreparedRecordDeletion(view, [kind, key]) ? null : readRecordFields(kind, key, preparedSource(view, [kind, key]));
+}
+export function readPreparedDeletedRecord(kind: SharedRecordCollection, key: string, view: Pick<SharedPreparationView, "get" | "kind" | "keys">): Record<string, unknown> | null {
+  return readPreparedRecordDeletion(view, [kind, key]) ? readRecordFields(kind, key, preparedSource(view, [kind, key])) : null;
 }

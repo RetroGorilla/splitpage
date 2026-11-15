@@ -154,6 +154,12 @@ export type SharedRecordSet = SharedOperationAuthor & {
   readonly target: SharedRecordAddress;
   readonly field: string;
 } & SharedFieldValue;
+export interface SharedRecordRevive extends SharedOperationAuthor {
+  readonly kind: "record-revive";
+  readonly target: SharedRecordAddress;
+  readonly field?: "props" | "links";
+  readonly entry?: SharedContentRef;
+}
 export interface SharedRecordDelete extends SharedOperationAuthor {
   readonly kind: "record-delete";
   readonly target: SharedRecordAddress;
@@ -202,7 +208,7 @@ export type SharedStatusRetire = SharedOperationAuthor & {
 } & Pick<SharedStatusEvent, "target" | "value">;
 export function sharedRecoveryKinds() {
   return ["removed-beat", "removed-heading", "crossing-tag", "deleted-tag", "gallery-overflow",
-    "unprojectable-fragment", "comment-without-words", "reply-without-comment", "scene-with-no-beats", "deleted-person"] as const;
+    "unprojectable-fragment", "comment-without-words", "reply-without-comment", "scene-with-no-beats", "deleted-person", "deleted-record"] as const;
 }
 export interface SharedRecoveryName { readonly kind: ReturnType<typeof sharedRecoveryKinds>[number]; readonly key: string }
 export interface SharedRecoveryDiscard extends SharedOperationAuthor {
@@ -217,7 +223,7 @@ export interface SharedDiscardRetire extends SharedOperationAuthor {
 export type SharedOperation = SharedTextInsert | SharedTextDelete | SharedMarkChange | SharedSegmentCreate | SharedSegmentRetire | SharedBeatSplitBefore
   | SharedBeatSplit | SharedBeatJoin | SharedJoinGlue | SharedJoinRetire | SharedSplitRetire | SharedSplitRestore | SharedSoftRemove | SharedRestore | SharedSegmentMove
   | SharedHeadingCreate | SharedHeadingFinalize | SharedHeadingRemove | SharedRecordCreate | SharedRecordSet
-  | SharedRecordDelete | SharedScalarSet | SharedStatusEvent | SharedTextRestore | SharedMarkRetract | SharedStatusRetire
+  | SharedRecordDelete | SharedRecordRevive | SharedScalarSet | SharedStatusEvent | SharedTextRestore | SharedMarkRetract | SharedStatusRetire
   | SharedRecoveryDiscard | SharedDiscardRetire | SharedGalleryRetire;
 
 export function replaceObservedText(

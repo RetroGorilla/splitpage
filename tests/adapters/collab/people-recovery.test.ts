@@ -45,7 +45,7 @@ for (const order of ["D1", "rev", "dup"] as const) test(`assumed rule 54: a dele
     const before = encodeSharedState(set.b).length;
     const deletion = executeSharedCommand(set.b, [operation(deleteRecord("people", "P1", "Bob"))], COMMAND);
     assert.deepEqual(deletion.result, { ok: true }); assert.ok(deletion.record); set.queue.flush(order); assertIncremental(set.c, projector);
-    assert.equal(encodeSharedState(set.b).length - before, -15);
+    assert.equal(encodeSharedState(set.b).length - before, 147);
     const listed = entry("P1", "Ada", "Bob", [], ["R1"]);
     agree("deleted", order, handles, people, { people: ["P2"], recovery: [listed] });
     const found = projectSharedDocumentWithRecovery(set.c).recovery.find(value => value.kind === "deleted-person"); assert.ok(found);
@@ -54,7 +54,7 @@ for (const order of ["D1", "rev", "dup"] as const) test(`assumed rule 54: a dele
     const restored = executeSharedCommand(set.c, [restore], COMMAND);
     assert.deepEqual(restored.result, { ok: true }); assert.ok(restored.record);
     send(set.a, createRecord("people", "P9", { name: "ada" })); set.queue.flush(order); assertIncremental(set.c, projector);
-    agree("restored beside a namesake", order, handles, people, { people: ["P1", "P9", "P2"], recovery: [] });
+    agree("restored beside a namesake", order, handles, people, { people: ["P9", "P1", "P2"], recovery: [] });
     const undone = reverseSharedUndoRecord(set.c, restored.record, writer("Carol"));
     assert.ok(undone.ok && undone.effective); set.queue.flush(order); assertIncremental(set.c, projector);
     agree("restore undone", order, handles, people, { people: ["P9", "P2"], recovery: [entry("P1", "Ada", "Carol", [], ["R1"])] });

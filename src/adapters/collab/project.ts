@@ -156,12 +156,15 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
     })));
     return [];
   });
-  const deleted = source.deletedPeople();
-  if (deleted.length) for (const entry of projectSharedDeletedPeople(deleted, { people: out.people as Record<string, unknown>[], tags, shots: out.brollShots as Record<string, unknown>[] },
+  const deleted = source.deletedPeople(), removedRecords = source.deletedRecords();
+  // why: a person whose removal an edit raced is listed once, as that record, which a restore brings back with the edit.
+  const raced = new Set(removedRecords.flatMap(entry => entry.collection === "people" && entry.field === null ? [entry.record] : []));
+  if (deleted.length) for (const entry of projectSharedDeletedPeople(deleted.filter(person => !raced.has(person.person)), { people: out.people as Record<string, unknown>[], tags, shots: out.brollShots as Record<string, unknown>[] },
     plans.filter(plan => !plan.group.removed).map(plan => ({ rowId: plan.group.root, names: plan.visualCells.flatMap(value => {
       const units = broll.get(value.key) ?? value.units;
       return cache.read(["who-names", value.key], [units], () => { cache.counted("who-scan", value.key, units.length); return readSharedWhoNames(units); });
     }) })))) recovery.push(entry);
+  for (const entry of removedRecords) recovery.push(entry);
   const visible = rows.map(row => String(row.id));
   const { sections, empty } = cache.read(["sections"], [...headings, ...visible], () => projectSharedSections(headings, new Set(visible)));
   for (const entry of empty) recovery.push({ kind: "scene-with-no-beats" as const, heading: canonicalSharedProjection(entry.heading, "section") as Record<string, unknown>, beforeRowId: entry.beforeRowId });
