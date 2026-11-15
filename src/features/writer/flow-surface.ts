@@ -13,6 +13,7 @@ import { hasSetLength } from "../../core/document/timing.ts";
 import { formatDuration } from "../../core/production/timing.ts";
 import type { MarkName, Marks, Run } from "../../core/text/runs.ts";
 import { domKeys, domToPos, posToDom } from "../common/cell-dom.ts";
+import { markTestTiming } from "../common/test-hooks.ts";
 import { createFlowBeatMenu } from "./flow-beat-menu.ts";
 import { createPaintedBeats } from "../../application/editing/painted-beats.ts";
 import { createWriterBuffer } from "./flow-buffer.ts";
@@ -1373,7 +1374,10 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     } : onSelectionChange]
   ];
   const guarded = buffered ? listeners.map(([target, name, handler]): [EventTarget, string, EventListener] =>
-    [target, name, event => { buffered.native(event, () => handler(event)); }]) : listeners;
+    [target, name, event => {
+      markTestTiming("measure:input-handler:start");
+      try { buffered.native(event, () => handler(event)); } finally { markTestTiming("measure:input-handler:end"); }
+    }]) : listeners;
   guarded.forEach(([target, name, handler]) => target.addEventListener(name, handler));
   const clipboardHandlers = buffered ? {
     copy: (event: ClipboardEvent) => { buffered.native(event, () => clipboardActions.copy(event)); },

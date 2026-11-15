@@ -25,20 +25,39 @@ import { sharedBufferPorts } from "./ports/shared-buffer.ts";
 import { sharedUndoOwner } from "./ports/shared-undo.ts";
 import { sharedStructurePorts } from "./ports/shared-values.ts";
 import { writerFlowCommands } from "./ports/writer-flow.ts";
-import { deleteBeatCommand } from "../../application/commands/rows.ts";
+import { addBeatCommand, deleteBeatCommand } from "../../application/commands/rows.ts";
+import { joinBeatsCommand, splitBeatCommand, textCut } from "../../application/commands/split-join.ts";
+import type { SharedApplyResult } from "../../adapters/collab/types.ts";
+import { sharedBufferQueueBytes } from "../../core/collab/buffer.ts";
 import { productionReaders } from "../document-ports.ts";
 import { fromHtml } from "../richtext.ts";
 import { sessionStamps } from "./session-owner.ts";
 import { projectSharedDocumentWithRecovery } from "../../adapters/collab/project.ts";
 
 type Side = "app" | "peer";
-type Order = "forward" | "reverse" | "duplicate";
+type Order = "forward" | "reverse" | "duplicate" | "catch-up";
+type RefusedKind = "throws" | "zero-length" | "queue-full";
 export type SharedTestReplica = Side | "joiner";
 
 const PEER_LEFT = "The peer has left";
 const NOT_JOINED = "The late joiner has not joined";
 const NAME_TAKEN = "The name is already given to another identity";
+const UNKNOWN_REFUSAL = "There is no refused update of that kind";
 const MEDIA_CELL = Object.freeze({ media: true });
+// why: a decodable item whose origin is a later clock of its own client, which native integration throws on
+const THROWS_WHILE_APPLYING: readonly number[] = [1, 1, 7, 0, 168, 7, 5, 1, 125, 1, 0];
+const ZERO_LENGTH_STRUCT: readonly number[] = [1, 1, 1, 0, 40, 1, 4, 109, 101, 116, 97, 1, 120, 0, 0];
+
+export function sharedTestBytes(update: string | Uint8Array | ArrayBuffer | readonly number[]): Uint8Array {
+  if (typeof update === "string") return Uint8Array.from(atob(update), character => character.charCodeAt(0));
+  return update instanceof ArrayBuffer ? new Uint8Array(update.slice(0)) : Uint8Array.from(update);
+}
+
+function base64Of(update: Uint8Array): string {
+  let text = "";
+  for (let at = 0; at < update.length; at += 0x8000) text += String.fromCharCode(...update.subarray(at, at + 0x8000));
+  return btoa(text);
+}
 
 // why: the same flow ports as the Writer's (writer.ts), so the peer plans what a second Writer would plan
 const PEER_FLOW: FlowPorts = {
@@ -105,15 +124,33 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
     if (!result.ok && result.reason !== "queue-full") throw new Error(result.reason);
     if (result.ok && id !== undefined) applied.push({ to: side, update: id });
   };
+  const catchUpOf = (side: Side): Uint8Array => {
+    const target = side === "app" ? app.handle : handle, source = side === "app" ? handle : app.handle;
+    return encodeSharedUpdate(source, encodeSharedStateVector(target));
+  };
   const resend = (side: Side): void => {
     if (!live) return;
-    const target = side === "app" ? app.handle : handle, source = side === "app" ? handle : app.handle;
-    receive(side, encodeSharedUpdate(source, encodeSharedStateVector(target)));
+    receive(side, catchUpOf(side));
+  };
+  const taken = (to: Side): Uint8Array[] => {
+    const updates = pending.filter(item => item.side === to);
+    for (const item of updates) pending.splice(pending.indexOf(item), 1);
+    return updates.map(item => item.update);
   };
   function deliver(order: Order = "forward", to?: Side): number {
     alive();
     const updates = pending.filter(item => !to || item.side === to);
     for (const item of updates) pending.splice(pending.indexOf(item), 1);
+    if (order === "catch-up") {
+      for (const side of ["app", "peer"] as const) {
+        const ids = updates.filter(item => item.side === side).map(item => item.id);
+        if (!ids.length) continue;
+        const result = applySharedUpdate(side === "app" ? app.handle : handle, catchUpOf(side));
+        if (!result.ok && result.reason !== "queue-full") throw new Error(result.reason);
+        if (result.ok) for (const id of ids) applied.push({ to: side, update: id });
+      }
+      return updates.length;
+    }
     if (order === "reverse") updates.reverse();
     for (const item of updates) {
       receive(item.side, item.update, item.id);
@@ -156,7 +193,68 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
     return Array.from({ length: painted.text.length }, (_, index) => painted.identity(index) ?? "");
   };
   const leaveJoiner = (): void => { const left = joiner; joiner = null; left?.dispose(); };
+  const cellText = { ...stamps, cells: (html: string) => PEER_FLOW.cells(html) };
+  const joinText = { ...cellText, plainText: (html: string | null | undefined) => projection(fromHtml(html ?? "", MEDIA_CELL)) };
+  const structural = (command: Parameters<typeof session.run>[0]): string => { alive(); return session.run(command).kind; };
+  const beatIds = (): readonly string[] => session.read(doc => doc ? doc.rows.map(row => row.id) : []);
+  const created = (command: Parameters<typeof session.run>[0]): { readonly kind: string; readonly id: string | null } => {
+    const before = new Set(beatIds()), kind = structural(command);
+    return { kind, id: beatIds().find(id => !before.has(id)) ?? null };
+  };
+  let replaying: { readonly results: SharedApplyResult[]; total: number; timer: unknown } | null = null;
+  const stopReplay = (): void => {
+    const running = replaying;
+    if (running && running.timer !== null) ports.timers.stop(running.timer);
+    if (running) running.timer = null;
+  };
+  const replay = (updates: readonly (string | Uint8Array | readonly number[])[], everyMs: number, to: Side = "app"): number => {
+    alive();
+    stopReplay();
+    paused = true;
+    const bytes = updates.map(sharedTestBytes), started = ports.now(), target = to === "app" ? app.handle : handle;
+    const running = { results: [] as SharedApplyResult[], total: bytes.length, timer: null as unknown };
+    replaying = running;
+    const next = (): void => {
+      const at = running.results.length, update = bytes[at];
+      if (!update) { running.timer = null; return; }
+      running.timer = ports.timers.start(() => {
+        if (!live || replaying !== running || running.timer === null) return;
+        running.results.push(applySharedUpdate(target, update));
+        next();
+      }, Math.max(0, started + (at + 1) * everyMs - ports.now()));
+    };
+    next();
+    return bytes.length;
+  };
   return {
+    split: (rowId: string, at: number) => created(splitBeatCommand(rowId, "audioText", textCut(at, at), PEER_FLOW.newId(), cellText, structure() ?? undefined)),
+    join: (intoId: string) => structural(joinBeatsCommand(intoId, joinText, structure() ?? undefined)),
+    add: (afterId: string | null) => created(addBeatCommand(afterId, PEER_FLOW.newId(), stamps, structure() ?? undefined)),
+    inject: (update: string | Uint8Array | readonly number[], to: Side = "app"): SharedApplyResult => {
+      alive();
+      return applySharedUpdate(to === "app" ? app.handle : handle, sharedTestBytes(update));
+    },
+    refusedUpdate: (kind: RefusedKind, rowId?: string): string => {
+      alive();
+      if (kind === "throws") return base64Of(Uint8Array.from(THROWS_WHILE_APPLYING));
+      if (kind === "zero-length") return base64Of(Uint8Array.from(ZERO_LENGTH_STRUCT));
+      if (kind !== "queue-full" || !rowId) throw new Error(UNKNOWN_REFUSAL);
+      const held = paused, before = sent;
+      paused = true;
+      try { buffered(rowId, 0, 0, "x".repeat(sharedBufferQueueBytes() + 1)); } finally { paused = held; }
+      const made = pending.filter(item => item.side === "app" && item.id > before);
+      for (const item of made) pending.splice(pending.indexOf(item), 1);
+      if (made.length !== 1 || !made[0]) throw new Error(UNKNOWN_REFUSAL);
+      return base64Of(made[0].update);
+    },
+    capture: (to: Side = "app") => { alive(); return taken(to).map(base64Of); },
+    replay,
+    replayed: () => {
+      const running = replaying;
+      return running ? { delivered: running.results.filter(result => result.ok).length, refused: running.results.filter(result => !result.ok).length,
+        remaining: running.total - running.results.length, running: running.timer !== null } : null;
+    },
+    stopReplay,
     recovery: () => projectSharedDocumentWithRecovery(handle).recovery,
     type: (rowId: string, offset: number, insert: string) => buffered(rowId, offset, offset, insert),
     erase: (rowId: string, from: number, to: number) => buffered(rowId, from, to, "").kind,
@@ -227,6 +325,7 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
     queued: () => pending.length,
     appliedUpdates: () => applied.map(entry => ({ ...entry })),
     dispose: () => {
+      stopReplay();
       live = false;
       for (const release of releases) release();
       pending.length = 0; leaveJoiner(); session.dispose(); replica.dispose(); destroySharedDocument(handle);
@@ -243,6 +342,15 @@ export function sharedTestPeerHook(current: () => SharedTestPeer | null) {
     format: (rowId: string, from: number, to: number, mark?: MarkName, endRow?: string) => current()?.format(rowId, from, to, mark, endRow),
     deleteRange: (rowId: string, from: number, endRow: string, to: number) => current()?.deleteRange(rowId, from, endRow, to),
     remove: (rowId: string) => current()?.remove(rowId),
+    split: (rowId: string, at: number) => current()?.split(rowId, at),
+    join: (intoId: string) => current()?.join(intoId),
+    add: (afterId: string | null) => current()?.add(afterId),
+    inject: (update: string | Uint8Array | readonly number[], to?: Side) => current()?.inject(update, to),
+    refusedUpdate: (kind: RefusedKind, rowId?: string) => current()?.refusedUpdate(kind, rowId),
+    capture: (to?: Side) => current()?.capture(to) ?? [],
+    replay: (updates: readonly (string | Uint8Array | readonly number[])[], everyMs: number, to?: Side) => current()?.replay(updates, everyMs, to),
+    replayed: () => current()?.replayed() ?? null,
+    stopReplay: () => { current()?.stopReplay(); },
     undo: () => current()?.undo(),
     redo: () => current()?.redo(),
     hold: () => { current()?.hold(); },

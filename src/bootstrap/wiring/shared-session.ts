@@ -54,6 +54,7 @@ export interface SharedSwitchPorts {
   readonly timers: TimerPort;
   readonly now: () => number;
   readonly opening: Pick<DocumentOpeningActivity, "openingPending">;
+  readonly hydrate?: (handle: SharedDocumentHandle, migrated: ValidatedDocument) => void;
 }
 
 export function joinSharedBindings(first: SharedBindings, second: Pick<SharedBindings, "enter" | "leave">): SharedBindings {
@@ -192,7 +193,7 @@ function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { readonly ke
     holdMergeBase(null);
     made.bound = true;
     ports.bindings.enter(parts);
-    hydrateSharedDocument(handle, hydration);
+    (ports.hydrate ?? hydrateSharedDocument)(handle, hydration);
     // why: detaching runs once everything else has landed; a rollback that reaches it puts back what it changed
     made.detaching = true;
     ports.detach();

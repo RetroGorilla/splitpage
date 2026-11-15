@@ -7,6 +7,7 @@ import { freezeSharedProjection, SharedProjectionCache } from "./projection-cach
 import type { SharedProjectionWork } from "./projection-cache.ts";
 import { SharedProjectionSource } from "./projection-source.ts";
 import type { CollabRoots } from "./roots.ts";
+import { markSharedTiming } from "./timing-marks.ts";
 import type { SharedDocumentHandle, SharedTransactionOrigin } from "./types.ts";
 
 export interface SharedIncrementalProjection extends SharedDocumentProjectionStep { readonly revision: number }
@@ -76,15 +77,22 @@ export function createSharedIncrementalProjector(handle: SharedDocumentHandle,
     pending = null;
   };
   stops.push(observeSharedUpdates(handle, (update, origin) => {
+    markSharedTiming("measure:mirror-apply:start");
     transactSharedDocument(mirror, "remote", () => Y.applyUpdate(replica.doc, update));
+    markSharedTiming("measure:mirror-apply:end");
     pending = readSharedRevision(handle);
+    markSharedTiming("measure:assembly:start");
     try { publish(); }
     catch (error) {
+      markSharedTiming("measure:assembly:end");
       if (!failureListeners.size) throw error;
       for (const listener of failureListeners) guardSharedCallback(state, () => listener(error, origin));
       return;
     }
+    markSharedTiming("measure:assembly:end");
+    markSharedTiming("measure:projection-listeners:start");
     for (const listener of listeners) guardSharedCallback(state, () => listener(current, origin));
+    markSharedTiming("measure:projection-listeners:end");
   }));
   return Object.freeze({
     read: () => current,

@@ -54,6 +54,14 @@ function unique(entries: readonly ImportBag[]): void {
   }
 }
 
+export function hydrateSharedDocumentFromState(handle: SharedDocumentHandle, encoded: Uint8Array): void {
+  const state = collabState(handle);
+  assertSharedDocumentIdle(state);
+  if (!state.fresh || Y.encodeStateAsUpdate(state.doc).length !== 2) throw new Error("Hydration requires a fresh empty shared document");
+  transactSharedDocument(handle, "hydration", () => { Y.applyUpdate(state.doc, encoded); });
+  if (state.doc.store.pendingStructs || state.doc.store.pendingDs) throw new Error("The stored shared state is incomplete");
+}
+
 export function hydrateSharedDocument(handle: SharedDocumentHandle, source: ValidatedDocument): void {
   const state = collabState(handle);
   assertSharedDocumentIdle(state);

@@ -2,6 +2,7 @@ import * as Y from "yjs";
 import type { SharedDocumentHandle, SharedTransactionOrigin } from "./types.ts";
 import { declareCollabRoots } from "./roots.ts";
 import { CollabReadCaches } from "./read-cache.ts";
+import { markSharedTiming } from "./timing-marks.ts";
 
 function formattingCleanup(transaction: Y.Transaction): boolean {
   if (transaction.beforeState.size !== transaction.afterState.size) return false;
@@ -104,9 +105,11 @@ function settleIngress(state: CollabDocumentState): void {
         for (const listener of gate.declineListeners) guardSharedCallback(state, listener);
         continue;
       }
+      markSharedTiming("measure:live-apply:start");
       gate.holds.add("delivering");
       try { runCollabTransaction(state, "remote", () => Y.applyUpdate(state.doc, next, "remote")); }
       catch (error) { gate.errors.push(error); }
+      markSharedTiming("measure:live-apply:end");
       if (gate.held[0] === next) { gate.held.shift(); gate.heldBytes -= next.byteLength; }
     }
   } finally { gate.holds.delete("delivering"); }

@@ -6,6 +6,7 @@ import type { SharedUndoRecord } from "../../core/collab/undo-record.ts";
 import { createSharedIncrementalProjector } from "./incremental-project.ts";
 import type { SharedProjectionWork } from "./projection-cache.ts";
 import type { SharedDocumentHandle } from "./types.ts";
+import { markSharedTiming } from "./timing-marks.ts";
 
 export interface SharedReplica extends ReplicaPort {
   readonly dispose: () => void;
@@ -20,8 +21,7 @@ export function createSharedReplica(handle: SharedDocumentHandle, count?: (work:
   // why: After a failed publication the pair is the revision being retried and a fresh attempt at its document,
   // never the live revision beside the older document.
   const published = () => projector.pending() === null ? projector.read() : projector.retry();
-  const execute: ReplicaPort["execute"] = (operations, options) => {
-    if (disposed) return { ok: false, reason: REPLICA_DISPOSED };
+  const write: ReplicaPort["execute"] = (operations, options) => {
     const description = options.description;
     if (!undo || !description) return executeSharedOperations(handle, operations, { base: options.base });
     let result: ReplicaExecution = { ok: false, reason: "undo-not-run" };
@@ -40,6 +40,15 @@ export function createSharedReplica(handle: SharedDocumentHandle, count?: (work:
     if (failed.thrown) throw failed.error;
     return result;
   };
+  const execute: ReplicaPort["execute"] = (operations, options) => {
+    if (disposed) return { ok: false, reason: REPLICA_DISPOSED };
+    markSharedTiming("measure:input-write:start");
+    try { return write(operations, options); } finally { markSharedTiming("measure:input-write:end"); }
+  };
+  const receive = (listener: Parameters<ReplicaPort["observe"]>[0], ...heard: Parameters<Parameters<ReplicaPort["observe"]>[0]>): void => {
+    markSharedTiming("measure:session-receive:start");
+    try { listener(...heard); } finally { markSharedTiming("measure:session-receive:end"); }
+  };
   return Object.freeze({
     revision: () => projector.pending() ?? projector.read().revision,
     project: () => published().document,
@@ -47,7 +56,7 @@ export function createSharedReplica(handle: SharedDocumentHandle, count?: (work:
     recovery: () => published().recovery,
     execute: execute,
     observe: (listener: Parameters<ReplicaPort["observe"]>[0]) =>
-      projector.observe((_projection, origin) => listener(origin), (error, origin) => listener(origin, { error })),
+      projector.observe((_projection, origin) => { receive(listener, origin); }, (error, origin) => { receive(listener, origin, { error }); }),
     dispose: () => { disposed = true; projector.dispose(); }
   });
 }

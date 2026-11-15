@@ -7,6 +7,7 @@ import { toHtml } from "../../core/text/html.ts";
 import { projection } from "../../core/text/runs.ts";
 import { domToPos, posToDom, placeSelection, paintTrailingCellSpaces, clearTrailingCellSpaces, readSharedCellSpaceForm } from "../common/cell-dom.ts";
 import { cssAttr } from "../common/dom.ts";
+import { markTestTiming } from "../common/test-hooks.ts";
 import type { CellBufferPorts } from "./ports.ts";
 import type { PaintedText } from "../../application/editing/ports.ts";
 import { followPaintedCaret } from "../../application/editing/painted-selection.ts";
@@ -235,7 +236,12 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
     ports.shown(() => { binding.native(event, () => { step(event, cell && root.contains(cell) ? cell : null); }); });
   }
 
-  for (const type of TYPES) root.addEventListener(type, listener, true);
+  function timed(event: Event): void {
+    markTestTiming("measure:input-handler:start");
+    try { listener(event); } finally { markTestTiming("measure:input-handler:end"); }
+  }
+
+  for (const type of TYPES) root.addEventListener(type, timed, true);
   if (caret) { root.addEventListener("focusin", focus); root.ownerDocument.addEventListener("selectionchange", selectionChanged); }
   const stopPainted = ports.onPainted(caret ? painted : record), stopCheck = ports.beforePaint(() => {
     binding.canPaint();
@@ -254,7 +260,7 @@ export function mountCellBuffer(mount: { readonly root: HTMLElement; readonly po
       open = false;
       spaceForms = null;
       stopPainted(); stopCheck();
-      for (const type of TYPES) root.removeEventListener(type, listener, true);
+      for (const type of TYPES) root.removeEventListener(type, timed, true);
       root.removeEventListener("focusin", focus);
       root.ownerDocument.removeEventListener("selectionchange", selectionChanged);
       for (const cell of root.querySelectorAll(CELLS)) {

@@ -1,0 +1,177 @@
+{
+  "tests": [
+    "src/test/shared-hook-measure-app.test.mjs",
+    "tests/bootstrap/shared-test-release.test.ts",
+    "tests/bootstrap/timing-marks-release.test.ts"
+  ],
+  "mutants": [
+    {
+      "label": "adapter timing marks are written while switched off",
+      "file": "src/adapters/collab/timing-marks.ts",
+      "find": "[Symbol.for(\"splitpage.timingMarks\")] === true) performance.mark(name);",
+      "replace": "[Symbol.for(\"splitpage.timingMarks\")] !== 2) performance.mark(name);",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "release build keeps the adapter timing marks",
+      "file": "src/adapters/collab/timing-marks.ts",
+      "find": "  if (TEST_HOOKS && (globalThis",
+      "replace": "  if ((globalThis",
+      "tests": ["tests/bootstrap/timing-marks-release.test.ts"]
+    },
+    {
+      "label": "release build keeps the input and render timing marks",
+      "file": "src/features/common/test-hooks.ts",
+      "find": "  if (TEST_HOOKS && (globalThis",
+      "replace": "  if ((globalThis",
+      "tests": ["tests/bootstrap/timing-marks-release.test.ts"]
+    },
+    {
+      "label": "the trial is not marked",
+      "file": "src/adapters/collab/document.ts",
+      "find": "  markSharedTiming(\"measure:trial:start\");\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "the live apply mark closes before the update is applied",
+      "file": "src/adapters/collab/document.ts",
+      "find": "    markSharedTiming(\"measure:live-apply:start\");\n    transactCollabState",
+      "replace": "    markSharedTiming(\"measure:live-apply:start\");\n    markSharedTiming(\"measure:live-apply:end\");\n    transactCollabState",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "the session receive is not marked",
+      "file": "src/adapters/collab/replica.ts",
+      "find": "    markSharedTiming(\"measure:session-receive:start\");\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "the local write is not marked",
+      "file": "src/adapters/collab/replica.ts",
+      "find": "    markSharedTiming(\"measure:input-write:start\");\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "render subscribers are not marked",
+      "file": "src/bootstrap/wiring/session-owner.ts",
+      "find": "    markTestTiming(\"measure:render:start\");\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "the peer splits at the start of the beat",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "textCut(at, at)",
+      "replace": "textCut(0, 0)",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "the peer joins a fixed beat",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "joinBeatsCommand(intoId, joinText",
+      "replace": "joinBeatsCommand(\"r2\", joinText",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "the peer adds after a fixed beat",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "addBeatCommand(afterId, PEER_FLOW.newId()",
+      "replace": "addBeatCommand(\"r1\", PEER_FLOW.newId()",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "a structural edit reports an old beat as the new one",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "beatIds().find(id => !before.has(id))",
+      "replace": "beatIds().find(id => before.has(id))",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "inject always applies to the peer",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "applySharedUpdate(to === \"app\" ? app.handle : handle, sharedTestBytes(update))",
+      "replace": "applySharedUpdate(handle, sharedTestBytes(update))",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "the throwing refusal is the zero-length one",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "if (kind === \"throws\") return base64Of(Uint8Array.from(THROWS_WHILE_APPLYING));",
+      "replace": "if (kind === \"throws\") return base64Of(Uint8Array.from(ZERO_LENGTH_STRUCT));",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "the queue-full update fits the buffer queue",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "\"x\".repeat(sharedBufferQueueBytes() + 1)",
+      "replace": "\"x\".repeat(sharedBufferQueueBytes() / 2)",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "catch-up delivers each held update instead of one",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "    if (order === \"catch-up\") {\n",
+      "replace": "    if (order === \"catch-up\" && updates.length < 0) {\n",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "catch-up records nothing as applied",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "        if (result.ok) for (const id of ids) applied.push({ to: side, update: id });\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "capture leaves the captured updates queued",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "    const updates = pending.filter(item => item.side === to);\n    for (const item of updates) pending.splice(pending.indexOf(item), 1);\n",
+      "replace": "    const updates = pending.filter(item => item.side === to);\n",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "replay delivers every update at once",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "Math.max(0, started + (at + 1) * everyMs - ports.now())",
+      "replace": "0",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "replay lets the app's updates reach the peer meanwhile",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "    stopReplay();\n    paused = true;\n",
+      "replace": "    stopReplay();\n",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "stopping a replay does nothing",
+      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "find": "    const running = replaying;\n    if (running && running.timer !== null) ports.timers.stop(running.timer);\n    if (running) running.timer = null;\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "entering from a stored state enters the open script instead",
+      "file": "src/bootstrap/wiring/shared-test.ts",
+      "find": "enter(sharedTestBytes(state))",
+      "replace": "enter()",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "entry hydrates the migrated script whatever the hydrate port",
+      "file": "src/bootstrap/wiring/shared-session.ts",
+      "find": "(ports.hydrate ?? hydrateSharedDocument)(handle, hydration);",
+      "replace": "hydrateSharedDocument(handle, hydration);",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    },
+    {
+      "label": "an incomplete stored state is accepted",
+      "file": "src/adapters/collab/hydrate.ts",
+      "find": "  if (state.doc.store.pendingStructs || state.doc.store.pendingDs) throw new Error(\"The stored shared state is incomplete\");\n",
+      "replace": "",
+      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+    }
+  ]
+}

@@ -14,6 +14,7 @@ import { cellOf, scriptCellOf } from "../richtext.ts";
 import { documentGuardOn, documentView, unwrapped } from "../../application/identity/document-guard.ts";
 import { createNumberingReader } from "../../application/session/numbering.ts";
 import type { DocumentNumberingReader } from "../../application/session/numbering.ts";
+import { markTestTiming } from "../../features/common/test-hooks.ts";
 
 export type SessionReplayRunner = StandaloneDocumentSession["replay"];
 
@@ -85,7 +86,9 @@ const stampListeners: ((changes: ChangeSet) => void)[] = [];
 
 function hearing(entry: Hearing): SessionListener {
   return function (change) {
-    if (entry.on) entry.listener(change);
+    if (!entry.on) return;
+    markTestTiming("measure:render:start");
+    try { entry.listener(change); } finally { markTestTiming("measure:render:end"); }
   };
 }
 
@@ -342,7 +345,9 @@ export function adoptShared(build: (ports: SharedOwnerPorts) => SharedDocumentSe
   const entered = new WeakMap<object, ValidatedDocument>();
   const made = build({
     entry: function (raw) {
+      markTestTiming("measure:document-entry:start");
       const doc = enterSharedDocument(raw);
+      markTestTiming("measure:document-entry:end");
       entered.set(doc, doc);
       return doc;
     },
