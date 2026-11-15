@@ -13,6 +13,7 @@ import { sharedStructurePorts } from "./ports/shared-values.ts";
 import { deleteBeatCommand } from "../../application/commands/rows.ts";
 import { productionReaders } from "../document-ports.ts";
 import { sessionStamps } from "./session-owner.ts";
+import { projectSharedDocumentWithRecovery } from "../../adapters/collab/project.ts";
 
 export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitchPorts) {
   const handle = createSharedDocument();
@@ -65,6 +66,7 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
     observeSharedDeclined(app.handle, () => { resend("app"); }), observeSharedDeclined(handle, () => { resend("peer"); })
   ];
   return {
+    recovery: () => projectSharedDocumentWithRecovery(handle).recovery,
     type: (rowId: string, offset: number, insert: string) => {
       if (!live) throw new Error("The peer has left");
       const base = text.paintedText.read(rowId, "audioText");
