@@ -90,7 +90,7 @@ export const PAGE = `(function () {
       need(doc.rows.length === data.rows, 'entered ' + doc.rows.length + ' beats, expected ' + data.rows);
       S.timing(true);
       return 'PERF ' + JSON.stringify({ kind: 'entry', label: data.name + ' entry', fixture: data.name, beats: doc.rows.length, stateBytes: data.stateBytes, ms: +ms.toFixed(1),
-        browser: (navigator.userAgent.match(/(Edg|Chrome)\\/[\\d.]+/) || ['unknown'])[0], viewport: innerWidth + 'x' + innerHeight, devicePixelRatio: devicePixelRatio });
+        browser: (navigator.userAgent.match(/Edg\\/[\\d.]+/) || navigator.userAgent.match(/Chrome\\/[\\d.]+/) || ['unknown'])[0], viewport: innerWidth + 'x' + innerHeight, devicePixelRatio: devicePixelRatio });
     },
     writerCaret: function () {
       var id = rowId(${LOCAL_ROW}), at = plainLength(S.read().app.rows[${LOCAL_ROW}].audioText);
