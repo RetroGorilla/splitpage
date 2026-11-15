@@ -288,7 +288,7 @@ test("catch-up delivery: held peer updates reach the app as one state-vector upd
 });
 
 test("replay: on an injected clock, after k intervals exactly k captured updates have reached the app, none early and none after a stop, while the app's own updates stay held for the peer", async () => {
-  await shared(p => {
+  await shared(async p => {
     p.hold();
     for (const [at, letter] of [[0, "A"], [1, "B"], [2, "C"]]) assert.equal(p.type("r2", at, letter).kind, "applied");
     const captured = p.capture();
@@ -301,6 +301,7 @@ test("replay: on an injected clock, after k intervals exactly k captured updates
     assert.equal(p.replay(captured, 40, "app", clock), 3);
     assert.deepEqual(p.replayed(), { delivered: 0, refused: 0, recovered: 0, remaining: 3, running: true });
     appTypes("!")();
+    await new Promise(resolve => { queueMicrotask(resolve); });
     assert.equal(queued(), 1, "the app's typing waits for the peer, so the peer does no work during the replay");
     for (let k = 1; k <= 3; k++) {
       clock.advance(39);
@@ -353,10 +354,16 @@ test("replay recovery: a queue-full update refused at its deadline is taken back
 });
 
 test("entry from an encoded shared state: the app enters the stored document with its history and recovery, the undo stack starts empty, and an empty, incomplete, truncated or unreadable state is refused with the standalone script unchanged", async () => {
-  let stored = null, expected = null, recovery = null, partial = null;
+  let stored = null, expected = null, recovery = null, partial = null, gapped = null;
   await shared(p => {
-    const vector = encodeSharedStateVector(sharedSessionParts().handle);
+    const handle = sharedSessionParts().handle, start = encodeSharedState(handle), vector = encodeSharedStateVector(handle);
     assert.equal(p.type("r1", 5, "?").kind, "applied");
+    assert.equal(p.deliver(), 1);
+    const middle = encodeSharedStateVector(handle);
+    assert.equal(p.type("r1", 6, "?").kind, "applied");
+    assert.equal(p.deliver(), 1);
+    gapped = Y.mergeUpdates([start, encodeSharedUpdate(handle, middle)]);
+    assert.equal(p.erase("r1", 6, 7), "applied");
     assert.equal(p.remove("r2"), "applied");
     assert.equal(p.deliver(), 2);
     stored = encodeSharedState(sharedSessionParts().handle);
@@ -366,7 +373,8 @@ test("entry from an encoded shared state: the app enters the stored document wit
     assert.equal(recovery.length, 1);
   });
   const other = [{ id: "o1", audioText: "Other", visualText: "" }];
-  for (const [name, bytes] of [["an empty state", new Uint8Array([0, 0])], ["a state with pending structs", partial],
+  for (const [name, bytes] of [["an empty state", new Uint8Array([0, 0])], ["an update without its base", partial],
+    ["a script with pending structs", gapped],
     ["a truncated state", stored.slice(0, Math.floor(stored.length / 2))], ["unreadable bytes", new Uint8Array([1, 2, 3])]]) {
     script(other);
     const standalone = JSON.stringify(hook.read());
