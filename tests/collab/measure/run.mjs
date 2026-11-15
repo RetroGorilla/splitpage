@@ -24,7 +24,7 @@ import { readSharedTextHistory } from "../../../src/adapters/collab/text-history
 import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 import { inlineStateImages } from "../../../src/adapters/storage/02c-blobs.ts";
 import { isMain } from "../../../tools/main-module.mjs";
-import { PERCENTILE_RULE, median } from "../../../tools/perf-stats.mjs";
+import { EARLIER_RECORDS, PERCENTILE_RULE, median } from "../../../tools/perf-stats.mjs";
 import { timingMarks } from "../../../shared/timing-marks.ts";
 import { markParts } from "./mark-parts.mjs";
 import { acquireReplica } from "./trial-method.mjs";
@@ -372,7 +372,7 @@ export function run(rounds = 5, saved = null, persist = () => {}) {
   const checkpoint = saved ? restoreCheckpoint(saved, fingerprint) : null;
   const sources = fixtures(), states = checkpoint?.states ?? [];
   const result = checkpoint?.result ?? { commit, node: process.version,
-    arch: process.arch, rounds, percentiles: PERCENTILE_RULE, growth: [], admission: [] };
+    arch: process.arch, rounds, percentiles: PERCENTILE_RULE, earlierRecords: EARLIER_RECORDS, growth: [], admission: [] };
   assert.equal(result.rounds, rounds);
   const streams = checkpoint?.streams ?? {};
   const publish = () => persist(saveCheckpoint({ fingerprint, result, states, streams }));

@@ -7,7 +7,7 @@ import { REPO } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
 import { KEY_GAP_MS, TYPED, parsePortBase } from "./perf-record.mjs";
 import { TRACE_CATEGORIES, traceRecords } from "./perf-trace.mjs";
-import { PERCENTILE_RULE, latencyFigures } from "./perf-stats.mjs";
+import { EARLIER_RECORDS, PERCENTILE_RULE, latencyFigures } from "./perf-stats.mjs";
 
 const DRIVER = join(REPO, ".claude", "skills", "run-splitpage-app", "driver.mjs");
 export const SHARED_FIXTURES = ["short", "long", "large", "edited"];
@@ -146,7 +146,7 @@ export const PAGE = `(function () {
       var consumed = replayed ? replayed.delivered + replayed.refused : 0;
       if (perf.replaying === 'remote') perf.cursor += consumed;
       var lat = perf.lat.slice().sort(function (a, b) { return a - b; });
-      var out = { kind: 'case', label: label, latencies: lat.map(function (v) { return +v.toFixed(3); }),
+      var out = { kind: 'case', label: label, latencies: lat,
         longTasks: perf.long.length, longTaskMs: +perf.long.reduce(function (a, b) { return a + b; }, 0).toFixed(1),
         replayed: perf.replaying ? { source: perf.replaying, delivered: replayed ? replayed.delivered : 0, refused: replayed ? replayed.refused : 0,
           recovered: replayed ? replayed.recovered : 0 } : null, events: perf.events };
@@ -325,6 +325,7 @@ export function sharedReport(rows, traced = false) {
     "# Shared composed-editor measurement",
     "",
     `- Typing: ${TYPED.length} characters, one real key event every ${KEY_GAP_MS} ms; latency is key-down to the frame after it, modifier key-downs left out; ${PERCENTILE_RULE}`,
+    `- ${EARLIER_RECORDS}`,
     `- Remote rates: ${REMOTE_RATES.join(", ")} updates a second of pre-generated single-character edits to the first beat; peer structural edits are split, join, add and remove, pre-generated and delivered one update a second`,
     `- Backlog: ${BACKLOG_UPDATES} held peer updates released ${BACKLOG_AT_MS} ms into the typing, one by one or as one catch-up diff`,
     `- Own structural edits: ${OWN_STRUCTURAL_PRESSES} presses of Ctrl+Enter in a Split narration cell, each adding a beat at the caret through the selection capture`,
@@ -341,6 +342,10 @@ export function sharedReport(rows, traced = false) {
     ...cases.map((r) => `| ${r.label} | ${r.keys} | ${r.p50 ?? "—"} | ${r.p95 ?? "—"} | ${r.max ?? "—"} | ${r.longTasks} | ${r.longTaskMs} | ${r.replayed ? r.replayed.delivered : "—"} | ${GROUP_NAMES.map((g) => r.groups?.[g] ?? "—").join(" | ")} |`)
   ];
   return lines.join("\n") + "\n";
+}
+
+export function sharedRecord(rows, traced) {
+  return { traced, traceCategories: traced ? TRACE_CATEGORIES : null, percentiles: PERCENTILE_RULE, earlierRecords: EARLIER_RECORDS, rows };
 }
 
 export async function main(argv) {
@@ -383,7 +388,7 @@ export async function main(argv) {
       rows.push(...sharedRows(found, fixture));
     }
   } finally { rmSync(work, { recursive: true, force: true }); }
-  if (args.json) writeFileSync(args.json, JSON.stringify({ traced: args.trace, traceCategories: args.trace ? TRACE_CATEGORIES : null, rows }, null, 2) + "\n");
+  if (args.json) writeFileSync(args.json, JSON.stringify(sharedRecord(rows, args.trace), null, 2) + "\n");
   console.log(sharedReport(rows, args.trace));
   return 0;
 }

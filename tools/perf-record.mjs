@@ -4,7 +4,7 @@ import { cpus, freemem, totalmem, platform, release, arch, tmpdir } from "node:o
 import { join, resolve } from "node:path";
 import { REPO } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
-import { PERCENTILE_RULE, latencyFigures, median } from "./perf-stats.mjs";
+import { EARLIER_RECORDS, PERCENTILE_RULE, latencyFigures, median } from "./perf-stats.mjs";
 
 const DRIVER = join(REPO, ".claude", "skills", "run-splitpage-app", "driver.mjs");
 export const TYPED = "The quick brown fox films a take by the window at dusk.";
@@ -39,7 +39,7 @@ export function parsePortBase(raw) {
   return { base, error: null };
 }
 
-const PROBE = `(function () {
+export const PROBE = `(function () {
   if (window.__perf) return 'ready';
   var perf = { lat: [], long: [], rects: 0 };
   var rangeRects = Range.prototype.getClientRects;
@@ -47,7 +47,7 @@ const PROBE = `(function () {
   perf.reset = function () { perf.lat = []; perf.long = []; perf.rects = 0; return true; };
   perf.take = function (label) {
     var lat = perf.lat.slice().sort(function (a, b) { return a - b; });
-    var out = { label: label, latencies: lat.map(function (v) { return +v.toFixed(3); }),
+    var out = { label: label, latencies: lat,
       longTasks: perf.long.length, longTaskMs: +perf.long.reduce(function (a, b) { return a + b; }, 0).toFixed(1), rangeRects: perf.rects };
     perf.reset();
     return 'PERF ' + JSON.stringify(out);
@@ -595,7 +595,7 @@ export function report(results, env, when) {
     ...(env.busy ? [`- Machine load: ${env.busy.before}% of the CPU busy in the second before the run and ${env.busy.after}% in the second after it`] : []),
     ...(env.freeGb !== undefined ? [`- Free memory at the start: ${env.freeGb} GB`] : []),
     `- Fixtures: ${fixtureLines.join("; ")}`,
-    ...(rows.length ? [`- Typing: ${TYPED.length} characters, one real key event every ${KEY_GAP_MS} ms, into scene 2's audio cell; latency is key-down to the frame after it; ${PERCENTILE_RULE}`] : []),
+    ...(rows.length ? [`- Typing: ${TYPED.length} characters, one real key event every ${KEY_GAP_MS} ms, into scene 2's audio cell; latency is key-down to the frame after it; ${PERCENTILE_RULE}`, `- ${EARLIER_RECORDS}`] : []),
     ...(rows.some((r) => r.label.endsWith("display preference")) ? [`- Redraw scenes (long script): one click per sample, measured from the click to the frame after it, ${SETTLE_MS} ms apart; stamp cycles the status of scenes ${STAMP_ROWS.join(", ")} twice, hide toggles Hide shot scenes ${HIDE_TOGGLES} times, display preference switches the clock between 24 and 12 hours ${PREFERENCE_CHANGES} times`] : []),
     "",
     ...(rows.length ? [

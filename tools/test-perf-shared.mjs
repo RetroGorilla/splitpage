@@ -5,10 +5,10 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { abbaOrder, passOrder, parseArgs, placeTools, sharedSummary, toolRevision, tracingNoise, waitForMemory, writeRecord } from "./perf-ab.mjs";
 import { parsePairedArgs, pairedSummary, parseRound } from "./measure-shared-paired.mjs";
-import { KEY_GAP_MS, TYPED, parsePerf } from "./perf-record.mjs";
-import { PERCENTILE_RULE, latencyFigures, median, nearestRank } from "./perf-stats.mjs";
+import { KEY_GAP_MS, PROBE, TYPED, parsePerf } from "./perf-record.mjs";
+import { EARLIER_RECORDS, PERCENTILE_RULE, latencyFigures, median, nearestRank } from "./perf-stats.mjs";
 import { GROUP_NAMES, PAGE, REMOTE_RATES, SEAMS, attachTraces, caseList, expectedKeys, parseShared, parseSharedArgs,
-  sharedProblems, sharedReport, sharedRows, sharedSuiteText, traceFile, tracedCase } from "./perf-shared.mjs";
+  sharedProblems, sharedRecord, sharedReport, sharedRows, sharedSuiteText, traceFile, tracedCase } from "./perf-shared.mjs";
 import { TASK_RECORD, TRACE_CATEGORIES, traceRecords } from "./perf-trace.mjs";
 
 const record = (name, at, dur, extra = {}) => ({ name, ph: "X", ts: at * 1000, dur: dur * 1000, pid: 1, tid: 1, cat: "devtools.timeline", ...extra });
@@ -177,6 +177,27 @@ test("every p50 is the median, the mean of the two middle values for an even cou
   assert.equal(median([1, 2, 3, 4]), 2.5);
   assert.equal(nearestRank(Array.from({ length: 55 }, (_, i) => i + 1), 0.95), 53);
   assert.match(PERCENTILE_RULE, /p95 is the nearest rank, the ceil\(0\.95 n\)-th smallest value/);
+});
+
+test("the pages return their samples unrounded and only the final figures are rounded", () => {
+  assert.deepEqual(latencyFigures([1.0496]), { keys: 1, p50: 1, p95: 1, max: 1 });
+  for (const [name, source] of [["shared", PAGE], ["standalone", PROBE]]) {
+    const field = /latencies: ([^,}]+)[,}]/.exec(source);
+    assert.ok(field, `${name}: the page returns its latencies`);
+    assert.deepEqual(new Function("lat", `return ${field[1]};`)([1.0496]), [1.0496], `${name}: the page passes each sample through as measured`);
+  }
+  const [row] = parseShared(`PERF ${JSON.stringify({ kind: "case", label: "x", latencies: [1.0496] })}\n`);
+  assert.deepEqual([row.p50, row.p95, row.max], [1, 1, 1]);
+});
+
+test("every record carries the percentile rule and says earlier standalone figures are not comparable", () => {
+  const direct = sharedRecord([], true);
+  assert.equal(direct.percentiles, PERCENTILE_RULE);
+  assert.equal(direct.earlierRecords, EARLIER_RECORDS);
+  assert.deepEqual(direct.traceCategories, TRACE_CATEGORIES);
+  assert.equal(sharedRecord([], false).traceCategories, null);
+  assert.match(EARLIER_RECORDS, /p50 the upper middle value, p95 the largest of 20 samples\) and are not comparable/);
+  assert.ok(sharedReport([], false).includes(EARLIER_RECORDS), "the direct report says so too");
 });
 
 test("both trees measure with the running checkout's tools, and a real run refuses tools with local changes", async () => {
