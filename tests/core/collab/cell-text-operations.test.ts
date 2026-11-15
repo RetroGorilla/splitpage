@@ -44,3 +44,20 @@ test("splices that do not turn the old cell into the new one, overlap, or fall o
   assert.equal(sharedCellTextOperations(cell(plain("cup"), plain("cup!")), [{ from: 3, to: 4, insert: plain("!") }]), null);
   assert.equal(sharedCellTextOperations(cell(plain("cup"), plain("cup")), [{ from: 2, to: 1, insert: [] }]), null);
 });
+
+const LONG_CELLS = [
+  { name: "a splice near the start, a long run after it", before: (n: number) => "cup " + "a".repeat(n), after: (n: number) => "mug " + "a".repeat(n),
+    splice: () => ({ from: 0, to: 3 }) },
+  { name: "a splice near the end, a long run before it", before: (n: number) => "a".repeat(n) + " cup", after: (n: number) => "a".repeat(n) + " mug",
+    splice: (n: number) => ({ from: n + 1, to: n + 4 }) }
+];
+
+for (const long of LONG_CELLS) for (const size of [12, 1_000_000]) test(`a cell of ${size} characters, ${long.name}, gives the small cell's operations, scaled`, () => {
+  const { from, to } = long.splice(size);
+  let written: ReturnType<typeof sharedCellTextOperations> = null;
+  assert.doesNotThrow(() => { written = sharedCellTextOperations(cell(plain(long.before(size)), plain(long.after(size))), [{ from, to, insert: plain("mug") }]); });
+  assert.deepEqual(written, [
+    { kind: "text-insert", target, at: { left: null, right: ref(from), affinity: "before" }, content: [{ value: "mug", marks: [] }] },
+    { kind: "text-delete", target, observed: [ref(from, to)] }
+  ]);
+});
