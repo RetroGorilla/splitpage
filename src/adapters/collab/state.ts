@@ -19,6 +19,18 @@ function formattingCleanup(transaction: Y.Transaction): boolean {
 
 export type IngressHold = "delivering" | "buffer" | "capture";
 
+export type SharedAdmissionWork = "encode" | "apply";
+export type SharedAdmissionCount = (work: SharedAdmissionWork, key: string, bytes: number) => void;
+
+export interface IngressTrial {
+  readonly attempt: (update: Uint8Array, decoded: ReturnType<typeof Y.decodeUpdate>, copyTrial: () => void) => void;
+  readonly stopped: () => boolean;
+  readonly takeStop: () => boolean;
+  readonly liveFailed: () => void;
+  readonly released: () => boolean;
+  readonly dispose: () => void;
+}
+
 export class IngressGate {
   readonly holds = new Set<IngressHold>();
   readonly held: Uint8Array[] = [];
@@ -27,6 +39,7 @@ export class IngressGate {
   declined = false;
   declinedReports = 0;
   readonly declineListeners = new Set<() => void>();
+  readonly stopListeners = new Set<() => void>();
   frames = 0;
   notifications = 0;
 }
@@ -46,6 +59,7 @@ export class CollabDocumentState {
   adapterBatch = false;
   execution: { applying: boolean } | null = null;
   readonly ingress = new IngressGate();
+  trial: IngressTrial | null = null;
 
   readonly reads = new CollabReadCaches();
 
@@ -93,14 +107,27 @@ export function guardSharedCallback(state: CollabDocumentState, call: () => void
   } finally { gate.notifications--; }
 }
 
+export const TRIAL_DIVERGED = "The live document did not reach the trial replica when the held updates were applied";
+
+// why: An admitted update that did not reach the live document in full leaves the trial replica ahead of it.
+export function applyAdmittedUpdate(state: CollabDocumentState, update: Uint8Array, write: (apply: () => void) => void): void {
+  let applied = false;
+  try { write(() => { Y.applyUpdate(state.doc, update, "remote"); applied = true; }); }
+  catch (error) { if (!applied) state.trial?.liveFailed(); throw error; }
+}
+
 function settleIngress(state: CollabDocumentState): void {
   const gate = state.ingress;
+  let drained = false;
   try {
     for (;;) {
       gate.holds.delete("delivering");
       if (gate.holds.size) return;
       const next = gate.held[0];
       if (!next) {
+        // why: When a hold ends the live document must have reached the trial replica, which already held these updates.
+        if (drained && state.trial && !state.trial.released()) gate.errors.push(new Error(TRIAL_DIVERGED));
+        drained = false;
         if (!gate.declinedReports) return;
         gate.declinedReports--;
         gate.holds.add("delivering");
@@ -111,7 +138,8 @@ function settleIngress(state: CollabDocumentState): void {
       try {
         if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:live-apply:start");
         gate.holds.add("delivering");
-        try { runCollabTransaction(state, "remote", () => Y.applyUpdate(state.doc, next, "remote")); }
+        drained = true;
+        try { applyAdmittedUpdate(state, next, apply => runCollabTransaction(state, "remote", apply)); }
         catch (error) { gate.errors.push(error); }
         finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:live-apply:end"); }
         if (gate.held[0] === next) { gate.held.shift(); gate.heldBytes -= next.byteLength; }
@@ -140,6 +168,10 @@ export function sharedWriteFrame<T>(state: CollabDocumentState, write: (recordFa
   if (errors.length > 1) throw new AggregateError(errors, "Shared document callbacks failed");
   if (errors.length || !result) throw errors[0];
   return result.value;
+}
+
+export function announceSharedIntakeStop(state: CollabDocumentState): void {
+  sharedWriteFrame(state, () => { for (const listener of [...state.ingress.stopListeners]) guardSharedCallback(state, listener); });
 }
 
 function runCollabTransaction(state: CollabDocumentState, origin: Exclude<SharedTransactionOrigin, "cleanup">, change: () => void, recordFailure?: (error: unknown) => void): void {

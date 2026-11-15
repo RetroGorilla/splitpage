@@ -1,5 +1,5 @@
 export const PART_SEAMS = Object.freeze({
-  validation: Object.freeze(["trial"]),
+  validation: Object.freeze(["trial", "rebuild"]),
   apply: Object.freeze(["live-apply", "queue"]),
   projection: Object.freeze(["mirror-apply", "assembly", "projection-listeners", "session-receive", "document-entry"]),
   rendering: Object.freeze(["render", "cell-refresh"]),
@@ -41,5 +41,5 @@ export function markParts(entries) {
   if (unknown.length) throw new Error("Timing marks outside every part: " + unknown.join(", "));
   const parts = Object.fromEntries(Object.entries(PART_SEAMS).map(([part, seams]) => [part, seams.reduce((sum, seam) => sum + (exclusive[seam] ?? 0), 0)]));
   const attributed = Object.values(parts).reduce((sum, value) => sum + value, 0);
-  return { ...parts, unattributed: outer - attributed, exclusive, outer };
+  return { ...parts, rebuild: exclusive.rebuild ?? 0, unattributed: outer - attributed, exclusive, outer };
 }

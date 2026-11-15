@@ -24,6 +24,7 @@ import { draftSource } from "./drafts.ts";
 import { confirmSavedNow, noteSaveChange, unsavedChanges } from "./save-owners.ts";
 import { currentHome, documentLocation, setHome } from "./location-owner.ts";
 import { projectSharedDocumentWithRecovery } from "../../adapters/collab/project.ts";
+import { sharedIntakeStopped } from "../../adapters/collab/ingress.ts";
 import { hydrateSharedDocumentFromState } from "../../adapters/collab/hydrate.ts";
 import type { SharedDocumentHandle } from "../../adapters/collab/types.ts";
 import { timingMarks } from "../../../shared/timing-marks.ts";
@@ -171,7 +172,8 @@ function startSharedTestHook(): () => void {
       const parts = sharedSessionParts();
       return { app: parts ? projectSharedDocumentWithRecovery(parts.handle).recovery : [], peer: peer?.recovery() ?? [] };
     },
-    counters: () => ({ ...counts, queued: peer?.queued() ?? 0, abandonable: writing.abandonable() + splitting.abandonable() })
+    counters: () => ({ ...counts, queued: peer?.queued() ?? 0, abandonable: writing.abandonable() + splitting.abandonable() }),
+    intakeStopped: () => { const parts = sharedSessionParts(); return parts ? sharedIntakeStopped(parts.handle) : false; }
   };
   exposeTestHook("__sharedTest", () => hook, release => { withdraw = release; });
   return () => {
