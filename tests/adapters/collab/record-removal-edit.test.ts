@@ -246,3 +246,18 @@ for (const order of ORDERS) test(`a reorder made without seeing a removal is no 
 for (const order of ORDERS) test(`the entry for a shot whose status was set without seeing its removal shows the status a restore will give: ${order}`, () => raced(KINDS[1] as Kind, order, w => {
   agree("status shown", order, w.handles, handle => entries(handle).map(entry => [entry.changed, entry.fields.status]), [[["status"], "shot"]]);
 }));
+
+test("stored size: removing a b-roll shot with 1, 10 and 100 props adds a digest per prop and nothing per edit", () => {
+  const sizes: Record<number, number> = {};
+  for (const count of [1, 10, 100]) {
+    const w = world("D1");
+    try {
+      w.send(w.run.a, { kind: "record-create", id: "make", by: "Bob", target: { collection: "shots", record: "S9" }, fields: { id: "S9", name: "City", status: "unshot", origin: "list",
+        props: Array.from({ length: count }, (_, index) => ({ id: "p" + index, name: "Prop " + index })) } });
+      const before = encodeSharedState(w.run.a).length;
+      w.send(w.run.a, deleting("shots", "S9")("Alice"));
+      sizes[count] = encodeSharedState(w.run.a).length - before;
+    } finally { w.close(); }
+  }
+  assert.deepEqual(sizes, { 1: 183, 10: 376, 100: 2411 });
+});

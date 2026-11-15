@@ -206,3 +206,43 @@ for (const child of CHILDREN) for (const copies of [2, 3] as const) for (const o
     } finally { projectors.forEach(projector => projector.dispose()); run.close(); }
   });
 }
+
+// why: an entry's rank only orders its list, so renumbering it after another person's removal, or a deliberate reorder,
+// is no edit of the record around it; rows for lists of two and three entries.
+interface Many { readonly kind: Listed; readonly entries: readonly Record<string, unknown>[] }
+const PROPS = [{ id: "pr1", name: "Cup" }, { id: "pr2", name: "Plate" }, { id: "pr3", name: "Bowl" }];
+const LINKS = [{ href: "https://example.com/1", name: "Cup" }, { href: "https://example.com/2", name: "Plate" }, { href: "https://example.com/3", name: "Bowl" }];
+const MANY: readonly Many[] = ([2, 3] as const).flatMap(count => [
+  { kind: { name: `a b-roll shot with ${count} props`, collection: "shots" as const, record: "S9", field: "props" as const,
+    fields: { id: "S9", name: "City", status: "unshot", origin: "list", props: PROPS.slice(0, count) }, item: (name: string) => ({ id: "pr1", name }), added: { id: "pr9", name: "New" } },
+  entries: PROPS.slice(0, count) },
+  { kind: { name: `a picture with ${count} video links`, collection: "gallery" as const, record: "G9", field: "links" as const,
+    fields: { beat: "R1", rank: "1", picture: { imageRef: pictureA, name: "" }, links: LINKS.slice(0, count) }, item: (name: string) => ({ href: "https://example.com/1", name }),
+    added: { href: "https://example.com/9", name: "New" } },
+  entries: LINKS.slice(0, count) }
+]);
+for (const { kind, entries } of MANY) for (const order of ORDERS) {
+  const [first, ...rest] = entries; assert.ok(first);
+  const race = (bob: readonly unknown[], carol?: readonly unknown[]) => {
+    const w = world(order);
+    w.send(w.run.b, { kind: "record-create", id: "make", by: "Bob", target: { collection: kind.collection, record: kind.record }, fields: kind.fields }); w.flush();
+    w.command(w.run.a, remove(kind, "Alice", "gone")); w.send(w.run.b, list(kind, bob, "Bob", "change"));
+    if (carol) w.send(w.run.c, list(kind, carol, "Carol", "rename"));
+    w.flush(); return w;
+  };
+  test(`${kind.name} removed while another person takes its first entry out, and nobody edits: nothing is listed on any copy or a late joiner: ${order}`, () => {
+    const w = race(rest);
+    try { agree("renumbered", order, w.handles, handle => ({ record: shownRecord(kind, handle), entries: listedEntries(handle) }), { record: false, entries: 0 }); } finally { w.close(); }
+  });
+  test(`${kind.name} removed while another person takes its first entry out and a third renames that entry: only the entry is listed: ${order}`, () => {
+    const w = race(rest, [{ ...first, name: "Mug" }, ...rest]);
+    try {
+      agree("renamed", order, w.handles, handle => ({ entries: listedEntries(handle), held: holders(handle, "Mug").map(entry => [entry.field, entry.entry !== null]) }),
+        { entries: 1, held: [[kind.field, true]] });
+    } finally { w.close(); }
+  });
+  test(`${kind.name} removed while another person reorders its entries, and nobody edits: nothing is listed on any copy or a late joiner: ${order}`, () => {
+    const w = race([...entries].reverse());
+    try { agree("reordered", order, w.handles, handle => ({ record: shownRecord(kind, handle), entries: listedEntries(handle) }), { record: false, entries: 0 }); } finally { w.close(); }
+  });
+}

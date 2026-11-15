@@ -69,6 +69,11 @@ function watched(collection: string | null, field: string): boolean {
     && !(collection === "comments" && (field === "updatedAt" || field === "resolution" || isSharedResolutionKey(field)));
 }
 
+// why: an entry's rank only orders its list, so a renumbering after someone else's removal, or a reorder, is no edit.
+function unranked(entry: unknown): unknown {
+  return entry && typeof entry === "object" && !Array.isArray(entry) ? Object.fromEntries(Object.entries(entry).filter(([key]) => key !== "rank")) : entry;
+}
+
 // why: a list is watched entry by entry, and an entry carrying its own removal mark is left out of both sides of the
 // comparison, so removing an entry is never an edit of the record around it and its raced edits are its own.
 export function sharedRecordObservation(view: SharedDeletionView, path: readonly string[], status: string | null, collection: string | null = null): SharedDeletionSeen {
@@ -79,7 +84,7 @@ export function sharedRecordObservation(view: SharedDeletionView, path: readonly
     if (view.kind(at) !== "map") { seen[field] = digest(JSON.stringify(tree(view, at))); continue; }
     seen[field] = digest("list");
     for (const key of [...view.keys(at)].sort()) {
-      seen[field + "/" + key] = readSharedRecordDeletion(view.get([...at, key, SHARED_RECORD_DELETION_FIELD])) ? REMOVED : digest(JSON.stringify(tree(view, [...at, key])));
+      seen[field + "/" + key] = readSharedRecordDeletion(view.get([...at, key, SHARED_RECORD_DELETION_FIELD])) ? REMOVED : digest(JSON.stringify(unranked(tree(view, [...at, key]))));
     }
   }
   if (status !== null) seen[STATUS] = digest(status);
