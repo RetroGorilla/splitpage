@@ -242,7 +242,7 @@ test("a first composition survives repaint, blocks a local command, and cancella
     assert.deepEqual([input.isConnected, input.value, input.selectionStart, input.selectionEnd, input.selectionDirection, [...collabState(h.a).ingress.holds]],
       [true, "N", 0, 1, "backward", ["buffer"]]);
     const command = { name: "other", needs: "edit" as const, plan: () => null };
-    assert.deepEqual(a.a.session.run(command), { kind: "rejected", reason: "buffer-pending" });
+    assert.deepEqual(a.a.session.run(command), { kind: "rejected", reason: "buffer-pending", notified: true });
     assert.deepEqual(a.reports, [{ kind: "rejected", reason: "buffer-composition" }]);
     a.edge.imeCancel(); a.edge.press("Escape");
     assert.deepEqual([input.isConnected, a.a.executed, [...collabState(h.a).ingress.holds]], [false, [], []]);
