@@ -138,6 +138,7 @@ const APP_LIFETIME_LISTENERS = [
   "document:beforecut",
   "document:click",
   "document:compositionend",
+  "document:compositionstart",
   "document:contextmenu",
   "document:copy",
   "document:cut",

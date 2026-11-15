@@ -44,7 +44,7 @@ function deferred<T>() {
 
 function switcher() {
   const log: string[] = [], errors: unknown[] = [], standalone = currentCapabilities(); let held: string | null = null;
-  const ports: SharedSwitchPorts = { opening: openingStatus, refusal: () => { log.push("refusal"); return null; },
+  const ports: SharedSwitchPorts = { opening: openingStatus, commandRefused: undefined, refusal: () => { log.push("refusal"); return null; },
     settle: () => { log.push("settle"); }, detach: () => { setHome("none"); },
     bindings: { enter: () => { log.push("enter"); }, settle: () => { log.push("binding-settle"); return held; }, leave: () => { log.push("leave"); } },
     common: standalone, standalone, migrate: migrateRows, docId: () => { log.push("id"); return "d" + String(serial++).padStart(32, "0"); },

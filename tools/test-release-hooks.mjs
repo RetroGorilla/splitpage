@@ -21,6 +21,7 @@ const CONVERTED = Object.freeze([
   "__saveStatusTest",
   "__sceneSelectTest",
   "__settingsTest",
+  "__sharedTest",
   "__splitpageFormats",
   "__targetTest",
   "__undoTest",
@@ -32,6 +33,20 @@ const CONVERTED = Object.freeze([
 const FAKE_DESKTOP = Object.freeze(["_failNextDraftWrites", "_blobFailNext", "0.0.0-test"]);
 
 const HOOK_ONLY = Object.freeze(["idbRecord", "idleFlushes"]);
+
+const SHARED_HOOK_ONLY = Object.freeze([
+  "The peer has left",
+  "The peer beat is missing",
+  "The peer buffer is unavailable",
+  "draft-not-kept",
+  "The shared session did not start",
+  "The draft writer did not detach",
+  "Your writing was kept in recovery.",
+  "This line changed. Try writing again.",
+  "The Writer could not settle",
+  "ownershipScans",
+  "appliedUpdates"
+]);
 
 let passed = 0;
 const failures = [];
@@ -66,6 +81,7 @@ check("the build flag is replaced, not left as a name", !release.includes("SPLIT
 eq("the fake desktop backend and its fault switches are left out", FAKE_DESKTOP.filter((marker) => release.includes(marker)), []);
 eq("the render counters and blob store controls are left out", HOOK_ONLY.filter((marker) => release.includes(marker)), []);
 eq("history fault queues, controls and inspection code are left out", historyTestNames(release), []);
+eq("the shared session hook, its peer and their notices are left out", SHARED_HOOK_ONLY.filter((marker) => release.includes(marker)), []);
 
 console.log("\nthe test build (node build.mjs --test):\n");
 
@@ -75,6 +91,7 @@ eq("a converted hook is never also on the list", CONVERTED.filter((name) => STIL
 eq("it keeps the fake desktop backend and its fault switches", FAKE_DESKTOP.filter((marker) => !testBuild.includes(marker)), []);
 eq("it keeps the render counters and blob store controls", HOOK_ONLY.filter((marker) => !testBuild.includes(marker)), []);
 eq("it keeps every history fault and distinctive control name", historyTestNames(testBuild), [...HISTORY_TEST_NAMES].sort());
+eq("it keeps the shared session hook, its peer and their notices", SHARED_HOOK_ONLY.filter((marker) => !testBuild.includes(marker)), []);
 
 console.log(`\n${passed} passed, ${failures.length} failed\n`);
 if (failures.length) {

@@ -1,0 +1,50 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;F.openFile(new File([JSON.stringify({schema:2,title:'Shared recovery',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello',visualText:''},{id:'r2',audioText:'Removed words',visualText:''}],comments:[]})],'recovery.splitpage'))
+wait F.state().title === 'Shared recovery'
+eval document.activeElement && document.activeElement.blur();true
+key ctrl KeyK
+wait !document.getElementById('cmdk').hidden
+type recovery
+expect !document.querySelector('#cmdk [data-cmd="recovery"]')
+key Escape
+wait document.getElementById('cmdk').hidden
+eval S.enter()
+wait S.read().peer !== null
+key ctrl KeyK
+wait !document.getElementById('cmdk').hidden
+type recovery
+wait document.querySelector('#cmdk [data-cmd="recovery"]') !== null
+key Enter
+wait document.getElementById('shared-recovery-panel') !== null
+expect document.getElementById('shared-recovery-panel').textContent.includes('Nothing in recovery.')
+eval S.peer.remove('r2');S.peer.deliver();true
+wait document.querySelector('#shared-recovery-panel [data-recovery-kind="removed-beat"]') !== null
+expect S.read().app.rows.map(function(r){return r.id}).join() === 'r1'
+expect document.querySelector('#shared-recovery-panel [data-recovery-kind="removed-beat"] pre').textContent.includes('Removed words')
+expect getComputedStyle(document.querySelector('#shared-recovery-panel [data-recovery-kind="removed-beat"] pre')).userSelect !== 'none'
+eval window.getSelection().selectAllChildren(document.querySelector('#shared-recovery-panel [data-recovery-kind="removed-beat"] pre'));true
+expect window.getSelection().toString().includes('Removed words')
+wait (function(){var b=document.querySelector('#shared-recovery-panel [data-recovery-kind="removed-beat"] .history-restore button:first-child');var r=b.getBoundingClientRect();return document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)===b})()
+click #shared-recovery-panel [data-recovery-kind="removed-beat"] .history-restore button:first-child
+eval S.peer.deliver();true
+wait S.read().app.rows.map(function(r){return r.id}).join() === 'r1,r2'
+expect JSON.stringify(S.read().app) === JSON.stringify(S.read().peer)
+expect document.querySelector('#shared-recovery-panel [data-recovery-kind="removed-beat"]') === null
+expect document.querySelectorAll('#rows .row').length === 2
+eval S.peer.remove('r2');S.peer.deliver();true
+wait document.querySelector('#shared-recovery-panel [data-recovery-kind="removed-beat"]') !== null
+wait (function(){var b=document.querySelector('#shared-recovery-panel [data-recovery-kind="removed-beat"] .history-restore button:last-child');var r=b.getBoundingClientRect();return document.elementFromPoint(r.left+r.width/2,r.top+r.height/2)===b})()
+click #shared-recovery-panel [data-recovery-kind="removed-beat"] .history-restore button:last-child
+eval S.peer.deliver();true
+wait document.querySelector('#shared-recovery-panel [data-recovery-kind="removed-beat"]') === null
+expect S.read().app.rows.map(function(r){return r.id}).join() === 'r1'
+expect JSON.stringify(S.read().app) === JSON.stringify(S.read().peer)
+eval S.leave()
+expect S.read().peer === null
+expect document.getElementById('shared-recovery-panel') === null
+key ctrl KeyK
+wait !document.getElementById('cmdk').hidden
+type recovery
+expect !document.querySelector('#cmdk [data-cmd="recovery"]')
+key Escape

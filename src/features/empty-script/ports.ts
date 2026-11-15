@@ -7,7 +7,7 @@ import type { CommandOutcome } from "../../application/session/document-session.
 export type EmptyScriptCreated = { readonly ok: true; readonly rowId: string } | ({ readonly ok: false } & Omit<Extract<CommandOutcome, { kind: "rejected" }>, "kind">);
 export type EmptyScriptHold = { readonly ok: true; readonly release: () => void } | { readonly ok: false; readonly reason: string };
 
-export interface EmptyScriptPorts extends Pick<BufferedFieldPorts, "report"> {
+export interface EmptyScriptPorts extends Pick<BufferedFieldPorts, "report" | "abandonment"> {
   readonly host: HTMLElement;
   readonly document: Pick<DocumentReader, "current" | "onChange">;
   readonly lifetime: Pick<SharedDocumentSession, "epoch" | "beforeCommand">;

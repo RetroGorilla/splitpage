@@ -36,6 +36,7 @@ async function share() {
   const standalone = currentCapabilities();
   const ports: SharedSwitchPorts = {
     opening: openingStatus,
+    commandRefused: undefined,
     refusal: () => null, settle: () => {}, detach: () => {},
     bindings: { enter: () => {}, settle: () => null, leave: () => {} },
     common: standalone, standalone, migrate: migrateRows, docId: () => "d" + String(ids++).padStart(32, "0"),
