@@ -186,7 +186,8 @@ export class AdapterReplica {
       : { kind: "record-set", ...this.author(), target, field: main, value };
     let reason: string | null = null;
     this.world.now += 2000;
-    const statused = collection === "tags" || collection === "shots", status = () => statused ? readSharedStatus(this.handle, { scope, record: ref(key) }) : undefined, before = status();
+    const statused = collection === "tags" || collection === "shots", status = () => statused ? readSharedStatus(this.handle, { scope, record: ref(key) }) : undefined;
+    const before = action === "delete" ? status() : undefined;
     this.undo.perform(() => {
       const execution = executeSharedCommand(this.handle, [operation(made)], { label: "record", selection: null, typing: null });
       if (!execution.result.ok) reason = execution.result.reason;
@@ -226,23 +227,24 @@ export class AdapterReplica {
     return selection.anchor === selection.focus ? from : { ...from, selection: { beat: from.beat, from: from.offset, to: to.offset } };
   }
 
+  private reading(collection: SharedRecordCollection, key: string, found: Readonly<Record<string, unknown>>): string {
+    const fields = { ...found as Record<string, unknown> };
+    if (collection === "tags") fields.status = readSharedStatus(this.handle, { scope: "tag", record: ref(key) });
+    if (collection === "shots") fields.status = readSharedStatus(this.handle, { scope: "shot", record: ref(key) });
+    return JSON.stringify(Object.keys(fields).sort().map(field => [field, fields[field]]));
+  }
+
+  // why: a removed record is read only when an undo of its removal is about to run, so a step reads nothing more.
+  kept(slot: string): string | undefined {
+    const at = slot.indexOf("|"), collection = slot.slice(0, at) as SharedRecordCollection, key = slot.slice(at + 1);
+    const removed = readSharedDeletedRecordFields(collection, key, collabState(this.handle).roots[collection].get(key));
+    return removed ? this.reading(collection, key, removed) : undefined;
+  }
+
   snapshot(): ModelSnapshot {
-    const records: Record<string, string> = {}, kept: Record<string, string> = {};
-    const reading = (collection: SharedRecordCollection, key: string, found: Readonly<Record<string, unknown>>): string => {
-      const fields = { ...found as Record<string, unknown> };
-      if (collection === "tags") fields.status = readSharedStatus(this.handle, { scope: "tag", record: ref(key) });
-      if (collection === "shots") fields.status = readSharedStatus(this.handle, { scope: "shot", record: ref(key) });
-      return JSON.stringify(Object.keys(fields).sort().map(field => [field, fields[field]]));
-    };
-    for (const collection of SHARED_UNDO_RECORDS) {
-      for (const item of readSharedRecords(this.handle, collection)) records[collection + "|" + item.key] = reading(collection, item.key, item.fields);
-      const root = collabState(this.handle).roots[collection];
-      for (const key of [...root.keys()].sort()) {
-        const removed = readSharedDeletedRecordFields(collection, key, root.get(key));
-        if (removed) kept[collection + "|" + key] = reading(collection, key, removed);
-      }
-    }
-    return { records, kept, rows: this.world.beats.map(beat => {
+    const records: Record<string, string> = {};
+    for (const collection of SHARED_UNDO_RECORDS) for (const item of readSharedRecords(this.handle, collection)) records[collection + "|" + item.key] = this.reading(collection, item.key, item.fields);
+    return { records, rows: this.world.beats.map(beat => {
       const history = this.history(beat), record = scalarTarget(this.handle, { scope: "beat", record: ref(beat) });
       return { id: beat, status: readSharedStatus(this.handle, { scope: "beat", record: ref(beat) }),
         scalars: Object.fromEntries(SCALARS.filter(field => record?.has(field)).map(field => [field, JSON.stringify(record?.get(field))] as const)),
