@@ -78,10 +78,10 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
   function cell(value: readonly SharedProjectionUnit[], rowId: string, field: "audioText" | "visualText", key: string): string {
     const units = value;
     const result = cache.read(["cell", key], [units, tags], () => projectSharedTextResult(units, tags), "cell");
-    recovery.push(...result.rejected.map(entry => {
+    for (const entry of result.rejected) {
       const first = units[entry.from]?.identity;
-      return { ...entry, rowId, field, start: first ? sharedRecoveryIdentityKey(first) : null };
-    }));
+      recovery.push({ ...entry, rowId, field, start: first ? sharedRecoveryIdentityKey(first) : null });
+    }
     return result.html;
   }
   for (const fragment of fragments) if (fragment.reason) recovery.push({ kind: "unprojectable-fragment", reason: fragment.reason,
@@ -119,8 +119,8 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
   for (const plan of plans) if (!plan.group.removed) anchor(plan);
   for (const plan of plans) {
     const { group, members, row, overflow, audio, visualCells } = plan;
-    recovery.push(...overflow.map(entry => ({ kind: "gallery-overflow" as const, rowId: group.root, ...entry,
-      slot: canonicalSharedProjection(entry.slot, "gallery") as Record<string, unknown> })));
+    for (const entry of overflow) recovery.push({ kind: "gallery-overflow" as const, rowId: group.root, ...entry,
+      slot: canonicalSharedProjection(entry.slot, "gallery") as Record<string, unknown> });
     const audioText = cell(broll.get(audio.key) ?? audio.units, group.root, "audioText", audio.key);
     const visualText = visualCells.map(value => cell(broll.get(value.key) ?? value.units, group.root, "visualText", value.key)).filter(Boolean).join("<br>");
     const painted = cache.read(["painted-row", group.root], [row, audioText, visualText], () => ({ ...row, audioText, visualText }));
@@ -159,18 +159,18 @@ export function assembleSharedDocument(source: SharedProjectionSource, previous:
   const deleted = source.deletedPeople(), removedRecords = source.deletedRecords();
   // why: a person whose removal an edit raced is listed once, as that record, which a restore brings back with the edit.
   const raced = new Set(removedRecords.flatMap(entry => entry.collection === "people" && entry.field === null ? [entry.record] : []));
-  if (deleted.length) recovery.push(...projectSharedDeletedPeople(deleted.filter(person => !raced.has(person.person)), { people: out.people as Record<string, unknown>[], tags, shots: out.brollShots as Record<string, unknown>[] },
+  if (deleted.length) for (const entry of projectSharedDeletedPeople(deleted.filter(person => !raced.has(person.person)), { people: out.people as Record<string, unknown>[], tags, shots: out.brollShots as Record<string, unknown>[] },
     plans.filter(plan => !plan.group.removed).map(plan => ({ rowId: plan.group.root, names: plan.visualCells.flatMap(value => {
       const units = broll.get(value.key) ?? value.units;
       return cache.read(["who-names", value.key], [units], () => { cache.counted("who-scan", value.key, units.length); return readSharedWhoNames(units); });
-    }) }))));
-  recovery.push(...removedRecords);
+    }) })))) recovery.push(entry);
+  for (const entry of removedRecords) recovery.push(entry);
   const visible = rows.map(row => String(row.id));
   const { sections, empty } = cache.read(["sections"], [...headings, ...visible], () => projectSharedSections(headings, new Set(visible)));
-  recovery.push(...empty.map(entry => ({ kind: "scene-with-no-beats" as const, heading: canonicalSharedProjection(entry.heading, "section") as Record<string, unknown>, beforeRowId: entry.beforeRowId })));
+  for (const entry of empty) recovery.push({ kind: "scene-with-no-beats" as const, heading: canonicalSharedProjection(entry.heading, "section") as Record<string, unknown>, beforeRowId: entry.beforeRowId });
   const words = new Set(anchored);
   for (const fragment of fragments) if (fragment.reason || fragment.kind === "h") readSharedCommentAnchors(fragment.units, words);
-  recovery.push(...projectSharedLostComments(comments, words, source.records("replies")));
+  for (const entry of projectSharedLostComments(comments, words, source.records("replies"))) recovery.push(entry);
   Object.assign(out, { rows }); if (sections.length) out.sections = sections; else delete out.sections;
   const document = cache.canonical(out) as DocumentShape;
   const changes = compareSharedProjections(previous, document, (kind, key) => cache.counted(kind === "row" ? "compare-row" : "compare-field", key));

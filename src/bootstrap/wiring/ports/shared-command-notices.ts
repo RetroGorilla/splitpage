@@ -3,10 +3,12 @@ import type { SharedSessionPorts } from "../../../application/session/shared-ses
 import type { SharedCommandGuard } from "../../../application/session/document-edits.ts";
 import type { BufferedFieldPorts } from "../../../application/editing/buffered-field.ts";
 import { SHARED_SESSION_DISABLED } from "../../../application/session/ports.ts";
+import { REWRITE_CELL_CHANGED } from "../../../application/commands/document-edit.ts";
 
 export function sharedCommandRefusalNotice(notices: Pick<NoticePort, "show">): NonNullable<SharedSessionPorts["refused"]> {
   return reason => {
-    notices.show(reason === SHARED_SESSION_DISABLED.moves ? reason : "This is not available in a shared session yet.", "warn");
+    notices.show(reason === SHARED_SESSION_DISABLED.moves ? reason : reason === REWRITE_CELL_CHANGED ? "This line changed. Try replacing again."
+      : "This is not available in a shared session yet.", "warn");
   };
 }
 
