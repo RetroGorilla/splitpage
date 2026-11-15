@@ -24,6 +24,7 @@ import { collabState } from "./state.ts";
 import { observeSharedStructureIndex } from "./structure-index.ts";
 import { resolveIndexedRestorableBeat } from "./structure-plan.ts";
 import { readSharedContentRef } from "../../core/collab/read-operation.ts";
+import { projectSharedDocumentWithRecovery } from "./project.ts";
 
 export function sharedBufferSourceSegment(handle: SharedDocumentHandle, rowId: string): string | null {
   const segment = resolveIndexedRestorableBeat(observeSharedStructureIndex(handle), rowId)?.segment;
@@ -103,13 +104,16 @@ export function createSharedBufferedText(
               const preceding = offset > 0 ? local.identity(offset - 1) : null;
               return preceding ? sharedAnchorCharacterEnd(preceding) : local.identity(0) ?? local.emptyGap ?? null;
             }) ?? [];
+            const beforeDrain = readSharedRevision(handle);
             buffer.commit(); open = false;
             try { release(); } catch (error) {
               outcome = outcome.kind === "noop" ? { kind: "failed", error }
                 : { ...outcome, kind: "committed", errors: [...(outcome.kind === "committed" ? outcome.errors : []), error] };
             }
             const restored = selection ? resolveSharedBufferedSelection(handle, anchors, target.field === "audioText" ? undefined : { key: rowId, target }) : undefined;
-            return { ...outcome, ...restored ? { selection: restored } : {}, ...local ? { written: local } : {} };
+            const recovered = readSharedRevision(handle) !== beforeDrain && (target.field === "audioText" || target.field === "visualText")
+              && projectSharedDocumentWithRecovery(handle).recovery.some(entry => entry.kind === "removed-beat" && entry.members.includes(target.owner));
+            return { ...outcome, ...restored ? { selection: restored } : {}, ...local ? { written: local } : {}, ...recovered ? { recovered: true } : {} };
           }
           return outcome;
         },

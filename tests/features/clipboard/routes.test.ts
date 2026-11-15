@@ -84,6 +84,19 @@ function release(held: Held[], at: number, extra: Extra): void {
 
 const settle = () => new Promise((r) => setImmediate(r));
 
+for (const type of ["copy", "cut", "paste"] as const) test(`C7 D17: prevented ${type} never reaches standalone clipboard ports`, () => {
+  const p = page(), h = harness(p);
+  p.byId("rows").addEventListener(type, event => { event.preventDefault(); }, true);
+  const routes = h.mount();
+  try {
+    const event = clip(p, type, p.byId("rows-script"), { html: "<b>Other</b>", text: "Other" });
+    assert.equal(event.defaultPrevented, true);
+    assert.deepEqual(h.calls, []);
+    assert.equal(p.byId("rows-script").textContent, "Hi");
+    assert.equal(p.doc.activeElement, p.doc.body);
+  } finally { routes.dispose(); }
+});
+
 test("only clipboard events mark insertions as pastes, including after asynchronous media reads", async () => {
   const p = page();
   const h = harness(p);

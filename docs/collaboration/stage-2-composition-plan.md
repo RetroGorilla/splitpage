@@ -309,6 +309,12 @@ Found in the review of #1551, for other cuts:
 Wiring notes from pull requests merged or in review since the plan, each for the cut
 that wires its surface:
 
+- **C7, first part.** `sharedSplitBindings` in `src/bootstrap/wiring/shared-split.ts`
+  supplies the switch's binding port for Split. It mounts the existing buffer,
+  selects shared input/focus/composition ports, and restores cold ports on leave.
+  [The binding record](stage-2-split-composed.md) covers D16, D17 and D18 and
+  records the hook's combined Writer/Split binding and five abandonment steps. Command
+  callers and D27 remain the next part; this does not close the whole C7 row.
 - **C6 or later, Writer paste** (paste is outside C6's typing scope). The shared
   Writer selects `pasteSharedFlowClipboard` and passes the handle to
   `writerFlowCommands(flow, { author, writer })`, with `writer` from the same handle

@@ -513,8 +513,8 @@
     {
       "label": "the hook leaves the recovery panel binding out",
       "file": "src/bootstrap/wiring/shared-test.ts",
-      "find": "const bindings = joinSharedBindings(writing, recoveryPanelBinding);",
-      "replace": "const bindings = joinSharedBindings(writing, { enter: () => {}, leave: () => {} });",
+      "find": "const bindings = joinSharedBindings(editing, recoveryPanelBinding);",
+      "replace": "const bindings = joinSharedBindings(editing, { enter: () => {}, leave: () => {} });",
       "tests": ["src/test/shared-hook-app.test.mjs"]
     },
     {

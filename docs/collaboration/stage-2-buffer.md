@@ -199,6 +199,12 @@ holds the literal, the refusals, the adopted document, a formatted field and T01
 with the removal command, where typing committed before a held removal joins that
 beat's recovery and adds no entry of its own.
 
+That successful T01 commit also calls `recovered(rowId)` once if releasing its
+hold drains the removal and the edited beat is then in removed-beat recovery.
+It creates no additional recovery entry or write. The Split and Writer bindings
+announce this path under rule 29, just as they announce the explicit recovery
+write; repeated delivery adds no announcement.
+
 The Writer binding asks for the write inside settlement, when a commit left its
 edit open. On success it forgets the edit, repaints the field from the document,
 puts the caret back at its offset (the surface clamps it to the repainted text),
