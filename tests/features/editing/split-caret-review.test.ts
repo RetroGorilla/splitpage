@@ -11,6 +11,34 @@ import { fakePictures } from "../fakes.ts";
 import { mountClipboardRoutes } from "../../../src/features/clipboard/routes.ts";
 import { mountRowRoutes } from "../../../src/features/rows/routes.ts";
 
+for (const field of ["audioText", "visualText"] as const) for (const backward of [false, true]) {
+  test(`C7 disposal restores native space forms and both selection ends in ${field}, backward ${backward}`, () => {
+    const p = splitCaretPage("Word", "Tail");
+    try {
+      assert.equal(p.type(field, 4, 4, " ", "R1"), true);
+      assert.equal(p.type(field, 4, 4, " ", "R2"), true);
+      const cell = p.cell(field, backward ? "R2" : "R1"), end = p.cell(field, backward ? "R1" : "R2");
+      cell.focus();
+      const anchor = posToDom(cell, 5), head = posToDom(end, 5);
+      document.getSelection()?.setBaseAndExtent(anchor.node, anchor.offset, head.node, head.offset);
+      assert.equal(p.buffer.dispose(), true);
+      const selection = document.getSelection(); assert.ok(selection?.anchorNode); assert.ok(selection.focusNode);
+      assert.deepEqual([domToPos(cell, selection.anchorNode, selection.anchorOffset), domToPos(end, selection.focusNode, selection.focusOffset)], [5, 5]);
+      assert.equal(p.cell(field, "R1").textContent, "Word ");
+      assert.equal(p.cell(field, "R2").textContent, "Tail ");
+      assert.deepEqual([p.buffer.spaceForm(cell), p.buffer.spaceForm(end)], [null, null]);
+      assert.equal(p.root.querySelector("[data-shared-cell-space-form], [data-shared-cell-space]"), null);
+      p.h.join(); p.h.queue.flush("dup");
+      for (const handle of [p.h.a, p.h.b, p.h.c]) assert.deepEqual(projectSharedDocumentWithRecovery(handle).document.rows.map(row =>
+        [row.id, projection(fromHtml(row.audioText ?? "")), projection(fromHtml(row.visualText ?? ""))]), [
+        ["R1", field === "audioText" ? "Word " : "Word", field === "visualText" ? "Word " : "Word"],
+        ["R2", field === "audioText" ? "Tail " : "Tail", field === "visualText" ? "Tail " : "Tail"]
+      ]);
+      assert.deepEqual([p.a.executed.length, p.reports, p.missing, p.recovered], [2, [], [], []]);
+    } finally { p.close(); }
+  });
+}
+
 for (const backward of [false, true]) {
   test(`rule 89 review: both selection ends survive split, two remote repaints and a full repaint, backward ${backward}`, () => {
     const p = splitCaretPage(), fresh = "structure_2_00730070006c00690074_beat_0";

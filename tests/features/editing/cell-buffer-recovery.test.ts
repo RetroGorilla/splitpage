@@ -172,7 +172,7 @@ test("rule 38 in the Split view: a refused recovery write shows its refusal and 
   } finally { page.close(); }
 });
 
-test("rule 38, T01 in the Split view: typing over a held removal joins that beat's recovery, with no recovery write and no announcement", () => {
+test("rule 29, T01 in the Split view: typing over a held removal joins that beat's recovery, with no recovery write and one announcement", () => {
   const page = recovering("ab");
   try {
     registerSharedRemovalHandlers(page.h.b);
@@ -181,7 +181,7 @@ test("rule 38, T01 in the Split view: typing over a held removal joins that beat
         observed: [flowBaseReference("R1", "audioText", 0, 2)], boundaries: ["R1"], components: [], gallery: [], at: 0 })], { base: readSharedRevision(page.h.b) }), { ok: true });
       page.h.queue.deliverFrom("B", "D1");
     } }), true);
-    assert.deepEqual([page.recovered, page.reports, page.root.querySelector('.row[data-id="R1"]')], [[], [], null]);
+    assert.deepEqual([page.recovered, page.reports, page.root.querySelector('.row[data-id="R1"]')], [["R1"], [], null]);
     assert.deepEqual(page.a.executed.map(command => command.operations.map(operation => operation.kind)), [["text-insert", "scalar"]]);
     copies(page, { rows: [{ id: "R2", text: "next" }], recovery: [{ id: "R1", text: "abZ", members: ["R1"] }] });
   } finally { page.close(); }
