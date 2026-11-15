@@ -1,3 +1,6 @@
+import type { SharedCommentPorts } from "../../../application/commands/comments.ts";
+import type { SharedGalleryCommands } from "../../../application/commands/gallery.ts";
+import type { SharedRecordCommands, SharedRecordPorts } from "../../../application/commands/shared-records.ts";
 import type { SharedSettledSelection, SharedStructureCommands } from "../../../application/commands/shared-structure.ts";
 import { sharedBufferedTarget } from "../../../adapters/collab/buffer.ts";
 import { holdSharedCapture } from "../../../adapters/collab/ingress.ts";
@@ -12,6 +15,9 @@ import type { SharedSessionParts } from "../shared-session.ts";
 import { sharedUndoRoute, stepSharedUndo, undoOwner } from "../undo.ts";
 import { notices } from "./effects.ts";
 import { sharedCommandRefusalNotice } from "./shared-command-notices.ts";
+import { sharedCommentPorts } from "./shared-comments.ts";
+import { sharedGalleryPorts } from "./shared-gallery.ts";
+import { sharedRecordPorts } from "./shared-records.ts";
 import { sharedStructurePorts, sharedValuePorts } from "./shared-values.ts";
 import { timingMarks } from "../../../../shared/timing-marks.ts";
 
@@ -136,6 +142,42 @@ export const sharedValueCommands: SharedValueCommands = {
   ports: () => {
     const parts = sharedSessionParts();
     return parts ? sharedValuePorts(source(parts))() : null;
+  },
+  refused
+};
+
+const recordPorts = new WeakMap<SharedSessionParts, SharedRecordPorts>();
+
+export const sharedRecordCommands: SharedRecordCommands = {
+  ports: () => {
+    const parts = sharedSessionParts();
+    if (!parts) return null;
+    // why: one ports object per session, so a panel can tell a draft typed in this session from the next one
+    const made = recordPorts.get(parts) ?? sharedRecordPorts(source(parts));
+    recordPorts.set(parts, made);
+    return made;
+  },
+  refused
+};
+
+export const sharedGalleryCommands: SharedGalleryCommands = {
+  ports: () => {
+    const parts = sharedSessionParts();
+    return parts ? sharedGalleryPorts(source(parts)) : null;
+  },
+  refused,
+  done: message => { notices.show(message, "ok"); }
+};
+
+const commentPorts = new WeakMap<SharedSessionParts, SharedCommentPorts>();
+
+export const sharedCommentCommands: SharedRecordCommands<SharedCommentPorts> = {
+  ports: () => {
+    const parts = sharedSessionParts();
+    if (!parts) return null;
+    const made = commentPorts.get(parts) ?? sharedCommentPorts({ ...source(parts), cells: html => sessionTextPorts.cells(html ?? "") })();
+    if (made) commentPorts.set(parts, made);
+    return made;
   },
   refused
 };

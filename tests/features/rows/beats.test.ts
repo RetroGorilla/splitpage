@@ -155,7 +155,7 @@ test("scene media: a gallery change goes through the gallery edit, and a paste p
     notices: notices.notices,
     ownership: fakeOwnership().ownership,
     pictures: fakePictures().pictures,
-    cells: { editGallery: (rowId, message) => { edited.push(rowId + ": " + message); return true; } },
+    cells: { editGallery: (rowId, message) => { edited.push(rowId + ": " + message); return { changed: true, held: false }; } },
     text: { storedHtmlFromDom },
     selection: { of: () => ({ from: 1, to: 3 }), set: (_cell, from, to) => { placed.push([from, to]); } }
   };
@@ -183,7 +183,7 @@ test("scene media: taking an attached file's link off is undone as a file link, 
     notices: fakeNotices().notices,
     ownership: fakeOwnership().ownership,
     pictures: fakePictures().pictures,
-    cells: { editGallery: (rowId, message) => { edited.push(rowId + ": " + message); return true; } },
+    cells: { editGallery: (rowId, message) => { edited.push(rowId + ": " + message); return { changed: true, held: false }; } },
     text: { storedHtmlFromDom },
     selection: { of: () => ({ from: 1, to: 3 }), set: () => {} }
   };

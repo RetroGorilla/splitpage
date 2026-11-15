@@ -150,8 +150,7 @@ export function startGalleryVideo(ports: GalleryVideoPorts): GalleryVideoMount {
         inFlightKeys.delete(key);
         if (!rec) { failedKeys.add(key); return; }
         if (!ports.ownership.stillOwns(ctx)) return;
-        const done = ports.cells.editGallery(rowId, "Thumbnail added", function (row) { return setVideoThumbnail(row, key, rec); });
-        if (done) ports.viewer.refresh();
+        if (ports.cells.editGallery(rowId, "Thumbnail added", function (row) { return setVideoThumbnail(row, key, rec); }).changed) ports.viewer.refresh();
       });
     });
   }

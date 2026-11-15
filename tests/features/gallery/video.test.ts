@@ -36,7 +36,7 @@ function setup(opts: { allowed?: boolean; thumbnail?: (host: string, ref: string
         const row = doc.rows.find((r) => r.id === rowId);
         const changed = !!row && !!edit(row);
         edits.push({ rowId, message, changed });
-        return changed;
+        return { changed, held: false };
       }
     },
     viewer: { refresh: () => { refreshed.push(1); } },
@@ -61,7 +61,7 @@ function setup(opts: { allowed?: boolean; thumbnail?: (host: string, ref: string
       ownership: ownership.ownership,
       undo: { fold: () => false },
       document: fakeDocument(doc).document,
-      cells: { editGallery: () => false },
+      cells: { editGallery: () => ({ changed: false, held: false }) },
       viewer: { refresh: () => {} }
     }
   };

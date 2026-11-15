@@ -37,6 +37,8 @@ import { deleteRange, replaceText, replaceWithTag, setMark } from "../../core/te
 import { namedTagId, projection } from "../../core/text/runs.ts";
 import { changeSet } from "../../application/session/change-set.ts";
 import { addPersonCommand, registerTagCommand, tagCellsCommand } from "../../application/commands/production-records.ts";
+import { runRecordCommand } from "../../application/commands/shared-records.ts";
+import type { SharedRecordBuild } from "../../application/commands/shared-records.ts";
 import { personNamed, registryEntryById as registryEntryByIdIn } from "../../core/production/records.ts";
 
 let currentDocument: ProductionTagPorts["document"]["current"] | null;
@@ -57,6 +59,12 @@ let breakUndoCoalescing: ProductionTagPorts["undo"]["breakCoalescing"] | null;
 let viewFlags: ProductionTagPorts["view"] | null;
 let showToast: ProductionTagPorts["notices"]["show"] | null;
 let randomIds: ProductionTagPorts["ids"] | null;
+let recordEdits: Pick<ProductionTagPorts, "edits" | "shared"> | null;
+
+function editRecords(build: SharedRecordBuild) {
+  const use = recordEdits as NonNullable<typeof recordEdits>;
+  return runRecordCommand(use.edits, use.shared, build);
+}
 
 function safeId(id: unknown, prefix: string) { return safeIdFrom(id, prefix, (randomIds as NonNullable<typeof randomIds>)); }
 
@@ -99,7 +107,7 @@ export function collectTagsFromRows(rows: readonly ProductionRow[] | null | unde
 }
 
 export function registerProductionTag(cat: string, name: unknown) {
-  return (runDocumentEdit as NonNullable<typeof runDocumentEdit>)(registerTagCommand({ cat: cat, name: String(name == null ? "" : name) }));
+  return editRecords(shared => registerTagCommand({ cat: cat, name: String(name == null ? "" : name) }, shared));
 }
 
 export function registryEntryById(id: string) {
@@ -107,7 +115,7 @@ export function registryEntryById(id: string) {
 }
 
 export function findOrAddPerson(name: string) {
-  (runDocumentEdit as NonNullable<typeof runDocumentEdit>)(addPersonCommand(name, (randomIds as NonNullable<typeof randomIds>)));
+  editRecords(shared => addPersonCommand(name, (randomIds as NonNullable<typeof randomIds>), shared));
   const person = (readSession as NonNullable<typeof readSession>)(function (doc) { return personNamed(doc, name); });
   return person ? person.id : "";
 }
@@ -668,6 +676,7 @@ export function startProductionTags(ports: ProductionTagPorts) {
   viewFlags = ports.view;
   showToast = ports.notices.show;
   randomIds = ports.ids;
+  recordEdits = ports;
   TAG_SHORTCUT_CHARS = (function () {
     let s = "";
     TAG_SHORTCUTS.forEach(function (r) {
@@ -732,7 +741,7 @@ export function startProductionTags(ports: ProductionTagPorts) {
         currentDocument = readSession = requestRefresh = runDocumentEdit = sessionStamps = stampDocument = null;
         sharedCommands = null;
         cellOf = inertBody = sanitizeHtml = productionReaders = null;
-        productionIndex = cellEditing = focusMemory = breakUndoCoalescing = viewFlags = showToast = randomIds = null;
+        productionIndex = cellEditing = focusMemory = breakUndoCoalescing = viewFlags = showToast = randomIds = recordEdits = null;
         tagsInField = TAG_SHORTCUT_CHARS = cancelRefresh = null;
       }
     }

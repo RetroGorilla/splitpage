@@ -6,7 +6,7 @@ import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
 import { startBrollPanel, mountBrollPanel } from "../../../src/features/broll/panel.ts";
 import type { BrollPanelPorts } from "../../../src/features/broll/ports.ts";
-import { fakeDocument, fakeEdits, fakeNotices, fakeScreen } from "../fakes.ts";
+import { fakeDocument, fakeEdits, fakeNotices, fakeScreen, fakeStandaloneRecords } from "../fakes.ts";
 
 const win = jsdomWindow() as unknown as Window & typeof globalThis;
 const realm = globalThis as unknown as Record<string, unknown>;
@@ -31,7 +31,9 @@ function fixture() {
     preferences: { panelGrouping: () => null, setPanelGrouping: () => {} },
     changes: { onChange: () => () => {} },
     document: fakeDocument().document,
+    lifetime: { epoch: () => 0 },
     edits: fakeEdits().edits,
+    shared: fakeStandaloneRecords(),
     text: { productionReaders: { cellOf: () => [], tagsInField: () => [], cueNamesInField: () => [], brollInField: () => [], brollPropsInField: () => [], wordCount: () => 0, whoInField: () => ({ names: [], pairs: [] }) } },
     ids: { id: (prefix) => prefix + "test", docId: () => "test" },
     production: { entries: () => [] },
@@ -48,7 +50,7 @@ function fixture() {
     undo: { breakCoalescing: () => { calls.push("break"); } },
     actions: { invoke: (id) => { calls.push(id); return { kind: "ran", id }; } },
     notices: fakeNotices().notices,
-    records: { brollEntries: () => [], addBrollProp: () => false, renameBrollInScript: () => false, updateBrollBadge: () => {} },
+    records: { brollEntries: () => [], renameBrollInScript: () => ({ changed: false, held: false }), updateBrollBadge: () => {} },
     rows: { focusField: (id, field) => { calls.push(id + ":" + field); } }
   };
   return { ports, calls, view };

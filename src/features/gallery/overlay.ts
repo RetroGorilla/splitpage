@@ -335,8 +335,8 @@ function retryThumbnail() {
       if (view) refreshGalleryOverlay();
       return;
     }
-    const done = rec && rowOf(rowId) && (ports as OverlayPortUse).cells.editGallery(rowId, "Thumbnail added", function (row) { return setVideoThumbnail(row, key, rec); });
-    if (!done && !hasThumbnail(rowId, key)) (ports as OverlayPortUse).notices.show("Could not get this video’s thumbnail — you may be offline, or the video is private or gone.", "warn");
+    const run = rec && rowOf(rowId) ? (ports as OverlayPortUse).cells.editGallery(rowId, "Thumbnail added", function (row) { return setVideoThumbnail(row, key, rec); }) : null;
+    if (!run?.held && !run?.changed && !hasThumbnail(rowId, key)) (ports as OverlayPortUse).notices.show("Could not get this video’s thumbnail — you may be offline, or the video is private or gone.", "warn");
     if (view && (view as GalleryView).rowId === rowId) refreshGalleryOverlay();
   });
 }
@@ -378,7 +378,7 @@ function step(by: number) {
 function moveTo(from: number, to: number) {
   if (from === to) return;
   const rowId = (view as GalleryView).rowId;
-  if ((ports as OverlayPortUse).cells.editGallery(rowId, "Moved to " + (to + 1), function (row) { return moveGallerySlot(row, from, to); })) {
+  if ((ports as OverlayPortUse).cells.editGallery(rowId, "Moved to " + (to + 1), function (row) { return moveGallerySlot(row, from, to); }).changed) {
     (view as GalleryView).sel = to;
     refreshGalleryOverlay();
   }
@@ -388,7 +388,7 @@ function makeCover() {
   if (!(view as GalleryView).sel) return;
   const from = (view as GalleryView).sel;
   const rowId = (view as GalleryView).rowId;
-  if ((ports as OverlayPortUse).cells.editGallery(rowId, "Made the cover", function (row) { return moveGallerySlot(row, from, 0); })) {
+  if ((ports as OverlayPortUse).cells.editGallery(rowId, "Made the cover", function (row) { return moveGallerySlot(row, from, 0); }).changed) {
     (view as GalleryView).sel = 0;
     refreshGalleryOverlay();
   }
@@ -399,7 +399,7 @@ function removeSelected() {
   const rowId = (view as GalleryView).rowId;
   const slot = rowSlots((rowOf(rowId) as { row: unknown; index: number; }).row)[at];
   const what = slotPoster(slot as Slot) ? "Video" : "Picture";
-  (ports as OverlayPortUse).cells.editGallery(rowId, what + " removed", function (row) { return removeGallerySlot(row, at); });
+  if ((ports as OverlayPortUse).cells.editGallery(rowId, what + " removed", function (row) { return removeGallerySlot(row, at); }).held) return;
   if (view) {
     (view as GalleryView).sel = Math.max(0, at - 1);
     refreshGalleryOverlay();
@@ -411,7 +411,9 @@ function removeAnnotations() {
   const slot = rowSlots((rowOf((view as GalleryView).rowId) as { row: unknown; index: number; }).row)[at];
   if (!slot || !slot.annotation) return;
   const original = slot.annotation.imageRef;
-  if (!(ports as OverlayPortUse).cells.editGallery((view as GalleryView).rowId, "Annotations removed", function (row) { return annotateGallerySlot(row, at, null, original, []); })) {
+  const run = (ports as OverlayPortUse).cells.editGallery((view as GalleryView).rowId, "Annotations removed", function (row) { return annotateGallerySlot(row, at, null, original, []); });
+  if (run.held) return;
+  if (!run.changed) {
     (ports as OverlayPortUse).notices.show("Could not go back to the original — the gallery already shows that picture.", "warn");
     return;
   }

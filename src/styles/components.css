@@ -2301,3 +2301,28 @@ body:has(> .writer:not([hidden])) .tagging-help { z-index: 147; }
   font: inherit;
   resize: vertical;
 }
+
+.typed-unsaved { display: grid; gap: 8px; margin: 0 0 12px; }
+.typed-unsaved-item {
+  display: grid;
+  gap: 6px;
+  padding: 10px 12px;
+  border: 1px solid var(--accent);
+  border-radius: 8px;
+  background: var(--surface);
+}
+.typed-unsaved-label { color: var(--text); font-size: 13px; line-height: 18px; }
+.typed-unsaved-text {
+  box-sizing: border-box;
+  width: 100%;
+  padding: 8px;
+  color: var(--text);
+  background: var(--bg);
+  border: 1px solid var(--border);
+  border-radius: 6px;
+  font: inherit;
+  font-size: 13px;
+  resize: vertical;
+}
+.typed-unsaved-dismiss { justify-self: end; }
+[data-unsaved] { outline: 1px solid var(--accent); outline-offset: 2px; }

@@ -1,4 +1,5 @@
 import type { ActionDefinition } from "../../application/actions.ts";
+import { NOTHING_RAN } from "../../application/commands/shared-records.ts";
 import { startBrollPanel as mountPanelState, mountBrollPanel } from "../../features/broll/panel.ts";
 import { brollPanelActions as panelDefinitions } from "../../features/broll/actions.ts";
 import type { BrollPanelEventsPorts, BrollPanelPorts, BrollPanelState } from "../../features/broll/ports.ts";
@@ -14,8 +15,9 @@ import { undoControl as portUndo } from "./ports/editing.ts";
 import { screen as portScreen } from "./ports/screen.ts";
 import { createRecordsReconciler } from "../../application/production/broll-records.ts";
 import { text as portText } from "./ports/text.ts";
-import { documentReader as portDocument } from "./ports/document.ts";
+import { documentLifetime as portLifetime, documentReader as portDocument } from "./ports/document.ts";
 import { edits as portEdits } from "./ports/editing.ts";
+import { sharedRecordCommands } from "./ports/shared-commands.ts";
 import { production as portProduction } from "./ports/production.ts";
 import type { RecordsReconciler } from "../../application/production/broll-records.ts";
 import { randomIds } from "../../adapters/identity/ids.ts";
@@ -37,6 +39,7 @@ export function mountBrollFeature(): BrollRecordsMount {
     const records = createBrollRecords({
       document: { current: portDocument.current, read: portDocument.read, numbering: portDocument.numbering },
       edits: portEdits,
+      shared: sharedRecordCommands,
       cells: { edit: (cell, change) => cellEditing().edit(cell, change) },
       paint: { whileShown: (edit) => paintGuard().whileShown(edit) },
       text,
@@ -98,7 +101,9 @@ export function mountBrollPanelStateFeature(): BrollPanelState {
       preferences: portPreferences,
       changes,
       document: portDocument,
+      lifetime: portLifetime,
       edits: portEdits,
+      shared: sharedRecordCommands,
       text: portText,
       ids: portIds,
       production: portProduction,
@@ -112,8 +117,7 @@ export function mountBrollPanelStateFeature(): BrollPanelState {
       rows: portRows,
       records: {
         brollEntries: () => broll.owner()?.brollEntries() ?? [],
-        addBrollProp: (id, name) => broll.owner()?.addBrollProp(id, name) ?? false,
-        renameBrollInScript: (entry, name) => broll.owner()?.renameBrollInScript(entry, name) ?? false,
+        renameBrollInScript: (entry, name, quiet) => broll.owner()?.renameBrollInScript(entry, name, quiet) ?? NOTHING_RAN,
         updateBrollBadge: () => broll.owner()?.updateBrollBadge()
       }
     };

@@ -256,8 +256,8 @@ const FIELDS: readonly Site[] = [
   ["core/text/anchors.ts#syncCommentAnchors", "field 1, rowId 1", "anchor-repair"],
   ["features/clipboard/beat-clip.ts#buildBeatPayload", "paragraphStart 1", "no-document"],
   ["features/clipboard/beat-clip.ts#insertBeats", "anchorId 1, name 1, owner 3, rowId 3", "record-with-text", "anchor-repair"],
-  ["features/comments/comments.ts#postComment", "anchorId 1, createdAt 1, field 1, resolvedAt 1, resolvedBy 1, rowId 1, updatedAt 1", "comment-stamp", "record-stated"],
-  ["features/comments/comments.ts#postReply", "createdAt 1", "comment-stamp"],
+  ["features/comments/comments.ts#commentSave", "anchorId 1, createdAt 1, field 1, resolvedAt 1, resolvedBy 1, rowId 1, updatedAt 1", "comment-stamp", "record-stated"],
+  ["features/comments/comments.ts#replySave", "createdAt 1", "comment-stamp"],
   ["features/merge/local-merge.ts#offerFileMerge", "docId 1", "local-merge"],
   ["features/rows/render.ts#captureRenderFocus", "field 1", "no-document"],
   ["features/writer/flow-visual-box.ts#bufferedVisualBox", "field 4", "no-document"]

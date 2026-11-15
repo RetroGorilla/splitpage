@@ -32,6 +32,14 @@ export function fakeStandaloneStructure(): SharedStructureCommands {
 export function fakeStandaloneValues(): SharedValueCommands {
   return { ports: () => null, refused: standaloneRefusal };
 }
+export function fakeStandaloneRecords(): SharedRecordCommands {
+  return { ports: () => null, refused: standaloneRefusal };
+}
+export function fakeStandaloneGallery(): SharedGalleryCommands {
+  return { ports: () => null, refused: standaloneRefusal, done: standaloneRefusal };
+}
+import type { SharedGalleryCommands } from "../../src/application/commands/gallery.ts";
+import type { SharedRecordCommands } from "../../src/application/commands/shared-records.ts";
 import type { SharedStructureCommands } from "../../src/application/commands/shared-structure.ts";
 import type { SharedAdmissionAnswer } from "../../src/application/session/shared-session.ts";
 import type { SharedValueCommands } from "../../src/application/commands/shared-values.ts";

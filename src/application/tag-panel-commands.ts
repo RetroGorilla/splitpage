@@ -1,9 +1,11 @@
+import type { RecordCommandRun } from "./commands/shared-records.ts";
+
 export interface TagPanelCommands {
   readonly renderProduction: () => void;
   readonly saveTagRename: (key: string, value: string) => string | null;
-  readonly addPersonForTag: (key: string, value: string) => void;
+  readonly addPersonForTag: (key: string, value: string) => RecordCommandRun;
   readonly setTagOwner: (key: string, personId: string) => void;
-  readonly setTagNotes: (key: string, text: string) => void;
+  readonly setTagNotes: (key: string, text: string, resubmit?: boolean) => void;
 }
 
 let commands: TagPanelCommands | null = null;
@@ -20,6 +22,6 @@ export function installTagPanelCommands(next: TagPanelCommands): () => void {
 
 export function renderProduction(): void { current().renderProduction(); }
 export function saveTagRename(key: string, value: string): string | null { return current().saveTagRename(key, value); }
-export function addPersonForTag(key: string, value: string): void { current().addPersonForTag(key, value); }
+export function addPersonForTag(key: string, value: string): RecordCommandRun { return current().addPersonForTag(key, value); }
 export function setTagOwner(key: string, personId: string): void { current().setTagOwner(key, personId); }
-export function setTagNotes(key: string, text: string): void { current().setTagNotes(key, text); }
+export function setTagNotes(key: string, text: string, resubmit?: boolean): void { current().setTagNotes(key, text, resubmit); }

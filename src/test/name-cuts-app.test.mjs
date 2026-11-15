@@ -96,7 +96,7 @@ for (const [what, c] of CASES) {
 
   test("08c addBrollProp: " + what + " (#344, #419)", () => {
     load();
-    assert.ok(addBrollProp("bs2", c.typed(80)));
+    assert.ok(addBrollProp("bs2", c.typed(80)).changed);
     assert.deepEqual(shot("bs2").props.map((p) => p.name), [c.kept(80)]);
     assert.ok(currentDocument().productionTags.some((t) => t.cat === "prop" && t.name === c.kept(80)));
   });

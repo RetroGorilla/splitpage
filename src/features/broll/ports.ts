@@ -13,6 +13,7 @@ import type { ProductionIndexOwner } from "../../core/production/index.ts";
 import type { CellEditing } from "../../application/editing/cell-editing.ts";
 import type { PaintGuard } from "../../application/editing/paint-guard.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
+import type { RecordCommandRun, SharedRecordCommands } from "../../application/commands/shared-records.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { CommonDocumentSession } from "../../application/session/document-session.ts";
 import type { TextServices } from "../../application/text/services.ts";
@@ -36,6 +37,7 @@ interface BrollAnchors {
 export interface BrollRecordsPorts {
   readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
   readonly edits: Pick<DocumentEdits, "run" | "edit" | "stamps" | "text">;
+  readonly shared: SharedRecordCommands;
   readonly cells: Pick<CellEditing<Element>, "edit">;
   readonly paint: Pick<PaintGuard, "whileShown">;
   readonly text: Pick<TextServices<HTMLElement>, "cellOf" | "inertBody" | "sanitizeHtml" | "htmlToPlainText" | "productionReaders">;
@@ -50,11 +52,11 @@ export interface BrollRecordsPorts {
 
 interface BrollRecords {
   readonly brollEntries: () => BrollEntry[];
-  readonly addBrollProp: (shotId: string, rawName: string) => boolean;
+  readonly addBrollProp: (shotId: string, rawName: string) => RecordCommandRun;
   readonly brollShotsByProp: () => Record<string, string[]>;
   readonly maybeCaptureBroll: (e: InputEvent, cellEl: Element) => void;
   readonly anchorBrollInLeftCell: (cellEl: Element) => number;
-  readonly renameBrollInScript: (entry: BrollEntry, newName: string) => boolean;
+  readonly renameBrollInScript: (entry: BrollEntry, newName: string, quiet?: boolean) => RecordCommandRun;
   readonly updateBrollBadge: () => void;
   readonly scheduleBrollRefresh: () => void;
 }
@@ -69,7 +71,9 @@ export interface BrollPanelPorts {
   readonly preferences: Pick<Preferences, "panelGrouping" | "setPanelGrouping">;
   readonly changes: PreferenceChanges;
   readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
-  readonly edits: Pick<DocumentEdits, "edit">;
+  readonly lifetime: Pick<CommonDocumentSession, "epoch">;
+  readonly edits: Pick<DocumentEdits, "edit" | "run">;
+  readonly shared: SharedRecordCommands;
   readonly text: Pick<TextServices<HTMLElement>, "productionReaders">;
   readonly ids: IdSource;
   readonly production: Pick<ProductionIndexOwner, "entries">;
@@ -80,7 +84,7 @@ export interface BrollPanelPorts {
   readonly undo: Pick<UndoControl, "breakCoalescing">;
   readonly actions: Pick<ActionRegistry, "invoke">;
   readonly notices: Pick<NoticePort, "show">;
-  readonly records: Pick<BrollRecords, "brollEntries" | "addBrollProp" | "renameBrollInScript" | "updateBrollBadge">;
+  readonly records: Pick<BrollRecords, "brollEntries" | "renameBrollInScript" | "updateBrollBadge">;
   readonly rows: { readonly focusField: (rowId: string, field: string) => void };
 }
 

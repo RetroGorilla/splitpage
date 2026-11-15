@@ -1,6 +1,6 @@
 import { swapBeatsCommand } from "../../../src/application/commands/rows.ts";
 import "../../../src/test/_dom.mjs";
-import { fakeCapabilities } from "../fakes.ts";
+import { fakeCapabilities, fakeStandaloneGallery, fakeStandaloneRecords } from "../fakes.ts";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createFlowWriter } from "../../../src/features/writer/flow-writer.ts";
@@ -56,13 +56,13 @@ function harness(changeBeforePlan = false, refusePaste = false, tagged = false) 
       attached: cell => cell.isConnected, html: cell => cell.innerHTML, selection: () => null,
       write: (cell, html) => { cell.innerHTML = html; }, focus: () => {}
     },
-    document: () => doc, run, text, wholeFieldText: createWholeFieldTextCommit({ run, text }), decode: { text: fromHtml, withMedia: fromHtml },
+    document: () => doc, run, text, gallery: fakeStandaloneGallery(), wholeFieldText: createWholeFieldTextCommit({ run, text }), decode: { text: fromHtml, withMedia: fromHtml },
     undo: { applying: () => false, breakCoalescing: () => {}, flush: () => {}, latest: () => null },
     stale: () => false, painted: () => {}, shown: edit => edit(), announce: () => {}
   });
   const tags = tagged ? startProductionTags({
     sharedCommands: { refuseUnsupported: () => false },
-    document: fakeDocument(doc).document, edits: fakeEdits().edits,
+    document: fakeDocument(doc).document, edits: fakeEdits().edits, shared: fakeStandaloneRecords(),
     refresh: { request: () => {}, cancel: () => {} }, stamping: { stamp: () => { throw new Error("No stamp expected"); } },
     text: { cellOf: () => [], productionReaders: migration.ports.readers, inertBody: () => document.body, sanitizeHtml: html => String(html ?? "") },
     production: () => createProductionIndex(migration.ports.readers, deepFreeze),
