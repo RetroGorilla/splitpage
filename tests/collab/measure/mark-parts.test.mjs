@@ -38,16 +38,20 @@ test("mark parts: an outer span nested in a part is transparent, a held copy is 
   assert.deepEqual(figures(parts), [3, 4, 0, 0, 8, 5, 20]);
 });
 
-test("mark parts: a replica rebuild counts in validation whether it runs inside the trial or beside it, and keeps its own figure", () => {
-  const inside = markParts([
-    at("receive:start", 0), at("trial:start", 0), at("rebuild:start", 1), at("rebuild:end", 4), at("trial:end", 6),
-    at("live-apply:start", 6), at("live-apply:end", 8), at("receive:end", 9)
+test("mark parts: a rebuild inside the trial counts in validation and is also published as its own figure", () => {
+  const parts = markParts([
+    at("receive:start", 0), at("trial:start", 0), at("rebuild:start", 1), at("rebuild:end", 4), at("trial:end", 6), at("live-apply:start", 6),
+    at("live-apply:end", 8), at("receive:end", 8)
   ]);
-  assert.deepEqual(inside.exclusive, { rebuild: 3, trial: 3, "live-apply": 2 });
-  assert.deepEqual(figures(inside), [6, 2, 0, 0, 0, 1, 9]);
-  const beside = markParts([at("drain:start", 0), at("rebuild:start", 0), at("rebuild:end", 5), at("trial:start", 5), at("trial:end", 7), at("drain:end", 8)]);
-  assert.deepEqual(beside.exclusive, { rebuild: 5, trial: 2 });
-  assert.deepEqual(figures(beside), [7, 0, 0, 0, 0, 1, 8]);
+  assert.deepEqual(parts.exclusive, { trial: 3, rebuild: 3, "live-apply": 2 });
+  assert.deepEqual([parts.validation, parts.rebuild, parts.apply, parts.unattributed, parts.outer], [6, 3, 2, 0, 8]);
+  assert.equal(markParts([at("receive:start", 0), at("trial:start", 0), at("trial:end", 2), at("receive:end", 2)]).rebuild, 0);
+});
+
+test("mark parts: a rebuild beside the trial rather than inside it counts in validation too", () => {
+  const parts = markParts([at("drain:start", 0), at("rebuild:start", 0), at("rebuild:end", 5), at("trial:start", 5), at("trial:end", 7), at("drain:end", 8)]);
+  assert.deepEqual(parts.exclusive, { rebuild: 5, trial: 2 });
+  assert.deepEqual([parts.validation, parts.rebuild, parts.unattributed, parts.outer], [7, 5, 1, 8]);
 });
 
 test("mark parts: an unpaired, crossed, unclosed or unknown mark, or a part outside every outer span, is refused", () => {

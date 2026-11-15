@@ -8,7 +8,10 @@ import type { Command } from "../../src/application/session/document-session.ts"
 import { readOperation } from "../../src/core/collab/read-operation.ts";
 import { migrateRows } from "../../src/core/migrate.ts";
 import { collabState } from "../../src/adapters/collab/state.ts";
-import { observeSharedTransactions } from "../../src/adapters/collab/document.ts";
+import { applySharedUpdate, createSharedDocument, destroySharedDocument, encodeSharedState, encodeSharedStateVector, encodeSharedUpdate, observeSharedTransactions,
+  transactSharedDocument } from "../../src/adapters/collab/document.ts";
+import { holdSharedBuffer } from "../../src/adapters/collab/ingress.ts";
+import { openSharedTrialReplicas, SharedTrialReplica } from "../../src/adapters/collab/trial-replica.ts";
 import {
   currentCapabilities, currentDocument, holdMergeBase, holdSessionCommands, liveSession, mergeBase, onDocumentReplaced, onRefresh, runCommand, sessionEntryRefusal, sharedSession, standaloneSession, startSessionBridge
 } from "../../src/bootstrap/wiring/session-owner.ts";
@@ -716,4 +719,66 @@ test("class A, leaving with a throwing timers.stop: no shared refresh reaches th
     assert.deepEqual([heard, state()], [[], [false, false, false, "Pilot"]]);
     await roundTrip(s, "Pilot");
   } finally { unhear(); s.stop(); }
+});
+
+function runningTrial(parts: SharedSessionParts): SharedTrialReplica {
+  const trial = collabState(parts.handle).trial;
+  assert.ok(trial instanceof SharedTrialReplica);
+  return trial;
+}
+
+function followsLive(parts: SharedSessionParts): boolean {
+  const replica = runningTrial(parts).encode(), live = encodeSharedState(parts.handle);
+  return replica.byteLength === live.byteLength && replica.every((value, index) => value === live[index]);
+}
+
+test("entry starts one trial replica that follows hydration and bridge commands, leave releases it, and a new entry starts a fresh one", async () => {
+  const s = start(), open = openSharedTrialReplicas();
+  try {
+    assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+    const first = s.entered(), trial = runningTrial(first), replica = trial.replica;
+    assert.deepEqual([openSharedTrialReplicas() - open, followsLive(first)], [1, true]);
+    assert.equal(runCommand(lengthCommand()).kind, "applied");
+    assert.deepEqual([length(), followsLive(first)], [7, true]);
+    assert.deepEqual(leaveSharedSession(s.ports), { ok: true });
+    assert.deepEqual([openSharedTrialReplicas() - open, collabState(first.handle).trial, replica.isDestroyed], [0, null, true]);
+    assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+    const second = s.entered();
+    assert.notEqual(runningTrial(second), trial);
+    assert.deepEqual([openSharedTrialReplicas() - open, followsLive(second)], [1, true]);
+    assert.deepEqual(leaveSharedSession(s.ports), { ok: true });
+    assert.equal(openSharedTrialReplicas() - open, 0);
+  } finally { s.stop(); }
+});
+
+test("a failed entry, before or after hydration, releases the trial replica it started", async () => {
+  for (const fault of ["bindings.enter", "hydration", "detach"] as const) {
+    const s = start(), open = openSharedTrialReplicas();
+    try {
+      s.arm(fault);
+      assert.deepEqual(await enterSharedSession(s.ports), { ok: false, reason: SHARED_ENTER_FAILED });
+      const parts = s.entered();
+      assert.deepEqual([fault, openSharedTrialReplicas() - open, collabState(parts.handle).trial], [fault, 0, null]);
+    } finally { s.stop(); }
+  }
+});
+
+test("a forced leave that ends the session during a buffer hold with a held update releases the trial replica and every observer", async () => {
+  const s = start(), open = openSharedTrialReplicas();
+  try {
+    assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+    const parts = s.entered(), trial = runningTrial(parts), sender = createSharedDocument();
+    assert.deepEqual(applySharedUpdate(sender, encodeSharedState(parts.handle)), { ok: true });
+    const vector = encodeSharedStateVector(sender);
+    transactSharedDocument(sender, "local-command", () => { collabState(sender).roots.meta.set("peer", true); });
+    holdSharedBuffer(parts.handle);
+    assert.deepEqual(applySharedUpdate(parts.handle, encodeSharedUpdate(sender, vector)), { ok: true });
+    assert.equal(collabState(parts.handle).ingress.held.length, 1);
+    s.hold("buffer-stuck");
+    assert.deepEqual(forceLeaveSharedSession(), { ok: false, reason: "buffer-stuck" });
+    assert.deepEqual([openSharedTrialReplicas() - open, collabState(parts.handle).trial, trial.replica.isDestroyed, collabState(parts.handle).ingress.held.length],
+      [0, null, true, 0]);
+    sharedGone(parts);
+    destroySharedDocument(sender);
+  } finally { s.stop(); }
 });

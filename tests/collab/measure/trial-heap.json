@@ -1,0 +1,284 @@
+{
+  "revision": "2cad09641fe1ffc0326d06daf66da47f9babf674",
+  "node": "v24.22.1",
+  "flags": [
+    "--expose-gc",
+    "--max-old-space-size=4096"
+  ],
+  "rounds": 5,
+  "metric": "Node adapter heapUsed deltas after two collections; excludes external backing storage; not browser figures",
+  "sampleUnits": "bytes",
+  "medianUnits": "MiB",
+  "rows": [
+    {
+      "script": "short",
+      "state": "fresh",
+      "bytes": 4189,
+      "samples": [
+        {
+          "plain": -1390520,
+          "live": -489928,
+          "mirror": 641168,
+          "trial": 67040
+        },
+        {
+          "plain": -2968,
+          "live": 137928,
+          "mirror": 343352,
+          "trial": 72184
+        },
+        {
+          "plain": -27920,
+          "live": 126712,
+          "mirror": 418160,
+          "trial": 87200
+        },
+        {
+          "plain": 1328,
+          "live": 93176,
+          "mirror": 753384,
+          "trial": -288904
+        },
+        {
+          "plain": -115072,
+          "live": 132288,
+          "mirror": 428896,
+          "trial": 80592
+        }
+      ],
+      "median": {
+        "plain": -0.0266265869140625,
+        "live": 0.12084197998046875,
+        "mirror": 0.409027099609375,
+        "trial": 0.06884002685546875,
+        "withoutTrial": 0.5298690795898438,
+        "session": 0.5987091064453125
+      }
+    },
+    {
+      "script": "short",
+      "state": "edited",
+      "bytes": 9161362,
+      "samples": [
+        {
+          "plain": -18608,
+          "live": 29012728,
+          "mirror": 41514752,
+          "trial": 30942192
+        },
+        {
+          "plain": 4456,
+          "live": 28930272,
+          "mirror": 41388560,
+          "trial": 29636744
+        },
+        {
+          "plain": 4456,
+          "live": 28936968,
+          "mirror": 41286528,
+          "trial": 30987952
+        },
+        {
+          "plain": 4456,
+          "live": 28953528,
+          "mirror": 41494072,
+          "trial": 30919064
+        },
+        {
+          "plain": -12400,
+          "live": 28925968,
+          "mirror": 41347440,
+          "trial": 31010592
+        }
+      ],
+      "median": {
+        "plain": 0.00424957275390625,
+        "live": 27.59644317626953,
+        "mirror": 39.47120666503906,
+        "trial": 29.508773803710938,
+        "withoutTrial": 67.0676498413086,
+        "session": 96.57642364501953
+      }
+    },
+    {
+      "script": "long",
+      "state": "fresh",
+      "bytes": 73161,
+      "samples": [
+        {
+          "plain": -598232,
+          "live": 936424,
+          "mirror": 5113672,
+          "trial": 825808
+        },
+        {
+          "plain": -3024352,
+          "live": 949976,
+          "mirror": 5079512,
+          "trial": 817896
+        },
+        {
+          "plain": 28536,
+          "live": 945928,
+          "mirror": 5061408,
+          "trial": 849640
+        },
+        {
+          "plain": 19136,
+          "live": 946408,
+          "mirror": 5079496,
+          "trial": 869104
+        },
+        {
+          "plain": -10064,
+          "live": 938216,
+          "mirror": 5061600,
+          "trial": 845752
+        }
+      ],
+      "median": {
+        "plain": -0.0095977783203125,
+        "live": 0.9021072387695312,
+        "mirror": 4.844184875488281,
+        "trial": 0.8065719604492188,
+        "withoutTrial": 5.7462921142578125,
+        "session": 6.552864074707031
+      }
+    },
+    {
+      "script": "long",
+      "state": "edited",
+      "bytes": 7924346,
+      "samples": [
+        {
+          "plain": 43736,
+          "live": 27089232,
+          "mirror": 43700464,
+          "trial": 28997944
+        },
+        {
+          "plain": 43736,
+          "live": 27020368,
+          "mirror": 43707416,
+          "trial": 27568024
+        },
+        {
+          "plain": 43736,
+          "live": 27038304,
+          "mirror": 43665184,
+          "trial": 28972456
+        },
+        {
+          "plain": 43736,
+          "live": 27047544,
+          "mirror": 43715768,
+          "trial": 27610336
+        },
+        {
+          "plain": 43736,
+          "live": 27035976,
+          "mirror": 43683720,
+          "trial": 28994840
+        }
+      ],
+      "median": {
+        "plain": 0.04170989990234375,
+        "live": 25.785736083984375,
+        "mirror": 41.67601013183594,
+        "trial": 27.630287170410156,
+        "withoutTrial": 67.46174621582031,
+        "session": 95.09203338623047
+      }
+    },
+    {
+      "script": "large",
+      "state": "fresh",
+      "bytes": 690502,
+      "samples": [
+        {
+          "plain": -332480,
+          "live": 7338264,
+          "mirror": 47646416,
+          "trial": 6466464
+        },
+        {
+          "plain": 265144,
+          "live": 7080224,
+          "mirror": 47515704,
+          "trial": 6372848
+        },
+        {
+          "plain": 261200,
+          "live": 7298040,
+          "mirror": 47482320,
+          "trial": 6390248
+        },
+        {
+          "plain": 259552,
+          "live": 7295680,
+          "mirror": 47461688,
+          "trial": 6499008
+        },
+        {
+          "plain": 361472,
+          "live": 7299976,
+          "mirror": 47544376,
+          "trial": 6405904
+        }
+      ],
+      "median": {
+        "plain": 0.2490997314453125,
+        "live": 6.959953308105469,
+        "mirror": 45.31450653076172,
+        "trial": 6.1091461181640625,
+        "withoutTrial": 52.27445983886719,
+        "session": 58.38360595703125
+      }
+    },
+    {
+      "script": "large",
+      "state": "edited",
+      "bytes": 8580233,
+      "samples": [
+        {
+          "plain": 363848,
+          "live": 33528824,
+          "mirror": 86257520,
+          "trial": 33324088
+        },
+        {
+          "plain": 349816,
+          "live": 33502904,
+          "mirror": 86228832,
+          "trial": 34695144
+        },
+        {
+          "plain": 368600,
+          "live": 33501416,
+          "mirror": 86217304,
+          "trial": 33205168
+        },
+        {
+          "plain": 363848,
+          "live": 33477752,
+          "mirror": 86256608,
+          "trial": 34668592
+        },
+        {
+          "plain": 361320,
+          "live": 33485624,
+          "mirror": 86212304,
+          "trial": 33256536
+        }
+      ],
+      "median": {
+        "plain": 0.34699249267578125,
+        "live": 31.949440002441406,
+        "mirror": 82.23422241210938,
+        "trial": 31.78032684326172,
+        "withoutTrial": 114.18366241455078,
+        "session": 145.9639892578125
+      }
+    }
+  ]
+}
