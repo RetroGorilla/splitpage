@@ -1,5 +1,5 @@
 export const PART_SEAMS = Object.freeze({
-  validation: Object.freeze(["trial"]),
+  validation: Object.freeze(["trial", "rebuild"]),
   apply: Object.freeze(["live-apply", "queue"]),
   projection: Object.freeze(["mirror-apply", "assembly", "projection-listeners", "session-receive", "document-entry"]),
   rendering: Object.freeze(["render", "cell-refresh"]),

@@ -38,6 +38,18 @@ test("mark parts: an outer span nested in a part is transparent, a held copy is 
   assert.deepEqual(figures(parts), [3, 4, 0, 0, 8, 5, 20]);
 });
 
+test("mark parts: a replica rebuild counts in validation whether it runs inside the trial or beside it, and keeps its own figure", () => {
+  const inside = markParts([
+    at("receive:start", 0), at("trial:start", 0), at("rebuild:start", 1), at("rebuild:end", 4), at("trial:end", 6),
+    at("live-apply:start", 6), at("live-apply:end", 8), at("receive:end", 9)
+  ]);
+  assert.deepEqual(inside.exclusive, { rebuild: 3, trial: 3, "live-apply": 2 });
+  assert.deepEqual(figures(inside), [6, 2, 0, 0, 0, 1, 9]);
+  const beside = markParts([at("drain:start", 0), at("rebuild:start", 0), at("rebuild:end", 5), at("trial:start", 5), at("trial:end", 7), at("drain:end", 8)]);
+  assert.deepEqual(beside.exclusive, { rebuild: 5, trial: 2 });
+  assert.deepEqual(figures(beside), [7, 0, 0, 0, 0, 1, 8]);
+});
+
 test("mark parts: an unpaired, crossed, unclosed or unknown mark, or a part outside every outer span, is refused", () => {
   const outer = marks => [at("event:start", 0), ...marks, at("event:end", 9)];
   assert.throws(() => markParts([at("trial:end", 1)]), /Unpaired timing mark: measure:trial:end/);

@@ -6,7 +6,7 @@ export const TASK_RECORD = "ThreadControllerImpl::RunTask";
 export const RENDER_RECORDS = Object.freeze({ style: Object.freeze(["UpdateLayoutTree"]), layout: Object.freeze(["Layout"]), paint: Object.freeze(["PrePaint", "Paint"]) });
 const KEY_EVENTS = new Set(["keydown", "keypress", "keyup", "beforeinput", "input", "textInput"]);
 const PARTS = ["validation", "apply", "projection", "rendering", "input"];
-const WITHIN_INPUT = [["route", "input-handler"], ["plan", "input-command"], ["write", "input-write"]];
+const OWN_FIGURES = [["rebuild", "rebuild"], ["route", "input-handler"], ["plan", "input-command"], ["write", "input-write"]];
 
 const ms = (us) => us / 1000;
 const round = (value) => Math.round(value * 1000) / 1000;
@@ -35,7 +35,7 @@ function spanEntries(spans, marks) {
 function figures(parts) {
   return {
     ...Object.fromEntries(PARTS.map((part) => [part, round(parts[part])])),
-    ...Object.fromEntries(WITHIN_INPUT.map(([figure, seam]) => [figure, round(parts.exclusive[seam] ?? 0)])),
+    ...Object.fromEntries(OWN_FIGURES.map(([figure, seam]) => [figure, round(parts.exclusive[seam] ?? 0)])),
     unattributed: round(parts.unattributed), outer: round(parts.outer)
   };
 }

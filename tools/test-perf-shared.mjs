@@ -22,7 +22,7 @@ function sampleTrace() {
     record("FunctionCall", 13, 2), record("UpdateLayoutTree", 16, 1),
     record(TASK_RECORD, 30, 2, { cat: "toplevel" }), dispatch("keyup", 30.5, 1),
     record(TASK_RECORD, 39.5, 2, { cat: "toplevel" }), record("Paint", 40, 1), record("Layout", 40.5, 0.25),
-    record(TASK_RECORD, 60, 10, { cat: "toplevel" }), record("FunctionCall", 60.5, 9), ...span("receive", 61, 69), ...span("trial", 62, 64), ...span("live-apply", 65, 68),
+    record(TASK_RECORD, 60, 10, { cat: "toplevel" }), record("FunctionCall", 60.5, 9), ...span("receive", 61, 69), ...span("trial", 62, 64), ...span("rebuild", 62.5, 63.5), ...span("live-apply", 65, 68),
     record(TASK_RECORD, 80, 5, { cat: "toplevel" }), record("FunctionCall", 80.5, 4),
     record(TASK_RECORD, 100, 10, { cat: "toplevel" }), dispatch("keydown", 101, 3), ...span("input-handler", 102, 103),
     { ...record(TASK_RECORD, 0, 500, { cat: "toplevel" }), tid: 2 }, { ...record("FunctionCall", 1, 400), tid: 2 }
@@ -31,12 +31,12 @@ function sampleTrace() {
 
 test("a trace gives each key the script time of its own tasks, its parts and the rest as unattributed, and its style, layout and paint up to the next key", () => {
   const { keys, groups } = traceRecords(sampleTrace());
-  const zero = { validation: 0, apply: 0, projection: 0, rendering: 0 };
+  const zero = { validation: 0, apply: 0, projection: 0, rendering: 0, rebuild: 0 };
   assert.deepEqual(keys, [
     { at: 0, tasks: 2, script: 2 + 8 + 2 + 1, ...zero, input: 6, route: 2, plan: 2, write: 2, unattributed: 13 - 6, outer: 13, style: 1, layout: 0.25, paint: 1 },
     { at: 100, tasks: 1, script: 3, ...zero, input: 1, route: 1, plan: 0, write: 0, unattributed: 2, outer: 3, style: 0, layout: 0, paint: 0 }
   ]);
-  assert.deepEqual(groups, { validation: 2, apply: 3, projection: 0, rendering: 0, input: 7, route: 3, plan: 2, write: 2,
+  assert.deepEqual(groups, { validation: 2, apply: 3, projection: 0, rendering: 0, input: 7, rebuild: 1, route: 3, plan: 2, write: 2,
     unattributed: 13 + 3 + 9 - 12, outer: 13 + 3 + 9, style: 1, layout: 0.25, paint: 1 }, "a task with neither a key nor a mark adds nothing, and another thread is ignored");
   assert.deepEqual(GROUP_NAMES, Object.keys(groups));
   assert.throws(() => traceRecords([...sampleTrace(), ...span("render", 200, 201)]), /outside every task record/);

@@ -45,7 +45,7 @@ export function tracedCase(read) {
   try { return { ...traceRecords(read()), problem: null }; } catch (error) { return { keys: [], groups: null, problem: error instanceof Error ? error.message : String(error) }; }
 }
 
-export const GROUP_NAMES = ["validation", "apply", "projection", "rendering", "input", "route", "plan", "write", "unattributed", "outer", "style", "layout", "paint"];
+export const GROUP_NAMES = ["validation", "apply", "projection", "rendering", "input", "rebuild", "route", "plan", "write", "unattributed", "outer", "style", "layout", "paint"];
 
 export const PAGE = `(function () {
   if (window.__perfShared) return 'ready';
