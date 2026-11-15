@@ -81,7 +81,7 @@ import {
 } from "../../features/editing/draft-edit.ts";
 import {
   addRow,
-  addRowAndFocus,
+  addRowAtCaret,
   armDelete,
   capturePastePlace,
   clearDropMarkers,
@@ -912,7 +912,7 @@ export function onRootKeydown(e: KeyboardEvent): void {
     e.preventDefault();
     hideTagGhost();
     if (!sharedSessionParts()) cellEditing().sync(cellEl);
-    addRowAndFocus(cellEl.getAttribute("data-id"), cellEl.getAttribute("data-field"));
+    addRowAtCaret(cellEl);
     return;
   }
   if (e.key === "Enter") {

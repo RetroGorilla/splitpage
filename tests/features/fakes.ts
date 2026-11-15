@@ -27,7 +27,7 @@ export function fakeSharedCommands(): SharedCommandGuard {
 }
 const standaloneRefusal = (): never => { throw new Error("a standalone caller reported a shared refusal"); };
 export function fakeStandaloneStructure(): SharedStructureCommands {
-  return { ports: () => null, refused: standaloneRefusal, settle: standaloneRefusal };
+  return { ports: () => null, refused: standaloneRefusal, settle: standaloneRefusal, settleSelection: standaloneRefusal };
 }
 export function fakeStandaloneValues(): SharedValueCommands {
   return { ports: () => null, refused: standaloneRefusal };

@@ -23,7 +23,13 @@ export interface TextCut {
   readonly to: number;
 }
 
-export type SplitAt = TextCut;
+export interface UnitsCut {
+  readonly kind: "units";
+  readonly removed: readonly (readonly [number, number])[];
+  readonly at: number;
+}
+
+export type SplitAt = TextCut | UnitsCut;
 
 const SPLIT_FIELDS: readonly string[] = Object.freeze(["visualText", "audioText"]);
 const VISUAL_CELLS: readonly string[] = Object.freeze([
@@ -33,6 +39,14 @@ const RANK: Readonly<Record<string, number>> = Object.freeze({ todo: 0, ready: 1
 
 export function textCut(from: number, to: number): TextCut {
   return Object.freeze({ kind: "text", from: from, to: to });
+}
+
+export function unitsCut(removed: readonly (readonly [number, number])[], at: number): UnitsCut {
+  return Object.freeze({ kind: "units", removed: Object.freeze(removed.map(range => Object.freeze([range[0], range[1]] as const))), at: at });
+}
+
+function cutRanges(at: SplitAt): { readonly removed: readonly (readonly [number, number])[]; readonly at: number } {
+  return at.kind === "units" ? at : { removed: [[at.from, at.to]], at: at.from };
 }
 
 function rankOf(status: unknown): number {
@@ -52,8 +66,16 @@ export function cellHtml(rowId: string, field: string): (doc: DocumentView | nul
 
 function halvesOf(at: SplitAt, html: string, ports: CellTextPorts): readonly [string, string] {
   const cell = ports.cells(html);
-  const cut = clampRange(cell, at.from, at.to);
-  const halves = splitCell(deleteRange(cell, cut.from, cut.to), cut.from);
+  if (at.kind === "text") {
+    const cut = clampRange(cell, at.from, at.to);
+    const halves = splitCell(deleteRange(cell, cut.from, cut.to), cut.from);
+    return [toHtml(halves[0]), toHtml(halves[1])];
+  }
+  const ranges = cutRanges(at), kept = ranges.removed.slice().sort((a, b) => b[0] - a[0]).reduce((rest, range) => {
+    const cut = clampRange(rest, range[0], range[1]);
+    return deleteRange(rest, cut.from, cut.to);
+  }, cell);
+  const halves = splitCell(kept, clampRange(kept, ranges.at, ranges.at).from);
   return [toHtml(halves[0]), toHtml(halves[1])];
 }
 
@@ -71,9 +93,13 @@ function splitChanges(rowId: string, field: string, createdId: string): ChangeSe
 
 function sharedSplit(doc: DocumentView, row: DocumentRow, at: SplitAt, createdId: string, ports: CellTextPorts, shared: SharedStructurePorts | undefined, by: ReturnType<SharedStructurePorts["author"]>, mint: (id: string | null) => void): Pick<Plan, "shared"> {
   if (!shared || !by) return {};
-  const trace = sharedStructureTrace(doc, shared, by), cell = shared.cells(row.audioText), cut = clampRange(cell, at.from, at.to);
-  trace.delete(row.id, cell, cut.from, cut.to);
-  trace.split(row.id, cut.from, { id: createdId, ...sharedCreatedBeat(ports) });
+  const trace = sharedStructureTrace(doc, shared, by), cell = shared.cells(row.audioText), ranges = cutRanges(at);
+  // why: later ranges go first, so each earlier range keeps the offsets it was read at
+  for (const range of ranges.removed.slice().sort((a, b) => b[0] - a[0])) {
+    const cut = clampRange(cell, range[0], range[1]);
+    trace.delete(row.id, cell, cut.from, cut.to);
+  }
+  trace.split(row.id, clampRange(cell, ranges.at, ranges.at).from, { id: createdId, ...sharedCreatedBeat(ports) });
   mint(sharedMintedBeat(trace, shared, createdId));
   return { shared: sharedStructureList(trace, shared, by, [row.id]) };
 }

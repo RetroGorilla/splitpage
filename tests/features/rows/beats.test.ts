@@ -32,20 +32,27 @@ function setup() {
   const edits = fakeEdits({ kind: "applied", generation: 1, changes: changeSet({}) });
   const notices = fakeNotices();
   const calls: string[] = [];
+  const order: string[] = [];
   const armed = new Map<DeleteArea, string>();
   let minted = 0;
+  const reader = fakeDocument(doc).document;
   const ports: BeatPorts = {
-    document: fakeDocument(doc).document,
+    document: {
+      ...reader,
+      read: (select) => { order.push("read"); return reader.read(select); },
+      current: () => { order.push("current"); return reader.current(); }
+    },
     edits: {
       ...edits.edits,
+      run: (command) => { order.push("run " + command.name); return edits.edits.run(command); },
       text: { ...edits.edits.stamps, cells: (h: string) => deepFreeze(normalizeCell(h ? [{ text: h, marks: {} }] : [])) }
     },
     notices: notices.notices,
-    ids: { id: (prefix) => prefix + "new" + (++minted) },
+    ids: { id: (prefix) => { order.push("id"); return prefix + "new" + (++minted); } },
     text: { cellOf },
-    cells: { sync: (cell) => { calls.push("sync " + cell.getAttribute("data-field")); } },
-    undo: { breakCoalescing: () => { calls.push("break"); } },
-    selection: { of: (): TextSpan => ({ from: 2, to: 2 }) },
+    cells: { sync: (cell) => { calls.push("sync " + cell.getAttribute("data-field")); order.push("sync " + cell.getAttribute("data-field")); } },
+    undo: { breakCoalescing: () => { calls.push("break"); order.push("break"); } },
+    selection: { of: (): TextSpan => { order.push("selection"); return { from: 2, to: 2 }; } },
     placeCaret: (cell, offset) => { calls.push("caret " + cell.getAttribute("data-field") + " " + offset); },
     rowDrag: { dragging: () => null },
     deletes: {
@@ -55,8 +62,25 @@ function setup() {
     },
     shared: fakeStandaloneStructure()
   };
-  return { edits, notices, calls, owner: mountBeats(ports) };
+  return { edits, notices, calls, order, owner: mountBeats(ports) };
 }
+
+test("scenes: standalone Delete, split and Ctrl+Enter read, sync and run in the same order as before shared sessions", () => {
+  const { order, owner } = setup();
+  document.body.querySelector("#rows")?.insertAdjacentHTML("beforeend", rowHtml("rnew1"));
+  const button = document.querySelector('.row[data-id="r1"] .gutter-btn'), cell = document.querySelector('.row[data-id="r1"] [data-field="audioText"]');
+  assert.ok(button && cell);
+  owner.armDelete(button, "r1");
+  assert.deepEqual(order.splice(0), ["read", "sync visualText", "sync audioText", "current"]);
+  owner.splitField(cell);
+  assert.deepEqual(order.splice(0), ["read", "sync audioText", "selection", "break", "id", "run split-scene"]);
+  owner.addRowAtCaret(cell);
+  const atCaret = order.splice(0);
+  owner.addRowAndFocus("r1", "audioText");
+  assert.deepEqual(atCaret, order.splice(0));
+  assert.deepEqual(atCaret, ["id", "run add-scene"]);
+  owner.dispose();
+});
 
 test("scenes: adding a scene runs the add command with a fresh id, and a refused add adds nothing", () => {
   const { edits, notices, owner } = setup();
