@@ -59,7 +59,7 @@ export function mountClipboardRoutes<Owner, Place, Extra>(mount: ClipboardRoutes
   }
 
   function copyOrCut(e: ClipboardEvent, cut: boolean): void {
-    if (!open) return;
+    if (!open || e.defaultPrevented) return;
     const cell = cellAround(e);
     if (!cell || !ports.scriptCell(cell)) return;
     if (!ports.copy(e, cell, cut) || !cut) return;
@@ -97,7 +97,7 @@ export function mountClipboardRoutes<Owner, Place, Extra>(mount: ClipboardRoutes
   }
 
   function paste(e: ClipboardEvent): void {
-    if (!open) return;
+    if (!open || e.defaultPrevented) return;
     const cell = cellAround(e);
     if (!cell) return;
     e.preventDefault();

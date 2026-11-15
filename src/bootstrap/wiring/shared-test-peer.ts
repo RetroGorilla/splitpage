@@ -29,6 +29,7 @@ import { deleteBeatCommand } from "../../application/commands/rows.ts";
 import { productionReaders } from "../document-ports.ts";
 import { fromHtml } from "../richtext.ts";
 import { sessionStamps } from "./session-owner.ts";
+import { projectSharedDocumentWithRecovery } from "../../adapters/collab/project.ts";
 
 type Side = "app" | "peer";
 type Order = "forward" | "reverse" | "duplicate";
@@ -156,6 +157,7 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
   };
   const leaveJoiner = (): void => { const left = joiner; joiner = null; left?.dispose(); };
   return {
+    recovery: () => projectSharedDocumentWithRecovery(handle).recovery,
     type: (rowId: string, offset: number, insert: string) => buffered(rowId, offset, offset, insert),
     erase: (rowId: string, from: number, to: number) => buffered(rowId, from, to, "").kind,
     format: (rowId: string, from: number, to: number, mark: MarkName = "b", endRow = rowId) => {
