@@ -13,6 +13,7 @@ export interface PaintedText {
   readonly identity: (index: number) => SharedContentRef | null;
   readonly emptyGap?: SharedContentRef;
   readonly endGap?: SharedContentRef;
+  readonly hidden?: string;
 }
 
 export interface BufferedTextEdit {

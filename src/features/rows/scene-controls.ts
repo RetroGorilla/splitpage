@@ -15,6 +15,7 @@ import { closeRowMenus } from "./row-menu.ts";
 import { bindBufferedInput } from "../common/buffered-input.ts";
 import type { BufferedInput, BufferedInputPorts } from "../common/buffered-input.ts";
 import { headingFieldKey, unsettledHeading } from "../../application/editing/buffered-field-key.ts";
+import { settleBeforeAbandoning } from "../../application/editing/buffered-field.ts";
 import { headingPos } from "../../core/flow/flow.ts";
 import type { SharedSceneCreation } from "../../application/commands/shared-scenes.ts";
 import type { SharedStructureCommands } from "../../application/commands/shared-structure.ts";
@@ -183,16 +184,20 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts, li
       let composing = false, creating = false, beforeComposition = "", release: (() => void) | null = null;
       let caret: readonly [number | null, number | null, "forward" | "backward" | "none"] | null = null;
       const end = (): void => { const done = release; release = null; done?.(); };
-      const finish = (): boolean => {
+      const settled = (): boolean => {
         if (composing) { shared.report({ kind: "rejected", reason: "buffer-composition" }); return false; }
         end(); return true;
       };
+      const finish = (): boolean => {
+        if (!composing && release && !bound) create();
+        return settled();
+      };
       const hold = (): void => { if (!bound && !release) release = ports.sharedScenes?.hold() ?? null; };
       const stopAdmission = ports.sharedScenes?.beforeCommand(() => creating || finish() || "announced");
-      const stopAbandon = ports.sharedScenes?.abandonment?.(() => {
+      const stopAbandon = ports.sharedScenes?.abandonment?.(settleBeforeAbandoning(finish, () => {
         if (composing) { composing = false; input.value = beforeComposition; }
         end();
-      });
+      }));
       const stopCheck = shared.beforePaint(() => {
         if (!composing) end();
         caret = doc.activeElement === input ? [input.selectionStart, input.selectionEnd, input.selectionDirection ?? "none"] : null;
@@ -202,8 +207,8 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts, li
         if (caret && input.isConnected) { input.focus({ preventScroll: true }); input.setSelectionRange(...caret); }
         caret = null;
       });
-      pending = { held: () => release !== null, finish, revert: finish, dispose: () => {
-        if (!finish()) return false;
+      pending = { held: () => release !== null, finish, revert: settled, dispose: () => {
+        if (!settled()) return false;
         stopAdmission?.(); stopAbandon?.(); stopCheck(); stopPainted(); return true;
       } };
       const create = (): void => {

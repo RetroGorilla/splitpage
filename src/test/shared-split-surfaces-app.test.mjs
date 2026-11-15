@@ -9,7 +9,7 @@ import { sharedCommandRefusalNotice } from "../bootstrap/wiring/ports/shared-com
 import { openingStatus } from "../bootstrap/wiring/ports/transitions.ts";
 import { TITLE_FIELD_KEY, headingFieldKey } from "../application/editing/buffered-field-key.ts";
 import { adoptReplacement, currentDocument, sharedSession } from "../bootstrap/wiring/session-owner.ts";
-import { enterSharedSession, leaveSharedSession, sharedSessionParts } from "../bootstrap/wiring/shared-session.ts";
+import { enterSharedSession, forceLeaveSharedSession, leaveSharedSession, sharedSessionParts } from "../bootstrap/wiring/shared-session.ts";
 import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
@@ -211,11 +211,11 @@ const served = [
     assert.equal(typeInput(box, "s"), true, "typed");
     submit(box);
   }, undo: () => keys(cellOf("audioText", "r1"), "z", { ctrlKey: true }), after: s => edit(s, n => { n.scenes[0][0] = "Scenes"; }) },
-  { name: "creating a scene from the add-scene box (rule 71: Ctrl+Z skips the creation step while heading undo is unsupported)", steps: 1, act: () => {
+  { name: "creating a scene from the add-scene box (rule 202: Ctrl+Z removes the heading it made)", steps: 1, act: () => {
     const box = addSceneBox("r2");
     assert.equal(typeInput(box, "N"), true, "typed");
     submit(box);
-  }, undo: () => keys(cellOf("audioText", "r1"), "z", { ctrlKey: true }), after: s => edit(s, n => { n.scenes.push(["N", "r2"]); }), skipped: true }
+  }, undo: () => keys(cellOf("audioText", "r1"), "z", { ctrlKey: true }), after: s => edit(s, n => { n.scenes.push(["N", "r2"]); }) }
 ];
 
 for (const literal of served) for (const order of ORDERS) test(`C7 surface literal: ${literal.name}, ${order}`, async () => {
@@ -231,8 +231,8 @@ for (const literal of served) for (const order of ORDERS) test(`C7 surface liter
     assert.deepEqual(undoOwner().sizes(), standalone);
     assert.equal(literal.undo(), true);
     exchange(f, order);
-    agree(f, withZ(literal.skipped ? literal.after(start) : start));
-    assert.deepEqual(f.parts.undo.sizes(), { ...sizes, redo: sizes.redo + (literal.skipped ? 0 : 1) });
+    agree(f, withZ(start));
+    assert.deepEqual(f.parts.undo.sizes(), { ...sizes, redo: sizes.redo + 1 });
     assert.deepEqual(warnings(), []);
   } finally { f.close(); }
 });
@@ -482,3 +482,159 @@ test("C7 surface mount: a first-delivery mount that fails at any registration un
     assert.deepEqual(currentDocument().sections.map(s => s.name), ["Scenes", "N"], where);
   }
 });
+
+function nativeInput(input, text) {
+  assert.equal(input.dispatchEvent(new window.InputEvent("beforeinput", { inputType: "insertText", data: text, bubbles: true, cancelable: true })), true);
+  const from = input.selectionStart ?? input.value.length, to = input.selectionEnd ?? from;
+  input.value = input.value.slice(0, from) + text + input.value.slice(to);
+  input.setSelectionRange(from + text.length, from + text.length);
+}
+function cellText(cell, text, composing, input) {
+  const inputType = composing ? "insertCompositionText" : "insertText", range = document.getSelection().getRangeAt(0).cloneRange();
+  const before = new window.InputEvent("beforeinput", { inputType, data: text, isComposing: composing, bubbles: true, cancelable: !composing });
+  Object.defineProperty(before, "getTargetRanges", { value: () => [range.cloneRange()] });
+  assert.equal(cell.dispatchEvent(before), true);
+  range.deleteContents();
+  const node = document.createTextNode(text); range.insertNode(node);
+  document.getSelection().setBaseAndExtent(node, text.length, node, text.length);
+  if (input) cell.dispatchEvent(new window.InputEvent("input", { inputType, data: text, isComposing: composing, bubbles: true }));
+}
+function composeCell(cell, text) {
+  cell.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true, data: "" }));
+  cellText(cell, text, true, true);
+  return { end: () => { cell.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: text })); } };
+}
+const box = { native: nativeInput, buffered: (input, text) => { assert.equal(typeInput(input, text), true); }, composing: composeInput };
+const CONTRACT = [
+  { name: "title", text: "X", open: () => atEnd(title()), read: doc => doc.title, start: "Shared Split", typed: "Shared SplitX", ...box },
+  { name: "scene name", text: "X", open: () => atEnd(renameBox()), read: doc => doc.sections.map(s => s.name), start: ["Scene"], typed: ["SceneX"], ...box },
+  { name: "add-scene box", text: "N", open: () => addSceneBox("r2"), read: doc => doc.sections.map(s => s.name), start: ["Scene"], typed: ["Scene", "N"], ...box },
+  { name: "emptied-script input", text: "Hi", source: { ...SOURCE, sections: [] }, prepare: removeAll,
+    open: () => { const input = document.getElementById("rows")?.previousElementSibling?.querySelector("textarea"); assert.ok(input); input.focus(); return input; },
+    read: doc => doc.rows.map(r => r.audioText), start: [], typed: ["Hi"], ...box },
+  { name: "Split field", text: "X", open: () => { const cell = cellOf("audioText", "r1"); caret(cell, 3); return cell; }, read: doc => doc.rows[0].audioText,
+    start: "abc", typed: "abcX", held: "buffer-composition", native: (cell, text) => { cellText(cell, text, false, false); }, buffered: (cell, text) => { cellText(cell, text, false, true); },
+    composing: composeCell }
+];
+const failedAt = new Map();
+async function failedEntry(source) {
+  if (!failedAt.has(source)) {
+    probe = { inject: null, labels: [], live: [], recording: false };
+    const clean = await enter(source);
+    const labels = probe.labels; probe = null;
+    clean.close();
+    failedAt.set(source, labels.indexOf("#doc-title beforeinput") + 1);
+  }
+  assert.ok(failedAt.get(source) > 0);
+  writerControls().closeWriter();
+  adoptReplacement(migrateRows(structuredClone(source)));
+  reports.length = 0; errors.length = 0; noticeCalls.length = 0; endings.length = 0;
+  probe = { inject: failedAt.get(source), labels: [], live: [], recording: false };
+  try { assert.deepEqual(await enterSharedSession(ports), { ok: true }); } finally { probe.recording = false; probe = null; }
+  const parts = sharedSessionParts(); assert.ok(parts);
+  const peer = createSharedDocument(); registerSharedOperationFamilies(peer, { cells: html => fromHtml(html) });
+  assert.equal(applySharedUpdate(peer, encodeSharedState(parts.handle)).ok, true);
+  return { parts, peer };
+}
+
+for (const surface of CONTRACT) for (const state of ["idle", "native", "buffered", "composing"]) for (const exit of ["leave", "stop", "failed mount"]) {
+  if (exit === "failed mount" && surface.name !== "Split field" && state !== "idle") continue;
+  test(`C7 surface contract: ${surface.name}, ${state}, ${exit}`, async () => {
+    const source = surface.source ?? SOURCE, failed = exit === "failed mount";
+    const f = failed ? await failedEntry(source) : await enter(source);
+    let composition = null, element = null;
+    try {
+      if (!failed) surface.prepare?.(f);
+      const before = surface.read(currentDocument());
+      if (!failed) assert.deepEqual(before, surface.start);
+      if (state !== "idle" || !failed) element = surface.open();
+      if (state === "native" || state === "buffered") surface[state](element, surface.text);
+      if (state === "composing") composition = surface.composing(element, surface.text);
+      if (exit === "leave" && composition) {
+        assert.deepEqual(leaveSharedSession(ports), { ok: false, reason: surface.held ?? SHARED_SPLIT_SURFACE_PENDING }, "an open composition holds an ordinary leave");
+        assert.equal(sharedSession(), true);
+        composition.end(); composition = null;
+      }
+      if (exit === "leave") assert.deepEqual(leaveSharedSession(ports), { ok: true });
+      if (exit === "stop") assert.deepEqual(forceLeaveSharedSession(), { ok: true });
+      if (failed) await new Promise(resolve => { setTimeout(resolve, 0); });
+      const lands = state === "native" || state === "buffered" || state === "composing" && exit === "leave";
+      assert.equal(sharedSession(), false);
+      assert.deepEqual(endings, [true], "a standalone copy landed");
+      assert.deepEqual(surface.read(currentDocument()), lands ? surface.typed : before);
+      assert.equal(surfaces.abandonable(), 0, "nothing stays registered");
+      assert.equal(document.querySelector("#rows .section-rename"), null, "no name box stays open");
+      assert.equal(currentWhoList()?.isOpen() ?? false, false);
+      if (surface.name === "emptied-script input" && element) assert.equal(element.isConnected, false);
+      if (failed) assert.deepEqual(warnings().map(call => call[0]).filter(text => text === SHARED_SPLIT_SURFACE_NOTICES.failed), [SHARED_SPLIT_SURFACE_NOTICES.failed]);
+      else assert.deepEqual(errors, []);
+    } finally {
+      composition?.end();
+      destroySharedDocument(f.peer);
+      if (sharedSession()) forceLeaveSharedSession();
+    }
+  });
+}
+
+test("C7 surface mount: an app stop in the failed-mount gap releases the failure hold and lands the shared copy without the failure notice", async () => {
+  const f = await failedEntry(SOURCE);
+  try {
+    remoteInsert(f.peer, "r2", "audioText", 0, "Z");
+    assert.equal(applySharedUpdate(f.parts.handle, encodeSharedState(f.peer)).ok, true);
+    assert.deepEqual(forceLeaveSharedSession(), { ok: true });
+    assert.deepEqual(endings, [true]);
+    assert.deepEqual(shape(currentDocument()), withZ(shape(SOURCE)));
+    await new Promise(resolve => { setTimeout(resolve, 0); });
+    assert.deepEqual(warnings(), [], "the delayed callback finds the session gone and says nothing");
+    assert.equal(surfaces.abandonable(), 0);
+  } finally {
+    destroySharedDocument(f.peer);
+    if (sharedSession()) forceLeaveSharedSession();
+  }
+});
+
+for (const exit of ["leave", "stop"]) test(`C7 surface leave: a People list open in a shared Split cell closes on ${exit}`, async () => {
+  const f = await enter();
+  try {
+    const live = cellOf("visualText", "r1"); caret(live, "Wide for ".length);
+    assert.equal(typeCell(live, "@"), true);
+    currentWhoList()?.maybeOpen({ inputType: "insertText", data: "@" }, cellOf("visualText", "r1"));
+    assert.equal(currentWhoList()?.isOpen(), true);
+    assert.deepEqual(exit === "leave" ? leaveSharedSession(ports) : forceLeaveSharedSession(), { ok: true });
+    assert.equal(currentWhoList()?.isOpen(), false);
+    assert.equal(document.getElementById("who-list")?.hidden, true);
+  } finally {
+    destroySharedDocument(f.peer);
+    if (sharedSession()) forceLeaveSharedSession();
+  }
+});
+
+const CUTS = [
+  { name: "a title", source: { ...SOURCE, title: "t".repeat(299) }, key: TITLE_FIELD_KEY, notice: SHARED_SPLIT_SURFACE_NOTICES.titleCut, letter: "t",
+    type: letter => { assert.equal(typeInput(atEnd(title()), letter), true); } },
+  { name: "a scene name", source: { ...SOURCE, sections: [{ id: "H1", name: "n".repeat(199), firstSceneId: "r1" }] }, key: headingFieldKey("H1"),
+    notice: SHARED_SPLIT_SURFACE_NOTICES.sceneCut, letter: "n", type: letter => { const name = atEnd(renameBox()); assert.equal(typeInput(name, letter), true); submit(name); } }
+];
+for (const cut of CUTS) for (const order of ORDERS) {
+  test(`C7 surface limit (rule 156): ${cut.name} whose shown text stays the same while my letter is cut tells me once, ${order}`, async () => {
+    const f = await enter(cut.source);
+    try {
+      cut.type(cut.letter);
+      remoteInsertAt(f.peer, cut.key, 0, cut.letter);
+      exchange(f, order);
+      assert.deepEqual(warnings().map(call => call[0]), [cut.notice]);
+    } finally { f.close(); }
+  });
+  test(`C7 surface limit (rule 156): ${cut.name} whose cut part grows with someone else's letters tells me only once, ${order}`, async () => {
+    const f = await enter(cut.source);
+    try {
+      cut.type("A");
+      remoteInsertAt(f.peer, cut.key, 0, "B");
+      exchange(f, order);
+      assert.deepEqual(warnings().map(call => call[0]), [cut.notice]);
+      remoteInsertAt(f.peer, cut.key, 0, "C");
+      exchange(f, order);
+      assert.deepEqual(warnings().map(call => call[0]), [cut.notice]);
+    } finally { f.close(); }
+  });
+}

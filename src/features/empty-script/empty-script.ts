@@ -1,3 +1,4 @@
+import { settleBeforeAbandoning } from "../../application/editing/buffered-field.ts";
 import type { EmptyScriptPorts } from "./ports.ts";
 
 export function startEmptyScript(ports: EmptyScriptPorts) {
@@ -30,9 +31,9 @@ export function startEmptyScript(ports: EmptyScriptPorts) {
     if (committing || dropped) return true;
     if (composing) { notify("buffer-composition"); return false; }
     if (!current() && (input.value || pending)) { notify("empty-script-stale"); return false; }
-    if (pending) { notify("buffer-pending"); return false; }
+    if (pending && input.value === beforeInput) { notify("buffer-pending"); return false; }
     if (!input.value) { end(); paint(); return true; }
-    committing = true;
+    pending = false; committing = true;
     try {
       const text = input.value, result = ports.create(text);
       if (!result.ok) { ports.report({ kind: "rejected", reason: result.reason, ...(result.notified ? { notified: result.notified } : {}) }); return false; }
@@ -80,7 +81,7 @@ export function startEmptyScript(ports: EmptyScriptPorts) {
     for (const [name, listener] of listeners) input.addEventListener(name, listener);
     off = ports.document.onChange(paint); admission = ports.lifetime.beforeCommand(() => finish() || "announced");
     paint();
-    abandoning = ports.abandonment?.(abandon);
+    abandoning = ports.abandonment?.(settleBeforeAbandoning(finish, abandon));
   } catch (error) {
     off(); admission();
     for (const [name, listener] of listeners) input.removeEventListener(name, listener);

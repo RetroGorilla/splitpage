@@ -10,6 +10,10 @@ export function sharedShownSceneName(name: string): string {
   return Array.from(name).length > SCENE_NAME_MAX ? cappedText(name, SCENE_NAME_MAX) : name;
 }
 
+export function sharedNameLimit(field: string): number | null {
+  return field === "title" ? TITLE_MAX : field === "heading" ? SCENE_NAME_MAX : null;
+}
+
 export function sharedShownName(field: string, text: string): string {
   return field === "title" ? sharedShownTitle(text) : field === "heading" ? sharedShownSceneName(text) : text;
 }

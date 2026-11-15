@@ -11,7 +11,7 @@ import { collabProjectedVisualTargets } from "./painted-visual-targets.ts";
 import { readSharedProjectedTextRuns } from "./projected-text-runs.ts";
 import { sharedJoinGlueReference } from "./join-glue-reference.ts";
 import { projectSharedJoinSeparator } from "../../core/collab/projection/joins.ts";
-import { sharedShownName } from "../../core/collab/projection/shown-names.ts";
+import { sharedNameLimit, sharedShownName } from "../../core/collab/projection/shown-names.ts";
 
 function partReading(part: { readonly text: Y.Text; readonly target: SharedTextAddress; readonly from: number; readonly to: number }) {
   const runs = readSharedProjectedTextRuns(part.text, part.from, part.to); if (!runs) return null;
@@ -77,14 +77,25 @@ function paintedText(handle: SharedDocumentHandle, address: SharedTextAddress, s
   if (from === null || !cut) return Object.freeze({ revision: readSharedRevision(handle), text, identity: stored, endGap, ...(text.length ? {} : { emptyGap: endGap }) });
   // why: past the limit the box shows the projection's cut, and an insertion at its end lands before the hidden text
   const identity = (index: number): SharedContentRef | null => index < from ? stored(index) : null;
-  return Object.freeze({ revision: readSharedRevision(handle), text: text.slice(0, from), identity, endGap, emptyGap: cut });
+  return Object.freeze({ revision: readSharedRevision(handle), text: text.slice(0, from), identity, endGap, emptyGap: cut, hidden: text.slice(from) });
 }
 
-export function readSharedOwnHiddenName(handle: SharedDocumentHandle, address: SharedTextAddress): string | null {
+export function readSharedOwnClock(handle: SharedDocumentHandle): number {
+  const { doc } = collabState(handle);
+  return Y.getState(doc.store, doc.clientID);
+}
+
+export function readSharedOwnHiddenUnits(handle: SharedDocumentHandle, address: SharedTextAddress, since: number): readonly SharedContentRef[] {
+  const limit = sharedNameLimit(address.field), found = limit === null ? null : collabProjectedTextTarget(handle, address);
+  // why: a text no longer than the limit in UTF-16 units cannot be cut, so the walk over its identities is skipped
+  if (!found || limit === null || found.parts.reduce((length, part) => length + part.to - part.from + 1, 0) <= limit) return [];
   const read = wholeText(handle, address, false), from = read ? hiddenFrom(address.field, read.text) : null;
-  if (!read || from === null) return null;
+  if (!read || from === null) return [];
   const me = collabState(handle).doc.clientID, hidden = Array.from({ length: read.text.length - from }, (_, at) => read.stored(from + at));
-  return hidden.some(ref => readSharedAnchorUnit(ref)?.client === me) ? hidden.join("\n") : null;
+  return hidden.filter((ref): ref is SharedContentRef => {
+    const unit = ref ? readSharedAnchorUnit(ref) : null;
+    return !!unit && unit.client === me && unit.clock >= since;
+  });
 }
 
 export function readSharedPaintedText(handle: SharedDocumentHandle, address: SharedTextAddress): PaintedText | null {

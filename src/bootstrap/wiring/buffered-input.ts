@@ -1,4 +1,4 @@
-import { createBufferedField } from "../../application/editing/buffered-field.ts";
+import { createBufferedField, settleBeforeAbandoning } from "../../application/editing/buffered-field.ts";
 import type { BufferedFieldBinding, BufferedFieldPorts } from "../../application/editing/buffered-field.ts";
 import { createPaintedBeats } from "../../application/editing/painted-beats.ts";
 import type { PaintedTextSource } from "../../application/editing/ports.ts";
@@ -25,9 +25,7 @@ export function sharedBufferedInputPorts(shared: { readonly paintedText: Painted
   return {
     field: surface => {
       const binding: BufferedFieldBinding = createBufferedField({ ...shared.bufferedText,
-        abandonment: abandon => shared.bufferedText.abandonment?.(final => {
-          if (final || !binding.finish()) abandon(final);
-        }) ?? (() => {})
+        abandonment: abandon => shared.bufferedText.abandonment?.(settleBeforeAbandoning(() => binding.finish(), abandon)) ?? (() => {})
       }, surface);
       return binding;
     },

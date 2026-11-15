@@ -247,8 +247,10 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
       kept = input ? caretNow(input) : null;
     });
     reset();
-  } catch (error) { unlisten(); throw error; }
+  } catch (error) { unlisten(); binding.detach(); throw error; }
+  const whole = (name: PaintedText | null): string | null => name ? name.text + (name.hidden ?? "") : null;
   if (form.opening !== undefined) expected = ports.painted.current(key);
+  const opened = form.opening === undefined ? undefined : whole(expected) ?? form.opening;
   return {
     held: binding.held,
     finish: () => ports.shown(() => { discardClipboard(); return binding.finish(); }),
@@ -257,9 +259,9 @@ export function bindBufferedInput(form: BufferedInputField, ports: BufferedInput
       if (!binding.finish()) return false;
       checkName();
       if (foreign) { ports.report({ kind: "rejected", reason: "buffer-heading-changed" }); return true; }
-      if (form.opening === undefined || form.stored() === form.opening) return true;
+      if (opened === undefined || (whole(ports.painted.current(key)) ?? form.stored()) === opened) return true;
       ports.painted.field(key, typing().value);
-      if (!binding.replace(form.opening, "rename-cancel")) return false;
+      if (!binding.replace(opened, "rename-cancel")) return false;
       ports.repaint();
       return true;
     }),

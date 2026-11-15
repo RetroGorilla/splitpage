@@ -44,8 +44,13 @@ export interface BufferedFieldBinding {
   readonly moved: (range: FlowRange | null) => void;
   readonly base: (rowId: string) => PaintedText | null;
   readonly dispose: () => boolean;
+  readonly detach: () => void;
   readonly replace: (text: string, label: string) => boolean;
   readonly describe: (label: string) => void;
+}
+
+export function settleBeforeAbandoning(finish: () => boolean, abandon: (final: boolean) => void): (final: boolean) => void {
+  return final => { if (final || !finish()) abandon(final); };
 }
 
 export interface BufferedFieldSurface<E> {
@@ -363,6 +368,7 @@ export function createBufferedField<E>(given: BufferedFieldPorts, surface: Buffe
       if (!finish()) return false;
       stopAdmission(); stopAbandonment?.(); target = null; surface.composition(false);
       return true;
-    }
+    },
+    detach: () => { stopAdmission(); stopAbandonment?.(); }
   };
 }

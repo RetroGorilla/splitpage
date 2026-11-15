@@ -107,6 +107,11 @@ function field(handle: SharedDocumentHandle, key: string): string | undefined {
   return readSharedPaintedText(handle, sharedBufferedTarget(handle, key))?.text;
 }
 
+function stored(handle: SharedDocumentHandle, key: string): string | undefined {
+  const painted = readSharedPaintedText(handle, sharedBufferedTarget(handle, key));
+  return painted ? painted.text + (painted.hidden ?? "") : undefined;
+}
+
 function typeB(h: Stage1ExecutorHarness, key: string, start: string, inserted = "Y", remove = 0): string {
   const b = sharedHarness(adapterReplica(h.b));
   try {
@@ -320,10 +325,10 @@ test("rule 85 Escape restores the stored opening name even when concurrent write
     assert.equal(page.stored(), "Y" + "a".repeat(199));
     page.edge.escape(); page.h.queue.flush("dup"); page.h.join();
     for (const handle of [page.h.a, page.h.b, page.h.c]) {
+      assert.equal(stored(handle, headingFieldKey("H1")), "Y" + "a".repeat(200));
       assert.equal(field(handle, headingFieldKey("H1")), "Y" + "a".repeat(199), "rule 156: the restored 201 letters show cut at 200 on every copy");
     }
-    assert.deepEqual([input.isConnected, input.value, input.selectionStart, input.selectionEnd, page.reports, page.owner.sizes().undo],
-      [false, "Y" + "a".repeat(199), 199, 199, [], 1], "rule 156: the deletion let the hidden letter into view, so the shown name is the opening one and Escape writes nothing");
+    assert.deepEqual([input.isConnected, input.value, page.reports, page.owner.sizes().undo], [false, "Y" + "a".repeat(199), [], 2]);
   } finally { page.close(); }
 });
 

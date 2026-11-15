@@ -1,5 +1,5 @@
 import { sharedBufferedTarget } from "../../adapters/collab/buffer.ts";
-import { readSharedOwnHiddenName } from "../../adapters/collab/paint-base.ts";
+import { readSharedOwnClock, readSharedOwnHiddenUnits } from "../../adapters/collab/paint-base.ts";
 import { collabState } from "../../adapters/collab/state.ts";
 import type { BufferedFieldPorts } from "../../application/editing/buffered-field.ts";
 import { TITLE_FIELD_KEY, headingFieldKey } from "../../application/editing/buffered-field-key.ts";
@@ -50,24 +50,23 @@ function closeSplitCompletions(): void {
 }
 
 function watchCuts(parts: SharedSessionParts): () => void {
-  const told = new Set<string>();
+  const hidden = new Map<string, ReadonlySet<string>>(), since = readSharedOwnClock(parts.handle);
   function check(key: string, notice: string): void {
-    const hidden = readSharedOwnHiddenName(parts.handle, sharedBufferedTarget(parts.handle, key));
-    if (!hidden || told.has(key + "\n" + hidden)) return;
-    told.add(key + "\n" + hidden);
-    notices.show(notice, "warn");
+    const now: ReadonlySet<string> = new Set(readSharedOwnHiddenUnits(parts.handle, sharedBufferedTarget(parts.handle, key), since));
+    const before = hidden.get(key);
+    if (now.size) hidden.set(key, now); else hidden.delete(key);
+    if ([...now].some(unit => !before?.has(unit))) notices.show(notice, "warn");
   }
-  return parts.session.subscribe(change => {
-    const { whole, docFields } = change.changes;
-    if (whole || docFields.includes("title")) check(TITLE_FIELD_KEY, SHARED_SPLIT_SURFACE_NOTICES.titleCut);
-    if (!whole && !docFields.includes("sections")) return;
+  // why: a cut can hide my letter while the shown text stays the same, so every change is checked
+  return parts.session.subscribe(() => {
+    check(TITLE_FIELD_KEY, SHARED_SPLIT_SURFACE_NOTICES.titleCut);
     for (const scene of parts.session.read(doc => normalizeScenes(doc?.sections)) ?? []) check(headingFieldKey(scene.id), SHARED_SPLIT_SURFACE_NOTICES.sceneCut);
   });
 }
 
 export function sharedSplitSurfaces(split: SharedBindings & { readonly abandonable?: () => number },
   effects: Pick<BufferedFieldPorts, "missingBase" | "recovered" | "report">): SharedBindings & { readonly abandonable: () => number } {
-  let entered: SharedSessionParts | null = null, waiting: (() => void) | null = null;
+  let entered: SharedSessionParts | null = null, waiting: (() => void) | null = null, failing: (() => void) | null = null;
   let surfaces: { readonly title: ReturnType<typeof mountTitlesFeature>; readonly scenes: ReturnType<typeof mountSceneHeadersFeature>;
     readonly empty: ReturnType<typeof mountSharedEmptyScript> | null; readonly cuts: () => void } | null = null;
   const abandons = new Set<(final: boolean) => void>();
@@ -79,9 +78,11 @@ export function sharedSplitSurfaces(split: SharedBindings & { readonly abandonab
   }
   function failed(parts: SharedSessionParts): void {
     const release = parts.session.hold(SHARED_SPLIT_SURFACE_FAILED);
+    failing = release;
     // why: the switch holds its lock until the entry or delivery that mounted returns, so the leave is the next task
     window.setTimeout(() => {
       release();
+      if (failing === release) failing = null;
       if (entered !== parts) return;
       notices.show(SHARED_SPLIT_SURFACE_NOTICES.failed, "warn");
       forceLeaveSharedSession();
@@ -157,8 +158,10 @@ export function sharedSplitSurfaces(split: SharedBindings & { readonly abandonab
       const mounted = surfaces;
       if (mounted?.empty && !mounted.empty.dispose()) throw new Error(SHARED_SPLIT_SURFACE_PENDING);
       waiting?.(); waiting = null;
+      failing?.(); failing = null;
       surfaces = null; entered = null;
       const errors: unknown[] = [];
+      try { closeSplitCompletions(); } catch (error) { errors.push(error); }
       if (mounted) for (const restore of [mounted.cuts, () => { mountTitlesFeature(); }, () => { mountSceneHeadersFeature(); }]) {
         try { restore(); } catch (error) { errors.push(error); }
       }

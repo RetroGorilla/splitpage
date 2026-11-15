@@ -110,8 +110,9 @@ test("an empty-script target ignores a compositionend without its compositionsta
   try {
     assert.equal(before(p.input), true); p.input.value = "pending";
     p.input.dispatchEvent(new window.CompositionEvent("compositionend", { data: "unrelated", bubbles: true }));
-    assert.deepEqual(p.created, []); assert.equal(p.control.finish(), false); assert.equal(p.state.held, 1);
-    input(p.input, "pending"); assert.deepEqual(p.created, ["pending"]);
+    assert.deepEqual(p.created, []); assert.equal(p.state.held, 1);
+    assert.equal(p.control.finish(), true, "rule 166: text the browser already wrote lands when the input is settled");
+    assert.deepEqual(p.created, ["pending"]); assert.equal(p.state.held, 0);
   } finally { assert.equal(p.control.dispose(), true); }
 });
 
