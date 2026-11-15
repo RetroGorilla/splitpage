@@ -188,7 +188,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts, li
         end(); return true;
       };
       const hold = (): void => { if (!bound && !release) release = ports.sharedScenes?.hold() ?? null; };
-      const stopAdmission = ports.sharedScenes?.beforeCommand(() => creating || finish());
+      const stopAdmission = ports.sharedScenes?.beforeCommand(() => creating || finish() || "announced");
       const stopAbandon = ports.sharedScenes?.abandonment?.(() => {
         if (composing) { composing = false; input.value = beforeComposition; }
         end();

@@ -69,6 +69,10 @@ export function addRowAndFocus(afterId: string | null | undefined, field: string
   beats.owner()?.addRowAndFocus(afterId, field);
 }
 
+export function addRowAtCaret(cell: Element): void {
+  beats.owner()?.addRowAtCaret(cell);
+}
+
 export function splitCellField(cell: Element): void {
   beats.owner()?.splitCellField(cell);
 }

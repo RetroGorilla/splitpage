@@ -17,7 +17,7 @@
     {
       "label": "C7 enters without mounting the Split binding",
       "file": "src/bootstrap/wiring/shared-split.ts",
-      "find": "buffer = mountSharedSplitBuffer(shared);",
+      "find": "buffer = mountSharedSplitBuffer({ ...shared, refuseNative: refuseSharedSplitNative });",
       "replace": "void shared;"
     },
     {
@@ -77,8 +77,8 @@
     {
       "label": "C7 shared input uses standalone whole-field synchronization",
       "file": "src/bootstrap/wiring/editor.ts",
-      "find": "const ports = sharedSplit ? { ...rowsEditorPorts, input:",
-      "replace": "const ports = false ? { ...rowsEditorPorts, input:"
+      "find": "if (cell && isScriptCell(cell)) afterScriptCellChange(cell);\n      else onRootInput(event);",
+      "replace": "onRootInput(event);"
     },
     {
       "label": "C7 shared blur uses standalone whole-field synchronization",

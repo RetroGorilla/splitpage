@@ -15,7 +15,7 @@ import { undoControl as portUndo } from "./ports/editing.ts";
 import { screen as portScreen } from "./ports/screen.ts";
 import { createRecordsReconciler } from "../../application/production/broll-records.ts";
 import { text as portText } from "./ports/text.ts";
-import { documentReader as portDocument } from "./ports/document.ts";
+import { documentLifetime as portLifetime, documentReader as portDocument } from "./ports/document.ts";
 import { edits as portEdits } from "./ports/editing.ts";
 import { sharedRecordCommands } from "./ports/shared-commands.ts";
 import { production as portProduction } from "./ports/production.ts";
@@ -101,6 +101,7 @@ export function mountBrollPanelStateFeature(): BrollPanelState {
       preferences: portPreferences,
       changes,
       document: portDocument,
+      lifetime: portLifetime,
       edits: portEdits,
       shared: sharedRecordCommands,
       text: portText,

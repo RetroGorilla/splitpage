@@ -70,6 +70,7 @@ const READ_ONLY_CALLERS = {
   "application/save/project-files.ts:ProjectFilesPorts.document": caller<ProjectFilesPorts["document"]>()("current"),
   "features/broll/ports.ts:BrollRecordsPorts.document": caller<BrollRecordsPorts["document"]>()("current", "read", "numbering"),
   "features/broll/ports.ts:BrollPanelPorts.document": caller<BrollPanelPorts["document"]>()("current", "read", "numbering"),
+  "features/broll/ports.ts:BrollPanelPorts.lifetime": caller<BrollPanelPorts["lifetime"]>()("epoch"),
   "features/clipboard/ports.ts:CellClipboardPorts.document": caller<CellClipboardPorts["document"]>()("read"),
   "features/clipboard/ports.ts:BeatSelectPorts.document": caller<BeatSelectPorts["document"]>()("current"),
   "features/clipboard/ports.ts:BeatSelectPorts.lifetime": caller<BeatSelectPorts["lifetime"]>()("epoch"),
@@ -113,7 +114,7 @@ const READ_ONLY_CALLERS = {
 };
 
 test("read-only session callers keep exactly their audited common read members", () => {
-  assert.equal(Object.keys(READ_ONLY_CALLERS).length, 53);
+  assert.equal(Object.keys(READ_ONLY_CALLERS).length, 54);
   for (const [name, keys] of Object.entries(READ_ONLY_CALLERS)) {
     assert.equal(new Set(keys).size, keys.length, name);
   }

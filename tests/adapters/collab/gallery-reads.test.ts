@@ -25,6 +25,6 @@ test("every module that reads the stores directly is in the doc's consumer table
   assert.deepEqual([...named].filter(file => !files.includes(file)), []);
   const through = rows.filter(row => /^(shown|the planned|notes)/.test(row.reads)).flatMap(row => row.modules);
   assert.deepEqual(through.filter(file => !readFileSync(`${FOLDER}/${file}`, "utf8").includes(`from "./${READ}"`)), []);
-  assert.deepEqual(through.sort(), ["projection-source.ts", "record-executor.ts", "record-reader.ts", "removal-executor.ts", "structure-index.ts",
+  assert.deepEqual(through.sort(), ["creation-retirement.ts", "projection-source.ts", "record-executor.ts", "record-reader.ts", "removal-executor.ts", "structure-index.ts",
     "undo-executor.ts", "undo-handlers.ts", "undo-removal.ts"]);
 });

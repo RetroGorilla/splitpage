@@ -98,7 +98,7 @@ console.log("\nneedsCollabMutants():\n");
   }
   for (const files of [null, []]) eq("an unknown diff runs the mutants", needsCollabMutants(files, triggers), true);
   eq("unreadable manifests run the mutants", needsCollabMutants(["src/bootstrap/main.ts"], null), true);
-  for (const path of ["src/bootstrap/main.ts", "src/features/find/find.ts", "tests/collab/mutants.md", "prototypes/collab/src/probe.ts", ".github/workflows/nightly.yml"]) {
+  for (const path of ["src/bootstrap/main.ts", "src/features/help/help.ts", "tests/collab/mutants.md", "prototypes/collab/src/probe.ts", ".github/workflows/nightly.yml"]) {
     eq(`${path} alone does not run the mutants`, needsCollabMutants([path], triggers), false);
   }
 }

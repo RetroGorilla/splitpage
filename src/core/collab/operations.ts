@@ -56,6 +56,19 @@ export interface SharedSegmentCreate extends SharedOperationAuthor {
   readonly at: SharedIdentityGap;
   readonly fields: SharedJsonFields;
 }
+export interface SharedSegmentRetire extends SharedOperationAuthor {
+  readonly kind: "segment-retire" | "segment-restore";
+  readonly beat: SharedContentRef;
+  readonly creator: string;
+  readonly observed: string;
+}
+export interface SharedHeadingRetire extends SharedOperationAuthor {
+  readonly kind: "heading-retire" | "heading-restore";
+  readonly heading: SharedContentRef;
+  readonly segment: SharedContentRef;
+  readonly creator: string;
+  readonly observed: string;
+}
 export interface SharedBeatSplit extends SharedOperationAuthor {
   readonly kind: "split";
   readonly target: SharedTextAddress;
@@ -148,6 +161,12 @@ export type SharedRecordSet = SharedOperationAuthor & {
   readonly target: SharedRecordAddress;
   readonly field: string;
 } & SharedFieldValue;
+export interface SharedRecordRevive extends SharedOperationAuthor {
+  readonly kind: "record-revive";
+  readonly target: SharedRecordAddress;
+  readonly field?: "props" | "links";
+  readonly entry?: SharedContentRef;
+}
 export interface SharedRecordDelete extends SharedOperationAuthor {
   readonly kind: "record-delete";
   readonly target: SharedRecordAddress;
@@ -196,7 +215,7 @@ export type SharedStatusRetire = SharedOperationAuthor & {
 } & Pick<SharedStatusEvent, "target" | "value">;
 export function sharedRecoveryKinds() {
   return ["removed-beat", "removed-heading", "crossing-tag", "deleted-tag", "gallery-overflow",
-    "unprojectable-fragment", "comment-without-words", "reply-without-comment", "scene-with-no-beats", "deleted-person"] as const;
+    "unprojectable-fragment", "comment-without-words", "reply-without-comment", "scene-with-no-beats", "deleted-person", "deleted-record"] as const;
 }
 export interface SharedRecoveryName { readonly kind: ReturnType<typeof sharedRecoveryKinds>[number]; readonly key: string }
 export interface SharedRecoveryDiscard extends SharedOperationAuthor {
@@ -208,10 +227,10 @@ export interface SharedDiscardRetire extends SharedOperationAuthor {
   readonly kind: "discard-retire";
   readonly discard: string;
 }
-export type SharedOperation = SharedTextInsert | SharedTextDelete | SharedMarkChange | SharedSegmentCreate | SharedBeatSplitBefore
+export type SharedOperation = SharedTextInsert | SharedTextDelete | SharedMarkChange | SharedSegmentCreate | SharedSegmentRetire | SharedHeadingRetire | SharedBeatSplitBefore
   | SharedBeatSplit | SharedBeatJoin | SharedJoinGlue | SharedJoinRetire | SharedSplitRetire | SharedSplitRestore | SharedSoftRemove | SharedRestore | SharedSegmentMove
   | SharedHeadingCreate | SharedHeadingFinalize | SharedHeadingRemove | SharedRecordCreate | SharedRecordSet
-  | SharedRecordDelete | SharedScalarSet | SharedStatusEvent | SharedTextRestore | SharedMarkRetract | SharedStatusRetire
+  | SharedRecordDelete | SharedRecordRevive | SharedScalarSet | SharedStatusEvent | SharedTextRestore | SharedMarkRetract | SharedStatusRetire
   | SharedRecoveryDiscard | SharedDiscardRetire | SharedGalleryRetire;
 
 export function replaceObservedText(

@@ -24,7 +24,7 @@ const PORTS = { cells: createFlowLoadRuntime().cells };
 
 const OWNERS: Readonly<Record<SharedOperation["kind"], string>> = {
   "text-insert": "text", "text-delete": "text", mark: "text",
-  "record-create": "record", "record-set": "record", "record-delete": "record",
+  "record-create": "record", "record-set": "record", "record-delete": "record", "record-revive": "record",
   split: "split", "split-before": "split", "segment-create": "split",
   remove: "removal", restore: "removal", "heading-remove": "removal", discard: "removal", "discard-retire": "removal",
   join: "join", "join-glue": "join", "join-retire": "join",
@@ -32,6 +32,7 @@ const OWNERS: Readonly<Record<SharedOperation["kind"], string>> = {
   "segment-move": "move refusal",
   "text-restore": "undo", "mark-retract": "undo", "status-retire": "undo", "split-retire": "undo", "split-restore": "undo",
   "gallery-retire": "undo", "gallery-restore": "undo",
+  "segment-retire": "undo", "segment-restore": "undo", "heading-retire": "undo", "heading-restore": "undo",
   scalar: "executor", status: "executor"
 };
 
@@ -58,8 +59,8 @@ test("every operation kind has one owner: a family the composition registers, or
   try {
     const registered = Object.keys(registeredSharedOperationHandlers(handle)).sort();
     assert.deepEqual(registered, Object.entries(OWNERS).filter(([, owner]) => owner !== "executor").map(([kind]) => kind).sort());
-    assert.deepEqual(registered, ["discard", "discard-retire", "gallery-restore", "gallery-retire", "heading-create", "heading-finalize", "heading-remove", "join", "join-glue", "join-retire",
-      "mark", "mark-retract", "record-create", "record-delete", "record-set", "remove", "restore", "segment-create", "segment-move", "split",
+    assert.deepEqual(registered, ["discard", "discard-retire", "gallery-restore", "gallery-retire", "heading-create", "heading-finalize", "heading-remove", "heading-restore", "heading-retire", "join", "join-glue", "join-retire",
+      "mark", "mark-retract", "record-create", "record-delete", "record-revive", "record-set", "remove", "restore", "segment-create", "segment-move", "segment-restore", "segment-retire", "split",
       "split-before", "split-restore", "split-retire", "status-retire", "text-delete", "text-insert", "text-restore"]);
   } finally { destroySharedDocument(handle); }
 });
@@ -113,6 +114,23 @@ test("seeded list, split undo: a split's retirement and restoration run on a han
     const rows = projectSharedDocumentWithRecovery(a).document.rows.map(row => row.audioText);
     send({ kind: "split-restore", id: "back", by: "Alice", beat: part.beat });
     assert.deepEqual([ran, rows, projectSharedDocumentWithRecovery(a).document.rows.map(row => row.audioText)], [["split-retire", "split-restore"], ["abcd"], ["ab", "cd"]]);
+  } finally { set.close(); }
+});
+
+test("seeded list, creation undo: retirement and restoration run on the composed handle and preserve identity", () => {
+  const { set, a, send, ran } = world({ rows: [{ id: "R1", audioText: "abc" }] });
+  try {
+    const before = projectSharedDocumentWithRecovery(a);
+    const done = executeSharedCommand(a, [operation({ kind: "segment-create", id: "create", by: "Alice", beat: "N1", segment: "N1",
+      at: { left: "R1", right: null, affinity: "after" }, fields: { audioText: "x" } })], { label: "create", selection: null, typing: null }, { base: readSharedRevision(a) });
+    assert.deepEqual(done.result, { ok: true });
+    const part = done.record?.parts[0]; assert.ok(part?.kind === "beat-create");
+    const after = projectSharedDocumentWithRecovery(a);
+    send({ kind: "segment-retire", id: "out", by: "Alice", beat: part.beat, creator: part.writer, observed: part.content });
+    assert.deepEqual(projectSharedDocumentWithRecovery(a), before);
+    send({ kind: "segment-restore", id: "back", by: "Alice", beat: part.beat, creator: part.writer, observed: part.content });
+    assert.deepEqual(projectSharedDocumentWithRecovery(a), after);
+    assert.deepEqual(ran, ["segment-retire", "segment-restore"]);
   } finally { set.close(); }
 });
 

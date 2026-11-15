@@ -27,10 +27,12 @@ New shots, comments, replies and gallery records receive paste-author ids.
 Beat and heading ids come from the existing structure identity port. Existing
 text references become observed unit identities before the command executes.
 
-Each admitted paste is one shared command and one undo entry. Creation undo still
-refuses `undo-unsupported:segment-create`; this cut does not change undo support.
-The merged gallery undo supports gallery record creation; whole-paste creation
-still reaches the segment-create limit first.
+Each admitted paste is one shared command and one undo entry. Beat creation now
+supports undo and same-identity redo while each created beat is unchanged; its
+initial gallery, comments and replies follow that beat's conditional retirement.
+A changed creation uses the whole entry up without writing. A paste that also
+creates a heading still reaches the unsupported heading inverse under rule 71.
+See [creation undo](stage-2-shared-undo.md#undo-of-beat-creation).
 
 The whole paste is refused, without a document write, for these cases:
 

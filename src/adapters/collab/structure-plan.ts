@@ -13,7 +13,7 @@ function context(view: StructurePlanScratch) {
   return view.scratch("structure-interpretation", () => ({ index: null as SharedStructureIndex | null,
     records: new Map<string, ReturnType<SharedStructureIndex["records"]>[number]>(), heads: new Map<string, SharedProjectionStream>(), removed: new Map<string, boolean>(),
     headings: new Map<string, boolean>(), created: new Map<string, string>(), finalized: new Map<string, string>(), converted: new Map<string, string>(),
-    retired: new Map<string, boolean>(), marked: null as Set<string> | null, parts: new Map<SharedSplitObservationPart, Map<string, unknown>>(), staged: new Set<string>() }));
+    hidden: new Map<string, boolean>(), retired: new Map<string, boolean>(), marked: null as Set<string> | null, parts: new Map<SharedSplitObservationPart, Map<string, unknown>>(), staged: new Set<string>() }));
 }
 
 export function bindSharedStructurePlan(view: StructurePlanScratch, index: SharedStructureIndex): void { context(view).index = index; }
@@ -22,6 +22,7 @@ export function sharedStructurePlanIndex(view: StructurePlanScratch): SharedStru
 }
 export function planSharedStructureOwner(view: StructurePlanScratch, id: string, segment: string): void { context(view).records.set(id, { id, valid: true, segment, retired: false }); }
 export function planSharedSplitRetirement(view: StructurePlanScratch, beat: string, retired: boolean): void { context(view).retired.set(beat, retired); }
+export function planSharedCreationRetirement(view: StructurePlanScratch, beat: string, hidden: boolean): void { context(view).hidden.set(beat, hidden); }
 // why: after each operation of a list the planned state asks the readers' own question again, on the planned document,
 // for every marked beat whose watched parts that operation wrote, so a list is prepared as every copy will read it.
 export function planSharedSplitStaged(view: StructurePlanScratch & SharedSplitReadView, index: SharedStructureIndex, writes: readonly { readonly path: readonly string[]; readonly kind: string }[]): void {
@@ -126,8 +127,8 @@ export function interpretSharedStructure(view: StructurePlanScratch, requests: r
     const record = id === null || records.has(id) ? undefined : state.records.get(id) ?? index.records(id).find(value => value.id === id);
     if (id !== null && record && planned(record).retired) records.set(id, planned(record));
   }
-  return projectSharedBlocks(streams, [...records.values()]).filter(block => purpose === "restore-membership" || block.id === null
-    || !(block.kind === "h" ? state.headings.get(block.id) ?? index.headingRemoved(block.id) : plannedRemoval(state, block.id)));
+  return projectSharedBlocks(streams, [...records.values()]).filter(block => block.id === null || !(state.hidden.get(block.id) ?? index.hidden(block.id))
+    && (purpose === "restore-membership" || !(block.kind === "h" ? state.headings.get(block.id) ?? index.headingRemoved(block.id) : plannedRemoval(state, block.id))));
 }
 
 function resolveOwner(view: StructurePlanScratch, owner: string, field: "audioText" | "heading", purpose: "projected" | "restore-membership") {

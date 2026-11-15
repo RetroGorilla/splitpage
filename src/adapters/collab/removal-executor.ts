@@ -86,8 +86,8 @@ function remove(operation: SharedSoftRemove, view: SharedPreparationView, index:
     const target = { owner: owner.owner as SharedContentRef, segment: owner.segment as SharedContentRef, field: "audioText" as const }, converted = sharedTextPlanSlot(view, ["segments", owner.segment, "text"]).plan;
     const plan = readSharedConvertedBeat(view, owner.owner) && converted ? { ...converted, target } : sharedTextCommandPlan(view, target);
     plans.push(plan); targets.push({ beat: owner.owner, segment: owner.segment, generation });
-    visuals.push(...attachments(view, index, "visuals", owner.owner, roots).map(record => ({ beat: owner.owner as SharedContentRef, record: record as SharedContentRef })));
-    gallery.push(...attachments(view, index, "gallery", owner.owner, roots));
+    for (const record of attachments(view, index, "visuals", owner.owner, roots)) visuals.push({ beat: owner.owner as SharedContentRef, record: record as SharedContentRef });
+    for (const record of attachments(view, index, "gallery", owner.owner, roots)) gallery.push(record);
     if (view.has(["beats", owner.owner, "bufferRecovery"])) {
       const metadata = readSharedBufferRecoveryMetadata(view.get(["beats", owner.owner, "bufferRecovery"]));
       if (!metadata) throw new SharedStructurePreparationError("invalid-buffer-recovery-metadata");
@@ -184,7 +184,7 @@ function restore(operation: SharedRestore, view: SharedPreparationView, identiti
   }
   if (!writes.length) return { ok: true, writes: Object.freeze([]), apply: handle => applySharedMapWrites(handle, Object.freeze([])) };
   // why: assumed rule 52 as amended on #1414: a restore retires the discards that saw its removals.
-  writes.push(...sharedRemovalDiscardRetires(view, removals));
+  for (const write of sharedRemovalDiscardRetires(view, removals)) writes.push(write);
   reserveSharedStructureIdentity(view, id, identities); prepareStructureAlias(view, operation.id, id);
   for (const beat of beats) planSharedStructureRemoval(view, beat, false);
   for (const heading of headings) planSharedHeadingRemoval(view, heading, false);

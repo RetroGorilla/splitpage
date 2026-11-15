@@ -49,6 +49,7 @@ function createHeading(operation: SharedHeadingCreate, view: SharedPreparationVi
   prepareStructureAlias(view, operation.heading, heading);
   if (operation.segment !== operation.heading) prepareStructureAlias(view, operation.segment, segment);
   const writes: SharedPreparedWrite[] = [{ kind: "map", path: ["headings", heading] }, { kind: "set", path: ["headings", heading, "id"], value: heading },
+    { kind: "set", path: ["headings", heading, "firstBeat"], value: first.owner },
     { kind: "set", path: ["headings", heading, "extra"], value: "{}" }];
   const overlay: SharedPreparedWrite[] = [];
   let text: { readonly path: readonly string[]; readonly title: boolean } | null = null, boundary: SharedTextWritePlan | null = null;

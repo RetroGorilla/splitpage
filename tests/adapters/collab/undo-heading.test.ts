@@ -140,7 +140,7 @@ test("declared: a demotion keeps the generic part and stays refused by name, sin
   assert.equal(supportsSharedUndoPart("heading-remove"), false);
 }));
 
-test("declared: a heading created by paste stays refused by name, since the paste also creates a beat", () => scenario("D1", run => {
+test("rule 208: a paste list whose heading lands on the first beat of an existing scene moves that scene's first beat, which an undo cannot clear, so it is skipped by name", () => scenario("D1", run => {
   const document = projectSharedDocumentWithRecovery(run.set.a).document, at = beatPos("R1", 0);
   let next = 0;
   const outcome = pasteFlowRange({ rows: document.rows, sections: document.sections, comments: [] } as FlowDoc, { anchor: at, head: at },
@@ -148,9 +148,11 @@ test("declared: a heading created by paste stays refused by name, since the past
     { ...runtime.ports, newId: () => "fresh" + ++next, operations: { id: "paste", by: "Writer" } });
   assert.ok(outcome && "rows" in outcome && outcome.ops);
   const record = run.command(run.set.a, [...outcome.ops], "paste"); run.flush();
-  assert.deepEqual(record.parts.filter(part => part.kind === "structure").map(part => part.kind === "structure" ? part.command : ""), ["segment-create", "segment-create", "heading-create"]);
-  refused(run, record, "undo-unsupported:heading-create");
-  assert.deepEqual(["heading-create", "segment-create"].map(supportsSharedUndoPart), [false, false]);
+  assert.deepEqual(record.parts.filter(part => part.kind === "structure"), []);
+  assert.deepEqual(record.parts.map(part => part.kind).sort(), ["beat-create", "beat-create", "heading-creation", "scalar", "scalar"]);
+  assert.ok(record.parts.some(part => part.kind === "scalar" && part.target.scope === "heading" && part.field === "firstSceneId" && part.prior.clear === true));
+  refused(run, record, "undo-unsupported:scalar:firstSceneId");
+  assert.deepEqual(["heading-create", "segment-create", "heading-creation", "beat-create"].map(supportsSharedUndoPart), [false, false, true, true]);
 }));
 
 test("declared: a command that removes a heading and a beat keeps the generic parts and its undo is refused", () => scenario("D1", run => {

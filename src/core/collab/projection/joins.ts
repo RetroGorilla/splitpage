@@ -67,11 +67,11 @@ export function projectSharedJoinGroups(beats: readonly SharedProjectionBeatStru
   }
   return ids.filter(id => !edges.has(id)).map(root => {
     const cyclic = cycleRoots.has(root), members = [root], stack = [root];
-    if (cyclic) members.push(...ids.filter(id => id !== root && roots.get(id) === root));
+    if (cyclic) { for (const id of ids) if (id !== root && roots.get(id) === root) members.push(id); }
     else while (stack.length) {
       const parent = stack.pop();
       if (parent !== root && parent !== undefined) members.push(parent);
-      if (parent !== undefined) stack.push(...[...children.get(parent) ?? []].reverse());
+      if (parent !== undefined) { const own = children.get(parent) ?? []; for (let index = own.length - 1; index >= 0; index--) stack.push(own[index] as string); }
     }
     return { root, removed: removed.has(root), cyclic,
       members: members.map(id => ({ id, glue: id === root ? "" as const : joins.get(id)?.glue ?? "", ...(id !== root && joins.get(id)?.glueSet ? { glueSet: true as const } : {}) })) };
@@ -98,7 +98,7 @@ export function projectSharedJoinedUnits(parts: readonly { readonly units: reado
       for (const format of part.formats ?? []) marks.push({ kind: format, value: true });
       units.push({ value: glue, marks });
     }
-    units.push(...part.units);
+    for (const unit of part.units) units.push(unit);
   }
   return units;
 }

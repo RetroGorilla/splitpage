@@ -101,7 +101,8 @@ export function mountTagPanelsFeature(): TagPanelMount {
         setAddingPerson: portView.setTagAddingPerson,
         setTagOwner: (key, value) => tagPanelCommands.setTagOwner(key as string, value),
         setTagNotes: (key, value) => tagPanelCommands.setTagNotes(key as string, value),
-        queueAutoSave: portSaves.dueNow
+        queueAutoSave: portSaves.dueNow,
+        sessionShared: sharedSession
       }
     }))
   ]);
@@ -162,6 +163,7 @@ export function mountTagsFeature(): ReturnType<typeof mountTags> {
       runFromButton: runFromButton,
       setTagOwner: setTagOwner,
       setTagNotes: setTagNotes,
+      sessionShared: sharedSession,
       bulkDeleteArmed: bulkDeleteArmed,
       isTouch: function () { return IS_TOUCH as boolean; },
       addingPerson: function () { return portView.tagAddingPersonKey(); },

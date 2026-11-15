@@ -92,7 +92,7 @@ function harness(changeBeforePlan = false, refusePaste = false, tagged = false) 
     },
     visualLeave: cell => { leaves.push(cell.innerHTML); cells.sync(cell); },
     undo: { step: () => {}, flush: () => {}, breakCoalescing: () => { breaks++; }, last: () => null, nextRedo: () => null },
-    caretAfterStep: () => 0, notice: () => {}, changed: () => {}, selectionMoved: () => {},
+    caretAfterStep: () => 0, replayPlacement: () => null, notice: () => {}, changed: () => {}, selectionMoved: () => {},
     plainVisual: () => "", beatInput: () => {}, typeAtBeatEdge: () => false,
     beatKeydown: () => false, beatSelection: () => {}, leaveBeat: beat => { left.push(beat.dataset.id ?? ""); },
     newCommentId: () => "c", openComment: () => {}

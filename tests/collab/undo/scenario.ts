@@ -26,7 +26,7 @@ export interface UndoReplica {
   readonly observe: (beat: string, from: number, to: number) => ModelObservation;
   readonly caretAfter: (character: string) => SharedUndoSelection;
   readonly edit: (input: { readonly at: ModelObservation; readonly remove?: ModelObservation; readonly text?: string; readonly marks?: readonly SharedMarkValue[];
-    readonly caret?: ModelObservation; readonly command?: string }) => string[];
+    readonly caret?: ModelObservation; readonly command?: string; readonly standaloneCaret?: true }) => string[];
   readonly mark: (observed: ModelObservation, mark: SharedMarkValue) => readonly string[];
   readonly length: (beat: string) => number;
   readonly rootOf: (id: string) => string;
@@ -36,6 +36,7 @@ export interface UndoReplica {
   readonly scalar: (beat: string, field: string, value: SharedJsonValue | undefined) => void;
   readonly snapshot: () => ModelSnapshot;
   readonly record?: (action: UndoRecordAction, collection: SharedRecordCollection, key: string, value: string) => string | null;
+  readonly kept?: (key: string) => string | undefined;
 }
 
 export type UndoRecordAction = "create" | "set" | "delete" | "status";

@@ -20,9 +20,17 @@ export interface CreatedBeatCommand extends Command {
   readonly created: () => string | null;
 }
 
+export interface SharedSettledSelection {
+  readonly rowId: string;
+  readonly removed: readonly (readonly [number, number])[];
+  readonly at: number;
+}
+
 export interface SharedStructureCommands {
   readonly ports: () => SharedStructurePorts | null;
   readonly refused: (outcome: CommandOutcome) => void;
+  readonly settle: () => boolean;
+  readonly settleSelection: (rowId: string, read: () => { readonly from: number; readonly to: number } | null) => SharedSettledSelection | null;
 }
 
 export function sharedStructureTrace(doc: DocumentView, ports: SharedStructurePorts, author: SharedStructureAuthor): FlowOperationTrace {

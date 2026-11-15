@@ -142,7 +142,7 @@ export function runUndoHistory(history: UndoHistory, kind: UndoWorldKind = MODEL
     });
     return { gone: list(before, after), came: list(after, before) };
   };
-  const returned = (name: ReplicaName, direction: string, entry: Entry, before: ModelSnapshot, after: ModelSnapshot): void => {
+  const returned = (name: ReplicaName, direction: string, entry: Entry, before: ModelSnapshot, after: ModelSnapshot, kept?: string): void => {
     const { gone, came } = moved(before, after), shown = new Set(before.rows.flatMap(row => row.characters.map(character => origin(character.id))));
     const expected = entry.back.filter(unit => !shown.has(unit.root));
     const same = expected.length === came.length && expected.every((unit, index) => unit.row === came[index]?.row && unit.value === came[index]?.value);
@@ -154,7 +154,8 @@ export function runUndoHistory(history: UndoHistory, kind: UndoWorldKind = MODEL
     const record = entry.record, had = before.records ?? {}, has = after.records ?? {};
     if (!record) return;
     const [from, to] = direction === "undo" ? [record.after, record.before] : [record.before, record.after];
-    if (had[record.key] === from && has[record.key] !== to) violate("a reversal did not bring the record back as it was, fields and author",
+    // why: assumed rule 172: an undone removal brings the record back as the removal kept it, with edits that raced it.
+    if (had[record.key] === from && has[record.key] !== to && !(kept !== undefined && has[record.key] === kept)) violate("a reversal did not bring the record back as it was, fields and author",
       `${name} ${direction} ${record.key}: expected ${to ?? "none"}, got ${has[record.key] ?? "none"}`);
     const status = recordValue(had[record.key], "status"), set = setters.get(record.key + "|" + String(status));
     // why: rule 39: a status someone else gave the record since is their change, and an undo leaves it standing.
@@ -208,6 +209,8 @@ export function runUndoHistory(history: UndoHistory, kind: UndoWorldKind = MODEL
 
   const reverse = (name: ReplicaName, replica: UndoReplica, direction: "undo" | "redo"): boolean => {
     const before = replica.snapshot(), sizes = replica.undo.sizes(), written = replica.written.length, other = direction === "undo" ? "redo" : "undo";
+    const removal = direction === "undo" ? stack(name).undo.at(-1)?.record : null;
+    const kept = removal && removal.after === undefined ? replica.kept?.(removal.key) : undefined;
     placed(name, before, false);
     const outcome = replica.undo[direction]();
     const now = replica.undo.sizes();
@@ -234,7 +237,7 @@ export function runUndoHistory(history: UndoHistory, kind: UndoWorldKind = MODEL
     if (now[other] !== sizes[other] + 1) violate("an effective reversal left no way back", `${name} ${direction}`);
     if (replica.written.length !== written + 1) violate("an effective reversal did not write exactly one update", `${name} ${direction}`);
     const after = replica.snapshot();
-    if (entry) returned(name, direction, entry, before, after);
+    if (entry) returned(name, direction, entry, before, after, kept);
     placed(name, after, true);
     foreign(name, replica, before, after, direction === "undo");
     return true;

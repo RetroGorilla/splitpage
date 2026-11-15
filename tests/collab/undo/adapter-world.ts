@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
+import type { Run } from "../../../src/core/text/runs.ts";
+import { markRuns, standaloneCaretOffset } from "./standalone-caret.ts";
 import type { SharedContentRef, SharedJsonValue, SharedMarkValue, SharedOperation, SharedRecordCollection, SharedTextAddress } from "../../../src/core/collab/operations.ts";
-import type { SharedUndoRecord, SharedUndoSelection } from "../../../src/core/collab/undo-record.ts";
+import type { SharedCommandDescription, SharedUndoRecord, SharedUndoSelection } from "../../../src/core/collab/undo-record.ts";
 import { createSharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
 import type { SharedUndo, SharedUndoReversal } from "../../../src/application/editing/undo/shared-undo.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
@@ -12,12 +14,14 @@ import { registerSharedUndoOperationHandlers } from "../../../src/adapters/colla
 import { executeSharedCommand, reverseSharedUndoRecord, SHARED_UNDO_RECORDS, supportsSharedUndoPart } from "../../../src/adapters/collab/undo-executor.ts";
 import { registerSharedRecordHandlers } from "../../../src/adapters/collab/record-executor.ts";
 import { readSharedRecords } from "../../../src/adapters/collab/record-reader.ts";
+import { readSharedDeletedRecordFields } from "../../../src/adapters/collab/record-codec.ts";
 import type { UndoRecordAction } from "./scenario.ts";
 import { readSharedTextHistory } from "../../../src/adapters/collab/text-history.ts";
 import type { SharedTextHistory } from "../../../src/adapters/collab/text-history.ts";
 import { readSharedTextRestoreOperation } from "../../../src/adapters/collab/mark-provenance.ts";
 import { createSharedAnchor, readSharedAnchorUnit } from "../../../src/adapters/collab/anchors.ts";
 import { captureSharedTextRange } from "../../../src/adapters/collab/executor-references.ts";
+import { readSharedMarkCharacters } from "../../../src/adapters/collab/mark-store.ts";
 import { readSharedStatus, readSharedStatusHeads, readSharedStatusNotices } from "../../../src/adapters/collab/status.ts";
 import { scalarTarget } from "../../../src/adapters/collab/scalar-executor.ts";
 import { createMonitoredSharedDocument, deliveryReplica, validatedFixture } from "../../adapters/collab/helpers.ts";
@@ -50,6 +54,7 @@ export class AdapterReplica {
   failNextReversal: string | null = null;
   refuseNextReversal: string | null = null;
   typing = false;
+  private standaloneBeat: string | null = null;
   private readonly world: AdapterWorld;
   private readonly spans = new WeakMap<ModelObservation, SharedContentRef | null>();
   private serial = 0;
@@ -81,7 +86,7 @@ export class AdapterReplica {
 
   private author(): { id: string; by: string } { return { id: this.name + ":" + ++this.serial, by: modelWriters[this.name].by }; }
 
-  private command(operations: readonly SharedOperation[], description: { label: string; selection: SharedUndoSelection | null; typing: string | null }): SharedUndoRecord | null {
+  private command(operations: readonly SharedOperation[], description: SharedCommandDescription): SharedUndoRecord | null {
     if (!this.typing) this.world.now += 2000;
     let recorded: SharedUndoRecord | null = null;
     this.undo.perform(() => {
@@ -112,7 +117,9 @@ export class AdapterReplica {
     throw new Error("No character " + character);
   }
 
-  edit(input: { readonly at: ModelObservation; readonly remove?: ModelObservation; readonly text?: string; readonly marks?: readonly SharedMarkValue[]; readonly caret?: ModelObservation; readonly command?: string }): string[] {
+  edit(input: { readonly at: ModelObservation; readonly remove?: ModelObservation; readonly text?: string; readonly marks?: readonly SharedMarkValue[]; readonly caret?: ModelObservation; readonly command?: string;
+    readonly standaloneCaret?: true }): string[] {
+    if (input.standaloneCaret) this.standaloneBeat = input.at.beat;
     const target = address(input.at.beat), operations: SharedOperation[] = [], removed = (input.remove ?? input.at).ids;
     if (input.text) operations.push(operation({ kind: "text-insert", ...this.author(), target, at: { left: input.at.left, right: null, affinity: "after" },
       content: [{ value: input.text, marks: input.marks ?? [] }] }));
@@ -185,9 +192,16 @@ export class AdapterReplica {
       : { kind: "record-set", ...this.author(), target, field: main, value };
     let reason: string | null = null;
     this.world.now += 2000;
+    const statused = collection === "tags" || collection === "shots", status = () => statused ? readSharedStatus(this.handle, { scope, record: ref(key) }) : undefined;
+    const before = action === "delete" ? status() : undefined;
     this.undo.perform(() => {
       const execution = executeSharedCommand(this.handle, [operation(made)], { label: "record", selection: null, typing: null });
       if (!execution.result.ok) reason = execution.result.reason;
+      // why: an undo record holds a record as it shows, its status included, whichever way the undo later uses it.
+      for (const part of execution.record?.parts ?? []) if (part.kind === "record-create" || part.kind === "record-delete") {
+        const shows = part.kind === "record-create" ? status() : before;
+        assert.equal(part.fields.status, shows, `a recorded ${part.kind} of ${collection} ${key} does not hold the status the record shows`);
+      }
       return execution.record;
     });
     return reason;
@@ -204,9 +218,18 @@ export class AdapterReplica {
       this.failNextReversal = null;
       throw new Error(message);
     }
+    const beat = this.standaloneBeat, before = beat === null ? null : this.shownRuns(beat);
     const reversal = reverseSharedUndoRecord(this.handle, record, { by: modelWriters[this.name].by, nextId: () => this.author().id });
     this.world.nameRestorations(this);
-    return reversal;
+    const offset = reversal.ok && beat !== null && before ? standaloneCaretOffset(before, this.shownRuns(beat)) : null;
+    if (!reversal.ok || beat === null || offset === null) return reversal;
+    const caret = offset > 0 ? this.anchor(beat, offset, "before") : this.anchor(beat, 0, "after");
+    return { ...reversal, selection: { anchor: caret, focus: caret } };
+  }
+
+  private shownRuns(beat: string): Run[] {
+    const characters = readSharedMarkCharacters(this.handle, address(beat)) ?? [];
+    return markRuns(characters.map(character => ({ value: character.value, marks: character.marks.map(group => [group.kind, group.values.length === 1 ? group.values[0] : group.values] as const) })));
   }
 
   caret(selection: SharedUndoSelection): CollabCaret {
@@ -219,14 +242,23 @@ export class AdapterReplica {
     return selection.anchor === selection.focus ? from : { ...from, selection: { beat: from.beat, from: from.offset, to: to.offset } };
   }
 
+  private reading(collection: SharedRecordCollection, key: string, found: Readonly<Record<string, unknown>>): string {
+    const fields = { ...found as Record<string, unknown> };
+    if (collection === "tags") fields.status = readSharedStatus(this.handle, { scope: "tag", record: ref(key) });
+    if (collection === "shots") fields.status = readSharedStatus(this.handle, { scope: "shot", record: ref(key) });
+    return JSON.stringify(Object.keys(fields).sort().map(field => [field, fields[field]]));
+  }
+
+  // why: a removed record is read only when an undo of its removal is about to run, so a step reads nothing more.
+  kept(slot: string): string | undefined {
+    const at = slot.indexOf("|"), collection = slot.slice(0, at) as SharedRecordCollection, key = slot.slice(at + 1);
+    const removed = readSharedDeletedRecordFields(collection, key, collabState(this.handle).roots[collection].get(key));
+    return removed ? this.reading(collection, key, removed) : undefined;
+  }
+
   snapshot(): ModelSnapshot {
     const records: Record<string, string> = {};
-    for (const collection of SHARED_UNDO_RECORDS) for (const item of readSharedRecords(this.handle, collection)) {
-      const fields = { ...item.fields as Record<string, unknown> };
-      if (collection === "tags") fields.status = readSharedStatus(this.handle, { scope: "tag", record: ref(item.key) });
-      if (collection === "shots") fields.status = readSharedStatus(this.handle, { scope: "shot", record: ref(item.key) });
-      records[collection + "|" + item.key] = JSON.stringify(Object.keys(fields).sort().map(field => [field, fields[field]]));
-    }
+    for (const collection of SHARED_UNDO_RECORDS) for (const item of readSharedRecords(this.handle, collection)) records[collection + "|" + item.key] = this.reading(collection, item.key, item.fields);
     return { records, rows: this.world.beats.map(beat => {
       const history = this.history(beat), record = scalarTarget(this.handle, { scope: "beat", record: ref(beat) });
       return { id: beat, status: readSharedStatus(this.handle, { scope: "beat", record: ref(beat) }),

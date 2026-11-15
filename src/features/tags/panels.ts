@@ -644,13 +644,25 @@ function renderProductionByShoot(entries?: readonly PresentedProductionEntry[]) 
 }
 
 export function renderProduction() {
-  keepingTyped(["production-list", "production-bulk", "gear-list"], () => {
-    renderProductionPanel();
-    renderGearList();
-  });
+  const draw = (): void => { renderProductionPanel(); renderGearList(); };
+  const shared = (ports as TagPanelPorts).shared.ports();
+  if (!shared) { typedLife = null; draw(); return; }
+  keepingTyped(shared, ["production-list", "production-bulk", "gear-list"], draw);
 }
 
 type TypedBox = HTMLInputElement | HTMLTextAreaElement;
+type TypedSpot = { readonly root: HTMLElement; readonly selector: string };
+
+const TYPED_BOXES = [".tag-notes-input", ".tag-person-input", ".tag-rename-input", "#bulk-person-input"];
+
+function typedSpot(root: HTMLElement, el: TypedBox): TypedSpot {
+  const scene = el.closest("[data-scene-group]")?.getAttribute("data-scene-group") ?? null;
+  return { root, selector: (scene === null ? "" : '[data-scene-group="' + cssAttr(scene) + '"] ') + typedBoxKey(el) };
+}
+
+function typedBoxAt(spot: TypedSpot): TypedBox | null {
+  return spot.root.isConnected ? spot.root.querySelector<TypedBox>(spot.selector) : null;
+}
 
 function typedBoxKey(el: TypedBox): string {
   let selector = (el.classList[0] ? "." + cssAttr(el.classList[0]) : el.tagName.toLowerCase()) + (el.id ? '[id="' + cssAttr(el.id) + '"]' : "");
@@ -667,25 +679,27 @@ function unsavedTyping(el: TypedBox): boolean {
   return findTagByKey(el.getAttribute("data-key"))?.notes !== cappedLongText(plainText(el.value), 2000);
 }
 
-let typedLife: { readonly ports: TagPanelPorts | null; readonly epoch: number } | null = null;
+let typedLife: { readonly ports: TagPanelPorts | null; readonly shared: object; readonly epoch: number } | null = null;
 
-function keepingTyped(rootIds: readonly string[], draw: () => void): void {
+function keepingTyped(shared: object, rootIds: readonly string[], draw: () => void): void {
   const active = document.activeElement, epoch = (ports as TagPanelPorts).lifetime.epoch();
-  const sameLife = typedLife !== null && typedLife.ports === ports && typedLife.epoch === epoch;
-  typedLife = { ports, epoch };
-  if (!sameLife) { draw(); return; }
-  const kept = rootIds.flatMap(id => {
-    const root = document.getElementById(id);
-    if (!root) return [];
-    return Array.from(root.querySelectorAll<TypedBox>(".tag-notes-input, .tag-person-input, .tag-rename-input, #bulk-person-input")).flatMap(el => {
-      const focused = el === active, unsaved = unsavedTyping(el);
-      return focused || unsaved ? [{ root, key: typedBoxKey(el), focused, unsaved, value: el.value,
-        start: el.selectionStart, end: el.selectionEnd, direction: el.selectionDirection }] : [];
-    });
+  const sameLife = typedLife !== null && typedLife.ports === ports && typedLife.shared === shared && typedLife.epoch === epoch;
+  typedLife = { ports, shared, epoch };
+  const roots = rootIds.map(id => "#" + id), selector = roots.flatMap(root => TYPED_BOXES.map(box => root + " " + box)).join(", ");
+  const boxes = Array.from(document.querySelectorAll<TypedBox>(selector));
+  if (!sameLife) {
+    // why: a draw that renders nothing leaves the boxes standing, and their text belongs to the lifetime before
+    for (const el of boxes) el.value = el.defaultValue;
+    draw(); return;
+  }
+  const kept = boxes.flatMap(el => {
+    const root = el.closest<HTMLElement>(roots.join(", ")), focused = el === active, unsaved = unsavedTyping(el);
+    return root && (focused || unsaved) ? [{ spot: typedSpot(root, el), focused, unsaved, value: el.value,
+      start: el.selectionStart, end: el.selectionEnd, direction: el.selectionDirection }] : [];
   });
   draw();
   for (const box of kept) {
-    const again = box.root.isConnected ? box.root.querySelector<TypedBox>(box.key) : null;
+    const again = typedBoxAt(box.spot);
     if (!again) continue;
     if (box.unsaved) again.value = box.value;
     const lost = !document.activeElement || document.activeElement === document.body;

@@ -1,6 +1,7 @@
 {
   "tests": [
     "src/test/shared-split-records-app.test.mjs",
+    "src/test/panel-drafts-standalone-app.test.mjs",
     "tests/features/gallery/overlay.test.ts",
     "tests/features/gallery/annotate-mount.test.ts"
   ],
@@ -356,7 +357,7 @@
     {
       "label": "a b-roll redraw writes a refused typed value again and warns again",
       "file": "src/features/broll/panel.ts",
-      "find": "const saved = !change || typedAttempt(active, change) !== refusedTyped && writeTyped(active, change);",
+      "find": "const saved = !change || !(keeping && typedAttempt(active, change) === refusedTyped) && writeTyped(active, change);",
       "replace": "const saved = !change || writeTyped(active, change);"
     },
     {
@@ -374,8 +375,20 @@
     {
       "label": "a blur in tag notes does not retry a refused write",
       "file": "src/features/tags/mount.ts",
-      "find": "if (box.value !== box.defaultValue) ports.setTagNotes(box.getAttribute(\"data-key\"), box.value);",
-      "replace": "if (!box) ports.setTagNotes(box.getAttribute(\"data-key\"), box.value);"
+      "find": "if (ports.sessionShared() && box.value !== box.defaultValue) ports.setTagNotes(",
+      "replace": "if (!box) ports.setTagNotes("
+    },
+    {
+      "label": "standalone, a blur in tag notes writes what its typing did not",
+      "file": "src/features/tags/mount.ts",
+      "find": "if (ports.sessionShared() && box.value !== box.defaultValue) ports.setTagNotes(",
+      "replace": "if (box.value !== box.defaultValue) ports.setTagNotes("
+    },
+    {
+      "label": "the tag entity wiring reports no shared session, so a refused notes write is never retried on blur",
+      "file": "src/bootstrap/wiring/production.ts",
+      "find": "        queueAutoSave: portSaves.dueNow,\n        sessionShared: sharedSession",
+      "replace": "        queueAutoSave: portSaves.dueNow,\n        sessionShared: () => false"
     },
     {
       "label": "a tag rename closes its box before the outcome",
@@ -400,6 +413,48 @@
       "file": "src/features/tags/panels.ts",
       "find": "  if (p.shared.ports()) { p.notices.show(message, \"ok\"); return; }",
       "replace": "  if (!p) { p.notices.show(message, \"ok\"); return; }"
+    },
+    {
+      "label": "the tag panels keep typed drafts across a redraw in standalone too",
+      "file": "src/features/tags/panels.ts",
+      "find": "  const shared = (ports as TagPanelPorts).shared.ports();\n",
+      "replace": "  const shared = (ports as TagPanelPorts).shared.ports() ?? ports;\n"
+    },
+    {
+      "label": "the b-roll panel keeps typed drafts across a redraw in standalone too",
+      "file": "src/features/broll/panel.ts",
+      "find": "const shared = (ports as PanelPortUse).shared.ports(), epoch",
+      "replace": "const shared = (ports as PanelPortUse).shared.ports() ?? ports, epoch"
+    },
+    {
+      "label": "a tag draft's key leaves out its scene, so two occurrences of one tag share a box",
+      "file": "src/features/tags/panels.ts",
+      "find": "selector: (scene === null ? \"\" : '[data-scene-group=\"' + cssAttr(scene) + '\"] ') + typedBoxKey(el) };",
+      "replace": "selector: typedBoxKey(el) };"
+    },
+    {
+      "label": "the tag panels keep drafts across a document or session lifetime",
+      "file": "src/features/tags/panels.ts",
+      "find": "const sameLife = typedLife !== null && typedLife.ports === ports && typedLife.shared === shared && typedLife.epoch === epoch;",
+      "replace": "const sameLife = true;"
+    },
+    {
+      "label": "the tag panels' first draw of a lifetime leaves the earlier lifetime's text in boxes it does not redraw",
+      "file": "src/features/tags/panels.ts",
+      "find": "    for (const el of boxes) el.value = el.defaultValue;\n",
+      "replace": "\n"
+    },
+    {
+      "label": "the b-roll panel keeps drafts across a document or session lifetime",
+      "file": "src/features/broll/panel.ts",
+      "find": "const same = shared !== null && typedLife !== null && typedLife.ports === ports && typedLife.shared === shared && typedLife.epoch === epoch;",
+      "replace": "const same = shared !== null;"
+    },
+    {
+      "label": "a refused b-roll write is remembered past its session",
+      "file": "src/features/broll/panel.ts",
+      "find": "  if (!same) refusedTyped = null;\n",
+      "replace": "\n"
     }
   ]
 }

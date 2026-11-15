@@ -144,7 +144,7 @@ test("rule 29: closing the Writer over a stale edit keeps the typing in recovery
   } finally { page.close(); }
 });
 
-test("T01 in the Writer: typing over a held removal joins that beat's recovery, with no recovery write and no announcement", () => {
+test("rule 29, T01 in the Writer: typing over a held removal joins that beat's recovery, with no recovery write and one announcement", () => {
   const page = recovering("ab");
   try {
     registerSharedRemovalHandlers(page.h.b);
@@ -153,7 +153,7 @@ test("T01 in the Writer: typing over a held removal joins that beat's recovery, 
         observed: [flowBaseReference("R1", "audioText", 0, 2)], boundaries: ["R1"], components: [], gallery: [], at: 0 })], { base: readSharedRevision(page.h.b) }), { ok: true });
       page.h.queue.deliverFrom("B", "D1");
     }), true);
-    assert.deepEqual([page.recovered, page.reports], [[], []]);
+    assert.deepEqual([page.recovered, page.reports], [["R1"], []]);
     assert.deepEqual(page.a.executed.map(command => command.operations.map(operation => operation.kind)), [["text-insert", "scalar"]]);
     copies(page, { rows: [{ id: "R2", text: "next" }], recovery: [{ id: "R1", text: "abZ", members: ["R1"] }] });
   } finally { page.close(); }

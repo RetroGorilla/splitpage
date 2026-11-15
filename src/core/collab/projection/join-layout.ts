@@ -81,7 +81,7 @@ export function projectSharedJoinedLayout(blocks: readonly SharedJoinLayoutBlock
     if (fields) (fields.joins as SharedProjectionBeatStructure["joins"][number][]).push({ ...source.entry, into: source.into });
   }
   for (const group of projectSharedJoinGroups(fieldStructures)) {
-    const row = rowOf.get(group.root); if (row) row.fields.push(...group.members.map(member => member.id));
+    const row = rowOf.get(group.root); if (row) for (const member of group.members) row.fields.push(member.id);
   }
   return rows;
 }

@@ -484,7 +484,8 @@ export function pasteBeatsAt(cd: DataTransfer | null, cellEl: Element) {
   if (!cd || !(ports as BeatSelectPorts).document.current()) return false;
   const clip = beatsOnClipboard(function (t: string) { return cd.getData(t); });
   if (!clip) return false;
-  (ports as BeatSelectPorts).cells.sync(cellEl);
+  // why: in a shared session the command's admission settles the cell, and a second settle warns twice
+  if (!(ports as BeatSelectPorts).structure.ports()) (ports as BeatSelectPorts).cells.sync(cellEl);
   pasteClip(clip, cellEl.getAttribute("data-id"));
   return true;
 }

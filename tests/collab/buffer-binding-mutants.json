@@ -3,8 +3,8 @@
   "mutants": [{
     "label": "local command admitted before dirty native typing",
     "file": "src/application/editing/buffered-field.ts",
-    "find": "const stopAdmission = ports.beforeCommand(() => committing || finish());",
-    "replace": "const stopAdmission = () => {};"
+    "find": "const stopAdmission = ports.beforeCommand(() => {",
+    "replace": "const stopAdmission = () => {}; void (() => {"
   }, {
     "label": "native cut and drag bypass delegated refusal",
     "file": "src/application/editing/buffered-field.ts",
@@ -84,8 +84,8 @@
   }, {
     "label": "recovered typing is not announced",
     "file": "src/application/editing/buffered-field.ts",
-    "find": "ports.recovered(held.rowId);",
-    "replace": "void held.rowId;",
+    "find": "surface.changed();\n    ports.recovered(held.rowId);",
+    "replace": "surface.changed(); void held.rowId;",
     "tests": ["tests/features/writer/buffer-recovery.test.ts"]
   }, {
     "label": "recovered field keeps its native text",

@@ -42,13 +42,19 @@ export interface SharedSessionPorts {
 
 export type SharedAdmissionRefusal = Extract<CommandOutcome, { readonly kind: "rejected" | "failed" }>;
 
+export const SHARED_LISTENER_REFUSAL = "buffer-pending";
+
+export const SHARED_ADMISSION_ANNOUNCED = "announced";
+
+export type SharedAdmissionAnswer = boolean | typeof SHARED_ADMISSION_ANNOUNCED;
+
 export interface SharedDocumentSession extends CommonDocumentSession {
   refuse: (reason: string) => CommandOutcome;
   revision: () => number;
   admit: () => SharedAdmissionRefusal | null;
   hold: (reason: string) => () => void;
   readAt: <T>(select: (doc: DocumentView | null, revision: number) => T) => T;
-  beforeCommand: (listener: () => boolean) => () => void;
+  beforeCommand: (listener: () => SharedAdmissionAnswer) => () => void;
   subscribeRows: (listener: ChangedRowsListener) => () => void;
   recovery: () => readonly SharedRecoveryEntry[];
 }
@@ -103,7 +109,7 @@ export const UNRECOGNISED_ORIGIN = "A shared transaction had an origin the sessi
 export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSession {
   const scheduler = createEffectScheduler(ports.effects, ports.timers, ports.timing);
   const listeners: SessionListener[] = [];
-  const admissions: (() => boolean)[] = [];
+  const admissions: (() => SharedAdmissionAnswer)[] = [];
   const rowListeners: ChangedRowsListener[] = [];
   let admitting = false;
   const holds: string[] = [];
@@ -195,7 +201,10 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
     const mine: Running = { plan: plan, landed: null, lost: null };
     running = mine;
     try {
-      const description = shared.undo === false ? null : shared.description ?? { label: name, selection: null, typing: null };
+      const described = shared.undo === false ? null : shared.description ?? { label: name, selection: null, typing: null };
+      // why: standalone keeps the plan's selection with its undo entry; the shared record keeps it for the replay
+      const cells = plan.changes.cells.flatMap(cell => cell.rowId !== null && cell.field !== null ? [{ rowId: cell.rowId, field: cell.field }] : []);
+      const description = described ? { ...described, ...plan.selection ? { recorded: plan.selection } : {}, ...cells.length ? { cells } : {} } : described;
       const result = ports.replica.execute(shared.operations, { base: base, description: description });
       if (!result.ok) return { kind: "rejected", reason: result.reason };
     } catch (error) {
@@ -221,7 +230,11 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
     if (admitting) return null;
     admitting = true;
     try {
-      for (const listener of admissions.slice()) if (!listener()) return { kind: "rejected", reason: "buffer-pending" };
+      for (const listener of admissions.slice()) {
+        const answer = listener();
+        if (answer === true) continue;
+        return { kind: "rejected", reason: SHARED_LISTENER_REFUSAL, ...(answer === SHARED_ADMISSION_ANNOUNCED ? { notified: true as const } : {}) };
+      }
     } catch (error) { return { kind: "failed", error }; }
     finally { admitting = false; }
     return disposed ? { kind: "rejected", reason: DISPOSED } : null;

@@ -78,7 +78,7 @@ export function startEmptyScript(ports: EmptyScriptPorts) {
   let off = (): void => {}, admission = (): void => {}, abandoning: (() => void) | undefined;
   try {
     for (const [name, listener] of listeners) input.addEventListener(name, listener);
-    off = ports.document.onChange(paint); admission = ports.lifetime.beforeCommand(finish);
+    off = ports.document.onChange(paint); admission = ports.lifetime.beforeCommand(() => finish() || "announced");
     paint();
     abandoning = ports.abandonment?.(abandon);
   } catch (error) {

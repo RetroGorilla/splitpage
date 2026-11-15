@@ -165,6 +165,12 @@ export function readJoinRetire(raw: unknown) {
 export function readSplitRetire(raw: unknown) {
   return readKind(raw, "split-retire", { beat: ref });
 }
+export function readSegmentRetire(raw: unknown, kind: "segment-retire" | "segment-restore") {
+  return readKind(raw, kind, { beat: ref, creator: ref, observed: ref });
+}
+export function readHeadingRetire(raw: unknown, kind: "heading-retire" | "heading-restore") {
+  return readKind(raw, kind, { heading: ref, segment: ref, creator: ref, observed: ref });
+}
 export function readSplitRestore(raw: unknown) {
   return readKind(raw, "split-restore", { beat: ref });
 }
@@ -199,6 +205,9 @@ function readField<K extends "record-set" | "scalar">(raw: unknown, kind: K, tar
   } catch { return null; }
 }
 export function readRecordSet(raw: unknown) { return readField(raw, "record-set", recordAddress); }
+export function readRecordRevive(raw: unknown) {
+  return readKind(raw, "record-revive", { target: recordAddress }, { field: oneOf("props", "links"), entry: ref });
+}
 export function readRecordDelete(raw: unknown) {
   return readKind(raw, "record-delete", { target: recordAddress });
 }
@@ -242,6 +251,10 @@ export function readOperation(raw: unknown): SharedOperation | null {
       case "text-delete": return readTextDelete(value);
       case "mark": return readMarkChange(value);
       case "segment-create": return readSegmentCreate(value);
+      case "segment-retire": return readSegmentRetire(value, "segment-retire");
+      case "segment-restore": return readSegmentRetire(value, "segment-restore");
+      case "heading-retire": return readHeadingRetire(value, "heading-retire");
+      case "heading-restore": return readHeadingRetire(value, "heading-restore");
       case "split": return readBeatSplit(value);
       case "split-before": return readBeatSplitBefore(value);
       case "join": return readBeatJoin(value);
@@ -258,6 +271,7 @@ export function readOperation(raw: unknown): SharedOperation | null {
       case "record-create": return readRecordCreate(value);
       case "record-set": return readRecordSet(value);
       case "record-delete": return readRecordDelete(value);
+      case "record-revive": return readRecordRevive(value);
       case "scalar": return readScalarSet(value);
       case "status": return readSharedStatusEvent(value);
       case "text-restore": return readTextRestore(value);

@@ -19,7 +19,7 @@ import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.t
 
 function ref(value: string) { const result = readSharedContentRef(value); assert.ok(result); return result; }
 
-for (const order of ["dup", "rev"] as const) test("rule 71: a skipped first creation cannot block later typing undo or the older entry/" + order, () => {
+for (const order of ["dup", "rev"] as const) test("first creation and later typing each undo, and the older entry stays reachable/" + order, () => {
   const h = replicas(2, { rows: [] }), late = createMonitoredSharedDocument();
   for (const handle of [h.a, h.b]) registerSharedOperationFamilies(handle, createFlowLoadRuntime());
   let serial = 0;
@@ -34,10 +34,6 @@ for (const order of ["dup", "rev"] as const) test("rule 71: a skipped first crea
     assert.equal(a.session.run(emptyScriptCommand("A", { ...bufferStamps("Alice"), author: { id: ref("start"), by: "Alice" },
       gap: { left: null, right: null, affinity: "before" }, created })).kind, "applied");
     assert.deepEqual(undo.sizes(), { undo: 2, redo: 0, dropped: 0 });
-    const before = encodeSharedState(h.a);
-    assert.deepEqual(undo.undo(), { ok: false, reason: "undo-unsupported:segment-create", skipped: true });
-    assert.deepEqual([undo.sizes(), undo.skipped()], [{ undo: 1, redo: 0, dropped: 0 }, 1]);
-    assert.deepEqual(encodeSharedState(h.a), before);
     const buffer = createSharedBufferedText(h.a, a.session, { target: id => sharedBufferedTarget(h.a, id),
       author: () => ({ id: "typing", by: "Alice" }), readers: bufferReaders, stamps: bufferStamps("Alice") });
     const painted = readSharedPaintedText(h.a, sharedBufferedTarget(h.a, created)); assert.ok(painted);
@@ -47,15 +43,16 @@ for (const order of ["dup", "rev"] as const) test("rule 71: a skipped first crea
     const typed = undo.undo(); assert.equal(typed.ok && typed.effective, true);
     assert.equal(a.session.read(doc => doc?.rows[0]?.audioText), "A");
     assert.deepEqual(a.session.read(doc => doc?.people), [{ id: "P1", name: "Pat" }]);
+    assert.deepEqual(undo.undo(), { ok: true, effective: true, label: "empty-script-type", selection: null });
+    assert.deepEqual(a.session.read(doc => doc?.rows), []);
     const older = undo.undo(); assert.equal(older.ok && older.effective, true);
     assert.deepEqual(a.session.read(doc => doc?.people), []);
-    assert.deepEqual(undo.undo(), { ok: false, empty: true }); assert.equal(undo.skipped(), 1);
+    assert.deepEqual(undo.undo(), { ok: false, empty: true }); assert.equal(undo.skipped(), 0);
     h.queue.flush(order); assert.equal(applySharedUpdate(late, encodeSharedState(h.a)).ok, true);
     const readings = [h.a, h.b, late].map(handle => projectSharedDocumentWithRecovery(handle));
-    for (const output of readings) assert.deepEqual(output, { document: { schema: 2, title: "", docId: "d00000000000000000000000000000000", rows: [
-      { id: "structure_1_00730074006100720074_beat_0", status: "todo", visualText: "", audioText: "A", imageRef: null, updatedAt: "2026-11-12T10:00:00.000Z", updatedBy: "Alice" }
-    ], comments: [], people: [], productionTags: [], brollShots: [], wordsPerMinute: 150, rev: 0 }, recovery: [] });
-    assertReplicasAgree("rule 71 empty-script undo", readings.map((output, index) => ({ replica: index === 0 ? "A" : index === 1 ? "B" : "C", order: index === 2 ? "late-C" : order === "rev" ? "D2" : "D1", output })));
+    for (const output of readings) assert.deepEqual(output, { document: { schema: 2, title: "", docId: "d00000000000000000000000000000000", rows: [],
+      comments: [], people: [], productionTags: [], brollShots: [], wordsPerMinute: 150, rev: 0 }, recovery: [] });
+    assertReplicasAgree("empty-script undo", readings.map((output, index) => ({ replica: index === 0 ? "A" : index === 1 ? "B" : "C", order: index === 2 ? "late-C" : order === "rev" ? "D2" : "D1", output })));
   } finally { a.session.dispose(); destroySharedDocument(late); h.close(); }
 });
 
@@ -63,7 +60,7 @@ for (const value of [
   { text: "A<&\nB", html: "A&lt;&amp;<br>B" },
   { text: "   ", html: "   " },
   { text: "  both ends  ", html: "  both ends  " }
-]) for (const order of ["dup", "rev"] as const) test("empty shared script first input is one literal creation command; rule 71 skips its named unsupported undo once/" + order + "/" + JSON.stringify(value.text), () => {
+]) for (const order of ["dup", "rev"] as const) test("empty shared script first input is one literal creation command that undoes and redoes/" + order + "/" + JSON.stringify(value.text), () => {
   const h = replicas(2, { rows: [] }), late = createMonitoredSharedDocument();
   for (const handle of [h.a, h.b]) registerSharedOperationFamilies(handle, createFlowLoadRuntime());
   const undo = sharedUndoOwner(h.a, () => ({ id: "undo", by: "Alice" }), () => 0, error => { throw error; });
@@ -76,12 +73,15 @@ for (const value of [
       segment: "structure_1_00730074006100720074_beat_0", beat: "structure_1_00730074006100720074_beat_0", at: { left: null, right: null, affinity: "before" },
       fields: { status: "todo", visualText: "", audioText: value.html, imageRef: null, updatedAt: "2026-11-12T10:00:00.000Z", updatedBy: "Alice" } }]]);
     assert.deepEqual(undo.sizes(), { undo: 1, redo: 0, dropped: 0 });
+    const empty = { ...projectSharedDocumentWithRecovery(h.a), document: { ...projectSharedDocumentWithRecovery(h.a).document, rows: [] } };
+    assert.deepEqual(undo.undo(), { ok: true, effective: true, label: "empty-script-type", selection: null });
+    assert.deepEqual([undo.sizes(), undo.skipped()], [{ undo: 0, redo: 1, dropped: 0 }, 0]);
+    h.queue.flush(order);
+    for (const handle of [h.a, h.b]) assert.deepEqual(projectSharedDocumentWithRecovery(handle), empty);
     const before = encodeSharedState(h.a);
-    assert.deepEqual(undo.undo(), { ok: false, reason: "undo-unsupported:segment-create", skipped: true });
-    assert.deepEqual([undo.sizes(), undo.skipped()], [{ undo: 0, redo: 0, dropped: 0 }, 1]);
+    assert.deepEqual(undo.undo(), { ok: false, empty: true }); assert.equal(undo.skipped(), 0);
     assert.deepEqual(encodeSharedState(h.a), before);
-    assert.deepEqual(undo.undo(), { ok: false, empty: true }); assert.equal(undo.skipped(), 1);
-    assert.deepEqual(encodeSharedState(h.a), before);
+    assert.deepEqual(undo.redo(), { ok: true, effective: true, label: "empty-script-type", selection: null });
     h.queue.flush(order); assert.equal(applySharedUpdate(late, encodeSharedState(h.a)).ok, true);
     const readings = [h.a, h.b, late].map(handle => projectSharedDocumentWithRecovery(handle));
     for (const output of readings) assert.deepEqual(output, { document: { schema: 2, title: "", docId: "d00000000000000000000000000000000", rows: [
@@ -89,6 +89,6 @@ for (const value of [
     ], comments: [], people: [], productionTags: [], brollShots: [], wordsPerMinute: 150, rev: 0 }, recovery: [] });
     assertReplicasAgree("empty-script first command", readings.map((output, index) => ({ replica: index === 0 ? "A" : index === 1 ? "B" : "C", order: index === 2 ? "late-C" : order === "rev" ? "D2" : "D1", output })));
     assert.equal(a.session.run(emptyScriptCommand("", { ...ports, clock: { ...ports.clock, nowIso: () => { assert.fail("Empty input read the clock"); } } })).kind, "noop");
-    assert.equal(a.executed.length, 1); assert.deepEqual([undo.sizes(), undo.skipped()], [{ undo: 0, redo: 0, dropped: 0 }, 1]);
+    assert.equal(a.executed.length, 1); assert.deepEqual([undo.sizes(), undo.skipped()], [{ undo: 1, redo: 0, dropped: 0 }, 0]);
   } finally { a.session.dispose(); destroySharedDocument(late); h.close(); }
 });

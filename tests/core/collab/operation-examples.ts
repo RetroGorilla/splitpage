@@ -38,6 +38,10 @@ export const operationExamples = [
   { fixture: "T21 undo of a format", operation: { kind: "mark-retract", id: "undo-bold-A", by: "Alice", target, occurrences: ["bold-A"] } },
   { fixture: "T21 scalar undo of a status", operation: { kind: "status-retire", id: "undo-status-A", by: "Alice",
     target: { scope: "beat", record: "R1" }, event: "c", value: "ready" } },
+  { fixture: "creation undo retains the beat", operation: { kind: "segment-retire", id: "undo-create-A", by: "Alice", beat: "R1", creator: "1", observed: "created-beat" } },
+  { fixture: "creation redo keeps the beat identity", operation: { kind: "segment-restore", id: "redo-create-A", by: "Alice", beat: "R1", creator: "1", observed: "created-beat" } },
+  { fixture: "heading creation undo hides the heading line", operation: { kind: "heading-retire", id: "undo-scene-A", by: "Alice", heading: "H1", segment: "h:H1", creator: "1", observed: "created-heading" } },
+  { fixture: "heading creation redo keeps the heading identity", operation: { kind: "heading-restore", id: "redo-scene-A", by: "Alice", heading: "H1", segment: "h:H1", creator: "1", observed: "created-heading" } },
   { fixture: "rule 52 recovery panel", operation: { kind: "discard", id: "discard-A", by: "Alice",
     entry: { kind: "removed-beat", key: "R1" }, removals: ["rA"] } }
 ] as const;

@@ -238,8 +238,31 @@ jobs:
       - name: Unit, desktop and tool test shard
         run: npm run test:all -- --shard "${{ matrix.shard }}/4"
 
+  mutants-baseline:
+    name: Collaboration mutants baseline
+    needs: changes
+    if: needs.changes.outputs.mutants == 'true' && needs.changes.outputs.tested != 'true'
+    runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 30
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: package-lock.json
+
+      - name: Install tooling
+        run: npm ci
+
+      - name: The unmutated collaboration tests pass
+        run: |
+          shopt -s extglob
+          node tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --baseline-only --baseline-timeout 1500
+
   mutants:
-    name: Collaboration mutants (${{ matrix.shard }}/4)
+    name: Collaboration mutants (${{ matrix.shard }}/6)
     needs: changes
     if: needs.changes.outputs.mutants == 'true' && needs.changes.outputs.tested != 'true'
     runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
@@ -247,7 +270,7 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6]
     steps:
       - uses: actions/checkout@v7
 
@@ -263,21 +286,22 @@ jobs:
       - name: Every collaboration mutant is caught
         run: |
           shopt -s extglob
-          node tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --shard "${{ matrix.shard }}/4" --concurrency 4 --baseline-timeout 900 --fail-on-survivor
+          node tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --shard "${{ matrix.shard }}/6" --concurrency 4 --no-baseline --fail-on-survivor
 
   gate:
-    needs: [changes, checks, tests, desktop-smoke, mutants]
+    needs: [changes, checks, tests, desktop-smoke, mutants, mutants-baseline]
     if: always()
     runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 2
     steps:
       - name: Every required job passed, or the change was prose only
         run: |
-          echo "changes=$CHANGES code=$CODE root_tests=$ROOT_TESTS tested=$TESTED desktop=$DESKTOP mutants_needed=$MUTANTS_NEEDED checks=$CHECKS tests=$TESTS smoke=$SMOKE mutants=$MUTANTS"
+          echo "changes=$CHANGES code=$CODE root_tests=$ROOT_TESTS tested=$TESTED desktop=$DESKTOP mutants_needed=$MUTANTS_NEEDED checks=$CHECKS tests=$TESTS smoke=$SMOKE mutants=$MUTANTS mutants_baseline=$MUTANTS_BASELINE"
           [ "$CHANGES" = success ] || exit 1
           want_mutants=skipped
           if [ "$MUTANTS_NEEDED" = true ] && [ "$TESTED" != true ]; then want_mutants=success; fi
           [ "$MUTANTS" = "$want_mutants" ] || exit 1
+          [ "$MUTANTS_BASELINE" = "$want_mutants" ] || exit 1
           if [ "$CODE" = true ] && [ "$TESTED" != true ]; then
             want_tests=skipped
             if [ "$ROOT_TESTS" = true ]; then want_tests=success; fi
@@ -298,15 +322,16 @@ jobs:
           TESTS: ${{ needs.tests.result }}
           SMOKE: ${{ needs.desktop-smoke.result }}
           MUTANTS: ${{ needs.mutants.result }}
+          MUTANTS_BASELINE: ${{ needs.mutants-baseline.result }}
 
       - name: Write the passed tree's marker
-        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && (needs.mutants.result == 'success' || needs.mutants.result == 'skipped') && needs.changes.outputs.tree != ''
+        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && (needs.mutants.result == 'success' || needs.mutants.result == 'skipped') && (needs.mutants-baseline.result == 'success' || needs.mutants-baseline.result == 'skipped') && needs.changes.outputs.tree != ''
         run: echo "$TREE" > "$RUNNER_TEMP/passed-tree.txt"
         env:
           TREE: ${{ needs.changes.outputs.tree }}
 
       - name: Upload the passed tree's marker
-        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && (needs.mutants.result == 'success' || needs.mutants.result == 'skipped') && needs.changes.outputs.tree != ''
+        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && (needs.mutants.result == 'success' || needs.mutants.result == 'skipped') && (needs.mutants-baseline.result == 'success' || needs.mutants-baseline.result == 'skipped') && needs.changes.outputs.tree != ''
         uses: actions/upload-artifact@v7
         with:
           name: ci-passed-tree-${{ needs.changes.outputs.tree }}

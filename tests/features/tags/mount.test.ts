@@ -48,7 +48,7 @@ function harness() {
     renderProduction: log("render"),
     saveTagRename: (key, value) => { log("rename-save")(key, value); return key; }, addPersonForTag: (key, value) => { log("person-save")(key, value); return { changed: true, held: false }; },
     setRenaming: log("renaming"), renaming: () => null, setAddingPerson: (v) => { state.adding = v; log("adding")(v); },
-    setTagOwner: log("owner"), setTagNotes: log("notes"), queueAutoSave: log("autosave"),
+    setTagOwner: log("owner"), setTagNotes: log("notes"), queueAutoSave: log("autosave"), sessionShared: () => false,
     acceptTagGhost: log("ghost"), acceptUntaggedMention: log("suggest"), applyTag: log("apply"),
     armBulkDelete: log("arm-bulk"), clearProductionSelection: log("clear"), closeTagComposer: log("close-composer"),
     disarmBulkDelete: log("disarm-bulk"), hideTagGhost: log("hide-ghost"), hideUntaggedPrompt: log("hide-suggest"),

@@ -1,5 +1,6 @@
 import type { BufferedTextCommit, BufferedTextEdit, PaintedText } from "./ports.ts";
 import type { CommandOutcome } from "../session/document-session.ts";
+import { SHARED_ADMISSION_ANNOUNCED } from "../session/shared-session.ts";
 import type { SharedDocumentSession } from "../session/shared-session.ts";
 import { beatPos } from "../../core/flow/flow.ts";
 import type { FlowPos, FlowRange } from "../../core/flow/flow.ts";
@@ -70,7 +71,9 @@ export interface BufferedFieldSurface<E> {
   readonly unsettled?: (key: string, text: string) => { readonly reason: string; readonly hold: boolean } | null;
 }
 
-export function createBufferedField<E>(ports: BufferedFieldPorts, surface: BufferedFieldSurface<E>): BufferedFieldBinding {
+export function createBufferedField<E>(given: BufferedFieldPorts, surface: BufferedFieldSurface<E>): BufferedFieldBinding {
+  let reported = 0;
+  const ports: BufferedFieldPorts = { ...given, report: outcome => { reported++; given.report(outcome); } };
   let active: { rowId: string; beat: E; base: PaintedText; edit: BufferedTextEdit; fault: boolean } | null = null;
   let target: readonly [number, number] | null = null;
   let typed: string | null = null;
@@ -209,6 +212,7 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
     active = null; target = null;
     surface.repaint(held.rowId); surface.restore(held.rowId, outcome.selection);
     surface.changed();
+    if (outcome.recovered) ports.recovered(held.rowId);
     if (outcome.kind === "failed" || outcome.kind === "rejected" || outcome.kind === "committed" && outcome.errors.length) ports.report(outcome);
     return true;
   }
@@ -230,7 +234,12 @@ export function createBufferedField<E>(ports: BufferedFieldPorts, surface: Buffe
     event.preventDefault(); return false;
   }
 
-  const stopAdmission = ports.beforeCommand(() => committing || finish());
+  const stopAdmission = ports.beforeCommand(() => {
+    if (committing) return true;
+    const before = reported;
+    // why: a fault refuses without a new report, and then only the caller can announce it
+    return finish() || (reported === before ? false : SHARED_ADMISSION_ANNOUNCED);
+  });
 
   function abandon(final: boolean): void {
     if (final) released = true;
