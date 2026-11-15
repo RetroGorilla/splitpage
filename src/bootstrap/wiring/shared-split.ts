@@ -4,6 +4,7 @@ import type { CellBuffer } from "../../features/editing/cell-buffer.ts";
 import { productionReaders } from "../document-ports.ts";
 import { mountCompositionFeature, mountFocusFeature, mountRowsEditingFeature, refuseSharedSplitNative } from "./editor.ts";
 import { notices } from "./ports/effects.ts";
+import { writerView } from "./ports/preferences.ts";
 import { sharedBufferPorts } from "./ports/shared-buffer.ts";
 import { sharedCommandReport } from "./ports/shared-command-notices.ts";
 import { sessionStamps } from "./session-owner.ts";
@@ -28,8 +29,9 @@ export function sharedSplitBindings(effects: Pick<BufferedFieldPorts, "missingBa
       closing = false;
       if (entered === parts && buffer) return;
       entered = parts;
+      // why: rule 198 on #1414: opening the Writer takes the caret out of the cell, and a view switch is not a leave
       const leftCell = sharedLeftCellKeying(parts.session, sharedScriptBrollKeyingPorts(parts, sessionStamps),
-        { open: () => !closing && entered === parts && !!buffer, notify });
+        { open: () => !closing && entered === parts && !!buffer && !writerView().writerOpen(), notify });
       mountCompositionFeature(true); mountFocusFeature({ leftCell }); mountRowsEditingFeature(true);
       const author = (): { readonly id: string; readonly by: string } => {
         const next = parts.author.next();

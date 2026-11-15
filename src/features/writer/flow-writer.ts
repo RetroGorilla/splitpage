@@ -209,8 +209,12 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     return state;
   }
 
+  function closeVisualAside(): void {
+    if (visual?.abandon) visual.abandon(); else visual?.close(false);
+  }
+
   function beforeReplay(dir: UndoDirection): void {
-    visual?.close(false);
+    closeVisualAside();
     const entry = dir === "undo" ? ports.undo.last() : ports.undo.nextRedo();
     replaying = entry?.selection ?? null;
     replayDir = dir;
@@ -330,7 +334,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     },
     ...(visual.settle ? { settle: () => !!visual?.settle?.() && (surface.settle?.() ?? true) } : surface.settle ? { settle: surface.settle } : {}),
     isCurrent,
-    finish: () => { if (visual?.abandon) visual.abandon(); else visual?.close(false); return isCurrent() ? surface.finish() : null; },
+    finish: () => { closeVisualAside(); return isCurrent() ? surface.finish() : null; },
     repaint: () => { if (isCurrent()) { surface.repaint(); visual?.refresh(); } },
     caret,
     format,

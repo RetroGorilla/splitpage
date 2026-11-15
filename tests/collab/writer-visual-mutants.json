@@ -24,8 +24,8 @@
     {
       "label": "Writer shared visual invokes standalone shortcut creators",
       "file": "src/features/writer/flow-visual-box.ts",
-      "find": "input: () => {}, leave: () => {}, keydown: () => false, beforeWrite: () => null,",
-      "replace": "input: ports.input, leave: ports.leave, keydown: ports.keydown, beforeWrite: () => null,",
+      "find": "input: () => {}, leave: cell => { if (!abandoning) ports.leave(cell); }, keydown: () => false, beforeWrite: () => null,",
+      "replace": "input: ports.input, leave: cell => { if (!abandoning) ports.leave(cell); }, keydown: ports.keydown, beforeWrite: () => null,",
       "tests": [
         "tests/features/writer/visual-buffer.test.ts"
       ]

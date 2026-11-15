@@ -11,6 +11,7 @@ export interface FlowVisualBoxPorts {
   readonly buffer?: FlowVisualBufferMount;
   readonly opened?: (cell: HTMLElement, range: FlowRange, first: boolean) => void;
   readonly closing?: () => boolean;
+  readonly closeForReplay?: () => void;
   readonly closed?: (cell: HTMLElement) => void;
   readonly repaint?: (paint: () => void) => void;
   readonly root: HTMLElement;
@@ -59,6 +60,7 @@ function bufferedVisualBox(ports: FlowVisualBoxPorts, mount: FlowVisualBufferMou
   };
   const control = standaloneVisualBox({ ...ports,
     input: () => {}, leave: cell => { if (!abandoning) ports.leave(cell); }, keydown: () => false, beforeWrite: () => null,
+    closeForReplay: () => { abandoned(() => { control.close(); }); },
     opened: (cell, range, first) => { selection = first ? range : null; cell.dataset.field = first ? "selection-visual" : "visualText"; binding?.selectionKeep(selection); binding?.painted(); },
     closing: () => { if (binding && !binding.finish()) return false; binding?.selectionEnd(); return true; },
     closed: target => { target.dataset.field = "inactive-visual"; selection = null; binding?.selectionKeep(null); binding?.painted(); },
@@ -108,8 +110,8 @@ function bufferedVisualBox(ports: FlowVisualBoxPorts, mount: FlowVisualBufferMou
   for (const type of types) box.addEventListener(type, stopped, true);
   const released = (): void => { if (!composing && selection) binding?.selectionEnd(); };
   box.addEventListener("keyup", released);
-  // why: rule 198 on #1414: in a shared session a view switch or teardown commits the box but is not a leave,
-  // so it keys nothing; the standalone box keys on both, as before.
+  // why: rule 198 on #1414: in a shared session a view switch, undo, redo or teardown commits the box and keys nothing;
+  // shared keying is its own undo step, which keying on these closes would undo or replace.
   return { ...control, settle: () => binding?.finish() ?? true, abandon: () => { abandoned(() => { control.close(false); }); }, dispose: () => {
     if (!binding?.dispose()) return;
     for (const type of types) { box.removeEventListener(type, gate, true); box.removeEventListener(type, stopped, true); }
@@ -313,7 +315,7 @@ function standaloneVisualBox(ports: FlowVisualBoxPorts) {
       event.preventDefault();
       event.stopPropagation();
       const redo = event.key.toLowerCase() === "y" || event.shiftKey;
-      close();
+      if (ports.closeForReplay) ports.closeForReplay(); else close();
       ports.undo(redo ? "redo" : "undo");
       return;
     }
@@ -333,7 +335,7 @@ function standaloneVisualBox(ports: FlowVisualBoxPorts) {
     if (input.inputType === "historyUndo" || input.inputType === "historyRedo") {
       event.preventDefault();
       event.stopPropagation();
-      close();
+      if (ports.closeForReplay) ports.closeForReplay(); else close();
       ports.undo(input.inputType === "historyUndo" ? "undo" : "redo");
     }
     if (input.inputType === "insertParagraph" || input.inputType === "insertLineBreak") {

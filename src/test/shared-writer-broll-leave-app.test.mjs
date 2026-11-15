@@ -196,16 +196,35 @@ test("undo and redo of the keying from the Writer take back and bring back the s
   } finally { f.close(); }
 });
 
-test("Ctrl+Z inside the box leaves it first, as the standalone Writer does: the keying is made, then undone, and can be redone", async () => {
+test("Ctrl+Z inside the box closes it without keying and takes back the typing, as the standalone Writer's undo does", async () => {
   const f = await enter("Close up");
   try {
     const cell = openVisual();
     typeInBox(cell, 0, "B-roll: ");
     const seen = counting(f.parts);
     try { key(cell, { key: "z", ctrlKey: true }); } finally { seen.restore(); }
-    assert.deepEqual(seen.names.filter(name => KEYING.includes(name)), ["key-broll-lines"]);
-    assert.deepEqual(agreed(f, "keyed then undone"), { visual: "B-roll: Close up", shots: [] });
-    assert.deepEqual(f.parts.undo.sizes(), { undo: 1, redo: 1, dropped: 0 });
+    assert.deepEqual(seen.names.filter(name => KEYING.includes(name)), []);
+    assert.deepEqual(agreed(f, "typing undone"), { visual: "Close up", shots: [] });
+    assert.deepEqual(f.parts.undo.sizes(), { undo: 0, redo: 1, dropped: 0 });
+  } finally { f.close(); }
+});
+
+test("undo of the keying reopens the box; Ctrl+Y pressed there closes it without keying and redoes the same key and shot", async () => {
+  const f = await enter("Close up");
+  try {
+    const cell = openVisual();
+    typeInBox(cell, 0, "B-roll: ");
+    escape(cell);
+    const made = agreed(f, "keyed"), id = made.shots[0]?.[0];
+    key(beat("r1"), { key: "z", ctrlKey: true });
+    assert.equal(box().element.hidden, false);
+    assert.equal(document.activeElement, box().cell);
+    assert.deepEqual(agreed(f, "undone"), { visual: "B-roll: Close up", shots: [] });
+    const seen = counting(f.parts);
+    try { key(box().cell, { key: "y", ctrlKey: true }); } finally { seen.restore(); }
+    assert.deepEqual(seen.names.filter(name => KEYING.includes(name)), []);
+    assert.deepEqual(agreed(f, "redone from the box"), { visual: KEY(id) + " Close up", shots: [[id, "Close up"]] });
+    assert.deepEqual(f.parts.undo.sizes(), { undo: 2, redo: 0, dropped: 0 });
   } finally { f.close(); }
 });
 
@@ -317,6 +336,22 @@ test("rule 198: switching from the Writer to the Split with the box open commits
     assert.equal(document.getElementById("writer").hidden, true);
     assert.deepEqual(seen.names.filter(name => KEYING.includes(name)), []);
     assert.deepEqual(agreed(f, "view switch"), { visual: "B-roll: Close up", shots: [] });
+  } finally { f.close(); }
+});
+
+test("rule 198: switching from the Split to the Writer with the caret in an unkeyed visual cell keys nothing", async () => {
+  const f = await enter("B-roll: Close up");
+  try {
+    const cell = cellOf("visualText");
+    cell.focus();
+    const point = posToDom(cell, 3);
+    document.getSelection().setBaseAndExtent(point.node, point.offset, point.node, point.offset);
+    const loaded = currentDocument().brollShots.map(shot => [shot.id, shot.name]), seen = counting(f.parts);
+    try { writerControls().openWriter(); } finally { seen.restore(); }
+    assert.equal(document.getElementById("writer").hidden, false);
+    assert.notEqual(document.activeElement, cell);
+    assert.deepEqual(seen.names.filter(name => KEYING.includes(name)), []);
+    assert.deepEqual(agreed(f, "Split to Writer"), { visual: "B-roll: Close up", shots: loaded });
   } finally { f.close(); }
 });
 

@@ -62,7 +62,7 @@ function visualWriter(order: DeliveryOrder = "dup", secondVisual = "", recordUnd
   const undo = undoOwner ? sharedUndoActions(a.session, undoOwner) : null;
   const { effects: bufferEffects, reports, missing, recovered } = fakeWriterBufferEffects();
   const { effects, notices } = fakeFlowCommandEffects(), guard = createPaintGuard();
-  const unexpected: string[] = [];
+  const unexpected: string[] = [], leaves: [string | null, string | null][] = [];
   const documentView = () => a.session.read(doc => doc);
   const author = sharedAuthorPort({ handle: () => h.a, name: () => "Alice" });
   const shared = sharedBufferPorts(h.a, a.session, { ...bufferEffects, readers: bufferReaders, stamps: bufferStamps("Alice"), author: () => { const request = author.next(); assert.ok(request); return request; } });
@@ -75,7 +75,7 @@ function visualWriter(order: DeliveryOrder = "dup", secondVisual = "", recordUnd
     text: { cells: fromHtml, ...bufferStamps("Alice") },
     wholeFieldText: { commit: () => { unexpected.push("whole-field"); return { kind: "rejected", reason: "unexpected-whole-field" }; } },
     visualInput: () => { unexpected.push("visual-input"); },
-    visualLeave: () => { unexpected.push("visual-leave"); },
+    visualLeave: target => { leaves.push([target.getAttribute("data-id"), target.getAttribute("data-field")]); },
     visualKeydown: () => { unexpected.push("visual-keydown"); return false; }
   });
   writer.repaint();
@@ -142,7 +142,8 @@ function visualWriter(order: DeliveryOrder = "dup", secondVisual = "", recordUnd
     const forbidden = () => { unexpected.push("other-standalone"); };
     const box = createFlowVisualBox({ root: otherRoot, buffer: writerVisualBuffer(otherShared, { document: doc, lifetime: b.session, decode: fromHtml, storedHtml: html => html, shown: otherGuard.whileShown }),
       doc, selection: () => at, prepare: range => range, place: () => {}, current: () => true, blocked: () => otherGuard.painting(),
-      plainVisual: () => "", thumbnails: () => "", save: () => { forbidden(); return null; }, input: forbidden, leave: forbidden, keydown: () => { forbidden(); return false; },
+      plainVisual: () => "", thumbnails: () => "", save: () => { forbidden(); return null; }, input: forbidden,
+      leave: target => { leaves.push([target.getAttribute("data-id"), target.getAttribute("data-field")]); }, keydown: () => { forbidden(); return false; },
       notice: forbidden, undo: forbidden, paste: forbidden });
     const stopOther = b.session.subscribe(() => { if (!otherGuard.shown()) box.refresh(); });
     box.open(at);
