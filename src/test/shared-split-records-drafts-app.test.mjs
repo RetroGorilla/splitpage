@@ -147,7 +147,35 @@ for (const redraw of REDRAWS) for (const order of ORDERS) test(`C7 typed draft: 
   } finally { stop(); tidy(f); }
 });
 
-const GONE_NOTE = "The shot was removed, so its note was not saved. The text is kept at the top of the b-roll list.";
+for (const order of ORDERS) test(`C7 typed draft: a b-roll note refused by a listener that announces it waits through a focused redraw, and the next blur once allowed saves it once, ${order}`, async () => {
+  const f = await enter();
+  let refusing = true;
+  const stop = f.parts.session.beforeCommand(() => {
+    if (!refusing) return true;
+    notices.show(REFUSED, "warn");
+    return "announced";
+  });
+  try {
+    brollOpen("b1");
+    const box = notesBox(); box.focus(); box.value = "Wide";
+    const undo = undoCount(f);
+    noticeCalls.length = 0;
+    blurOut(box);
+    assert.deepEqual([warned(), shot("b1").notes], [[[REFUSED, "warn"]], ""], "refused once by the listener");
+    noticeCalls.length = 0;
+    notesBox().focus();
+    runBrollRefresh();
+    assert.deepEqual([notesBox()?.value, document.activeElement === notesBox(), shot("b1").notes, warned()], ["Wide", true, "", []], "a focused redraw keeps the text and does not retry");
+    refusing = false;
+    runBrollRefresh();
+    assert.equal(shot("b1").notes, "", "a waiting draft is not retried by a redraw");
+    blurOut(notesBox());
+    assert.deepEqual([shot("b1").notes, undoCount(f) - undo, warned(), brollHook().drafts()], ["Wide", 1, [], []], "the next blur saves it once");
+    exchange(f, order);
+  } finally { stop(); tidy(f); }
+});
+
+const GONE_NOTE ="The shot was removed, so its note was not saved. The text is kept at the top of the b-roll list.";
 
 for (const order of ORDERS) test(`C7 typed draft: a held b-roll note whose shot a peer deletes gives one notice and stays readable in the panel, ${order}`, async () => {
   const f = await enter();

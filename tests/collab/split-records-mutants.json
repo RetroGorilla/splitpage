@@ -244,7 +244,8 @@
       "label": "a refused shot add clears the typed name and announces success",
       "file": "src/application/commands/production-actions.ts",
       "find": "  return runRecord(ports, shared => addShotCommand(rec, shared)) ? rec : null;",
-      "replace": "  runRecord(ports, shared => addShotCommand(rec, shared));\n  return rec;"
+      "replace": "  runRecord(ports, shared => addShotCommand(rec, shared));\n  return rec;",
+      "tests": ["tests/application/commands/production-actions.test.ts"]
     },
     {
       "label": "a refused bulk assignment to a new person closes its box",
@@ -352,7 +353,8 @@
       "label": "a b-roll redraw takes the typed value as the comparison base even when its write was refused",
       "file": "src/features/broll/panel.ts",
       "find": "if (kept.ownValue && kept.saved && recordField(again)) again.defaultValue = kept.value;",
-      "replace": "if (kept.ownValue && recordField(again)) again.defaultValue = kept.value;"
+      "replace": "if (kept.ownValue && recordField(again)) again.defaultValue = kept.value;",
+      "tests": ["src/test/shared-split-records-drafts-app.test.mjs"]
     },
     {
       "label": "a b-roll redraw writes a refused typed value again and warns again",

@@ -676,6 +676,7 @@ function tagUnsavedLabel(draft: TypedDraft): string {
 }
 
 function goneTagDraft(draft: TypedDraft): void {
+  if (!(ports as TagPanelPorts).shared.ports()) return;
   (ports as TagPanelPorts).notices.show(tagUnsavedLabel(draft) + ". The text is kept at the top of the list.", "warn");
 }
 

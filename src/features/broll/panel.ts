@@ -78,6 +78,7 @@ function unsavedLabel(draft: TypedDraft): string {
 }
 
 function goneDraft(draft: TypedDraft): void {
+  if (!(ports as PanelPortUse).shared.ports()) return;
   (ports as PanelPortUse).notices.show(unsavedLabel(draft) + ". The text is kept at the top of the b-roll list.", "warn");
 }
 

@@ -499,6 +499,7 @@ function unsavedCommentLabel(draft: TypedDraft): string {
 }
 
 function goneComment(draft: TypedDraft): void {
+  if (!(ports as CommentsRuntimePorts).shared.ports()) return;
   (ports as CommentsRuntimePorts).notices.show(unsavedCommentLabel(draft) + ". The text is kept at the top of the comments list.", "warn");
 }
 
@@ -636,7 +637,8 @@ export function postComment() {
 function commentSave(pending: PendingCommentContext, author: string): TypedSave {
   return (body, quiet) => {
     const doc = (ports as CommentsRuntimePorts).document.current();
-    if (pending.field !== "title" && (!doc || rowIndexOf(doc, pending.rowId) === -1)) return "gone";
+    const shared = (ports as CommentsRuntimePorts).shared.ports() !== null;
+    if (shared && pending.field !== "title" && (!doc || rowIndexOf(doc, pending.rowId) === -1)) return "gone";
     const run = editComments(shared => addCommentCommand({
       id: pending.id,
       rowId: pending.rowId,
