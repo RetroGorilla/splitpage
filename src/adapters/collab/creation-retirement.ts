@@ -62,11 +62,7 @@ function text(handle: SharedDocumentHandle, record: Y.Map<unknown>, writer: stri
     [mark.kind, mark.id, mark.values, [...new Set(mark.additions.map(markIdentity))].sort()])]);
 }
 
-function narration(handle: SharedDocumentHandle, beat: string, record: Y.Map<unknown>, writer: string): unknown {
-  watchSharedCreationMap(record, "segment");
-  const roots = collabState(handle).roots, segment: unknown = record.get("segment") ?? "b:" + beat, stored = typeof segment === "string" ? roots.segments.get(segment) : null;
-  const raw: unknown = stored instanceof Y.Map ? stored.get("text") : null;
-  if (!(stored instanceof Y.Map) || !(raw instanceof Y.Text)) return null;
+function boundaryList(segment: string, stored: Y.Map<unknown>, raw: Y.Text) {
   const boundaries: { readonly at: number; readonly size: number; readonly value: unknown; readonly identity: unknown }[] = [];
   const head: unknown = stored.get("head"); boundaries.push({ at: 0, size: 0, value: head, identity: [segment, "head"] });
   let offset = 0;
@@ -74,6 +70,15 @@ function narration(handle: SharedDocumentHandle, beat: string, record: Y.Map<unk
     if (readSharedBoundaryEmbed(part.insert)) boundaries.push({ at: offset, size: 1, value: part.insert, identity: Y.createRelativePositionFromTypeIndex(raw, offset).item });
     offset += typeof part.insert === "string" ? part.insert.length : 1;
   }
+  return boundaries;
+}
+
+function narration(handle: SharedDocumentHandle, beat: string, record: Y.Map<unknown>, writer: string): unknown {
+  watchSharedCreationMap(record, "segment");
+  const roots = collabState(handle).roots, segment: unknown = record.get("segment") ?? "b:" + beat, stored = typeof segment === "string" ? roots.segments.get(segment) : null;
+  const raw: unknown = stored instanceof Y.Map ? stored.get("text") : null;
+  if (typeof segment !== "string" || !(stored instanceof Y.Map) || !(raw instanceof Y.Text)) return null;
+  const boundaries = boundaryList(segment, stored, raw);
   const index = boundaries.findIndex(item => { const boundary = readSharedBoundaryEmbed(item.value); return boundary?.kind === "b" && boundary.id === beat; });
   const own = boundaries[index], next = boundaries[index + 1];
   const headings = boundaries.slice(0, index).filter(item => readSharedBoundaryEmbed(item.value)?.kind === "h");
@@ -131,6 +136,26 @@ export function readSharedCreationContent(handle: SharedDocumentHandle, beat: st
     comments.map(([id, value]) => [id, fields(value, writer, key => key === "updatedAt")]), replies.map(([id, value]) => [id, fields(value, writer)]), splits, headings, joinedText]);
 }
 
+// why: a heading is as made while its record, its boundary and the characters of its name up to the next boundary are;
+// beats typed under it by anyone are their own work and stay out.
+export function readSharedHeadingCreationContent(handle: SharedDocumentHandle, heading: string, writer: string, segment: string): string {
+  sharedCreationObservationCost.builds++;
+  const roots = collabState(handle).roots, record = roots.headings.get(heading), stored = roots.segments.get(segment);
+  watchSharedCreationMap(roots.headings, heading); watchSharedCreationMap(roots.segments, segment);
+  if (!(record instanceof Y.Map)) return "null";
+  const line = () => {
+    if (!(stored instanceof Y.Map)) return null;
+    watchSharedCreationMap(stored, "text"); watchSharedCreationMap(stored, "head");
+    const raw: unknown = stored.get("text"); if (!(raw instanceof Y.Text)) return null;
+    const boundaries = boundaryList(segment, stored, raw);
+    const index = boundaries.findIndex(item => { const boundary = readSharedBoundaryEmbed(item.value); return boundary?.kind === "h" && boundary.id === heading; });
+    const own = boundaries[index], next = boundaries[index + 1];
+    if (!own) { watchSharedCreationText(raw, 0, raw.length, null); return null; }
+    return [own.identity, own.value, text(handle, stored, writer, own.at, next?.at ?? raw.length)];
+  };
+  return JSON.stringify([fields(record, writer, unstamped), line()]);
+}
+
 export function isSharedCreationRetired(handle: SharedDocumentHandle, beat: string): boolean {
   sharedCreationObservationCost.checks++;
   if (!readSharedCreationMarkers(handle).has(beat)) return false;
@@ -139,8 +164,10 @@ export function isSharedCreationRetired(handle: SharedDocumentHandle, beat: stri
     watchSharedCreationMap(state.roots.creationRetired, beat);
     const raw: unknown = state.roots.creationRetired.get(beat);
     if (!raw || typeof raw !== "object" || Array.isArray(raw)) return false;
-    const { observed, writer } = raw as Record<string, unknown>;
-    return typeof observed === "string" && typeof writer === "string" && readSharedCreationContent(handle, beat, writer) === observed;
+    const { observed, writer, segment } = raw as Record<string, unknown>;
+    if (typeof observed !== "string" || typeof writer !== "string") return false;
+    if (segment === undefined) return readSharedCreationContent(handle, beat, writer) === observed;
+    return typeof segment === "string" && readSharedHeadingCreationContent(handle, beat, writer, segment) === observed;
   };
   return cachedSharedCreationObservation(handle, beat, read);
 }

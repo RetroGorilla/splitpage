@@ -89,7 +89,7 @@ export function readProjectionBlocks(handle: SharedDocumentHandle, readUnits?: (
   });
   const hidden = readSharedCreationRetirements(handle);
   const projected = projectSharedBlocks(streams, records);
-  return hidden.size ? projected.filter(block => block.kind !== "b" || block.id === null || !hidden.has(block.id)) : projected;
+  return hidden.size ? projected.filter(block => block.id === null || !hidden.has(block.id)) : projected;
 }
 
 export function readProjectionStream(key: string, segment: Y.Map<unknown>, inOrder: boolean, all: readonly SharedProjectionUnit[]): SharedProjectionStream {

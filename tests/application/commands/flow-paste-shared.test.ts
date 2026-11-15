@@ -281,6 +281,40 @@ test("one whole paste is one command and undo step whose creation and picture un
   } finally { a.session.dispose(); runtime.close(); h.close(); }
 });
 
+const headed = [{ name: "heading only", rows: [], headers: [{ index: 0, scene: { name: "Scene" } }] },
+  { name: "heading in middle", rows: [{ id: "old", audioText: "X" }, { id: "old2", audioText: "Y" }], headers: [{ index: 1, scene: { name: "Middle" } }] }] as const;
+for (const literal of headed) for (const order of ["D1", "rev", "dup"] as const) test(`rule 204: a shared paste with a heading is one undo step, undone and redone on every copy and a late joiner: ${literal.name}, ${order}`, () => {
+  const h = replicas(2, { rows: [{ id: "R1", audioText: "A" }, { id: "R2", audioText: "B" }] });
+  const runtime = clipboardRuntime(); let serial = 0;
+  const undo = createSharedUndo({ now: () => 0, supports: supportsSharedUndoPart,
+    reverse: record => reverseSharedUndoRecord(h.a, record, { by: "Alice", nextId: () => "undo" + ++serial }) });
+  const replica = adapterReplica(h.a);
+  const a = sharedHarness({ ...replica, execute: (operations, options) => {
+    let result: ReturnType<typeof executeSharedCommand>["result"] = { ok: true };
+    undo.perform(() => { const execution = executeSharedCommand(h.a, operations, { label: "paste", selection: null, typing: null }, options); result = execution.result; return execution.record; });
+    return result;
+  } });
+  const everywhere = (expected: ReturnType<typeof projectSharedDocumentWithRecovery>) => {
+    h.queue.flush(order); const late = createMonitoredSharedDocument();
+    try {
+      assert.equal(applySharedUpdate(late, encodeSharedState(h.a)).ok, true);
+      for (const handle of [h.a, h.b, late]) assert.deepEqual(projectSharedDocumentWithRecovery(handle), expected);
+    } finally { destroySharedDocument(late); }
+  };
+  try {
+    for (const handle of [h.a, h.b]) registerSharedOperationFamilies(handle, { cells: runtime.cells });
+    const ports = writerFlowCommands(runtime.ports, { author: sharedAuthorPort({ handle: () => h.a, name: () => "Alice" }), writer: () => "1", handle: () => h.a });
+    const before = projectSharedDocumentWithRecovery(h.a), data = wire(literal.rows, {}, literal.headers);
+    const prepared = ports.commands.prepare("paste", doc => pasteSharedFlowClipboard(doc, at, data, ports.flow, runtime.rich.inertBody, runtime.load) ?? null, stamps, at);
+    assert.equal(a.session.run(prepared.command).kind, "applied");
+    const pasted = projectSharedDocumentWithRecovery(h.a);
+    assert.deepEqual(pasted.document.sections?.map(section => section.name), [literal.headers[0].scene.name]);
+    everywhere(pasted);
+    assert.deepEqual(undo.undo(), { ok: true, effective: true, label: "paste", selection: null }); everywhere(before);
+    assert.deepEqual(undo.redo(), { ok: true, effective: true, label: "paste", selection: null }); everywhere(pasted);
+  } finally { a.session.dispose(); runtime.close(); h.close(); }
+});
+
 test("whole-beat paste inside narration resolves observed units before separate execution and caret restoration", () => {
   const h = replicas(2, { rows: [{ id: "R1", audioText: "AB" }, { id: "R2", audioText: "B" }] });
   const runtime = clipboardRuntime(), a = sharedHarness(adapterReplica(h.a)), b = sharedHarness(adapterReplica(h.b));

@@ -8,9 +8,10 @@ import { readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { registerSharedHeadingHandlers } from "../../../src/adapters/collab/heading-executor.ts";
 import { registerSharedTextOperationHandlers } from "../../../src/adapters/collab/text-executor.ts";
+import { registerSharedUndoOperationHandlers } from "../../../src/adapters/collab/undo-handlers.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import { createSharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
-import { executeSharedCommand, supportsSharedUndoPart } from "../../../src/adapters/collab/undo-executor.ts";
+import { executeSharedCommand, reverseSharedUndoRecord, supportsSharedUndoPart } from "../../../src/adapters/collab/undo-executor.ts";
 import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 
 const HA = structureIdentityFixture("1", "head", "heading"), HB = structureIdentityFixture("2", "head", "heading");
@@ -153,7 +154,7 @@ test("shared creation waits for compositionend, leaves a cancelled composition b
   } finally { pages.close(); }
 });
 
-test("the two shared creation commands give the same complete document in one list or separate lists; rule 71: creation is one undo step, skipped while not supported", () => {
+test("the two shared creation commands give the same complete document in one list or separate lists; rule 202: creation is one undo step that removes the heading line", () => {
   const pages = sceneCreationPages();
   const set = replicas(2, { rows: [{ id: "R1", audioText: "ab" }, { id: "R2", audioText: "next" }] });
   try {
@@ -161,16 +162,21 @@ test("the two shared creation commands give the same complete document in one li
     pages.a.open("add", "R2"); pages.a.edge.type("M");
     const commands = pages.a.a.executed.map(command => command.operations);
     collabState(set.b).doc.clientID = 1;
-    for (const handle of [set.a, set.b]) { registerSharedHeadingHandlers(handle); registerSharedTextOperationHandlers(handle); }
+    for (const handle of [set.a, set.b]) { registerSharedHeadingHandlers(handle); registerSharedTextOperationHandlers(handle); registerSharedUndoOperationHandlers(handle); }
     assert.deepEqual(executeSharedOperations(set.a, commands.flat(), { base: readSharedRevision(set.a) }), { ok: true });
-    const undo = createSharedUndo({ now: () => 0, supports: supportsSharedUndoPart, reverse: () => { throw new Error("Unsupported heading undo reached reversal"); } });
+    let serial = 0;
+    const undo = createSharedUndo({ now: () => 0, supports: supportsSharedUndoPart, reverse: record => reverseSharedUndoRecord(set.b, record, { by: "Bob", nextId: () => "undo" + ++serial }) });
     undo.perform(() => {
       const execution = executeSharedCommand(set.b, commands[0] ?? [], { label: "add-section", selection: null, typing: null }, { base: readSharedRevision(set.b) });
       assert.deepEqual(execution.result, { ok: true }); return execution.record;
     });
     assert.deepEqual(undo.sizes(), { undo: 1, redo: 0, dropped: 0 });
-    assert.deepEqual(undo.undo(), { ok: false, reason: "undo-unsupported:heading-create", skipped: true });
-    assert.deepEqual([undo.sizes(), undo.skipped()], [{ undo: 0, redo: 0, dropped: 0 }, 1]);
+    const made = projectSharedDocumentWithRecovery(set.b);
+    assert.deepEqual(undo.undo(), { ok: true, effective: true, label: "add-section", selection: null });
+    assert.deepEqual([undo.sizes(), undo.skipped()], [{ undo: 0, redo: 1, dropped: 0 }, 0]);
+    assert.deepEqual(projectSharedDocumentWithRecovery(set.b).document.sections, []);
+    assert.deepEqual(undo.redo(), { ok: true, effective: true, label: "add-section", selection: null });
+    assert.deepEqual(projectSharedDocumentWithRecovery(set.b), made);
     assert.deepEqual(executeSharedOperations(set.b, commands[1] ?? [], { base: readSharedRevision(set.b) }), { ok: true });
     agree("scene creation lists", "D1", [set.a, set.b], projectSharedDocumentWithRecovery,
       { document: createdDocument([{ id: HA, name: "N", firstSceneId: "R1" },

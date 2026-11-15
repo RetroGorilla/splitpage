@@ -18,6 +18,7 @@ import { isStableSharedIdentity } from "./identity.ts";
 import { prepareSharedStatusRetire } from "./status.ts";
 import { prepareSharedSplitRestore, prepareSharedSplitRetire } from "./undo-split.ts";
 import { prepareSharedSegmentRetire } from "./undo-creation.ts";
+import { prepareSharedHeadingRetire } from "./undo-heading-creation.ts";
 import { noteSharedPlannedPicture, readSharedStoredPicture, SHARED_GALLERY_RETIREMENT_FIELD, sharedGalleryRetirementValue } from "./gallery-retirement.ts";
 import { collabState, SharedExecutionWriteError } from "./state.ts";
 import { sharedPendingAttachmentKeys } from "./structure-content.ts";
@@ -133,5 +134,5 @@ export function prepareSharedGalleryRetire(operation: SharedGalleryRetire, view:
 export function registerSharedUndoOperationHandlers(handle: SharedDocumentHandle): void {
   registerSharedOperationHandlers(handle, { "text-restore": prepareSharedTextRestore, "mark-retract": prepareSharedMarkRetract, "status-retire": prepareSharedStatusRetire,
     "split-retire": prepareSharedSplitRetire, "split-restore": prepareSharedSplitRestore, "gallery-retire": prepareSharedGalleryRetire, "gallery-restore": prepareSharedGalleryRetire,
-    "segment-retire": prepareSharedSegmentRetire, "segment-restore": prepareSharedSegmentRetire });
+    "segment-retire": prepareSharedSegmentRetire, "segment-restore": prepareSharedSegmentRetire, "heading-retire": prepareSharedHeadingRetire, "heading-restore": prepareSharedHeadingRetire });
 }
