@@ -53,17 +53,22 @@ function runs(offsets: readonly number[]): (readonly [number, number])[] {
   return removed;
 }
 
-function settleSelection(rowId: string, read: () => { readonly from: number; readonly to: number } | null): SharedSettledSelection | null {
-  const parts = sharedSessionParts();
-  if (!parts) return null;
-  let seen: { readonly selected: readonly string[]; readonly after: string | undefined; readonly before: string | undefined } | null = null;
+type SelectionRead = () => { readonly from: number; readonly to: number } | null;
+
+function captureSeen(parts: SharedSessionParts, rowId: string, read: SelectionRead) {
   const release = holdSharedCapture(parts.handle);
   try {
     if (!settle()) return null;
     const range = read(), units = unitsOf(parts, rowId);
     if (!range || !units) return null;
-    seen = { selected: units.slice(range.from, range.to), after: units[range.from], before: units[range.from - 1] };
+    return { selected: units.slice(range.from, range.to), after: units[range.from], before: units[range.from - 1] };
   } finally { release(); }
+}
+
+function settleSelection(rowId: string, read: SelectionRead): SharedSettledSelection | null {
+  const parts = sharedSessionParts();
+  if (!parts) return null;
+  const seen = captureSeen(parts, rowId, read);
   if (!seen) return null;
   if (!seen.selected.length) {
     const near = [seen.after, seen.before].filter((key): key is string => !!key), found = located(parts, rowId, near);
