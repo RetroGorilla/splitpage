@@ -2,17 +2,17 @@
 
 ## Decision
 
-The earlier figures describe different quantities. Stage 1's **5.94 bytes per typed character** is the entire retained document divided by all typing in a draft and revision. It includes the document's fixed structure. It is not the marginal cost of a key. Stage 2's **320 bytes** is the increase caused by one unformatted key in one particular small state. Its **324,052 bytes per 1,000 keys** is a longer unformatted stream, with longer operation identifiers and native clocks. After 100 mark additions in that cell, the next local key instead adds **5,223–5,224 bytes**. There is no fixed Stage 2 per-character rate.
+The earlier figures describe different quantities: Stage 1's published 5.94 bytes per typed character divides the entire retained document by typing, while Stage 2's 320 bytes measures one new unformatted key. That distinction does not explain the storage gap. On the same typing/retyping schedule and whole-document basis, Stage 1 is **4,511 B per 1,000 typed characters** and Stage 2 is **568,361 B**, about **126 times larger**. The corresponding unformatted marginal controls are **1,016 B per 1,000 keys** for native coalescing and **320 B for one Stage 2 key**. After 100 mark additions in a cell, a new local key stores **5,223–5,224 B**: its birth names those additions. The rate grows with a cell's marked history.
 
-Replaying the same Stage 1 typing and retyping in the real Stage 2 adapter gives **6,415,088 bytes with two writers** and **6,404,190 with six**. Both contain exactly **11,287 typed characters and 10,478 final characters**, including the prototype's convention for atom labels. Stage 1 at the same point occupies **50,914 bytes**. In the two-writer Stage 2 state, birth ranges, birth observations, writer identity and birth keys/framing dominate. The exact ledger below identifies every encoded byte. The original Stage 1 full block still reproduces **67,095 / 67,096 bytes**; its later structural and production edits are excluded from both sides of the new text comparison.
+Replaying the same Stage 1 typing and retyping in the real Stage 2 adapter gives **6,415,088 bytes with two writers** and **6,404,190 with six**. Both contain exactly **11,287 typed characters and 10,478 final characters**, including the prototype's convention for atom labels. Stage 1 at the same point occupies **50,914 bytes**. Three causes explain the difference: every insertion stores a birth (310 B in the one-key control; range and keys/framing together occupy about **3.14 MB** in the replay); interleaved metadata prevents native text coalescing (**2,518 → 54,161 B** of text identity); and each birth copies the cell's known additions into an observed list (**2,854,447 B, 44.5%**). Each marked key creates an addition bound to that insertion, and `text-executor.ts` copies all cell additions into every later birth. The replay has **70,683 references, 6.3 per birth**, with marked typing in **37 of 60 cells**. For marked typing within a cell this makes the copied lists grow quadratically. Writer identity occupies **101,664 B, 1.6%**, a smaller component. The ledger below accounts for every byte. The original Stage 1 full block still reproduces **67,095 / 67,096 B**; its structural and production tail is excluded from both sides of this text comparison.
 
 This measurement does not recommend changing the format yet. A growing run must first demonstrate immediate per-key delivery, selective undo, concurrent marks and recovery. Sharing an observed-mark set may save more than shortening anchors, but changing or truncating that set can change which concurrent formatting applies. Piece C is that correctness trial. None of the 2 MiB, 3x fresh, 10x edited or input gates changes here. **Every Stage 0 local-input result remains not measured.** No timing or browser measurement ran for this record.
 
-Repeated reopenings do not reset the cost. The tables below track 60 reduced-volume sessions on the one- and two-person long script, and 20 on the other cases, each with 10 words of new typing per person. Removal records name observed content, so repeated whole-beat removal/restore keeps substantially more than deletion tombstones. A separate default-volume prefix stops at the first over-cap 100-key block: it establishes a crossing during the first writer's typing phase of **day 1**, before that person's 30,000-key allocation is complete, for either fixture and any requested group size. Full day 1–60 totals below are explicitly extrapolations, too far beyond the reduced-volume sample to certify a capacity promise. A storage recommendation needs the trial's repeated-day results, not a first-day run-length saving alone.
+Repeated reopenings do not reset the cost. The tables track 60 reduced-volume **sample sessions** on the one- and two-person long script, and 20 on the other cases, with 10 new words per person plus corrections and rewrites (about 66 keys each per session). Whole-beat removal/restore retains observed content as well as tombstones. Every checkpoint is reported with its complete size and with removal marks subtracted, an accounting comparison rather than a run without those commands. A separate default-volume prefix establishes the first over-cap block during the first writer's typing phase of **day 1**, before that person's 30,000-key allocation is complete, for either fixture and any requested group size. No full-volume day total is claimed because the measured samples do not establish growth at that typing volume or distribution. A storage recommendation needs the trial's repeated-session results as well as its run-length savings.
 
 ## What was run
 
-Product source is `cafd0a73dfb0cd373b19e84b3503761e5e740840`, fetched from `origin/main`, including #1605 and #1606. Node is 24.22.1, x64 on native Windows x64. Byte counts are deterministic; there are no timing percentiles, speed assertions, heap measurements or browser suites. New files under `tests/collab/measure` drive the real adapter. A byte-only entry beside the original Stage 1 workload captures its text calls; the measurement runner launches it as a subprocess, respecting the prototype import boundary.
+Product source is `cafd0a73dfb0cd373b19e84b3503761e5e740840`, fetched from `origin/main`, including #1605 and #1606. Node is 24.22.1, x64 on native Windows x64. Byte counts are deterministic; there are no timing percentiles, speed assertions, heap measurements or browser suites. New files under `tests/collab/measure` drive the real adapter. A byte-only entry outside the pinned Stage 1 lifetime source folder captures its text calls; the measurement runner launches it as a subprocess, respecting the prototype import boundary.
 
 `prototypes/collab/measure/byte-replay.ts` executes the unchanged `LifetimeHistory.appendBlock()` for two and six writers. It captures the actual native text inserts, embeds and deletions through the first 30 beats and five half-beat rewrites. It checkpoints before splits, joins, moves, removals, status and review edits. Each UTF-16 unit is still published as a distinct insertion, with the original attributes. Corrections remain one backspace/retype per 55 original characters; rewrites retain the original five-beat, half-narration schedule. The Stage 2 runner applies the same tape through `readOperation` and `executeSharedOperations`. It translates prototype occurrence keys into semantic tag ids, URLs and comment anchors, ignores null/false attribute clears, and asserts character values, mark payloads and visible projected text in every cell. Both writer groups retain one `comment-without-words` recovery entry after the first-five-beat rewrites; recovery counts are recorded. Writer changes occur at the original causal beat/revision boundaries. These are causal, turn-taking writers, not a concurrent-edit correctness demonstration.
 
@@ -45,17 +45,15 @@ The fast test checks the 320/310 headline, deletion retention, a byte-identical 
 
 ## Repeated-day parameters and limits
 
-The scripts run the same existing long and ten-copy large audit fixtures, for 1, 2 and 4 writers. Default requested volume is 5,000 words each per working day, six keys per word, counting original typing, correction retyping and rewrite typing. The measured samples allocate 10 words of **new drafting** each per sample day, then add the stated corrections and rewrites. The raw `measuredWordsPerPersonPerDay` field denotes that new-drafting allocation; exact counters distinguish every typing kind. The projection rescales by total keyboard typing, not by the new-drafting count alone. Every new character is a separate real adapter operation. Writers take causal turns under fixed deterministic replica ids 1–4, reused after binary reopening; this is capacity measurement, not evidence about concurrent correctness or a future replica-identity persistence protocol. `capacity-prefix.mjs` separately executes the first writer's typing phase (including corrections), checking encoded size every 100 original keys and stopping after the first over-cap block. It crosses well before the total 30,000-key allowance, even after reserving that day's rewrite share. Later people's input or later structural edits cannot move that first crossing to a later day. The 100-original-key interval, not an exact key index, is reported. This establishes day 1 without allocating every over-cap full day.
+The scripts run the same existing long and ten-copy large audit fixtures, for 1, 2 and 4 writers. Default requested volume is 5,000 words each per working day, six keys per word, counting original typing, correction retyping and rewrite typing. The measured samples allocate 10 words of **new drafting** each per sample day, then add the stated corrections and rewrites. The raw `measuredWordsPerPersonPerDay` field denotes that new-drafting allocation; exact counters distinguish every typing kind. Every new character is a separate real adapter operation. Writers take causal turns under fixed deterministic replica ids 1–4, reused after binary reopening; this is capacity measurement, not evidence about concurrent correctness or a future replica-identity persistence protocol. `capacity-prefix.mjs` separately executes the first writer's typing phase (including corrections), checking encoded size every 100 original keys and stopping after the first over-cap block. It crosses well before the total 30,000-key allowance, even after reserving that day's rewrite share. Later people's input or later structural edits cannot move that first crossing to a later day. The 100-original-key interval, not an exact key index, is reported. This establishes day 1 without allocating every over-cap full day.
 
-The correction schedule is Stage 1's stated one per 55 keys, based on Stage 0's 55-key typing case. Rewriting deletes and individually retypes one twelfth of new text: five of thirty beats, half each, as in the lifetime schedule. Stage 0's edit-workload ratios supply one split and one join per 200 new keys, two removals per 200 keys, and one bold operation per 100 keys. Each structural operation is undone; each bold operation gets one undo/redo pair. Stated additional parameters are one beat creation (undo, redo, undo), comment with anchor mark, B-roll keying and Replace splice per 1,000 new keys. The counters are recorded. Short sampled days can have no threshold event; a full default day includes every family. Undo operations themselves create retained provenance.
+The correction schedule is Stage 1's stated one per 55 keys, based on Stage 0's 55-key typing case. Rewriting deletes and individually retypes one twelfth of new text: five of thirty beats, half each, as in the lifetime schedule. The Stage 2 growth tool's heavy-use schedule (`stage-2-growth-admission.md`, Measurement method), rather than a measured user rate, supplies one split and one join per 200 new keys, two removals per 200 keys, and one bold operation per 100 keys. Stage 0 supplies the gate counts only. Each structural operation is undone; each bold operation gets one undo/redo pair. Stated additional parameters are one beat creation (undo, redo, undo), comment with anchor mark, B-roll keying and Replace splice per 1,000 new keys. Unlike the growth tool, which removed an untyped beat, `working-days.mjs` removes a beat being typed and rewritten, retaining heavier removal observations. The counters are recorded. Short sampled sessions can have no threshold event; a full default day includes every family. Undo operations themselves create retained provenance.
 
 Typing rotates through existing beats in 55-key blocks, starting at a different beat for each sample day and writer; two existing beats exercise joins with undo. The initial attempt to put a whole default day in one cell was stopped for run time before producing a cap result; it supplies no tabled number. Additions use the actual segment-create handler; keying uses `sharedBrollKeying`; Replace uses the same `sharedCellTextOperations` splice builder and undo executor as its application command. This bypasses UI search and focus handling, which are not measured. End-of-day local undo objects are released. The exact binary document is encoded, destroyed and reopened through `applySharedUpdate`; its encoded bytes must remain identical. No instance is reconstructed from a plain projection, and no compaction is performed. Stage 2 does not yet ship persisted shared-session reopening: this is the existing adapter's binary round trip, not a claim about a production persistence UI. [Rule 97](https://github.com/RetroGorilla/splitpage/issues/1414#issuecomment-6869752297) keeps saving and cleanup for later stages.
 
-All measured category rows and plain sizes are in the six adjacent `stage-2-working-days-<fixture>-<people>.json` files. The [complete category table](stage-2-working-days-by-category.csv) includes all categories at every requested full-volume horizon, with separate measured and extrapolated rows; the smaller tables below highlight births and removal observations. The one- and two-person long cases were measured through sample day 60. The four-person long case and all large cases stop at sample day 20 under the shared machine's queue and run constraints; later sampled sessions were not run.
+All measured category rows and plain sizes remain in the six adjacent `stage-2-working-days-<fixture>-<people>.json` files. Their legacy `day` field counts sample sessions, not full-volume working days. The [complete category table](stage-2-working-days-by-category.csv) contains every measured checkpoint, total bytes with removal marks subtracted, and growth per measured keyboard key for every category. `stage-2-working-days-rates.json` contains the same exact arithmetic and the keys typed at the first measured sample-session crossing. The one- and two-person long cases reach sample session 60; the four-person long case and all large cases stop at session 20 under the shared machine's queue and run constraints. Later sessions were not measured.
 
-Default-volume category projections are in `stage-2-working-days-projections.json`. The fit fixes each measured day-zero intercept and fits nonnegative linear and quadratic growth to the last three checkpoints, separately per category: 10/20/60 for the longer runs, 5/10/20 otherwise. Each original key brings 1/55 correction retypes and 1/12 rewrite keys in the stated schedule. The sample-day multiplier is therefore `5000 / (10 × (1 + 1/55 + 1/12))`, about 453.9, rather than 500. Command-inserted strings (initial beat text, the short B-roll line prepared for keying, and Replace output) are separate operations included in encoded/plain totals, outside the keyboard allowance. The volume assumption is append-heavy: new draft text remains, while the rewrite share deletes and retypes existing text. A steady-length script was not measured; sufficiently long default horizons can exceed 2 MiB even in plain text.
-
-Projected category rows sum exactly to the projected total, but they are **model outputs, not encoded documents**. Residuals, coefficients and exact volume multipliers are included. Word volume, distribution among cells, day boundaries and the increasing observed sets are confounded in this fit. Default day 1 is already 7.6–22.7 times beyond the last measured sample; day 60 is 454–1,362 times beyond it. These extrapolations show why a repeated-day capacity claim is presently unsupported; they do not certify full-volume totals or a safe number of working days. The first-day crossing is established independently by the measured prefix, not by the fit. Measured sample crossing days (where reached) and checkpoint intervals are retained separately in the projection JSON.
+The workload is append-heavy: new draft text remains, while the rewrite share deletes and retypes existing text. Command-inserted beat text, the B-roll seed line and Replace output are included in encoded/plain growth but excluded from keyboard-key counts. A steady-length script was not measured. The default-volume first-day crossing is observed independently by the measured prefix. Full-volume totals are not fitted.
 
 ## Reproduction
 
@@ -73,7 +71,7 @@ For each fixture (`long`, `large`) and group (`1`, `2`, `4`), sequentially:
 node tests/collab/measure/working-days.mjs long 1 10 60 docs/collaboration/stage-2-working-days-long-1.json
 ```
 
-Use 60 as the final argument before the output file for the one- and two-person long cases, 20 for the four-person long and all large cases. Run `node tests/collab/measure/capacity-prefix.mjs` and `node tests/collab/measure/key-rates.mjs` sequentially for the separate controls, each after its memory check. Keep at least 3,000 MB available. Use the coordinator's external shared lock for heavy runs; its location is deliberately not committed. Each repeated-session command writes a local, ignored encoded checkpoint under `.cache` and resumes it on a later invocation. Remove only the matching local checkpoint to replay from day zero. Do not commit those binary instances. After all six results and both controls exist, `node tests/collab/measure/reconciliation-report.mjs` regenerates the following tables and the clearly labelled projection JSON. Run `node --test tests/collab/measure/retained-bytes.test.mjs` for the fast ledger check.
+Use 60 as the final argument before the output file for the one- and two-person long cases, 20 for the four-person long and all large cases. Run `node tests/collab/measure/capacity-prefix.mjs` and `node tests/collab/measure/key-rates.mjs` sequentially for the separate controls, each after its memory check. Keep at least 3,000 MB available. Use the coordinator's external shared lock for heavy runs; its location is deliberately not committed. Each repeated-session command writes a local, ignored encoded checkpoint under `.cache` and resumes it on a later invocation. Remove only the matching local checkpoint to replay from day zero. Do not commit those binary instances. After all six results and both controls exist, `node tests/collab/measure/reconciliation-report.mjs` regenerates the following tables, measured-rate JSON and category CSV. Run `node --test tests/collab/measure/retained-bytes.test.mjs` for the fast ledger check.
 
 ## Validation
 
@@ -142,155 +140,124 @@ The birth observed-list row splits exactly as follows. Insertion-bound reference
 
 | Fixture | People | First default day over 2 MiB | Original keys at crossing | Bytes before / after block |
 | --- | --- | --- | --- | --- |
-| long | 1, 2, 4 | 1 | 6701–6800 | 2,087,413 / 2,115,671 |
-| large | 1, 2, 4 | 1 | 4801–4900 | 2,093,556 / 2,124,913 |
+| long | 1, 2, 4 | 1 | 6701-6800 | 2,087,413 / 2,115,671 |
+| large | 1, 2, 4 | 1 | 4801-4900 | 2,093,556 / 2,124,913 |
 
 ## Repeated sessions: measured samples
 
-### long, 1 people: measured at 10 new words each per sample day, plus corrections and rewrites
+Added rates divide growth since session zero by all recorded keyboard keys, including correction and rewrite typing. They include command-generated edits in the numerator. Subtracting removal marks is exact category accounting, not a rerun with removal disabled; other remove/restore effects remain.
 
-| Sample day | Encoded B | Plain B | Birth B | Removal marks B |
-| --- | --- | --- | --- | --- |
-| 0 | 66,469 | 38,342 | 0 | 0 |
-| 1 | 87,106 | 38,402 | 20,292 | 0 |
-| 2 | 149,646 | 38,479 | 37,566 | 43,991 |
-| 5 | 260,437 | 38,693 | 89,388 | 98,557 |
-| 10 | 419,875 | 39,044 | 187,568 | 152,194 |
-| 20 | 742,359 | 40,439 | 373,847 | 271,887 |
-| 60 | 2,258,923 | 45,589 | 1,241,713 | 857,345 |
+### long, 1 people: 10 new words each per sample session, plus corrections and rewrites
 
-First measured sample day over 2 MiB: 56.
+| Sample session | Keys typed | Encoded B | B less removal marks | Plain B | Added B/key | Added B/key less removal marks |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0 | 0 | 66,469 | 66,469 | 38,342 | n/a | n/a |
+| 1 | 66 | 87,106 | 87,106 | 38,402 | 312.7 | 312.7 |
+| 2 | 132 | 149,646 | 105,655 | 38,479 | 630.1 | 296.9 |
+| 5 | 330 | 260,437 | 161,880 | 38,693 | 587.8 | 289.1 |
+| 10 | 660 | 419,875 | 267,681 | 39,044 | 535.5 | 304.9 |
+| 20 | 1,321 | 742,359 | 470,472 | 40,439 | 511.7 | 305.8 |
+| 60 | 3,965 | 2,258,923 | 1,401,578 | 45,589 | 553 | 336.7 |
 
-### long, 2 people: measured at 10 new words each per sample day, plus corrections and rewrites
+First measured sample session over 2 MiB: 56; 3,701 keys typed.
 
-| Sample day | Encoded B | Plain B | Birth B | Removal marks B |
-| --- | --- | --- | --- | --- |
-| 0 | 66,469 | 38,342 | 0 | 0 |
-| 1 | 148,987 | 38,479 | 37,168 | 43,799 |
-| 2 | 209,724 | 38,616 | 76,474 | 62,104 |
-| 5 | 420,499 | 39,044 | 185,436 | 154,946 |
-| 10 | 862,896 | 40,482 | 397,927 | 368,221 |
-| 20 | 1,715,693 | 43,129 | 800,532 | 786,694 |
-| 60 | 5,534,132 | 54,450 | 2,860,028 | 2,411,973 |
+### long, 2 people: 10 new words each per sample session, plus corrections and rewrites
 
-First measured sample day over 2 MiB: 26.
+| Sample session | Keys typed | Encoded B | B less removal marks | Plain B | Added B/key | Added B/key less removal marks |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0 | 0 | 66,469 | 66,469 | 38,342 | n/a | n/a |
+| 1 | 132 | 148,987 | 105,188 | 38,479 | 625.1 | 293.3 |
+| 2 | 264 | 209,724 | 147,620 | 38,616 | 542.6 | 307.4 |
+| 5 | 660 | 420,499 | 265,553 | 39,044 | 536.4 | 301.6 |
+| 10 | 1,321 | 862,896 | 494,675 | 40,482 | 602.9 | 324.2 |
+| 20 | 2,643 | 1,715,693 | 928,999 | 43,129 | 624 | 326.3 |
+| 60 | 7,930 | 5,534,132 | 3,122,159 | 54,450 | 689.5 | 385.3 |
 
-### long, 4 people: measured at 10 new words each per sample day, plus corrections and rewrites
+First measured sample session over 2 MiB: 26; 3,436 keys typed.
 
-| Sample day | Encoded B | Plain B | Birth B | Removal marks B |
-| --- | --- | --- | --- | --- |
-| 0 | 66,469 | 38,342 | 0 | 0 |
-| 1 | 227,164 | 38,616 | 70,920 | 85,231 |
-| 2 | 404,529 | 38,890 | 149,922 | 178,627 |
-| 5 | 911,665 | 40,620 | 419,454 | 395,430 |
-| 10 | 1,823,180 | 42,919 | 891,406 | 803,573 |
-| 20 | 3,574,862 | 47,204 | 1,835,032 | 1,548,182 |
+### long, 4 people: 10 new words each per sample session, plus corrections and rewrites
 
-First measured sample day over 2 MiB: 13.
+| Sample session | Keys typed | Encoded B | B less removal marks | Plain B | Added B/key | Added B/key less removal marks |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0 | 0 | 66,469 | 66,469 | 38,342 | n/a | n/a |
+| 1 | 264 | 227,164 | 141,933 | 38,616 | 608.7 | 285.8 |
+| 2 | 528 | 404,529 | 225,902 | 38,890 | 640.3 | 302 |
+| 5 | 1,321 | 911,665 | 516,235 | 40,620 | 639.8 | 340.5 |
+| 10 | 2,643 | 1,823,180 | 1,019,607 | 42,919 | 664.7 | 360.6 |
+| 20 | 5,287 | 3,574,862 | 2,026,680 | 47,204 | 663.6 | 370.8 |
 
-### large, 1 people: measured at 10 new words each per sample day, plus corrections and rewrites
+First measured sample session over 2 MiB: 13; 3,436 keys typed.
 
-| Sample day | Encoded B | Plain B | Birth B | Removal marks B |
-| --- | --- | --- | --- | --- |
-| 0 | 632,834 | 333,308 | 0 | 0 |
-| 1 | 653,471 | 333,368 | 20,292 | 0 |
-| 2 | 716,011 | 333,445 | 37,566 | 43,991 |
-| 5 | 826,802 | 333,659 | 89,388 | 98,557 |
-| 10 | 986,240 | 334,010 | 187,568 | 152,194 |
-| 20 | 1,308,901 | 335,405 | 373,847 | 272,062 |
+### large, 1 people: 10 new words each per sample session, plus corrections and rewrites
 
-First measured sample day over 2 MiB: not reached.
+| Sample session | Keys typed | Encoded B | B less removal marks | Plain B | Added B/key | Added B/key less removal marks |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0 | 0 | 632,834 | 632,834 | 333,308 | n/a | n/a |
+| 1 | 66 | 653,471 | 653,471 | 333,368 | 312.7 | 312.7 |
+| 2 | 132 | 716,011 | 672,020 | 333,445 | 630.1 | 296.9 |
+| 5 | 330 | 826,802 | 728,245 | 333,659 | 587.8 | 289.1 |
+| 10 | 660 | 986,240 | 834,046 | 334,010 | 535.5 | 304.9 |
+| 20 | 1,321 | 1,308,901 | 1,036,839 | 335,405 | 511.8 | 305.8 |
 
-### large, 2 people: measured at 10 new words each per sample day, plus corrections and rewrites
+First measured sample session over 2 MiB: not reached.
 
-| Sample day | Encoded B | Plain B | Birth B | Removal marks B |
-| --- | --- | --- | --- | --- |
-| 0 | 632,834 | 333,308 | 0 | 0 |
-| 1 | 715,352 | 333,445 | 37,168 | 43,799 |
-| 2 | 776,089 | 333,582 | 76,474 | 62,104 |
-| 5 | 986,864 | 334,010 | 185,436 | 154,946 |
-| 10 | 1,429,263 | 335,448 | 397,927 | 368,221 |
-| 20 | 2,283,750 | 338,095 | 800,532 | 788,383 |
+### large, 2 people: 10 new words each per sample session, plus corrections and rewrites
 
-First measured sample day over 2 MiB: 19.
+| Sample session | Keys typed | Encoded B | B less removal marks | Plain B | Added B/key | Added B/key less removal marks |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0 | 0 | 632,834 | 632,834 | 333,308 | n/a | n/a |
+| 1 | 132 | 715,352 | 671,553 | 333,445 | 625.1 | 293.3 |
+| 2 | 264 | 776,089 | 713,985 | 333,582 | 542.6 | 307.4 |
+| 5 | 660 | 986,864 | 831,918 | 334,010 | 536.4 | 301.6 |
+| 10 | 1,321 | 1,429,263 | 1,061,042 | 335,448 | 602.9 | 324.2 |
+| 20 | 2,643 | 2,283,750 | 1,495,367 | 338,095 | 624.6 | 326.3 |
 
-### large, 4 people: measured at 10 new words each per sample day, plus corrections and rewrites
+First measured sample session over 2 MiB: 19; 2,511 keys typed.
 
-| Sample day | Encoded B | Plain B | Birth B | Removal marks B |
-| --- | --- | --- | --- | --- |
-| 0 | 632,834 | 333,308 | 0 | 0 |
-| 1 | 793,529 | 333,582 | 70,920 | 85,231 |
-| 2 | 970,894 | 333,856 | 149,922 | 178,627 |
-| 5 | 1,478,032 | 335,586 | 419,454 | 395,430 |
-| 10 | 2,389,548 | 337,885 | 891,406 | 803,573 |
-| 20 | 4,143,500 | 342,170 | 1,835,032 | 1,550,450 |
+### large, 4 people: 10 new words each per sample session, plus corrections and rewrites
 
-First measured sample day over 2 MiB: 9.
+| Sample session | Keys typed | Encoded B | B less removal marks | Plain B | Added B/key | Added B/key less removal marks |
+| --- | --- | --- | --- | --- | --- | --- |
+| 0 | 0 | 632,834 | 632,834 | 333,308 | n/a | n/a |
+| 1 | 264 | 793,529 | 708,298 | 333,582 | 608.7 | 285.8 |
+| 2 | 528 | 970,894 | 792,267 | 333,856 | 640.3 | 302 |
+| 5 | 1,321 | 1,478,032 | 1,082,602 | 335,586 | 639.8 | 340.5 |
+| 10 | 2,643 | 2,389,548 | 1,585,975 | 337,885 | 664.7 | 360.6 |
+| 20 | 5,287 | 4,143,500 | 2,593,050 | 342,170 | 664 | 370.8 |
 
-## Full-volume horizons: extrapolations, not observed days
+First measured sample session over 2 MiB: 9; 2,379 keys typed.
 
-### long, 1 people: extrapolated at 5,000 words each per day
+## Per-key growth at the measured volumes
 
-| Working day | Encoded B (fit) | Plain B (fit) | Beyond last measured sample |
-| --- | --- | --- | --- |
-| 1 | 26,659,052 | 195,914 | 7.6x |
-| 2 | 76,322,561 | 590,118 | 15.1x |
-| 5 | 363,738,587 | 3,192,517 | 37.8x |
-| 10 | 1,304,183,686 | 12,262,481 | 75.7x |
-| 20 | 4,915,392,810 | 48,149,773 | 151.3x |
-| 60 | 42,431,148,353 | 428,330,470 | 453.9x |
+Each category is its change from session zero divided by measured keys. Every checkpoint's exact fractions are in the rates JSON and CSV; the final measured checkpoints are below. Displayed rates are rounded.
 
-### long, 2 people: extrapolated at 5,000 words each per day
+| Exclusive growth category, B/key | long / 1 people / 3,965 keys | long / 2 people / 7,930 keys | long / 4 people / 5,287 keys | large / 1 people / 1,321 keys | large / 2 people / 2,643 keys | large / 4 people / 5,287 keys |
+| --- | --- | --- | --- | --- | --- | --- |
+| text content | 1 | 1 | 1 | 1 | 1 | 1 |
+| text identity | 5 | 5.6 | 5.3 | 4.5 | 5 | 5.3 |
+| birth range | 150.7 | 150.8 | 149.9 | 149.8 | 149.8 | 149.9 |
+| birth observed marks | 56.6 | 103.9 | 91.9 | 28 | 47.8 | 91.9 |
+| birth stamp or author | 9 | 9 | 9 | 9 | 9 | 9 |
+| birth keys and framing | 96.8 | 96.9 | 96.2 | 96.2 | 96.2 | 96.2 |
+| mark additions | 4.8 | 4.8 | 4.7 | 4.8 | 4.7 | 4.7 |
+| mark removals | 2.5 | 2.5 | 2.5 | 2.5 | 2.5 | 2.5 |
+| mark copies | 0.1 | 0.1 | 0.1 | 0.2 | 0.1 | 0.1 |
+| deletions | 1.4 | 1.5 | 1.5 | 1.4 | 1.4 | 1.5 |
+| split objects | 1.3 | 1.3 | 1.3 | 1.3 | 1.3 | 1.3 |
+| retirement observations | 2.8 | 2.8 | 2.8 | 2.8 | 2.8 | 2.8 |
+| removal marks | 216.2 | 304.2 | 292.8 | 206 | 298.3 | 293.3 |
+| structure | 2.4 | 2.5 | 2.4 | 2.4 | 2.4 | 2.4 |
+| undo heading observations | 0 | 0 | 0 | 0 | 0 | 0 |
+| undo beat observations | 0.6 | 0.7 | 0.6 | 0.6 | 0.6 | 0.6 |
+| undo replacement observations | 0 | 0 | 0 | 0 | 0 | 0 |
+| undo keying observations | 0 | 0 | 0 | 0 | 0 | 0 |
+| people | 0 | 0 | 0 | 0 | 0 | 0 |
+| shots | 0.5 | 0.7 | 0.4 | 0.3 | 0.5 | 0.4 |
+| tags | 0 | 0 | 0 | 0 | 0 | 0 |
+| comments | 0.1 | 0.1 | 0.1 | 0.1 | 0.1 | 0.1 |
+| rest | 1 | 1 | 1 | 1 | 1 | 1 |
+| update framing | 0 | 0 | 0 | 0 | 0 | 0 |
+| TOTAL growth B/key | 553 | 689.5 | 663.6 | 511.8 | 624.6 | 664 |
+| Growth B/key less removal marks | 336.7 | 385.3 | 370.8 | 305.8 | 326.3 | 370.8 |
 
-| Working day | Encoded B (fit) | Plain B (fit) | Beyond last measured sample |
-| --- | --- | --- | --- |
-| 1 | 80,882,316 | 308,936 | 7.6x |
-| 2 | 252,613,859 | 922,207 | 15.1x |
-| 5 | 1,313,302,641 | 4,818,084 | 37.8x |
-| 10 | 4,899,431,151 | 18,164,756 | 75.7x |
-| 20 | 18,890,365,169 | 70,558,886 | 151.3x |
-| 60 | 165,769,794,605 | 622,812,578 | 453.9x |
-
-### long, 4 people: extrapolated at 5,000 words each per day
-
-| Working day | Encoded B (fit) | Plain B (fit) | Beyond last measured sample |
-| --- | --- | --- | --- |
-| 1 | 153,814,334 | 241,007 | 22.7x |
-| 2 | 461,948,807 | 443,671 | 45.4x |
-| 5 | 2,312,671,876 | 1,051,665 | 113.5x |
-| 10 | 8,484,942,485 | 2,064,988 | 227x |
-| 20 | 32,408,479,316 | 4,091,633 | 453.9x |
-| 60 | 282,489,234,754 | 12,198,216 | 1,361.8x |
-
-### large, 1 people: extrapolated at 5,000 words each per day
-
-| Working day | Encoded B (fit) | Plain B (fit) | Beyond last measured sample |
-| --- | --- | --- | --- |
-| 1 | 24,140,539 | 975,386 | 22.7x |
-| 2 | 64,121,570 | 2,861,558 | 45.4x |
-| 5 | 282,904,587 | 15,984,647 | 113.5x |
-| 10 | 977,009,382 | 62,738,365 | 227x |
-| 20 | 3,600,718,122 | 249,552,935 | 453.9x |
-| 60 | 30,568,874,962 | 2,240,906,348 | 1,361.8x |
-
-### large, 2 people: extrapolated at 5,000 words each per day
-
-| Working day | Encoded B (fit) | Plain B (fit) | Beyond last measured sample |
-| --- | --- | --- | --- |
-| 1 | 132,803,545 | 1,250,722 | 22.7x |
-| 2 | 462,968,084 | 3,859,080 | 45.4x |
-| 5 | 2,641,424,702 | 21,829,821 | 113.5x |
-| 10 | 10,232,062,357 | 85,599,945 | 227x |
-| 20 | 40,262,875,045 | 339,961,030 | 453.9x |
-| 60 | 358,379,957,474 | 3,048,349,833 | 1,361.8x |
-
-### large, 4 people: extrapolated at 5,000 words each per day
-
-| Working day | Encoded B (fit) | Plain B (fit) | Beyond last measured sample |
-| --- | --- | --- | --- |
-| 1 | 154,418,665 | 535,973 | 22.7x |
-| 2 | 462,588,250 | 738,637 | 45.4x |
-| 5 | 2,313,399,513 | 1,346,631 | 113.5x |
-| 10 | 8,485,759,992 | 2,359,954 | 227x |
-| 20 | 32,409,262,361 | 4,386,599 | 453.9x |
-| 60 | 282,487,023,897 | 12,493,182 | 1,361.8x |
+No full-volume day total is claimed because the samples do not establish growth at that typing volume or distribution.

@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
-import { readFileSync, readdirSync } from "node:fs";
+import { readFileSync, readdirSync, existsSync } from "node:fs";
+import { execFileSync } from "node:child_process";
+import process from "node:process";
 import { URL } from "node:url";
 import * as Y from "yjs";
 import { retainedBytes } from "./retained-bytes.mjs";
+import { sessionRates } from "./session-rates.mjs";
 import { executeMeasured, insertionMarks } from "./reconciliation.mjs";
 import { fixtures, open, writer } from "./run.mjs";
 import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
@@ -106,4 +109,39 @@ test("committed comparison reproduces the original full block and reconciles eve
     assert.ok(point.crossed.typed < 30000);
     assert.equal(Object.values(point.crossed.ledger.categories).reduce((sum, value) => sum + value, 0), point.crossed.bytes);
   }
+});
+
+test("sample-session rates use measured key counters and exact category subtraction at every checkpoint", () => {
+  const directory = new URL("../../../docs/collaboration/", import.meta.url);
+  const rates = JSON.parse(readFileSync(new URL("stage-2-working-days-rates.json", directory), "utf8"));
+  assert.equal(rates.sessions.length, 6);
+  const crossings = [];
+  for (const rate of rates.sessions) {
+    const measured = JSON.parse(readFileSync(new URL(`stage-2-working-days-${rate.fixture}-${rate.people}.json`, directory), "utf8"));
+    assert.deepEqual(rate, sessionRates(measured));
+    for (const point of rate.points) {
+      assert.equal(Object.values(point.addedCategories).reduce((sum, value) => sum + value, 0), point.addedBytes);
+      assert.equal(point.addedBytesLessRemovalMarks, point.addedBytes - point.addedCategories["removal marks"]);
+      if (point.keyboardKeys) for (const [category, bytes] of Object.entries(point.addedCategories)) {
+        assert.equal(point.categoryBytesPerKey[category], bytes / point.keyboardKeys);
+      }
+    }
+    crossings.push(rate.firstOverCap ? [rate.firstOverCap.sampleSession, rate.firstOverCap.keyboardKeys] : null);
+    assert.equal(Object.hasOwn(rate, "firstDefaultDayOver2MiB"), false);
+  }
+  assert.deepEqual(crossings, [[56, 3701], [26, 3436], [13, 3436], null, [19, 2511], [9, 2379]]);
+});
+
+test("measurement report, measured-rate JSON and CSV reproduce without full-volume fitted totals", () => {
+  const directory = new URL("../../../docs/collaboration/", import.meta.url);
+  const paths = ["stage-2-byte-reconciliation.md", "stage-2-working-days-rates.json", "stage-2-working-days-by-category.csv"];
+  const before = paths.map(path => readFileSync(new URL(path, directory), "utf8"));
+  execFileSync(process.execPath, ["tests/collab/measure/reconciliation-report.mjs"]);
+  assert.deepEqual(paths.map(path => readFileSync(new URL(path, directory), "utf8")), before);
+  assert.equal(existsSync(new URL("stage-2-working-days-projections.json", directory)), false);
+  assert.doesNotMatch(before[0], /Full-volume horizons|Encoded B \(fit\)|First measured sample day/);
+  assert.doesNotMatch(before[1], /firstDefaultDayOver2MiB|extrapolated|quadratic/);
+  assert.doesNotMatch(before[2], /extrapolated/);
+  assert.match(before[0], /126 times larger/);
+  assert.match(before[0], /No full-volume day total is claimed/);
 });

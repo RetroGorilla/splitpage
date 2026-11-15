@@ -1,63 +1,22 @@
 import assert from "node:assert/strict";
 import { readFileSync, writeFileSync } from "node:fs";
 import { retainedCategories } from "./retained-bytes.mjs";
+import { sessionRates } from "./session-rates.mjs";
 
 const directory = "docs/collaboration/", read = name => JSON.parse(readFileSync(directory + name, "utf8"));
-const reconciliation = read("stage-2-byte-reconciliation.json"), days = [];
-const prefixes = read("stage-2-capacity-prefix.json");
-const controls = read("stage-2-key-rates.json");
-const horizons = [1, 2, 5, 10, 20, 60];
-
-function retainedFit(points, field) {
-  const initial = field(points[0]), samples = points.filter(point => point.day > 0).slice(-3);
-  assert.equal(samples.length, 3);
-  let s2 = 0, s3 = 0, s4 = 0, sy1 = 0, sy2 = 0;
-  for (const point of samples) {
-    const t = point.day, y = field(point) - initial;
-    s2 += t ** 2; s3 += t ** 3; s4 += t ** 4; sy1 += y * t; sy2 += y * t ** 2;
-  }
-  const determinant = s2 * s4 - s3 ** 2;
-  let linear = (sy1 * s4 - sy2 * s3) / determinant, quadratic = (sy2 * s2 - sy1 * s3) / determinant;
-  if (quadratic < 0) { quadratic = 0; linear = Math.max(0, sy1 / s2); }
-  if (linear < 0) { linear = 0; quadratic = Math.max(0, sy2 / s4); }
-  const predict = t => initial + linear * t + quadratic * t ** 2;
-  return { initial, linear, quadratic, sampleDays: samples.map(point => point.day),
-    maxFitResidualBytes: Math.max(...samples.map(point => Math.abs(predict(point.day) - field(point)))) };
-}
-
+const reconciliation = read("stage-2-byte-reconciliation.json"), sessions = [];
+const prefixes = read("stage-2-capacity-prefix.json"), controls = read("stage-2-key-rates.json");
 for (const fixture of ["long", "large"]) for (const people of [1, 2, 4]) {
-  const { plan, result } = read(`stage-2-working-days-${fixture}-${people}.json`);
-  const typedPerOriginal = 1 + plan.rewriteFraction[0] / plan.rewriteFraction[1] + 1 / plan.correctionEvery;
-  const factor = plan.wordsPerPerson / (result.measuredWordsPerPersonPerDay * typedPerOriginal);
-  const fits = Object.fromEntries(retainedCategories.map(category => [category, retainedFit(result.points, point => point.categories[category])]));
-  const plainFit = retainedFit(result.points, point => point.plainBytes);
-  const predict = (fit, day) => Math.round(fit.initial + fit.linear * day * factor + fit.quadratic * (day * factor) ** 2);
-  const projected = horizons.map(day => {
-    const categories = Object.fromEntries(retainedCategories.map(category => [category, predict(fits[category], day)]));
-    return { day, extrapolated: true, equivalentSampleDays: day * factor, targetKeyboardKeys: day * plan.wordsPerPerson * plan.keysPerWord * people, categories,
-      encodedBytes: Object.values(categories).reduce((sum, value) => sum + value, 0), plainBytes: predict(plainFit, day) };
-  });
-  days.push({ fixture, people, measuredNewWordsPerPersonPerDay: result.measuredWordsPerPersonPerDay, defaultWordsPerPersonPerDay: plan.wordsPerPerson,
-    defaultWordMeaning: "all keyboard typing, including correction retyping and rewrite typing; command-inserted seed strings excluded",
-    typedPerOriginal, sampleDayScale: factor,
-    measuredThroughDay: result.points.at(-1).day,
-    method: "nonnegative quadratic by category, fixed measured day-0 intercept, last three checkpoints; sample-day axis scaled by total typing volume including corrections and rewrites",
-    limitation: "word volume and elapsed days are confounded; the fit does not validate full-volume capacity or late mark/removal behavior",
-    fits, plainFit, projected, firstDefaultDayOver2MiB: projected.find(point => point.encodedBytes > 2 * 1024 ** 2)?.day ?? null,
-    measuredFirstSampleDayOver2MiB: result.firstCap,
-    measuredFirstCrossingInterval: result.points.filter(point => point.encodedBytes <= 2 * 1024 ** 2).at(-1)?.day < result.points.at(-1).day
-      ? [result.points.filter(point => point.encodedBytes <= 2 * 1024 ** 2).at(-1)?.day + 1, result.points.find(point => point.encodedBytes > 2 * 1024 ** 2).day] : null });
+  const data = read(`stage-2-working-days-${fixture}-${people}.json`);
+  sessions.push({ data, rates: sessionRates(data) });
 }
-writeFileSync(directory + "stage-2-working-days-projections.json", JSON.stringify({ version: 1, days }, null, 2) + "\n");
-const csv = [["kind", "fixture", "people", "wordsPerPersonPerDay", "wordMeaning", "day", "keyboardKeys", "encodedBytes", "plainBytes", ...retainedCategories]];
-for (const item of days) {
-  const { result } = read(`stage-2-working-days-${item.fixture}-${item.people}.json`);
-  for (const [kind, words, points] of [["measured", 10, result.points], ["extrapolated", 5000, item.projected]]) {
-    const meaning = kind === "measured" ? "new drafting, before corrections and rewrites" : "all keyboard typing, including corrections and rewrites";
-    for (const point of points) csv.push([kind, item.fixture, item.people, words, meaning, point.day,
-      point.targetKeyboardKeys ?? point.counters.typed + point.counters.correctionRetypes + point.counters.rewritten, point.encodedBytes, point.plainBytes,
-      ...retainedCategories.map(category => point.categories[category])]);
-  }
+writeFileSync(directory + "stage-2-working-days-rates.json", JSON.stringify({ version: 1, sessions: sessions.map(item => item.rates) }, null, 2) + "\n");
+const csv = [["kind", "fixture", "people", "newWordsPerPersonPerSampleSession", "sampleSession", "keyboardKeys", "encodedBytes", "encodedBytesLessRemovalMarks", "plainBytes", "addedBytesPerKey", "addedBytesPerKeyLessRemovalMarks", ...retainedCategories, ...retainedCategories.map(category => category + " added B/key")]];
+for (const { data: { result }, rates } of sessions) for (const [index, point] of result.points.entries()) {
+  const rate = rates.points[index];
+  csv.push(["measured", result.fixture, result.people, result.measuredWordsPerPersonPerDay, point.day, rate.keyboardKeys,
+    point.encodedBytes, rate.encodedBytesLessRemovalMarks, point.plainBytes, rate.bytesPerKey, rate.bytesPerKeyLessRemovalMarks,
+    ...retainedCategories.map(category => point.categories[category]), ...retainedCategories.map(category => rate.categoryBytesPerKey[category])]);
 }
 writeFileSync(directory + "stage-2-working-days-by-category.csv", csv.map(row => row.map(value => JSON.stringify(value)).join(",")).join("\n") + "\n");
 
@@ -78,18 +37,18 @@ const observations = table(["Observed-list component", "Stage 2 / 2 writers B", 
   [["insertion-bound addition references", "insertionBound"], ["range addition references", "range"], ["unknown references", "unknown"]]
     .map(([name, key]) => [name, ...reconciliation.stageTwo.map(point => fmt(point.observationReferences[key].bytes))])
     .concat([["keys and array framing", ...reconciliation.stageTwo.map(point => fmt(point.observationReferences.keysAndArrayFraming))]]));
-const measured = days.map(({ fixture, people }) => {
-  const { result } = read(`stage-2-working-days-${fixture}-${people}.json`);
-  return `### ${fixture}, ${people} people: measured at 10 new words each per sample day, plus corrections and rewrites\n\n` + table(["Sample day", "Encoded B", "Plain B", "Birth B", "Removal marks B"],
-    result.points.map(point => [point.day, fmt(point.encodedBytes), fmt(point.plainBytes),
-      fmt(Object.entries(point.categories).filter(([category]) => category.startsWith("birth ")).reduce((sum, [, value]) => sum + value, 0)), fmt(point.categories["removal marks"])])) +
-    `\n\nFirst measured sample day over 2 MiB: ${result.firstCap?.day ?? "not reached"}.`;
+const measured = sessions.map(({ rates }) => {
+  return `### ${rates.fixture}, ${rates.people} people: 10 new words each per sample session, plus corrections and rewrites\n\n` + table(
+    ["Sample session", "Keys typed", "Encoded B", "B less removal marks", "Plain B", "Added B/key", "Added B/key less removal marks"],
+    rates.points.map(point => [point.sampleSession, fmt(point.keyboardKeys), fmt(point.encodedBytes), fmt(point.encodedBytesLessRemovalMarks), fmt(point.plainBytes),
+      point.bytesPerKey === null ? "n/a" : fmt(point.bytesPerKey), point.bytesPerKeyLessRemovalMarks === null ? "n/a" : fmt(point.bytesPerKeyLessRemovalMarks)])) +
+    `\n\nFirst measured sample session over 2 MiB: ${rates.firstOverCap ? rates.firstOverCap.sampleSession + "; " + fmt(rates.firstOverCap.keyboardKeys) + " keys typed" : "not reached"}.`;
 }).join("\n\n");
-const forecasts = days.map(point => `### ${point.fixture}, ${point.people} people: extrapolated at 5,000 words each per day\n\n` +
-  table(["Working day", "Encoded B (fit)", "Plain B (fit)", "Beyond last measured sample"], point.projected.map(row =>
-    [row.day, fmt(row.encodedBytes), fmt(row.plainBytes), fmt(row.equivalentSampleDays / point.measuredThroughDay) + "x"]))).join("\n\n");
-const path = directory + "stage-2-byte-reconciliation.md";
-const source = readFileSync(path, "utf8");
+const endpoints = sessions.map(({ rates }) => rates.points.at(-1));
+const rateHead = ["Exclusive growth category, B/key", ...sessions.map(({ rates }, index) => `${rates.fixture} / ${rates.people} people / ${fmt(endpoints[index].keyboardKeys)} keys`)];
+const rateTable = table(rateHead, retainedCategories.map(category => [category, ...endpoints.map(point => fmt(point.categoryBytesPerKey[category]))])
+  .concat([["TOTAL growth B/key", ...endpoints.map(point => fmt(point.bytesPerKey))], ["Growth B/key less removal marks", ...endpoints.map(point => fmt(point.bytesPerKeyLessRemovalMarks))]]));
+const path = directory + "stage-2-byte-reconciliation.md", source = readFileSync(path, "utf8");
 const marker = "## Generated comparison and byte ledger";
 assert.ok(source.includes(marker));
 writeFileSync(path, source.slice(0, source.indexOf(marker)) + marker + "\n\n" + comparison + "\n\n### Unformatted typing difference controls\n\n" + controlTable +
@@ -97,6 +56,8 @@ writeFileSync(path, source.slice(0, source.indexOf(marker)) + marker + "\n\n" + 
   "\n\nThe birth observed-list row splits exactly as follows. Insertion-bound references name additions whose native-id interval is fixed; range additions have no such restriction. This identifies candidates for the correctness trial and does not remove any observation in Piece R.\n\n" + observations +
   "\n\n## Measured default-volume capacity crossing\n\n" + table(["Fixture", "People", "First default day over 2 MiB", "Original keys at crossing", "Bytes before / after block"],
     prefixes.map(point => [point.fixture, point.groupSizes.join(", "), point.firstDayOverCap ?? "not reached", point.crossed
-      ? `${point.crossed.previous.typed + 1}–${point.crossed.typed}` : "not reached", point.crossed
+      ? `${point.crossed.previous.typed + 1}-${point.crossed.typed}` : "not reached", point.crossed
       ? `${fmt(point.crossed.previous.bytes)} / ${fmt(point.crossed.bytes)}` : "not reached"])) +
-  "\n\n## Repeated sessions: measured samples\n\n" + measured + "\n\n## Full-volume horizons: extrapolations, not observed days\n\n" + forecasts + "\n");
+  "\n\n## Repeated sessions: measured samples\n\nAdded rates divide growth since session zero by all recorded keyboard keys, including correction and rewrite typing. They include command-generated edits in the numerator. Subtracting removal marks is exact category accounting, not a rerun with removal disabled; other remove/restore effects remain.\n\n" + measured +
+  "\n\n## Per-key growth at the measured volumes\n\nEach category is its change from session zero divided by measured keys. Every checkpoint's exact fractions are in the rates JSON and CSV; the final measured checkpoints are below. Displayed rates are rounded.\n\n" + rateTable +
+  "\n\nNo full-volume day total is claimed because the samples do not establish growth at that typing volume or distribution.\n");
