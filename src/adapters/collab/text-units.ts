@@ -2,6 +2,7 @@ import * as Y from "yjs";
 import type { SharedTextAddress } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { readSharedPaintedText } from "./paint-base.ts";
+import { resolveSharedTextAnchor } from "./anchors.ts";
 
 function unitKey(ref: string): string {
   try {
@@ -11,6 +12,15 @@ function unitKey(ref: string): string {
     if (item) return item.client + ":" + item.clock;
   } catch { return ref; }
   return ref;
+}
+
+export function readSharedTextBoundary(handle: SharedDocumentHandle, address: SharedTextAddress, index: number): string | null {
+  const painted = readSharedPaintedText(handle, address);
+  return painted ? index < painted.text.length ? painted.identity(index) : painted.endGap ?? null : null;
+}
+
+export function locateSharedTextBoundary(handle: SharedDocumentHandle, address: SharedTextAddress, boundary: string): number | null {
+  return resolveSharedTextAnchor(handle, boundary, address);
 }
 
 export function readSharedTextUnits(handle: SharedDocumentHandle, address: SharedTextAddress): readonly string[] | null {

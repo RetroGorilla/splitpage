@@ -4,7 +4,7 @@ import type { SharedRecordCommands, SharedRecordPorts } from "../../../applicati
 import type { SharedSettledSelection, SharedStructureCommands } from "../../../application/commands/shared-structure.ts";
 import { sharedBufferedTarget } from "../../../adapters/collab/buffer.ts";
 import { holdSharedCapture } from "../../../adapters/collab/ingress.ts";
-import { readSharedTextUnits } from "../../../adapters/collab/text-units.ts";
+import { locateSharedTextBoundary, readSharedTextBoundary, readSharedTextUnits } from "../../../adapters/collab/text-units.ts";
 import { bufferedFieldKey } from "../../../core/collab/buffer.ts";
 import type { SharedValueCommands } from "../../../application/commands/shared-values.ts";
 import type { CommandOutcome } from "../../../application/session/document-session.ts";
@@ -34,15 +34,41 @@ function settle(): boolean {
   return refusal === null;
 }
 
+function narration(parts: SharedSessionParts, rowId: string) {
+  return sharedBufferedTarget(parts.handle, bufferedFieldKey(rowId, "audioText"));
+}
+
 function unitsOf(parts: SharedSessionParts, rowId: string): readonly string[] | null {
-  try { return readSharedTextUnits(parts.handle, sharedBufferedTarget(parts.handle, bufferedFieldKey(rowId, "audioText"))); }
+  try { return readSharedTextUnits(parts.handle, narration(parts, rowId)); }
   catch { return null; }
+}
+
+function boundaryOf(parts: SharedSessionParts, rowId: string, index: number): string | null {
+  try { return readSharedTextBoundary(parts.handle, narration(parts, rowId), index); }
+  catch { return null; }
+}
+
+function searchOrder(parts: SharedSessionParts, rowId: string): readonly string[] {
+  const rows = parts.session.read(doc => doc ? doc.rows.map(row => row.id) : []);
+  return rows.includes(rowId) ? [rowId, ...rows.filter(id => id !== rowId)] : rows;
+}
+
+function boundaryIn(parts: SharedSessionParts, rowId: string, boundary: string): number | null {
+  try { return locateSharedTextBoundary(parts.handle, narration(parts, rowId), boundary); }
+  catch { return null; }
+}
+
+function boundaryCut(parts: SharedSessionParts, rows: readonly string[], boundary: string | null): { readonly rowId: string; readonly at: number } | null {
+  for (const id of boundary ? rows : []) {
+    const at = boundaryIn(parts, id, boundary as string);
+    if (at !== null) return { rowId: id, at };
+  }
+  return null;
 }
 
 function located(parts: SharedSessionParts, rowId: string, keys: readonly string[]): Map<string, { readonly rowId: string; readonly at: number }> {
   const found = new Map<string, { readonly rowId: string; readonly at: number }>();
-  const rows = parts.session.read(doc => doc ? doc.rows.map(row => row.id) : []);
-  for (const id of rows.includes(rowId) ? [rowId, ...rows.filter(id => id !== rowId)] : rows) {
+  for (const id of searchOrder(parts, rowId)) {
     (unitsOf(parts, id) ?? []).forEach((key, at) => { if (keys.includes(key) && !found.has(key)) found.set(key, { rowId: id, at }); });
     if (keys.every(key => found.has(key))) break;
   }
@@ -67,7 +93,8 @@ function captureSeen(parts: SharedSessionParts, rowId: string, read: SelectionRe
     if (!settle()) return null;
     const range = read(), units = unitsOf(parts, rowId);
     if (!range || !units) return null;
-    return { selected: units.slice(range.from, range.to), after: units[range.from], before: units[range.from - 1] };
+    const start = range.from < range.to ? boundaryOf(parts, rowId, range.from) : null;
+    return { selected: units.slice(range.from, range.to), after: units[range.from], before: units[range.from - 1], start };
   } finally { release(); }
 }
 
@@ -87,9 +114,12 @@ function settleSelection(rowId: string, read: SelectionRead): SharedSettledSelec
   }
   const found = located(parts, rowId, seen.selected), places = seen.selected.flatMap(key => found.get(key) ?? []);
   const first = places[0];
-  if (!first || places.some(place => place.rowId !== first.rowId)) { refuse(first ? SELECTION_SPANS : SELECTION_GONE); return null; }
+  if (first && places.some(place => place.rowId !== first.rowId)) { refuse(SELECTION_SPANS); return null; }
   const offsets = places.map(place => place.at).sort((a, b) => a - b);
-  return { rowId: first.rowId, removed: runs(offsets), at: offsets[0] as number };
+  // why: the cut is the boundary before the first seen character, which outlives that character's deletion
+  const cut = boundaryCut(parts, first ? [first.rowId] : searchOrder(parts, rowId), seen.start) ?? (first ? { rowId: first.rowId, at: offsets[0] as number } : null);
+  if (!cut) { refuse(SELECTION_GONE); return null; }
+  return { rowId: cut.rowId, removed: runs(offsets), at: Math.min(cut.at, offsets[0] ?? cut.at) };
 }
 
 function source(parts: SharedSessionParts) {
