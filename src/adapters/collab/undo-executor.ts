@@ -492,8 +492,10 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
         const key = textKey(target), was = before.get(key), visible = typed.get(key);
         if (described.has(key) || !was && !visible) continue;
         const is = now(target);
-        if (!is) continue;
+        // why: a joined row's text is reached through the row and through its piece; it is described once, as one text.
+        if (!is || described.has(textKey(is.target))) continue;
         described.add(key);
+        described.add(textKey(is.target));
         const inserted = is.units.filter(unit => was ? !was.live(unit.unit) : !visible?.has(unit.unit.client + ":" + unit.unit.clock)).map(unit => unit.identity);
         // why: a character the command moved into another beat of the same text was not deleted by it, so its undo never
         // brings that character back, even after someone else deleted it, as a heading made from that line does.
