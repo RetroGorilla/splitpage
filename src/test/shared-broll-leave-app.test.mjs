@@ -111,7 +111,7 @@ test("rule 196: leaving a Split visual cell keys the line another copy typed, wi
     select(cellOf("visualText"), 3);
     cellOf("audioText", "r2").focus();
     const { visual, shots } = agreed(f), id = shots[0]?.[0];
-    assert.match(id ?? "", /^bs_k\d+_\d+$/);
+    assert.match(id ?? "", /^bs_w\d+_\d+_0$/);
     assert.deepEqual({ visual, shots }, { visual: KEY(id) + " Close up", shots: [[id, "Close up"]] });
     assert.deepEqual(f.parts.undo.sizes(), { undo: 1, redo: 0, dropped: 0 });
     assert.deepEqual([reports, errors, warnings], [[], [], []]);

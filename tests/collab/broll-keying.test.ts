@@ -87,8 +87,16 @@ function agreedShots(set: ReturnType<typeof findReplicas>) {
 function lineKeyOf(handle: SharedDocumentHandle): string {
   const shot = shots(handle)[0];
   assert.ok(shot);
-  assert.match(shot.id, /^bs_k\d+_\d+$/);
+  assert.match(shot.id, /^bs_w\d+_\d+_0$/);
   return shot.id;
+}
+
+function keysIn(html: unknown): string[] {
+  return explode(scriptCellOf(String(html ?? ""))).flatMap(unit => unit.atom?.atom === "broll" ? [unit.atom.id] : []);
+}
+
+function madeBy(who: ReturnType<typeof copy>, id: string): boolean {
+  return who.harness.executed.some(entry => entry.operations.some(item => item.kind === "record-create" && item.target.record === id));
 }
 
 function bytes(handle: SharedDocumentHandle, run: () => void): number {
@@ -162,17 +170,18 @@ test("rule 198: leaving a row that is gone, or a session with no document, keys 
 });
 
 for (const order of ORDERS) {
-  test(`rule 196: two copies leaving one line at once store one shot under one id; the next leave drops the later key: ${order}`, () => {
+  test(`rule 196: two copies leaving one line at once mint two keys and two shots; the next leave drops the later key and its untouched shot: ${order}`, () => {
     const set = typedLine("Close up"), a = copy(set.a, "Alice"), b = copy(set.b, "Bob");
     try {
       assert.deepEqual(a.leave(), ["applied"]);
       assert.deepEqual(b.leave(), ["applied"]);
       deliverAll(set.queue, order);
-      const id = lineKeyOf(set.a), doubled = String(visual(set, "doubled", order) ?? "");
-      const repeat = /data-broll-id="(broll_[^"]+)"/.exec(doubled)?.[1] ?? "";
-      assert.equal(doubled, KEY(id) + KEY(repeat) + " Close up");
-      assert.deepEqual(agreedShots(set), [{ id, name: "Close up", ...SEED }]);
-      const dropped = repeat.split("_").at(-2) === "1" ? a : b, kept = dropped === a ? b : a;
+      const [id, later] = keysIn(visual(set, "doubled", order));
+      assert.ok(id && later && id !== later);
+      assert.equal(visual(set, "doubled", order), KEY(id) + KEY(later) + " Close up");
+      assert.deepEqual(agreedShots(set).map(shot => shot.id).sort(), [id, later].sort());
+      const dropped = madeBy(a, later) ? a : b, kept = dropped === a ? b : a;
+      assert.equal(madeBy(kept, id), true);
       assert.deepEqual(dropped.leave(), ["applied"]);
       deliverAll(set.queue, order);
       assert.equal(visual(set, "cleaned", order), KEY(id) + " Close up");
@@ -194,7 +203,7 @@ for (const order of ORDERS) {
     const set = typedLine("Close up"), a = copy(set.a, "Alice"), b = copy(set.b, "Bob");
     try {
       a.leave(); b.leave(); deliverAll(set.queue, order);
-      const id = lineKeyOf(set.a);
+      const [id] = keysIn(visual(set, "doubled", order)); assert.ok(id);
       assert.deepEqual([a.leave(), b.leave()], [["applied"], ["applied"]]);
       deliverAll(set.queue, order);
       assert.equal(visual(set, "both cleaned", order), KEY(id) + " Close up");
@@ -255,9 +264,23 @@ test("stored size: one keying and its undo, as encoded updates", () => {
   try {
     const keyed = bytes(set.a, () => { assert.deepEqual(a.leave(), ["applied"]); });
     const undone = bytes(set.a, () => { assert.equal(a.owner.undo().ok, true); });
-    assert.deepEqual({ keyed, undone }, { keyed: 649, undone: 2819 });
+    assert.deepEqual({ keyed, undone }, { keyed: 655, undone: 2819 });
     deliverAll(set.queue, "D1"); agreedShots(set);
   } finally { a.session.dispose(); set.close(); }
+});
+
+test("stored size: two copies keying one line at once, then the cleanup that removes the later shot", () => {
+  const set = typedLine("Close up"), a = copy(set.a, "Alice"), b = copy(set.b, "Bob");
+  try {
+    const keyedA = bytes(set.a, () => { assert.deepEqual(a.leave(), ["applied"]); });
+    const keyedB = bytes(set.b, () => { assert.deepEqual(b.leave(), ["applied"]); });
+    deliverAll(set.queue, "D1");
+    const [first, later] = keysIn(visual(set, "doubled", "D1")); assert.ok(first && later);
+    const cleaned = bytes(set.a, () => { assert.deepEqual(a.leave(), ["applied"]); });
+    deliverAll(set.queue, "D1");
+    assert.deepEqual(agreedShots(set).map(shot => shot.id), [first]);
+    assert.deepEqual({ keyedA, keyedB, cleaned }, { keyedA: 655, keyedB: 648, cleaned: 305 });
+  } finally { a.session.dispose(); b.session.dispose(); set.close(); }
 });
 
 const TARGET = { owner: "R1", segment: "R1", field: "visualText" } as SharedTextAddress;
@@ -287,11 +310,16 @@ function usedUp(a: ReturnType<typeof copy>, set: ReturnType<typeof findReplicas>
   agreedShots(set);
 }
 
-function shotEdit(change: "field" | "status" | "prop", id: string, by: string): unknown {
+type ShotChange = "field" | "cleared" | "extra" | "status" | "prop" | "rank";
+
+function shotEdit(change: ShotChange, id: string, by: string): unknown {
   const target = { collection: "shots", record: id };
   return change === "field" ? { kind: "record-set", id: "shot-notes", by, target, field: "notes", value: "handheld" }
-    : change === "status" ? { kind: "status", id: "shot-status", by, target: { scope: "shot", record: id }, value: "shot", parents: [] }
-      : { kind: "record-set", id: "shot-prop", by, target, field: "props", value: [{ id: "p_mug", name: "Mug" }] };
+    : change === "cleared" ? { kind: "record-set", id: "shot-cleared", by, target, field: "notes", clear: true }
+      : change === "extra" ? { kind: "record-set", id: "shot-extra", by, target, field: "extra", value: '{"lens":"35mm"}' }
+        : change === "rank" ? { kind: "record-set", id: "shot-rank", by, target, field: "rank", value: "5" }
+          : change === "status" ? { kind: "status", id: "shot-status", by, target: { scope: "shot", record: id }, value: "shot", parents: [] }
+            : { kind: "record-set", id: "shot-prop", by, target, field: "props", value: [{ id: "p_mug", name: "Mug" }] };
 }
 
 const ATOMS: readonly Run[] = [
@@ -338,8 +366,9 @@ for (const order of ORDERS) {
     } finally { a.session.dispose(); b.session.dispose(); set.close(); }
   });
 
-  for (const change of ["none", "field", "status", "prop"] as const) for (const editor of change === "none" ? ["nobody"] as const : ["keyer", "other"] as const) {
-    for (const cleaner of ["keyer", "other"] as const) test(`rule 196: a dropped repeat's shot changed after it was made stays without a key; an untouched one goes: ${change} by ${editor}, cleaned by ${cleaner}: ${order}`, () => {
+  for (const change of ["none", "field", "cleared", "extra", "status", "prop", "rank"] as const) for (const editor of change === "none" ? ["nobody"] as const : ["keyer", "other"] as const) {
+    const untouched = change === "none" || change === "rank";
+    for (const cleaner of ["keyer", "other"] as const) test(`rule 196: a dropped repeat's shot changed after it was made stays without a key; an untouched or only reordered one goes: ${change} by ${editor}, cleaned by ${cleaner}: ${order}`, () => {
       const set = writtenCell("B-roll: Close up"), a = copy(set.a, "Alice"), b = copy(set.b, "Bob");
       try {
         a.leave();
@@ -360,10 +389,10 @@ for (const order of ORDERS) {
         assert.deepEqual((cleaner === "keyer" ? keyer : other).copy.leave(), ["applied"]); deliverAll(set.queue, order);
         assert.equal(visual(set, "repeat dropped", order), KEY(kept) + " Close up");
         const after = agreedShots(set);
-        assert.deepEqual(after.map(shot => shot.id).sort(), (change === "none" ? [kept] : [kept, later]).sort());
-        if (change !== "none") assert.deepEqual(after.find(shot => shot.id === later), before);
+        assert.deepEqual(after.map(shot => shot.id).sort(), (untouched ? [kept] : [kept, later]).sort());
+        if (!untouched) assert.deepEqual(after.find(shot => shot.id === later), before);
         assert.doesNotMatch(JSON.stringify(projectSharedDocumentWithRecovery(set.a).recovery), new RegExp(later));
-        if (change === "none") {
+        if (untouched) {
           const refused = executeSharedOperations(set.b, [operation(shotEdit("field", later, "Bob"))], { base: readSharedRevision(set.b) });
           assert.equal(refused.ok, false);
         }
@@ -371,7 +400,59 @@ for (const order of ORDERS) {
     });
   }
 
-  test(`nameless marker waits for a name; an existing named key without a record is repaired by the leaving copy: ${order}`, () => {
+  for (const start of ["marker", "missing-shot"] as const) for (const change of ["notes", "removal"] as const) for (const cleaner of ["A", "B", "late"] as const) {
+    test(`rule 196: two keyings at once never share a shot, so A's ${change} before B's keying survives: ${start}, cleaned by ${cleaner}: ${order}`, () => {
+      const set = start === "marker" ? typedLine("Close up") : writtenCell(KEY("bs_missing") + " Close up"), a = copy(set.a, "Alice"), b = copy(set.b, "Bob");
+      try {
+        assert.deepEqual(a.leave(), ["applied"]);
+        const mine = a.harness.executed.at(-1)?.operations.find(item => item.kind === "record-create")?.target.record; assert.ok(mine);
+        sendAs(set.a, change === "notes" ? shotEdit("field", mine, "Alice") : { kind: "record-delete", id: "mine-gone", by: "Alice", target: { collection: "shots", record: mine } });
+        assert.deepEqual(b.leave(), ["applied"]);
+        const theirs = b.harness.executed.at(-1)?.operations.find(item => item.kind === "record-create")?.target.record; assert.ok(theirs);
+        assert.notEqual(theirs, mine);
+        deliverAll(set.queue, order);
+        const [first, later] = keysIn(visual(set, "doubled", order));
+        assert.deepEqual([first, later].sort(), [mine, theirs].sort());
+        if (cleaner === "late") {
+          const c = copy(set.c, "Carol");
+          assert.equal(applySharedUpdate(set.c, encodeSharedState(set.a)).ok, true);
+          assert.deepEqual(c.leave(), ["applied"]);
+          for (const handle of [set.a, set.b]) assert.equal(applySharedUpdate(handle, encodeSharedState(set.c)).ok, true);
+          c.session.dispose();
+        } else assert.deepEqual((cleaner === "A" ? a : b).leave(), ["applied"]);
+        deliverAll(set.queue, order);
+        assert.equal(visual(set, "cleaned", order), KEY(first ?? "") + " Close up");
+        const after = agreedShots(set), ids = after.map(shot => shot.id).sort();
+        if (change === "notes") {
+          assert.deepEqual(ids, (first === mine ? [mine] : [mine, theirs]).sort());
+          assert.deepEqual(after.find(shot => shot.id === mine), { id: mine, name: "Close up", ...SEED, notes: "handheld" });
+        } else assert.deepEqual(ids, first === mine ? [] : [theirs]);
+        assert.equal(JSON.stringify(after).includes("bs_missing"), false);
+        assert.doesNotMatch(JSON.stringify(projectSharedDocumentWithRecovery(set.a).recovery), new RegExp(mine));
+        for (const who of [a, b]) {
+          const revision = readSharedRevision(set.a);
+          assert.deepEqual(who.owner.undo(), { ok: true, effective: false, label: "key-broll-lines", selection: null, reason: "used-up" });
+          assert.equal(readSharedRevision(set.a), revision);
+        }
+        assert.equal(set.queue.pending.length, 0);
+        assert.deepEqual(agreedShots(set), after);
+      } finally { a.session.dispose(); b.session.dispose(); set.close(); }
+    });
+  }
+
+  test(`rule 199: undo of a keying that reused a listed shot is used up after another copy edits that shot: ${order}`, () => {
+    const set = typedLine("Mug"), a = copy(set.a, "Alice");
+    try {
+      assert.deepEqual(a.leave(), ["applied"]); deliverAll(set.queue, order);
+      assert.equal(visual(set, "reused", order), KEY("S1") + " Mug");
+      sendAs(set.b, { kind: "record-set", id: "listed-notes", by: "Bob", target: { collection: "shots", record: "S1" }, field: "notes", value: "handheld" });
+      deliverAll(set.queue, order);
+      usedUp(a, set);
+      assert.equal(visual(set, "reused kept", order), KEY("S1") + " Mug");
+    } finally { a.session.dispose(); set.close(); }
+  });
+
+  test(`nameless marker waits for a name; an existing named key without a record is repaired by the leaving copy under a key it mints: ${order}`, () => {
     for (const keyed of [false, true]) {
       const set = writtenCell(keyed ? KEY("bs_missing") + " Close up" : "B-roll: "), a = copy(set.a, "Alice");
       try {
@@ -380,7 +461,7 @@ for (const order of ORDERS) {
           insertAt(set.b, 8, "Close up"); deliverAll(set.queue, order);
         }
         assert.deepEqual(a.leave(), ["applied"]); deliverAll(set.queue, order);
-        const id = keyed ? "bs_missing" : lineKeyOf(set.a);
+        const id = lineKeyOf(set.a);
         assert.equal(visual(set, "named record", order), KEY(id) + " Close up");
         assert.deepEqual(agreedShots(set), [{ id, name: "Close up", ...SEED }]);
         assert.equal(a.harness.executed.at(-1)?.operations.find(operation => operation.kind === "record-create")?.by, "Alice");

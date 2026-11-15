@@ -21,8 +21,6 @@ export interface SharedBrollKeying {
   readonly shots: readonly string[];
 }
 
-export type SharedBrollLineKey = (at: number) => string | null;
-
 function undrawn(serial: number): string {
   return "\u0000" + serial;
 }
@@ -37,18 +35,18 @@ function applySplices(cell: readonly Run[], splices: readonly SharedCellSplice[]
   return implode(units);
 }
 
-// why: rule 196 on #1414: a new key takes its id from the line's first character, so copies keying one line at once
-// mint one id and one shot record; an id already held by an unclaimed shot of that name is reused, as standalone does.
-export function sharedBrollKeying(left: SharedBrollLeftCell, readers: ProductionReaders, plainTextOf: FieldText, lineKey: SharedBrollLineKey,
+// why: rule 196 on #1414: each keying mints ids of its own, so copies keying one line at once never write one record and
+// cleanup settles the doubled key; an id held by an unclaimed shot of that name is reused, as standalone does.
+export function sharedBrollKeying(left: SharedBrollLeftCell, readers: ProductionReaders, plainTextOf: FieldText,
   author: { readonly id: string; readonly by: string }, shotRemoved: (id: string) => boolean = () => false): SharedBrollKeying | null {
-  let drawn = 0;
+  let drawn = 0, minted = 0;
+  const mint = () => "bs_" + author.id + "_" + minted++;
   const plan = planBrollAnchorsInState(left.state, readers, { id: () => undrawn(drawn++), docId: () => "" });
   const found = readers.brollInField(toHtml(left.cell)), lines = brollMarkerLines(left.cell);
   const named = new Set(lines.filter((_, index) => !!found[index]?.name).map(item => item.line.start));
   const todo = brollAnchorTodo(left.cell, left.rowId, plan).flatMap(item => {
     if (item.found.marker.key || !named.has(item.found.line.start)) return [];
-    const id = isUndrawn(item.id) ? lineKey(item.found.line.start) : item.id;
-    return id ? [{ ...item, id }] : [];
+    return [{ ...item, id: isUndrawn(item.id) ? mint() : item.id }];
   });
   const splices: SharedCellSplice[] = [], keys: string[] = [];
   for (const item of todo) {
@@ -66,13 +64,22 @@ export function sharedBrollKeying(left: SharedBrollLeftCell, readers: Production
     }
     keys.push(item.id);
   }
+  const recorded = new Set(left.state.brollShots.map(shot => shot.id));
+  lines.forEach((line, index) => {
+    const item = line.marker.key, key = item?.atom;
+    if (!item || key?.atom !== "broll" || !key.id || recorded.has(key.id) || !found[index]?.name || shotRemoved(key.id)) return;
+    const id = mint();
+    splices.push({ from: item.pos, to: item.pos + 1, insert: [{ ...key, id }] });
+    keys.push(id);
+  });
+  splices.sort((a, b) => a.from - b.from);
   const cell = applySplices(left.cell, splices);
   const text = sharedCellTextOperations({ owner: left.rowId, field: "visualText", before: left.cell, after: cell }, splices);
   if (!text) return null;
-  const html = toHtml(cell), eligible = new Set([...keys, ...found.filter(item => item.name && item.id).map(item => item.id)]);
+  const html = toHtml(cell), eligible = new Set(keys);
   const state: BrollState = { ...left.state, rows: left.state.rows.map(row => row.id === left.rowId ? { ...row, visualText: html } : row) };
   const shots = planBrollRecordsInState(state, readers, { id: () => undrawn(drawn++), docId: () => "" }, plainTextOf, rowId => rowId === left.rowId).create
-    .filter(shot => eligible.has(shot.id) && !shotRemoved(shot.id));
+    .filter(shot => eligible.has(shot.id));
   const operations: SharedOperation[] = text.map((operation, index) => ({ ...operation, id: (author.id + ":" + index) as SharedContentRef, by: author.by }));
   shots.forEach(({ id, ...fields }, index) => {
     const created: SharedRecordCreate = { kind: "record-create", id: (author.id + ":shot:" + index) as SharedContentRef, by: author.by,

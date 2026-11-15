@@ -1,5 +1,4 @@
 import { sharedBrollKeying, sharedBrollRepeats } from "../../core/collab/broll-keying.ts";
-import type { SharedBrollLineKey } from "../../core/collab/broll-keying.ts";
 import type { SharedContentRef, SharedOperation } from "../../core/collab/operations.ts";
 import type { FieldText, ProductionReaders } from "../../core/production/ports.ts";
 import type { CellDecoder } from "../../core/text/ports.ts";
@@ -13,7 +12,7 @@ export interface SharedBrollKeyingPorts {
   readonly cells: CellDecoder;
   readonly readers: ProductionReaders;
   readonly plainTextOf: FieldText;
-  readonly lineKeys: (rowId: string) => SharedBrollLineKey | null;
+  readonly keyable: (rowId: string) => boolean;
   readonly shotRemoved: (id: string) => boolean;
   readonly shotUntouched: (id: string) => boolean;
 }
@@ -42,8 +41,8 @@ function repeatsIn(doc: DocumentView, rowId: string, ports: SharedBrollKeyingPor
 }
 
 function keyingIn(doc: DocumentView, rowId: string, ports: SharedBrollKeyingPorts, author: { readonly id: string; readonly by: string }): readonly SharedOperation[] | null {
-  const left = leftCell(doc, rowId, ports), lineKey = left ? ports.lineKeys(rowId) : null;
-  const keyed = left && lineKey ? sharedBrollKeying(left, ports.readers, ports.plainTextOf, lineKey, author, ports.shotRemoved) : null;
+  const left = leftCell(doc, rowId, ports);
+  const keyed = left && ports.keyable(rowId) ? sharedBrollKeying(left, ports.readers, ports.plainTextOf, author, ports.shotRemoved) : null;
   return keyed ? [...keyed.operations, ports.beatStamp(rowId as SharedContentRef, { id: author.id + "_stamp", by: author.by })] : null;
 }
 
