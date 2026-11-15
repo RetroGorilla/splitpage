@@ -26,7 +26,7 @@ function sorted(value: unknown): unknown {
   return Object.fromEntries(Object.keys(value).sort().map(key => [key, sorted((value as Record<string, unknown>)[key])]));
 }
 
-export function sharedCellUnitKey(unit: Char): string {
+function unitKey(unit: Char): string {
   return unit.atom ? JSON.stringify(["atom", sorted(unit.atom)]) : JSON.stringify([unit.ch, sorted(unit.marks)]);
 }
 
@@ -66,7 +66,7 @@ export function sharedCellTextOperations(cell: SharedCellText, splices: readonly
   }
   for (let index = kept; index < was.length; index++) result.push(was[index] as Char);
   const now = explode(cell.after);
-  if (result.length !== now.length || result.some((unit, index) => sharedCellUnitKey(unit) !== sharedCellUnitKey(now[index] as Char))) return null;
+  if (result.length !== now.length || result.some((unit, index) => unitKey(unit) !== unitKey(now[index] as Char))) return null;
   const target: SharedTextAddress = { owner: cell.owner as SharedTextAddress["owner"], segment: cell.owner as SharedTextAddress["segment"], field: cell.field };
   const operations: SharedCellTextOperation[] = [];
   for (const splice of parts) {

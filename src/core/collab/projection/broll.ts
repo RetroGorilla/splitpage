@@ -14,11 +14,6 @@ function encoded(value: string): string {
   return result;
 }
 
-export function isSharedBrollRepeatOf(id: string, original: string): boolean {
-  const prefix = "broll_" + encoded(original) + "_";
-  return id.startsWith(prefix) && /^\d+_\d+_*$/.test(id.slice(prefix.length));
-}
-
 export function readSharedBrollAtoms(units: readonly SharedProjectionUnit[]): readonly SharedBrollAtom[] {
   const atoms: SharedBrollAtom[] = [];
   for (let index = 0; index < units.length; index++) {
