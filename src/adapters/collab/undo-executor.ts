@@ -36,6 +36,7 @@ import { hasLaterSharedJoin, isSharedJoinRetired, nextSharedJoinGeneration, plan
 import type { SharedJoinUndoPart } from "./undo-join.ts";
 import { planSharedSplitUndo, recordSharedSplit } from "./undo-split.ts";
 import { canReverseSharedCreation, recordSharedCreation, sharedCreationUndoParts } from "./undo-creation.ts";
+import { canReverseSharedHeadingCreation, recordSharedHeadingCreation, sharedHeadingCreationRecorded } from "./undo-heading-creation.ts";
 import { planSharedRemovalUndo, readSharedLiveStructure, recordSharedRemoval } from "./undo-removal.ts";
 import { isSharedGalleryShown, readSharedRetirementObservation, readSharedStoredPicture } from "./gallery-retirement.ts";
 import { readSharedRemovalState } from "./removal-state.ts";
@@ -43,7 +44,7 @@ import { readStoredRecordDeletion } from "./record-deletion.ts";
 import * as Y from "yjs";
 
 export const SHARED_UNDO_PARTS: readonly string[] = Object.freeze(["text", "mark-add", "mark-remove", "scalar", "status", "status-retired",
-  "record-create", "record-delete", "record-field", "join", "remove", "restore", "discard", "discard-retired", "join-glue", "beat-split", "record-retired", "beat-create"]);
+  "record-create", "record-delete", "record-field", "join", "remove", "restore", "discard", "discard-retired", "join-glue", "beat-split", "record-retired", "beat-create", "heading-creation"]);
 export const SHARED_UNDO_RECORDS: readonly SharedRecordCollection[] = Object.freeze(["comments", "replies", "people", "tags", "shots"] as const);
 
 export interface SharedUndoWriter { readonly by: string; readonly nextId: () => string }
@@ -203,6 +204,10 @@ function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: Sh
   switch (part.kind) {
     case "beat-create": {
       operations.push(operationOf({ kind: part.retired ? "segment-restore" : "segment-retire", ...author(), beat: part.beat, creator: part.writer, observed: part.content }));
+      return { inverse: () => ({ effective: true, part: { ...part, retired: !part.retired } }) };
+    }
+    case "heading-creation": {
+      operations.push(operationOf({ kind: part.retired ? "heading-restore" : "heading-retire", ...author(), heading: part.heading, segment: part.segment, creator: part.writer, observed: part.content }));
       return { inverse: () => ({ effective: true, part: { ...part, retired: !part.retired } }) };
     }
     case "text": {
@@ -377,7 +382,8 @@ export function reverseSharedUndoRecord(handle: SharedDocumentHandle, record: Sh
 
 function reverseRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, writer: SharedUndoWriter): SharedUndoReversal {
   // why: a creation and its initial text are one edit; a used-up creation must not undo any other part of that edit.
-  if (record.parts.some(part => part.kind === "beat-create" && !canReverseSharedCreation(handle, part))) {
+  if (record.parts.some(part => part.kind === "beat-create" && !canReverseSharedCreation(handle, part)
+    || part.kind === "heading-creation" && !canReverseSharedHeadingCreation(handle, part))) {
     return { ok: true, effective: false, selection: null, inverse: record };
   }
   const operations: SharedOperation[] = [], planned: Planned[] = [], merged: SharedUndoPart[] = [];
@@ -393,6 +399,10 @@ function reverseRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, w
   } catch (error) {
     if (error instanceof SharedUndoRefusal) return { ok: false, reason: error.message };
     throw error;
+  }
+  // why: a scene's first beat can be set but never cleared, so an undo that would clear it is skipped (rule 71).
+  if (record.parts.some(part => part.kind === "scalar" && part.target.scope === "heading" && part.field === "firstSceneId" && part.prior.clear === true)) {
+    return { ok: false, reason: "undo-unsupported:scalar:firstSceneId" };
   }
   if (operations.length) {
     const result = executeSharedOperations(handle, operations, { origin: "local-undo" });
@@ -538,6 +548,8 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       parts.push(recordSharedRemoval(handle, operation, live) ?? { kind: "structure", command: operation.kind, operation: operation.id });
     } else if (operation.kind === "segment-create") {
       parts.push(recordSharedCreation(handle, operation));
+    } else if (sharedHeadingCreationRecorded(operation, operations)) {
+      parts.push(recordSharedHeadingCreation(handle, operation));
     } else if (operation.kind === "split" || operation.kind === "split-before") {
       parts.push(recordSharedSplit(handle, operation) ?? { kind: "structure", command: operation.kind, operation: operation.id });
     } else if (operation.kind === "join-retire") {
@@ -556,7 +568,7 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       parts.push({ kind: "discard", discard: eventKey(handle, operation.id), entry: operation.entry, removals: operation.removals });
     } else if (operation.kind !== "text-restore" && operation.kind !== "mark-retract" && operation.kind !== "status-retire" && operation.kind !== "discard-retire"
       && operation.kind !== "split-retire" && operation.kind !== "split-restore" && operation.kind !== "gallery-retire" && operation.kind !== "gallery-restore"
-      && operation.kind !== "segment-retire" && operation.kind !== "segment-restore") {
+      && operation.kind !== "segment-retire" && operation.kind !== "segment-restore" && operation.kind !== "heading-retire" && operation.kind !== "heading-restore") {
       parts.push({ kind: "structure", command: operation.kind, operation: operation.id });
     }
   }
