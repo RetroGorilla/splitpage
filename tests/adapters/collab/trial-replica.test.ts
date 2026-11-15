@@ -349,6 +349,31 @@ test("rule 210: an update that depends on a held update is tried against it, so 
   ]);
 });
 
+test("rule 210: a valid update is refused at receipt when a held update from another copy cannot be applied with it, and the third refusal stops intake", () => {
+  const unusable = crafted(7, [metaItem(7, 0, "", 1, Y.createID(9, 0)),
+    new Y.Item(Y.createID(7, 1), null, Y.createID(7, 2), null, null, META, "cycle", new Y.ContentAny([2])),
+    new Y.Item(Y.createID(7, 2), null, Y.createID(7, 1), null, null, META, "cycle", new Y.ContentAny([3]))]);
+  const honest = crafted(9, [metaItem(9, 0, "honest", 1)]);
+  const outcomes: unknown[] = [];
+  for (const [name, standing, holding] of [["copy trial, held", false, true], ["copy trial, gate open", false, false], ["standing replica, held", true, true]] as const) {
+    const handle = createMonitoredSharedDocument();
+    try {
+      if (standing) startSharedTrialReplica(handle);
+      const release = holding ? holdSharedBuffer(handle) : () => {};
+      const accepted = applySharedUpdate(handle, unusable);
+      const results = Array.from({ length: 4 }, () => applySharedUpdate(handle, honest));
+      const failure = thrown(release);
+      outcomes.push([name, accepted, results, failure, [...Y.decodeStateVector(encodeSharedStateVector(handle))].sort(), sharedIntakeStopped(handle)]);
+    } finally { destroySharedDocument(handle); }
+  }
+  const refused = { ok: false, reason: "invalid-update" };
+  assert.deepEqual(outcomes, [
+    ["copy trial, held", { ok: true }, [{ ok: true }, { ok: true }, { ok: true }, { ok: true }], "TypeError", [[7, 1], [9, 1]], false],
+    ["copy trial, gate open", { ok: true }, [refused, refused, refused, refused], "nothing thrown", [], false],
+    ["standing replica, held", { ok: true }, [refused, refused, refused, { ok: false, reason: "intake-stopped" }], "nothing thrown", [], true]
+  ]);
+});
+
 test("a live write that fails after its trial passed, gate open: the error reaches the caller as before and the replica is rebuilt from live", () => {
   const handle = hydrated(1), counts = counter();
   try {
@@ -497,6 +522,77 @@ test("local surrogate fragments rebuild like a fresh wire copy after native text
     assert.equal(text.toString(), "\ud800\udc00");
     assert.equal(same(trial.encode(), livePlusHeld(handle)), true);
     assert.deepEqual([counts.calls("encode:rebuild"), trial.spent], [1, 0]);
+  } finally { destroySharedDocument(handle); }
+});
+
+test("surrogate pairs: plain typing and deleting beside a valid pair, a split pair and a low half typed apart rebuild nothing; a low half joining its high half rebuilds once", () => {
+  const schedules: Record<string, ((text: Y.Text) => void)[]> = {
+    "typing plain letters": [text => { text.insert(6, "x"); }, text => { text.insert(7, "y"); }, text => { text.insert(4, "z"); }, text => { text.insert(0, "w"); }],
+    "deleting plain letters": [text => { text.delete(5, 1); }, text => { text.delete(0, 1); }, text => { text.delete(3, 1); }],
+    "deleting one half of the pair": [text => { text.delete(3, 1); }],
+    "typing inside the pair": [text => { text.insert(3, "x"); }],
+    "low half typed before its high half": [text => { text.insert(6, "\ude00"); }, text => { text.insert(6, "\ud83d"); }],
+    "high half, then low half in a second transaction": [text => { text.insert(6, "\ud83d"); }, text => { text.insert(7, "\ude00"); }]
+  };
+  const outcomes: Record<string, unknown> = {};
+  for (const [name, steps] of Object.entries(schedules)) {
+    const handle = createMonitoredSharedDocument(), counts = counter();
+    try {
+      const text = new Y.Text();
+      transactSharedDocument(handle, "local-command", () => { collabState(handle).roots.meta.set("text", text); });
+      transactSharedDocument(handle, "local-command", () => { text.insert(0, "ab𐀀cd"); });
+      const trial = startSharedTrialReplica(handle, counts.count);
+      for (const step of steps) transactSharedDocument(handle, "local-command", () => { step(text); });
+      const stale = trial.stale;
+      counts.reset();
+      outcomes[name] = [stale, matches(handle), counts.calls("encode:rebuild"), counts.calls("apply:follow")];
+    } finally { destroySharedDocument(handle); }
+  }
+  assert.deepEqual(outcomes, {
+    "typing plain letters": [false, true, 0, 0],
+    "deleting plain letters": [false, true, 0, 0],
+    "deleting one half of the pair": [false, true, 0, 0],
+    "typing inside the pair": [false, true, 0, 0],
+    "low half typed before its high half": [false, true, 0, 0],
+    "high half, then low half in a second transaction": [true, true, 1, 0]
+  });
+});
+
+test("arrivals inside local transactions' notifications rebuild nothing: 50 local writes each with a nested arrival cost 50 flushes and no rebuild", () => {
+  const handle = hydrated(1), counts = counter();
+  try {
+    const state = collabState(handle), trial = startSharedTrialReplica(handle, counts.count), results: SharedApplyResult[] = [];
+    const stop = observeSharedTransactions(handle, origin => { if (origin === "local-command") results.push(applySharedUpdate(handle, Uint8Array.of(0, 0))); });
+    counts.reset();
+    for (let index = 0; index < 50; index++) transactSharedDocument(handle, "local-command", () => { state.roots.meta.set("key", index); });
+    stop();
+    assert.deepEqual(reasons(results), { ok: 50 });
+    assert.deepEqual([counts.calls("encode:flush"), counts.calls("encode:rebuild"), trial.stale], [50, 0, false]);
+    assert.equal(matches(handle), true);
+    assert.equal(counts.calls("encode:rebuild"), 0);
+  } finally { destroySharedDocument(handle); }
+});
+
+test("an arrival inside a local transaction's body sees the transaction reuse a held clock and is tried on a replica rebuilt from live", () => {
+  const handle = createMonitoredSharedDocument(), counts = counter();
+  try {
+    const state = collabState(handle);
+    state.doc.clientID = 7;
+    const trial = startSharedTrialReplica(handle, counts.count), release = holdSharedBuffer(handle);
+    assert.deepEqual(applySharedUpdate(handle, crafted(7, [metaItem(7, 0, "remote", 1)])), { ok: true });
+    let inside: unknown[] = [];
+    counts.reset();
+    transactSharedDocument(handle, "local-command", () => {
+      state.roots.meta.set("local", 1);
+      inside = [applySharedUpdate(handle, Uint8Array.of(0, 0)), trial.replica.getMap("meta").toJSON(), trial.stale];
+    });
+    assert.deepEqual(inside, [{ ok: true }, { local: 1 }, false]);
+    assert.deepEqual([counts.calls("encode:rebuild"), trial.spent], [1, 0]);
+    release();
+    assert.deepEqual(state.roots.meta.toJSON(), { local: 1 });
+    counts.reset();
+    assert.equal(matches(handle), true);
+    assert.equal(counts.calls("encode:rebuild"), 0);
   } finally { destroySharedDocument(handle); }
 });
 

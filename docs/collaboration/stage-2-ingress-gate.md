@@ -108,24 +108,59 @@ a struct whose origin is in A.
   live write, reported and skipped.
 - After: the replica holds A, so B is refused at receipt and live never changes.
 
-This is assumed rule 210. No case goes the other way: against live alone, dependent structs
-only wait as pending, and the decode and zero-length checks do not depend on state.
+Assumed rule 210: an update is refused at receipt when it cannot be applied together with the
+changes this copy is holding, whichever of them is at fault. No case goes the other way:
+against live alone, dependent structs only wait as pending, and the decode and zero-length
+checks do not depend on state.
+
+The fault can lie with the held update. Copy 7 sends A, whose first struct waits for (9,0)
+and whose next two point at each other; A is accepted and held. Copy 9 then sends a valid
+(9,0) four times.
+
+| Path | The four (9,0) arrivals | When the hold ends |
+| --- | --- | --- |
+| Before, held | accepted four times | the drain throws and live is partly written |
+| Before, gate open | refused four times (A already waits in live) | nothing |
+| After, held | refused three times, then `intake-stopped` | nothing; live stays as it was |
+
+So one person's unusable held change makes another person's valid change refused here, and
+after three refusals stops intake. The alternative would be to drop the unusable held change
+instead; that is an open question for the owner.
 
 When an incoming struct overlaps clocks present in the replica but absent from live, the
 update is also tried on a fresh copy of live. Otherwise the library could skip invalid
 structs as duplicates of held clocks. Genuine held duplicates remain accepted. Disjoint
 updates keep the incremental path without a whole-document copy.
 
-A local write can reuse a held clock with different content. The local transaction's before
-state detects that collision and marks the replica stale. Local text containing surrogate
-units does the same: wire encoding normalizes fragments per item, and later native item
-merges can change the encoded content without changing the state vector. Both cases rebuild
-from live plus held before the next trial. A successful stale recovery spends no budget.
+A local write can reuse a held clock with different content. When the transaction wrote
+clocks that the replica already holds beyond what it copied from live, the replica is marked
+stale.
 
-An update can arrive inside a live local transaction or its notifications, before that
-transaction's `update` event. The replica then first copies what it lacks
+Surrogate pairs need one case. Wire encoding turns a lone surrogate half at either end of an
+encoded run into U+FFFD. When a local run starts with a low half and the library merges it
+into the previous item, whose last unit is the matching high half, live holds a valid pair
+while the replica received two replacement characters. The check reads only the transaction's
+own first written unit on each client and the unit before it in the same item. Deleting one
+half of a pair, typing inside a pair, or formatting half of it needs nothing: the library
+replaces both halves with U+FFFD when it splits the item, on live and on the replica alike.
+A low half typed before its high half is never merged with it and encodes the same on both.
+The tests pin these schedules: plain typing and deleting beside a valid pair, a split pair
+and a low half typed apart rebuild nothing; a high half, then a low half in a second
+transaction, rebuilds once.
+
+Both cases rebuild from live plus held before the next trial. A successful stale recovery
+spends no budget.
+
+An update can arrive inside a live local transaction's body or its notifications, before
+that transaction's `update` event. The replica then first checks the transaction's writes so
+far against live's current state vector (the library fills the transaction's after state only
+at cleanup), and either marks the replica stale or copies what it lacks
 (`encodeStateAsUpdate(live, replicaVector)`). That copy carries the whole delete set; it
-happens only on such nested arrivals and is counted.
+happens only on such nested arrivals and is counted. The copy, or a rebuild at that moment,
+records the live state vector it reached. When the transaction's `update` event follows, its
+clocks below that vector count as copied, not as held, so a nested arrival does not force a
+rebuild afterwards: 50 local writes, each with an arrival in its notifications, cost 50 copies
+and no rebuild.
 
 ### Refusals and the rebuild budget
 
@@ -265,6 +300,13 @@ applies 52 bytes on both: the update once on the replica and once on live. These
 moved by the adapter for those exact fixtures. A stale recovery copies the whole live
 document plus held updates, and a nested arrival can encode the complete delete set.
 
+Each local transaction in a shared session adds this work, which the composed-editor
+measurement still has to time: a set insert and a set clear for the transaction; one pass over
+its before and after state vectors (one entry per client that has written to the document); for
+each client it wrote, one binary search into that client's structs and a two-unit read; and
+one apply of the transaction's own update on the replica. The library encodes that update
+anyway, because the session already listens for updates to send. No text is read whole.
+
 ## Tests
 
 `tests/adapters/collab/ingress-gate.test.ts` holds the literal cases;
@@ -274,4 +316,4 @@ revision against the same arrivals applied one by one. `tests/collab/ingress-gat
 holds nine deliberate defects, listed in `tests/collab/mutants.md`. The trial replica's cases
 are in `tests/adapters/collab/trial-replica.test.ts`, with its session lifetime in
 `tests/bootstrap/shared-switch.test.ts`. `tests/collab/trial-replica-mutants.json` holds its
-seventeen deliberate defects.
+twenty-one deliberate defects.

@@ -78,12 +78,32 @@
   }, {
     "label": "local reuse of a held clock trusts equal vectors",
     "file": "src/adapters/collab/trial-replica.ts",
-    "find": "      if (after > before && Y.getState(this.#replica.doc.store, client) > before) return true;",
-    "replace": "      void after; void before; void client;"
+    "find": "      if (clock > floor && Y.getState(this.#replica.doc.store, client) > floor) return true;",
+    "replace": "      void clock; void floor;"
   }, {
     "label": "surrogate item normalization leaves the replica clean",
     "file": "src/adapters/collab/trial-replica.ts",
-    "find": "(part: { insert?: unknown }) => typeof part.insert === \"string\" && /[\\ud800-\\udfff]/.test(part.insert))) return true;",
-    "replace": "(part: { insert?: unknown }) => typeof part.insert === \"string\" && /[\\ud800-\\udfff]/.test(part.insert))) return false;"
+    "find": "      if (low >= 0xdc00 && low <= 0xdfff && high >= 0xd800 && high <= 0xdbff) return true;",
+    "replace": "      if (low >= 0xdc00 && low <= 0xdfff && high >= 0xd800 && high <= 0xdbff) return false;"
+  }, {
+    "label": "any surrogate in a written text item rebuilds the replica",
+    "file": "src/adapters/collab/trial-replica.ts",
+    "find": "      if (!(item instanceof Y.Item) || !(item.content instanceof Y.ContentString) || item.id.clock === before) continue;",
+    "replace": "      if (!(item instanceof Y.Item) || !(item.content instanceof Y.ContentString)) continue;\n      if (/[\\ud800-\\udfff]/.test(item.content.str)) return true;"
+  }, {
+    "label": "in-flight check reads the state the library fills only at cleanup",
+    "file": "src/adapters/collab/trial-replica.ts",
+    "find": "      if (local.some(transaction => this.#reusesClock(transaction, vector))) this.#stale = true;",
+    "replace": "      if (local.some(transaction => this.#reusesClock(transaction, transaction.afterState))) this.#stale = true;"
+  }, {
+    "label": "flushed content counted as a held clock when its transaction ends",
+    "file": "src/adapters/collab/trial-replica.ts",
+    "find": "        try { Y.applyUpdate(this.#replica.doc, missing); this.#mirrored(vector); } catch { this.#stale = true; }",
+    "replace": "        try { Y.applyUpdate(this.#replica.doc, missing); } catch { this.#stale = true; }"
+  }, {
+    "label": "rebuilt content counted as a held clock when its transaction ends",
+    "file": "src/adapters/collab/trial-replica.ts",
+    "find": "    if (vector) this.#mirrored(vector);",
+    "replace": "    void vector;"
   }]
 }

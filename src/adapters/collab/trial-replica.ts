@@ -9,8 +9,10 @@ let open = 0;
 
 export function openSharedTrialReplicas(): number { return open; }
 
+function vectorOf(doc: Y.Doc): Map<number, number> { return Y.decodeStateVector(Y.encodeStateVector(doc)); }
+
 function sameVector(first: Y.Doc, second: Y.Doc): boolean {
-  const left = Y.decodeStateVector(Y.encodeStateVector(first)), right = Y.decodeStateVector(Y.encodeStateVector(second));
+  const left = vectorOf(first), right = vectorOf(second);
   if (left.size !== right.size) return false;
   for (const [client, clock] of left) if (right.get(client) !== clock) return false;
   return true;
@@ -20,6 +22,7 @@ export class SharedTrialReplica implements IngressTrial {
   readonly #live: CollabDocumentState;
   readonly #count: SharedAdmissionCount | undefined;
   readonly #inflight = new Set<Y.Transaction>();
+  readonly #copied = new Map<Y.Transaction, Map<number, number>>();
   readonly #stops: (() => void)[] = [];
   #replica: CollabDocumentState;
   #stale = false;
@@ -39,7 +42,7 @@ export class SharedTrialReplica implements IngressTrial {
     const begin = (transaction: Y.Transaction): void => guardSharedCallback(live, () => { this.#inflight.add(transaction); });
     const follow = (update: Uint8Array, _origin: unknown, _doc: Y.Doc, transaction: Y.Transaction): void =>
       guardSharedCallback(live, () => { this.#follow(update, transaction); });
-    const settled = (): void => guardSharedCallback(live, () => { this.#inflight.clear(); });
+    const settled = (): void => guardSharedCallback(live, () => { this.#inflight.clear(); this.#copied.clear(); });
     doc.on("beforeTransaction", begin);
     doc.on("update", follow);
     doc.on("afterAllTransactions", settled);
@@ -63,41 +66,63 @@ export class SharedTrialReplica implements IngressTrial {
 
   #follow(update: Uint8Array, transaction: Y.Transaction): void {
     this.#inflight.delete(transaction);
+    const reused = this.#reusesClock(transaction, transaction.afterState);
+    this.#copied.delete(transaction);
     // why: A remote transaction applies only an update the replica took at its trial; a stale replica is rebuilt whole.
     if (transaction.origin === "remote" || this.#stale) return;
-    if (this.#needsSnapshot(transaction)) { this.#stale = true; return; }
+    if (reused || this.#joinsPair(transaction)) { this.#stale = true; return; }
     this.#count?.("apply", "follow", update.byteLength);
     try { Y.applyUpdate(this.#replica.doc, update); } catch { this.#stale = true; }
   }
 
-  #needsSnapshot(transaction: Y.Transaction): boolean {
-    for (const [client, after] of transaction.afterState) {
-      const before = transaction.beforeState.get(client) ?? 0;
-      if (after > before && Y.getState(this.#replica.doc.store, client) > before) return true;
+  // why: Clocks the replica already holds past what it copied from live belong to held updates, not to this transaction.
+  #reusesClock(transaction: Y.Transaction, written: Map<number, number>): boolean {
+    const copied = this.#copied.get(transaction);
+    for (const [client, clock] of written) {
+      const floor = Math.max(transaction.beforeState.get(client) ?? 0, copied?.get(client) ?? 0);
+      if (clock > floor && Y.getState(this.#replica.doc.store, client) > floor) return true;
     }
-    // why: Wire encoding normalizes surrogate fragments per item; native item merges can change their encoded content.
-    for (const type of transaction.changedParentTypes.keys()) if (type instanceof Y.Text && type.toDelta().some(
-      (part: { insert?: unknown }) => typeof part.insert === "string" && /[\ud800-\udfff]/.test(part.insert))) return true;
     return false;
   }
 
+  // why: A run sliced off between the halves of a pair it merged with encodes them as replacement characters.
+  #joinsPair(transaction: Y.Transaction): boolean {
+    for (const [client, after] of transaction.afterState) {
+      const before = transaction.beforeState.get(client) ?? 0, structs = this.#live.doc.store.clients.get(client);
+      if (after <= before || !structs) continue;
+      const item = structs[Y.findIndexSS(structs, before)];
+      if (!(item instanceof Y.Item) || !(item.content instanceof Y.ContentString) || item.id.clock === before) continue;
+      const offset = before - item.id.clock, low = item.content.str.charCodeAt(offset), high = item.content.str.charCodeAt(offset - 1);
+      if (low >= 0xdc00 && low <= 0xdfff && high >= 0xd800 && high <= 0xdbff) return true;
+    }
+    return false;
+  }
+
+  #mirrored(vector: Map<number, number>): void {
+    for (const transaction of this.#inflight) if (transaction.origin !== "remote") this.#copied.set(transaction, vector);
+  }
+
   #rebuild(): void {
+    const vector = this.#inflight.size ? vectorOf(this.#live.doc) : null;
     const next = this.#build();
     this.#replica.doc.destroy();
     this.#replica = next;
     this.#stale = false;
+    if (vector) this.#mirrored(vector);
   }
 
   #current(): boolean {
     if (this.#disposed) throw new Error("The trial replica has ended");
-    for (const transaction of this.#inflight) {
-      if (transaction.origin !== "remote" && this.#needsSnapshot(transaction)) this.#stale = true;
-    }
-    if (!this.#stale && [...this.#inflight].some(transaction => transaction.origin !== "remote")) {
-      // why: A live transaction whose update is not announced yet is copied by what the replica lacks.
-      const missing = Y.encodeStateAsUpdate(this.#live.doc, Y.encodeStateVector(this.#replica.doc));
-      this.#count?.("encode", "flush", missing.byteLength); this.#count?.("apply", "flush", missing.byteLength);
-      try { Y.applyUpdate(this.#replica.doc, missing); } catch { this.#stale = true; }
+    const local = [...this.#inflight].filter(transaction => transaction.origin !== "remote");
+    if (!this.#stale && local.length) {
+      const vector = vectorOf(this.#live.doc);
+      if (local.some(transaction => this.#reusesClock(transaction, vector))) this.#stale = true;
+      else {
+        // why: A live transaction whose update is not announced yet is copied by what the replica lacks.
+        const missing = Y.encodeStateAsUpdate(this.#live.doc, Y.encodeStateVector(this.#replica.doc));
+        this.#count?.("encode", "flush", missing.byteLength); this.#count?.("apply", "flush", missing.byteLength);
+        try { Y.applyUpdate(this.#replica.doc, missing); this.#mirrored(vector); } catch { this.#stale = true; }
+      }
     }
     if (this.#stale && !this.#rebuildBlocked && !this.#stopped) this.#recover(false);
     return !this.#stale;
@@ -169,6 +194,7 @@ export class SharedTrialReplica implements IngressTrial {
     this.#disposed = true;
     for (const stop of this.#stops.splice(0)) stop();
     this.#inflight.clear();
+    this.#copied.clear();
     this.#replica.doc.destroy();
     open--;
     if (this.#live.trial === this) this.#live.trial = null;
