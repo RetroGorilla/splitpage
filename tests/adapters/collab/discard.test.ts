@@ -163,14 +163,14 @@ for (const order of ["D1", "rev", "dup"] as const) test(`assumed rule 52: commen
       roots.segments.set("empty", segment); roots.order.insert(0, ["empty"]);
     }); set.queue.flush(order);
     const listed = summary(set.b).recovery;
-    assert.deepEqual(listed, ['unprojectable-fragment ["empty","1:103"]', "comment-without-words C9", 'reply-without-comment ["C1","r1"]']);
+    assert.deepEqual(listed, ['unprojectable-fragment ["empty","1:104"]', "comment-without-words C9", 'reply-without-comment ["C1","r1"]']);
     const made = executeSharedCommand(set.b, discards(set.b, "d", ["unprojectable-fragment", "comment-without-words", "reply-without-comment"]), { label: "discard", selection: null, typing: null });
     assert.ok(made.result.ok && made.record); set.queue.flush(order); assertIncremental(set.c, projector);
     agree("all discarded", order, handles, summary, { rows: ["R1", "R2"], recovery: [] });
     transactSharedDocument(set.c, "local-command", () => nativeText(set.c, "empty").delete(0, 1)); set.queue.flush(order); assertIncremental(set.c, projector);
-    agree("fragment renamed", order, handles, summary, { rows: ["R1", "R2"], recovery: ['unprojectable-fragment ["empty","1:104"]'] });
+    agree("fragment renamed", order, handles, summary, { rows: ["R1", "R2"], recovery: ['unprojectable-fragment ["empty","1:105"]'] });
     const undone = reverseSharedUndoRecord(set.b, made.record, writer("Bob")); assert.ok(undone.ok); set.queue.flush(order); assertIncremental(set.c, projector);
-    agree("discards undone", order, handles, summary, { rows: ["R1", "R2"], recovery: ['unprojectable-fragment ["empty","1:104"]', "comment-without-words C9", 'reply-without-comment ["C1","r1"]'] });
+    agree("discards undone", order, handles, summary, { rows: ["R1", "R2"], recovery: ['unprojectable-fragment ["empty","1:105"]', "comment-without-words C9", 'reply-without-comment ["C1","r1"]'] });
   } finally { set.close(); }
 });
 
