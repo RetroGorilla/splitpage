@@ -23,7 +23,7 @@ after(() => { stopApp(); closeApp(); });
 test("C9 the real switch binding registers and releases recovery on normal leave and rolled-back enter", async () => {
   let serial = 0;
   const standalone = currentCapabilities(), reported: unknown[] = [];
-  const ports: SharedSwitchPorts = { opening: openingStatus, refusal: () => null, settle: () => {}, detach: () => {},
+  const ports: SharedSwitchPorts = { opening: openingStatus, refusal: () => null, commandRefused: undefined, settle: () => {}, detach: () => {},
     bindings: { ...recoveryPanelBinding, settle: () => null, leave: () => {
       recoveryPanelBinding.leave();
       assert.equal(appActions.has("recovery"), false);

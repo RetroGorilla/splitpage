@@ -31,7 +31,7 @@ export function writerVisualBuffer(shared: { readonly bufferedText: BufferedFiel
   return (root, repaint) => {
     const painted = createPaintedBeats(shared.paintedText), listeners = new Set<() => void>();
     const cell = root.querySelector<HTMLElement>(".wr-flow-visual-text"); if (!cell) throw new Error("A Writer visual buffer needs its cell");
-    let selectionEdit: BufferedTextEdit | null = null, painting = false;
+    let selectionEdit: BufferedTextEdit | null = null, painting = false, discarded = false;
     const key = () => bufferedFieldKey(cell.dataset.id ?? "", "visualText");
     const order = () => source.document()?.rows.map(row => row.id) ?? [];
     const model = () => createSelectionModel({ epoch: source.lifetime.epoch, order,
@@ -49,6 +49,11 @@ export function writerVisualBuffer(shared: { readonly bufferedText: BufferedFiel
       readable: id => shared.paintedText.read(id, readBufferedFieldKey(id).field) !== null
     } });
     const selectionEnd = (): void => { const edit = selectionEdit; selectionEdit = null; edit?.cancel(); };
+    const abandon = (): void => {
+      if (selectionEdit || cell.dataset.field === "selection-visual") { discarded = true; cell.innerHTML = ""; }
+      selectionEnd();
+    };
+    const stopAbandonment = shared.bufferedText.abandonment?.(abandon);
     return {
       painted: record,
       finish: () => {
@@ -58,6 +63,7 @@ export function writerVisualBuffer(shared: { readonly bufferedText: BufferedFiel
       selectionStart: range => {
         if (selectionEdit?.isOpen()) return true;
         if (range.head.kind !== "beat") return false;
+        discarded = false;
         const base = shared.paintedText.read(range.head.rowId, "audioText");
         selectionEdit = base ? shared.bufferedText.open(range.head.rowId, base) : null;
         if (!selectionEdit) shared.bufferedText.report({ kind: "rejected", reason: "buffer-unavailable" });
@@ -78,6 +84,7 @@ export function writerVisualBuffer(shared: { readonly bufferedText: BufferedFiel
         return { anchor: beatPos(resolved.rowId, resolved.anchor), head: beatPos(resolved.rowId, resolved.head) };
       },
       selectionEnd,
+      discarded: () => discarded,
       refresh: paint => {
         if (painting) return;
         if (cell.dataset.field === "visualText" && !source.document()?.rows.some(row => row.id === cell.dataset.id)) {
@@ -95,7 +102,7 @@ export function writerVisualBuffer(shared: { readonly bufferedText: BufferedFiel
           if (focused && resolved && resolved.rowId === cell.dataset.id) { cell.focus({ preventScroll: true }); placeSelection(cell, root.ownerDocument.getSelection(), resolved); }
         } finally { painting = false; }
       },
-      dispose: () => { if (!buffer.dispose()) return false; selectionEnd(); return true; }
+      dispose: () => { if (!buffer.dispose()) return false; selectionEnd(); stopAbandonment?.(); return true; }
     };
   };
 }
