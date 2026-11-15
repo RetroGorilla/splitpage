@@ -27,7 +27,13 @@ names what the command changed by identity, never by offset.
 | `status`, `status-retired` | the beat, the status event and its value |
 | `record-create`, `record-delete` | the record and its fields |
 | `beat-create` | the stored beat identity, creating copy, initial observation and retirement direction |
+| `heading-creation` | the stored heading identity, the segment that holds its line, creating copy, initial observation and retirement direction |
 | `structure` | the command kind and the operation identity |
+
+A B-roll keying (`key-broll-lines`) records `text` and `record-create` parts, plus `keyedLines` (each keyed
+line's units and other copies' contributions) and `keyedShots` (the fields of each shot its lines hold), so
+its undo runs only while the lines and shots are as it left them; see
+[stage-2-commit-time-writers.md](stage-2-commit-time-writers.md).
 
 `typing` is the text a keystroke inserted (`""` for a deletion key), or `null`
 for a command that is not typing, such as cut or paste.
@@ -97,8 +103,10 @@ A refusal leaves both stacks as they were. The reasons:
   The executor is not called. Every structure command but a join, an unjoin, a
   separator change, a split, a beat removal, a heading removal without a new
   beat and a restore of either is refused this way until its executor lands:
-  `segment-move`, `heading-create`, `heading-finalize`, and
-  `heading-remove` with a new beat (a demotion). A split whose part cannot be
+  `segment-move`, `heading-finalize` on a line typed earlier, and
+  `heading-remove` with a new beat (a demotion). A heading made by the add-scene
+  box or a paste is a `heading-creation` part; see
+  [Undo of heading creation](#undo-of-heading-creation). A split whose part cannot be
   recorded keeps the generic part, named `split` or `split-before`. A
   removal of another kind (range, became-heading) is named `remove` and
   refused by the executor with `undo-unsupported:remove`. See
@@ -575,9 +583,8 @@ Declared, refused by name (`undo-unsupported:split`): a command with two
 splits (a middle selection to its own beat, where the second split names the
 first's new beat by an alias), and Enter inside a scene heading name.
 
-Not undone yet: a heading created by paste and a demotion. A pasted heading
-needs its own inverse; a demotion also needs the heading removal raced with
-it to show what its undo writes. Beat creation is supported below.
+Not undone yet: a demotion, which also needs the heading removal raced with
+it to show what its undo writes. Beat and heading creation are supported below.
 
 ### Undo of a removal and a restore
 
@@ -632,8 +639,7 @@ and marks, and the first beat as compared for a beat. Literals in
 
 Not undone yet, each refused by name with a literal: a demotion (a
 `heading-remove` with a new beat), because restoring the removal leaves the
-name in the new beat and undoing the split has no operation yet; a heading
-created by paste, because the heading creation has no inverse yet;
+name in the new beat and undoing the split has no operation yet;
 a command that removes a heading and a beat together;
 and a restore of a heading removal and a beat removal at once.
 
@@ -820,6 +826,65 @@ A fixed-size digest would introduce collision semantics into the equality
 check, so this cut keeps the exact comparison. There is no persisted cleanup
 path for either effective or invalidated retirements. The plan review must
 decide that storage policy; this cut adds no cleanup mechanism.
+
+### Undo of heading creation
+
+A `heading-create` (the add-scene box) records a `heading-creation` part after
+the whole command has applied, and so does a `heading-finalize` whose line's
+beat the same command created (a paste, which brings each heading as a new
+`# name` line and finishes it). The part names the stored heading, the segment
+that holds its line and the creating copy, and keeps an observation of the
+result: the heading's unstamped record fields (its scene values and any removal
+field), its boundary, and the characters and active marks of its name up to the
+next boundary. The name typed and the values written in the same command are
+absorbed into the part, as a beat's initial text is.
+
+Undo emits `heading-retire`, which writes the same `creationRetired` marker as a
+beat, with the segment beside what the undo saw. While the observation still
+matches, every structure and projection reader hides the heading line: its
+beats fall under the scene before, and nothing is listed in recovery. Redo
+emits `heading-restore`, clearing the marker and revealing the same heading.
+The creation wrote no paragraph mark on its first beat, so the undo writes
+none; the first beat shows as it did before the heading was made.
+
+Assumed rules 202 to 209, proposed for the plan review:
+
+202. Undo of creating a heading removes the heading line only. Its beats stay
+     and fall under the scene before; nothing is listed in recovery. Redo brings
+     back the same heading with the same identity.
+203. The undo works only while the heading is as made: its scene values, its
+     place (its boundary in its segment) and its name's characters and marks.
+     Another copy's rename, value, formatting, split of the name or removal
+     uses it up, as rule 145 does for a beat; the creator's own later rename
+     has its own later step and is undone first.
+204. A whole paste is one step. Each thing it created is judged on its own,
+     and the step is undone only while all of them are as made; a beat it
+     created and took away again in the same paste is part of that creation.
+205. An unseen change follows rule 148: the undo succeeds locally, the change
+     arrives and the changed thing comes back on every copy, carrying that
+     change; the rest of the step stays undone and the redo is used up.
+206. Beats someone else adds under the heading, or typing in them, are not
+     work on the heading: the undo still removes the line and their beats stay.
+207. A heading made over a beat is a structural change of that beat (rule
+     147): undoing the heading does not give back the beat's creation undo.
+208. Routes not served keep rule 71 (skipped by name): a heading finished from
+     a line typed earlier in the Writer (`heading-finalize`), a demotion
+     (`heading-remove` with a new beat), and a paste whose heading lands on the
+     first beat of an existing scene, which also moves that scene's first beat
+     (`scalar:firstSceneId`), a field an undo cannot clear.
+209. Storage: an undo keeps one copy of the observation in the marker; a redo
+     deletes it and leaves a tombstone.
+
+Stored size, from `encodeSharedState` in `undo-heading-creation.test.ts`: an
+undo adds 371 bytes for a one-character name and 3,754 bytes for a name of
+200 characters; the redo then takes 305 and 3,687 bytes away again, leaving
+66 and 67 bytes more than before the undo.
+
+Literals: `tests/adapters/collab/undo-heading-creation.test.ts` (two copies in
+three delivery orders with an encoded late joiner and incremental projection),
+`undo-heading.test.ts`, the add-scene box in `tests/features/rows/scene-create.test.ts`
+and the real shared paste in `tests/application/commands/flow-paste-shared.test.ts`.
+Mutants: `tests/collab/heading-creation-undo-mutants.json`.
 
 ### The provenance marker
 

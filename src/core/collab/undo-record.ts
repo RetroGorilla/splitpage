@@ -37,6 +37,14 @@ export type SharedUndoPart =
     readonly content: string;
   }
   | {
+    readonly kind: "heading-creation";
+    readonly heading: SharedContentRef;
+    readonly segment: SharedContentRef;
+    readonly writer: string;
+    readonly retired: boolean;
+    readonly content: string;
+  }
+  | {
     readonly kind: "mark-add";
     readonly target: SharedTextAddress;
     readonly mark: SharedMarkValue;

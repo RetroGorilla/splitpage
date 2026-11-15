@@ -5,7 +5,7 @@ import { mountSceneControls } from "../../../src/features/rows/scene-controls.ts
 import { createSceneView } from "../../../src/application/editing/scene-view.ts";
 import { harness, runConfined } from "../../application/session-fakes.ts";
 import { toggleRowMenu } from "../../../src/features/rows/row-menu.ts";
-import { fakeNotices } from "../fakes.ts";
+import { fakeNotices, fakeStandaloneStructure } from "../fakes.ts";
 import { scenesInOrder } from "../../../src/core/document/scenes.ts";
 import { deriveDocumentNumbering } from "../../../src/core/document/numbering.ts";
 
@@ -25,7 +25,7 @@ function fixture(existing = false, moving: string | null = null) {
     drag: { dragging: () => moving, end: () => { moving = null; } },
     ids: { id: () => "created" },
     notices: fakeNotices().notices,
-    scroll: () => {}, stopScroll: () => {}
+    scroll: () => {}, stopScroll: () => {}, structure: fakeStandaloneStructure()
   });
   const more = document.querySelector<HTMLButtonElement>(".row-more");
   const add = document.querySelector<HTMLButtonElement>('[data-action="add-section"]');

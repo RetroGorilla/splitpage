@@ -19,7 +19,7 @@ import type { SharedDocumentProjectionResult } from "../../../src/adapters/colla
 import { registerSharedUndoOperationHandlers } from "../../../src/adapters/collab/undo-handlers.ts";
 import { createSharedPreparation } from "../../../src/adapters/collab/prepare.ts";
 import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
-import { readSharedCreationContent } from "../../../src/adapters/collab/creation-retirement.ts";
+import { readSharedCreationContent, readSharedHeadingCreationContent } from "../../../src/adapters/collab/creation-retirement.ts";
 import { sharedStructureKey } from "../../../src/core/collab/structure-key.ts";
 import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/removal-executor.ts";
 
@@ -107,6 +107,9 @@ test("seeded incremental projection agrees at every authored and delivered revis
           const segment = new Y.Map<unknown>(); segment.set("head", { h: prefix + "heading" }); segment.set("text", new Y.Text("New Scene " + pick(9)));
           roots.segments.set(prefix + "heading-segment", segment); roots.order.push([prefix + "heading-segment"]);
         });
+        const made = readSharedHeadingCreationContent(handle, prefix + "heading", creator, prefix + "heading-segment");
+        submit({ kind: "heading-retire", heading: prefix + "heading", segment: prefix + "heading-segment", creator, observed: made });
+        submit({ kind: "heading-restore", heading: prefix + "heading", segment: prefix + "heading-segment", creator, observed: made });
         raw("heading-finalize", () => nativeMap(handle, "segments", "b:R4").set("head", { h: prefix + "heading" }));
         raw("heading-remove", () => roots.headings.delete(prefix + "heading"));
         raw("segment-move", () => {
@@ -133,12 +136,12 @@ test("seeded incremental projection agrees at every authored and delivered revis
   }
   assert.deepEqual(violations, declaredLimits);
   t.diagnostic(JSON.stringify({ histories, commands, checkpoints, lateJoiners, discards, reports: incrementalReports.compared - reported, choices: choices.size, declaredLimits }));
-  assert.equal(histories, 24); assert.equal(lateJoiners, 24); assert.equal(commands, 1560);
+  assert.equal(histories, 24); assert.equal(lateJoiners, 24); assert.equal(commands, 1680);
   assert.equal(discards, 60);
-  assert.equal(checkpoints, 3252);
-  assert.equal(incrementalReports.compared - reported, 3216);
+  assert.equal(checkpoints, 3500);
+  assert.equal(incrementalReports.compared - reported, 3464);
   assert.equal(choices.size, 216);
-  assert.deepEqual([...kinds].sort(), ["discard", "heading-create", "heading-finalize", "heading-remove", "join", "join-glue", "mark", "mark-retract", "record-create", "record-delete", "record-set",
+  assert.deepEqual([...kinds].sort(), ["discard", "heading-create", "heading-finalize", "heading-remove", "heading-restore", "heading-retire", "join", "join-glue", "mark", "mark-retract", "record-create", "record-delete", "record-set",
     "remove", "restore", "scalar", "segment-create", "segment-move", "segment-restore", "segment-retire", "split", "split-before", "status", "status-retire", "text-delete", "text-insert", "text-restore"]);
   assert.deepEqual([...new Set(operationExamples.map(example => example.operation.kind))].sort(), [...kinds].sort());
 });

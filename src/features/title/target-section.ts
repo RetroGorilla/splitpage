@@ -1,14 +1,17 @@
 import { parseBeatLength, targetLengthOf } from "../../core/document/timing.ts";
 import { formatDuration } from "../../core/production/timing.ts";
 import { targetLengthCommand } from "../../application/commands/document-settings.ts";
+import { sharedCommandTaken } from "../../application/commands/shared-values.ts";
 import type { DocumentChromePorts } from "./ports.ts";
 
-type TargetSectionPorts = Pick<DocumentChromePorts, "document" | "edits" | "notices">;
+type TargetSectionPorts = Pick<DocumentChromePorts, "document" | "edits" | "notices" | "shared">;
 
 export const TARGET_PRESETS = [30, 60, 120, 180, 300, 600];
 
 function setTargetLength(ports: TargetSectionPorts, seconds: number | null) {
   if (!ports.document.current()) return false;
+  const shared = ports.shared.ports();
+  if (shared) return sharedCommandTaken(ports.edits.run(targetLengthCommand(seconds, shared)), ports.shared.refused);
   return !!ports.edits.edit(targetLengthCommand(seconds));
 }
 

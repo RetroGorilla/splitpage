@@ -2,6 +2,7 @@ import type { SessionChange } from "../../application/session/change-set.ts";
 import { documentReader as portDocument } from "./ports/document.ts";
 import { edits as portEdits } from "./ports/editing.ts";
 import { text as portText } from "./ports/text.ts";
+import { sharedValueCommands } from "./ports/shared-commands.ts";
 import { createBeatStatus } from "../../features/rows/beat-status.ts";
 import type { BeatStatus } from "../../features/rows/beat-status.ts";
 import { owned } from "../../features/routing/owned.ts";
@@ -17,6 +18,7 @@ export function mountBeatStatusFeature(): BeatStatusMount {
     const status = createBeatStatus({
       document: portDocument,
       edits: portEdits,
+      shared: sharedValueCommands,
       text: portText,
       hideShot: () => viewFlags().hideShot(),
       shots: {

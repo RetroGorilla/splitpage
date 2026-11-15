@@ -166,7 +166,7 @@ test("rule 38 in the Split view: a refused recovery write shows its refusal and 
     assert.deepEqual([page.recovered, projectSharedDocumentWithRecovery(page.h.a).recovery], [[], []]);
     assert.deepEqual(page.a.session.run({ name: "must-wait", needs: "edit", plan: () => {
       assert.fail("A pending native edit must stop another command before planning");
-    } }), { kind: "rejected", reason: "buffer-pending" });
+    } }), { kind: "rejected", reason: "buffer-pending", notified: true });
     end(page, "");
     assert.deepEqual([[...collabState(page.h.a).ingress.holds], page.cell("R1").textContent], [[], "abcd"]);
   } finally { page.close(); }

@@ -207,6 +207,16 @@ After C5c's record builders (#1569), the existing builder inventory still has 52
 `sharedRecordPorts({ handle, author })` as their optional last argument. The
 whole-cell tagging builders still have no shared form and remain refused.
 
+C7 part two connects the Split structure and value callers through
+`src/bootstrap/wiring/ports/shared-commands.ts`: add (Ctrl+Enter, the add bar), split
+(Alt+Enter, the split core), the delete button, deleting and cutting selected beats, the
+scene menu's remove, status, Filmed, beat length, target length and words per minute.
+Those ten builders move from `serve pending composition` to `serve`. An added or split
+beat's id is the one the executor minted, read from the row that follows. `joinBeatsCommand`
+has no app caller and stays pending. Legacy `pasteBeatsCommand` has no shared port: its
+caller runs it without reading the held standalone undo, so the session's rule 73 refusal
+shows once.
+
 ## 4 The switch
 
 ### Who decides

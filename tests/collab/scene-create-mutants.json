@@ -23,7 +23,7 @@
   }, {
     "label": "a local command ignores the first composition",
     "file": "src/features/rows/scene-controls.ts",
-    "find": "ports.sharedScenes?.beforeCommand(() => creating || finish())",
+    "find": "ports.sharedScenes?.beforeCommand(() => creating || finish() || \"announced\")",
     "replace": "undefined"
   }, {
     "label": "a first composition input creates before compositionend",

@@ -1,0 +1,309 @@
+{
+  "tests": [
+    "src/test/shared-split-callers-app.test.mjs",
+    "src/test/shared-split-refusals-app.test.mjs",
+    "tests/features/rows/beats.test.ts"
+  ],
+  "mutants": [
+    {
+      "label": "Ctrl+Enter and the add bar still call the standalone add in a shared session",
+      "file": "src/features/rows/beats.ts",
+      "find": "  if (shared) return sharedCreated(addBeatCommand",
+      "replace": "  if (false) return sharedCreated(addBeatCommand"
+    },
+    {
+      "label": "Alt+Enter and the split core still call the standalone split in a shared session",
+      "file": "src/features/rows/beats.ts",
+      "find": "  if (shared && field === \"audioText\" && id) return splitSharedNarration(id, cellEl, shared);\n  if (!shared) (ports as BeatPortUse).cells.sync(cellEl);\n  // why: a shared visual split is refused by name, so no offset it reads reaches a write\n  else if (!(ports as BeatPortUse).shared.settle()) return null;\n  const sel = (ports as BeatPortUse).selection.of(shared ? document.querySelector(rowCellSelector(id, field)) ?? cellEl : cellEl);\n  if (!sel) return null;\n  (ports as BeatPortUse).undo.breakCoalescing();\n  const createdId = (ports as BeatPortUse).ids.id(\"r\");\n  if (shared) {\n    const minted = sharedCreated(",
+      "replace": "  if (!shared) (ports as BeatPortUse).cells.sync(cellEl);\n  else if (!(ports as BeatPortUse).shared.settle()) return null;\n  const sel = (ports as BeatPortUse).selection.of(shared ? document.querySelector(rowCellSelector(id, field)) ?? cellEl : cellEl);\n  if (!sel) return null;\n  (ports as BeatPortUse).undo.breakCoalescing();\n  const createdId = (ports as BeatPortUse).ids.id(\"r\");\n  if (false) {\n    const minted = sharedCreated("
+    },
+    {
+      "label": "the delete button still calls the standalone delete in a shared session",
+      "file": "src/features/rows/beats.ts",
+      "find": "  if (shared) runSharedCommand(deleteBeatCommand(id, shared));",
+      "replace": "  if (false) runSharedCommand(deleteBeatCommand(id, shared));"
+    },
+    {
+      "label": "deleting selected beats still calls the standalone removal in a shared session",
+      "file": "src/features/clipboard/beat-select.ts",
+      "find": "  if (shared) { if (takeOutShared(ids, shared))",
+      "replace": "  if (false) { if (takeOutShared(ids, shared))"
+    },
+    {
+      "label": "cutting selected beats still calls the standalone removal in a shared session",
+      "file": "src/features/clipboard/beat-select.ts",
+      "find": "  const shared = (ports as BeatSelectPorts).structure.ports();\n  if (shared && !takeOutShared(w.ids, shared)) return;",
+      "replace": "  const shared = null;\n  if (shared && !takeOutShared(w.ids, shared)) return;"
+    },
+    {
+      "label": "the scene menu still calls the standalone scene removal in a shared session",
+      "file": "src/features/rows/scene-controls.ts",
+      "find": "      const shared = ports.structure.ports();\n      if (!shared) ports.edits.run(removeSceneCommand(id));",
+      "replace": "      const shared = null;\n      if (!shared) ports.edits.run(removeSceneCommand(id));"
+    },
+    {
+      "label": "the status chip still calls the standalone status command in a shared session",
+      "file": "src/features/rows/beat-status.ts",
+      "find": "ports.edits.run(shared ? beatStatusCommand(",
+      "replace": "ports.edits.run(false ? beatStatusCommand("
+    },
+    {
+      "label": "the Filmed box still calls the standalone filmed command in a shared session",
+      "file": "src/features/rows/beat-status.ts",
+      "find": "ports.edits.run(shared ? setBeatFilmedCommand(",
+      "replace": "ports.edits.run(false ? setBeatFilmedCommand("
+    },
+    {
+      "label": "the read-time box still calls the standalone length command in a shared session",
+      "file": "src/features/rows/read-time.ts",
+      "find": ".edits.run(shared\n    ? (beatLengthCommand",
+      "replace": ".edits.run(false\n    ? (beatLengthCommand"
+    },
+    {
+      "label": "the rundown still calls the standalone target command in a shared session",
+      "file": "src/features/rundown/target.ts",
+      "find": "  if (shared) return sharedCommandTaken(",
+      "replace": "  if (false) return sharedCommandTaken("
+    },
+    {
+      "label": "the title target popover still calls the standalone target command in a shared session",
+      "file": "src/features/title/target-section.ts",
+      "find": "  if (shared) return sharedCommandTaken(",
+      "replace": "  if (false) return sharedCommandTaken("
+    },
+    {
+      "label": "the words-per-minute popover still calls the standalone command in a shared session",
+      "file": "src/features/title/document-chrome.ts",
+      "find": "    if (shared) sharedCommandTaken(",
+      "replace": "    if (false) sharedCommandTaken("
+    },
+    {
+      "label": "Ctrl+Enter and the add bar return the list-local id instead of the minted one",
+      "file": "src/features/rows/beats.ts",
+      "find": "  if (shared) return sharedCreated(addBeatCommand(afterId || null, createdId, (ports as BeatPortUse).edits.stamps, shared));",
+      "replace": "  if (shared) return runSharedCommand(addBeatCommand(afterId || null, createdId, (ports as BeatPortUse).edits.stamps, shared)) ? createdId : null;"
+    },
+    {
+      "label": "the split returns the list-local id instead of the minted one",
+      "file": "src/features/rows/beats.ts",
+      "find": "unitsCut(settled.removed, settled.at), createdId, (ports as BeatPortUse).edits.text, shared));",
+      "replace": "unitsCut(settled.removed, settled.at), createdId, (ports as BeatPortUse).edits.text, shared)) && createdId;"
+    },
+    {
+      "label": "created id taken from document position: Ctrl+Enter and the add bar read the row after the one they added after, or the last row",
+      "file": "src/features/rows/beats.ts",
+      "find": "  if (shared) return sharedCreated(addBeatCommand(afterId || null, createdId, (ports as BeatPortUse).edits.stamps, shared));",
+      "replace": "  if (shared) { const doc = sharedCreated(addBeatCommand(afterId || null, createdId, (ports as BeatPortUse).edits.stamps, shared)) && (ports as BeatPortUse).document.current(); return doc ? doc.rows[afterId ? rowIndexOf(doc, afterId) + 1 : doc.rows.length - 1]?.id ?? null : null; }"
+    },
+    {
+      "label": "created id taken from document position: the split reads the row after the one it split",
+      "file": "src/features/rows/beats.ts",
+      "find": "  return minted ? { id: minted, field: \"audioText\" } : null;",
+      "replace": "  const doc = minted && (ports as BeatPortUse).document.current();\n  return doc ? { id: doc.rows[rowIndexOf(doc, settled.rowId) + 1]?.id ?? null, field: \"audioText\" } : null;"
+    },
+    {
+      "label": "the add command reports its list-local id instead of the id the executor mints",
+      "file": "src/application/commands/rows.ts",
+      "find": "  mint(sharedMintedBeat(trace, shared, createdId));",
+      "replace": "  mint(createdId);"
+    },
+    {
+      "label": "the split command reports its list-local id instead of the id the executor mints",
+      "file": "src/application/commands/split-join.ts",
+      "find": "  mint(sharedMintedBeat(trace, shared, createdId));",
+      "replace": "  mint(createdId);"
+    },
+    {
+      "label": "the created beat id is derived for the operation's segment instead of its beat",
+      "file": "src/bootstrap/wiring/ports/shared-values.ts",
+      "find": "operation, \"beat\");",
+      "replace": "operation, \"segment\");"
+    },
+    {
+      "label": "author operation id repeats across commands",
+      "file": "src/bootstrap/wiring/ports/shared-author.ts",
+      "find": "String(++serial)",
+      "replace": "String(serial + 1)"
+    },
+    {
+      "label": "rule 133: a refused visual split shows no notice",
+      "file": "src/features/rows/beats.ts",
+      "find": "  if (outcome.kind === \"rejected\") (ports as BeatPortUse).shared.refused(outcome);",
+      "replace": ""
+    },
+    {
+      "label": "a refusal the session already announced is announced again",
+      "file": "src/bootstrap/wiring/ports/shared-commands.ts",
+      "find": "outcome.kind === \"rejected\" && !outcome.notified",
+      "replace": "outcome.kind === \"rejected\""
+    },
+    {
+      "label": "the read-time button's Ctrl+Z steps the standalone owner in a shared session",
+      "file": "src/bootstrap/wiring/ports/shared-commands.ts",
+      "find": "return route ? stepSharedUndo(route, \"undo\"",
+      "replace": "return false ? stepSharedUndo(route, \"undo\""
+    },
+    {
+      "label": "rule 150: the delete toast offers an Undo that reads the standalone owner",
+      "file": "src/features/clipboard/beat-select.ts",
+      "find": "offerUndo(count(ids.length) + \" deleted\", null)",
+      "replace": "offerUndo(count(ids.length) + \" deleted\", (ports as BeatSelectPorts).undo.last())"
+    },
+    {
+      "label": "beat paste in a shared session reads the held standalone undo instead of refusing",
+      "file": "src/features/clipboard/beat-select.ts",
+      "find": "  if ((ports as BeatSelectPorts).structure.ports()) {\n    // why: legacy beat paste",
+      "replace": "  if (false) {\n    // why: legacy beat paste"
+    },
+    {
+      "label": "rule 73: a refused beat paste shows no notice",
+      "file": "src/features/clipboard/beat-select.ts",
+      "find": "    if (outcome.kind === \"rejected\") (ports as BeatSelectPorts).structure.refused(outcome);\n    return null;",
+      "replace": "    return null;"
+    },
+    {
+      "label": "rule 150: the cut toast offers an Undo that reads the standalone owner",
+      "file": "src/features/clipboard/beat-select.ts",
+      "find": "const entry = shared ? null : takeOut(w.ids);",
+      "replace": "const entry = shared ? (ports as BeatSelectPorts).undo.last() : takeOut(w.ids);"
+    },
+    {
+      "label": "the guard skips a silent listener refusal, so nobody announces it",
+      "file": "src/bootstrap/wiring/ports/shared-commands.ts",
+      "find": "  if (outcome.kind === \"rejected\" && !outcome.notified) refuse(outcome.reason);",
+      "replace": "  if (outcome.kind === \"rejected\" && !outcome.notified && outcome.reason !== \"buffer-pending\") refuse(outcome.reason);"
+    },
+    {
+      "label": "the caller announces after an announcing listener",
+      "file": "src/bootstrap/wiring/ports/shared-commands.ts",
+      "find": "  if (outcome.kind === \"rejected\" && !outcome.notified) refuse(outcome.reason);",
+      "replace": "  if (outcome.kind === \"rejected\") refuse(outcome.reason);"
+    },
+    {
+      "label": "the session drops a listener's announced answer, so the caller announces it again",
+      "file": "src/application/session/shared-session.ts",
+      "find": "...(answer === SHARED_ADMISSION_ANNOUNCED ? { notified: true as const } : {})",
+      "replace": "...({})"
+    },
+    {
+      "label": "a faulted typing buffer claims to have announced a refusal it never reported",
+      "file": "src/application/editing/buffered-field.ts",
+      "find": "return finish() || (reported === before ? false : SHARED_ADMISSION_ANNOUNCED);",
+      "replace": "return finish() || SHARED_ADMISSION_ANNOUNCED;"
+    },
+    {
+      "label": "the shared split reads the text's identities before admission commits the typing",
+      "file": "src/bootstrap/wiring/ports/shared-commands.ts",
+      "find": "    if (!settle()) return null;\n    const range = read(), units = unitsOf(parts, rowId);",
+      "replace": "    const early = unitsOf(parts, rowId);\n    if (!settle()) return null;\n    const range = read(), units = early;"
+    },
+    {
+      "label": "the shared split lets held updates land before it reads what its author saw",
+      "file": "src/bootstrap/wiring/ports/shared-commands.ts",
+      "find": "  const release = holdSharedCapture(parts.handle);",
+      "replace": "  const release = () => {};"
+    },
+    {
+      "label": "Alt+Enter restores its offsets under the beat it was pressed in, not the beat the text is in now",
+      "file": "src/features/rows/beats.ts",
+      "find": "splitBeatCommand(settled.rowId,",
+      "replace": "splitBeatCommand(id,"
+    },
+    {
+      "label": "Ctrl+Enter adds after the beat it was pressed in, not the beat the text is in now",
+      "file": "src/features/rows/beats.ts",
+      "find": "  if (settled) addRowAndFocus(settled.rowId, field);",
+      "replace": "  if (settled) addRowAndFocus(id, field);"
+    },
+    {
+      "label": "the split deletes unseen text inside the selection with it",
+      "file": "src/bootstrap/wiring/ports/shared-commands.ts",
+      "find": "removed: runs(offsets),",
+      "replace": "removed: [[offsets[0] as number, (offsets.at(-1) as number) + 1]],"
+    },
+    {
+      "label": "the selection is looked up under a beat a peer's join removed",
+      "file": "src/bootstrap/wiring/ports/shared-commands.ts",
+      "find": "  return rows.includes(rowId) ? [rowId, ...rows.filter(id => id !== rowId)] : rows;",
+      "replace": "  return [rowId, ...rows.filter(id => id !== rowId)];"
+    },
+    {
+      "label": "a selection a peer's split now spans two beats is not refused",
+      "file": "src/bootstrap/wiring/ports/shared-commands.ts",
+      "find": "if (first && places.some(place => place.rowId !== first.rowId))",
+      "replace": "if (false)"
+    },
+    {
+      "label": "the cut follows the first surviving selected character",
+      "file": "src/bootstrap/wiring/ports/shared-commands.ts",
+      "find": "at: Math.min(cut.at, offsets[0] ?? cut.at) };",
+      "replace": "at: offsets[0] ?? cut.at };"
+    },
+    {
+      "label": "the shared delete button reads its row index before admission drains held updates",
+      "file": "src/features/rows/beats.ts",
+      "find": "    if (!(ports as BeatPortUse).shared.settle()) return;\n    idx = (ports as BeatPortUse).document.read(function (doc) { return rowIndexOf(doc, id); });",
+      "replace": "    idx = (ports as BeatPortUse).document.read(function (doc) { return rowIndexOf(doc, id); });\n    if (!(ports as BeatPortUse).shared.settle()) return;"
+    },
+    {
+      "label": "the delete button settles each cell in a shared session, so one refusal warns once per cell",
+      "file": "src/features/rows/beats.ts",
+      "find": "  if (!(ports as BeatPortUse).shared.ports()) {\n    idx =",
+      "replace": "  if (true) {\n    idx ="
+    },
+    {
+      "label": "the delete button arms the button it was given after admission redrew the beat",
+      "file": "src/features/rows/beats.ts",
+      "find": "    btn = live;",
+      "replace": "    void live;"
+    },
+    {
+      "label": "the standalone delete button syncs its cells before it reads the row index",
+      "file": "src/features/rows/beats.ts",
+      "find": "    idx = (ports as BeatPortUse).document.read(function (doc) { return rowIndexOf(doc, id); });\n    const rowEl = rowElement(id);\n    if (rowEl) rowEl.querySelectorAll(\".cell-editable\").forEach(function (cellEl) { (ports as BeatPortUse).cells.sync(cellEl); });",
+      "replace": "    const rowEl = rowElement(id);\n    if (rowEl) rowEl.querySelectorAll(\".cell-editable\").forEach(function (cellEl) { (ports as BeatPortUse).cells.sync(cellEl); });\n    idx = (ports as BeatPortUse).document.read(function (doc) { return rowIndexOf(doc, id); });"
+    },
+    {
+      "label": "Ctrl+Enter in a shared session settles the cell before its command too, so a refusal warns twice",
+      "file": "src/bootstrap/wiring/editor.ts",
+      "find": "    if (!sharedSessionParts()) cellEditing().sync(cellEl);\n    addRowAtCaret(",
+      "replace": "    cellEditing().sync(cellEl);\n    addRowAtCaret("
+    },
+    {
+      "label": "Alt+Enter in a shared session settles the cell before its command too, so a refusal warns twice",
+      "file": "src/bootstrap/wiring/editor.ts",
+      "find": "    if (!sharedSessionParts()) cellEditing().sync(cellEl);\n    splitCellField(cellEl);",
+      "replace": "    cellEditing().sync(cellEl);\n    splitCellField(cellEl);"
+    },
+    {
+      "label": "the split in a shared session settles the cell before its command too, so a refusal warns twice",
+      "file": "src/features/rows/beats.ts",
+      "find": "function splitSharedNarration(id: string, cellEl: Element, shared: NonNullable<ReturnType<BeatPorts[\"shared\"][\"ports\"]>>) {\n",
+      "replace": "function splitSharedNarration(id: string, cellEl: Element, shared: NonNullable<ReturnType<BeatPorts[\"shared\"][\"ports\"]>>) {\n  (ports as BeatPortUse).cells.sync(cellEl);\n"
+    },
+    {
+      "label": "the standalone split reads its selection without syncing the cell first",
+      "file": "src/features/rows/beats.ts",
+      "find": "  if (!shared) (ports as BeatPortUse).cells.sync(cellEl);\n",
+      "replace": "  if (!shared) { }\n"
+    },
+    {
+      "label": "the beat paste in a shared session settles the cell before its command too, so a refusal warns twice",
+      "file": "src/features/clipboard/beat-select.ts",
+      "find": "  if (!(ports as BeatSelectPorts).structure.ports()) (ports as BeatSelectPorts).cells.sync(cellEl);",
+      "replace": "  (ports as BeatSelectPorts).cells.sync(cellEl);"
+    },
+    {
+      "label": "Ctrl+Enter and Alt+Enter in a script cell are refused natively instead of reaching their shared commands",
+      "file": "src/bootstrap/wiring/editor.ts",
+      "find": "key.key === \"Enter\" && !mod && !key.altKey ||",
+      "replace": "key.key === \"Enter\" ||"
+    },
+    {
+      "label": "plain Enter in a script cell is no longer refused natively, so an unserved line break reaches standalone code",
+      "file": "src/bootstrap/wiring/editor.ts",
+      "find": "key.key === \"Enter\" && !mod && !key.altKey ||",
+      "replace": "key.key === \"Enter\" && false ||"
+    }
+  ]
+}
