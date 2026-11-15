@@ -6,6 +6,7 @@ import { join, resolve } from "node:path";
 import { REPO } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
 import { KEY_GAP_MS, TYPED, parsePortBase } from "./perf-record.mjs";
+import { markParts } from "../tests/collab/measure/mark-parts.mjs";
 
 const DRIVER = join(REPO, ".claude", "skills", "run-splitpage-app", "driver.mjs");
 export const SHARED_FIXTURES = ["short", "long", "large", "edited"];
@@ -39,50 +40,26 @@ export function caseList() {
   ];
 }
 
-export function markTotals(entries) {
-  const totals = {}, stack = [];
-  let unmatched = 0;
-  for (const entry of entries) {
-    const found = /^measure:(.+):(start|end)$/.exec(entry.name);
-    if (!found) continue;
-    const seam = found[1];
-    if (found[2] === "start") { stack.push({ seam, at: entry.startTime, inner: 0 }); continue; }
-    let open = stack.pop();
-    while (open && open.seam !== seam) { unmatched++; open = stack.pop(); }
-    if (!open) { unmatched++; continue; }
-    const spent = entry.startTime - open.at, row = totals[seam] || (totals[seam] = { count: 0, inclusive: 0, exclusive: 0 });
-    row.count++; row.inclusive += spent; row.exclusive += spent - open.inner;
-    if (stack.length) stack[stack.length - 1].inner += spent;
-  }
-  for (const seam of Object.keys(totals)) {
-    totals[seam].inclusive = Math.round(totals[seam].inclusive * 1000) / 1000;
-    totals[seam].exclusive = Math.round(totals[seam].exclusive * 1000) / 1000;
-  }
-  return { seams: totals, unmatched: unmatched + stack.length };
-}
-
 export function markGroups(marks) {
-  const seam = (name, key) => marks.seams[name]?.[key] ?? 0;
+  const parts = markParts(marks.map(([name, startTime]) => ({ name: "measure:" + name, startTime })));
   const round = (value) => Math.round(value * 1000) / 1000;
+  const exclusive = (seam) => parts.exclusive[seam] ?? 0;
   return {
-    validation: round(seam("trial", "inclusive")),
-    apply: round(seam("live-apply", "exclusive")),
-    projection: round(seam("mirror-apply", "inclusive") + seam("assembly", "inclusive") + seam("projection-listeners", "exclusive")
-      + seam("session-receive", "exclusive") + seam("document-entry", "inclusive")),
-    rendering: round(seam("render", "inclusive")),
-    input: round(seam("input-handler", "exclusive") + seam("input-command", "exclusive") + seam("input-write", "exclusive")),
-    route: round(seam("input-handler", "exclusive")),
-    plan: round(seam("input-command", "exclusive")),
-    write: round(seam("input-write", "exclusive"))
+    validation: round(parts.validation), apply: round(parts.apply), projection: round(parts.projection), rendering: round(parts.rendering),
+    input: round(parts.input), route: round(exclusive("input-handler")), plan: round(exclusive("input-command")), write: round(exclusive("input-write")),
+    outer: round(parts.outer)
   };
 }
 
-export const GROUP_NAMES = ["validation", "apply", "projection", "rendering", "input", "route", "plan", "write"];
+export function markProblem(marks) {
+  try { markGroups(marks); return null; } catch (error) { return error instanceof Error ? error.message : String(error); }
+}
+
+export const GROUP_NAMES = ["validation", "apply", "projection", "rendering", "input", "route", "plan", "write", "outer"];
 
 export const PAGE = `(function () {
   if (window.__perfShared) return 'ready';
   var S = window.__sharedTest;
-  var totals = ${markTotals.toString()};
   var MODIFIERS = { Control: 1, Shift: 1, Alt: 1, Meta: 1 };
   var perf = { since: Infinity, lat: [], long: [], data: '', fixture: null, cursor: 0, events: [], timers: [], replaying: null, structural: [], refused: null };
   addEventListener('keydown', function (e) {
@@ -175,10 +152,12 @@ export const PAGE = `(function () {
       var consumed = replayed ? replayed.delivered + replayed.refused : 0;
       if (perf.replaying === 'remote') perf.cursor += consumed;
       var lat = perf.lat.slice().sort(function (a, b) { return a - b; });
-      var marks = totals(performance.getEntriesByType('mark'));
+      var marks = performance.getEntriesByType('mark').filter(function (m) { return m.name.indexOf('measure:') === 0; })
+        .map(function (m) { return [m.name.slice(8), +m.startTime.toFixed(4)]; });
       var out = { kind: 'case', label: label, keys: lat.length, p50: q(lat, 0.5), p95: q(lat, 0.95), max: lat.length ? +lat[lat.length - 1].toFixed(1) : null,
         longTasks: perf.long.length, longTaskMs: +perf.long.reduce(function (a, b) { return a + b; }, 0).toFixed(1), marks: marks,
-        replayed: perf.replaying ? { source: perf.replaying, delivered: replayed ? replayed.delivered : 0, refused: replayed ? replayed.refused : 0 } : null, events: perf.events };
+        replayed: perf.replaying ? { source: perf.replaying, delivered: replayed ? replayed.delivered : 0, refused: replayed ? replayed.refused : 0,
+          recovered: replayed ? replayed.recovered : 0 } : null, events: perf.events };
       clear();
       quiet(function () {
         if (perf.replaying === 'structural') perf.structural.slice(consumed).forEach(function (update) { need(S.peer.inject(update).ok, 'a late structural update was refused'); });
@@ -254,7 +233,8 @@ export function sharedProblems(found, fixture) {
     const row = cases.find((r) => r.label === spec.label);
     if (!row) continue;
     if (row.keys !== expectedKeys(spec)) problems.push(`${spec.label}: ${row.keys} key samples, expected ${expectedKeys(spec)}`);
-    if (row.marks.unmatched) problems.push(`${spec.label}: ${row.marks.unmatched} unmatched timing marks`);
+    const broken = markProblem(row.marks);
+    if (broken) problems.push(`${spec.label}: ${broken}`);
     if (spec.kind === "backlog" && !(row.events.length === 1 && row.events[0].updates > 0)) problems.push(`${spec.label}: the backlog was not released`);
     if (spec.kind === "refused") {
       for (const kind of ["throws", "zero-length"]) {
@@ -270,7 +250,11 @@ export function sharedProblems(found, fixture) {
 
 export function sharedRows(found, fixture) {
   return found.filter((r) => r.kind === "entry" || (r.kind === "case" && !r.label.startsWith("warm-up")))
-    .map((r) => r.kind === "case" ? { ...r, fixture, label: `${fixture} ${r.label}`, groups: markGroups(r.marks) } : { ...r, fixture });
+    .map((r) => {
+      if (r.kind !== "case") return { ...r, fixture };
+      const { marks, ...kept } = r;
+      return { ...kept, fixture, label: `${fixture} ${r.label}`, markCount: marks.length, groups: markGroups(marks) };
+    });
 }
 
 export async function prepareData(only) {

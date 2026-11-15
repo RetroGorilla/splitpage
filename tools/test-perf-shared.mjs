@@ -6,39 +6,23 @@ import { test } from "node:test";
 import { abbaOrder, parseArgs, sharedSummary, waitForMemory, writeRecord } from "./perf-ab.mjs";
 import { parsePairedArgs, pairedSummary, parseRound } from "./measure-shared-paired.mjs";
 import { KEY_GAP_MS, TYPED } from "./perf-record.mjs";
-import { GROUP_NAMES, PAGE, PENDING_CASES, REMOTE_RATES, SEAMS, caseList, expectedKeys, markGroups, markTotals, parseShared, parseSharedArgs,
+import { GROUP_NAMES, PAGE, PENDING_CASES, REMOTE_RATES, SEAMS, caseList, expectedKeys, markGroups, markProblem, parseShared, parseSharedArgs,
   sharedProblems, sharedRows, sharedSuiteText } from "./perf-shared.mjs";
 
-const mark = (name, startTime) => ({ name, startTime });
-
-test("mark totals pair each start with its end and split nested time into inclusive and exclusive", () => {
-  const totals = markTotals([
-    mark("measure:live-apply:start", 0), mark("measure:mirror-apply:start", 1), mark("measure:mirror-apply:end", 3),
-    mark("measure:projection-listeners:start", 3), mark("measure:session-receive:start", 4), mark("measure:render:start", 5),
-    mark("measure:render:end", 8), mark("measure:session-receive:end", 9), mark("measure:projection-listeners:end", 9.5),
-    mark("measure:live-apply:end", 10), mark("other", 11), mark("measure:trial:start", 12), mark("measure:trial:end", 13.5)
+test("mark groups are the shared disjoint parts of the page's raw marks, and the parts add up to the outermost spans", () => {
+  const groups = markGroups([
+    ["trial:start", 0], ["trial:end", 1.5], ["live-apply:start", 2], ["mirror-apply:start", 3], ["mirror-apply:end", 5],
+    ["projection-listeners:start", 5], ["session-receive:start", 6], ["render:start", 7], ["render:end", 10], ["session-receive:end", 11],
+    ["projection-listeners:end", 11.5], ["live-apply:end", 12], ["input-handler:start", 20], ["input-command:start", 21], ["input-write:start", 22],
+    ["input-write:end", 25], ["input-command:end", 26], ["input-handler:end", 26.5]
   ]);
-  assert.deepEqual(totals.seams["live-apply"], { count: 1, inclusive: 10, exclusive: 1.5 });
-  assert.deepEqual(totals.seams["session-receive"], { count: 1, inclusive: 5, exclusive: 2 });
-  assert.deepEqual(totals.seams.render, { count: 1, inclusive: 3, exclusive: 3 });
-  assert.deepEqual(totals.seams.trial, { count: 1, inclusive: 1.5, exclusive: 1.5 });
-  assert.equal(totals.unmatched, 0);
-  assert.equal(markTotals([mark("measure:render:start", 0), mark("measure:input-write:start", 1), mark("measure:render:end", 2)]).unmatched, 1);
-  assert.equal(markTotals([mark("measure:render:end", 2)]).unmatched, 1);
-  assert.equal(markTotals([mark("measure:render:start", 2)]).unmatched, 1);
-});
-
-test("mark groups name validation, projection, rendering and input from the seams", () => {
-  const seams = Object.fromEntries(SEAMS.map((seam, index) => [seam, { count: 1, inclusive: 10 * (index + 1), exclusive: index + 1 }]));
-  const groups = markGroups({ seams, unmatched: 0 });
   assert.deepEqual(Object.keys(groups), GROUP_NAMES);
-  assert.equal(groups.validation, 10);
-  assert.equal(groups.apply, 2);
-  assert.equal(groups.projection, 30 + 40 + 5 + 6 + 70);
-  assert.equal(groups.rendering, 80);
-  assert.equal(groups.input, 9 + 10 + 11);
-  assert.deepEqual([groups.route, groups.plan, groups.write], [9, 10, 11]);
-  assert.equal(markGroups({ seams: {}, unmatched: 0 }).projection, 0);
+  assert.deepEqual(groups, { validation: 1.5, apply: 1.5, projection: 2 + 1.5 + 2, rendering: 3, input: 1.5 + 2 + 3, route: 1.5, plan: 2, write: 3, outer: 1.5 + 10 + 6.5 });
+  assert.equal(groups.validation + groups.apply + groups.projection + groups.rendering + groups.input, groups.outer);
+  assert.equal(markProblem([["render:start", 0], ["input-write:start", 1], ["render:end", 2]]), "Unpaired timing mark: measure:render:end");
+  assert.equal(markProblem([["render:start", 2]]), "Unclosed timing mark: render");
+  assert.equal(markProblem([]), null);
+  assert.deepEqual(SEAMS.filter((seam) => markProblem([[seam + ":start", 0], [seam + ":end", 1]])), [], "every seam belongs to a part");
 });
 
 test("the cases cover typing on both surfaces at every rate, undo, structural edits, both backlog shapes and refusals", () => {
@@ -72,14 +56,14 @@ test("the suite enters from the stored state, warms up once, switches to the Wri
 });
 
 test("a run is refused when keys go missing, marks do not pair, refusals are not refused or the backlog never lands", () => {
-  const good = (spec) => ({ kind: "case", label: spec.label, keys: expectedKeys(spec), marks: { seams: {}, unmatched: 0 },
-    replayed: spec.rate ? { source: "remote", delivered: 3, refused: 0 } : null,
+  const good = (spec) => ({ kind: "case", label: spec.label, keys: expectedKeys(spec), marks: [["render:start", 1], ["render:end", 2]],
+    replayed: spec.rate ? { source: "remote", delivered: 3, refused: 0, recovered: 0 } : null,
     events: spec.kind === "backlog" ? [{ release: spec.order, updates: 200, ms: 4 }]
       : spec.kind === "refused" ? [{ refused: "throws", ok: false, reason: "invalid-update" }, { refused: "zero-length", ok: false, reason: "invalid-update" }, { refused: "queue-full", ok: true, reason: null }] : [] });
   const entry = { kind: "entry", label: "short entry", fixture: "short", beats: 2, stateBytes: 3, ms: 5, browser: "Edg/1" };
-  const rows = [entry, { kind: "case", label: "warm-up (discarded)", keys: 1, marks: { seams: {}, unmatched: 9 }, events: [] }, ...caseList().map(good)];
+  const rows = [entry, { kind: "case", label: "warm-up (discarded)", keys: 1, marks: [["render:end", 1]], events: [] }, ...caseList().map(good)];
   assert.deepEqual(sharedProblems(rows, "short"), []);
-  const broken = rows.map((r) => r.label === "split typing, remote 1/s" ? { ...r, keys: 3 } : r.label === "split typing, remote 10/s" ? { ...r, marks: { seams: {}, unmatched: 2 } } : r);
+  const broken = rows.map((r) => r.label === "split typing, remote 1/s" ? { ...r, keys: 3 } : r.label === "split typing, remote 10/s" ? { ...r, marks: [["trial:start", 0]] } : r);
   assert.equal(sharedProblems(broken, "short").length, 2);
   const refused = rows.map((r) => r.events?.some((e) => e.refused) ? { ...r, events: [{ refused: "throws", ok: true, reason: null }] } : r);
   assert.equal(sharedProblems(refused, "short").length, 3);
@@ -88,7 +72,7 @@ test("a run is refused when keys go missing, marks do not pair, refusals are not
   assert.equal(sharedProblems(rows.filter((r) => r.kind !== "entry"), "short").length, 1);
   const kept = sharedRows(rows, "short");
   assert.equal(kept.length, caseList().length + 1);
-  assert.ok(kept.every((r) => r.kind === "entry" || (r.label.startsWith("short ") && r.groups)));
+  assert.ok(kept.every((r) => r.kind === "entry" || (r.label.startsWith("short ") && r.groups.rendering === 1 && r.markCount === 2 && !("marks" in r))));
   assert.deepEqual(parseShared('pressed a\nPERF {"kind":"entry"}\n'), [{ kind: "entry" }]);
 });
 
