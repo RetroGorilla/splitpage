@@ -1,54 +1,66 @@
 open
 wait document.querySelectorAll('#rows .row').length > 0
-eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=window.__writerFlowTest;window.at=(r,a,h)=>({anchor:{kind:'beat',rowId:r,offset:a},head:{kind:'beat',rowId:r,offset:h===undefined?a:h}});window.beat=r=>document.querySelector('#writer-doc .wr-beat[data-id="'+r+'"]').textContent.replace(/\u200b/g,'');window.text=i=>S.read().app.rows[i].audioText;window.same=()=>JSON.stringify(S.read().app)===JSON.stringify(S.read().peer);F.openFile(new File([JSON.stringify({'schema':2,'title':'T04 forward','paragraphsDecided':true,'rows':[{'id':'r1','audioText':'abcd','visualText':''},{'id':'r2','audioText':'ef','visualText':''}],'comments':[]})],'trace.splitpage'))
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=window.__writerFlowTest;window.at=(r,a,h)=>({anchor:{kind:'beat',rowId:r,offset:a},head:{kind:'beat',rowId:r,offset:h===undefined?a:h}});window.beat=r=>document.querySelector('#writer-doc .wr-beat[data-id="'+r+'"]').textContent.replace(/\u200b/g,'');window.text=i=>S.read().app.rows[i].audioText;window.same=()=>JSON.stringify(S.read().app)===JSON.stringify(S.read().peer);window.rows=side=>JSON.stringify(S.read()[side].rows.map(r=>[r.id,r.audioText]));F.openFile(new File([JSON.stringify({'schema':2,'title':'T04 forward','paragraphsDecided':true,'rows':[{'id':'r1','audioText':'abcd','visualText':''},{'id':'r2','audioText':'ef','visualText':''}],'comments':[]})],'trace.splitpage'))
 wait F.state().title === 'T04 forward'
 click #btn-write
 wait W.on()
 eval S.enter()
 wait S.read().peer !== null
-expect W.on()
 eval S.peer.hold();document.getElementById('writer-doc').focus();W.place(at('r1',2,2));true
-ime set xy
+ime set x
 eval S.peer.type('r1',0,'Z');true
-eval S.peer.release('forward')
+eval S.peer.deliver('forward', 'app');true
 expect text(0) === 'abcd'
+ime set xy
 ime commit xy
 eval JSON.stringify(W.selection())
+eval S.peer.deliver('forward');true
 expect same()
+expect JSON.stringify(S.recovery()) === '{"app":[],"peer":[]}'
 expect text(0) === 'Zabxycd' && text(1) === 'ef' && beat('r1') === 'Zabxycd'
 expect W.selection().anchor.rowId === 'r1' && W.selection().anchor.offset === 5 && W.selection().head.rowId === 'r1' && W.selection().head.offset === 5
 expect S.counters().recovered === 0 && S.counters().missingBase === 0
 key ctrl KeyZ
 eval JSON.stringify(W.selection())
-expect text(0) === 'Zabcd' && beat('r1') === 'Zabcd'
+eval S.peer.deliver('forward');true
 expect same()
+expect JSON.stringify(S.recovery()) === '{"app":[],"peer":[]}'
+expect rows('app') === '[["r1","Zabcd"],["r2","ef"]]' && rows('peer') === '[["r1","Zabcd"],["r2","ef"]]'
+expect beat('r1') === 'Zabcd' && beat('r2') === 'ef'
 expect W.selection().anchor.rowId === 'r1' && W.selection().anchor.offset === 3 && W.selection().head.rowId === 'r1' && W.selection().head.offset === 3
+eval S.peer.release('forward');true
 eval window.projection=S.read().app;S.leave()
 expect S.read().peer === null
 expect JSON.stringify(Object.assign({},F.state(),{docId:projection.docId})) === JSON.stringify(projection)
-eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=window.__writerFlowTest;window.at=(r,a,h)=>({anchor:{kind:'beat',rowId:r,offset:a},head:{kind:'beat',rowId:r,offset:h===undefined?a:h}});window.beat=r=>document.querySelector('#writer-doc .wr-beat[data-id="'+r+'"]').textContent.replace(/\u200b/g,'');window.text=i=>S.read().app.rows[i].audioText;window.same=()=>JSON.stringify(S.read().app)===JSON.stringify(S.read().peer);F.openFile(new File([JSON.stringify({'schema':2,'title':'T04 duplicate','paragraphsDecided':true,'rows':[{'id':'r1','audioText':'abcd','visualText':''},{'id':'r2','audioText':'ef','visualText':''}],'comments':[]})],'trace.splitpage'))
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=window.__writerFlowTest;window.at=(r,a,h)=>({anchor:{kind:'beat',rowId:r,offset:a},head:{kind:'beat',rowId:r,offset:h===undefined?a:h}});window.beat=r=>document.querySelector('#writer-doc .wr-beat[data-id="'+r+'"]').textContent.replace(/\u200b/g,'');window.text=i=>S.read().app.rows[i].audioText;window.same=()=>JSON.stringify(S.read().app)===JSON.stringify(S.read().peer);window.rows=side=>JSON.stringify(S.read()[side].rows.map(r=>[r.id,r.audioText]));F.openFile(new File([JSON.stringify({'schema':2,'title':'T04 duplicate','paragraphsDecided':true,'rows':[{'id':'r1','audioText':'abcd','visualText':''},{'id':'r2','audioText':'ef','visualText':''}],'comments':[]})],'trace.splitpage'))
 wait F.state().title === 'T04 duplicate'
 eval if (!W.on()) document.getElementById('btn-write').click(); true
 wait W.on()
 eval S.enter()
 wait S.read().peer !== null
-expect W.on()
 eval S.peer.hold();document.getElementById('writer-doc').focus();W.place(at('r1',2,2));true
-ime set xy
+ime set x
 eval S.peer.type('r1',0,'Z');true
-eval S.peer.release('duplicate')
+eval S.peer.deliver('duplicate', 'app');true
 expect text(0) === 'abcd'
+ime set xy
 ime commit xy
 eval JSON.stringify(W.selection())
+eval S.peer.deliver('duplicate');true
 expect same()
+expect JSON.stringify(S.recovery()) === '{"app":[],"peer":[]}'
 expect text(0) === 'Zabxycd' && text(1) === 'ef' && beat('r1') === 'Zabxycd'
 expect W.selection().anchor.rowId === 'r1' && W.selection().anchor.offset === 5 && W.selection().head.rowId === 'r1' && W.selection().head.offset === 5
 expect S.counters().recovered === 0 && S.counters().missingBase === 0
 key ctrl KeyZ
 eval JSON.stringify(W.selection())
-expect text(0) === 'Zabcd' && beat('r1') === 'Zabcd'
+eval S.peer.deliver('duplicate');true
 expect same()
+expect JSON.stringify(S.recovery()) === '{"app":[],"peer":[]}'
+expect rows('app') === '[["r1","Zabcd"],["r2","ef"]]' && rows('peer') === '[["r1","Zabcd"],["r2","ef"]]'
+expect beat('r1') === 'Zabcd' && beat('r2') === 'ef'
 expect W.selection().anchor.rowId === 'r1' && W.selection().anchor.offset === 3 && W.selection().head.rowId === 'r1' && W.selection().head.offset === 3
+eval S.peer.release('forward');true
 eval window.projection=S.read().app;S.leave()
 expect S.read().peer === null
 expect JSON.stringify(Object.assign({},F.state(),{docId:projection.docId})) === JSON.stringify(projection)
