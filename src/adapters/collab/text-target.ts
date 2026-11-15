@@ -1,5 +1,4 @@
 import * as Y from "yjs";
-import { readMarkChange } from "../../core/collab/read-operation.ts";
 import type { SharedTextAddress } from "../../core/collab/operations.ts";
 import type { SharedDocumentHandle } from "./types.ts";
 import { collabState, assertSharedDocumentIdle, SharedExecutionWriteError } from "./state.ts";
@@ -12,6 +11,7 @@ import type { SharedStructureReadView } from "./structure-read-view.ts";
 import { readSharedProjectedTextRuns } from "./projected-text-runs.ts";
 import { projectSharedJoinSeparator } from "../../core/collab/projection/joins.ts";
 import { readSharedJoinGroup } from "./join-record.ts";
+import { readPhysicalSharedTextTarget as physicalTextTarget } from "./text-address.ts";
 
 export function createCollabText(handle: SharedDocumentHandle, container: Y.Map<unknown>, title = false): Y.Text {
   assertSharedDocumentIdle(collabState(handle));
@@ -34,10 +34,6 @@ export function applySharedTextCreation(handle: SharedDocumentHandle, descriptio
   let container: unknown = state.roots[description.path[0] as keyof typeof state.roots];
   for (const key of description.path.slice(1)) container = (container as Y.Map<unknown>).get(key);
   attachCollabText(container as Y.Map<unknown>, description.title ? "title" : "text", description.title ? "titleMarks" : "markRecords");
-}
-
-export function readSharedTextTarget(raw: unknown): SharedTextAddress | null {
-  return readMarkChange({ kind: "mark", id: "target", by: "", target: raw, observed: [], mark: { kind: "b", value: true } })?.target ?? null;
 }
 
 export function nativeStructureView(handle: SharedDocumentHandle) {
@@ -165,16 +161,6 @@ export function collabProjectedHeadingPoint(handle: SharedDocumentHandle, segmen
 export function collabProjectedSegmentAnchorTarget(handle: SharedDocumentHandle, segment: string, offset: number) {
   const index = observeSharedStructureIndex(handle), span = readIndexedStructureSpans(index, segment).find(block => block.from <= offset && block.to >= offset);
   return span?.id ? collabWritingTextTarget(handle, { owner: span.id as SharedTextAddress["owner"], segment: segment as SharedTextAddress["segment"], field: span.kind === "h" ? "heading" : "audioText" }) : null;
-}
-
-function physicalTextTarget(handle: SharedDocumentHandle, raw: SharedTextAddress) {
-  const target = readSharedTextTarget(raw);
-  if (!target) return null;
-  const { roots } = collabState(handle);
-  const container = target.field === "title" ? roots.meta : target.field === "visualText" ? roots.visuals.get(target.segment) : roots.segments.get(target.segment);
-  if (!(container instanceof Y.Map)) return null;
-  const text: unknown = container.get(target.field === "title" ? "title" : "text");
-  return text instanceof Y.Text ? { target, container, text, marksKey: target.field === "title" ? "titleMarks" : "markRecords" } : null;
 }
 
 export function collabPreparedOperationTextTarget(handle: SharedDocumentHandle, target: SharedTextAddress) {

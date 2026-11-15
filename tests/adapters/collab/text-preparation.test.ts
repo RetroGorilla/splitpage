@@ -10,7 +10,7 @@ import { createSharedPreparation } from "../../../src/adapters/collab/prepare.ts
 import type { SharedPreparationView } from "../../../src/adapters/collab/prepare.ts";
 import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 import { readSharedMarkCharacters } from "../../../src/adapters/collab/mark-store.ts";
-import { readSharedTextTarget } from "../../../src/adapters/collab/text-target.ts";
+import { readSharedTextTarget } from "../../../src/adapters/collab/text-address.ts";
 import { sharedMarkRecordKey } from "../../../src/adapters/collab/mark-record.ts";
 import { operation } from "./executor-support.ts";
 import { installTextSeamProbe } from "./text-seam-support.ts";

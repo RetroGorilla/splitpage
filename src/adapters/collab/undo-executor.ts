@@ -34,13 +34,14 @@ import { hasLaterSharedJoin, isSharedJoinRetired, nextSharedJoinGeneration, plan
   readSharedJoinPlace, readSharedJoinSeparator, readSharedJoinedSeparators, recordSharedJoin } from "./undo-join.ts";
 import type { SharedJoinUndoPart } from "./undo-join.ts";
 import { planSharedSplitUndo, recordSharedSplit } from "./undo-split.ts";
+import { canReverseSharedCreation, recordSharedCreation, sharedCreationUndoParts } from "./undo-creation.ts";
 import { planSharedRemovalUndo, readSharedLiveStructure, recordSharedRemoval } from "./undo-removal.ts";
 import { isSharedGalleryShown, readSharedRetirementObservation, readSharedStoredPicture } from "./gallery-retirement.ts";
 import { readSharedRemovalState } from "./removal-state.ts";
 import * as Y from "yjs";
 
 export const SHARED_UNDO_PARTS: readonly string[] = Object.freeze(["text", "mark-add", "mark-remove", "scalar", "status", "status-retired",
-  "record-create", "record-delete", "record-field", "join", "remove", "restore", "discard", "discard-retired", "join-glue", "beat-split", "record-retired"]);
+  "record-create", "record-delete", "record-field", "join", "remove", "restore", "discard", "discard-retired", "join-glue", "beat-split", "record-retired", "beat-create"]);
 export const SHARED_UNDO_RECORDS: readonly SharedRecordCollection[] = Object.freeze(["comments", "replies", "people", "tags", "shots"] as const);
 
 export interface SharedUndoWriter { readonly by: string; readonly nextId: () => string }
@@ -191,6 +192,10 @@ function recordField(fields: SharedJsonFields, field: string): SharedFieldValue 
 function planPart(handle: SharedDocumentHandle, part: SharedUndoPart, writer: SharedUndoWriter, operations: SharedOperation[]): Planned {
   const author = (): { id: string; by: string } => ({ id: writer.nextId(), by: writer.by });
   switch (part.kind) {
+    case "beat-create": {
+      operations.push(operationOf({ kind: part.retired ? "segment-restore" : "segment-retire", ...author(), beat: part.beat, creator: part.writer, observed: part.content }));
+      return { inverse: () => ({ effective: true, part: { ...part, retired: !part.retired } }) };
+    }
     case "text": {
       const history = historyOf(handle, part.target), removed: SharedHistoryUnit[] = [];
       for (const identity of part.inserted) {
@@ -349,6 +354,10 @@ export function reverseSharedUndoRecord(handle: SharedDocumentHandle, record: Sh
 }
 
 function reverseRecord(handle: SharedDocumentHandle, record: SharedUndoRecord, writer: SharedUndoWriter): SharedUndoReversal {
+  // why: a creation and its initial text are one edit; a used-up creation must not undo any other part of that edit.
+  if (record.parts.some(part => part.kind === "beat-create" && !canReverseSharedCreation(handle, part))) {
+    return { ok: true, effective: false, selection: null, inverse: record };
+  }
   const operations: SharedOperation[] = [], planned: Planned[] = [], merged: SharedUndoPart[] = [];
   for (const part of record.parts) {
     const last = merged.at(-1);
@@ -501,6 +510,8 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       }
     } else if ((operation.kind === "remove" || operation.kind === "restore" || operation.kind === "heading-remove" && operation.newBeat === null) && live) {
       parts.push(recordSharedRemoval(handle, operation, live) ?? { kind: "structure", command: operation.kind, operation: operation.id });
+    } else if (operation.kind === "segment-create") {
+      parts.push(recordSharedCreation(handle, operation));
     } else if (operation.kind === "split" || operation.kind === "split-before") {
       parts.push(recordSharedSplit(handle, operation) ?? { kind: "structure", command: operation.kind, operation: operation.id });
     } else if (operation.kind === "join-retire") {
@@ -518,7 +529,8 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
     } else if (operation.kind === "discard") {
       parts.push({ kind: "discard", discard: eventKey(handle, operation.id), entry: operation.entry, removals: operation.removals });
     } else if (operation.kind !== "text-restore" && operation.kind !== "mark-retract" && operation.kind !== "status-retire" && operation.kind !== "discard-retire"
-      && operation.kind !== "split-retire" && operation.kind !== "split-restore" && operation.kind !== "gallery-retire" && operation.kind !== "gallery-restore") {
+      && operation.kind !== "split-retire" && operation.kind !== "split-restore" && operation.kind !== "gallery-retire" && operation.kind !== "gallery-restore"
+      && operation.kind !== "segment-retire" && operation.kind !== "segment-restore") {
       parts.push({ kind: "structure", command: operation.kind, operation: operation.id });
     }
   }
@@ -528,5 +540,5 @@ function executeCommand(handle: SharedDocumentHandle, operations: readonly Share
       parts.push({ kind: "join-glue", join: item.join as SharedContentRef, from: item.from as SharedContentRef, prior: item.separator, written: now.separator });
     }
   }
-  return { result, record: parts.length ? { label: description.label, parts, selection: description.selection, typing: description.typing } : null };
+  return { result, record: parts.length ? { label: description.label, parts: sharedCreationUndoParts(operations, parts), selection: description.selection, typing: description.typing } : null };
 }

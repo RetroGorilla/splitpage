@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { replicas, execute, ref } from "./executor-support.ts";
 import { cacheText, cacheStatus } from "./read-cache-support.ts";
-import { readCollabMarkState } from "../../../src/adapters/collab/mark-store.ts";
+import { readCollabMarkState } from "../../../src/adapters/collab/mark-state.ts";
 import { destroySharedDocument, applySharedUpdate, encodeSharedState, observeSharedTransactions, readSharedRevision, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
 import { createMonitoredSharedDocument as createSharedDocument } from "./helpers.ts";
 import { registerSharedTextOperationHandlers } from "../../../src/adapters/collab/text-executor.ts";
