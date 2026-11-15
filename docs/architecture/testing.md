@@ -577,7 +577,7 @@ and "Collaboration mutants" runs six shards in parallel. Both turn on bash's
 `extglob` first:
 
 ```
-node tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --baseline-only --baseline-timeout 900
+node tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --baseline-only --baseline-timeout 1500
 node tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --shard K/6 --concurrency 4 --no-baseline --fail-on-survivor
 ```
 
@@ -586,9 +586,11 @@ shard, and the gate requires both the baseline and every shard to succeed when
 mutants are due, or both jobs to be skipped when they are not. A failed or
 cancelled baseline fails the gate even if every shard passes. The baseline
 covers every test file the whole set names, or every unit test if an entry has
-no filter; its log lists failing tests. Its job has a 20-minute limit and a
-900 s baseline budget. The shards run with `--no-baseline` and retain their
-30-minute limit. The shard count had already risen from four to six this week,
+no filter; its log lists failing tests. Its job has a 30-minute limit and a
+1,500 s baseline budget: the first whole-set baseline, on 2026-11-15, took
+708.1 s for 202 test files, and the per-shard baselines before it varied
+fourfold between runners. The shards run with `--no-baseline` and retain their
+30-minute limit; in that first run they took 9.9 to 18 minutes. The shard count had already risen from four to six this week,
 but on 2026-11-15 the repeated baselines still took 167.7 to 674.5 s per shard
 on GitHub's runners, covering 106 to 125 files, while the mutants themselves
 took about 19 minutes for 183. Three shards across two pull requests reached

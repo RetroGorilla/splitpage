@@ -243,7 +243,7 @@ jobs:
     needs: changes
     if: needs.changes.outputs.mutants == 'true' && needs.changes.outputs.tested != 'true'
     runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
-    timeout-minutes: 20
+    timeout-minutes: 30
     steps:
       - uses: actions/checkout@v7
 
@@ -259,7 +259,7 @@ jobs:
       - name: The unmutated collaboration tests pass
         run: |
           shopt -s extglob
-          node tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --baseline-only --baseline-timeout 900
+          node tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --baseline-only --baseline-timeout 1500
 
   mutants:
     name: Collaboration mutants (${{ matrix.shard }}/6)
