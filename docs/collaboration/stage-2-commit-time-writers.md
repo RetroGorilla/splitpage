@@ -203,7 +203,8 @@ checks as any other:
   first in text order regardless of id. A dropped id held nowhere else in the script
   loses its shot through normal record removal, but only while the shot is untouched
   since it was made (`sharedBrollShotUntouched` in `adapters/collab/broll-keying.ts`).
-  It has no undo entry and no stamp. A refusal or failure stops the leave there.
+  It has no undo entry and no stamp. A refusal or failure stops the commands there, so
+  nothing is keyed; it does not stop the leave itself.
 - `key-broll-lines` (`sharedBrollKeying` in `core/collab/broll-keying.ts`) keys each
   named unkeyed line, makes its shot authored by the leaving copy, and stamps the beat. It
   has an undo entry. Each keying mints its own ids from its command's author id
@@ -246,7 +247,7 @@ anywhere outside the box (the Writer's own close button included), opening anoth
 visual, or Find leaving a visual match. These are the moments the standalone Writer
 keys at. A pending box commits first, which lets held remote updates in. Cleanup and
 keying then plan on that document. The caret goes back to the narration where the box
-was opened. Leaving a narration beat keys nothing in either mode. Assumed rules 217 to 220:
+was opened. Leaving a narration beat keys nothing in either mode. Assumed rules 217 to 221:
 
 - **217:** the Writer's leave keys through the same command as the Split's, with rules
   196 to 199 unchanged.
@@ -258,6 +259,13 @@ was opened. Leaving a narration beat keys nothing in either mode. Assumed rules 
 - **219:** a switch from the Split to the Writer keys nothing in the Split cell the caret
   was in. A press on the Write button is a leave like any other press.
 - **220:** another copy removing the row under the open box closes the box and keys nothing.
+- **221:** when the box's text is committed and cleanup or keying is then refused or fails,
+  the box still closes and the caret goes where the standalone Writer puts it. One notice
+  shows, nothing is keyed, and the `B-roll:` line stays as typed text until a later leave
+  by any copy keys it. Holding the box open on a refusal that may never clear, such as a
+  read-only session, would trap the person in it, and the Split leave already behaves this
+  way. Only a refused commit of the box's own text keeps the box open, because there the
+  text is at stake.
 
 `tests/collab/broll-keying.test.ts` (each table runs once through the Split leave and
 once through the shared Writer's visual box), `tests/core/collab/broll-keying.test.ts`,

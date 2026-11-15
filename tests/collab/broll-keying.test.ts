@@ -621,7 +621,7 @@ for (const order of ORDERS) {
   });
 }
 
-for (const reason of ["read-only", "stale-base"]) test(`refused cleanup stops the leave before keying, with one notice: ${reason}`, () => {
+for (const reason of ["read-only", "stale-base"]) test(`refused cleanup stops the commands before keying, with one notice: ${reason}`, () => {
   const set = writtenCell(KEY("S1") + KEY("bs_repeat") + " Mug<br>B-roll: Close up"), a = copy(set.a, "Alice");
   try {
     a.harness.deny(reason);
@@ -633,7 +633,7 @@ for (const reason of ["read-only", "stale-base"]) test(`refused cleanup stops th
   } finally { a.session.dispose(); set.close(); }
 });
 
-test("failed cleanup stops the leave before a second command is attempted", () => {
+test("failed cleanup stops the commands before a second command is attempted", () => {
   const set = writtenCell(KEY("S1") + KEY("bs_repeat") + " Mug<br>B-roll: Close up"), a = copy(set.a, "Alice");
   try {
     const names: string[] = [], error = new Error("cleanup failed");

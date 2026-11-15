@@ -299,15 +299,52 @@ for (const order of ["D1", "rev", "dup"]) {
   });
 }
 
-test("a refused cleanup stops the Writer leave before keying, with one notice", async () => {
-  const f = await enter("B-roll: Close up");
+function refusedLeave(f, refused, cell) {
+  const run = f.parts.session.run, names = [];
+  f.parts.session.run = command => { names.push(command.name); return command.name === refused ? { kind: "rejected", reason: "read-only" } : run(command); };
+  try { escape(cell); } finally { f.parts.session.run = run; }
+  return names.filter(name => KEYING.includes(name));
+}
+
+test("rule 221: a refused cleanup still closes the box with the caret where the standalone Writer puts it, one notice, the typed line unkeyed until the next leave", async () => {
+  const f = await enter("Wide<br>B-roll: Close up");
   try {
     escape(openVisual());
-    f.peerLeave(); assert.equal(keysIn(agreed(f, "doubled").visual).length, 2);
-    const run = f.parts.session.run, names = [];
-    f.parts.session.run = command => { names.push(command.name); return command.name === "drop-repeated-broll-keys" ? { kind: "rejected", reason: "read-only" } : run(command); };
-    try { escape(openVisual()); } finally { f.parts.session.run = run; }
-    assert.deepEqual(names.filter(name => KEYING.includes(name)), ["drop-repeated-broll-keys"]);
+    f.peerLeave();
+    const [first, later] = keysIn(agreed(f, "doubled").visual);
+    assert.ok(first && later && first !== later);
+    warnings.length = 0;
+    const cell = openVisual();
+    assert.equal(typeInBox(cell, 0, "B-roll: "), true);
+    assert.deepEqual(refusedLeave(f, "drop-repeated-broll-keys", cell), ["drop-repeated-broll-keys"]);
+    assert.equal(warnings.length, 1);
+    assert.equal(box().element.hidden, true);
+    assert.deepEqual(writerControls().writerFlowControl().selection(), caretAt(beatPos("r1", 0)));
+    const refused = agreed(f, "cleanup refused");
+    assert.ok(refused.visual.startsWith("B-roll: Wide<br>"), refused.visual);
+    assert.deepEqual(keysIn(refused.visual), [first, later]);
+    escape(openVisual());
+    const { visual, shots } = agreed(f, "the next leave cleans and keys"), [made, kept] = keysIn(visual);
+    assert.equal(kept, first);
+    assert.equal(visual, KEY(made) + " Wide<br>" + KEY(first) + " Close up");
+    assert.ok(shots.some(([id, name]) => id === made && name === "Wide"), JSON.stringify(shots));
+    assert.equal(warnings.length, 1);
+  } finally { f.close(); }
+});
+
+test("rule 221: a refused keying still closes the box with the caret where the standalone Writer puts it, one notice, the typed line unkeyed until the next leave", async () => {
+  const f = await enter("Close up");
+  try {
+    const cell = openVisual();
+    assert.equal(typeInBox(cell, 0, "B-roll: "), true);
+    assert.deepEqual(refusedLeave(f, "key-broll-lines", cell), ["key-broll-lines"]);
+    assert.equal(warnings.length, 1);
+    assert.equal(box().element.hidden, true);
+    assert.deepEqual(writerControls().writerFlowControl().selection(), caretAt(beatPos("r1", 0)));
+    assert.deepEqual(agreed(f, "keying refused"), { visual: "B-roll: Close up", shots: [] });
+    escape(openVisual());
+    const { visual, shots } = agreed(f, "the next leave keys"), id = shots[0]?.[0];
+    assert.deepEqual({ visual, shots }, { visual: KEY(id) + " Close up", shots: [[id, "Close up"]] });
     assert.equal(warnings.length, 1);
   } finally { f.close(); }
 });

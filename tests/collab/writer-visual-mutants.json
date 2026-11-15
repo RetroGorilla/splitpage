@@ -146,6 +146,15 @@
       "tests": [
         "tests/features/writer/visual-buffer.test.ts"
       ]
+    },
+    {
+      "label": "the box leaves while it is still open",
+      "file": "src/features/writer/flow-visual-box.ts",
+      "find": "    if (rejected()) return;\n    dirty = true;\n    if (composing || (event as InputEvent).isComposing) return;\n",
+      "replace": "    if (rejected()) return;\n    dirty = true;\n    ports.leave(cell);\n    if (composing || (event as InputEvent).isComposing) return;\n",
+      "tests": [
+        "tests/features/writer/visual-buffer.test.ts"
+      ]
     }
   ]
 }
