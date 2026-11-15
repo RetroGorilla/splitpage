@@ -76,7 +76,7 @@ export function startEmptyScript(ports: EmptyScriptPorts) {
     else if (pending) input.value = beforeInput;
     composing = false; pending = false;
   };
-  const off = ports.document.onChange(paint), admission = ports.lifetime.beforeCommand(finish), abandoning = ports.abandonment?.(abandon);
+  const off = ports.document.onChange(paint), admission = ports.lifetime.beforeCommand(() => finish() || "announced"), abandoning = ports.abandonment?.(abandon);
   paint();
   return { finish, dispose: () => {
     if (disposed) return true;

@@ -15,9 +15,9 @@ export const builderOperationCoverage = [
     ["preview counts without writing", []],
     ["standalone bulk writer behind tagCellsCommand; shared callers refuse before preview or undo", ["mark"]]
   ]]),
-  classified("serve pending composition", ["beatStatusCommand", "field-record", "status"]),
-  classified("serve pending composition", ["setBeatFilmedCommand", "field-record", "status"]),
-  classified("serve pending composition", ["beatLengthCommand", "field-record", "scalar"]),
+  classified("serve", ["beatStatusCommand", "field-record", "status"]),
+  classified("serve", ["setBeatFilmedCommand", "field-record", "status"]),
+  classified("serve", ["beatLengthCommand", "field-record", "scalar"]),
   classified("serve", ["addCommentCommand", "field-record", "record-create"]),
   classified("serve", ["addReplyCommand", "field-record", "record-create,record-set"]),
   classified("serve", ["setCommentAssigneeCommand", "field-record", "record-set"]),
@@ -33,8 +33,8 @@ export const builderOperationCoverage = [
   classified("serve", ["deleteShotCommand", "field-record", "record-delete"]),
   classified("serve", ["addShotPropCommand", "field-record", "record-create,record-set"]),
   classified("serve", ["removeShotPropCommand", "field-record", "record-set"]),
-  classified("serve pending composition", ["targetLengthCommand", "field-record", "scalar"]),
-  classified("serve pending composition", ["wordsPerMinuteCommand", "field-record", "scalar"]),
+  classified("serve", ["targetLengthCommand", "field-record", "scalar"]),
+  classified("serve", ["wordsPerMinuteCommand", "field-record", "scalar"]),
   classified("could not classify", ["editStamp", "field-record", "scalar"]),
   classified("refuse", ["documentIdStamp", "field-record", "scalar"]),
   classified("refuse", ["initializeFlowParagraphs", "field-record", "scalar"]),
@@ -104,11 +104,11 @@ export const builderOperationCoverage = [
     ["conflict comment deletion", ["record-delete"]],
     ["missing comment/row", []]
   ]]),
-  classified("serve pending composition", ["addBeatCommand", "structure", "segment-create", [
+  classified("serve", ["addBeatCommand", "structure", "segment-create", [
     ["append or insert after existing beat, with initial defaults", ["segment-create"]],
     ["missing predecessor", []]
   ]]),
-  classified("serve pending composition", ["deleteBeatCommand", "structure", "remove,scalar", [
+  classified("serve", ["deleteBeatCommand", "structure", "remove,scalar", [
     ["observed beat removal, including every part of a joined row", ["remove"]],
     ["surviving paragraph flags", ["scalar"]],
     ["scene first-beat derivation / empty-scene recovery / missing beat", []]
@@ -126,7 +126,7 @@ export const builderOperationCoverage = [
     ["source occupies part of segment", ["move-in-shared-session"]],
     ["edge/missing beat", []]
   ]]),
-  classified("serve pending composition", ["splitBeatCommand", "structure", "text-delete,split,scalar | visual-split-in-shared-session", [
+  classified("serve", ["splitBeatCommand", "structure", "text-delete,split,scalar | visual-split-in-shared-session", [
     ["narration split", ["split"]],
     ["visual component split refused by name when an author is present", ["visual-split-in-shared-session"]],
     ["delete selected observed span before splitting", ["text-delete"]],
@@ -151,7 +151,7 @@ export const builderOperationCoverage = [
     ["partial-source/cross-scene structural cut-paste", ["move-in-shared-session", "cross-scene-structural-paste"]],
     ["null/empty plan or incomplete apply", []]
   ]]),
-  classified("serve pending composition", ["removeBeatsCommand", "structure", "remove,scalar", [
+  classified("serve", ["removeBeatsCommand", "structure", "remove,scalar", [
     ["observed distinct existing beats, including every part of joined rows", ["remove"]],
     ["surviving paragraph repair", ["scalar"]],
     ["scene-anchor derivation / empty-scene recovery / missing/duplicate/no-op ids", []]
@@ -168,7 +168,7 @@ export const builderOperationCoverage = [
   classified("serve", ["sharedSceneCommand", "structure", "heading-create,text-insert", [
     ["first shared name creates its heading before the selected beat and inserts that name in one list", ["heading-create", "text-insert"]]
   ]]),
-  classified("serve pending composition", ["removeSceneCommand", "structure", "heading-remove,scalar", [
+  classified("serve", ["removeSceneCommand", "structure", "heading-remove,scalar", [
     ["discard observed header without demotion", ["heading-remove"]],
     ["first beat paragraph flag", ["scalar"]],
     ["missing header", []]

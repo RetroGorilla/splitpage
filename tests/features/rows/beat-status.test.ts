@@ -8,7 +8,7 @@ import { migrateRows } from "../../../src/core/migrate.ts";
 import { createBeatStatus } from "../../../src/features/rows/beat-status.ts";
 import { productionReaders } from "../../../src/bootstrap/document-ports.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import { fakeCapabilities, fakeDocument, fakeEdits } from "../fakes.ts";
+import { fakeCapabilities, fakeDocument, fakeEdits, fakeStandaloneValues } from "../fakes.ts";
 
 const TEN = "one two three four five six seven eight nine ten";
 
@@ -57,6 +57,7 @@ function setup(opts: { targetSeconds?: number; hideShot?: boolean; hiding?: () =
       },
       stamps: edits.edits.stamps
     } : edits.edits,
+    shared: fakeStandaloneValues(),
     text: { productionReaders },
     hideShot: opts.hiding || (() => !!opts.hideShot),
     shots: { armGrace: (id) => { grace.push("arm:" + id); }, clearGrace: (id) => { grace.push("clear:" + id); } },

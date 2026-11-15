@@ -1,5 +1,6 @@
 import { escapeHtml } from "../../core/document/text-policy.ts";
 import { wordsPerMinuteCommand } from "../../application/commands/document-settings.ts";
+import { sharedCommandTaken } from "../../application/commands/shared-values.ts";
 import { DEFAULT_WPM } from "../../core/document/timing.ts";
 import { getSavedAuthorName } from "../../application/comment-author.ts";
 import { cleanAuthorName } from "../../core/document/people.ts";
@@ -187,7 +188,9 @@ function openClockPopover(focusOn: string) {
   first.focus();
   first.select();
   function commit() {
-    runDocumentEdit(wordsPerMinuteCommand(Number(input.value)));
+    const shared = ports.shared.ports();
+    if (shared) sharedCommandTaken(ports.edits.run(wordsPerMinuteCommand(Number(input.value), shared)), ports.shared.refused);
+    else runDocumentEdit(wordsPerMinuteCommand(Number(input.value)));
     closeAnchorPopover();
   }
   (document.getElementById("wpm-save") as HTMLElement).addEventListener("click", commit);

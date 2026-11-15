@@ -119,7 +119,7 @@ const requests: readonly (readonly [string, (page: Page) => void])[] = [
   ["format port", page => { page.surface.format("b"); }],
   ["operation port", page => { page.surface.apply("must-wait", () => { assert.fail("Composition cannot plan a command"); }, null); }],
   ["session command admission", page => {
-    assert.deepEqual(page.a.session.run({ name: "must-wait", needs: "edit", plan: () => { assert.fail("Composition cannot enter the session"); } }), { kind: "rejected", reason: "buffer-pending" });
+    assert.deepEqual(page.a.session.run({ name: "must-wait", needs: "edit", plan: () => { assert.fail("Composition cannot enter the session"); } }), { kind: "rejected", reason: "buffer-pending", notified: true });
   }],
   ...[
     { key: "Enter" }, { key: "Tab" }, { key: "z", ctrlKey: true }, { key: "z", ctrlKey: true, shiftKey: true },

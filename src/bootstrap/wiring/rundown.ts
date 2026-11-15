@@ -11,6 +11,7 @@ import { rundownMinimizeActions as minimizeDefinitions, rundownBeatActions as be
 import type { RundownPorts, TargetMount, TargetPorts } from "../../features/rundown/ports.ts";
 import { startRundown as mountRundown } from "../../features/rundown/rundown.ts";
 import { startTarget as mountTarget } from "../../features/rundown/target.ts";
+import { sharedValueCommands } from "./ports/shared-commands.ts";
 import { cellEditing, rowDrag } from "./editor-owners.ts";
 import { preferences } from "./preferences-owner.ts";
 
@@ -40,6 +41,7 @@ export function mountTargetFeature(): TargetMount {
     const ports: TargetPorts = {
       document: portDocument,
       edits: portEdits,
+      shared: sharedValueCommands,
       notices: portNotices
     };
     const mounted: TargetMount = mountTarget(ports);

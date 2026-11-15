@@ -52,7 +52,7 @@ function select(cell, from, to = from) {
 }
 function snapshot(cell) {
   const s = document.getSelection();
-  return { doc: hook.read(), encoded: encodeSharedState(sharedSessionParts().handle), updates: hook.peer.appliedUpdates().slice(),
+  return { doc: hook.read(), encoded: encodeSharedState(sharedSessionParts().handle), updates: hook.peer.appliedUpdates().slice(), sizes: sharedSessionParts().undo.sizes(),
     html: cell.innerHTML, active: document.activeElement,
     anchor: s.anchorNode, head: s.focusNode, offsets: [s.anchorOffset, s.focusOffset] };
 }
@@ -96,9 +96,42 @@ const ROUTES = [
   ...KEYS.map(([key, modifiers]) => ({ name: key + JSON.stringify(modifiers), type: "keydown", key, modifiers })),
   { name: "Tab accepts a person suggestion", type: "keydown", key: "Tab", mention: true }
 ];
+const SERVED = {
+  'Enter{"ctrlKey":true}': { audioText: "add", visualText: "add" },
+  'Enter{"altKey":true}': { audioText: "split", visualText: "refused by name" }
+};
+function servedRows(command, field, state) {
+  const typed = state === "pending" ? "abcXdef" : "abcdef", other = field === "audioText" ? "abcdef" : typed;
+  const mine = field === "audioText" ? typed : "abcdef";
+  if (command === "add") return [["r1", field === "audioText" ? typed : "abcdef", field === "visualText" ? typed : "abcdef"], ["new", "", ""], ["r2", "PQother", "other"]];
+  const cut = state === "selection" ? [2, 4] : state === "pending" ? [4, 4] : [3, 3];
+  return [["r1", mine.slice(0, cut[0]), other], ["new", mine.slice(cut[1]), ""], ["r2", "PQother", "other"]];
+}
+function servedRow(route, field, state, before, e, label) {
+  const command = SERVED[route.name]?.[field];
+  if (!command || state === "composition" || command === "refused by name" && state !== "pending") return false;
+  assert.equal(e.defaultPrevented, true, label);
+  if (command === "refused by name") {
+    assert.deepEqual(warningCalls, [["This is not available in a shared session yet.", "warn"]], label);
+    assert.deepEqual(hook.read().app.rows.map(row => [row.id, row.audioText, row.visualText]), [["r1", "abcdef", "abcXdef"], ["r2", "PQother", "other"]], label);
+    assert.deepEqual(hook.read().app, hook.read().peer, label);
+    assert.deepEqual(sharedSessionParts().undo.sizes(), { ...before.sizes, undo: before.sizes.undo + 1 }, label);
+    assert.equal(document.activeElement, cellOf(field), label);
+    return true;
+  }
+  assert.deepEqual(warningCalls, [], label);
+  const app = hook.read().app, made = app.rows.map(row => row.id).filter(id => id !== "r1" && id !== "r2");
+  assert.equal(made.length, 1, label);
+  assert.deepEqual(app.rows.map(row => [made.includes(row.id) ? "new" : row.id, row.audioText, row.visualText]), servedRows(command, field, state), label);
+  assert.deepEqual(app, hook.read().peer, label);
+  assert.notDeepEqual(encodeSharedState(sharedSessionParts().handle), before.encoded, label);
+  assert.deepEqual(sharedSessionParts().undo.sizes(), { ...before.sizes, undo: before.sizes.undo + (state === "pending" ? 2 : 1) }, label);
+  assert.equal(document.activeElement, cellOf(command === "split" ? "audioText" : field, made[0]), label);
+  return true;
+}
 for (const field of ["audioText", "visualText"]) for (const order of ["forward", "reverse"]) {
   test(`rule 55 refusal table: ${field}, encoded delivery ${order}, every unserved route and cell state`, async t => {
-    let rows = 0;
+    let rows = 0, served = 0;
     for (const route of ROUTES) for (const state of ["caret", "selection", "pending", "composition"]) {
       if (route.mention && field === "audioText") continue;
       for (const elsewhere of route.type === "drop" ? [false, true] : [false]) {
@@ -127,6 +160,7 @@ for (const field of ["audioText", "visualText"]) for (const order of ["forward",
           await tick(); watching = false;
           const label = `${route.name}/${state}/other=${elsewhere}`;
           assert.deepEqual([errors, calls, access], [[], [], []], label);
+          if (servedRow(route, field, state, before, e, label)) { rows++; served++; continue; }
           assert.equal(e.defaultPrevented, true, label);
           assert.deepEqual(warningCalls, [["This is not available in a shared session yet.", "warn"]], label);
           assert.deepEqual(hook.read(), before.doc, label);
@@ -145,8 +179,8 @@ for (const field of ["audioText", "visualText"]) for (const order of ["forward",
         }
       }
     }
-    assert.equal(rows, field === "audioText" ? 104 : 108);
-    t.diagnostic(rows + " refusal rows; standalone undo is instrumented on every event");
+    assert.deepEqual([rows, served], field === "audioText" ? [104, 6] : [108, 4]);
+    t.diagnostic((rows - served) + " refusal rows and " + served + " served rows; standalone undo is instrumented on every event");
   });
 }
 for (const field of ["audioText", "visualText"]) for (const order of ["forward", "reverse"]) {

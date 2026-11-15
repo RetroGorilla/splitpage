@@ -25,6 +25,7 @@ const { readOperation } = await import("../core/collab/read-operation.ts");
 const { beatPos, caretAt } = await import("../core/flow/flow.ts");
 const { cellSelection } = await import("../features/common/cell-selection.ts");
 const { documentReader } = await import("../bootstrap/wiring/ports/document.ts");
+const { projectSharedDocument } = await import("../adapters/collab/project.ts");
 
 after(closeApp);
 
@@ -302,3 +303,47 @@ for (const registration of ["onReplaced", "onChange"]) {
     }
   });
 }
+
+function textPoint(element, offset) {
+  const walker = document.createTreeWalker(element, 4);
+  let node, left = offset;
+  while ((node = walker.nextNode())) { if (left <= node.data.length) return [node, left]; left -= node.data.length; }
+  return [element, element.childNodes.length];
+}
+
+test("known wrong, #1600: the shared Writer's Enter over cXd deletes a peer's Z held between c and d, leaving an empty beat, ab and ef", async () => {
+  writerControls().closeWriter();
+  adoptReplacement(migrateRows({ rows: [{ id: "r1", audioText: "abcdef", visualText: "", status: "todo" }, { id: "r2", audioText: "Other", visualText: "", status: "todo" }] }));
+  undoOwner().flush();
+  assert.deepEqual(await enterSharedSession(ports), { ok: true });
+  const parts = sharedSessionParts(), other = createSharedDocument();
+  try {
+    registerSharedOperationFamilies(other, { cells: html => fromHtml(html) });
+    assert.equal(applySharedUpdate(other, encodeSharedState(parts.handle)).ok, true);
+    writerControls().openWriter();
+    const root = document.getElementById("writer-doc");
+    root.focus();
+    const [node, offset] = textPoint(beat("r1"), 3);
+    document.getSelection().setBaseAndExtent(node, offset, node, offset);
+    const range = document.getSelection().getRangeAt(0).cloneRange();
+    const typing = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: "X" });
+    Object.defineProperty(typing, "getTargetRanges", { value: () => [range.cloneRange()] });
+    assert.equal(beat("r1").dispatchEvent(typing), true);
+    range.insertNode(document.createTextNode("X"));
+    remoteAt(other, "r1", "Z", 3);
+    assert.equal(applySharedUpdate(parts.handle, encodeSharedState(other)).ok, true);
+    const [from, fromOffset] = textPoint(beat("r1"), 2), [to, toOffset] = textPoint(beat("r1"), 5);
+    document.getSelection().setBaseAndExtent(from, fromOffset, to, toOffset);
+    const target = document.getSelection().getRangeAt(0).cloneRange();
+    root.dispatchEvent(new window.KeyboardEvent("keydown", { key: "Enter", bubbles: true, cancelable: true }));
+    const enter = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertParagraph" });
+    Object.defineProperty(enter, "getTargetRanges", { value: () => [target] });
+    beat("r1").dispatchEvent(enter);
+    assert.equal(applySharedUpdate(other, encodeSharedState(parts.handle)).ok, true);
+    assert.equal(applySharedUpdate(parts.handle, encodeSharedState(other)).ok, true);
+    const shape = doc => doc.rows.map(row => [/^r\d$/.test(row.id) ? row.id : "new", row.audioText]);
+    const present = [["new", ""], ["r1", "ab"], ["new", "ef"], ["r2", "Other"]];
+    assert.deepEqual([shape(currentDocument()), shape(projectSharedDocument(other))], [present, present]);
+    assert.deepEqual([reports, errors], [[], []]);
+  } finally { destroySharedDocument(other); writerControls().closeWriter(); leaveSharedSession(ports); reports.length = 0; errors.length = 0; }
+});

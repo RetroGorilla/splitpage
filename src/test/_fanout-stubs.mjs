@@ -82,11 +82,14 @@ export function hasSetLength(row) { return coreHasSetLength(row); }
 export function formatDuration(s) { return String(s); }
 export function parseBeatLength() { return null; }
 
+const standaloneValues = { ports: () => null, refused: () => { throw new Error("a standalone caller reported a shared refusal"); } };
+
 export function readTimePorts() {
   return {
     document: { current: currentDocument, read: readSession },
     text: { productionReaders: documentReaders },
     edits: { run: runCommand, stamps: sessionStamps },
+    shared: standaloneValues,
     undo: { undo, redo },
     paint: { afterThisPaint },
     notices: { show: showToast }
@@ -97,6 +100,7 @@ export function beatStatusPorts() {
   return {
     document: { current: currentDocument, read: readSession },
     edits: { run: runCommand, stamps: sessionStamps },
+    shared: standaloneValues,
     text: { productionReaders: documentReaders },
     hideShot: () => viewFlags().hideShot(),
     shots: shotHiding(),
