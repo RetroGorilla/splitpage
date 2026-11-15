@@ -139,14 +139,19 @@ stale.
 Surrogate pairs need one case. Wire encoding turns a lone surrogate half at either end of an
 encoded run into U+FFFD. When a local run starts with a low half and the library merges it
 into the previous item, whose last unit is the matching high half, live holds a valid pair
-while the replica received two replacement characters. The check reads only the transaction's
-own first written unit on each client and the unit before it in the same item. Deleting one
+while the replica received two replacement characters. Every point where the replica stopped
+taking in live content is such an encoding boundary: the end of an earlier transaction, a copy
+or a rebuild for an arrival inside the transaction's body or notifications, refused or held
+arrivals included. The library merges a transaction's items only at its cleanup, after its
+notifications, so the transaction's `update` event checks each of its stops: the first unit
+after the stop and the unit before it in the same item. Deleting one
 half of a pair, typing inside a pair, or formatting half of it needs nothing: the library
 replaces both halves with U+FFFD when it splits the item, on live and on the replica alike.
 A low half typed before its high half is never merged with it and encodes the same on both.
 The tests pin these schedules: plain typing and deleting beside a valid pair, a split pair
 and a low half typed apart rebuild nothing; a high half, then a low half in a second
-transaction, rebuilds once.
+transaction, rebuilds once, and so does a pair completed after a stop between its halves (a
+valid or refused arrival in the body, an arrival in the notifications, a hold).
 
 Both cases rebuild from live plus held before the next trial. A successful stale recovery
 spends no budget.
@@ -303,7 +308,8 @@ document plus held updates, and a nested arrival can encode the complete delete 
 Each local transaction in a shared session adds this work, which the composed-editor
 measurement still has to time: a set insert and a set clear for the transaction; one pass over
 its before and after state vectors (one entry per client that has written to the document); for
-each client it wrote, one binary search into that client's structs and a two-unit read; and
+each client it wrote, one binary search into that client's structs and a two-unit read per
+stop (one stop, plus one for each arrival inside the transaction); and
 one apply of the transaction's own update on the replica. The library encodes that update
 anyway, because the session already listens for updates to send. No text is read whole.
 
@@ -316,4 +322,4 @@ revision against the same arrivals applied one by one. `tests/collab/ingress-gat
 holds nine deliberate defects, listed in `tests/collab/mutants.md`. The trial replica's cases
 are in `tests/adapters/collab/trial-replica.test.ts`, with its session lifetime in
 `tests/bootstrap/shared-switch.test.ts`. `tests/collab/trial-replica-mutants.json` holds its
-twenty-one deliberate defects.
+twenty-two deliberate defects.

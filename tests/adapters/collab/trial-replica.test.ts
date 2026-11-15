@@ -558,6 +558,84 @@ test("surrogate pairs: plain typing and deleting beside a valid pair, a split pa
   });
 });
 
+test("a surrogate pair completed after the replica stopped inside it rebuilds: arrivals in the body, in notifications, refused, and a hold between the halves", () => {
+  const HIGH = "\ud83d", LOW = "\ude00";
+  const schedules: Record<string, (handle: SharedDocumentHandle, text: Y.Text) => void> = {
+    "valid arrival in the body between the halves": (handle, text) => {
+      transactSharedDocument(handle, "local-command", () => {
+        text.insert(0, HIGH);
+        assert.deepEqual(applySharedUpdate(handle, Uint8Array.of(0, 0)), { ok: true });
+        text.insert(1, LOW);
+      });
+    },
+    "refused arrival in the body between the halves": (handle, text) => {
+      transactSharedDocument(handle, "local-command", () => {
+        text.insert(0, HIGH);
+        assert.deepEqual(applySharedUpdate(handle, partialUpdate(7)), { ok: false, reason: "invalid-update" });
+        text.insert(1, LOW);
+      });
+    },
+    "arrival in the body, then another in the same transaction's notifications": (handle, text) => {
+      const stop = observeSharedTransactions(handle, origin => {
+        if (origin === "local-command") assert.deepEqual(applySharedUpdate(handle, Uint8Array.of(0, 0)), { ok: true });
+      });
+      transactSharedDocument(handle, "local-command", () => {
+        text.insert(0, HIGH);
+        assert.deepEqual(applySharedUpdate(handle, Uint8Array.of(0, 0)), { ok: true });
+        text.insert(1, LOW);
+      });
+      stop();
+    },
+    "arrival in the high half's notifications, low half in the next transaction": (handle, text) => {
+      const stop = observeSharedTransactions(handle, origin => {
+        if (origin === "local-command") assert.deepEqual(applySharedUpdate(handle, Uint8Array.of(0, 0)), { ok: true });
+      });
+      transactSharedDocument(handle, "local-command", () => { text.insert(0, HIGH); });
+      stop();
+      transactSharedDocument(handle, "local-command", () => { text.insert(1, LOW); });
+    },
+    "hold opened between the halves": (handle, text) => {
+      transactSharedDocument(handle, "local-command", () => { text.insert(0, HIGH); });
+      const release = holdSharedBuffer(handle);
+      assert.deepEqual(applySharedUpdate(handle, crafted(9, [metaItem(9, 0, "held", 1)])), { ok: true });
+      transactSharedDocument(handle, "local-command", () => { text.insert(1, LOW); });
+      release();
+    }
+  };
+  const outcomes: Record<string, unknown> = {};
+  for (const [name, run] of Object.entries(schedules)) {
+    const handle = createMonitoredSharedDocument(), counts = counter();
+    try {
+      collabState(handle).doc.clientID = 1;
+      const text = new Y.Text();
+      transactSharedDocument(handle, "local-command", () => { collabState(handle).roots.meta.set("text", text); });
+      const trial = startSharedTrialReplica(handle, counts.count);
+      run(handle, text);
+      assert.deepEqual(applySharedUpdate(handle, Uint8Array.of(0, 0)), { ok: true });
+      outcomes[name] = [text.toString() === HIGH + LOW, same(trial.encode(), livePlusHeld(handle)), counts.calls("encode:rebuild") >= 1];
+    } finally { destroySharedDocument(handle); }
+  }
+  assert.deepEqual(outcomes, Object.fromEntries(Object.keys(schedules).map(name => [name, [true, true, true]])));
+});
+
+test("100 ordinary arrivals rebuild nothing, with the gate open and held then released", () => {
+  const outcomes: unknown[] = [];
+  for (const holding of [false, true]) {
+    const handle = hydrated(1), counts = counter();
+    try {
+      const sender = senderOf(handle, 2), updates = Array.from({ length: 100 }, (_, index) => scalarUpdate(sender, "s" + index, index));
+      startSharedTrialReplica(handle, counts.count);
+      counts.reset();
+      const release = holding ? holdSharedBuffer(handle) : () => {};
+      const results = updates.map(update => applySharedUpdate(handle, update, counts.count));
+      release();
+      outcomes.push([reasons(results), counts.calls("encode:rebuild"), counts.calls("encode:copy"), matches(handle), counts.calls("encode:rebuild")]);
+      destroySharedDocument(sender);
+    } finally { destroySharedDocument(handle); }
+  }
+  assert.deepEqual(outcomes, [[{ ok: 100 }, 0, 0, true, 0], [{ ok: 100 }, 0, 0, true, 0]]);
+});
+
 test("arrivals inside local transactions' notifications rebuild nothing: 50 local writes each with a nested arrival cost 50 flushes and no rebuild", () => {
   const handle = hydrated(1), counts = counter();
   try {

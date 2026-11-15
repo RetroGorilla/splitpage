@@ -22,7 +22,7 @@ export class SharedTrialReplica implements IngressTrial {
   readonly #live: CollabDocumentState;
   readonly #count: SharedAdmissionCount | undefined;
   readonly #inflight = new Set<Y.Transaction>();
-  readonly #copied = new Map<Y.Transaction, Map<number, number>>();
+  readonly #copied = new Map<Y.Transaction, Map<number, number>[]>();
   readonly #stops: (() => void)[] = [];
   #replica: CollabDocumentState;
   #stale = false;
@@ -66,40 +66,57 @@ export class SharedTrialReplica implements IngressTrial {
 
   #follow(update: Uint8Array, transaction: Y.Transaction): void {
     this.#inflight.delete(transaction);
-    const reused = this.#reusesClock(transaction, transaction.afterState);
+    const local = transaction.origin !== "remote" && !this.#stale;
+    const unsafe = local && (this.#reusesClock(transaction, transaction.afterState) || this.#joinsPair(transaction));
     this.#copied.delete(transaction);
     // why: A remote transaction applies only an update the replica took at its trial; a stale replica is rebuilt whole.
-    if (transaction.origin === "remote" || this.#stale) return;
-    if (reused || this.#joinsPair(transaction)) { this.#stale = true; return; }
+    if (!local) return;
+    if (unsafe) { this.#stale = true; return; }
     this.#count?.("apply", "follow", update.byteLength);
     try { Y.applyUpdate(this.#replica.doc, update); } catch { this.#stale = true; }
   }
 
+  #floor(transaction: Y.Transaction, client: number): number {
+    const copies = this.#copied.get(transaction);
+    return Math.max(transaction.beforeState.get(client) ?? 0, copies?.[copies.length - 1]?.get(client) ?? 0);
+  }
+
   // why: Clocks the replica already holds past what it copied from live belong to held updates, not to this transaction.
   #reusesClock(transaction: Y.Transaction, written: Map<number, number>): boolean {
-    const copied = this.#copied.get(transaction);
     for (const [client, clock] of written) {
-      const floor = Math.max(transaction.beforeState.get(client) ?? 0, copied?.get(client) ?? 0);
+      const floor = this.#floor(transaction, client);
       if (clock > floor && Y.getState(this.#replica.doc.store, client) > floor) return true;
     }
     return false;
   }
 
-  // why: A run sliced off between the halves of a pair it merged with encodes them as replacement characters.
+  // why: The library merges a transaction's items only at its cleanup, so each stop inside it is judged at its update.
   #joinsPair(transaction: Y.Transaction): boolean {
+    const copies = this.#copied.get(transaction) ?? [];
     for (const [client, after] of transaction.afterState) {
-      const before = transaction.beforeState.get(client) ?? 0, structs = this.#live.doc.store.clients.get(client);
-      if (after <= before || !structs) continue;
-      const item = structs[Y.findIndexSS(structs, before)];
-      if (!(item instanceof Y.Item) || !(item.content instanceof Y.ContentString) || item.id.clock === before) continue;
-      const offset = before - item.id.clock, low = item.content.str.charCodeAt(offset), high = item.content.str.charCodeAt(offset - 1);
-      if (low >= 0xdc00 && low <= 0xdfff && high >= 0xd800 && high <= 0xdbff) return true;
+      const before = transaction.beforeState.get(client) ?? 0;
+      for (const start of [before, ...copies.map(copy => copy.get(client) ?? 0)]) {
+        if (start >= before && after > start && this.#splitsPair(client, start)) return true;
+      }
     }
     return false;
   }
 
+  // why: Every stop of the replica is an encoding boundary, and a run that starts between a pair's halves encodes
+  // both as replacement characters.
+  #splitsPair(client: number, start: number): boolean {
+    const structs = this.#live.doc.store.clients.get(client);
+    if (!structs || start === 0) return false;
+    const item = structs[Y.findIndexSS(structs, start)];
+    if (!(item instanceof Y.Item) || !(item.content instanceof Y.ContentString) || item.id.clock === start) return false;
+    const offset = start - item.id.clock, low = item.content.str.charCodeAt(offset), high = item.content.str.charCodeAt(offset - 1);
+    return low >= 0xdc00 && low <= 0xdfff && high >= 0xd800 && high <= 0xdbff;
+  }
+
   #mirrored(vector: Map<number, number>): void {
-    for (const transaction of this.#inflight) if (transaction.origin !== "remote") this.#copied.set(transaction, vector);
+    for (const transaction of this.#inflight) {
+      if (transaction.origin !== "remote") this.#copied.set(transaction, [...this.#copied.get(transaction) ?? [], vector]);
+    }
   }
 
   #rebuild(): void {

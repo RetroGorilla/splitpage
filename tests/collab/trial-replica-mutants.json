@@ -3,8 +3,8 @@
   "mutants": [{
     "label": "local change skipped in the trial replica",
     "file": "src/adapters/collab/trial-replica.ts",
-    "find": "if (transaction.origin === \"remote\" || this.#stale) return;",
-    "replace": "if (transaction.origin === \"remote\" || transaction.origin === \"local-command\" || this.#stale) return;"
+    "find": "    const local = transaction.origin !== \"remote\" && !this.#stale;",
+    "replace": "    const local = transaction.origin !== \"remote\" && transaction.origin !== \"local-command\" && !this.#stale;"
   }, {
     "label": "held update skipped in the trial replica",
     "file": "src/adapters/collab/document.ts",
@@ -83,13 +83,18 @@
   }, {
     "label": "surrogate item normalization leaves the replica clean",
     "file": "src/adapters/collab/trial-replica.ts",
-    "find": "      if (low >= 0xdc00 && low <= 0xdfff && high >= 0xd800 && high <= 0xdbff) return true;",
-    "replace": "      if (low >= 0xdc00 && low <= 0xdfff && high >= 0xd800 && high <= 0xdbff) return false;"
+    "find": "    return low >= 0xdc00 && low <= 0xdfff && high >= 0xd800 && high <= 0xdbff;",
+    "replace": "    return low >= 0xdc00 && low <= 0xdfff && high >= 0xd800 && high <= 0xdbff && false;"
   }, {
     "label": "any surrogate in a written text item rebuilds the replica",
     "file": "src/adapters/collab/trial-replica.ts",
-    "find": "      if (!(item instanceof Y.Item) || !(item.content instanceof Y.ContentString) || item.id.clock === before) continue;",
-    "replace": "      if (!(item instanceof Y.Item) || !(item.content instanceof Y.ContentString)) continue;\n      if (/[\\ud800-\\udfff]/.test(item.content.str)) return true;"
+    "find": "    if (!(item instanceof Y.Item) || !(item.content instanceof Y.ContentString) || item.id.clock === start) return false;",
+    "replace": "    if (!(item instanceof Y.Item) || !(item.content instanceof Y.ContentString)) return false;\n    if (/[\\ud800-\\udfff]/.test(item.content.str)) return true;"
+  }, {
+    "label": "the surrogate check starts at the transaction's before-state",
+    "file": "src/adapters/collab/trial-replica.ts",
+    "find": "      for (const start of [before, ...copies.map(copy => copy.get(client) ?? 0)]) {",
+    "replace": "      for (const start of [before]) {"
   }, {
     "label": "in-flight check reads the state the library fills only at cleanup",
     "file": "src/adapters/collab/trial-replica.ts",
