@@ -5,6 +5,8 @@ export type ScreenUnit = { readonly painted: number } | { readonly local: string
 
 export interface LocalRun { readonly anchor: number; readonly text: string }
 export interface LocalPlan { readonly runs: readonly LocalRun[]; readonly deleted: readonly number[] }
+export type CommitStatus = "written" | "unchanged" | "moved" | "recovery";
+export interface CommitOutcome { readonly status: CommitStatus; readonly text: string }
 
 interface DocUnit { readonly painted: number | null; live: boolean }
 type Entry = { readonly painted: number; deleted: boolean } | { readonly local: string };
@@ -52,11 +54,13 @@ export class Composition {
   private readonly units: DocUnit[];
   private readonly entries: Entry[];
   private readonly observer: (event: Y.YTextEvent) => void;
+  private readonly locate: () => Y.Text | undefined;
   private open = true;
   folded = 0;
 
-  constructor(text: Y.Text) {
+  constructor(text: Y.Text, locate: () => Y.Text | undefined = () => text) {
     this.text = text;
+    this.locate = locate;
     this.painted = paintedUnits(text);
     this.units = this.painted.map((_, index) => ({ painted: index, live: true }));
     this.entries = this.painted.map((_, index) => ({ painted: index, deleted: false }));
@@ -174,9 +178,17 @@ export class Composition {
     this.close();
   }
 
-  commit(origin: unknown): boolean {
+  // why: Yjs deletes items integrated into a deleted type, so a write through a stale cell reference vanishes silently;
+  // the cell is looked up again by its owner's id and the text goes to the live cell or back to the caller
+  commit(origin: unknown): CommitOutcome {
     const plan = this.plan();
     this.close();
+    const typed = plan.runs.map(run => run.text).join(""), live = this.locate();
+    if (live !== this.text) {
+      if (live === undefined || typed === "") return { status: "recovery", text: typed };
+      live.doc?.transact(() => live.insert(live.length, typed), origin);
+      return { status: "moved", text: typed };
+    }
     const position = new Map<number, number>();
     this.units.forEach((unit, index) => { if (unit.painted !== null) position.set(unit.painted, index); });
     const liveBefore = (end: number): number => this.units.slice(0, end).filter(unit => unit.live).length;
@@ -185,8 +197,8 @@ export class Composition {
       const index = position.get(painted) ?? -1;
       if (this.units[index]?.live) ops.push({ at: liveBefore(index), order: Number.MAX_SAFE_INTEGER });
     }
-    if (ops.length === 0) return false;
+    if (ops.length === 0) return { status: "unchanged", text: typed };
     this.text.doc?.transact(() => applyOps(this.text, ops), origin);
-    return true;
+    return { status: "written", text: typed };
   }
 }

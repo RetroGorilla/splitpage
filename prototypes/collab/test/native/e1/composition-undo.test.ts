@@ -13,7 +13,7 @@ const start = (base: string, captureTimeout = 0) => {
 };
 const commit = (a: Replica, edit: Composition): void => {
   a.undo.stopCapturing();
-  assert.equal(edit.commit(a.origin), true);
+  assert.equal(edit.commit(a.origin).status, "written");
 };
 
 test("A composes Y over bc while B types Q after d; C deletes a after the commit; undo and redo keep both others' changes", () => {

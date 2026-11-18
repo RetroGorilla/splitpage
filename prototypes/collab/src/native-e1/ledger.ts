@@ -44,23 +44,31 @@ const count = (tokens: readonly string[]): Map<string, number> => {
   return counts;
 };
 
-// why: expectations come only from recorded commands: who inserted which token between which neighbours they saw,
-// and which tokens they deleted; Yjs ids are labels for instances, never a source of expected content or order
+// why: every expected instance is recorded from a command or an undo forecast before the write runs; Yjs ids are bound
+// afterwards only as labels, so an instance the write never produced stays expected and is reported missing
 export class Ledger {
   private readonly nodes = new Map<string, Node>();
   private readonly byId = new Map<string, string>();
   private readonly full = new Map<string, Set<string>>();
   private readonly live = new Map<string, Set<string>>();
 
-  add(key: string, token: string, id: string | null = key, restored = false): void {
+  add(key: string, token: string, restored = false): void {
     if (this.nodes.has(key)) throw new Error(`instance ${key} recorded twice`);
-    this.nodes.set(key, { token, id, dead: false, restored });
-    if (id !== null) this.byId.set(id, key);
+    this.nodes.set(key, { token, id: null, dead: false, restored });
   }
 
   bind(key: string, id: string): void {
     this.node(key).id = id;
     this.byId.set(id, key);
+  }
+
+  bindSeen(seen: readonly Seen[], keys: readonly string[]): string[] {
+    const unbound: string[] = [];
+    for (const key of keys) {
+      const match = seen.find(item => item.token === this.token(key) && !this.byId.has(item.id));
+      if (match === undefined || this.idOf(key) !== null) unbound.push(key); else this.bind(key, match.id);
+    }
+    return unbound;
   }
 
   has(key: string): boolean {
@@ -108,7 +116,7 @@ export class Ledger {
   // why: Yjs redoes a deleted item, possibly a run of several, between the undoing replica's left neighbour and its
   // tombstone (redoItem, Item.js): the copy follows what that replica held before the run, and precedes the original
   restore(original: string, id: string, held: (id: string) => boolean, run: ReadonlySet<string>): void {
-    this.add(id, this.token(original), id, true);
+    this.add(id, this.token(original), true);
     for (const graph of [this.full, this.live]) {
       const earlier = new Set<string>(), queue = [original];
       while (queue.length > 0) {
@@ -138,7 +146,7 @@ export class Ledger {
   }
 
   expectedTokens(): string[] {
-    return [...this.nodes.values()].filter(node => !node.dead && node.id !== null).map(node => node.token);
+    return [...this.nodes.values()].filter(node => !node.dead).map(node => node.token);
   }
 
   check(final: readonly Seen[]): LedgerFindings {
@@ -152,7 +160,7 @@ export class Ledger {
       if (this.node(key).dead) identity.push(`${label(seen.token)} shown although deleted`);
     });
     for (const [key, node] of this.nodes) {
-      if (!node.dead && node.id !== null && !position.has(key)) identity.push(`${label(node.token)} missing`);
+      if (!node.dead && !position.has(key)) identity.push(`${label(node.token)} missing${node.id === null ? ", never written" : ""}`);
     }
     const expected = count(this.expectedTokens()), actual = count(final.map(seen => seen.token));
     for (const token of new Set([...expected.keys(), ...actual.keys()])) {

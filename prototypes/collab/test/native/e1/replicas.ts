@@ -21,7 +21,16 @@ export interface Room {
 // why: every update goes into its writer's log, also the formatting clean-up a copy runs after remote formatting
 export type UndoScope = ConstructorParameters<typeof Y.UndoManager>[0];
 
-export function room(clients: readonly number[], build: (doc: Y.Doc) => void, scope: (doc: Y.Doc) => UndoScope = doc => doc.getText("t"), captureTimeout = 0): Room {
+export type CellFilter = "keep cells" | "keep content";
+
+// why: "keep cells" never deletes a created Y.Text, the rule experiment E3 owns; "keep content" is the design's filter,
+// which deletes a cell that is empty at the undoing copy
+const filters: Record<CellFilter, (type: Y.AbstractType<unknown>) => boolean> = {
+  "keep cells": type => !(type instanceof Y.Text) && (!(type instanceof Y.Map) || type.size === 0),
+  "keep content": type => type instanceof Y.Text ? type.length === 0 : type instanceof Y.Map ? type.size === 0 : true
+};
+
+export function room(clients: readonly number[], build: (doc: Y.Doc) => void, scope: (doc: Y.Doc) => UndoScope = doc => doc.getText("t"), captureTimeout = 0, filter: CellFilter = "keep cells"): Room {
   const seed = new Y.Doc();
   seed.clientID = 100;
   build(seed);
@@ -37,11 +46,7 @@ export function room(clients: readonly number[], build: (doc: Y.Doc) => void, sc
     const undo = new Y.UndoManager(scope(doc), {
       trackedOrigins: new Set([origin]),
       captureTimeout,
-      deleteFilter: item => {
-        if (!(item.content instanceof Y.ContentType)) return true;
-        const type = item.content.type;
-        return type instanceof Y.Text ? type.length === 0 : type instanceof Y.Map ? type.size === 0 : true;
-      }
+      deleteFilter: item => !(item.content instanceof Y.ContentType) || filters[filter](item.content.type as Y.AbstractType<unknown>)
     });
     return { doc, log, origin, undo };
   });

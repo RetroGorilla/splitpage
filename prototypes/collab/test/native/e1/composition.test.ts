@@ -4,7 +4,7 @@ import * as Y from "yjs";
 import { Composition } from "../../../src/native-e1/fold.ts";
 import { malformed, view } from "../../../src/native-e1/ledger.ts";
 import { agreed, bold, local, room, shown, text } from "./replicas.ts";
-import type { Replica } from "./replicas.ts";
+import type { CellFilter, Replica } from "./replicas.ts";
 
 // why: tie rule held here: text the composing person commits goes before remote text that landed in the same gap of
 // the painted screen meanwhile, as CodeMirror maps a cursor over an insertion at it (SelectionRange.map, assoc -1)
@@ -76,8 +76,8 @@ const split = (replica: Replica, at: number, id: string): void => local(replica,
   replica.doc.getMap("beats").set(id, new Y.Map());
   replica.doc.getMap("visuals").set(id, new Y.Text());
 });
-const segmented = (clients: readonly number[] = [1, 2, 3]) => {
-  const shared = room(clients, abcd, doc => [text(doc), doc.getMap("beats"), doc.getMap("visuals")]);
+const segmented = (filter: CellFilter = "keep cells") => {
+  const shared = room([1, 2, 3], abcd, doc => [text(doc), doc.getMap("beats"), doc.getMap("visuals")], 0, filter);
   return { shared, a: shared.replicas[0] as Replica, b: shared.replicas[1] as Replica };
 };
 const beats = (doc: Y.Doc): string => [...doc.getMap("beats").keys()].sort().join(",");
@@ -126,35 +126,84 @@ test("B removes or joins the composing cell's beat by flag: the composed text la
 
 const visualText = (doc: Y.Doc): string => [...doc.getMap("visuals").entries()].map(([key, value]) => `${key}:${(value as Y.Text).toString()}`).sort().join(",");
 
-test("finding: B undoes the split that made beat 2 while A composes in beat 2's empty visual cell; the composed text is gone", () => {
-  const { shared, a, b } = segmented();
+const composingInCell = (filter: CellFilter) => {
+  const { shared, a, b } = segmented(filter);
   split(b, 2, "2");
   shared.sync();
-  const cell = a.doc.getMap("visuals").get("2") as Y.Text;
-  const edit = new Composition(cell);
+  const edit = new Composition(a.doc.getMap("visuals").get("2") as Y.Text, () => a.doc.getMap("visuals").get("2") as Y.Text | undefined);
   edit.insert(0, "Y");
-  b.undo.undo();
+  return { shared, a, b, edit };
+};
+
+for (const [filter, status, expected] of [["keep content", "recovery", ""], ["keep cells", "written", "2:Y"]] as const) {
+  test(`B undoes the split while A composes Y in beat 2's empty visual cell, filter "${filter}": commit ${status}`, () => {
+    const { shared, a, b, edit } = composingInCell(filter);
+    b.undo.undo();
+    shared.send(b, a);
+    assert.deepEqual(edit.commit(a.origin), { status, text: "Y" });
+    assert.equal(a.log.length, status === "written" ? 1 : 0);
+    assert.equal(agreed(shared, visualText), expected);
+    assert.equal(agreed(shared, beats), "");
+    shared.close();
+  });
+}
+
+for (const [filter, status] of [["keep content", "moved"], ["keep cells", "written"]] as const) {
+  test(`B undoes and redoes the split while A composes Y in beat 2's visual cell, filter "${filter}": Y reaches the live cell (${status})`, () => {
+    const { shared, a, b, edit } = composingInCell(filter);
+    b.undo.undo();
+    b.undo.redo();
+    shared.send(b, a);
+    assert.deepEqual(edit.commit(a.origin), { status, text: "Y" });
+    assert.equal(agreed(shared, visualText), "2:Y");
+    assert.equal(agreed(shared, beats), "2");
+    shared.close();
+  });
+}
+
+test("B deletes beat 2's visual cell directly while A composes Y in it: nothing is written and Y comes back for recovery", () => {
+  const { shared, a, b, edit } = composingInCell("keep cells");
+  local(b, () => b.doc.getMap("visuals").delete("2"));
   shared.send(b, a);
-  assert.equal(a.doc.getMap("visuals").has("2"), false);
-  assert.equal(edit.commit(a.origin), true);
-  assert.equal(a.log.length, 1);
+  assert.deepEqual(edit.commit(a.origin), { status: "recovery", text: "Y" });
+  assert.equal(a.log.length, 0);
   assert.equal(agreed(shared, visualText), "");
-  assert.equal(agreed(shared, shownText), "abcd");
   shared.close();
 });
 
-test("control: the same loss without composition, when A types Y into the cell and B's undo cross on the wire", () => {
-  const { shared, a, b } = segmented();
-  split(b, 2, "2");
-  shared.sync();
-  local(a, () => (a.doc.getMap("visuals").get("2") as Y.Text).insert(0, "Y"));
-  b.undo.undo();
-  assert.equal(agreed(shared, visualText), "");
+test("B replaces beat 2's visual cell with a new one holding Z while A composes Y in the old one: Y goes after Z", () => {
+  const { shared, a, b, edit } = composingInCell("keep cells");
+  local(b, () => b.doc.getMap("visuals").set("2", new Y.Text("Z")));
+  shared.send(b, a);
+  assert.deepEqual(edit.commit(a.origin), { status: "moved", text: "Y" });
+  assert.equal(agreed(shared, visualText), "2:ZY");
   shared.close();
 });
+
+test("B removes beat 2 by flag and restores it while A composes Y in its visual cell: the cell is the same and Y lands", () => {
+  const { shared, a, b, edit } = composingInCell("keep cells");
+  local(b, () => (b.doc.getMap("beats").get("2") as Y.Map<unknown>).set("removed", { by: "B", at: 1 }));
+  local(b, () => (b.doc.getMap("beats").get("2") as Y.Map<unknown>).delete("removed"));
+  shared.send(b, a);
+  assert.deepEqual(edit.commit(a.origin), { status: "written", text: "Y" });
+  assert.equal(agreed(shared, visualText), "2:Y");
+  shared.close();
+});
+
+for (const [filter, expected] of [["keep content", ""], ["keep cells", "2:Y"]] as const) {
+  test(`control without composition, filter "${filter}": A types Y into the cell and B's undo cross on the wire`, () => {
+    const { shared, a, b } = segmented(filter);
+    split(b, 2, "2");
+    shared.sync();
+    local(a, () => (a.doc.getMap("visuals").get("2") as Y.Text).insert(0, "Y"));
+    b.undo.undo();
+    assert.equal(agreed(shared, visualText), expected);
+    shared.close();
+  });
+}
 
 test("control: when A's Y reaches B before B's undo, the delete filter keeps the cell and Y", () => {
-  const { shared, a, b } = segmented();
+  const { shared, a, b } = segmented("keep content");
   split(b, 2, "2");
   shared.sync();
   local(a, () => (a.doc.getMap("visuals").get("2") as Y.Text).insert(0, "Y"));
@@ -238,7 +287,7 @@ test("B deletes bc and undoes it while A composes bc away: B's restored copies s
   local(b, () => text(b.doc).delete(1, 2));
   b.undo.undo();
   shared.send(b, a);
-  assert.equal(edit.commit(a.origin), false);
+  assert.deepEqual(edit.commit(a.origin), { status: "unchanged", text: "" });
   assert.equal(agreed(shared, shownText), "abcd");
   shared.close();
 });
