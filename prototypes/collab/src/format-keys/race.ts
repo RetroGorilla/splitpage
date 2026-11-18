@@ -3,8 +3,8 @@ import { fileURLToPath } from "node:url";
 import * as Y from "yjs";
 import { NativeReplica } from "../native/variant.ts";
 import type { NativeDeltaItem } from "../native/variant.ts";
-import { NormalisingReplica, makeReplica } from "./keys.ts";
-import type { KeyScheme } from "./keys.ts";
+import { makeReplica } from "./keys.ts";
+import type { KeyScheme, NormalisingReplica } from "./keys.ts";
 import { random } from "./life.ts";
 import { marksOfNames, printCell, readCell } from "./model.ts";
 import type { ModelChar } from "./model.ts";
@@ -20,11 +20,11 @@ export type RaceStep =
 export type RaceWith = "typing" | "formatting" | "unformatting" | "deleting" | "undo" | "own-undo";
 export interface RaceRun {
   same: boolean; at: number; copy: string; without: string; with: string; executed: number; normalised: number;
-  races: RaceWith[]; convergedWithout: boolean; convergedWith: boolean; ineffective: number;
+  races: RaceWith[]; convergedWithout: boolean; convergedWith: boolean; ineffective: number; unchecked: number;
 }
 export interface RaceSummary {
   writers: number; delivery: RaceDelivery; histories: number; executed: number; normalisingCommands: number; keysTurnedOff: number;
-  historiesNormalised: number; raced: Record<RaceWith, number>; differing: number; ineffective: number; divergedWithout: number; divergedWith: number;
+  historiesNormalised: number; raced: Record<RaceWith, number>; differing: number; ineffective: number; unchecked: number; divergedWithout: number; divergedWith: number;
   shortest: { steps: RaceStep[]; described: string[]; without: string; with: string; copy: string } | null;
 }
 
@@ -122,7 +122,7 @@ export function runRace(steps: readonly RaceStep[], writers: number, delivery: R
   patch?: (replica: NativeReplica) => void): RaceRun {
   const seed = seedState(), without = new Net("act", writers, seed, patch), withRule = new Net("act+norm", writers, seed, patch);
   const known = Array.from({ length: writers }, () => new Set<number>()), issued: Issued[] = [], own = Array.from({ length: writers }, (): number[] => []);
-  const result: RaceRun = { same: true, at: -1, copy: "", without: "", with: "", executed: 0, normalised: 0, races: [], convergedWithout: true, convergedWith: true, ineffective: 0 };
+  const result: RaceRun = { same: true, at: -1, copy: "", without: "", with: "", executed: 0, normalised: 0, races: [], convergedWithout: true, convergedWith: true, ineffective: 0, unchecked: 0 };
   const compare = (at: number, extra: [string, NativeReplica, NativeReplica][] = []): boolean => {
     const pairs: [string, NativeReplica, NativeReplica][] = [...without.copies.map((copy, index): [string, NativeReplica, NativeReplica] => [`copy ${index + 1}`, copy.replica, (withRule.copies[index] as Copy).replica]), ...extra];
     for (const [name, left, right] of pairs) {
@@ -170,7 +170,10 @@ export function runRace(steps: readonly RaceStep[], writers: number, delivery: R
       }
       kind = step.op === "delete" ? "deleting" : step.op === "add" ? "formatting" : "unformatting";
     }
-    if (!took(step, chars, left) || !took(step, chars, right)) { result.ineffective++; Object.assign(result, { same: false, at: position, copy: `copy ${step.by + 1}, command without its effect` }); stopped = true; break; }
+    // why: two undos that each restore one deleted letter show it twice (the spike's double-restore); a letter is then
+    // no longer found by identity, so such commands are counted and not checked for their effect
+    if (new Set(chars.map(item => item.ch)).size < chars.length) result.unchecked++;
+    else if (!took(step, chars, left) || !took(step, chars, right)) { result.ineffective++; Object.assign(result, { same: false, at: position, copy: `copy ${step.by + 1}, command without its effect` }); stopped = true; break; }
     const normalising = (right as NormalisingReplica).turnedOff > before, id = issued.length;
     if (normalising) result.normalised += (right as NormalisingReplica).turnedOff - before;
     issued.push({ id, by: step.by, kind, known: new Set(known[step.by]), normalising });
@@ -250,7 +253,7 @@ export function shrinkRace(steps: readonly RaceStep[], fails: (candidate: readon
 
 export function surveyRace(writers: number, delivery: RaceDelivery, seeds: number, length: number, first = 1): RaceSummary {
   const raced = { typing: 0, formatting: 0, unformatting: 0, deleting: 0, undo: 0, "own-undo": 0 };
-  const summary: RaceSummary = { writers, delivery, histories: seeds, executed: 0, normalisingCommands: 0, keysTurnedOff: 0, historiesNormalised: 0, raced, differing: 0, ineffective: 0, divergedWithout: 0, divergedWith: 0, shortest: null };
+  const summary: RaceSummary = { writers, delivery, histories: seeds, executed: 0, normalisingCommands: 0, keysTurnedOff: 0, historiesNormalised: 0, raced, differing: 0, ineffective: 0, unchecked: 0, divergedWithout: 0, divergedWith: 0, shortest: null };
   for (let seed = first; seed < first + seeds; seed++) {
     const steps = generateRace(seed, writers, length), run = runRace(steps, writers, delivery);
     summary.executed += run.executed; summary.keysTurnedOff += run.normalised;
@@ -259,6 +262,7 @@ export function surveyRace(writers: number, delivery: RaceDelivery, seeds: numbe
     if (!run.convergedWithout) summary.divergedWithout++;
     if (!run.convergedWith) summary.divergedWith++;
     if (run.ineffective) summary.ineffective++;
+    summary.unchecked += run.unchecked;
     if (run.same) continue;
     summary.differing++;
     if (summary.shortest && summary.shortest.steps.length <= 4) continue;

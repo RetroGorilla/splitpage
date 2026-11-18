@@ -1,0 +1,1089 @@
+{
+  "node": "v24.22.1",
+  "patterns": [
+    {
+      "pattern": "prefix",
+      "scheme": "act",
+      "actions": 100,
+      "keysMedian": 50,
+      "keysP95": 95,
+      "keysMax": 100,
+      "mostOfOneKind": 100,
+      "bytes": 5054,
+      "bytesAdded": 4947,
+      "bytesPerAction": 49.5,
+      "readMs": 0.6953,
+      "afterUnformat": 2768,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 1,
+        "bytes": 2909,
+        "readMs": 0.0018
+      },
+      "rebuilt": {
+        "bytes": 243,
+        "readMs": 0.0006
+      }
+    },
+    {
+      "pattern": "prefix",
+      "scheme": "act+norm",
+      "actions": 100,
+      "keysMedian": 1,
+      "keysP95": 1,
+      "keysMax": 1,
+      "mostOfOneKind": 1,
+      "bytes": 2897,
+      "bytesAdded": 2790,
+      "bytesPerAction": 27.9,
+      "readMs": 0.0017,
+      "afterUnformat": 2768,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 1,
+        "bytes": 2909,
+        "readMs": 0.0017
+      },
+      "rebuilt": {
+        "bytes": 237,
+        "readMs": 0.0005
+      }
+    },
+    {
+      "pattern": "prefix",
+      "scheme": "name",
+      "actions": 100,
+      "keysMedian": 1,
+      "keysP95": 1,
+      "keysMax": 1,
+      "mostOfOneKind": 1,
+      "bytes": 1337,
+      "bytesAdded": 1230,
+      "bytesPerAction": 12.3,
+      "readMs": 0.0012,
+      "afterUnformat": 1221,
+      "mismatches": 0
+    },
+    {
+      "pattern": "prefix",
+      "scheme": "act",
+      "actions": 300,
+      "keysMedian": 150,
+      "keysP95": 285,
+      "keysMax": 300,
+      "mostOfOneKind": 300,
+      "bytes": 15455,
+      "bytesAdded": 15348,
+      "bytesPerAction": 51.2,
+      "readMs": 5.877,
+      "afterUnformat": 8769,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 1,
+        "bytes": 8910,
+        "readMs": 0.0039
+      },
+      "rebuilt": {
+        "bytes": 444,
+        "readMs": 0.0005
+      }
+    },
+    {
+      "pattern": "prefix",
+      "scheme": "act+norm",
+      "actions": 300,
+      "keysMedian": 1,
+      "keysP95": 1,
+      "keysMax": 1,
+      "mostOfOneKind": 1,
+      "bytes": 8898,
+      "bytesAdded": 8791,
+      "bytesPerAction": 29.3,
+      "readMs": 0.0039,
+      "afterUnformat": 8769,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 1,
+        "bytes": 8910,
+        "readMs": 0.004
+      },
+      "rebuilt": {
+        "bytes": 439,
+        "readMs": 0.0005
+      }
+    },
+    {
+      "pattern": "prefix",
+      "scheme": "name",
+      "actions": 300,
+      "keysMedian": 1,
+      "keysP95": 1,
+      "keysMax": 1,
+      "mostOfOneKind": 1,
+      "bytes": 4138,
+      "bytesAdded": 4031,
+      "bytesPerAction": 13.4,
+      "readMs": 0.0025,
+      "afterUnformat": 4022,
+      "mismatches": 0
+    },
+    {
+      "pattern": "toggle",
+      "scheme": "act",
+      "actions": 100,
+      "keysMedian": 0,
+      "keysP95": 0,
+      "keysMax": 0,
+      "mostOfOneKind": 0,
+      "bytes": 1233,
+      "bytesAdded": 719,
+      "bytesPerAction": 7.2,
+      "readMs": 0.0005,
+      "afterUnformat": 719,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 0,
+        "bytes": 1233,
+        "readMs": 0.0005
+      },
+      "rebuilt": {
+        "bytes": 510,
+        "readMs": 0.0003
+      }
+    },
+    {
+      "pattern": "toggle",
+      "scheme": "act+norm",
+      "actions": 100,
+      "keysMedian": 0,
+      "keysP95": 0,
+      "keysMax": 0,
+      "mostOfOneKind": 0,
+      "bytes": 1233,
+      "bytesAdded": 719,
+      "bytesPerAction": 7.2,
+      "readMs": 0.0005,
+      "afterUnformat": 719,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 0,
+        "bytes": 1233,
+        "readMs": 0.0005
+      },
+      "rebuilt": {
+        "bytes": 510,
+        "readMs": 0.0003
+      }
+    },
+    {
+      "pattern": "toggle",
+      "scheme": "name",
+      "actions": 100,
+      "keysMedian": 0,
+      "keysP95": 0,
+      "keysMax": 0,
+      "mostOfOneKind": 0,
+      "bytes": 1233,
+      "bytesAdded": 719,
+      "bytesPerAction": 7.2,
+      "readMs": 0.0005,
+      "afterUnformat": 719,
+      "mismatches": 0
+    },
+    {
+      "pattern": "toggle",
+      "scheme": "act",
+      "actions": 300,
+      "keysMedian": 0,
+      "keysP95": 0,
+      "keysMax": 0,
+      "mostOfOneKind": 0,
+      "bytes": 2805,
+      "bytesAdded": 2291,
+      "bytesPerAction": 7.6,
+      "readMs": 0.0008,
+      "afterUnformat": 2291,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 0,
+        "bytes": 2805,
+        "readMs": 0.0008
+      },
+      "rebuilt": {
+        "bytes": 510,
+        "readMs": 0.0003
+      }
+    },
+    {
+      "pattern": "toggle",
+      "scheme": "act+norm",
+      "actions": 300,
+      "keysMedian": 0,
+      "keysP95": 0,
+      "keysMax": 0,
+      "mostOfOneKind": 0,
+      "bytes": 2805,
+      "bytesAdded": 2291,
+      "bytesPerAction": 7.6,
+      "readMs": 0.0009,
+      "afterUnformat": 2291,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 0,
+        "bytes": 2805,
+        "readMs": 0.0008
+      },
+      "rebuilt": {
+        "bytes": 510,
+        "readMs": 0.0003
+      }
+    },
+    {
+      "pattern": "toggle",
+      "scheme": "name",
+      "actions": 300,
+      "keysMedian": 0,
+      "keysP95": 0,
+      "keysMax": 0,
+      "mostOfOneKind": 0,
+      "bytes": 2805,
+      "bytesAdded": 2291,
+      "bytesPerAction": 7.6,
+      "readMs": 0.0009,
+      "afterUnformat": 2291,
+      "mismatches": 0
+    },
+    {
+      "pattern": "overlapping",
+      "scheme": "act",
+      "actions": 100,
+      "keysMedian": 2,
+      "keysP95": 5,
+      "keysMax": 8,
+      "mostOfOneKind": 8,
+      "bytes": 5108,
+      "bytesAdded": 4594,
+      "bytesPerAction": 45.9,
+      "readMs": 0.0158,
+      "afterUnformat": 3263,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 1,
+        "bytes": 3963,
+        "readMs": 0.0031
+      },
+      "rebuilt": {
+        "bytes": 720,
+        "readMs": 0.0013
+      }
+    },
+    {
+      "pattern": "overlapping",
+      "scheme": "act+norm",
+      "actions": 100,
+      "keysMedian": 2,
+      "keysP95": 2,
+      "keysMax": 3,
+      "mostOfOneKind": 3,
+      "bytes": 3983,
+      "bytesAdded": 3469,
+      "bytesPerAction": 34.7,
+      "readMs": 0.0059,
+      "afterUnformat": 3016,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 1,
+        "bytes": 3716,
+        "readMs": 0.0029
+      },
+      "rebuilt": {
+        "bytes": 720,
+        "readMs": 0.0014
+      }
+    },
+    {
+      "pattern": "overlapping",
+      "scheme": "name",
+      "actions": 100,
+      "keysMedian": 1,
+      "keysP95": 1,
+      "keysMax": 1,
+      "mostOfOneKind": 1,
+      "bytes": 2305,
+      "bytesAdded": 1791,
+      "bytesPerAction": 17.9,
+      "readMs": 0.0037,
+      "afterUnformat": 1723,
+      "mismatches": 0
+    },
+    {
+      "pattern": "overlapping",
+      "scheme": "act",
+      "actions": 300,
+      "keysMedian": 2,
+      "keysP95": 5,
+      "keysMax": 12,
+      "mostOfOneKind": 12,
+      "bytes": 12223,
+      "bytesAdded": 11709,
+      "bytesPerAction": 39,
+      "readMs": 0.0193,
+      "afterUnformat": 10013,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 1,
+        "bytes": 10710,
+        "readMs": 0.0057
+      },
+      "rebuilt": {
+        "bytes": 727,
+        "readMs": 0.0013
+      }
+    },
+    {
+      "pattern": "overlapping",
+      "scheme": "act+norm",
+      "actions": 300,
+      "keysMedian": 1,
+      "keysP95": 2,
+      "keysMax": 2,
+      "mostOfOneKind": 2,
+      "bytes": 9578,
+      "bytesAdded": 9064,
+      "bytesPerAction": 30.2,
+      "readMs": 0.0078,
+      "afterUnformat": 8671,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 1,
+        "bytes": 9368,
+        "readMs": 0.0051
+      },
+      "rebuilt": {
+        "bytes": 727,
+        "readMs": 0.0012
+      }
+    },
+    {
+      "pattern": "overlapping",
+      "scheme": "name",
+      "actions": 300,
+      "keysMedian": 1,
+      "keysP95": 1,
+      "keysMax": 1,
+      "mostOfOneKind": 1,
+      "bytes": 5169,
+      "bytesAdded": 4655,
+      "bytesPerAction": 15.5,
+      "readMs": 0.0037,
+      "afterUnformat": 4575,
+      "mismatches": 0
+    },
+    {
+      "pattern": "alternate",
+      "scheme": "act",
+      "actions": 100,
+      "keysMedian": 1,
+      "keysP95": 3,
+      "keysMax": 3,
+      "mostOfOneKind": 3,
+      "bytes": 2659,
+      "bytesAdded": 2145,
+      "bytesPerAction": 21.5,
+      "readMs": 0.0024,
+      "afterUnformat": 1972,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 1,
+        "bytes": 2562,
+        "readMs": 0.0015
+      },
+      "rebuilt": {
+        "bytes": 600,
+        "readMs": 0.0007
+      }
+    },
+    {
+      "pattern": "alternate",
+      "scheme": "act+norm",
+      "actions": 100,
+      "keysMedian": 1,
+      "keysP95": 1,
+      "keysMax": 1,
+      "mostOfOneKind": 1,
+      "bytes": 2458,
+      "bytesAdded": 1944,
+      "bytesPerAction": 19.4,
+      "readMs": 0.0015,
+      "afterUnformat": 1862,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 1,
+        "bytes": 2449,
+        "readMs": 0.0014
+      },
+      "rebuilt": {
+        "bytes": 592,
+        "readMs": 0.0008
+      }
+    },
+    {
+      "pattern": "alternate",
+      "scheme": "name",
+      "actions": 100,
+      "keysMedian": 1,
+      "keysP95": 1,
+      "keysMax": 1,
+      "mostOfOneKind": 1,
+      "bytes": 1503,
+      "bytesAdded": 989,
+      "bytesPerAction": 9.9,
+      "readMs": 0.001,
+      "afterUnformat": 954,
+      "mismatches": 0
+    },
+    {
+      "pattern": "alternate",
+      "scheme": "act",
+      "actions": 300,
+      "keysMedian": 2,
+      "keysP95": 2,
+      "keysMax": 3,
+      "mostOfOneKind": 3,
+      "bytes": 6806,
+      "bytesAdded": 6292,
+      "bytesPerAction": 21,
+      "readMs": 0.004,
+      "afterUnformat": 6065,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 1,
+        "bytes": 6655,
+        "readMs": 0.003
+      },
+      "rebuilt": {
+        "bytes": 588,
+        "readMs": 0.0007
+      }
+    },
+    {
+      "pattern": "alternate",
+      "scheme": "act+norm",
+      "actions": 300,
+      "keysMedian": 2,
+      "keysP95": 2,
+      "keysMax": 2,
+      "mostOfOneKind": 2,
+      "bytes": 6425,
+      "bytesAdded": 5911,
+      "bytesPerAction": 19.7,
+      "readMs": 0.0041,
+      "afterUnformat": 5771,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 1,
+        "bytes": 6361,
+        "readMs": 0.0029
+      },
+      "rebuilt": {
+        "bytes": 588,
+        "readMs": 0.0007
+      }
+    },
+    {
+      "pattern": "alternate",
+      "scheme": "name",
+      "actions": 300,
+      "keysMedian": 1,
+      "keysP95": 1,
+      "keysMax": 1,
+      "mostOfOneKind": 1,
+      "bytes": 3077,
+      "bytesAdded": 2563,
+      "bytesPerAction": 8.5,
+      "readMs": 0.0018,
+      "afterUnformat": 2527,
+      "mismatches": 0
+    },
+    {
+      "pattern": "sliding",
+      "scheme": "act",
+      "actions": 100,
+      "keysMedian": 20,
+      "keysP95": 20,
+      "keysMax": 20,
+      "mostOfOneKind": 20,
+      "bytes": 4529,
+      "bytesAdded": 4296,
+      "bytesPerAction": 43,
+      "readMs": 0.2261,
+      "afterUnformat": 2137,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 1,
+        "bytes": 2408,
+        "readMs": 0.0017
+      },
+      "rebuilt": {
+        "bytes": 267,
+        "readMs": 0.0006
+      }
+    },
+    {
+      "pattern": "sliding",
+      "scheme": "act+norm",
+      "actions": 100,
+      "keysMedian": 20,
+      "keysP95": 20,
+      "keysMax": 20,
+      "mostOfOneKind": 20,
+      "bytes": 4529,
+      "bytesAdded": 4296,
+      "bytesPerAction": 43,
+      "readMs": 0.2444,
+      "afterUnformat": 2137,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 1,
+        "bytes": 2408,
+        "readMs": 0.0028
+      },
+      "rebuilt": {
+        "bytes": 267,
+        "readMs": 0.0008
+      }
+    },
+    {
+      "pattern": "sliding",
+      "scheme": "name",
+      "actions": 100,
+      "keysMedian": 1,
+      "keysP95": 1,
+      "keysMax": 1,
+      "mostOfOneKind": 1,
+      "bytes": 1557,
+      "bytesAdded": 1324,
+      "bytesPerAction": 13.2,
+      "readMs": 0.0022,
+      "afterUnformat": 1312,
+      "mismatches": 0
+    },
+    {
+      "pattern": "sliding",
+      "scheme": "act",
+      "actions": 300,
+      "keysMedian": 20,
+      "keysP95": 20,
+      "keysMax": 20,
+      "mostOfOneKind": 20,
+      "bytes": 14088,
+      "bytesAdded": 13654,
+      "bytesPerAction": 45.5,
+      "readMs": 0.7568,
+      "afterUnformat": 7095,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 1,
+        "bytes": 7568,
+        "readMs": 0.0037
+      },
+      "rebuilt": {
+        "bytes": 468,
+        "readMs": 0.0008
+      }
+    },
+    {
+      "pattern": "sliding",
+      "scheme": "act+norm",
+      "actions": 300,
+      "keysMedian": 20,
+      "keysP95": 20,
+      "keysMax": 20,
+      "mostOfOneKind": 20,
+      "bytes": 14088,
+      "bytesAdded": 13654,
+      "bytesPerAction": 45.5,
+      "readMs": 0.7789,
+      "afterUnformat": 7095,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 1,
+        "bytes": 7568,
+        "readMs": 0.0035
+      },
+      "rebuilt": {
+        "bytes": 468,
+        "readMs": 0.0005
+      }
+    },
+    {
+      "pattern": "sliding",
+      "scheme": "name",
+      "actions": 300,
+      "keysMedian": 1,
+      "keysP95": 1,
+      "keysMax": 1,
+      "mostOfOneKind": 1,
+      "bytes": 4943,
+      "bytesAdded": 4509,
+      "bytesPerAction": 15,
+      "readMs": 0.0028,
+      "afterUnformat": 4497,
+      "mismatches": 0
+    },
+    {
+      "pattern": "type-inside",
+      "scheme": "act",
+      "actions": 100,
+      "keysMedian": 75,
+      "keysP95": 101,
+      "keysMax": 101,
+      "mostOfOneKind": 101,
+      "bytes": 13496,
+      "bytesAdded": 12982,
+      "bytesPerAction": 129.8,
+      "readMs": 0.5798,
+      "afterUnformat": 5913,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 1,
+        "bytes": 6465,
+        "readMs": 0.0025
+      },
+      "rebuilt": {
+        "bytes": 653,
+        "readMs": 0.0008
+      }
+    },
+    {
+      "pattern": "type-inside",
+      "scheme": "act+norm",
+      "actions": 100,
+      "keysMedian": 1,
+      "keysP95": 1,
+      "keysMax": 1,
+      "mostOfOneKind": 1,
+      "bytes": 5563,
+      "bytesAdded": 5049,
+      "bytesPerAction": 50.5,
+      "readMs": 0.002,
+      "afterUnformat": 5027,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 1,
+        "bytes": 5579,
+        "readMs": 0.0021
+      },
+      "rebuilt": {
+        "bytes": 649,
+        "readMs": 0.0007
+      }
+    },
+    {
+      "pattern": "type-inside",
+      "scheme": "name",
+      "actions": 100,
+      "keysMedian": 1,
+      "keysP95": 1,
+      "keysMax": 1,
+      "mostOfOneKind": 1,
+      "bytes": 3071,
+      "bytesAdded": 2557,
+      "bytesPerAction": 25.6,
+      "readMs": 0.0014,
+      "afterUnformat": 2545,
+      "mismatches": 0
+    },
+    {
+      "pattern": "type-inside",
+      "scheme": "act",
+      "actions": 300,
+      "keysMedian": 175,
+      "keysP95": 301,
+      "keysMax": 301,
+      "mostOfOneKind": 301,
+      "bytes": 42718,
+      "bytesAdded": 42204,
+      "bytesPerAction": 140.7,
+      "readMs": 6.35,
+      "afterUnformat": 19501,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 1,
+        "bytes": 20054,
+        "readMs": 0.0062
+      },
+      "rebuilt": {
+        "bytes": 853,
+        "readMs": 0.0008
+      }
+    },
+    {
+      "pattern": "type-inside",
+      "scheme": "act+norm",
+      "actions": 300,
+      "keysMedian": 1,
+      "keysP95": 1,
+      "keysMax": 1,
+      "mostOfOneKind": 1,
+      "bytes": 15966,
+      "bytesAdded": 15452,
+      "bytesPerAction": 51.5,
+      "readMs": 0.0049,
+      "afterUnformat": 15428,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 1,
+        "bytes": 15980,
+        "readMs": 0.0076
+      },
+      "rebuilt": {
+        "bytes": 849,
+        "readMs": 0.0005
+      }
+    },
+    {
+      "pattern": "type-inside",
+      "scheme": "name",
+      "actions": 300,
+      "keysMedian": 1,
+      "keysP95": 1,
+      "keysMax": 1,
+      "mostOfOneKind": 1,
+      "bytes": 8672,
+      "bytesAdded": 8158,
+      "bytesPerAction": 27.2,
+      "readMs": 0.0032,
+      "afterUnformat": 8146,
+      "mismatches": 0
+    },
+    {
+      "pattern": "punch",
+      "scheme": "act",
+      "actions": 100,
+      "keysMedian": 36,
+      "keysP95": 101,
+      "keysMax": 101,
+      "mostOfOneKind": 101,
+      "bytes": 78797,
+      "bytesAdded": 78283,
+      "bytesPerAction": 782.8,
+      "readMs": 0.3611,
+      "afterUnformat": 38547,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 1,
+        "bytes": 39099,
+        "readMs": 0.017
+      },
+      "rebuilt": {
+        "bytes": 552,
+        "readMs": 0.0005
+      }
+    },
+    {
+      "pattern": "punch",
+      "scheme": "act+norm",
+      "actions": 100,
+      "keysMedian": 1,
+      "keysP95": 1,
+      "keysMax": 1,
+      "mostOfOneKind": 1,
+      "bytes": 4686,
+      "bytesAdded": 4172,
+      "bytesPerAction": 41.7,
+      "readMs": 0.0031,
+      "afterUnformat": 4150,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 1,
+        "bytes": 4702,
+        "readMs": 0.003
+      },
+      "rebuilt": {
+        "bytes": 546,
+        "readMs": 0.0009
+      }
+    },
+    {
+      "pattern": "punch",
+      "scheme": "name",
+      "actions": 100,
+      "keysMedian": 1,
+      "keysP95": 1,
+      "keysMax": 1,
+      "mostOfOneKind": 1,
+      "bytes": 2262,
+      "bytesAdded": 1748,
+      "bytesPerAction": 17.5,
+      "readMs": 0.0012,
+      "afterUnformat": 1736,
+      "mismatches": 0
+    },
+    {
+      "pattern": "punch",
+      "scheme": "act",
+      "actions": 300,
+      "keysMedian": 37,
+      "keysP95": 165,
+      "keysMax": 301,
+      "mostOfOneKind": 301,
+      "bytes": 210118,
+      "bytesAdded": 209604,
+      "bytesPerAction": 698.7,
+      "readMs": 0.6005,
+      "afterUnformat": 149830,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 1,
+        "bytes": 150383,
+        "readMs": 0.1767
+      },
+      "rebuilt": {
+        "bytes": 552,
+        "readMs": 0.0005
+      }
+    },
+    {
+      "pattern": "punch",
+      "scheme": "act+norm",
+      "actions": 300,
+      "keysMedian": 1,
+      "keysP95": 1,
+      "keysMax": 1,
+      "mostOfOneKind": 1,
+      "bytes": 12690,
+      "bytesAdded": 12176,
+      "bytesPerAction": 40.6,
+      "readMs": 0.0041,
+      "afterUnformat": 12152,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 1,
+        "bytes": 12704,
+        "readMs": 0.0058
+      },
+      "rebuilt": {
+        "bytes": 546,
+        "readMs": 0.0008
+      }
+    },
+    {
+      "pattern": "punch",
+      "scheme": "name",
+      "actions": 300,
+      "keysMedian": 1,
+      "keysP95": 1,
+      "keysMax": 1,
+      "mostOfOneKind": 1,
+      "bytes": 5433,
+      "bytesAdded": 4919,
+      "bytesPerAction": 16.4,
+      "readMs": 0.0023,
+      "afterUnformat": 4907,
+      "mismatches": 0
+    },
+    {
+      "pattern": "paste",
+      "scheme": "act",
+      "actions": 100,
+      "keysMedian": 1,
+      "keysP95": 2,
+      "keysMax": 2,
+      "mostOfOneKind": 1,
+      "bytes": 42695,
+      "bytesAdded": 42078,
+      "bytesPerAction": 420.8,
+      "readMs": 0.3057,
+      "afterUnformat": 22589,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 2,
+        "bytes": 47388,
+        "readMs": 0.2441
+      },
+      "rebuilt": {
+        "bytes": 38228,
+        "readMs": 0.1709
+      }
+    },
+    {
+      "pattern": "paste",
+      "scheme": "act+norm",
+      "actions": 100,
+      "keysMedian": 1,
+      "keysP95": 2,
+      "keysMax": 2,
+      "mostOfOneKind": 1,
+      "bytes": 42695,
+      "bytesAdded": 42078,
+      "bytesPerAction": 420.8,
+      "readMs": 0.1571,
+      "afterUnformat": 22589,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 2,
+        "bytes": 47388,
+        "readMs": 0.254
+      },
+      "rebuilt": {
+        "bytes": 38228,
+        "readMs": 0.1515
+      }
+    },
+    {
+      "pattern": "paste",
+      "scheme": "name",
+      "actions": 100,
+      "keysMedian": 1,
+      "keysP95": 2,
+      "keysMax": 2,
+      "mostOfOneKind": 1,
+      "bytes": 30291,
+      "bytesAdded": 29722,
+      "bytesPerAction": 297.2,
+      "readMs": 0.1173,
+      "afterUnformat": 19310,
+      "mismatches": 0
+    },
+    {
+      "pattern": "paste",
+      "scheme": "act",
+      "actions": 300,
+      "keysMedian": 1,
+      "keysP95": 2,
+      "keysMax": 2,
+      "mostOfOneKind": 1,
+      "bytes": 147883,
+      "bytesAdded": 147266,
+      "bytesPerAction": 490.9,
+      "readMs": 1.0417,
+      "afterUnformat": 78179,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 2,
+        "bytes": 164334,
+        "readMs": 1.1741
+      },
+      "rebuilt": {
+        "bytes": 132138,
+        "readMs": 1.2796
+      }
+    },
+    {
+      "pattern": "paste",
+      "scheme": "act+norm",
+      "actions": 300,
+      "keysMedian": 1,
+      "keysP95": 2,
+      "keysMax": 2,
+      "mostOfOneKind": 1,
+      "bytes": 147883,
+      "bytesAdded": 147266,
+      "bytesPerAction": 490.9,
+      "readMs": 1.1817,
+      "afterUnformat": 78179,
+      "mismatches": 0,
+      "collapsed": {
+        "keysMax": 2,
+        "bytes": 164334,
+        "readMs": 1.1594
+      },
+      "rebuilt": {
+        "bytes": 132138,
+        "readMs": 1.2704
+      }
+    },
+    {
+      "pattern": "paste",
+      "scheme": "name",
+      "actions": 300,
+      "keysMedian": 1,
+      "keysP95": 2,
+      "keysMax": 2,
+      "mostOfOneKind": 1,
+      "bytes": 99551,
+      "bytesAdded": 98982,
+      "bytesPerAction": 329.9,
+      "readMs": 0.457,
+      "afterUnformat": 63734,
+      "mismatches": 0
+    }
+  ],
+  "undoAfterCollapse": {
+    "without": "abcdefgHIj",
+    "with": "abCDEfgHIj (the undo changed nothing)"
+  },
+  "curve": [
+    {
+      "acts": 4,
+      "keysMedian": 4,
+      "keysMax": 4,
+      "items": 9,
+      "bytes": 690,
+      "readMs": 0.0019,
+      "collapsedBytes": 644,
+      "collapsedReadMs": 0.0005
+    },
+    {
+      "acts": 8,
+      "keysMedian": 7,
+      "keysMax": 8,
+      "items": 17,
+      "bytes": 872,
+      "readMs": 0.005,
+      "collapsedBytes": 738,
+      "collapsedReadMs": 0.0006
+    },
+    {
+      "acts": 16,
+      "keysMedian": 11,
+      "keysMax": 16,
+      "items": 31,
+      "bytes": 1233,
+      "readMs": 0.0141,
+      "collapsedBytes": 923,
+      "collapsedReadMs": 0.0008
+    },
+    {
+      "acts": 32,
+      "keysMedian": 19,
+      "keysMax": 32,
+      "items": 59,
+      "bytes": 1945,
+      "readMs": 0.1017,
+      "collapsedBytes": 1283,
+      "collapsedReadMs": 0.0011
+    },
+    {
+      "acts": 64,
+      "keysMedian": 33,
+      "keysMax": 64,
+      "items": 109,
+      "bytes": 3357,
+      "readMs": 0.3758,
+      "collapsedBytes": 1992,
+      "collapsedReadMs": 0.0016
+    },
+    {
+      "acts": 128,
+      "keysMedian": 65,
+      "keysMax": 128,
+      "items": 189,
+      "bytes": 6097,
+      "readMs": 1.5135,
+      "collapsedBytes": 3324,
+      "collapsedReadMs": 0.0026
+    },
+    {
+      "acts": 256,
+      "keysMedian": 129,
+      "keysMax": 256,
+      "items": 280,
+      "bytes": 11273,
+      "readMs": 4.8557,
+      "collapsedBytes": 5684,
+      "collapsedReadMs": 0.004
+    }
+  ]
+}

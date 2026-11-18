@@ -9,13 +9,12 @@ import { collapse, countKeys, quantile, rebuiltDelta } from "./keys.ts";
 import type { KeyScheme } from "./keys.ts";
 import { readCell, firstDifference } from "./model.ts";
 import { CheckFailure, World, cellKey, deltaOf, pasteRuns } from "./world.ts";
-import type { Command, Mismatch, Snapshot } from "./world.ts";
+import type { Mismatch, Snapshot } from "./world.ts";
 
 export interface Rate { name: string; typed: number; formats: number; pastes: number; overlap: number; undo: number }
 
-// why: the long demo, typed in full, holds 72 formatted runs in 10,424 characters, 61 of them tags. A realistic day
-// revises a tenth of the script and makes 20 formatting commands; a heavy one makes ten times as many, half over
-// text that already shows the same kind, the pattern where one key per action stacks keys
+// why: the typed long demo holds 72 formatted runs in 10,424 characters; a realistic day revises a tenth of it with 20
+// formatting commands, a heavy day makes ten times as many, half over text already showing the kind (RESULT.md)
 export const RATES: Record<string, Rate> = {
   realistic: { name: "realistic", typed: 1000, formats: 20, pastes: 2, overlap: 0.2, undo: 0.1 },
   heavy: { name: "heavy", typed: 1000, formats: 200, pastes: 20, overlap: 0.5, undo: 0.1 }
@@ -91,7 +90,7 @@ function act(world: World, writer: number, beat: string, intent: Intent, rate: R
     let from: number, to: number;
     if (existing.length && next() < rate.overlap) {
       const run = existing[pick(existing.length)] as { from: number; to: number };
-      from = Math.max(0, run.from + pick(13) - 6); to = Math.min(length, Math.max(from + 1, run.to + pick(13) - 6));
+      from = Math.min(length - 1, Math.max(0, run.from + pick(13) - 6)); to = Math.min(length, Math.max(from + 1, run.to + pick(13) - 6));
     } else {
       from = pick(length - 2); to = Math.min(length, from + 3 + pick(38));
     }
@@ -132,21 +131,24 @@ export function life(scheme: KeyScheme, rate: Rate, writers: number, days: numbe
   let firstMismatch: Mismatch | null = null, totalBytes = 0;
   try { typeTape(world); } catch (error) { if (!(error instanceof CheckFailure)) throw error; firstMismatch = error.mismatch; days = 0; }
   for (let day = 1; day <= days; day++) {
-    let dayFormatting = 0, dayBytes = 0;
-    try {
-      const edits: Intent[] = [];
-      for (let typed = 0; typed < rate.typed;) { const length = 5 + Math.floor(next() * 36); edits.push({ kind: "edit", length }); typed += length; }
-      phase(world, edits, rate, next);
-      const before = world.bytes(), formattedBefore = world.formatting;
-      const marks: Intent[] = [...Array.from({ length: rate.formats }, (): Intent => ({ kind: "format" })), ...Array.from({ length: rate.pastes }, (): Intent => ({ kind: "paste" }))];
-      for (let index = marks.length - 1; index > 0; index--) { const other = Math.floor(next() * (index + 1)); [marks[index], marks[other]] = [marks[other] as Intent, marks[index] as Intent]; }
-      phase(world, marks, rate, next);
-      dayFormatting = world.formatting - formattedBefore; dayBytes = world.bytes() - before;
-    } catch (error) {
-      if (!(error instanceof CheckFailure)) throw error;
-      firstMismatch = error.mismatch;
-      break;
-    }
+    const outcome = ((): { dayFormatting: number; dayBytes: number } | null => {
+      try {
+        const edits: Intent[] = [];
+        for (let typed = 0; typed < rate.typed;) { const length = 5 + Math.floor(next() * 36); edits.push({ kind: "edit", length }); typed += length; }
+        phase(world, edits, rate, next);
+        const before = world.bytes(), formattedBefore = world.formatting;
+        const marks: Intent[] = [...Array.from({ length: rate.formats }, (): Intent => ({ kind: "format" })), ...Array.from({ length: rate.pastes }, (): Intent => ({ kind: "paste" }))];
+        for (let index = marks.length - 1; index > 0; index--) { const other = Math.floor(next() * (index + 1)); [marks[index], marks[other]] = [marks[other] as Intent, marks[index] as Intent]; }
+        phase(world, marks, rate, next);
+        return { dayFormatting: world.formatting - formattedBefore, dayBytes: world.bytes() - before };
+      } catch (error) {
+        if (!(error instanceof CheckFailure)) throw error;
+        firstMismatch = error.mismatch;
+        return null;
+      }
+    })();
+    if (!outcome) break;
+    const { dayFormatting, dayBytes } = outcome;
     totalBytes += dayBytes;
     if (day === days || report.includes(day)) {
       const mismatches = world.check();

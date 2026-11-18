@@ -113,6 +113,7 @@ export class World {
       replica.splice(command.beat, command.field, command.from, command.to, []);
       this.model.remove(key, command.from, command.to);
     } else if (command.op === "format") {
+      if (command.to <= command.from || command.to > length) throw new Error(`Empty or outside range ${command.from}..${command.to}`);
       this.model.save(writer, key);
       replica.format(command.beat, command.field, command.from, command.to, { [command.name]: command.on ? true : null });
       this.model.set(key, command.from, command.to, command.name, command.on);

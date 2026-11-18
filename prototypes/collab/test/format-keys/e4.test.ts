@@ -56,7 +56,7 @@ test("each worst-case pattern's check fails when its command does nothing", () =
   for (const [patch, pattern] of [[noFormat, "prefix"], [noUnformat, "toggle"], [noTyping, "type-inside"], [noTyping, "paste"]] as const) {
     const world = new World({ rows: [{ id: "one", audioText: "o".repeat(400), visualText: "" }] }, "act", 1);
     world.writers.forEach(patch);
-    let failed = false;
+    let failed: boolean;
     try { drivePattern(world, pattern, 10); failed = world.check().length > 0; } catch (error) { failed = error instanceof CheckFailure; }
     assert.ok(failed, pattern);
     world.destroy();

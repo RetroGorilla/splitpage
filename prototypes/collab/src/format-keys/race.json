@@ -1,0 +1,330 @@
+{
+  "node": "v24.22.1",
+  "seeds": 2000,
+  "length": 20,
+  "initial": "abcdefgh",
+  "summaries": [
+    {
+      "writers": 2,
+      "delivery": "updates",
+      "histories": 2000,
+      "executed": 27921,
+      "normalisingCommands": 0,
+      "keysTurnedOff": 2805,
+      "historiesNormalised": 1432,
+      "raced": {
+        "typing": 958,
+        "formatting": 1033,
+        "unformatting": 697,
+        "deleting": 609,
+        "undo": 918,
+        "own-undo": 427
+      },
+      "differing": 72,
+      "ineffective": 0,
+      "unchecked": 28,
+      "divergedWithout": 0,
+      "divergedWith": 0,
+      "shortest": {
+        "steps": [
+          {
+            "op": "delete",
+            "by": 1,
+            "first": "g",
+            "last": "h"
+          },
+          {
+            "op": "add",
+            "by": 0,
+            "kind": "i",
+            "first": "f",
+            "last": "h"
+          },
+          {
+            "op": "undo",
+            "by": 1
+          },
+          {
+            "op": "undo",
+            "by": 0
+          }
+        ],
+        "described": [
+          "B deletes g..h",
+          "A makes f..h italic",
+          "B presses undo",
+          "A presses undo"
+        ],
+        "without": "a[bcd|b]ef[gh|i]",
+        "with": "a[bcd|b]efgh",
+        "copy": "copy 1"
+      }
+    },
+    {
+      "writers": 2,
+      "delivery": "shuffled",
+      "histories": 2000,
+      "executed": 27921,
+      "normalisingCommands": 0,
+      "keysTurnedOff": 2805,
+      "historiesNormalised": 1432,
+      "raced": {
+        "typing": 958,
+        "formatting": 1033,
+        "unformatting": 697,
+        "deleting": 609,
+        "undo": 918,
+        "own-undo": 427
+      },
+      "differing": 72,
+      "ineffective": 0,
+      "unchecked": 28,
+      "divergedWithout": 0,
+      "divergedWith": 0,
+      "shortest": {
+        "steps": [
+          {
+            "op": "add",
+            "by": 0,
+            "kind": "i",
+            "first": "d",
+            "last": "d"
+          },
+          {
+            "op": "add",
+            "by": 1,
+            "kind": "b",
+            "first": "a",
+            "last": "d"
+          },
+          {
+            "op": "insert",
+            "by": 1,
+            "after": "d",
+            "char": "D",
+            "mode": "plain"
+          }
+        ],
+        "described": [
+          "A makes d italic",
+          "B makes a..d bold",
+          "B types D after d, plain"
+        ],
+        "without": "[abc|b][d|b,i][D|i]ef[gh|i]",
+        "with": "[abc|b][d|b,i]Def[gh|i]",
+        "copy": "copy 1"
+      }
+    },
+    {
+      "writers": 2,
+      "delivery": "state",
+      "histories": 2000,
+      "executed": 27921,
+      "normalisingCommands": 0,
+      "keysTurnedOff": 2812,
+      "historiesNormalised": 1433,
+      "raced": {
+        "typing": 958,
+        "formatting": 1033,
+        "unformatting": 698,
+        "deleting": 609,
+        "undo": 918,
+        "own-undo": 427
+      },
+      "differing": 70,
+      "ineffective": 0,
+      "unchecked": 28,
+      "divergedWithout": 0,
+      "divergedWith": 0,
+      "shortest": {
+        "steps": [
+          {
+            "op": "add",
+            "by": 0,
+            "kind": "i",
+            "first": "d",
+            "last": "d"
+          },
+          {
+            "op": "add",
+            "by": 1,
+            "kind": "b",
+            "first": "a",
+            "last": "d"
+          },
+          {
+            "op": "insert",
+            "by": 1,
+            "after": "d",
+            "char": "D",
+            "mode": "plain"
+          }
+        ],
+        "described": [
+          "A makes d italic",
+          "B makes a..d bold",
+          "B types D after d, plain"
+        ],
+        "without": "[abc|b][d|b,i][D|i]ef[gh|i]",
+        "with": "[abc|b][d|b,i]Def[gh|i]",
+        "copy": "copy 1"
+      }
+    },
+    {
+      "writers": 3,
+      "delivery": "updates",
+      "histories": 2000,
+      "executed": 26616,
+      "normalisingCommands": 0,
+      "keysTurnedOff": 2313,
+      "historiesNormalised": 1335,
+      "raced": {
+        "typing": 1130,
+        "formatting": 1171,
+        "unformatting": 844,
+        "deleting": 740,
+        "undo": 1086,
+        "own-undo": 347
+      },
+      "differing": 91,
+      "ineffective": 0,
+      "unchecked": 5,
+      "divergedWithout": 0,
+      "divergedWith": 0,
+      "shortest": {
+        "steps": [
+          {
+            "op": "add",
+            "by": 0,
+            "kind": "b",
+            "first": "b",
+            "last": "e"
+          },
+          {
+            "op": "undo",
+            "by": 0
+          },
+          {
+            "op": "remove",
+            "by": 1,
+            "kind": "b",
+            "first": "a",
+            "last": "d"
+          }
+        ],
+        "described": [
+          "A makes b..e bold",
+          "A presses undo",
+          "B takes a..d out of bold"
+        ],
+        "without": "abcdef[gh|i]",
+        "with": "a[bcd|b]ef[gh|i]",
+        "copy": "copy 1"
+      }
+    },
+    {
+      "writers": 3,
+      "delivery": "shuffled",
+      "histories": 2000,
+      "executed": 26616,
+      "normalisingCommands": 0,
+      "keysTurnedOff": 2315,
+      "historiesNormalised": 1337,
+      "raced": {
+        "typing": 1131,
+        "formatting": 1172,
+        "unformatting": 844,
+        "deleting": 741,
+        "undo": 1088,
+        "own-undo": 347
+      },
+      "differing": 91,
+      "ineffective": 0,
+      "unchecked": 5,
+      "divergedWithout": 0,
+      "divergedWith": 0,
+      "shortest": {
+        "steps": [
+          {
+            "op": "add",
+            "by": 0,
+            "kind": "b",
+            "first": "b",
+            "last": "e"
+          },
+          {
+            "op": "undo",
+            "by": 0
+          },
+          {
+            "op": "remove",
+            "by": 1,
+            "kind": "b",
+            "first": "a",
+            "last": "d"
+          }
+        ],
+        "described": [
+          "A makes b..e bold",
+          "A presses undo",
+          "B takes a..d out of bold"
+        ],
+        "without": "abcdef[gh|i]",
+        "with": "a[bcd|b]ef[gh|i]",
+        "copy": "copy 1"
+      }
+    },
+    {
+      "writers": 3,
+      "delivery": "state",
+      "histories": 2000,
+      "executed": 26677,
+      "normalisingCommands": 0,
+      "keysTurnedOff": 2343,
+      "historiesNormalised": 1343,
+      "raced": {
+        "typing": 1131,
+        "formatting": 1171,
+        "unformatting": 836,
+        "deleting": 732,
+        "undo": 1080,
+        "own-undo": 351
+      },
+      "differing": 68,
+      "ineffective": 0,
+      "unchecked": 5,
+      "divergedWithout": 0,
+      "divergedWith": 0,
+      "shortest": {
+        "steps": [
+          {
+            "op": "add",
+            "by": 0,
+            "kind": "b",
+            "first": "b",
+            "last": "e"
+          },
+          {
+            "op": "undo",
+            "by": 0
+          },
+          {
+            "op": "remove",
+            "by": 1,
+            "kind": "b",
+            "first": "a",
+            "last": "d"
+          }
+        ],
+        "described": [
+          "A makes b..e bold",
+          "A presses undo",
+          "B takes a..d out of bold"
+        ],
+        "without": "abcdef[gh|i]",
+        "with": "a[bcd|b]ef[gh|i]",
+        "copy": "copy 1"
+      }
+    }
+  ]
+}
