@@ -278,7 +278,12 @@ export class NativeReplica {
       for (const row of bags(source.rows)) {
         const id = String(row.id);
         for (const heading of sections.filter(section => section.firstSceneId === id)) {
-          this.addSegment(`seg-h-${String(heading.id)}`, { h: String(heading.id) }, [{ text: String(heading.name ?? ""), marks: {} }]);
+          const headingId = String(heading.id), record = new Y.Map<unknown>();
+          this.doc.getMap("headings").set(headingId, record);
+          for (const [key, value] of Object.entries(heading)) {
+            if (key !== "id" && key !== "name" && key !== "firstSceneId") record.set(key, value);
+          }
+          this.addSegment(`seg-h-${headingId}`, { h: headingId }, [{ text: String(heading.name ?? ""), marks: {} }]);
         }
         this.addSegment(`seg-b-${id}`, { b: id }, runsOfHtml(String(row.audioText ?? ""), source.productionTags, source.comments));
         const beat = new Y.Map<unknown>();
@@ -292,13 +297,13 @@ export class NativeReplica {
     this.changes();
   }
 
-  private addSegment(id: string, head: Record<string, string>, runs: readonly Run[]): void {
+  protected addSegment(id: string, head: Record<string, string>, runs: readonly Run[], at = this.order.length): void {
     const segment = new Y.Map<unknown>(), text = new Y.Text();
     this.segments.set(id, segment);
     segment.set("head", head);
     segment.set("text", text);
     writeRuns(text, 0, runs, this.choose, null);
-    this.order.push([id]);
+    this.order.insert(at, [id]);
   }
 
   private view(segment: string): NativeBlock[] {
@@ -600,11 +605,20 @@ export class NativeReplica {
 
   // why: the second reading: a join flag only hides the boundary above its beat, so a joined beat belongs to the nearest
   // visible row above it in stored order, and a removed joined beat to the removed beat directly above it
-  private contiguousHeads(order: readonly string[]): Map<string, NativeHead> {
+  protected breaksContiguousGroup?: (heading: string) => boolean;
+
+  protected invalidateStructure(): void { this.structureChanged = true; }
+
+  private contiguousHeads(blocks: readonly NativeBlock[]): Map<string, NativeHead> {
     const heads = new Map<string, NativeHead>();
     let shown: string | null = null, hidden: string | null = null, above = false;
     this.loops = [];
-    for (const id of order) {
+    for (const block of blocks) {
+      if (block.kind === "h") {
+        if (this.breaksContiguousGroup?.(block.id)) { shown = null; hidden = null; above = false; }
+        continue;
+      }
+      const id = block.id;
       const joined = this.joined(id) !== null;
       if (this.removal(id)) {
         if (!(joined && above && hidden !== null)) hidden = id;
@@ -634,8 +648,8 @@ export class NativeReplica {
   }
 
   private project(): Map<string, NativeRow> {
-    const blocks = this.blocks().filter(block => block.kind === "b"), order = blocks.map(block => block.id);
-    const heads = this.reading === "contiguous" ? this.contiguousHeads(order) : this.heads(order);
+    const stored = this.blocks(), blocks = stored.filter(block => block.kind === "b");
+    const heads = this.reading === "contiguous" ? this.contiguousHeads(stored) : this.heads(blocks.map(block => block.id));
     const members = new Map<string, NativeBlock[]>();
     this.groups.clear(); this.owner.clear(); this.hiddenGroups = new Map();
     for (const block of blocks) {
