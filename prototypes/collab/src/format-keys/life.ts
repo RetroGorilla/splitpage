@@ -5,10 +5,10 @@ import * as Y from "yjs";
 import { NativeReplica, nativeRuns } from "../native/variant.ts";
 import type { NativeDeltaItem, NativeField } from "../native/variant.ts";
 import { typingTape } from "../native/tape.ts";
-import { collapse, countKeys, quantile, rebuiltDelta } from "./keys.ts";
+import { collapse, countKeys, quantile, reachesKeyLimit, rebuiltDelta } from "./keys.ts";
 import type { KeyScheme } from "./keys.ts";
 import { readCell, firstDifference } from "./model.ts";
-import { CheckFailure, World, cellKey, deltaOf, pasteRuns } from "./world.ts";
+import { CheckFailure, World, cellKey, deltaOf, measureUndo, pasteRuns } from "./world.ts";
 import type { Mismatch, Snapshot } from "./world.ts";
 
 export interface Rate { name: string; typed: number; formats: number; pastes: number; overlap: number; undo: number }
@@ -209,6 +209,7 @@ export function drivePattern(world: World, pattern: Pattern, actions: number, se
       if (index === 0) toggle(0, 10, 60);
       const at = 11 + Math.floor(next() * 48);
       world.run(0, { op: "format", beat, field, from: at, to: at + 1, name: "b", on: false });
+      world.checkCell(0, beat, field);
       toggle(0, 10, 60);
     } else {
       const from = Math.floor(next() * 160);
@@ -245,7 +246,7 @@ export function worstCase(pattern: Pattern, scheme: KeyScheme, actions: number):
     const names = new Set(readCell(delta).flatMap(char => char.names)), loneText = lone.cell("one", "audioText").text;
     for (const name of names) collapse(lone, loneText, name);
     lone.changes();
-    if (firstDifference(readCell(deltaOf(lone, "one", "audioText")), readCell(delta)) >= 0) row.mismatches++;
+    if (firstDifference(readCell(deltaOf(lone, "one", "audioText")), world.model.cell(cellKey("one", "audioText"))) >= 0) row.mismatches++;
     const stored = new Y.Doc();
     Y.applyUpdate(stored, Y.encodeStateAsUpdate(lone.doc));
     row.collapsed = { keysMax: cellStats(loneText.toDelta() as NativeDeltaItem[]).keysMax, bytes: Y.encodeStateAsUpdate(stored).length, readMs: readTime(loneText) };
@@ -253,16 +254,17 @@ export function worstCase(pattern: Pattern, scheme: KeyScheme, actions: number):
     lone.destroy();
     const fresh = new NativeReplica(1, 0, "act");
     fresh.hydrate({ rows: [{ id: "one", audioText: "", visualText: "" }] });
-    const rebuilt = fresh.cell("one", "audioText").text;
+    const { text: rebuilt, start } = fresh.cell("one", "audioText");
     fresh.doc.transact(() => {
       let index = 0;
-      for (const item of rebuiltDelta(delta, 1, { next: 0 })) {
-        if (typeof item.insert === "string") rebuilt.insert(index, item.insert, item.attributes ?? {}); else rebuilt.insertEmbed(index, item.insert, item.attributes ?? {});
+      const serial = { next: 0 };
+      for (const item of rebuiltDelta(delta, 1, serial)) {
+        if (typeof item.insert === "string") rebuilt.insert(start + index, item.insert, item.attributes ?? {}); else rebuilt.insertEmbed(start + index, item.insert, item.attributes ?? {});
         index += typeof item.insert === "string" ? item.insert.length : 1;
       }
     }, "hydration");
     fresh.changes();
-    if (firstDifference(readCell(deltaOf(fresh, "one", "audioText")), readCell(delta)) >= 0) row.mismatches++;
+    if (firstDifference(readCell(deltaOf(fresh, "one", "audioText")), world.model.cell(cellKey("one", "audioText"))) >= 0) row.mismatches++;
     row.rebuilt = { bytes: fresh.encode().length, readMs: readTime(rebuilt) };
     fresh.destroy();
   }
@@ -273,7 +275,10 @@ export function worstCase(pattern: Pattern, scheme: KeyScheme, actions: number):
   return row;
 }
 
-export interface CurveRow { acts: number; keysMedian: number; keysMax: number; items: number; bytes: number; readMs: number; collapsedBytes: number; collapsedReadMs: number }
+export interface CurveRow {
+  acts: number; keysMedian: number; keysMax: number; items: number; bytes: number; readMs: number;
+  limitScanMs: number; collapsedBytes: number; collapsedReadMs: number;
+}
 
 // why: each act bolds a random half of a 400-character cell with a fresh key, so characters carry about half the keys
 // and the cell splits into many differently formatted pieces; this times reading against keys per character
@@ -283,10 +288,20 @@ export function readCurve(acts: number, seed = 11): CurveRow {
   replica.undo.destroy();
   for (let index = 0; index < acts; index++) { const from = Math.floor(next() * 200); replica.format("one", "audioText", from, from + 200, { b: true }); }
   const text = replica.cell("one", "audioText").text, delta = text.toDelta() as NativeDeltaItem[], stats = cellStats(delta), bytes = replica.encode().length, readMs = readTime(text);
+  const samples: number[] = [];
+  for (let index = 0; index < 122; index++) {
+    const start = performance.now();
+    const reached = reachesKeyLimit(text, "b", 32);
+    const elapsed = performance.now() - start;
+    if (reached !== (stats.mostOfOneKind >= 32)) throw new Error("The limit scan and key count disagree");
+    if (index >= 21) samples.push(elapsed);
+  }
+  const limitScanMs = Math.round(quantile(samples, 0.5) * 10000) / 10000;
   collapse(replica, text, "b");
   const stored = new Y.Doc();
   Y.applyUpdate(stored, replica.encode());
-  const row = { acts, keysMedian: stats.keysMedian, keysMax: stats.keysMax, items: delta.length, bytes, readMs, collapsedBytes: Y.encodeStateAsUpdate(stored).length, collapsedReadMs: readTime(text) };
+  const row = { acts, keysMedian: stats.keysMedian, keysMax: stats.keysMax, items: delta.length, bytes, readMs, limitScanMs,
+    collapsedBytes: Y.encodeStateAsUpdate(stored).length, collapsedReadMs: readTime(text) };
   stored.destroy(); replica.destroy();
   return row;
 }
@@ -301,11 +316,15 @@ export function afterCollapseUndo(collapsing: boolean): string {
     if (collapsing) collapse(first, first.cell("one", "audioText").text, "b");
   });
   first.changes(); world.pullAll();
-  const undone = second.undo.undo() !== null;
-  second.changes(); world.pullAll();
-  const shown = readCell(deltaOf(first, "one", "audioText")).map(char => char.names.includes("b") ? char.ch.toUpperCase() : char.ch).join("");
-  world.destroy();
-  return `${shown}${undone ? "" : " (the undo changed nothing)"}`;
+  const undone = measureUndo(second).item !== null;
+  world.pullAll();
+  const late = world.reader();
+  const show = (copy: NativeReplica) => readCell(deltaOf(copy, "one", "audioText")).map(char => char.names.includes("b") ? char.ch.toUpperCase() : char.ch).join("");
+  try {
+    const shown = show(first);
+    if (shown !== show(second) || shown !== show(late)) throw new Error("Copies disagree after undo");
+    return `${shown}${undone ? "" : " (the undo changed nothing)"}`;
+  } finally { late.destroy(); world.destroy(); }
 }
 
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
@@ -315,12 +334,15 @@ if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
     const days = Number(flag("days", "250")), schemes = flag("schemes", "act,act+norm,name").split(",") as KeyScheme[];
     const runs: LifeResult[] = [], report = [1, 5, 10, 25, 50, 100, 150, 200, 250].filter(day => day < days);
     for (const rate of flag("rates", "realistic,heavy").split(",")) for (const writers of flag("writers", "1,2,6").split(",").map(Number)) for (const scheme of schemes) {
-      const run = life(scheme, RATES[rate] as (typeof RATES)["realistic"], writers, days, 7, report);
+      const workload = RATES[rate] as Rate;
+      const run = life(scheme, { ...workload, overlap: Number(flag("overlap", String(workload.overlap))) }, writers, days, Number(flag("seed", "7")), report);
       runs.push(run);
       const last = run.days.at(-1);
       process.stderr.write(`${rate} ${writers} ${scheme}: ${run.seconds} s, ${last?.bytes} bytes, keys max ${last?.keysMax}, mismatches ${last?.mismatches}\n`);
     }
     result.life = runs;
+  } else if (part === "curve") {
+    result.curve = flag("curve", "4,8,16,32,64,128,256").split(",").map(Number).map(acts => readCurve(acts));
   } else {
     const rows: PatternRow[] = [];
     const patterns = flag("patterns", Object.keys(PATTERNS).join(",")).split(",") as Pattern[], schemes = flag("schemes", "act,act+norm,name").split(",") as KeyScheme[];

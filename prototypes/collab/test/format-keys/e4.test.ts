@@ -139,6 +139,29 @@ test("the rule changes what shows: a letter typed at an edge someone else format
   assert.equal(run.with, "[abc|b][d|b,i]Def[gh|i]");
 });
 
+test("the rule can lose the original italic when concurrent deletion and formatting are both undone", () => {
+  const run = runRace([
+    { op: "delete", by: 1, first: "g", last: "h" },
+    { op: "add", by: 0, kind: "i", first: "f", last: "h" },
+    { op: "undo", by: 1 },
+    { op: "undo", by: 0 }
+  ], 2, "updates");
+  assert.equal(run.same, false);
+  assert.equal(run.without, "a[bcd|b]ef[gh|i]");
+  assert.equal(run.with, "a[bcd|b]efgh");
+});
+
+test("the final agreement check runs even after an earlier difference", () => {
+  const run = runRace([...edgeRace, { op: "deliver", from: 1, to: 0 }, { op: "undo", by: 0 }], 2, "updates", replica => {
+    const { text, end } = replica.cell("R1", "audioText");
+    replica.doc.transact(() => text.insert(end, "Z", {}), "remote");
+    replica.changes();
+  });
+  assert.equal(run.at, 3);
+  assert.equal(run.convergedWithout, true);
+  assert.equal(run.convergedWith, false);
+});
+
 test("the comparison fails when one copy with the rule loses one character's formatting", () => {
   let seed = 1, steps = generateRace(seed, 2, 12);
   while (!runRace(steps, 2, "updates").same) steps = generateRace(++seed, 2, 12);

@@ -35,6 +35,16 @@ export function deltaOf(replica: NativeReplica, beat: string, field: NativeField
   return replica.block(beat).delta;
 }
 
+export function measureUndo(replica: NativeReplica): { item: ReturnType<Y.UndoManager["undo"]>; updates: number } {
+  let updates = 0;
+  let item: ReturnType<Y.UndoManager["undo"]>;
+  const count = () => { updates++; };
+  replica.doc.on("update", count);
+  try { item = replica.undo.undo(); } finally { replica.doc.off("update", count); }
+  replica.changes();
+  return { item, updates };
+}
+
 // why: writers edit their own copies; the stored copy receives every update and keeps no undo history, as a server does
 export class World {
   readonly writers: NativeReplica[];
@@ -79,6 +89,12 @@ export class World {
   pullAll(): void { this.writers.forEach((_, index) => this.pull(index)); }
 
   length(beat: string, field: NativeField): number { return this.model.cell(cellKey(beat, field)).length; }
+
+  checkCell(writer: number, beat: string, field: NativeField): void {
+    const key = cellKey(beat, field), replica = this.writers[writer] as NativeReplica;
+    const expected = this.model.cell(key), actual = readCell(deltaOf(replica, beat, field)), index = firstDifference(expected, actual);
+    if (index >= 0) throw new CheckFailure({ copy: `writer ${writer + 1}`, cell: key, index, expected: printCell(expected), actual: printCell(actual) });
+  }
 
   run(writer: number, command: Command): void {
     const replica = this.writers[writer] as NativeReplica;

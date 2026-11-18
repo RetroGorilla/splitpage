@@ -3,7 +3,7 @@ import { fileURLToPath } from "node:url";
 import * as Y from "yjs";
 import { NativeReplica } from "../native/variant.ts";
 import type { NativeDeltaItem } from "../native/variant.ts";
-import { makeReplica } from "./keys.ts";
+import { freshKey, makeReplica } from "./keys.ts";
 import type { KeyScheme, NormalisingReplica } from "./keys.ts";
 import { random } from "./life.ts";
 import { marksOfNames, printCell, readCell } from "./model.ts";
@@ -20,11 +20,12 @@ export type RaceStep =
 export type RaceWith = "typing" | "formatting" | "unformatting" | "deleting" | "undo" | "own-undo";
 export interface RaceRun {
   same: boolean; at: number; copy: string; without: string; with: string; executed: number; normalised: number;
-  races: RaceWith[]; convergedWithout: boolean; convergedWith: boolean; ineffective: number; unchecked: number;
+  races: RaceWith[]; convergedWithout: boolean; convergedWith: boolean; ineffective: number;
 }
 export interface RaceSummary {
-  writers: number; delivery: RaceDelivery; histories: number; executed: number; normalisingCommands: number; keysTurnedOff: number;
-  historiesNormalised: number; raced: Record<RaceWith, number>; differing: number; ineffective: number; unchecked: number; divergedWithout: number; divergedWith: number;
+  writers: number; delivery: RaceDelivery; histories: number; executed: number; keysTurnedOff: number;
+  historiesNormalised: number; raced: Record<RaceWith, number>; differing: number; ineffective: number; differingWithoutUndo: number;
+  stoppedEarly: number; divergedWithout: number; divergedWith: number; reduced: { addInsert: number; addRemoveUndo: number; other: number };
   shortest: { steps: RaceStep[]; described: string[]; without: string; with: string; copy: string } | null;
 }
 
@@ -41,9 +42,9 @@ class Net {
   constructor(scheme: KeyScheme, writers: number, seed: Uint8Array, patch?: (replica: NativeReplica) => void) {
     this.copies = Array.from({ length: writers }, (_, index) => {
       const replica = makeReplica(scheme, index + 1), log: Uint8Array[] = [];
-      patch?.(replica);
       Y.applyUpdate(replica.doc, seed, "remote");
       replica.changes();
+      patch?.(replica);
       replica.doc.on("update", (update: Uint8Array, origin: unknown) => { if (origin !== "remote") log.push(update); });
       return { replica, log };
     });
@@ -92,8 +93,9 @@ export function readR1(replica: NativeReplica): string { return printCell(readCe
 export function seedState(): Uint8Array {
   const seed = new NativeReplica(900, 0, "act");
   seed.hydrate({ rows: [{ id: "R1", audioText: INITIAL, visualText: "" }] });
-  seed.format("R1", "audioText", 1, 4, { b: true });
-  seed.format("R1", "audioText", 6, 8, { i: true });
+  const { text, start } = seed.cell("R1", "audioText");
+  text.format(start + 1, 3, { [freshKey(seed.doc, "b")]: true });
+  text.format(start + 6, 2, { [freshKey(seed.doc, "i")]: true });
   const state = seed.encode();
   seed.destroy();
   return state;
@@ -102,16 +104,18 @@ export function seedState(): Uint8Array {
 // why: what a command must leave on the copy that made it, from the command and the characters it was made on: a
 // format shows on every selected character, an unformat on none, a typed letter sits after its left with its marks
 function took(step: RaceStep, before: readonly ModelChar[], replica: NativeReplica): boolean {
-  const after = readCell(replica.block("R1").delta as NativeDeltaItem[]), at = (char: string): number => after.findIndex(item => item.ch === char);
   if (step.op === "undo" || step.op === "deliver") return true;
+  const after = readCell(replica.block("R1").delta);
+  const original = before.map(item => item.ch), actual = after.map(item => item.ch).join("");
   if (step.op === "insert") {
-    const left = step.after === null ? -1 : before.findIndex(item => item.ch === step.after), own = after[at(step.char)];
+    const left = step.after === null ? -1 : original.indexOf(step.after), own = after[left + 1];
     const names = step.mode === "inherit" ? [...(before[left]?.names ?? [])] : step.mode === "plain" ? [] : [step.mode];
-    return !!own && at(step.char) === left + 1 && own.names.join(",") === [...names].sort().join(",");
+    const expected = [...original.slice(0, left + 1), step.char, ...original.slice(left + 1)].join("");
+    return actual === expected && own?.names.join(",") === [...names].sort().join(",");
   }
-  const from = before.findIndex(item => item.ch === step.first), to = before.findIndex(item => item.ch === step.last), selected = before.slice(from, to + 1).map(item => item.ch);
-  if (step.op === "delete") return selected.every(char => at(char) < 0) && after.length === before.length - selected.length;
-  return selected.every(char => after[at(char)]?.names.includes(step.kind) === (step.op === "add"));
+  const from = original.indexOf(step.first), to = original.indexOf(step.last);
+  if (step.op === "delete") return actual === [...original.slice(0, from), ...original.slice(to + 1)].join("");
+  return actual === original.join("") && after.slice(from, to + 1).every(item => item.names.includes(step.kind) === (step.op === "add"));
 }
 
 interface Issued { id: number; by: number; kind: RaceWith; known: Set<number>; normalising: boolean }
@@ -119,28 +123,31 @@ interface Issued { id: number; by: number; kind: RaceWith; known: Set<number>; n
 // why: the same commands run on copies without the rule and copies with it; every copy, and copies loaded late from the
 // stored state, must show the same formatting on every character in both, after every step and once all is delivered
 export function runRace(steps: readonly RaceStep[], writers: number, delivery: RaceDelivery, tamper?: (replica: NativeReplica) => void,
-  patch?: (replica: NativeReplica) => void): RaceRun {
+  patch?: (replica: NativeReplica) => void, beforeStep?: (step: RaceStep, position: number) => void): RaceRun {
   const seed = seedState(), without = new Net("act", writers, seed, patch), withRule = new Net("act+norm", writers, seed, patch);
   const known = Array.from({ length: writers }, () => new Set<number>()), issued: Issued[] = [], own = Array.from({ length: writers }, (): number[] => []);
-  const result: RaceRun = { same: true, at: -1, copy: "", without: "", with: "", executed: 0, normalised: 0, races: [], convergedWithout: true, convergedWith: true, ineffective: 0, unchecked: 0 };
+  const result = { same: true, at: -1, copy: "", without: "", with: "", executed: 0, normalised: 0, races: [] as RaceWith[], ineffective: 0 };
   const compare = (at: number, extra: [string, NativeReplica, NativeReplica][] = []): boolean => {
     const pairs: [string, NativeReplica, NativeReplica][] = [...without.copies.map((copy, index): [string, NativeReplica, NativeReplica] => [`copy ${index + 1}`, copy.replica, (withRule.copies[index] as Copy).replica]), ...extra];
     for (const [name, left, right] of pairs) {
       const a = readR1(left), b = readR1(right);
-      if (a !== b) { Object.assign(result, { same: false, at, copy: name, without: a, with: b }); return false; }
+      if (a !== b) {
+        if (result.same) Object.assign(result, { same: false, at, copy: name, without: a, with: b });
+        return false;
+      }
     }
     return true;
   };
   const used = new Set<string>();
-  let stopped = false;
   for (const [position, step] of steps.entries()) {
+    beforeStep?.(step, position);
     if (step.op === "deliver") {
       if (step.from === step.to || step.from >= writers || step.to >= writers) continue;
       for (const net of [without, withRule]) {
         if (delivery === "state") net.state(step.from, step.to); else net.deliver(step.from, step.to, delivery === "shuffled" ? ORDERS[position % 3] as (typeof ORDERS)[number] : "forward");
       }
       for (const id of delivery === "state" ? known[step.from] ?? [] : issued.filter(item => item.by === step.from).map(item => item.id)) known[step.to]?.add(id);
-      if (!compare(position)) { stopped = true; break; }
+      if (!compare(position)) break;
       continue;
     }
     if (step.by >= writers) continue;
@@ -170,31 +177,32 @@ export function runRace(steps: readonly RaceStep[], writers: number, delivery: R
       }
       kind = step.op === "delete" ? "deleting" : step.op === "add" ? "formatting" : "unformatting";
     }
-    // why: two undos that each restore one deleted letter show it twice (the spike's double-restore); a letter is then
-    // no longer found by identity, so such commands are counted and not checked for their effect
-    if (new Set(chars.map(item => item.ch)).size < chars.length) result.unchecked++;
-    else if (!took(step, chars, left) || !took(step, chars, right)) { result.ineffective++; Object.assign(result, { same: false, at: position, copy: `copy ${step.by + 1}, command without its effect` }); stopped = true; break; }
+    if (!took(step, chars, left) || !took(step, chars, right)) {
+      result.ineffective++;
+      Object.assign(result, { same: false, at: position, copy: `copy ${step.by + 1}, command without its effect`, without: readR1(left), with: readR1(right) });
+      break;
+    }
     const normalising = (right as NormalisingReplica).turnedOff > before, id = issued.length;
     if (normalising) result.normalised += (right as NormalisingReplica).turnedOff - before;
     issued.push({ id, by: step.by, kind, known: new Set(known[step.by]), normalising });
     known[step.by]?.add(id);
     if (step.op !== "undo") own[step.by]?.push(id);
     result.executed++;
-    if (!compare(position)) { stopped = true; break; }
+    if (!compare(position)) break;
   }
-  if (!stopped) {
-    for (const net of [without, withRule]) {
-      if (delivery !== "state") net.settle(delivery === "shuffled" ? ORDERS[steps.length % 3] as (typeof ORDERS)[number] : "forward");
-      else for (let round = 0; round < 3; round++) for (let from = 0; from < writers; from++) for (let to = 0; to < writers; to++) if (from !== to) net.state(from, to);
-    }
-    if (tamper) tamper((withRule.copies[0] as Copy).replica);
-    const lates: [string, NativeReplica, NativeReplica][] = Array.from({ length: writers }, (_, index) => [`late joiner from copy ${index + 1}`, without.late(index), withRule.late(index)]);
-    compare(steps.length, lates);
-    for (const [, left, right] of lates) { left.destroy(); right.destroy(); }
-    const readings = (net: Net): Set<string> => new Set(net.copies.map(copy => readR1(copy.replica)));
-    result.convergedWithout = readings(without).size === 1;
-    result.convergedWith = readings(withRule).size === 1;
+  // why: after a difference, the same next selection may no longer exist in both variants
+  for (const net of [without, withRule]) {
+    if (delivery !== "state") net.settle(delivery === "shuffled" ? ORDERS[steps.length % 3] as (typeof ORDERS)[number] : "forward");
+    else for (let round = 0; round < 3; round++) for (let from = 0; from < writers; from++) for (let to = 0; to < writers; to++) if (from !== to) net.state(from, to);
   }
+  if (tamper) tamper((withRule.copies[0] as Copy).replica);
+  const lates: [string, NativeReplica, NativeReplica][] = Array.from({ length: writers }, (_, index) => [`late joiner from copy ${index + 1}`, without.late(index), withRule.late(index)]);
+  compare(steps.length, lates);
+  const converged = (net: Net, late: NativeReplica[]): boolean =>
+    new Set([...net.copies.map(copy => copy.replica), ...late].map(readR1)).size === 1;
+  const convergedWithout = converged(without, lates.map(([, left]) => left));
+  const convergedWith = converged(withRule, lates.map(([, , right]) => right));
+  for (const [, left, right] of lates) { left.destroy(); right.destroy(); }
   const races = new Set<RaceWith>();
   for (const normaliser of issued.filter(item => item.normalising)) for (const other of issued) {
     if (other.by === normaliser.by) { if (other.kind === "own-undo" && other.id > normaliser.id) races.add("own-undo"); continue; }
@@ -203,7 +211,7 @@ export function runRace(steps: readonly RaceStep[], writers: number, delivery: R
   }
   result.races = [...races];
   without.destroy(); withRule.destroy();
-  return result;
+  return { ...result, convergedWithout, convergedWith };
 }
 
 export function generateRace(seed: number, writers: number, length: number): RaceStep[] {
@@ -253,7 +261,8 @@ export function shrinkRace(steps: readonly RaceStep[], fails: (candidate: readon
 
 export function surveyRace(writers: number, delivery: RaceDelivery, seeds: number, length: number, first = 1): RaceSummary {
   const raced = { typing: 0, formatting: 0, unformatting: 0, deleting: 0, undo: 0, "own-undo": 0 };
-  const summary: RaceSummary = { writers, delivery, histories: seeds, executed: 0, normalisingCommands: 0, keysTurnedOff: 0, historiesNormalised: 0, raced, differing: 0, ineffective: 0, unchecked: 0, divergedWithout: 0, divergedWith: 0, shortest: null };
+  const summary: RaceSummary = { writers, delivery, histories: seeds, executed: 0, keysTurnedOff: 0, historiesNormalised: 0, raced, differing: 0,
+    ineffective: 0, differingWithoutUndo: 0, stoppedEarly: 0, divergedWithout: 0, divergedWith: 0, reduced: { addInsert: 0, addRemoveUndo: 0, other: 0 }, shortest: null };
   for (let seed = first; seed < first + seeds; seed++) {
     const steps = generateRace(seed, writers, length), run = runRace(steps, writers, delivery);
     summary.executed += run.executed; summary.keysTurnedOff += run.normalised;
@@ -262,11 +271,13 @@ export function surveyRace(writers: number, delivery: RaceDelivery, seeds: numbe
     if (!run.convergedWithout) summary.divergedWithout++;
     if (!run.convergedWith) summary.divergedWith++;
     if (run.ineffective) summary.ineffective++;
-    summary.unchecked += run.unchecked;
     if (run.same) continue;
     summary.differing++;
-    if (summary.shortest && summary.shortest.steps.length <= 4) continue;
+    if (run.at < steps.length) summary.stoppedEarly++;
+    if (!runRace(steps.filter(step => step.op !== "undo"), writers, delivery).same) summary.differingWithoutUndo++;
     const small = shrinkRace(steps, candidate => !runRace(candidate, writers, delivery).same), again = runRace(small, writers, delivery);
+    const ops = [...new Set(small.filter(step => step.op !== "deliver").map(step => step.op))].sort().join(",");
+    summary.reduced[ops === "add,insert" ? "addInsert" : ops === "add,remove,undo" ? "addRemoveUndo" : "other"]++;
     if (!summary.shortest || small.length < summary.shortest.steps.length) summary.shortest = { steps: small, described: small.map(describeRace), without: again.without, with: again.with, copy: again.copy };
   }
   return summary;

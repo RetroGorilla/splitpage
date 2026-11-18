@@ -23,7 +23,7 @@ function extents(delta: readonly NativeDeltaItem[]): Map<string, Extent> {
   return result;
 }
 
-function freshKey(doc: Y.Doc, name: string): string {
+export function freshKey(doc: Y.Doc, name: string): string {
   const clock = Y.decodeStateVector(Y.encodeStateVector(doc)).get(doc.clientID) ?? 0;
   return `${name}${SUFFIX}${doc.clientID.toString(36)}.${clock.toString(36)}`;
 }
@@ -108,6 +108,16 @@ export function countKeys(delta: readonly NativeDeltaItem[]): KeyCount {
     mostOfOneKind = Math.max(mostOfOneKind, ...kinds.values(), 0);
   }
   return { perCharacter, mostOfOneKind, total };
+}
+
+export function reachesKeyLimit(text: Y.Text, name: string, limit: number): boolean {
+  return (text.toDelta() as NativeDeltaItem[]).some(item => {
+    let count = 0;
+    for (const [key, value] of Object.entries(item.attributes ?? {})) {
+      if (value === true && nativeMarkName(key) === name && ++count >= limit) return true;
+    }
+    return false;
+  });
 }
 
 export function quantile(values: readonly number[], fraction: number): number {
