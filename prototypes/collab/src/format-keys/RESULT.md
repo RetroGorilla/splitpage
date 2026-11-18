@@ -11,9 +11,10 @@ Prototype evidence for Yjs 13.6.33 on Node 24.22.1. The main comparison uses pla
 | Keys per formatted character, median / p95 / max, one writer, baseline | 3 / 6 / 9, max 1 of one kind | 3 / 7 / 17, max 5 of one kind |
 | Median read of the scheme's busiest cell, one writer, baseline | 0.0280 ms | 0.0452 ms |
 | Day 250, one writer, heavy workload | 2,234,969 bytes, 58.1 bytes/action, keys 5 / 8 / 15, read 0.0409 ms | 3,398,236 bytes, 85.8 bytes/action, keys 7 / 14 / 25, read 0.5874 ms |
-| Missing bold in the 60 unseen-pair trials | 72 letters missing at merge, 290 across all checkpoints | 0 at merge and across all checkpoints |
+| Missing bold in the 60 unseen-pair trials | 72 missing at merge, or 48 with the redundant-bold trials excluded. 290 across all checkpoints with those trials included. | 0 at merge and across all checkpoints |
+| Bold on letters with no active bold request in the 60 unseen-pair trials | 35 at merge, 208 across all checkpoints | 20 at merge, 70 across all checkpoints |
 | Bold left where an undo should have cleared it | 34 letters across the paired trials. In the standalone `bXc` trace it extends from `c` to the end. | 30 letters across the paired trials. In the standalone `bXc` trace it stays on `c`. |
-| Undo reaches a different step | 6/120 presses in the paired trials. The subsequent seen-unbold trace also deletes older typing in both client orders. | 0/120 in the paired trials. The subsequent seen-unbold trace deletes older typing in both client orders. |
+| Undo reaches a different step | 6/120 presses in the paired trials, all in the redundant-bold cases. The subsequent seen-unbold trace also deletes older typing in both client orders. | 0/120 in the paired trials. The subsequent seen-unbold trace deletes older typing in both client orders. |
 | Updates per undo | 116 presses sent one update and 4 sent two in the paired trials. | Each of the 120 paired presses sent one. |
 | Plain `X` typed while the other format was unseen | Bold on `X` in 11/20 trials after merge. | Bold on `X` in 20/20 trials after merge. |
 | Writer and late-joiner agreement | All 66 trials agree at every checkpoint. | All 66 trials agree at every checkpoint. |
@@ -21,7 +22,7 @@ Prototype evidence for Yjs 13.6.33 on Node 24.22.1. The main comparison uses pla
 | Prefix, 100 → 300 rounds | 1,337 → 4,138 bytes, 12.3 → 13.4 bytes/round, max 1 key | 5,054 → 15,455 bytes, 49.5 → 51.2 bytes/round, max 100 → 300 keys |
 | Scheme machinery beyond plain library calls | Named attributes (`b: true`, `i: true`, etc.). | Client-and-clock keys, suffix stripping and de-duplication on read, visible-key scans, tail re-keying on unformat, special handling of typed and pasted text. The proposed bounds add a limit check, collapse and a rebuild. |
 
-The paired trials show outcomes conditional on the timing, ranges and undo order below.
+The paired trials show outcomes conditional on the timing, ranges, undo order and delta-reading observer below.
 E4 did not measure the per-keystroke cost of maintaining action keys or how often any of these situations
 occurs in real editing. E4 leaves the choice of key scheme to the owner.
 
@@ -69,6 +70,20 @@ Both actors begin with an older typing entry (A's `Q`, B's `R`) except in the ma
 first. B then undoes its own last command (typing when it typed). A and B each redo once in that order.
 Every row runs twice per scheme, with A assigned the lower and then the higher client ID. At each checkpoint
 the two writers sync and a late joiner loads each writer's saved state.
+
+**Delta-observer condition.** The kind-key table includes Yjs's removal of duplicate formatting markers when a
+consumer reads the change event's delta at merge. Editor bindings consume change deltas, and the harness does
+so through `observeDeep` and `Y.YTextEvent.delta`. A raw two-document check kept B's bold after A's undo
+in the identical, overlapping and nested add/add cases in both client-ID orders when no observer consumed the
+delta. With a delta-reading observer the overlapping and nested cases lost B's bold in both orders, and the
+identical case lost it when A had the lower ID. Reading the visible snapshot via `toDelta()` alone preserved
+the difference. The overlapping case is pinned in `test/native/format-key-observer.test.ts`.
+
+**Undo expectation.** The table uses the per-action reading that B's bold should survive A's undo. Under a
+last-visible-change reading that treats A's undo as the latest request to clear A's range, bold on the shared
+range counts as extra and only the loss of B's bold outside A's range counts as missing. Applying that reading
+at A's undo in the 30 add/add trials per scheme changes missing/extra letter counts from 28/18 to 4/42 with kind
+keys and from 0/10 to 0/58 with action keys.
 
 Each result cell has six fields, separated by dots.
 
@@ -118,6 +133,17 @@ Each result cell has six fields, separated by dots.
 | Bold bc, then type X (no older step) | none | seen | 0/0/0/0/0/0 · 2/0 · r,r/r,r · 1,1/1,1 · 0 · 0 | 0/0/0/0/0/0 · 2/0 · r,r/r,r · 1,1/1,1 · 0 · 0 |
 | Bold bc, then unbold bc | unbold | none | 0/0/0/0/0 · 0/0 · w,w/r,r · 1,1/1,1 · 0 · 0 | 0/0/0/0/0 · 0/0 · w,w/r,r · 1,1/1,1 · 0 · 0 |
 
+In the identical bold/unbold cases, A commands bold on text already bold on A's screen. With kind keys the
+command writes nothing and creates no undo entry. The plain result is what B visibly did. Counting A's redundant
+command as intent contributes 24 of the 72 missing letters at first merge and all six wrong-step presses in
+the paired trials. The other trials account for 48 missing letters at first merge.
+
+The missing-letter column counts only expected bold. In the overlapping bold/unbold case without typing, kind
+keys show `g` bold after B unbolded it and show `h`, `Q` and `R` bold without a request for those letters,
+at both first merge and the final redo. The summary's extra-bold count takes visible bold minus the expected
+bold set at each `record()` in the first 30 scenarios in `schemes.test.ts`, in both client-ID orders.
+It includes plain typed letters such as `X`, and a letter can count again at a later checkpoint.
+
 With plain undo in the standalone `bXc` trace without older typing, both client orders show
 `abX[cdefgh|b]` with kind keys and `abX[c|b]defgh` with action keys after A undoes. The action-key path
 re-keyed the tail to keep `X` plain, and the tail's key survives the author's plain undo. The kind-key result
@@ -164,6 +190,8 @@ keys of the requested kind in each delta piece until it finds one with at least 
 101 scans after 21 warmups. It includes delta construction and key inspection. It excludes formatting, collapse,
 network delivery and rebuilding.
 
+The table records one run's medians. Scan timings at 32 keys varied severalfold across runs.
+
 | Actions | Keys per formatted character (median / max) | Delta pieces | Stored bytes | Read (ms) | Limit scan (ms) | Collapsed bytes / read (ms) |
 | --- | --- | --- | --- | --- | --- | --- |
 | 4 | 4/4 | 9 | 690 | 0.0178 | 0.0061 | 644 / 0.0041 |
@@ -174,8 +202,8 @@ network delivery and rebuilding.
 | 128 | 65/128 | 189 | 6,097 | 5.6354 | 1.5919 | 3,324 / 0.005 |
 | 256 | 129/256 | 280 | 11,273 | 14.5043 | 3.9928 | 5,684 / 0.0077 |
 
-A scan at the 32-key threshold took about 0.19 ms on this cell. The maximum across life checkpoints was 5 for
-the baseline and 10 for the heavy workload. On the 300-round patterns collapse decreased the prefix file from
+A scan at the 32-key threshold took on the order of a tenth of a millisecond on this cell. The maximum across
+life checkpoints was 5 for the baseline and 10 for the heavy workload. On the 300-round patterns collapse decreased the prefix file from
 15,455 to 8,910 bytes and punch from 210,118 to 150,383. Rebuilding those patterns from visible content produced
 444 and 552 bytes. The proposed **4× rebuilt-size** trigger was chosen without measuring a full-year rebuild.
 The rebuilt files here are fresh single-cell snapshots. A live rebuild protocol and preservation of offline
@@ -226,10 +254,14 @@ also remain covered.
   settling, including late joiners. The harness reads `turnedOff` for rule activity and estimates concurrent
   activity from its issued-command and delivery logs. Its command-effect oracle covers add, remove, delete and
   insert. Undo and delivery enter the comparison and agreement checks without an independent intent check.
+  For the formatting controls, the sweep reads the implementation's pre-command display to decide whether a
+  reached call would have a visible effect. This classifies 1,167 of 1,182 reached value-format histories as
+  used with an effect.
 - **Two-copy table.** Commands and the shared fixture establish expected bold. The harness reads displayed deltas,
   correlates the stack item added by a command with the item returned by undo, and counts public update events
   during each press. The stack check can distinguish a successful press that produces the wrong visible outcome
-  from a press that reaches an older entry.
+  from a press that reaches an older entry. Its `observeDeep` callback also reads `Y.YTextEvent.delta` at merge.
+  That editor-binding read triggers the duplicate-format cleanup involved in the kind-key outcomes above.
 
 E4 also leaves out splits and joins, headings, new atoms during the life, links, the guarded undo path, memory,
 browser and server behavior, and long offline lives. The two-copy and collapse probes cover only their stated
@@ -313,8 +345,10 @@ A round is one iteration of the named pattern. Punch unbolds a single letter and
 each round. Prefix adds one letter and bolds a prefix that grows by one per round. Other patterns are fixed-range
 toggle, random overlapping toggles, two writers alternating on shifted ranges after syncing, a sliding range,
 plain typing into bold before re-bolding, and a formatted paste. Pattern and curve timings are from the follow-up
-runs. Each scheme entry gives stored bytes · bytes added per round · median/p95/max keys per formatted
-character · median read ms. All 48 runs matched the model, including every immediate punch check.
+runs. The side-by-side layout was assembled by hand from the per-scheme rows emitted by `report.ts`, with
+sub-microsecond readings taken from the raw output. Each scheme entry gives stored bytes · bytes added per
+round · median/p95/max keys per formatted character · median read ms. All 48 runs matched the model, including
+every immediate punch check.
 
 | Pattern | Rounds | Kind keys | Action keys | Action keys + rule | Action keys after all marks removed / collapse / rebuild |
 | --- | ---: | --- | --- | --- | --- |
@@ -350,6 +384,7 @@ node src/format-keys/race.ts --seeds=2000 --length=20 --write=race.json
 node src/format-keys/report.ts life-name.json patterns.json curve.json race.json
 E4_TABLE=1 node --test test/format-keys/schemes.test.ts
 node --test test/format-keys/controls.test.ts test/format-keys/collapse.test.ts test/format-keys/e4.test.ts
+node --test test/native/format-key-observer.test.ts
 ```
 
 For complete life tables run the first line separately for each workload (`realistic`, `heavy`), writer count
