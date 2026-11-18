@@ -48,6 +48,12 @@ test("mark parts: a rebuild inside the trial counts in validation and is also pu
   assert.equal(markParts([at("receive:start", 0), at("trial:start", 0), at("trial:end", 2), at("receive:end", 2)]).rebuild, 0);
 });
 
+test("mark parts: a rebuild beside the trial rather than inside it counts in validation too", () => {
+  const parts = markParts([at("drain:start", 0), at("rebuild:start", 0), at("rebuild:end", 5), at("trial:start", 5), at("trial:end", 7), at("drain:end", 8)]);
+  assert.deepEqual(parts.exclusive, { rebuild: 5, trial: 2 });
+  assert.deepEqual([parts.validation, parts.rebuild, parts.unattributed, parts.outer], [7, 5, 1, 8]);
+});
+
 test("mark parts: an unpaired, crossed, unclosed or unknown mark, or a part outside every outer span, is refused", () => {
   const outer = marks => [at("event:start", 0), ...marks, at("event:end", 9)];
   assert.throws(() => markParts([at("trial:end", 1)]), /Unpaired timing mark: measure:trial:end/);
