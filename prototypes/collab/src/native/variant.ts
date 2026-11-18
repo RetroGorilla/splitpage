@@ -17,6 +17,7 @@ export interface NativeRow {
 export interface NativeTextChange { segment: string; delta: unknown[] }
 export interface NativeChanges { text: NativeTextChange[]; rows: NativeRow[]; gone: string[]; order: boolean; records: string[] }
 export type NativeRecoveryReason = "removed" | "unplaced" | "loop";
+export type NativeReading = "follow" | "contiguous";
 export interface NativeRecovery {
   beat: string; kept: string; unseen: string[]; visual: string; reason: NativeRecoveryReason; members: string[];
   audio: NativeDeltaItem[]; visualItems: NativeDeltaItem[];
@@ -175,6 +176,7 @@ export class NativeReplica {
   private pending: NativeNote[] = [];
   private depth = 0;
   keepCreated = true;
+  private readingRule: NativeReading = "follow";
   readonly scheme: NativeScheme;
 
   constructor(client: number, captureTimeout = 0, scheme: NativeScheme = "name") {
@@ -218,6 +220,9 @@ export class NativeReplica {
       this.pending = [];
     });
   }
+
+  get reading(): NativeReading { return this.readingRule; }
+  set reading(value: NativeReading) { this.readingRule = value; this.structureChanged = true; }
 
   get segments(): Y.Map<Y.Map<unknown>> { return this.doc.getMap("segments"); }
   get beats(): Y.Map<Y.Map<unknown>> { return this.doc.getMap("beats"); }
@@ -593,6 +598,25 @@ export class NativeReplica {
     return heads;
   }
 
+  // why: the second reading: a join flag only hides the boundary above its beat, so a joined beat belongs to the nearest
+  // visible row above it in stored order, and a removed joined beat to the removed beat directly above it
+  private contiguousHeads(order: readonly string[]): Map<string, NativeHead> {
+    const heads = new Map<string, NativeHead>();
+    let shown: string | null = null, hidden: string | null = null, above = false;
+    this.loops = [];
+    for (const id of order) {
+      const joined = this.joined(id) !== null;
+      if (this.removal(id)) {
+        if (!(joined && above && hidden !== null)) hidden = id;
+        heads.set(id, { id: hidden, hidden: true }); above = true;
+      } else {
+        if (!(joined && shown !== null)) shown = id;
+        heads.set(id, { id: shown, hidden: false }); above = false;
+      }
+    }
+    return heads;
+  }
+
   private row(id: string, members: readonly NativeBlock[]): NativeRow {
     const audio: NativeDeltaItem[] = [], visual: NativeDeltaItem[] = [], parts = { audio: [] as NativePart[], visual: [] as NativePart[] };
     for (const member of members) {
@@ -610,7 +634,8 @@ export class NativeReplica {
   }
 
   private project(): Map<string, NativeRow> {
-    const blocks = this.blocks().filter(block => block.kind === "b"), heads = this.heads(blocks.map(block => block.id));
+    const blocks = this.blocks().filter(block => block.kind === "b"), order = blocks.map(block => block.id);
+    const heads = this.reading === "contiguous" ? this.contiguousHeads(order) : this.heads(order);
     const members = new Map<string, NativeBlock[]>();
     this.groups.clear(); this.owner.clear(); this.hiddenGroups = new Map();
     for (const block of blocks) {
@@ -687,7 +712,7 @@ export class NativeReplica {
         for (const item of block.delta) {
           const length = typeof item.insert === "string" ? item.insert.length : 1;
           for (let offset = 0; offset < length; offset++, index++) {
-            const id = this.characterIdentity(text, index), late = id.clock >= (removal.seen[String(id.client)] ?? 0);
+            const seen = (this.removal(block.id) ?? removal).seen, id = this.characterIdentity(text, index), late = id.clock >= (seen[String(id.client)] ?? 0);
             if (late) {
               const value = typeof item.insert === "string" ? item.insert.charAt(offset) : "￼";
               if (open) unseen[unseen.length - 1] += value; else unseen.push(value);

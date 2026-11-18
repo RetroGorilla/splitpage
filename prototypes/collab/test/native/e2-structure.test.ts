@@ -2,18 +2,21 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import * as Y from "yjs";
 import { NativeReplica, nativeCopy } from "../../src/native/variant.ts";
-import type { NativeDeltaItem } from "../../src/native/variant.ts";
+import type { NativeDeltaItem, NativeReading } from "../../src/native/variant.ts";
 import { joinUp, typeAt } from "../../src/native/rows.ts";
+import { compareReadings } from "./e2-compare.ts";
 import { measureE2Size } from "./e2-size.ts";
 import { closeE2, generateE2, reach, runE2, shownRecovery, shownRows, shrinkE2 } from "./structure-model.ts";
-import type { E2Delivery, E2Result, E2Step } from "./structure-model.ts";
+import type { E2Delivery, E2Result, E2Role, E2Step } from "./structure-model.ts";
 
 const DELIVERIES: readonly E2Delivery[] = ["forward", "reverse", "twice", "shuffled", "state"];
+const READINGS: readonly NativeReading[] = ["follow", "contiguous"];
 const everyone = (from: number): E2Step[] => [0, 1, 2].filter(to => to !== from).map(to => ({ op: "deliver", from, to }));
 const SETTLE: E2Step[] = [...everyone(0), ...everyone(1), ...everyone(2), ...everyone(0), ...everyone(1)];
 const UNTOUCHED = ["R3: ghi / qr", "R4: jkl / st"];
 
-interface Case { steps: E2Step[]; rows: string[]; recovery?: string[]; misordered?: boolean }
+interface Outcome { rows: string[]; recovery?: string[]; misordered?: boolean }
+interface Case extends Outcome { steps: E2Step[]; contiguous?: Outcome }
 
 // why: two insertions at one gap made apart are ordered by the library with the lower client id first (#1 is client 1);
 // the model fixes no such order, it holds the first one shown, and these expectations state the library's
@@ -35,22 +38,25 @@ const CASES: Record<string, Case> = {
     steps: [{ op: "join", by: 0, row: "R2" }, { op: "join", by: 1, row: "R2" }],
     rows: ["R1(R1+R2): abc def / mn|op", ...UNTOUCHED]
   },
-  "a chain: one joins 1+2 while another joins 2+3 and a third 3+4": {
-    steps: [{ op: "join", by: 0, row: "R2" }, { op: "join", by: 1, row: "R3" }, { op: "join", by: 2, row: "R4" }],
-    rows: ["R1(R1+R2+R3+R4): abc def ghi jkl / mn|op|qr|st"]
+  "a chain: one joins 1+2 while another joins 2+3 and a third 3+4, with typing in the visual cells": {
+    steps: [{ op: "join", by: 0, row: "R2" }, { op: "type", by: 1, row: "R3", field: "v", at: 1 }, { op: "join", by: 1, row: "R3" },
+      { op: "type", by: 2, row: "R2", field: "v", at: 2 }, { op: "join", by: 2, row: "R4" }],
+    rows: ["R1(R1+R2+R3+R4): abc def ghi jkl / mn|opB|qAr|st"]
   },
   "a loop of two join flags written directly breaks at the beat earliest in order": {
     steps: [{ op: "flag", by: 0, beat: "R1", into: "R2" }, { op: "flag", by: 1, beat: "R2", into: "R1" }],
-    rows: ["R1(R1+R2): abc def / mn|op", ...UNTOUCHED], recovery: ["loop R1: "]
+    rows: ["R1(R1+R2): abc def / mn|op", ...UNTOUCHED], recovery: ["loop R1: "],
+    contiguous: { rows: ["R1(R1+R2): abc def / mn|op", ...UNTOUCHED] }
   },
   "a loop of three join flags written directly": {
     steps: [{ op: "flag", by: 0, beat: "R1", into: "R3" }, { op: "flag", by: 1, beat: "R2", into: "R1" }, { op: "flag", by: 2, beat: "R3", into: "R2" }],
-    rows: ["R1(R1+R2+R3): abc def ghi / mn|op|qr", "R4: jkl / st"], recovery: ["loop R1: "]
+    rows: ["R1(R1+R2+R3): abc def ghi / mn|op|qr", "R4: jkl / st"], recovery: ["loop R1: "],
+    contiguous: { rows: ["R1(R1+R2+R3): abc def ghi / mn|op|qr", "R4: jkl / st"] }
   },
-  "a split inside a joined row, with typing at the seam before and after the glue": {
-    steps: [{ op: "join", by: 0, row: "R2" }, ...everyone(0), { op: "split", by: 1, row: "R1", at: 1 },
-      { op: "type", by: 2, row: "R1", field: "a", at: 3 }, { op: "type", by: 2, row: "R1", field: "a", at: 5 }],
-    rows: ["R1: a / mn", "S1(S1+R2): bcAB def / op", ...UNTOUCHED]
+  "a split inside a joined row, with typing at the seam and in both visual cells": {
+    steps: [{ op: "join", by: 0, row: "R2" }, ...everyone(0), { op: "split", by: 1, row: "R1", at: 1 }, { op: "type", by: 1, row: "R1", field: "v", at: 1 },
+      { op: "type", by: 2, row: "R1", field: "a", at: 3 }, { op: "type", by: 2, row: "R1", field: "a", at: 5 }, { op: "type", by: 2, row: "R1", field: "v", at: 4 }],
+    rows: ["R1: a / mAn", "S1(S1+R2): bcBC def / oDp", ...UNTOUCHED]
   },
   "a split at the seam undoes the join while someone types on both sides of it": {
     steps: [{ op: "join", by: 0, row: "R2" }, ...everyone(0), { op: "split", by: 1, row: "R1", at: 4 },
@@ -65,7 +71,8 @@ const CASES: Record<string, Case> = {
   },
   "finding: a split inside a beat while another person joins the next beat to it": {
     steps: [{ op: "join", by: 0, row: "R2" }, { op: "split", by: 1, row: "R1", at: 1 }],
-    rows: ["R1(R1+R2): a def / mn|op", "S1: bc", ...UNTOUCHED], misordered: true
+    rows: ["R1(R1+R2): a def / mn|op", "S1: bc", ...UNTOUCHED], misordered: true,
+    contiguous: { rows: ["R1: a / mn", "S1(S1+R2): bc def / op", ...UNTOUCHED] }
   },
   "a removal while someone splits the same beat": {
     steps: [{ op: "remove", by: 0, row: "R2" }, { op: "split", by: 1, row: "R2", at: 1 }],
@@ -82,7 +89,8 @@ const CASES: Record<string, Case> = {
   },
   "a removal of the row another person joins the next beat into, without a restore": {
     steps: [{ op: "remove", by: 0, row: "R1" }, { op: "join", by: 1, row: "R2" }],
-    rows: UNTOUCHED, recovery: ["removed R1(R1+R2): abc def / mn|op"]
+    rows: UNTOUCHED, recovery: ["removed R1(R1+R2): abc def / mn|op"],
+    contiguous: { rows: ["R2: def / op", ...UNTOUCHED], recovery: ["removed R1: abc / mn"] }
   },
   "a removal of a joined row while someone types in its later beat": {
     steps: [{ op: "join", by: 0, row: "R2" }, ...everyone(0), { op: "remove", by: 1, row: "R1" },
@@ -102,79 +110,104 @@ const CASES: Record<string, Case> = {
     steps: [{ op: "remove", by: 0, row: "R2" }, { op: "remove", by: 1, row: "R2" }, { op: "deliver", from: 0, to: 2 }, { op: "restore", by: 2, entry: "R2" }],
     rows: ["R1: abc / mn", ...UNTOUCHED], recovery: ["removed R2: def / op"]
   },
-  "finding: one person removes a beat, joins the next to the row above, then restores": {
-    steps: [{ op: "remove", by: 0, row: "R2" }, { op: "join", by: 0, row: "R3" }, { op: "restore", by: 0, entry: "R2" }],
-    rows: ["R1(R1+R3): abc ghi / mn|qr", "R2: def / op", "R4: jkl / st"], misordered: true
+  "finding: one person removes a beat, joins the next to the row above, then restores, while another types in its visual": {
+    steps: [{ op: "type", by: 1, row: "R3", field: "v", at: 0 }, { op: "remove", by: 0, row: "R2" }, { op: "join", by: 0, row: "R3" }, { op: "restore", by: 0, entry: "R2" }],
+    rows: ["R1(R1+R3): abc ghi / mn|Aqr", "R2: def / op", "R4: jkl / st"], misordered: true,
+    contiguous: { rows: ["R1: abc / mn", "R2(R2+R3): def ghi / op|Aqr", "R4: jkl / st"] }
   },
-  "a restore while another person, who still sees the beat removed, joins the next one up": {
-    steps: [{ op: "remove", by: 0, row: "R2" }, ...everyone(0), { op: "restore", by: 1, entry: "R2" }, { op: "join", by: 2, row: "R3" }],
-    rows: ["R1(R1+R3): abc ghi / mn|qr", "R2: def / op", "R4: jkl / st"], misordered: true
+  "a restore while another person, who still sees the beat removed, joins the next one up, with typing in both visual cells": {
+    steps: [{ op: "remove", by: 0, row: "R2" }, ...everyone(0), { op: "restore", by: 1, entry: "R2" }, { op: "type", by: 1, row: "R2", field: "v", at: 1 },
+      { op: "join", by: 2, row: "R3" }, { op: "type", by: 2, row: "R1", field: "v", at: 4 }],
+    rows: ["R1(R1+R3): abc ghi / mn|qBr", "R2: def / oAp", "R4: jkl / st"], misordered: true,
+    contiguous: { rows: ["R1: abc / mn", "R2(R2+R3): def ghi / oAp|qBr", "R4: jkl / st"] }
   }
 };
 
-for (const [name, item] of Object.entries(CASES)) for (const delivery of DELIVERIES) {
-  test(`E2 ${name}, ${delivery} delivery`, () => {
-    const result = runE2([...item.steps, ...SETTLE], { delivery });
+for (const [name, item] of Object.entries(CASES)) for (const reading of READINGS) for (const delivery of DELIVERIES) {
+  test(`E2 ${name}, ${reading} reading, ${delivery} delivery`, () => {
+    const result = runE2([...item.steps, ...SETTLE], { delivery, reading }), want = reading === "contiguous" ? item.contiguous ?? item : item;
     try {
       assert.deepEqual(result.problems, []);
-      assert.deepEqual(result.rows, item.rows);
-      assert.deepEqual(result.recovery, item.recovery ?? []);
-      assert.equal(result.misordered, item.misordered ?? false);
+      assert.deepEqual(result.rows, want.rows);
+      assert.deepEqual(result.recovery, want.recovery ?? []);
+      assert.equal(result.misordered, want.misordered ?? false);
+      assert.ok(result.probed > 0, "edits at shown places were probed");
     } finally { closeE2(result); }
   });
 }
 
-test("E2 generated histories: three writers and a late joiner agree, nothing is missing, doubled or out of reach", t => {
-  let histories = 0, executed = 0, misordered = 0;
-  for (const delivery of DELIVERIES) for (let seed = 1; seed <= 200; seed++) {
-    const steps = generateE2(seed * 7919, 30), result = runE2(steps, { delivery, seed });
-    try {
-      if (result.problems.length) {
-        const short = shrinkE2(steps, candidate => { const again = runE2(candidate, { delivery, seed }); const failed = again.problems.length > 0; closeE2(again); return failed; });
-        const again = runE2(short, { delivery, seed });
-        assert.fail(`${delivery} seed ${seed}: ${again.labels.join("; ")} => ${again.problems.join(" | ")}`);
-      }
-      histories++; executed += result.executed; if (result.misordered) misordered++;
-    } finally { closeE2(result); }
-  }
-  t.diagnostic(`${histories} histories, ${executed} commands, ${misordered} with rows out of stored order`);
-  assert.equal(histories, 1000);
-  assert.ok(misordered > 0, "the follow-the-flag reading shows rows out of stored order in some histories");
+for (const reading of READINGS) {
+  test(`E2 generated histories, ${reading} reading: copies agree, nothing is missing, doubled or out of reach, edits land where shown`, t => {
+    let histories = 0, executed = 0, misordered = 0, probed = 0, ties = 0, flags = 0;
+    for (const delivery of DELIVERIES) for (let seed = 1; seed <= 200; seed++) {
+      const steps = generateE2(seed * 7919, 30), result = runE2(steps, { delivery, seed, reading });
+      try {
+        if (result.problems.length) {
+          const short = shrinkE2(steps, candidate => { const again = runE2(candidate, { delivery, seed, reading }); const failed = again.problems.length > 0; closeE2(again); return failed; });
+          const again = runE2(short, { delivery, seed, reading });
+          assert.fail(`${delivery} seed ${seed}: ${again.labels.join("; ")} => ${again.problems.join(" | ")}`);
+        }
+        histories++; executed += result.executed; probed += result.probed;
+        if (result.misordered) misordered++;
+        if (result.observedTies) ties++;
+        if (result.observedFlags) flags++;
+      } finally { closeE2(result); }
+    }
+    t.diagnostic(`${histories} histories, ${executed} commands, ${probed} edit probes, ${misordered} with rows out of stored order, `
+      + `${ties} with an order the commands left open, ${flags} with a flag value the commands left open`);
+    assert.equal(histories, 1000);
+    if (reading === "follow") assert.ok(misordered > 0, "following the named beat shows rows out of stored order in some histories");
+    else assert.equal(misordered, 0, "the contiguous reading keeps rows in stored order");
+  });
+}
+
+test("E2 the two readings compared on generated histories", t => {
+  const comparison = compareReadings(10, 30);
+  t.diagnostic(JSON.stringify({ totals: comparison.totals, differing: comparison.differing, kinds: Object.fromEntries(Object.entries(comparison.kinds).map(([kind, entry]) => [kind, entry.histories])) }));
+  assert.equal(comparison.totals.follow.problems + comparison.totals.contiguous.problems, 0);
+  assert.equal(comparison.totals.contiguous.misordered, 0);
+  assert.ok(comparison.differing > 0);
 });
 
-function tampered(tamper: (replica: NativeReplica, late: boolean) => void): E2Result {
+function tampered(tamper: (replica: NativeReplica, role: E2Role) => void): E2Result {
   return runE2([{ op: "join", by: 0, row: "R2" }, { op: "type", by: 1, row: "R2", field: "a", at: 1 }, { op: "remove", by: 2, row: "R3" }, ...SETTLE], { tamper });
 }
 
-function remotely(replica: NativeReplica, change: () => void): void {
+function remotely(replica: NativeReplica, role: E2Role, change: () => void): void {
+  if (role !== "copy") return;
   replica.doc.transact(change, "remote");
   replica.changes();
 }
 
-const NEGATIVE: Record<string, { tamper: (replica: NativeReplica, late: boolean) => void; expect: RegExp }> = {
-  "drop a character": { tamper: (replica, late) => { if (!late) remotely(replica, () => { const cell = replica.cell("R2", "audioText"); cell.text.delete(cell.start, 1); }); }, expect: /narration holds/ },
+const NEGATIVE: Record<string, { tamper: (replica: NativeReplica, role: E2Role) => void; expect: RegExp[] }> = {
+  "drop a character": { tamper: (replica, role) => { remotely(replica, role, () => { const cell = replica.cell("R2", "audioText"); cell.text.delete(cell.start, 1); }); }, expect: [/narration holds/] },
   "misplace a character": {
-    tamper: (replica, late) => {
-      if (late) return;
-      remotely(replica, () => { const from = replica.cell("R2", "audioText"); from.text.delete(from.start, 1); const to = replica.cell("R4", "audioText"); to.text.insert(to.start + 1, "d"); });
+    tamper: (replica, role) => {
+      remotely(replica, role, () => { const from = replica.cell("R2", "audioText"); from.text.delete(from.start, 1); const to = replica.cell("R4", "audioText"); to.text.insert(to.start + 1, "d"); });
     },
-    expect: /order .* breaks/
+    expect: [/order .* breaks/]
   },
   "misplace a visual character into another beat's cell": {
-    tamper: (replica, late) => { if (!late) remotely(replica, () => { replica.visuals.get("R2")?.delete(0, 1); replica.visuals.get("R4")?.insert(0, "o"); }); },
-    expect: /visual R2 holds/
+    tamper: (replica, role) => { remotely(replica, role, () => { replica.visuals.get("R2")?.delete(0, 1); replica.visuals.get("R4")?.insert(0, "o"); }); },
+    expect: [/visual R2 holds/]
   },
-  "duplicate a character": { tamper: (replica, late) => { if (!late) remotely(replica, () => { const cell = replica.cell("R1", "audioText"); cell.text.insert(cell.start, "a"); }); }, expect: /twice/ },
+  "duplicate a character": { tamper: (replica, role) => { remotely(replica, role, () => { const cell = replica.cell("R1", "audioText"); cell.text.insert(cell.start, "a"); }); }, expect: [/twice/] },
   "strand a character in a container no row reads": {
-    tamper: (replica, late) => {
-      if (late) return;
-      remotely(replica, () => {
+    tamper: (replica, role) => {
+      remotely(replica, role, () => {
         const cell = replica.cell("R4", "audioText"); cell.text.delete(cell.start, 1);
         const hidden = new Y.Map<unknown>(), text = new Y.Text("j");
         replica.segments.set("seg-hidden", hidden); hidden.set("head", { b: "R9" }); hidden.set("text", text);
       });
     },
-    expect: /j is stored 1 time\(s\) and shown 0/
+    expect: [/j is stored 1 time\(s\) and shown 0/]
+  },
+  "route edits by corrupted parts while the shown text stays right": {
+    tamper: replica => {
+      const real = replica.rows.bind(replica);
+      replica.rows = () => real().map(row => ({ ...row, parts: { audio: row.parts.audio.map(part => ({ ...part, length: 0 })), visual: row.parts.visual } }));
+    },
+    expect: [/R1 audioText parts do not cover the shown text/, /edit at shown place: type at \d+ of R1 audioText/]
   }
 };
 
@@ -182,13 +215,25 @@ for (const [name, control] of Object.entries(NEGATIVE)) {
   test(`E2 negative control: ${name} fails the checks`, () => {
     const clean = tampered(() => undefined);
     try { assert.deepEqual(clean.problems, []); } finally { closeE2(clean); }
-    const result = tampered(control.tamper);
+    const result = name.startsWith("route") ? runE2([{ op: "join", by: 0, row: "R2" }, ...SETTLE], { tamper: control.tamper, probes: 40 }) : tampered(control.tamper);
     try {
       assert.ok(result.problems.length > 0, "the check passed a tampered document");
-      assert.match(result.problems.join("\n"), control.expect);
+      for (const expect of control.expect) assert.match(result.problems.join("\n"), expect);
     } finally { closeE2(result); }
   });
 }
+
+test("E2 negative control: a corrupted-parts reader types Z at shown offset 5 of R1+R2 into the wrong place", () => {
+  const result = runE2([{ op: "join", by: 0, row: "R2" }, ...SETTLE]), copy = new NativeReplica(700);
+  try {
+    Y.applyUpdate(copy.doc, Y.encodeStateAsUpdate((result.copies[0] as NativeReplica).doc), "remote");
+    const real = copy.rows.bind(copy);
+    copy.rows = () => real().map(row => ({ ...row, parts: { audio: row.parts.audio.map(part => ({ ...part, length: 0 })), visual: row.parts.visual } }));
+    typeAt(copy, "R1", "audioText", 5, "Z");
+    assert.equal(real()[0]?.audioText, "abc Zdef", "routed by the corrupted parts");
+    assert.match(reach(copy).join("\n"), /parts do not cover/);
+  } finally { closeE2(result); copy.destroy(); }
+});
 
 test("E2 negative control: the stranding reach check catches a removed chain read by the spike's earlier rule", () => {
   const result = runE2([{ op: "remove", by: 0, row: "R1" }, { op: "join", by: 1, row: "R2" }, ...SETTLE], {

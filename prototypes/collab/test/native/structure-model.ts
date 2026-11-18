@@ -1,6 +1,6 @@
 import * as Y from "yjs";
 import { NativeReplica, nativeCopy } from "../../src/native/variant.ts";
-import type { NativeDeltaItem, NativeField, NativeRecovery, NativeRow } from "../../src/native/variant.ts";
+import type { NativeDeltaItem, NativeField, NativeReading, NativeRecovery, NativeRow } from "../../src/native/variant.ts";
 import { deleteIn, joinUp, removeRow, restoreRow, splitAt, typeAt } from "../../src/native/rows.ts";
 
 export type E2Field = "a" | "v";
@@ -16,17 +16,23 @@ export type E2Step =
   | { op: "flag"; by: number; beat: string; into: string }
   | { op: "deliver"; from: number; to: number };
 export interface E2Beat { id: string; audio: string; visual: string }
-export interface E2Options { delivery?: E2Delivery; seed?: number; beats?: readonly E2Beat[]; tamper?: (replica: NativeReplica, late: boolean) => void }
+export type E2Role = "copy" | "late" | "probe";
+export interface E2Options {
+  delivery?: E2Delivery; seed?: number; beats?: readonly E2Beat[]; reading?: NativeReading; probes?: number;
+  tamper?: (replica: NativeReplica, role: E2Role) => void;
+}
+export interface E2Place { row: number; members: string[]; hidden: boolean }
 export interface E2Result {
   problems: string[]; misordered: boolean; executed: number; skipped: number; labels: string[];
   rows: string[]; recovery: string[]; copies: NativeReplica[]; late: NativeReplica;
+  observedTies: number; observedFlags: number; probed: number; places: Map<string, E2Place>;
 }
 interface ModelWrite { id: number; command: number; beat: string; key: "joined" | "removed"; set: boolean; into: string | null; glue: string; knew: Set<number>; item: string | null }
 interface ModelCommand { id: number; by: number; knew: Set<number>; writes: number[] }
 interface ModelPiece { beat: string | null; chars: string[] }
 interface ModelRow { id: string; members: string[]; audio: ModelPiece[]; visual: ModelPiece[] }
 interface ModelEntry { beat: string; reason: string; members: string[]; audio: string[]; visual: string[] }
-interface ModelView { rows: ModelRow[]; entries: ModelEntry[]; line: string[]; visuals: Map<string, string[]> }
+interface ModelView { rows: ModelRow[]; entries: ModelEntry[]; line: string[]; visuals: Map<string, string[]>; beats: string[]; flags: Map<string, unknown>; reading: NativeReading }
 interface Stored { line: string[]; visuals: Map<string, string[]>; beats: string[]; items: Map<string, { id: string; deleted: boolean }[]>; values: Map<string, unknown>; stray: string[] }
 
 export const E2_BEATS: readonly E2Beat[] = [
@@ -50,22 +56,33 @@ function rng(seed: number): () => number {
 // written after others sits after them. Where they fix nothing, the first order any copy shows is held from then on
 class Fences {
   private readonly after = new Map<string, Set<string>>();
-  put(first: string, second: string): void { this.after.set(first, (this.after.get(first) ?? new Set<string>()).add(second)); }
-  precedes(first: string, second: string): boolean {
+  private readonly fixedAfter = new Map<string, Set<string>>();
+  put(first: string, second: string, observed = false): void {
+    this.after.set(first, (this.after.get(first) ?? new Set<string>()).add(second));
+    if (!observed) this.fixedAfter.set(first, (this.fixedAfter.get(first) ?? new Set<string>()).add(second));
+  }
+  private reaches(graph: ReadonlyMap<string, Set<string>>, first: string, second: string): boolean {
     const queue = [first], seen = new Set<string>();
-    for (let next = queue.pop(); next !== undefined; next = queue.pop()) for (const char of this.after.get(next) ?? []) {
+    for (let next = queue.pop(); next !== undefined; next = queue.pop()) for (const char of graph.get(next) ?? []) {
       if (char === second) return true;
       if (!seen.has(char)) { seen.add(char); queue.push(char); }
     }
     return false;
   }
+  precedes(first: string, second: string): boolean { return this.reaches(this.after, first, second); }
+  fixed(first: string, second: string): boolean { return this.reaches(this.fixedAfter, first, second); }
   accepts(sequence: readonly string[]): boolean {
     for (let index = 1; index < sequence.length; index++) {
       const left = sequence[index - 1] as string, right = sequence[index] as string;
       if (left === right || this.precedes(right, left)) return false;
-      if (!this.precedes(left, right)) this.put(left, right);
+      if (!this.precedes(left, right)) this.put(left, right, true);
     }
     return true;
+  }
+  observedPairs(sequence: readonly string[]): number {
+    let count = 0;
+    for (let index = 1; index < sequence.length; index++) if (!this.fixed(sequence[index - 1] as string, sequence[index] as string)) count++;
+    return count;
   }
   chain(sequence: readonly string[]): void { sequence.forEach((value, index) => { if (index) this.put(sequence[index - 1] as string, value); }); }
 }
@@ -106,9 +123,10 @@ function readStored(replica: NativeReplica): Stored {
   return { line, visuals, beats: [...replica.beats.keys()].sort(), items, values, stray };
 }
 
-// why: the design's reading, written apart from the code under test: a chain is one row, a loop breaks at its beat
-// earliest in order, and a chain that meets a removed beat is hidden with the nearest one and listed in recovery
-function modelView(line: readonly string[], visuals: ReadonlyMap<string, string[]>, beats: readonly string[], flag: (beat: string, key: "joined" | "removed") => unknown): ModelView {
+// why: both readings, written apart from the code under test. Follow: a chain is one row, a loop breaks at its beat
+// earliest in order, a chain meeting a removed beat hides with the nearest one. Contiguous: see contiguousGroups
+function modelView(line: readonly string[], visuals: ReadonlyMap<string, string[]>, beats: readonly string[], flags: ReadonlyMap<string, unknown>, reading: NativeReading): ModelView {
+  const flag = (beat: string, key: "joined" | "removed"): unknown => flags.get(`${beat}/${key}`);
   const order: string[] = [], narration = new Map<string, string[]>();
   for (const element of line) {
     if (element.startsWith("b:")) { order.push(element.slice(2)); narration.set(element.slice(2), []); }
@@ -131,8 +149,9 @@ function modelView(line: readonly string[], visuals: ReadonlyMap<string, string[
     loops.add(cycle.sort((left, right) => rank(left) - rank(right))[0] as string);
   }
   for (const beat of loops) up.set(beat, null);
-  const groups = new Map<string, { hidden: boolean; members: string[] }>();
-  for (const beat of order) {
+  if (reading === "contiguous") loops.clear();
+  const groups = reading === "contiguous" ? contiguousGroups(order, beat => join(beat) !== null, beat => flag(beat, "removed") !== undefined) : new Map<string, { hidden: boolean; members: string[] }>();
+  if (reading === "follow") for (const beat of order) {
     let current = beat, next = up.get(beat) ?? null;
     while (flag(current, "removed") === undefined && next !== null) { current = next; next = up.get(current) ?? null; }
     const head = { id: current, hidden: flag(current, "removed") !== undefined };
@@ -159,7 +178,24 @@ function modelView(line: readonly string[], visuals: ReadonlyMap<string, string[
     entries.push({ beat: id, reason: "removed", members: group.members, audio: built.audio.flatMap(piece => piece.chars), visual: built.visual.flatMap(piece => piece.chars) });
   }
   for (const beat of [...loops].sort((left, right) => rank(left) - rank(right))) entries.push({ beat, reason: "loop", members: [beat], audio: [], visual: [] });
-  return { rows, entries, line: [...line], visuals: new Map(visuals) };
+  return { rows, entries, line: [...line], visuals: new Map(visuals), beats: [...beats], flags: new Map(flags), reading };
+}
+
+// why: the second reading: a join flag hides only the boundary above its beat. A shown joined beat goes to the last
+// shown row above it; a removed joined beat goes with the removed beat right above it, else heads its own entry
+function contiguousGroups(order: readonly string[], joined: (beat: string) => boolean, removed: (beat: string) => boolean): Map<string, { hidden: boolean; members: string[] }> {
+  const groups = new Map<string, { hidden: boolean; members: string[] }>();
+  const shownHeads: string[] = [], hiddenHeads: string[] = [];
+  order.forEach((beat, index) => {
+    const gone = removed(beat), previous = order[index - 1];
+    let head = beat;
+    if (gone && joined(beat) && previous !== undefined && removed(previous)) head = hiddenHeads.at(-1) ?? beat;
+    if (!gone && joined(beat) && shownHeads.length) head = shownHeads.at(-1) ?? beat;
+    if (head === beat) (gone ? hiddenHeads : shownHeads).push(beat);
+    const group = groups.get(head) ?? { hidden: gone, members: [] };
+    group.members.push(beat); groups.set(head, group);
+  });
+  return groups;
 }
 
 const flat = (pieces: readonly ModelPiece[]): string => pieces.map(piece => piece.chars.join("")).join("");
@@ -206,10 +242,10 @@ function spot(row: ModelRow, field: E2Field, at: number): { beat: string; offset
 
 // why: copies made only from the stored state; the generator issues commands as a person would, on rows shown
 export function runE2(steps: readonly E2Step[], options: E2Options = {}): E2Result {
-  const delivery = options.delivery ?? "forward", random = rng(options.seed ?? 7), beats = options.beats ?? E2_BEATS;
+  const delivery = options.delivery ?? "forward", random = rng(options.seed ?? 7), beats = options.beats ?? E2_BEATS, reading = options.reading ?? "follow";
   const seed = new NativeReplica(900);
   seed.hydrate({ rows: beats.map(beat => ({ id: beat.id, audioText: beat.audio, visualText: beat.visual })) });
-  const copies = E2_NAMES.map((_, index) => nativeCopy(seed, index + 1));
+  const copies = E2_NAMES.map((_, index) => { const copy = nativeCopy(seed, index + 1); copy.reading = reading; copy.changes(); return copy; });
   seed.destroy();
   const fences = new Fences(), commands: ModelCommand[] = [], writes: ModelWrite[] = [];
   const born = new Map<string, number>(), died = new Map<string, number[]>(), home = new Map<string, string>(), beatBorn = new Map<string, number>();
@@ -228,6 +264,7 @@ export function runE2(steps: readonly E2Step[], options: E2Options = {}): E2Resu
   let next = 0, created = 0, executed = 0, skipped = 0;
 
   const alive = (element: string, seen: ReadonlySet<number>): boolean => seen.has(born.get(element) ?? -2) && !(died.get(element) ?? []).some(command => seen.has(command));
+  let observed: Set<string> | null = null;
   const verify = (replica: NativeReplica, seen: ReadonlySet<number>, who: string): ModelView | null => {
     const stored = readStored(replica), fail = (message: string): null => { problems.push(`${who}: ${message}`); return null; };
     const wanted = [...born.keys()].filter(element => !home.has(element) && alive(element, seen));
@@ -250,6 +287,15 @@ export function runE2(steps: readonly E2Step[], options: E2Options = {}): E2Resu
       if (!fences.accepts(ordered.map(write => `w:${write.id}`))) return fail(`${beat}.${key} writes in an order that breaks one fixed or shown`);
       const last = ordered.at(-1), over = last ? mine.some(write => write.knew.has(last.id)) : true;
       const value = last && !over ? (key === "joined" ? { into: last.into, glue: last.glue } : true) : undefined;
+      // why: the outcomes the commands allow: any set nobody overwrote or deleted, and no value when one of those may sit
+      // left of a set someone deleted; only when several remain does the order the library gave them decide
+      const shape = (set: ModelWrite): string => JSON.stringify(key === "joined" ? { into: set.into, glue: set.glue } : true);
+      const standing = sets.filter(set => !mine.some(other => other.knew.has(set.id)));
+      const deleted = sets.filter(set => mine.some(other => !other.set && other.knew.has(set.id)));
+      const outcomes = new Set(standing.map(shape));
+      if (!standing.length || standing.some(set => deleted.some(gone => !set.knew.has(gone.id)))) outcomes.add("none");
+      if (!outcomes.has(value === undefined ? "none" : JSON.stringify(value))) return fail(`${beat}.${key} is ${JSON.stringify(value)}, the commands allow ${[...outcomes].join(" or ")}`);
+      if (outcomes.size > 1) observed?.add(`${beat}.${key}`);
       const raw = stored.values.get(`${beat}/${key}`) as { into?: string; glue?: string } | undefined;
       const same = value === undefined ? raw === undefined : key === "removed" ? raw !== undefined
         : raw?.into === (value as { into: string }).into && raw?.glue === (value as { glue: string }).glue;
@@ -257,7 +303,7 @@ export function runE2(steps: readonly E2Step[], options: E2Options = {}): E2Resu
       if (items.some((item, index) => item.deleted !== (index < items.length - 1 || over))) return fail(`${beat}.${key} keeps a write the library should have dropped`);
       flags.set(`${beat}/${key}`, value);
     }
-    const view = modelView(stored.line, stored.visuals, present, (beat, key) => flags.get(`${beat}/${key}`));
+    const view = modelView(stored.line, stored.visuals, present, flags, reading);
     const rows = shownRows(replica), wantRows = modelRows(view), entries = shownRecovery(replica), wantEntries = modelEntries(view);
     if (JSON.stringify(rows) !== JSON.stringify(wantRows)) return fail(`rows ${JSON.stringify(rows)}, the model reads ${JSON.stringify(wantRows)}`);
     const unplaced = (list: string[]): string => JSON.stringify([...list.filter(item => item.startsWith("unplaced")).sort(), ...list.filter(item => !item.startsWith("unplaced"))]);
@@ -274,6 +320,7 @@ export function runE2(steps: readonly E2Step[], options: E2Options = {}): E2Resu
     writes.push(record); command.writes.push(record.id);
   };
   const repoint = (command: ModelCommand, by: number, row: ModelRow, from: number, begins: string, flags: (beat: string) => { into: string; glue: string } | null): void => {
+    if (reading === "contiguous") return;
     const earlier = new Set(row.members.slice(0, from));
     for (const member of row.members.slice(from)) {
       const join = flags(member);
@@ -314,8 +361,8 @@ export function runE2(steps: readonly E2Step[], options: E2Options = {}): E2Resu
     if (!replica || !seen) continue;
     const view = verify(replica, seen, `${E2_NAMES[step.by]} before step ${position}`);
     if (!view) break;
-    const stored = readStored(replica), flags = (beat: string): { into: string; glue: string } | null => {
-      const value = stored.values.get(`${beat}/joined`) as { into?: string; glue?: string } | undefined;
+    const flags = (beat: string): { into: string; glue: string } | null => {
+      const value = view.flags.get(`${beat}/joined`) as { into?: string; glue?: string } | undefined;
       return value && typeof value.into === "string" ? { into: value.into, glue: value.glue ?? "" } : null;
     };
     const command: ModelCommand = { id: commands.length, by: step.by, knew: new Set(seen), writes: [] };
@@ -365,14 +412,14 @@ export function runE2(steps: readonly E2Step[], options: E2Options = {}): E2Resu
         joinUp(replica, row.id, " ");
         label = `${name} joins ${row.id} to ${above.id}`;
       } else {
-        write(command, step.by, row.id, "removed", true);
+        for (const member of reading === "contiguous" ? row.members : [row.id]) write(command, step.by, member, "removed", true);
         removeRow(replica, row.id, name);
         label = `${name} removes ${row.id}`;
       }
     } else if (step.op === "restore") {
       const entry = pick(view.entries.filter(item => item.reason === "removed").map(item => ({ ...item, id: item.beat })), step.entry);
       if (!entry) { skipped++; continue; }
-      write(command, step.by, entry.beat, "removed", false);
+      for (const member of reading === "contiguous" ? entry.members : [entry.beat]) write(command, step.by, member, "removed", false);
       restoreRow(replica, entry.beat);
       label = `${name} restores ${entry.beat}`;
     } else {
@@ -390,27 +437,76 @@ export function runE2(steps: readonly E2Step[], options: E2Options = {}): E2Resu
     verify(replica, seen, `${name} after step ${position}`);
   }
   if (!problems.length) for (let round = 0; round < 2; round++) for (let from = 0; from < copies.length; from++) for (let to = 0; to < copies.length; to++) if (from !== to) transfer(from, to, round);
-  for (const replica of copies) options.tamper?.(replica, false);
+  for (const replica of copies) options.tamper?.(replica, "copy");
   const late = new NativeReplica(800);
+  late.reading = reading;
   Y.applyUpdate(late.doc, Y.encodeStateAsUpdate((copies[0] as NativeReplica).doc), "remote");
-  options.tamper?.(late, true);
+  options.tamper?.(late, "late");
   late.changes();
   const all = new Set(commands.map(command => command.id).concat(-1));
-  let misordered = false;
+  let misordered = false, observedTies = 0, observedFlags = 0, probed = 0;
+  const places = new Map<string, E2Place>();
   if (!problems.length) {
     const readings = [...copies, late].map(replica => JSON.stringify([shownRows(replica), shownRecovery(replica), readStored(replica).line]));
-    if (readings.some(reading => reading !== readings[0])) problems.push(`copies differ: ${readings.join(" / ")}`);
+    if (readings.some(value => value !== readings[0])) problems.push(`copies differ: ${readings.join(" / ")}`);
     [...copies, late].forEach((replica, index) => {
-      const view = verify(replica, all, index < copies.length ? `${E2_NAMES[index]} at the end` : "late joiner");
-      problems.push(...reach(replica));
-      if (view && index === 0) {
-        const visible = new Set(view.rows.flatMap(row => row.audio.filter(piece => piece.beat !== null).flatMap(piece => piece.chars)));
-        const read = view.rows.flatMap(row => row.audio.filter(piece => piece.beat !== null).flatMap(piece => piece.chars));
-        misordered = JSON.stringify(read) !== JSON.stringify(view.line.filter(element => visible.has(element)));
+      observed = index === 0 ? new Set<string>() : null;
+      const failed = problems.length, view = verify(replica, all, index < copies.length ? `${E2_NAMES[index]} at the end` : "late joiner");
+      const unreached = reach(replica);
+      if (!view || index !== 0) { problems.push(...unreached); return; }
+      observedFlags = observed?.size ?? 0;
+      observedTies = fences.observedPairs(view.line) + [...view.visuals.values()].reduce((sum, cell) => sum + fences.observedPairs(cell), 0);
+      const shown = view.rows.flatMap(row => row.members), stored = view.line.filter(element => element.startsWith("b:")).map(element => element.slice(2));
+      misordered = JSON.stringify(shown) !== JSON.stringify(stored.filter(beat => shown.includes(beat)));
+      view.rows.forEach((row, at) => { for (const member of row.members) places.set(member, { row: at, members: row.members, hidden: false }); });
+      view.entries.forEach((entry, at) => { for (const member of entry.members) places.set(member, { row: at, members: entry.members, hidden: true }); });
+      if (problems.length === failed) {
+        const result = probeEdits(replica, view, options.probes ?? 6, random, options.tamper);
+        probed = result.count; problems.push(...result.problems);
       }
+      problems.push(...unreached);
     });
   }
-  return { problems, misordered, executed, skipped, labels, rows: shownRows(copies[0] as NativeReplica), recovery: shownRecovery(copies[0] as NativeReplica), copies, late };
+  observed = null;
+  return { problems, misordered, executed, skipped, labels, rows: shownRows(copies[0] as NativeReplica), recovery: shownRecovery(copies[0] as NativeReplica), copies, late,
+    observedTies, observedFlags, probed, places };
+}
+
+// why: edits are routed by the row's parts; each probe types or deletes at a shown place on a fresh copy and compares
+// the rows with the model's own placement of that edit, which never reads the parts
+function probeEdits(source: NativeReplica, view: ModelView, count: number, random: () => number, tamper?: (replica: NativeReplica, role: E2Role) => void): { count: number; problems: string[] } {
+  const places: { row: ModelRow; field: E2Field; at: number }[] = [];
+  for (const row of view.rows) for (const field of ["a", "v"] as const) {
+    const length = flat(field === "a" ? row.audio : row.visual).length;
+    for (let at = 0; at <= length; at++) places.push({ row, field, at });
+  }
+  for (let index = places.length - 1; index > 0; index--) { const swap = Math.floor(random() * (index + 1)); [places[index], places[swap]] = [places[swap] as typeof places[number], places[index] as typeof places[number]]; }
+  const problems: string[] = [];
+  let done = 0;
+  for (const { row, field, at } of places.slice(0, count)) for (const op of ["type", "delete"] as const) {
+    const pieces = field === "a" ? row.audio : row.visual, shown = pieces.flatMap(piece => piece.chars.map(char => ({ char, beat: piece.beat })));
+    const target = shown[at];
+    if (op === "delete" && (!target || target.beat === null)) continue;
+    const line = [...view.line], visuals = new Map([...view.visuals].map(([beat, cell]) => [beat, [...cell]]));
+    if (op === "type") {
+      const place = spot(row, field, at);
+      if (field === "v") visuals.get(place.beat)?.splice(place.offset, 0, "Ω");
+      else line.splice(line.indexOf(`b:${place.beat}`) + 1 + place.offset, 0, "Ω");
+    } else if (field === "v") visuals.get(target?.beat ?? "")?.splice(visuals.get(target?.beat ?? "")?.indexOf(target?.char ?? "") ?? -1, 1);
+    else line.splice(line.indexOf(target?.char ?? ""), 1);
+    const expected = modelView(line, visuals, view.beats, view.flags, view.reading);
+    const copy = new NativeReplica(700);
+    copy.reading = view.reading;
+    Y.applyUpdate(copy.doc, Y.encodeStateAsUpdate(source.doc), "remote");
+    tamper?.(copy, "probe");
+    copy.changes();
+    const fieldName: NativeField = field === "v" ? "visualText" : "audioText";
+    if (op === "type") typeAt(copy, row.id, fieldName, at, "Ω"); else deleteIn(copy, row.id, fieldName, at, at + 1);
+    const got = [...shownRows(copy), ...shownRecovery(copy)], want = [...modelRows(expected), ...modelEntries(expected)];
+    if (JSON.stringify(got) !== JSON.stringify(want)) problems.push(`edit at shown place: ${op} at ${at} of ${row.id} ${fieldName} gave ${JSON.stringify(got)}, the model places it ${JSON.stringify(want)}`);
+    copy.destroy(); done++;
+  }
+  return { count: done, problems };
 }
 
 // why: apart from the model: every live character of any text is shown once, in a row or in recovery, and a row or
@@ -429,8 +525,13 @@ export function reach(replica: NativeReplica): string[] {
     count(shown, plain(group.audio)); count(shown, plain(group.visual));
     for (const field of ["audioText", "visualText"] as const) {
       const cells = group.members.map(member => { const cell = replica.cell(member, field); return plain(cell.text.toDelta() as NativeDeltaItem[]).slice(cell.start, cell.end); });
-      const held = cells.join(""), showing = plain(field === "audioText" ? group.audio : group.visual).replace(/[ \n]/g, "");
+      const held = cells.join(""), shownText = plain(field === "audioText" ? group.audio : group.visual), showing = shownText.replace(/[ \n]/g, "");
       if (held !== showing) problems.push(`${group.id} ${field} shows ${showing}; its beats' cells hold ${held}`);
+      const parts = field === "audioText" ? group.parts.audio : group.parts.visual;
+      if (!parts.length) continue;
+      let at = 0;
+      const routed = parts.map(part => { const slice = shownText.slice(at, at + part.length); at += part.length; return part.beat === null ? slice.replace(/[ \n]/g, "") : slice === cells[group.members.indexOf(part.beat)] ? "" : "x"; });
+      if (at !== shownText.length || routed.some(mark => mark !== "")) problems.push(`${group.id} ${field} parts do not cover the shown text beat by beat`);
     }
   }
   for (const [char, times] of live) if ((shown.get(char) ?? 0) !== times) problems.push(`${char} is stored ${times} time(s) and shown ${shown.get(char) ?? 0}`);
@@ -465,6 +566,11 @@ export function shrinkE2(steps: readonly E2Step[], fails: (candidate: readonly E
     }
   }
   return current;
+}
+
+export function storedText(result: E2Result): string {
+  const stored = readStored(result.copies[0] as NativeReplica);
+  return JSON.stringify([stored.line, [...stored.visuals].sort()]);
 }
 
 export function closeE2(result: E2Result): void {
