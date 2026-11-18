@@ -1,11 +1,12 @@
-import type { NativeField } from "../native/variant.ts";
+import type { NativeField, NativeScheme } from "../native/variant.ts";
 import type { CreationRule } from "./layer.ts";
 import { World } from "./harness.ts";
 import type { Delivery, Loss, Part, Step, WorldOptions, WorldStats } from "./harness.ts";
 
 export type Pace = "batched" | "continuous";
 export interface HistoryOptions {
-  seed: number; steps: number; pace: Pace; modes: readonly Delivery[]; checkEvery?: number; bound?: number; creations?: CreationRule; prepare?: (world: World) => void
+  seed: number; steps: number; pace: Pace; modes: readonly Delivery[]; checkEvery?: number; scheme?: NativeScheme; creations?: CreationRule;
+  prepare?: (world: World) => void; onExtraPressUpdates?: (count: number) => void
 }
 export interface HistoryResult { stats: WorldStats; losses: Loss[]; history: string[]; steps: Step[]; actions: Record<string, number>; clients: number[] }
 
@@ -32,9 +33,18 @@ type Action = keyof typeof WEIGHTS;
 interface Caret { beat: string; field: NativeField; at: number }
 
 export function runHistory(options: HistoryOptions): HistoryResult {
-  const next = random(options.seed), pick = <T>(list: readonly T[]): T => list[Math.floor(next() * list.length)] as T;
+  const next = random(options.seed);
   const clients = [1, 2, 3].sort(() => next() - 0.5);
-  const world = new World(HISTORY_ROWS, { clients, creations: options.creations ?? "keep-always", ...(options.bound !== undefined ? { bound: options.bound } : {}) });
+  const world = new World(HISTORY_ROWS, {
+    clients, creations: options.creations ?? "keep-always", ...(options.scheme ? { scheme: options.scheme } : {}),
+    ...(options.onExtraPressUpdates ? { onExtraPressUpdates: options.onExtraPressUpdates } : {})
+  });
+  try { return generate(options, world, next, clients); }
+  finally { for (const copy of world.copies) copy.replica.destroy(); }
+}
+
+function generate(options: HistoryOptions, world: World, next: () => number, clients: number[]): HistoryResult {
+  const pick = <T>(list: readonly T[]): T => list[Math.floor(next() * list.length)] as T;
   const names = world.copies.map(copy => copy.name), carets = new Map<string, Caret>(), actions: Record<string, number> = {};
   let created = 0, tags = 0, losses: Loss[] = [];
   options.prepare?.(world);
@@ -154,7 +164,6 @@ export function runHistory(options: HistoryOptions): HistoryResult {
       losses = world.check(`step ${step + 1}`);
     }
   }
-  for (const copy of world.copies) copy.replica.destroy();
   return { stats: world.stats, losses, history: world.history, steps: world.steps, actions, clients };
 }
 

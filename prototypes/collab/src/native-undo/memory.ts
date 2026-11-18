@@ -6,8 +6,11 @@ import { UndoLayer } from "./layer.ts";
 import type { CreationRule } from "./layer.ts";
 
 export interface Checkpoint { readonly operations: number; readonly typed: number; readonly visible: number; readonly editing: number; readonly receiving: number; readonly fresh: number; readonly retained: number; readonly undo: number }
-export interface SessionResult { readonly bound: number | null; readonly checkpoints: Checkpoint[]; readonly afterClear: number }
-export interface CreationCost { readonly rule: CreationRule; readonly what: string; readonly count: number; readonly bytesPerUndone: number; readonly freshBytesPerUndone: number }
+export interface SessionResult { readonly checkpoints: Checkpoint[]; readonly afterClear: number }
+export interface CreationCost {
+  readonly rule: CreationRule; readonly what: string; readonly count: number; readonly bytesPerUndone: number;
+  readonly freshBytesPerUndone: number; readonly freshBytesPerStoredCharacter: number
+}
 
 const BEATS = 30;
 
@@ -33,12 +36,12 @@ function freshSize(doc: Y.Doc): number {
 
 // why: a long session of word-by-word typing with backspaces, formatting and undo, one keystroke a command, as an
 // editor sends them; a second copy only receives, as every other person's copy does
-export function session(operations: number, bound: number | null, every: number): SessionResult {
+export function session(operations: number, every: number): SessionResult {
   const seed = new NativeReplica(900, 0, "act");
   seed.hydrate({ rows: rows() });
   const editing = nativeCopy(seed, 1), receiving = nativeCopy(seed, 2);
   let clock = 0;
-  const layer = new UndoLayer(editing, { now: () => clock, bound: bound ?? Number.POSITIVE_INFINITY });
+  const layer = new UndoLayer(editing, { now: () => clock });
   editing.doc.on("update", (update: Uint8Array, origin: unknown) => { if (origin !== "remote") Y.applyUpdate(receiving.doc, update, "remote"); });
   const next = random(7), checkpoints: Checkpoint[] = [];
   let typed = 0, beat = "R1", at = 0;
@@ -68,12 +71,13 @@ export function session(operations: number, bound: number | null, every: number)
   layer.manager.clear();
   const afterClear = Y.encodeStateAsUpdate(editing.doc).length;
   editing.destroy(); receiving.destroy(); seed.destroy();
-  return { bound, checkpoints, afterClear };
+  return { checkpoints, afterClear };
 }
 
 export function creationCost(rule: CreationRule, what: "record" | "split", count: number): CreationCost {
   const seed = new NativeReplica(900, 0, "act");
-  seed.hydrate({ rows: [{ id: "R1", audioText: "abcdefgh".repeat(count), visualText: "" }] });
+  const audioText = "abcdefgh".repeat(count);
+  seed.hydrate({ rows: [{ id: "R1", audioText, visualText: "" }] });
   const replica = nativeCopy(seed, 1), layer = new UndoLayer(replica, { creations: rule, now: () => 0 });
   const before = Y.encodeStateAsUpdate(replica.doc).length, freshBefore = freshSize(replica.doc);
   for (let index = 0; index < count; index++) {
@@ -81,9 +85,9 @@ export function creationCost(rule: CreationRule, what: "record" | "split", count
     else layer.command(() => { replica.split("R1", 4, `S${index}`); });
     layer.undo();
   }
-  const result: CreationCost = {
-    rule, what, count, bytesPerUndone: (Y.encodeStateAsUpdate(replica.doc).length - before) / count, freshBytesPerUndone: (freshSize(replica.doc) - freshBefore) / count
-  };
+  const freshBytes = freshSize(replica.doc) - freshBefore;
+  const result: CreationCost = { rule, what, count, bytesPerUndone: (Y.encodeStateAsUpdate(replica.doc).length - before) / count,
+    freshBytesPerUndone: freshBytes / count, freshBytesPerStoredCharacter: freshBytes / audioText.length };
   replica.destroy(); seed.destroy();
   return result;
 }
@@ -118,14 +122,54 @@ export function pastes(cycles: number, size: number): PasteResult[] {
 
 export function measure(): { sessions: SessionResult[]; pastes: PasteResult[]; creations: CreationCost[] } {
   return {
-    sessions: [session(20_000, 200, 5_000), session(20_000, null, 5_000)],
+    sessions: [session(20_000, 5_000)],
     pastes: pastes(100, 10_000),
     creations: (["keep-always", "keep-holding"] as const).flatMap(rule => [creationCost(rule, "record", 100), creationCost(rule, "split", 100)])
   };
 }
 
+function typingTrial(grouping: "words" | "yjs", creations: CreationRule) {
+  const replica = new NativeReplica(1, 0, "act");
+  replica.hydrate({ rows: rows() });
+  let clock = 0;
+  const layer = new UndoLayer(replica, { now: () => clock, grouping, creations });
+  const script = "hello big world ".repeat(200), offsets = Array<number>(BEATS).fill(0);
+  const start = performance.now();
+  for (let index = 0; index < script.length; index++) {
+    const cell = Math.floor(index / 112) % BEATS, offset = offsets[cell] as number;
+    clock += 100;
+    layer.type(`R${cell + 1}`, "audioText", offset, script.charAt(index));
+    offsets[cell] = offset + 1;
+  }
+  const microsecondsPerKey = (performance.now() - start) * 1000 / script.length;
+  const result = {
+    microsecondsPerKey, bytes: freshSize(replica.doc), characters: script.length + rows().reduce((total, row) => total + row.audioText.length, 0),
+    entries: layer.manager.undoStack.length
+  };
+  replica.destroy();
+  return result;
+}
+
+function typingCosts() {
+  const policies = [
+    { grouping: "yjs", creations: "keep-always" }, { grouping: "words", creations: "keep-always" }, { grouping: "words", creations: "keep-holding" }
+  ] as const;
+  const samples = policies.map(() => [] as ReturnType<typeof typingTrial>[]);
+  for (let round = 0; round < 12; round++) {
+    policies.forEach((_, offset) => {
+      const index = (round + offset) % policies.length, policy = policies[index] as (typeof policies)[number];
+      const sample = typingTrial(policy.grouping, policy.creations);
+      if (round >= 3) samples[index]?.push(sample);
+    });
+  }
+  return policies.map((policy, index) => {
+    const ordered = samples[index]?.sort((a, b) => a.microsecondsPerKey - b.microsecondsPerKey) ?? [];
+    return { ...policy, median: ordered[4], microsecondsPerKey: ordered.map(sample => sample.microsecondsPerKey) };
+  });
+}
+
 if (process.argv[1]?.endsWith("memory.ts")) {
-  const result = JSON.stringify(measure(), null, 2);
-  if (process.argv.includes("--write")) writeFileSync(new URL("./memory-results.json", import.meta.url), result + "\n");
+  const result = JSON.stringify(process.argv.includes("--timing") ? typingCosts() : measure(), null, 2);
+  if (process.argv.includes("--write") && !process.argv.includes("--timing")) writeFileSync(new URL("./memory-results.json", import.meta.url), result + "\n");
   process.stdout.write(result + "\n");
 }

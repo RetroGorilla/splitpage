@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { runHistory } from "../../src/native-undo/generator.ts";
 import type { HistoryOptions, Pace } from "../../src/native-undo/generator.ts";
+import { CheckFailure } from "../../src/native-undo/harness.ts";
 import type { CreationRule } from "../../src/native-undo/layer.ts";
 
 const MODES: HistoryOptions["modes"] = ["forward", "reverse", "twice"];
@@ -16,6 +17,25 @@ function run(pace: Pace, creations: CreationRule, count: number): { presses: num
   }
   return total;
 }
+
+test("plain keys, continuous seed 254: undo emits its update and a formatting cleanup update", () => {
+  const options = { seed: 254, steps: 40, pace: "continuous", modes: MODES, scheme: "name" } as const;
+  assert.throws(() => runHistory(options), (error: Error) => error instanceof CheckFailure && /C undo: 2 Yjs update events/.test(error.message));
+  const updates: number[] = [], origins: unknown[] = [], extraOrigins: unknown[][] = [];
+  const result = runHistory({
+    ...options,
+    prepare: world => {
+      for (const copy of world.copies) copy.replica.doc.on("update", (_update, origin) => {
+        if (copy.current) origins.push(origin === copy.layer.manager ? "UndoManager" : origin);
+      });
+    },
+    onExtraPressUpdates: count => { updates.push(count); extraOrigins.push(origins.slice(-count)); }
+  });
+  assert.deepEqual(updates, [2]);
+  assert.deepEqual(extraOrigins, [["UndoManager", null]]);
+  assert.deepEqual(result.losses, []);
+  assert.equal(result.stats.checks, 3);
+});
 
 for (const pace of ["batched", "continuous"] as const) {
   test(`keep-always, ${pace} delivery: 200 generated histories hold every check and lose nothing`, () => {

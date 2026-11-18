@@ -2,7 +2,6 @@ import * as Y from "yjs";
 import type { Marks } from "../../../../src/core/text/runs.ts";
 import type { NativeField, NativeReplica } from "../native/variant.ts";
 
-export const UNDO_BOUND = 200;
 export const GROUP_MS = 1000;
 export const DEFAULT_STATUS = "todo";
 export const RECORD_ROOTS = ["comments", "people", "tags", "shots"] as const;
@@ -14,7 +13,7 @@ const MAP_SCOPE = ["segments", "beats", "visuals", "comments", "people", "tags",
 export interface UndoCaret { beat: string; field: NativeField; offset: number }
 export interface ResolvedCaret { text: Y.Text; index: number }
 export type CreationRule = "keep-holding" | "keep-always";
-export interface UndoLayerOptions { now?: () => number; bound?: number; creations?: CreationRule }
+export interface UndoLayerOptions { now?: () => number; creations?: CreationRule; grouping?: "words" | "yjs" }
 interface TypingGroup { cell: string; at: number; endsInSpace: boolean }
 
 function holds(type: unknown): boolean {
@@ -31,42 +30,37 @@ export function changedDocument(transaction: Y.Transaction): boolean {
 export class UndoLayer {
   readonly replica: NativeReplica;
   readonly manager: Y.UndoManager;
-  readonly bound: number;
-  notices = 0;
-  dropped = 0;
+  updates = 0;
   restored: ResolvedCaret | null = null;
   private readonly now: () => number;
+  private readonly words: boolean;
   private group: TypingGroup | null = null;
-  private caret: UndoCaret | null = null;
+  private caret: Y.RelativePosition | null = null;
 
   constructor(replica: NativeReplica, options: UndoLayerOptions = {}) {
     this.replica = replica;
     this.now = options.now ?? Date.now;
-    this.bound = options.bound ?? UNDO_BOUND;
+    this.words = options.grouping !== "yjs";
     // why: one manager per session; the spike's own manager covers fewer roots and must not keep a second history
     replica.undo.destroy();
     const doc = replica.doc, always = (options.creations ?? "keep-always") === "keep-always";
     this.manager = new Y.UndoManager([...MAP_SCOPE.map(name => doc.getMap(name)), doc.getArray("order")], {
       trackedOrigins: new Set([replica.origin]),
       // why: the grouping rule below owns the one-second limit, so a slow machine never splits a group by itself
-      captureTimeout: Number.POSITIVE_INFINITY,
+      ...(this.words ? { captureTimeout: Number.POSITIVE_INFINITY } : {}),
       // why: a created record or cell that is empty here may already hold another copy's unarrived writes, which a
       // deleted type would discard on arrival; so by default undo takes back only what was written into it
       deleteFilter: item => !(item.content instanceof Y.ContentType && (always || holds(item.content.type)))
     });
     this.manager.on("stack-item-added", event => {
-      if (this.caret) event.stackItem.meta.set("caret", this.relative(this.caret));
-      if (event.type === "undo" && this.manager.undoStack.length > this.bound) {
-        this.manager.undoStack.shift();
-        this.dropped++;
-      }
+      if (this.caret) event.stackItem.meta.set("caret", this.caret);
     });
     this.manager.on("stack-item-popped", event => {
       const caret = event.stackItem.meta.get("caret") as Y.RelativePosition | undefined;
       const absolute = caret ? Y.createAbsolutePositionFromRelativePosition(caret, doc) : null;
       this.restored = absolute && absolute.type instanceof Y.Text ? { text: absolute.type, index: absolute.index } : null;
     });
-    doc.on("afterTransaction", transaction => { if (changedDocument(transaction)) this.notices++; });
+    doc.on("update", () => { this.updates++; });
   }
 
   private relative(caret: UndoCaret): Y.RelativePosition {
@@ -92,12 +86,13 @@ export class UndoLayer {
 
   // why: the app's rule: one cell, under a second since the last keystroke, and a word typed after a space starts anew
   private typing(cell: string, typed: string, replacing: boolean, caret: UndoCaret, run: () => void): void {
-    const now = this.now(), last = this.group;
+    const now = this.words ? this.now() : 0, last = this.group;
     const joins = !replacing && last !== null && last.cell === cell && now - last.at < GROUP_MS && !(last.endsInSpace && /\S/.test(typed));
-    if (!joins) this.manager.stopCapturing();
-    this.caret = caret;
+    if (this.words ? !joins : replacing) this.manager.stopCapturing();
+    this.caret = this.relative(caret);
     try { run(); } finally { this.caret = null; }
     if (replacing) { this.endGroup(); return; }
+    if (!this.words) return;
     if (joins && last) {
       last.at = now;
       if (typed) last.endsInSpace = /\s$/.test(typed);
@@ -106,7 +101,7 @@ export class UndoLayer {
 
   command(run: () => void, caret: UndoCaret | null = null): void {
     this.endGroup();
-    this.caret = caret;
+    this.caret = caret ? this.relative(caret) : null;
     try { this.replica.transact(run); } finally { this.caret = null; this.endGroup(); }
   }
 
@@ -121,7 +116,7 @@ export class UndoLayer {
   private press(caret: UndoCaret | null, run: () => UndoStackItem | null): UndoStackItem | null {
     this.endGroup();
     this.restored = null;
-    this.caret = caret;
+    this.caret = caret ? this.relative(caret) : null;
     try { return run(); } finally { this.caret = null; }
   }
 

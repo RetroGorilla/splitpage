@@ -57,15 +57,15 @@ test("skip 5: someone changed the status after seeing mine: my undo has nothing 
   assert.deepEqual(stacks(w, "A"), [0, 1]);
 });
 
-test("skip 6 (formatting keys): someone unbolds part of my bold after seeing it: my bold step has nothing left to change, the press undoes the step before and the rest stays bold", () => {
-  const w = world(ROWS);
+for (const scheme of ["act", "name"] as const) test(`formatting skip with ${scheme} keys: unbolding b before undoing bold on bcd`, () => {
+  const w = world(ROWS, { scheme });
   w.type("A", "R1", "audioText", 0, "x");
   w.command("A", [{ do: "format", beat: "R1", field: "audioText", from: 2, to: 5, mark: "b", on: true }]); settled(w, "bold");
   assert.equal(narration(w, "R1"), "xa[bcd|b]");
   w.command("B", [{ do: "format", beat: "R1", field: "audioText", from: 2, to: 3, mark: "b", on: false }]); settled(w, "B unbolds b");
   assert.ok(w.undo("A"));
   settled(w, "undo");
-  assert.equal(narration(w, "R1"), "ab[cd|b]");
-  assert.deepEqual(stacks(w, "A"), [0, 1]);
-  assert.equal(w.stats.formatSkips, 1);
+  assert.equal(narration(w, "R1"), scheme === "act" ? "ab[cd|b]" : "xab[cd|b]");
+  assert.deepEqual(stacks(w, "A"), scheme === "act" ? [0, 1] : [1, 1]);
+  assert.equal(w.stats.formatSkips, scheme === "act" ? 1 : 0);
 });

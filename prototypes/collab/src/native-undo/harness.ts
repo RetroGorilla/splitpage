@@ -1,15 +1,18 @@
 import * as Y from "yjs";
 import type { Marks } from "../../../../src/core/text/runs.ts";
 import { NativeReplica, nativeCopy, nativeMarkName } from "../native/variant.ts";
-import type { NativeDeltaItem, NativeField } from "../native/variant.ts";
-import { RECORD_ROOTS, UndoLayer, changedDocument, readRecords, readStatus } from "./layer.ts";
+import type { NativeDeltaItem, NativeField, NativeScheme } from "../native/variant.ts";
+import { RECORD_ROOTS, UndoLayer, readRecords, readStatus } from "./layer.ts";
 import type { CreationRule, RecordRoot, UndoCaret, UndoStackItem } from "./layer.ts";
-import { ANY_KIND, UndoModel } from "./model.ts";
-import type { Creation, ModelChar, ModelItem, Seen, TypingSpec } from "./model.ts";
+import { ANY_KIND, UndoModel, markCommand } from "./model.ts";
+import type { CommandChar, Creation, ModelChar, ModelItem, PressResult, Seen, TypingSpec } from "./model.ts";
 
 export type Delivery = "forward" | "reverse" | "twice";
 export interface WorldRow { id: string; audioText: string; visualText?: string; status?: string }
-export interface WorldOptions { names?: readonly string[]; clients?: readonly number[]; bound?: number; creations?: CreationRule }
+export interface WorldOptions {
+  names?: readonly string[]; clients?: readonly number[]; scheme?: NativeScheme; creations?: CreationRule;
+  onExtraPressUpdates?: (count: number) => void
+}
 export type Part =
   | { do: "insert"; beat: string; field: NativeField; at: number; text: string; marks?: readonly string[] }
   | { do: "delete"; beat: string; field: NativeField; from: number; to: number }
@@ -32,15 +35,26 @@ export interface Loss { readonly what: string; readonly author: string; readonly
 export class CheckFailure extends Error {}
 export type E3Type = Y.Text | Y.Map<unknown> | Y.Array<unknown>;
 export interface MarkMismatch { readonly at: string; readonly char: string; readonly kind: string; readonly expected: boolean }
+export type WriteCommand = "type" | "erase" | "format" | "split" | "join" | "field" | "undo" | "redo";
 export interface WorldStats {
   presses: number; uncertainPresses: number; uncertainCommands: number; markMismatches: MarkMismatch[]; checks: number;
-  formatSkips: number; formatSkipExample: string[] | null; undone: number; redone: number
+  undoPresses: number; uncertainUndos: number; uncertainRedos: number; writes: Set<WriteCommand>;
+  formatSkips: number; formatSkipExample: string[] | null; undone: number; redone: number;
+  formatRemains: number; inheritedTagLost: number
 }
 
 interface Logged { readonly update: Uint8Array; readonly op: string }
 interface OpRecord { readonly copy: string; readonly client: number; readonly start: number; readonly end: number; readonly context: ReadonlySet<string> }
-interface Watched { changed: number; added: { item: UndoStackItem; type: string }[]; updated: number }
+interface Watched { updates: number; added: { item: UndoStackItem; type: string }[]; updated: number }
 interface YChar { readonly id: Y.ID; readonly value: string; readonly names: ReadonlySet<string> }
+interface TextEdit {
+  readonly container: string;
+  readonly before: CommandChar[];
+  readonly apply: (chars: CommandChar[]) => CommandChar[];
+}
+interface PlannedPart { expected: Creation[]; run: () => void; text?: TextEdit; check?: () => void }
+interface MarkBeforeUndo { char: ModelChar; kind: string; sources: string[] }
+interface UndoMarkProbe { remains: MarkBeforeUndo[]; lost: MarkBeforeUndo[] }
 
 export class Copy {
   readonly name: string;
@@ -117,7 +131,10 @@ export class World {
   readonly history: string[] = [];
   readonly steps: Step[] = [];
   private settling = false;
-  readonly stats: WorldStats = { presses: 0, uncertainPresses: 0, uncertainCommands: 0, markMismatches: [], checks: 0, formatSkips: 0, formatSkipExample: null, undone: 0, redone: 0 };
+  readonly stats: WorldStats = {
+    presses: 0, uncertainPresses: 0, uncertainCommands: 0, markMismatches: [], checks: 0, formatSkips: 0, formatSkipExample: null,
+    undone: 0, redone: 0, undoPresses: 0, uncertainUndos: 0, uncertainRedos: 0, writes: new Set(), formatRemains: 0, inheritedTagLost: 0
+  };
   clock = 1_000_000;
   strictMarks = false;
   private readonly toModel = new Map<string, string>();
@@ -125,23 +142,32 @@ export class World {
   private readonly records = new Map<string, OpRecord>();
   private readonly keys = new Map<UndoStackItem, number>();
   private readonly read = new Map<string, number>();
+  private readonly undoMarks: UndoMarkProbe[] = [];
+  private readonly seedBeats: readonly string[];
+  private readonly scheme: NativeScheme;
+  private readonly onExtraPressUpdates: WorldOptions["onExtraPressUpdates"];
   private late = 0;
 
   constructor(rows: readonly WorldRow[], options: WorldOptions = {}) {
     const names = options.names ?? ["A", "B", "C"], clients = options.clients ?? names.map((_, index) => index + 1);
-    const seed = new NativeReplica(900, 0, "act");
-    seed.hydrate({ rows: rows.map(row => ({ visualText: "", status: "todo", ...row })) });
-    this.bindSeed(seed.doc);
-    if (options.bound !== undefined) this.model.bound = options.bound;
+    this.scheme = options.scheme ?? "act";
+    this.onExtraPressUpdates = options.onExtraPressUpdates;
+    this.seedBeats = rows.map(row => row.id);
+    const seed = new NativeReplica(900, 0, this.scheme);
+    const inputs = rows.map(row => ({ visualText: "", status: "todo", ...row }));
+    seed.hydrate({ rows: inputs });
+    this.bindSeed(seed, inputs);
     const creations = options.creations ?? "keep-always";
     this.model.keepCreated = creations;
     this.copies = names.map((name, index) => {
       const client = clients[index] as number, replica = nativeCopy(seed, client);
-      const layer = new UndoLayer(replica, { now: () => this.clock, creations, ...(options.bound !== undefined ? { bound: options.bound } : {}) });
+      const layer = new UndoLayer(replica, { now: () => this.clock, creations });
       const copy = new Copy(name, client, replica, layer);
       this.model.addCopy(name, client);
-      replica.doc.on("update", (update: Uint8Array, origin: unknown) => { if (origin !== "remote") copy.log.push({ update, op: copy.current ?? "cleanup" }); });
-      replica.doc.on("afterTransaction", (transaction: Y.Transaction) => { if (copy.watched && changedDocument(transaction)) copy.watched.changed++; });
+      replica.doc.on("update", (update: Uint8Array, origin: unknown) => {
+        if (copy.watched) copy.watched.updates++;
+        if (origin !== "remote") copy.log.push({ update, op: copy.current ?? "cleanup" });
+      });
       layer.manager.on("stack-item-added", event => { copy.watched?.added.push({ item: event.stackItem, type: event.type }); });
       layer.manager.on("stack-item-updated", () => { if (copy.watched) copy.watched.updated++; });
       return copy;
@@ -166,36 +192,34 @@ export class World {
     return found;
   }
 
-  private bindSeed(doc: Y.Doc): void {
+  private bindSeed(seed: NativeReplica, rows: readonly Required<WorldRow>[]): void {
     for (const name of ["beats", "visuals", ...RECORD_ROOTS]) this.model.root(`root:${name}`, "map");
-    for (const [segment, record] of doc.getMap<Y.Map<unknown>>("segments")) {
+    for (const row of rows) {
+      const beat = row.id, segment = `seg-b-${beat}`, record = seed.beat(beat);
       this.model.root(`seg:${segment}`, "text");
-      this.bindText(record.get("text") as Y.Text, `seg:${segment}`);
-    }
-    for (const [beat, record] of doc.getMap<Y.Map<unknown>>("beats")) {
+      this.bindText(seed.cell(beat, "audioText").text, `seg:${segment}`, row.audioText);
       const holder = itemOf(record), id = `y${key(holder.id)}`;
       this.bind(holder.id, id);
       this.model.hydrateItem(id, "root:beats", beat, "", holder.id.client, "map");
-      for (const [field, value] of record) {
-        const item = record._map.get(field) as Y.Item, child = `y${key(item.id)}`;
-        this.bind(item.id, child);
-        this.model.hydrateItem(child, `k:${id}`, field, JSON.stringify(value), item.id.client, null);
-      }
-    }
-    for (const [beat, text] of doc.getMap<Y.Text>("visuals")) {
-      const holder = itemOf(text), id = `y${key(holder.id)}`;
-      this.bind(holder.id, id);
-      this.model.hydrateItem(id, "root:visuals", beat, "", holder.id.client, "text");
-      this.bindText(text, `k:${id}`);
+      const status = record._map.get("status") as Y.Item, statusId = `y${key(status.id)}`;
+      if (record.get("status") !== row.status) this.fail(`Hydration differs for ${beat}.status`);
+      this.bind(status.id, statusId);
+      this.model.hydrateItem(statusId, `k:${id}`, "status", JSON.stringify(row.status), status.id.client, null);
+      const text = seed.cell(beat, "visualText").text, visual = itemOf(text), visualId = `y${key(visual.id)}`;
+      this.bind(visual.id, visualId);
+      this.model.hydrateItem(visualId, "root:visuals", beat, "", visual.id.client, "text");
+      this.bindText(text, `k:${visualId}`, row.visualText);
     }
   }
 
-  private bindText(text: Y.Text, container: string): void {
+  private bindText(text: Y.Text, container: string, input: string): void {
+    const chars = textChars(text);
+    if (chars.map(char => char.value).join("") !== input || chars.some(char => char.names.size)) this.fail(`Hydration differs for ${container}`);
     let left: string | null = null;
-    for (const char of textChars(text)) {
+    for (const [index, char] of chars.entries()) {
       const id = `y${key(char.id)}`;
       this.bind(char.id, id);
-      this.model.hydrateChar(id, container, char.value, left);
+      this.model.hydrateChar(id, container, input.charAt(index), left);
       left = id;
     }
   }
@@ -259,6 +283,12 @@ export class World {
       if (!found || found.kind !== creation.kind || found.parent !== this.typeOf(doc, creation.container)) this.fail(`${copy.name}: creation ${index} does not match ${JSON.stringify(creation)}`);
       if (found.kind === "char" && found.value !== creation.value) this.fail(`${copy.name}: typed ${found.value}, expected ${creation.value}`);
       if (found.kind === "item" && found.key !== creation.key) this.fail(`${copy.name}: wrote ${found.key}, expected ${creation.key}`);
+      if (found.kind === "item") {
+        const childType = this.model.containers.get(`k:${creation.id}`)?.type;
+        const matches = childType === "map" ? found.value instanceof Y.Map : childType === "text" ? found.value instanceof Y.Text
+          : JSON.stringify(found.value) === creation.value;
+        if (!matches) this.fail(`${copy.name}: wrote the wrong value for ${found.key}; the model expected ${creation.value}`);
+      }
       this.bind(found.id, creation.id);
     });
   }
@@ -274,37 +304,87 @@ export class World {
     return `k:${this.modelOf(itemOf(type).id)}`;
   }
 
-  private part(copy: Copy, op: string, part: Part, seen: Seen): { expected: Creation[]; run: () => void } {
+  private edit(view: { container: string; chars: YChar[] }, apply: TextEdit["apply"]): TextEdit {
+    return { container: view.container, before: this.commandChars(view.chars), apply };
+  }
+
+  private commandChars(chars: YChar[]): CommandChar[] {
+    return chars.map(char => ({ ...char, id: this.modelOf(char.id) }));
+  }
+
+  private checkText(copy: Copy, edits: readonly TextEdit[]): void {
+    const expected = new Map<string, CommandChar[]>();
+    for (const edit of edits) expected.set(edit.container, edit.apply(expected.get(edit.container) ?? edit.before));
+    for (const [container, chars] of expected) {
+      const actual = this.commandChars(textChars(this.typeOf(copy.replica.doc, container) as Y.Text));
+      if (actual.length !== chars.length || actual.some((char, index) => char.id !== chars[index]?.id || char.value !== chars[index]?.value)) {
+        this.fail(`${copy.name} after command: ${container} text ${JSON.stringify(actual.map(char => char.value).join(""))}; the model expected ${JSON.stringify(chars.map(char => char.value).join(""))}`);
+      }
+      for (const [index, char] of chars.entries()) {
+        const names = (actual[index] as CommandChar).names;
+        if (names.size !== char.names.size || [...char.names].some(name => !names.has(name))) {
+          this.fail(`${copy.name} after command: marks on ${JSON.stringify(char.value)} (${char.id}) are [${[...names]}]; the model expected [${[...char.names]}]`);
+        }
+      }
+    }
+  }
+
+  private part(copy: Copy, op: string, part: Part, seen: Seen): PlannedPart {
     const replica = copy.replica, model = this.model;
     switch (part.do) {
       case "insert": case "delete": case "format": {
         const view = this.cellView(copy, part.beat, part.field);
         if (part.do === "insert") {
           const at = view.start + part.at, left = view.chars[at - 1], right = view.chars[at];
-          const expected = model.insert(op, view.container, [...part.text], left ? this.modelOf(left.id) : null, right ? this.modelOf(right.id) : null, part.marks ?? [], seen);
-          return { expected, run: () => { replica.splice(part.beat, part.field, part.at, part.at, [{ text: part.text, marks: marksOf(part.marks ?? []) }]); } };
+          const expected = model.insert(op, view.container, part.text.split(""), left ? this.modelOf(left.id) : null, right ? this.modelOf(right.id) : null, part.marks ?? [], seen);
+          const inserted = expected.map(char => ({ id: char.id, value: char.value, names: new Set(part.marks) }));
+          return { expected, text: this.edit(view, chars => [...chars.slice(0, at), ...inserted, ...chars.slice(at)]),
+            run: () => { replica.splice(part.beat, part.field, part.at, part.at, [{ text: part.text, marks: marksOf(part.marks ?? []) }]); } };
         }
         const ids = view.chars.slice(view.start + part.from, view.start + part.to).map(char => this.modelOf(char.id));
         if (part.do === "delete") {
           model.remove(op, ids, seen);
-          return { expected: [], run: () => { replica.splice(part.beat, part.field, part.from, part.to, []); } };
+          return { expected: [], text: this.edit(view, chars => chars.filter(char => !ids.includes(char.id))),
+            run: () => { replica.splice(part.beat, part.field, part.from, part.to, []); } };
         }
         model.format(op, view.container, ids, part.mark, part.on, seen);
-        return { expected: [], run: () => { replica.format(part.beat, part.field, part.from, part.to, { [part.mark]: part.on ? true : null }); } };
+        const targets = new Set(ids);
+        const text = this.edit(view, chars => markCommand(chars, targets, part.mark, part.on));
+        const freshKey = this.scheme === "act" && part.on && targets.size > 0;
+        const clock = Y.getState(replica.doc.store, copy.client);
+        if (freshKey || text.before.some(char => targets.has(char.id) && char.names.has(part.mark) !== part.on)) this.stats.writes.add("format");
+        return {
+          expected: [], text, run: () => { replica.format(part.beat, part.field, part.from, part.to, { [part.mark]: part.on ? true : null }); },
+          check: () => {
+            if (freshKey && Y.getState(replica.doc.store, copy.client) === clock) this.fail(`${copy.name}: formatting on did not write its fresh mark key`);
+          }
+        };
       }
       case "split": {
         const view = this.cellView(copy, part.beat, "audioText"), at = view.start + part.at, left = view.chars[at - 1], right = view.chars[at];
         const expected = model.insert(op, view.container, [JSON.stringify({ b: part.created })], left ? this.modelOf(left.id) : null, right ? this.modelOf(right.id) : null, [], seen, true);
         expected.push(model.createContainer(op, "root:beats", part.created, "map", seen));
         expected.push(model.createContainer(op, "root:visuals", part.created, "text", seen));
-        return { expected, run: () => { replica.split(part.beat, part.at, part.created); } };
+        const boundary = expected[0] as Creation, inserted = { id: boundary.id, value: boundary.value, names: left?.names ?? new Set<string>() };
+        this.stats.writes.add("split");
+        return { expected, text: this.edit(view, chars => [...chars.slice(0, at), inserted, ...chars.slice(at)]),
+          run: () => { replica.split(part.beat, part.at, part.created); } };
       }
       case "set": case "clear": {
         const container = this.mapContainer(replica.beats.get(part.beat), `beat ${part.beat}`);
         if (part.do === "clear") {
-          model.clear(op, container, part.key, seen);
-          return { expected: [], run: () => { replica.transact(() => { replica.beat(part.beat).delete(part.key); }); } };
+          const changed = model.clear(op, container, part.key, seen);
+          if (changed && part.key === "joined") this.stats.writes.add("join");
+          return {
+            expected: [],
+            run: () => {
+              if (part.key === "joined") replica.unjoin(part.beat);
+              else replica.transact(() => { replica.beat(part.beat).delete(part.key); });
+            },
+            check: () => { if (replica.beat(part.beat).has(part.key)) this.fail(`${copy.name}: ${part.beat}.${part.key} was not cleared`); }
+          };
         }
+        if (part.key === "joined") this.stats.writes.add("join");
         const expected = [model.set(op, container, part.key, () => ({ json: JSON.stringify(part.value) }), seen)];
         return { expected, run: () => { replica.setField(part.beat, part.key, part.value); } };
       }
@@ -314,6 +394,7 @@ export class World {
         return { expected, run: () => { copy.layer.createRecord(part.root, part.id, part.fields); } };
       }
       case "field": {
+        this.stats.writes.add("field");
         const container = this.mapContainer(replica.doc.getMap<Y.Map<unknown>>(part.root).get(part.id), `record ${part.root}/${part.id}`);
         const expected = [model.set(op, container, part.key, () => ({ json: JSON.stringify(part.value) }), seen)];
         return { expected, run: () => { copy.layer.setRecordField(part.root, part.id, part.key, part.value); } };
@@ -321,31 +402,32 @@ export class World {
     }
   }
 
-  private open(copy: Copy, op: string): { from: number; notices: number; context: Set<string> } {
+  private open(copy: Copy, op: string): { from: number; updates: number; context: Set<string> } {
     const context = this.contextOf(copy);
     copy.current = op;
-    copy.watched = { changed: 0, added: [], updated: 0 };
-    return { from: Y.getState(copy.replica.doc.store, copy.client), notices: copy.layer.notices, context };
+    copy.watched = { updates: 0, added: [], updated: 0 };
+    return { from: Y.getState(copy.replica.doc.store, copy.client), updates: copy.layer.updates, context };
   }
 
-  private close(copy: Copy, op: string, opened: { from: number; context: Set<string> }): Watched {
+  private close(copy: Copy, op: string, opened: ReturnType<World["open"]>): Watched {
     const watched = copy.watched as Watched;
     copy.current = null; copy.watched = null;
     this.records.set(op, { copy: copy.name, client: copy.client, start: opened.from, end: Y.getState(copy.replica.doc.store, copy.client), context: opened.context });
-    if (watched.changed > 1) this.fail(`${copy.name}: one command or press made ${watched.changed} change notifications`);
+    if (copy.layer.updates - opened.updates !== watched.updates) this.fail(`${copy.name}: layer's update count differs from Yjs update events`);
     return watched;
   }
 
   private settleEntry(copy: Copy, watched: Watched, label: string): void {
-    const end = this.model.end(watched.changed > 0);
-    if (end.predicted !== (watched.changed > 0)) {
-      if (!end.involved) this.fail(`${copy.name} ${label}: changed ${watched.changed > 0}, the model expected ${end.predicted}`);
+    if (watched.updates > 1) this.fail(`${copy.name}: one command emitted ${watched.updates} Yjs update events`);
+    const end = this.model.end(watched.updates > 0);
+    if (end.predicted !== (watched.updates > 0)) {
+      if (!end.involved) this.fail(`${copy.name} ${label}: changed ${watched.updates > 0}, the model expected ${end.predicted}`);
       this.stats.uncertainCommands++;
     }
-    if (watched.changed > 0 && end.merged && (watched.added.length || watched.updated !== 1)) {
+    if (watched.updates > 0 && end.merged && (watched.added.length || watched.updated !== 1)) {
       this.fail(`${copy.name} ${label}: the model joined the open group; the library added ${watched.added.length} and updated ${watched.updated}`);
     }
-    if (watched.changed > 0 && !end.merged) {
+    if (watched.updates > 0 && !end.merged) {
       const added = watched.added.filter(entry => entry.type === "undo");
       if (added.length !== 1) this.fail(`${copy.name} ${label}: the model added an entry; the library added ${added.length} and updated ${watched.updated}`);
       this.keys.set((added[0] as { item: UndoStackItem }).item, end.key as number);
@@ -354,6 +436,7 @@ export class World {
   }
 
   type(name: string, beat: string, field: NativeField, at: number, text: string, marks: readonly string[] = []): void {
+    if (text.length) this.stats.writes.add("type");
     this.steps.push({ act: "type", by: name, at: this.clock, beat, field, offset: at, text, marks });
     this.typing(name, `type ${JSON.stringify(text)} at ${beat}.${field}:${at}${marks.length ? ` [${marks.join(",")}]` : ""}`,
       { cell: `${field}:${beat}`, typed: text, replacing: false, now: this.clock }, [{ do: "insert", beat, field, at, text, marks }],
@@ -361,6 +444,7 @@ export class World {
   }
 
   erase(name: string, beat: string, field: NativeField, from: number, to: number): void {
+    if (to > from) this.stats.writes.add("erase");
     this.steps.push({ act: "erase", by: name, at: this.clock, beat, field, from, to });
     this.typing(name, `erase ${beat}.${field}:${from}-${to}`, { cell: `${field}:${beat}`, typed: "", replacing: false, now: this.clock },
       [{ do: "delete", beat, field, from, to }], layer => { layer.erase(beat, field, from, to); });
@@ -380,10 +464,11 @@ export class World {
     const planned = parts.map(part => this.part(copy, op, part, seen));
     const { watched } = this.guarded(copy, op, opened, () => { run(copy.layer); });
     this.bindCreations(copy, opened.from, planned.flatMap(part => part.expected));
+    this.checkText(copy, planned.flatMap(part => part.text ? [part.text] : []));
     this.settleEntry(copy, watched, label);
   }
 
-  private guarded<T>(copy: Copy, op: string, opened: { from: number; context: Set<string> }, run: () => T): { value: T; watched: Watched } {
+  private guarded<T>(copy: Copy, op: string, opened: ReturnType<World["open"]>, run: () => T): { value: T; watched: Watched } {
     let value: T;
     try { value = run(); } catch (error) { this.close(copy, op, opened); throw error; }
     return { value, watched: this.close(copy, op, opened) };
@@ -394,15 +479,19 @@ export class World {
     this.steps.push({ act: "command", by: name, at: this.clock, parts });
     this.history.push(`${name} command ${JSON.stringify(parts)} @${this.clock}`);
     const op = this.model.begin(name, null), opened = this.open(copy, op);
+    const edits: TextEdit[] = [];
     const { watched } = this.guarded(copy, op, opened, () => {
       copy.layer.command(() => {
         for (const part of parts) {
           const from = Y.getState(copy.replica.doc.store, copy.client), planned = this.part(copy, op, part, seen);
           planned.run();
           this.bindCreations(copy, from, planned.expected);
+          if (planned.text) { this.checkText(copy, [planned.text]); edits.push(planned.text); }
+          planned.check?.();
         }
       }, caret);
     });
+    this.checkText(copy, edits);
     this.settleEntry(copy, watched, "command");
   }
 
@@ -419,16 +508,19 @@ export class World {
     const copy = this.copy(name), seen = this.seenBy(copy), label = back ? "undo" : "redo";
     this.steps.push({ act: label, by: name, at: this.clock });
     this.history.push(`${name} ${label} @${this.clock}`);
+    const before = back && copy.layer.manager.undoStack.length ? this.marksBeforeUndo(copy, seen) : [];
     const op = this.model.op(name), opened = this.open(copy, op);
     const { value: applied, watched } = this.guarded(copy, op, opened, () => back ? copy.layer.undo(caret) : copy.layer.redo(caret));
     this.stats.presses++;
+    if (back) this.stats.undoPresses++;
     const appliedKey = applied ? this.keys.get(applied) ?? -1 : null;
     const result = back ? this.model.undo(name, op, seen, entry => entry === appliedKey) : this.model.redo(name, op, seen, entry => entry === appliedKey);
-    if (result.uncertain) this.stats.uncertainPresses++;
-    if (result.applied !== null) this.stats[back ? "undone" : "redone"]++;
+    if (result.uncertain) { this.stats.uncertainPresses++; this.stats[back ? "uncertainUndos" : "uncertainRedos"]++; }
+    if (result.applied !== null) { this.stats[back ? "undone" : "redone"]++; this.stats.writes.add(label); }
     if (result.formatSkips) { this.stats.formatSkips++; this.stats.formatSkipExample ??= [...this.history]; }
     if (result.applied !== appliedKey) this.fail(`${name} ${label}: the library applied entry ${String(appliedKey)}; the model expected ${String(result.applied)}`);
-    if (watched.changed !== (applied ? 1 : 0)) this.fail(`${name} ${label}: ${watched.changed} change notifications for one press`);
+    if (applied && watched.updates > 1 && this.onExtraPressUpdates) this.onExtraPressUpdates(watched.updates);
+    else if (watched.updates !== (applied ? 1 : 0)) this.fail(`${name} ${label}: ${watched.updates} Yjs update events for one press`);
     const added = watched.added.filter(entry => entry.type === (back ? "redo" : "undo"));
     if (added.length !== (applied ? 1 : 0) || watched.updated) this.fail(`${name} ${label}: ${added.length} entries added to the other stack`);
     if (added[0]) this.keys.set(added[0].item, result.created as number);
@@ -446,7 +538,74 @@ export class World {
       if (!this.toModel.has(key(made.id))) this.fail(`${name} ${label}: the library restored ${made.kind} ${made.kind === "char" ? made.value : made.key} that the model did not (model: ${JSON.stringify(result.restored)})`);
     }
     this.checkStacks(copy, label);
+    const after = this.seenBy(copy);
+    this.checkPressText(doc, result, after, `${name} after ${label}`);
+    if (!doc.store.pendingStructs && !doc.store.pendingDs) this.compare(doc, after, `${name} after ${label}`, false);
+    if (before.length && applied) this.observeUndoMarks(copy, before, result, after);
     return applied;
+  }
+
+  private checkPressText(doc: Y.Doc, result: PressResult, seen: Seen, label: string): void {
+    const deleted = new Set(result.deletes);
+    const relevant = [...deleted, ...result.restored.map(item => item.to)].flatMap(id => {
+      const char = this.model.chars.get(id);
+      return char && !this.model.containerDeleted(char.container, seen) ? [char] : [];
+    });
+    const byContainer = new Map<string, Map<string, YChar>>();
+    for (const char of relevant) {
+      let chars = byContainer.get(char.container);
+      if (!chars) {
+        chars = new Map(textChars(this.typeOf(doc, char.container) as Y.Text).map(value => [this.modelOf(value.id), value]));
+        byContainer.set(char.container, chars);
+      }
+      if (deleted.has(char.id) ? chars.has(char.id) : chars.get(char.id)?.value !== char.value) {
+        this.fail(`${label}: the model's ${deleted.has(char.id) ? "deletion" : "restoration"} of ${JSON.stringify(char.value)} (${char.id}) is missing`);
+      }
+    }
+  }
+
+  private marksBeforeUndo(copy: Copy, seen: Seen): MarkBeforeUndo[] {
+    const before: MarkBeforeUndo[] = [];
+    for (const container of this.model.containers.values()) {
+      if (container.type !== "text" || container.holder && !seen(container.holder) || this.model.containerDeleted(container.id, seen)) continue;
+      for (const actual of textChars(this.typeOf(copy.replica.doc, container.id) as Y.Text)) {
+        const char = this.model.chars.get(this.modelOf(actual.id)) as ModelChar;
+        for (const kind of actual.names) {
+          const sources = this.model.liveSources(char, kind, seen);
+          if (sources.length) before.push({ char, kind, sources });
+        }
+      }
+    }
+    return before;
+  }
+
+  private observeUndoMarks(copy: Copy, before: readonly MarkBeforeUndo[], result: PressResult, seen: Seen): void {
+    const deleted = new Set(result.deletes), sourcesUndone = new Set(result.formatSources);
+    const deletedTags = new Set(before.flatMap(mark => deleted.has(mark.char.id) && mark.kind.startsWith("t:") ? mark.sources : []));
+    const others = deletedTags.size ? this.copies.filter(other => other !== copy).flatMap(other => this.marksBeforeUndo(other, this.seenBy(other))) : [];
+    const probe: UndoMarkProbe = {
+      remains: before.filter(mark => !deleted.has(mark.char.id) && mark.sources.some(source => sourcesUndone.has(source))),
+      lost: [...before, ...others].filter(mark => !deleted.has(mark.char.id) && mark.char.author !== copy.name && mark.sources.some(source => deletedTags.has(source)))
+    };
+    this.countUndoMarks(copy.replica.doc, probe, seen);
+    if (probe.remains.length || probe.lost.length) this.undoMarks.push(probe);
+  }
+
+  private countUndoMarks(doc: Y.Doc, probe: UndoMarkProbe, seen: Seen): void {
+    const after = new Map<string, ReadonlySet<string>>();
+    const marks = [...probe.remains, ...probe.lost];
+    for (const container of new Set(marks.map(mark => mark.char.container))) {
+      const holder = this.model.containers.get(container)?.holder;
+      if (holder && !seen(holder)) continue;
+      if (this.model.containerDeleted(container, seen)) continue;
+      for (const char of textChars(this.typeOf(doc, container) as Y.Text)) after.set(this.modelOf(char.id), char.names);
+    }
+    const differs = ({ char, kind }: MarkBeforeUndo, expected: boolean): boolean => {
+      const shown = after.get(char.id);
+      return !!shown && !char.value.startsWith('{"b":') && shown.has(kind) !== expected && this.model.kinds(char, seen).has(kind) === expected;
+    };
+    if (probe.remains.some(mark => differs(mark, false))) { this.stats.formatRemains++; probe.remains = []; }
+    if (probe.lost.some(mark => differs(mark, true))) { this.stats.inheritedTagLost++; probe.lost = []; }
   }
 
   checkStacks(copy: Copy, label: string): void {
@@ -489,7 +648,7 @@ export class World {
   }
 
   joiner(): NativeReplica {
-    const replica = new NativeReplica(800 + ++this.late, 0, "act");
+    const replica = new NativeReplica(800 + ++this.late, 0, this.scheme);
     Y.applyUpdate(replica.doc, Y.encodeStateAsUpdate((this.copies[0] as Copy).replica.doc), "remote");
     replica.undo.destroy();
     return replica;
@@ -511,22 +670,46 @@ export class World {
     }
     for (const copy of this.copies) { this.compare(copy.replica.doc, this.seenBy(copy), `${label} on ${copy.name}`); this.checkStacks(copy, label); }
     this.compare(late.doc, () => true, `${label} on a late joiner`);
+    for (const replica of [...this.copies.map(copy => copy.replica), late]) this.checkRowOrder(replica, label);
+    for (const probe of this.undoMarks) this.countUndoMarks(late.doc, probe, () => true);
+    this.undoMarks.length = 0;
     late.destroy();
     return this.losses();
   }
 
-  private compare(doc: Y.Doc, seen: Seen, label: string): void {
+  private checkRowOrder(replica: NativeReplica, label: string): void {
+    const beats = this.seedBeats.flatMap(beat => {
+      const chars = textChars(this.typeOf(replica.doc, `seg:seg-b-${beat}`) as Y.Text).map(char => this.model.chars.get(this.modelOf(char.id)) as ModelChar);
+      const positions = new Map(chars.map((char, index) => [char.id, index]));
+      const splits = chars.flatMap((char, index) => {
+        if (!char.value.startsWith('{"b":')) return [];
+        const left = char.left === null ? undefined : positions.get(char.left);
+        const right = char.right === null ? undefined : positions.get(char.right);
+        if ((left !== undefined && left >= index) || (right !== undefined && right <= index)) this.fail(`${label}: split ${char.value} is outside its model gap`);
+        return [(JSON.parse(char.value) as { b: string }).b];
+      });
+      return [beat, ...splits];
+    });
+    const expected = this.model.projectedRows(beats, () => true), actual = replica.rows().map(row => row.id);
+    if (JSON.stringify(actual) !== JSON.stringify(expected)) this.fail(`${label}: projected row order [${actual}]; the model expected [${expected}]`);
+  }
+
+  private compare(doc: Y.Doc, seen: Seen, label: string, marks = true): void {
     const model = this.model;
     for (const container of model.containers.values()) {
       const holder = container.holder ? model.items.get(container.holder) : undefined;
-      if (holder && !seen(holder.op) || model.containerDeleted(container.id, seen)) continue;
+      if (holder && !seen(holder.id) || model.containerDeleted(container.id, seen)) continue;
       const type = this.typeOf(doc, container.id);
       if (container.type === "text") {
         const actual = textChars(type as Y.Text), expected = [...model.chars.values()].filter(char => char.container === container.id && model.visibleChar(char, seen));
         const known = new Set(actual.map(char => { const id = this.toModel.get(key(char.id)); if (!id) this.fail(`${label}: unexpected character ${char.value} in ${container.id}`); return id; }));
         for (const char of expected) if (!known.has(char.id)) this.fail(`${label}: character ${JSON.stringify(char.value)} (${char.id}, typed by ${char.author}) is missing from ${container.id}`);
         if (known.size !== expected.length) this.fail(`${label}: ${container.id} holds ${known.size} characters, the model ${expected.length}`);
-        for (const char of actual) this.compareMarks(model.chars.get(this.modelOf(char.id)) as ModelChar, char.names, seen, label);
+        for (const char of actual) {
+          const expectedChar = model.chars.get(this.modelOf(char.id)) as ModelChar;
+          if (char.value !== expectedChar.value) this.fail(`${label}: ${expectedChar.id} holds ${JSON.stringify(char.value)}; the model expected ${JSON.stringify(expectedChar.value)}`);
+          if (marks) this.compareMarks(expectedChar, char.names, seen, label);
+        }
         continue;
       }
       const map = type as Y.Map<unknown>, names = new Set([...model.keys(container.id), ...map.keys()]);

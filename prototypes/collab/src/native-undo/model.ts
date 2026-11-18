@@ -27,10 +27,23 @@ interface Plan { readonly performed: boolean; readonly formats: boolean; readonl
 interface FormatAction { readonly id: string; readonly op: string; readonly kind: string; readonly container: string; readonly on: boolean; readonly cover: Set<string>; readonly undone: string[]; readonly edge: Set<string> }
 export interface ModelOp { readonly id: string; readonly copy: string; readonly index: number }
 export interface Restoration { readonly from: string; readonly to: string; readonly kind: "char" | "item" }
-export interface PressResult { readonly applied: number | null; readonly created: number | null; readonly restored: Restoration[]; readonly uncertain: number; readonly formatSkips: number }
+export interface PressResult {
+  readonly applied: number | null; readonly created: number | null; readonly restored: Restoration[];
+  readonly uncertain: number; readonly formatSkips: number; readonly deletes: readonly string[]; readonly formatSources: readonly string[]
+}
 export interface Creation { readonly id: string; readonly kind: "char" | "item"; readonly container: string; readonly value: string; readonly key: string | null }
 export interface ModelEnd { readonly predicted: boolean; readonly merged: boolean; readonly key: number | null; readonly involved: boolean }
 export interface TypingSpec { readonly cell: string; readonly typed: string; readonly replacing: boolean; readonly now: number }
+export interface CommandChar { readonly id: string; readonly value: string; readonly names: ReadonlySet<string> }
+
+export function markCommand(chars: readonly CommandChar[], targets: ReadonlySet<string>, kind: string, on: boolean): CommandChar[] {
+  return chars.map(char => {
+    if (!targets.has(char.id)) return char;
+    const names = new Set(char.names);
+    if (on) names.add(kind); else names.delete(kind);
+    return { ...char, names };
+  });
+}
 
 export const MODEL_GROUP_MS = 1000;
 export const ANY_KIND = "*";
@@ -59,7 +72,6 @@ export class UndoModel {
   readonly items = new Map<string, ModelItem>();
   readonly containers = new Map<string, ModelContainer>();
   readonly ops = new Map<string, ModelOp>();
-  bound = 200;
   keepCreated: "keep-holding" | "keep-always" = "keep-always";
   private readonly actions: FormatAction[] = [];
   private readonly lists = new Map<string, string[]>();
@@ -156,6 +168,26 @@ export class UndoModel {
     return last && !this.itemDeleted(last, seen) ? last : null;
   }
 
+  projectedRows(beats: readonly string[], seen: Seen): string[] {
+    const placed = new Set(beats), rows = new Set<string>();
+    const field = (beat: string, name: string): unknown => {
+      const holder = this.current("root:beats", beat, seen);
+      const value = holder && this.current(`k:${holder.id}`, name, seen)?.value;
+      return value && "json" in value ? JSON.parse(value.json) : undefined;
+    };
+    for (const beat of placed) {
+      const visited = new Set<string>();
+      let target = beat;
+      while (!field(target, "removed")) {
+        const into = (field(target, "joined") as { into?: string } | undefined)?.into;
+        if (!into || !placed.has(into) || visited.has(into)) { rows.add(target); break; }
+        visited.add(target);
+        target = into;
+      }
+    }
+    return [...rows];
+  }
+
   lastWrite(container: string, key: string): string | null { return this.list(container, key).at(-1) ?? null; }
 
   private rightmost(container: string, key: string, seen: Seen): ModelItem | null {
@@ -210,14 +242,9 @@ export class UndoModel {
       return { predicted, merged: true, key: top.key, involved: entry.involved };
     }
     const added: ModelEntry = { ...entry, key: ++this.entries };
-    this.push(state.undo, added, true);
+    state.undo.push(added);
     state.capturing = building.typing;
     return { predicted, merged: false, key: added.key, involved: entry.involved };
-  }
-
-  private push(stack: ModelEntry[], entry: ModelEntry, bounded: boolean): void {
-    stack.push(entry);
-    if (bounded && stack.length > this.bound) stack.shift();
   }
 
   private involve(container: string, seen: Seen): void {
@@ -349,10 +376,11 @@ export class UndoModel {
       }
       if (!performed) continue;
       const result = this.commit(state, entry, plan, op, seen);
-      this.push(to, result.entry, !back);
-      return { applied: entry.key, created: result.entry.key, restored: result.restored, uncertain, formatSkips };
+      to.push(result.entry);
+      const formatSources = entry.effects.flatMap(effect => effect.action === null ? [] : [effect.action]);
+      return { applied: entry.key, created: result.entry.key, restored: result.restored, uncertain, formatSkips, deletes: plan.deletes, formatSources };
     }
-    return { applied: null, created: null, restored: [], uncertain, formatSkips };
+    return { applied: null, created: null, restored: [], uncertain, formatSkips, deletes: [], formatSources: [] };
   }
 
   private follow(state: CopyState, id: string): string {

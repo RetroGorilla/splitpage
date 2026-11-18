@@ -2,8 +2,9 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import type * as Y from "yjs";
 import { runHistory } from "../../src/native-undo/generator.ts";
+import type { HistoryOptions } from "../../src/native-undo/generator.ts";
 import { CheckFailure } from "../../src/native-undo/harness.ts";
-import type { World } from "../../src/native-undo/harness.ts";
+import type { Copy, World, WriteCommand } from "../../src/native-undo/harness.ts";
 import { settled, world } from "./kit.ts";
 
 const SEEDS = Array.from({ length: 10 }, (_, seed) => seed);
@@ -51,6 +52,46 @@ test("input control: a record field write that silently does nothing fails exact
   assert.ok(found.every(message => message === null || /created 0 items; the model expected 1/.test(message)), found.join("\n"));
 });
 
+const GENERATED = (["batched", "continuous"] as const).flatMap(pace =>
+  Array.from({ length: 300 }, (_, seed): HistoryOptions => ({ ...options, pace, seed })));
+const baseline = GENERATED.map(history => runHistory(history).stats.writes);
+const noOps: Record<WriteCommand, (copy: Copy) => void> = {
+  type: ({ layer }) => { layer.type = () => undefined; },
+  erase: ({ layer }) => { layer.erase = () => undefined; },
+  format: ({ replica }) => { replica.format = () => undefined; },
+  split: ({ replica }) => { replica.split = () => undefined; },
+  join: ({ replica }) => {
+    const setField = replica.setField.bind(replica);
+    replica.setField = (beat, field, value) => { if (field !== "joined") setField(beat, field, value); };
+    replica.unjoin = () => undefined;
+  },
+  field: ({ layer }) => { layer.setRecordField = () => undefined; },
+  undo: ({ layer }) => { layer.undo = () => null; },
+  redo: ({ layer }) => { layer.redo = () => null; }
+};
+
+for (const [command, mute] of Object.entries(noOps) as [WriteCommand, (copy: Copy) => void][]) {
+  test(`generated no-op control: ${command} fails every history with an effective write`, t => {
+    let used = 0, failed = 0, otherFailures = 0;
+    const missed: string[] = [];
+    for (const [index, history] of GENERATED.entries()) {
+      const changed = baseline[index]?.has(command);
+      if (changed) used++;
+      try {
+        runHistory({ ...history, prepare: w => { w.copies.forEach(mute); } });
+        if (changed) missed.push(`${history.pace}/${history.seed}`);
+      } catch (error) {
+        assert.ok(error instanceof CheckFailure, String(error));
+        if (changed) failed++; else otherFailures++;
+      }
+    }
+    t.diagnostic(`${command}: ${used} used, ${failed} failed with an effective write, ${otherFailures} other failures`);
+    assert.ok(used > 0);
+    assert.deepEqual(missed, []);
+    assert.equal(failed, used);
+  });
+}
+
 function base(): World {
   const w = world([{ id: "R1", audioText: "abcd", visualText: "vw" }]);
   w.command("A", [{ do: "record", root: "tags", id: "T1", fields: { name: "Alpha" } }]);
@@ -85,10 +126,31 @@ test("output control: a change one copy never sends fails the check", () => {
   assert.throws(() => w.check(), (error: Error) => error instanceof CheckFailure && /copies differ/.test(error.message));
 });
 
-test("output control: a second change notification during one press fails", () => {
+test("output control: a second Yjs update event during one press fails", () => {
   const w = base(), b = w.copy("B");
   b.layer.manager.on("stack-item-popped", () => { b.replica.doc.transact(() => { b.replica.doc.getMap("meta").set("touched", true); }, "tamper"); });
-  assert.throws(() => w.undo("B"), (error: Error) => error instanceof CheckFailure && /2 change notifications|made 2 change notifications/.test(error.message));
+  assert.throws(() => w.undo("B"), (error: Error) => error instanceof CheckFailure && /2 Yjs update events|made 2 Yjs update events/.test(error.message));
+});
+
+test("output control: missing counts in the layer fail against the observed Yjs update event", () => {
+  const w = base(), b = w.copy("B");
+  Object.defineProperty(b.layer, "updates", { get: () => 0, set: () => undefined });
+  assert.throws(() => w.undo("B"), (error: Error) => error instanceof CheckFailure && /layer's update count differs/.test(error.message));
+});
+
+test("output control: the same wrongly ordered rows on every copy fail the model projection", () => {
+  const w = world();
+  for (const replica of w.copies.map(copy => copy.replica)) {
+    const rows = replica.rows.bind(replica);
+    replica.rows = () => rows().reverse();
+  }
+  const joiner = w.joiner.bind(w);
+  w.joiner = () => {
+    const replica = joiner(), rows = replica.rows.bind(replica);
+    replica.rows = () => rows().reverse();
+    return replica;
+  };
+  assert.throws(() => w.check(), (error: Error) => error instanceof CheckFailure && /projected row order/.test(error.message));
 });
 
 test("mutant layer: tracking remote changes as one's own is caught", () => {
@@ -103,7 +165,5 @@ test("mutant layer: a delete filter that lets undo delete a created cell is caug
   const w = world([{ id: "R1", audioText: "abcd", visualText: "vw" }]);
   w.copy("A").layer.manager.deleteFilter = () => true;
   w.command("A", [{ do: "split", beat: "R1", at: 2, created: "S1" }]);
-  w.undo("A");
-  w.settle();
-  assert.throws(() => w.check(), (error: Error) => error instanceof CheckFailure);
+  assert.throws(() => w.undo("A"), (error: Error) => error instanceof CheckFailure && /root:beats.S1 .* is missing/.test(error.message));
 });

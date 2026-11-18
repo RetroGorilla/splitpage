@@ -86,12 +86,12 @@ for (const kind of KINDS) test(`${kind.name} alone, with another person's change
   kind.remote(w);
   assert.deepEqual(settled(w, "remote change"), kind.done);
   assert.deepEqual(stacks(w, "A"), [base + 1, 0]);
-  const notices = w.copy("A").layer.notices;
+  const updates = w.copy("A").layer.updates;
   for (const [press, expected, after] of [["undo", kind.undone, [base, 1]], ["redo", kind.done, [base + 1, 0]], ["undo", kind.undone, [base, 1]]] as const) {
     assert.ok(press === "undo" ? w.undo("A") : w.redo("A"), `${press} applied`);
     assert.deepEqual(settled(w, press), expected, press);
     assert.deepEqual(stacks(w, "A"), after, `${press} stacks`);
     if (kind.fields) assert.deepEqual(records(w).people, press === "redo" ? kind.fields.done : kind.fields.undone, `${press} fields`);
   }
-  assert.equal(w.copy("A").layer.notices - notices, 3, "one change notification per press");
+  assert.equal(w.copy("A").layer.updates - updates, 3, "one Yjs update event per press");
 });

@@ -51,35 +51,29 @@ test("backspace within the group joins it, and another person's typing arriving 
   assert.deepEqual(settled(w, "undo"), ["R1: Q-- (todo)"]);
 });
 
-test("the bound keeps the newest 200 steps; the oldest five cannot be undone", () => {
+test("standard history can undo all 205 steps", () => {
   const w = world(ROWS);
   for (let index = 0; index < 205; index++) w.command("A", [{ do: "set", beat: "R1", key: "lengthSeconds", value: index }]);
-  assert.deepEqual(stacks(w, "A"), [200, 0]);
-  assert.equal(w.copy("A").layer.dropped, 5);
-  for (let index = 0; index < 200; index++) assert.ok(w.undo("A"));
+  assert.deepEqual(stacks(w, "A"), [205, 0]);
+  for (let index = 0; index < 205; index++) assert.ok(w.undo("A"));
   assert.equal(w.undo("A"), null);
   settled(w, "all undone");
-  assert.equal(w.copy("A").replica.beats.get("R1")?.get("lengthSeconds"), 4);
+  assert.equal(w.copy("A").replica.beats.get("R1")?.get("lengthSeconds"), undefined);
   assert.deepEqual(seen(w), ["R1:  (todo)"]);
 });
 
-test("undo history keeps deleted text in the editing copy; the bound does not release it; a copy loaded from stored state does not hold it", () => {
-  const sizes = [200, Number.POSITIVE_INFINITY].map(bound => {
-    const seed = new NativeReplica(900, 0, "act");
-    seed.hydrate({ rows: [{ id: "R1", audioText: "", visualText: "" }] });
-    const replica = nativeCopy(seed, 1), layer = new UndoLayer(replica, { bound, now: () => 0 });
-    for (let index = 0; index < 1000; index++) {
-      layer.command(() => { replica.splice("R1", "audioText", 0, 0, [{ text: "abcdefghij", marks: {} }]); });
-      layer.command(() => { replica.splice("R1", "audioText", 0, 10, []); });
-    }
-    const fresh = new Y.Doc();
-    Y.applyUpdate(fresh, Y.encodeStateAsUpdate(replica.doc));
-    const result = { editing: Y.encodeStateAsUpdate(replica.doc).length, fresh: Y.encodeStateAsUpdate(fresh).length };
-    replica.destroy(); seed.destroy(); fresh.destroy();
-    return result;
-  });
-  const [bounded, unbounded] = sizes as [{ editing: number; fresh: number }, { editing: number; fresh: number }];
-  assert.ok(bounded.editing > 10_000, `editing copy ${bounded.editing} bytes`);
-  assert.ok(bounded.fresh < 1_000, `fresh copy ${bounded.fresh} bytes`);
-  assert.equal(bounded.editing, unbounded.editing);
+test("undo history keeps deleted text in the editing copy; a copy loaded from stored state does not hold it", () => {
+  const seed = new NativeReplica(900, 0, "act");
+  seed.hydrate({ rows: [{ id: "R1", audioText: "", visualText: "" }] });
+  const replica = nativeCopy(seed, 1), layer = new UndoLayer(replica, { now: () => 0 });
+  for (let index = 0; index < 1000; index++) {
+    layer.command(() => { replica.splice("R1", "audioText", 0, 0, [{ text: "abcdefghij", marks: {} }]); });
+    layer.command(() => { replica.splice("R1", "audioText", 0, 10, []); });
+  }
+  const fresh = new Y.Doc();
+  Y.applyUpdate(fresh, Y.encodeStateAsUpdate(replica.doc));
+  const editing = Y.encodeStateAsUpdate(replica.doc).length, loaded = Y.encodeStateAsUpdate(fresh).length;
+  assert.ok(editing > 10_000, `editing copy ${editing} bytes`);
+  assert.ok(loaded < 1_000, `fresh copy ${loaded} bytes`);
+  replica.destroy(); seed.destroy(); fresh.destroy();
 });

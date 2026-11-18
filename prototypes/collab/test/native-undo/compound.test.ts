@@ -21,9 +21,9 @@ function state(w: World): State {
 }
 
 function press(w: World, name: string, kind: "undo" | "redo", expected: Omit<State, "stacks">, after: [number, number]): void {
-  const notices = w.copy(name).layer.notices;
+  const updates = w.copy(name).layer.updates;
   assert.ok(kind === "undo" ? w.undo(name) : w.redo(name), `${name} ${kind} applied`);
-  assert.equal(w.copy(name).layer.notices - notices, 1, `${name} ${kind}: one change notification`);
+  assert.equal(w.copy(name).layer.updates - updates, 1, `${name} ${kind}: one Yjs update event`);
   settled(w, `${name} ${kind}`);
   const got = state(w);
   assert.deepEqual({ ...got, stacks: undefined }, { ...expected, stacks: undefined }, `${name} ${kind}`);
@@ -42,7 +42,10 @@ test("a compound command with remote changes made after seeing it: undo, redo, u
   const full = { text: "a[bXYQcd|b]ef", flag: true, removed: true, tags: { T1: { name: "Alpha", colour: "blue", note: "from B" } } };
   assert.deepEqual({ ...state(w), stacks: undefined }, { ...full, stacks: undefined });
   const undone = { text: "a[b|b]Qcdef", flag: undefined, removed: true, tags: { T1: { colour: "blue", note: "from B" } } };
+  const a = w.copy("A").replica, observed = new Set<string>();
+  for (const root of ["segments", "beats", "tags"]) a.doc.getMap(root).observeDeep(() => { observed.add(root); });
   press(w, "A", "undo", undone, [0, 1]);
+  assert.deepEqual(observed, new Set(["segments", "beats", "tags"]));
   press(w, "A", "redo", full, [1, 0]);
   press(w, "A", "undo", undone, [0, 1]);
   const recoloured = { ...undone, tags: { T1: { colour: "red" } } };

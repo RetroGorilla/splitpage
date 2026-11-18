@@ -4,6 +4,7 @@
       "pace": "batched",
       "creations": "keep-always",
       "histories": 300,
+      "scheme": "act",
       "failures": 0,
       "presses": 2425,
       "undone": 1439,
@@ -29,12 +30,20 @@
         "join": 333,
         "edit": 635,
         "field": 265
-      }
+      },
+      "undoPresses": 1688,
+      "uncertainUndos": 137,
+      "uncertainRedos": 12,
+      "formatRemains": 5,
+      "inheritedTagLost": 0,
+      "formatSkipSeeds": [],
+      "extraPressUpdates": []
     },
     {
       "pace": "continuous",
       "creations": "keep-always",
       "histories": 300,
+      "scheme": "act",
       "failures": 0,
       "presses": 2361,
       "undone": 1418,
@@ -60,12 +69,22 @@
         "edit": 578,
         "split": 480,
         "record": 367
-      }
+      },
+      "undoPresses": 1647,
+      "uncertainUndos": 138,
+      "uncertainRedos": 7,
+      "formatRemains": 9,
+      "inheritedTagLost": 0,
+      "formatSkipSeeds": [
+        130
+      ],
+      "extraPressUpdates": []
     },
     {
       "pace": "batched",
       "creations": "keep-holding",
       "histories": 300,
+      "scheme": "act",
       "failures": 0,
       "presses": 2421,
       "undone": 1439,
@@ -91,12 +110,20 @@
         "join": 334,
         "edit": 630,
         "field": 264
-      }
+      },
+      "undoPresses": 1688,
+      "uncertainUndos": 140,
+      "uncertainRedos": 12,
+      "formatRemains": 5,
+      "inheritedTagLost": 0,
+      "formatSkipSeeds": [],
+      "extraPressUpdates": []
     },
     {
       "pace": "continuous",
       "creations": "keep-holding",
       "histories": 300,
+      "scheme": "act",
       "failures": 0,
       "presses": 2358,
       "undone": 1413,
@@ -122,7 +149,101 @@
         "edit": 579,
         "split": 476,
         "record": 365
-      }
+      },
+      "undoPresses": 1643,
+      "uncertainUndos": 137,
+      "uncertainRedos": 6,
+      "formatRemains": 9,
+      "inheritedTagLost": 0,
+      "formatSkipSeeds": [
+        130
+      ],
+      "extraPressUpdates": []
+    },
+    {
+      "pace": "batched",
+      "creations": "keep-always",
+      "histories": 300,
+      "scheme": "name",
+      "failures": 0,
+      "presses": 2425,
+      "undone": 1439,
+      "redone": 98,
+      "uncertainPresses": 146,
+      "uncertainCommands": 67,
+      "losses": 0,
+      "unseenLosses": 0,
+      "formatSkips": 0,
+      "historiesWithMarkDifferences": 40,
+      "actions": {
+        "type": 3091,
+        "split": 475,
+        "compound": 715,
+        "undo": 1688,
+        "erase": 946,
+        "format": 1189,
+        "replace": 317,
+        "remove": 503,
+        "record": 371,
+        "status": 735,
+        "redo": 737,
+        "join": 333,
+        "edit": 635,
+        "field": 265
+      },
+      "undoPresses": 1688,
+      "uncertainUndos": 134,
+      "uncertainRedos": 12,
+      "formatRemains": 5,
+      "inheritedTagLost": 0,
+      "formatSkipSeeds": [],
+      "extraPressUpdates": []
+    },
+    {
+      "pace": "continuous",
+      "creations": "keep-always",
+      "histories": 300,
+      "scheme": "name",
+      "failures": 1,
+      "presses": 2361,
+      "undone": 1418,
+      "redone": 86,
+      "uncertainPresses": 135,
+      "uncertainCommands": 64,
+      "losses": 0,
+      "unseenLosses": 0,
+      "formatSkips": 0,
+      "historiesWithMarkDifferences": 21,
+      "actions": {
+        "type": 3109,
+        "compound": 717,
+        "format": 1253,
+        "undo": 1647,
+        "status": 667,
+        "join": 375,
+        "replace": 405,
+        "remove": 499,
+        "erase": 928,
+        "field": 261,
+        "redo": 714,
+        "edit": 578,
+        "split": 480,
+        "record": 367
+      },
+      "undoPresses": 1647,
+      "uncertainUndos": 129,
+      "uncertainRedos": 6,
+      "formatRemains": 12,
+      "inheritedTagLost": 0,
+      "formatSkipSeeds": [],
+      "extraPressUpdates": [
+        {
+          "seed": 254,
+          "updates": [
+            2
+          ]
+        }
+      ]
     }
   ],
   "marks": {
