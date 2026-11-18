@@ -27,7 +27,7 @@ export interface MarkSummary {
 
 // why: every difference from main's rule falls in exactly one of these, decided from the commands alone
 export const MARK_CLASSES = {
-  "lost-selected": "Formatting gone from a character someone selected and formatted, and nobody unformatted",
+  "lost-selected": "Formatting gone from a character someone selected and formatted, and nobody unformatted since",
   "lost-typed-with": "Formatting gone from a character that was typed with it and that nobody formatted or unformatted afterwards",
   "lost-unformat-apart": "Formatting gone from a character one person formatted while another, who had not seen that, unformatted it",
   "lost-typed-inside": "No formatting on a character typed inside a formatted range by someone who had not seen the formatting",
@@ -192,9 +192,13 @@ export function runMarks(steps: readonly MarkStep[], writers: number, scheme: Na
     const birth = commands.find(command => command.op === "insert" && command.selected[0] === item.char);
     const selected = commands.some(command => command.op === "add" && command.kind === kind && command.selected.includes(item.char));
     const formatted = !!birth?.marks.includes(kind) || selected;
-    const unformatted = commands.some(command => command.op === "remove" && command.kind === kind && command.selected.includes(item.char));
+    const touching = commands.filter(command => command.kind === kind && command.selected.includes(item.char));
+    const removals = touching.filter(command => command.op === "remove"), unformatted = removals.length > 0;
+    // why: under main's rule a selection still stands when no removal of the character had seen it
+    const standing = touching.filter(command => command.op === "add" && !removals.some(removal => removal.known.has(command.id)));
+    const crossed = standing.some(add => removals.some(removal => !add.known.has(removal.id)));
     const apart = !!birth && commands.some(command => (command.op === "add" || command.op === "remove") && command.kind === kind && !birth.known.has(command.id) && !command.known.has(birth.id));
-    const cause: MarkClass = wanted ? (formatted ? (unformatted ? "lost-unformat-apart" : selected ? "lost-selected" : "lost-typed-with") : "lost-typed-inside")
+    const cause: MarkClass = wanted ? (standing.length ? (crossed ? "lost-unformat-apart" : "lost-selected") : birth?.marks.includes(kind) && !unformatted ? "lost-typed-with" : "lost-typed-inside")
       : apart ? "extra-typed-apart" : formatted && unformatted ? "extra-unformatted" : "extra-nowhere";
     differences.push({ char: item.char, kind, direction: wanted ? "lost" : "extra", cause });
   }

@@ -5,10 +5,12 @@
     "delivery": "updates",
     "histories": 1000,
     "executed": 9087,
+    "skipped": 0,
     "disagreements": 0,
     "textMismatches": 0,
-    "withLost": 160,
-    "withExtra": 190,
+    "withOpen": 29,
+    "withLost": 159,
+    "withExtra": 188,
     "cases": [
       {
         "cause": "extra-nowhere",
@@ -53,7 +55,7 @@
       },
       {
         "cause": "extra-typed-apart",
-        "histories": 187,
+        "histories": 185,
         "steps": [
           {
             "op": "insert",
@@ -119,7 +121,7 @@
       },
       {
         "cause": "lost-selected",
-        "histories": 117,
+        "histories": 121,
         "steps": [
           {
             "op": "add",
@@ -145,7 +147,7 @@
       },
       {
         "cause": "lost-typed-inside",
-        "histories": 20,
+        "histories": 19,
         "steps": [
           {
             "op": "add",
@@ -213,54 +215,56 @@
       },
       {
         "cause": "lost-unformat-apart",
-        "histories": 33,
+        "histories": 26,
         "steps": [
+          {
+            "op": "add",
+            "by": 1,
+            "kind": "i",
+            "first": "a",
+            "last": "b"
+          },
           {
             "op": "remove",
             "by": 0,
-            "kind": "b",
-            "first": "f",
-            "last": "f"
+            "kind": "i",
+            "first": "b",
+            "last": "d"
           },
           {
             "op": "add",
             "by": 0,
-            "kind": "b",
-            "first": "f",
-            "last": "f"
-          },
-          {
-            "op": "insert",
-            "by": 1,
-            "after": "e",
-            "char": "E",
-            "mode": "b"
+            "kind": "i",
+            "first": "a",
+            "last": "a"
           }
         ],
         "example": [
-          "A takes f out of bold",
-          "A makes f bold",
-          "B types E after e, bold"
+          "B makes a..b italic",
+          "A takes b..d out of italic",
+          "A makes a italic"
         ],
-        "native": "abcde[E|b]f",
-        "model": "abcde[E|b][f|b]"
+        "native": "[a|i]bcdef",
+        "model": "[a|i][b|i]cdef"
       }
     ]
   },
   {
     "scheme": "name",
     "writers": 2,
-    "delivery": "state",
+    "delivery": "shuffled",
     "histories": 1000,
     "executed": 9087,
+    "skipped": 0,
     "disagreements": 0,
     "textMismatches": 0,
-    "withLost": 144,
-    "withExtra": 197,
+    "withOpen": 29,
+    "withLost": 159,
+    "withExtra": 189,
     "cases": [
       {
         "cause": "extra-nowhere",
-        "histories": 2,
+        "histories": 5,
         "steps": [
           {
             "op": "add",
@@ -306,7 +310,7 @@
       },
       {
         "cause": "extra-typed-apart",
-        "histories": 195,
+        "histories": 186,
         "steps": [
           {
             "op": "insert",
@@ -372,7 +376,262 @@
       },
       {
         "cause": "lost-selected",
-        "histories": 106,
+        "histories": 121,
+        "steps": [
+          {
+            "op": "add",
+            "by": 1,
+            "kind": "b",
+            "first": "b",
+            "last": "b"
+          },
+          {
+            "op": "add",
+            "by": 0,
+            "kind": "b",
+            "first": "c",
+            "last": "d"
+          }
+        ],
+        "example": [
+          "B makes b bold",
+          "A makes c..d bold"
+        ],
+        "native": "a[b|b]cdef",
+        "model": "a[b|b][c|b][d|b]ef"
+      },
+      {
+        "cause": "lost-typed-inside",
+        "histories": 19,
+        "steps": [
+          {
+            "op": "add",
+            "by": 1,
+            "kind": "b",
+            "first": "d",
+            "last": "f"
+          },
+          {
+            "op": "add",
+            "by": 0,
+            "kind": "b",
+            "first": "b",
+            "last": "d"
+          },
+          {
+            "op": "insert",
+            "by": 0,
+            "after": "d",
+            "char": "B",
+            "mode": "plain"
+          }
+        ],
+        "example": [
+          "B makes d..f bold",
+          "A makes b..d bold",
+          "A types B after d, plain"
+        ],
+        "native": "a[b|b][c|b][d|b]Bef",
+        "model": "a[b|b][c|b][d|b][B|b][e|b][f|b]"
+      },
+      {
+        "cause": "lost-typed-with",
+        "histories": 23,
+        "steps": [
+          {
+            "op": "add",
+            "by": 0,
+            "kind": "i",
+            "first": "c",
+            "last": "d"
+          },
+          {
+            "op": "insert",
+            "by": 0,
+            "after": "d",
+            "char": "B",
+            "mode": "inherit"
+          },
+          {
+            "op": "add",
+            "by": 1,
+            "kind": "i",
+            "first": "a",
+            "last": "b"
+          }
+        ],
+        "example": [
+          "A makes c..d italic",
+          "A types B after d, taking the formatting on its left",
+          "B makes a..b italic"
+        ],
+        "native": "[a|i][b|i]cdBef",
+        "model": "[a|i][b|i][c|i][d|i][B|i]ef"
+      },
+      {
+        "cause": "lost-unformat-apart",
+        "histories": 24,
+        "steps": [
+          {
+            "op": "add",
+            "by": 1,
+            "kind": "i",
+            "first": "a",
+            "last": "b"
+          },
+          {
+            "op": "remove",
+            "by": 0,
+            "kind": "i",
+            "first": "b",
+            "last": "d"
+          },
+          {
+            "op": "add",
+            "by": 0,
+            "kind": "i",
+            "first": "a",
+            "last": "a"
+          }
+        ],
+        "example": [
+          "B makes a..b italic",
+          "A takes b..d out of italic",
+          "A makes a italic"
+        ],
+        "native": "[a|i]bcdef",
+        "model": "[a|i][b|i]cdef"
+      }
+    ]
+  },
+  {
+    "scheme": "name",
+    "writers": 2,
+    "delivery": "state",
+    "histories": 1000,
+    "executed": 9087,
+    "skipped": 0,
+    "disagreements": 0,
+    "textMismatches": 0,
+    "withOpen": 29,
+    "withLost": 144,
+    "withExtra": 188,
+    "cases": [
+      {
+        "cause": "extra-nowhere",
+        "histories": 2,
+        "steps": [
+          {
+            "op": "add",
+            "by": 0,
+            "kind": "b",
+            "first": "b",
+            "last": "c"
+          },
+          {
+            "op": "deliver",
+            "from": 0,
+            "to": 1
+          },
+          {
+            "op": "delete",
+            "by": 0,
+            "first": "c",
+            "last": "d"
+          },
+          {
+            "op": "add",
+            "by": 1,
+            "kind": "b",
+            "first": "a",
+            "last": "a"
+          },
+          {
+            "op": "delete",
+            "by": 0,
+            "first": "a",
+            "last": "b"
+          }
+        ],
+        "example": [
+          "A makes b..c bold",
+          "A's changes reach B",
+          "A deletes c..d",
+          "B makes a bold",
+          "A deletes a..b"
+        ],
+        "native": "[e|b][f|b]",
+        "model": "ef"
+      },
+      {
+        "cause": "extra-typed-apart",
+        "histories": 186,
+        "steps": [
+          {
+            "op": "insert",
+            "by": 1,
+            "after": "e",
+            "char": "E",
+            "mode": "plain"
+          },
+          {
+            "op": "add",
+            "by": 0,
+            "kind": "i",
+            "first": "f",
+            "last": "f"
+          }
+        ],
+        "example": [
+          "B types E after e, plain",
+          "A makes f italic"
+        ],
+        "native": "abcde[E|i][f|i]",
+        "model": "abcdeE[f|i]"
+      },
+      {
+        "cause": "extra-unformatted",
+        "histories": 2,
+        "steps": [
+          {
+            "op": "add",
+            "by": 1,
+            "kind": "b",
+            "first": "f",
+            "last": "f"
+          },
+          {
+            "op": "deliver",
+            "from": 1,
+            "to": 0
+          },
+          {
+            "op": "add",
+            "by": 1,
+            "kind": "b",
+            "first": "d",
+            "last": "e"
+          },
+          {
+            "op": "remove",
+            "by": 0,
+            "kind": "b",
+            "first": "e",
+            "last": "f"
+          }
+        ],
+        "example": [
+          "B makes f bold",
+          "B's changes reach A",
+          "B makes d..e bold",
+          "A takes e..f out of bold"
+        ],
+        "native": "abc[d|b][e|b][f|b]",
+        "model": "abc[d|b][e|b]f"
+      },
+      {
+        "cause": "lost-selected",
+        "histories": 110,
         "steps": [
           {
             "op": "add",
@@ -466,37 +725,37 @@
       },
       {
         "cause": "lost-unformat-apart",
-        "histories": 29,
+        "histories": 22,
         "steps": [
+          {
+            "op": "add",
+            "by": 1,
+            "kind": "i",
+            "first": "a",
+            "last": "b"
+          },
           {
             "op": "remove",
             "by": 0,
-            "kind": "b",
-            "first": "f",
-            "last": "f"
+            "kind": "i",
+            "first": "b",
+            "last": "d"
           },
           {
             "op": "add",
             "by": 0,
-            "kind": "b",
-            "first": "f",
-            "last": "f"
-          },
-          {
-            "op": "insert",
-            "by": 1,
-            "after": "e",
-            "char": "E",
-            "mode": "b"
+            "kind": "i",
+            "first": "a",
+            "last": "a"
           }
         ],
         "example": [
-          "A takes f out of bold",
-          "A makes f bold",
-          "B types E after e, bold"
+          "B makes a..b italic",
+          "A takes b..d out of italic",
+          "A makes a italic"
         ],
-        "native": "abcde[E|b]f",
-        "model": "abcde[E|b][f|b]"
+        "native": "[a|i]bcdef",
+        "model": "[a|i][b|i]cdef"
       }
     ]
   },
@@ -506,10 +765,12 @@
     "delivery": "state",
     "histories": 1000,
     "executed": 8720,
+    "skipped": 0,
     "disagreements": 0,
     "textMismatches": 0,
+    "withOpen": 29,
     "withLost": 197,
-    "withExtra": 287,
+    "withExtra": 282,
     "cases": [
       {
         "cause": "extra-nowhere",
@@ -553,7 +814,7 @@
       },
       {
         "cause": "extra-typed-apart",
-        "histories": 284,
+        "histories": 279,
         "steps": [
           {
             "op": "add",
@@ -619,7 +880,7 @@
       },
       {
         "cause": "lost-selected",
-        "histories": 152,
+        "histories": 155,
         "steps": [
           {
             "op": "add",
@@ -645,7 +906,7 @@
       },
       {
         "cause": "lost-typed-inside",
-        "histories": 41,
+        "histories": 40,
         "steps": [
           {
             "op": "add",
@@ -713,7 +974,7 @@
       },
       {
         "cause": "lost-unformat-apart",
-        "histories": 28,
+        "histories": 22,
         "steps": [
           {
             "op": "add",
@@ -753,14 +1014,16 @@
     "delivery": "updates",
     "histories": 1000,
     "executed": 9087,
+    "skipped": 0,
     "disagreements": 0,
     "textMismatches": 0,
-    "withLost": 13,
-    "withExtra": 205,
+    "withOpen": 30,
+    "withLost": 12,
+    "withExtra": 204,
     "cases": [
       {
         "cause": "extra-typed-apart",
-        "histories": 205,
+        "histories": 204,
         "steps": [
           {
             "op": "insert",
@@ -786,7 +1049,7 @@
       },
       {
         "cause": "lost-typed-inside",
-        "histories": 6,
+        "histories": 5,
         "steps": [
           {
             "op": "add",
@@ -855,17 +1118,133 @@
   {
     "scheme": "act",
     "writers": 2,
-    "delivery": "state",
+    "delivery": "shuffled",
     "histories": 1000,
     "executed": 9087,
+    "skipped": 0,
     "disagreements": 0,
     "textMismatches": 0,
-    "withLost": 10,
-    "withExtra": 215,
+    "withOpen": 30,
+    "withLost": 12,
+    "withExtra": 205,
     "cases": [
       {
         "cause": "extra-typed-apart",
-        "histories": 215,
+        "histories": 205,
+        "steps": [
+          {
+            "op": "insert",
+            "by": 1,
+            "after": "e",
+            "char": "E",
+            "mode": "plain"
+          },
+          {
+            "op": "add",
+            "by": 0,
+            "kind": "i",
+            "first": "f",
+            "last": "f"
+          }
+        ],
+        "example": [
+          "B types E after e, plain",
+          "A makes f italic"
+        ],
+        "native": "abcde[E|i][f|i]",
+        "model": "abcdeE[f|i]"
+      },
+      {
+        "cause": "lost-typed-inside",
+        "histories": 5,
+        "steps": [
+          {
+            "op": "add",
+            "by": 0,
+            "kind": "b",
+            "first": "d",
+            "last": "f"
+          },
+          {
+            "op": "delete",
+            "by": 0,
+            "first": "d",
+            "last": "f"
+          },
+          {
+            "op": "insert",
+            "by": 1,
+            "after": "e",
+            "char": "E",
+            "mode": "inherit"
+          }
+        ],
+        "example": [
+          "A makes d..f bold",
+          "A deletes d..f",
+          "B types E after e, taking the formatting on its left"
+        ],
+        "native": "abcE",
+        "model": "abc[E|b]"
+      },
+      {
+        "cause": "lost-typed-with",
+        "histories": 7,
+        "steps": [
+          {
+            "op": "add",
+            "by": 1,
+            "kind": "i",
+            "first": "d",
+            "last": "d"
+          },
+          {
+            "op": "deliver",
+            "from": 1,
+            "to": 0
+          },
+          {
+            "op": "insert",
+            "by": 1,
+            "after": "d",
+            "char": "C",
+            "mode": "inherit"
+          },
+          {
+            "op": "insert",
+            "by": 0,
+            "after": "d",
+            "char": "D",
+            "mode": "b"
+          }
+        ],
+        "example": [
+          "B makes d italic",
+          "B's changes reach A",
+          "B types C after d, taking the formatting on its left",
+          "A types D after d, bold"
+        ],
+        "native": "abc[d|i][D|b][C|b]ef",
+        "model": "abc[d|i][D|b][C|i]ef"
+      }
+    ]
+  },
+  {
+    "scheme": "act",
+    "writers": 2,
+    "delivery": "state",
+    "histories": 1000,
+    "executed": 9087,
+    "skipped": 0,
+    "disagreements": 0,
+    "textMismatches": 0,
+    "withOpen": 30,
+    "withLost": 10,
+    "withExtra": 206,
+    "cases": [
+      {
+        "cause": "extra-typed-apart",
+        "histories": 206,
         "steps": [
           {
             "op": "insert",
@@ -970,14 +1349,16 @@
     "delivery": "state",
     "histories": 1000,
     "executed": 8720,
+    "skipped": 0,
     "disagreements": 0,
     "textMismatches": 0,
-    "withLost": 16,
-    "withExtra": 322,
+    "withOpen": 29,
+    "withLost": 15,
+    "withExtra": 319,
     "cases": [
       {
         "cause": "extra-typed-apart",
-        "histories": 319,
+        "histories": 316,
         "steps": [
           {
             "op": "add",
@@ -1043,7 +1424,7 @@
       },
       {
         "cause": "lost-typed-inside",
-        "histories": 12,
+        "histories": 11,
         "steps": [
           {
             "op": "add",

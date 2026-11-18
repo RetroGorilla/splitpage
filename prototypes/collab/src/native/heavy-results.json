@@ -61,16 +61,21 @@
           "editor": 2446402
         },
         {
-          "repetition": 98,
-          "server": 618014,
-          "editor": 3188934
+          "repetition": 100,
+          "server": 630002,
+          "editor": 3253502
+        },
+        {
+          "repetition": 102,
+          "server": 642549,
+          "editor": 3318729
         }
       ],
-      "repetitions": 98,
+      "repetitions": 102,
       "crossedAt": null,
-      "seconds": 603.1,
-      "reloaded": 618014,
-      "undoPairs": 804
+      "seconds": 609.2,
+      "reloaded": 642549,
+      "undoPairs": 904
     },
     {
       "fixture": "large",
@@ -88,7 +93,7 @@
       ],
       "repetitions": 1,
       "crossedAt": null,
-      "seconds": 1.8,
+      "seconds": 1.9,
       "reloaded": 293432,
       "undoPairs": 804
     },
@@ -151,15 +156,15 @@
           "editor": 2552046
         },
         {
-          "repetition": 97,
-          "server": 612864,
-          "editor": 3296294
+          "repetition": 98,
+          "server": 618858,
+          "editor": 3330178
         }
       ],
-      "repetitions": 97,
+      "repetitions": 98,
       "crossedAt": null,
-      "seconds": 605.9,
-      "reloaded": 612864,
+      "seconds": 604.1,
+      "reloaded": 618858,
       "undoPairs": 804
     },
     {
@@ -178,7 +183,7 @@
       ],
       "repetitions": 1,
       "crossedAt": null,
-      "seconds": 1.8,
+      "seconds": 1.7,
       "reloaded": 302876,
       "undoPairs": 804
     }
@@ -190,7 +195,7 @@
       "acts": 100,
       "bytes": 3642,
       "afterUnformat": 2448,
-      "readMs": 0.03,
+      "readMs": 0.025,
       "keysOnBusiestCharacter": 1
     },
     {
@@ -199,7 +204,7 @@
       "acts": 1000,
       "bytes": 37842,
       "afterUnformat": 25848,
-      "readMs": 0.222,
+      "readMs": 0.203,
       "keysOnBusiestCharacter": 1
     },
     {
@@ -208,7 +213,7 @@
       "acts": 10000,
       "bytes": 420183,
       "afterUnformat": 300191,
-      "readMs": 1.635,
+      "readMs": 1.314,
       "keysOnBusiestCharacter": 1
     },
     {
@@ -235,7 +240,7 @@
       "acts": 100,
       "bytes": 4642,
       "afterUnformat": 2448,
-      "readMs": 0.02,
+      "readMs": 0.015,
       "keysOnBusiestCharacter": 1
     },
     {
@@ -244,7 +249,7 @@
       "acts": 1000,
       "bytes": 49842,
       "afterUnformat": 25848,
-      "readMs": 0.179,
+      "readMs": 0.352,
       "keysOnBusiestCharacter": 1
     },
     {
@@ -253,7 +258,7 @@
       "acts": 10000,
       "bytes": 560183,
       "afterUnformat": 300191,
-      "readMs": 5.679,
+      "readMs": 5.163,
       "keysOnBusiestCharacter": 1
     },
     {
@@ -262,7 +267,7 @@
       "acts": 100,
       "bytes": 3736,
       "afterUnformat": 1542,
-      "readMs": 0.028,
+      "readMs": 0.029,
       "keysOnBusiestCharacter": 100
     },
     {
@@ -271,7 +276,7 @@
       "acts": 1000,
       "bytes": 38246,
       "afterUnformat": 15042,
-      "readMs": 0.37,
+      "readMs": 0.365,
       "keysOnBusiestCharacter": 1000
     }
   ]

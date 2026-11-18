@@ -5,16 +5,19 @@ A prototype. Nothing here ships and no file under `src/`, `server/`, `desktop/` 
 
 ## Verdict
 
-On the same script the variant stores about 200 times less than main and commits a local keystroke 280 to 2,800 times
-faster, and in no history did copies disagree or a typed character go missing. It does not keep main's mark rules:
-with one attribute key per mark name, formatting disappears from text nobody unformatted or deleted. One key per
-formatting act removes most of that, not all. That choice and three undo rules need the owner's decision.
+On the same script the variant stores about 200 times less than main. Its keystroke path measured 280 to 2,800 times
+faster, but does less than main's, so that ratio is a direction only. Copies never disagreed, and in generated
+histories of typing, deleting and formatting no character went missing; structure and undo rest on fixed examples.
+It does not keep main's mark rules: with one attribute key per mark name, formatting disappears from text nobody
+unformatted or deleted. One key per formatting act removes most of that, not all. That choice and three undo rules
+need the owner's decision.
 
 ## Numbers
 
-Main and variant ran the same script in the same run: Node v24.22.1, x64, commit `954c48398` (later commits change
-tests and this report only). Timing cells are median / p95 in ms, each the median of 3 rounds of 200 timed keystrokes
-after 20 untimed ones. Ranges are in `results.json`.
+Main and variant ran the same script in the same run: Node v24.22.1, x64, commit `954c48398`. Later commits changed
+how a split is recorded, the undo guard and where an act key takes its clock, none on the timed path: timing was not
+rerun, sizes were and are the same to the byte. Timing cells are median / p95 in ms, each the median of 3 rounds of
+200 timed keystrokes after 20 untimed ones. Ranges are in `results.json`.
 
 | | Main | Variant, one key per mark name | Variant, one key per formatting act |
 | --- | --- | --- | --- |
@@ -31,34 +34,42 @@ after 20 untimed ones. Ranges are in `results.json`.
 | Remote keystroke with its change set, 30 beats | 1.58 / 2.07 | 0.022 / 0.038 | 0.022 / 0.036 |
 | Remote keystroke, 300 beats | 6.83 / 8.27 | 0.022 / 0.040 | 0.023 / 0.038 |
 | Remote keystroke, 900 beats | 23.52 / 32.97 | 0.022 / 0.037 | 0.022 / 0.038 |
-| Heavy-use schedule, long script: bytes per repetition, stored copy | not measured | 5,985 | 5,985 |
-| Heavy-use schedule: 2 MiB crossed | not measured | no, 618,014 after 98 | no, 612,864 after 97 |
+| Heavy-use schedule, long script: mean bytes per repetition, stored copy | not measured | 5,991 over 102 | 5,985 over 98 |
+| Heavy-use schedule: 2 MiB crossed | not measured | no, 642,549 after 102 | no, 618,858 after 98 |
+
+**The ratios show a direction, not equivalent adapter performance.** The same reading and row-change work is timed
+on both sides, and main reads the painted text before its clock, which favours main. But the variant checks no
+revision or base, rejects no command, isolates no failed update and groups no undo (every keystroke is an entry).
+Those costs are not measured, except one: decoding and checking each incoming update before applying it took the
+remote keystroke from 0.022 to 0.023 or 0.024 ms. Appendix B.
 
 ## Answers
 
 1. **Size.** The table. The number of writers changes nothing. The heavy-use schedule ran 600 s per key scheme on
-   the long script and did not reach 2 MiB: 98 repetitions (980,000 typed characters and 29,400 other commands,
-   each undone) left 618,014 bytes. Growth was linear, so it would cross near repetition 345; that figure is
+   the long script and did not reach 2 MiB: 102 repetitions (1,020,000 typed characters and 30,600 other commands,
+   each undone) left 642,549 bytes. At the measured rates it would cross between repetitions 334 and 345;
    extrapolated, not measured. Appendix C.
 2. **Local keystroke.** Flat in the number of beats and in what was typed before.
 3. **Remote keystroke.** Flat as well. The change set is read from the Yjs events.
-4. **Marks.** In 6,000 generated histories every copy and a late joiner agreed, and the text was always what was
-   typed minus what was deleted. Formatting differs from main's rule as listed below. Appendix D.
-5. **Undo.** Plain `Y.UndoManager` does typing with remote edits in between, redo, issue #1612, split, join, and
-   removal while a collaborator types into the removed beat. Used-up steps and identical changes need a guard of
-   about 60 lines (`undoStep`). Appendices E and F.
-6. **Traces.** Of the Stage 1 document traces 16 pass as they are, 3 in the part the spike builds, 3 with a
-   declared difference; headings were not built. The 187 test files under `tests/collab/` and
-   `tests/adapters/collab/` cannot run: they call main's executors and assert main's stored records. Appendix G.
+4. **Marks.** 8,000 runs of 2,000 generated histories. In all of them every copy and a late joiner agreed and held
+   exactly the characters the commands call for. Formatting differs from main's rule as listed below. Appendix D.
+5. **Undo.** Plain `Y.UndoManager` does typing with remote edits in between, redo, issue #1612, join and removal.
+   A split needs a delete filter. Used-up steps, identical changes and their redo need a guard of about 100 lines
+   (`undoStep`, `redoStep`). Appendices E and F.
+6. **Traces.** 22 document-content examples adapted from the Stage 1 rows, not the original editor or adapter
+   suites: 16 pass as they are, 3 in the part the spike builds, 3 with a declared difference. The 187 test files
+   under `tests/collab/` and `tests/adapters/collab/` cannot run: they assert main's stored records. Appendix G.
+7. **Coverage.** Generated histories type, delete and format, delivered in order, reversed, twice or as whole
+   state. Split, join, removal, undo and redo are covered by fixed examples only. Appendix G.
 
 ## Declared differences: what a person sees
 
 Marks, with both key schemes (accepted for this spike as briefed):
 
 - **Outside edge.** Text typed just beside a range that someone else formats at the same moment takes the
-  formatting; main leaves it plain.
+  formatting or stays plain depending on which of the two has the higher client id; main leaves it plain.
 - **Typed inside while the range is unformatted.** The letters after the typed text keep the formatting. With the
-  outside edge: 187 to 215 of 1,000 two-writer histories.
+  outside edge: 185 to 206 of 1,000 two-writer histories.
 - **Typed inside, letters gone.** Text typed inside a formatted range arrives plain when every letter of the range
   was deleted meanwhile; main formats it.
 
@@ -66,12 +77,12 @@ Marks, by key scheme. These touch the owner's rule that formatting never disappe
 deleted, so they are his decision and not accepted by default:
 
 - **One key per mark name breaks the rule in two commands.** Two people make neighbouring words bold at the same
-  moment: one word stays plain (106 to 152 of 1,000 histories). M-loss ends with plain `d` when updates arrive one
+  moment: one word stays plain (110 to 155 of 1,000 histories). M-loss ends with plain `d` when updates arrive one
   by one. In 2 to 5 of 1,000 histories formatting appears on text nobody formatted.
-- **One key per formatting act kept the rule for every character someone selected and formatted**, in 3,000
-  histories and in M-loss. It is not a guarantee: a letter typed as the continuation of a formatted run arrives
-  plain when the letter on its left was deleted or someone typed between them, unseen (5 to 7 of 1,000). Closing
-  that needs a marker pair per formatted keystroke; not built. Cost of the scheme: appendix C.
+- **One key per formatting act kept the rule for every character someone selected and formatted**, in 4,000 runs
+  of 2,000 histories and in M-loss. It is not a guarantee: a letter typed as the continuation of a formatted run
+  arrives plain when the letter on its left was deleted or someone typed between them, unseen (5 to 7 of 1,000).
+  Closing that needs a marker pair per formatted keystroke; not built. Cost of the scheme: appendix C.
 
 Structure and undo:
 
@@ -86,23 +97,25 @@ Structure and undo:
 
 ## Real findings
 
-No disagreement between copies and no lost typed character, in the generator or in any trace.
+No disagreement between copies in the generator or in any trace, and no character missing, extra or out of place in
+the generated histories. That check is built from the commands, not from the code it checks; three planted faults
+(a letter dropped, a letter misplaced, a deletion ignored) each fail it.
 
-One loss in the first version of the variant, fixed and kept as a test: undoing a split whose new beat was created
-in the same transaction deleted what a collaborator had typed in that beat's visual cell. `Y.UndoManager` undoes a
-creation by deleting the created type with everything in it. The variant now writes the new beat's record and visual
-cell outside the undo history; an undone split then leaves an unused record, 51 bytes on the stored copy.
+One loss, found twice. `Y.UndoManager` undoes a creation by deleting the created type with everything in it, so
+undoing a split deleted what a collaborator had typed in the new beat's visual cell. The first fix failed whenever
+the split ran inside an outer transaction, as review showed. The fix now is the undo manager's delete filter: an
+undone creation never deletes a beat's record or visual cell. Tests show it for a split on its own, inside two kinds
+of outer transaction and in a compound command; it is not proven beyond them. It costs 104 bytes per 50 undone
+splits.
 
 ## Surprises
 
 - `text.insert` with explicit attributes writes a marker after the text that turns the earlier formatting on again.
   When the run's own end marker is later removed elsewhere, that marker formats everything to the end of the text.
 - The same history can end differently depending on whether a copy received each update or the whole state.
-- An editing copy with undo history does not collect deleted text until it is reloaded: after 98 repetitions its
-  encoded state was 3,188,934 bytes against 618,014 on the stored copy. Reloaded, it was 618,014.
+- An editing copy with undo history does not collect deleted text until it is reloaded: after 102 repetitions its
+  encoded state was 3,318,729 bytes against 642,549 on the stored copy. Reloaded, it was 642,549.
 - Plain `undo()` goes on to an older step when the top one changes nothing, and can leave a field blank.
-- The dependency gate forbids a prototype from importing the adapter, so main and the variant run in two child
-  processes with one shared measurement block. That put one file under `tests/collab/measure/`.
 
 ## Not done, not measured
 
@@ -132,15 +145,23 @@ a per-keystroke record or a map that grows with every edit. Reproduction command
   is not below `seen[client]`. A restore deletes the key.
 - **Join.** `beats[from].joined = {into, glue}`. The text stays in its own beat and the reader joins the rows.
 - **Undo.** One `Y.UndoManager` over `segments`, `order`, `beats`, `visuals` and `comments`. The tracked origin is the
-  copy's own origin object. Untracked: `"hydration"`, `"setup"` (a new beat's record and visual cell), `"takeback"`
-  (the guard's forward writes) and `"remote"`.
+  copy's own origin object. Untracked: `"hydration"`, `"takeback"` (the guard's forward writes) and `"remote"`.
+- **An undone creation keeps its container.** The undo manager's `deleteFilter` option refuses to delete a beat's
+  record or visual cell, so undoing a split removes the boundary and leaves both, with whatever anyone wrote in them.
+  The filter decides by the item it is handed, so it holds in any transaction, nested or not.
+- **Compound commands.** `replica.transact` makes several commands one entry. The guard's notes for each part wait
+  for that entry. A caller that wraps commands in a raw `doc.transact` still gets one entry and the delete filter,
+  but loses the notes, so that entry is undone as the library alone would.
 - **Remote updates.** Plain `Y.applyUpdate`, at any time. `changes()` reads the Yjs events: a structural event
   rebuilds the rows, a text event touches only the rows of the segments it names.
-- **Limits kept.** Public Yjs API only, no `Y.Item` built by hand, no private field read. Besides text, two things
-  grow: one beat record per split, and with act keys one attribute key per formatting command.
+- **Limits kept.** Public Yjs API only and no `Y.Item` built by hand. Two places read fields of objects the library
+  hands over: the delete filter reads `content` and `parent` of its item, and the removal marker reads the id inside
+  a relative position. An act key takes its clock from the encoded state vector. Besides text, two things grow: one
+  beat record per split, and with act keys one attribute key per formatting command.
 
 ## B. How main and the variant were measured
 
+The dependency gate forbids a prototype from importing the adapter, which put one file under `tests/collab/measure/`.
 `bench.ts` starts each subject in its own child process: `tests/collab/measure/native-spike-main.mjs` drives main
 through `hydrateSharedDocument`, `createSharedReplica`, `sharedUndoOwner` and `executeSharedOperations`;
 `subject.mjs` drives the variant. Both files hold the same measurement block, and `bench.ts` refuses to run when the
@@ -150,8 +171,32 @@ Stage 1 lifetime workload. The final text of every subject is compared: it was t
 taken from a copy without undo history, as a server holds it.
 
 A local keystroke on the variant is timed from the `splice` call to the returned change set. On main the painted
-text is read and the operation built before the clock starts; the clock covers `replica.execute` and
-`replica.changes()`. A remote keystroke is timed from applying the update to the returned change set on both.
+text is read and the operation built before the clock starts, which favours main; the clock covers `replica.execute`
+and `replica.changes()`. A remote keystroke is timed from applying the update to the returned change set on both.
+Reading the changed cell, projecting it and producing the row change are inside the timed part on both.
+
+What main's timed path does and the variant's does not:
+
+- **Admission of an incoming update and failure isolation.** The variant calls `Y.applyUpdate` and nothing else.
+  Nothing isolates a failure inside the library.
+- **Revision and base checks, and rejecting a command.** The variant's commands check nothing and cannot be refused.
+- **Undo grouping.** The timed variant runs with `captureTimeout` 0: every keystroke is its own entry, with no word
+  boundaries, no bound on the number of entries and no hold.
+
+So the ratios show a direction. They are not the performance of an equivalent adapter.
+
+One of the three was cheap to time. A second run at commit `b9fe61267` adds a fourth subject to the remote path: the
+name-key variant with `admit` in `subject.mjs`, which refuses an update over 1 MiB, decodes it and checks every
+struct for kind, place and size before `Y.applyUpdate`. It clones nothing, so an update that fails inside the
+library is still not undone. Median / p95 in ms, ranges in `intake-results.json`:
+
+| Remote keystroke | Main | Variant | Variant, each update checked first |
+| --- | --- | --- | --- |
+| 30 beats | 1.59 / 2.05 | 0.022 / 0.036 | 0.024 / 0.044 |
+| 300 beats | 6.54 / 7.76 | 0.022 / 0.037 | 0.023 / 0.041 |
+| 900 beats | 22.67 / 29.46 | 0.022 / 0.036 | 0.023 / 0.038 |
+
+Revision checks, command rejection and undo grouping on this schema: not measured.
 
 ## C. Heavy use, and what formatting acts cost
 
@@ -162,29 +207,33 @@ history. The undo history is cleared after each repetition.
 | Script | Key scheme | Fresh | After the text part | After splits, joins, removals | After one repetition | Repetitions run | Stored copy then | Editing copy then | Editing copy reloaded | 100 undo and redo pairs add |
 | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
 | short | name | 1,546 | 2,914 | 5,624 | 7,220 | 1 | 7,220 | 33,360 | 7,220 | 804 |
-| long | name | 31,665 | 33,188 | 35,898 | 37,494 | 98 in 603 s | 618,014 | 3,188,934 | 618,014 | 804 |
+| long | name | 31,665 | 33,188 | 35,898 | 37,494 | 102 in 609 s | 642,549 | 3,318,729 | 642,549 | 904 |
 | large | name | 287,268 | 288,874 | 291,636 | 293,432 | 1 | 293,432 | 319,572 | 293,432 | 804 |
 | short | act | 1,606 | 2,974 | 5,684 | 7,280 | 1 | 7,280 | 34,620 | 7,280 | 804 |
-| long | act | 32,509 | 34,032 | 36,742 | 38,338 | 97 in 606 s | 612,864 | 3,296,294 | 612,864 | 804 |
+| long | act | 32,509 | 34,032 | 36,742 | 38,338 | 98 in 604 s | 618,858 | 3,330,178 | 618,858 | 804 |
 | large | act | 296,712 | 298,318 | 301,080 | 302,876 | 1 | 302,876 | 330,416 | 302,876 | 804 |
 
 Stored copy of the long script with name keys, by repetition: 37,494 (1), 43,388 (2), 49,283 (3), 180,451 (25),
-330,302 (50), 480,152 (75), 618,014 (98). All figures are bytes.
+330,302 (50), 480,152 (75), 630,002 (100), 642,549 (102). All figures are bytes. The step per repetition grows from
+5,894 to 5,994 to 6,274, and the undo and redo pairs cost 904 instead of 804 after 102 repetitions. Both fit ids
+taking one more byte as a writer's clock grows; that cause was not checked. At 6,274 bytes a repetition 2 MiB would
+be crossed at repetition 334, at 5,994 at 345; extrapolated, not measured. This run was made at `b9fe61267`; the
+run at `954c48398` gave the same bytes at every repetition both recorded.
 
 Formatting that stays. "Apart" formats a different word each time; "stacked" formats one range again and again.
 
 | Key scheme | Acts | Shape | Bytes added | Bytes left once all is unformatted | Reading the cell, ms | Keys on the busiest character |
 | --- | --- | --- | --- | --- | --- | --- |
-| name | 100 | apart | 3,642 | 2,448 | 0.03 | 1 |
-| name | 1,000 | apart | 37,842 | 25,848 | 0.222 | 1 |
-| name | 10,000 | apart | 420,183 | 300,191 | 1.635 | 1 |
+| name | 100 | apart | 3,642 | 2,448 | 0.025 | 1 |
+| name | 1,000 | apart | 37,842 | 25,848 | 0.203 | 1 |
+| name | 10,000 | apart | 420,183 | 300,191 | 1.314 | 1 |
 | name | 100 | stacked | 36 | 29 | under 0.001 | 1 |
 | name | 1,000 | stacked | 36 | 29 | under 0.001 | 1 |
-| act | 100 | apart | 4,642 | 2,448 | 0.02 | 1 |
-| act | 1,000 | apart | 49,842 | 25,848 | 0.179 | 1 |
-| act | 10,000 | apart | 560,183 | 300,191 | 5.679 | 1 |
-| act | 100 | stacked | 3,736 | 1,542 | 0.028 | 100 |
-| act | 1,000 | stacked | 38,246 | 15,042 | 0.37 | 1,000 |
+| act | 100 | apart | 4,642 | 2,448 | 0.015 | 1 |
+| act | 1,000 | apart | 49,842 | 25,848 | 0.352 | 1 |
+| act | 10,000 | apart | 560,183 | 300,191 | 5.163 | 1 |
+| act | 100 | stacked | 3,736 | 1,542 | 0.029 | 100 |
+| act | 1,000 | stacked | 38,246 | 15,042 | 0.365 | 1,000 |
 
 What one key per act costs as acts accumulate:
 
@@ -199,34 +248,56 @@ What one key per act costs as acts accumulate:
 ## D. Marks under concurrency
 
 `marks-generator.ts` builds each history from a seed: 14 steps of typing (plain, with a mark, or taking the
-formatting on its left), deleting, formatting, unformatting and delivering, on the text `abcdef`. It runs the history
-on the variant and on a model of main's rule that does not use Yjs for marks: a mark covers the characters it selected
-and what arrives unseen strictly inside them, a removal takes away only marks it had seen, and typed text carries
-the marks it was given. Each difference is put in exactly one class, decided from the commands alone.
+formatting on its left), deleting, formatting, unformatting and delivering, on the text `abcdef`. No split, join,
+removal, undo or redo. It runs the history on the variant and checks it against a model built from the recorded
+commands alone:
 
-| Key scheme | Writers | Delivery | Histories | Commands | Copies or late joiner disagree | Text wrong | Formatting lost | Formatting gained | lost-selected | lost-typed-with | lost-unformat-apart | lost-typed-inside | extra-typed-apart | extra-unformatted | extra-nowhere |
-| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
-| name | 2 | each update | 1,000 | 9,087 | 0 | 0 | 160 | 190 | 117 | 23 | 33 | 20 | 187 | 2 | 5 |
-| name | 2 | whole state | 1,000 | 9,087 | 0 | 0 | 144 | 197 | 106 | 17 | 29 | 18 | 195 | 2 | 2 |
-| name | 3 | whole state | 1,000 | 8,720 | 0 | 0 | 197 | 287 | 152 | 19 | 28 | 41 | 284 | 2 | 4 |
-| act | 2 | each update | 1,000 | 9,087 | 0 | 0 | 13 | 205 | 0 | 7 | 0 | 6 | 205 | 0 | 0 |
-| act | 2 | whole state | 1,000 | 9,087 | 0 | 0 | 10 | 215 | 0 | 5 | 0 | 5 | 215 | 0 | 0 |
-| act | 3 | whole state | 1,000 | 8,720 | 0 | 0 | 16 | 322 | 0 | 5 | 0 | 12 | 319 | 3 | 0 |
+- **Which characters.** A copy must show the starting text, plus every typed character it has been told of, minus
+  every character a deletion it has been told of covers. Checked on the acting copy before and after each command,
+  and on every copy and a late joiner at the end.
+- **In which order.** Each typed character lies between the two it was typed between. Where the commands fix no
+  order (two letters typed unseen into one gap), the first order any copy shows is held and every later reading, on
+  any copy, must keep it. That one tie is the only thing the model takes from the code it checks.
+- **Which marks.** Main's rule: a mark covers the characters it selected and what arrives unseen strictly inside
+  them, a removal takes away only marks it had seen, and typed text carries the marks it was given. A letter typed
+  "taking the formatting on its left" takes what the model says is there, not what the variant shows. Where a tie
+  in order decides whether a character lies inside a range, the model follows the order the copies showed; where no
+  reading fixes it either, the mark is left open and not counted, and a command that would need it is skipped.
 
-The columns from "Formatting lost" on count histories with at least one such difference.
+The first version took the character sequence from the variant's own updates and the inherited marks from the
+variant's own display; review showed that a silently dropped letter passed. Three planted faults are now tests: a
+typed letter dropped, a typed letter placed one position to the left, a deletion ignored. Each fails the character
+check with every key scheme and delivery, while the copies still agree with each other.
+
+Each mark difference is put in exactly one class, decided from the commands alone.
+
+| Key scheme | Writers | Delivery | Histories | Commands run | Commands skipped | Copies or late joiner disagree | Characters missing, extra or out of place | Histories with an open mark | Formatting lost | Formatting gained | lost-selected | lost-typed-with | lost-unformat-apart | lost-typed-inside | extra-typed-apart | extra-unformatted | extra-nowhere |
+| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |
+| name | 2 | each update, in order | 1,000 | 9,087 | 0 | 0 | 0 | 29 | 159 | 188 | 121 | 23 | 26 | 19 | 185 | 2 | 5 |
+| name | 2 | each update, reversed or twice | 1,000 | 9,087 | 0 | 0 | 0 | 29 | 159 | 189 | 121 | 23 | 24 | 19 | 186 | 2 | 5 |
+| name | 2 | whole state | 1,000 | 9,087 | 0 | 0 | 0 | 29 | 144 | 188 | 110 | 17 | 22 | 18 | 186 | 2 | 2 |
+| name | 3 | whole state | 1,000 | 8,720 | 0 | 0 | 0 | 29 | 197 | 282 | 155 | 19 | 22 | 40 | 279 | 2 | 4 |
+| act | 2 | each update, in order | 1,000 | 9,087 | 0 | 0 | 0 | 30 | 12 | 204 | 0 | 7 | 0 | 5 | 204 | 0 | 0 |
+| act | 2 | each update, reversed or twice | 1,000 | 9,087 | 0 | 0 | 0 | 30 | 12 | 205 | 0 | 7 | 0 | 5 | 205 | 0 | 0 |
+| act | 2 | whole state | 1,000 | 9,087 | 0 | 0 | 0 | 30 | 10 | 206 | 0 | 5 | 0 | 5 | 206 | 0 | 0 |
+| act | 3 | whole state | 1,000 | 8,720 | 0 | 0 | 0 | 29 | 15 | 319 | 0 | 5 | 0 | 11 | 316 | 3 | 0 |
+
+The columns from "Formatting lost" on count histories with at least one such difference. The same 1,000 seeds run in
+every row with the same number of writers, so the rows are not independent samples. "Reversed or twice" hands one
+person's updates to another in order, reversed or twice over, changing with the step.
 
 The complete list of ways the result differs from main's mark records, each with its shortest reduced history. `[x|b]`
 is bold x, `[x|i]` italic x. Every history found, with its reduction, is in `marks-results.json`.
 
 | Class | What a person sees | Key scheme | Reduced history | Variant | Main's rule |
 | --- | --- | --- | --- | --- | --- |
-| lost-selected | Formatting gone from a character someone selected and formatted, and nobody unformatted | name only | B makes b bold; A makes c..d bold | `a[b|b]cdef` | `a[b|b][c|b][d|b]ef` |
+| lost-selected | Formatting gone from a character someone selected and formatted, and nobody unformatted since | name only | B makes b bold; A makes c..d bold | `a[b|b]cdef` | `a[b|b][c|b][d|b]ef` |
 | lost-typed-with | Formatting gone from a character typed with it | name | A makes c..d italic; A types B after d, taking the formatting on its left; B makes a..b italic | `[a|i][b|i]cdBef` | `[a|i][b|i][c|i][d|i][B|i]ef` |
-| | | act | B makes d italic; that reaches A; B types B after d, taking the formatting on its left; A deletes d | `abcBef` | `abc[B|i]ef` |
+| | | act | A deletes a..c; B makes b italic; B types A after b, taking the formatting on its left | `Adef` | `[A|i]def` |
 | | | act | B makes d italic; that reaches A; B types C after d, taking the formatting on its left; A types D after d, bold | `abc[d|i][D|b][C|b]ef` | `abc[d|i][D|b][C|i]ef` |
-| lost-unformat-apart | Formatting gone from a character one person formatted while another, who had not seen that, unformatted it | name only | C makes d..f bold; B makes f bold; C takes f out of bold | `abc[d|b][e|b]f` | `abc[d|b][e|b][f|b]` |
+| lost-unformat-apart | Formatting gone from a character one person formatted while another, who had not seen that, unformatted it | name only | B makes a..b italic; A takes b..d out of italic; A makes a italic | `[a|i]bcdef` | `[a|i][b|i]cdef` |
 | lost-typed-inside | No formatting on a character typed inside a formatted range by someone who had not seen the formatting | name | B makes d..f bold; A makes b..d bold; A types B after d, plain | `a[b|b][c|b][d|b]Bef` | `a[b|b][c|b][d|b][B|b][e|b][f|b]` |
-| | | act | A makes d..f bold; A deletes d..f; B types E after e | `abcE` | `abc[E|b]` |
+| | | act | A makes d..f bold; A deletes d..f; B types E after e, taking the formatting on its left | `abcE` | `abc[E|b]` |
 | | | act | A makes b..c bold; A takes c out of bold; C types D after b, plain | `a[b|b]Dcdef` | `a[b|b][D|b]cdef` |
 | extra-typed-apart | Formatting on a character typed without it, beside or inside a range someone formatted or partly unformatted without having seen the character | both | B types E after e, plain; A makes f italic | `abcde[E|i][f|i]` | `abcdeE[f|i]` |
 | extra-unformatted | Formatting still on a character that someone unformatted after seeing every formatting of it | name | B makes f bold; that reaches A; B makes d..e bold; A takes e..f out of bold | `abc[d|b][e|b][f|b]` | `abc[d|b][e|b]f` |
@@ -244,7 +315,7 @@ The literal histories, on `abcd` with two writers, are tests in `marks.test.ts`:
 | A: bold `bc`, delivered. B: types plain `X` after `b`. A: unbolds `bc` | `abXcd` | `abX[c|b][d|b]` | same | `abX[c|b]d` |
 
 Which scheme guarantees that formatting never disappears from text nobody unformatted or deleted: neither. Name keys
-break it in the second row. Act keys held it for every selected and formatted character in 3,000 histories, which is
+break it in the second row. Act keys held it for every selected and formatted character in 4,000 runs, which is
 evidence and not a proof, and break it for a letter typed as the continuation of a run (`lost-typed-with`).
 
 ## E. Undo, rule by rule
@@ -279,7 +350,9 @@ Against `docs/collaboration/stage-2-shared-undo.md`. "Plain" is `Y.UndoManager.u
 | A field or a status: the earlier value only while it still holds what the command wrote; a change that lost is used up and leaves nothing to redo | Plain: the winner's undo of a status leaves it blank. Guard: met (tested) | Plain: a beat with no status |
 | Undo of a join; redo | Met (tested, T12 join, T06) | |
 | Undo of an unjoin; a separator change | Unjoin built, its undo not tested; separator change not built | |
-| Undo of a split; redo | The boundary is deleted, where main keeps it and marks it. Text others typed in the new beat runs on in the first beat, as the Stage 1 trace expects (T12). Their visual text moves to the recovery list | |
+| Undo of a split; redo | The boundary is deleted, where main keeps it and marks it. Text others typed in the new beat runs on in the first beat, as the Stage 1 trace expects (T12). The new beat's record and visual cell stay, in any transaction; their visual text shows in the recovery list and a redo brings the beat back with it (tested) | |
+| Redo of a guarded undo | Met for join, status, removal and tag with both key schemes: the redo puts the change back and a second undo takes it away again (tested) | |
+| A compound command is one entry | Met through `replica.transact`: each part is taken back by what it means (tested). Through a raw `doc.transact` the entry is undone as the library alone would | |
 | Undo of a removal | Met (tested, T10) | |
 | Heading removal, beat creation, heading creation, records, pictures | Not built | |
 
@@ -320,15 +393,37 @@ The cheapest way to meet the owner's rule is the guard built here, `undoStep`:
 4. After the undo: if the flag still means the same, or the library left it blank, write the value before under an
    untracked origin. For a mark, turn off every key of the same name that covers exactly the same characters and
    was not in view when the command ran.
+5. Those forward writes are not in the library's history, so when the library moved nothing the guard puts the entry
+   on the redo stack itself. A redo runs the same steps the other way: it writes the value the command wrote, and
+   formats the range again when the mark shows on none of its characters.
 
-It stores nothing: `meta` lives in memory. With it, in all four cases either person's undo takes the change back and
-the other's is used up (tested, both key schemes for the tag). Three things it does not do. An undo made before the
+It stores nothing: `meta` lives in memory. With it, in all four cases either person's undo takes the change back,
+the other's is used up, and the undo can be redone and undone again (tested, both key schemes for the tag). In its
+first version a guarded undo that only wrote forward reported success and left nothing to redo; review found that.
+Three things it does not do. An undo made before the
 other's change arrives leaves the change showing. It cannot tell an identical change made apart from one made later
 by someone who saw the first, so that one is taken back too. With name keys the second person's tag undo is spent
 without a notice. Meeting the rule in full needs a generation number in each flag value and one key that lists
 retired generations: two plain keys per flag, no growth per edit. That was not built.
 
-## G. Traces
+## G. Traces, and what the evidence covers
+
+The table lists document-content examples adapted from the Stage 1 trace rows: each was rewritten as commands on the
+variant with the outcome the row expects. They are not the original editor or adapter suites, none of which runs.
+
+- **Generated histories** contain typing, deleting, formatting, unformatting and delivery. They contain no split,
+  join, removal, undo or redo. With two writers they deliver update by update in order, update by update reversed
+  and twice, or as whole state; with three writers as whole state only.
+- **Structure, undo and redo** are covered by fixed examples only: the tests in `undo.test.ts` and the traces below.
+  The traces run on three copies and a late joiner, in order, reversed and twice.
+- **Results that depend on client-id order.** Of two unseen writes to one key the higher client id stands: the T21
+  scalar status, and which person is the "winner" in appendix F. Two letters typed unseen into one gap stand in
+  client-id order. M-edge too: the letter typed before the range takes the formatting when its typist has the higher
+  client id and stays plain, as on main, when the lower (run both ways by hand, both key schemes; the test holds one
+  way). With
+  name keys, which copy still holds the markers of a tag two people set decides whose plain undo removes it. The
+  fixed examples run with one assignment of ids, appendix F with the undo made by each person in turn; the
+  generator's writers always have the same ids in the same order.
 
 | Trace | Result |
 | --- | --- |
@@ -351,7 +446,10 @@ npm ci && npm ci --prefix prototypes/collab
 node prototypes/collab/src/native/bench.ts --rounds=3 --volume=10 --write=prototypes/collab/src/native/results.json
 node prototypes/collab/src/native/heavy.ts --repetitions=600 --seconds=600 --write=prototypes/collab/src/native/heavy-results.json
 node prototypes/collab/test/native/marks-generator.ts --seeds=1000 --length=14 --write=prototypes/collab/src/native/marks-results.json
+node prototypes/collab/src/native/bench.ts --rounds=3 --only=remote --write=prototypes/collab/src/native/intake-results.json
 node --test prototypes/collab/test/native/undo.test.ts prototypes/collab/test/native/traces.test.ts prototypes/collab/test/native/marks.test.ts
 ```
 
-About 8 minutes, 21 minutes, under a minute and a few seconds. Node 24.22.1; nothing starts a browser.
+About 8 minutes, 21 minutes, a minute or two, under a minute and a few seconds. Node 24.22.1; nothing starts a
+browser. The first command now also times the checked subject on the remote path, so a fresh `results.json` holds a
+fourth timing column that the committed one, made before that subject existed, does not.
