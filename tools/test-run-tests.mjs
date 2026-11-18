@@ -3,7 +3,7 @@ import { mkdtempSync, mkdirSync, writeFileSync, copyFileSync, symlinkSync, unlin
 import { join, dirname } from "node:path";
 import { tmpdir } from "node:os";
 import { REPO, listRepoFiles } from "./source-scan.mjs";
-import { discover, runTests, parseArgs, assignShards, nodeVersionWarning, unsupportedNodeError, SETS } from "./run-tests.mjs";
+import { discover, runTests, parseArgs, assignShards, unweightedFiles, nodeVersionWarning, unsupportedNodeError, SETS } from "./run-tests.mjs";
 import { typecheck, CONFIGS } from "./typecheck.mjs";
 
 let passed = 0;
@@ -266,6 +266,18 @@ check("shards cannot hide partial coverage behind --only", Boolean(parseArgs(["-
   eq("an untested area outside the shard still fails discovery", runIn(repo, { files: [...files, "src/application/missing.ts"], groups, shard: { index: 1, total: 2 } }).code, 1);
   const required = [{ name: "missing", set: "unit", runner: "script", matches: () => false, requiredWhen: () => true }];
   eq("an empty required group still fails a shard", runIn(repo, { files, groups: [...groups, ...required], shard: { index: 1, total: 2 } }).code, 1);
+}
+
+console.log("\nshard weights:\n");
+
+{
+  const discovered = discover(listRepoFiles(REPO)).groups.flatMap((g) => g.files);
+  const unweighted = unweightedFiles(discovered);
+  check(
+    "no more than 10% of discovered test files lack a weight in tools/test-weights.json",
+    unweighted.length * 10 <= discovered.length,
+    `${unweighted.length} of ${discovered.length} files have no entry; regenerate with: gh run view <run-id> --repo RetroGorilla/splitpage --log | node tools/update-test-weights.mjs > test-weights.new.json, then replace tools/test-weights.json`
+  );
 }
 
 console.log("\na stray GOLDEN_UPDATE:\n");
