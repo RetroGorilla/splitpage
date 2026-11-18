@@ -3,7 +3,7 @@
   "private": true,
   "type": "module",
   "scripts": {
-    "test": "node --test \"test/**/*.test.ts\"",
+    "test": "node --test \"test/**/*.test.ts\" \"test/**/*.test.mjs\"",
     "experiments": "node src/buffer-report.ts",
     "slice": "node src/slice/run.ts",
     "local": "node --test src/local/run.ts"
