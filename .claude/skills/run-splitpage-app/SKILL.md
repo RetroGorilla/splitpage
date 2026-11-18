@@ -631,6 +631,7 @@ buffered pipeline long after the driver has exited, which looks like a hang.
 | `count <sel>` / `text <sel>` / `sel <sel>` | inspect |
 | `shot <name>` | screenshot to `%TEMP%\splitpage-shots\<name>.png` |
 | `logs` | dump collected console output |
+| `trace start <categories>` / `trace stop <file>` | `driver.mjs` only: records a browser trace (`Tracing.start` with the comma-separated categories, events reported back) until `stop`, which writes the events as one JSON array to `<file>`. One trace at a time. `tools/perf-shared.mjs --trace` uses it |
 | `sleep <ms>`, `quit` | |
 
 Selectors are CSS, or `text=Exact Label` / `text*=Contains`. Prefer `text*=`

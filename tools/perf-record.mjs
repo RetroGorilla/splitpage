@@ -4,10 +4,11 @@ import { cpus, freemem, totalmem, platform, release, arch, tmpdir } from "node:o
 import { join, resolve } from "node:path";
 import { REPO } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
+import { EARLIER_RECORDS, PERCENTILE_RULE, latencyFigures, median } from "./perf-stats.mjs";
 
 const DRIVER = join(REPO, ".claude", "skills", "run-splitpage-app", "driver.mjs");
-const TYPED = "The quick brown fox films a take by the window at dusk.";
-const KEY_GAP_MS = 60;
+export const TYPED = "The quick brown fox films a take by the window at dusk.";
+export const KEY_GAP_MS = 60;
 const SPLITS = 5;
 const EXPORT_RUNS = 5;
 const PICTURES = 10;
@@ -38,7 +39,7 @@ export function parsePortBase(raw) {
   return { base, error: null };
 }
 
-const PROBE = `(function () {
+export const PROBE = `(function () {
   if (window.__perf) return 'ready';
   var perf = { lat: [], long: [], rects: 0 };
   var rangeRects = Range.prototype.getClientRects;
@@ -46,8 +47,7 @@ const PROBE = `(function () {
   perf.reset = function () { perf.lat = []; perf.long = []; perf.rects = 0; return true; };
   perf.take = function (label) {
     var lat = perf.lat.slice().sort(function (a, b) { return a - b; });
-    var q = function (p) { return lat.length ? +lat[Math.min(lat.length - 1, Math.floor(p * lat.length))].toFixed(1) : null; };
-    var out = { label: label, keys: lat.length, p50: q(0.5), p95: q(0.95), max: lat.length ? +lat[lat.length - 1].toFixed(1) : null,
+    var out = { label: label, latencies: lat,
       longTasks: perf.long.length, longTaskMs: +perf.long.reduce(function (a, b) { return a + b; }, 0).toFixed(1), rangeRects: perf.rects };
     perf.reset();
     return 'PERF ' + JSON.stringify(out);
@@ -486,7 +486,11 @@ export function suiteText(fixture) {
 }
 
 export function parsePerf(stdout) {
-  return stdout.split("\n").filter((l) => l.startsWith("PERF ")).map((l) => JSON.parse(l.slice(5)));
+  return stdout.split("\n").filter((l) => l.startsWith("PERF ")).map((l) => JSON.parse(l.slice(5))).map((row) => {
+    if (!Array.isArray(row.latencies)) return row;
+    const { latencies, label, ...rest } = row;
+    return { label, ...latencyFigures(latencies), ...rest };
+  });
 }
 
 export function parseTrials(stdout) {
@@ -498,11 +502,6 @@ const IMAGE_CASES = [
   { label: "images load from IndexedDB", pictures: PICTURES, comments: undefined },
   { label: "images merge", pictures: 2 * PICTURES, comments: 2 * PICTURES }
 ];
-
-function median(values) {
-  const sorted = [...values].sort((a, b) => a - b);
-  return sorted[Math.floor(sorted.length / 2)];
-}
 
 function middle(values) {
   const sorted = [...values].sort((a, b) => a - b);
@@ -596,7 +595,7 @@ export function report(results, env, when) {
     ...(env.busy ? [`- Machine load: ${env.busy.before}% of the CPU busy in the second before the run and ${env.busy.after}% in the second after it`] : []),
     ...(env.freeGb !== undefined ? [`- Free memory at the start: ${env.freeGb} GB`] : []),
     `- Fixtures: ${fixtureLines.join("; ")}`,
-    ...(rows.length ? [`- Typing: ${TYPED.length} characters, one real key event every ${KEY_GAP_MS} ms, into scene 2's audio cell; latency is key-down to the frame after it`] : []),
+    ...(rows.length ? [`- Typing: ${TYPED.length} characters, one real key event every ${KEY_GAP_MS} ms, into scene 2's audio cell; latency is key-down to the frame after it; ${PERCENTILE_RULE}`, `- ${EARLIER_RECORDS}`] : []),
     ...(rows.some((r) => r.label.endsWith("display preference")) ? [`- Redraw scenes (long script): one click per sample, measured from the click to the frame after it, ${SETTLE_MS} ms apart; stamp cycles the status of scenes ${STAMP_ROWS.join(", ")} twice, hide toggles Hide shot scenes ${HIDE_TOGGLES} times, display preference switches the clock between 24 and 12 hours ${PREFERENCE_CHANGES} times`] : []),
     "",
     ...(rows.length ? [

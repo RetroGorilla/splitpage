@@ -24,7 +24,12 @@ import { readSharedTextHistory } from "../../../src/adapters/collab/text-history
 import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 import { inlineStateImages } from "../../../src/adapters/storage/02c-blobs.ts";
 import { isMain } from "../../../tools/main-module.mjs";
+import { EARLIER_RECORDS, PERCENTILE_RULE, median } from "../../../tools/perf-stats.mjs";
+import { timingMarks } from "../../../shared/timing-marks.ts";
+import { markParts } from "./mark-parts.mjs";
+import { acquireReplica } from "./trial-method.mjs";
 
+const held = (handle, mode) => mode === "current" && acquireReplica ? acquireReplica(handle) : () => {};
 const MIB = 1024 ** 2;
 const CAP = 2 * MIB;
 const copy = value => globalThis.structuredClone(value);
@@ -123,12 +128,12 @@ export function writer(handle, identity = {}) {
 
 export function workload(handle, document) {
   const edit = writer(handle), address = target(document.rows[0].id);
-  const fresh = encodeSharedState(handle).length;
+  const fresh = encodeSharedState(handle).length, clock = performance.now(), at = () => `${((performance.now() - clock) / 1000).toFixed(1)} s`;
   for (let block = 0; block < 100; block++) {
     edit.typeBatch(address, 100);
     const deletion = edit.command({ kind: "text-delete", target: address, observed: edit.history(address).units.slice(-100).map(unit => unit.identity) });
     edit.reverse(edit.reverse(deletion));
-    if ((block + 1) % 25 === 0) process.stderr.write(`Text workload: ${block + 1}/100 blocks\n`);
+    if ((block + 1) % 25 === 0) process.stderr.write(`Text workload: ${block + 1}/100 blocks, ${at()}\n`);
   }
   const afterText = encodeSharedState(handle).length;
   for (let index = 0; index < 200; index++) {
@@ -142,24 +147,27 @@ export function workload(handle, document) {
         observed: edit.history(target(owner)).units.map(unit => unit.identity), boundaries: [owner], components: [], gallery: [], at: 1 });
     }
     edit.reverse(record);
+    if (index === 49 || index === 99 || index === 199) process.stderr.write(`Structural workload: ${index + 1}/200 commands, ${at()}\n`);
   }
   for (let index = 0; index < 100; index++) {
     const record = edit.command({ kind: "mark", target: address, observed: edit.history(address).units.slice(0, 2).map(unit => unit.identity), mark: { kind: "b", value: true } });
     edit.reverse(record);
   }
-  process.stderr.write("Completed 200 structural commands with undo and 100 formatting commands with undo\n");
+  process.stderr.write(`Completed 200 structural commands with undo and 100 formatting commands with undo, ${at()}\n`);
   return { afterText, per1000Typed: (afterText - fresh) / 10 };
 }
 
 export function growth(fixture) {
-  const handle = open();
+  const handle = open(), clock = performance.now(), at = () => `${((performance.now() - clock) / 1000).toFixed(1)} s`;
   try {
     hydrateSharedDocument(handle, enterSharedDocument(copy(fixture.document)));
     const entered = enterSharedDocument(projectSharedDocument(handle));
     const fresh = encodeSharedState(handle);
+    process.stderr.write(`Growth: entered and encoded, ${at()}\n`);
     const textGrowth = workload(handle, fixture.document), edited = encodeSharedState(handle);
     const projected = enterSharedDocument(projectSharedDocument(handle));
     assert.deepEqual(projected, entered);
+    process.stderr.write(`Growth: workload done, encoded and projected, ${at()}\n`);
     const probe = open(edited);
     let per100Pairs;
     try {
@@ -169,6 +177,7 @@ export function growth(fixture) {
       for (let pair = 0; pair < 100; pair++) next = edit.reverse(edit.reverse(next));
       per100Pairs = encodeSharedState(probe).length - before;
     } finally { destroySharedDocument(probe); }
+    process.stderr.write(`Growth: probe of 100 undo and redo pairs done, ${at()}\n`);
     const plainFile = copy(projected);
     inlineStateImages(plainFile);
     return { name: fixture.name, plain: fixture.plain, fresh, edited, ...textGrowth, per100Pairs,
@@ -219,7 +228,7 @@ export function quantile(values, fraction) {
 function collectedHeap() { globalThis.gc(); globalThis.gc(); return process.memoryUsage().heapUsed; }
 
 function timed(state, updates, mode, singles, expected) {
-  const handle = open(state);
+  const handle = open(state), release = held(handle, mode);
   try {
     collectedHeap();
     const samples = [], start = performance.now();
@@ -229,18 +238,34 @@ function timed(state, updates, mode, singles, expected) {
     else apply(handle, updates, mode);
     const total = performance.now() - start;
     if (expected) assert.deepEqual(encodeSharedState(handle), expected);
-    return { total, ...singles ? { p50: quantile(samples, 0.5), p95: quantile(samples, 0.95), max: Math.max(...samples) } : {} };
-  } finally { destroySharedDocument(handle); }
+    return { total, ...singles ? { p50: median(samples), p95: quantile(samples, 0.95), max: Math.max(...samples) } : {} };
+  } finally { release(); destroySharedDocument(handle); }
+}
+
+export function markedAdmission(state, updates) {
+  const handle = open(state), release = held(handle, "current"), samples = [];
+  timingMarks.marksOn = true;
+  try {
+    for (const update of updates) {
+      performance.clearMarks();
+      apply(handle, [update], "current");
+      samples.push(markParts(performance.getEntriesByType("mark")));
+    }
+  } finally { timingMarks.marksOn = false; performance.clearMarks(); release(); destroySharedDocument(handle); }
+  return Object.fromEntries(["validation", "rebuild", "apply", "unattributed", "outer"].map(figure => {
+    const values = samples.map(parts => parts[figure]);
+    return [figure, { total: values.reduce((sum, value) => sum + value, 0), p50: median(values), p95: quantile(values, 0.95) }];
+  }));
 }
 
 function burstHeap(state, updates) {
-  const handle = open(state);
+  const handle = open(state), release = held(handle, "current");
   try {
     const before = collectedHeap();
     let peak = before;
     for (const update of updates) { apply(handle, [update], "current"); peak = Math.max(peak, process.memoryUsage().heapUsed); }
     return { peak: (peak - before) / MIB, retained: (collectedHeap() - before) / MIB };
-  } finally { destroySharedDocument(handle); }
+  } finally { release(); destroySharedDocument(handle); }
 }
 
 function footprint(fixture, state) {
@@ -254,10 +279,6 @@ function footprint(fixture, state) {
   } finally { destroySharedDocument(handle); }
 }
 
-function median(values) {
-  const sorted = [...values].sort((a, b) => a - b), middle = Math.floor(sorted.length / 2);
-  return sorted.length % 2 ? sorted[middle] : (sorted[middle - 1] + sorted[middle]) / 2;
-}
 
 export function summary(values, digits = 2) {
   return `${median(values).toFixed(digits)} [${Math.min(...values).toFixed(digits)}–${Math.max(...values).toFixed(digits)}]`;
@@ -315,6 +336,31 @@ export function sourceFingerprint() {
     "HEAD:tests/collab/fixtures/projection-reference.json"], { encoding: "utf8" }).trim();
 }
 
+export function expectedAfter(state, updates, owner) {
+  const control = open(state);
+  try {
+    const address = target(owner), before = readSharedTextHistory(control, address).units.length;
+    apply(control, updates, "direct");
+    assert.equal(readSharedTextHistory(control, address).units.length, before + updates.length);
+    return encodeSharedState(control);
+  } finally { destroySharedDocument(control); }
+}
+
+export function admissionRound(source, state, updates, expected, round, withHeap) {
+  const measured = { footprint: footprint(source, state) };
+  const modes = ["current", "direct", "decode", "batch"];
+  for (const mode of [...modes.slice(round % 4), ...modes.slice(0, round % 4)]) {
+    measured[mode] = {};
+    if (mode !== "batch") measured[mode].single = timed(state, updates.slice(0, 500), mode, true);
+    for (const count of [100, 1000]) measured[mode][count] = timed(state, updates.slice(0, count), mode, false, count === 1000 ? expected : null);
+  }
+  if (withHeap) {
+    measured.heap = {};
+    for (const count of [100, 1000]) measured.heap[count] = burstHeap(state, updates.slice(0, count));
+  }
+  return measured;
+}
+
 export function run(rounds = 5, saved = null, persist = () => {}) {
   assert.equal(process.versions.node, "24.22.1", "Use the repository Node pin");
   assert.equal(typeof globalThis.gc, "function", "Run with --expose-gc");
@@ -326,7 +372,7 @@ export function run(rounds = 5, saved = null, persist = () => {}) {
   const checkpoint = saved ? restoreCheckpoint(saved, fingerprint) : null;
   const sources = fixtures(), states = checkpoint?.states ?? [];
   const result = checkpoint?.result ?? { commit, node: process.version,
-    arch: process.arch, rounds, growth: [], admission: [] };
+    arch: process.arch, rounds, percentiles: PERCENTILE_RULE, earlierRecords: EARLIER_RECORDS, growth: [], admission: [] };
   assert.equal(result.rounds, rounds);
   const streams = checkpoint?.streams ?? {};
   const publish = () => persist(saveCheckpoint({ fingerprint, result, states, streams }));
@@ -343,32 +389,15 @@ export function run(rounds = 5, saved = null, persist = () => {}) {
     if (row?.runs.length === rounds) continue;
     const state = states[index][phase], key = source.name + "/fresh";
     const generated = streams[key] ?? (streams[key] = updatesFor(states[index].fresh, source.document.rows[0].id));
-    const control = open(state);
-    let expected;
-    try {
-      const address = target(source.document.rows[0].id), before = readSharedTextHistory(control, address).units.length;
-      apply(control, generated.updates, "direct");
-      assert.equal(readSharedTextHistory(control, address).units.length, before + 1000);
-      expected = encodeSharedState(control);
-    }
-    finally { destroySharedDocument(control); }
+    assert.equal(generated.updates.length, 1000);
+    const expected = expectedAfter(state, generated.updates, source.document.rows[0].id);
     if (!row) {
       row = { name: source.name, phase, senderBase: key.split("/")[1], per1000Typed: expected.length - state.length, runs: [] };
       result.admission.push(row);
     }
     publish();
     for (let round = row.runs.length; round < rounds; round++) {
-      const measured = { footprint: footprint(source, state) };
-      const modes = ["current", "direct", "decode", "batch"];
-      for (const mode of [...modes.slice(round % 4), ...modes.slice(0, round % 4)]) {
-        measured[mode] = {};
-        if (mode !== "batch") measured[mode].single = timed(state, generated.updates.slice(0, 500), mode, true);
-        for (const count of [100, 1000]) measured[mode][count] = timed(state, generated.updates.slice(0, count), mode, false, count === 1000 ? expected : null);
-      }
-      if (!row.runs.some(run => run.heap)) {
-        measured.heap = {};
-        for (const count of [100, 1000]) measured.heap[count] = burstHeap(state, generated.updates.slice(0, count));
-      }
+      const measured = admissionRound(source, state, generated.updates, expected, round, !row.runs.some(run => run.heap));
       row.runs.push(measured);
       publish();
       process.stderr.write(`${source.name} ${phase}: round ${round + 1}/${rounds}\n`);

@@ -4,7 +4,8 @@ import { mkdirSync, mkdtempSync, readFileSync, rmSync, symlinkSync, unlinkSync, 
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { main, measurements, median, parseArgs, report } from "./perf-ab.mjs";
+import { main, measurements, parseArgs, report } from "./perf-ab.mjs";
+import { median } from "./perf-stats.mjs";
 import { REPO } from "./source-scan.mjs";
 
 test("arguments reject ambiguous or invalid comparisons", () => {

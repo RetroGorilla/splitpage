@@ -288,6 +288,10 @@ async function connectCdp() {
       consoleLines.push(`exception: ${msg.params.exceptionDetails?.exception?.description}`);
     } else if (msg.method === "Log.entryAdded") {
       consoleLines.push(`${msg.params.entry.level}: ${msg.params.entry.text}`);
+    } else if (msg.method === "Tracing.dataCollected" && tracing) {
+      for (const event of msg.params.value) tracing.events.push(event);
+    } else if (msg.method === "Tracing.tracingComplete" && tracing) {
+      tracing.complete();
     }
   });
   ws.addEventListener("close", () => {
@@ -563,6 +567,33 @@ async function mouseEvent(rest) {
   out1(`mouse ${m[1]} at ${x},${y}`);
 }
 
+let tracing = null;
+
+async function traceCommand(rest) {
+  const m = /^(start) ([\w.,-]+)$|^(stop) (.+)$/.exec(rest.trim());
+  if (!m) throw new Error("trace needs: start <category,category,...> | stop <file>");
+  if (m[1]) {
+    if (tracing) throw new Error("a trace is already running");
+    tracing = { events: [], complete: () => {} };
+    await send("Tracing.start", { transferMode: "ReportEvents", traceConfig: { recordMode: "recordAsMuchAsPossible", includedCategories: m[2].split(",") } });
+    out1(`trace started: ${m[2]}`);
+    return;
+  }
+  if (!tracing) throw new Error("no trace is running");
+  const running = tracing;
+  let timer = null;
+  const complete = new Promise((resolve, reject) => {
+    running.complete = resolve;
+    timer = setTimeout(() => { reject(new Error("the trace did not complete within 120 s")); }, 120000);
+  });
+  try {
+    await send("Tracing.end");
+    await complete;
+  } finally { clearTimeout(timer); tracing = null; }
+  fs.writeFileSync(path.resolve(m[4]), JSON.stringify(running.events));
+  out1(`trace stopped: ${running.events.length} events`);
+}
+
 async function pressKey(name, mods = "") {
   const k = KEY_MAP[String(name).toLowerCase()];
   if (!k) throw new Error(`unknown key '${name}' (have: ${KEY_NAMES})`);
@@ -667,6 +698,7 @@ async function invokeLine(line) {
       else for (const l of consoleLines) out1(l);
       break;
     case "sleep": await sleep(parseInt(rest, 10)); break;
+    case "trace": await traceCommand(rest); break;
     case "quit": return false;
     default: throw new Error(`unknown command: ${cmd}`);
   }
