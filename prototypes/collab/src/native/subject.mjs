@@ -7,7 +7,25 @@ import { NativeReplica, nativeCopy, nativeRuns } from "./variant.ts";
 
 const plain = delta => nativeRuns(delta).map(run => run.atom ? "￼" : run.text).join("");
 
-const scheme = process.argv[4] === "act" ? "act" : "name";
+const scheme = process.argv[4] === "act" ? "act" : "name", checked = process.argv[5] === "checked";
+const ROOTS = new Set(["segments", "order", "beats", "visuals", "comments", "people", "tags", "shots", "meta"]);
+
+// why: a stand-in for intake, timed as its own subject: the update is decoded and every struct checked for kind,
+// place and size before it is applied. Nothing is cloned, so an update that fails inside the library is not undone
+function admit(update) {
+  assert.ok(update.byteLength <= 1 << 20);
+  for (const struct of Y.decodeUpdate(update).structs) {
+    if (!(struct instanceof Y.Item)) { assert.ok(struct instanceof Y.GC || struct instanceof Y.Skip); continue; }
+    const content = struct.content;
+    assert.ok(typeof struct.parent !== "string" || ROOTS.has(struct.parent));
+    if (content instanceof Y.ContentString) assert.ok(content.str.length <= 10000);
+    else if (content instanceof Y.ContentFormat) assert.ok(content.key.length <= 256 && (content.value === true || content.value === null));
+    else if (content instanceof Y.ContentEmbed) assert.ok(content.embed && typeof content.embed === "object" && Object.keys(content.embed).length <= 4);
+    else if (content instanceof Y.ContentType) assert.ok(content.type instanceof Y.Map || content.type instanceof Y.Text);
+    else if (content instanceof Y.ContentAny) assert.ok(JSON.stringify(content.arr).length <= 100000);
+    else assert.ok(content instanceof Y.ContentDeleted);
+  }
+}
 
 const subject = {
   create(document, client, editor) {
@@ -37,6 +55,7 @@ const subject = {
     return () => { const taken = updates; updates = []; return taken; };
   },
   receive(target, update) {
+    if (checked) admit(update);
     Y.applyUpdate(target.replica.doc, update, "remote");
     const changes = target.replica.changes();
     assert.ok(changes.rows.length > 0);

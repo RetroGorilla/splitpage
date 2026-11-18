@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { actCost } from "../../src/native/heavy.ts";
-import type { NativeScheme } from "../../src/native/variant.ts";
+import type { NativeReplica, NativeScheme } from "../../src/native/variant.ts";
 import { runMarks, surveyMarks } from "./marks-generator.ts";
 import type { MarkDelivery, MarkStep } from "./marks-generator.ts";
 
@@ -31,15 +31,15 @@ const LITERALS: Record<string, { steps: MarkStep[]; model: string; shows: Record
 for (const [name, literal] of Object.entries(LITERALS)) test(name, () => {
   for (const scheme of SCHEMES) for (const delivery of DELIVERIES) {
     const run = runMarks(literal.steps, 2, scheme, delivery, "abcd");
-    assert.equal(run.agree, true);
+    assert.deepEqual([run.agree, run.textMatches, run.open], [true, true, 0]);
     assert.equal(run.text, run.expectedText);
     assert.equal(run.model, literal.model);
     assert.equal(run.native, literal.shows[`${scheme} ${delivery}`], `${scheme} keys, delivery by ${delivery}`);
   }
 });
 
-for (const scheme of SCHEMES) for (const [writers, delivery] of [[2, "updates"], [2, "state"], [3, "state"]] as const) {
-  test(`generated mark histories, ${scheme} keys, ${writers} writers, delivery by ${delivery}: every copy and a late joiner agree and no typed character is lost`, () => {
+for (const scheme of SCHEMES) for (const [writers, delivery] of [[2, "updates"], [2, "shuffled"], [2, "state"], [3, "state"]] as const) {
+  test(`generated mark histories, ${scheme} keys, ${writers} writers, delivery by ${delivery}: every copy and a late joiner agree and every reading holds the characters the commands say`, () => {
     const summary = surveyMarks(scheme, writers, delivery, 150, 14), count = (cause: string): number => summary.cases.find(item => item.cause === cause)?.histories ?? 0;
     assert.equal(summary.disagreements, 0);
     assert.equal(summary.textMismatches, 0);
@@ -48,6 +48,27 @@ for (const scheme of SCHEMES) for (const [writers, delivery] of [[2, "updates"],
     else assert.ok(count("lost-selected") > 0);
   });
 }
+
+// why: negative controls. The text check must fail when the code under test drops, keeps or misplaces a character
+const typesX: MarkStep[] = [{ op: "insert", by: 0, after: "b", char: "X", mode: "plain" }, { op: "add", by: 1, kind: "b", first: "c", last: "d" }];
+const TAMPERED: Record<string, { steps: MarkStep[]; splice: (real: NativeReplica["splice"]) => NativeReplica["splice"] }> = {
+  "a typed character is silently dropped": { steps: typesX,
+    splice: real => (beat, field, from, to, insert) => { real(beat, field, from, to, insert.filter(run => run.text !== "X")); } },
+  "a typed character lands one place to the left": { steps: typesX,
+    splice: real => (beat, field, from, to, insert) => { real(beat, field, insert.length ? from - 1 : from, insert.length ? to - 1 : to, insert); } },
+  "a deletion is silently ignored": { steps: [{ op: "delete", by: 0, first: "b", last: "c" }, { op: "add", by: 1, kind: "b", first: "c", last: "d" }],
+    splice: real => (beat, field, from, to, insert) => { if (insert.length) real(beat, field, from, to, insert); } }
+};
+
+for (const [name, tampered] of Object.entries(TAMPERED)) test(`negative control: the generator's text check fails when ${name}`, () => {
+  for (const scheme of SCHEMES) for (const delivery of [...DELIVERIES, "shuffled"] as const) {
+    const honest = runMarks(tampered.steps, 2, scheme, delivery, "abcd");
+    const run = runMarks(tampered.steps, 2, scheme, delivery, "abcd", copies => { for (const copy of copies) copy.splice = tampered.splice(copy.splice.bind(copy)); });
+    assert.deepEqual([honest.textMatches, honest.agree], [true, true]);
+    assert.deepEqual([run.textMatches, run.agree], [false, true], `${scheme} keys, delivery by ${delivery}`);
+    assert.notEqual(run.text, run.expectedText);
+  }
+});
 
 test("formatting that stays costs more with one key per act only where acts lie on top of each other", () => {
   const apart = [actCost("name", "apart", 100), actCost("act", "apart", 100)], stacked = [actCost("name", "stacked", 100), actCost("act", "stacked", 100)];

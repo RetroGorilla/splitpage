@@ -8,17 +8,18 @@ import { scaledDemo, typingTape } from "./tape.ts";
 
 const MAIN = fileURLToPath(new URL("../../../../tests/collab/measure/native-spike-main.mjs", import.meta.url));
 const VARIANT = fileURLToPath(new URL("./subject.mjs", import.meta.url));
-const SUBJECTS = { main: [MAIN], variant: [VARIANT, "name"], variantAct: [VARIANT, "act"] } as const;
+const SUBJECTS = { main: [MAIN], variant: [VARIANT, "name"], variantAct: [VARIANT, "act"], variantChecked: [VARIANT, "name", "checked"] } as const;
 type SubjectName = keyof typeof SUBJECTS;
-const NAMES: readonly SubjectName[] = ["main", "variant", "variantAct"];
-const TITLES: Record<SubjectName, string> = { main: "Main", variant: "Variant, one key per mark name", variantAct: "Variant, one key per formatting act" };
+const NAMES: readonly SubjectName[] = ["main", "variant", "variantAct", "variantChecked"];
+const TITLES: Record<SubjectName, string> = { main: "Main", variant: "Variant, one key per mark name", variantAct: "Variant, one key per formatting act",
+  variantChecked: "Variant, one key per mark name, each update decoded and checked before it is applied" };
 
 export interface TimingSummary { n: number; median: number; p95: number; max: number; updatesPerKeystroke?: number; updateBytes?: number }
 interface SizeResult { fresh: number; bytes: number; text: { id: string; audio: string; visual: string }[]; extra: number; extraBytes: number }
 type SizeNumbers = Omit<SizeResult, "text">;
 export interface SizeRow { writers: number; copies: number; typed: number; finalCharacters: number; agree: boolean; firstDifference: string | null;
   main: SizeNumbers | null; variant: SizeNumbers; variantAct: SizeNumbers }
-export interface TimingRow { beats: number; pretype: number; main: TimingSummary[]; variant: TimingSummary[]; variantAct: TimingSummary[] }
+export interface TimingRow { beats: number; pretype: number; main: TimingSummary[]; variant: TimingSummary[]; variantAct: TimingSummary[]; variantChecked: TimingSummary[] }
 export interface BenchResults {
   node: string; arch: string; commit: string; rounds: number; samples: number; warmup: number;
   tape: { typed: number; atoms: number; corrections: number; revisionDeletes: number; finalCharacters: number };
@@ -81,9 +82,10 @@ export function bench(options: { rounds: number; samples: number; warmup: number
       for (const item of cases) {
         if (kind === "remote" && item.pretype) continue;
         const document = scaledDemo(item.beats / 30), beat = String(records(document.rows)[0]?.id);
-        const row: TimingRow = { ...item, main: [], variant: [], variantAct: [] };
+        const row: TimingRow = { ...item, main: [], variant: [], variantAct: [], variantChecked: [] };
         for (let round = 0; round < options.rounds; round++) {
           for (const name of round % 2 ? [...NAMES].reverse() : NAMES) {
+            if (kind === "typing" && name === "variantChecked") continue;
             row[name].push(run(directory, name, `${kind}-${item.beats}-${item.pretype}`,
               { kind, document, beat, pretype: item.pretype, samples: options.samples, warmup: options.warmup }) as TimingSummary);
           }
@@ -107,7 +109,7 @@ export function benchReport(results: BenchResults): string {
     `Typing tape: ${results.tape.typed} typed characters, ${results.tape.atoms} inline atoms, ${results.tape.corrections} corrections, ${results.tape.revisionDeletes} range deletions.`, "",
     "| Tape | Writers | Typed characters | Final characters | Same final text | Subject | Fresh bytes | Bytes after tape | Bytes per typed character | Bytes for 1,000 more keystrokes |",
     "| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |"];
-  for (const row of results.size) for (const name of NAMES) {
+  for (const row of results.size) for (const name of ["main", "variant", "variantAct"] as const) {
     const value = row[name];
     lines.push(`| ${row.copies}× | ${row.writers} | ${row.typed} | ${row.finalCharacters} | ${row.agree ? "yes" : "no: " + String(row.firstDifference)} | ${TITLES[name]} | ` +
       (value ? `${value.fresh} | ${value.bytes} | ${((value.bytes - value.fresh) / row.typed).toFixed(2)} | ${value.extraBytes} |` : "not measured | not measured | not measured | not measured |"));
@@ -115,6 +117,7 @@ export function benchReport(results: BenchResults): string {
   for (const [title, rows] of [["Local keystroke commit", results.typing], ["One remote keystroke applied", results.remote]] as const) {
     lines.push("", `| ${title} | Subject | Samples per round | Median ms | p95 ms |`, "| --- | --- | --- | --- | --- |");
     for (const row of rows) for (const name of NAMES) {
+      if (!row[name].length) continue;
       const digits = name === "main" ? 2 : 3;
       lines.push(`| ${row.beats} beats${row.pretype ? `, after ${row.pretype} characters typed in one beat` : ""} | ${TITLES[name]} | ${row[name][0]?.n ?? 0} | ${spread(row[name], value => value.median, digits)} | ${spread(row[name], value => value.p95, digits)} |`);
     }

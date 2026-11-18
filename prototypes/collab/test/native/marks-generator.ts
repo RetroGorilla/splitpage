@@ -4,9 +4,10 @@ import * as Y from "yjs";
 import { nativeMarkName } from "../../src/native/variant.ts";
 import type { NativeReplica, NativeScheme } from "../../src/native/variant.ts";
 import { KitNet, start } from "./kit.ts";
+import type { KitOrder } from "./kit.ts";
 
 export type MarkKind = "b" | "i";
-export type MarkDelivery = "updates" | "state";
+export type MarkDelivery = "updates" | "shuffled" | "state";
 export type MarkStep =
   | { op: "add" | "remove"; by: number; kind: MarkKind; first: string; last: string }
   | { op: "delete"; by: number; first: string; last: string }
@@ -14,11 +15,14 @@ export type MarkStep =
   | { op: "deliver"; from: number; to: number };
 export type MarkClass = keyof typeof MARK_CLASSES;
 export interface MarkDifference { char: string; kind: MarkKind; direction: "lost" | "extra"; cause: MarkClass }
-export interface MarkRun { agree: boolean; text: string; expectedText: string; native: string; model: string; differences: MarkDifference[]; executed: number }
+export interface MarkRun {
+  agree: boolean; textMatches: boolean; text: string; expectedText: string; native: string; model: string; differences: MarkDifference[];
+  executed: number; skipped: number; open: number;
+}
 export interface MarkCase { cause: MarkClass; histories: number; steps: MarkStep[]; example: string[]; native: string; model: string }
 export interface MarkSummary {
-  scheme: NativeScheme; writers: number; delivery: MarkDelivery; histories: number; executed: number; disagreements: number; textMismatches: number;
-  withLost: number; withExtra: number; cases: MarkCase[];
+  scheme: NativeScheme; writers: number; delivery: MarkDelivery; histories: number; executed: number; skipped: number; disagreements: number; textMismatches: number;
+  withOpen: number; withLost: number; withExtra: number; cases: MarkCase[];
 }
 
 // why: every difference from main's rule falls in exactly one of these, decided from the commands alone
@@ -34,8 +38,10 @@ export const MARK_CLASSES = {
 
 interface ModelCommand { id: number; op: "add" | "remove" | "delete" | "insert"; kind?: MarkKind; selected: string[]; marks: MarkKind[]; known: ReadonlySet<number> }
 interface Shown { char: string; kinds: MarkKind[] }
+type Sure = boolean | null;
 
 const KINDS: readonly MarkKind[] = ["b", "i"];
+const ORDERS: readonly KitOrder[] = ["forward", "reverse", "twice"];
 const POOL = "ABCDEFGHIJKLMNOPQRSTUVWXYZ0123456789ΑΒΓΔΕΖΗΘΙΚΛΜΝΞΟΠΡΣΤΥΦΧΨΩ";
 const LETTER = (writer: number): string => String.fromCharCode(65 + writer);
 
@@ -51,59 +57,113 @@ function read(replica: NativeReplica): Shown[] {
 
 const printed = (shown: readonly Shown[]): string => shown.map(item => item.kinds.length ? `[${item.char}|${item.kinds.join(",")}]` : item.char).join("");
 
-// why: main's mark rule, computed without the shared library: a mark covers what it selected and what arrives unseen
-// strictly inside; a removal takes away only marks it had seen; typed text carries the marks it was given
-function expected(commands: readonly ModelCommand[], order: string): Shown[] {
-  const place = new Map([...order].map((char, index) => [char, index])), at = (char: string | undefined): number => place.get(char ?? "") ?? -1;
-  const deleted = new Set(commands.filter(command => command.op === "delete").flatMap(command => command.selected));
-  const births = new Map(commands.filter(command => command.op === "insert").map(command => [command.selected[0] ?? "", command]));
-  const reaches = (command: ModelCommand, char: string): boolean => {
-    if (command.selected.includes(char)) return true;
-    const birth = births.get(char);
-    return !!birth && !birth.known.has(command.id) && at(command.selected[0]) < at(char) && at(char) < at(command.selected.at(-1));
+// why: what the commands alone fix about the order of characters: each typed character lies between the two it was
+// typed between. Where they fix nothing, the first order any copy shows is held and every later reading must keep it
+function fences(initial: string): { put: (first: string, second: string) => void; precedes: (first: string, second: string) => boolean;
+  accepts: (sequence: readonly string[]) => boolean; line: (chars: ReadonlySet<string>, hint: readonly string[]) => string[] } {
+  const after = new Map<string, Set<string>>();
+  const put = (first: string, second: string): void => { after.set(first, (after.get(first) ?? new Set<string>()).add(second)); };
+  const precedes = (first: string, second: string): boolean => {
+    const queue = [first], seen = new Set<string>();
+    for (let next = queue.pop(); next !== undefined; next = queue.pop()) for (const char of after.get(next) ?? []) {
+      if (char === second) return true;
+      if (!seen.has(char)) { seen.add(char); queue.push(char); }
+    }
+    return false;
   };
-  const result: Shown[] = [];
-  for (const char of order) {
-    if (deleted.has(char)) continue;
-    const kinds = KINDS.filter(kind => {
-      const removals = commands.filter(command => command.op === "remove" && command.kind === kind && reaches(command, char));
-      if (births.get(char)?.marks.includes(kind) && !removals.some(removal => removal.selected.includes(char))) return true;
-      return commands.some(command => command.op === "add" && command.kind === kind && reaches(command, char) && !removals.some(removal => removal.known.has(command.id)));
-    });
-    result.push({ char, kinds });
-  }
-  return result;
+  const accepts = (sequence: readonly string[]): boolean => {
+    for (let index = 1; index < sequence.length; index++) {
+      const left = sequence[index - 1] as string, right = sequence[index] as string;
+      if (left === right || precedes(right, left)) return false;
+      if (!precedes(left, right)) put(left, right);
+    }
+    return true;
+  };
+  const line = (chars: ReadonlySet<string>, hint: readonly string[]): string[] => {
+    const rank = (char: string): number => hint.includes(char) ? hint.indexOf(char) : hint.length;
+    const rest = [...chars].sort((a, b) => rank(a) - rank(b) || a.localeCompare(b)), result: string[] = [];
+    while (rest.length) result.push(...rest.splice(Math.max(0, rest.findIndex(char => !rest.some(other => other !== char && precedes(other, char)))), 1));
+    return result;
+  };
+  [...initial].forEach((char, index, all) => { if (index) put(all[index - 1] as string, char); });
+  return { put, precedes, accepts, line };
 }
 
-export function runMarks(steps: readonly MarkStep[], writers: number, scheme: NativeScheme, delivery: MarkDelivery, initial = "abcdef"): MarkRun {
-  const copies = start([{ id: "R1", audioText: initial }], writers, scheme), net = new KitNet(copies), oracle = new Y.Doc({ gc: false });
-  // why: a copy that never collects deleted text gives the order of every character ever typed, which the rule needs
-  Y.applyUpdate(oracle, Y.encodeStateAsUpdate((copies[0] as NativeReplica).doc));
-  for (const copy of copies) copy.doc.on("update", (update: Uint8Array) => { Y.applyUpdate(oracle, update); });
+// why: main's mark rule, computed without the shared library: a mark covers what it selected and what arrives unseen
+// strictly inside; a removal takes away only marks it had seen; typed text carries the marks it was given
+function expected(commands: readonly ModelCommand[], char: string, kind: MarkKind, precedes: (first: string, second: string) => boolean): Sure {
+  const birth = commands.find(command => command.op === "insert" && command.selected[0] === char);
+  const marking = commands.filter(command => (command.op === "add" || command.op === "remove") && command.kind === kind);
+  const reach = (command: ModelCommand): Sure => {
+    if (command.selected.includes(char)) return true;
+    if (!birth || birth.known.has(command.id)) return false;
+    const first = command.selected[0] as string, last = command.selected.at(-1) as string;
+    if (precedes(first, char) && precedes(char, last)) return true;
+    return precedes(char, first) || precedes(last, char) ? false : null;
+  };
+  const unsure = marking.filter(command => reach(command) === null);
+  let yes = false, no = false;
+  // why: where the commands do not fix on which side of a range's edge a character lies, both sides are tried
+  for (let mask = 0; mask < 1 << Math.min(unsure.length, 12); mask++) {
+    const reaches = (command: ModelCommand): boolean => reach(command) ?? ((mask >> unsure.indexOf(command)) & 1) === 1;
+    const removals = marking.filter(command => command.op === "remove" && reaches(command));
+    const shows = (!!birth?.marks.includes(kind) && !removals.some(removal => removal.selected.includes(char)))
+      || marking.some(command => command.op === "add" && reaches(command) && !removals.some(removal => removal.known.has(command.id)));
+    if (shows) yes = true; else no = true;
+  }
+  return yes && no ? null : yes;
+}
+
+export function runMarks(steps: readonly MarkStep[], writers: number, scheme: NativeScheme, delivery: MarkDelivery, initial = "abcdef",
+  tamper?: (copies: NativeReplica[]) => void): MarkRun {
+  const copies = start([{ id: "R1", audioText: initial }], writers, scheme), net = new KitNet(copies), order = fences(initial);
+  tamper?.(copies);
   const commands: ModelCommand[] = [], known = copies.map(() => new Set<number>()), issued = copies.map((): number[] => []);
   const record = (by: number, command: Omit<ModelCommand, "id" | "known">): void => {
     const id = commands.length;
     commands.push({ ...command, id, known: new Set(known[by]) });
     known[by]?.add(id); issued[by]?.push(id);
   };
-  const sync = (from: number, to: number): void => {
+  const seenBy = (seen: ReadonlySet<number> | null): ModelCommand[] => seen ? commands.filter(command => seen.has(command.id)) : commands;
+  // why: every character a copy has been told of is there unless a deletion it has been told of covers it
+  const inventory = (seen: ReadonlySet<number> | null): Set<string> => {
+    const chars = new Set(initial), told = seenBy(seen);
+    for (const command of told) if (command.op === "insert") chars.add(command.selected[0] as string);
+    for (const command of told) if (command.op === "delete") for (const char of command.selected) chars.delete(char);
+    return chars;
+  };
+  const sound = (shown: readonly Shown[], seen: ReadonlySet<number> | null): boolean => {
+    const chars = shown.map(item => item.char), wanted = inventory(seen);
+    return chars.length === wanted.size && chars.every(char => wanted.has(char)) && order.accepts(chars);
+  };
+  const sync = (from: number, to: number, position: number): void => {
     const source = copies[from] as NativeReplica, target = copies[to] as NativeReplica;
-    if (delivery === "updates") { net.deliver(source, target); for (const id of issued[from] ?? []) known[to]?.add(id); return; }
+    if (delivery !== "state") {
+      net.deliver(source, target, delivery === "shuffled" ? ORDERS[position % 3] : "forward");
+      for (const id of issued[from] ?? []) known[to]?.add(id);
+      return;
+    }
     Y.applyUpdate(target.doc, Y.encodeStateAsUpdate(source.doc, Y.encodeStateVector(target.doc)), "remote");
     target.changes();
     for (const id of known[from] ?? []) known[to]?.add(id);
   };
-  let executed = 0;
-  for (const step of steps) {
-    if (step.op === "deliver") { if (step.from < writers && step.to < writers && step.from !== step.to) sync(step.from, step.to); continue; }
-    const replica = copies[step.by];
-    if (!replica) continue;
+  let executed = 0, skipped = 0, textMatches = true;
+  for (const [position, step] of steps.entries()) {
+    if (step.op === "deliver") { if (step.from < writers && step.to < writers && step.from !== step.to) sync(step.from, step.to, position); continue; }
+    const replica = copies[step.by], seen = known[step.by];
+    if (!replica || !seen) continue;
     const shown = read(replica), index = (char: string): number => shown.findIndex(item => item.char === char);
+    if (!sound(shown, seen)) { textMatches = false; break; }
     if (step.op === "insert") {
       const at = step.after === null ? 0 : index(step.after) + 1;
-      if ((step.after !== null && at === 0) || index(step.char) >= 0 || commands.some(command => command.op === "insert" && command.selected[0] === step.char)) continue;
-      const marks = step.mode === "plain" ? [] : step.mode === "inherit" ? [...(shown[at - 1]?.kinds ?? [])] : [step.mode];
+      if ((step.after !== null && at === 0) || initial.includes(step.char) || commands.some(command => command.op === "insert" && command.selected[0] === step.char)) continue;
+      const left = shown[at - 1]?.char ?? null, right = shown[at]?.char ?? null;
+      const taken = left === null ? [] : KINDS.map(kind => [kind, expected(seenBy(seen), left, kind, order.precedes)] as const);
+      if (step.mode === "inherit" && taken.some(([, shows]) => shows === null)) { skipped++; continue; }
+      const marks = step.mode === "plain" ? [] : step.mode === "inherit" ? taken.filter(([, shows]) => shows).map(([kind]) => kind) : [step.mode];
       replica.splice("R1", "audioText", at, at, [{ text: step.char, marks: Object.fromEntries(marks.map(kind => [kind, true])) }]);
+      if (left !== null) order.put(left, step.char);
+      if (right !== null) order.put(step.char, right);
       record(step.by, { op: "insert", selected: [step.char], marks });
     } else {
       const from = index(step.first), to = index(step.last);
@@ -114,18 +174,21 @@ export function runMarks(steps: readonly MarkStep[], writers: number, scheme: Na
       record(step.by, { op: step.op, ...step.op === "delete" ? {} : { kind: step.kind }, selected, marks: [] });
     }
     replica.changes(); executed++;
+    if (!sound(read(replica), seen)) { textMatches = false; break; }
   }
-  if (delivery === "updates") net.settle();
-  else for (let round = 0; round < 3; round++) for (let from = 0; from < writers; from++) for (let to = 0; to < writers; to++) if (from !== to) sync(from, to);
+  if (delivery !== "state") net.settle(delivery === "shuffled" ? ORDERS[steps.length % 3] : "forward");
+  else for (let round = 0; round < 3; round++) for (let from = 0; from < writers; from++) for (let to = 0; to < writers; to++) if (from !== to) sync(from, to, 0);
   const late = net.late(scheme), readings = [...copies, late].map(copy => printed(read(copy)));
-  const text = oracle.getMap<Y.Map<unknown>>("segments").get("seg-b-R1")?.get("text") as Y.Text;
-  const everything = text.toDelta(Y.createSnapshot(Y.createDeleteSet(), Y.decodeStateVector(Y.encodeStateVector(oracle)))) as { insert: unknown }[];
-  const order = everything.map(item => typeof item.insert === "string" ? item.insert : "").join("");
-  const native = read(copies[0] as NativeReplica), model = expected(commands, order), differences: MarkDifference[] = [];
+  for (const copy of [...copies, late]) if (textMatches && !sound(read(copy), null)) textMatches = false;
+  const native = read(copies[0] as NativeReplica), differences: MarkDifference[] = [];
+  const line = textMatches ? native.map(item => item.char) : order.line(inventory(null), native.map(item => item.char));
+  const model = line.map(char => ({ char, kinds: KINDS.map(kind => [kind, expected(commands, char, kind, order.precedes)] as const) }));
   const shownNow = new Map(native.map(item => [item.char, item.kinds]));
-  for (const item of model) for (const kind of KINDS) {
-    const here = shownNow.get(item.char)?.includes(kind) ?? false, wanted = item.kinds.includes(kind);
-    if (here === wanted) continue;
+  let open = 0;
+  for (const item of model) for (const [kind, wanted] of item.kinds) {
+    const here = shownNow.get(item.char)?.includes(kind) ?? false;
+    if (wanted === null) open++;
+    if (wanted === null || here === wanted) continue;
     const birth = commands.find(command => command.op === "insert" && command.selected[0] === item.char);
     const selected = commands.some(command => command.op === "add" && command.kind === kind && command.selected.includes(item.char));
     const formatted = !!birth?.marks.includes(kind) || selected;
@@ -135,8 +198,12 @@ export function runMarks(steps: readonly MarkStep[], writers: number, scheme: Na
       : apart ? "extra-typed-apart" : formatted && unformatted ? "extra-unformatted" : "extra-nowhere";
     differences.push({ char: item.char, kind, direction: wanted ? "lost" : "extra", cause });
   }
-  return { agree: readings.every(value => value === readings[0]), text: native.map(item => item.char).join(""), expectedText: model.map(item => item.char).join(""),
-    native: printed(native), model: printed(model), differences, executed };
+  const modelPrinted = model.map(item => {
+    const names = item.kinds.filter(([, shows]) => shows !== false).map(([kind, shows]) => shows ? kind : `${kind}?`);
+    return names.length ? `[${item.char}|${names.join(",")}]` : item.char;
+  }).join("");
+  return { agree: readings.every(value => value === readings[0]), textMatches, text: native.map(item => item.char).join(""), expectedText: line.join(""),
+    native: printed(native), model: modelPrinted, differences, executed, skipped, open };
 }
 
 function random(seed: number): () => number {
@@ -192,12 +259,13 @@ export function describeStep(step: MarkStep): string {
 }
 
 export function surveyMarks(scheme: NativeScheme, writers: number, delivery: MarkDelivery, seeds: number, length: number): MarkSummary {
-  const summary: MarkSummary = { scheme, writers, delivery, histories: seeds, executed: 0, disagreements: 0, textMismatches: 0, withLost: 0, withExtra: 0, cases: [] };
+  const summary: MarkSummary = { scheme, writers, delivery, histories: seeds, executed: 0, skipped: 0, disagreements: 0, textMismatches: 0, withOpen: 0, withLost: 0, withExtra: 0, cases: [] };
   for (let seed = 1; seed <= seeds; seed++) {
     const steps = generateMarks(seed, writers, length), run = runMarks(steps, writers, scheme, delivery);
-    summary.executed += run.executed;
+    summary.executed += run.executed; summary.skipped += run.skipped;
     if (!run.agree) summary.disagreements++;
-    if (run.text !== run.expectedText) summary.textMismatches++;
+    if (!run.textMatches) summary.textMismatches++;
+    if (run.open) summary.withOpen++;
     if (run.differences.some(difference => difference.direction === "lost")) summary.withLost++;
     if (run.differences.some(difference => difference.direction === "extra")) summary.withExtra++;
     for (const cause of new Set(run.differences.map(difference => difference.cause))) {
@@ -214,10 +282,11 @@ export function surveyMarks(scheme: NativeScheme, writers: number, delivery: Mar
 }
 
 export function marksReport(summaries: readonly MarkSummary[]): string {
-  const causes = Object.keys(MARK_CLASSES) as MarkClass[], sent = (row: MarkSummary): string => row.delivery === "updates" ? "each update" : "state";
-  const lines = [`| Key scheme | Writers | Delivery | Histories | Commands run | Copies or late joiner disagree | Text differs from typed minus deleted | ${causes.join(" | ")} |`,
-    `| --- | --- | --- | --- | --- | --- | --- | ${causes.map(() => "---").join(" | ")} |`];
-  for (const row of summaries) lines.push(`| ${row.scheme} | ${row.writers} | ${sent(row)} | ${row.histories} | ${row.executed} | ${row.disagreements} | ${row.textMismatches} | ${causes.map(cause => row.cases.find(item => item.cause === cause)?.histories ?? 0).join(" | ")} |`);
+  const causes = Object.keys(MARK_CLASSES) as MarkClass[];
+  const sent = (row: MarkSummary): string => row.delivery === "state" ? "whole state" : row.delivery === "updates" ? "each update, in order" : "each update, reversed or twice";
+  const lines = [`| Key scheme | Writers | Delivery | Histories | Commands run | Commands skipped | Copies or late joiner disagree | Characters missing, extra or out of place | Histories with a mark the commands leave open | Formatting lost | Formatting gained | ${causes.join(" | ")} |`,
+    `| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | ${causes.map(() => "---").join(" | ")} |`];
+  for (const row of summaries) lines.push(`| ${row.scheme} | ${row.writers} | ${sent(row)} | ${row.histories} | ${row.executed} | ${row.skipped} | ${row.disagreements} | ${row.textMismatches} | ${row.withOpen} | ${row.withLost} | ${row.withExtra} | ${causes.map(cause => row.cases.find(item => item.cause === cause)?.histories ?? 0).join(" | ")} |`);
   lines.push("", "The seven columns on the right count histories with at least one difference of that kind:", "");
   for (const cause of causes) lines.push(`- \`${cause}\`: ${MARK_CLASSES[cause]}.`);
   lines.push("", "Shortest reduced history found for each kind (text starts as plain `abcdef`; `[x|b]` is bold x, `[x|i]` italic):", "",
@@ -232,7 +301,7 @@ export function marksReport(summaries: readonly MarkSummary[]): string {
 if (process.argv[1] && fileURLToPath(import.meta.url) === process.argv[1]) {
   const flag = (name: string, fallback: number): number => Number(process.argv.find(value => value.startsWith(`--${name}=`))?.split("=")[1] ?? fallback);
   const output = process.argv.find(value => value.startsWith("--write="))?.split("=")[1], summaries: MarkSummary[] = [];
-  for (const scheme of ["name", "act"] as const) for (const [writers, delivery] of [[2, "updates"], [2, "state"], [3, "state"]] as const) {
+  for (const scheme of ["name", "act"] as const) for (const [writers, delivery] of [[2, "updates"], [2, "shuffled"], [2, "state"], [3, "state"]] as const) {
     summaries.push(surveyMarks(scheme, writers, delivery, flag("seeds", 300), flag("length", 14)));
     process.stderr.write(`${scheme} ${writers} ${delivery}: done\n`);
   }
