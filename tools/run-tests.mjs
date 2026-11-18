@@ -128,6 +128,10 @@ export function assignShards(entries, total, weights = WEIGHTS) {
   return shards.map((s) => s.files.sort());
 }
 
+export function unweightedFiles(files, weights = WEIGHTS) {
+  return files.filter((file) => !(weights[file] > 0));
+}
+
 function runGroup(entry, { repo, node, print, spawn }) {
   const { group } = entry;
   const files = entry.selected;

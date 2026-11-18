@@ -55,6 +55,7 @@ These come from the maintainer. Each one has been broken by an agent before.
 9. **Read the invariants before touching saving, merging, history, undo or the document format.** [HANDOFF.md](docs/HANDOFF.md) and [invariants.md](docs/architecture/invariants.md). Several tests exist only to hold them in place.
 10. **PR titles and bodies name no AI model or tool.**
 11. **Convert a JS file to TypeScript before changing it substantially.** Before a substantial change (more than a small fix) to a `.js` file under `src/features/`, `src/application/` or `src/adapters/`, convert it to strict TypeScript in its own PR first: types only, no behaviour change, then the change on top. Files nobody is changing stay JavaScript. Files on the typing, undo or save path need the same review and performance check as any change there.
+12. **A library's standard behaviour is the default.** Use Yjs, and any established library, through its public API and the pattern its official bindings use. A result that only differs from a rule we wrote is a preference; a defect is copies that disagree, lost content or a crash. A departure needs a reproduced defect, its cost measured per keystroke and per stored character, and the maintainer's decision, before anything is built on it. Then add the smallest thing on top of the library.
 
 ## Checking your work
 

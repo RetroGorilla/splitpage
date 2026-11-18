@@ -1,0 +1,343 @@
+{
+  "node": "v24.22.1",
+  "arch": "x64",
+  "commit": "b9fe61267102b3707116bc2a9148c9ee98e80b3a",
+  "rounds": 3,
+  "samples": 200,
+  "warmup": 20,
+  "tape": {
+    "typed": 11287,
+    "atoms": 9,
+    "corrections": 189,
+    "revisionDeletes": 5,
+    "finalCharacters": 10424
+  },
+  "size": [],
+  "typing": [],
+  "remote": [
+    {
+      "beats": 30,
+      "pretype": 0,
+      "main": [
+        {
+          "n": 200,
+          "median": 1.592800000000011,
+          "p95": 2.1327,
+          "max": 3.0758999999999332,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 280
+        },
+        {
+          "n": 200,
+          "median": 1.5863000000000511,
+          "p95": 2.040899999999965,
+          "max": 3.1131000000000313,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 280
+        },
+        {
+          "n": 200,
+          "median": 1.5144999999999982,
+          "p95": 2.0499000000000933,
+          "max": 3.2466000000000577,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 280
+        }
+      ],
+      "variant": [
+        {
+          "n": 200,
+          "median": 0.022600000000011278,
+          "p95": 0.03630000000001132,
+          "max": 0.1600999999999999,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        },
+        {
+          "n": 200,
+          "median": 0.022199999999998,
+          "p95": 0.03460000000001173,
+          "max": 0.15020000000001232,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        },
+        {
+          "n": 200,
+          "median": 0.022199999999998,
+          "p95": 0.04099999999999682,
+          "max": 0.15149999999999864,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        }
+      ],
+      "variantAct": [
+        {
+          "n": 200,
+          "median": 0.022800000000017917,
+          "p95": 0.0403999999999769,
+          "max": 0.1373000000000104,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        },
+        {
+          "n": 200,
+          "median": 0.02420000000000755,
+          "p95": 0.046899999999993724,
+          "max": 0.20869999999999322,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        },
+        {
+          "n": 200,
+          "median": 0.02240000000000464,
+          "p95": 0.03819999999998913,
+          "max": 0.15059999999999718,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        }
+      ],
+      "variantChecked": [
+        {
+          "n": 200,
+          "median": 0.02400000000000091,
+          "p95": 0.04409999999998604,
+          "max": 0.2190999999999974,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        },
+        {
+          "n": 200,
+          "median": 0.02580000000000382,
+          "p95": 0.05639999999999645,
+          "max": 0.3199999999999932,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        },
+        {
+          "n": 200,
+          "median": 0.023300000000006094,
+          "p95": 0.043200000000013006,
+          "max": 0.1436999999999955,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        }
+      ]
+    },
+    {
+      "beats": 300,
+      "pretype": 0,
+      "main": [
+        {
+          "n": 200,
+          "median": 6.3861000000001695,
+          "p95": 7.4418000000000575,
+          "max": 14.607899999999972,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 280
+        },
+        {
+          "n": 200,
+          "median": 6.557500000000118,
+          "p95": 7.761999999999944,
+          "max": 15.352499999999964,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 280
+        },
+        {
+          "n": 200,
+          "median": 6.5426000000002205,
+          "p95": 7.843200000000024,
+          "max": 14.615299999999934,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 280
+        }
+      ],
+      "variant": [
+        {
+          "n": 200,
+          "median": 0.021900000000016462,
+          "p95": 0.039199999999993906,
+          "max": 0.19360000000000355,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        },
+        {
+          "n": 200,
+          "median": 0.021700000000009823,
+          "p95": 0.035899999999998045,
+          "max": 0.10009999999999764,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        },
+        {
+          "n": 200,
+          "median": 0.02240000000000464,
+          "p95": 0.037399999999990996,
+          "max": 0.1594000000000051,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        }
+      ],
+      "variantAct": [
+        {
+          "n": 200,
+          "median": 0.02230000000000132,
+          "p95": 0.0367999999999995,
+          "max": 0.23529999999999518,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        },
+        {
+          "n": 200,
+          "median": 0.02230000000000132,
+          "p95": 0.039800000000013824,
+          "max": 0.07349999999999568,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        },
+        {
+          "n": 200,
+          "median": 0.0221000000000231,
+          "p95": 0.039299999999997226,
+          "max": 0.07389999999998054,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        }
+      ],
+      "variantChecked": [
+        {
+          "n": 200,
+          "median": 0.02349999999998431,
+          "p95": 0.04070000000001528,
+          "max": 0.1932999999999936,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        },
+        {
+          "n": 200,
+          "median": 0.02339999999998099,
+          "p95": 0.04230000000001155,
+          "max": 0.08830000000000382,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        },
+        {
+          "n": 200,
+          "median": 0.023500000000012733,
+          "p95": 0.037700000000000955,
+          "max": 0.15409999999999968,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        }
+      ]
+    },
+    {
+      "beats": 900,
+      "pretype": 0,
+      "main": [
+        {
+          "n": 200,
+          "median": 20.96900000000005,
+          "p95": 22.674699999999575,
+          "max": 54.03060000000005,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 280
+        },
+        {
+          "n": 200,
+          "median": 22.665200000000368,
+          "p95": 29.45550000000003,
+          "max": 64.11340000000018,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 280
+        },
+        {
+          "n": 200,
+          "median": 24.273600000000442,
+          "p95": 35.12069999999949,
+          "max": 71.53340000000026,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 280
+        }
+      ],
+      "variant": [
+        {
+          "n": 200,
+          "median": 0.021300000000053387,
+          "p95": 0.03679999999997108,
+          "max": 0.18089999999995143,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        },
+        {
+          "n": 200,
+          "median": 0.022299999999972897,
+          "p95": 0.03469999999998663,
+          "max": 0.08990000000000009,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        },
+        {
+          "n": 200,
+          "median": 0.021500000000003183,
+          "p95": 0.036000000000001364,
+          "max": 0.08920000000000528,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        }
+      ],
+      "variantAct": [
+        {
+          "n": 200,
+          "median": 0.021700000000009823,
+          "p95": 0.03570000000001983,
+          "max": 0.0968000000000302,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        },
+        {
+          "n": 200,
+          "median": 0.021700000000009823,
+          "p95": 0.03649999999998954,
+          "max": 0.155399999999986,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        },
+        {
+          "n": 200,
+          "median": 0.021399999999971442,
+          "p95": 0.04410000000001446,
+          "max": 0.1149000000000342,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        }
+      ],
+      "variantChecked": [
+        {
+          "n": 200,
+          "median": 0.022600000000011278,
+          "p95": 0.03899999999998727,
+          "max": 0.09750000000002501,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        },
+        {
+          "n": 200,
+          "median": 0.022800000000017917,
+          "p95": 0.03659999999999286,
+          "max": 0.25670000000002346,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        },
+        {
+          "n": 200,
+          "median": 0.022999999999967713,
+          "p95": 0.03840000000002419,
+          "max": 0.06309999999996307,
+          "updatesPerKeystroke": 1,
+          "updateBytes": 10
+        }
+      ]
+    }
+  ]
+}
