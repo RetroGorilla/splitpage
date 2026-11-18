@@ -8,10 +8,14 @@ import { retainedFamilies, retainedUndoSources } from "./retained.ts";
 const root = fileURLToPath(new URL("../../", import.meta.url));
 const undoCall = /\b(undoOne|undoJoin|undoStatus|undoCapturedMarks|undoStructuralRange)\(|\.undo\(\)/;
 
+// why: the scan covers the Stage 1 command-record histories; test/native drives Y.UndoManager, not those
+// records, so it has no retained family to list.
+const outsideScan = new Set(["undo-records", "native"]);
+
 function testFiles(folder: string): string[] {
   return readdirSync(folder, { withFileTypes: true }).flatMap(entry => {
     const path = join(folder, entry.name);
-    if (entry.isDirectory()) return entry.name === "undo-records" ? [] : testFiles(path);
+    if (entry.isDirectory()) return outsideScan.has(entry.name) ? [] : testFiles(path);
     return entry.name.endsWith(".ts") ? [relative(root, path).replaceAll("\\", "/")] : [];
   });
 }
