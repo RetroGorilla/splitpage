@@ -1,12 +1,12 @@
 import { isDeepStrictEqual } from "node:util";
 import * as Y from "yjs";
 import { NativeHeadingReplica } from "../../src/native/headings.ts";
-import { deleteIn, joinUp, removeRow, restoreRow, splitAt, typeAt } from "../../src/native/rows.ts";
+import { deleteIn, removeRow, restoreRow, splitAt, typeAt } from "../../src/native/rows.ts";
 import type { NativeDeltaItem, NativeField } from "../../src/native/variant.ts";
 import { randomFor } from "./e5-histories.ts";
 import type { E5Delivery, E5History } from "./e5-histories.ts";
 import { E5Model, INITIAL, required } from "./e5-model.ts";
-import type { E5Boundary, E5Command, E5Projection, E5Removal, E5Stored, E5Unit, E5Write } from "./e5-model.ts";
+import type { E5Boundary, E5Event, E5Projection, E5Removal, E5Stored, E5Unit, E5Write } from "./e5-model.ts";
 
 export const WRITES: readonly E5Write[] = ["create", "renameType", "renameDelete", "removeHeading", "restoreHeading",
   "typeBeat", "deleteBeat", "split", "join", "unjoin", "removeBeat", "restoreBeat"];
@@ -87,7 +87,7 @@ export function readProjection(replica: NativeHeadingReplica): E5Projection {
   };
 }
 
-function write(replica: NativeHeadingReplica, by: number, command: E5Command): void {
+function write(replica: NativeHeadingReplica, { by, command, joinInto }: E5Event): void {
   switch (command.op) {
     case "create": replica.createHeading(command.beat, command.id, command.name); break;
     case "renameType": replica.typeHeading(command.id, command.at, command.value); break;
@@ -98,7 +98,7 @@ function write(replica: NativeHeadingReplica, by: number, command: E5Command): v
     case "deleteBeat": deleteIn(replica, command.row, fieldOf(command.field), command.at, command.at + 1); break;
     case "split": splitAt(replica, command.row, command.at, command.id); break;
     case "unjoin": splitAt(replica, command.row, command.at, "unused"); break;
-    case "join": joinUp(replica, command.row); break;
+    case "join": replica.join(command.row, required(joinInto, "planned join target"), " "); break;
     case "removeBeat": removeRow(replica, command.row, `W${by + 1}`); break;
     case "restoreBeat": restoreRow(replica, command.id); break;
   }
@@ -256,7 +256,7 @@ export function runHistory(history: E5History, removal: E5Removal, delivery: E5D
       if ("command" in step) {
         op = step.command.op;
         capturing = [];
-        write(replicaAt(step.by), step.by, step.command);
+        write(replicaAt(step.by), required(history.events[updates.length], "recorded command"));
         knownAt(step.by).add(updates.length);
         updates.push(capturing);
         capturing = null;

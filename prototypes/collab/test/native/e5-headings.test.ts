@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { NativeHeadingReplica } from "../../src/native/headings.ts";
 import { DELIVERIES, generateHistory, NAMED, recordHistory, WITH_RESTORE } from "./e5-histories.ts";
+import type { E5Boundary } from "./e5-model.ts";
 import { loadReplica, readProjection, readStored, runHistory, seedReplica, WRITES } from "./e5-run.ts";
 import type { E5Run } from "./e5-run.ts";
 
@@ -13,6 +14,36 @@ function summary(run: E5Run): string[] {
   const { outline, removedHeadings } = run.final.view;
   return [...outline.map(entry => entry.kind === "row" ? `${entry.members.join("+")}: ${entry.audio}` : `#${entry.id}: ${entry.name}`),
     ...removedHeadings.map(entry => `recovery ${entry.id}: ${entry.name}`)];
+}
+
+function classifyStranded({ stored, view }: NonNullable<E5Run["final"]>) {
+  const shown = new Set([...view.outline, ...view.removedBeats, ...view.removedHeadings]
+    .flatMap(entry => [...(entry.kind === "row" ? entry.audio + entry.visual : entry.name)]));
+  const counts = { total: 0, inS0: 0, visibleBeatAbove: 0, removedBeatAbove: 0, noBlockAbove: 0 };
+  let above: E5Boundary | null = null;
+  for (const id of stored.order) {
+    const segment = stored.segments[id];
+    assert.ok(segment);
+    if (segment.head) above = segment.head;
+    let prefix = segment.head === null;
+    for (const unit of segment.units) {
+      if (typeof unit !== "string") {
+        prefix = false;
+        above = unit;
+      } else if (!shown.has(unit)) {
+        assert.ok(prefix, `stranded character outside a headless prefix in ${id}`);
+        counts.total++;
+        if (id === "S0") counts.inS0++;
+        if (!above) counts.noBlockAbove++;
+        else {
+          assert.equal(above.kind, "b");
+          if (stored.beats[above.id]?.removed) counts.removedBeatAbove++;
+          else counts.visibleBeatAbove++;
+        }
+      }
+    }
+  }
+  return counts;
 }
 
 const COMMON = ["#H0: A", "B0: O"];
@@ -85,6 +116,7 @@ for (const removal of REMOVALS) {
   const histories = Array.from({ length: SEEDS }, (_, seed) => generateHistory(removal, (seed + 1) * 7919, 30));
   test(`E5 ${removal}: generated heading and beat races`, t => {
     const totals = { histories: 0, commands: 0, lost: 0, duplicated: 0, uneditable: 0, disagreeing: 0, outOfOrder: 0, crashes: 0, strandedHistories: 0 };
+    const stranded = { total: 0, inS0: 0, visibleBeatAbove: 0, removedBeatAbove: 0, noBlockAbove: 0, historiesWithS0: 0 };
     const locations: Record<string, number> = {}, commands: Record<string, number> = {};
     for (const delivery of DELIVERIES) for (const [seed, history] of histories.entries()) {
       const result = runHistory(history, removal, delivery, seed + 1);
@@ -93,6 +125,13 @@ for (const removal of REMOVALS) {
       totals.commands += history.events.length;
       for (const key of ["lost", "duplicated", "uneditable", "disagreeing", "outOfOrder", "crashes"] as const) totals[key] += result[key];
       if (result.uneditable) totals.strandedHistories++;
+      if (removal === "delete") {
+        assert.ok(result.final);
+        const counts = classifyStranded(result.final);
+        assert.equal(counts.total, result.uneditable);
+        for (const key of ["total", "inS0", "visibleBeatAbove", "removedBeatAbove", "noBlockAbove"] as const) stranded[key] += counts[key];
+        stranded.historiesWithS0 += Number(counts.inS0 > 0);
+      }
       for (const [where, count] of Object.entries(result.renameLocations)) locations[where] = (locations[where] ?? 0) + count;
       for (const { command } of history.events) {
         const key = "field" in command ? `${command.op} ${command.field}` : command.op;
@@ -102,8 +141,11 @@ for (const removal of REMOVALS) {
     t.diagnostic(JSON.stringify({ totals, commands, locations }));
     assert.equal(totals.histories, 1000);
     assert.equal(totals.lost + totals.duplicated + totals.disagreeing + totals.outOfOrder + totals.crashes, 0);
-    if (removal === "delete") assert.ok(totals.uneditable > 0);
-    else assert.equal(totals.uneditable, 0);
+    if (removal === "delete") {
+      t.diagnostic(JSON.stringify(stranded));
+      assert.equal(totals.strandedHistories, 525);
+      assert.deepEqual(stranded, { total: 790, inS0: 745, visibleBeatAbove: 35, removedBeatAbove: 10, noBlockAbove: 745, historiesWithS0: 500 });
+    } else assert.equal(totals.uneditable, 0);
     assert.ok((commands.unjoin ?? 0) > 135);
   });
 
@@ -162,6 +204,44 @@ test("E5 flag: hydrate, remove and restore a heading that has its own segment", 
     replica.restoreHeading("H1");
     assert.deepEqual(readProjection(replica).outline[0], { kind: "heading", id: "H1", name: "Title" });
     assert.deepEqual(replica.headings.get("H1")?.toJSON(), { extra: "kept" });
+  } finally { replica.destroy(); }
+});
+
+for (const removal of REMOVALS) test(`E5 ${removal}: undo and redo remove a hydrated heading in one step`, () => {
+  const replica = new NativeHeadingReplica(1, removal);
+  try {
+    replica.hydrate({
+      sections: [{ id: "H1", name: "Title", firstSceneId: "B1" }],
+      rows: [{ id: "B1", audioText: "Narration" }]
+    });
+    assert.equal(replica.undo.undoStack.length, 0);
+    const initial = readProjection(replica);
+    replica.removeHeading("H1");
+    const removed = readProjection(replica);
+    assert.ok(!removed.outline.some(entry => entry.kind === "heading"));
+    assert.equal(removed.removedHeadings.length, removal === "flag" ? 1 : 0);
+    assert.equal(replica.undo.undoStack.length, 1);
+    assert.equal(replica.undoStep(), "undone");
+    assert.deepEqual(readProjection(replica), initial);
+    assert.equal(replica.redoStep(), "undone");
+    assert.deepEqual(readProjection(replica), removed);
+  } finally { replica.destroy(); }
+});
+
+for (const beat of ["B3", "B4"]) test(`E5 flag: undo and redo create above ${beat} in one step`, () => {
+  const replica = seedReplica("flag");
+  try {
+    const initial = readStored(replica), outline = readProjection(replica);
+    replica.createHeading(beat, "New", "Title");
+    const created = readStored(replica), createdOutline = readProjection(replica);
+    assert.ok(replica.headings.has("New"));
+    assert.equal(replica.undo.undoStack.length, 1);
+    assert.equal(replica.undoStep(), "undone");
+    assert.deepEqual(readStored(replica), initial);
+    assert.deepEqual(readProjection(replica), outline);
+    assert.equal(replica.redoStep(), "undone");
+    assert.deepEqual(readStored(replica), created);
+    assert.deepEqual(readProjection(replica), createdOutline);
   } finally { replica.destroy(); }
 });
 

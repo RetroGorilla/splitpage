@@ -55,7 +55,7 @@ type Change =
   | { type: "segment"; id: string; head: E5Boundary }
   | { type: "clearHead"; id: string }
   | { type: "record"; kind: "b" | "h"; id: string };
-export interface E5Event { by: number; command: E5Command; seen: ReadonlySet<number>; changes: Change[] }
+export interface E5Event { by: number; command: E5Command; seen: ReadonlySet<number>; changes: Change[]; joinInto?: string }
 interface Block extends E5Boundary { segment: string; start: number; length: number; text: string }
 
 const script = (segment: string): string => `text:${segment}`;
@@ -202,6 +202,7 @@ export class E5Model {
 
   plan(command: E5Command, by: number, seen: ReadonlySet<number>, index: number, removal: E5Removal): E5Event {
     const changes: Change[] = [], stored = this.stored(), blocks = this.blocks(stored), view = this.project(stored);
+    const event: E5Event = { by, command, seen: new Set(seen), changes };
     const block = (id: string, kind: "h" | "b"): Block => {
       const found = blocks.find(item => item.id === id && item.kind === kind);
       if (!found) throw new Error(`Missing ${kind} ${id}`);
@@ -271,7 +272,8 @@ export class E5Model {
       }
       case "join": {
         const above = required(rows[rows.indexOf(row(command.row)) - 1], "row above join");
-        set(flag("joined", command.row), required(above.members.at(-1), "beat above join"));
+        event.joinInto = required(above.members.at(-1), "beat above join");
+        set(flag("joined", command.row), event.joinInto);
         break;
       }
       case "removeBeat":
@@ -283,7 +285,7 @@ export class E5Model {
         break;
       }
     }
-    return { by, command, seen: new Set(seen), changes };
+    return event;
   }
 }
 

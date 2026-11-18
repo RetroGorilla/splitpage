@@ -17,6 +17,7 @@ export class NativeHeadingReplica extends NativeReplica {
     super(client);
     this.headingRemoval = headingRemoval;
     this.reading = "contiguous";
+    this.undo.addToScope(this.headings);
     this.headings.observeDeep(() => { this.invalidateStructure(); });
   }
 

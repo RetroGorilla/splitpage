@@ -2,14 +2,15 @@
 
 ## Verdict
 
-A removal flag on the heading record keeps the heading and its name recoverable, even when the heading is a
-segment's first boundary. Restore clears the flag. This uses one ordinary map write per removal and keeps the
-same text in the same container. Every copy agreed and every surviving character was editable or recoverable.
+A removal flag is preferable because it keeps the heading name recoverable in place. Restore clears the flag
+in one map write. This works for both embedded headings and segment heads, with the same text in the same
+container. Both representations kept all surviving characters in storage and every copy agreed.
 
 Deleting an embedded boundary also kept the characters. A preceding block in the same segment picked up the
 name when one was present. A segment head has no embed to delete. Deleting its `head` key left the name in
 an unowned prefix, even when a beat embed followed in the same segment. The reader exposed no editor or
-recovery action for that prefix. The flag passed, so E5 stopped after those two representations.
+recovery action for that prefix. In a hydrated script every heading has its own segment, so deleting the
+segment head strands the whole name under this reader rule even without a race.
 
 ## Numbers
 
@@ -32,10 +33,22 @@ seeds drove both variants. Commands could differ once the two models showed diff
 | Runs showing a row or heading out of stored order | 0 | 0 |
 | Crashes | 0 | 0 |
 
-These are counts across all deliveries. For the 200 distinct deletion histories, 158 characters were stranded
-in 105 histories. A recovery entry counts as reachable because restore gives it an editor again. E2 reported 135
-seam splits under its original reading. E5 used a separate, more heavily weighted unjoin command routed through
-the same seam split.
+All 790 stranded letters were before the first boundary of a segment whose `head` was deleted. Of those, 745
+were in the first segment, S0, across 500 runs. That segment starts with fixture heading H0. Those letters had
+no block above them. The other 45 had a block above them, a visible beat for 35 letters and a removed beat for
+10. For the 200 distinct deletion histories, 158 characters were stranded in 105 histories. A recovery entry
+counts as reachable because restore gives it an editor again.
+
+The stranding follows a reader choice. The prototype's `view()` and the test model's `blocks()` both omit text
+before a segment's first boundary. Assigning that text to the nearest block above in stored order, or to the
+first block below when nothing is above, would strand none in these runs. The name would run into the neighboring
+text without a separator. With a beat above, both the original name and any simultaneous name typing would
+become that beat's narration. The fallback below can put the letters in narration or in another heading. The
+deleted heading has no recovery restore. Editing the reassigned text would need new routing because no beat id
+addresses that prefix. E5 leaves this alternative reader rule unbuilt.
+
+E2 reported 135 seam splits under its original reading. E5 used a separate, more heavily weighted unjoin
+command routed through the same seam split.
 
 The table follows characters typed into a heading whose removal was concurrent with that keystroke. Each
 keystroke counts once per run, even when two people removed its heading. The location is where it finished,
@@ -67,7 +80,8 @@ one-letter creates and removals, starting at the base, with no renames.
 | Flag embed | +46 | +1 | +12 | +15 | 65,934 |
 | Flag segment head | +104 | +6 | +4 | +15 | 122,942 |
 
-The embedded flag case adds about 66 bytes per create and remove. A new segment brings that to about 123 bytes.
+Each create-and-remove cycle with the flag keeps about 66 bytes for an embed or 123 bytes for a new segment
+for the life of the document.
 Each flag case keeps all 1,000 records, names, boundaries and flags live. The head case also keeps 1,000 segment
 records, text containers and order entries. They stay for the life of the document without compaction. Deletion
 keeps the 1,000 heading records with no heading that reads them, the 1,000 letters, and deletion markers. It also
@@ -115,9 +129,8 @@ histories ran on the flag. These outcomes have literal expectations as well as t
 | Restore after remote name typing, for an embedded heading and a segment head | The flag exposes the name at the original boundary. The embedded case then deletes the original letter through the heading editor. |
 | Restore after seeing only the lower-priority of two concurrent removals | The unseen removal still stands on every copy. This is ordinary map behavior. |
 
-An active heading starts a new group on the reading used here. The contiguous beat join rule resumes when that
-heading is removed. A join flag written across an active heading can take effect when the heading disappears.
-A hidden heading keeps its own name range. E5 also leaves consecutive headings editable and offers a restore
+An active heading starts a new group on the reading used here. A hidden heading keeps its own name range.
+E5 also leaves consecutive headings editable and offers a restore
 for empty removed headings. The older rules about empty scenes, joined headings and paragraphs (S16, S21, S35,
 S37, S41 and R17) are product choices. E5 measures the results without choosing those policies.
 
@@ -141,18 +154,35 @@ an actual winner, inserted id, position, or local view to build a later command 
   removed heading ids and names. These are actual display results for comparison, counting and location.
   A separate order count compares the actual outline with the actual stored order. The expected outline
   still comes from the commands.
-- The focused tests also read the row's HTML text to check a real narration edit, and a hydrated heading map to
-  check that its extra field survives removal and restore. They check missing-editor errors for the stranded
-  prefix. The harness records command or reader exceptions as failures.
+- The generated join now uses the model's last beat in the row above. The row helper normally takes it from
+  the implementation's `rows()`. Beat removal still takes members from the implementation's row, and beat
+  restore takes members from its recovery entry. Beat typing and deletion use the implementation's row
+  parts for edit ranges. Unjoin and split use those parts to decide whether the offset is a seam. Heading
+  typing and deletion turn name offsets into text offsets using the implementation's block start. Heading
+  creation and removal also use the implementation's segment and boundary position. These are inputs to the
+  writer on the actual side. None feeds an expected value.
+- The focused tests also read the row's HTML text to check a real narration edit, a hydrated heading map to
+  check its extra field, and the undo stack size and undo and redo outcomes to check one step per command.
+  They check missing-editor errors for the stranded prefix. The harness records command or reader exceptions
+  as failures.
 - Full encoded byte lengths after reload give the size results. Public type entries give the counts of retained
   segments, letters, records and live flags. Byte lengths are measurements, never expected characters or flags.
 
 ## Limits and least certain result
 
-This covers one fixture with two segment shapes, single-character edits, and short runs. T08 and T09 informed
-the boundary cases. Full Writer flows such as heading promotion and demotion, cross-heading selections,
-cut and paste, composition, moves, formatting, atoms, undo/redo and browser behavior were outside E5. The study
-also omits paragraph updates, the name limit, and permanent discard. Delivery is eventually complete.
+This covers one generated fixture with two segment shapes, single-character edits, and short runs. T08 and
+T09 informed the boundary cases. Undo and redo are covered for local heading creation and removal. Generated
+undo races, moving headings, cut or paste across a heading, and concurrent heading field edits during removal
+are outside E5. So are heading promotion and demotion, cross-heading selections, composition, formatting, atoms,
+browser behavior, paragraph updates, the name limit, and permanent discard. Delivery is eventually complete.
+
+A join flag written across a visible heading stays dormant. Remove `#H`, join `B2` up, then restore `#H`,
+and the joined row splits into `B1 | #H | B2` with `B2`'s join flag still set.
+
+A new heading embed and a letter typed at the end of the old name can share an insertion gap in the same
+text. Standard Yjs insert order by client id can put the letter after the new boundary. This cannot happen
+for a hydrated segment-head heading, whose name has its own text container. The synthetic H0 case starts
+at a segment head but shares its text container with the following beat, so that fixture can exhibit the race.
 
 The least certain part is how often an end-of-name keystroke changes owners in real scripts. E5 pins a short
 example and counts it with both removals. The frequency depends on which gaps people edit, what else is inserted

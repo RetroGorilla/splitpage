@@ -603,12 +603,12 @@ export class NativeReplica {
     return heads;
   }
 
-  // why: the second reading: a join flag only hides the boundary above its beat, so a joined beat belongs to the nearest
-  // visible row above it in stored order, and a removed joined beat to the removed beat directly above it
   protected breaksContiguousGroup?: (heading: string) => boolean;
 
   protected invalidateStructure(): void { this.structureChanged = true; }
 
+  // why: the second reading: a join flag only hides the boundary above its beat, so a joined beat belongs to the nearest
+  // visible row above it in stored order, and a removed joined beat to the removed beat directly above it
   private contiguousHeads(blocks: readonly NativeBlock[]): Map<string, NativeHead> {
     const heads = new Map<string, NativeHead>();
     let shown: string | null = null, hidden: string | null = null, above = false;
