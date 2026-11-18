@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as Y from "yjs";
-import { firstDifference, printCell } from "../../src/format-keys/model.ts";
-import type { ModelChar } from "../../src/format-keys/model.ts";
+import { freshKey } from "../../src/format-keys/keys.ts";
+import { firstDifference, printCell, readCell, visibleName } from "../../src/format-keys/model.ts";
+import type { ModelChar, ReadableItem } from "../../src/format-keys/model.ts";
 import { TAG_T, TAG_U, TagCommandModel } from "../../src/format-keys/tag-model.ts";
 import type { TagEdit } from "../../src/format-keys/tag-model.ts";
 import { TagReplica, nestedTags, pullTags } from "../../src/format-keys/tag-replica.ts";
@@ -50,6 +51,7 @@ interface Call { command: number; slot: number; fault: Fault }
 interface CommandCheck {
   before?: (text: Y.Text, command: number) => () => void;
   after?: (actual: ModelChar[], command: number) => void;
+  writeOther?: (copy: TagReplica, edit: TagEdit) => void;
 }
 
 class LocalTagCheck extends Error {}
@@ -78,6 +80,7 @@ function differences(want: readonly ModelChar[], got: readonly ModelChar[]) {
     missing: expected.filter(mark => !actual.includes(mark)).length,
     extra: actual.filter(mark => !expected.includes(mark)).length,
     lost: want.filter(char => !got.some(other => other.ch === char.ch)).map(char => char.ch).join(""),
+    leftover: got.filter(char => !want.some(other => other.ch === char.ch)).map(char => char.ch).join(""),
     text: want.map(char => char.ch).join("") === got.map(char => char.ch).join(""),
     order: want.filter(char => got.some(other => other.ch === char.ch)).map(char => char.ch).join("") === got.map(char => char.ch).join("")
   };
@@ -96,15 +99,16 @@ function measure(race: TagRace, scheme: typeof schemes[number], low: boolean, ch
   const model = new TagCommandModel(initial), cells = Object.keys(initial);
   const active = new Set<number>(), presses: { target: number; redo: boolean }[] = [];
   const frames: { raw: ModelChar[][]; shown: ModelChar[][]; rejected: string[]; misses: number; extras: number;
-    altMisses: number; altExtras: number; lost: string; textDifferences: number; textOrderChanges: number }[] = [];
+    altMisses: number; altExtras: number; lost: string; leftover: string; textDifferences: number; textOrderChanges: number }[] = [];
   const updates: number[] = [], steps: string[] = [];
   let command = 0, disagreements = 0;
 
-  function execute(copy: TagReplica, edit: TagEdit, seen = [...active]) {
+  function execute(copy: TagReplica, edit: TagEdit, seen = [...active],
+    write = (writer: TagReplica, command: TagEdit) => writer.editTagCell(command)) {
     const target = model.record(edit, seen), before = copy.undo.undoStack.at(-1), index = command++;
     const restore = checks.before?.(copy.tagText(edit.cell), index);
     let sent;
-    try { sent = countUpdates(copy, () => copy.editTagCell(edit)); } finally { restore?.(); }
+    try { sent = countUpdates(copy, () => write(copy, edit)); } finally { restore?.(); }
     const includeApplications = scheme === "act";
     const got = copy.tagView(edit.cell, includeApplications), want = model.view(edit.cell, [...seen, target], { includeApplications });
     checks.after?.(got, index);
@@ -123,7 +127,7 @@ function measure(race: TagRace, scheme: typeof schemes[number], low: boolean, ch
     const raw = cells.map(cell => a.tagView(cell)), projections = raw.map(nestedTags);
     const frame = { raw, shown: projections.map(projection => projection.chars),
       rejected: projections.flatMap(projection => projection.rejected.map(extent => `${extent.name}@${extent.from}..${extent.to}`)),
-      misses: 0, extras: 0, altMisses: 0, altExtras: 0, lost: "", textDifferences: 0, textOrderChanges: 0 };
+      misses: 0, extras: 0, altMisses: 0, altExtras: 0, lost: "", leftover: "", textDifferences: 0, textOrderChanges: 0 };
     for (const [index, cell] of cells.entries()) {
       const got = raw[index] ?? [], own = differences(model.view(cell, [...active]), got);
       const alternate = differences(model.view(cell, [...active], { presses }), got);
@@ -132,6 +136,7 @@ function measure(race: TagRace, scheme: typeof schemes[number], low: boolean, ch
       frame.altMisses += alternate.missing;
       frame.altExtras += alternate.extra;
       frame.lost += own.lost;
+      frame.leftover += own.leftover;
       frame.textDifferences += Number(!own.text);
       frame.textOrderChanges += Number(!own.order);
     }
@@ -183,7 +188,7 @@ function measure(race: TagRace, scheme: typeof schemes[number], low: boolean, ch
     const before = [...active];
     const aEntry = race.solo === "B" ? undefined : execute(a, add(2, 6));
     if (race.seen) sync();
-    const bEntry = race.solo === "A" ? undefined : execute(b, race.b, race.seen ? [...active] : before);
+    const bEntry = race.solo === "A" ? undefined : execute(b, race.b, race.seen ? [...active] : before, checks.writeOther);
     updates.push(aEntry?.sent ?? 0, bEntry?.sent ?? 0);
     record();
     const redoA = press(a, aEntry, false);
@@ -211,12 +216,13 @@ function tableCell(low: TagMeasurement, high: TagMeasurement): string {
   }).join("/");
   const paired = (left: readonly (number | string)[], right: readonly (number | string)[]) =>
     left.map((value, index) => `${value},${right[index]}`).join("/");
-  const shownLoss = (result: TagMeasurement) => result.frames.map(frame => frame.lost || "–").join("/");
-  const lost = low.frames.concat(high.frames).some(frame => frame.lost) ? `${shownLoss(low)};${shownLoss(high)}` : "–";
+  const shownText = (result: TagMeasurement) => result.frames.map(frame =>
+    [frame.lost, frame.leftover && `+${frame.leftover}`].filter(Boolean).join("") || "–").join("/");
+  const text = low.frames.concat(high.frames).some(frame => frame.lost || frame.leftover) ? `${shownText(low)};${shownText(high)}` : "–";
   const own = counts("misses", "extras"), alternate = counts("altMisses", "altExtras");
   const steps = paired(low.steps, high.steps), updates = paired(low.updates, high.updates);
   return [own === "0:0/0:0/0:0/0:0/0:0" ? "0" : own, alternate === own ? "=" : alternate,
-    steps === "r,r/r,r/r,r/r,r" ? "r" : steps, updates === "1,1/1,1/1,1/1,1/1,1/1,1" ? "1" : updates, lost].join(" · ");
+    steps === "r,r/r,r/r,r/r,r" ? "r" : steps, updates === "1,1/1,1/1,1/1,1/1,1/1,1" ? "1" : updates, text].join(" · ");
 }
 
 test("tag races replay both orders and check the command model and convergence at each checkpoint", t => {
@@ -258,6 +264,65 @@ test("plain keys lose applied tags, while both schemes can leave tags or skip un
       const afterRemoval = run("B sees T, then removes it all", scheme, low);
       assert.equal(afterRemoval.steps[0], "o");
       assert.equal(afterRemoval.tagged[2], "cdef");
+    }
+  }
+});
+
+test("plain insert and range clear leave a per-application tag on the rest of the cell after the author's undo", () => {
+  const writeOther = (copy: TagReplica, edit: TagEdit): void => {
+    const text = copy.tagText(edit.cell);
+    copy.transact(() => {
+      if (edit.op === "insert") text.insert(edit.at, edit.letter, {});
+      else if (edit.op === "remove") {
+        const keys = new Set(copy.tagDelta(edit.cell).flatMap(run => Object.keys(run.attributes ?? {})));
+        const key = [...keys].find(key => visibleName(key) === edit.name);
+        assert.ok(key);
+        text.format(edit.from, edit.to - edit.from, { [key]: null });
+      } else assert.fail("The standard-write comparison only splits a tag");
+    });
+  };
+  for (const [label, plainText, standardTail, rekeyedTail] of [
+    ["B sees T, then types plain X inside", "abcX", "defghQR", "def"],
+    ["B sees T, then removes its middle", "abcde", "fghQR", "f"]
+  ] as const) {
+    const race = races.find(entry => entry.label === label);
+    assert.ok(race);
+    for (const low of orders) {
+      const standard = measure(race, "act", low, { writeOther });
+      assert.equal(standard.disagreements, 0, label);
+      const comparisons: [TagMeasurement, string][] = [
+        [measure(race, "name", low), standardTail],
+        [standard, standardTail],
+        [measure(race, "act", low), rekeyedTail]
+      ];
+      for (const [result, tail] of comparisons) {
+        const undo = result.frames[1];
+        assert.ok(undo);
+        assert.equal(undo.extras, tail.length);
+        assert.equal(printCell(undo.raw[0] ?? []), `${plainText}[${tail}|${TAG_T}]${tail === rekeyedTail ? "ghQR" : ""}`);
+      }
+    }
+  }
+});
+
+test("omitting insert attributes at a tag's right edge makes the inserted letter keep the tag through deletion and reload", () => {
+  for (const scheme of schemes) for (const explicit of [false, true]) {
+    for (const at of [4, 5, 6, 7, 8]) {
+      const doc = new Y.Doc(), late = new Y.Doc();
+      try {
+        const text = doc.getText("script");
+        text.insert(0, "abcdefgh", {});
+        const key = scheme === "act" ? freshKey(doc, TAG_T) : TAG_T;
+        text.format(2, 2, { [key]: true });
+        if (explicit) text.insert(at, "R", {}); else text.insert(at, "R");
+        text.delete(2, 2);
+        Y.applyUpdate(late, Y.encodeStateAsUpdate(doc));
+        const tail = `${"abcdefgh".slice(4, at)}R${"abcdefgh".slice(at)}`;
+        const expected = !explicit && at === 4 ? `ab[R|${TAG_T}]efgh` : `ab${tail}`;
+        for (const copy of [text, late.getText("script")]) {
+          assert.equal(printCell(readCell(copy.toDelta() as ReadableItem[])), expected, `${scheme}, explicit=${explicit}, at=${at}`);
+        }
+      } finally { doc.destroy(); late.destroy(); }
     }
   }
 });
