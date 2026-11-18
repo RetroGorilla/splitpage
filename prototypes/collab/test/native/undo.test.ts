@@ -303,6 +303,18 @@ test("a status that lost to another person's leaves nothing to redo; a restore d
   assert.deepEqual(net.agree(), ["R1: ab"]);
 });
 
+test("what 50 undone splits leave on a copy without undo history, with the new beat's record kept and with it undone", () => {
+  const left = (["apart", "tracked"] as const).map(record => {
+    const [a] = start([{ id: "R1", audioText: "abcdef" }], 1) as [NativeReplica], stored = new Y.Doc();
+    Y.applyUpdate(stored, a.encode());
+    a.doc.on("update", (update: Uint8Array) => { Y.applyUpdate(stored, update); });
+    const before = Y.encodeStateAsUpdate(stored).length;
+    for (let index = 0; index < 50; index++) { a.split("R1", 2, `split-0-${index}`, {}, record); a.changes(); a.undo.undo(); a.changes(); }
+    return { record, bytes: Y.encodeStateAsUpdate(stored).length - before, records: a.beats.size };
+  });
+  assert.deepEqual(left, [{ record: "apart", bytes: 2557, records: 51 }, { record: "tracked", bytes: 2451, records: 1 }]);
+});
+
 test("pending-update, a limit main carries, is the same here: a deletion applies before the update it follows has arrived", () => {
   const { b, c } = pair([{ id: "R1", audioText: "ab" }]), sent: Uint8Array[] = [];
   b.doc.on("update", (update: Uint8Array) => { sent.push(update); });

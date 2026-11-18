@@ -1,0 +1,278 @@
+{
+  "node": "v24.22.1",
+  "limit": 2097152,
+  "results": [
+    {
+      "fixture": "short",
+      "scheme": "name",
+      "fresh": 1546,
+      "afterText": 2914,
+      "afterStructure": 5624,
+      "afterFormatting": 7220,
+      "steps": [
+        {
+          "repetition": 1,
+          "server": 7220,
+          "editor": 33360
+        }
+      ],
+      "repetitions": 1,
+      "crossedAt": null,
+      "seconds": 0.2,
+      "reloaded": 7220,
+      "undoPairs": 804
+    },
+    {
+      "fixture": "long",
+      "scheme": "name",
+      "fresh": 31665,
+      "afterText": 33188,
+      "afterStructure": 35898,
+      "afterFormatting": 37494,
+      "steps": [
+        {
+          "repetition": 1,
+          "server": 37494,
+          "editor": 63634
+        },
+        {
+          "repetition": 2,
+          "server": 43388,
+          "editor": 95668
+        },
+        {
+          "repetition": 3,
+          "server": 49283,
+          "editor": 127703
+        },
+        {
+          "repetition": 25,
+          "server": 180451,
+          "editor": 834701
+        },
+        {
+          "repetition": 50,
+          "server": 330302,
+          "editor": 1639302
+        },
+        {
+          "repetition": 75,
+          "server": 480152,
+          "editor": 2446402
+        },
+        {
+          "repetition": 98,
+          "server": 618014,
+          "editor": 3188934
+        }
+      ],
+      "repetitions": 98,
+      "crossedAt": null,
+      "seconds": 603.1,
+      "reloaded": 618014,
+      "undoPairs": 804
+    },
+    {
+      "fixture": "large",
+      "scheme": "name",
+      "fresh": 287268,
+      "afterText": 288874,
+      "afterStructure": 291636,
+      "afterFormatting": 293432,
+      "steps": [
+        {
+          "repetition": 1,
+          "server": 293432,
+          "editor": 319572
+        }
+      ],
+      "repetitions": 1,
+      "crossedAt": null,
+      "seconds": 1.8,
+      "reloaded": 293432,
+      "undoPairs": 804
+    },
+    {
+      "fixture": "short",
+      "scheme": "act",
+      "fresh": 1606,
+      "afterText": 2974,
+      "afterStructure": 5684,
+      "afterFormatting": 7280,
+      "steps": [
+        {
+          "repetition": 1,
+          "server": 7280,
+          "editor": 34620
+        }
+      ],
+      "repetitions": 1,
+      "crossedAt": null,
+      "seconds": 0.2,
+      "reloaded": 7280,
+      "undoPairs": 804
+    },
+    {
+      "fixture": "long",
+      "scheme": "act",
+      "fresh": 32509,
+      "afterText": 34032,
+      "afterStructure": 36742,
+      "afterFormatting": 38338,
+      "steps": [
+        {
+          "repetition": 1,
+          "server": 38338,
+          "editor": 65678
+        },
+        {
+          "repetition": 2,
+          "server": 44232,
+          "editor": 99112
+        },
+        {
+          "repetition": 3,
+          "server": 50127,
+          "editor": 132547
+        },
+        {
+          "repetition": 25,
+          "server": 181295,
+          "editor": 870345
+        },
+        {
+          "repetition": 50,
+          "server": 331146,
+          "editor": 1709946
+        },
+        {
+          "repetition": 75,
+          "server": 480996,
+          "editor": 2552046
+        },
+        {
+          "repetition": 97,
+          "server": 612864,
+          "editor": 3296294
+        }
+      ],
+      "repetitions": 97,
+      "crossedAt": null,
+      "seconds": 605.9,
+      "reloaded": 612864,
+      "undoPairs": 804
+    },
+    {
+      "fixture": "large",
+      "scheme": "act",
+      "fresh": 296712,
+      "afterText": 298318,
+      "afterStructure": 301080,
+      "afterFormatting": 302876,
+      "steps": [
+        {
+          "repetition": 1,
+          "server": 302876,
+          "editor": 330416
+        }
+      ],
+      "repetitions": 1,
+      "crossedAt": null,
+      "seconds": 1.8,
+      "reloaded": 302876,
+      "undoPairs": 804
+    }
+  ],
+  "costs": [
+    {
+      "scheme": "name",
+      "shape": "apart",
+      "acts": 100,
+      "bytes": 3642,
+      "afterUnformat": 2448,
+      "readMs": 0.03,
+      "keysOnBusiestCharacter": 1
+    },
+    {
+      "scheme": "name",
+      "shape": "apart",
+      "acts": 1000,
+      "bytes": 37842,
+      "afterUnformat": 25848,
+      "readMs": 0.222,
+      "keysOnBusiestCharacter": 1
+    },
+    {
+      "scheme": "name",
+      "shape": "apart",
+      "acts": 10000,
+      "bytes": 420183,
+      "afterUnformat": 300191,
+      "readMs": 1.635,
+      "keysOnBusiestCharacter": 1
+    },
+    {
+      "scheme": "name",
+      "shape": "stacked",
+      "acts": 100,
+      "bytes": 36,
+      "afterUnformat": 29,
+      "readMs": 0,
+      "keysOnBusiestCharacter": 1
+    },
+    {
+      "scheme": "name",
+      "shape": "stacked",
+      "acts": 1000,
+      "bytes": 36,
+      "afterUnformat": 29,
+      "readMs": 0,
+      "keysOnBusiestCharacter": 1
+    },
+    {
+      "scheme": "act",
+      "shape": "apart",
+      "acts": 100,
+      "bytes": 4642,
+      "afterUnformat": 2448,
+      "readMs": 0.02,
+      "keysOnBusiestCharacter": 1
+    },
+    {
+      "scheme": "act",
+      "shape": "apart",
+      "acts": 1000,
+      "bytes": 49842,
+      "afterUnformat": 25848,
+      "readMs": 0.179,
+      "keysOnBusiestCharacter": 1
+    },
+    {
+      "scheme": "act",
+      "shape": "apart",
+      "acts": 10000,
+      "bytes": 560183,
+      "afterUnformat": 300191,
+      "readMs": 5.679,
+      "keysOnBusiestCharacter": 1
+    },
+    {
+      "scheme": "act",
+      "shape": "stacked",
+      "acts": 100,
+      "bytes": 3736,
+      "afterUnformat": 1542,
+      "readMs": 0.028,
+      "keysOnBusiestCharacter": 100
+    },
+    {
+      "scheme": "act",
+      "shape": "stacked",
+      "acts": 1000,
+      "bytes": 38246,
+      "afterUnformat": 15042,
+      "readMs": 0.37,
+      "keysOnBusiestCharacter": 1000
+    }
+  ]
+}
