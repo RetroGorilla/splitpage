@@ -571,20 +571,23 @@ final scheme test makes redundant.
 
 ### Collaboration mutants in CI
 
-Every `tests/collab/*-mutants.json` file except `undo-slow-mutants.json` runs in
-PR CI. "Collaboration mutants baseline" runs one baseline for the whole set,
-and "Collaboration mutants" runs six shards in parallel. Both turn on bash's
-`extglob` first:
+Every `tests/collab/*-mutants.json` file except `undo-slow-mutants.json` runs
+nightly in `nightly.yml`, not in pull request CI. "Collaboration mutants
+baseline (fast set)" runs one baseline for the whole set, and "Collaboration
+mutants (fast set)" runs six shards in parallel. Both turn on bash's `extglob`
+first:
 
 ```
 node tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --baseline-only --baseline-timeout 1500
 node tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --shard K/6 --concurrency 4 --no-baseline --fail-on-survivor
 ```
 
-A survivor, an inconclusive mutant or a mutant that cannot be applied fails the
-shard, and the gate requires both the baseline and every shard to succeed when
-mutants are due, or both jobs to be skipped when they are not. A failed or
-cancelled baseline fails the gate even if every shard passes. The baseline
+A survivor, an inconclusive mutant or a mutant that cannot be applied fails its
+shard, and a failed or cancelled baseline fails its job even if every shard
+passes. Nothing waits on these jobs: `mutants-fast-report` runs when either
+fails and opens an issue titled "Nightly collaboration mutants failed", or
+comments on the open one, with a link to the run, so a survivor is reported the
+next morning. The baseline
 covers every test file the whole set names, or every unit test if an entry has
 no filter; its log lists failing tests. Its job has a 30-minute limit and a
 1,500 s baseline budget: the first whole-set baseline, on 2026-11-15, took
@@ -614,31 +617,26 @@ In PR CI they finished or timed out depending on how many landed in the same
 shard, and a timeout makes a mutant inconclusive, which fails the shard. The
 next slowest, "a restored character is written behind the whole deleted run
 (generator)", took 125 s locally and 260 s in CI beside three of the five, and
-stays in PR CI; every other undo mutant took under 100 s locally. The
+belongs to the fast set; every other undo mutant took under 100 s locally. The
 sources these five edit are also edited by faster mutants in
-`undo-mutants.json`, so a change to them still starts the PR job.
-`tools/test-ci-shards.mjs` expands both workflows' file arguments in bash and
-fails unless every mutants file is run by exactly one of them; a new file is
-run by PR CI unless it is named `undo-slow-mutants.json`.
+`undo-mutants.json`, which the nightly fast set covers. `tools/test-ci-shards.mjs`
+expands the file arguments of both nightly mutant commands in bash and fails
+unless every mutants file is run by exactly one of them; a new file is run by
+the fast set unless it is named `undo-slow-mutants.json`.
 
 A failing nightly mutants run shows as a failed scheduled run of `nightly.yml`
 in the repository's Actions tab, and GitHub notifies the account that last
-changed the workflow's schedule, as its notification settings say. Nothing else
-reports it: no issue is opened and no pull request is blocked.
+changed the workflow's schedule, as its notification settings say. The report
+steps also open an issue titled "Nightly collaboration mutants failed", or
+comment on the open one, with a link to the run: the slow job's report step,
+and `mutants-fast-report` for the fast set. No pull request is blocked.
 
-The job runs when the change touches a file that a mutant edits, a test file
-that a mutant's `tests` filter selects, anything under `tests/collab/` other
-than Markdown, the runner (`tools/mutants.mjs` and the modules it imports) or
-`ci.yml`, or when the diff is unknown. `needsCollabMutants` in
-`tools/ci-changes.mjs` reads these from the mutants files themselves, so a new
-entry brings its paths with it; a mutant with no filter runs every unit test, so
-it makes every change start the job. `tools/test-ci-changes.mjs` fails if any
-path a mutants file names would not start the job. A test helper outside
-`tests/collab/` that a named test imports is not a trigger: the unit test shards
-still run it, and the next change that starts the job runs the mutants against
-it.
+The nightly mutant jobs run every night and on demand, whatever the change, so
+no pull request waits on them. A test helper outside `tests/collab/` that a
+named test imports is run by the unit test shards, and the next nightly run
+runs the mutants against it.
 
-When you add a mutants file under `tests/collab/`, CI picks it up by name; list
+When you add a mutants file under `tests/collab/`, the nightly run picks it up by name; list
 its mutants in `tests/collab/mutants.md` as before. A survivor needs a test, or
 the entry is removed with the reason it cannot be caught (unreachable or
 equivalent), recorded in the pull request.
