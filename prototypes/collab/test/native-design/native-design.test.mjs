@@ -91,85 +91,89 @@ test('a join as a flag keeps what another copy typed in the second visual cell',
   assert.equal(a.getMap('visuals').get('b2').toString(), 'two X');
 });
 
-test('stale base: painted b and c mapped through relative positions delete the surviving d once b is gone', t => {
-  const { a, b, sync } = pair(t, doc => { doc.getText('beat').insert(0, 'abcd'); });
-  const text = a.getText('beat');
-  const painted = [...text.toString()].map((_, index) => Y.createRelativePositionFromTypeIndex(text, index, 0));
-  b.getText('beat').delete(1, 1);
+test('a retried birth under the same creation id: one births entry, the order lists the segment twice, one copy\'s typing is gone', t => {
+  const { a, b, sync } = pair(t);
+  for (const doc of [a, b]) {
+    doc.transact(() => doc.getMap('births').set('creation-1', { by: doc.clientID }), 'hydration');
+    convert(doc, 'hello');
+  }
+  a.getMap('segments').get('b:1').insert(5, ' A');
+  b.getMap('segments').get('b:1').insert(5, ' B');
   sync();
-  const at = [1, 2].map(index => Y.createAbsolutePositionFromRelativePosition(painted[index], a).index);
-  assert.deepEqual(at, [1, 1]);
-  a.transact(() => { for (const index of [...at].sort((x, y) => y - x)) text.delete(index, 1); });
-  sync();
-  assert.equal(text.toString(), 'a');
+  assert.equal(a.getMap('births').size, 1);
+  assert.deepEqual(a.getArray('order').toArray(), ['b:1', 'b:1']);
+  assert.equal(a.getMap('segments').get('b:1').toString(), 'hello B');
 });
 
-function composing(text) {
-  const units = [...Array(text.length).keys()].map(index => ({ painted: index, live: true }));
-  const observer = (event, transaction) => {
-    if (transaction.origin !== 'remote') return;
-    let at = 0;
-    const advance = count => {
-      while (count > 0) { if (units[at].live) count--; at++; }
-    };
-    const skipDead = () => { while (at < units.length && !units[at].live) at++; };
-    for (const step of event.delta) {
-      if (step.retain) advance(step.retain);
-      else if (step.delete) {
-        let count = step.delete;
-        while (count > 0) { skipDead(); units[at].live = false; at++; count--; }
-      } else if (step.insert !== undefined) {
-        const length = typeof step.insert === 'string' ? step.insert.length : 1;
-        units.splice(at, 0, ...Array.from({ length }, () => ({ painted: null, live: true })));
-        at += length;
-      }
-    }
-  };
-  text.observe(observer);
-  return {
-    commit(from, to, insert) {
-      text.unobserve(observer);
-      const liveBefore = position => units.slice(0, position).filter(unit => unit.live).length;
-      const left = units.findLastIndex(unit => unit.painted !== null && unit.painted < from);
-      const gap = liveBefore(left + 1);
-      const doomed = units.flatMap((unit, position) => unit.live && unit.painted !== null && unit.painted >= from && unit.painted < to ? [liveBefore(position)] : []);
-      text.doc.transact(() => {
-        if (insert) text.insert(gap, insert);
-        for (const index of doomed.sort((x, y) => y - x)) text.delete(index + (insert && index >= gap ? insert.length : 0), 1);
-      });
-    }
-  };
-}
+test('a throw after the first write inside one transaction still commits and emits that write', t => {
+  const doc = new Y.Doc();
+  t.after(() => doc.destroy());
+  const updates = [];
+  doc.on('update', update => updates.push(update));
+  assert.throws(() => doc.transact(() => { doc.getText('beat').insert(0, 'a'); throw new Error('second part refused'); }));
+  assert.equal(doc.getText('beat').toString(), 'a');
+  assert.equal(updates.length, 1);
+});
 
-for (const [name, remote, from, to, insert, expected] of [
-  ['remote deleted b; local deletes bc', text => text.delete(1, 1), 1, 3, '', 'ad'],
-  ['remote deleted bc; local deletes bc', text => text.delete(1, 2), 1, 3, '', 'ad'],
-  ['remote typed X between b and c; local deletes bc', text => text.insert(2, 'X'), 1, 3, '', 'aXd'],
-  ['remote deleted b; local replaces bc with Y', text => text.delete(1, 1), 1, 3, 'Y', 'aYd'],
-  ['remote deleted a; local types Y after a', text => text.delete(0, 1), 1, 1, 'Y', 'Ybcd'],
-  ['remote put an embed between b and c; local deletes bc', text => text.insertEmbed(2, { k: 'shot' }), 1, 3, '', 'a\u0000d']
-]) {
-  test(`composition reconciled against the remote delta: ${name}`, t => {
-    const { a, b, sync } = pair(t, doc => { doc.getText('beat').insert(0, 'abcd'); });
-    const text = a.getText('beat');
-    const edit = composing(text);
-    remote(b.getText('beat'));
-    sync();
-    edit.commit(from, to, insert);
-    sync();
-    const shown = doc => doc.getText('beat').toDelta().map(step => typeof step.insert === 'string' ? step.insert : '\u0000').join('');
-    assert.equal(shown(a), expected);
-    assert.equal(shown(b), expected);
-  });
-}
+test('setting a map key to its current value emits an update and wakes a remote observer', t => {
+  const { a, b } = pair(t, doc => doc.getMap('beats').set('status', 'todo'));
+  let updates = 0;
+  let observed = 0;
+  a.on('update', () => updates++);
+  b.getMap('beats').observe(() => observed++);
+  a.getMap('beats').set('status', 'todo');
+  Y.applyUpdate(b, Y.encodeStateAsUpdate(a, Y.encodeStateVector(b)), 'remote');
+  assert.deepEqual([updates, observed], [1, 1]);
+});
 
-test('stale base: the same deletion by painted offsets removes X and keeps c', t => {
-  const { a, b, sync } = pair(t, doc => { doc.getText('beat').insert(0, 'abcd'); });
-  b.getText('beat').insert(2, 'X');
+test('a replaced visual cell: a held relative position resolves to null and a write through the old cell is not shown', t => {
+  const doc = new Y.Doc();
+  t.after(() => doc.destroy());
+  const visuals = doc.getMap('visuals');
+  const cell = new Y.Text('abc');
+  visuals.set('b2', cell);
+  const position = Y.createRelativePositionFromTypeIndex(cell, 1);
+  visuals.set('b2', new Y.Text('xyz'));
+  cell.insert(0, 'Q');
+  assert.equal(Y.createAbsolutePositionFromRelativePosition(position, doc), null);
+  assert.equal(visuals.get('b2').toString(), 'xyz');
+});
+
+test('both copies delete the same b and undo before seeing the other\'s undo: both show abbc', t => {
+  const { a, b, sync } = pair(t, doc => doc.getText('beat').insert(0, 'abc'));
+  const origin = { local: true };
+  const managers = [a, b].map(doc => new Y.UndoManager(doc.getText('beat'), { trackedOrigins: new Set([origin]) }));
+  for (const doc of [a, b]) doc.transact(() => doc.getText('beat').delete(1, 1), origin);
   sync();
-  a.getText('beat').delete(1, 2);
+  for (const manager of managers) assert.notEqual(manager.undo(), null);
   sync();
-  assert.equal(a.getText('beat').toString(), 'acd');
+  assert.deepEqual([a.getText('beat').toString(), b.getText('beat').toString()], ['abbc', 'abbc']);
+});
+
+test('a 1,000-character paste: encoded update bytes plain, with one identified key per character, with four', () => {
+  const paste = attributes => {
+    const doc = new Y.Doc();
+    doc.clientID = 7;
+    let bytes = 0;
+    doc.on('update', update => { bytes += update.byteLength; });
+    const text = doc.getText('beat');
+    doc.transact(() => {
+      if (!attributes) text.insert(0, 'x'.repeat(1000));
+      else for (let index = 0; index < 1000; index++) text.insert(index, 'x', attributes(index));
+    });
+    doc.destroy();
+    return bytes;
+  };
+  const keys = kinds => index => Object.fromEntries(kinds.map(kind => [`${kind}\u001f7.${index.toString(36)}`, true]));
+  assert.deepEqual([paste(null), paste(keys(['b'])), paste(keys(['b', 'i', 'hl', 't:tag1']))], [1014, 37809, 145593]);
+});
+
+test('a new history rebuilt from the visible text and synced with the old one doubles the text', t => {
+  const { a, b, sync } = pair(t);
+  a.getText('beat').insert(0, 'seed');
+  b.getText('beat').insert(0, a.getText('beat').toString());
+  sync();
+  assert.equal(a.getText('beat').toString(), 'seedseed');
 });
 
 test('plain undo: a group that deleted all it typed is passed over and the same press undoes the step before', t => {
@@ -250,33 +254,6 @@ test('identical statuses: a fallback value written after the undo makes the foll
   assert.equal(a.getMap('beats').get('b1').get('status'), 'todo');
 });
 
-test('a delete filter that keeps a created record still holding a field: undo removes the name, keeps the colour', t => {
-  const { a, b, sync } = pair(t);
-  const origin = { local: true };
-  const people = a.getMap('people');
-  const deleteFilter = item => !(item.content instanceof Y.ContentType && item.parent === people && item.content.type.size > 0);
-  const undo = new Y.UndoManager(people, { trackedOrigins: new Set([origin]), deleteFilter });
-  a.transact(() => { const person = new Y.Map(); people.set('p1', person); person.set('name', 'Ada'); }, origin);
-  sync();
-  b.getMap('people').get('p1').set('colour', 'teal');
-  sync();
-  assert.notEqual(undo.undo(), null);
-  sync();
-  for (const doc of [a, b]) assert.deepEqual(doc.getMap('people').get('p1').toJSON(), { colour: 'teal' });
-});
-
-test('the same filter lets undo delete a created record nobody else changed', t => {
-  const doc = new Y.Doc();
-  t.after(() => doc.destroy());
-  const people = doc.getMap('people');
-  const origin = { local: true };
-  const deleteFilter = item => !(item.content instanceof Y.ContentType && item.parent === people && item.content.type.size > 0);
-  const undo = new Y.UndoManager(people, { trackedOrigins: new Set([origin]), deleteFilter });
-  doc.transact(() => { const person = new Y.Map(); people.set('p1', person); person.set('name', 'Ada'); }, origin);
-  assert.notEqual(undo.undo(), null);
-  assert.equal(people.has('p1'), false);
-});
-
 test('deleted text kept by undo history stays in the encoded state after clear() until a fresh copy is made', t => {
   const doc = new Y.Doc();
   t.after(() => doc.destroy());
@@ -323,13 +300,29 @@ test('formatting key per action: bolding growing prefixes leaves one live key pe
   assert.deepEqual([formatted, unformatted, baseline], [3610, 1739, 113]);
 });
 
-test('resolve and reopen as two time fields: the later choice shows on both copies', t => {
-  const { a, b, sync } = pair(t, doc => { doc.getMap('comments').set('c1', new Y.Map()); });
-  a.getMap('comments').get('c1').set('resolvedAt', 2000);
-  b.getMap('comments').get('c1').set('reopenedAt', 1000);
+test('a comment body as one whole string: two people adding to it at once keep only one addition', t => {
+  const { a, b, sync } = pair(t, doc => {
+    const comment = new Y.Map();
+    doc.getMap('comments').set('c1', comment);
+    comment.set('body', 'Note');
+  });
+  a.getMap('comments').get('c1').set('body', 'Note from A');
+  b.getMap('comments').get('c1').set('body', 'Note from B');
   sync();
-  for (const doc of [a, b]) {
-    const comment = doc.getMap('comments').get('c1');
-    assert.equal((comment.get('resolvedAt') ?? 0) > (comment.get('reopenedAt') ?? 0), true);
-  }
+  const bodies = [a, b].map(doc => doc.getMap('comments').get('c1').get('body'));
+  assert.equal(bodies[0], bodies[1]);
+  assert.equal(['Note from A', 'Note from B'].includes(bodies[0]), true);
+});
+
+test('a comment body as Y.Text: both additions stay', t => {
+  const { a, b, sync } = pair(t, doc => {
+    const comment = new Y.Map();
+    doc.getMap('comments').set('c1', comment);
+    comment.set('body', new Y.Text('Note'));
+  });
+  a.getMap('comments').get('c1').get('body').insert(4, ' from A');
+  b.getMap('comments').get('c1').get('body').insert(4, ' from B');
+  sync();
+  assert.equal(a.getMap('comments').get('c1').get('body').toString(), 'Note from A from B');
+  assert.equal(b.getMap('comments').get('c1').get('body').toString(), 'Note from A from B');
 });
