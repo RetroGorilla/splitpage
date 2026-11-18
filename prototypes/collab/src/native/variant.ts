@@ -9,13 +9,25 @@ export interface NativeDeltaItem { insert: string | Record<string, unknown>; att
 export interface NativeBlock { id: string; kind: "b" | "h"; segment: string; start: number; end: number; delta: NativeDeltaItem[] }
 export interface NativeRemoval { by: string; at: number; seen: Record<string, number> }
 export interface NativeJoin { into: string; glue: string }
-export interface NativeRow { id: string; audioText: string; visualText: string; fields: Record<string, unknown> }
+export interface NativeRow { id: string; audioText: string; visualText: string; fields: Record<string, unknown>; audio: NativeDeltaItem[]; visual: NativeDeltaItem[] }
 export interface NativeTextChange { segment: string; delta: unknown[] }
 export interface NativeChanges { text: NativeTextChange[]; rows: NativeRow[]; gone: string[]; order: boolean; records: string[] }
-export interface NativeRecovery { beat: string; kept: string; unseen: string[] }
+export interface NativeRecovery { beat: string; kept: string; unseen: string[]; visual: string }
 export interface NativeDocumentSource { rows?: unknown; sections?: unknown; comments?: unknown; people?: unknown; productionTags?: unknown; brollShots?: unknown; [key: string]: unknown }
 
 export type NativeScheme = "name" | "act";
+export type NativeUndoOutcome = "undone" | "used-up" | "empty";
+interface NativeFlagNote { beat: string; key: string; wrote: string | null; before: unknown }
+interface NativeActNote { text: Y.Text; names: string[]; seen: string[]; minted: string[]; from: Y.RelativePosition; to: Y.RelativePosition }
+interface NativeNote { flag?: NativeFlagNote; act?: NativeActNote }
+
+// why: two writes of one flag are the same change when they mean the same, whoever made them and whenever
+function flagMeaning(key: string, value: unknown): string | null {
+  if (value === undefined) return null;
+  if (key === "removed") return "removed";
+  if (key === "joined" && value && typeof value === "object") return JSON.stringify([(value as NativeJoin).into, (value as NativeJoin).glue]);
+  return JSON.stringify(value);
+}
 type KeyChoice = (wanted: NativeAttributes, beside: Record<string, unknown> | null) => NativeAttributes;
 
 const FORMATS = ["b", "i", "u", "s", "hl", "dir", "cue"] as const;
@@ -112,6 +124,16 @@ function attributesAt(delta: readonly NativeDeltaItem[], offset: number): Record
   return null;
 }
 
+function runEnd(delta: readonly NativeDeltaItem[], key: string, at: number): number {
+  let index = 0, end = at;
+  for (const item of delta) {
+    const next = index + (typeof item.insert === "string" ? item.insert.length : 1);
+    if (next > at) { if (item.attributes?.[key] !== true) break; end = next; }
+    index = next;
+  }
+  return end;
+}
+
 function boundaryOf(insert: unknown): { id: string; kind: "b" | "h" } | null {
   if (!insert || typeof insert !== "object") return null;
   const value = insert as Record<string, unknown>;
@@ -134,6 +156,7 @@ export class NativeReplica {
   private textChanges: NativeTextChange[] = [];
   private structureChanged = true;
   private readonly layout = new Map<string, string>();
+  private note: NativeNote | null = null;
   readonly scheme: NativeScheme;
 
   constructor(client: number, captureTimeout = 0, scheme: NativeScheme = "name") {
@@ -168,6 +191,10 @@ export class NativeReplica {
     this.order.observe(() => { this.structureChanged = true; });
     this.undo = new Y.UndoManager([this.segments, this.order, this.beats, this.visuals, this.doc.getMap("comments")],
       { trackedOrigins: new Set([this.origin]), captureTimeout });
+    this.undo.on("stack-item-added", (event: { stackItem: { meta: Map<unknown, unknown> } }) => {
+      if (this.note) event.stackItem.meta.set("note", this.note);
+      this.note = null;
+    });
   }
 
   get segments(): Y.Map<Y.Map<unknown>> { return this.doc.getMap("segments"); }
@@ -180,6 +207,14 @@ export class NativeReplica {
   // why: an act's key is its writer and that writer's clock when it began, so a reloaded copy never reuses one
   private actKey(name: string): string {
     return `${name}${ACT}${this.doc.clientID.toString(36)}.${Y.getState(this.doc.store, this.doc.clientID).toString(36)}`;
+  }
+
+  // why: turning a key off as far as its run goes and giving what follows the gap a new key writes no marker that turns
+  // the old key on again; such a marker would format everything after it once the run's own end is removed elsewhere
+  private retire(text: Y.Text, key: string, from: number, to: number): void {
+    const tail = Math.max(to, runEnd(text.toDelta() as NativeDeltaItem[], key, to));
+    if (tail > from) text.format(from, tail - from, { [key]: null });
+    if (tail > to) text.format(to, tail - to, { [`${key.split(ACT).slice(0, 2).join(ACT)}${ACT}${this.actKey("").slice(1)}`]: true });
   }
 
   private readonly choose: KeyChoice = (wanted, beside) => {
@@ -284,66 +319,166 @@ export class NativeReplica {
     this.transact(() => {
       const cell = this.cell(beat, field);
       if (from < 0 || to < from || cell.start + to > cell.end) throw new Error(`Range outside ${beat}`);
-      const delta = this.scheme === "act" && insert.length ? this.cellDelta(beat, field) : [];
-      const beside = attributesAt(delta, from - 1) ?? attributesAt(delta, from);
+      const act = this.scheme === "act" && insert.length > 0;
+      const left = !act ? null : from > 0 ? attributesAt(this.cellDelta(beat, field), from - 1)
+        : cell.start > 0 ? attributesAt(cell.text.toDelta() as NativeDeltaItem[], cell.start - 1) : null;
       // why: inserting before deleting keeps the typed text in its gap when another copy's text lands beside it
-      const after = writeRuns(cell.text, cell.start + from, insert, this.choose, beside);
+      const after = act ? this.typeAct(cell.text, cell.start + from, insert, left) : writeRuns(cell.text, cell.start + from, insert, this.choose, null);
       if (to > from) cell.text.delete(after, to - from);
     });
   }
 
-  format(beat: string, field: NativeField, from: number, to: number, marks: Record<string, true | null>): void {
-    this.transact(() => {
-      const cell = this.cell(beat, field);
-      let attributes = marks;
-      if (this.scheme === "act") {
-        attributes = {};
-        let index = 0;
-        const held = new Set<string>();
-        for (const item of this.cellDelta(beat, field)) {
-          const next = index + (typeof item.insert === "string" ? item.insert.length : 1);
-          if (next > from && index < to) for (const [key, value] of Object.entries(item.attributes ?? {})) if (value === true) held.add(key);
-          index = next;
-        }
-        for (const [name, value] of Object.entries(marks)) {
-          if (value) attributes[this.actKey(name)] = true;
-          else for (const key of held) if (nativeMarkName(key) === name) attributes[key] = null;
-        }
-      }
-      cell.text.format(cell.start + from, to - from, attributes);
-    });
+  // why: text typed with marks that differ from those on its left makes the library write a marker that turns the left's
+  // formatting on again after it. Typed with the left's keys and then changed, it writes none: see retire
+  private typeAct(text: Y.Text, at: number, runs: readonly Run[], left: Record<string, unknown> | null): number {
+    let index = at, beside = Object.keys(left ?? {}).filter(key => left?.[key] === true);
+    for (const run of runs) {
+      const embed = embedOf(run), length = embed ? 1 : run.text.length, names = Object.keys(nativeAttributes(run.marks));
+      if (!length) continue;
+      const taken = Object.fromEntries(beside.map(key => [key, true]));
+      if (embed) text.insertEmbed(index, embed, taken); else text.insert(index, run.text, taken);
+      const kept = beside.filter(key => names.includes(nativeMarkName(key)));
+      for (const key of beside) if (!kept.includes(key)) this.retire(text, key, index, index + length);
+      const fresh = Object.fromEntries(names.filter(name => !kept.some(key => nativeMarkName(key) === name)).map(name => [this.actKey(name), true]));
+      if (Object.keys(fresh).length) text.format(index, length, fresh);
+      beside = [...kept, ...Object.keys(fresh)];
+      index += length;
+    }
+    return index;
   }
 
-  split(beat: string, offset: number, created: string, fields: Record<string, unknown> = {}): void {
+  format(beat: string, field: NativeField, from: number, to: number, marks: Record<string, true | null>): void {
+    this.undo.stopCapturing();
     this.transact(() => {
-      const cell = this.cell(beat, "audioText");
-      cell.text.insertEmbed(cell.start + offset, { b: created }, {});
-      const record = new Y.Map<unknown>();
-      this.beats.set(created, record);
-      for (const [key, value] of Object.entries(fields)) record.set(key, value);
+      const cell = this.cell(beat, field), held = new Set<string>();
+      let attributes = marks, index = 0;
+      for (const item of this.cellDelta(beat, field)) {
+        const next = index + (typeof item.insert === "string" ? item.insert.length : 1);
+        if (next > from && index < to) for (const [key, value] of Object.entries(item.attributes ?? {})) if (value === true) held.add(key);
+        index = next;
+      }
+      if (this.scheme === "act") {
+        attributes = {};
+        for (const [name, value] of Object.entries(marks)) {
+          if (value) attributes[this.actKey(name)] = true;
+          else for (const key of held) if (nativeMarkName(key) === name) this.retire(cell.text, key, cell.start + from, cell.start + to);
+        }
+      }
+      this.note = { act: { text: cell.text, names: Object.keys(marks).filter(name => marks[name]), seen: [...held], minted: this.scheme === "act" ? Object.keys(attributes) : [],
+        from: Y.createRelativePositionFromTypeIndex(cell.text, cell.start + from, 0), to: Y.createRelativePositionFromTypeIndex(cell.text, cell.start + to, -1) } };
+      if (Object.keys(attributes).length) cell.text.format(cell.start + from, to - from, attributes);
+    });
+    this.note = null;
+    this.undo.stopCapturing();
+  }
+
+  private flagged(beat: string, key: string, write: (record: Y.Map<unknown>) => void): void {
+    const record = this.beat(beat), before = record.get(key);
+    this.undo.stopCapturing();
+    this.transact(() => {
+      write(record);
+      this.note = { flag: { beat, key, wrote: flagMeaning(key, record.get(key)), before } };
+    });
+    this.note = null;
+    this.undo.stopCapturing();
+  }
+
+  private alone(stack: unknown[], run: () => boolean): boolean {
+    const older = stack.splice(0, stack.length - 1);
+    try { return run(); } finally { stack.unshift(...older); }
+  }
+
+  // why: plain undo() goes on to an older step when the top one changes nothing, and reverses a flag only when this
+  // copy's write is the one that stands; this step takes one entry, and takes a change back by what it means
+  undoStep(): NativeUndoOutcome { return this.step(this.undo.undoStack, () => this.undo.undo() !== null, true); }
+
+  redoStep(): NativeUndoOutcome { return this.step(this.undo.redoStack, () => this.undo.redo() !== null, false); }
+
+  private step(stack: { meta: Map<unknown, unknown> }[], run: () => boolean, back: boolean): NativeUndoOutcome {
+    const top = stack.at(-1);
+    if (!top) return "empty";
+    const note = top.meta.get("note") as NativeNote | undefined, flag = note?.flag, record = flag ? this.beats.get(flag.beat) : undefined;
+    if (flag && back && flagMeaning(flag.key, record?.get(flag.key)) !== flag.wrote) { stack.pop(); return "used-up"; }
+    this.note = note ?? null;
+    const done = this.alone(stack, run);
+    this.note = null;
+    if (!back) return done ? "undone" : "used-up";
+    if (flag && record) {
+      const now = record.get(flag.key);
+      // why: an identical write by someone else still stands, or the library declined to put the earlier value back
+      if (flagMeaning(flag.key, now) === flag.wrote || (now === undefined && flag.before !== undefined)) {
+        this.doc.transact(() => { if (flag.before === undefined) record.delete(flag.key); else record.set(flag.key, flag.before); }, "takeback");
+        return "undone";
+      }
+    }
+    if (note?.act && this.takeBack(note.act)) return "undone";
+    return done ? "undone" : "used-up";
+  }
+
+  // why: the same mark over exactly the same characters, made by someone who had not seen this one, is one change
+  private takeBack(act: NativeActNote): boolean {
+    const start = Y.createAbsolutePositionFromRelativePosition(act.from, this.doc)?.index, end = Y.createAbsolutePositionFromRelativePosition(act.to, this.doc)?.index;
+    const extents = new Map<string, { first: number; last: number; count: number }>();
+    let index = 0;
+    for (const item of act.text.toDelta() as NativeDeltaItem[]) {
+      const length = typeof item.insert === "string" ? item.insert.length : 1;
+      for (const [key, value] of Object.entries(item.attributes ?? {})) {
+        if (value !== true || act.seen.includes(key) || !act.names.includes(nativeMarkName(key))) continue;
+        const extent = extents.get(key) ?? { first: index, last: index, count: 0 };
+        extent.last = index + length; extent.count += length;
+        extents.set(key, extent);
+      }
+      index += length;
+    }
+    const off = new Map<string, { first: number; last: number }>();
+    for (const [key, extent] of extents) {
+      // why: a key that continues one of this act's keys after someone's unformatted gap is still this act
+      if (act.minted.some(minted => key.startsWith(minted + ACT))) off.set(key, extent);
+      else if (start !== undefined && end !== undefined && extent.first === start && extent.last === end && extent.count === end - start) off.set(key, extent);
+    }
+    if (!off.size) return false;
+    this.doc.transact(() => { for (const [key, extent] of off) act.text.format(extent.first, extent.last - extent.first, { [key]: null }); }, "takeback");
+    return true;
+  }
+
+  // why: undoing a creation deletes the created type with everything anyone wrote in it, so with "apart" the new beat's
+  // record and visual cell are written outside the undo history and only the boundary is undone
+  split(beat: string, offset: number, created: string, fields: Record<string, unknown> = {}, record: "apart" | "tracked" = "apart"): void {
+    const setup = (): void => {
+      const map = new Y.Map<unknown>();
+      this.beats.set(created, map);
+      for (const [key, value] of Object.entries(fields)) map.set(key, value);
       this.visuals.set(created, new Y.Text());
+    };
+    if (record === "apart") this.doc.transact(setup, "setup");
+    this.transact(() => {
+      const cell = this.cell(beat, "audioText"), around = attributesAt(cell.text.toDelta() as NativeDeltaItem[], cell.start + offset - 1) ?? {};
+      // why: given the formatting already in force at its place, the boundary writes no marker of its own, so a later
+      // undo of that formatting cannot leave a marker that turns it on again after the boundary
+      cell.text.insertEmbed(cell.start + offset, { b: created }, Object.fromEntries(Object.entries(around).filter(([, value]) => value === true)));
+      if (record === "tracked") setup();
     });
   }
 
   join(from: string, into: string, glue: string): void {
-    this.transact(() => { this.beat(from).set("joined", { into, glue } satisfies NativeJoin); });
+    this.flagged(from, "joined", record => { record.set("joined", { into, glue } satisfies NativeJoin); });
   }
 
   unjoin(from: string): void {
-    this.transact(() => { this.beat(from).delete("joined"); });
+    this.flagged(from, "joined", record => { record.delete("joined"); });
   }
 
   remove(beat: string, by: string, at = 0): void {
     const seen = Object.fromEntries([...Y.decodeStateVector(Y.encodeStateVector(this.doc))].map(([client, clock]) => [String(client), clock]));
-    this.transact(() => { this.beat(beat).set("removed", { by, at, seen } satisfies NativeRemoval); });
+    this.flagged(beat, "removed", record => { record.set("removed", { by, at, seen } satisfies NativeRemoval); });
   }
 
   restore(beat: string): void {
-    this.transact(() => { this.beat(beat).delete("removed"); });
+    this.flagged(beat, "removed", record => { record.delete("removed"); });
   }
 
   setField(beat: string, field: string, value: unknown): void {
-    this.transact(() => { this.beat(beat).set(field, value); });
+    this.flagged(beat, field, record => { record.set(field, value); });
   }
 
   beat(id: string): Y.Map<unknown> {
@@ -396,7 +531,7 @@ export class NativeReplica {
       if (visual.length && own.length) visual.push({ insert: "\n" });
       visual.push(...own);
     }
-    return { id, audioText: nativeHtml(audio), visualText: nativeHtml(visual), fields: this.beats.get(id)?.toJSON() as Record<string, unknown> ?? {} };
+    return { id, audioText: nativeHtml(audio), visualText: nativeHtml(visual), fields: this.beats.get(id)?.toJSON() as Record<string, unknown> ?? {}, audio, visual };
   }
 
   private project(): Map<string, NativeRow> {
@@ -430,8 +565,10 @@ export class NativeReplica {
     this.textChanges = []; this.structureChanged = false;
     this.dirtySegments.clear(); this.dirtyBeats.clear(); this.dirtyRecords.clear();
     const rows: NativeRow[] = [], gone: string[] = [];
+    // why: a tag or comment the page has no record for changes the stored marks but not the HTML
     const differs = (row: NativeRow, before: NativeRow | undefined): boolean => !before || before.audioText !== row.audioText
-      || before.visualText !== row.visualText || JSON.stringify(before.fields) !== JSON.stringify(row.fields);
+      || before.visualText !== row.visualText || JSON.stringify(before.fields) !== JSON.stringify(row.fields)
+      || JSON.stringify([before.audio, before.visual]) !== JSON.stringify([row.audio, row.visual]);
     if (structural) {
       const next = this.project();
       for (const [id, row] of next) if (differs(row, this.shown.get(id))) rows.push(row);
@@ -458,7 +595,11 @@ export class NativeReplica {
 
   recovery(): NativeRecovery[] {
     this.changes();
-    const result: NativeRecovery[] = [];
+    const result: NativeRecovery[] = [], placed = new Set(this.blocks().filter(block => block.kind === "b").map(block => block.id));
+    // why: a beat whose split was undone keeps its record and visual cell; what was typed there is listed
+    for (const [beat, text] of this.visuals) {
+      if (!placed.has(beat) && text.length) result.push({ beat, kept: "", unseen: [], visual: nativeHtml(text.toDelta() as NativeDeltaItem[]) });
+    }
     for (const block of this.blocks()) {
       const removal = block.kind === "b" ? this.removal(block.id) : null;
       if (!removal) continue;
@@ -475,7 +616,7 @@ export class NativeReplica {
           open = late;
         }
       }
-      result.push({ beat: block.id, kept: nativeHtml(block.delta), unseen });
+      result.push({ beat: block.id, kept: nativeHtml(block.delta), unseen, visual: nativeHtml(this.visualDelta(block.id)) });
     }
     return result;
   }
