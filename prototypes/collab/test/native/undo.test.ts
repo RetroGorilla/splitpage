@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import * as Y from "yjs";
 import type { NativeReplica, NativeScheme } from "../../src/native/variant.ts";
 import { KitNet, cut, recovered, show, start, type } from "./kit.ts";
 
@@ -260,4 +261,56 @@ test("both join, one undoes, the other's later undo is used up and reaches no ol
   assert.deepEqual(net.agree(), ["R1: [ab|b]", "R2: cd!"]);
   assert.equal(a.undoStep(), "undone"); net.settle();
   assert.deepEqual(net.agree(), ["R1: ab", "R2: cd!"]);
+});
+
+test("grouping as the library alone gives it: an undo ends the typing group; a group that deleted all it typed keeps an entry", () => {
+  const fresh = (): [NativeReplica, NativeReplica] => start([{ id: "R1", audioText: "ab" }], 2, "name", 60_000) as [NativeReplica, NativeReplica];
+  let [a] = fresh();
+  type(a, "R1", 2, "x"); a.undo.stopCapturing(); type(a, "R1", 3, "y"); a.undo.undo(); type(a, "R1", 3, "z");
+  assert.equal(a.undo.undoStack.length, 2);
+  a.undo.undo();
+  assert.deepEqual(show(a), ["R1: abx"]);
+  [a] = fresh();
+  type(a, "R1", 2, "x"); a.undo.stopCapturing(); type(a, "R1", 3, "y"); cut(a, "R1", 3, 4);
+  assert.equal(a.undo.undoStack.length, 2, "a group that deleted all it typed keeps its entry");
+  assert.equal(a.undoStep(), "used-up");
+  assert.deepEqual(show(a), ["R1: abx"]);
+});
+
+test("declared: a letter someone else deleted and brought back is no longer the typist's to undo", () => {
+  const { a, b, net } = pair([{ id: "R1", audioText: "ab" }]);
+  type(a, "R1", 2, "x"); net.settle(); cut(b, "R1", 2, 3); net.settle(); b.undoStep(); net.settle();
+  assert.equal(a.undoStep(), "used-up"); net.settle();
+  assert.deepEqual(net.agree(), ["R1: abx"]);
+});
+
+// why: main's rule leaves c plain before the undo; here plain text typed unseen inside the run keeps the bold after it
+for (const scheme of SCHEMES) test(`${scheme} keys: an unformat undone puts bold back where it was; text someone typed plain inside stays plain`, () => {
+  const { a, b, net } = pair([{ id: "R1", audioText: "abcd" }], scheme);
+  a.format("R1", "audioText", 0, 4, { b: true }); a.changes(); net.settle();
+  a.format("R1", "audioText", 1, 3, { b: null }); a.changes(); type(b, "R1", 2, "X"); net.settle();
+  const apart = net.agree(scheme);
+  assert.equal(a.undoStep(), "undone"); net.settle();
+  assert.deepEqual([apart, net.agree(scheme)], [["R1: [a|b]bX[cd|b]"], ["R1: [ab|b]X[cd|b]"]]);
+});
+
+test("a status that lost to another person's leaves nothing to redo; a restore does not undo a removal it had not seen", () => {
+  const copies = start(rows), net = new KitNet(copies), [a, b] = copies as [NativeReplica, NativeReplica];
+  a.setField("R1", "status", "ready"); b.setField("R1", "status", "shot"); net.settle();
+  assert.deepEqual([a.undoStep(), a.redoStep()], ["used-up", "empty"]);
+  a.remove("R2", "Alice"); a.changes(); net.settle();
+  a.restore("R2"); a.changes(); b.restore("R2"); b.changes(); b.remove("R2", "Bob"); b.changes(); net.settle();
+  assert.deepEqual(net.agree(), ["R1: ab"]);
+});
+
+test("pending-update, a limit main carries, is the same here: a deletion applies before the update it follows has arrived", () => {
+  const { b, c } = pair([{ id: "R1", audioText: "ab" }]), sent: Uint8Array[] = [];
+  b.doc.on("update", (update: Uint8Array) => { sent.push(update); });
+  type(b, "R1", 2, "X"); b.splice("R1", "audioText", 0, 1, [{ text: "Y", marks: {} }]); b.changes();
+  assert.equal(sent.length, 2);
+  Y.applyUpdate(c.doc, sent[1] as Uint8Array, "remote");
+  assert.deepEqual(show(c), ["R1: b"]);
+  Y.applyUpdate(c.doc, sent[0] as Uint8Array, "remote");
+  c.changes();
+  assert.deepEqual(show(c), ["R1: YbX"]);
 });
