@@ -1,17 +1,17 @@
 import * as Y from "yjs";
 import type { Marks } from "../../../../src/core/text/runs.ts";
-import { NativeReplica, nativeCopy, nativeMarkName } from "../native/variant.ts";
+import { NativeReplica, nativeCopy, nativeMarkName, usesActionKey } from "../native/variant.ts";
 import type { NativeDeltaItem, NativeField, NativeScheme } from "../native/variant.ts";
 import { RECORD_ROOTS, UndoLayer, readRecords, readStatus } from "./layer.ts";
 import type { CreationRule, RecordRoot, UndoCaret, UndoStackItem } from "./layer.ts";
-import { ANY_KIND, UndoModel, markCommand } from "./model.ts";
+import { ANY_KIND, UndoModel, changesMark, changesPlainMarkers, markCommand } from "./model.ts";
 import type { CommandChar, Creation, ModelChar, ModelItem, PressResult, Seen, TypingSpec } from "./model.ts";
 
 export type Delivery = "forward" | "reverse" | "twice";
 export interface WorldRow { id: string; audioText: string; visualText?: string; status?: string }
 export interface WorldOptions {
   names?: readonly string[]; clients?: readonly number[]; scheme?: NativeScheme; creations?: CreationRule;
-  onExtraPressUpdates?: (count: number) => void
+  onExtraPressUpdates?: (count: number) => void; auditTags?: boolean
 }
 export type Part =
   | { do: "insert"; beat: string; field: NativeField; at: number; text: string; marks?: readonly string[] }
@@ -36,11 +36,27 @@ export class CheckFailure extends Error {}
 export type E3Type = Y.Text | Y.Map<unknown> | Y.Array<unknown>;
 export interface MarkMismatch { readonly at: string; readonly char: string; readonly kind: string; readonly expected: boolean }
 export type WriteCommand = "type" | "erase" | "format" | "split" | "join" | "field" | "undo" | "redo";
+export type ProbedWrite = WriteCommand | "tag" | "untag";
+export interface CommandDifference {
+  readonly step: number; readonly perAction: boolean; readonly predicted: boolean; readonly updated: boolean;
+  readonly formats: readonly FormatProbe[]; readonly markerOnly: boolean
+}
+interface FormatProbe {
+  readonly mark: string; readonly on: boolean; readonly displayed: string; readonly modeled: string; readonly requested: string; readonly range: string;
+  readonly cell: string; readonly restored: string; readonly pending: boolean; readonly markerOnly: boolean
+}
+export interface TagDifference {
+  readonly step: number; readonly at: string; readonly copy: string; readonly container: string;
+  readonly id: string; readonly original: string; readonly value: string; readonly kind: string; readonly requests: number[];
+  readonly cell: string
+}
 export interface WorldStats {
   presses: number; uncertainPresses: number; uncertainCommands: number; markMismatches: MarkMismatch[]; checks: number;
   undoPresses: number; uncertainUndos: number; uncertainRedos: number; writes: Set<WriteCommand>;
   formatSkips: number; formatSkipExample: string[] | null; undone: number; redone: number;
-  formatRemains: number; inheritedTagLost: number
+  formatRemains: number; inheritedTagLost: number; differentStep: number; skippedToOlder: number;
+  pressUpdates: Record<number, number>; commandDifferences: CommandDifference[];
+  used: Set<ProbedWrite>; effective: Set<ProbedWrite>; tagDifferences: TagDifference[]
 }
 
 interface Logged { readonly update: Uint8Array; readonly op: string }
@@ -96,6 +112,17 @@ export function textChars(text: Y.Text): YChar[] {
   return result;
 }
 
+function liveMarkers(text: Y.Text): { index: number; key: string; on: boolean; id: string }[] {
+  const markers: ReturnType<typeof liveMarkers> = [];
+  let index = 0;
+  for (let item = text._start; item; item = item.right) {
+    if (item.deleted) continue;
+    if (item.content instanceof Y.ContentFormat) markers.push({ index, key: item.content.key, on: item.content.value === true, id: key(item.id) });
+    else if (item.countable) index += item.length;
+  }
+  return markers;
+}
+
 export function marked(delta: readonly NativeDeltaItem[]): string {
   const parts: { text: string; names: string }[] = [];
   for (const item of delta) {
@@ -133,7 +160,8 @@ export class World {
   private settling = false;
   readonly stats: WorldStats = {
     presses: 0, uncertainPresses: 0, uncertainCommands: 0, markMismatches: [], checks: 0, formatSkips: 0, formatSkipExample: null,
-    undone: 0, redone: 0, undoPresses: 0, uncertainUndos: 0, uncertainRedos: 0, writes: new Set(), formatRemains: 0, inheritedTagLost: 0
+    undone: 0, redone: 0, undoPresses: 0, uncertainUndos: 0, uncertainRedos: 0, writes: new Set(), formatRemains: 0, inheritedTagLost: 0,
+    differentStep: 0, skippedToOlder: 0, pressUpdates: {}, commandDifferences: [], used: new Set(), effective: new Set(), tagDifferences: []
   };
   clock = 1_000_000;
   strictMarks = false;
@@ -143,15 +171,20 @@ export class World {
   private readonly keys = new Map<UndoStackItem, number>();
   private readonly read = new Map<string, number>();
   private readonly undoMarks: UndoMarkProbe[] = [];
+  private readonly formats: FormatProbe[] = [];
+  private readonly operationSteps = new Map<string, number>();
   private readonly seedBeats: readonly string[];
   private readonly scheme: NativeScheme;
   private readonly onExtraPressUpdates: WorldOptions["onExtraPressUpdates"];
+  private readonly auditTags: boolean;
   private late = 0;
 
   constructor(rows: readonly WorldRow[], options: WorldOptions = {}) {
     const names = options.names ?? ["A", "B", "C"], clients = options.clients ?? names.map((_, index) => index + 1);
     this.scheme = options.scheme ?? "act";
+    this.model.predictKindKeys = this.scheme !== "act";
     this.onExtraPressUpdates = options.onExtraPressUpdates;
+    this.auditTags = options.auditTags ?? false;
     this.seedBeats = rows.map(row => row.id);
     const seed = new NativeReplica(900, 0, this.scheme);
     const inputs = rows.map(row => ({ visualText: "", status: "todo", ...row }));
@@ -312,6 +345,11 @@ export class World {
     return chars.map(char => ({ ...char, id: this.modelOf(char.id) }));
   }
 
+  private write(kind: ProbedWrite, effective = true): void {
+    this.stats.used.add(kind);
+    if (effective) this.stats.effective.add(kind);
+  }
+
   private checkText(copy: Copy, edits: readonly TextEdit[]): void {
     const expected = new Map<string, CommandChar[]>();
     for (const edit of edits) expected.set(edit.container, edit.apply(expected.get(edit.container) ?? edit.before));
@@ -347,16 +385,41 @@ export class World {
           return { expected: [], text: this.edit(view, chars => chars.filter(char => !ids.includes(char.id))),
             run: () => { replica.splice(part.beat, part.field, part.from, part.to, []); } };
         }
-        model.format(op, view.container, ids, part.mark, part.on, seen);
         const targets = new Set(ids);
         const text = this.edit(view, chars => markCommand(chars, targets, part.mark, part.on));
-        const freshKey = this.scheme === "act" && part.on && targets.size > 0;
+        const selected = text.before.filter(char => targets.has(char.id));
+        const actionKey = usesActionKey(this.scheme, part.mark);
+        const visibleOrFresh = changesMark(selected, part.mark, part.on, actionKey);
+        const from = view.start + part.from, to = view.start + part.to;
+        const beforeMarkers = !actionKey && !visibleOrFresh && to > from ? liveMarkers(view.text) : [];
+        const markerOnly = beforeMarkers.length > 0 &&
+          changesPlainMarkers(part.mark, part.on, text.before[from - 1]?.names.has(part.mark) ?? false, from, to, beforeMarkers);
+        const expectedChange = visibleOrFresh || markerOnly;
+        const modelChars = ids.map(id => model.chars.get(id) as ModelChar);
+        this.formats.push({
+          mark: part.mark, on: part.on, cell: `${part.beat}.${part.field}`,
+          range: selected.map(char => char.value).join(""),
+          displayed: selected.map(char => Number(char.names.has(part.mark))).join(""),
+          modeled: modelChars.map(char => Number(model.kinds(char, seen).has(part.mark))).join(""),
+          requested: part.mark.startsWith("t:") ? modelChars.map(char => Number(model.requestedTags(char, seen).has(part.mark))).join("") : "",
+          restored: modelChars.map(char => Number(char.restoredFrom !== null)).join(""),
+          pending: !!(replica.doc.store.pendingStructs || replica.doc.store.pendingDs),
+          markerOnly
+        });
+        model.expectFormat(expectedChange);
+        model.format(op, view.container, ids, part.mark, part.on, seen);
+        const freshKey = actionKey && part.on && targets.size > 0;
         const clock = Y.getState(replica.doc.store, copy.client);
-        if (freshKey || text.before.some(char => targets.has(char.id) && char.names.has(part.mark) !== part.on)) this.stats.writes.add("format");
+        if (visibleOrFresh) this.stats.writes.add("format");
+        this.write(part.mark.startsWith("t:") ? (part.on ? "tag" : "untag") : "format", expectedChange);
         return {
           expected: [], text, run: () => { replica.format(part.beat, part.field, part.from, part.to, { [part.mark]: part.on ? true : null }); },
           check: () => {
             if (freshKey && Y.getState(replica.doc.store, copy.client) === clock) this.fail(`${copy.name}: formatting on did not write its fresh mark key`);
+            if (markerOnly) {
+              const idsOf = (markers: ReturnType<typeof liveMarkers>): string => markers.filter(marker => marker.key === part.mark).map(marker => marker.id).join(",");
+              if (idsOf(beforeMarkers) === idsOf(liveMarkers(view.text))) this.fail(`${copy.name}: formatting did not rewrite the expected markers for ${part.mark}`);
+            }
           }
         };
       }
@@ -367,6 +430,7 @@ export class World {
         expected.push(model.createContainer(op, "root:visuals", part.created, "text", seen));
         const boundary = expected[0] as Creation, inserted = { id: boundary.id, value: boundary.value, names: left?.names ?? new Set<string>() };
         this.stats.writes.add("split");
+        this.write("split");
         return { expected, text: this.edit(view, chars => [...chars.slice(0, at), inserted, ...chars.slice(at)]),
           run: () => { replica.split(part.beat, part.at, part.created); } };
       }
@@ -375,6 +439,7 @@ export class World {
         if (part.do === "clear") {
           const changed = model.clear(op, container, part.key, seen);
           if (changed && part.key === "joined") this.stats.writes.add("join");
+          if (part.key === "joined") this.write("join", changed);
           return {
             expected: [],
             run: () => {
@@ -384,7 +449,7 @@ export class World {
             check: () => { if (replica.beat(part.beat).has(part.key)) this.fail(`${copy.name}: ${part.beat}.${part.key} was not cleared`); }
           };
         }
-        if (part.key === "joined") this.stats.writes.add("join");
+        if (part.key === "joined") { this.stats.writes.add("join"); this.write("join"); }
         const expected = [model.set(op, container, part.key, () => ({ json: JSON.stringify(part.value) }), seen)];
         return { expected, run: () => { replica.setField(part.beat, part.key, part.value); } };
       }
@@ -395,6 +460,7 @@ export class World {
       }
       case "field": {
         this.stats.writes.add("field");
+        this.write("field");
         const container = this.mapContainer(replica.doc.getMap<Y.Map<unknown>>(part.root).get(part.id), `record ${part.root}/${part.id}`);
         const expected = [model.set(op, container, part.key, () => ({ json: JSON.stringify(part.value) }), seen)];
         return { expected, run: () => { copy.layer.setRecordField(part.root, part.id, part.key, part.value); } };
@@ -405,6 +471,7 @@ export class World {
   private open(copy: Copy, op: string): { from: number; updates: number; context: Set<string> } {
     const context = this.contextOf(copy);
     copy.current = op;
+    this.operationSteps.set(op, this.steps.length);
     copy.watched = { updates: 0, added: [], updated: 0 };
     return { from: Y.getState(copy.replica.doc.store, copy.client), updates: copy.layer.updates, context };
   }
@@ -420,10 +487,14 @@ export class World {
   private settleEntry(copy: Copy, watched: Watched, label: string): void {
     if (watched.updates > 1) this.fail(`${copy.name}: one command emitted ${watched.updates} Yjs update events`);
     const end = this.model.end(watched.updates > 0);
-    if (end.predicted !== (watched.updates > 0)) {
+    const updated = watched.updates > 0;
+    const markerOnly = this.formats.some(format => format.markerOnly);
+    if (end.perAction !== updated || end.predicted !== updated || markerOnly) {
       if (!end.involved) this.fail(`${copy.name} ${label}: changed ${watched.updates > 0}, the model expected ${end.predicted}`);
-      this.stats.uncertainCommands++;
+      if (end.perAction !== updated) this.stats.uncertainCommands++;
+      this.stats.commandDifferences.push({ step: this.steps.length, perAction: end.perAction, predicted: end.predicted, updated, formats: [...this.formats], markerOnly });
     }
+    this.formats.length = 0;
     if (watched.updates > 0 && end.merged && (watched.added.length || watched.updated !== 1)) {
       this.fail(`${copy.name} ${label}: the model joined the open group; the library added ${watched.added.length} and updated ${watched.updated}`);
     }
@@ -433,9 +504,11 @@ export class World {
       this.keys.set((added[0] as { item: UndoStackItem }).item, end.key as number);
     }
     this.checkStacks(copy, label);
+    this.checkLocalTags(copy, label);
   }
 
   type(name: string, beat: string, field: NativeField, at: number, text: string, marks: readonly string[] = []): void {
+    this.write("type", text.length > 0);
     if (text.length) this.stats.writes.add("type");
     this.steps.push({ act: "type", by: name, at: this.clock, beat, field, offset: at, text, marks });
     this.typing(name, `type ${JSON.stringify(text)} at ${beat}.${field}:${at}${marks.length ? ` [${marks.join(",")}]` : ""}`,
@@ -444,6 +517,7 @@ export class World {
   }
 
   erase(name: string, beat: string, field: NativeField, from: number, to: number): void {
+    this.write("erase", to > from);
     if (to > from) this.stats.writes.add("erase");
     this.steps.push({ act: "erase", by: name, at: this.clock, beat, field, from, to });
     this.typing(name, `erase ${beat}.${field}:${from}-${to}`, { cell: `${field}:${beat}`, typed: "", replacing: false, now: this.clock },
@@ -509,11 +583,18 @@ export class World {
     this.steps.push({ act: label, by: name, at: this.clock });
     this.history.push(`${name} ${label} @${this.clock}`);
     const before = back && copy.layer.manager.undoStack.length ? this.marksBeforeUndo(copy, seen) : [];
+    const stacked = (back ? copy.layer.manager.undoStack : copy.layer.manager.redoStack).at(-1);
+    const top = stacked ? this.keys.get(stacked) ?? -1 : null;
+    if (top !== this.model.top(name, back)) this.fail(`${name} ${label}: top stack entry disagrees with the model`);
     const op = this.model.op(name), opened = this.open(copy, op);
     const { value: applied, watched } = this.guarded(copy, op, opened, () => back ? copy.layer.undo(caret) : copy.layer.redo(caret));
     this.stats.presses++;
     if (back) this.stats.undoPresses++;
     const appliedKey = applied ? this.keys.get(applied) ?? -1 : null;
+    if (top !== appliedKey) this.stats.differentStep++;
+    if (top !== appliedKey && appliedKey !== null) this.stats.skippedToOlder++;
+    this.stats.pressUpdates[watched.updates] = (this.stats.pressUpdates[watched.updates] ?? 0) + 1;
+    this.write(label, appliedKey !== null);
     const result = back ? this.model.undo(name, op, seen, entry => entry === appliedKey) : this.model.redo(name, op, seen, entry => entry === appliedKey);
     if (result.uncertain) { this.stats.uncertainPresses++; this.stats[back ? "uncertainUndos" : "uncertainRedos"]++; }
     if (result.applied !== null) { this.stats[back ? "undone" : "redone"]++; this.stats.writes.add(label); }
@@ -542,6 +623,7 @@ export class World {
     this.checkPressText(doc, result, after, `${name} after ${label}`);
     if (!doc.store.pendingStructs && !doc.store.pendingDs) this.compare(doc, after, `${name} after ${label}`, false);
     if (before.length && applied) this.observeUndoMarks(copy, before, result, after);
+    this.checkLocalTags(copy, label);
     return applied;
   }
 
@@ -670,6 +752,12 @@ export class World {
     }
     for (const copy of this.copies) { this.compare(copy.replica.doc, this.seenBy(copy), `${label} on ${copy.name}`); this.checkStacks(copy, label); }
     this.compare(late.doc, () => true, `${label} on a late joiner`);
+    if (this.auditTags) {
+      const tags = this.checkTags(late.doc, () => true, label, "settled");
+      for (const copy of this.copies) {
+        if (this.tagView(copy.replica.doc).join("|") !== tags.join("|")) this.fail(`${label}: ${copy.name}'s character tags differ from a late joiner`);
+      }
+    }
     for (const replica of [...this.copies.map(copy => copy.replica), late]) this.checkRowOrder(replica, label);
     for (const probe of this.undoMarks) this.countUndoMarks(late.doc, probe, () => true);
     this.undoMarks.length = 0;
@@ -726,6 +814,46 @@ export class World {
   }
 
   private describe(item: ModelItem): string { return `${item.id} written by ${item.author}`; }
+
+  private checkLocalTags(copy: Copy, label: string): void {
+    const { doc } = copy.replica;
+    if (this.auditTags && !doc.store.pendingStructs && !doc.store.pendingDs) this.checkTags(doc, this.seenBy(copy), label, copy.name);
+  }
+
+  private *tagText(doc: Y.Doc, seen: Seen): Iterable<{ container: string; text: Y.Text; chars: YChar[] }> {
+    for (const container of this.model.containers.values()) {
+      if (container.type !== "text" || (container.holder && !seen(container.holder)) || this.model.containerDeleted(container.id, seen)) continue;
+      const text = this.typeOf(doc, container.id) as Y.Text;
+      yield { container: container.id, text, chars: textChars(text).filter(char => !char.value.startsWith('{"b":')) };
+    }
+  }
+
+  private tagNames(char: YChar): string[] { return [...char.names].filter(name => name.startsWith("t:")).sort(); }
+
+  private tagView(doc: Y.Doc): string[] {
+    return [...this.tagText(doc, () => true)].flatMap(({ chars }) => chars.map(char => JSON.stringify([key(char.id), this.tagNames(char)])));
+  }
+
+  private checkTags(doc: Y.Doc, seen: Seen, label: string, copy: string): string[] {
+    const tags: string[] = [];
+    for (const { container, text, chars } of this.tagText(doc, seen)) {
+      for (const char of chars) {
+        const id = this.modelOf(char.id), modelChar = this.model.chars.get(id) as ModelChar;
+        const expected = this.model.requestedTags(modelChar, seen);
+        const shown = this.tagNames(char);
+        if (copy === "settled") tags.push(JSON.stringify([key(char.id), shown]));
+        for (const kind of new Set([...expected.keys(), ...shown])) {
+          const requests = expected.get(kind);
+          if (shown.includes(kind) === !!requests) continue;
+          this.stats.tagDifferences.push({
+            step: this.steps.length, at: label, copy, container, id, original: this.model.originalCharId(modelChar), value: char.value, kind,
+            requests: (requests ?? []).map(op => this.operationSteps.get(op) as number), cell: marked(text.toDelta() as NativeDeltaItem[])
+          });
+        }
+      }
+    }
+    return tags;
+  }
 
   private compareMarks(char: ModelChar, names: ReadonlySet<string>, seen: Seen, label: string): void {
     if (char.uncertain.has(ANY_KIND)) return;

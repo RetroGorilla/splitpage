@@ -9,6 +9,169 @@ emitted zero. The stack checks used Yjs's selected entry for 294 of 4,786 presse
 generated losses came from writes still in flight. Both formatting key schemes show F1 and F2. The plain-key
 comparison also had one undo press that emitted two updates.
 
+## Follow-up with the chosen keys
+
+**Verdict.** E3 holds for characters, record fields and agreement with keep-always, including under selective
+undo and redo. It does not hold for production tags. The chosen scheme lost four explicitly requested tags at
+settled checkpoints in each delivery order. In one of those histories undoing a plain insertion cleared part of
+someone else's tag. In the other three, tags placed on text concurrently deleted and restored by another
+copy did not follow that text onto its restored identities. The original one-update rule also fails.
+
+The chosen mode uses plain attributes for simple marks, `c:<commentId>` for comment marks and a
+`t:<tagId>` attribute with a writer-and-clock suffix for each tag application. In this experiment, insertion
+with an explicit tag counts as an application and gets a key of its own, even inside a seen tag. The existing
+unformat path still clears the selected keys and re-keys any surviving tails. One standard `Y.UndoManager`
+per writer handles undo and redo. No cleanup gets filtered out of the update stream.
+
+### The 131 command disagreements
+
+The original counter compared the presence of a local Yjs update with a person-level model that assumed
+per-action writes. The new model predicts display changes from the selected characters and the requested
+state. It also predicts whether a plain-key command will rewrite a live marker, using the ordered markers
+present before the command. The harness checks the resulting marks, character identities and values immediately
+after each part and at the end of the command. There were zero update-presence mismatches with this prediction
+under plain or chosen keys, including the marker rewrites. These classifications apply to the original counter.
+
+| Class and cause | Per action | Plain | Chosen |
+| --- | ---: | ---: | ---: |
+| A · Redundant simple on. The selection already shows the mark and the call makes no write. | 0 | 102 | 102 |
+| A · Redundant tag on. A plain tag key behaves like a plain bold key. | 0 | 23 | 0 |
+| A · Pending integration. In batched 29, B tries to unbold `b` after getting C's dependent update, before the dependency arrives. B still sees plain `b` and the command writes nothing. | 1 | 1 | 1 |
+| A · Restored marks. In continuous 103 and 264, the old model omits tags or bold on restored characters. Turning the visible marks off writes normally. | 2 | 2 | 2 |
+| B · Bold covers previously plain typing when the other copy restores a deletion across the formatting boundary, batched 142. | 0 | 1 | 1 |
+| B · Undo of bold typing leaves bold on later plain text, continuous 101. | 1 | 1 | 1 |
+| C · A tag covers two plain characters outside the author's selection, batched 31. | 1 | 1 | 1 |
+| Total A / B / C | 3 / 1 / 1 | 128 / 2 / 1 | 105 / 2 / 1 |
+
+- **B, restored boundary.** Start with `ghij` and client ids A=1, C=3. C bolds `gh`, deletes `ghi`
+  and undoes that deletion. A, who has yet to see C's writes, inserts a plain `l` between `h` and `i`.
+  Reverse delivery gives `[ghl|b]ij`. A unbolds the excess successfully.
+- **B, undo of marked typing.** Start with `vw`. C types bold `rpz` before `v` and syncs.
+  A inserts plain `u ` between `r` and `p`, ahead of C receiving it. C undoes the original typing.
+  B receives A's insertion first and sees `u ` followed by bold `vw`. Unbolding `vw` works.
+- **C, wrong assignment.** Start with plain `vw`. A selects only `w` and applies `T1`. Unseen by A,
+  B types plain `mm` just before `w`. Both writers and a late joiner show `v[mmw|T1]`. B untags
+  only `mm` and all show `vmm[w|T1]`. The flagged command was B's correct removal. The wrong
+  write was the preceding expansion of A's tag onto B's plain text. This case reproduces under both key forms.
+
+The new prediction also accounts for seven display-neutral marker rewrites under plain keys and four under
+chosen keys. These were outside the 131 and 108 because the old model predicted an update for their outer
+command. Three plain and two chosen rewrites were standalone. In batched 160, bold `w`, tag the same
+`w`, then bold it again. The last press of the formatting button moves a bold marker past the tag marker and
+adds a history entry with the same display. Continuous 41 is the converse for a plain tag. In continuous 291,
+two copies bold adjacent letters separately. Reapplying bold across both letters removes the close/open pair
+between them. Batched 26, batched 241, continuous 25 and continuous 228 contain marker rewrites within compounds.
+
+### Generated results
+
+Each column has 300 batched and 300 continuous histories, 40 steps each, using E3's seed-selected mixture
+of forward, reverse and duplicate batches. Each of those 600 seeds also ran three more times per scheme,
+once with each schedule fixed throughout. A tag count is a unique (history, original character, tag kind)
+triple, including the original identity if undo creates a replacement. The tag audit samples the acting
+copy just after commands when it has no pending integrations, and all copies plus a late joiner after
+settling. The settled tag counts below use the late joiner's view after checking individual character
+marks for agreement with the writers.
+
+| Measure | Per action | Plain | Chosen |
+| --- | ---: | ---: | ---: |
+| Histories completed / settled checks | 600 / 1,800 | 600 / 1,800 | 600 / 1,800 |
+| Characters or fields lost / copies or late joiner disagree / stack check failures | 0 / 0 / 0 | 0 / 0 / 0 | 0 / 0 / 0 |
+| Undo and redo presses / applied undo / applied redo | 4,786 / 2,857 / 184 | 4,786 / 2,857 / 184 | 4,786 / 2,857 / 184 |
+| Presses consulting the library's selected entry, undo / redo | 275 / 19 | 263 / 18 | 264 / 18 |
+| Presses differing from a nonempty top, older entry / no entry applied | 44 / 8 | 43 / 8 | 43 / 8 |
+| Presses emitting 0 / 1 / 2 updates | 1,745 / 3,041 / 0 | 1,745 / 3,040 / 1 | 1,745 / 3,040 / 1 |
+| E3 F1 presses / inherited-tag F2 probe hits / predicted formatting skips | 14 / 0 / 1 | 17 / 0 / 0 | 17 / 0 / 0 |
+| Missing requested tags, characters / histories | 17 / 11 | 20 / 13 | 7 / 6 |
+| Missing requested tags at settled checks, characters / histories | 13 / 9 | 16 / 11 | 4 / 4 |
+| Tags with no active explicit request, characters / histories | 105 / 43 | 117 / 40 | 106 / 43 |
+| Tags with no active explicit request at settled checks, characters / histories | 90 / 37 | 103 / 35 | 91 / 37 |
+
+Across the three fixed schedules the non-tag rows and settled missing-tag totals above repeated for each
+scheme. The chosen scheme had four histories with missing tags in forward and twice, and six in reverse.
+The two additional reverse histories were visible locally during delivery and recovered by the next settled
+check. Extra settled tags affected 93 characters in 38 histories in forward and twice, and 91 in 37 in reverse.
+For the explicit F2 example, the chosen mode shows `x[s|T1]y` after C undoes typing tagged `run` and A's
+explicitly tagged `s` remains. Its independent key survives in this fixture.
+
+The strict seed-254 test fails on C's continuous undo with either plain or chosen keys. The first
+`Y.Doc` update comes from the manager and the second from Yjs formatting cleanup with a null origin.
+The continuation in each regression verifies exactly those two origins and agreement at all three settled
+checks. An editor that exposes one notification per press must coalesce its own view notification around
+the press, allow the synchronous updates and caret restoration to finish, and publish the final view once.
+Transport and persistence must still consume both Yjs updates, including the null-origin one.
+
+### Missing tag histories
+
+These are all missing-tag histories in the mixed schedules under plain or chosen keys. All are batched except
+the final row. Brackets denote `T1`. Local gaps marked **transient** close at settlement. The report's
+`--details` output gives the exact command, update delivery, stack actions, target character identities,
+request step numbers and each observed cell for every row and every additional unrequested tag.
+
+| Seed | Keys | History and outcome |
+| --- | --- | --- |
+| 0 | Plain | In a split beat's visual cell, A types tagged `poq`, syncs, then appends tagged `nsk ` while B replaces `q` with a plain `n`. The appended four characters survive without their tag. |
+| 3 | Plain | A tags `gh` and syncs. A explicitly tags `g` again while C, who saw only the first application, untags `g`. At merge the new request leaves `g` plain. |
+| 14 | Chosen | C inserts tagged `run ` into `xy` and syncs. A inserts plain text before the space and sends it to B, then undoes. Before receiving the undo, B adds plain text before `n`. After merge, `n` stays tagged and C's original space is plain. The short fixture yields `x[ru]Z[n] y`. |
+| 23 | Plain and chosen | In `ghij`, B deletes `j` and undoes before receiving A's tag on the original `j`. A sees `ghi[j]` before sync. All copies settle on plain `ghij`. A later restore produces another identity for the same `j` without the tag. |
+| 34 | Plain | A tags `y` in visual `xy`. C receives it and untags the range including `y`. A, who has yet to receive the removal, tags `y` again. Merge loses A's second request. |
+| 84 | Plain and chosen | **Transient.** B tags `y` in a compound, inserts `z ` before it, then undoes and redoes. B sends the reversal batch in reverse to C. Cleanup relayed through C reaches A ahead of B's full batch. A sees `xz y` while B and C see `xz [y]`. After settling the tag returns. |
+| 130 | Plain | A tags `w` in `vw` and deletes both letters. B, unaware of A's edits, types tagged `p` after `w`. The remaining `p` goes plain at merge. |
+| 160 | Plain and chosen | **Transient.** B tags `vr` and syncs, then undoes and redoes. C receives B's batch in reverse and sends cleanup to A ahead of B's full batch. A temporarily sees both `v` and `r` plain. Their tags return at settlement. |
+| 176 | Plain and chosen | C deletes and restores `y` in visual `xy` while B tags the original `y` in a compound. Sync retains the restored `y` without its tag. |
+| 208 | Plain | A inserts tagged `ro ` into `vw`. Unseen by A, B tags `w`, then separately types and erases a letter. B's undo skips that exhausted entry and reaches its tag compound. All three of A's inserted characters lose their tags at merge. |
+| 230 | Plain | A deletes `w` from `vw`, tags `v`, then undoes the tag. C, before seeing A's changes, appends tagged `n`. Sync keeps `n` but drops its tag. |
+| 234 | Plain | A types `uz ` and syncs. C inserts tagged `ozt ` just before A's space while B tags `z ` on its copy. B's original space is plain at merge. |
+| 262 | Plain and chosen | B replaces `gh` with `q` and undoes. On the original `ghij`, C tags `hi` and inserts `oks` before `g`. Sync shows restored plain `h` and tagged `i`. Another restore of `h` also lacks its tag. |
+| Continuous 0 | Plain | B types tagged `tzl` at the start of `abcdef`. C receives it and replaces `lab` with plain `u`. B, before seeing that edit, types tagged `ms` after `l`. Both letters are seen plain locally. At settled checks `m` survives plain. |
+
+### Chosen-scheme controls and limits
+
+Each control turns one write path into a silent in-memory no-op and reruns the 600 mixed histories.
+Used counts histories that called the path. Effective counts histories with a visible or marker write, a
+fresh application key, or an applied press. Each edit is checked before the next command. The two other
+redo failures were already empty presses which changed stack housekeeping or broke a typing group.
+
+| Muted write | Used | Effective | Failed among effective | Other failures |
+| --- | ---: | ---: | ---: | ---: |
+| Typing | 600 | 600 | 600 | 0 |
+| Deleting | 576 | 576 | 576 | 0 |
+| Simple formatting | 594 | 568 | 568 | 0 |
+| Tagging | 419 | 419 | 419 | 0 |
+| Untagging | 282 | 24 | 24 | 0 |
+| Split | 543 | 543 | 543 | 0 |
+| Join or unjoin | 411 | 411 | 411 | 0 |
+| Record field write | 443 | 443 | 443 | 0 |
+| Undo | 596 | 594 | 594 | 0 |
+| Redo | 544 | 159 | 159 | 2 |
+
+The intent model records explicit tag ranges and tagged typing without reading resulting marks. An untag
+withdraws the requests it could see, and a press reverses requests in the entry it applied. The model
+carries requests to restored identities of the same character. Automatically extended ranges on unseen
+typing count as extra when nobody requested the tag on those characters. That convention exposes possible
+wrong assignments but cannot decide which implicit growth a person wanted. A tag applied concurrently
+to a deleted character counts as lost if undo restores its text without that tag.
+
+The harness still uses the current implementation's pre-command positions, visible marks and ordered live
+markers as inputs, along with client ids, state vectors, delivered operations and the encoded removal
+vector. It validates assigned character and field identities by kind and value, binds restored identities
+through Yjs's `redone` link, and uses the raw order of split boundaries in its projection check.
+An update still determines whether to install a model command entry, with an independent prediction
+checked against that fact. For 282 of 4,786 chosen-scheme presses (264 undo, 18 redo), character and
+field effects alone could not tell whether markers would make an entry apply. The expected stacks for
+those presses use the library's selected entry. The reported skip-to-older total compares the pre-press top
+identity to the returned one. Successful controls show detection per history even where the first
+formatting-only press is ambiguous.
+
+The 40-step generator uses one tag id on marks and bold as its simple kind. The key-shape fixture also
+checks italic, underline, strike, highlight, direction, cue and comment identities. These runs cover
+short ASCII editing on three writers and the delta-reading prototype observer. They omit editor selection
+and composition, long offline histories, multiple tag ids and nested tag editing, interleavings beyond
+the generated schedules, and independent CRDT character sequence prediction.
+
+From `prototypes/collab`, run `node src/native-undo/chosen-report.ts` for the mixed schedule and add
+`--fixed` for the three fixed schedules. Add `--details` for the per-command classifications and full
+histories. Run `node --test test/native-undo/chosen.test.ts` for the regression and no-op controls.
+
 ## Standard Yjs and prototype policy
 
 One `Y.UndoManager` per copy over every root but `births`/`edited` (here: segments, beats, visuals, comments, people,

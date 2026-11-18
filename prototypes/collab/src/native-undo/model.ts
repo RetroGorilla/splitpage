@@ -17,10 +17,13 @@ export interface ModelItem {
 export interface ModelContainer { readonly id: string; readonly type: ContainerType; readonly holder: string | null }
 interface Pair { readonly char: string; readonly source: string }
 interface Effect { readonly kind: string; readonly container: string; readonly action: string | null; readonly add: Pair[]; readonly remove: Pair[]; readonly op: string }
-export interface ModelEntry { readonly key: number; insertions: string[]; deletions: Set<string>; effects: Effect[]; involved: boolean }
+interface TagIntent {
+  readonly kind: string; readonly command: string; readonly reversals: string[]; readonly removes: readonly TagIntent[]; readonly on: boolean
+}
+export interface ModelEntry { readonly key: number; insertions: string[]; deletions: Set<string>; effects: Effect[]; tags: TagIntent[]; involved: boolean }
 interface Group { cell: string; at: number; endsInSpace: boolean }
 interface CopyState { readonly client: number; undo: ModelEntry[]; redo: ModelEntry[]; group: Group | null; capturing: boolean; readonly redone: Map<string, string> }
-interface Building { readonly copy: string; readonly entry: ModelEntry; readonly joins: boolean; readonly typing: boolean }
+interface Building { readonly copy: string; readonly entry: ModelEntry; readonly joins: boolean; readonly typing: boolean; formatChanges: boolean }
 // why: whether formatting undo changes anything depends on markers the model does not hold; a step that a person
 // would expect to remove or restore formatting yet changes nothing is counted, not failed
 interface Plan { readonly performed: boolean; readonly formats: boolean; readonly uncertain: boolean; readonly deletes: string[]; readonly restores: string[] }
@@ -32,9 +35,32 @@ export interface PressResult {
   readonly uncertain: number; readonly formatSkips: number; readonly deletes: readonly string[]; readonly formatSources: readonly string[]
 }
 export interface Creation { readonly id: string; readonly kind: "char" | "item"; readonly container: string; readonly value: string; readonly key: string | null }
-export interface ModelEnd { readonly predicted: boolean; readonly merged: boolean; readonly key: number | null; readonly involved: boolean }
+export interface ModelEnd { readonly predicted: boolean; readonly perAction: boolean; readonly merged: boolean; readonly key: number | null; readonly involved: boolean }
 export interface TypingSpec { readonly cell: string; readonly typed: string; readonly replacing: boolean; readonly now: number }
 export interface CommandChar { readonly id: string; readonly value: string; readonly names: ReadonlySet<string> }
+
+export function changesMark(chars: readonly CommandChar[], kind: string, on: boolean, actionKey: boolean): boolean {
+  return chars.length > 0 && ((actionKey && on) || chars.some(char => char.names.has(kind) !== on));
+}
+
+// why: a visually uniform range can still have a closing and an opening marker between its characters
+export function changesPlainMarkers(
+  kind: string, on: boolean, activeBefore: boolean, from: number, to: number,
+  markers: readonly { readonly index: number; readonly key: string; readonly on: boolean }[]
+): boolean {
+  let startGap = true;
+  for (const marker of markers) {
+    if (marker.index < from) continue;
+    if (marker.index >= to) break;
+    if (startGap && marker.index === from && marker.on === (marker.key === kind && on)) {
+      if (marker.key === kind) activeBefore = marker.on;
+      continue;
+    }
+    startGap = false;
+    if (marker.key === kind) return true;
+  }
+  return activeBefore !== on;
+}
 
 export function markCommand(chars: readonly CommandChar[], targets: ReadonlySet<string>, kind: string, on: boolean): CommandChar[] {
   return chars.map(char => {
@@ -73,10 +99,12 @@ export class UndoModel {
   readonly containers = new Map<string, ModelContainer>();
   readonly ops = new Map<string, ModelOp>();
   keepCreated: "keep-holding" | "keep-always" = "keep-always";
+  predictKindKeys = false;
   private readonly actions: FormatAction[] = [];
   private readonly lists = new Map<string, string[]>();
   private readonly copies = new Map<string, CopyState>();
   private readonly order = new Map<string, number>();
+  private readonly tags = new Map<string, TagIntent[]>();
   private building: Building | null = null;
   private serial = 0;
   private entries = 0;
@@ -216,7 +244,7 @@ export class UndoModel {
       else if (joins && last) { last.at = typing.now; if (typing.typed) last.endsInSpace = /\s$/.test(typing.typed); }
       else state.group = { cell: typing.cell, at: typing.now, endsInSpace: /\s$/.test(typing.typed) };
     } else { state.group = null; state.capturing = false; }
-    this.building = { copy, entry: { key: -1, insertions: [], deletions: new Set(), effects: [], involved: false }, joins, typing: !!typing && !typing.replacing };
+    this.building = { copy, entry: { key: -1, insertions: [], deletions: new Set(), effects: [], tags: [], involved: false }, joins, typing: !!typing && !typing.replacing, formatChanges: false };
     return op;
   }
 
@@ -230,21 +258,64 @@ export class UndoModel {
     if (!building) throw new Error("No command is open");
     this.building = null;
     const state = this.state(building.copy), entry = building.entry;
-    const predicted = entry.insertions.length > 0 || entry.deletions.size > 0 || entry.effects.length > 0;
-    if (!changed) return { predicted, merged: false, key: null, involved: entry.involved };
+    const content = entry.insertions.length > 0 || entry.deletions.size > 0;
+    const perAction = content || entry.effects.length > 0;
+    const predicted = this.predictKindKeys ? content || building.formatChanges : perAction;
+    if (!changed) return { predicted, perAction, merged: false, key: null, involved: entry.involved };
     state.redo = [];
     const top = state.undo.at(-1);
     if (building.joins && state.capturing && top) {
       top.insertions.push(...entry.insertions);
       for (const id of entry.deletions) top.deletions.add(id);
       top.effects.push(...entry.effects);
+      top.tags.push(...entry.tags);
       top.involved ||= entry.involved;
-      return { predicted, merged: true, key: top.key, involved: entry.involved };
+      return { predicted, perAction, merged: true, key: top.key, involved: entry.involved };
     }
     const added: ModelEntry = { ...entry, key: ++this.entries };
     state.undo.push(added);
     state.capturing = building.typing;
-    return { predicted, merged: false, key: added.key, involved: entry.involved };
+    return { predicted, perAction, merged: false, key: added.key, involved: entry.involved };
+  }
+
+  expectFormat(changed: boolean): void {
+    if (!this.building) throw new Error("No command is open");
+    this.building.formatChanges ||= changed;
+  }
+
+  top(copy: string, back: boolean): number | null {
+    const state = this.state(copy);
+    return (back ? state.undo : state.redo).at(-1)?.key ?? null;
+  }
+
+  originalCharId(char: ModelChar): string {
+    while (char.restoredFrom !== null) char = this.chars.get(char.restoredFrom) as ModelChar;
+    return char.id;
+  }
+
+  private activeTag(intent: TagIntent, seen: Seen): boolean {
+    return seen(intent.command) && intent.reversals.filter(seen).length % 2 === 0;
+  }
+
+  private addTagIntent(char: ModelChar, kind: string, on: boolean, command: string, seen: Seen): void {
+    const id = this.originalCharId(char), list = this.tags.get(id) ?? [];
+    const removes = on ? [] : list.filter(intent => intent.kind === kind && intent.on && this.activeTag(intent, seen));
+    const intent: TagIntent = { kind, on, command, reversals: [], removes };
+    list.push(intent);
+    this.tags.set(id, list);
+    this.entry().tags.push(intent);
+  }
+
+  requestedTags(char: ModelChar, seen: Seen): Map<string, string[]> {
+    const active = (this.tags.get(this.originalCharId(char)) ?? []).filter(intent => this.activeTag(intent, seen));
+    const removed = new Set(active.flatMap(intent => intent.removes)), result = new Map<string, string[]>();
+    for (const intent of active) {
+      if (!intent.on || removed.has(intent)) continue;
+      const requests = result.get(intent.kind) ?? [];
+      requests.push(intent.command);
+      result.set(intent.kind, requests);
+    }
+    return result;
   }
 
   private involve(container: string, seen: Seen): void {
@@ -266,6 +337,7 @@ export class UndoModel {
       const unknown = leftChar ? (leftChar.uncertain.has(ANY_KIND) ? (inheritAll ? [ANY_KIND] : wanted) : wanted.filter(kind => leftChar.uncertain.has(kind))) : [];
       const char: ModelChar = { id, container, value, op, author: this.author(op), left: previous, right, context, deleters: [], sources, uncertain: new Set(unknown), restoredFrom: null };
       this.chars.set(id, char);
+      if (!inheritAll) for (const kind of marks) if (kind.startsWith("t:")) this.addTagIntent(char, kind, true, op, seen);
       for (const action of this.actions) if (action.container === container && !seen(action.op)) this.place(char, action);
       this.entry().insertions.push(id);
       created.push({ id, kind: "char", container, value, key: null });
@@ -310,6 +382,7 @@ export class UndoModel {
     const add: Pair[] = [], remove: Pair[] = [];
     for (const id of ids) {
       const char = this.chars.get(id) as ModelChar, list = char.sources.get(kind) ?? [];
+      if (kind.startsWith("t:")) this.addTagIntent(char, kind, on, op, seen);
       if (on) {
         list.push({ source: action.id, added: op, removed: [] });
         char.sources.set(kind, list);
@@ -450,7 +523,7 @@ export class UndoModel {
   }
 
   private commit(state: CopyState, entry: ModelEntry, plan: Plan, op: string, seen: Seen): { entry: ModelEntry; restored: Restoration[] } {
-    const made: ModelEntry = { key: ++this.entries, insertions: [], deletions: new Set(), effects: [], involved: entry.involved };
+    const made: ModelEntry = { key: ++this.entries, insertions: [], deletions: new Set(), effects: [], tags: entry.tags, involved: entry.involved };
     const restored: Restoration[] = [], view: Seen = id => id === op || seen(id), context = this.context(view);
     const restore = (id: string): string => {
       const existing = state.redone.get(id);
@@ -497,6 +570,7 @@ export class UndoModel {
       for (const child of this.items.values()) if (child.container === item.value.container && seen(child.id) && !this.itemDeleted(child, seen)) { made.deletions.add(child.id); child.deleters.push(op); }
     }
     for (const effect of entry.effects) made.effects.push(this.reverse(effect, op));
+    for (const intent of entry.tags) intent.reversals.push(op);
     return { entry: made, restored };
   }
 
