@@ -1,0 +1,487 @@
+{
+  "configs": [
+    {
+      "pace": "batched",
+      "creations": "keep-always",
+      "histories": 300,
+      "scheme": "act",
+      "failures": 0,
+      "presses": 2425,
+      "undone": 1439,
+      "redone": 98,
+      "uncertainPresses": 149,
+      "uncertainCommands": 3,
+      "losses": 0,
+      "unseenLosses": 0,
+      "formatSkips": 0,
+      "historiesWithMarkDifferences": 35,
+      "actions": {
+        "type": 3091,
+        "split": 475,
+        "compound": 715,
+        "undo": 1688,
+        "erase": 946,
+        "format": 1189,
+        "replace": 317,
+        "remove": 503,
+        "record": 371,
+        "status": 735,
+        "redo": 737,
+        "join": 333,
+        "edit": 635,
+        "field": 265
+      },
+      "undoPresses": 1688,
+      "uncertainUndos": 137,
+      "uncertainRedos": 12,
+      "formatRemains": 5,
+      "inheritedTagLost": 0,
+      "formatSkipSeeds": [],
+      "extraPressUpdates": []
+    },
+    {
+      "pace": "continuous",
+      "creations": "keep-always",
+      "histories": 300,
+      "scheme": "act",
+      "failures": 0,
+      "presses": 2361,
+      "undone": 1418,
+      "redone": 86,
+      "uncertainPresses": 145,
+      "uncertainCommands": 2,
+      "losses": 0,
+      "unseenLosses": 0,
+      "formatSkips": 1,
+      "historiesWithMarkDifferences": 10,
+      "actions": {
+        "type": 3109,
+        "compound": 717,
+        "format": 1253,
+        "undo": 1647,
+        "status": 667,
+        "join": 375,
+        "replace": 405,
+        "remove": 499,
+        "erase": 928,
+        "field": 261,
+        "redo": 714,
+        "edit": 578,
+        "split": 480,
+        "record": 367
+      },
+      "undoPresses": 1647,
+      "uncertainUndos": 138,
+      "uncertainRedos": 7,
+      "formatRemains": 9,
+      "inheritedTagLost": 0,
+      "formatSkipSeeds": [
+        130
+      ],
+      "extraPressUpdates": []
+    },
+    {
+      "pace": "batched",
+      "creations": "keep-holding",
+      "histories": 300,
+      "scheme": "act",
+      "failures": 0,
+      "presses": 2421,
+      "undone": 1439,
+      "redone": 98,
+      "uncertainPresses": 152,
+      "uncertainCommands": 3,
+      "losses": 26,
+      "unseenLosses": 26,
+      "formatSkips": 0,
+      "historiesWithMarkDifferences": 36,
+      "actions": {
+        "type": 3104,
+        "split": 480,
+        "compound": 712,
+        "undo": 1688,
+        "erase": 937,
+        "format": 1192,
+        "replace": 317,
+        "remove": 503,
+        "record": 365,
+        "status": 741,
+        "redo": 733,
+        "join": 334,
+        "edit": 630,
+        "field": 264
+      },
+      "undoPresses": 1688,
+      "uncertainUndos": 140,
+      "uncertainRedos": 12,
+      "formatRemains": 5,
+      "inheritedTagLost": 0,
+      "formatSkipSeeds": [],
+      "extraPressUpdates": []
+    },
+    {
+      "pace": "continuous",
+      "creations": "keep-holding",
+      "histories": 300,
+      "scheme": "act",
+      "failures": 0,
+      "presses": 2358,
+      "undone": 1413,
+      "redone": 85,
+      "uncertainPresses": 143,
+      "uncertainCommands": 2,
+      "losses": 12,
+      "unseenLosses": 12,
+      "formatSkips": 1,
+      "historiesWithMarkDifferences": 10,
+      "actions": {
+        "type": 3117,
+        "compound": 720,
+        "format": 1243,
+        "undo": 1643,
+        "status": 670,
+        "join": 377,
+        "replace": 404,
+        "remove": 501,
+        "erase": 927,
+        "field": 263,
+        "redo": 715,
+        "edit": 579,
+        "split": 476,
+        "record": 365
+      },
+      "undoPresses": 1643,
+      "uncertainUndos": 137,
+      "uncertainRedos": 6,
+      "formatRemains": 9,
+      "inheritedTagLost": 0,
+      "formatSkipSeeds": [
+        130
+      ],
+      "extraPressUpdates": []
+    },
+    {
+      "pace": "batched",
+      "creations": "keep-always",
+      "histories": 300,
+      "scheme": "name",
+      "failures": 0,
+      "presses": 2425,
+      "undone": 1439,
+      "redone": 98,
+      "uncertainPresses": 146,
+      "uncertainCommands": 67,
+      "losses": 0,
+      "unseenLosses": 0,
+      "formatSkips": 0,
+      "historiesWithMarkDifferences": 40,
+      "actions": {
+        "type": 3091,
+        "split": 475,
+        "compound": 715,
+        "undo": 1688,
+        "erase": 946,
+        "format": 1189,
+        "replace": 317,
+        "remove": 503,
+        "record": 371,
+        "status": 735,
+        "redo": 737,
+        "join": 333,
+        "edit": 635,
+        "field": 265
+      },
+      "undoPresses": 1688,
+      "uncertainUndos": 134,
+      "uncertainRedos": 12,
+      "formatRemains": 5,
+      "inheritedTagLost": 0,
+      "formatSkipSeeds": [],
+      "extraPressUpdates": []
+    },
+    {
+      "pace": "continuous",
+      "creations": "keep-always",
+      "histories": 300,
+      "scheme": "name",
+      "failures": 1,
+      "presses": 2361,
+      "undone": 1418,
+      "redone": 86,
+      "uncertainPresses": 135,
+      "uncertainCommands": 64,
+      "losses": 0,
+      "unseenLosses": 0,
+      "formatSkips": 0,
+      "historiesWithMarkDifferences": 21,
+      "actions": {
+        "type": 3109,
+        "compound": 717,
+        "format": 1253,
+        "undo": 1647,
+        "status": 667,
+        "join": 375,
+        "replace": 405,
+        "remove": 499,
+        "erase": 928,
+        "field": 261,
+        "redo": 714,
+        "edit": 578,
+        "split": 480,
+        "record": 367
+      },
+      "undoPresses": 1647,
+      "uncertainUndos": 129,
+      "uncertainRedos": 6,
+      "formatRemains": 12,
+      "inheritedTagLost": 0,
+      "formatSkipSeeds": [],
+      "extraPressUpdates": [
+        {
+          "seed": 254,
+          "updates": [
+            2
+          ]
+        }
+      ]
+    }
+  ],
+  "marks": {
+    "batched": [
+      {
+        "category": "without undo: b extra on a letter",
+        "count": 11,
+        "shortest": [
+          "clients 2,3,1",
+          "A type \"sqn\" at R2.visualText:0 [b] @1003493",
+          "deliver A>B 1 twice",
+          "deliver A>C 1 twice",
+          "A type \"m\" at R2.visualText:3 @1009405",
+          "C command [{\"do\":\"format\",\"beat\":\"R2\",\"field\":\"visualText\",\"from\":0,\"to\":2,\"mark\":\"b\",\"on\":false}] @1012417",
+          "deliver A>B 1 forward",
+          "deliver A>C 1 forward",
+          "deliver C>A 1 forward",
+          "deliver C>B 1 forward",
+          "b expected off for c26 \"m\" by A"
+        ]
+      },
+      {
+        "category": "with undo or redo: b extra on a letter",
+        "count": 7,
+        "shortest": [
+          "clients 3,2,1",
+          "C command [{\"do\":\"set\",\"beat\":\"R2\",\"key\":\"status\",\"value\":\"shot\"},{\"do\":\"format\",\"beat\":\"R2\",\"field\":\"audioText\",\"from\":3,\"to\":4,\"mark\":\"b\",\"on\":true},{\"do\":\"insert\",\"beat\":\"R1\",\"field\":\"audioText\",\"at\":4,\"text\":\"lo\"},{\"do\":\"split\",\"beat\":\"R1\",\"at\":3,\"created\":\"S2\"}] @1010947",
+          "C command [{\"do\":\"set\",\"beat\":\"R2\",\"key\":\"status\",\"value\":\"todo\"},{\"do\":\"format\",\"beat\":\"R1\",\"field\":\"audioText\",\"from\":0,\"to\":3,\"mark\":\"b\",\"on\":true},{\"do\":\"insert\",\"beat\":\"S2\",\"field\":\"visualText\",\"at\":0,\"text\":\"nlo\"}] @1011129",
+          "deliver C>B 2 reverse",
+          "B command [{\"do\":\"format\",\"beat\":\"R1\",\"field\":\"audioText\",\"from\":1,\"to\":2,\"mark\":\"b\",\"on\":false}] @1012806",
+          "C undo @1013270",
+          "deliver B>A 1 forward",
+          "deliver B>C 1 forward",
+          "deliver C>A 3 forward",
+          "deliver C>B 1 forward",
+          "b expected off for y900:5 \"c\" by seed"
+        ]
+      },
+      {
+        "category": "without undo: t:T1 extra on a letter",
+        "count": 5,
+        "shortest": [
+          "clients 1,2,3",
+          "C type \"m\" at R2.audioText:3 [t:T1] @1000521",
+          "C type \"zzz\" at R2.audioText:4 [t:T1] @1002468",
+          "deliver C>B 2 forward",
+          "C type \"zsn \" at R2.audioText:4 @1005174",
+          "B command [{\"do\":\"format\",\"beat\":\"R2\",\"field\":\"audioText\",\"from\":3,\"to\":5,\"mark\":\"t:T1\",\"on\":false}] @1010598",
+          "deliver B>A 1 forward",
+          "deliver B>C 1 forward",
+          "deliver C>A 3 forward",
+          "deliver C>B 1 forward",
+          "t:T1 expected off for c24 \"z\" by C"
+        ]
+      },
+      {
+        "category": "with undo or redo: t:T1 extra on a letter",
+        "count": 3,
+        "shortest": [
+          "clients 1,2,3",
+          "B command [{\"do\":\"set\",\"beat\":\"R2\",\"key\":\"status\",\"value\":\"ready\"},{\"do\":\"format\",\"beat\":\"R1\",\"field\":\"visualText\",\"from\":0,\"to\":2,\"mark\":\"t:T1\",\"on\":true},{\"do\":\"insert\",\"beat\":\"R2\",\"field\":\"visualText\",\"at\":0,\"text\":\"rr \"},{\"do\":\"record\",\"root\":\"tags\",\"id\":\"T1\",\"fields\":{\"name\":\"tag 1\",\"colour\":\"blue\"}}] @1004500",
+          "C command [{\"do\":\"split\",\"beat\":\"R1\",\"at\":3,\"created\":\"S1\"}] @1004586",
+          "deliver B>C 1 forward",
+          "B undo @1006203",
+          "C command [{\"do\":\"set\",\"beat\":\"R1\",\"key\":\"status\",\"value\":\"shot\"},{\"do\":\"format\",\"beat\":\"R2\",\"field\":\"audioText\",\"from\":0,\"to\":4,\"mark\":\"t:T1\",\"on\":true},{\"do\":\"insert\",\"beat\":\"R1\",\"field\":\"visualText\",\"at\":1,\"text\":\"p\"},{\"do\":\"field\",\"root\":\"tags\",\"id\":\"T1\",\"key\":\"colour\",\"value\":\"x\"},{\"do\":\"split\",\"beat\":\"S1\",\"at\":1,\"created\":\"S2\"}] @1009675",
+          "deliver B>A 2 forward",
+          "deliver B>C 1 forward",
+          "deliver C>A 2 forward",
+          "deliver C>B 2 forward",
+          "t:T1 expected off for y900:14 \"w\" by seed"
+        ]
+      },
+      {
+        "category": "without undo: b extra on a beat boundary",
+        "count": 3,
+        "shortest": [
+          "clients 1,3,2",
+          "B command [{\"do\":\"format\",\"beat\":\"R2\",\"field\":\"audioText\",\"from\":0,\"to\":4,\"mark\":\"b\",\"on\":true}] @1005653",
+          "C command [{\"do\":\"split\",\"beat\":\"R2\",\"at\":4,\"created\":\"S1\"}] @1005948",
+          "C type \"us\" at R1.visualText:0 [t:T1] @1006667",
+          "deliver B>A 1 reverse",
+          "deliver B>C 1 reverse",
+          "deliver C>A 2 reverse",
+          "deliver C>B 2 reverse",
+          "C command [{\"do\":\"set\",\"beat\":\"S1\",\"key\":\"status\",\"value\":\"shot\"},{\"do\":\"format\",\"beat\":\"R1\",\"field\":\"visualText\",\"from\":3,\"to\":4,\"mark\":\"b\",\"on\":true},{\"do\":\"insert\",\"beat\":\"R1\",\"field\":\"visualText\",\"at\":2,\"text\":\"lu \"},{\"do\":\"record\",\"root\":\"tags\",\"id\":\"T2\",\"fields\":{\"name\":\"tag 2\",\"colour\":\"blue\"}},{\"do\":\"split\",\"beat\":\"S1\",\"at\":0,\"created\":\"S2\"}] @1018774",
+          "deliver C>A 1 forward",
+          "deliver C>B 1 forward",
+          "b expected off for c37 \"{\\\"b\\\":\\\"S2\\\"}\" by C"
+        ]
+      },
+      {
+        "category": "with undo or redo: t:T1 missing on a beat boundary",
+        "count": 2,
+        "shortest": [
+          "clients 1,2,3",
+          "B command [{\"do\":\"set\",\"beat\":\"R1\",\"key\":\"status\",\"value\":\"shot\"},{\"do\":\"format\",\"beat\":\"R2\",\"field\":\"audioText\",\"from\":0,\"to\":4,\"mark\":\"t:T1\",\"on\":true},{\"do\":\"insert\",\"beat\":\"R2\",\"field\":\"visualText\",\"at\":2,\"text\":\"n\"},{\"do\":\"record\",\"root\":\"tags\",\"id\":\"T1\",\"fields\":{\"name\":\"tag 1\",\"colour\":\"blue\"}}] @1000297",
+          "deliver B>C 1 forward",
+          "B undo @1007482",
+          "B command [{\"do\":\"set\",\"beat\":\"R1\",\"key\":\"status\",\"value\":\"shot\"}] @1007679",
+          "C command [{\"do\":\"set\",\"beat\":\"R1\",\"key\":\"status\",\"value\":\"ready\"},{\"do\":\"format\",\"beat\":\"R2\",\"field\":\"audioText\",\"from\":0,\"to\":3,\"mark\":\"b\",\"on\":false},{\"do\":\"insert\",\"beat\":\"R1\",\"field\":\"visualText\",\"at\":1,\"text\":\"kmu\"},{\"do\":\"record\",\"root\":\"tags\",\"id\":\"T3\",\"fields\":{\"name\":\"tag 3\",\"colour\":\"blue\"}},{\"do\":\"split\",\"beat\":\"R2\",\"at\":3,\"created\":\"S1\"}] @1010290",
+          "deliver B>A 3 forward",
+          "deliver B>C 2 forward",
+          "deliver C>A 1 forward",
+          "deliver C>B 1 forward",
+          "t:T1 expected on for c39 \"{\\\"b\\\":\\\"S1\\\"}\" by C"
+        ]
+      },
+      {
+        "category": "without undo: t:T1 missing on a letter",
+        "count": 2,
+        "shortest": [
+          "clients 3,2,1",
+          "A command [{\"do\":\"format\",\"beat\":\"R1\",\"field\":\"visualText\",\"from\":0,\"to\":1,\"mark\":\"t:T1\",\"on\":true}] @1001852",
+          "A type \"p\" at R1.visualText:0 @1002002",
+          "A type \"usl\" at R2.audioText:3 @1006137",
+          "deliver A>B 3 reverse",
+          "deliver A>C 3 reverse",
+          "C type \"n\" at R1.visualText:2 [t:T1] @1008687",
+          "B erase R1.visualText:0-2 @1009412",
+          "deliver B>A 1 forward",
+          "deliver B>C 1 forward",
+          "deliver C>A 1 forward",
+          "deliver C>B 1 forward",
+          "t:T1 expected on for c29 \"n\" by C"
+        ]
+      },
+      {
+        "category": "without undo: t:T1 extra on a beat boundary",
+        "count": 1,
+        "shortest": [
+          "clients 1,2,3",
+          "A command [{\"do\":\"set\",\"beat\":\"R2\",\"key\":\"status\",\"value\":\"shot\"},{\"do\":\"format\",\"beat\":\"R2\",\"field\":\"visualText\",\"from\":0,\"to\":1,\"mark\":\"b\",\"on\":true},{\"do\":\"insert\",\"beat\":\"R1\",\"field\":\"visualText\",\"at\":0,\"text\":\"s \"},{\"do\":\"record\",\"root\":\"tags\",\"id\":\"T1\",\"fields\":{\"name\":\"tag 1\",\"colour\":\"red\"}},{\"do\":\"split\",\"beat\":\"R2\",\"at\":2,\"created\":\"S1\"}] @1000893",
+          "C command [{\"do\":\"format\",\"beat\":\"R2\",\"field\":\"audioText\",\"from\":1,\"to\":2,\"mark\":\"t:T1\",\"on\":true}] @1006222",
+          "deliver A>B 1 forward",
+          "deliver A>C 1 forward",
+          "deliver C>A 1 forward",
+          "deliver C>B 1 forward",
+          "A command [{\"do\":\"split\",\"beat\":\"S1\",\"at\":0,\"created\":\"S3\"}] @1009403",
+          "deliver A>B 1 forward",
+          "deliver A>C 1 forward",
+          "t:T1 expected off for c33 \"{\\\"b\\\":\\\"S3\\\"}\" by A"
+        ]
+      },
+      {
+        "category": "without undo: b missing on a letter",
+        "count": 1,
+        "shortest": [
+          "clients 3,2,1",
+          "C command [{\"do\":\"set\",\"beat\":\"R2\",\"key\":\"status\",\"value\":\"shot\"},{\"do\":\"format\",\"beat\":\"R2\",\"field\":\"audioText\",\"from\":3,\"to\":4,\"mark\":\"b\",\"on\":true},{\"do\":\"insert\",\"beat\":\"R1\",\"field\":\"audioText\",\"at\":6,\"text\":\"pmn \"}] @1002837",
+          "deliver C>A 1 twice",
+          "deliver C>B 1 twice",
+          "A erase R2.audioText:2-4 @1009324",
+          "B type \"s\" at R2.audioText:4 [b] @1016619",
+          "deliver A>B 1 forward",
+          "deliver A>C 1 forward",
+          "deliver B>A 1 forward",
+          "deliver B>C 1 forward",
+          "b expected on for c29 \"s\" by B"
+        ]
+      }
+    ],
+    "continuous": [
+      {
+        "category": "with undo or redo: b extra on a letter",
+        "count": 5,
+        "shortest": [
+          "clients 1,2,3",
+          "B command [{\"do\":\"format\",\"beat\":\"R1\",\"field\":\"audioText\",\"from\":0,\"to\":4,\"mark\":\"b\",\"on\":true}] @1004518",
+          "deliver B>A 1 reverse",
+          "A type \"oo\" at R1.audioText:2 @1005302",
+          "B undo @1005855",
+          "deliver A>B 1 forward",
+          "deliver A>C 1 forward",
+          "deliver B>A 1 forward",
+          "deliver B>C 2 forward",
+          "b expected off for y900:5 \"c\" by seed"
+        ]
+      },
+      {
+        "category": "with undo or redo: t:T1 extra on a letter",
+        "count": 3,
+        "shortest": [
+          "clients 3,1,2",
+          "A type \"nn\" at R1.visualText:1 @1004636",
+          "deliver A>B 1 twice",
+          "deliver A>C 1 reverse",
+          "C command [{\"do\":\"format\",\"beat\":\"R1\",\"field\":\"visualText\",\"from\":0,\"to\":4,\"mark\":\"t:T1\",\"on\":true}] @1006522",
+          "deliver C>B 1 twice",
+          "B type \"srq \" at R1.visualText:2 @1008788",
+          "C undo @1010175",
+          "deliver B>A 1 forward",
+          "deliver B>C 1 forward",
+          "deliver C>A 2 forward",
+          "deliver C>B 1 forward",
+          "t:T1 expected off for c23 \"n\" by A"
+        ]
+      },
+      {
+        "category": "without undo: t:T1 missing on a letter",
+        "count": 1,
+        "shortest": [
+          "clients 3,2,1",
+          "B type \"tzl\" at R1.audioText:0 [t:T1] @1009287",
+          "deliver B>C 1 forward",
+          "C replace R1.audioText:2-5 with \"u\" @1011396",
+          "B type \"ms\" at R1.audioText:3 [t:T1] @1011789",
+          "deliver B>A 2 forward",
+          "deliver B>C 1 forward",
+          "deliver C>A 1 forward",
+          "deliver C>B 1 forward",
+          "t:T1 expected on for c28 \"m\" by B"
+        ]
+      },
+      {
+        "category": "without undo: b extra on a letter",
+        "count": 1,
+        "shortest": [
+          "clients 2,1,3",
+          "C type \"k\" at R2.visualText:1 @1001070",
+          "deliver C>B 1 reverse",
+          "C type \"o\" at R2.visualText:3 @1004697",
+          "deliver C>A 1 forward",
+          "C command [{\"do\":\"record\",\"root\":\"tags\",\"id\":\"T1\",\"fields\":{\"name\":\"tag 1\",\"colour\":\"blue\"}}] @1006197",
+          "deliver C>A 1 reverse",
+          "deliver C>B 1 reverse",
+          "deliver C>B 1 twice",
+          "B command [{\"do\":\"set\",\"beat\":\"R2\",\"key\":\"status\",\"value\":\"todo\"},{\"do\":\"format\",\"beat\":\"R2\",\"field\":\"visualText\",\"from\":2,\"to\":4,\"mark\":\"b\",\"on\":true},{\"do\":\"insert\",\"beat\":\"R1\",\"field\":\"visualText\",\"at\":2,\"text\":\"zr\"},{\"do\":\"field\",\"root\":\"tags\",\"id\":\"T1\",\"key\":\"note\",\"value\":\"green\"}] @1007068",
+          "deliver B>A 1 twice",
+          "deliver B>C 1 forward",
+          "C type \"n\" at R2.visualText:4 @1007911",
+          "A type \"pl\" at R2.visualText:3 @1008183",
+          "deliver A>B 1 forward",
+          "deliver A>C 1 forward",
+          "deliver C>A 2 forward",
+          "deliver C>B 1 forward",
+          "b expected off for c35 \"n\" by C"
+        ]
+      }
+    ]
+  }
+}

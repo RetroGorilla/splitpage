@@ -1,0 +1,117 @@
+{
+  "sessions": [
+    {
+      "checkpoints": [
+        {
+          "operations": 5000,
+          "typed": 3693,
+          "visible": 2948,
+          "editing": 23229,
+          "receiving": 21781,
+          "fresh": 21781,
+          "retained": 1260,
+          "undo": 754
+        },
+        {
+          "operations": 10000,
+          "typed": 7429,
+          "visible": 5559,
+          "editing": 43738,
+          "receiving": 40929,
+          "fresh": 40929,
+          "retained": 2393,
+          "undo": 1567
+        },
+        {
+          "operations": 15000,
+          "typed": 11165,
+          "visible": 8075,
+          "editing": 63600,
+          "receiving": 59374,
+          "fresh": 59374,
+          "retained": 3623,
+          "undo": 2333
+        },
+        {
+          "operations": 20000,
+          "typed": 14852,
+          "visible": 10557,
+          "editing": 83348,
+          "receiving": 77649,
+          "fresh": 77649,
+          "retained": 4838,
+          "undo": 3093
+        }
+      ],
+      "afterClear": 83348
+    }
+  ],
+  "pastes": [
+    {
+      "pasted": 250000,
+      "editing": 253678,
+      "fresh": 3678,
+      "retained": 250000,
+      "editingItems": 211,
+      "freshItems": 211
+    },
+    {
+      "pasted": 500000,
+      "editing": 503678,
+      "fresh": 3678,
+      "retained": 500000,
+      "editingItems": 211,
+      "freshItems": 211
+    },
+    {
+      "pasted": 750000,
+      "editing": 753678,
+      "fresh": 3678,
+      "retained": 750000,
+      "editingItems": 211,
+      "freshItems": 211
+    },
+    {
+      "pasted": 1000000,
+      "editing": 1003678,
+      "fresh": 3678,
+      "retained": 1000000,
+      "editingItems": 211,
+      "freshItems": 211
+    }
+  ],
+  "creations": [
+    {
+      "rule": "keep-always",
+      "what": "record",
+      "count": 100,
+      "bytesPerUndone": 50.57,
+      "freshBytesPerUndone": 37.67,
+      "freshBytesPerStoredCharacter": 4.70875
+    },
+    {
+      "rule": "keep-always",
+      "what": "split",
+      "count": 100,
+      "bytesPerUndone": 48.95,
+      "freshBytesPerUndone": 38.05,
+      "freshBytesPerStoredCharacter": 4.75625
+    },
+    {
+      "rule": "keep-holding",
+      "what": "record",
+      "count": 100,
+      "bytesPerUndone": 48.03,
+      "freshBytesPerUndone": 13.99,
+      "freshBytesPerStoredCharacter": 1.74875
+    },
+    {
+      "rule": "keep-holding",
+      "what": "split",
+      "count": 100,
+      "bytesPerUndone": 46.41,
+      "freshBytesPerUndone": 35.51,
+      "freshBytesPerStoredCharacter": 4.43875
+    }
+  ]
+}

@@ -272,7 +272,7 @@ export class NativeReplica {
       }
       for (const [field, root] of Object.entries(RECORD_ROOTS)) {
         const map = this.doc.getMap(root);
-        bags(source[field]).forEach((record, index) => map.set(String(record.id), { ...record, rank: index }));
+        bags(source[field]).forEach((record, index) => map.set(String(record.id), new Y.Map(Object.entries({ ...record, rank: index }))));
       }
       const sections = bags(source.sections);
       for (const row of bags(source.rows)) {
