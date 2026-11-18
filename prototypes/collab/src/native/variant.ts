@@ -17,9 +17,10 @@ export interface NativeDocumentSource { rows?: unknown; sections?: unknown; comm
 
 export type NativeScheme = "name" | "act";
 export type NativeUndoOutcome = "undone" | "used-up" | "empty";
-interface NativeFlagNote { beat: string; key: string; wrote: string | null; before: unknown }
+interface NativeFlagNote { beat: string; key: string; wrote: string | null; before: unknown; after: unknown }
 interface NativeActNote { text: Y.Text; names: string[]; seen: string[]; minted: string[]; from: Y.RelativePosition; to: Y.RelativePosition }
 interface NativeNote { flag?: NativeFlagNote; act?: NativeActNote }
+type NativeStackItem = Y.UndoManager["undoStack"][number];
 
 // why: two writes of one flag are the same change when they mean the same, whoever made them and whenever
 function flagMeaning(key: string, value: unknown): string | null {
@@ -156,7 +157,9 @@ export class NativeReplica {
   private textChanges: NativeTextChange[] = [];
   private structureChanged = true;
   private readonly layout = new Map<string, string>();
-  private note: NativeNote | null = null;
+  private pending: NativeNote[] = [];
+  private depth = 0;
+  keepCreated = true;
   readonly scheme: NativeScheme;
 
   constructor(client: number, captureTimeout = 0, scheme: NativeScheme = "name") {
@@ -189,11 +192,15 @@ export class NativeReplica {
     });
     for (const name of ["comments", "people", "tags", "shots", "meta"] as const) this.doc.getMap(name).observeDeep(() => { this.dirtyRecords.add(name); });
     this.order.observe(() => { this.structureChanged = true; });
+    // why: the library undoes a creation by deleting the created type with all that anyone wrote in it since; the
+    // filter keeps a beat's record and visual cell whatever transaction made them, so only their placement is undone
+    const deleteFilter = (item: Y.Item): boolean =>
+      !(this.keepCreated && item.content instanceof Y.ContentType && (item.parent === this.beats || item.parent === this.visuals));
     this.undo = new Y.UndoManager([this.segments, this.order, this.beats, this.visuals, this.doc.getMap("comments")],
-      { trackedOrigins: new Set([this.origin]), captureTimeout });
+      { trackedOrigins: new Set([this.origin]), captureTimeout, deleteFilter });
     this.undo.on("stack-item-added", (event: { stackItem: { meta: Map<unknown, unknown> } }) => {
-      if (this.note) event.stackItem.meta.set("note", this.note);
-      this.note = null;
+      if (this.pending.length) event.stackItem.meta.set("notes", this.pending);
+      this.pending = [];
     });
   }
 
@@ -202,11 +209,17 @@ export class NativeReplica {
   get visuals(): Y.Map<Y.Text> { return this.doc.getMap("visuals"); }
   get order(): Y.Array<string> { return this.doc.getArray("order"); }
 
-  transact(change: () => void): void { this.doc.transact(change, this.origin); }
+  // why: a compound command is one entry; the notes of its parts wait for that entry, which the library adds when
+  // the outermost transaction ends, and notes of a command that changed nothing are dropped there
+  transact(change: () => void): void {
+    this.depth++;
+    try { this.doc.transact(change, this.origin); } finally { if (--this.depth === 0) this.pending = []; }
+  }
 
   // why: an act's key is its writer and that writer's clock when it began, so a reloaded copy never reuses one
   private actKey(name: string): string {
-    return `${name}${ACT}${this.doc.clientID.toString(36)}.${Y.getState(this.doc.store, this.doc.clientID).toString(36)}`;
+    const clock = Y.decodeStateVector(Y.encodeStateVector(this.doc)).get(this.doc.clientID) ?? 0;
+    return `${name}${ACT}${this.doc.clientID.toString(36)}.${clock.toString(36)}`;
   }
 
   // why: turning a key off as far as its run goes and giving what follows the gap a new key writes no marker that turns
@@ -364,11 +377,10 @@ export class NativeReplica {
           else for (const key of held) if (nativeMarkName(key) === name) this.retire(cell.text, key, cell.start + from, cell.start + to);
         }
       }
-      this.note = { act: { text: cell.text, names: Object.keys(marks).filter(name => marks[name]), seen: [...held], minted: this.scheme === "act" ? Object.keys(attributes) : [],
-        from: Y.createRelativePositionFromTypeIndex(cell.text, cell.start + from, 0), to: Y.createRelativePositionFromTypeIndex(cell.text, cell.start + to, -1) } };
+      this.pending.push({ act: { text: cell.text, names: Object.keys(marks).filter(name => marks[name]), seen: [...held], minted: this.scheme === "act" ? Object.keys(attributes) : [],
+        from: Y.createRelativePositionFromTypeIndex(cell.text, cell.start + from, 0), to: Y.createRelativePositionFromTypeIndex(cell.text, cell.start + to, -1) } });
       if (Object.keys(attributes).length) cell.text.format(cell.start + from, to - from, attributes);
     });
-    this.note = null;
     this.undo.stopCapturing();
   }
 
@@ -377,9 +389,9 @@ export class NativeReplica {
     this.undo.stopCapturing();
     this.transact(() => {
       write(record);
-      this.note = { flag: { beat, key, wrote: flagMeaning(key, record.get(key)), before } };
+      const after = record.get(key);
+      this.pending.push({ flag: { beat, key, wrote: flagMeaning(key, after), before, after } });
     });
-    this.note = null;
     this.undo.stopCapturing();
   }
 
@@ -390,29 +402,52 @@ export class NativeReplica {
 
   // why: plain undo() goes on to an older step when the top one changes nothing, and reverses a flag only when this
   // copy's write is the one that stands; this step takes one entry, and takes a change back by what it means
-  undoStep(): NativeUndoOutcome { return this.step(this.undo.undoStack, () => this.undo.undo() !== null, true); }
+  undoStep(): NativeUndoOutcome { return this.step(this.undo.undoStack, this.undo.redoStack, () => this.undo.undo() !== null, true); }
 
-  redoStep(): NativeUndoOutcome { return this.step(this.undo.redoStack, () => this.undo.redo() !== null, false); }
+  redoStep(): NativeUndoOutcome { return this.step(this.undo.redoStack, this.undo.undoStack, () => this.undo.redo() !== null, false); }
 
-  private step(stack: { meta: Map<unknown, unknown> }[], run: () => boolean, back: boolean): NativeUndoOutcome {
-    const top = stack.at(-1);
+  private step(from: NativeStackItem[], to: NativeStackItem[], run: () => boolean, back: boolean): NativeUndoOutcome {
+    const top = from.at(-1);
     if (!top) return "empty";
-    const note = top.meta.get("note") as NativeNote | undefined, flag = note?.flag, record = flag ? this.beats.get(flag.beat) : undefined;
-    if (flag && back && flagMeaning(flag.key, record?.get(flag.key)) !== flag.wrote) { stack.pop(); return "used-up"; }
-    this.note = note ?? null;
-    const done = this.alone(stack, run);
-    this.note = null;
-    if (!back) return done ? "undone" : "used-up";
-    if (flag && record) {
-      const now = record.get(flag.key);
-      // why: an identical write by someone else still stands, or the library declined to put the earlier value back
-      if (flagMeaning(flag.key, now) === flag.wrote || (now === undefined && flag.before !== undefined)) {
-        this.doc.transact(() => { if (flag.before === undefined) record.delete(flag.key); else record.set(flag.key, flag.before); }, "takeback");
-        return "undone";
-      }
+    const notes = (top.meta.get("notes") ?? []) as NativeNote[], grown = to.length;
+    const flags = notes.flatMap(note => note.flag ? [note.flag] : []), acts = notes.flatMap(note => note.act ? [note.act] : []);
+    const value = (flag: NativeFlagNote): unknown => this.beats.get(flag.beat)?.get(flag.key);
+    // why: a flag is this entry's to change only while it still holds what the entry's last move left there
+    const standing = flags.filter(flag => flagMeaning(flag.key, value(flag)) === (back ? flag.wrote : flagMeaning(flag.key, flag.before)));
+    if (flags.length && flags.length === notes.length && !standing.length) { from.pop(); return "used-up"; }
+    let done = false, forced = false;
+    this.pending = notes;
+    // why: an entry the guard moved across itself holds nothing the library can replay
+    if (top.meta.get("carrier") === true) from.pop(); else done = this.alone(from, run);
+    this.pending = [];
+    for (const flag of standing) {
+      const record = this.beats.get(flag.beat), target = back ? flag.before : flag.after;
+      // why: an identical write by someone else still stands, or the library declined to put the value back
+      if (!record || flagMeaning(flag.key, record.get(flag.key)) === flagMeaning(flag.key, target)) continue;
+      this.doc.transact(() => { if (target === undefined) record.delete(flag.key); else record.set(flag.key, target); }, "takeback");
+      forced = true;
     }
-    if (note?.act && this.takeBack(note.act)) return "undone";
-    return done ? "undone" : "used-up";
+    for (const act of acts) if (back ? this.takeBack(act) : this.putBack(act)) forced = true;
+    if (!done && !forced) return "used-up";
+    // why: a move the library did not make left no entry on the other stack, so the entry itself goes there
+    if (to.length === grown) { top.meta.set("carrier", true); to.push(top); }
+    return "undone";
+  }
+
+  private putBack(act: NativeActNote): boolean {
+    const start = Y.createAbsolutePositionFromRelativePosition(act.from, this.doc)?.index, end = Y.createAbsolutePositionFromRelativePosition(act.to, this.doc)?.index;
+    if (start === undefined || end === undefined || end <= start) return false;
+    const showing = new Set<string>();
+    let index = 0;
+    for (const item of act.text.toDelta() as NativeDeltaItem[]) {
+      const next = index + (typeof item.insert === "string" ? item.insert.length : 1);
+      if (next > start && index < end) for (const [key, shown] of Object.entries(item.attributes ?? {})) if (shown === true) showing.add(nativeMarkName(key));
+      index = next;
+    }
+    const missing = act.names.filter(name => !showing.has(name));
+    if (!missing.length) return false;
+    this.doc.transact(() => { act.text.format(start, end - start, Object.fromEntries(missing.map(name => [this.scheme === "act" ? this.actKey(name) : name, true]))); }, "takeback");
+    return true;
   }
 
   // why: the same mark over exactly the same characters, made by someone who had not seen this one, is one change
@@ -441,22 +476,16 @@ export class NativeReplica {
     return true;
   }
 
-  // why: undoing a creation deletes the created type with everything anyone wrote in it, so with "apart" the new beat's
-  // record and visual cell are written outside the undo history and only the boundary is undone
-  split(beat: string, offset: number, created: string, fields: Record<string, unknown> = {}, record: "apart" | "tracked" = "apart"): void {
-    const setup = (): void => {
-      const map = new Y.Map<unknown>();
-      this.beats.set(created, map);
-      for (const [key, value] of Object.entries(fields)) map.set(key, value);
-      this.visuals.set(created, new Y.Text());
-    };
-    if (record === "apart") this.doc.transact(setup, "setup");
+  split(beat: string, offset: number, created: string, fields: Record<string, unknown> = {}): void {
     this.transact(() => {
       const cell = this.cell(beat, "audioText"), around = attributesAt(cell.text.toDelta() as NativeDeltaItem[], cell.start + offset - 1) ?? {};
       // why: given the formatting already in force at its place, the boundary writes no marker of its own, so a later
       // undo of that formatting cannot leave a marker that turns it on again after the boundary
       cell.text.insertEmbed(cell.start + offset, { b: created }, Object.fromEntries(Object.entries(around).filter(([, value]) => value === true)));
-      if (record === "tracked") setup();
+      const map = new Y.Map<unknown>();
+      this.beats.set(created, map);
+      for (const [key, value] of Object.entries(fields)) map.set(key, value);
+      this.visuals.set(created, new Y.Text());
     });
   }
 

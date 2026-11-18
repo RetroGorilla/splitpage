@@ -93,9 +93,10 @@ test("split undo and redo with another person's typing on both sides (T12)", () 
   assert.equal(a.redoStep(), "undone"); net.settle(); assert.deepEqual(net.agree(), ["R1: abY", "Ra: Xcd"]);
 });
 
-test("finding: a split whose new beat is created inside the undone transaction loses what someone else typed in its visual cell", () => {
+test("finding: the library alone undoes a split by deleting the new beat's visual cell with what someone else typed in it", () => {
   const { a, b, net } = pair([{ id: "R1", audioText: "abcd" }]);
-  a.split("R1", 2, "Ra", {}, "tracked"); a.changes(); net.settle();
+  a.keepCreated = false;
+  a.split("R1", 2, "Ra"); a.changes(); net.settle();
   type(b, "Ra", 0, "V", "visualText"); net.settle();
   a.undoStep(); net.settle();
   assert.deepEqual(net.agree(), ["R1: abcd"]);
@@ -103,15 +104,26 @@ test("finding: a split whose new beat is created inside the undone transaction l
   assert.deepEqual(recovered(b), []);
 });
 
-test("the variant's split writes the new beat's record outside the undo history: the visual text is kept and listed after the undo", () => {
-  const { a, b, net } = pair([{ id: "R1", audioText: "abcd" }]);
-  a.split("R1", 2, "Ra"); a.changes(); net.settle();
-  type(b, "Ra", 0, "V", "visualText"); net.settle();
-  a.undoStep(); net.settle();
+const SPLITS: Record<string, (a: NativeReplica) => void> = {
+  "on its own": a => { a.split("R1", 2, "Ra"); },
+  "inside the copy's own outer transaction": a => { a.transact(() => { a.split("R1", 2, "Ra"); }); },
+  "inside a raw outer transaction of the document": a => { a.doc.transact(() => { a.split("R1", 2, "Ra"); }, a.origin); },
+  "as one part of a compound command": a => { a.transact(() => { a.splice("R1", "audioText", 4, 4, [{ text: "!", marks: {} }]); a.split("R1", 2, "Ra", { status: "todo" }); }); }
+};
+
+for (const [how, split] of Object.entries(SPLITS)) test(`a split made ${how}, then undone: what someone else wrote in the new beat's visual cell and record is kept and listed`, () => {
+  const { a, b, net } = pair([{ id: "R1", audioText: "abcd" }]), compound = how.startsWith("as one part");
+  split(a); a.changes(); net.settle();
+  type(b, "Ra", 0, "V", "visualText"); b.setField("Ra", "shot", "wide"); b.changes(); net.settle();
+  assert.equal(a.undoStep(), "undone"); net.settle();
   assert.deepEqual(net.agree(), ["R1: abcd"]);
-  assert.deepEqual(recovered(b), ["Ra:  / V"]);
-  a.redoStep(); net.settle();
-  assert.deepEqual(net.agree(), ["R1: ab", "Ra: cd / V"]);
+  for (const copy of [a, b, net.late()]) {
+    assert.deepEqual(recovered(copy), ["Ra:  / V"]);
+    assert.equal(copy.beats.get("Ra")?.get("shot"), "wide");
+  }
+  assert.equal(a.redoStep(), "undone"); net.settle();
+  assert.deepEqual(net.agree(), compound ? ["R1: ab", "Ra: cd! / V"] : ["R1: ab", "Ra: cd / V"]);
+  assert.equal(b.beats.get("Ra")?.get("shot"), "wide");
 });
 
 test("join undo and redo with another person's typing in the joined beat (T12 join)", () => {
@@ -229,7 +241,31 @@ for (const [name, act] of Object.entries(identical)) for (const scheme of SCHEME
       assert.equal(reading(net, me, scheme), untouched);
     }
   });
+  test(`the same ${name} made by two people at once, ${scheme} keys: the guarded undo by either person can be redone and undone again`, () => {
+    for (const undoer of [0, 1]) {
+      const { me, net } = made(undoer), changed = reading(net, me, scheme);
+      assert.notEqual(changed, untouched);
+      assert.equal(me.undoStep(), "undone"); me.changes(); net.settle();
+      assert.equal(reading(net, me, scheme), untouched, `undo by client ${undoer + 1}`);
+      assert.equal(me.redoStep(), "undone"); me.changes(); net.settle();
+      assert.equal(reading(net, me, scheme), changed, `redo by client ${undoer + 1}`);
+      assert.equal(me.undoStep(), "undone"); me.changes(); net.settle();
+      assert.equal(reading(net, me, scheme), untouched, `second undo by client ${undoer + 1}`);
+    }
+  });
 }
+
+test("a compound command in one transaction is one entry whose parts are each taken back by what they mean", () => {
+  const copies = start(rows), net = new KitNet(copies), [a, b] = copies as [NativeReplica, NativeReplica];
+  a.transact(() => { a.join("R2", "R1", " "); a.setField("R1", "status", "ready"); type(a, "R1", 2, "!"); });
+  b.join("R2", "R1", " "); b.setField("R1", "status", "ready"); b.changes(); net.settle();
+  assert.deepEqual([net.agree(), a.beats.get("R1")?.get("status"), a.undo.undoStack.length], [["R1: ab! cd"], "ready", 1]);
+  assert.equal(a.undoStep(), "undone"); net.settle();
+  assert.deepEqual([net.agree(), b.beats.get("R1")?.get("status")], [["R1: ab", "R2: cd"], "todo"]);
+  assert.deepEqual([b.undoStep(), b.undoStep()], ["used-up", "used-up"]);
+  assert.equal(a.redoStep(), "undone"); net.settle();
+  assert.deepEqual([net.agree(), b.beats.get("R1")?.get("status")], [["R1: ab! cd"], "ready"]);
+});
 
 test("declared: when one person undoes before the other's identical change arrives, the change shows until the other undoes too", () => {
   const copies = start(rows), net = new KitNet(copies), [a, b] = copies as [NativeReplica, NativeReplica];
@@ -304,15 +340,16 @@ test("a status that lost to another person's leaves nothing to redo; a restore d
 });
 
 test("what 50 undone splits leave on a copy without undo history, with the new beat's record kept and with it undone", () => {
-  const left = (["apart", "tracked"] as const).map(record => {
+  const left = ([true, false] as const).map(kept => {
     const [a] = start([{ id: "R1", audioText: "abcdef" }], 1) as [NativeReplica], stored = new Y.Doc();
+    a.keepCreated = kept;
     Y.applyUpdate(stored, a.encode());
     a.doc.on("update", (update: Uint8Array) => { Y.applyUpdate(stored, update); });
     const before = Y.encodeStateAsUpdate(stored).length;
-    for (let index = 0; index < 50; index++) { a.split("R1", 2, `split-0-${index}`, {}, record); a.changes(); a.undo.undo(); a.changes(); }
-    return { record, bytes: Y.encodeStateAsUpdate(stored).length - before, records: a.beats.size };
+    for (let index = 0; index < 50; index++) { a.split("R1", 2, `split-0-${index}`); a.changes(); a.undo.undo(); a.changes(); }
+    return { kept, bytes: Y.encodeStateAsUpdate(stored).length - before, records: a.beats.size };
   });
-  assert.deepEqual(left, [{ record: "apart", bytes: 2557, records: 51 }, { record: "tracked", bytes: 2451, records: 1 }]);
+  assert.deepEqual(left, [{ kept: true, bytes: 2555, records: 51 }, { kept: false, bytes: 2451, records: 1 }]);
 });
 
 test("pending-update, a limit main carries, is the same here: a deletion applies before the update it follows has arrived", () => {
