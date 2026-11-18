@@ -9,10 +9,19 @@ export interface NativeDeltaItem { insert: string | Record<string, unknown>; att
 export interface NativeBlock { id: string; kind: "b" | "h"; segment: string; start: number; end: number; delta: NativeDeltaItem[] }
 export interface NativeRemoval { by: string; at: number; seen: Record<string, number> }
 export interface NativeJoin { into: string; glue: string }
-export interface NativeRow { id: string; audioText: string; visualText: string; fields: Record<string, unknown>; audio: NativeDeltaItem[]; visual: NativeDeltaItem[] }
+export interface NativePart { beat: string | null; length: number }
+export interface NativeRow {
+  id: string; audioText: string; visualText: string; fields: Record<string, unknown>; audio: NativeDeltaItem[]; visual: NativeDeltaItem[];
+  members: string[]; parts: { audio: NativePart[]; visual: NativePart[] };
+}
 export interface NativeTextChange { segment: string; delta: unknown[] }
 export interface NativeChanges { text: NativeTextChange[]; rows: NativeRow[]; gone: string[]; order: boolean; records: string[] }
-export interface NativeRecovery { beat: string; kept: string; unseen: string[]; visual: string }
+export type NativeRecoveryReason = "removed" | "unplaced" | "loop";
+export interface NativeRecovery {
+  beat: string; kept: string; unseen: string[]; visual: string; reason: NativeRecoveryReason; members: string[];
+  audio: NativeDeltaItem[]; visualItems: NativeDeltaItem[];
+}
+interface NativeHead { id: string; hidden: boolean }
 export interface NativeDocumentSource { rows?: unknown; sections?: unknown; comments?: unknown; people?: unknown; productionTags?: unknown; brollShots?: unknown; [key: string]: unknown }
 
 export type NativeScheme = "name" | "act";
@@ -135,6 +144,10 @@ function runEnd(delta: readonly NativeDeltaItem[], key: string, at: number): num
   return end;
 }
 
+function deltaLength(delta: readonly NativeDeltaItem[]): number {
+  return delta.reduce((sum, item) => sum + (typeof item.insert === "string" ? item.insert.length : 1), 0);
+}
+
 function boundaryOf(insert: unknown): { id: string; kind: "b" | "h" } | null {
   if (!insert || typeof insert !== "object") return null;
   const value = insert as Record<string, unknown>;
@@ -151,6 +164,8 @@ export class NativeReplica {
   private shown = new Map<string, NativeRow>();
   private readonly groups = new Map<string, string[]>();
   private readonly owner = new Map<string, string>();
+  private hiddenGroups = new Map<string, string[]>();
+  private loops: string[] = [];
   private readonly dirtySegments = new Set<string>();
   private readonly dirtyBeats = new Set<string>();
   private readonly dirtyRecords = new Set<string>();
@@ -539,40 +554,72 @@ export class NativeReplica {
     return (this.visuals.get(beat)?.toDelta() ?? []) as NativeDeltaItem[];
   }
 
-  private target(beat: string, blocks: ReadonlyMap<string, NativeBlock>): string | null {
-    const passed = new Set<string>();
-    let current = beat;
-    for (;;) {
-      if (this.removal(current)) return null;
-      const join = this.joined(current);
-      if (!join || !blocks.has(join.into) || passed.has(join.into)) return current;
-      passed.add(current); current = join.into;
+  // why: design section 7: a chain reads as one row, a loop breaks at its beat earliest in order, and a beat whose chain
+  // meets a removed beat goes with the nearest one, so its text is listed in recovery instead of read by no one
+  private heads(order: readonly string[]): Map<string, NativeHead> {
+    const index = new Map(order.map((id, at) => [id, at])), parent = new Map<string, string | null>(), state = new Map<string, 1 | 2>();
+    for (const id of order) {
+      const into = this.joined(id)?.into;
+      parent.set(id, into !== undefined && into !== id && index.has(into) ? into : null);
     }
+    this.loops = [];
+    for (const id of order) {
+      const path: string[] = [];
+      let current: string | null = id;
+      while (current !== null && !state.has(current)) { state.set(current, 1); path.push(current); current = parent.get(current) ?? null; }
+      if (current !== null && state.get(current) === 1) {
+        const cycle = path.slice(path.indexOf(current));
+        const first = cycle.reduce((best, next) => (index.get(next) ?? 0) < (index.get(best) ?? 0) ? next : best);
+        parent.set(first, null); this.loops.push(first);
+      }
+      for (const passed of path) state.set(passed, 2);
+    }
+    this.loops.sort((left, right) => (index.get(left) ?? 0) - (index.get(right) ?? 0));
+    const heads = new Map<string, NativeHead>();
+    for (const id of order) {
+      const path: string[] = [];
+      let current = id, head: NativeHead | undefined;
+      for (;;) {
+        head = heads.get(current);
+        if (head) break;
+        path.push(current);
+        if (this.removal(current)) { head = { id: current, hidden: true }; break; }
+        const up = parent.get(current) ?? null;
+        if (up === null) { head = { id: current, hidden: false }; break; }
+        current = up;
+      }
+      for (const passed of path) heads.set(passed, head);
+    }
+    return heads;
   }
 
   private row(id: string, members: readonly NativeBlock[]): NativeRow {
-    const audio: NativeDeltaItem[] = [], visual: NativeDeltaItem[] = [];
+    const audio: NativeDeltaItem[] = [], visual: NativeDeltaItem[] = [], parts = { audio: [] as NativePart[], visual: [] as NativePart[] };
     for (const member of members) {
       const glue = member.id === id ? "" : this.joined(member.id)?.glue ?? "";
-      if (glue && audio.length && member.delta.length) audio.push({ insert: glue });
+      if (glue && audio.length && member.delta.length) { audio.push({ insert: glue }); parts.audio.push({ beat: null, length: glue.length }); }
       audio.push(...member.delta);
+      parts.audio.push({ beat: member.id, length: deltaLength(member.delta) });
       const own = this.visualDelta(member.id);
-      if (visual.length && own.length) visual.push({ insert: "\n" });
+      if (visual.length && own.length) { visual.push({ insert: "\n" }); parts.visual.push({ beat: null, length: 1 }); }
       visual.push(...own);
+      parts.visual.push({ beat: member.id, length: deltaLength(own) });
     }
-    return { id, audioText: nativeHtml(audio), visualText: nativeHtml(visual), fields: this.beats.get(id)?.toJSON() as Record<string, unknown> ?? {}, audio, visual };
+    return { id, audioText: nativeHtml(audio), visualText: nativeHtml(visual), fields: this.beats.get(id)?.toJSON() as Record<string, unknown> ?? {}, audio, visual,
+      members: members.map(member => member.id), parts };
   }
 
   private project(): Map<string, NativeRow> {
-    const blocks = this.blocks().filter(block => block.kind === "b"), byId = new Map(blocks.map(block => [block.id, block]));
+    const blocks = this.blocks().filter(block => block.kind === "b"), heads = this.heads(blocks.map(block => block.id));
     const members = new Map<string, NativeBlock[]>();
-    this.groups.clear(); this.owner.clear();
+    this.groups.clear(); this.owner.clear(); this.hiddenGroups = new Map();
     for (const block of blocks) {
-      const target = this.target(block.id, byId);
-      if (target === null) continue;
-      members.set(target, [...(members.get(target) ?? []), block]);
-      this.groups.set(target, [...(this.groups.get(target) ?? []), block.id]);
-      this.owner.set(block.id, target);
+      const head = heads.get(block.id);
+      if (!head) continue;
+      if (head.hidden) { this.hiddenGroups.set(head.id, [...(this.hiddenGroups.get(head.id) ?? []), block.id]); continue; }
+      members.set(head.id, [...(members.get(head.id) ?? []), block]);
+      this.groups.set(head.id, [...(this.groups.get(head.id) ?? []), block.id]);
+      this.owner.set(block.id, head.id);
     }
     return new Map([...members].map(([id, group]) => [id, this.row(id, group)]));
   }
@@ -627,26 +674,32 @@ export class NativeReplica {
     const result: NativeRecovery[] = [], placed = new Set(this.blocks().filter(block => block.kind === "b").map(block => block.id));
     // why: a beat whose split was undone keeps its record and visual cell; what was typed there is listed
     for (const [beat, text] of this.visuals) {
-      if (!placed.has(beat) && text.length) result.push({ beat, kept: "", unseen: [], visual: nativeHtml(text.toDelta() as NativeDeltaItem[]) });
+      if (placed.has(beat) || !text.length) continue;
+      const visualItems = text.toDelta() as NativeDeltaItem[];
+      result.push({ beat, kept: "", unseen: [], visual: nativeHtml(visualItems), reason: "unplaced", members: [beat], audio: [], visualItems });
     }
-    for (const block of this.blocks()) {
-      const removal = block.kind === "b" ? this.removal(block.id) : null;
+    for (const [head, ids] of this.hiddenGroups) {
+      const removal = this.removal(head), members = ids.map(id => this.block(id)), unseen: string[] = [];
       if (!removal) continue;
-      const text = this.segments.get(block.segment)?.get("text") as Y.Text, unseen: string[] = [];
-      let index = block.start, open = false;
-      for (const item of block.delta) {
-        const length = typeof item.insert === "string" ? item.insert.length : 1;
-        for (let offset = 0; offset < length; offset++, index++) {
-          const id = this.characterIdentity(text, index), late = id.clock >= (removal.seen[String(id.client)] ?? 0);
-          if (late) {
-            const value = typeof item.insert === "string" ? item.insert.charAt(offset) : "￼";
-            if (open) unseen[unseen.length - 1] += value; else unseen.push(value);
+      for (const block of members) {
+        const text = this.segments.get(block.segment)?.get("text") as Y.Text;
+        let index = block.start, open = false;
+        for (const item of block.delta) {
+          const length = typeof item.insert === "string" ? item.insert.length : 1;
+          for (let offset = 0; offset < length; offset++, index++) {
+            const id = this.characterIdentity(text, index), late = id.clock >= (removal.seen[String(id.client)] ?? 0);
+            if (late) {
+              const value = typeof item.insert === "string" ? item.insert.charAt(offset) : "￼";
+              if (open) unseen[unseen.length - 1] += value; else unseen.push(value);
+            }
+            open = late;
           }
-          open = late;
         }
       }
-      result.push({ beat: block.id, kept: nativeHtml(block.delta), unseen, visual: nativeHtml(this.visualDelta(block.id)) });
+      const row = this.row(head, members);
+      result.push({ beat: head, kept: row.audioText, unseen, visual: row.visualText, reason: "removed", members: row.members, audio: row.audio, visualItems: row.visual });
     }
+    for (const beat of this.loops) result.push({ beat, kept: "", unseen: [], visual: "", reason: "loop", members: [beat], audio: [], visualItems: [] });
     return result;
   }
 
