@@ -1,10 +1,12 @@
 **Yes.** The Node prototype completed all tested operations on a 15,036,020-byte shared document on a
-Windows arm64 laptop with 16 GB RAM. The first local keystroke came closest to the proposed 1 ms layer
-share, with a 0.734 ms median and a 0.963 ms maximum. Across all local keystrokes the median was 0.201 ms
-against the app's 8 ms end-to-end ceiling. Cold load and catch-up from the initial script cost the most
-time, at 1.59 s through the first full read and 1.81 s to apply the whole-history difference. Creating
-the replica and applying the stored update took 1.50 s. Stage 0's historical join test for its 2 MiB
-fixture targeted a maximum 1 s single task.
+Windows arm64 laptop with 16 GB RAM. In the evenly edited fixture, the first local keystroke came
+closest to the proposed 1 ms layer share, with a 0.734 ms median and a 0.963 ms maximum. Across all
+local keystrokes the median was 0.201 ms. A separate 15.68 MB probe with 140,001 entries in one cell
+took 22.06 ms per key at the median, above both the layer share and the app's 8 ms end-to-end ceiling.
+Cold load and catch-up from the initial script cost the most time in the main fixture, at 1.59 s through
+the first full read and 1.81 s to apply the whole-history difference. Creating the replica and applying
+the stored update took 1.50 s. Stage 0's historical join test for its 2 MiB fixture targeted a maximum
+1 s single task.
 
 ## Measurements
 
@@ -27,6 +29,7 @@ identical across rounds. The two GC-off byte counts each come from one replay.
 | Undo entries after 20,000 operations | 5,000 | 5,000 |
 | Local keystroke and incremental read, ms | 0.089 [0.059–0.411] | 0.201 [0.132–0.963] |
 | First local keystroke in each timed copy, ms | 0.224 [0.156–0.411] | 0.734 [0.671–0.963] |
+| Local key and read in a concentrated audio cell, separate 15.68 MB probe, ms | — | 22.06 [4.97–50.76] |
 | Remote keystroke and incremental read, ms | 0.076 [0.053–0.862] | 0.123 [0.096–1.99] |
 | Split and read, ms | 11.53 [10.28–15.28] | 49.10 [44.67–49.41] |
 | Format and read, ms | 0.141 [0.120–0.563] | 0.270 [0.262–0.620] |
@@ -42,14 +45,63 @@ At 15 MB, Yjs GC removes 54% of the bytes that would otherwise be stored. A one-
 and from 22.40 to 165.50 ms respectively compared with the baseline. At the same visible script length,
 load through first read grows about 29×, compared with about 2.3× for the median local key.
 
+### Where split time goes
+
+The 49.10 ms split is dominated by the prototype reader. In five instrumented runs after a warm-up,
+the split transaction, including its observers, took a median **0.25 ms** (0.19–0.27). The subsequent
+`changes()` took **47.39 ms** (41.45–58.73), including **45.69 ms** in `project()`. That structural path
+rebuilds all 300 existing rows and the new one. It makes 301 uncached `visualDelta()` calls, which read
+every visual cell's `Y.Text.toDelta()` and follow its linked entries, including deleted ones. Those calls
+took **37.11 ms** (30.60–44.97) at 15 MB and **1.28 ms** (1.19–1.51) at 0.5 MB. The rest of
+`changes()` took **10.85 ms** (10.27–13.76) at 15 MB. It includes building row HTML and comparing
+fields and runs via `JSON.stringify`, work that depends on beat count and visible formatting runs.
+The independent review timed **0.5–1.1 ms** for the write, **31–36 ms** for `changes()` and
+**20–25 ms** for the visual reads (**0.25 ms** at 0.5 MB). Both runs locate the cost in full projection.
+For this split, a reader that rebuilt only the touched rows and cached unchanged cell deltas would
+pay about the write plus reading one changed source cell, with additional row and order bookkeeping.
+That cost is an estimate. [Visual read](../native/variant.ts#L563) ·
+[Projection and comparisons](../native/variant.ts#L632-L690)
+
+### Concentrated cell history
+
+Counting the linked Yjs items in each of the 600 text cells after reload gave a median of **2,154**
+and a maximum of **3,947**. The column medians were **3,441** for audio and **1,254** for visual.
+The review reported a median of **1,386** and the same maximum. The median difference is unresolved.
+
+The concentration probe starts from editing day 11,232 of the E8 fixture. It prepends a temporary
+68,354-character paste to the middle audio cell, alternates underline on and off one character at a
+time using a second client ID, then deletes the paste. The visible text checks passed after reload.
+The resulting **15,680,416-byte** state has **140,001 entries** in that cell, 9.5% of the document.
+Five fresh copies each took 11 local keys at positions across the cell through the same undo and
+incremental read path. The **22.06 ms** median exceeds both the **1 ms** layer share and the **8 ms**
+app ceiling. Separately timed medians were 16.31 ms for the write including its observers and
+5.76 ms for the subsequent read.
+
+A second pattern built up the cell with 75,776 seeded, equal-length replacements of 5–20 characters.
+It reached 140,115 entries and took 23.49 ms median and 49.01 ms maximum on a 17.45 MB state.
+The independent review's 140,000-entry cell took 1.7 ms median and 3.6 ms maximum. All three probes
+exceed the layer share. The variation shows that entry count alone is insufficient to predict
+hot-cell latency.
+
+This walk also explains part of the cost of small reconnects. The timed apply includes observers that
+read `YTextEvent.delta`, which traverses the full history of every touched text cell, including its
+deleted entries. It can do substantial work for a small incoming update. The later correctness read
+is outside the apply timer. [Text observers](../native/variant.ts#L187-L208)
+
 ## Years of use
 
 At the one-writer plain-key rates measured in [E4](../format-keys/RESULT.md), **15 MB represents about
-37 years of realistic editing or 6.8 years of heavy editing**, with 250 editing days per year. E4's
+37.1 years of realistic editing or 6.80 years of heavy editing**, with 250 editing days per year. E4's
 realistic fixture grew from 36,535 bytes on day 1 to 437,985 on day 250, or 0.403 MB per year at that rate.
 The heavy fixture grew from 45,448 to 2,234,969 bytes, or 2.198 MB per year. The estimate extends each
 day 1–250 slope from its day 1 starting size and assumes it stays constant. The E8 generator's 11,806
 synthetic days use a simpler, fixed-length schedule with a different byte growth rate.
+
+E4 divides a fixed amount of daily work among one, two or six writers. The estimate assumes one
+writer's day of edits per editing day. If each of N writers does that much work, divide the estimate
+by N, assuming the byte growth adds linearly. For six writers that is about 6 years at the realistic
+rate or 1.1 years at the heavy rate. The independent review estimates that the chosen scheme, with
+per-application production tag keys, adds about **9–10%** stored bytes over plain keys.
 
 ## Fixture and measurement
 
@@ -63,9 +115,14 @@ replica exposes the all-plain and all-per-action schemes. This run uses plain ke
 
 The generator batches each replacement into one transaction and omits per-keystroke projection during the
 build. The 15 MB build took 245 seconds. It uses public Yjs text and formatting operations on the native
-replica's stored shape. The slow baseline replays the same replacements letter by letter and calls the
-replica's reader after every edit. Its
-stored bytes and visible-text SHA-256 agree with the batch build. Both builds independently record and check
+replica's stored shape. At **0.5 MB only**, the letter-by-letter replay of the same schedule, with a read
+after each edit, matches the batched build's stored bytes and visible-text SHA-256. That comparison covers
+the scripted replacements. Typos, caret jumps, interleaved writers and the 15 MB replay are outside this
+cross-check. The independent review measured about **9.8 stored bytes per Yjs entry** for both batched
+edits and typing with 6% typo-and-backspace in a separate comparison. Similar encoded sizes and entry
+counts support carrying over the whole-document load, heap and whole-history reconnect results to
+comparably shaped histories. Local typing, structural reading and short reconnects also depend on which
+cells hold the history and which cells a command or update touches. Both builds independently record and check
 the generated text in both columns and in headings. The measured replica and reconnect recipients are checked
 against that record after loading or catching up. The target tolerance is ±5%, in decimal MB. The comparison
 with garbage collection off replays the same seed and day count in a separate process.
@@ -85,6 +142,16 @@ replica, its caches and the E6 undo manager after 20,000 local operations across
 deletion and formatting. The session refreshes the projection after each ten-operation burst. Its heap includes
 retained deleted text to the extent it occupies the V8 heap. These values exclude the process's external
 buffers and peak allocation during load, projection or encoding.
+
+In separate fresh processes, the bare `Y.Doc` held **306.66 MiB** at 15 MB. The loaded replica before
+projection held **306.72 MiB**, and its first full read brought it to **308.21 MiB**, about **1.5 MiB**
+above the bare document. These are medians of three runs per condition with the same post-GC method.
+The bare document held **1,402,898 Yjs entries**, about **229 heap bytes per entry**. Of those entries,
+**1,393,993 (99.4%)** were garbage-collected tombstones in text histories, which include deleted
+formatting markers. The original benchmark's after-read heap was **31.6×** the encoded bytes at
+0.5 MB and **24.0×** at 15 MB when both sides use bytes. The 15 MB figure is **22.9 MiB of heap per
+decimal MB stored**. The earlier 343.85 MiB figure at 15 MB leaves about **36 MiB** unattributed by
+the isolated breakdown.
 
 ## Current and historical limits
 
@@ -116,18 +183,27 @@ buffers and peak allocation during load, projection or encoding.
   connection before authentication and a **1 MiB** outgoing update-batch flush threshold.
   [`service/instance/loading-probe.ts`](../service/instance/loading-probe.ts) sets the latter to one byte
   to test that loading stays quiet.
+- In the pinned provider, `HocuspocusProviderWebsocket` defaults `messageReconnectTimeout` to **30 s**
+  and checks every 3 s. Its watchdog runs after the socket has received its first complete message.
+  Each subsequent complete message, including a connection ping, resets it. A 15 MB first state sync
+  takes about 30 s at **4 Mbit/s** before overhead. With automatic retry after a handshake, such a sync
+  can repeatedly reconnect if it takes longer than the watchdog and no other complete message arrives in time.
+  [Provider use](../service/instance/client.ts#L119) · [Pinned version](../../package-lock.json)
 - [`service/instance/extension.ts`](../service/instance/extension.ts) caps the instance-management
   HTTP request body at **3 MiB**, including JSON and the base64 initial state. That leaves at most
   **2.25 MiB** of binary state before subtracting the envelope.
   [`service/images/service.ts`](../service/images/service.ts) caps both declared and streamed image
   uploads at **16 MiB**. [`service/images/store-worker.ts`](../service/images/store-worker.ts) repeats
-  the same guard before storing a PNG.
+  the same guard before storing a PNG. The [instance client](../service/instance/client.ts#L63)
+  aborts the HTTP request after **15 s** via `AbortSignal.timeout(15000)`, including an upload and
+  the wait for its reply.
 - The current [`server/server.ts`](../../../../server/server.ts) handles static GET and HEAD requests.
   The former HTTP collaboration server (`server/server.js` in `309c15d9f^1`, removed in PR #849)
   capped JSON document create and save requests at **25 MiB** by default via `MAX_BODY_BYTES` and
   returned HTTP 413 for an oversized body. Its endpoints used **8 KiB** for small join and link
   requests, **512 KiB** for comment requests and **256 KiB** for missing-blob queries. The same server
-  and its blob helper used **8 MiB** per blob and a **20 MiB** review blob budget by default.
+  and its blob helper used **8 MiB** per blob, a **20 MiB** review blob budget and a **100 MiB**
+  `LINK_EDIT_BLOB_BUDGET` for scoped edit links by default.
 - The [E6 undo results](../native-undo/RESULTS.md) propose rebuilding an editing copy after it deletes
   **1,000,000 local characters**. That proposed trigger addresses undo retention in one editing copy.
 
