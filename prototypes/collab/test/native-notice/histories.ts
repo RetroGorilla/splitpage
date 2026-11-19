@@ -2,6 +2,11 @@ import { histories } from "../native-delete/histories.ts";
 import { base, blocks, type DeleteCommand, type StoredReading } from "../native-delete/model.ts";
 import type { Effect } from "./model.ts";
 
+export const tagSweepRemovals = ["cut", "same", "all", "first"] as const;
+const audioRanges = [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]] as const;
+export const tagSweepCases = [...audioRanges.map(range => ({ field: "audio" as const, range })),
+  { field: "visual" as const, range: [0, 1] as const }];
+
 type Write = DeleteCommand | { op: "undo" | "redo" } | { op: "move"; id: string; after: string } |
   { op: "detail"; id: string; key: string; value: unknown };
 export type Step =

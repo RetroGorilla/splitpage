@@ -34,7 +34,8 @@ export interface LedgerResult {
 
 // why: letter instances: a typed letter is alive until a command that saw it removes it; an undo brings back what its
 // command removed as a new instance; anything the library decides that this cannot know is uncertain
-export function settle(events: readonly LedgerEvent[], initial: { char: string; field: LetterField; owner: string }[], beats: string[]): LedgerResult {
+export function settle(events: readonly LedgerEvent[], initial: { char: string; field: LetterField; owner: string }[], beats: string[],
+  keepCutVisuals = false): LedgerResult {
   const instances: Instance[] = initial.map(item => ({ ...item, born: -1, state: "alive", why: "", revival: false, killers: new Set() }));
   const versions: BeatVersion[] = beats.map(beat => ({ beat, born: -1, alive: true, killers: new Set() }));
   const beatsKilledBy = new Map<number, BeatVersion[]>(), beatsRevivedBy = new Map<number, BeatVersion[]>(), uncertainBeats = new Set<string>();
@@ -65,7 +66,7 @@ export function settle(events: readonly LedgerEvent[], initial: { char: string; 
         if (made?.id === owner && made.standalone) return { kind: "typing in a new heading lost when its creator undoes the creation unseen", by: other };
         continue;
       }
-      if (other.deletedBeats.includes(owner)) {
+      if (!keepCutVisuals && other.deletedBeats.includes(owner)) {
         const reverted = events.some(later => later.reverts === other.index);
         return { kind: reverted ? "uncertain" : "unseen visual change discarded with a deleted beat", by: other };
       }
@@ -100,7 +101,7 @@ export function settle(events: readonly LedgerEvent[], initial: { char: string; 
       && (instance.born === version.born || byIndex.get(instance.born)?.seen.has(version.born) === true));
     const deleted = new Set(event.deletedBeats);
     for (const instance of instances) {
-      if (instance.field !== "visual" || !deleted.has(instance.owner) || inMissed(instance)) continue;
+      if (keepCutVisuals || instance.field !== "visual" || !deleted.has(instance.owner) || inMissed(instance)) continue;
       if (visibleTo(event, instance) && visible.has(instance.char)) kill(event, instance, killedBy, "deleted with its row");
       else if (instance.state === "alive" && events.some(later => later.reverts === event.index)) instance.state = "uncertain";
       else if (instance.state === "alive") {
