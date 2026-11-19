@@ -4,6 +4,8 @@ Prototype only. Nothing here ships. Code: `src/native-row-record/`, tests: `test
 
 ## Verdict
 
+**Correction, 2026-11-19.** Three statements in this file said that under R, Bob's undo of his cut shows nothing. That was wrong. After Alice's undo, B is empty on both copies. Bob's undo then shows the narration in B again on both copies: `A: a, B: b`, or with `bcd` as the text, B goes from empty to `bcd`. All three places below are corrected, and `review.test.ts` now pins what every copy shows before and after Bob's undo.
+
 Both new options remove the failure. A row shown without its record or visual cell drops from 30 of 90 runs (K) to 0 of 90 (R and U). In every copy after every step, it drops from 480 of 3,000 to 0.
 
 Scope of the clean result: no lost narration, no row shown twice, no disagreement between copies and no reader failure. That holds in the tested histories, commands and checked readings only:
@@ -14,9 +16,9 @@ Scope of the clean result: no lost narration, no row shown twice, no disagreemen
 The options differ in whose intent wins:
 
 - **R, a reading rule.**
-  - A boundary without its record or cell is not a row; its text reads as part of the row above. Alice's undo of her split wins, so the document looks as it did before the split. Bob's undo of his cut shows nothing.
+  - A boundary without its record or cell is not a row; its text reads as part of the row above. Alice's undo of her split wins, so N stays hidden. Bob's undo of his cut brings the narration back, shown as B's text (`B: b`), so the document looks as it did before the split.
   - R stores nothing extra and changes no figure in any generated set.
-  - The hidden boundary stays in the text, though. Text typed into B after the race sits after it, and moves into N if Alice later redoes her split.
+  - The hidden boundary stays in the text, though, where B's own text ends. Text typed into B after that point moves into N if Alice later redoes her split.
 - **U, creation is not undone at the record.**
   - The record and cell a command creates survive a plain undo of that command. This uses the undo manager's public `deleteFilter`; it is one statement.
   - Bob's undo wins: the row comes back whole, with the status and visual Bob typed. All 16 table commands work on it, and the notice reader lists it, as the row list does.
@@ -123,7 +125,7 @@ At settlement N is shown without a rank in 30 of 90 runs under K, 0 of 90 under 
 
 - **1a, 3a to 6a.**
   - K: Bob's undo wins for the text, but his row comes back without a record or cell, so most commands on it fail.
-  - R: Alice's undo wins; N is hidden and `b` reads as B's text, as before the split. Bob's undo writes the boundary but shows nothing.
+  - R: Alice's undo wins; N is hidden and `b` reads as B's text, as before the split. After Alice's undo B is empty; Bob's undo writes the boundary back and shows `b` in B again on both copies.
   - U: Bob's undo wins; N comes back whole with whatever Bob wrote to it, but without a rank, so its place follows rule (e).
   - Nothing is lost in any option. In 3a, Bob's undo also brings back A and B in all three.
 - **2a.** As 1a, but N is empty and `b` never left B. Under R the document looks untouched. Under U an empty N follows B.
@@ -156,6 +158,15 @@ At settlement N is shown without a rank in 30 of 90 runs under K, 0 of 90 under 
 | Join B to A, then unjoin | `A(A+B): a bcd`, then `A: a, B: bcd`; only B's `joined` field changes | unchanged |
 
 What a person would notice: text typed into B after the race can later appear in N when Alice redoes her split. Cutting B also takes the hidden text.
+
+The seam is the hidden marker. It sits where B's own text ended before the split:
+- When B had no text of its own, B shows `bcd`:
+  - a letter typed at offset 0 lands before the marker (`B: ybcd`, stored `[A]a[B]y[N]bcd`), and Alice's redo gives `B: y, N: bcd`;
+  - a letter typed at the end lands after it, and the redo gives `B: , N: bcdz`.
+- When B keeps its own `x` (Alice split `xbcd` at 1), B shows `xbcd`:
+  - letters typed at offsets 0 and 1 stay in B after the redo (`B: yx` and `B: xy`);
+  - offset 2 and the end go to N (`N: bycd`, `N: bcdz`).
+- Typing exactly at the seam stays in B. Every copy agrees in every case.
 
 Bare boundaries elsewhere under R. These were built by seeding N and then removing its record and cell with a write no undo tracks:
 
@@ -300,7 +311,7 @@ Method: `src/native-row-record/cost.ts`, on E14's fixture of 900 beats, with 30 
   - Hides Bob's restored row and the record kept with it. A command on that id writes nothing.
   - The hidden boundary stays in the text. Text later typed into B after it moves into N if Alice redoes her split. Cutting B takes it too.
   - A split inside text read from a bare boundary lands after A's own boundary, not at the requested point.
-  - It is worse than K in history 1a and its offline variants in one respect: Bob's undo shows no visible effect. Under K it at least showed `N: b`.
+  - In history 1a and its offline variants, Bob's undo shows his narration again, but as B's text, not as the row he restored. Under K it showed as its own row `N: b`.
   - It changes nothing in any generated set.
 - **U**
   - Leaves N without a rank, so N's place follows rule (e). An insert before it lands at the top, an unrelated move gives it a rank, and cutting B can move it across a scene line.

@@ -82,6 +82,41 @@ test("E17 review 2: where later edits go under R after the race", () => {
   });
 });
 
+test("E17 follow-up: what every copy shows before and after Bob's restoring undo", () => {
+  const empty = ["A: a / ", "B:  / "];
+  const expected: Record<string, Record<"K" | "R" | "U", string[]>> = {
+    b: { K: ["A: a / ", "B:  / ", "N: b / "], R: ["A: a / ", "B: b / "], U: ["A: a / ", "B:  / ", "N: b / "] },
+    bcd: { K: ["A: a / ", "B:  / ", "N: bcd / "], R: ["A: a / ", "B: bcd / "], U: ["A: a / ", "B:  / ", "N: bcd / "] }
+  };
+  const bobUndo = race.length - 3;
+  for (const option of ROW_OPTIONS) for (const [name, spec] of [["b", justTwo()], ["bcd", bcd()]] as const) inWorld(option, spec, 2, world => {
+    world.run(race.slice(0, bobUndo));
+    assert.deepEqual([world.rows(ALICE), world.rows(BOB)], [empty, empty], `${option} ${name} before`);
+    world.run(race.slice(bobUndo));
+    assert.deepEqual([world.rows(ALICE), world.rows(BOB), world.agree()], [expected[name]?.[option], expected[name]?.[option], true], `${option} ${name} after`);
+  });
+});
+
+// why: the hidden marker sits where B's own text ended, so typing at that offset or before stays in B on Alice's redo
+test("E17 follow-up: where the seam sits when R shows the hidden row's text in B", () => {
+  const own = (): Spec => ({ order: ["S"], segments: { S: { head: b("A"), units: ["a", b("B"), "xbcd"] } }, beats: { A: {}, B: {} }, visuals: { A: "", B: "" }, headings: {} });
+  const ownRace: Step[] = [split(ALICE, "B", 1, "N"), ...sync(2), remove(BOB, "N"), ...sync(2), undo(ALICE), ...sync(2), undo(BOB), ...sync(2)];
+  const cases: [string, () => Spec, Step[], number, string, string[], string, string[]][] = [
+    ["y at 0", bcd, race, 0, "y", ["A: a / ", "B: ybcd / "], "[A]a[B]y[N]bcd", ["A: a / ", "B: y / ", "N: bcd / "]],
+    ["z at the end", bcd, race, 3, "z", ["A: a / ", "B: bcdz / "], "[A]a[B][N]bcdz", ["A: a / ", "B:  / ", "N: bcdz / "]],
+    ["B's own x: y at 0", own, ownRace, 0, "y", ["A: a / ", "B: yxbcd / "], "[A]a[B]yx[N]bcd", ["A: a / ", "B: yx / ", "N: bcd / "]],
+    ["B's own x: y at 1", own, ownRace, 1, "y", ["A: a / ", "B: xybcd / "], "[A]a[B]xy[N]bcd", ["A: a / ", "B: xy / ", "N: bcd / "]],
+    ["B's own x: y at 2", own, ownRace, 2, "y", ["A: a / ", "B: xbycd / "], "[A]a[B]x[N]bycd", ["A: a / ", "B: x / ", "N: bycd / "]],
+    ["B's own x: z at the end", own, ownRace, 4, "z", ["A: a / ", "B: xbcdz / "], "[A]a[B]x[N]bcdz", ["A: a / ", "B: x / ", "N: bcdz / "]]
+  ];
+  for (const [label, spec, base, at, letter, typed, storage, redone] of cases) inWorld("R", spec(), 2, world => {
+    world.run([...base, type(BOB, "B", "audio", at, letter), ...sync(2)]);
+    assert.deepEqual([world.rows(), stored(world.peer(ALICE))], [typed, storage], label);
+    world.run([redo(ALICE), ...sync(2)]);
+    assert.deepEqual([world.rows(), stored(world.peer(ALICE)), world.agree(), world.threw], [redone, storage, true, []], label);
+  });
+});
+
 test("E17 review 2: R reads a bare boundary at a segment's start, after a heading and in a leading span", () => {
   const one = (units: Spec["segments"][string], extra: Partial<Spec> = {}): Spec => ({ order: ["S"], segments: { S: units }, beats: { A: {}, N: {} }, visuals: { A: "", N: "" }, headings: {}, ...extra });
   const cases: [string, Spec, string[], string[] | null][] = [
