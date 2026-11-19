@@ -25,7 +25,7 @@ function nextInContainer(replica: NativeHeadingReplica): Map<string, string | nu
 
 // why: the moved blocks are written after the block shown above the drop place; blocks that were shown after them only
 // because they hung on a moved block are written after the block now shown above them, so they stay where they were
-export function planMove(replica: NativeHeadingReplica, first: string, last: string, after: string | null): MovePlan | null {
+export function planMove(replica: NativeHeadingReplica, first: string, last: string, after: string | null, fallback = true): MovePlan | null {
   const arrangement = replica.arrangement(), order = arrangement.order, from = order.indexOf(first), to = order.indexOf(last);
   if (from < 0 || to < from) throw new Error(`No run from ${first} to ${last}`);
   const members = order.slice(from, to + 1), moving = new Set(members);
@@ -48,7 +48,10 @@ export function planMove(replica: NativeHeadingReplica, first: string, last: str
     const shown = arrange(natural, ref => writes.get(ref)?.place ?? replica.placement(ref)).order;
     const wrong = rest.find((ref, index) => shown[index] !== ref);
     if (wrong === undefined) break;
-    if (round > rest.length) { rest.forEach(write("dependent")); break; }
+    if (round > rest.length) {
+      if (!fallback) throw new Error(`Placement did not settle: ${first} through ${last} after ${after ?? "top"}`);
+      rest.forEach(write("dependent")); break;
+    }
     write("dependent")(wrong);
   }
   return { members, writes: [...writes.values()] };
