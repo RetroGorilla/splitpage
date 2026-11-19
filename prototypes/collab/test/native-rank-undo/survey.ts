@@ -48,6 +48,7 @@ export interface Tally {
   histories: number; never: Record<string, number>; neverSeeds: Record<string, number>; local: Record<string, number>; kinds: Record<string, number>;
   ranklessHistories: number; ranklessRows: number; ruleE: number; drift: { place: number; scene: number }; refused: number; disagree: number;
   localSeeds: Record<string, number>; generatorThrew: Record<string, number>;
+  press: { presses: number; scene: number; drift: number; seenLater: number; seeds: Record<string, number> };
 }
 
 // why: E11's chosen combination keeps heading names in their own cells (part B)
@@ -55,7 +56,7 @@ export const NAMES = "cells";
 
 const blank = (): Tally => ({
   histories: 0, never: {}, neverSeeds: {}, local: {}, kinds: {}, ranklessHistories: 0, ranklessRows: 0, ruleE: 0, drift: { place: 0, scene: 0 }, refused: 0, disagree: 0,
-  localSeeds: {}, generatorThrew: {}
+  localSeeds: {}, generatorThrew: {}, press: { presses: 0, scene: 0, drift: 0, seenLater: 0, seeds: {} }
 });
 const RANKLESS = "a row brought back by an undo after an unseen move is read at its stored place";
 
@@ -84,6 +85,12 @@ function add(tally: Tally, results: readonly PlayResult[], seed: number): void {
   if (results.some(result => result.uses.rank)) tally.ruleE++;
   if (results.some(result => result.drift.place)) tally.drift.place++;
   if (results.some(result => result.drift.scene)) tally.drift.scene++;
+  // why: press checks count histories, as the drift counts do; presses are counted on the forward delivery
+  tally.press.presses += first.press?.presses ?? 0;
+  for (const key of ["scene", "drift", "seenLater"] as const) if (results.some(result => result.press?.[key])) {
+    tally.press[key]++;
+    tally.press.seeds[key] ??= seed;
+  }
 }
 
 // why: `own` picks each history's commands from the rows the option itself shows; otherwise the lists are the ones
@@ -93,7 +100,7 @@ export function surveyE11(option: RankOption, size: number, twins: boolean, own 
   for (let number = 1; number <= size; number++) {
     const generated = generateHistory(number, 40, twins, NAMES, own ? make : undefined), steps: Step[] = generated.steps;
     for (const problem of generated.thrown) tally.generatorThrew[problem] = (tally.generatorThrew[problem] ?? 0) + 1;
-    add(tally, MODES.map((mode, at) => play({ spec: GENERATED_SPEC(), steps, writers: 3, mode, seed: number * 7 + at, make, names: NAMES, storage })), number);
+    add(tally, MODES.map((mode, at) => play({ spec: GENERATED_SPEC(), steps, writers: 3, mode, seed: number * 7 + at, make, names: NAMES, storage, pressChecks: true })), number);
   }
   return tally;
 }
@@ -119,7 +126,7 @@ export function surveyE10(option: RankOption): { tally: Tally; table: Record<str
   const make = makeOption(option), storage = e15Checks(option), tally = blank(), table: Record<string, Record<E10Outcome, number>> = {}, outcomes: E10Outcome[] = [];
   const all: { history: E10History; writers: number }[] = [...namedHistories.map(history => ({ history, writers: 2 })), ...Array.from({ length: 200 }, (_, i) => ({ history: generate(i + 1), writers: 3 }))];
   for (const [index, { history, writers }] of all.entries()) {
-    const results = MODES.map((mode, at) => play({ spec: E10_SPEC(), steps: e10Steps(history), writers, mode, seed: index * 5 + at, make, names: NAMES, storage }));
+    const results = MODES.map((mode, at) => play({ spec: E10_SPEC(), steps: e10Steps(history), writers, mode, seed: index * 5 + at, make, names: NAMES, storage, pressChecks: true }));
     add(tally, results, index);
     const outcome: E10Outcome = results.some(result => result.never.length || result.local.length) ? "broken"
       : results.every(result => history.preferred(e10View(result))) ? "preferred" : "other";

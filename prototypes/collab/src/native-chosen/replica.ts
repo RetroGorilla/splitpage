@@ -170,11 +170,13 @@ export class ChosenReplica extends MoveReplica {
     const spans = this.spansOf(STRAY_ROW, "audioText"), first = spans[0];
     if (!first) throw new Error("No narration-only row to give a record");
     const ranks = this.naturalBlocks().map(block => this.storedRank(block.kind, block.id)).filter((rank): rank is string => typeof rank === "string").sort();
+    const rank = betweenRanks(null, ranks[0] ?? null, this.doc.clientID, ++this.count);
+    this.creating?.(`b:${claim}`, rank);
     this.transact(() => {
-      first.text.insertEmbed(first.start, { b: claim }, {});
+      first.text.insertEmbed(first.start, this.marker("b", claim), {});
       const record = new Y.Map<unknown>();
       this.beats.set(claim, record);
-      this.writeFlat(record, betweenRanks(null, ranks[0] ?? null, this.doc.clientID, ++this.count));
+      this.writeFlat(record, rank);
       this.visuals.set(claim, new Y.Text());
     });
     this.forgetViews();
@@ -225,8 +227,9 @@ export class ChosenReplica extends MoveReplica {
     const above = shown[at - 1], right = this.storedRank("b", before), left = above ? this.storedRank(above.kind, above.id) : null;
     const rank = typeof right === "string" && (left === null || (typeof left === "string" && left < right))
       ? betweenRanks(left as string | null, right, this.doc.clientID, ++this.count) : right;
+    this.creating?.(`b:${id}`, rank, `b:${before}`);
     this.transact(() => {
-      this.addSegment(`seg-b-${id}`, { b: id }, [{ text: value, marks: {} }], this.order.toArray().indexOf(block.segment));
+      this.addSegment(`seg-b-${id}`, this.marker("b", id), [{ text: value, marks: {} }], this.order.toArray().indexOf(block.segment));
       const record = new Y.Map<unknown>();
       this.beats.set(id, record);
       for (const [key, item] of Object.entries(fields)) record.set(key, item);

@@ -232,8 +232,11 @@ export interface TagOutcome { requested: number; kept: number; lost: TagLoss[] }
 export interface PlayResult {
   never: string[]; local: string[]; kinds: Kinds; timing: Record<string, { sameMoment: number; offline: number }>; lines: string[]; uses: Record<string, number>; events: number; tags: TagOutcome;
   drift: { place: number; scene: number }; cells: Record<string, string>;
+  press?: PressCount; calls?: Record<number, string[]>; stored?: string;
 }
-export interface ControlCount { used: number; effective: number; failed: number; throws: number; coverage: number; storageOnly: number }
+// why: E15's checks on undo and redo presses, kept apart so E11's recorded counts stay as they were
+export interface PressCount { presses: number; scene: number; drift: number; seenLater: number; problems: string[] }
+export interface ControlCount { used: number; effective: number; failed: number; throws: number; coverage: number; storageOnly: number; checkThrows?: number }
 export type Controls = Map<string, ControlCount>;
 
 interface Copy { replica: ChosenReplica; seen: Set<number>; client: number; known: Set<number>; initial: Uint8Array; journal: ({ update: Uint8Array } | { cmd: Cmd })[] }
@@ -244,6 +247,7 @@ export interface StorageCheck { snap: (replica: ChosenReplica) => unknown; check
 export interface PlayOptions {
   spec: Spec; steps: readonly Step[]; writers: number; mode: Mode; seed: number; rules?: NativeRules; names?: ChosenNames; controls?: Controls; window?: number;
   checkLetters?: boolean; make?: MakeReplica; storage?: StorageCheck; ownCalls?: boolean;
+  pressChecks?: boolean; mute?: { step: number; call: number }; listCalls?: boolean;
 }
 
 export function play(options: PlayOptions): PlayResult {
@@ -320,7 +324,9 @@ export function play(options: PlayOptions): PlayResult {
       const keysBefore = cmd.op === "format" ? keysIn(replica, cmd.id, cmd.field) : undefined, snapshot = Y.snapshot(replica.doc);
       const itemsBefore = cmd.op === "split" ? letterItems(replica) : null;
       const rankless = [...replica.beats.keys()].filter(id => typeof replica.storedRank("b", id) !== "string"), held = options.storage?.snap(replica);
-      const calls = options.controls ? watch(replica, () => { perform(replica, cmd); }, -1, options.ownCalls) : (perform(replica, cmd), []);
+      const muted = options.mute?.step === index ? options.mute.call : -1;
+      const calls = options.controls || options.listCalls || muted >= 0 ? watch(replica, () => { perform(replica, cmd); }, muted, options.ownCalls || muted >= 0 || options.listCalls) : (perform(replica, cmd), []);
+      if (options.listCalls) (result.calls ??= {})[index] = calls;
       for (const problem of options.storage?.check(held, replica, cmd) ?? []) result.local.push(`step ${index} ${cmd.op}: ${problem}`);
       const after = shown(replica), stylesAfter = readStyles(replica), storedChanged = !equal(stylesBefore, stylesAfter);
       if (itemsBefore && !equal(itemsBefore, letterItems(replica))) result.local.push(`step ${index} split: narration letters were deleted and written again`);
@@ -348,6 +354,7 @@ export function play(options: PlayOptions): PlayResult {
       const real = broken.filter(problem => !problem.startsWith("kind: "));
       if (real.length) result.local.push(`step ${index} ${cmd.op}: ${real.join("; ")}`);
       drift(result, cmd, before, after, rankless);
+      if (options.pressChecks) pressCheck(result.press ??= { presses: 0, scene: 0, drift: 0, seenLater: 0, problems: [] }, index, cmd, record, events, made, before, after);
       if (["type", "erase", "format", "field", "split", "join", "unjoin", "delete"].includes(cmd.op)) {
         const was = sceneMap(before), changed = [...sceneMap(after)].filter(([beat, scene]) => was.has(beat) && was.get(beat) !== scene).map(([beat]) => beat);
         if (changed.length) result.never.push(`step ${index} ${cmd.op}: beats ${changed.join(",")} changed scene with one person working`);
@@ -381,6 +388,7 @@ export function play(options: PlayOptions): PlayResult {
         result.never.push(...neverAcceptable(reachability(copy.replica)).map(problem => `settled on ${copy.client}: ${problem}`));
       }
       result.lines = lines;
+      if (options.listCalls) result.stored = JSON.stringify(styles);
       result.never.push(...neverAcceptable(reachability(hub.replica)).map(problem => `settled: ${problem}`));
       result.uses = { ...hub.replica.ruleUse(), rank: everyone.reduce((sum, copy) => sum + copy.replica.ruleUse().rank, 0) };
       result.events = events.length;
@@ -419,6 +427,56 @@ function drift(result: PlayResult, cmd: Cmd, before: Shown, after: Shown, rankle
     result.drift.place++;
     if (scene(wanted, row) !== scene(got, row)) result.drift.scene++;
   }
+}
+
+// why: E15: a press takes back or puts back one command; rows that command did not place keep their scene and their
+// order among themselves, and a press that moves a row or heading someone else moved later, seen, is counted
+function pressCheck(count: PressCount, index: number, cmd: Cmd, record: LedgerEvent, events: readonly LedgerEvent[], made: ReadonlyMap<number, Cmd>, before: Shown, after: Shown): void {
+  if (cmd.op !== "undo" && cmd.op !== "redo") return;
+  const originOf = (at: number | null): number | null => {
+    const event = at === null ? undefined : events.find(item => item.index === at), source = at === null ? undefined : made.get(at);
+    if (!event || !source) return null;
+    return source.op === "undo" ? originOf(event.reverts) : source.op === "redo" ? originOf(event.redoes) : event.index;
+  };
+  const origin = originOf(cmd.op === "undo" ? record.reverts : record.redoes), source = origin === null ? undefined : made.get(origin);
+  if (origin === null || !source) return;
+  count.presses++;
+  const scenes = [sceneMap(before), sceneMap(after)] as const, beats = new Set<string>(), headings = new Set<string>();
+  const rowMembers = (id: string): string[] => [before, after].flatMap(view => view.rows.get(rowOf(view, id) ?? "") ?? [id]);
+  // why: a range of rows carries the headings inside it, and with them their scenes
+  const span = (first: string, last: string | undefined): string[] => [before, after].flatMap(view => {
+    const from = view.order.indexOf(rowOf(view, first) ?? ""), to = view.order.indexOf(rowOf(view, last ?? first) ?? "");
+    return from < 0 ? [] : view.order.slice(from, Math.max(from, to) + 1).flatMap(id => id.startsWith("#") ? [id] : view.rows.get(id) ?? []);
+  });
+  const underHeading = (id: string): void => { headings.add(id); for (const map of scenes) for (const [beat, scene] of map) if (scene === id) beats.add(beat); };
+  switch (source.op) {
+    case "move":
+      if (source.drop.unit === "scene") underHeading(source.drop.first);
+      else for (const id of span(source.drop.first, source.drop.last ?? undefined)) if (id.startsWith("#")) underHeading(id.slice(1)); else beats.add(id);
+      break;
+    case "delete": for (const id of source.rows) for (const beat of rowMembers(id)) beats.add(beat); break;
+    case "split": for (const beat of [...rowMembers(source.id), source.created]) beats.add(beat); break;
+    case "join": case "unjoin": for (const beat of rowMembers(source.id)) beats.add(beat); break;
+    case "insert": beats.add(source.id); break;
+    case "heading": case "removeHeading": case "restoreHeading": underHeading(source.id); break;
+    default: break;
+  }
+  const changed = [...scenes[1]].filter(([beat, scene]) => scenes[0].has(beat) && scenes[0].get(beat) !== scene && !beats.has(beat)
+    && !headings.has(scene ?? "") && !headings.has(scenes[0].get(beat) ?? "")).map(([beat]) => beat);
+  if (changed.length) { count.scene++; count.problems.push(`step ${index} ${cmd.op}: beats ${changed.join(",")} changed scene with one person working`); }
+  const placed = (view: Shown, id: string): boolean => id.startsWith("#") ? headings.has(id.slice(1)) : (view.rows.get(id) ?? []).some(beat => beats.has(beat));
+  const kept = (view: Shown, other: Shown): string[] => view.order.filter(id => other.order.includes(id) && !placed(before, id) && !placed(after, id));
+  const was = kept(before, after), now = kept(after, before);
+  if (!equal(was, now)) { count.drift++; count.problems.push(`step ${index} ${cmd.op}: rows the pressed command did not place changed order: ${was.join(",")} became ${now.join(",")}`); }
+  if (source.op !== "move") return;
+  const item = source.drop.unit === "scene" ? `#${source.drop.first}` : source.drop.first;
+  const place = (view: Shown): string | null => { const id = item.startsWith("#") ? item : rowOf(view, item) ?? ""; const at = view.order.indexOf(id); return at < 0 ? null : view.order[at - 1] ?? "top"; };
+  if (place(before) === null || place(before) === place(after)) return;
+  // why: a later placement is a move of the same row or heading, or a redo of one; an undo goes back to an earlier one
+  const sameItem = (at: number | null): boolean => { const other = at === null ? undefined : made.get(at); return other?.op === "move" && other.drop.unit === source.drop.unit && other.drop.first === source.drop.first; };
+  const later = events.find(event => event.index > origin && event.by !== record.by && record.seen.has(event.index) && (made.get(event.index)?.op === "move"
+    ? sameItem(event.index) && standing(event.index, events) : event.redoes !== null && sameItem(originOf(event.redoes))));
+  if (later) { count.seenLater++; count.problems.push(`step ${index} ${cmd.op}: moved ${item}, which step ${later.index} by another person moved later and the presser had seen`); }
 }
 
 // why: two accepted outcomes of moves made at the same moment as another command, read from the settled rows
@@ -578,6 +636,6 @@ function control(counts: Controls, rebuild: () => ChosenReplica, cmd: Cmd, calls
       const problems = [...promises(cmd, before, after, replica, record, !equal(styles, stylesBefore), keysBefore), ...neverAcceptable(reachability(replica)), ...storage?.check(held, replica, cmd) ?? []];
       if (problems.length) count.failed++;
       else if (equal(after, normal)) count.storageOnly++;
-    } catch { count.effective++; count.throws++; } finally { replica.destroy(); }
+    } catch { count.effective++; count.throws++; count.checkThrows = (count.checkThrows ?? 0) + 1; } finally { replica.destroy(); }
   }
 }

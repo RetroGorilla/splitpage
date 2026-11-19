@@ -21,7 +21,14 @@ export function held(option: RankOption, replica: ChosenReplica): Map<string, un
   return found;
 }
 
-const KEEPS_ORDER = new Set(["type", "erase", "format", "field"]);
+// why: a muted rank write that the reader does not show; each option's own rank calls, and nothing else, may do this.
+// E's fixed place also covers a new row's first rank, which a stray row's claim writes when someone types into it
+export const SILENT: Record<RankOption, RegExp> = {
+  A: /^move \/ YMap\.set:e10Rank$/, B: /^move \/ YMap\.set:e10Rank$/,
+  C: /^move \/ YMap\.(set|delete):rank entry$/, D: /^move \/ YArray\.(push|delete)$/, E: /^(move|type|split|insert|field|heading) \/ YMap\.set:e10Rank$/
+};
+
+const KEEPS_ORDER =new Set(["type", "erase", "format", "field"]);
 const order = (replica: ChosenReplica): string[] => shown(replica).order.map(id => id.replace(/^~stray.*$/, "~stray"));
 
 interface Snap { held: Map<string, unknown[]>; order: string[] }

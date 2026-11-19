@@ -1,10 +1,13 @@
 import * as Y from "yjs";
 import { ChosenReplica } from "../native-chosen/replica.ts";
 import type { ChosenNames } from "../native-chosen/replica.ts";
+import { initialRank } from "../native-moves/ranks.ts";
 import { ALL_RULES, STRAY_ROW } from "../native/variant.ts";
-import type { NativeRules } from "../native/variant.ts";
+import type { NativeBlock, NativeDeltaItem, NativeRules } from "../native/variant.ts";
 
-export const OPTIONS = ["A", "B", "C", "D"] as const;
+const AT = "at";
+
+export const OPTIONS = ["A", "B", "C", "D", "E"] as const;
 export type RankOption = typeof OPTIONS[number];
 export type EntryOrder = "stamp" | "lowest" | "clock";
 
@@ -70,10 +73,11 @@ export class EntryRankReplica extends ChosenReplica {
     const seen = [...record.keys()].filter(key => key.startsWith(ENTRY));
     const stamp = 1 + Math.max(0, ...seen.map(key => entryOf(key, "")?.stamp ?? 0));
     for (const key of seen) record.delete(key);
-    record.set(this.key(stamp), rank);
+    // why: a missing rank (a new row whose source had none) is stored as no entry, as option A stores no value
+    if (typeof rank === "string") record.set(this.key(stamp), rank);
   }
 
-  protected override flatFields(rank: unknown): Record<string, unknown> { return { [this.key(1)]: rank }; }
+  protected override flatFields(rank: unknown): Record<string, unknown> { return typeof rank === "string" ? { [this.key(1)]: rank } : {}; }
 }
 
 const LIST = "ranks";
@@ -93,6 +97,9 @@ export class ListRankReplica extends ChosenReplica {
 
   protected override writeFlat(record: Y.Map<unknown>, rank: unknown): void {
     let list = record.get(LIST);
+    // why: checked before any write: a missing rank leaves no live element and never reaches push, which would throw
+    // after the rest of the command was written
+    if (typeof rank !== "string") { if (list instanceof Y.Array && list.length) list.delete(0, list.length); return; }
     if (!(list instanceof Y.Array)) { list = new Y.Array<unknown>(); record.set(LIST, list); }
     const items = list as Y.Array<unknown>;
     if (items.length) items.delete(0, items.length);
@@ -113,11 +120,75 @@ export class ListRankReplica extends ChosenReplica {
   }
 }
 
+// why: option E: undo stays as built; every boundary carries the rank its block was created with, never rewritten,
+// and the reader uses it only for a block whose record has no rank or no record
+export class FixedPlaceReplica extends ChosenReplica {
+  private readonly creatingAt = new Map<string, string>();
+  private fixedReads = 0;
+
+  protected override creating(ref: string, rank: unknown, from?: string): void {
+    const place = typeof rank === "string" ? rank : from ? this.placeOf(from) : undefined;
+    if (place === undefined) this.creatingAt.delete(ref); else this.creatingAt.set(ref, place);
+  }
+
+  protected override marker(kind: "b" | "h", id: string): Record<string, string> {
+    const plain = super.marker(kind, id), at = this.creatingAt.get(`${kind}:${id}`);
+    this.creatingAt.delete(`${kind}:${id}`);
+    return at === undefined ? plain : { ...plain, [AT]: at };
+  }
+
+  override hydratedBoundary(index: number, kind: "b" | "h", id: string): Record<string, string> {
+    return { ...super.marker(kind, id), [AT]: initialRank(index) };
+  }
+
+  fixedPlaces(): Map<string, string> {
+    const found = new Map<string, string>();
+    const take = (raw: unknown): void => {
+      if (!raw || typeof raw !== "object") return;
+      const value = raw as Record<string, unknown>, kind = typeof value.b === "string" ? "b" : typeof value.h === "string" ? "h" : null;
+      if (kind && typeof value[AT] === "string" && !found.has(`${kind}:${String(value[kind])}`)) found.set(`${kind}:${String(value[kind])}`, value[AT]);
+    };
+    for (const segment of this.segments.values()) {
+      take(segment.get("head"));
+      const text = segment.get("text");
+      if (text instanceof Y.Text) for (const item of text.toDelta() as NativeDeltaItem[]) if (typeof item.insert !== "string") take(item.insert);
+    }
+    return found;
+  }
+
+  placeOf(ref: string): string | undefined {
+    const rank = this.storedRank(ref.startsWith("h:") ? "h" : "b", ref.slice(2));
+    return typeof rank === "string" ? rank : this.fixedPlaces().get(ref);
+  }
+
+  protected override groupsOf(natural: NativeBlock[]): Map<string, { head: string; rank: string }> {
+    const ranks = natural.map(block => this.storedRank(block.kind, block.id));
+    if (!this.rules.rank || ranks.every(rank => typeof rank === "string")) return super.groupsOf(natural);
+    const fixed = this.fixedPlaces(), groups = new Map<string, { head: string; rank: string }>();
+    for (const [index, block] of natural.entries()) {
+      const head = `${block.kind}:${block.id}`, own = ranks[index];
+      if (typeof own === "string") { groups.set(head, { head, rank: own }); continue; }
+      const at = fixed.get(head);
+      if (at === undefined) return super.groupsOf(natural);
+      // why: as in rule (e), the next move or new heading writes this rank, here the fixed one, so nothing moves
+      groups.set(head, { head: `${head}?`, rank: at });
+    }
+    this.fixedReads++;
+    return groups;
+  }
+
+  override ruleUse(): Record<keyof NativeRules, number> {
+    const uses = super.ruleUse();
+    return { ...uses, rank: uses.rank + this.fixedReads };
+  }
+}
+
 export function makeOption(option: RankOption, order: EntryOrder = "stamp"): (client: number, rules: NativeRules, names: ChosenNames) => ChosenReplica {
   switch (option) {
     case "A": return (client, rules, names) => new ChosenReplica(client, rules, names);
     case "B": return (client, rules, names) => new RemoteMapUndoReplica(client, rules, names);
     case "C": return (client, rules, names) => new EntryRankReplica(client, rules, names, order);
     case "D": return (client, rules, names) => new ListRankReplica(client, rules, names);
+    case "E": return (client, rules, names) => new FixedPlaceReplica(client, rules, names);
   }
 }

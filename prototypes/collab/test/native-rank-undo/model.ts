@@ -1,40 +1,56 @@
-// why: the evidence model for the named histories; it imports neither Yjs nor the code under test. It follows one
-// beat's rank under each storage's written rules and says which write stands
-export type Storage = "A" | "B" | "C" | "D";
+// why: the evidence for the named histories; it imports nothing. A register model follows one stored value under each
+// option's written rules, and the hand-written rows below say what a person sees for each value it can leave standing
+export type Storage = "A" | "B" | "C" | "D" | "E";
 export type RegisterStep =
   | { op: "write"; by: number; label: string }
   | { op: "other"; by: number; label: string }
   | { op: "drop"; by: number }
+  | { op: "delete"; by: number }
   | { op: "sync" }
+  | { op: "deliver"; from: number; to: number }
   | { op: "undo" | "redo"; by: number }
   | { op: "mark" };
 export interface Snapshot { rank: string | null; undone: string[] }
+export type Register = "rank" | "record";
 
-interface Item { id: number; by: number; value: string; key: string; stamp: number; origin: Item | null; gone: { by: number; at: number } | null; redone: Set<number> }
+interface Gone { by: number; id: number }
+interface Item { id: number; by: number; value: string; key: string; stamp: number; origin: Item | null; gone: Gone[]; redone: Set<number> }
 interface Entry { other?: string; ins: Item[]; del: Item[]; drop?: boolean }
 
-// why: each option's written rule, applied once every copy has every update; the four rules are listed in
-// RESULT.md under "What each option changes elsewhere"
+// why: a record is a plain map entry in every option, so only B (its undo setting) and E (its fixed place) differ there
+export const storageOf = (option: Storage, register: Register): Storage => register === "rank" || option === "B" || option === "E" ? option : "A";
+
+// why: each option's written rule: one map key (A, E; B always brings it back), a key per write read by stamp (C), a
+// list read by its last live element, where a redo goes back before its original (D)
 export function standings(storage: Storage, steps: readonly RegisterStep[]): Snapshot[] {
-  const keyed = storage === "A" || storage === "B";
-  let clock = 0, base = 0, list: Item[] = [], dropped = false;
-  const make = (by: number, value: string, key: string, stamp: number, origin: Item | null): Item =>
-    ({ id: clock++, by, value, key, stamp, origin, gone: null, redone: new Set() });
+  const keyed = storage === "A" || storage === "B" || storage === "E";
+  const list: Item[] = [];
+  let clock = 0, dropped = false;
+  const known = new Map<number, Set<number>>(), seeded = 1;
+  const knows = (by: number, id: number): boolean => id < seeded || by === -1 || (known.get(by)?.has(id) ?? false);
+  const learn = (by: number, id: number): void => { const set = known.get(by) ?? new Set<number>(); set.add(id); known.set(by, set); };
+  const make = (by: number, value: string, key: string, stamp: number, origin: Item | null): Item => {
+    const item: Item = { id: clock++, by, value, key, stamp, origin, gone: [], redone: new Set() };
+    learn(by, item.id);
+    return item;
+  };
   list.push(make(-1, "start", "k-start", 1, null));
-  base = clock;
+  const exists = (by: number, item: Item): boolean => knows(by, item.id);
+  const deletedFor = (by: number, item: Item): boolean => item.gone.some(gone => knows(by, gone.id));
+  const lastExisting = (by: number): Item | null => list.filter(item => exists(by, item)).at(-1) ?? null;
+  // why: a map key shows only its last item; an earlier one is deleted when the later one arrives
+  const alive = (by: number, item: Item): boolean => exists(by, item) && !deletedFor(by, item) && (!keyed || lastExisting(by) === item);
+  const remove = (item: Item, by: number): void => { const gone = { by, id: clock++ }; item.gone.push(gone); if (by >= 0) learn(by, gone.id); };
   const undos = new Map<number, Entry[]>(), redos = new Map<number, Entry[]>(), undone = new Set<string>();
   const stack = (map: Map<number, Entry[]>, by: number): Entry[] => { const found = map.get(by) ?? []; map.set(by, found); return found; };
-  const exists = (by: number, item: Item): boolean => item.id < base || item.by === by;
-  const alive = (by: number, item: Item): boolean => exists(by, item) && (item.gone === null || (item.gone.at >= base && item.gone.by !== by));
-  const remove = (item: Item, by: number): void => { item.gone ??= { by, at: clock++ }; };
   // why: items made at once after the same item are ordered by writer, lower first, as the library orders siblings
-  const place = (item: Item): void => {
+  const place = (item: Item, before: Item | null = null): void => {
     let at = item.origin ? list.indexOf(item.origin) + 1 : 0;
-    while (at < list.length && list[at]?.origin === item.origin && (list[at]?.by ?? 0) < item.by) at++;
+    while (at < list.length && list[at] !== before && list[at]?.origin === item.origin && (list[at]?.by ?? 0) < item.by) at++;
     list.splice(at, 0, item);
   };
   const write = (by: number, value: string): Entry => {
-    const seen = list.filter(item => alive(by, item)), last = list.filter(item => exists(by, item)).at(-1) ?? null;
+    const seen = list.filter(item => alive(by, item)), last = lastExisting(by);
     const stamp = 1 + Math.max(0, ...seen.map(item => item.stamp));
     const item = make(by, value, keyed ? "k-start" : `k${clock}`, stamp, keyed || storage === "D" ? last : null);
     if (storage === "C") list.push(item); else place(item);
@@ -42,34 +58,32 @@ export function standings(storage: Storage, steps: readonly RegisterStep[]): Sna
     if (dropped) remove(item, -2);
     return { ins: [item], del: seen };
   };
-  const restore = (by: number, entry: Entry, before: readonly Item[]): Item[] => {
+  const restore = (by: number, entry: Entry): Item[] => {
     const back: Item[] = [];
     for (const item of entry.del) {
       if (item.redone.has(by)) continue;
       const own = new Set([...entry.ins, ...stack(undos, by).flatMap(other => other.del), ...stack(redos, by).flatMap(other => other.del)]);
-      const after = before.slice(before.indexOf(item) + 1).filter(other => other.key === item.key);
-      if ((storage === "A" || storage === "C") && after.some(other => !own.has(other) && !other.redone.has(by))) continue;
-      const copy = make(by, item.value, item.key, item.stamp, keyed ? list.at(-1) ?? null : item.origin);
+      const after = list.slice(list.indexOf(item) + 1).filter(other => other.key === item.key && exists(by, other));
+      if (storage !== "B" && storage !== "D" && after.some(other => !own.has(other) && !other.redone.has(by))) continue;
+      const left = list.slice(0, list.indexOf(item)).filter(other => exists(by, other)).at(-1) ?? null;
+      const copy = make(by, item.value, item.key, item.stamp, keyed ? lastExisting(by) : storage === "D" ? left : item.origin);
       item.redone.add(by);
-      if (storage === "D") list.splice(Math.max(0, list.indexOf(item)), 0, copy); else list.push(copy);
-      if (keyed) for (const other of list) if (other !== copy) remove(other, by);
+      if (keyed) place(copy); else if (storage === "D") place(copy, item); else list.push(copy);
       back.push(copy);
     }
     return back;
   };
   const press = (by: number, from: Map<number, Entry[]>, to: Map<number, Entry[]>): void => {
-    if (base !== clock) throw new Error("The model presses undo only on settled copies");
     for (let entry = stack(from, by).pop(); entry; entry = stack(from, by).pop()) {
       if (entry.other !== undefined) {
         if (undone.has(entry.other)) undone.delete(entry.other); else undone.add(entry.other);
         stack(to, by).push(entry);
         return;
       }
-      const before = list;
-      if (entry.drop) { dropped = !dropped; if (!dropped) list = []; }
-      const gone = entry.ins.filter(item => item.gone === null);
+      if (entry.drop) dropped = !dropped;
+      const gone = entry.ins.filter(item => alive(by, item));
       for (const item of gone) remove(item, by);
-      const back = restore(by, entry, before);
+      const back = restore(by, entry);
       if (!entry.drop && !gone.length && !back.length && !entry.del.some(item => item.redone.has(by))) continue;
       stack(to, by).push({ ins: back, del: gone, ...entry.drop ? { drop: true } : {} });
       return;
@@ -77,29 +91,116 @@ export function standings(storage: Storage, steps: readonly RegisterStep[]): Sna
   };
   const read = (): string | null => {
     if (dropped) return "deleted";
-    const live = list.filter(item => item.gone === null);
-    if (keyed) { const last = list.at(-1); return last && last.gone === null ? last.value : null; }
+    const live = list.filter(item => !item.gone.length);
+    if (keyed) { const last = list.at(-1); return last && !last.gone.length ? last.value : storage === "E" ? "fixed" : null; }
     if (storage === "D") return live.at(-1)?.value ?? null;
     return live.toSorted((a, b) => b.stamp - a.stamp || b.by - a.by)[0]?.value ?? null;
   };
+  const everyone = steps.flatMap(step => "by" in step ? [step.by] : "from" in step ? [step.from, step.to] : []);
+  const writers = (): number[] => [...new Set([...everyone, ...known.keys(), ...list.map(item => item.by)])].filter(by => by >= 0);
   const snapshots: Snapshot[] = [];
+  let settled = true;
   for (const step of steps) {
-    if (step.op === "write") { stack(undos, step.by).push(write(step.by, step.label)); stack(redos, step.by).length = 0; }
+    if (step.op === "write") { stack(undos, step.by).push(write(step.by, step.label)); stack(redos, step.by).length = 0; settled = false; }
     else if (step.op === "other") { stack(undos, step.by).push({ other: step.label, ins: [], del: [] }); stack(redos, step.by).length = 0; }
-    else if (step.op === "drop") {
+    else if (step.op === "drop" || step.op === "delete") {
       const seen = list.filter(item => alive(step.by, item));
       for (const item of seen) remove(item, step.by);
-      dropped = true;
-      stack(undos, step.by).push({ ins: [], del: seen, drop: true }); stack(redos, step.by).length = 0;
+      if (step.op === "drop") dropped = true;
+      stack(undos, step.by).push({ ins: [], del: seen, ...step.op === "drop" ? { drop: true } : {} }); stack(redos, step.by).length = 0;
+      settled = false;
     } else if (step.op === "sync") {
-      // why: once delivered, a map key keeps only its last item, as the library deletes the rest on arrival
-      if (keyed) for (const item of list.slice(0, -1)) remove(item, -2);
-      base = clock;
-    } else if (step.op === "undo") press(step.by, undos, redos);
-    else if (step.op === "redo") press(step.by, redos, undos);
-    else snapshots.push({ rank: read(), undone: [...undone].sort() });
+      const all = [...list.map(item => item.id), ...list.flatMap(item => item.gone.map(gone => gone.id))];
+      for (const by of writers()) for (const id of all) learn(by, id);
+      settled = true;
+    } else if (step.op === "deliver") { for (const id of known.get(step.from) ?? []) learn(step.to, id); }
+    else if (step.op === "undo") { press(step.by, undos, redos); settled = false; }
+    else if (step.op === "redo") { press(step.by, redos, undos); settled = false; }
+    else {
+      if (!settled) throw new Error("The model reads only once every copy has every update");
+      snapshots.push({ rank: read(), undone: [...undone].sort() });
+    }
   }
   return snapshots;
 }
 
 export const snapshotKey = (snapshot: Snapshot): string => `${snapshot.rank ?? "none"}${snapshot.undone.length ? ` / undone ${snapshot.undone.join(", ")}` : ""}`;
+
+// why: a row is `id: narration / visual`, a heading `#id name`. Short forms: a bare id is a row whose narration is its
+// id in lower case and whose visual cell is empty; `#H` is a heading whose name is `h`
+const short = (text: string): string[] => text.split(", ").map(part => part.startsWith("#") ? `${part} ${part.slice(1).toLowerCase()}` : `${part}: ${part.toLowerCase()} / `);
+const BASE_NAMES: Record<string, string> = { "#H": "mno", "#I": "stu" };
+const BASE_ROWS: Record<string, string> = { A: "A: abc / 1", B: "B: def / 2", C: "C: ghi / 3", D: "D: jkl / 4", E: "E: pqr / 5", F: "F: vwx / 6" };
+const full = (text: string): string[] => text.split(", ").map(part => part.startsWith("#") ? `${part} ${BASE_NAMES[part]}` : BASE_ROWS[part] ?? part);
+const RACE = { bob: short("#H, B, A") };
+const DRIFT = "beats B changed scene with one person working";
+const EMPTY_REDO = "redo popped an item but changed nothing stored";
+const LOST = ["beat B has no record", "beat B has no visual cell"];
+const lostAt = (at: number, extra: { at: number; problem: string }[] = []): Partial<Record<Storage, { at: number; problem: string }[]>> =>
+  Object.fromEntries((["A", "B", "C", "D", "E"] as const).map(option => [option, [...LOST.map(problem => ({ at, problem })), ...option === "E" ? [] : extra]]));
+
+export interface Expected { rows: Record<string, string[]>[]; never?: Partial<Record<Storage, { at: number; problem: string }[]>>; seenLater?: Storage[] }
+
+// why: by history label: per part, the rows for each value the model can leave standing; `never` lists the results an
+// option shows, by part, and `seenLater` the options whose press moves a later placement the presser had seen
+export const EXPECTED: Record<string, Expected> = {
+  "winner undoes, then the loser deletes A": {
+    rows: [RACE, { none: short("#H, A, B"), start: short("B, #H, A"), alice: short("#H, A, B"), fixed: short("B, #H, A") },
+      { none: short("B, #H"), start: short("B, #H"), alice: short("#H, B"), fixed: short("B, #H") }],
+    never: { A: [{ at: 2, problem: DRIFT }] }
+  },
+  "loser undoes, then the loser deletes A": {
+    rows: [RACE, { "bob / undone A into H": short("A, #H, B"), start: short("B, #H, A"), bob: short("#H, B, A") },
+      { "bob / undone A into H": short("#H, B"), start: short("B, #H"), bob: short("#H, B") }],
+    seenLater: ["B"]
+  },
+  "winner undoes, then redoes": {
+    rows: [RACE, { none: short("#H, A, B"), start: short("B, #H, A"), alice: short("#H, A, B"), fixed: short("B, #H, A") }, { bob: short("#H, B, A") }]
+  },
+  "three people move one beat at once, each undoes in turn": {
+    rows: [{ carol: short("B, A, C, D") }, { none: short("A, B, C, D"), start: short("A, B, C, D"), fixed: short("A, B, C, D"), bob: short("A, C, D, B") },
+      { none: short("A, B, C, D"), start: short("A, B, C, D"), fixed: short("A, B, C, D"), alice: short("A, C, B, D") },
+      { none: short("A, B, C, D"), start: short("A, B, C, D"), fixed: short("A, B, C, D") }]
+  },
+  "E11's six-step deletion history": {
+    rows: [{ deleted: short("#H, A") }, { none: short("#H, A, B"), start: short("B, #H, A"), fixed: short("B, #H, A") },
+      { none: short("B, #H"), start: short("B, #H"), fixed: short("B, #H") }],
+    never: { A: [{ at: 2, problem: DRIFT }] }
+  },
+  "a move, someone else's seen move of the same beat, the first person's undo": {
+    rows: [{ alice: short("A, C, B, D") }, { bob: short("A, C, D, B") }, { bob: short("A, C, D, B"), start: short("A, B, C, D") }],
+    seenLater: ["B"]
+  },
+  "a move while someone else splits the beat unseen, then the mover undoes": {
+    rows: [{ alice: ["A: a / ", "N: b / ", "C: c / ", "D: d / ", "B:  / "] }, { start: ["A: a / ", "B:  / ", "N: b / ", "C: c / ", "D: d / "] }]
+  },
+  "a heading move against a beat move into that scene, then each undoes": {
+    rows: [{ bob: full("A, C, D, B, #I, F, #H, E") }, { start: full("A, B, C, D, #I, F, #H, E") }, { "start / undone scene H": full("A, B, C, D, #H, E, #I, F") }]
+  },
+  "an older redo of a heading move against a later move the presser had seen": {
+    rows: [{ start: short("A, #H, #I") }, { alice: short("#H, A, #I") }, { alice: short("#H, A, #I"), bob: short("A, #I, #H") }],
+    never: { A: [{ at: 2, problem: EMPTY_REDO }], E: [{ at: 2, problem: EMPTY_REDO }] },
+    seenLater: ["B", "C"]
+  },
+  "three people: a redo and an undo of heading moves around a later move": {
+    rows: [{ top: short("#H, A, #I"), carol: short("A, #I, #H"), start: short("A, #H, #I") }],
+    never: { A: [{ at: 0, problem: EMPTY_REDO }], E: [{ at: 0, problem: EMPTY_REDO }] },
+    seenLater: ["B", "C", "D"]
+  },
+  "a row moved earlier, then two moves at once and the winner's undo": {
+    rows: [{ earlier: short("A, C, D, B") }, { bob: short("B, A, C, D") },
+      { none: short("A, B, C, D"), earlier: short("A, C, D, B"), alice: short("A, C, B, D"), fixed: short("A, B, C, D") }]
+  },
+  "both delete a row offline and undo, one redoes: the row loses its record": {
+    rows: [{ none: short("A, B"), fixed: short("A, B") }],
+    never: lostAt(0)
+  },
+  "a row that lost its record under a moved neighbour, then the neighbour is deleted": {
+    rows: [{ start: short("B, #H, A") }, { none: short("#H, A, B"), fixed: short("B, #H, A") }, { none: short("B, #H"), fixed: short("B, #H") }],
+    never: lostAt(1, [{ at: 2, problem: DRIFT }])
+  },
+  "a new row inserted before a row that lost its record": {
+    rows: [{ none: short("A, B"), fixed: short("A, B") }, { none: short("N, A, B"), fixed: short("A, N, B") }],
+    never: lostAt(0)
+  }
+};

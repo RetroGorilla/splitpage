@@ -347,6 +347,9 @@ export class NativeReplica {
     this.changes();
   }
 
+  // why: E15's option E writes a fixed position into each boundary it creates; the default is the plain boundary
+  protected marker(kind: "b" | "h", id: string): Record<string, string> { return kind === "b" ? { b: id } : { h: id }; }
+
   protected addSegment(id: string, head: Record<string, string>, runs: readonly Run[], at = this.order.length): void {
     const segment = new Y.Map<unknown>(), text = new Y.Text();
     this.segments.set(id, segment);
@@ -635,17 +638,17 @@ export class NativeReplica {
       this.splitPlacement = "exact";
       if (at.span.opened === "own") {
         const around = attributesAt(at.span.text.toDelta() as NativeDeltaItem[], at.index - 1) ?? {};
-        at.span.text.insertEmbed(at.index, { b: created }, Object.fromEntries(Object.entries(around).filter(([, value]) => value === true)));
+        at.span.text.insertEmbed(at.index, this.marker("b", created), Object.fromEntries(Object.entries(around).filter(([, value]) => value === true)));
       } else if (this.copyFreeSplit) {
         const own = spans.find(span => span.opened === "own");
-        if (own && spans.indexOf(own) > at.at) { own.text.insertEmbed(own.start, { b: created }, {}); this.splitPlacement = "at the beat's own text"; }
-        else { at.span.text.insertEmbed(at.index, { b: created }, {}); this.splitPlacement = "where the caret is, read by the rules"; }
+        if (own && spans.indexOf(own) > at.at) { own.text.insertEmbed(own.start, this.marker("b", created), {}); this.splitPlacement = "at the beat's own text"; }
+        else { at.span.text.insertEmbed(at.index, this.marker("b", created), {}); this.splitPlacement = "where the caret is, read by the rules"; }
       } else {
         const ownAt = spans.findIndex(span => span.opened === "own");
         if (ownAt > at.at) {
           const own = spans[ownAt] as NativeTextSpan, stop = lengthBefore(ownAt);
           const moved = this.sliceOf(spans, offset, stop), cuts = this.pieces(spans, offset, stop);
-          own.text.insertEmbed(own.start, { b: created }, {});
+          own.text.insertEmbed(own.start, this.marker("b", created), {});
           this.copyInto(own.text, own.start + 1, moved);
           for (const cut of cuts.reverse()) cut.text.delete(cut.from, cut.to - cut.from);
         } else {
@@ -654,7 +657,7 @@ export class NativeReplica {
           const target = spans[lastOwn];
           if (!target) throw new Error(`No beat text before the split in ${beat}`);
           const startMoved = lengthBefore(lastOwn + 1), moved = this.sliceOf(spans, startMoved, offset), cuts = this.pieces(spans, startMoved, offset);
-          at.span.text.insertEmbed(at.index, { b: created }, {});
+          at.span.text.insertEmbed(at.index, this.marker("b", created), {});
           for (const cut of cuts.reverse()) cut.text.delete(cut.from, cut.to - cut.from);
           this.copyInto(target.text, target.end, moved);
         }
@@ -835,7 +838,7 @@ export class NativeReplica {
       const cell = this.cell(beat, "audioText"), around = attributesAt(cell.text.toDelta() as NativeDeltaItem[], cell.start + offset - 1) ?? {};
       // why: given the formatting already in force at its place, the boundary writes no marker of its own, so a later
       // undo of that formatting cannot leave a marker that turns it on again after the boundary
-      cell.text.insertEmbed(cell.start + offset, { b: created }, Object.fromEntries(Object.entries(around).filter(([, value]) => value === true)));
+      cell.text.insertEmbed(cell.start + offset, this.marker("b", created), Object.fromEntries(Object.entries(around).filter(([, value]) => value === true)));
       const map = new Y.Map<unknown>();
       this.beats.set(created, map);
       for (const [key, value] of Object.entries(fields)) map.set(key, value);

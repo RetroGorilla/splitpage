@@ -47,7 +47,7 @@ export function betweenRanks(left: string | null, right: string | null, client: 
 }
 
 const ref = (block: NativeBlock): string => blockRef(block.kind, block.id);
-const initialRank = (index: number): string => digits((index + 1) * 32, 6) + "V";
+export const initialRank = (index: number): string => digits((index + 1) * 32, 6) + "V";
 
 function boundary(block: NativeBlock): number { return Math.max(0, block.start - 1); }
 
@@ -69,6 +69,12 @@ export class MoveReplica extends NativeHeadingReplica {
   protected writeFlat(record: Y.Map<unknown>, rank: unknown): void { record.set(FLAT, rank); }
 
   protected flatFields(rank: unknown): Record<string, unknown> { return { [FLAT]: rank }; }
+
+  // why: E15's option E is told each new block's first rank before its boundary is written; by default no one is told
+  protected creating?(ref: string, rank: unknown, from?: string): void;
+
+  // why: the boundary a hydration writes for the block at this place in the natural order; E15's option E adds its rank
+  hydratedBoundary(index: number, kind: "b" | "h", id: string): Record<string, string> { return this.marker(kind, id); }
 
   initializeRanks(): void {
     const natural = this.naturalBlocks();
@@ -247,7 +253,9 @@ export class MoveReplica extends NativeHeadingReplica {
   }
 
   override split(beat: string, offset: number, created: string, fields: Record<string, unknown> = {}): void {
-    const additions = this.design === "flat" ? { ...fields, ...this.flatFields(this.readFlat(recordOf(this, `b:${beat}`))) } : fields;
+    const rank = this.design === "flat" ? this.readFlat(recordOf(this, `b:${beat}`)) : undefined;
+    const additions = this.design === "flat" ? { ...fields, ...this.flatFields(rank) } : fields;
+    this.creating?.(`b:${created}`, rank, `b:${beat}`);
     super.split(beat, offset, created, additions);
   }
 
@@ -261,6 +269,7 @@ export class MoveReplica extends NativeHeadingReplica {
     const block = required(byRef.get(target), "beat after new heading");
     order.splice(order.indexOf(target), 0, heading);
     const writes = this.planRanks(order, new Set([heading]), groups, natural);
+    this.creating?.(heading, writes.find(write => write.head === heading)?.rank);
     this.transact(() => {
       super.createHeading(beat, id, name);
       const standalone = block.start === 0, segment = standalone ? `seg-h-${id}` : block.segment;

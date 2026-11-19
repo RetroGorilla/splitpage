@@ -35,12 +35,12 @@ export class NativeHeadingReplica extends NativeReplica {
       this.headings.set(id, record);
       const inline = this.nameCells ? [] : [{ text: name, marks: {} }], lead = this.nameCells ? this.spansOf(beat, "audioText")[0] : undefined;
       // why: text a rule shows at the start of the beat goes below the new heading with the rest of the row
-      if (lead && lead.opened !== "own") lead.text.insertEmbed(lead.start, { h: id });
+      if (lead && lead.opened !== "own") lead.text.insertEmbed(lead.start, this.marker("h", id));
       else if (start === 0) {
         const { segment } = this.block(beat);
-        this.addSegment(`seg-h-${id}`, { h: id }, inline, this.order.toArray().indexOf(segment));
+        this.addSegment(`seg-h-${id}`, this.marker("h", id), inline, this.order.toArray().indexOf(segment));
       } else {
-        text.insertEmbed(start - 1, { h: id });
+        text.insertEmbed(start - 1, this.marker("h", id));
         if (inline.length) text.insert(start, name, {});
       }
       if (this.nameCells) { const cell = new Y.Text(); this.names.set(id, cell); cell.insert(0, name, {}); }

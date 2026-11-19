@@ -50,7 +50,8 @@ function holdings(replica: ChosenReplica): Map<string, Held> {
   return held;
 }
 
-export interface Overwrites { presses: number; changed: number; others: Record<string, number>; histories: number; extraEntries: number; extraRecords: number }
+// why: `others` counts values (one per changed field or rank); `overwritingPresses` counts presses that changed any
+export interface Overwrites { presses: number; changed: number; others: Record<string, number>; overwritingPresses: number; histories: number; extraEntries: number; extraRecords: number }
 
 // why: whole-state sync between copies, which is enough to count what an undo press changes on the copy that pressed
 export const generatedLists = (size: number): { spec: Spec; steps: Step[] }[] =>
@@ -68,7 +69,7 @@ function extras(option: RankOption, copies: readonly (ChosenReplica | null)[], m
 }
 
 export function countOverwrites(option: RankOption, lists: readonly { spec: Spec; steps: readonly Step[] }[]): Overwrites {
-  const make = makeOption(option), result: Overwrites = { presses: 0, changed: 0, others: {}, histories: 0, extraEntries: 0, extraRecords: 0 };
+  const make = makeOption(option), result: Overwrites = { presses: 0, changed: 0, others: {}, overwritingPresses: 0, histories: 0, extraEntries: 0, extraRecords: 0 };
   for (const { spec, steps } of lists) {
     const bytes = seed(spec, ALL_RULES, NAMES, make);
     const copies: (ChosenReplica | null)[] = [0, 1, 2].map(index => steps.some(step => "open" in step && step.open === index) ? null : load(bytes, index + 1, ALL_RULES, NAMES, make));
@@ -88,7 +89,7 @@ export function countOverwrites(option: RankOption, lists: readonly { spec: Spec
         if (!before) continue;
         result.presses++;
         const after = holdings(copy);
-        let changed = false;
+        let changed = false, overwrote = false;
         for (const key of new Set([...before.keys(), ...after.keys()])) {
           const was = before.get(key), now = after.get(key);
           if (equal(was?.value, now?.value)) continue;
@@ -97,10 +98,11 @@ export function countOverwrites(option: RankOption, lists: readonly { spec: Spec
           if (present && was.writer !== null && was.writer !== copy.doc.clientID && was.writer !== SEED_CLIENT) {
             const kind = key.slice(0, key.indexOf("/"));
             result.others[kind] = (result.others[kind] ?? 0) + 1;
-            hit = true;
+            hit = true; overwrote = true;
           }
         }
         if (changed) result.changed++;
+        if (overwrote) result.overwritingPresses++;
       }
       const left = extras(option, copies, make);
       result.extraEntries += left.entries; result.extraRecords += left.records;

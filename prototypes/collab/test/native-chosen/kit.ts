@@ -37,12 +37,15 @@ export function base(): Spec {
 
 // why: with names in cells, the text right after a heading's boundary in a spec is that heading's name
 export function seed(spec: Spec, rules: NativeRules = ALL_RULES, names: ChosenNames = "inline", make: MakeReplica = chosen): Uint8Array {
-  const replica = make(900, rules, names);
+  const replica = make(900, rules, names), places = new Map<Unit, number>();
+  for (const id of new Set(spec.order)) for (const unit of [spec.segments[id]?.head, ...spec.segments[id]?.units ?? []]) if (unit && typeof unit === "object") places.set(unit, places.size);
+  // why: the hydrated boundary is the spec's own unit unless the replica adds to it (E15's option E adds its rank)
+  const boundary = (unit: { b: string } | { h: string }): Record<string, string> => "b" in unit ? replica.hydratedBoundary(places.get(unit) ?? -1, "b", unit.b) : replica.hydratedBoundary(places.get(unit) ?? -1, "h", unit.h);
   replica.doc.transact(() => {
     for (const [id, data] of Object.entries(spec.segments)) {
       const record = new Y.Map<unknown>(), text = new Y.Text();
       replica.segments.set(id, record);
-      if (data.head) record.set("head", data.head);
+      if (data.head) record.set("head", boundary(data.head));
       record.set("text", text);
       let heading = data.head && "h" in data.head ? data.head.h : null;
       for (const unit of data.units) {
@@ -51,7 +54,7 @@ export function seed(spec: Spec, rules: NativeRules = ALL_RULES, names: ChosenNa
           if (!replica.names.has(heading)) replica.names.set(heading, cell);
           cell.insert(cell.length, unit, {});
         } else if (typeof unit === "string") text.insert(text.length, unit, {});
-        else text.insertEmbed(text.length, unit, {});
+        else text.insertEmbed(text.length, boundary(unit), {});
         if (typeof unit === "object") heading = "h" in unit ? unit.h : null;
       }
     }

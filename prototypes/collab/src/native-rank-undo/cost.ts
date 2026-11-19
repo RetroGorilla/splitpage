@@ -9,9 +9,10 @@ import type { RankOption } from "./variants.ts";
 const NAMES = "cells";
 
 // why: E11's cost fixture: 30 beats per segment, a heading at the head of every third segment, 120 letters of
-// narration and 48 of visual text per beat
+// narration and 48 of visual text per beat; each boundary is the one the option writes at hydration
 function fixture(option: RankOption, size: number): Uint8Array {
   const replica = makeOption(option)(1, ALL_RULES, NAMES);
+  let places = 0;
   replica.doc.transact(() => {
     let text = new Y.Text();
     for (let n = 0; n < size; n++) {
@@ -20,15 +21,15 @@ function fixture(option: RankOption, size: number): Uint8Array {
         const segment = new Y.Map<unknown>(), key = `S${n}`, heading = n % 90 === 0;
         text = new Y.Text();
         replica.segments.set(key, segment);
-        segment.set("head", heading ? { h: `H${n}` } : { b: id });
+        segment.set("head", heading ? replica.hydratedBoundary(places++, "h", `H${n}`) : replica.hydratedBoundary(places++, "b", id));
         segment.set("text", text);
         replica.order.push([key]);
         if (heading) {
           replica.headings.set(`H${n}`, new Y.Map<unknown>());
           const cell = new Y.Text(); cell.insert(0, `Scene ${n}`, {}); replica.names.set(`H${n}`, cell);
-          text.insertEmbed(text.length, { b: id }, {});
+          text.insertEmbed(text.length, replica.hydratedBoundary(places++, "b", id), {});
         }
-      } else text.insertEmbed(text.length, { b: id }, {});
+      } else text.insertEmbed(text.length, replica.hydratedBoundary(places++, "b", id), {});
       text.insert(text.length, "n".repeat(120), {});
       replica.beats.set(id, new Y.Map<unknown>([["status", "ready"]]));
       const visual = new Y.Text();
@@ -71,13 +72,13 @@ function schedule(beats: number, count: number, seed: number): { first: string; 
   return moves;
 }
 
-function lifetime(option: RankOption): { initial: number; sentPerMove: number; keptPerMove: number } {
-  const replica = open(option, fixture(option, 300), 2), initial = fresh(option, replica), moves = schedule(300, 1000, 17);
+function lifetime(option: RankOption): { initial: number; perRow: number; sentPerMove: number; keptPerMove: number } {
+  const replica = open(option, fixture(option, 300), 2), initial = fresh(option, replica), moves = schedule(300, 1000, 17), perRow = Number((initial / 300).toFixed(2));
   let sent = 0;
   replica.doc.on("update", (update: Uint8Array) => { sent += update.length; });
   try {
     for (const move of moves) { assert.ok(replica.drop({ unit: "row", first: move.first, target: move.target, after: true })); replica.changes(); }
-    return { initial, sentPerMove: Number((sent / moves.length).toFixed(2)), keptPerMove: Number(((fresh(option, replica) - initial) / moves.length).toFixed(2)) };
+    return { initial, perRow, sentPerMove: Number((sent / moves.length).toFixed(2)), keptPerMove: Number(((fresh(option, replica) - initial) / moves.length).toFixed(2)) };
   } finally { replica.destroy(); }
 }
 

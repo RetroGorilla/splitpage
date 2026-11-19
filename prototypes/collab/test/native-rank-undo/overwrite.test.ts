@@ -10,7 +10,7 @@ import { perform } from "../native-chosen/play.ts";
 import type { Cmd, Step } from "../native-chosen/play.ts";
 import { countOverwrites, generatedLists } from "./overwrite.ts";
 import type { Overwrites } from "./overwrite.ts";
-import { fourBeats, twoBeats } from "./histories.ts";
+import { fourBeats, rowAndTwoHeadings, twoBeats } from "./histories.ts";
 
 const SIZE = Number(process.env.E15_SEEDS ?? 600);
 
@@ -30,10 +30,10 @@ function seenThenUndo(option: RankOption, spec: Spec, alice: Cmd, bob: Cmd, read
 test("E15 option B: an undo overwrites a later value someone else wrote after seeing it", () => {
   const status = (option: RankOption): unknown => seenThenUndo(option, { ...twoBeats(), beats: { A: {}, B: { status: "todo" } } },
     { op: "field", id: "B", key: "status", value: "ready" }, { op: "field", id: "B", key: "status", value: "done" }, copy => copy.beats.get("B")?.get("status"));
-  assert.deepEqual(OPTIONS.map(status), ["done", "todo", "done", "done"]);
+  assert.deepEqual(OPTIONS.map(status), ["done", "todo", "done", "done", "done"]);
   const order = (option: RankOption): unknown => seenThenUndo(option, fourBeats(),
     { op: "move", drop: { unit: "row", first: "B", target: "C", after: true } }, { op: "move", drop: { unit: "row", first: "B", target: "D", after: true } }, copy => copy.rows().map(row => row.id).join(""));
-  assert.deepEqual(OPTIONS.map(order), ["ACDB", "ABCD", "ACDB", "ACDB"]);
+  assert.deepEqual(OPTIONS.map(order), ["ACDB", "ABCD", "ACDB", "ACDB", "ACDB"]);
 });
 
 test("E15 the overwrite count sees the hand-built cases: a seen later status and a seen later move", () => {
@@ -46,12 +46,20 @@ test("E15 the overwrite count sees the hand-built cases: a seen later status and
     steps({ op: "move", drop: { unit: "row", first: "B", target: "C", after: true } }, { op: "move", drop: { unit: "row", first: "B", target: "D", after: true } })
   ];
   assert.deepEqual(OPTIONS.map(option => countOverwrites(option, lists).others),
-    [{}, { "beats.status": 1, "beats.rank": 1 }, {}, {}]);
+    [{}, { "beats.status": 1, "beats.rank": 1 }, {}, {}, {}]);
+});
+
+test("E15 the overwrite count sees an older redo of a heading move against a later move the presser had seen", () => {
+  const spec = rowAndTwoHeadings(), sceneAfter: Cmd = { op: "move", drop: { unit: "scene", first: "H", target: "I", after: true } };
+  const steps: Step[] = [{ by: 1, cmd: sceneAfter }, { by: 1, cmd: { op: "undo" } }, { from: 1, to: 0 }, { from: 0, to: 1 },
+    { by: 0, cmd: { op: "move", drop: { unit: "scene", first: "H", target: null, after: true } } }, { from: 0, to: 1 }, { by: 1, cmd: { op: "redo" } }];
+  assert.deepEqual(OPTIONS.map(option => countOverwrites(option, [{ spec, steps }]).others), [{}, { "headings.rank": 1 }, { "headings.rank": 1 }, {}, {}]);
 });
 
 test("E15 generated histories: how often an undo or redo press changes a value another person wrote", t => {
   const table: Record<string, Overwrites> = {}, lists = generatedLists(SIZE);
   for (const option of OPTIONS) table[option] = countOverwrites(option, lists);
   t.diagnostic(JSON.stringify(table));
-  for (const option of ["A", "C", "D"] as const) assert.deepEqual(table[option]?.others, {}, `${option}: a plain undo never changes another person's value`);
+  for (const option of ["A", "C", "D", "E"] as const) assert.deepEqual(table[option]?.others, {}, `${option}: a plain undo never changes another person's value`);
+  t.diagnostic(`presses that changed another person's value: ${OPTIONS.map(option => `${option} ${table[option]?.overwritingPresses ?? 0}`).join(", ")}`);
 });
