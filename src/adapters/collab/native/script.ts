@@ -13,23 +13,38 @@ export interface NativeScript {
   readonly close: () => void;
 }
 
-interface DocumentState { open: boolean; destroyed: boolean; readonly handles: Set<() => void> }
+interface DocumentState { open: boolean; destroyed: boolean; readonly handles: Set<() => void>; readonly failures: unknown[] }
 
 const DOCUMENTS = new WeakMap<Y.Doc, DocumentState>();
+
+// why: a throw inside the library's cleanup would surface from a transaction that already committed;
+// it is kept and thrown by the next command before that command writes anything
+function guardSharedCallback(state: DocumentState, call: () => void): void {
+  try { call(); } catch (error) {
+    if (!state.open) throw error;
+    state.failures.push(error);
+  }
+}
 
 // why: the transaction state belongs to the document, so a handle opened during a transaction still sees it
 function documentState(doc: Y.Doc): DocumentState {
   const known = DOCUMENTS.get(doc);
   if (known) return known;
-  const state: DocumentState = { open: false, destroyed: false, handles: new Set() };
+  const state: DocumentState = { open: false, destroyed: false, handles: new Set(), failures: [] };
   DOCUMENTS.set(doc, state);
-  doc.on("beforeAllTransactions", () => { state.open = true; });
-  doc.on("afterAllTransactions", () => { state.open = false; });
-  doc.on("destroy", () => {
+  doc.on("beforeAllTransactions", () => guardSharedCallback(state, () => { state.open = true; }));
+  doc.on("afterAllTransactions", () => guardSharedCallback(state, () => { state.open = false; }));
+  doc.on("destroy", () => guardSharedCallback(state, () => {
     state.destroyed = true;
     for (const close of [...state.handles]) close();
-  });
+  }));
   return state;
+}
+
+export function throwNativeFailures(script: NativeScript): void {
+  const failures = DOCUMENTS.get(script.doc)?.failures.splice(0) ?? [];
+  if (failures.length === 1) throw failures[0];
+  if (failures.length) throw new AggregateError(failures, "Callbacks of the shared script failed");
 }
 
 export function openNativeScript(doc: Y.Doc): NativeScript {

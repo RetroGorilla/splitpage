@@ -284,6 +284,17 @@ test("round 3, fix 6: a handle closes when its document is destroyed", () => {
   assert.deepEqual(anchorNativeText(copy, NARRATION("R1"), 0), { kind: "refused", reason: "closed" });
 });
 
+test("a script callback that throws during a command keeps the command's outcome, and the next command throws it before writing", () => {
+  const copy = one({ R1: "ab" }), failure = new Error("detaching failed"), text = segmentText(copy, "b:R1");
+  copy.reader.close = () => { throw failure; };
+  copy.roots.segments.observeDeep(() => { copy.doc.destroy(); });
+  let outcome = "";
+  assert.doesNotThrow(() => { outcome = typeNativeText(copy, range(copy, NARRATION("R1"), 2), "c", {}).kind; });
+  assert.deepEqual([outcome, text.toString(), copy.closed()], ["written", "abc", true]);
+  assert.throws(() => anchorNativeText(copy, NARRATION("R1"), 0), failure);
+  assert.deepEqual(anchorNativeText(copy, NARRATION("R1"), 0), { kind: "refused", reason: "closed" });
+});
+
 test("round 3, fix 6: a handle opened inside a running transaction is busy and refuses", () => {
   const copy = one({ R1: "ab" });
   let outcome = "", busy = false, second: NativeScript | null = null;

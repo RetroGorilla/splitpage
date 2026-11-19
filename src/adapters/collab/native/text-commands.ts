@@ -4,6 +4,7 @@ import type { Marks, Run } from "../../../core/text/runs.ts";
 import { nativeCellView, nativeLeftAt, nativeStoredOffset, prepareNativeRuns, writeNativeRuns } from "./inline.ts";
 import type { NativeDeltaItem } from "./inline.ts";
 import { nativeSegmentSpans } from "./reader.ts";
+import { throwNativeFailures } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { encodeNativeValue } from "./values.ts";
 
@@ -45,6 +46,7 @@ const WRITTEN: NativeCommitOutcome = Object.freeze({ kind: "written" });
 const UNCHANGED: NativeCommitOutcome = Object.freeze({ kind: "unchanged" });
 
 function availability(script: NativeScript): NativeRefusal | null {
+  throwNativeFailures(script);
   if (script.closed() || script.reader.isClosed()) return "closed";
   return script.busy() ? "busy" : null;
 }
