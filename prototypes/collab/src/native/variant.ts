@@ -16,7 +16,7 @@ export const NO_RULES: NativeRules = Object.freeze({ prefix: false, empty: false
 export const ALL_RULES: NativeRules = Object.freeze({ prefix: true, empty: true, repeat: true, adjacent: true, rank: true, headless: true });
 export const STRAY_ROW = "~stray";
 export interface NativeTextSpan {
-  text: Y.Text; start: number; end: number; opened: "own" | "unowned"; boundary?: "head" | "embed" | null; record?: Y.Map<unknown>;
+  text: Y.Text; start: number; end: number; opened: "own" | "unowned"; boundary?: "head" | "embed" | null; record?: Y.Map<unknown>; opener?: string | null;
 }
 interface SegmentView { signature: string; spans: NativeSpan[]; keys: (string | null)[] }
 interface OwnedEntry { id: string; kind: "b" | "h"; own: [string, number]; spans: [string, number][] }
@@ -211,6 +211,7 @@ export class NativeReplica {
   // why: a split that copies narration duplicates it when two people split the same rule-read text at once
   protected copyFreeSplit = false;
   splitPlacement = "exact";
+  protected nameCells = false;
 
   constructor(client: number, captureTimeout = 0, scheme: NativeScheme = "name") {
     this.doc.clientID = client;
@@ -398,7 +399,9 @@ export class NativeReplica {
         index += length;
       }
     }
-    const signature = keys.map((key, at) => key ?? (spans[at] && spans[at].end > spans[at].start ? "+" : "-")).join("|");
+    const filled = (at: number): string => spans[at] && spans[at].end > spans[at].start ? "+" : "-";
+    // why: rule (f) moves a heading's following text only when there is some, so that fact is part of the key too
+    const signature = keys.map((key, at) => key === null ? filled(at) : this.nameCells && key.startsWith("h:") ? key + filled(at) : key).join("|");
     const view = { signature, spans, keys };
     this.segmentViews.set(segment, view);
     return view;
@@ -447,12 +450,33 @@ export class NativeReplica {
       if (first && rules.prefix) { first.spans.unshift(...top); hits.prefix++; }
       else if (!first && rules.empty) { stray = top; hits.empty++; }
     }
+    if (this.nameCells && rules.headless) this.readHeadless(entries, order, stray, hits);
     const owners = new Map<string, Set<string>>();
     const own = (segment: string, key: string): void => { const set = owners.get(segment) ?? new Set<string>(); set.add(key); owners.set(segment, set); };
     for (const [key, entry] of entries) for (const [segment] of entry.spans) own(segment, key);
     for (const [segment] of stray) own(segment, `b:${STRAY_ROW}`);
     this.ownership = { signatures, entries, order, stray, owners, hits };
     return this.ownership;
+  }
+
+  // why: rule (f): with names in cells, text after a heading's boundary has no beat; like rule (a) it shows in the beat
+  // right below, else the beat above, else the next beat further down, in stored order
+  private readHeadless(entries: Map<string, OwnedEntry>, order: readonly string[], stray: [string, number][], hits: Record<NativeRule, number>): void {
+    const place = new Map([...new Set(this.order.toArray())].map((segment, index) => [segment, index]));
+    const stored = (spans: [string, number][]): void => { spans.sort((a, b) => (place.get(a[0]) ?? 0) - (place.get(b[0]) ?? 0) || a[1] - b[1]); };
+    for (const [at, key] of order.entries()) {
+      const entry = entries.get(key);
+      if (entry?.kind !== "h") continue;
+      const moving = entry.spans.filter(([segment, index]) => { const span = this.segmentView(segment).spans[index]; return !!span && span.end > span.start; });
+      entry.spans = [];
+      if (!moving.length) continue;
+      hits.headless++;
+      const beatOf = (keys: readonly string[]): OwnedEntry | undefined => keys.map(next => entries.get(next)).find(item => item?.kind === "b");
+      const next = entries.get(order[at + 1] ?? ""), below = next?.kind === "b" ? next : undefined;
+      const target = (below ?? beatOf(order.slice(0, at).toReversed()) ?? beatOf(order.slice(at + 1)))?.spans ?? stray;
+      target.push(...moving);
+      stored(target);
+    }
   }
 
   private compose(id: string, kind: "b" | "h", refs: readonly [string, number][], own: [string, number] | null): NativeBlock {
@@ -482,7 +506,7 @@ export class NativeReplica {
       const view = this.segmentView(segment), span = view.spans[at], record = this.segments.get(segment), text = record?.get("text");
       if (!span || !record || !(text instanceof Y.Text)) throw new Error(`Missing span of ${beat}`);
       const boundary = view.keys[at] === null ? null : at === 0 ? "head" : "embed";
-      return { text, start: span.start, end: span.end, opened: boundary === null || !entry || !this.opensInPlace(entry, segment, at) ? "unowned" : "own", boundary, record };
+      return { text, start: span.start, end: span.end, opened: boundary === null || !entry || !this.opensInPlace(entry, segment, at) ? "unowned" : "own", boundary, record, opener: view.keys[at] ?? null };
     });
   }
 

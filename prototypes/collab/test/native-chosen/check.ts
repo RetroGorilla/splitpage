@@ -27,9 +27,12 @@ export function reachability(replica: ChosenReplica): Reach {
     }
     return text;
   };
+  const cells = replica.nameStore === "cells", named = new Set<string>();
   for (const entry of replica.outline()) {
     if (entry.kind === "heading") {
-      const stored = mark(entry.id, "h"), shown = entry.name.map(item => typeof item.insert === "string" ? item.insert : "□").join("");
+      const shown = entry.name.map(item => typeof item.insert === "string" ? item.insert : "□").join("");
+      const stored = cells ? replica.names.get(entry.id)?.toString() ?? "" : mark(entry.id, "h");
+      named.add(entry.id);
       if (stored !== shown) result.problems.push(`heading ${entry.id} shows ${shown}, its editor reaches ${stored}`);
       continue;
     }
@@ -48,7 +51,9 @@ export function reachability(replica: ChosenReplica): Reach {
     }
     if (offset !== shown.length) result.problems.push(`row ${row.id} parts cover ${offset} of ${shown.length}`);
   }
-  for (const heading of replica.headingRecovery()) mark(heading.id, "h");
+  for (const heading of replica.headingRecovery()) if (cells) named.add(heading.id); else mark(heading.id, "h");
+  // why: with names in cells, a name cell no heading shows or recovers holds letters no one can reach
+  if (cells) for (const [id, cell] of replica.names) if (!named.has(id)) for (const char of cell.toString()) result.unshown.push(`${char}@name:${id}`);
   for (const [beat, count] of shownBeats) if (count > 1) result.shownTwice.push(beat);
   const listed = new Set(replica.order.toArray());
   for (const [id, record] of replica.segments) {

@@ -62,14 +62,14 @@ function combine(results: PlayResult[]): { never: string[]; local: string[]; kin
   return { never: [...new Set(results.flatMap(result => result.never))], local: [...new Set(results.flatMap(result => result.local))], kinds, lines: results[0]?.lines ?? [] };
 }
 
-test("E11 rerun of E10's 229 histories, flat ranks, five deliveries", t => {
+for (const names of ["inline", "cells"] as const) test(`E11 rerun of E10's 229 histories, flat ranks, five deliveries${names === "cells" ? ", names in their own cells" : ""}`, t => {
   const table: Record<string, string[]> = {}, totals: Record<string, number> = {}, broken: Record<string, unknown> = {};
   let never = 0, local = 0;
   const localKinds: Record<string, number> = {}, samples: Record<string, string> = {}, adjacent: Record<string, { count: number; was: Record<string, number> }> = {};
   const tags = { requested: 0, kept: 0, lost: [] as unknown[] };
   let joinMoving: string[] = [];
   for (const [index, { history, writers }] of all().entries()) {
-    const results = DELIVERIES.map((mode, at) => play({ spec: E10_SPEC(), steps: steps(history), writers, mode, seed: index * 5 + at }));
+    const results = DELIVERIES.map((mode, at) => play({ spec: E10_SPEC(), steps: steps(history), writers, mode, seed: index * 5 + at, names }));
     const merged = combine(results);
     for (const line of results.map(result => result.lines.join(" | "))) assert.equal(line, merged.lines.join(" | "), `${history.label}: the five deliveries agree`);
     for (const kind of Object.keys(merged.kinds)) totals[kind] = (totals[kind] ?? 0) + 1;

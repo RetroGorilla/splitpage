@@ -1,6 +1,6 @@
 import * as Y from "yjs";
-import type { ChosenReplica } from "../../src/native-chosen/replica.ts";
-import { STRAY_ROW } from "../../src/native/variant.ts";
+import type { ChosenNames, ChosenReplica } from "../../src/native-chosen/replica.ts";
+import { ALL_RULES, STRAY_ROW } from "../../src/native/variant.ts";
 import { randomFor } from "../native/e5-histories.ts";
 import { need } from "../native-delete/model.ts";
 import { base, load, seed } from "./kit.ts";
@@ -18,16 +18,16 @@ export interface Generated { seed: number; steps: Step[]; lateAt: number; offlin
 
 // why: commands are picked from the rows the acting copy shows, the way a person picks them; the picks are recorded
 // as plain commands and replayed unchanged under every delivery mode
-export function generateHistory(number: number, length = 40, twins = false): Generated {
+export function generateHistory(number: number, length = 40, twins = false, names: ChosenNames = "inline"): Generated {
   const random = randomFor(number * 104729 + 7), pick = <T>(items: readonly T[]): T => items[Math.floor(random() * items.length)] as T;
   const second = randomFor(number * 7919 + 3), twinPick = <T>(items: readonly T[]): T => items[Math.floor(second() * items.length)] as T;
   const chance = (p: number): boolean => random() < p;
-  const bytes = seed(GENERATED_SPEC()), log: Uint8Array[] = [], known = [new Set<number>(), new Set<number>(), new Set<number>()];
+  const bytes = seed(GENERATED_SPEC(), ALL_RULES, names), log: Uint8Array[] = [], known = [new Set<number>(), new Set<number>(), new Set<number>()];
   const watched = (replica: ChosenReplica, index: number): ChosenReplica => {
     replica.doc.on("update", (update: Uint8Array, origin: unknown) => { if (origin !== "remote") need(known[index], "known set").add(log.push(update) - 1); });
     return replica;
   };
-  const copies: (ChosenReplica | null)[] = [watched(load(bytes, 1), 0), watched(load(bytes, 2), 1), null], steps: Step[] = [];
+  const copies: (ChosenReplica | null)[] = [watched(load(bytes, 1, ALL_RULES, names), 0), watched(load(bytes, 2, ALL_RULES, names), 1), null], steps: Step[] = [];
   const lateAt = 4 + Math.floor(random() * 10), offline: [number, number, number][] = [], thrown: string[] = [];
   let letter = 0x410, serial = 0, away: { copy: number; until: number } | null = null, crashed: string | null = null;
   const char = (): string => { const value = String.fromCodePoint(letter); letter += letter === 0x44f ? 0x60 : 1; return value; };
@@ -45,7 +45,7 @@ export function generateHistory(number: number, length = 40, twins = false): Gen
     if (count === lateAt) {
       const from = chance(0.5) ? 0 : 1, source = need(copies[from] ?? undefined, "copy");
       known[2] = new Set(known[from]);
-      copies[2] = watched(load(source.encode(), 3), 2);
+      copies[2] = watched(load(source.encode(), 3, ALL_RULES, names), 2);
       steps.push({ open: 2, from });
     }
     if (!away && count > 2 && chance(0.12)) {

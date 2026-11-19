@@ -1,5 +1,6 @@
 import * as Y from "yjs";
 import { ChosenReplica } from "../../src/native-chosen/replica.ts";
+import type { ChosenNames } from "../../src/native-chosen/replica.ts";
 import { ALL_RULES, nativeMarkName } from "../../src/native/variant.ts";
 import type { NativeDeltaItem, NativeRules } from "../../src/native/variant.ts";
 import type { Marker, StoredReading, VisibleEntry } from "../native-delete/model.ts";
@@ -31,19 +32,27 @@ export function base(): Spec {
   };
 }
 
-export function seed(spec: Spec, rules: NativeRules = ALL_RULES): Uint8Array {
-  const replica = new ChosenReplica(900, rules);
+// why: with names in cells, the text right after a heading's boundary in a spec is that heading's name
+export function seed(spec: Spec, rules: NativeRules = ALL_RULES, names: ChosenNames = "inline"): Uint8Array {
+  const replica = new ChosenReplica(900, rules, names);
   replica.doc.transact(() => {
     for (const [id, data] of Object.entries(spec.segments)) {
       const record = new Y.Map<unknown>(), text = new Y.Text();
       replica.segments.set(id, record);
       if (data.head) record.set("head", data.head);
       record.set("text", text);
+      let heading = data.head && "h" in data.head ? data.head.h : null;
       for (const unit of data.units) {
-        if (typeof unit === "string") text.insert(text.length, unit, {});
+        if (typeof unit === "string" && heading && names === "cells") {
+          const cell = replica.names.get(heading) ?? new Y.Text();
+          if (!replica.names.has(heading)) replica.names.set(heading, cell);
+          cell.insert(cell.length, unit, {});
+        } else if (typeof unit === "string") text.insert(text.length, unit, {});
         else text.insertEmbed(text.length, unit, {});
+        if (typeof unit === "object") heading = "h" in unit ? unit.h : null;
       }
     }
+    if (names === "cells") for (const id of Object.keys(spec.headings)) if (!replica.names.has(id)) replica.names.set(id, new Y.Text());
     replica.order.push(spec.order);
     for (const [id, fields] of Object.entries(spec.beats)) replica.beats.set(id, new Y.Map(Object.entries(fields)));
     for (const [id, value] of Object.entries(spec.visuals)) { const text = new Y.Text(); text.insert(0, value, {}); replica.visuals.set(id, text); }
@@ -55,8 +64,8 @@ export function seed(spec: Spec, rules: NativeRules = ALL_RULES): Uint8Array {
   return bytes;
 }
 
-export function load(bytes: Uint8Array, client: number, rules: NativeRules = ALL_RULES): ChosenReplica {
-  const replica = new ChosenReplica(client, rules);
+export function load(bytes: Uint8Array, client: number, rules: NativeRules = ALL_RULES, names: ChosenNames = "inline"): ChosenReplica {
+  const replica = new ChosenReplica(client, rules, names);
   Y.applyUpdate(replica.doc, bytes, "remote");
   replica.changes();
   return replica;

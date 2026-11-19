@@ -15,7 +15,7 @@ const methods = [
 // why: a silent-write control: every library write call is listed, and the one numbered `omit` does nothing
 export function watch(replica: ChosenReplica, run: () => void, omit = -1): string[] {
   const calls: string[] = [];
-  const roots = new Map<unknown, string>([[replica.beats, "beats"], [replica.visuals, "visuals"], [replica.segments, "segments"], [replica.headings, "headings"]]);
+  const roots = new Map<unknown, string>([[replica.beats, "beats"], [replica.visuals, "visuals"], [replica.segments, "segments"], [replica.headings, "headings"], [replica.names, "names"]]);
   const restore = methods.map(([parent, key]) => {
     const descriptor = Object.getOwnPropertyDescriptor(parent, key);
     if (!descriptor) throw new Error(`No ${key}`);
@@ -77,6 +77,7 @@ export function readStyles(replica: ChosenReplica): unknown {
     segments: Object.fromEntries([...replica.segments].map(([id, record]) => [id, (record.get("text") as Y.Text).toDelta()])),
     heads: Object.fromEntries([...replica.segments].map(([id, record]) => [id, record.get("head") ?? null])),
     visuals: Object.fromEntries([...replica.visuals].map(([id, cell]) => [id, cell.toDelta()])),
+    names: Object.fromEntries([...replica.names].map(([id, cell]) => [id, cell.toDelta()])),
     beats: replica.beats.toJSON(), headings: replica.headings.toJSON(), order: replica.order.toArray()
   };
 }

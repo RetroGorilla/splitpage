@@ -1,5 +1,6 @@
 import * as Y from "yjs";
 import type { Run } from "../../../../src/core/text/runs.ts";
+import type { NativeHeading, NativeOutlineEntry } from "../native/headings.ts";
 import { MoveReplica, betweenRanks } from "../native-moves/ranks.ts";
 import type { RankDrop } from "../native-moves/ranks.ts";
 import { ALL_RULES, STRAY_ROW, nativeAttributes, nativeEmbed, nativeMarkName } from "../native/variant.ts";
@@ -9,18 +10,22 @@ const RANK = "e10Rank";
 const isTag = (name: string): boolean => name.startsWith("t:");
 
 export interface ChosenCut { text: Y.Text; from: number; to: number }
+export type ChosenNames = "inline" | "cells";
 
 export class ChosenReplica extends MoveReplica {
   private count = 0;
 
   private rankReads = 0;
 
-  constructor(client: number, rules: NativeRules = ALL_RULES) {
+  constructor(client: number, rules: NativeRules = ALL_RULES, names: ChosenNames = "inline") {
     super(client, "flat");
     this.keepCreated = false;
     this.copyFreeSplit = true;
+    this.nameCells = names === "cells";
     this.rules = rules;
   }
+
+  get nameStore(): ChosenNames { return this.nameCells ? "cells" : "inline"; }
 
   // why: rule (e): Yjs does not redo a map entry a newer write replaced, so a restored record can lack its rank; that
   // beat is read between the ranked neighbours of its stored place, and nothing is written
@@ -107,13 +112,33 @@ export class ChosenReplica extends MoveReplica {
 
   override typeHeading(id: string, offset: number, value: string): void {
     if (this.headings.get(id)?.get("removed") === true) throw new Error(`Cannot type in heading ${id}`);
+    if (this.nameCells) { this.transact(() => { this.writeChosen(this.nameCell(id, offset), offset, [{ text: value, marks: {} }], null); }); return; }
     this.spliceSpans(id, "audioText", offset, offset, [{ text: value, marks: {} }], "h", this.writeChosen);
   }
 
   override deleteHeadingText(id: string, from: number, to: number): void {
     if (this.headings.get(id)?.get("removed") === true) throw new Error(`Cannot delete in heading ${id}`);
+    if (this.nameCells) { this.transact(() => { this.nameCell(id, to).delete(from, to - from); }); return; }
     this.spliceSpans(id, "audioText", from, to, [], "h", this.writeChosen);
   }
+
+  private nameCell(id: string, reach: number): Y.Text {
+    const cell = this.names.get(id);
+    if (!cell || reach > cell.length) throw new Error(`Range outside heading ${id}`);
+    return cell;
+  }
+
+  override outline(): NativeOutlineEntry[] {
+    const entries = super.outline();
+    return this.nameCells ? entries.map(entry => entry.kind === "heading" ? { ...entry, name: this.nameDelta(entry.id) } : entry) : entries;
+  }
+
+  override headingRecovery(): NativeHeading[] {
+    const hidden = super.headingRecovery();
+    return this.nameCells ? hidden.map(heading => ({ ...heading, name: this.nameDelta(heading.id) })) : hidden;
+  }
+
+  private nameDelta(id: string): NativeDeltaItem[] { return (this.names.get(id)?.toDelta() ?? []) as NativeDeltaItem[]; }
 
   override split(beat: string, offset: number, created: string, fields: Record<string, unknown> = {}): void {
     if (beat !== STRAY_ROW) { super.split(beat, offset, created, fields); return; }
@@ -172,8 +197,9 @@ export class ChosenReplica extends MoveReplica {
     }
     const cuts = new Map<Y.Text, { from: number; to: number }[]>(), heads = new Set<Y.Map<unknown>>();
     for (const beat of beats) for (const span of this.spansOf(beat, "audioText")) {
-      const from = span.boundary === "embed" ? span.start - 1 : span.start;
-      if (span.boundary === "head" && span.record) heads.add(span.record);
+      // why: rule (f) shows a heading's following text in a beat; deleting that beat keeps the heading's boundary
+      const ours = !span.opener?.startsWith("h:"), from = span.boundary === "embed" && ours ? span.start - 1 : span.start;
+      if (span.boundary === "head" && span.record && ours) heads.add(span.record);
       if (span.end > from) cuts.set(span.text, [...cuts.get(span.text) ?? [], { from, to: span.end }]);
     }
     this.transact(() => {

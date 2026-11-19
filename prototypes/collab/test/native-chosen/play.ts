@@ -1,7 +1,7 @@
 import { isDeepStrictEqual as equal } from "node:util";
 import * as Y from "yjs";
 import type { RankDrop } from "../../src/native-moves/ranks.ts";
-import type { ChosenReplica } from "../../src/native-chosen/replica.ts";
+import type { ChosenNames, ChosenReplica } from "../../src/native-chosen/replica.ts";
 import { joinUp } from "../../src/native/rows.ts";
 import { ALL_RULES, STRAY_ROW, nativeMarkName } from "../../src/native/variant.ts";
 import type { NativeDeltaItem, NativeField, NativeRules } from "../../src/native/variant.ts";
@@ -19,6 +19,7 @@ export type Cmd =
   | { op: "format"; id: string; field: "audio" | "visual"; from: number; to: number; key: string; on: boolean }
   | { op: "field"; id: string; key: string; value: string }
   | { op: "split"; id: string; at: number; created: string }
+  | { op: "insert"; before: string; id: string; text: string }
   | { op: "join" | "unjoin"; id: string }
   | { op: "delete"; rows: string[] }
   | { op: "heading"; above: string; id: string; text: string }
@@ -73,6 +74,7 @@ export function perform(replica: ChosenReplica, cmd: Cmd): void {
     case "format": replica.format(cmd.id, FIELD[cmd.field], cmd.from, cmd.to, { [cmd.key]: cmd.on ? true : null }); break;
     case "field": replica.setField(cmd.id, cmd.key, cmd.value); break;
     case "split": replica.split(cmd.id, cmd.at, cmd.created, {}); break;
+    case "insert": replica.insertBeat(cmd.before, cmd.id, cmd.text); break;
     case "join": if (!joinUp(replica, cmd.id)) throw new Error(`Nothing above ${cmd.id}`); break;
     case "unjoin": replica.unjoin(cmd.id); break;
     case "delete": {
@@ -164,6 +166,7 @@ export function promises(cmd: Cmd, before: Shown, after: Shown, replica: ChosenR
       if (typeof replica.beats.get(cmd.created)?.get("e10Rank") !== "string") problems.push(`split-off ${cmd.created} has no rank`);
       break;
     }
+    case "insert": if (textOf(after, "audio", cmd.id) !== cmd.text || after.visual.get(cmd.id) !== "") problems.push(`inserted ${cmd.id} not shown`); break;
     case "join": { const row = rowOf(after, cmd.id); if (!row || row === cmd.id) problems.push(`join of ${cmd.id} not shown`); break; }
     case "unjoin": if (rowOf(after, cmd.id) !== cmd.id) problems.push(`unjoin of ${cmd.id} not shown`); break;
     case "delete": {
@@ -232,16 +235,16 @@ export type Controls = Map<string, ControlCount>;
 
 interface Copy { replica: ChosenReplica; seen: Set<number>; client: number; known: Set<number>; initial: Uint8Array; journal: ({ update: Uint8Array } | { cmd: Cmd })[] }
 
-export interface PlayOptions { spec: Spec; steps: readonly Step[]; writers: number; mode: Mode; seed: number; rules?: NativeRules; controls?: Controls; window?: number; checkLetters?: boolean }
+export interface PlayOptions { spec: Spec; steps: readonly Step[]; writers: number; mode: Mode; seed: number; rules?: NativeRules; names?: ChosenNames; controls?: Controls; window?: number; checkLetters?: boolean }
 
 export function play(options: PlayOptions): PlayResult {
-  const { spec, steps, writers, mode, rules = ALL_RULES, window = 3 } = options, bytes = seed(spec, rules);
+  const { spec, steps, writers, mode, rules = ALL_RULES, window = 3, names = "inline" } = options, bytes = seed(spec, rules, names);
   const result: PlayResult = { never: [], local: [], kinds: {}, timing: {}, lines: [], uses: {}, events: 0, tags: { requested: 0, kept: 0, lost: [] } };
   const copies: (Copy | null)[] = [], log: Uint8Array[] = [], events: LedgerEvent[] = [], syncs: number[] = [], asks: TagAsk[] = [], made = new Map<number, Cmd>();
   const undoStacks = new Map<number, number[]>(), redoStacks = new Map<number, number[]>();
   // why: like a provider, every update a copy makes is relayed, including the formatting clean-up Yjs writes on receipt
   const open = (client: number, encoded: Uint8Array, known: Iterable<number> = []): Copy => {
-    const copy: Copy = { replica: load(encoded, client, rules), seen: new Set(), client, known: new Set(known), initial: encoded, journal: [] };
+    const copy: Copy = { replica: load(encoded, client, rules, names), seen: new Set(), client, known: new Set(known), initial: encoded, journal: [] };
     copy.replica.doc.on("update", (update: Uint8Array, origin: unknown) => { if (origin !== "remote") copy.known.add(log.push(update) - 1); });
     return copy;
   };
@@ -289,8 +292,12 @@ export function play(options: PlayOptions): PlayResult {
         record.seenVisual.push(...before.visual.get(member) ?? "");
       }
       if (cmd.op === "split") record.createdBeats = [cmd.created];
+      if (cmd.op === "insert") {
+        record.createdBeats = [cmd.id]; record.createdSegment = true;
+        for (const char of cmd.text) record.typed.push({ char, field: "audio", owner: cmd.id });
+      }
       if (cmd.op === "field") record.fieldSet = { beat: cmd.id, key: cmd.key };
-      if (cmd.op === "heading") record.createdHeading = { id: cmd.id, standalone: replica.block(cmd.above).start === 0 };
+      if (cmd.op === "heading") record.createdHeading = { id: cmd.id, standalone: names === "cells" || replica.block(cmd.above).start === 0 };
       made.set(index, cmd);
       if (cmd.op === "format" && cmd.field === "audio" && cmd.key.startsWith("t:")) {
         asks.push({ index, by: step.by, name: cmd.key, on: cmd.on, ids: [...textOf(before, "audio", cmd.id).slice(cmd.from, cmd.to)], seen: new Set(copy.seen), beat: cmd.id });
@@ -333,11 +340,11 @@ export function play(options: PlayOptions): PlayResult {
       if (options.controls && saved) {
         const journal = [...copy.journal];
         const rebuild = cmd.op === "undo" || cmd.op === "redo" ? (): ChosenReplica => {
-          const replica = load(copy.initial, copy.client, rules);
+          const replica = load(copy.initial, copy.client, rules, names);
           for (const entry of journal) { if ("cmd" in entry) perform(replica, entry.cmd); else Y.applyUpdate(replica.doc, entry.update, "remote"); }
           replica.changes();
           return replica;
-        } : (): ChosenReplica => load(saved, copy.client + 9000, rules);
+        } : (): ChosenReplica => load(saved, copy.client + 9000, rules, names);
         control(options.controls, rebuild, cmd, calls, before, record, stylesBefore);
       }
       if (options.controls) copy.journal.push({ cmd });

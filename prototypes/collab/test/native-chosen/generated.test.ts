@@ -5,6 +5,7 @@ import { need } from "../native-delete/model.ts";
 import { MODES } from "./engine.ts";
 import { GENERATED_SPEC, generateHistory } from "./generate.ts";
 import { ALL_RULES } from "../../src/native/variant.ts";
+import type { ChosenNames } from "../../src/native-chosen/replica.ts";
 import { play } from "./play.ts";
 import type { Controls, PlayResult, Step } from "./play.ts";
 
@@ -16,17 +17,17 @@ const category = (problem: string): string => {
   return text.replace(/\b(letter|narration|beat|beats|copy|row|heading) \S+/g, "$1 #").replace(/\(\w+\)/g, "").replace(/\s+/g, " ").slice(0, 90);
 };
 
-export function runAll(steps: readonly Step[], number: number): PlayResult[] {
-  return MODES.map((mode, at) => play({ spec: GENERATED_SPEC(), steps, writers: 3, mode, seed: number * 7 + at }));
+export function runAll(steps: readonly Step[], number: number, names: ChosenNames = "inline"): PlayResult[] {
+  return MODES.map((mode, at) => play({ spec: GENERATED_SPEC(), steps, writers: 3, mode, seed: number * 7 + at, names }));
 }
 
-function shrink(steps: Step[], number: number, kind: string): Step[] {
+function shrink(steps: Step[], number: number, kind: string, names: ChosenNames): Step[] {
   let current = steps;
   for (let changed = true; changed;) {
     changed = false;
     for (let index = current.length - 1; index >= 0; index--) {
       const candidate = current.filter((_, at) => at !== index);
-      if (runAll(candidate, number).some(result => result.never.some(problem => category(problem) === kind))) { current = candidate; changed = true; }
+      if (runAll(candidate, number, names).some(result => result.never.some(problem => category(problem) === kind))) { current = candidate; changed = true; }
     }
   }
   return current;
@@ -34,13 +35,14 @@ function shrink(steps: Step[], number: number, kind: string): Step[] {
 
 interface Survey { never: Record<string, { count: number; seed: number }>; local: Record<string, { count: number; sample: string }>; thrown: Record<string, number>; tags: { requested: number; causes: Record<string, number> } }
 
-function survey(t: { diagnostic: (message: string) => void }, size: number, twins: boolean): Survey {
+// why: `steps` replays the step lists made without the option under it, so the same histories can be compared
+function survey(t: { diagnostic: (message: string) => void }, size: number, twins: boolean, names: ChosenNames = "inline", steps: ChosenNames = names): Survey {
   const kinds: Record<string, number> = {}, timing: Record<string, { sameMoment: number; offline: number }> = {}, never: Record<string, { count: number; seed: number }> = {};
   const local: Record<string, { count: number; sample: string }> = {}, thrown: Record<string, number> = {}, uses: Record<string, number> = {}, ops: Record<string, number> = {};
   let histories = 0, commands = 0, withLoss = 0, clean = 0, formatsByDelivery = 0, twinPairs = 0;
   const tags = { requested: 0, kept: 0, histories: 0, historiesWithTags: 0, causes: {} as Record<string, number>, lost: [] as unknown[] };
   for (let number = 1; number <= size; number++) {
-    const history = generateHistory(number, 40, twins), results = runAll(history.steps, number);
+    const history = generateHistory(number, 40, twins, steps), results = runAll(history.steps, number, names);
     twinPairs += history.steps.filter(step => "by" in step && step.cmd.op === "split" && step.cmd.created.startsWith("T")).length / 2;
     histories++;
     for (const step of history.steps) if ("by" in step) { commands++; ops[step.cmd.op] = (ops[step.cmd.op] ?? 0) + 1; }
@@ -69,8 +71,8 @@ function survey(t: { diagnostic: (message: string) => void }, size: number, twin
   }
   const smallest: Record<string, unknown> = {};
   for (const [kind, { seed }] of Object.entries(never)) {
-    const steps = shrink(generateHistory(seed, 40, twins).steps, seed, kind);
-    smallest[kind] = { seed, steps, rows: runAll(steps, seed)[0]?.lines };
+    const smallSteps = shrink(generateHistory(seed, 40, twins, steps).steps, seed, kind, names);
+    smallest[kind] = { seed, steps: smallSteps, rows: runAll(smallSteps, seed, names)[0]?.lines };
   }
   t.diagnostic(JSON.stringify({ histories, commands, twinPairs, clean, withLoss, formatsByDelivery, ops, uses, kinds, timing, thrown }));
   t.diagnostic(JSON.stringify({ never, smallest }));
@@ -96,6 +98,23 @@ test("E11 generated histories with same-moment double splits of rows the rules r
   assert.deepEqual(Object.keys(local), [], "every command did what it promised on its copy");
   assert.deepEqual(Object.keys(thrown), [], "no writer refused a request picked from the rows");
   assert.deepEqual(Object.keys(never).filter(kind => !LEFT_BY_PART_A.includes(kind)), []);
+});
+
+test("E11 part B: the same step lists with names in their own cells", t => {
+  const { never, local } = survey(t, SIZE, false, "cells", "inline");
+  // why: a list made where narration showed in a name can ask for an offset the option no longer shows; that refusal is
+  // the only problem allowed, and it is counted in the diagnostic
+  const refused = (key: string): boolean => /^threw: (Range|Offset) outside|step \d+ \w+: (split|typing|erasing|format)/.test(key);
+  assert.deepEqual(Object.keys(never).filter(kind => !refused(kind)), []);
+  assert.deepEqual(Object.keys(local).filter(kind => !refused(kind)), []);
+});
+
+for (const twins of [false, true]) test(`E11 part B: histories made with names in their own cells${twins ? ", with same-moment double splits" : ""}`, t => {
+  const { never, local, thrown, tags } = survey(t, twins ? Number(process.env.E11_TWIN_SEEDS ?? 200) : SIZE, twins, "cells");
+  assert.deepEqual(Object.keys(local), [], "every command did what it promised on its copy");
+  assert.deepEqual(Object.keys(thrown), [], "no writer refused a request picked from the rows");
+  assert.deepEqual(Object.keys(never), [], "nothing never-acceptable");
+  assert.equal(tags.causes.other, undefined, "every lost tag is one of the two library behaviours named in RESULT.md");
 });
 
 const CONTROL_SEEDS = Number(process.env.E11_CONTROL_SEEDS ?? 25);
@@ -131,4 +150,19 @@ test("E11 new generated histories: with one reading rule off, the histories that
   }
   t.diagnostic(JSON.stringify(table));
   for (const rule of ["prefix", "repeat", "empty", "rank"] as const) if (table[rule]) assert.equal(table[rule].failed, table[rule].needed, rule);
+});
+
+test("E11 part B: with rule (f) off, the histories made with names in cells that use it fail", t => {
+  let needed = 0, failed = 0;
+  for (let number = 1; number <= SIZE; number++) {
+    const { steps } = generateHistory(number, 40, false, "cells");
+    const normal = play({ spec: GENERATED_SPEC(), steps, writers: 3, mode: "forward", seed: number, names: "cells", checkLetters: false });
+    if (!normal.uses.headless) continue;
+    needed++;
+    const off = play({ spec: GENERATED_SPEC(), steps, writers: 3, mode: "forward", seed: number, names: "cells", rules: { ...ALL_RULES, headless: false } });
+    if (off.never.length || off.local.length) failed++;
+  }
+  t.diagnostic(JSON.stringify({ needed, failed }));
+  assert.ok(needed > 0);
+  assert.equal(failed, needed);
 });

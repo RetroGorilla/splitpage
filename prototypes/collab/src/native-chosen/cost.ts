@@ -4,6 +4,7 @@ import * as Y from "yjs";
 import { ALL_RULES, NO_RULES } from "../native/variant.ts";
 import type { NativeRules } from "../native/variant.ts";
 import { ChosenReplica } from "./replica.ts";
+import type { ChosenNames } from "./replica.ts";
 
 class TimedReplica extends ChosenReplica {
   measureWrite = false;
@@ -28,8 +29,8 @@ class TimedReplica extends ChosenReplica {
 }
 
 // why: 30 beats per segment, a heading at the head of every third segment, 120 letters of narration and 48 of visual
-function fixture(size: number): Uint8Array {
-  const replica = new ChosenReplica(1);
+function fixture(size: number, names: ChosenNames): Uint8Array {
+  const replica = new ChosenReplica(1, ALL_RULES, names);
   replica.doc.transact(() => {
     let text = new Y.Text();
     for (let n = 0; n < size; n++) {
@@ -43,7 +44,8 @@ function fixture(size: number): Uint8Array {
         replica.order.push([key]);
         if (heading) {
           replica.headings.set(`H${n}`, new Y.Map<unknown>());
-          text.insert(0, `Scene ${n}`, {});
+          if (names === "cells") { const cell = new Y.Text(); cell.insert(0, `Scene ${n}`, {}); replica.names.set(`H${n}`, cell); }
+          else text.insert(0, `Scene ${n}`, {});
           text.insertEmbed(text.length, { b: id }, {});
         }
       } else text.insertEmbed(text.length, { b: id }, {});
@@ -60,8 +62,8 @@ function fixture(size: number): Uint8Array {
   return result;
 }
 
-function load(bytes: Uint8Array, rules: NativeRules): TimedReplica {
-  const replica = new TimedReplica(2, rules);
+function load(bytes: Uint8Array, rules: NativeRules, names: ChosenNames): TimedReplica {
+  const replica = new TimedReplica(2, rules, names);
   Y.applyUpdate(replica.doc, bytes, "remote");
   replica.changes();
   return replica;
@@ -74,8 +76,8 @@ const median = (values: number[]): number => {
   return Number(((low + high) / 2).toFixed(3));
 };
 
-function reading(bytes: Uint8Array, rules: NativeRules, size: number): number {
-  const replica = load(bytes, rules), samples: number[] = [];
+function reading(bytes: Uint8Array, rules: NativeRules, size: number, names: ChosenNames): number {
+  const replica = load(bytes, rules, names), samples: number[] = [];
   try {
     for (let n = 0; n < 60; n++) {
       const start = performance.now();
@@ -86,8 +88,8 @@ function reading(bytes: Uint8Array, rules: NativeRules, size: number): number {
   return median(samples);
 }
 
-function keystroke(bytes: Uint8Array, rules: NativeRules, size: number): number {
-  const replica = load(bytes, rules), samples: number[] = [], beat = `B${Math.floor(size / 2) + 1}`;
+function keystroke(bytes: Uint8Array, rules: NativeRules, size: number, names: ChosenNames): number {
+  const replica = load(bytes, rules, names), samples: number[] = [], beat = `B${Math.floor(size / 2) + 1}`;
   try {
     for (let n = 0; n < 210; n++) {
       const start = performance.now();
@@ -106,10 +108,10 @@ const COMMANDS: Record<string, Command> = {
   move: (replica, size) => { assert.equal(replica.drop({ unit: "row", first: `B${size / 2 + 1}`, target: "B3", after: true }), true); }
 };
 
-function command(bytes: Uint8Array, size: number, run: Command): { write: number; rebuild: number; total: number; rebuildShare: number } {
+function command(bytes: Uint8Array, size: number, run: Command, names: ChosenNames): { write: number; rebuild: number; total: number; rebuildShare: number } {
   const write: number[] = [], rebuild: number[] = [], total: number[] = [];
   for (let n = 0; n < 40; n++) {
-    const replica = load(bytes, ALL_RULES);
+    const replica = load(bytes, ALL_RULES, names);
     try {
       replica.measureWrite = true;
       const start = performance.now();
@@ -125,13 +127,15 @@ function command(bytes: Uint8Array, size: number, run: Command): { write: number
   return { ...result, rebuildShare: Number((result.rebuild / result.total).toFixed(2)) };
 }
 
-for (const size of [30, 300, 900]) {
-  const bytes = fixture(size);
-  console.log(JSON.stringify({
-    size, bytes: bytes.byteLength,
-    readMs: { rules: reading(bytes, ALL_RULES, size), plain: reading(bytes, NO_RULES, size) },
-    keystrokeMs: { rules: keystroke(bytes, ALL_RULES, size), plain: keystroke(bytes, NO_RULES, size) }
-  }));
+for (const names of ["inline", "cells"] as const) {
+  for (const size of [30, 300, 900]) {
+    const bytes = fixture(size, names);
+    console.log(JSON.stringify({
+      names, size, bytes: bytes.byteLength,
+      readMs: { rules: reading(bytes, ALL_RULES, size, names), plain: reading(bytes, NO_RULES, size, names) },
+      keystrokeMs: { rules: keystroke(bytes, ALL_RULES, size, names), plain: keystroke(bytes, NO_RULES, size, names) }
+    }));
+  }
+  const large = fixture(900, names);
+  for (const [name, run] of Object.entries(COMMANDS)) console.log(JSON.stringify({ names, size: 900, command: name, ms: command(large, 900, run, names) }));
 }
-const large = fixture(900);
-for (const [name, run] of Object.entries(COMMANDS)) console.log(JSON.stringify({ size: 900, command: name, ms: command(large, 900, run) }));

@@ -159,12 +159,13 @@ export function settle(events: readonly LedgerEvent[], initial: { char: string; 
       // why: the redo restores what the creation undo itself deleted, so letters the creator had seen come back and
       // letters that arrived after the undo stay gone
       for (const instance of killedBy.get(undo.index) ?? []) {
-        if (instance.why !== "typing removed by a creation undo the creator saw" || instance.born === target.index || !target.createdBeats.includes(instance.owner)) continue;
+        const created = target.createdBeats.includes(instance.owner) || (target.createdHeading?.standalone === true && target.createdHeading.id === instance.owner);
+        if (instance.why !== "typing removed by a creation undo the creator saw" || instance.born === target.index || !created) continue;
         instances.push({ ...instance, born: event.index, state: "alive", why: "", revival: true, killers: new Set() });
         const at = losses.findIndex(loss => loss.kind === instance.why && loss.char === instance.char);
         if (at >= 0) losses.splice(at, 1);
       }
-      if (target.createdHeading) for (const instance of instances) if (instance.owner === target.createdHeading.id && instance.state === "dead") instance.state = "uncertain";
+      if (target.createdHeading && !target.createdHeading.standalone) for (const instance of instances) if (instance.owner === target.createdHeading.id && instance.state === "dead") instance.state = "uncertain";
     } else apply(event, false);
   }
   const result: LedgerResult = { alive: new Map(), dead: new Map(), uncertain: new Set(), beatsAlive: new Set(), beatsDead: new Set(), beatsUncertain: new Set(), losses };

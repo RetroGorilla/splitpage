@@ -19,11 +19,12 @@ export class NativeHeadingReplica extends NativeReplica {
     super(client);
     this.headingRemoval = headingRemoval;
     this.reading = "contiguous";
-    this.undo.addToScope(this.headings);
+    this.undo.addToScope([this.headings, this.names]);
     this.headings.observeDeep(() => { this.invalidateStructure(); });
   }
 
   get headings(): Y.Map<Y.Map<unknown>> { return this.doc.getMap("headings"); }
+  get names(): Y.Map<Y.Text> { return this.doc.getMap("names"); }
 
   createHeading(beat: string, id: string, name: string): void {
     if (this.headings.has(id)) throw new Error(`Heading ${id} already exists`);
@@ -32,13 +33,17 @@ export class NativeHeadingReplica extends NativeReplica {
     this.transact(() => {
       const record = new Y.Map<unknown>();
       this.headings.set(id, record);
-      if (start === 0) {
+      const inline = this.nameCells ? [] : [{ text: name, marks: {} }], lead = this.nameCells ? this.spansOf(beat, "audioText")[0] : undefined;
+      // why: text a rule shows at the start of the beat goes below the new heading with the rest of the row
+      if (lead && lead.opened !== "own") lead.text.insertEmbed(lead.start, { h: id });
+      else if (start === 0) {
         const { segment } = this.block(beat);
-        this.addSegment(`seg-h-${id}`, { h: id }, [{ text: name, marks: {} }], this.order.toArray().indexOf(segment));
+        this.addSegment(`seg-h-${id}`, { h: id }, inline, this.order.toArray().indexOf(segment));
       } else {
         text.insertEmbed(start - 1, { h: id });
-        text.insert(start, name, {});
+        if (inline.length) text.insert(start, name, {});
       }
+      if (this.nameCells) { const cell = new Y.Text(); this.names.set(id, cell); cell.insert(0, name, {}); }
       // why: the new boundary is stored where the beat's text is, which is not where a moved beat is shown
       if (shownAbove !== undefined) record.set("place", { a: shownAbove, n: this.nextStamp(), u: start === 0 ? null : ref } satisfies Placement);
     });
