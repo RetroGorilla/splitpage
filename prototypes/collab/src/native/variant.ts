@@ -2,6 +2,8 @@ import * as Y from "yjs";
 import { toHtml } from "../../../../src/core/text/html.ts";
 import type { Marks, Run } from "../../../../src/core/text/runs.ts";
 import { deltaToRuns, htmlToDelta } from "../proj/richtext.ts";
+import { arrange, blockRef, placementOf } from "../native-moves/order.ts";
+import type { Arrangement, Placement } from "../native-moves/order.ts";
 
 export type NativeField = "audioText" | "visualText";
 export type NativeAttributes = Record<string, true>;
@@ -203,7 +205,7 @@ export class NativeReplica {
         if (typeof id === "string") {
           this.dirtyBeats.add(id);
           if (event instanceof Y.YTextEvent) this.textChanges.push({ segment: `visual:${id}`, delta: event.delta });
-          else if (event instanceof Y.YMapEvent && (event.keysChanged.has("joined") || event.keysChanged.has("removed"))) this.structureChanged = true;
+          else if (event instanceof Y.YMapEvent && ["joined", "removed", "place"].some(key => event.keysChanged.has(key))) this.structureChanged = true;
         } else if (event instanceof Y.YMapEvent) { this.structureChanged = true; for (const key of event.keysChanged as Set<string>) this.dirtyBeats.add(key); }
       }
     });
@@ -502,6 +504,8 @@ export class NativeReplica {
   }
 
   split(beat: string, offset: number, created: string, fields: Record<string, unknown> = {}): void {
+    const ref = blockRef("b", beat), children = [...this.arrangement().placed].filter(([, place]) => place.a === ref)
+      .flatMap(([key, place]) => { const record = this.record(key); return record ? [[record, place] as const] : []; });
     this.transact(() => {
       const cell = this.cell(beat, "audioText"), around = attributesAt(cell.text.toDelta() as NativeDeltaItem[], cell.start + offset - 1) ?? {};
       // why: given the formatting already in force at its place, the boundary writes no marker of its own, so a later
@@ -511,8 +515,30 @@ export class NativeReplica {
       this.beats.set(created, map);
       for (const [key, value] of Object.entries(fields)) map.set(key, value);
       this.visuals.set(created, new Y.Text());
+      // why: a block moved to after this beat was put after all of its text, so it now follows the split-off end
+      for (const [record, place] of children) record.set("place", { ...place, a: blockRef("b", created) });
     });
   }
+
+  private record(ref: string): Y.Map<unknown> | undefined {
+    return (ref.startsWith("h:") ? this.doc.getMap<Y.Map<unknown>>("headings") : this.beats).get(ref.slice(2));
+  }
+
+  placement(ref: string): Placement | null { return placementOf(this.record(ref)?.get("place")); }
+
+  private placements(): [Y.Map<unknown>, Placement][] {
+    const result: [Y.Map<unknown>, Placement][] = [];
+    for (const root of [this.beats, this.doc.getMap<Y.Map<unknown>>("headings")]) for (const record of root.values()) {
+      const place = record instanceof Y.Map ? placementOf(record.get("place")) : null;
+      if (place) result.push([record, place]);
+    }
+    return result;
+  }
+
+  // why: a later move goes nearer its anchor than an earlier one; the stamp is one above any this copy has seen
+  nextStamp(): number { return this.placements().reduce((top, [, place]) => Math.max(top, place.n), 0) + 1; }
+
+  arrangement(): Arrangement { return this.arrangementOf(this.naturalBlocks()); }
 
   join(from: string, into: string, glue: string): void {
     this.flagged(from, "joined", record => { record.set("joined", { into, glue } satisfies NativeJoin); });
@@ -551,13 +577,23 @@ export class NativeReplica {
     return value && typeof value === "object" && typeof value.into === "string" ? value : null;
   }
 
-  blocks(): NativeBlock[] {
+  naturalBlocks(): NativeBlock[] {
     const seen = new Set<string>();
     return [...new Set(this.order.toArray())].flatMap(segment => this.view(segment)).filter(block => {
       const key = `${block.kind}:${block.id}`;
       if (seen.has(key)) return false;
       seen.add(key); return true;
     });
+  }
+
+  blocks(): NativeBlock[] {
+    const natural = this.naturalBlocks(), byRef = new Map(natural.map(block => [blockRef(block.kind, block.id), block]));
+    return this.arrangementOf(natural).order.flatMap(ref => { const block = byRef.get(ref); return block ? [block] : []; });
+  }
+
+  private arrangementOf(natural: readonly NativeBlock[]): Arrangement {
+    return arrange(natural.map(block => ({ ref: blockRef(block.kind, block.id), kind: block.kind, segment: block.segment, start: block.start })),
+      ref => this.placement(ref));
   }
 
   private visualDelta(beat: string): NativeDeltaItem[] {
