@@ -192,6 +192,7 @@ const STEPS: readonly Site[] = [
 ];
 
 const FIELDS: readonly Site[] = [
+  ["adapters/collab/native/reader.ts#NativeScriptReader", "docId 1, rev 1", "capture-read", "stored-read"],
   ["adapters/collab/project.ts#assembleSharedDocument", "rev 1", "capture-read"],
   ["adapters/formats/export-projections.ts#commentEntries", "createdAt 2, resolvedBy 1", "no-document"],
   ["adapters/formats/project-file.ts#buildSplitpageCopy", "docId 1", "no-document"],

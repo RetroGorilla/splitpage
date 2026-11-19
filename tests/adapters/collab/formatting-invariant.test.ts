@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { readFileSync, readdirSync } from "node:fs";
-import { join } from "node:path";
+import { join, sep } from "node:path";
 import { fileURLToPath } from "node:url";
 import ts from "typescript";
 import { formattingLibraryControls } from "./formatting-controls.ts";
@@ -83,8 +83,10 @@ test("native formatting exemptions are exactly the reviewed library controls and
 });
 
 test("every adapter test document is constructed through the formatting monitor or a named control", () => {
-  const base = new URL("./", import.meta.url);
-  const files = readdirSync(base, { recursive: true, withFileTypes: true }).filter(entry => entry.isFile() && /\.(?:ts|mjs)$/.test(entry.name));
+  const base = new URL("./", import.meta.url), native = fileURLToPath(new URL("./native", import.meta.url));
+  // why: the native layer's tests use plain Yjs documents and never the formatting monitor this invariant guards
+  const files = readdirSync(base, { recursive: true, withFileTypes: true })
+    .filter(entry => entry.isFile() && /\.(?:ts|mjs)$/.test(entry.name) && entry.parentPath !== native && !entry.parentPath.startsWith(native + sep));
   let inspected = 0;
   for (const entry of files) {
     const path = join(entry.parentPath, entry.name);
