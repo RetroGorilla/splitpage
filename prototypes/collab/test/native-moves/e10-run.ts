@@ -299,6 +299,20 @@ export interface E10Run {
   failureHistory?: E10Step[];
 }
 interface ReplayState { replica: MoveReplica; undo: UndoLayer; seen: Set<number>; updates: Uint8Array[] }
+
+const beforeMove = "#P A B C D #Q E F G H";
+const afterLaterMove = "#P A C D #Q E F G H B";
+const afterUndoWithCut = "#P A D #Q E F G H B C";
+
+function pressOrder(history: E10History, event: E10Event, cutUndo: boolean): string | undefined {
+  if (event.by !== 0) return undefined;
+  const op = event.command.op;
+  if (op !== "undo" && op !== "redo") return undefined;
+  if (history.kind === "undo remote move") return cutUndo && op === "undo" ? afterUndoWithCut : afterLaterMove;
+  if (history.kind === "undo remote edit") return op === "undo" ? beforeMove : "#P A C D #Q E F B G H";
+  return undefined;
+}
+
 const shuffled = (packets: Uint8Array[], random: () => number): Uint8Array[] => {
   const result = packets.slice();
   for (let i = result.length - 1; i > 0; i--) {
@@ -366,11 +380,13 @@ export function run(design: MoveDesign, history: E10History, delivery: E5Deliver
           if (clean && checkWrites(raw, before, event, design).length) { stats.failed++; continue; }
           const mutant = inspect(replica, false);
           if (clean && compare(mutant, event.expected, event.view).length) stats.failed++;
-          else if (clean && history.kind === "undo remote edit" && event.command.op === "undo" &&
-              baseline.view.order.join(" ") === "#P A B C D #Q E F G H" && !equal(mutant.view, baseline.view)) stats.failed++;
-          else if (clean && history.kind === "undo remote edit" && event.command.op === "redo" &&
-              history.preferred(baseline.view) && !history.preferred(mutant.view)) stats.failed++;
-          else if (equal(mutant.facts, baseline.facts) && equal(mutant.view, baseline.view) && equal(mutant.problems, baseline.problems)) stats.storageOnly++;
+          else {
+            const expectedOrder = pressOrder(history, event, design === "run");
+            if (clean && expectedOrder && baseline.view.order.join(" ") === expectedOrder &&
+                mutant.view.order.join(" ") !== expectedOrder) stats.failed++;
+            else if (equal(mutant.facts, baseline.facts) && equal(mutant.view, baseline.view) &&
+                equal(mutant.problems, baseline.problems)) stats.storageOnly++;
+          }
         }
       } catch {
         stats.throws++;
@@ -404,10 +420,11 @@ export function run(design: MoveDesign, history: E10History, delivery: E5Deliver
       const problems = compare(actual, event.expected, event.view);
       if (problems.length) result.local.push(`step ${index} ${step.command.op}: ${problems.join("; ")}`);
       if (step.command.op === "undo" || step.command.op === "redo") {
-        result.presses[index] = actual.view.order.join(" ");
-        if (history.kind === "undo remote edit" && step.command.op === "undo" &&
-            (actual.view.order.join(" ") !== "#P A B C D #Q E F G H" || actual.view.cells.B !== "cqd")) result.preferences.push("undo did not take B home with cqd");
-        if (history.kind === "undo remote move" && actual.view.order.join(" ") !== "#P A C D #Q E F G H B") result.preferences.push("undo or redo disturbed B's later move");
+        const order = actual.view.order.join(" "), preferred = pressOrder(history, event, false);
+        result.presses[index] = order;
+        if (preferred && (preferred !== order || (history.kind === "undo remote edit" && actual.view.cells.B !== "cqd"))) {
+          result.preferences.push(`step ${index} ${step.command.op} expected ${preferred}, got ${order}`);
+        }
       }
       if (calls && before) testControls(actual, before, calls, event);
     }

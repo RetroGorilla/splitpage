@@ -57,6 +57,12 @@ test("E10: collision outcomes per three-writer history across five deliveries", 
   for (const design of MOVE_DESIGNS) {
     const counts: Record<string, Record<ReturnType<typeof outcome>, number>> = {}, examples: Record<string, unknown> = {},
       alternate: Record<string, string> = {};
+    const breakdown = { randomDrops: 0, randomDropsStillOther: 0, oldPressCheck: 0, oldPressStillOther: 0, hiddenHeading: {} as Record<string, number>,
+      withoutHeading: {} as Record<string, number>, remaining: {} as Record<string, number>, scenesLeftBehind: 0,
+      headingChanges: {} as Record<string, number>, witnesses: {} as Record<string, [string, string]> };
+    const tallyKind = (bucket: Record<string, number>, history: E10History): void => {
+      bucket[history.kind] = (bucket[history.kind] ?? 0) + 1;
+    };
     for (let i = 1; i <= size; i++) {
       const history = generate(i), runs = DELIVERIES.map(delivery => run(design, history, delivery, 3));
       const result = outcome(history, runs), tally = counts[history.kind] ??= { preferred: 0, other: 0, broken: 0 };
@@ -66,9 +72,52 @@ test("E10: collision outcomes per three-writer history across five deliveries", 
       if (result === "other" && !alternate[history.kind]) alternate[history.kind] = `${i}: ${runs[0]?.view?.order.join(" ")}`;
       const first = required(runs[0], "forward delivery");
       assert.deepEqual(runs.map(result => result.view), runs.map(() => first.view), `${design}, ${history.label}, cross-delivery view`);
+      assert.deepEqual(runs.map(run => run.preferences), runs.map(() => first.preferences), `${design}, ${history.label}, cross-delivery presses`);
+      const remotePress = history.kind === "undo remote move" || history.kind === "undo remote edit";
+      if (result !== "other" && !(result === "preferred" && remotePress)) continue;
+      if (history.steps.some(step => "by" in step && step.by === 2 && step.command.op === "move")) {
+        breakdown.randomDrops++;
+        if (result === "other") breakdown.randomDropsStillOther++;
+        continue;
+      }
+      if (remotePress) {
+        breakdown.oldPressCheck++;
+        if (result === "other") breakdown.oldPressStillOther++;
+      }
+      if (result !== "other") continue;
+      const steps = history.steps.filter(step => !("by" in step && step.by === 2 &&
+        ((step.command.op === "heading" && step.command.newId === "#T") ||
+          (step.command.op === "removeHeading" && step.command.id === "#T"))));
+      const without = run(design, { ...history, steps }, "forward", 3);
+      if (outcome(history, [without]) === "preferred") tallyKind(remotePress ? breakdown.withoutHeading : breakdown.hiddenHeading, history);
+      else tallyKind(breakdown.remaining, history);
+      const before = required(first.view, "original view").order.join(" ");
+      const after = required(without.view, "view without the third heading").order.join(" ");
+      if (before !== after) {
+        tallyKind(breakdown.headingChanges, history);
+        breakdown.witnesses[history.kind] ??= [before, after];
+      }
+      if ((history.kind === "rename moved heading" || history.kind === "remove moved heading") &&
+          ["E", "F", "G", "H"].every(id => first.view?.rows.some(row => row.id === id && row.scene === "#P"))) {
+        breakdown.scenesLeftBehind++;
+      }
     }
     assert.equal(Object.values(counts).reduce((sum, counts) => sum + counts.preferred + counts.other + counts.broken, 0), size);
-    t.diagnostic(JSON.stringify({ design, size, counts, examples, alternate }));
+    t.diagnostic(JSON.stringify({ design, size, counts, examples, alternate, breakdown }));
+  }
+});
+
+test("E10: undo leaves C in the other scene until the first writer redoes", () => {
+  const history = required(namedHistories.find(history => history.kind === "undo remote move"), "undo of a move");
+  for (const delivery of DELIVERIES) {
+    const undone = run("run", { ...history, steps: history.steps.slice(0, -1) }, delivery, 2);
+    assert.deepEqual(undone.problems, []);
+    assert.deepEqual(undone.local, []);
+    assert.equal(undone.view?.rows.find(row => row.id === "C")?.scene, "#Q");
+    const redone = run("run", history, delivery, 2);
+    assert.deepEqual(redone.problems, []);
+    assert.deepEqual(redone.local, []);
+    assert.equal(redone.view?.rows.find(row => row.id === "C")?.scene, "#P");
   }
 });
 
@@ -86,8 +135,7 @@ test("E10: silence individual writes and whole undo presses", t => {
     assert.ok(Object.values(totals).every(stats => stats.used > 0));
     for (const [key, stats] of Object.entries(totals)) {
       assert.equal(stats.coverage, 0, `${design}, ${key}`);
-      const contestedPress = design === "run" && (key === "undo undo" || key === "redo redo");
-      if (!contestedPress) assert.equal(stats.effective, stats.failed, `${design}, ${key}`);
+      assert.equal(stats.effective, stats.failed, `${design}, ${key}`);
       const missingParent = (design === "flat" && /^heading map.set [RT]$/.test(key)) ||
         (design === "run" && key === "heading map.set seg-h-R");
       if (!missingParent) assert.equal(stats.throws, 0, `${design}, ${key}`);

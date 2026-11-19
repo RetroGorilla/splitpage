@@ -29,17 +29,22 @@ function storage(replica: MoveReplica): number {
   return length;
 }
 
+const WARMUP = 12;
+
+function percentile(values: number[], fraction: number): number {
+  const result = values.toSorted((a, b) => a - b)[Math.floor(values.length * fraction)];
+  assert.ok(result !== undefined);
+  return result;
+}
+
 function time(samples: number, job: (index: number) => void): string {
-  const warmup = 12, values: number[] = [];
-  for (let i = 0; i < warmup + samples; i++) {
+  const values: number[] = [];
+  for (let i = 0; i < WARMUP + samples; i++) {
     const before = performance.now();
     job(i);
-    if (i >= warmup) values.push(performance.now() - before);
+    if (i >= WARMUP) values.push(performance.now() - before);
   }
-  values.sort((a, b) => a - b);
-  const median = values[Math.floor(samples / 2)], p95 = values[Math.floor(samples * 0.95)];
-  assert.ok(median !== undefined && p95 !== undefined);
-  return `${median.toFixed(3)} / ${p95.toFixed(3)}`;
+  return `${percentile(values, 0.5).toFixed(3)} / ${percentile(values, 0.95).toFixed(3)}`;
 }
 
 function schedule(beats: number, count: number, seed: number): { moves: RankDrop[]; order: string[] } {
@@ -80,19 +85,51 @@ function transmission(bytes: Uint8Array, design: MoveDesign, drop: RankDrop): nu
   return written;
 }
 
-function lifetime(bytes: Uint8Array, design: MoveDesign): { initial: number; keptPerMove: number; extraBytesPerCharacter: number } {
+function lifetime(bytes: Uint8Array, design: MoveDesign) {
   const { replica, layer } = start(bytes, design), initial = storage(replica);
   const { moves, order } = schedule(300, 1000, 17);
+  let written = 0;
+  replica.doc.on("update", (update: Uint8Array) => { written += update.length; });
   for (const drop of moves) go(replica, layer, drop);
   assert.deepEqual(replica.rows().map(row => row.id), order);
   const stored = storage(replica);
   close(replica, layer);
-  return { initial, keptPerMove: Number(((stored - initial) / 1000).toFixed(2)),
+  return { initial, avgUpdate: Number((written / moves.length).toFixed(2)), keptPerMove: Number(((stored - initial) / 1000).toFixed(2)),
     extraBytesPerCharacter: Number(((stored - bytes.length) / (300 * 84)).toFixed(3)) };
 }
 
+function timedMove(replica: MoveReplica, layer: UndoLayer, drop: RankDrop) {
+  const original = replica.transact;
+  let depth = 0, transaction = 0;
+  replica.transact = function (change): void {
+    const start = performance.now(), outer = depth++ === 0;
+    let callbackTime = 0;
+    try {
+      original.call(replica, () => {
+        const entered = performance.now();
+        change();
+        callbackTime = performance.now() - entered;
+      });
+    } finally {
+      depth--;
+      // why: the outer undo transaction encloses planning, so only its overhead belongs with the inner writes.
+      transaction += performance.now() - start - (outer ? callbackTime : 0);
+    }
+  };
+  const start = performance.now();
+  try {
+    layer.command(() => { assert.ok(replica.drop(drop)); });
+  } finally {
+    replica.transact = original;
+  }
+  const rebuildStart = performance.now(), planning = rebuildStart - start - transaction;
+  replica.changes();
+  const rebuild = performance.now() - rebuildStart;
+  return { transaction, planning, rebuild, share: 100 * rebuild / (rebuild + planning + transaction) };
+}
+
 function scale(beats: number, bytes: Uint8Array, design: MoveDesign, samples: number) {
-  const { replica, layer } = start(bytes, design), { moves, order } = schedule(beats, Math.floor(beats / 3) + samples + 12, 57);
+  const { replica, layer } = start(bytes, design), { moves, order } = schedule(beats, Math.floor(beats / 3) + samples + WARMUP, 57);
   const warm = Math.floor(beats / 3);
   try {
     for (const drop of moves.slice(0, warm)) go(replica, layer, drop);
@@ -100,10 +137,15 @@ function scale(beats: number, bytes: Uint8Array, design: MoveDesign, samples: nu
       replica.blocks();
     });
     const moved = new Set(moves.map(drop => drop.first));
+    const parts: ReturnType<typeof timedMove>[] = [];
     const move = time(samples, index => {
       const drop = moves[warm + index];
       assert.ok(drop);
-      go(replica, layer, drop);
+      if (beats !== 900) go(replica, layer, drop);
+      else {
+        const sample = timedMove(replica, layer, drop);
+        if (index >= WARMUP) parts.push(sample);
+      }
     });
     assert.deepEqual(replica.rows().map(row => row.id), order);
     const movedId = moves[0]?.first, still = `B${beats - 1}`;
@@ -113,7 +155,13 @@ function scale(beats: number, bytes: Uint8Array, design: MoveDesign, samples: nu
       layer.type(id, "audioText", 1, "x");
       replica.changes();
     });
-    return { beats, read, move, moved: char(movedId), unmoved: char(still) };
+    const moveParts = beats === 900 ? {
+      transaction: percentile(parts.map(part => part.transaction), 0.5).toFixed(3),
+      planning: percentile(parts.map(part => part.planning), 0.5).toFixed(3),
+      rebuild: percentile(parts.map(part => part.rebuild), 0.5).toFixed(3),
+      rebuildShare: percentile(parts.map(part => part.share), 0.5).toFixed(1)
+    } : undefined;
+    return { beats, read, move, moveParts, moved: char(movedId), unmoved: char(still) };
   } finally { close(replica, layer); }
 }
 
