@@ -220,7 +220,7 @@ Each slice is one pull request in `src/adapters/collab/native/`, the only place 
 - **Tags:** E11's counts and E12's flag rule replace the lost-tag question.
 - **Relay, loads and the notice** rest on E13 and E12; only E14 is pending.
 
-Round 4's list is in [appendix J](#j-round-4-changes).
+Round 4's list is in [appendix K](#k-round-4-changes).
 
 ## Appendix
 
@@ -389,7 +389,7 @@ Each is the design's default unless the owner objects.
 | Undo passing over spent steps | Library behaviour (16 in 600, E11) | A press occasionally undoes something older |
 | A person who stayed online while their beat was removed | Not told (E11); E12's online signal is not used | Visual text or fields can vanish with no message for them |
 
-### K. Relay signals and the reconnect wrapper
+### J. Relay signals and the reconnect wrapper
 
 What the stock provider's signals promise (E13):
 
@@ -405,7 +405,7 @@ tag kept in 5 of 5 runs where stock lost it; the first edit after reconnect reac
 offline return sent 1,000,485 bytes against 2,001,048. A large combined reply is subject to the upload ceiling in
 appendix I (E13).
 
-### J. Round 4 changes
+### K. Round 4 changes
 
 The removed mark on beats, the keep-always undo setting, the refusal of moves, the 2 MiB budget and the U14 row were
 dropped; plain keys replaced per-action keys except for production tags; the join target is stored again for rule
