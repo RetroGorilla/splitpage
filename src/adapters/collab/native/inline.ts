@@ -390,13 +390,9 @@ export function nativeRangeUnits(items: readonly NativeDeltaItem[], from: number
     offset += length;
     if (end <= start) continue;
     const attributes = item.attributes ?? {};
-    let shown = 0, carries = true;
-    if (typeof item.insert === "string") shown = shownLength(item.insert.slice(start - (offset - length), end - (offset - length)));
-    else {
-      const read = atomOf(item.insert, {});
-      shown = read && cleanAtom(read) ? 1 : 0;
-      carries = !!read && !!shown && atomCarries(read, carry);
-    }
+    const read = typeof item.insert === "string" ? null : atomOf(item.insert, {});
+    const shown = typeof item.insert === "string" ? shownLength(item.insert.slice(start - (offset - length), end - (offset - length))) : read && cleanAtom(read) ? 1 : 0;
+    const carries = typeof item.insert === "string" || (!!read && !!shown && atomCarries(read, carry));
     for (const name in attributes) {
       if (attributes[name] !== true) continue;
       keys.add(name);
