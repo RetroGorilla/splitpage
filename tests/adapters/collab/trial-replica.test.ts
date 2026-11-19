@@ -249,8 +249,10 @@ test("trial replica routes: an arrival inside a local transaction's notification
 
 test("trial replica write inventory: every library write under the shared adapter is listed with how it reaches the replica", () => {
   const writes = /\b(transactCollabState|transactSharedDocument|runCollabTransaction|Y\.transact|Y\.applyUpdate|Y\.applyUpdateV2)\(|\.transact\(/g;
+  // why: the native layer has no trial replica; its writes are checked by tests/adapters/collab/native
+  const native = join(REPO, "src/adapters/collab/native");
   const files = (path: string): string[] => readdirSync(path, { withFileTypes: true }).flatMap(entry =>
-    entry.isDirectory() ? files(join(path, entry.name)) : entry.name.endsWith(".ts") ? [join(path, entry.name)] : []);
+    entry.isDirectory() ? join(path, entry.name) === native ? [] : files(join(path, entry.name)) : entry.name.endsWith(".ts") ? [join(path, entry.name)] : []);
   const found: Record<string, number> = {};
   for (const file of files(join(REPO, "src/adapters/collab"))) {
     const name = relative(REPO, file).replaceAll("\\", "/"), hits = readFileSync(file, "utf8").match(writes)?.length ?? 0;
