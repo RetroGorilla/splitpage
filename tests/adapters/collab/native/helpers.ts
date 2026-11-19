@@ -7,7 +7,7 @@ import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
 import type { DocumentShape, ValidatedDocument } from "../../../../src/core/document/validated.ts";
 import type { Run } from "../../../../src/core/text/runs.ts";
 import { convertToNativeScript } from "../../../../src/adapters/collab/native/convert.ts";
-import { NativeScriptReader } from "../../../../src/adapters/collab/native/reader.ts";
+import { readNativeOnce } from "../../../../src/adapters/collab/native/reader.ts";
 import { openNativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import { anchorNativeText, replaceNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
@@ -59,8 +59,7 @@ export function shown(script: NativeScript, reader = script.reader): string[] {
 }
 
 export function freshlyShown(script: NativeScript): string[] {
-  const reader = new NativeScriptReader(script.roots);
-  try { return shown(script, reader); } finally { reader.close(); }
+  return readNativeOnce(script.roots, reader => shown(script, reader));
 }
 
 export class ScriptNet {

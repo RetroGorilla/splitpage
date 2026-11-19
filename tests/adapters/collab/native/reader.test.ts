@@ -4,7 +4,6 @@ import * as Y from "yjs";
 import { dom } from "../../../../src/test/_dom.mjs";
 import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
 import type { ValidatedDocument } from "../../../../src/core/document/validated.ts";
-import { NativeScriptReader } from "../../../../src/adapters/collab/native/reader.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import { anchorNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
 import { convertedScript, edit, freshlyShown, shown } from "./helpers.ts";
@@ -83,7 +82,7 @@ test("finding 6: a malformed beat extra, field value or reply key is a diagnosti
 });
 
 test("finding 6: a closed reader refuses to read", () => {
-  const script = convertedScript(small({ R1: "ab" })), reader = new NativeScriptReader(script.roots);
+  const script = convertedScript(small({ R1: "ab" })), reader = script.reader;
   assert.equal(reader.row("R1")?.audioText, "ab");
   reader.close();
   assert.equal(reader.isClosed(), true);

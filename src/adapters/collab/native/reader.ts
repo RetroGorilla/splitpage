@@ -1,4 +1,5 @@
 import * as Y from "yjs";
+import { projectSharedJoinedFields } from "../../../core/collab/projection/joins.ts";
 import type { DocumentShape } from "../../../core/document/validated.ts";
 import { toHtml } from "../../../core/text/html.ts";
 import type { Run } from "../../../core/text/runs.ts";
@@ -34,7 +35,7 @@ export interface NativeUnplacedSpan {
   readonly length: number;
 }
 
-export type NativeProblemKind = "no-text" | "hidden-units" | "unknown-embed" | "unshown-marks" | "bad-value" | "bad-key" | "heading-without-row" | "join-not-read" | "missing-beat-record" | "missing-visual" | "missing-heading-record" | "missing-name" | "no-order" | "no-segment";
+export type NativeProblemKind = "no-text" | "hidden-units" | "unknown-embed" | "unshown-marks" | "bad-value" | "bad-key" | "heading-without-row" | "join-not-read" | "missing-beat-record" | "missing-visual" | "missing-heading-record" | "missing-name" | "no-order" | "no-segment" | "joined-field-not-shown";
 
 export interface NativeReaderProblem {
   readonly kind: NativeProblemKind;
@@ -72,12 +73,44 @@ function samePlacement(left: ParsedSegment, right: ParsedSegment): boolean {
 
 interface UnplacedRef extends NativeSpanPlace { readonly reason: NativeUnplacedReason }
 interface StoredBlock { readonly kind: "b" | "h"; readonly id: string; readonly shown: boolean; readonly spans: NativeSpanPlace[] }
+interface RankedBlock { readonly block: StoredBlock; readonly rank: string; readonly index: number }
 type DeepListener = (events: Y.YEvent<Y.AbstractType<unknown>>[]) => void;
 export type NativeWatch = <Event>(type: Y.AbstractType<Event>, listener: DeepListener) => () => void;
 type Problems = NativeReaderProblem[] | null;
 
 const BEAT_FIELDS = ["status", "lengthSeconds", "paragraphStart"];
 const META_FIELDS = ["docId", "schema", "wordsPerMinute", "targetSeconds"];
+const PRIMARY_GALLERY_FIELDS = { imageRef: "imageRef", imageName: "name", imageAnnotation: "annotation", imageLinks: "links" };
+const GALLERY_FIELDS = new Set([...Object.keys(PRIMARY_GALLERY_FIELDS), "moreImages"]);
+
+function fieldBag(value: unknown): value is Readonly<Record<string, unknown>> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function galleryLink(value: unknown): value is Readonly<Record<string, unknown>> {
+  return fieldBag(value) && (typeof value.href === "string" && !!value.href
+    || (!value.href && typeof value.name === "string" && (value.size == null || typeof value.size === "number")));
+}
+
+function gallerySlots(fields: Readonly<Record<string, unknown>>): { readonly path: string; readonly slot: Readonly<Record<string, unknown>> }[] {
+  const primary = Object.fromEntries(Object.entries(PRIMARY_GALLERY_FIELDS).flatMap(([key, name]) =>
+    Object.hasOwn(fields, key) && (key !== "imageRef" || fields[key] != null) ? [[name, fields[key]]] : []));
+  const slots = Object.keys(primary).length ? [{ path: "image", slot: primary }] : [];
+  const more = fields.moreImages;
+  if (Array.isArray(more)) more.forEach((value: unknown, index) => {
+    if (fieldBag(value)) slots.push({ path: "moreImages/" + index, slot: value });
+  });
+  return slots;
+}
+
+function gallerySlotShown(source: Readonly<Record<string, unknown>>, output: Readonly<Record<string, unknown>>): boolean {
+  return Object.entries(source).every(([key, value]) => {
+    if (key !== "links" || !Array.isArray(value)) return JSON.stringify(value) === JSON.stringify(output[key]);
+    const links = Array.isArray(output.links) ? output.links : [];
+    return value.every((link: unknown) => fieldBag(link) && links.some((shown: unknown) => fieldBag(shown)
+      && Object.entries(link).every(([name, field]) => JSON.stringify(field) === JSON.stringify(shown[name]))));
+  });
+}
 
 export function nativeSegmentSpans(segment: unknown): NativeSpanContent[] | null {
   if (!(segment instanceof Y.Map)) return null;
@@ -191,6 +224,7 @@ export class NativeScriptReader {
   private spanOwners = new Map<string, string[]>();
   private groups = new Map<string, RowMember[]>();
   private groupHeads = new Map<string, string>();
+  private rankedBlocks: readonly RankedBlock[] = [];
   private removedHeadings: readonly string[] = [];
   private structuralProblems: NativeReaderProblem[] = [];
   private stray: string | null = null;
@@ -203,9 +237,8 @@ export class NativeScriptReader {
   private rowsBuilt = 0;
   private structures = 0;
 
-  constructor(roots: NativeRoots, watch?: NativeWatch) {
+  constructor(roots: NativeRoots, watch: NativeWatch) {
     this.roots = roots;
-    if (!watch) return;
     const observe = <Event>(type: Y.AbstractType<Event>, listener: DeepListener): void => { this.detach.push(watch(type, listener)); };
     observe(roots.segments, events => {
       for (const event of events) {
@@ -412,11 +445,12 @@ export class NativeScriptReader {
     for (const key of [...this.roots.segments.keys()].sort()) {
       if (!ordered.has(key)) this.segment(key)?.spans.forEach((_, index) => { this.candidates.push({ segment: key, span: index, reason: "no-order" }); });
     }
-    this.updateOutline(this.ranked(blocks), blocks);
+    this.rankedBlocks = this.ranked(blocks);
+    this.updateOutline(this.rankedBlocks, blocks);
     this.structural = false;
   }
 
-  private updateOutline(ranked: readonly StoredBlock[], stored: readonly StoredBlock[]): void {
+  private updateOutline(ranked: readonly RankedBlock[], stored: readonly StoredBlock[]): void {
     const outline: NativeOutlineEntry[] = [], groups = new Map<string, RowMember[]>(), heads = new Map<string, string>();
     const start = (id: string): RowMember[] => {
       outline.push(Object.freeze({ kind: "row", id }));
@@ -428,7 +462,7 @@ export class NativeScriptReader {
     const stray = this.stray;
     if (stray !== null && this.narration.get(stray)?.some(ref => (this.spanAt(ref)?.items.length ?? 0) > 0)) start(stray);
     let previous: RowMember[] | undefined;
-    for (const block of ranked) {
+    for (const { block } of ranked) {
       const id = block.id;
       if (block.kind === "h") {
         outline.push(Object.freeze({ kind: "heading", id, name: this.nameOf(id) }));
@@ -464,7 +498,7 @@ export class NativeScriptReader {
     outline.forEach((entry, index) => { if (entry.kind === "heading") this.headingIndex.set(entry.id, index); });
   }
 
-  private ranked(blocks: readonly StoredBlock[]): StoredBlock[] {
+  private ranked(blocks: readonly StoredBlock[]): RankedBlock[] {
     let previous = "";
     const keyed = blocks.map((block, index) => {
       const rank = rankOf(block.kind === "h" ? this.roots.headings.get(block.id) : this.roots.beats.get(block.id));
@@ -472,7 +506,7 @@ export class NativeScriptReader {
       return { block, rank: rank ?? previous, index };
     });
     keyed.sort((left, right) => left.rank < right.rank ? -1 : left.rank > right.rank ? 1 : left.index - right.index);
-    return keyed.map(entry => entry.block).filter(block => block.shown);
+    return keyed.filter(({ block }) => block.shown);
   }
 
   private nameOf(id: string): string {
@@ -511,6 +545,41 @@ export class NativeScriptReader {
     return Object.fromEntries(entries);
   }
 
+  private rowFields(id: string, problems: Problems): Record<string, unknown> {
+    const root = this.beatFields(id, null), group = this.groups.get(id);
+    if (!group || group.length < 2) return root;
+    const members = group.map(member => ({
+      id: member.id, fields: member.id === id ? root : this.beatFields(member.id, null)
+    }));
+    const galleries = members.map(member => gallerySlots(member.fields));
+    const records = galleries.flatMap((slots, member) => slots.map(({ slot }, index) => {
+      const { links, ...picture } = slot;
+      return { key: String(index).padStart(10, "0"), fields: {
+        beat: members[member]?.id, picture, links: Array.isArray(links) ? links.filter(galleryLink).map(fields => ({ fields })) : []
+      } };
+    }));
+    const { row, overflow } = projectSharedJoinedFields(root, members.map(member => ({ ...member.fields, id: member.id })), records);
+    if (problems) {
+      const shown = gallerySlots(row).map(({ slot }) => slot);
+      members.forEach((member, index) => {
+        const where = "beats/" + member.id + "/";
+        for (const [key, value] of Object.entries(member.fields)) {
+          if (!GALLERY_FIELDS.has(key) && JSON.stringify(value) !== JSON.stringify(row[key])) problems.push({ kind: "joined-field-not-shown", where: where + key });
+        }
+        const more = member.fields.moreImages;
+        if (more !== undefined && (!Array.isArray(more) || more.some(value => !fieldBag(value)))) {
+          problems.push({ kind: "joined-field-not-shown", where: where + "moreImages" });
+        }
+        for (const { path, slot } of galleries[index] ?? []) {
+          if (!shown.some(output => gallerySlotShown(slot, output)) || overflow.some(entry => entry.beat === member.id && gallerySlotShown(slot, entry.slot))) {
+            problems.push({ kind: "joined-field-not-shown", where: where + path });
+          }
+        }
+      });
+    }
+    return row;
+  }
+
   private buildRow(id: string): NativeReadRow {
     this.rowsBuilt++;
     const group = this.groups.get(id) ?? [], audio: NativeDeltaItem[] = [], visual: NativeDeltaItem[] = [];
@@ -529,7 +598,7 @@ export class NativeScriptReader {
     return Object.freeze({
       id, members: Object.freeze(id === this.stray ? [] : group.map(member => member.id)),
       narration: frozenRuns(narration), visual: frozenRuns(visualRuns), audioText: toHtml(narration), visualText: toHtml(visualRuns),
-      fields: deepFrozen(this.beatFields(id, null))
+      fields: deepFrozen(this.rowFields(id, null))
     });
   }
 
@@ -553,6 +622,27 @@ export class NativeScriptReader {
   beatBoundary(beat: string): NativeSpanPlace | null {
     this.sync();
     return this.places.get(beat) ?? null;
+  }
+
+  ranksAboveBeat(beat: string): { readonly before: string | null; readonly after: string | null } | null {
+    this.sync();
+    if (this.groupHeads.get(beat) !== beat) return null;
+    const index = this.rankedBlocks.findIndex(({ block }) => block.kind === "b" && block.id === beat);
+    const target = this.rankedBlocks[index];
+    if (!target) return null;
+    const before = this.rankedBlocks[index - 1]?.rank ?? null, after = target.rank;
+    // why: a first rankless beat inherits the new heading's rank, beneath it and before the next ranked block
+    if (before === null && after === "" && rankOf(this.roots.beats.get(beat)) === null) {
+      return Object.freeze({ before: null, after: this.rankedBlocks.find(entry => entry.rank !== "")?.rank ?? null });
+    }
+    return Object.freeze({ before: before === "" && after !== "" ? null : before, after });
+  }
+
+  hasHeadingMarker(id: string): boolean {
+    this.sync();
+    const key = "h:" + id;
+    for (const { spans } of this.parsed.values()) if (spans.some(span => span.key === key)) return true;
+    return false;
   }
 
   headingBoundary(heading: string, removed: boolean): NativeSpanPlace | null {
@@ -594,6 +684,7 @@ export class NativeScriptReader {
       if (visual instanceof Y.Text) this.cellProblems(visual.toDelta() as NativeDeltaItem[], "visuals/" + id, problems);
       this.beatFields(id, problems);
     }
+    for (const [id, group] of this.groups) if (group.length > 1) this.rowFields(id, problems);
     for (const id of this.headingPlaces.keys()) {
       const name = this.roots.names.get(id);
       if (name && name.toString().length !== name.length) problems.push({ kind: "bad-value", where: "names/" + id });
@@ -655,4 +746,9 @@ export class NativeScriptReader {
     });
     return deepFrozen({ ...this.collect(null), rows, ...sections.length ? { sections } : {} });
   }
+}
+
+export function readNativeOnce<T>(roots: NativeRoots, read: (reader: NativeScriptReader) => T): T {
+  const reader = new NativeScriptReader(roots, () => () => undefined);
+  try { return read(reader); } finally { reader.close(); }
 }

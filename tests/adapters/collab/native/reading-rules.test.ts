@@ -4,8 +4,8 @@ import * as Y from "yjs";
 import { dom } from "../../../../src/test/_dom.mjs";
 import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
 import { formatNativeText } from "../../../../src/adapters/collab/native/format-commands.ts";
-import { removeNativeHeading, renameNativeHeading, restoreNativeHeading } from "../../../../src/adapters/collab/native/heading-commands.ts";
-import { NativeScriptReader } from "../../../../src/adapters/collab/native/reader.ts";
+import { createNativeHeading, removeNativeHeading, renameNativeHeading, restoreNativeHeading } from "../../../../src/adapters/collab/native/heading-commands.ts";
+import { NativeScriptReader, readNativeOnce } from "../../../../src/adapters/collab/native/reader.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import { anchorNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
 import { convertedScript, edit, joinedScript, ScriptNet } from "./helpers.ts";
@@ -77,8 +77,8 @@ function lines(reader: NativeScriptReader): string[] {
 }
 
 function check(copy: NativeScript, warm = copy.reader): void {
-  const before = Y.encodeStateAsUpdate(copy.doc), fresh = new NativeScriptReader(copy.roots);
-  try {
+  const before = Y.encodeStateAsUpdate(copy.doc);
+  readNativeOnce(copy.roots, fresh => {
     assert.deepEqual(view(warm), view(fresh), "warm and fresh");
     assert.deepEqual(Y.encodeStateAsUpdate(copy.doc), before, "reading wrote to Yjs");
     const seen = new Set<string>();
@@ -92,7 +92,7 @@ function check(copy: NativeScript, warm = copy.reader): void {
       if (row.members.length > 1 || !/^[a-zA-Z]*$/.test(row.audioText)) continue;
       assert.equal(anchorNativeText(copy, narr(row.id), 0, row.audioText.length).kind, "anchored", row.id + " is editable");
     }
-  } finally { fresh.close(); }
+  });
 }
 
 function storedNarration(copy: NativeScript): string[] {
@@ -344,7 +344,7 @@ test("rule (g) reassigns a prefix in a different segment without reparsing eithe
 });
 
 function generatedHeadings(seed: number, observing: boolean): void {
-  const a = script("AB", { B: "H" }), reader = observing ? a.reader : new NativeScriptReader(a.roots);
+  const a = script("AB", { B: "H" }), reader = observing ? a.reader : new NativeScriptReader(a.roots, () => () => undefined);
   try {
     let name = "Name H", removed = false, missing = false;
     const assertStep = (step: number): void => {
@@ -404,9 +404,10 @@ test("heading commands refuse busy, stale and malformed targets before writing",
     assert.deepEqual(renameNativeHeading(a, range, "N"), { kind: "unchanged" });
     assert.deepEqual(Y.encodeStateAsUpdate(a.doc), original);
     a.roots.headings.get("H")?.delete("rank");
-    const missing = Y.encodeStateAsUpdate(a.doc);
-    assert.deepEqual(removeNativeHeading(a, "H"), { kind: "refused", reason: "missing" });
-    assert.deepEqual(Y.encodeStateAsUpdate(a.doc), missing);
+    assert.equal(removeNativeHeading(a, "H").kind, "written");
+    assert.deepEqual(a.reader.recovery(), [{ id: "H", name: "Name H" }]);
+    assert.equal(restoreNativeHeading(a, "H").kind, "written");
+    assert.equal(a.roots.headings.get("H")?.has("rank"), false);
   } finally { a.doc.destroy(); }
 });
 
@@ -465,4 +466,266 @@ test("plain Yjs undo of the winning concurrent rank erases the key", () => {
     send(b, a);
     assert.deepEqual([left.has("rank"), right.has("rank")], [false, false]);
   } finally { undo.destroy(); seed.destroy(); a.destroy(); b.destroy(); }
+});
+
+test("joined fields show the highest status and both galleries, with diagnostics for fields that have no place", () => {
+  const a = script("AB"), b = joinedScript(a, 200), net = new ScriptNet([a, b]);
+  const left = { sha256: "a".repeat(64), mime: "image/png" }, right = { sha256: "b".repeat(64), mime: "image/png" };
+  try {
+    for (const copy of [a, b]) check(copy);
+    const upper = a.roots.beats.get("A"), lower = b.roots.beats.get("B");
+    assert.ok(upper && lower);
+    a.doc.transact(() => {
+      upper.set("status", JSON.stringify("ready"));
+      upper.set("extra", JSON.stringify({ imageRef: left, imageName: "Upper" }));
+    });
+    b.doc.transact(() => {
+      lower.set("status", JSON.stringify("todo"));
+      lower.set("extra", JSON.stringify({ imageRef: right, imageName: "Lower", note: "lower note" }));
+      lower.set("joined", { into: "A", glue: " " });
+    });
+    settle(a, b, net, ["A=a b"]);
+    assert.equal(a.reader.row("A")?.fields.status, "ready");
+    lower.set("status", JSON.stringify("shot"));
+    assert.deepEqual(b.reader.refresh().rows, ["A"]);
+    settle(a, b, net, ["A=a b"]);
+    const late = joinedScript(a, 901);
+    try {
+      for (const copy of [a, b, late]) {
+        const fields = copy.reader.row("A")?.fields, exported = copy.reader.document().rows[0];
+        for (const row of [fields, exported]) {
+          assert.equal(row?.status, "shot");
+          assert.deepEqual(row?.imageRef, left);
+          assert.equal(row?.imageName, "Upper");
+          assert.deepEqual(row?.moreImages, [{ imageRef: right, name: "Lower" }]);
+        }
+        assert.deepEqual(copy.reader.problems(), [
+          { kind: "joined-field-not-shown", where: "beats/A/status" },
+          { kind: "joined-field-not-shown", where: "beats/B/note" }
+        ]);
+      }
+    } finally { late.doc.destroy(); }
+    lower.set("extra", JSON.stringify({ imageRef: left, imageName: "Different name" }));
+    settle(a, b, net, ["A=a b"]);
+    const duplicate = joinedScript(a, 902);
+    try {
+      for (const copy of [a, b, duplicate]) {
+        assert.equal(copy.reader.row("A")?.fields.imageName, "Upper");
+        assert.equal(copy.reader.row("A")?.fields.moreImages, undefined);
+        assert.deepEqual(copy.reader.problems(), [
+          { kind: "joined-field-not-shown", where: "beats/A/status" },
+          { kind: "joined-field-not-shown", where: "beats/B/image" }
+        ]);
+      }
+    } finally { duplicate.doc.destroy(); }
+    lower.delete("joined");
+    settle(a, b, net, ["A=a", "B=b"]);
+    assert.equal(a.reader.row("B")?.fields.imageName, "Different name");
+    assert.deepEqual(a.reader.problems(), []);
+  } finally { a.doc.destroy(); b.doc.destroy(); }
+});
+
+test("a heading can be removed and restored when the winning concurrent rank is undone", () => {
+  const genesis = script("A", { A: "H" }), a = joinedScript(genesis, 150), b = joinedScript(genesis, 200), net = new ScriptNet([a, b]);
+  genesis.doc.destroy();
+  const left = a.roots.headings.get("H"), right = b.roots.headings.get("H");
+  assert.ok(left && right);
+  const undo = new Y.UndoManager(right, { trackedOrigins: new Set([b.origin]) });
+  try {
+    for (const copy of [a, b]) check(copy);
+    left.set("rank", "1");
+    b.doc.transact(() => { right.set("rank", "0"); }, b.origin);
+    settle(a, b, net, ["#H=Name H", "A=a"]);
+    assert.equal(left.get("rank"), "0");
+    assert.ok(undo.undo());
+    settle(a, b, net, ["#H=Name H", "A=a"]);
+    assert.equal(left.has("rank"), false);
+    assert.equal(removeNativeHeading(a, "H").kind, "written");
+    settle(a, b, net, ["A=a"]);
+    assert.deepEqual(b.reader.recovery(), [{ id: "H", name: "Name H" }]);
+    assert.equal(restoreNativeHeading(b, "H").kind, "written");
+    settle(a, b, net, ["#H=Name H", "A=a"]);
+    assert.equal(left.has("rank"), false);
+    assert.equal(right.has("rank"), false);
+  } finally { undo.destroy(); a.doc.destroy(); b.doc.destroy(); }
+});
+
+test("one-shot readers close before the next document change and new reads see the update", () => {
+  const a = script("AB"), b = joinedScript(a, 200), net = new ScriptNet([a, b]);
+  try {
+    const closed = [a, b].map(copy => readNativeOnce(copy.roots, reader => {
+      assert.deepEqual(lines(reader), ["A=a", "B=b"]);
+      return reader;
+    }));
+    assert.equal(edit(b, narr("B"), 1, 1, run("x")).kind, "written");
+    settle(a, b, net, ["A=a", "B=bx"]);
+    const late = joinedScript(a, 901);
+    try {
+      for (const reader of closed) assert.throws(() => reader.outline(), /closed/);
+      for (const copy of [a, b, late]) {
+        assert.deepEqual(readNativeOnce(copy.roots, lines), ["A=a", "B=bx"]);
+        const escaped = readNativeOnce(copy.roots, reader => reader);
+        assert.throws(() => escaped.row("B"), /closed/);
+      }
+    } finally { late.doc.destroy(); }
+  } finally { a.doc.destroy(); b.doc.destroy(); }
+});
+
+function caretAt(copy: NativeScript, id: string) {
+  const anchored = anchorNativeText(copy, narr(id), 0);
+  assert.equal(anchored.kind, "anchored");
+  return anchored.range;
+}
+
+test("create a heading above the first row and between rows, with names only in their cells", () => {
+  const a = script("ABC"), b = joinedScript(a, 200), net = new ScriptNet([a, b]);
+  try {
+    for (const copy of [a, b]) check(copy);
+    assert.equal(createNativeHeading(a, caretAt(a, "A"), "H1", "Top").kind, "written");
+    settle(a, b, net, ["#H1=Top", "A=a", "B=b", "C=c"]);
+    assert.equal(createNativeHeading(b, caretAt(b, "B"), "H2", "Between").kind, "written");
+    settle(a, b, net, ["#H1=Top", "A=a", "#H2=Between", "B=b", "C=c"]);
+    const late = joinedScript(a, 901);
+    try {
+      for (const copy of [a, b, late]) {
+        assert.deepEqual(copy.roots.order.toArray(), ["h:H1", "b:A"]);
+        assert.deepEqual(segment(copy, "h:H1").get("head"), { h: "H1" });
+        assert.deepEqual(textOf(segment(copy, "b:A")).toDelta(), [
+          { insert: "a" }, { insert: { h: "H2" } }, { insert: { b: "B" } }, { insert: "b" },
+          { insert: { b: "C" } }, { insert: "c" }
+        ]);
+        assert.equal(copy.roots.names.size, 2);
+        assert.deepEqual(["H1", "H2"].map(id => copy.roots.names.get(id)?.toString()), ["Top", "Between"]);
+      }
+    } finally { late.doc.destroy(); }
+  } finally { a.doc.destroy(); b.doc.destroy(); }
+});
+
+test("a tie between adjacent rows refuses heading creation before writing on every copy", () => {
+  const a = script("AB"), b = joinedScript(a, 200), net = new ScriptNet([a, b]);
+  try {
+    a.roots.beats.get("B")?.set("rank", a.roots.beats.get("A")?.get("rank"));
+    settle(a, b, net, ["A=a", "B=b"]);
+    const late = joinedScript(a, 901);
+    try {
+      for (const copy of [a, b, late]) {
+        const before = Y.encodeStateAsUpdate(copy.doc);
+        assert.deepEqual(createNativeHeading(copy, caretAt(copy, "B"), "H", "Tied"), { kind: "refused", reason: "rank" });
+        assert.deepEqual(Y.encodeStateAsUpdate(copy.doc), before);
+      }
+    } finally { late.doc.destroy(); }
+  } finally { a.doc.destroy(); b.doc.destroy(); }
+});
+
+test("create a heading above a rankless beat using its inherited rank", () => {
+  const a = script("ABC", { B: "Old" }), b = joinedScript(a, 200), net = new ScriptNet([a, b]);
+  try {
+    assert.equal(removeNativeHeading(a, "Old").kind, "written");
+    b.roots.beats.get("B")?.delete("rank");
+    settle(a, b, net, ["A=a", "B=b", "C=c"]);
+    assert.equal(a.reader.ranksAboveBeat("B")?.after, a.roots.headings.get("Old")?.get("rank"));
+    assert.equal(createNativeHeading(a, caretAt(a, "B"), "H", "New scene").kind, "written");
+    settle(a, b, net, ["A=a", "#H=New scene", "B=b", "C=c"]);
+    const late = joinedScript(a, 901);
+    try {
+      for (const copy of [a, b, late]) {
+        assert.equal(copy.roots.beats.get("B")?.has("rank"), false);
+        const rank: unknown = copy.roots.headings.get("H")?.get("rank");
+        assert.ok(typeof rank === "string" && rank < String(copy.roots.headings.get("Old")?.get("rank")));
+      }
+    } finally { late.doc.destroy(); }
+  } finally { a.doc.destroy(); b.doc.destroy(); }
+});
+
+test("a leading rankless beat can follow a new heading without passing the next ranked beat", () => {
+  const a = script("AB"), b = joinedScript(a, 200), net = new ScriptNet([a, b]);
+  try {
+    b.roots.beats.get("A")?.delete("rank");
+    settle(a, b, net, ["A=a", "B=b"]);
+    assert.equal(createNativeHeading(a, caretAt(a, "B"), "BeforeB", "Before B").kind, "written");
+    settle(a, b, net, ["A=a", "#BeforeB=Before B", "B=b"]);
+    assert.equal(createNativeHeading(b, caretAt(b, "A"), "Top", "Before A").kind, "written");
+    settle(a, b, net, ["#Top=Before A", "A=a", "#BeforeB=Before B", "B=b"]);
+    assert.equal(a.roots.beats.get("A")?.has("rank"), false);
+  } finally { a.doc.destroy(); b.doc.destroy(); }
+});
+
+for (const target of ["A", "B"] as const) {
+  test("same-gap heading creations both survive in stored tie order above " + target, () => {
+    const genesis = script("ABC"), a = joinedScript(genesis, 150), b = joinedScript(genesis, 200), net = new ScriptNet([a, b]);
+    genesis.doc.destroy();
+    try {
+      assert.equal(createNativeHeading(a, caretAt(a, target), "H1", "First").kind, "written");
+      assert.equal(createNativeHeading(b, caretAt(b, target), "H2", "Second").kind, "written");
+      const tail = ["#H1=First", "#H2=Second", ...target === "A" ? ["A=a"] : [], "B=b", "C=c"];
+      settle(a, b, net, target === "A" ? tail : ["A=a", ...tail]);
+      const rank = a.roots.headings.get("H1")?.get("rank");
+      assert.equal(a.roots.headings.get("H2")?.get("rank"), rank);
+      if (target === "B") {
+        const raw = textOf(segment(a, "b:A"));
+        a.doc.transact(() => {
+          raw.insertEmbed(2, { b: "N" }, {});
+          const record = new Y.Map<unknown>();
+          a.roots.beats.set("N", record);
+          record.set("rank", rank);
+          a.roots.visuals.set("N", new Y.Text());
+        });
+        settle(a, b, net, ["A=a", "#H1=First", "N=", "#H2=Second", "B=b", "C=c"]);
+        const late = joinedScript(a, 901);
+        try {
+          for (const copy of [a, b, late]) {
+            const before = Y.encodeStateAsUpdate(copy.doc);
+            assert.deepEqual(createNativeHeading(copy, caretAt(copy, "N"), "H3", "In the tie"), { kind: "refused", reason: "rank" });
+            assert.deepEqual(Y.encodeStateAsUpdate(copy.doc), before);
+          }
+        } finally { late.doc.destroy(); }
+      }
+    } finally { a.doc.destroy(); b.doc.destroy(); }
+  });
+}
+
+for (const concurrent of ["cut", "split"] as const) {
+  test("a heading survives when a peer performs a concurrent " + concurrent + " of its row", () => {
+    const a = script("AB"), b = joinedScript(a, 200), net = new ScriptNet([a, b]);
+    try {
+      assert.equal(createNativeHeading(a, caretAt(a, "B"), "H", "Section").kind, "written");
+      if (concurrent === "cut") cut(b, ["B"]);
+      else b.doc.transact(() => {
+        textOf(segment(b, "b:A")).insertEmbed(2, { b: "N" }, {});
+        const record = new Y.Map<unknown>();
+        b.roots.beats.set("N", record);
+        record.set("rank", b.roots.beats.get("B")?.get("rank"));
+        b.roots.visuals.set("N", new Y.Text());
+      });
+      settle(a, b, net, concurrent === "cut" ? ["A=a", "#H=Section"] : ["A=a", "#H=Section", "B=", "N=b"]);
+    } finally { a.doc.destroy(); b.doc.destroy(); }
+  });
+}
+
+test("a new heading keeps the row's recovered prefix and refuses stale and duplicate targets before writing", () => {
+  const a = script("ABC", { B: "Old" }), b = joinedScript(a, 200), net = new ScriptNet([a, b]);
+  try {
+    cut(a, ["B"]);
+    assert.equal(edit(b, narr("B"), 0, 0, run("x")).kind, "written");
+    settle(a, b, net, ["A=a", "#Old=Name Old", "C=xc"]);
+    const caret = caretAt(b, "C");
+    assert.equal(createNativeHeading(b, caret, "H", "Recovered").kind, "written");
+    settle(a, b, net, ["A=a", "#Old=Name Old", "#H=Recovered", "C=xc"]);
+    const before = Y.encodeStateAsUpdate(b.doc), fresh = caretAt(b, "C");
+    b.doc.transact(() => { assert.deepEqual(createNativeHeading(b, fresh, "Busy", "N"), { kind: "refused", reason: "busy" }); });
+    assert.deepEqual(createNativeHeading(b, fresh, "H", "Duplicate"), { kind: "refused", reason: "missing" });
+    assert.deepEqual(createNativeHeading(b, fresh, "\ud800", "Invalid"), { kind: "refused", reason: "missing" });
+    assert.deepEqual(createNativeHeading(b, fresh, "Invalid", "\ud800"), { kind: "refused", reason: "text" });
+    assert.deepEqual(Y.encodeStateAsUpdate(b.doc), before);
+    cut(a, ["C"]);
+    net.settle();
+    const late = joinedScript(a, 901);
+    try {
+      for (const copy of [a, b, late]) {
+        const initial = Y.encodeStateAsUpdate(copy.doc);
+        assert.deepEqual(createNativeHeading(copy, fresh, "NoTarget", "Stale"), { kind: "refused", reason: "missing" });
+        assert.deepEqual(Y.encodeStateAsUpdate(copy.doc), initial);
+      }
+    } finally { late.doc.destroy(); }
+  } finally { a.doc.destroy(); b.doc.destroy(); }
 });
