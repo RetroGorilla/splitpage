@@ -128,21 +128,29 @@ export const snapshotKey = (snapshot: Snapshot): string => `${snapshot.rank ?? "
 
 // why: a row is `id: narration / visual`, a heading `#id name`. Short forms: a bare id is a row whose narration is its
 // id in lower case and whose visual cell is empty; `#H` is a heading whose name is `h`
-const short = (text: string): string[] => text.split(", ").map(part => part.startsWith("#") ? `${part} ${part.slice(1).toLowerCase()}` : `${part}: ${part.toLowerCase()} / `);
+// why: `N=b` is a row N whose narration is `b`, for rows a split gave new narration
+const short = (text: string): string[] => text.split(", ").map(part => part.startsWith("#") ? `${part} ${part.slice(1).toLowerCase()}`
+  : part.includes("=") ? `${part.split("=")[0]}: ${part.split("=")[1]} / ` : `${part}: ${part.toLowerCase()} / `);
 const BASE_NAMES: Record<string, string> = { "#H": "mno", "#I": "stu" };
 const BASE_ROWS: Record<string, string> = { A: "A: abc / 1", B: "B: def / 2", C: "C: ghi / 3", D: "D: jkl / 4", E: "E: pqr / 5", F: "F: vwx / 6" };
 const full = (text: string): string[] => text.split(", ").map(part => part.startsWith("#") ? `${part} ${BASE_NAMES[part]}` : BASE_ROWS[part] ?? part);
 const RACE = { bob: short("#H, B, A") };
 const DRIFT = "beats B changed scene with one person working";
 const EMPTY_REDO = "redo popped an item but changed nothing stored";
-const LOST = ["beat B has no record", "beat B has no visual cell"];
-const lostAt = (at: number, extra: { at: number; problem: string }[] = []): Partial<Record<Storage, { at: number; problem: string }[]>> =>
-  Object.fromEntries((["A", "B", "C", "D", "E"] as const).map(option => [option, [...LOST.map(problem => ({ at, problem })), ...option === "E" ? [] : extra]]));
+const SPLIT_RANKLESS = "split-off N has no rank";
+const OPTION_LETTERS = ["A", "B", "C", "D", "E"] as const;
+type Listed = Partial<Record<Storage, { at: number; problem: string }[]>>;
+const lostOf = (id: string): string[] => [`beat ${id} has no record`, `beat ${id} has no visual cell`];
+const lostAt = (at: number, extra: { at: number; problem: string }[] = [], id = "B", extraIn: readonly Storage[] = ["A", "B", "C", "D"]): Listed =>
+  Object.fromEntries(OPTION_LETTERS.map(option => [option, [...lostOf(id).map(problem => ({ at, problem })), ...extraIn.includes(option) ? extra : []]]));
+const every = (at: number, problem: string): Listed => Object.fromEntries(OPTION_LETTERS.map(option => [option, [{ at, problem }]]));
 
-export interface Expected { rows: Record<string, string[]>[]; never?: Partial<Record<Storage, { at: number; problem: string }[]>>; seenLater?: Storage[] }
+// why: rows per part by the model's reading, or by option (`all`: every option); never, local and threw by part;
+// seenLater and moved: options whose press moves a later seen placement, or rows the pressed command did not place
+export interface Expected {
+  rows: Record<string, string[]>[]; never?: Listed; local?: Listed; threw?: Listed; seenLater?: Storage[]; moved?: Storage[]; blockedRedo?: Storage[];
+}
 
-// why: by history label: per part, the rows for each value the model can leave standing; `never` lists the results an
-// option shows, by part, and `seenLater` the options whose press moves a later placement the presser had seen
 export const EXPECTED: Record<string, Expected> = {
   "winner undoes, then the loser deletes A": {
     rows: [RACE, { none: short("#H, A, B"), start: short("B, #H, A"), alice: short("#H, A, B"), fixed: short("B, #H, A") },
@@ -179,13 +187,13 @@ export const EXPECTED: Record<string, Expected> = {
   },
   "an older redo of a heading move against a later move the presser had seen": {
     rows: [{ start: short("A, #H, #I") }, { alice: short("#H, A, #I") }, { alice: short("#H, A, #I"), bob: short("A, #I, #H") }],
-    never: { A: [{ at: 2, problem: EMPTY_REDO }], E: [{ at: 2, problem: EMPTY_REDO }] },
-    seenLater: ["B", "C"]
+    local: { A: [{ at: 2, problem: EMPTY_REDO }], E: [{ at: 2, problem: EMPTY_REDO }] },
+    seenLater: ["B", "C"], blockedRedo: ["A", "E"]
   },
   "three people: a redo and an undo of heading moves around a later move": {
     rows: [{ top: short("#H, A, #I"), carol: short("A, #I, #H"), start: short("A, #H, #I") }],
-    never: { A: [{ at: 0, problem: EMPTY_REDO }], E: [{ at: 0, problem: EMPTY_REDO }] },
-    seenLater: ["B", "C", "D"]
+    local: { A: [{ at: 0, problem: EMPTY_REDO }], E: [{ at: 0, problem: EMPTY_REDO }] },
+    seenLater: ["B", "C", "D"], blockedRedo: ["A", "E"]
   },
   "a row moved earlier, then two moves at once and the winner's undo": {
     rows: [{ earlier: short("A, C, D, B") }, { bob: short("B, A, C, D") },
@@ -202,5 +210,53 @@ export const EXPECTED: Record<string, Expected> = {
   "a new row inserted before a row that lost its record": {
     rows: [{ none: short("A, B"), fixed: short("A, B") }, { none: short("N, A, B"), fixed: short("A, N, B") }],
     never: lostAt(0)
+  },
+  "a rankless row split, a move into the gap, a heading above the split-off, the mover's undo": {
+    rows: [
+      { A: short("A, B, C, D"), B: short("A, B, C, D"), C: short("A, C, B, D"), D: short("A, C, B, D"), E: short("A, B, C, D") },
+      { A: short("A, B=, N=b, C, D"), B: short("A, B=, N=b, C, D"), C: short("A, C, B=, N=b, D"), D: short("A, C, B=, N=b, D"), E: short("A, B=, N=b, C, D") },
+      { A: short("A, B=, D, N=b, C"), B: short("A, B=, D, N=b, C"), C: short("A, C, B=, D, N=b"), D: short("A, C, B=, D, N=b"), E: short("A, B=, D, N=b, C") },
+      { A: short("A, B=, D, #H, N=b, C"), B: short("A, B=, D, #H, N=b, C"), C: short("A, C, B=, D, #H, N=b"), D: short("A, C, B=, D, #H, N=b"), E: short("A, B=, D, #H, N=b, C") },
+      { A: short("A, B=, #H, N=b, C, D"), B: short("A, B=, N=b, #H, C, D"), C: short("A, C, B=, N=b, D, #H"), D: short("A, C, B=, N=b, D, #H"), E: short("A, B=, N=b, #H, C, D") }
+    ],
+    local: { A: [{ at: 1, problem: SPLIT_RANKLESS }], E: [{ at: 1, problem: SPLIT_RANKLESS }] },
+    moved: ["B", "C", "D", "E"]
+  },
+  "a rankless row split, a move into the gap, another row moved into it, the mover's undo": {
+    rows: [
+      { A: short("A, B, C, D, X"), B: short("A, B, C, D, X"), C: short("A, C, B, D, X"), D: short("A, C, B, D, X"), E: short("A, B, C, D, X") },
+      { A: short("A, B=, N=b, C, D, X"), B: short("A, B=, N=b, C, D, X"), C: short("A, C, B=, N=b, D, X"), D: short("A, C, B=, N=b, D, X"), E: short("A, B=, N=b, C, D, X") },
+      { A: short("A, B=, D, N=b, C, X"), B: short("A, B=, D, N=b, C, X"), C: short("A, C, B=, D, N=b, X"), D: short("A, C, B=, D, N=b, X"), E: short("A, B=, D, N=b, C, X") },
+      { A: short("A, B=, D, X, N=b, C"), B: short("A, B=, D, X, N=b, C"), C: short("A, C, B=, D, X, N=b"), D: short("A, C, B=, D, X, N=b"), E: short("A, B=, D, X, N=b, C") },
+      { A: short("A, B=, X, N=b, C, D"), B: short("A, B=, N=b, X, C, D"), C: short("A, C, B=, N=b, X, D"), D: short("A, C, B=, N=b, X, D"), E: short("A, B=, N=b, X, C, D") }
+    ],
+    local: { A: [{ at: 1, problem: SPLIT_RANKLESS }], E: [{ at: 1, problem: SPLIT_RANKLESS }] },
+    moved: ["B", "C", "D", "E"]
+  },
+  "a healthy row moved to the top after another lost its record": {
+    rows: [{ all: short("A, B, C") }, { all: short("C, A, B") }],
+    never: lostAt(0), threw: every(1, "move: Missing record b:B")
+  },
+  "a heading created above a row that lost its record": {
+    rows: [{ all: short("A, B") }, { all: short("A, #H, B") }],
+    never: lostAt(0), threw: every(1, "heading: Missing record b:B")
+  },
+  "a document where one row's boundary has no fixed place: B rankless, C without a record, A deleted": {
+    rows: [
+      { all: short("B, #H, A, C") },
+      { A: short("#H, A, B, C"), B: short("B, #H, A, C"), C: short("#H, A, B, C"), D: short("#H, A, B, C"), E: short("B, #H, A, C") },
+      { A: short("#H, C, A, B"), B: short("B, #H, C, A"), C: short("#H, C, A, B"), D: short("#H, C, A, B"), E: short("#H, C, A, B") },
+      { A: short("B, #H, C"), B: short("B, #H, C"), C: short("#H, C, B"), D: short("#H, C, B"), E: short("B, #H, C") }
+    ],
+    never: lostAt(2, [{ at: 3, problem: DRIFT }], "C", ["A", "E"])
+  },
+  "history 1 on a document whose boundaries have no fixed place": {
+    rows: [{ all: short("#H, B, A") }, { A: short("#H, A, B"), B: short("B, #H, A"), C: short("#H, A, B"), D: short("#H, A, B"), E: short("#H, A, B") },
+      { A: short("B, #H"), B: short("B, #H"), C: short("#H, B"), D: short("#H, B"), E: short("B, #H") }],
+    never: { A: [{ at: 2, problem: DRIFT }], E: [{ at: 2, problem: DRIFT }] }
+  },
+  "a move, someone else's seen range move that carries the beat, the first person's undo": {
+    rows: [{ all: short("A, C, B, D") }, { all: short("A, D, C, B") }, { A: short("A, D, C, B"), B: short("A, B, D, C"), C: short("A, D, C, B"), D: short("A, D, C, B"), E: short("A, D, C, B") }],
+    seenLater: ["B"]
   }
 };

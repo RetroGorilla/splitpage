@@ -42,9 +42,14 @@ export function e15Checks(option: RankOption): StorageCheck {
       const was = before as Snap, problems: string[] = [];
       if (KEEPS_ORDER.has(cmd.op) && !equal(order(replica), was.order)) problems.push(`${cmd.op} moved rows: ${was.order.join(",")} became ${order(replica).join(",")}`);
       if (cmd.op === "undo" || cmd.op === "redo") return problems;
+      // why: the one intended exception: a new row made from a row with no rank (inserted before it, or split from it)
+      // has no rank either, so it holds no entry, as option A stores no value
+      const source = cmd.op === "insert" ? [cmd.id, cmd.before] : cmd.op === "split" ? [cmd.created, cmd.id] : null;
+      const rankless = source !== null && typeof replica.storedRank("b", source[1] ?? "") !== "string";
       for (const [key, now] of held(option, replica)) {
         if (equal(was.held.get(key), now)) continue;
         const live = liveCount(option, now);
+        if (live === 0 && rankless && key === `b:${source?.[0]}` && !was.held.has(key)) continue;
         if (live !== 1) problems.push(`rank of ${key} holds ${live} live entries after a rank write`);
       }
       return problems;
