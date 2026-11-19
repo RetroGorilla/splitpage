@@ -37,10 +37,11 @@ export function marksOfNames(names: readonly string[]): Marks {
   return marks as Marks;
 }
 
-export function readCell(delta: readonly ReadableItem[]): ModelChar[] {
+export function readCell(delta: readonly ReadableItem[], includeApplications = false): ModelChar[] {
   const result: ModelChar[] = [];
   for (const item of delta) {
-    const names = [...new Set(Object.entries(item.attributes ?? {}).filter(([, value]) => value === true).map(([key]) => visibleName(key)))].sort();
+    const keys = Object.entries(item.attributes ?? {}).filter(([, value]) => value === true).map(([key]) => visibleName(key));
+    const names = (includeApplications ? keys : [...new Set(keys)]).sort();
     if (typeof item.insert === "string") for (const ch of item.insert) result.push({ ch, names });
     else result.push({ ch: ATOM, names });
   }
