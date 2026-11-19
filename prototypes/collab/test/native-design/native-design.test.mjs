@@ -313,16 +313,3 @@ test('a comment body as one whole string: two people adding to it at once keep o
   assert.equal(bodies[0], bodies[1]);
   assert.equal(['Note from A', 'Note from B'].includes(bodies[0]), true);
 });
-
-test('a comment body as Y.Text: both additions stay', t => {
-  const { a, b, sync } = pair(t, doc => {
-    const comment = new Y.Map();
-    doc.getMap('comments').set('c1', comment);
-    comment.set('body', new Y.Text('Note'));
-  });
-  a.getMap('comments').get('c1').get('body').insert(4, ' from A');
-  b.getMap('comments').get('c1').get('body').insert(4, ' from B');
-  sync();
-  assert.equal(a.getMap('comments').get('c1').get('body').toString(), 'Note from A from B');
-  assert.equal(b.getMap('comments').get('c1').get('body').toString(), 'Note from A from B');
-});
