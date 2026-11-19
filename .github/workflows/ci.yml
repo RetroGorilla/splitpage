@@ -31,6 +31,8 @@ jobs:
       desktop: ${{ steps.classify.outputs.desktop }}
       collab: ${{ steps.classify.outputs.collab }}
       root_tests: ${{ steps.classify.outputs.root_tests }}
+      root_due: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || (steps.classify.outputs.root_tests == 'true' && steps.tested.outputs.tested != 'true') }}
+      old_adapter: ${{ steps.classify.outputs.old_adapter }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -39,6 +41,9 @@ jobs:
       - uses: actions/setup-node@v7
         with:
           node-version-file: .nvmrc
+
+      - name: Install the classifier's dependencies
+        run: npm ci --ignore-scripts
 
       - name: Classify the change
         id: classify
@@ -97,6 +102,9 @@ jobs:
       - name: Prototype shard command matches its test script
         if: needs.changes.outputs.collab == 'true'
         run: node tools/test-ci-collab-shards.mjs
+
+      - name: Root test partitions cover every test
+        run: node tools/test-ci-old-adapter-shards.mjs
 
       - name: Desktop browser scripts are generated from their checked sources
         if: needs.changes.outputs.root_tests == 'true'
@@ -187,9 +195,9 @@ jobs:
           retention-days: 30
 
   tests:
-    name: Tests (${{ matrix.shard }}/4)
+    name: Tests (${{ matrix.shard }}/8)
     needs: changes
-    if: needs.changes.outputs.root_tests == 'true' && needs.changes.outputs.tested != 'true'
+    if: needs.changes.outputs.root_due == 'true'
     runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 25
     env:
@@ -197,44 +205,40 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - uses: actions/checkout@v7
 
-      - uses: actions/setup-node@v7
+      - uses: ./.github/actions/root-test-setup
         with:
-          node-version-file: .nvmrc
-          cache: npm
-          cache-dependency-path: |
-            package-lock.json
-            desktop/package-lock.json
-
-      - name: Install tooling
-        run: npm ci && npm ci --prefix desktop
-
-      - name: Build index.html and stamp sw.js
-        run: node build.mjs
-
-      - name: sw.js is committed with the current VERSION stamp
-        run: git diff --exit-code -- sw.js
-
-      - name: Select persistent Chromium cache
-        run: |
-          test -n "$RUNNER_TOOL_CACHE"
-          echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TOOL_CACHE/splitpage-playwright/$PLAYWRIGHT_VERSION" >> "$GITHUB_ENV"
-
-      - name: Install Chromium
-        run: |
-          npx --yes playwright@${PLAYWRIGHT_VERSION} install ${{ runner.environment == 'github-hosted' && '--with-deps' || '' }} chromium
-          exe=$(find "$PLAYWRIGHT_BROWSERS_PATH" -maxdepth 3 -type f -path '*/chromium-*/*' -name chrome -print -quit)
-          if [ -z "$exe" ]; then
-            echo "::error::no Chromium under $PLAYWRIGHT_BROWSERS_PATH"
-            exit 1
-          fi
-          echo "SPLITPAGE_CHROME=$exe" >> "$GITHUB_ENV"
+          shard: ${{ matrix.shard }}/8
+          suite: always
 
       - name: Unit, desktop and tool test shard
-        run: npm run test:all -- --shard "${{ matrix.shard }}/4"
+        run: npm run test:all -- --shard "${{ matrix.shard }}/8" --suite=always
+
+  old-adapter-tests:
+    name: Old adapter tests (${{ matrix.shard }}/3)
+    needs: changes
+    if: needs.changes.outputs.old_adapter == 'true'
+    runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 25
+    env:
+      SPLITPAGE_CHROME_ARGS: --no-sandbox --disable-dev-shm-usage
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/root-test-setup
+        with:
+          shard: ${{ matrix.shard }}/3
+          suite: old-adapter
+
+      - name: Old adapter test shard
+        run: npm run test:all -- --shard "${{ matrix.shard }}/3" --suite=old-adapter
 
   collab-tests:
     name: Collaboration prototype tests (${{ matrix.shard }}/4)
@@ -267,46 +271,88 @@ jobs:
         working-directory: prototypes/collab
 
   gate:
-    needs: [changes, checks, tests, collab-tests, desktop-smoke]
+    needs: [changes, checks, tests, old-adapter-tests, collab-tests, desktop-smoke]
     if: always()
     runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 2
+    permissions:
+      actions: read
     steps:
       - name: Every required job passed, or the change was prose only
         run: |
-          echo "changes=$CHANGES code=$CODE root_tests=$ROOT_TESTS collab=$COLLAB tested=$TESTED desktop=$DESKTOP checks=$CHECKS tests=$TESTS collab_tests=$COLLAB_TESTS smoke=$SMOKE"
+          echo "changes=$CHANGES code=$CODE root_due=$ROOT_DUE old_adapter=$OLD_ADAPTER collab=$COLLAB tested=$TESTED desktop=$DESKTOP checks=$CHECKS tests=$TESTS old_adapter_tests=$OLD_ADAPTER_TESTS collab_tests=$COLLAB_TESTS smoke=$SMOKE"
           [ "$CHANGES" = success ] || exit 1
+          want_tests=skipped
+          if [ "$ROOT_DUE" = true ]; then want_tests=success; fi
+          [ "$TESTS" = "$want_tests" ] || exit 1
+          want_old=skipped
+          if [ "$OLD_ADAPTER" = true ]; then want_old=success; fi
+          [ "$OLD_ADAPTER_TESTS" = "$want_old" ] || exit 1
           if [ "$CODE" = true ] && [ "$TESTED" != true ]; then
-            want_tests=skipped
-            if [ "$ROOT_TESTS" = true ]; then want_tests=success; fi
             want_collab=skipped
             if [ "$COLLAB" = true ]; then want_collab=success; fi
             want_smoke=skipped
             if [ "$DESKTOP" = true ]; then want_smoke=success; fi
-            [ "$CHECKS" = success ] && [ "$TESTS" = "$want_tests" ] && [ "$COLLAB_TESTS" = "$want_collab" ] && [ "$SMOKE" = "$want_smoke" ]
+            [ "$CHECKS" = success ] && [ "$COLLAB_TESTS" = "$want_collab" ] && [ "$SMOKE" = "$want_smoke" ]
           else
-            [ "$CHECKS" = skipped ] && [ "$TESTS" = skipped ] && [ "$COLLAB_TESTS" = skipped ] && [ "$SMOKE" = skipped ]
+            [ "$CHECKS" = skipped ] && [ "$COLLAB_TESTS" = skipped ] && [ "$SMOKE" = skipped ]
           fi
         env:
           CHANGES: ${{ needs.changes.result }}
           CODE: ${{ needs.changes.outputs.code }}
-          ROOT_TESTS: ${{ needs.changes.outputs.root_tests }}
+          ROOT_DUE: ${{ needs.changes.outputs.root_due }}
+          OLD_ADAPTER: ${{ needs.changes.outputs.old_adapter }}
           COLLAB: ${{ needs.changes.outputs.collab }}
           TESTED: ${{ needs.changes.outputs.tested }}
           DESKTOP: ${{ needs.changes.outputs.desktop }}
           CHECKS: ${{ needs.checks.result }}
           TESTS: ${{ needs.tests.result }}
+          OLD_ADAPTER_TESTS: ${{ needs.old-adapter-tests.result }}
           COLLAB_TESTS: ${{ needs.collab-tests.result }}
           SMOKE: ${{ needs.desktop-smoke.result }}
 
+      - name: Every required matrix shard passed
+        if: needs.changes.outputs.root_due == 'true' || needs.changes.outputs.old_adapter == 'true' || (needs.changes.outputs.code == 'true' && needs.changes.outputs.tested != 'true' && needs.changes.outputs.collab == 'true')
+        run: |
+          jobs=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=all&per_page=100" --jq '.jobs[] | [.name, .run_attempt, .conclusion] | @tsv')
+          verify_shards() {
+            local label=$1 count=$2 shard name result
+            for ((shard = 1; shard <= count; shard++)); do
+              name="$label ($shard/$count)"
+              result=$(awk -F '\t' -v name="$name" '
+                $1 == name && $2 ~ /^[1-9][0-9]*$/ {
+                  attempt = $2 + 0
+                  if (attempt > latest) { latest = attempt; count = 0 }
+                  if (attempt == latest) { count++; conclusion = $3 }
+                }
+                END { if (count == 1) print conclusion; else if (count > 1) print "duplicate" }
+              ' <<< "$jobs")
+              if [ "$result" != success ]; then
+                echo "::error::$name must have exactly one successful job (found: ${result:-missing})"
+                return 1
+              fi
+            done
+          }
+          if [ "$ROOT_TESTS" = true ]; then verify_shards "Tests" "$ROOT_SHARDS"; fi
+          if [ "$OLD_ADAPTER" = true ]; then verify_shards "Old adapter tests" "$OLD_SHARDS"; fi
+          if [ "$COLLAB" = true ]; then verify_shards "Collaboration prototype tests" "$COLLAB_SHARDS"; fi
+        env:
+          GH_TOKEN: ${{ github.token }}
+          ROOT_TESTS: ${{ needs.changes.outputs.root_due }}
+          OLD_ADAPTER: ${{ needs.changes.outputs.old_adapter }}
+          COLLAB: ${{ needs.changes.outputs.code == 'true' && needs.changes.outputs.tested != 'true' && needs.changes.outputs.collab == 'true' }}
+          ROOT_SHARDS: '8'
+          OLD_SHARDS: '3'
+          COLLAB_SHARDS: '4'
+
       - name: Write the passed tree's marker
-        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.collab-tests.result == 'success' || needs.collab-tests.result == 'skipped') && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && needs.changes.outputs.tree != ''
+        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.old-adapter-tests.result == 'success' || needs.old-adapter-tests.result == 'skipped') && (needs.collab-tests.result == 'success' || needs.collab-tests.result == 'skipped') && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && needs.changes.outputs.tree != ''
         run: echo "$TREE" > "$RUNNER_TEMP/passed-tree.txt"
         env:
           TREE: ${{ needs.changes.outputs.tree }}
 
       - name: Upload the passed tree's marker
-        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.collab-tests.result == 'success' || needs.collab-tests.result == 'skipped') && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && needs.changes.outputs.tree != ''
+        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.old-adapter-tests.result == 'success' || needs.old-adapter-tests.result == 'skipped') && (needs.collab-tests.result == 'success' || needs.collab-tests.result == 'skipped') && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && needs.changes.outputs.tree != ''
         uses: actions/upload-artifact@v7
         with:
           name: ci-passed-tree-${{ needs.changes.outputs.tree }}

@@ -1,9 +1,10 @@
 import { execFileSync } from "node:child_process";
-import { appendFileSync } from "node:fs";
-import { dirname } from "node:path";
+import { appendFileSync, existsSync } from "node:fs";
+import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isMain } from "./main-module.mjs";
 import { COLLAB_ORACLE_COPIES } from "./collab-oracle-copies.mjs";
+import { nativePath, oldAdapterFiles } from "./old-adapter-tests.mjs";
 
 const REPO = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -42,6 +43,25 @@ export function needsRootTests(files) {
   return files.some((f) => COPIED_PROTOTYPE_FILES.has(f) || (!f.startsWith("prototypes/collab/") && needsChecks([f])));
 }
 
+const OLD_ADAPTER_INPUTS = [
+  /^(?:src\/(?:core|application|adapters\/collab)|shared|tests\/(?:collab|adapters\/collab))\//,
+  /^src\/bootstrap\/wiring\/(?:ports\/)?shared-/,
+  /^\.github\/(?:actions|workflows)\//,
+  /^tools\/(?:ci-|test-ci-|run-tests\.mjs|test-weights\.json|timing-reporter\.mjs|dep-report\.mjs|source-scan\.mjs|main-module\.mjs|old-adapter-tests\.mjs|collab-oracle-copies\.mjs)/,
+  /^(?:desktop\/)?package(?:-lock)?\.json$/,
+  /^(?:\.nvmrc|build\.mjs)$/
+];
+
+export function needsOldAdapterTests(files, repo = REPO, inventory = null) {
+  if (files === null || files.length === 0) return true;
+  const candidates = files.filter((path) => !nativePath(path) && needsChecks([path]));
+  if (candidates.some((path) => COPIED_PROTOTYPE_FILES.has(path) || OLD_ADAPTER_INPUTS.some((re) => re.test(path)))) return true;
+  if (candidates.length === 0) return false;
+  const { dependencies, wiringImporters } = inventory ?? oldAdapterFiles(repo);
+  return candidates.some((path) => dependencies.has(path) || wiringImporters.includes(path) ||
+    /^(?:tests|src\/test|src\/bootstrap\/wiring)\//.test(path) && !existsSync(join(repo, path)));
+}
+
 export function needsAppChecks(files) {
   if (files === null || files.length === 0) return true;
   return files.some((f) => needsChecks([f]) && !NON_APP.some((re) => re.test(f)));
@@ -70,6 +90,8 @@ if (isMain(import.meta.url)) {
   const desktop = needsDesktopChecks(files);
   const collab = needsCollabChecks(files);
   const rootTests = needsRootTests(files);
+  const pushToMain = process.env.GITHUB_EVENT_NAME === "push" && process.env.GITHUB_REF === "refs/heads/main";
+  const oldAdapter = pushToMain || needsOldAdapterTests(files);
   console.log(files === null ? "ci-changes: no usable diff, running every check" : `ci-changes: ${files.length} files changed`);
   for (const f of files ?? []) console.log(`  ${f}`);
   console.log(`ci-changes: code=${code}`);
@@ -77,5 +99,6 @@ if (isMain(import.meta.url)) {
   console.log(`ci-changes: desktop=${desktop}`);
   console.log(`ci-changes: collab=${collab}`);
   console.log(`ci-changes: root_tests=${rootTests}`);
-  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `code=${code}\napp=${app}\ndesktop=${desktop}\ncollab=${collab}\nroot_tests=${rootTests}\n`);
+  console.log(`ci-changes: old_adapter=${oldAdapter}`);
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `code=${code}\napp=${app}\ndesktop=${desktop}\ncollab=${collab}\nroot_tests=${rootTests}\nold_adapter=${oldAdapter}\n`);
 }

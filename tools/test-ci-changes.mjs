@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, renameSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { needsChecks, needsAppChecks, needsDesktopChecks, needsCollabChecks, needsRootTests, changedFiles } from "./ci-changes.mjs";
+import { needsChecks, needsAppChecks, needsDesktopChecks, needsCollabChecks, needsRootTests, needsOldAdapterTests, changedFiles } from "./ci-changes.mjs";
 import { isScanned, canScan } from "./comment-gate.mjs";
 import { listRepoFiles } from "./source-scan.mjs";
 
@@ -80,6 +80,27 @@ for (const path of ["src/bootstrap/main.ts", "tools/dep-report.mjs", ".github/wo
 for (const files of [null, [], [".github/workflows/ci.yml"]]) eq("unknown diffs and workflow changes run prototype tests", needsCollabChecks(files), true);
 eq("app-only changes do not run prototype tests", needsCollabChecks(["src/bootstrap/main.ts"]), false);
 eq("a mixed change still runs every affected check", [needsChecks(["prototypes/collab/src/probe.ts", "src/bootstrap/main.ts"]), needsCollabChecks(["prototypes/collab/src/probe.ts", "src/bootstrap/main.ts"]), needsDesktopChecks(["prototypes/collab/src/probe.ts", "src/bootstrap/main.ts"])], [true, true, true]);
+
+eq("native adapter changes run the always-required app and root coverage only", [
+  needsAppChecks(["src/adapters/collab/native/document.ts", "tests/adapters/collab/native/document.test.ts"]),
+  needsRootTests(["src/adapters/collab/native/document.ts", "tests/adapters/collab/native/document.test.ts"]),
+  needsOldAdapterTests(["src/adapters/collab/native/document.ts", "tests/adapters/collab/native/document.test.ts"])
+], [true, true, false]);
+for (const files of [
+  null, [], ["src/adapters/collab/document.ts"], ["src/core/text/runs.ts"], ["shared/text.ts"],
+  ["src/application/session/shared-session.ts"], ["src/bootstrap/wiring/ports/shared-buffer.ts"],
+  ["tests/adapters/collab/guarded-subscriptions.test.ts"], ["tests/collab/undo/model.ts"],
+  ["tools/run-tests.mjs"], [".github/workflows/ci.yml"], [".github/actions/root-test-setup/action.yml"],
+  ["package.json"], ["package-lock.json"], ["prototypes/collab/test/oracles.ts"],
+  ["tests/features/writer/removed-old-test.test.ts"]
+]) eq(`old-adapter checks run for ${JSON.stringify(files)}`, needsOldAdapterTests(files), true);
+eq("real old-adapter support triggers the filter", needsOldAdapterTests(["tests/core/migrate-ports.ts"]), true);
+eq("shipping feature changes stay outside the old-adapter filter", needsOldAdapterTests(["src/features/editing/cell-buffer.ts"]), false);
+eq("prose alone skips old-adapter checks on a PR", needsOldAdapterTests(["README.md"]), false);
+eq("prose inside the old test folder skips both root matrices", [
+  needsRootTests(["tests/collab/mutants.md"]), needsOldAdapterTests(["tests/collab/mutants.md"])
+], [false, false]);
+eq("an unrelated feature test stays outside the old-adapter filter", needsOldAdapterTests(["tests/features/writer/idle-word-count.test.ts"]), false);
 
 const repo = mkdtempSync(join(tmpdir(), "splitpage-ci-changes-"));
 const git = (...args) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: repo, encoding: "utf8" }).stdout.trim();
