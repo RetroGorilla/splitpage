@@ -534,9 +534,8 @@ In all of them, no option lost narration, showed a row twice, left copies disagr
 **Where rule (g) shows the narration.** As if the marker were absent: into the row above; at a segment's start,
 into that segment's first beat, else the beat before, else the next; after a heading, into the beat after it, the
 name unchanged; with no beat, the narration-only row. **The seam:** B shows its own text, then the hidden text.
-Typing at the seam (offset 0 when B has none of its own) lands before the hidden marker and stays in B on a redo
-(outside review; to be pinned by a test); typing inside or after the hidden text moves into N on a redo, and
-cutting B takes it (E17). **Refreshing** keeps the parsed narration of unchanged segments and recomputes which rows
+Typing at the seam (the offset where B's own text ends; 0 when B has none) lands before the hidden marker and stays in B on a redo;
+typing inside or after the hidden text moves into N on a redo, and cutting B takes it (E17, pinned by the test "where the seam sits" in `prototypes/collab/test/native-row-record/review.test.ts`). **Refreshing** keeps the parsed narration of unchanged segments and recomputes which rows
 own the affected text. The marker's own segment alone is too narrow: a hidden marker at a segment's start moves its
 narration to a beat in another segment.
 

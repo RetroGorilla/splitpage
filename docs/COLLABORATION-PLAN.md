@@ -4,7 +4,39 @@ This is the plan of record for collaboration, dated 2026-11-09 and revised the s
 
 It supersedes two earlier drafts. The 2026-11-06 plan chose peer-to-peer Yjs over `y-webrtc` with only a signalling server. That was dropped because `y-webrtc` has had no release since 2023, Chromium drops data-channel messages over 256 KiB so large scripts cannot sync through it unmodified, and a guest sees nothing when every other participant is offline. The trade is simpler hosting for availability, and the server now stores readable script content. An earlier 2026-11-09 draft of this server-based plan fixed one narration schema in advance; this version makes the schema a feasibility outcome instead.
 
+## Update 2026-11-19: the shared-document layer is rebuilt on standard Yjs
+
+The shared-document layer is being rebuilt as set out in [native-adapter-design.md](collaboration/native-adapter-design.md) (round 8). The owner approved building it on 2026-11-19. It proceeds slice by slice, in the eight slices of that note's section 11, one pull request each.
+
+Where this plan and the note disagree about the shared document, its storage shape, undo, removal, moves, the offline notice or the build order, the note wins. The rest of this plan stands: the relay on the owner's own server, accounts and invitations, and anything the note leaves out of scope, such as pictures and screen design.
+
+Each superseded place below also carries a one-line pointer under its heading.
+
+| Plan location | Note decision | What the first version does instead |
+| --- | --- | --- |
+| Section 1, *Server storage* | 19 | Stock snapshot storage, rewritten 2 to 10 s after an edit. No update journal yet |
+| Section 1, *Narration schema* | 1 | Standard Yjs: beats share a segment's text, cut by boundary markers. Candidates A and B are not used |
+| Section 2, Required experience, item 3 | 19 | "Durable on the server" means a stored snapshot. A server stop can lose the last seconds |
+| Section 2, Required experience, reordering paragraph | 9, 15 | Moves are in. Two same-moment moves of one row can leave it without a rank |
+| Section 4, *Undo and rendering* | 8 | Y.UndoManager with its default delete filter. Word-based grouping. No 200-entry cap. Accepted losses: note section 5 |
+| Section 5, *Candidate representations* | 1 | Not used as written. Each beat has a record and a visual cell; a join sets a flag |
+| Section 5, *Schema requirements*, status and monotonic values | 15 | Plain values. Of two writes at once Yjs keeps one, and the winner's undo can leave it empty |
+| Section 5, *Schema requirements*, comments and replies | 10 | Each body is one whole value. Only its author edits it; anyone may resolve or remove |
+| Section 5, *Schema decision gate* | 1, 15 | The owner chose the schema. Its accepted losses are in note section 5 and appendix M |
+| Section 6, *Structural conflicts and recovery* | 4 | A removed row keeps its record and visual cell, hidden. Edits to a removed row come back only through undo. The recovery list skips removed rows |
+| Section 8, *Server storage* | 19 | Snapshot storage, as above |
+| Section 8, *Durability receipts* | 19 | Not in the first version. Slice 7's server-stop tests decide whether they come first |
+| Section 8, *User-visible status*, "Your changes saved to server" | 19 | Not shown. The first version has no durability receipt |
+| Section 10, *Backups and restore* | 2 | Not designed yet. Proposed with slice 7 |
+| Section 11, *Implementation stages* | Note section 11 | The build order is the note's eight slices |
+| Section 13, *Acceptance evidence* | 11, 19; note appendix O | Slice gates replace the feasibility traces. The 2 MiB fixture gives way to the 15 MB limit. Receipt traces wait for decision 19 |
+| Section 14, receipt invariants | 19 | Written with receipts, not now |
+
+Decision 19 in short: the first version uses stock snapshot storage, a departure from the plan's update journal and durable receipts. Slice 7's server-stop tests decide whether those come before others use the layer. Until they do, the first version makes no receipt-based "saved to server" claim.
+
 ## 1 Purpose and decisions
+
+> Superseded in this table on 2026-11-19: *Server storage* (decision 19) and *Narration schema* (decision 1). See the update above.
 
 Build collaboration for a trusted group of two to six people. A participant can open a shared script when nobody else is online, edit with others, keep working through a connection outage, and export an independent file. Existing standalone editing and the `.splitpage` format remain supported.
 
@@ -39,6 +71,8 @@ Only the deployment owner can create instances, issue or revoke invitations, and
 Each invitation is a separately revocable capability, normally labeled for its intended recipient. Forwarding a link also forwards its access. Leaving on one device removes that device's membership; it does not revoke a copied invitation elsewhere.
 
 ### Required experience
+
+> Superseded on 2026-11-19: item 3 (decision 19) and the reordering paragraph below (decisions 9 and 15). See the update above.
 
 1. The owner opens a standalone script and chooses Collaborate.
 2. Splitpage prepares an instance while preserving the original script and edits made during preparation.
@@ -157,6 +191,8 @@ Capture selection anchors against the matching editor version before projecting 
 
 ### Undo and rendering
 
+> Superseded on 2026-11-19 in part: one-second typing groups and the 200-entry limit (decision 8). Accepted losses: note section 5.
+
 Shared sessions use selective undo scoped to their local action origins. Standalone sessions retain the existing undo owner. Preserve current typing groups and compound-action boundaries; remote updates, hydration, projection and derived bookkeeping do not enter local undo. Undo may reset on restart in v1.
 
 Undo of joins, splits and deletions must preserve concurrent edits and avoid duplicate restored content. Cursor restoration is part of the gate. Comment/reply draft editors retain their existing independent undo behavior.
@@ -171,6 +207,8 @@ Today every commit runs three steps that write into the document: attribution st
 
 ### Candidate representations
 
+> Superseded on 2026-11-19: Candidates A and B, and the join paragraph below (decision 1; note section 2).
+
 Prototype these bounded alternatives; do not start production integration with an assumed winner.
 
 **Candidate A: one document-wide narration and heading sequence.** Stable structural atoms identify beats and scene boundaries, while text identity survives ordinary boundary changes. Investigate representing heading text in that sequence so promoting narration to a heading or removing a heading does not require a silent text copy. Explicit reordering remains a separate problem. Measure projection and update cost on long scripts.
@@ -182,6 +220,8 @@ One independent `Y.Text` per scene is not sufficient by itself: creating or remo
 For either candidate, specify how visual text and other beat data survive a join. Copying the current visual into the surviving beat is insufficient while another replica can still edit the original. Evaluate retained visual components with an explicit join relationship, or another mechanism that passes the same traces. Do not describe narration-only success as a complete join solution.
 
 ### Schema requirements
+
+> Superseded on 2026-11-19 in part: the status, comment and reply rows (decisions 15 and 10).
 
 Every field has one authoritative representation. Boundary atoms carry stable identity; mutable fields need a declared update policy. Do not independently store the same status, paragraph flag or membership in an atom and a map. Metadata changes must not accidentally replace structural identity.
 
@@ -208,9 +248,13 @@ Two locally valid operations may merge into a domain-limit violation. Define det
 
 ### Schema decision gate
 
+> Superseded on 2026-11-19: the owner chose the schema (decisions 1 and 15). Its accepted losses are in note section 5.
+
 Select a production schema only after the mandatory traces in section 13 pass, including scene changes, visual joins, buffered input, recovery and undo. Record rejected alternatives, supported APIs, growth behavior and remaining optional command restrictions. If neither candidate passes, revise the representation or product scope before production work. Do not weaken required writing behavior to declare success.
 
 ## 6 Structural conflicts and recovery
+
+> Superseded on 2026-11-19 in part: removed rows keep a hidden record and cell (decision 4). See note sections 5 and 7 and appendix I.
 
 Each structural operation needs enough retained identity to explain its result after delayed, reordered and duplicated updates. A removed beat's metadata alone does not retain narration that lives elsewhere. A snapshot at deletion alone does not identify later concurrent edits.
 
@@ -272,6 +316,8 @@ Test quota exhaustion, interrupted writes, compaction, the second-tab refusal, r
 
 ### Server storage
 
+> Superseded on 2026-11-19: stock snapshot storage in the first version (decision 19).
+
 Use one server process with one writable SQLite database on a local persistent filesystem. The first persistence design journals accepted binary Yjs updates in sequence; periodic binary checkpoints bound replay cost. Persist capability metadata, instance lifecycle state and blob membership alongside it. Node 24 ships a built-in SQLite module with a backup function. Evaluate it before adding a native add-on, and check its stability label first.
 
 Serialize admission, application and persistence bookkeeping for each instance. Retain all accepted state necessary for replay, including deletion information and any allowed unresolved dependencies. Checkpoint compaction may remove journal entries only after the checkpoint that covers them is committed and verified. Never rebuild an existing instance from its plain projection during restart or compaction.
@@ -279,6 +325,8 @@ Serialize admission, application and persistence bookkeeping for each instance. 
 Configure and verify SQLite durability explicitly. WAL with `synchronous=FULL` is the initial choice, subject to filesystem and deployment validation. Read the journal mode and synchronous setting back on every writer connection before accepting writes, and fail writable startup on a mismatch. Blob finalization must meet the corresponding filesystem durability contract. A process-kill test does not substitute for reasoning about host crash or power loss, and no physical power-loss experiment is planned: the evidence is the configuration check, the process-crash, write-failure, checkpoint and blob-ordering tests, and the documented backup loss window. Physical destruction of the volume remains a backup-recovery event.
 
 ### Durability receipts
+
+> Superseded on 2026-11-19: not in the first version. Slice 7's server-stop tests decide whether they come first (decision 19).
 
 Use the provider's supported ordered message path. Do not introduce a second document synchronization protocol.
 
@@ -311,6 +359,8 @@ Two more facts from the same source apply to both designs. An error thrown by th
 Handle normal container termination and configured stop signals, drain pending work within a documented grace period, and report failure. Graceful shutdown is not part of the guarantee for updates already acknowledged as durable.
 
 ### User-visible status
+
+> Superseded on 2026-11-19: the *Your changes saved to server* row is not shown in the first version (decision 19).
 
 Track local document persistence, local asset availability, outbound synchronization, server receipts and connection state separately. A newer local edit invalidates the saved status for the previous generation.
 
@@ -401,6 +451,8 @@ Use an always-running instance for the limited release. Home power and internet 
 
 ### Backups and restore
 
+> Superseded on 2026-11-19 in timing: backups are not designed yet and are proposed with slice 7 (decision 2).
+
 Back up the database consistently with its blob manifest, instance metadata and access records. Use a documented database backup mechanism, not a casual copy of a live SQLite file. Verify that every referenced blob exists in the backup. Keep at least one backup outside the primary machine's failure domain. A second share on the same machine is not sufficient for that requirement.
 
 Start with daily backups and document the resulting maximum backup-age loss window. Monitor backup failures. Keep the management secret and any backup-encryption keys in separately recoverable secret storage.
@@ -416,6 +468,8 @@ Treat migration as a controlled cutover: stop new writes, drain and verify durab
 Keep the public hostname stable where possible. If it changes, define credential and local-membership migration instead of assuming origin-scoped storage follows it. A future Fly.io deployment needs its own volume, shutdown, network, cost and smoke verification. Auto-stop follows demonstrated idle-connection and reconnect behavior; it is not required for v1.
 
 ## 11 Implementation stages
+
+> Superseded on 2026-11-19: the build order is the note's eight slices (note section 11).
 
 | Stage | Deliverable | Exit condition |
 | --- | --- | --- |
@@ -448,6 +502,8 @@ Stage 0 produces the following concrete artifacts as implementation evidence, wi
 Run `node tools/code-map.mjs` to identify feature files, wiring and tests. Use Node 24.22.1 and `npm ci` for implementation and test work. Reconcile the baseline with current `main` before each stage.
 
 ## 13 Acceptance evidence
+
+> Superseded on 2026-11-19 in part: slice gates and accepted losses replace these traces (note section 11 and appendix O; decisions 11 and 19).
 
 For each concurrency trace, write the expected visible script, recovery contents and undo outcome before implementation. Run updates in different orders with duplicates and interruptions. Eventual equality alone is insufficient: equally wrong replicas fail.
 
@@ -509,6 +565,8 @@ Add collaboration unit and service contract tests to required CI, and a bounded 
 While working, run focused tests and the relevant type, dependency and comment gates. Before pushing, run `npm run verify` once. Select browser and desktop suites under [testing.md](architecture/testing.md) and the [browser harness skill](../.claude/skills/run-splitpage-app/SKILL.md). Typing, editing and undo changes require the comparison in [performance-record.md](architecture/performance-record.md). Follow the review tier for every changed responsibility; persistence and recovery require the full review process. Add the shared replica, synchronization and server storage to the Full tier in [review.md](architecture/review.md) before Stage 2 code is reviewed.
 
 ## 14 Documentation and decisions before release
+
+> Superseded on 2026-11-19 in part: the receipt invariants wait for decision 19.
 
 Update the document model, session, saving, dependencies, glossary, invariants and roadmap to reflect the chosen implementation. Record the schema and provider decision with evidence. Follow repository policy for user-help and release-note changes.
 
