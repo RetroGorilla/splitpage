@@ -13,8 +13,11 @@ import { letterItems, perform } from "../native-chosen/play.ts";
 import type { Cmd, Step } from "../native-chosen/play.ts";
 import { need } from "../native-delete/model.ts";
 
-export function openCopy(bytes: Uint8Array, client: number, keep: boolean, rules: NativeRules = ALL_RULES): ChosenReplica {
-  const replica = keep ? new KeptReplica(client, rules) : new ChosenReplica(client, rules, "cells");
+// why: E17 replays the same sets with other kept replicas; `unread` lists boundaries that variant reads as no row
+export interface KeptVariant { make: (client: number, rules: NativeRules) => ChosenReplica; unread: (replica: ChosenReplica) => string[] }
+
+export function openCopy(bytes: Uint8Array, client: number, keep: boolean, rules: NativeRules = ALL_RULES, variant?: KeptVariant): ChosenReplica {
+  const replica = variant ? variant.make(client, rules) : keep ? new KeptReplica(client, rules) : new ChosenReplica(client, rules, "cells");
   Y.applyUpdate(replica.doc, bytes, "remote");
   replica.changes();
   return replica;
@@ -119,7 +122,7 @@ function surroundings(replica: ChosenReplica, before: Map<string, string | null>
 }
 
 export function replay(spec: Spec, steps: readonly KeptStep[], writers: number, keep: boolean, mode: Mode, number: number,
-  rules: NativeRules = ALL_RULES, expected?: KeptReplayChecks): ReplayResult {
+  rules: NativeRules = ALL_RULES, expected?: KeptReplayChecks, variant?: KeptVariant): ReplayResult {
   const initial = seed(spec, ALL_RULES, "cells"), updates: Uint8Array[] = [];
   const result: ReplayResult = {
     problems: [], count: 0, rankUse: false, missingRank: false, lines: [], state: null, orphans: [], doubled: [], stale: [], rankAt: [],
@@ -128,7 +131,7 @@ export function replay(spec: Spec, steps: readonly KeptStep[], writers: number, 
   const stock = narrationStock(spec, steps), repeated = new Set<string>();
   const owned: Peer[] = [];
   const load = (bytes: Uint8Array, client: number, packets: Iterable<number> = []): Peer => {
-    const peer = { replica: openCopy(bytes, client, keep, rules), packets: new Set(packets) };
+    const peer = { replica: openCopy(bytes, client, keep, rules, variant), packets: new Set(packets) };
     owned.push(peer);
     peer.replica.doc.on("update", (update: Uint8Array, origin: unknown) => {
       if (origin !== "remote") peer.packets.add(updates.push(update) - 1);
@@ -146,6 +149,7 @@ export function replay(spec: Spec, steps: readonly KeptStep[], writers: number, 
     result.problems.push(...neverAcceptable(reach).map(message => `${stage}: ${message}`));
     const { ids: live, letters } = tape(replica);
     for (const [unit, count] of letters) if (count > (stock.get(unit) ?? 0)) repeated.add(unit);
+    for (const id of variant?.unread(replica) ?? []) live.delete(id);
     const members = replica.rows().flatMap(row => row.members).filter(id => id !== STRAY_ROW);
     if (!equal(new Set(members), live) || members.length !== live.size) result.problems.push(`${stage}: boundary and row membership differ`);
     const missing = [...live].filter(id => typeof replica.beats.get(id)?.get("e10Rank") !== "string");
