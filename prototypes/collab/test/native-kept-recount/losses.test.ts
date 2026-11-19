@@ -1,10 +1,10 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { KeptReplica } from "../../src/native-kept/replica.ts";
-import { crossedEdits, lossKinds, readCrossings } from "../../src/native-kept-recount/losses.ts";
+import { crossedEdits, fieldLoss, lossKinds, readCrossings } from "../../src/native-kept-recount/losses.ts";
 import { MODES } from "../native-chosen/engine.ts";
 import { GENERATED_SPEC, generateHistory } from "../native-chosen/generate.ts";
-import { perform, play, rowOf, shown } from "../native-chosen/play.ts";
+import { keysIn, perform, play, rowOf, shown } from "../native-chosen/play.ts";
 import { justTwo, split, remove, act, setField, undo } from "../native-rank-undo/histories.ts";
 import { missingContainers } from "./reachability.ts";
 
@@ -35,19 +35,25 @@ test("E16 generated E11 histories and forward accepted-loss counts", t => {
             const view = shown(replica), rows = [...view.rows.keys()];
             if (cmd.op === "format" && rowOf(view, cmd.id) === undefined && replica.beats.has(cmd.id)) {
               const before = replica.encode();
+              assert.throws(() => keysIn(replica, cmd.id, cmd.field), /Missing beat C/);
               perform(replica, cmd);
               assert.deepEqual(replica.encode(), before);
               totals.stale.add(`${label} step ${step} format`);
               return true;
             }
             if (cmd.op === "join" && rows.indexOf(cmd.id) <= 0) {
+              const before = replica.encode();
+              assert.throws(() => perform(replica, cmd), /Nothing above C/);
+              assert.deepEqual(replica.encode(), before);
               totals.stale.add(`${label} step ${step} join`);
               return true;
             }
             if (cmd.op === "move" && cmd.drop.unit !== "scene"
               && [cmd.drop.first, cmd.drop.last, cmd.drop.target].some(id => typeof id === "string" && !rows.includes(id))) {
               totals.stale.add(`${label} step ${step} move`);
+              const before = replica.encode();
               assert.equal(replica.drop(cmd.drop), false);
+              assert.deepEqual(replica.encode(), before);
               return true;
             }
             return false;
@@ -68,7 +74,7 @@ test("E16 generated E11 histories and forward accepted-loss counts", t => {
             }
           } } : {})
         });
-        const problem = result.never.find(message => !/changed scene|no visual cell|no record/.test(message));
+        const problem = result.never[0];
         if (problem && !totals.problems.has(label)) totals.problems.set(label, `${mode}: ${problem}`);
         if (twins) continue;
         if (at === 0) {
@@ -99,11 +105,29 @@ test("E16 generated E11 histories and forward accepted-loss counts", t => {
   const [built, kept] = results;
   assert.deepEqual(built?.counts, [131, 106, 3, 1, 1, 3, 3]);
   assert.deepEqual(kept?.counts, [1, 0, 3, 1, 1, 3, 3]);
+  assert.deepEqual([...(kept?.stale ?? [])], [
+    "mixed 186 step 19 move", "mixed 186 step 28 join", "mixed 513 step 22 format", "mixed 513 step 32 join",
+    "twin 186 step 19 move", "twin 186 step 28 join"
+  ]);
   assert.deepEqual([...(kept?.fieldMisses ?? [])], ["497 step 29 N05 record false"]);
   assert.deepEqual(Object.fromEntries(kept?.crossings ?? []), {
     "field/removed/matches": 120, "visual/removed/matches": 103, "field/shown/matches": 6,
     "visual/shown/matches": 8, "field/removed/missing": 1
   });
+});
+
+test("E16 kept scoring rejects the deleting replica on the first 80 histories", () => {
+  const totals = [false, true].map(() => ({ flagged: 0, fieldLosses: 0 }));
+  for (let seed = 1; seed <= 80; seed++) {
+    const { steps } = generateHistory(seed, 40, false, "cells");
+    for (const [index, total] of totals.entries()) {
+      const result = play({ spec: GENERATED_SPEC(), steps, writers: 3, mode: "forward",
+        seed: seed * 7, names: "cells", keepCutVisuals: index === 1 });
+      total.flagged += Number(result.never.length + result.local.length > 0);
+      total.fieldLosses += result.kinds[fieldLoss] ?? 0;
+    }
+  }
+  assert.deepEqual(totals, [{ flagged: 0, fieldLosses: 12 }, { flagged: 63, fieldLosses: 12 }]);
 });
 
 test("E16 crossing count detects a muted visual command and a falsified reading", () => {
@@ -124,7 +148,7 @@ test("E16 crossing count detects a muted visual command and a falsified reading"
   }
 });
 
-test("E16 a split muting control suppresses the creation-undo crossing at its source", () => {
+test("E16 the split command check detects a muted split", () => {
   const spec = justTwo(), steps = [split(0, "B", 0, "N")];
   const actual = play({ spec, steps, writers: 2, mode: "forward", seed: 1, names: "cells", make: makeKept });
   const muted = play({ spec, steps, writers: 2, mode: "forward", seed: 1, names: "cells", make: makeKept, mute: { step: 0, call: 0 } });

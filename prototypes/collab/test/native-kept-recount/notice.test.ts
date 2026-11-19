@@ -66,6 +66,7 @@ function run(history: NoticeHistory, kept: boolean, pureStorage: boolean, totals
   const ledger = new Ledger(copies.length), outcomes = new Set<string>();
   const touched = copies.map(() => new Map<string, Set<LossKind>>());
   const commands: Extract<Step, { person: number }>[] = [];
+  const undoneCreations = new Set<string>();
   let bases = copies.map(readNotice);
   const check = (copy: MoveReplica) => {
     if (kept) assert.deepEqual(missingContainers(copy), [], history.name);
@@ -87,8 +88,13 @@ function run(history: NoticeHistory, kept: boolean, pureStorage: boolean, totals
           ledger.write(step.person, step.effect);
           commands.push(step);
           const copy = need(copies[step.person], "writer");
+          const beforeUndo = kept && step.command.op === "undo" ? [...copy.beats.keys()] : [];
           if (copy instanceof KeptReplica) writeKept(copy, step.command);
           else write(copy, step.command);
+          for (const id of beforeUndo) if (!copy.beats.has(id)) {
+            assert.ok(commands.some(({ person, effect }) => person === step.person && effect.action === "create" && effect.id === id));
+            undoneCreations.add(id);
+          }
           check(copy);
           const { effect } = step;
           if (effect.action === "edit") {
@@ -110,6 +116,7 @@ function run(history: NoticeHistory, kept: boolean, pureStorage: boolean, totals
       try {
         for (const from of order) for (const to of order) if (from !== to) send(from, to);
       } finally { stop.forEach(close => close()); }
+      if (kept) assert.ok(mapEvents.every(ids => [...ids].every(id => undoneCreations.has(id))), history.name);
       const merged = kept ? readNotice(need(copies[0], "first copy")) : assertConverged(copies);
       if (kept) {
         const first = need(copies[0], "first copy");
@@ -161,6 +168,8 @@ test("E16 replays E12's notice histories", t => {
     [[31, 0, 9, 31, 0, 10, 18, 0, 20], [84, 32, 8, 78, 23, 8, 50, 26, 36], [84, 32, 8, 78, 23, 8, 63, 26, 36]],
     [[31, 3, 9, 31, 3, 10, 18, 3, 20], [84, 50, 8, 78, 42, 8, 50, 40, 36], [84, 50, 8, 78, 42, 8, 63, 46, 36]]
   ];
+  const onlineHits = [[22, 32, 46], [22, 32, 46], [19, 15, 22]];
+  const mapBanners = [[18, 50, 63], [2, 5, 5], [2, 5, 5]];
   let variant = 0;
   for (const [kept, storage] of [[false, false], [true, false], [true, true]] as const) {
     for (const [group, histories] of groups.entries()) {
@@ -177,6 +186,9 @@ test("E16 replays E12's notice histories", t => {
         Object.entries(totals).filter(([key]) => key.startsWith(side + "/miss/")).reduce((sum, [, n]) => sum + n, 0)
       ]);
       assert.deepEqual(actual, expected[variant]?.[group]);
+      const hits = Object.entries(totals).filter(([key]) => key.startsWith("online/hit/")).reduce((sum, [, n]) => sum + n, 0);
+      assert.equal(hits, onlineHits[variant]?.[group]);
+      assert.equal(totals["map/banner"] ?? 0, mapBanners[variant]?.[group]);
     }
     variant++;
   }
