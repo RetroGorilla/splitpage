@@ -1,6 +1,5 @@
 import * as Y from "yjs";
 import { nativeRankBetween } from "./rank.ts";
-import { nativeSegmentSpans } from "./reader.ts";
 import { nativeAvailability, nativeLiveRange, nativeRangeSnapshot } from "./text-commands.ts";
 import type { NativeRefusal, NativeTextRange } from "./text-commands.ts";
 import type { NativeScript } from "./script.ts";
@@ -30,30 +29,27 @@ export function createNativeHeading(script: NativeScript, at: NativeTextRange, i
     if (roots.headings.has(id) || roots.names.has(id) || roots.segments.has(key) || order.includes(key) || reader.hasHeadingMarker(id)) return refused("missing");
     const live = nativeLiveRange(script, checked);
     if (typeof live === "string") return refused(live);
-    const beat = checked.target.beat, own = reader.beatBoundary(beat), first = reader.narrationSpans(beat)[0];
-    const gap = reader.ranksAboveBeat(beat);
-    if (!own || !first || !gap) return refused("missing");
-    const segment = roots.segments.get(first.segment), text = segment?.get("text");
-    const span = nativeSegmentSpans(segment)?.[first.span], segmentIndex = order.indexOf(first.segment);
-    if (!(text instanceof Y.Text) || !span || segmentIndex < 0 || (first === own && span.key !== "b:" + beat)) return refused("missing");
+    const beat = checked.target.beat, gap = reader.ranksAboveBeat(beat);
+    if (!gap) return refused("missing");
     let rank: string;
     try { rank = nativeRankBetween(gap.before, gap.after); }
     catch (error) { if (error instanceof RangeError) return refused("rank"); throw error; }
+    const placement = reader.headingPlacement(beat, id, rank);
+    if (!placement) return refused("range");
+    const text = roots.segments.get(placement.segment)?.get("text"), segmentIndex = order.indexOf(placement.segment);
+    if (!(text instanceof Y.Text) || segmentIndex < 0) return refused("missing");
     const record = new Y.Map<unknown>(), cell = new Y.Text(), marker = { h: id };
     roots.headings.set(id, record);
     record.set("rank", rank);
     roots.names.set(id, cell);
     if (name) cell.insert(0, name, {});
-    if (first === own && first.span === 0) {
+    if (placement.at === null) {
       const heading = new Y.Map<unknown>();
       roots.segments.set(key, heading);
       heading.set("head", marker);
       heading.set("text", new Y.Text());
       roots.order.insert(segmentIndex, [key]);
-    } else {
-      // why: a recovered prefix belongs below the new heading with the beat's own text
-      text.insertEmbed(first === own ? span.start - 1 : span.start, marker, {});
-    }
+    } else text.insertEmbed(placement.at, marker, {});
     return WRITTEN;
   }, script.origin);
 }

@@ -729,3 +729,47 @@ test("a new heading keeps the row's recovered prefix and refuses stale and dupli
     } finally { late.doc.destroy(); }
   } finally { a.doc.destroy(); b.doc.destroy(); }
 });
+
+test("heading creation preserves all narration with a recovered segment prefix and intervening heading", () => {
+  const prefix = Array.from({ length: 30 }, (_, index) => ({ id: "P" + index, audioText: "p" + index }));
+  const rows = [...prefix, { id: "B", audioText: "b" }, { id: "C", audioText: "c" }].map(row => ({ ...row, visualText: "" }));
+  const a = convertedScript(migrateRows({ schema: 2, docId: "heading-prefix", title: "T", rev: 0, rows }), 100);
+  const b = joinedScript(a, 200), observer = joinedScript(a, 300), net = new ScriptNet([a, b, observer]);
+  try {
+    assert.deepEqual(a.roots.order.toArray(), ["b:P0", "b:B"]);
+    assert.equal(createNativeHeading(a, caretAt(a, "C"), "Existing", "Existing").kind, "written");
+    net.settle();
+    a.doc.transact(() => {
+      const record = segment(a, "b:B");
+      record.delete("head");
+      textOf(record).delete(0, 1);
+    }, a.origin);
+    assert.equal(edit(b, narr("B"), 0, 0, run("X")).kind, "written");
+    const leading = prefix.map(row => row.id + "=" + row.audioText);
+    settle(a, b, net, [...leading, "#Existing=Existing", "C=Xc"]);
+    assert.deepEqual(lines(observer.reader), [...leading, "#Existing=Existing", "C=Xc"]);
+    const before = a.reader.rows().map(row => [row.id, row.audioText]);
+    assert.equal(createNativeHeading(a, caretAt(a, "C"), "New", "New").kind, "written");
+    assert.deepEqual(a.reader.rows().map(row => [row.id, row.audioText]), before);
+    settle(a, b, net, [...leading, "#Existing=Existing", "#New=New", "C=Xc"]);
+    assert.deepEqual(lines(observer.reader), [...leading, "#Existing=Existing", "#New=New", "C=Xc"]);
+  } finally { a.doc.destroy(); b.doc.destroy(); observer.doc.destroy(); }
+});
+
+test("empty and non-string stored rank bounds refuse heading creation without writing", () => {
+  const a = script("AB"), b = joinedScript(a, 200), net = new ScriptNet([a, b]);
+  try {
+    for (const rank of ["", 17]) {
+      a.roots.beats.get("A")?.set("rank", rank);
+      settle(a, b, net, ["A=a", "B=b"]);
+      const late = joinedScript(a, 901);
+      try {
+        for (const copy of [a, b, late]) {
+          const before = Y.encodeStateAsUpdate(copy.doc);
+          assert.deepEqual(createNativeHeading(copy, caretAt(copy, "B"), "H", "Heading"), { kind: "refused", reason: "rank" });
+          assert.deepEqual(Y.encodeStateAsUpdate(copy.doc), before);
+        }
+      } finally { late.doc.destroy(); }
+    }
+  } finally { a.doc.destroy(); b.doc.destroy(); }
+});

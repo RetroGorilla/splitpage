@@ -73,7 +73,7 @@ function samePlacement(left: ParsedSegment, right: ParsedSegment): boolean {
 
 interface UnplacedRef extends NativeSpanPlace { readonly reason: NativeUnplacedReason }
 interface StoredBlock { readonly kind: "b" | "h"; readonly id: string; readonly shown: boolean; readonly spans: NativeSpanPlace[] }
-interface RankedBlock { readonly block: StoredBlock; readonly rank: string; readonly index: number }
+interface RankedBlock { readonly block: StoredBlock; readonly rank: string; readonly bound: string | null; readonly index: number }
 type DeepListener = (events: Y.YEvent<Y.AbstractType<unknown>>[]) => void;
 export type NativeWatch = <Event>(type: Y.AbstractType<Event>, listener: DeepListener) => () => void;
 type Problems = NativeReaderProblem[] | null;
@@ -361,16 +361,14 @@ export class NativeScriptReader {
     return parsed;
   }
 
-  private restructure(): void {
-    this.structures++;
+  private layout(ordered: ReadonlySet<string>, segmentAt: (key: string) => ParsedSegment | null, newHeading?: string) {
     const seen = new Set<string>(), blocks: StoredBlock[] = [], places = new Map<string, NativeSpanPlace>();
     const top: NativeSpanPlace[] = [], problems: NativeReaderProblem[] = [], headingPlaces = new Map<string, NativeSpanPlace>();
-    const ordered = new Set(this.roots.order.toArray().filter((key): key is string => typeof key === "string"));
     const positions = new Map<string, number>();
     let previousBeat: StoredBlock | undefined;
     for (const segment of ordered) {
       positions.set(segment, positions.size);
-      const parsed = this.segment(segment);
+      const parsed = segmentAt(segment);
       if (!parsed) { problems.push({ kind: "no-segment", where: "segments/" + segment }); continue; }
       const leading: NativeSpanPlace[] = [];
       let previous: StoredBlock | undefined, firstBeat: StoredBlock | undefined, lastBeat = previousBeat;
@@ -388,6 +386,8 @@ export class NativeScriptReader {
           previous = { kind, id, shown: true, spans: [ref] };
           firstBeat ??= previous;
           lastBeat = previous;
+        } else if (id === newHeading) {
+          previous = { kind, id, shown: true, spans: [ref] };
         } else {
           const record = this.roots.headings.get(id), hasName = this.roots.names.get(id) instanceof Y.Text;
           if (!(record instanceof Y.Map)) problems.push({ kind: "missing-heading-record", where: "headings/" + id });
@@ -414,6 +414,13 @@ export class NativeScriptReader {
       const owner = next?.kind === "b" ? next : previousBeat ?? below[at];
       (owner?.spans ?? top).push(...block.spans);
     }
+    return { seen, blocks, places, top, problems, headingPlaces, positions };
+  }
+
+  private restructure(): void {
+    this.structures++;
+    const ordered = new Set(this.roots.order.toArray().filter((key): key is string => typeof key === "string"));
+    const { seen, blocks, places, top, problems, headingPlaces, positions } = this.layout(ordered, key => this.segment(key));
     this.stray = null;
     if (!places.size && top.length) {
       let id = "~stray";
@@ -498,12 +505,14 @@ export class NativeScriptReader {
     outline.forEach((entry, index) => { if (entry.kind === "heading") this.headingIndex.set(entry.id, index); });
   }
 
-  private ranked(blocks: readonly StoredBlock[]): RankedBlock[] {
-    let previous = "";
+  private ranked(blocks: readonly StoredBlock[], newHeading?: { readonly id: string; readonly rank: string }): RankedBlock[] {
+    let previous: string | null = null, bound: string | null = null;
     const keyed = blocks.map((block, index) => {
-      const rank = rankOf(block.kind === "h" ? this.roots.headings.get(block.id) : this.roots.beats.get(block.id));
-      if (rank !== null) previous = rank;
-      return { block, rank: rank ?? previous, index };
+      const record = block.kind === "h" ? this.roots.headings.get(block.id) : this.roots.beats.get(block.id);
+      const rank = block.kind === "h" && block.id === newHeading?.id ? newHeading.rank : rankOf(record);
+      if (rank !== null) { previous = rank; bound = rank; }
+      else if (record instanceof Y.Map && record.has("rank")) bound = "";
+      return { block, rank: previous ?? "", bound, index };
     });
     keyed.sort((left, right) => left.rank < right.rank ? -1 : left.rank > right.rank ? 1 : left.index - right.index);
     return keyed.filter(({ block }) => block.shown);
@@ -630,12 +639,57 @@ export class NativeScriptReader {
     const index = this.rankedBlocks.findIndex(({ block }) => block.kind === "b" && block.id === beat);
     const target = this.rankedBlocks[index];
     if (!target) return null;
-    const before = this.rankedBlocks[index - 1]?.rank ?? null, after = target.rank;
+    const left = this.rankedBlocks[index - 1], before = left?.bound ?? null, after = target.bound;
     // why: a first rankless beat inherits the new heading's rank, beneath it and before the next ranked block
-    if (before === null && after === "" && rankOf(this.roots.beats.get(beat)) === null) {
-      return Object.freeze({ before: null, after: this.rankedBlocks.find(entry => entry.rank !== "")?.rank ?? null });
+    if (!left && after === null) return Object.freeze({ before: null, after: this.rankedBlocks.find(entry => entry.bound !== null)?.bound ?? null });
+    return Object.freeze({ before, after: after ?? "" });
+  }
+
+  headingPlacement(beat: string, id: string, rank: string): { readonly segment: string; readonly at: number | null } | null {
+    this.sync();
+    const own = this.places.get(beat), first = this.narrationSpans(beat)[0];
+    if (!own || !first) return null;
+    const boundary = this.previewHeading(beat, id, rank, own, false);
+    return boundary ?? (first === own ? null : this.previewHeading(beat, id, rank, first, true));
+  }
+
+  // why: a marker can redirect recovered text even when it leaves every narration item untouched
+  private previewHeading(beat: string, id: string, rank: string, place: NativeSpanPlace, prefix: boolean) {
+    const segment = this.parsed.get(place.segment), span = segment?.spans[place.span];
+    if (!segment || !span) return null;
+    const key = "h:" + id, standalone = !prefix && place.span === 0;
+    const marker: ParsedSpan = prefix ? { ...span, key } : { key, start: 0, end: 0, items: [], content: "[]" };
+    const ordered = new Set(this.roots.order.toArray().flatMap(entry => entry === place.segment && standalone ? [key, entry] : [entry]));
+    const proposed = [...segment.spans];
+    if (prefix) proposed.splice(place.span, 1, { ...span, end: span.start, items: [], content: "[]" }, marker);
+    else if (!standalone) proposed.splice(place.span, 0, marker);
+    const segmentAt = (entry: string): ParsedSegment | null => {
+      if (standalone && entry === key) return { hasText: true, spans: [marker] };
+      if (entry === place.segment) return { hasText: true, spans: proposed };
+      return this.parsed.get(entry) ?? null;
+    };
+    const { blocks } = this.layout(ordered, segmentAt, id), ranked = this.ranked(blocks, { id, rank });
+    const index = ranked.findIndex(({ block }) => block.kind === "h" && block.id === id);
+    const target = ranked[index + 1]?.block;
+    if (index < 0 || target?.kind !== "b" || target.id !== beat) return null;
+    ranked.splice(index, 1);
+    if (ranked.length !== this.rankedBlocks.length || ranked.some(({ block }, at) => {
+      const prior = this.rankedBlocks[at]?.block;
+      return prior?.id !== block.id || prior.kind !== block.kind;
+    })) return null;
+
+    const owners = new Map<ParsedSpan, string>();
+    for (const block of blocks) if (block.kind === "b") {
+      for (const ref of block.spans) {
+        const item = segmentAt(ref.segment)?.spans[ref.span];
+        if (item?.items.length) owners.set(prefix && item === marker ? span : item, block.id);
+      }
     }
-    return Object.freeze({ before: before === "" && after !== "" ? null : before, after });
+    for (const [segment, previous] of this.spanOwners) {
+      const spans = this.parsed.get(segment)?.spans ?? [];
+      if (spans.some((item, at) => item.items.length && owners.get(item) !== previous[at])) return null;
+    }
+    return Object.freeze({ segment: place.segment, at: standalone ? null : prefix ? span.start : span.start - 1 });
   }
 
   hasHeadingMarker(id: string): boolean {
