@@ -1,6 +1,6 @@
 # Design: the shared-document layer on standard Yjs
 
-Round 7, 2026-11-19. Nothing is built.
+Round 8, 2026-11-19. Nothing is built.
 
 When several people open one script together, each copy holds a shared document that the library Yjs keeps in
 step. This note designs that layer. It replaces `src/adapters/collab/` under rule 12 of `AGENTS.md`: a library's
@@ -10,7 +10,7 @@ pictures and screen design are out of scope.
 
 ## Decisions made
 
-Decided by the owner: rows 1 to 13 on 2026-11-18; row 4's new form and rows 14 to 18 on 2026-11-19.
+Decided by the owner: rows 1 to 13 on 2026-11-18; row 4's new form and rows 14 to 19 on 2026-11-19.
 
 | # | Decision | What a person will notice | Source |
 | --- | --- | --- | --- |
@@ -28,17 +28,17 @@ Decided by the owner: rows 1 to 13 on 2026-11-18; row 4's new form and rows 14 t
 | 12 | Offline merges get a notice listing clashed beats with "put it back", reusing the file-merge banner and review list. When unsure whether the remover had seen your edit, it shows the possible clash: "a beat you changed was removed", with what you had | One banner after reconnecting; sometimes a card the remover had seen | Owner, E12 |
 | 13 | The relay runs on the owner's own server (plan of record); presence is late and optional | — | Plan |
 | 14 | Reconnect goes through a 38-line wrapper around the stock provider that holds document sends until the client's own state reply has gone out | Formatting changed across a dropped connection is kept in the measured pairs; first edits after a reconnect arrive about 29 ms later | Owner, E13 |
-| 15 | Two same-moment moves of one row, then the winner's undo: placed as built, with plain undo (E15's option A). Every command checks every part it will touch before its first write, and otherwise refuses without writing | The row follows its narration neighbour, later perhaps into another scene (section 10) | Owner, E15 |
-| 16 | A first load keeps the stock 30 s wait | Roughly 3.5 MB loads at 1 Mbit/s, 7 MB at 2, 14 MB at 4 (worked out from E13); a larger script on a slower link restarts forever | Owner, E13 |
+| 15 | Two same-moment moves of one row, then the winner's undo: placed as built, with plain undo (E15's option A). Every command checks each part it will touch before writing, or refuses | The row follows its narration neighbour, later perhaps into another scene (section 10) | Owner, E15 |
+| 16 | A first load keeps the stock 30 s wait, with the script sizes that fit at each speed, a limit on restarts, and a clear message when a script is too large for the line | Worked out from E13: about 3.5 MB loads at 1 Mbit/s, 7 MB at 2, 14 MB at 4. A larger script gets the message instead of restarting forever | Owner, E13 |
 | 17 | The offline notice flags a production tag lost through someone's unseen delete and undo | The person returning is told; one who stayed online is not | Owner, E12, E16 |
 | 18 | A marker whose record or visual cell is missing is not a row: its narration reads into the row above, and nothing is written (rule (g), E17's option R) | Section 10 | Owner, E17 |
+| 19 | The first version uses stock snapshot storage, the whole state rewritten 2 to 10 s after an edit: a departure from `docs/COLLABORATION-PLAN.md`. Tests stop the server inside that window, show what is lost and whether reconnecting copies restore it, and decide whether the plan's update journal and durable receipts come before others use it | A server stop can lose the last seconds of edits on the server; that reconnecting copies re-send them is an untested assumption | Owner, E13 |
 
 **The guide for same-spot, same-moment conflicts** (owner): it is enough if they merge without losing data about
 nine times in ten; a guide, not a hard rule, and stricter where a defect must never happen (section 6).
 
-**E11's verdict:** "With both parts, the combination holds, except for one thing that rule (e) leaves open." The
-parts are the reader and writer corrections, and name cells. The open thing is a beat with no rank. Kept records
-close the route through an undone removal (E14); decision 15 accepts the route through a move race.
+**E11's verdict:** with the reader and writer corrections and name cells the combination holds, except a beat with
+no rank (rule (e)). Kept records close one route to it (E14); decision 15 accepts the other, a move race.
 
 ## Open for the owner
 
@@ -76,9 +76,10 @@ Each command is one transaction.
 
 **Check before writing** (decision 15). Every command finds each part it will touch by id: its rows' records,
 cells and boundaries, and the ranks of neighbours a move will write. If one is missing, it refuses without writing.
-With kept records E15's histories 17 and 18 no longer arise (E16). On section 10's four-step row, as built, 5 of 16
-commands, among them a heading above it and a run move including it, wrote and then threw; none did under rule (g)
-(E16, E17). A writer aimed at a removed row's hidden record or cell makes no change (E14).
+A command aimed at a removed or hidden row returns that refusal; it never reports success, or nothing, through a
+stale target (E1). On section 10's four-step row 5 of 16 commands wrote and then threw as built, none under rule
+(g); the prototype skips some silently and its join throws (E16, E17). Commands on the row above work on the
+narration it shows.
 
 Composition folds in remote changes made meanwhile (E1). The reader writes nothing back. The file is converted
 once, and every copy adopts that conversion (appendix B). Conversion writes each heading's name into its name cell,
@@ -95,9 +96,9 @@ every surviving letter reachable without writing anything.
 | (b) An empty script holding stray letters shows them as a narration-only row | Stray letters stay on screen | — |
 | (c) A boundary repeating a beat id is ignored | Two people remove a row and both undo: it returns once, narration twice (`xx`) | — |
 | (d) A join counts only if its target is the beat directly above | A beat whose target was removed or moved shows as its own row | A later move can make an old join count again (11 in 600 generated histories, E11) |
-| (e) A beat whose record has no rank is read after the block before it in the narration | After two people move the same row at once and the winner undoes, the row shows after its narration neighbour | No fixed place: when that neighbour moves or goes, the row follows the next one, possibly into another scene (a five-step history, every delivery; E14, E15) |
+| (e) A beat whose record has no rank is read after the block before it in the narration | After two people move the same row at once and the winner undoes, the row shows after its narration neighbour | No fixed place: when that neighbour moves or goes, the row follows the next one, possibly into another scene (E14, E15) |
 | (f) Text between a heading's boundary and the next boundary is narration without a beat, shown in the first of: the beat directly after the heading, the nearest beat above, the next beat further down, the narration-only row | Letters typed in a deleted scene's beat show in a neighbouring beat, editable | The third step can show it under a different scene, and it moves with that beat (E11) |
-| (g) A beat marker whose record or visual cell is missing is not a row; its narration reads as if the marker were absent: into the row above; at a segment's start, into that segment's first beat, else the beat before, else the next; after a heading, into the beat after it, the name unchanged; with no beat, the narration-only row | After section 10's four steps, N's narration shows in B, as before the split | The restoring undo brings back the narration, not the row. Text typed later after the hidden marker moves into N if the creator redoes. A split inside that text lands right after the beat's own marker (E17) |
+| (g) A beat marker whose record or visual cell is missing is not a row; its narration reads as if the marker were absent, in a neighbouring row ([appendix N](#n-a-row-without-its-record)) | After section 10's four steps, N's narration shows in B, editable, as before the split | The restoring undo brings back the narration, not the row. Text typed inside or after the hidden text moves into N on a redo; a split inside it lands right after the beat's own marker (E17) |
 
 A beat loses its rank through a same-moment move race (section 10): 3 of 600 generated histories (E14).
 
@@ -122,10 +123,9 @@ One `Y.UndoManager` per person over every root a command writes, headings and na
 
 E16 recounted E11's 600 generated histories with kept records ([appendix M](#m-accepted-losses-counted)). Unseen
 record changes lost with a removed beat fall from 131 (in 110 of 600 histories) to 1 (1 of 600); unseen visual
-changes from 106 (94 of 600) to 0. The kept visual figure counts what is stored, not what is shown: the edit stays
-with the hidden row and shows again if the removal is undone. The other losses are unchanged and small: typing in a
-creation its creator undoes unseen (4 of 600), a split beside a move, a deletion missing a restored row, doubled
-narration (also after E17's histories), tags, and decision 15's rankless row.
+changes from 106 (94 of 600) to 0, stored with the hidden row and shown if the removal is undone. The rest are
+unchanged and small: typing in a creation its creator undoes unseen (4 of 600), a split beside a move, a deletion
+missing a restored row, doubled narration (also after E17's histories), tags, and decision 15's rankless row.
 
 **5a. Tags.** Of 845 requested tags, 800 were kept, 40 undone by their author and 5 lost (E11); the same 5 with
 kept records (E16). Plain Yjs causes both: an undo the tagger had not seen restored deleted letters as new ones
@@ -153,17 +153,18 @@ histories, 600 mixed and 200 double-split generated histories.
 - **Check before writing** and **name cells on conversion** (E15): section 2.
 - **Recovery skips removed rows** (E14): the inherited recovery list shows removed beats with visual text as
   unplaced.
-- **One reading everywhere** (E16, E17): rules (a) to (g) apply the same way in the outline, the lookup by which
-  commands find their rows, the offline notice and its put-back, the recovery list, and export, autosave and
-  snapshots that turn the script back into a file. As built, the outline showed E16's row and the notice did not.
-- **Incremental reading** (E8, E11): a full rebuild is 84 to 99% of a 900-beat command. Relay order, memory,
+- **One reading everywhere** (E16, E17): rules (a) to (g) apply the same way in the outline, command lookup, the
+  offline notice and its put-back, the recovery list, and export, autosave and snapshots. As built, the outline
+  showed E16's row and the notice did not.
+- **Incremental reading** (E8, E11): a full rebuild is 84 to 99% of a 900-beat command. Keep the parsed narration
+  of unchanged segments and recompute which rows own the affected text (rule (g); appendix N). Relay order, memory,
   storage and signals: appendix J.
 
 ## 8. Relay and size
 
-The relay is stock Hocuspocus 4.8.0. It kept order on steady connections, bursts, late joins, long offline
-stretches and a restart (E13). Its one break, an undo sent into a dead socket overtaken by a redo queued for the
-reconnect, lost formatting only; decision 14's wrapper prevented it in every measured pair.
+The relay is stock Hocuspocus 4.8.0. It kept order in every condition E13 tried, a restart included. Its one
+break, an undo sent into a dead socket overtaken by a redo queued for the reconnect, lost formatting only; decision
+14's wrapper prevented it in every measured pair.
 
 At 15 MB a keystroke took 0.201 ms (E8); a first download at 1 to 4 Mbit/s never finished in 30 s (decision 16).
 Kept records add about 100 bytes per removed row, 160 to 174 for edited ones (E14). Detail:
@@ -179,23 +180,21 @@ someone else changed or removed. "Put it back" makes a fresh beat from what the 
 - **Seen and unseen** edits to visual text, visual tags, status and fields still leave identical evidence (4 of 4
   pairs, E16), hence decision 12's possible clash.
 - **Tags** (decision 17): E16's sweep lost 6 of 28 unseen tags and flagged all 6.
-- **Who is told:** only the returning person. Someone online while another person removes a beat they edited sees
-  the row go, with no message; their edits return if the remover undoes. No online signal is used: with kept
-  records the removal signal fires only for undone creations (E16; appendix I). An edit on a row that stays removed,
-  and a lost tag, go untold for them.
+- **Journal clearing:** an entry clears on the server's "applied" status, which under decision 19's storage means
+  applied in memory, not stored. An edit a server stop then loses is not listed (appendix I).
+- **Who is told:** only the returning person. Someone online sees a removed row they edited go with no message;
+  their edits return if the remover undoes, and a tag lost that way goes untold (E16; appendix I).
 
 ## 10. Races on one row under undo
 
-E1 to E17 are merged; none is pending. They found four histories where an undo meets someone else's change to one
-row.
+The experiments, all merged, found four histories where an undo meets someone else's change to one row.
 
-- **An undone creation after a cut and its undo** (E16). Alice splits B, making N; Bob cuts N; Alice undoes her
-  split; Bob undoes his cut. No race is needed. Alice's undo deletes N's record and visual cell, which the cut had
-  kept; Bob's undo brings back only N's marker and narration. As built every copy shows N with neither (5 of 5
-  deliveries), and most commands on it fail. Rule (g) answers it (decision 18): N's narration shows in B, as before
-  the split: Bob's undo brings back the narration, not the row. Bob's status and visual text on N went with Alice's undo and come back
-  only if she redoes her split. Text typed into B after the hidden marker moves into N if she does, and cutting B
-  takes that text with it (E17; [appendix N](#n-a-row-without-its-record)).
+- **An undone creation after a cut and its undo** (E16). Alice splits B, making N; Bob cuts N; Alice undoes; Bob
+  undoes. No race is needed: Alice's undo deletes N's record and visual cell, which the cut had kept, and Bob's
+  brings back only N's marker and narration. As built every copy shows N with neither (5 of 5 deliveries). Under
+  rule (g) (decision 18), after Alice's undo B is empty; Bob's undo brings the narration back, shown in B, but not
+  N as a row. Bob's status and visual text on N return only if Alice redoes her split
+  ([appendix N](#n-a-row-without-its-record)).
 - **Rank** (E15). Two same-moment moves and the winner's undo leave a row without a rank; rule (e) places it
   (decision 15; [appendix L](#l-a-rows-place-after-competing-moves-and-undo)).
 - **Record** (E15). Two people remove a row offline, both undo, one redoes: kept records keep its record and cell.
@@ -208,25 +207,25 @@ overwrites another person's write.
 ## 11. Build order
 
 Each slice is one pull request in `src/adapters/collab/native/`, the only place the dependency gate admits Yjs.
-Where each experiment's histories enter as tests is this note's reading of the slices.
+Where each experiment's histories enter as tests is this note's reading of the slices; the cases in appendix O are
+requirements from the outside review.
 
 | # | Slice | Gate |
 | --- | --- | --- |
 | 1 | Shape, conversion with name cells, typing, deleting text, incremental reader | The spike's tape on three copies and a late joiner; headings named in cells; a 900-beat structural change within 8 ms |
 | 2 | Formatting and tags | E4, E6 and E11's tag counts on the adapter; crossing display |
-| 3 | Split, join, removal with kept records, headings, reading rules (a) to (g) | E9, E10, E11 and E14 sets; rule (g) on a marker without its record; section 6 at zero but decision 15's case; recovery lists no removed row |
+| 3 | Split, join, removal with kept records, headings, reading rules (a) to (g) | E9, E10, E11 and E14 sets; rule (g) on a marker without its record; E17's command table and the split timing with a parse counter (appendix O); section 6 at zero but decision 15's case; recovery lists no removed row |
 | 4 | Moves | E10's collision table; a move including a row without its record refused unwritten |
 | 5 | Records, status, comments | Exact row changes; author-only bodies |
-| 6 | Undo | E3, E11, E14 and E16 tests; E15's histories under option A; E17's histories under rule (g); one change per press |
-| 7 | Session, editor, relay with the wrapper, server storage, offline notice | E13's pair table; E16's notice counts; every reader agrees on E17's histories; a 15 MB first load on a slow link; store and reload |
+| 6 | Undo | E3, E11, E14 and E16 tests; E15's histories under option A; E17's histories under rule (g); creation undo and redo timing (appendix O); one change per press |
+| 7 | Session, editor, relay with the wrapper, server storage, offline notice | E13's pair table; E16's notice counts; every reader agrees on E17's histories; first loads per decision 16; a large offline return under stock timers; two writers past the size limit; server stops per decision 19; stale-target editor cases (appendix O); store and reload |
 | 8 | Delete the old adapter | Every deleted test mapped; `npm run verify` |
 
-## 12. What changed in round 7
+## 12. What changed in round 8
 
-- **Decisions 16 to 18** (owner); nothing is open. **Rule (g)** answers E16's row without its record.
-- **Losses and the notice** use E16's recount with kept records; the online case is stated (sections 5, 9).
-- **One reading everywhere** (section 7). E16's history replaces E15's 17 and 18 as the check-first evidence.
-  Earlier rounds: [appendix K](#k-earlier-rounds).
+An outside review found the design sound to build. Its corrections are in sections 2, 3, 7, 9 and 10 and
+appendices I and N; its acceptance cases are appendix O. Decisions 16 and 19 are the owner's answers to its two
+questions. Earlier rounds: [appendix K](#k-earlier-rounds).
 
 ## Appendix
 
@@ -407,11 +406,11 @@ Each is the design's default unless the owner objects.
 | Formatting that differs by delivery order | Accept: library behaviour (E11) | A mark's exact edge can differ; copies agree once everything is delivered |
 | What happens at 15 MB | Refuse the edit with a message and an export; warn from 12 MB | A warning, then a refusal with a way out |
 | Two crossing tags | The second shows on its letters outside the first (E6) | Part of the second tag looks absent |
-| What counts as pending work for the notice | The person's own journal, cleared by acknowledgments (E12); no client can observe a "last state both had" moment (E13) | Fewer false cards for someone who was idle. With kept records: journal 46 false banners of 325 and 26 misses of 238; ideal base 64 and 25 of 238; both miss 16 of 30 generated split-and-move losses; counting an edit stored on a hidden row as kept, false banners rise to 87 and 103 (E16) |
+| What counts as pending work for the notice | The person's own journal (E12); no client can observe a "last state both had" moment (E13). Under decision 19 an entry is cleared by the server's built-in "applied" status, which means applied in memory only, and not reliably: it is also sent when applying threw or the update waits on missing dependencies (plan, "Durability receipts"). An edit lost by a server stop after that status leaves no entry, so the notice cannot list it. Only a journal commit in `beforeSync`, as the plan requires, would make the status mean stored | Fewer false cards for someone who was idle. With kept records: journal 46 false banners of 325 and 26 misses of 238; ideal base 64 and 25 of 238; both miss 16 of 30 generated split-and-move losses; counting an edit stored on a hidden row as kept, false banners rise to 87 and 103 (E16) |
 | Words already shown in the row above when a beat is put back | As built: both show (E12) | The words appear twice; the person deletes one. After a double delete and double undo, a third copy |
 | Two people putting the same beat back | Two rows (E12) | Both rows show; someone deletes one |
 | "Undo merge" | Hidden; ordinary undo takes back a put-back (E12) | No "Undo merge" button in shared mode |
-| The first upload of a large script | Accept the built-in server's ceiling: about 7 MB at 1 Mbit/s, 14 MB at 2 Mbit/s, 15 MB passed at 4 Mbit/s (E13). The documented `handleConnection` route on a host-owned listener has no such sweep, but the host then owns connection lifetime and heartbeat | Sharing a large script over a slow upload fails, and the host retries on a faster link |
+| The first upload of a large script | Accept the built-in server's ceiling. Measured with both Hocuspocus timers raised to 180 s, not decision 16's stock settings: largest single uploads about 7.15 MB at 1 Mbit/s and 14 MB at 2; the full 15 MB script passed at 4 (E13). Under stock timers, a 5 MB offline return at 1 Mbit/s reached the server at 41.8 s; the provider then forced a disconnect at 66.1 s, and on the next connection the pending count reached zero at 67.2 s, the re-sent reply being 2 bytes because the server already had the work (E13). The documented `handleConnection` route on a host-owned listener has no such sweep, but the host then owns connection lifetime and heartbeat | Sharing a large script over a slow upload fails, and the host retries on a faster link |
 | Backups of scripts stored on the server | Not designed; proposed with slice 7 | Nothing, unless the server's store is lost |
 | Undo passing over spent steps | Library behaviour (16 in 600, E11) | A press occasionally undoes something older |
 | A person who stays online while a beat they edited is removed | Not told; no online signal is used. With kept records the beat-map signal fell from 131 to 12 banners of 325, all from undone creations, and the row-reading observer misses 92 of 192 losses (E16) | The row disappears with no message; their edits return only if the remover undoes. A tag lost that way is not flagged for them (decision 17) |
@@ -448,6 +447,10 @@ the tag kept in 5 of 5 runs where stock lost it; the first edit after reconnect 
 in appendix I (E13).
 
 ### K. Earlier rounds
+
+**Round 7.** Decisions 16 to 18 (owner); rule (g) answered E16's row without its record. Losses and the notice moved
+to E16's recount with kept records, and the online case was stated. Every reader applies the same reading. E16's
+history replaced E15's 17 and 18 as the check-first evidence.
 
 **Round 6.** Decisions 4, 12, 14 and 15 (owner): kept records, the possible-clash card, the reconnect wrapper, and
 the move race accepted with plain undo plus check-before-writing. Rule (e)'s cause became a move race, not a removal
@@ -528,6 +531,15 @@ In all of them, no option lost narration, showed a row twice, left copies disagr
 | **R, rule (g) (chosen)** | 0 of 90. Alice's undo wins: the document reads as before the split, and Bob's undo brings back the narration, not the row; Alice's redo brings N back with its record, cell, rank and Bob's status. No command throws after writing; joining the hidden row throws before writing. Outline and notice agree, and restoring from the notice works | Stores nothing. Read and keystroke times within the spread between passes; a split and its undo about 0.6 ms slower; the re-reading cost during editing not measured. About 20 lines and a 4-line hook | The hidden marker stays in the text: later typing after it moves into N on Alice's redo, and cutting B takes it. A split inside that text lands right after the beat's own marker. It moves no generated figure |
 | U, an undo filter that keeps created records and cells | 0 of 90. Bob's undo wins: N comes back whole with his status and visual text, and all 16 commands work. It also removes E16's one remaining record loss | About 31 bytes kept per undone creation (30.6 per split, 30.8 per insert), for good. About 7 lines | N has no rank and follows rule (e): an unrelated move gives it one, cutting B can carry it across a scene line, and restoring from the notice throws until it has one. The filter refuses to delete any record or visual cell in the root maps, on undo and redo, whichever command made it, so a redo no longer deletes containers a command deleted directly. A remote creation undo no longer reaches the beat-map observer |
 
+**Where rule (g) shows the narration.** As if the marker were absent: into the row above; at a segment's start,
+into that segment's first beat, else the beat before, else the next; after a heading, into the beat after it, the
+name unchanged; with no beat, the narration-only row. **The seam:** B shows its own text, then the hidden text.
+Typing at the seam (offset 0 when B has none of its own) lands before the hidden marker and stays in B on a redo
+(outside review; to be pinned by a test); typing inside or after the hidden text moves into N on a redo, and
+cutting B takes it (E17). **Refreshing** keeps the parsed narration of unchanged segments and recomputes which rows
+own the affected text. The marker's own segment alone is too narrow: a hidden marker at a segment's start moves its
+narration to a beat in another segment.
+
 **Other routes.** Creating the record and cell in an untracked transaction nested inside the command does not work:
 Yjs keeps the outer origin. A separate, outer, untracked transaction run before the tracked one does work (E17's
 review): undo removes the marker and rank and keeps the record. Its cost is a second transaction, with its own
@@ -536,5 +548,45 @@ and U together were not tried.
 
 None of the options changes the segment-head race, the doubled narration of a double delete and double undo, or
 rule (e)'s placement. The owner chose R. Per E17, it writes and stores nothing, it is the one option under which
-outline, notice and restore-from-notice all work on the four-step state, and the cost is that Bob's undo shows
-nothing.
+outline, notice and restore-from-notice all work on the four-step state. Its cost: Bob's undo brings back N's
+narration, shown in B, but not N as a row.
+
+The outside review of this note measured remote apply through the prototype's reader on the 900-beat fixture: a
+split 4.6 to 5.2 ms as built against 5.0 to 5.35 ms with the rule; a creation undo or redo 4.6 to 5.0 against 4.9 to
+5.3; a keystroke about 0.75 ms in both. These are the reviewer's own uncommitted measurements, not an experiment
+result, and they include a full reparse: the prototype's hook clears every segment's parsed text. The design keeps
+parsed narration for unchanged segments instead (section 7). Open: whether the older `views` cache in
+`src/native/variant.ts` reads records and needs the same split.
+
+### O. Acceptance cases from the outside review
+
+Requirements from the outside review of this note, added to the build order (section 11).
+
+**Slice 3.**
+- E17's 16-command table on the four-step state: every command aimed at the hidden row returns a refusal and leaves
+  the document snapshot unchanged. Commands on the row above succeed on the shown narration: typing at the seam and at
+  the end, cut, move, join and unjoin, a heading above. "Move the run B through N" refuses or moves B alone.
+- A split's timing through the reader on the 900-beat script with warm caches, including one case at a segment's
+  start, with a parse counter showing no unrelated segment was reparsed, so a full rebuild that happens to meet the
+  time does not pass.
+
+**Slice 6.** The same timing for a creation's undo and redo, and the outline before and after Bob's undo in section
+10's four-step history.
+
+**Slice 7.**
+- **First loads** (decision 16): the sizes that fit at each supported speed, a limit on restarts and the message;
+  and a large offline return under stock timers.
+- **Two writers past the size limit:** two offline copies, each under 15 MB, whose merge exceeds it. The test shows
+  where the refusal happens, what each person sees, how refused work is exported, and that retries stop. The note
+  has only a per-command refusal on the client (appendix I, "What happens at 15 MB"). The plan also requires bounds on
+  total document state checked before an update reaches other clients, explicit handling of legitimate concurrent
+  limit conflicts, never discarding an update while claiming synchronization succeeded, preserving recoverable data,
+  and a test where individually valid edits merge past the limit ("Validation and resource limits"). That gap is
+  open.
+- **Server stops** (decision 19): stop the server inside the 2 to 10 s store window; show what is lost and whether
+  reconnecting copies restore it. The plan's receipt checker and kill-before-and-after-receipt tests apply only if
+  these tests call for the update journal.
+- **Stale targets in the editor** (E1's four commit outcomes: written, unchanged, moved to the beat's live cell, or
+  handed to a recovery list): IME composition and plain buffered typing, in narration and in visual cells, with the
+  target removed, replaced, restored, or hidden under rule (g). Each ends as a visible write or a recovery entry,
+  never silently. One case starts a composition in N while N is shown and commits it after N is hidden.
