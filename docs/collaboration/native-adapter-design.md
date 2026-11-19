@@ -1,12 +1,12 @@
 # Design: the shared-document layer on standard Yjs
 
-Round 4, 2026-11-18. Nothing is built.
+Round 5, 2026-11-19. Nothing is built.
 
 When several people open one script together, each copy holds a shared document that the library Yjs keeps in
 step. This note designs that layer: storage, commands, reading, undo, the relay and the offline notice. It
 replaces `src/adapters/collab/` under rule 12 of `AGENTS.md`: a library's standard behaviour is the default, and
-anything on top needs a reproduced defect, its measured cost and the owner's decision. Every figure names its result file ([appendix A](#a-sources)). Accounts,
-invitations, disk storage, pictures and screen design are out of scope.
+anything on top needs a reproduced defect, its measured cost and the owner's decision. Every figure names its result
+file ([appendix A](#a-sources)). Accounts, invitations, pictures and screen design are out of scope.
 
 ## Decisions made
 
@@ -14,46 +14,48 @@ All decided by the owner on 2026-11-18.
 
 | # | Decision | What a person will notice | Source |
 | --- | --- | --- | --- |
-| 1 | Standard Yjs. Several beats share one segment's text, separated by boundary markers; a record per beat; a visual cell per beat; headings in their own map | Nothing directly | Spike, E2, E5 |
-| 2 | Formatting: a plain key per kind (bold, italic, highlight and the like); a key per application for production tags only. No clean-up rule. Standard writes only; every insert names its formatting | Now and then, when two people format touching or overlapping words at once, some letters lose bold, or bold stays after an undo. Tags kept every letter in the two-copy trials | E4, E6 |
-| 3 | Removing a beat is a real deletion of its text and boundary, record and visual cell; the segment stays | The row is gone for everyone, with any change others made to it without seeing the removal | E9, E10 |
-| 4 | Four reading rules (section 3) show stray narration, writing nothing | Letters typed into a beat as it was removed appear in a neighbouring row, editable | E9; E11 pending |
-| 5 | Undo is the library's own `Y.UndoManager` everywhere, default delete behaviour; no keep-always setting | Undo takes back only your own changes. Undoing a new beat removes it with what others typed in it. Snapshots and autosave give earlier states | E3, E9 |
-| 6 | Headings keep their small `removed` mark | A removed heading can be restored with its name | E5 |
-| 7 | Moves are in the first version, with flat ranks: one sortable position per block | Rows and scenes can be moved. A beat split while you move it leaves its second half behind | E10 |
-| 8 | A comment or reply body is a whole value only its author edits; anyone may resolve or remove. Resolve, reopen and the "last edited" stamp are plain values | Two different choices at once: one wins, the same on every copy | Appendix B |
-| 9 | The size limit is 15 MB | Years of editing fit; a full-size script opened in about 1.6 s | E8 |
-| 10 | Offline merges get a notice listing clashed beats, each with "put it back", reusing the file-merge banner and review list | One banner after reconnecting | E9; E12 pending |
-| 11 | Presence (seeing where others edit) is late and optional | Not in the first version | — |
+| 1 | Standard Yjs. Beats share a segment's text, cut by boundary markers; each beat has a record and a visual cell | Nothing directly | Spike, E2 |
+| 2 | A shared script stays on the server between sessions; 15 MB bounds its whole shared life; server storage and backups are in the first version | Reopen any time; an offline copy can return days later | Owner |
+| 3 | A plain formatting key per kind; a key per application for production tags only; standard writes; explicit attributes on every insert | Two people formatting touching words at once can lose some bold. Tags: section 5 | E4, E6, E11 |
+| 4 | Removing a beat really deletes its text, boundary, record and visual cell | Others' unseen changes to it go with it | E9, E11 |
+| 5 | A heading's name has its own text cell; the heading keeps its boundary, record, rank and `removed` mark | A removed heading restores with its name; narration never ends up in a title | E5, E11 |
+| 6 | Reading rules (a) to (f) show stray narration, writing nothing | Letters typed into a removed beat appear in a nearby row, editable | E9, E11 |
+| 7 | No command copies narration | A split inside recovered text breaks at the nearest point needing no copy | E11 |
+| 8 | Undo is `Y.UndoManager` with core Yjs's default delete filter | Undo takes back only your own changes; snapshots and autosave go further back | E3, E11 |
+| 9 | Moves with flat ranks: one sortable position per block | A beat split while you move it leaves its second half behind | E10, E11 |
+| 10 | Comment and reply bodies are whole values only their author edits; anyone may resolve or remove | Two choices at once: one wins everywhere | Appendix B |
+| 11 | The size limit is 15 MB | A full-size script opened in about 1.6 s | E8 |
+| 12 | Offline merges get a notice listing clashed beats with "put it back", reusing the file-merge banner and review list | One banner after reconnecting | E12 |
+| 13 | The relay runs on the owner's own server (plan of record); presence is late and optional | — | Plan |
 
 **The guide for same-spot, same-moment conflicts** (owner): it is enough if they merge without losing data about
-nine times in ten. It is a guide, not a hard rule, and stricter where a defect must never happen (section 6). The
-experiments built their histories to hit bad cases, so their counts are rates within a race, not in real use (E9,
-E10).
+nine times in ten; a guide, not a hard rule, and stricter where a defect must never happen (section 6). The
+experiments built their histories to hit bad cases, so their counts are not rates in real use.
+
+**E11's verdict:** "With both parts, the combination holds, except for one thing that rule (e) leaves open." The
+parts are the corrections to the reader and writers, and names in their own cells.
 
 ## Open for the owner
 
-| # | Question | Options and what a person would notice |
-| --- | --- | --- |
-| Q1 | Does a shared room outlive the live session? | **(a)** No (the earlier proposal): the host converts the file once; at the end the result is saved as the ordinary JSON file and the room discarded. Each session starts a fresh history, so 15 MB bounds one session; offline work that misses it would return through the existing file merge. **(b)** Yes: the room stays on the relay, offline copies merge whenever they return, and the history grows toward 15 MB over years |
-| Q2 | Who hosts the relay? | **(a)** The owner's own server: no running cost, reachable only while it is up. **(b)** A rented server: a monthly cost, always on |
-| Q3 | What happens at 15 MB? | **(a)** Edits that would pass it are refused with a message and an export button; the host starts a fresh shared copy. **(b)** The same, with a warning from 12 MB |
-| Q4 | How are two production tags shown when they cross after a merge? Both are stored; today's reader hides the second (E6) | **(a)** The second shows only on its letters outside the first. **(b)** The first shows; the second is flagged in the tag panel as overlapping |
-| Q5 | E3b lost a requested production tag in 4 of 600 generated histories, where another copy deleted and restored those letters at that moment or undid typing next to the tag. Its writer re-keyed tag tails, which the decided design does not | **(a)** Accept under the guide. **(b)** Treat a lost tag as never acceptable: an experiment, then a departure under rule 12 if needed |
+| # | Question | Options, and what a person would notice | Coordinator's recommendation |
+| --- | --- | --- | --- |
+| 1 | How should reconnect behave? | **(a)** Stock. After a dropped or silently dead connection, formatting you changed, undid and redid across the drop can disappear on every copy (5 of 22 pair kinds, every run); text is never lost. **(b)** A 38-line wrapper around the stock provider holds document sends until the client's own state reply has gone out. That loss did not occur in any measured pair; edits in the first moment after a reconnect reach others one round trip later (about 29 ms in the test); an offline stretch uploads half the bytes. A departure under rule 12, with a reproduced defect and a measured cost (E13) | (b) |
+| 2 | How long may a first load wait? | **(a)** Keep the stock 30 s. A script loads if its whole state arrives within about 30 s: roughly 3.5 MB at 1 Mbit/s, 7 MB at 2 Mbit/s, 14 MB at 4 Mbit/s (worked out from E13; 15 MB failed at 4). A larger script on a slower link restarts forever. **(b)** 180 s. Those loads finish (129 s at 1 Mbit/s); a silently dead connection shows "connected" for about four minutes instead of 36 to 39 s (E13) | (a) for now: it is the library's default and only bites on large scripts over slow links; revisit when a script nears that size |
+| 3 | What does the offline notice claim when it cannot tell whether the other person had seen your change? | E12's options. **(a)** Show possible clashes for visual and record edits; some people see a card even when the remover saw their edit. **(b)** Use the evidence available for narration and withhold ambiguous cards; a person could lose an unseen visual edit with no card. **(c)** Carry evidence of what the deleter had seen; a stronger card that depends on that evidence surviving disconnects | Show possible clashes, worded as "a beat you changed was removed" with what you had, never as "they had not seen it" |
+| 4 | A production tag lost through someone's unseen delete-and-undo (5 of 845 in E11) | **(a)** Accept it silently, as library behaviour. **(b)** The notice flags it with E12's rule (7 of 7 losses flagged in its sweep). The person returning is told; one who stayed online is not | (b) |
+
+Smaller points, with the design's defaults, are in [appendix I](#i-smaller-open-points).
 
 ## 1. Stored shape
 
-One `Y.Doc` per script. Records are `Y.Map`s with a key per field; text is `Y.Text`; a boundary or other atom is a
-one-unit embed no edit can split. A segment's text holds several beats and headings, each running from its
-boundary to the next; a segment's first block is named by its `head` key instead. Each beat and heading record holds
-its `rank`; a joined beat holds `joined = {into, glue}`; a removed heading holds `removed`. Everything that is not
-text is a plain value: of two writes at once Yjs keeps one, the same everywhere. Rows, scenes, durations, tag extents
-and comment anchors are worked out when reading. The roots are in [appendix G](#g-roots).
+One `Y.Doc` per script. Segment text (`Y.Text`) holds narration and one-unit boundary embeds, `{b}` for beats and
+`{h}` for headings; a segment's first block is named by its `head` key. Visual cells and heading names are separate
+`Y.Text`s. Records are `Y.Map`s: each beat and heading has a `rank`, a joined beat `joined = {into, glue}`. Every
+other field is a plain value; of two writes at once Yjs keeps one. Roots: [appendix G](#g-roots).
 
-**Formatting.** Attributes take `true`. Plain keys: `b`, `i`, `u`, `s`, `hl`, `dir`, `cue`, `c:<commentId>`,
-`l:<url>`. A production tag is `t:<tagId>`, U+001F, then the writer's client id and clock, stripped on reading; each
-application gets a fresh key (E3b). Keys build up where a tag is reapplied: 301 on one letter after 300 rounds of
-clearing one letter and re-tagging (E6). That growth is accepted.
+**Formatting.** Plain keys `b`, `i`, `u`, `s`, `hl`, `dir`, `cue`, `c:<commentId>`, `l:<url>`. A production tag is
+`t:<tagId>`, U+001F, then the writer's client id and clock, fresh per application (E3b). Keys build up where a tag
+is reapplied, 301 on one letter after 300 rounds (E6); that growth is accepted.
 
 ## 2. What each command writes
 
@@ -61,147 +63,136 @@ Each command is one transaction.
 
 | Command | Writes |
 | --- | --- |
-| Type, paste | `insert` with an explicit attributes object, before any delete; never splitting a surrogate pair |
+| Type, paste | `insert` with an explicit attributes object, before any delete |
 | Bold and other plain kinds | `format` with the plain key, `true` or `null` |
-| Tag, untag | A fresh application key; untag sets `null` on the keys seen in the range. No re-keying of a tail |
-| Split | Boundary embed, beat record copying the parent's rank, visual cell |
-| Join, unjoin | Set or delete `joined` on the lower beat; a split at the seam deletes it |
-| Remove beats | The observed text with its boundary (or `head` key), the records, the visual cells; the segment stays (E9) |
-| Remove, restore heading | Set or delete `removed` |
-| Create heading | Embed or new segment, record, own rank |
-| Move | A new rank per moved block; a tie at the drop re-ranks the right side (E10) |
-| Fields, status, resolve, stamp, body | `Y.Map.set`, only if the value differs: a same-value write still sends an update (appendix B) |
+| Tag, untag | A fresh application key; untag sets `null` on the keys seen. No re-keying |
+| Split | Boundary, record copying the parent's rank, visual cell. Never narration |
+| Join, unjoin | Set or delete `joined` on the lower beat |
+| Remove beats | The observed text with its boundary (or `head`), the records, the visual cells; the segment stays |
+| Create, rename, remove heading | Boundary or segment, record, rank, name cell; rename edits the name cell; remove sets `removed` |
+| Move | A new rank per moved block, and the shown rank of a rankless neighbour (rule (e)); a tie at the drop re-ranks the right side |
+| Fields, status, resolve, body | `Y.Map.set`, only if the value differs (appendix B) |
 
-Rules for every writer:
-
-- **Targets by id.** A write looks up its target when it runs. Yjs drops writes into a deleted container, and a held
-  reference to a replaced cell writes where nobody sees it (E1; appendix B). A missing target refuses the command and
-  never throws; E10's controls caught a writer that threw.
-- **Compounds** check every part first: a throw after the first write still commits it (appendix B).
-- **Composition** (input methods): the commit folds in remote changes made meanwhile (E1: 40,000 histories, nothing
-  lost or doubled). If the cell was replaced the text goes at its end; if deleted, to local recovery.
-- **One birth.** Two conversions of one file merge badly (appendix B), so one create-or-load, keyed by a creation id,
-  stores the first and every copy adopts it before editing.
-- **Incoming updates** are applied by the stock provider; the reader writes nothing back.
+Every writer finds its target by id when it runs and refuses a missing one rather than throw (E1). A compound checks
+every part before writing (appendix B). Composition folds in remote changes made meanwhile (E1). The reader writes
+nothing back. The file is converted once, and every copy adopts that conversion (appendix B).
 
 ## 3. Reading rules
 
-Blocks show in rank order; ties follow stored order (E10). A joined beat shares the row above (E2). Four rules make
-every surviving letter reachable without writing anything:
+Blocks show in rank order; ties follow stored order (E10). A joined beat shares the row above (E2). Six rules make
+every surviving letter reachable without writing anything.
 
-| Rule | What a person sees |
-| --- | --- |
-| (a) Text before a segment's first boundary belongs to that segment's first beat, or to the row above if the segment has no beat | A letter typed into a beat heading its segment, as someone removed it, shows at the start of the next beat. Before, it was stored and shown nowhere (E9) |
-| (b) An empty script holding stray letters shows them as a narration-only row | Removing every row while someone types leaves their letters on screen |
-| (c) A boundary repeating a beat id is ignored | Two people remove one row and both undo: it returns once, its narration twice (`defdef`), nothing hidden (E9) |
-| (d) A join counts only if its target is the beat directly above | A beat whose join target was removed or moved shows as its own row, not merged into a row nobody chose (E9) |
+| Rule | What a person sees | Known limit (E11) |
+| --- | --- | --- |
+| (a) Text before a segment's first boundary belongs to that segment's first beat, or to the row above if the segment has no beat | Letters typed in a removed beat that headed its segment show at the start of the next beat | — |
+| (b) An empty script holding stray letters shows them as a narration-only row | Stray letters stay on screen | — |
+| (c) A boundary repeating a beat id is ignored | Two people remove a row and both undo: it returns once, narration twice (`xx`) | — |
+| (d) A join counts only if its target is the beat directly above | A beat whose target was removed or moved shows as its own row | A later move can make an old join count again (11 in 600) |
+| (e) A beat whose record has no rank is read at its stored place | An undone deletion of a beat someone moved unseen brings it back where it was stored | No fixed place: a later unrelated command can move it, even across a scene line. 0 of 1,600 generated histories; a six-step hand-built case |
+| (f) Text between a heading's boundary and the next boundary is narration without a beat, shown in the first of: the beat directly after the heading, the nearest beat above, the next beat further down, the narration-only row | Letters typed in a deleted scene's beat show in a neighbouring beat, editable | The third step can show it under a different scene, and it moves with that beat |
 
-Rule (d) needs the target, so `joined` stores `into` again. Unseen typing in any other removed beat ends at the end
-of the beat above, editable (E9). A removed heading waits in heading recovery (E5). E11 checks the rules.
+Rule (e) exists because Yjs does not redo a map entry a newer write replaced; without it the reader threw in 5 of
+600 histories (E11).
 
 ## 4. Undo
 
-One `Y.UndoManager` per session over every root a command writes, headings included, not `births` or `edited`. Only
-the local command origin is tracked. Grouping follows the app's word rule with `stopCapturing()` (8.33 against
-8.07 µs per key, overlapping; E3). The delete filter is the default; depth has no cap, as Yjs offers none (E3).
+One `Y.UndoManager` per person over every root a command writes, headings and names included, not `births` or
+`edited`. Only the local command origin is tracked. Grouping follows the app's word rule with `stopCapturing()`
+(E3). Default delete filter; no depth cap.
 
-- Undo takes back only the presser's changes. A step whose effect is already gone is passed over and the press
-  undoes the one before (appendix B).
-- A field gets back the value its own write replaced. If two people set the same status and the presser's stood,
-  undo leaves it absent, read as `todo` (appendix B).
-- Undoing a creation deletes the record or cell with everything in it, including what others wrote (appendix B).
-- One press can send two updates, the manager's and a formatting clean-up (E3b, seed 254). The editor shows one
-  change per press; the transport sends both.
-- `undo()` is called directly: inside an outer transaction it left no redo (appendix B).
-- The caret is a relative position taken before each step (E3).
-
-Going further back is the job of snapshots and autosave.
+- Undo takes back only the presser's changes; a press can pass over spent steps to an older one (E11).
+- Undoing a deletion does not bring back fields overwritten unseen: rank (rule (e)), status, join (E11). A beat cut
+  and restored by its deleter's undo comes back without others' unseen visual text, status, fields and tags (E12).
+- Undoing a creation removes everything written into it, seen or unseen; the creator's redo brings back only what
+  the creator had seen (E11).
+- One press can send two updates; the editor shows one change, the transport sends both (E3b). `undo()` is called
+  directly (appendix B).
 
 ## 5. Accepted losses
 
-| Loss (accepted by the owner) | How often, within the race | Source |
-| --- | --- | --- |
-| A change to a beat's visual cell, status, tags or fields the deleter had not seen goes with the beat. Unseen narration stays (section 3) | Every time. E10: 15 of 229 histories per design (8 a visual edit and field, 7 a field on a removed segment head) | E9, E10 |
-| Typing or a field in a new beat or record goes when its creator undoes the creation | Undone split: 40 of 40 lost the visual letter and field; the narration letter joined the original beat. Undone inserted beat: 40 of 40 lost everything. E3: 38 in 600 histories under a filter that keeps a cell holding text; the default loses at least those, and seen writes too | E9, E3, appendix B |
-| A split during a move leaves the second half behind as its own row | 8 of 8 histories, flat ranks | E10 |
-| Two people dropping into each other's spot: neither request met | 8 of 8; nothing lost | E10 |
-| Undoing a move after someone else moved that beat does nothing visible | 6 of 8 so; 2 in another editable order | E10 |
-| A double delete and double undo doubles the narration | Every ordering tried, including fully offline | E9 |
+E11, 600 generated histories, names in cells. Counts are occurrences within those built-to-clash sets.
 
-Other outcomes under the guide, with no text lost and copies agreeing, are in [appendix H](#h-other-outcomes).
+| Loss | Count | Notes |
+| --- | ---: | --- |
+| Unseen record change discarded with a deleted beat | 131 | 14 at the same moment, 117 offline (3-step window) |
+| Unseen visual change discarded with a deleted beat | 106 | 19 at the same moment, 87 offline |
+| Typing in a new beat lost when its creator undoes the creation unseen | 3 | Seen writes go too (appendix B) |
+| Typing in a new heading's name lost when its creator undoes the creation unseen | 1 | The one loss names in cells add |
+| A split next to a move left the second half at the old place | 1 | E10: all 8 histories of that collision |
+| A deletion missed a row that someone's unseen undo had restored | 3 | |
+| A double delete and double undo doubles the narration | 3 | |
+| Production tag lost | 5 of 845 | Section 5a |
+| Two people dropping into each other's spot: neither request met | — | E10: all 8 histories |
+
+**5a. Tags.** Of 845 requested tags, 800 were kept, 40 undone by their author and 5 lost (E11). Both causes are
+plain Yjs, the same for bold: an undo the tagger had not seen restored deleted letters as new ones, leaving the tag
+on the originals (4); a letter shown twice after a double delete and double undo carries the tag on one copy (1).
+
+Outcomes that lose nothing are in [appendix H](#h-outcomes-that-lose-nothing).
 
 ## 6. Never acceptable
 
-| Defect | Evidence so far |
+| Defect | Evidence (E11, names in cells: E9's 2,257 runs; E10's 229, 600 new and 200 double-split histories in five deliveries) |
 | --- | --- |
-| Narration stored but in no row, or shown but not editable | Not yet zero: the old reader left 750 typed letters without an editing route in E9 and stranded narration in 7 of 229 E10 histories. Rules (a) to (c) target them. **E11 pending** |
-| A beat shown twice, or its surviving narration nowhere | E7: 0. E9: no duplicate blocks in 2,220 histories per variant; its double undo hid `defdef`, which rule (c) shows. **E11 pending** |
-| Copies disagreeing after everything is delivered | 0 in E1 to E7, E9 and E10 |
-| A thrown error in a reader or writer | 0 crashes in E5, E7, E9; none of E10's broken histories was a crash. E10's writer threw under controls when a muted write left a target missing; section 2 makes that a refusal |
-| An existing beat changing scene with one person working | Flat ranks: 0 single-writer failures in E10's 229 histories (placement failed it). **E11 reruns it** |
+| Narration stored but in no row, or shown but not editable | 0 in every set. With names inline it was 27 letters in 19 of 600 |
+| A beat shown twice, or its surviving narration nowhere | 0 in every set. Narration shown twice by a command of ours: 0 |
+| Copies disagreeing after everything is delivered | 0 in every set, and in E1 to E10 |
+| A thrown error in a reader or writer | 0 in every set. Writers still threw under controls when a muted write left a new heading's record missing (39); section 2 makes that a refusal |
+| An existing beat changing scene with one person working | 0 in every set, **except rule (e)'s open case**: a six-step hand-built history moves a rankless beat out of its scene on its own copy. E14 asks whether a different removal closes it |
 
 ## 7. Requirements on the product code
 
-- **Relay order** (E3b): each writer's updates arrive in order, or merged. A redo applied before its undo on one
-  copy and relayed on left a tag removed everywhere, under every key form. E13 checks the stock relay.
-- **Explicit attributes** on every insert (E6): without them a letter inherits a neighbour's tag and keeps it after
-  the tag's text is deleted. Tags use standard writes only.
-- **Crossing tags** need a read-side fix (E6; Q4).
-- **Incremental reading** (E8, E9, E10): rebuild only the rows a change touched and cache cell contents. The Yjs
-  write took 0.02 to 0.07 ms for a move or removal at 900 beats and 0.25 ms (0.5 to 1.1 in review) for a split at
-  15 MB; the prototype's full rebuild was 74 to 85% of a move and 47 of 49 ms for that split.
-- **One walk per key** (E8): the prototype read a cell's whole history twice per key, slow in long-history cells.
-- **Memory at the limit** (E8): 344 MiB retained after loading 15 MB in Node; browsers unmeasured.
-- **Slow first sync** (E8): the provider's 30 s `messageReconnectTimeout`; 15 MB takes about 30 s at 4 Mbit/s and
-  can loop. The relay must accept the whole state as one message (14,990,327 bytes). E13 checks both.
-- **The offline notice's gaps** (section 9, E9).
+- **No copying** (E11): a first version whose split copied text doubled it when two people split at once.
+- **Explicit attributes** on every insert, standard tag writes (E6).
+- **Relay order** (E3b, E13): each writer's updates arrive in order or merged; question 1 decides reconnect.
+- **Crossing tags** need a read-side fix (E6; appendix I).
+- **Incremental reading** (E8, E11): the Yjs write is 0.02 to 0.07 ms; rebuilding every row is 84 to 99% of a
+  900-beat command. Rebuild only touched rows and walk a cell once per key.
+- **Memory** at 15 MB: 344 MiB in a Node copy (E8), 306.9 MiB on the server per open script (E13).
+- **Storage** (E13): each store rewrites the whole snapshot (438 ms encode at 15 MB), 2 to 10 s after an edit; a
+  positive status does not mean saved.
+- **Signals** (E13): no stock event means "caught up both ways"; `synced` and a zero pending count both held while a
+  download was still held back.
 
 ## 8. Relay and size
 
-The relay is the stock Hocuspocus 4.8.0 server as shipped (plan of record). It passes updates and holds the state
-for late joiners. Who runs it is Q2; whether it keeps rooms is Q1.
+The relay is stock Hocuspocus 4.8.0. It kept order on steady connections, bursts, late joins, long offline
+stretches and a restart (E13). The one break: an undo sent into a dead socket and a redo queued for the reconnect
+reach the server redo first. Only formatting was lost; no stock setting prevents it (question 1).
 
-| At 15 MB (E8, 15,036,020 bytes) | Result |
+| At 15 MB | Result |
 | --- | --- |
-| Load through first full read | 1.59 s |
-| Heap after loading | 344 MiB |
-| Keystroke median (first key) | 0.201 ms (0.734 ms) |
-| Split, with full rebuild | 49.10 ms |
-| Catch-up after 1 day / 30 days / whole history | 20 KB in 30 ms / 74 KB in 166 ms / 15.0 MB in 1.81 s |
-| Years that fill it, one writer (six writers) | About 37 realistic or 6.8 heavy (6 or 1.1) |
+| Keystroke median (E8) | 0.201 ms |
+| First join, cold server / late join, warm (E13) | 4.99 s / 1.98 s |
+| First download at 1, 2, 4 Mbit/s: stock / 180 s timeout (E13) | Restarted at 35 to 39 s, never finished / 129.3, 80.0, 35.9 s |
+| Years that fill it, one writer (E8) | About 37 realistic or 6.8 heavy |
 
-The weak spot is one cell with a long history: keys stayed under 1 ms to about 4,000 old entries and under 8 ms to
-about 96,000; at 140,001 the median was 22.06 ms, 3.23 ms in a replay (E8). Tag keys add about 9 to 10% (E6). A
-command that would pass the limit, counted in encoded bytes (appendix B), is refused before writing (Q3).
+**First upload.** The built-in server's 30 s heartbeat sweep ends a connection still receiving one large message,
+with no setting for it. Its largest tested uploads were about 7 MB at 1 Mbit/s and 14 MB at 2 Mbit/s; 15 MB passed
+at 4 Mbit/s (E13). The design accepts that ceiling (appendix I).
 
 ## 9. Offline notice
 
-On reconnecting, a copy that worked offline compares three readings per beat: the shared state when it went
-offline, its own state, and the merged result. Beats it changed that someone else changed or removed are listed in
-the banner (`src/features/merge/banner.ts`) and the review list (`src/core/merge/review.ts`, which already compares
-base, mine and theirs). "Put it back" writes the offline text again as an ordinary edit. Version one is only that.
+On reconnecting, a copy compares its own state with the merged result, per beat, and lists beats it changed that
+someone else changed or removed. "Put it back" makes a fresh beat from what the person had, as one undo step (E12).
 
-Known gaps (E9): a deleter offline while the typist stayed online sees no clash; after a double delete and double
-undo nothing is flagged, and offering `def` would store a third copy; plain text misses mark-only and field-only
-changes; after a redone removal, a letter in the beat above cannot be traced to the removed beat.
+- **Counts** (E12, 325 histories): with an ideal base, 64 false banners and 16 misses (all a split-off half left
+  behind after a move); with the person's own journal of pending edits and no base, 46 and the same 16. The design
+  uses the journal, because no client can observe a "last state both had" moment (E13).
+- **Seen against unseen.** For visual text, visual tags, status and fields, a seen and an unseen edit left identical
+  evidence: a card warns in both or misses one. Narration was told apart in the tested pairs.
+- **Who is told.** Only the returning person. A deleter offline while the typist stayed online leaves nobody told
+  (E11).
+- **Put it back** shows words twice if a reading rule already shows them above, would add a third copy after a
+  double delete and double undo, and gives two rows when two people do it.
+- **Reuse:** the banner, the paired-text formatter and the two-side review layout carry over; wording, "Review" and
+  the confirm action change.
 
-## 10. Experiments still running
+## 10. Experiment still running: E14
 
-### E11: the whole combination in the real reader and writers
-
-Will settle whether the reading rules leave every surviving narration character shown exactly once in an editable
-row, with all decisions together, and reruns the 22 E10 histories per design that broke through deletion. Result
-pending.
-
-### E12: the offline notice
-
-Will settle what the three-reading comparison detects, whether "put it back" restores the text, and how much of the
-review list carries over. Result pending.
-
-### E13: the stock Hocuspocus 4.8.0 relay
-
-Will settle whether it keeps each writer's updates in order, how a 15 MB first sync behaves on a slow link, and
-which signal marks a copy as in sync. Result pending.
+A variant where removing a beat deletes only its narration and boundary, keeping its record and visual cell. Does
+that remove rule (e)'s open case, the cut-and-undone loss and the unseen record and visual losses, and at what cost?
+Result pending.
 
 ## 11. Build order
 
@@ -209,23 +200,27 @@ Each slice is one pull request in `src/adapters/collab/native/`, the only place 
 
 | # | Slice | Gate |
 | --- | --- | --- |
-| 1 | Shape, birth, typing, deleting text, incremental reader | Fixture round-trip; birth retries and racing loads; the spike's tape on three copies and a late joiner in every order; a 900-beat structural change within 8 ms |
-| 2 | Formatting and tags | E4 and E6 rows on the adapter; crossing display (Q4) |
-| 3 | Split, join, removal, headings, new beats, reading rules | E2, E5, E9 and E11 histories; section 6 at zero |
+| 1 | Shape, conversion, typing, deleting text, incremental reader | The spike's tape on three copies and a late joiner; a 900-beat structural change within 8 ms |
+| 2 | Formatting and tags | E4, E6 and E11's tag counts on the adapter; crossing display |
+| 3 | Split, join, removal, headings with name cells, reading rules (a) to (f) | E9, E10 and E11 sets on the adapter; section 6 at zero apart from rule (e)'s case, or E14's answer |
 | 4 | Moves | E10's collision table, flat column or better |
 | 5 | Records, status, comments | Exact row changes; author-only bodies |
-| 6 | Undo | E3's tests with the chosen keys; one change per press |
-| 7 | Session, editor, relay, offline notice | E1 on the Writer; E12 and E13 cases; a 15 MB first sync on a slow link |
+| 6 | Undo | E3 and E11 undo tests; one change per press |
+| 7 | Session, editor, relay, server storage, offline notice | The reconnect decision (question 1) with E13's pair table; E12's counts; a 15 MB first load on a slow link; store and reload |
 | 8 | Delete the old adapter | Every deleted test mapped; `npm run verify` |
 
-## 12. What changed since round 3
+## 12. What changed in round 5
 
-- **Removed mark on beats:** gone; removal is a real deletion and the reading rules show stray narration (E9).
-- **Keep-always undo setting:** gone; snapshots and autosave cover going back (decision 5).
-- **Refusal of moves:** gone; flat ranks held with standard undo (E10).
-- **2 MiB budget:** gone; E8 ran every operation at 15 MB and the owner set that limit.
-- **U14 row:** gone; there are no removed beats to type into.
-- Also: plain keys except for tags (E4, E6); the join target stored again for rule (d).
+- **Rooms stay on the server** (owner); the session-only proposal is dropped and the relay host settled.
+- **Heading names in their own cells:** inline, narration typed in a deleted scene ended up inside a removed title,
+  in no row, and no rule could tell a title from stray letters (E11).
+- **Rules (e) and (f)** added, with their limits; **no command copies narration**, after a copying split doubled
+  text (E11).
+- **Undo:** what it does not bring back is stated (E11, E12).
+- **Tags:** E11's counts and E12's flag rule replace the lost-tag question.
+- **Relay, loads and the notice** rest on E13 and E12; only E14 is pending.
+
+Round 4's list is in [appendix J](#j-round-4-changes).
 
 ## Appendix
 
@@ -246,11 +241,15 @@ Result files, under `prototypes/collab/src/`:
 | E8, size | [`native-size/RESULT.md`](../../prototypes/collab/src/native-size/RESULT.md) |
 | E9, real deletion | [`native-delete/RESULT.md`](../../prototypes/collab/src/native-delete/RESULT.md) |
 | E10, move ranks | [`native-moves/E10-RESULT.md`](../../prototypes/collab/src/native-moves/E10-RESULT.md) |
+| E11, the chosen combination | [`native-chosen/RESULT.md`](../../prototypes/collab/src/native-chosen/RESULT.md) |
+| E12, the offline notice | [`native-notice/RESULT.md`](../../prototypes/collab/src/native-notice/RESULT.md) |
+| E13, the stock relay | [`native-relay/RESULT.md`](../../prototypes/collab/src/native-relay/RESULT.md) |
 
 Library sources read: Yjs 13.6.33 `src/utils/UndoManager.js`, `src/types/YText.js`; y-prosemirror 1.3.7
 `sync-plugin.js`, `undo-plugin.js`; y-codemirror.next 0.3.5 `y-sync.js`, `y-undomanager.js`; y-protocols 1.0.6
-`sync.js`; the Hocuspocus 4.8.0 provider; the Yjs documentation on `Y.UndoManager`, `Y.Text`, `Y.Doc`, document
-updates and relative positions. Rule ids such as U14 are from [`native-rule-inventory.md`](native-rule-inventory.md).
+`sync.js`; Hocuspocus 4.8.0 server and provider; the Yjs documentation on `Y.UndoManager`, `Y.Text`, `Y.Doc`,
+document updates and relative positions. Rule ids such as U14 are from
+[`native-rule-inventory.md`](native-rule-inventory.md).
 
 ### B. Checks
 
@@ -262,7 +261,7 @@ updates and relative positions. Rule ids such as U14 are from [`native-rule-inve
 | --- | --- |
 | Two independent conversions of one file, merged | The beat listed twice; one copy's typing gone |
 | Two conversions under one fixed client id, different text | The copies disagree |
-| A retried birth under one creation id, both copies typing | One `births` entry, the segment listed twice, one copy's typing gone |
+| A retried conversion under one creation id, both copies typing | One `births` entry, the segment listed twice, one copy's typing gone |
 | Join by copying the second visual cell while another copy types in it / join as a flag | That typing gone / kept |
 | A throw after the first write in `doc.transact` | The first write committed and sent |
 | A map key set to its current value | One update sent; the remote observer called |
@@ -278,8 +277,9 @@ updates and relative positions. Rule ids such as U14 are from [`native-rule-inve
 | A new history built from the visible text, synced with the old | The text doubled |
 | A comment body as a whole string, two people adding at once | One addition kept, the same on both copies |
 
-The cleared-undo check backs the rebuild in appendix C. The rebuilt-history check is why a room is never rebuilt
-from its visible text (Q1).
+The cleared-undo check backs the rebuild in appendix C. The rebuilt-history check is why a stored room is never
+rebuilt from its visible text. The paste check is why size is counted in encoded bytes: a command that would pass
+15 MB is refused before writing.
 
 ### C. Costs and rebuild
 
@@ -287,18 +287,17 @@ from its visible text (Q1).
 | --- | --- | --- |
 | Split | 54.51 | E2 |
 | Live join | about 40 | E2 |
-| Heading create-and-remove cycle, embed / segment head | 66 / 123 | E5 |
+| Heading name in its own cell, per heading | 13 to 15 | E11 |
 | Flat-rank row move, kept / sent | 9.19 / about 38 | E10 |
 | Production tag history per application, plain key / per-application key | 50.2 / 70.9 to 72.2 | E6 |
-| One embedded beat removed, against the old mark, at 300 beats | 247 saved | E9 |
+| Tag keys over a script's life | about 9 to 10% more | E6 |
 
 An editing copy keeps every letter its own undo history deleted, and `clear()` frees none (appendix B): pasting and
 deleting a 10,000-letter block 100 times gave 1,003,678 encoded bytes against 3,678 in a fresh copy (E3). A copy
-therefore loads fresh on entry and rebuilds from its stored state at an idle moment once its own deleted letters
-pass a threshold (E3 proposes 1,000,000), telling the person undo history was cleared.
+loads fresh on entry and rebuilds from its stored state at an idle moment once its own deleted letters pass a
+threshold (E3 proposes 1,000,000), telling the person undo history was cleared.
 
-Flat ranks are base-62 strings with a writer suffix; after 1,000 insertions into one ever-narrower gap the longest
-was 222 characters (E10).
+The notice's comparison took 1.65 to 1.68 ms median at 900 beats, and capturing a reading 10.2 to 11.6 ms (E12).
 
 ### D. Rules decided or dropped
 
@@ -313,13 +312,13 @@ to R10, R13, R17; Q02, Q04, Q06, Q07. Dropped after E3: U10.
 | --- | --- |
 | Adapter: document state, ingress gate, trial replica, read caches, identities, anchors, text units, birth, creation and mark records, undo executors | Go: Yjs items, relative positions and `Y.UndoManager` replace them |
 | Adapter: executors and preparation | Rewritten as four writers: text, formatting, structure, records |
-| Adapter: projection, indexes, hydration, text import | Rewritten: the incremental reader and one birth |
+| Adapter: projection, indexes, hydration, text import | Rewritten: the incremental reader and one conversion |
 | Adapter: buffer, painted base, recorded selection | Replaced by the composition fold |
-| Adapter: move refusal | Goes: moves are in (decision 7) |
+| Adapter: move refusal | Goes: moves are in |
 | Core: `operations.ts`, `read-operation.ts`, `base-reference.ts` | Change: text by cell, offset and base; operations for dropped rules go |
 | Core: `undo-record.ts` | Goes; a description keeps label, selection, typing key |
 | Core: `recovery.ts`, `removal-state.ts` | Change: removed beats go; removed headings and local refused text stay |
-| Core: `merge/review.ts`; feature: `merge/banner.ts` | Reused by the offline notice |
+| Core: `merge/review.ts`; feature: `merge/banner.ts` | Reused by the offline notice, with new wording |
 | Application: `shared-session.ts` | Stays |
 | Application: `shared-undo.ts`, `replayed-steps.ts` | Shrink to admission and the grouping rule |
 | Tests: `tests/collab/` delivery, agreement, checker, fixtures | Carry over; dropped rules marked |
@@ -340,23 +339,56 @@ E5's checks are the template.
 | `meta` | Format version, `docId`, timing settings, the file's schema, unknown file fields as one JSON string; `title` as `Y.Text` |
 | `births` | Creation id to `{at, by}`: the one conversion of the file |
 | `order` | Segment keys in stored order |
-| `segments` | Per segment: `head` (`{b: beatId}` or `{h: headingId}`) and `text` (narration, heading names, boundary embeds, atoms) |
+| `segments` | Per segment: `head` (`{b: beatId}` or `{h: headingId}`) and `text` (narration and boundaries) |
 | `beats` | Per beat: `rank`, `status`, `lengthSeconds`, `paragraphStart`, `extra`; `joined = {into, glue}` when set |
 | `visuals` | One visual cell (`Y.Text`) per beat |
 | `headings` | Per heading: `rank`, other fields; `removed` when set |
+| `names` | One name cell (`Y.Text`) per heading |
 | `comments`, `replies`, `people`, `tags`, `shots` | The file's fields; bodies are whole strings |
 | `edited` | Per beat, `{by, at}` of the last typing |
 
-### H. Other outcomes
+### H. Outcomes that lose nothing
 
-Under the guide, with no text lost and copies agreeing:
+E11, 600 generated histories, names in cells, unless marked:
 
-- **Plain formatting** (E4, 60 two-copy trials with unseen same-kind changes): 72 letters missing bold at merge, 48
-  without the trials that re-bolded bold text; 34 letters left bold after an undo.
-- **Tags:** E6 found 0 letters missing over 42 trials and 24 extra after undo with standard writes. E3b: Q5.
-- **Rule (d):** a join stops counting when its target is removed, moved or split from it. E11 counts how often.
-- **Composition:** text composed beside a deleted letter can land on the far side of an insertion made there at the
-  same moment: 25 of 20,000 histories with undo (E1).
-- **Double restore:** both delete the `b` of `abc` and both undo: `abbc` (appendix B).
-- **Edges:** a letter typed at a heading's end can land in a heading created there at that moment (E5); an unseen
-  letter typed at a tag's edge takes the tag or not by client order (E6).
+| Outcome | Count |
+| --- | ---: |
+| A split inside rule-read text placed at the nearest point | 8 |
+| An undo press passed over items that no longer changed anything | 16 |
+| A move made an old join count again (rule (d)) | 11 |
+| An undo of a move did nothing visible | 8 |
+| Letters whose fate Yjs decides, all absent at the end | 10 |
+| Formatting differing by delivery order, marks only | 8 histories |
+| An undo press changed only formatting on letters someone else had erased | 2 |
+| A restored row without a rank read at its stored place (rule (e)) | 5 histories |
+
+Also, with no text lost: plain bold in E4's 60 two-copy trials, 72 letters missing bold at merge and 34 left bold
+after an undo; text composed beside a deleted letter landing across a same-moment insertion, 25 of 20,000 (E1); two
+people deleting the same `b` of `abc` and both undoing give `abbc` (appendix B); a letter at a tag's edge takes the
+tag by client order (E6).
+
+### I. Smaller open points
+
+Each is the design's default unless the owner objects.
+
+| Point | Default | What a person notices |
+| --- | --- | --- |
+| A split whose caret is inside recovered text | Nearest point that needs no copy, as built (E11) | With recovered `X` before the beat's own `b`, asking for a break before `X` gives `B: X` / `N: b`; with `X` after `b`, a break at the end gives `B: b` / `N: X`. The break moves by the whole recovered text |
+| Where rule (f) places narration with no beat in its scene | As built (E11) | Rarely, a few letters from a deleted scene start a row in the next scene and move with it |
+| A beat with no rank | Rule (e), as built; E14 pending | The row returns where it was stored and, rarely, a later command moves it |
+| Undoing a heading's creation after an unseen rename | Plain undo; the rename is lost (1 in 600, E11) | The heading and the rename disappear |
+| An old join counting again after a move | As built (11 in 600, E11) | Rarely, a moved row merges with the row it was once joined to |
+| Formatting that differs by delivery order | Accept: library behaviour (E11) | A mark's exact edge can differ; copies agree once everything is delivered |
+| What happens at 15 MB | Refuse the edit with a message and an export; warn from 12 MB | A warning, then a refusal with a way out |
+| Two crossing tags | The second shows on its letters outside the first (E6) | Part of the second tag looks absent |
+| What counts as pending work for the notice | The person's own journal, cleared by acknowledgments (E12) | Fewer false cards for someone who was idle |
+| Words already shown in the row above when a beat is put back | As built: both show (E12) | The words appear twice; the person deletes one |
+| Two people putting the same beat back | Two rows (E12) | Both rows show; someone deletes one |
+| "Undo merge" | Hidden; ordinary undo takes back a put-back (E12) | No "Undo merge" button in shared mode |
+| The first upload of a large script | Accept the built-in server's ceiling: about 7 MB at 1 Mbit/s, 14 MB at 2 Mbit/s, 15 MB passed at 4 Mbit/s (E13) | Sharing a large script over a slow upload fails, and the host retries on a faster link |
+
+### J. Round 4 changes
+
+The removed mark on beats, the keep-always undo setting, the refusal of moves, the 2 MiB budget and the U14 row were
+dropped; plain keys replaced per-action keys except for production tags; the join target is stored again for rule
+(d).
