@@ -7,7 +7,7 @@ Prototype only. Nothing here ships. Code: `src/native-row-record/`, tests: `test
 Both new options remove the failure. A row shown without its record or visual cell drops from 30 of 90 runs (K) to 0 of 90 (R and U). In every copy after every step, it drops from 480 of 3,000 to 0. No option loses narration, shows a row twice, leaves copies disagreeing or fails a reader in these histories. The options differ in whose intent wins:
 
 - **R, a reading rule.** A boundary without its record or cell is not a row; its text reads as part of the row above. Alice's undo of her split wins, and the document looks as it did before the split. Bob's undo of his cut brings nothing visible back. Commands on that row write nothing. R stores nothing extra. It changes no figure in any generated set.
-- **U, creation is not undone at the record.** The record and cell a command creates survive a plain undo of that command. This uses the undo manager's public `deleteFilter`; it is one statement. Bob's undo wins: the row comes back whole, with the status and visual Bob typed. Every command on it works. Its cost: about 31 bytes stored for every undone creation, and more hidden records. The row it brings back has no rank, because the creator's undo still deletes the rank inside the kept record. It then reads by rule (e): after the block before it.
+- **U, creation is not undone at the record.** The record and cell a command creates survive a plain undo of that command. This uses the undo manager's public `deleteFilter`; it is one statement. Bob's undo wins: the row comes back whole, with the status and visual Bob typed. Every command on it works, and the notice reader lists it, as the row list does. Its cost: about 31 bytes stored for every undone creation, and more hidden records. The row it brings back has no rank, because the creator's undo still deletes the rank inside the kept record. It then reads by rule (e): after the block before it.
 
 U also removes the record and visual losses E14's sets still had (192 records or cells in E11 mixed, down to 0). It removes E16's one remaining unseen record loss (1 to 0), and gives back no E16 gain. R moves none of these figures.
 
@@ -17,7 +17,15 @@ This is a measurement, not a recommendation.
 
 ## Reported first
 
-- **Writer failure, K only.** After the four steps, 4 of 15 commands throw after writing. The four are: create a heading above N, move B to the top, move A below B, create a heading above B. "Move A below B" leaves `B, N, A` stored and throws `Missing record b:N`. Five more commands on N throw before writing. Smallest history: the four steps (history 1). This is the failure E17 is about. R and U have no throw after writing. R has one throw before writing: join N up to B (`Nothing above N`). U has none.
+- **Writer failure, K only.** After the four steps, 5 of 16 commands throw after writing:
+  - create a heading above N;
+  - move the run B through N above A (E16's finding);
+  - move B to the top;
+  - move A below B;
+  - create a heading above B.
+
+  The three moves leave `B, N, A` stored and throw `Missing record b:N`. Five more commands on N throw before writing. Smallest history: the four steps (history 1). This is the failure E17 is about. R and U have no throw after writing. R has one throw before writing: join N up to B (`Nothing above N`). U has none.
+- **Reader disagreement, K only.** On the same state, K's row list shows N, but the notice reader leaves N out (E16's finding). In R both leave N out; in U both show it.
 - **Narration doubled, all options.** E16's kind "a double delete then a double undo doubles the narration" is 3 under K, R and U alike. E17 neither causes nor fixes it.
 - **Two stored boundaries for N.** In 2 of 18 histories (marked ² below), N ends with two boundaries in the text. In all options it is shown once and its narration once.
 - **E16's ledger under U.** In 3 seeds of E16's mixed set, the ledger expects a letter typed into a new beat to be lost when its creator undoes the creation, but finds it stored. The ledger counts it lost and notes it as "but is shown". All three letters are in a kept visual cell whose row is hidden (seed 252 N25, 287 N22, 367 N12). The letter is stored, not shown. The ledger's expectation was written for K. These 3 notes are reported, not loosened. Whether a later redo shows them was not measured in that set.
@@ -93,7 +101,7 @@ Where `b` is missing (1b, 3b, 4b, 5b, 6b), Bob's redo of his cut deleted it. Tha
 
 ## Commands on the four-step state
 
-The 15 commands in `commands.ts` were run on Alice's copy after history 1a. Each outcome is decided by comparing snapshots before and after the command.
+The 16 commands in `commands.ts` were run on Alice's copy after history 1a. Each outcome is decided by comparing snapshots before and after the command.
 
 | Command | K | R | U |
 | --- | --- | --- | --- |
@@ -112,8 +120,10 @@ The 15 commands in `commands.ts` were run on Alice's copy after history 1a. Each
 | type narration at the start of B | done | done | done |
 | cut B | done | done | done |
 | create a heading above B | **throws after writing** | done | done |
+| move the run B through N above A | **throws after writing** (`B, N, A` stored) | no write | done (`B, N, A`) |
+| row list shows N / notice reader shows N | yes / **no** | no / no | yes / yes |
 
-Under K and U, an insert before N lands at the top because N has no rank. That is E15's rule (e), not E17's.
+Under K and U, an insert before N lands at the top because N has no rank. That is E15's rule (e), not E17's. The same rule decides where U leaves N when B moves on its own: "move B to the top" and "move A below B" both give `B, A, N`, so N no longer follows B. K stores `B, N, A` before it throws. R has no N to move.
 
 ## Generated sets
 
@@ -139,7 +149,7 @@ Under U, hidden kept records rise by 0 to 15 % (E10: 55 → 63). These are the r
 
 ### E16's recount
 
-These were measured on E16's branch head `460a104`, not on `main`: E16 (#1644) has not merged. The scratch script copied E16's loop from `losses.test.ts`, with the same seeds, modes, `keepCutVisuals`, `skip`, `inspect` and `settled`. It is not committed. It should become a test here once E16 lands.
+`test/native-row-record/recount.test.ts` runs E16's loop for its kept variant from `native-kept-recount/losses.test.ts` (on `main` since #1644). It uses the same seeds, modes, `keepCutVisuals`, `skip`, `inspect`, `settled` and crossing reader, and only the replica changes. The figures were first taken on E16's branch head `460a104` and match the ones on `main`.
 
 | Figure (600 mixed + 200 twins) | K | R | U |
 | --- | --- | --- | --- |
@@ -162,7 +172,7 @@ K reproduces E16's figures exactly. U's one changed loss is seed 497, step 29: N
 
 - **No-op fixes bring the failure back on the set total.**
   - R with the rule switched off (`R0`) and U with a filter that deletes everything (`U0`) both give 30 of 90 runs and 480 of 3,000 copy-steps, as K does. Both match K's model exactly.
-  - `U0` also gives back K's figures in all four E14 sets: 32, 192 and 32 disappeared.
+  - `U0` also gives back K's figures in all four E14 sets (32, 192 and 32 disappeared) and in E16's whole recount.
 - **A deliberately wrong reading is caught.** R that drops a bare boundary's text instead of giving it to the row above (`Rdrop`) mismatches the model in 75 of 90 runs, and the never-acceptable check flags 75.
 - **A wrong expectation is caught.** Comparing R against K's model, U against K's, and K against U's mismatches in 90 of 90 runs each.
 - The model's own reading of the four steps is pinned from the commands, separately for K, R and U (`variants.test.ts`).
@@ -189,7 +199,7 @@ Method: `src/native-row-record/cost.ts`, on E14's fixture of 900 beats, with 30 
 - **Lines changed.**
   - U: about 7 lines.
   - R: about 20 lines, plus a 4-line hook in `variant.ts` and 3 visibility changes in E14's replica.
-  - Tests and harness: about 590 lines, new and opt-in. E14's `replay.ts` gained an optional variant, and three helpers moved from `reruns.test.ts` to `sets.ts` unchanged.
+  - Tests and harness: about 700 lines, new and opt-in. E14's `replay.ts` gained an optional variant, and three helpers moved from `reruns.test.ts` to `sets.ts` unchanged.
 
 ## What each option does not cover
 
@@ -198,7 +208,7 @@ Method: `src/native-row-record/cost.ts`, on E14's fixture of 900 beats, with 30 
   - It is worse than K in history 1a and its offline variants in one respect: Bob's undo shows no visible effect. Under K it at least showed `N: b`.
   - It changes nothing in any generated set.
 - **U**
-  - Leaves N without a rank, so N reads by rule (e). An insert before it lands at the top (as in K).
+  - Leaves N without a rank, so N reads by rule (e). An insert before it lands at the top (as in K), and moving B alone leaves N at the end, not under B.
   - Keeps about 31 bytes for every undone creation in every copy, for good. Hidden kept records rise by up to 15 %.
   - Typing into a new beat's visual cell survives the creator's undo, stored but not shown (E16's 3 seeds).
 - **Both**
@@ -214,13 +224,12 @@ Method: `src/native-row-record/cost.ts`, on E14's fixture of 900 beats, with 30 
 - Redo of the 3 E16 seeds whose typed letters U keeps hidden.
 - R and U combined.
 - Anything in the product: no product code was changed.
-- E16's recount on `main`: it was measured on E16's branch head.
 
 ## Owner question
 
 What should happen when someone undoes the creation of a row that another person has since cut and restored?
 
-- **A. Keep K.** The row comes back without its record or visual cell; setting its status or typing in its visual fails, and some moves near it fail halfway.
+- **A. Keep K.** The row comes back without its record or visual cell; setting its status or typing in its visual fails, some moves near it fail halfway, and the offline notice does not list it.
 - **B. R, read it as no row.** The restored row stays invisible and its text joins the row above; the person who restored it sees nothing happen.
 - **C. U, keep what a creation made.** The row comes back whole with everyone's edits, placed after the row before it; each undone creation leaves about 31 bytes behind.
 - **D. U now, and decide on R later.** As C. R would be a second guard for any other route to a missing record, not measured together.

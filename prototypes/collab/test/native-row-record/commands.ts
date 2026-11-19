@@ -58,5 +58,6 @@ export const COMMANDS: { label: string; cmd: Cmd }[] = [
   { label: "move A below B", cmd: { op: "move", drop: { unit: "row", first: "A", target: "B", after: true } } },
   { label: "type narration at the start of B", cmd: { op: "type", id: "B", field: "audio", at: 0, text: "y" } },
   { label: "cut B", cmd: { op: "delete", rows: ["B"] } },
-  { label: "create a heading above B", cmd: { op: "heading", above: "B", id: "H", text: "h" } }
+  { label: "create a heading above B", cmd: { op: "heading", above: "B", id: "H", text: "h" } },
+  { label: "move the run B through N above A", cmd: { op: "move", drop: { unit: "rows", first: "B", last: "N", target: "A", after: false } } }
 ];
