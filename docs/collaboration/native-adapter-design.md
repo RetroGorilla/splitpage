@@ -385,7 +385,25 @@ Each is the design's default unless the owner objects.
 | Words already shown in the row above when a beat is put back | As built: both show (E12) | The words appear twice; the person deletes one |
 | Two people putting the same beat back | Two rows (E12) | Both rows show; someone deletes one |
 | "Undo merge" | Hidden; ordinary undo takes back a put-back (E12) | No "Undo merge" button in shared mode |
-| The first upload of a large script | Accept the built-in server's ceiling: about 7 MB at 1 Mbit/s, 14 MB at 2 Mbit/s, 15 MB passed at 4 Mbit/s (E13) | Sharing a large script over a slow upload fails, and the host retries on a faster link |
+| The first upload of a large script | Accept the built-in server's ceiling: about 7 MB at 1 Mbit/s, 14 MB at 2 Mbit/s, 15 MB passed at 4 Mbit/s (E13). The documented `handleConnection` route on a host-owned listener has no such sweep, but the host then owns connection lifetime and heartbeat | Sharing a large script over a slow upload fails, and the host retries on a faster link |
+| Undo passing over spent steps | Library behaviour (16 in 600, E11) | A press occasionally undoes something older |
+| A person who stayed online while their beat was removed | Not told (E11); E12's online signal is not used | Visual text or fields can vanish with no message for them |
+
+### K. Relay signals and the reconnect wrapper
+
+What the stock provider's signals promise (E13):
+
+| Signal | Promises | Does not promise |
+| --- | --- | --- |
+| `status` connected, `connect` | The socket is open | That the document has arrived; a silently dead link stays "connected" 36 to 39 s, or 216 to 234 s with a 180 s timeout |
+| `synced` | After the server's state reply is applied, the copy has what the server had when it answered | Caught up both ways: it fired once before the reply on a reconnect, and stayed true through a forced disconnect |
+| Pending count at zero | On an unbroken connection, every update this copy sent was applied by the relay | Saved to storage; after a reconnect an offline queue reset to 1 and reached zero early |
+
+The wrapper (question 1) is a 38-line subclass of the stock provider. It holds document sends while disconnected and
+from open until its own state reply is sent; authentication, awareness and the handshake stay stock. Measured: the
+tag kept in 5 of 5 runs where stock lost it; the first edit after reconnect reached a peer about 29 ms later; a 1 MB
+offline return sent 1,000,485 bytes against 2,001,048. A large combined reply is subject to the upload ceiling in
+appendix I (E13).
 
 ### J. Round 4 changes
 
