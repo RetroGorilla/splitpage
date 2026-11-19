@@ -66,7 +66,10 @@ and unresolved dynamic imports keep the whole file in the always-run set.
 The trial-replica file stays there because one case scans all of `src/`.
 
 The filter includes those covered paths, shared CI tooling, package inputs,
-and unknown diffs. Native-only diffs skip the old matrix. The self-check
+and unknown diffs. It also includes every bootstrap wiring module that
+directly imports the old adapter. This wiring is part of the app bundle.
+Triggering the matrix from one of those files does not change test eligibility.
+Native-only diffs skip the old matrix. The self-check
 verifies that every old test and each imported file triggers the filter.
 Static analysis cannot infer arbitrary runtime file reads. The old set allows
 only the assertion, test and utility builtins and the existing Yjs libraries.

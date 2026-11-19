@@ -18,6 +18,9 @@ const testLibraries = new Set(["builtin:assert/strict", "builtin:test", "builtin
 export function oldAdapterFiles(repo, graph = loadGraph(repo)) {
   const imports = new Map();
   const dependencies = new Set();
+  const wiringImporters = [...graph.values()]
+    .filter(({ path, edges }) => path.startsWith("src/bootstrap/wiring/") && edges.some(({ target }) => oldSource(target)))
+    .map(({ path }) => path);
   for (const test of graph.keys()) {
     if (!candidate(test) || TREE_INVENTORIES.includes(test)) continue;
     const reach = new Set([test]);
@@ -38,7 +41,7 @@ export function oldAdapterFiles(repo, graph = loadGraph(repo)) {
     imports.set(test, reach);
     for (const path of reach) dependencies.add(path);
   }
-  return { isOldTest: (path) => imports.has(path), dependencies, imports };
+  return { isOldTest: (path) => imports.has(path), dependencies, imports, wiringImporters };
 }
 
 export function partitionRootTests(entries, isOldTest) {

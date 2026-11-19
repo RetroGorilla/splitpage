@@ -52,6 +52,12 @@ for (const test of old) {
     assert.ok(needsOldAdapterTests([path], REPO, inventory), `${test} depends on ${path}, which must trigger the old matrix`);
   }
 }
+const wiring = [...modules.values()].filter(({ path, edges }) => path.startsWith("src/bootstrap/wiring/") &&
+  edges.some(({ target }) => target.startsWith("src/adapters/collab/") && !target.startsWith("src/adapters/collab/native/")));
+assert.ok(wiring.some(({ path }) => path === "src/bootstrap/wiring/editor.ts"));
+for (const { path } of wiring) {
+  assert.ok(needsOldAdapterTests([path], REPO, inventory), `${path} imports the old adapter and must trigger its matrix`);
+}
 assert.deepEqual(jobs.checks.steps.filter((s) => s.run === "node tools/test-ci-old-adapter-shards.mjs").map((s) => s.if), [undefined]);
 const nightly = parse(readFileSync(join(REPO, ".github/workflows/nightly.yml"), "utf8")).jobs["root-tests"];
 const nightlyCount = nightly.strategy.matrix.shard.length;
