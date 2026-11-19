@@ -1,0 +1,41 @@
+name: Prepare root tests
+description: Install tooling, build the app and prepare Chromium for root tests
+runs:
+  using: composite
+  steps:
+    - uses: actions/setup-node@v7
+      with:
+        node-version-file: .nvmrc
+        cache: npm
+        cache-dependency-path: |
+          package-lock.json
+          desktop/package-lock.json
+
+    - name: Install tooling
+      shell: bash
+      run: npm ci && npm ci --prefix desktop
+
+    - name: Build index.html and stamp sw.js
+      shell: bash
+      run: node build.mjs
+
+    - name: sw.js is committed with the current VERSION stamp
+      shell: bash
+      run: git diff --exit-code -- sw.js
+
+    - name: Select persistent Chromium cache
+      shell: bash
+      run: |
+        test -n "$RUNNER_TOOL_CACHE"
+        echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TOOL_CACHE/splitpage-playwright/$PLAYWRIGHT_VERSION" >> "$GITHUB_ENV"
+
+    - name: Install Chromium
+      shell: bash
+      run: |
+        npx --yes playwright@${PLAYWRIGHT_VERSION} install ${{ runner.environment == 'github-hosted' && '--with-deps' || '' }} chromium
+        exe=$(find "$PLAYWRIGHT_BROWSERS_PATH" -maxdepth 3 -type f -path '*/chromium-*/*' -name chrome -print -quit)
+        if [ -z "$exe" ]; then
+          echo "::error::no Chromium under $PLAYWRIGHT_BROWSERS_PATH"
+          exit 1
+        fi
+        echo "SPLITPAGE_CHROME=$exe" >> "$GITHUB_ENV"

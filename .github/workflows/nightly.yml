@@ -140,6 +140,24 @@ jobs:
             gh issue create --title "$title" --body-file "$body" --label area:tooling
           fi
 
+  root-tests:
+    name: Root tests (${{ matrix.shard }}/10)
+    runs-on: ${{ vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 25
+    env:
+      SPLITPAGE_CHROME_ARGS: --no-sandbox --disable-dev-shm-usage
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4, 5, 6, 7, 8, 9, 10]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: ./.github/actions/root-test-setup
+
+      - name: Unit, desktop and tool test shard
+        run: npm run test:all -- --shard "${{ matrix.shard }}/10"
+
   suites:
     runs-on: ${{ vars.CI_RUNNER }}
     timeout-minutes: 180

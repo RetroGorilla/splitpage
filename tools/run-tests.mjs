@@ -3,6 +3,7 @@ import { existsSync, readFileSync } from "node:fs";
 import { join } from "node:path";
 import { REPO, listRepoFiles } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
+import { oldAdapterFiles, partitionRootTests } from "./old-adapter-tests.mjs";
 
 const TS_SOURCE = /\.(?:ts|mts|cts)$/;
 const DECLARATION = /\.d\.(?:ts|mts|cts)$/;
@@ -165,6 +166,7 @@ export function runTests({
   listOnly = false,
   only = [],
   shard = null,
+  suite = null,
   env = process.env,
   nodeError = null
 } = {}) {
@@ -178,9 +180,10 @@ export function runTests({
     return 2;
   }
   const { groups: found, overlaps, orphans, untested } = discover(files, groups);
+  const eligible = suite === null ? found : partitionRootTests(found, oldAdapterFiles(repo).isOldTest)[suite];
   const focused = only.length > 0;
-  const assigned = shard ? new Set(assignShards(found, shard.total)[shard.index - 1]) : null;
-  const chosen = found.filter((e) => sets.includes(e.group.set)).map((e) => ({ ...e, selected: selectFiles(e.files, only).filter((file) => !assigned || assigned.has(file)) }));
+  const assigned = shard ? new Set(assignShards(eligible, shard.total)[shard.index - 1]) : null;
+  const chosen = found.map((e, i) => ({ ...e, selected: selectFiles(eligible[i].files, only).filter((file) => !assigned || assigned.has(file)) })).filter((e) => sets.includes(e.group.set));
   let failed = false;
 
   for (const e of chosen) {
@@ -205,7 +208,7 @@ export function runTests({
     print("focused run: this is NOT the full gate; `npm run test:all`, which CI runs, executes every discovered file");
   }
   if (shard) {
-    print(`\nshard ${shard.index}/${shard.total}: ${picked} of ${discovered} discovered test files in ${sets.join(", ")}`);
+    print(`\nshard ${shard.index}/${shard.total}: ${picked} of ${discovered} discovered test files in ${sets.join(", ")}${suite ? ` (${suite} suite)` : ""}`);
     for (const e of chosen) for (const f of e.selected) print(`  ${f}`);
     print("sharded run: every shard must pass to complete the full gate");
   }
@@ -281,6 +284,7 @@ export function parseArgs(args) {
   const named = [];
   let listOnly = false;
   let shard = null;
+  let suite = null;
   for (let i = 0; i < args.length; i++) {
     const a = args[i];
     if (a === "--list") listOnly = true;
@@ -294,14 +298,19 @@ export function parseArgs(args) {
       const match = /^(\d+)\/(\d+)$/.exec(value ?? "");
       shard = match ? { index: Number(match[1]), total: Number(match[2]) } : null;
       if (!validShard(shard)) return { error: "--shard needs an index/total with 1 <= index <= total" };
-    } else if (a.startsWith("--")) return { error: `unknown flag ${a}; use --list, --shard <index/total> or --only <path-or-substring>` };
+    } else if (a.startsWith("--suite=")) {
+      const value = a.slice("--suite=".length);
+      if (suite || !["always", "old-adapter"].includes(value)) return { error: "--suite must be always or old-adapter and may only be specified once" };
+      suite = value;
+    } else if (a.startsWith("--")) return { error: `unknown flag ${a}; use --list, --shard <index/total>, --suite=always|old-adapter or --only <path-or-substring>` };
     else named.push(a);
   }
   const unknown = named.filter((a) => !SETS.includes(a) && a !== "all");
   if (unknown.length) return { error: `unknown set ${unknown.join(", ")}; use ${SETS.join(", ")} or all` };
   const sets = named.length === 0 || named.includes("all") ? SETS : named;
   if (shard && only.length) return { error: "--shard cannot be combined with --only" };
-  return { sets, listOnly, only, ...(shard ? { shard } : {}) };
+  if (suite && !shard) return { error: "--suite requires --shard" };
+  return { sets, listOnly, only, ...(shard ? { shard } : {}), ...(suite ? { suite } : {}) };
 }
 
 if (isMain(import.meta.url)) {

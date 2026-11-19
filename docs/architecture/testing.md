@@ -63,7 +63,7 @@ changes CI runs lint, types, the
 dependency and comment gates, the build, every discovered unit, desktop and
 tool test, and, for app-affecting changes, the smoke, CSP and persistence browser suites. CI never
 narrows to the test files a change touched; `--only` is a local tool. CI
-distributes the full discovered test set across four required shards, while
+distributes the full discovered test set across the required root matrices, while
 lint, types and the other checks run in a separate job.
 
 App-affecting changes also require the dev desktop smoke. Test-only changes
@@ -421,7 +421,8 @@ them, and prints how many ran in each group.
 | --- | --- | --- | --- |
 | `frontend` | `src/test/*.test.mjs` | `node --test` | always |
 | `source` | `*.test.{ts,mts,cts,js,mjs,cjs}` under `src/`, outside `src/test/` | `node --test` | once a migrated area (below) holds TypeScript source and its `tests/` folder has no test |
-| `tests` | `tests/**/*.test.*` | `node --test` | once `tests/` holds TypeScript |
+| `tests` | Five always-run root shards on a fresh root-test change and on every push to `main`. The native adapter, source inventories and mixed standalone checks are in this matrix. |
+| `old-adapter-tests` | Six shards when a pull request affects the old adapter or its dependencies or test support, and on every push to `main`. See [the filter](ci.md#old-shared-document-adapter). |
 | `desktop` | `desktop/test/*.test.mjs` | `node <file>`, one at a time | always |
 | `tools` | `tools/test-*.mjs` | `node <file>`, one at a time | always |
 
@@ -452,15 +453,17 @@ src/test/formats`, `npm run test:all -- --only tools/test-comment-gate`.
 Discovery and its orphan, overlap and empty-group checks still run over
 everything, the selected files are listed, and the run says it is not the
 full gate. A filter that matches nothing exits 2. It is for local feedback
-only; CI runs the whole set through all four required shards.
+only; CI runs the whole set through the required root matrices.
 
 `--shard <index/total>` balances files using the recorded timing weights
-described above. CI uses four shards (#1282). `npm run test:all -- --shard 1/4`, `--shard 2/4`, `--shard 3/4` and `--shard 4/4`
-together run every discovered file exactly once. Full discovery, area coverage,
+described above. `--suite=always` and `--suite=old-adapter` select disjoint file sets before balancing.
+PR CI uses five always-run shards and six old-adapter shards when the change
+requires them. The ten unfiltered nightly shards use `--shard 1/10` through
+`--shard 10/10`. Full discovery, area coverage,
 orphan, overlap, required-group and golden-update guards still run in each
 shard. A group can have no files assigned to one shard, but a shard with no
 assigned files at all fails. Invalid shard coordinates and combining `--shard`
-with `--only` are errors. `--list --shard 1/4` lists the first shard without
+with `--only` are errors. `--list --shard 1/10` lists the first shard without
 executing it. A shard's success covers only its printed share; all shards must
 pass. Local `npm run verify` remains an unsharded full run.
 
@@ -817,9 +820,9 @@ to `main` or a `hotfix/` branch. Its jobs call the scripts above and nothing els
 | --- | --- |
 | `changes` | `tools/ci-changes.mjs`: does the diff touch anything but prose? On a push to `main`, `tools/ci-tested-tree.mjs`: did another run already pass this exact tree? ([ci.md](ci.md)) |
 | `checks` | Node from `.nvmrc`: lint, typecheck, check:deps and check:comments for non-prose changes requiring a fresh run; for app-affecting changes, also build, check the `sw.js` stamp, run browser suites 01 and 52, then 21 suites covering save, typing, undo, export, writer position and typing work (the list and the reason for each are in [ci.md](ci.md); about 75 s), and upload the built app |
-| `tests` | When `tools/ci-changes.mjs` reports `root_tests=true` (any non-prose change outside `prototypes/collab/`, a prototype oracle that `tests/collab/` copies, or an unknown diff) and no earlier run passed the same tree, four independent matrix jobs run `test:all -- --shard 1/4`, `2/4`, `3/4` and `4/4`, after building their own app and checking the worker stamp. Together they execute every discovered unit, desktop and tool test exactly once. They run in parallel with `checks`, subject to available runner slots. A prototype-only change skips them |
+| `tests` | When `tools/ci-changes.mjs` reports `root_tests=true` (any non-prose change outside `prototypes/collab/`, a prototype oracle that `tests/collab/` copies, or an unknown diff) and no earlier run passed the same tree, ten independent matrix jobs run `test:all -- --shard 1/10` through `10/10`, after building their own app and checking the worker stamp. Together they execute every discovered unit, desktop and tool test exactly once. They run in parallel with `checks`, subject to available runner slots. A prototype-only change skips them |
 | `collab-tests` | When `tools/ci-changes.mjs` reports `collab=true` (a change under `prototypes/collab/`, to `ci.yml`, or an unknown diff) and no earlier run passed the same tree, matrix jobs install only `prototypes/collab` and run its tests with Node's `--test-shard=<i>/<n>`; together they run every prototype test file once, in parallel with `checks`. On the same flag `checks` runs `tools/test-ci-collab-shards.mjs`, which fails when the shard command and the prototype's `test` script differ |
-| `gate` | The workflow's summary check; nothing in the repository settings requires it (see [ci.md](ci.md#known-limits)). For a code change needing a fresh run it requires successful classification and `checks`, the four test shards when `root_tests=true`, the prototype test shards when `collab=true` and `desktop-smoke` when `desktop=true`, and each of those three skipped when its flag is false. For prose only, or a tree another run already passed, it requires `checks`, `tests`, `collab-tests` and `desktop-smoke` to be skipped. It uploads the `ci-passed-tree-<tree>` marker only when its check passed, `checks` and all four `tests` shards succeeded, `collab-tests` and `desktop-smoke` each succeeded or were skipped, and the tree is known; so a prototype-only change, which skips `tests`, uploads none |
+| `gate` | Checks expected job results and each required matrix leg before uploading the passed-tree marker. See [CI configuration](ci.md#githubworkflowsciyml). |
 | `desktop-smoke` | Electron dev-target smoke on `ubuntu-latest` under Xvfb, on pull requests and pushes to `main` when `tools/ci-changes.mjs` reports `desktop=true`; about 5.5 min, in parallel with the other jobs |
 
 The persistence suite costs little: on its first hosted run (PR #270,
