@@ -1,8 +1,9 @@
 **Yes.** The Node prototype completed all tested operations on a 15,036,020-byte shared document on a
 Windows arm64 laptop with 16 GB RAM. In the evenly edited fixture, the first local keystroke came
 closest to the proposed 1 ms layer share, with a 0.734 ms median and a 0.963 ms maximum. Across all
-local keystrokes the median was 0.201 ms. A separate 15.68 MB probe with 140,001 entries in one cell
-took 22.06 ms per key at the median, above both the layer share and the app's 8 ms end-to-end ceiling.
+local keystrokes the median was 0.201 ms. The original 15.68 MB probe with 140,001 entries in one cell
+took 22.06 ms per key at the median. An instrumented replay of the same bytes took 3.23 ms. Both
+exceed the layer share. The original run also exceeded the app's 8 ms end-to-end ceiling.
 Cold load and catch-up from the initial script cost the most time in the main fixture, at 1.59 s through
 the first full read and 1.81 s to apply the whole-history difference. Creating the replica and applying
 the stored update took 1.50 s. Stage 0's historical join test for its 2 MiB fixture targeted a maximum
@@ -29,7 +30,8 @@ identical across rounds. The two GC-off byte counts each come from one replay.
 | Undo entries after 20,000 operations | 5,000 | 5,000 |
 | Local keystroke and incremental read, ms | 0.089 [0.059–0.411] | 0.201 [0.132–0.963] |
 | First local keystroke in each timed copy, ms | 0.224 [0.156–0.411] | 0.734 [0.671–0.963] |
-| Local key and read in a concentrated audio cell, separate 15.68 MB probe, ms | — | 22.06 [4.97–50.76] |
+| Local key and read in a concentrated audio cell, original 15.68 MB probe, ms | — | 22.06 [4.97–50.76] |
+| Same concentrated cell, instrumented replay at the same offsets, ms | — | 3.23 [2.30–6.39] |
 | Remote keystroke and incremental read, ms | 0.076 [0.053–0.862] | 0.123 [0.096–1.99] |
 | Split and read, ms | 11.53 [10.28–15.28] | 49.10 [44.67–49.41] |
 | Format and read, ms | 0.141 [0.120–0.563] | 0.270 [0.262–0.620] |
@@ -68,20 +70,113 @@ Counting the linked Yjs items in each of the 600 text cells after reload gave a 
 and a maximum of **3,947**. The column medians were **3,441** for audio and **1,254** for visual.
 The review reported a median of **1,386** and the same maximum. The median difference is unresolved.
 
-The concentration probe starts from editing day 11,232 of the E8 fixture. It prepends a temporary
-68,354-character paste to the middle audio cell, alternates underline on and off one character at a
-time using a second client ID, then deletes the paste. The visible text checks passed after reload.
-The resulting **15,680,416-byte** state has **140,001 entries** in that cell, 9.5% of the document.
-Five fresh copies each took 11 local keys at positions across the cell through the same undo and
-incremental read path. The **22.06 ms** median exceeds both the **1 ms** layer share and the **8 ms**
-app ceiling. Separately timed medians were 16.31 ms for the write including its observers and
-5.76 ms for the subsequent read.
+#### What the probe builds
 
-A second pattern built up the cell with 75,776 seeded, equal-length replacements of 5–20 characters.
-It reached 140,115 entries and took 23.49 ms median and 49.01 ms maximum on a 17.45 MB state.
-The independent review's 140,000-entry cell took 1.7 ms median and 3.6 ms maximum. All three probes
-exceed the layer share. The variation shows that entry count alone is insufficient to predict
-hot-cell latency.
+[`hot-cell.ts`](hot-cell.ts) starts from day 11,232 of E8. The middle audio cell has 54 visible
+characters, 3,270 old tombstones, 13 live text entries and 10 live format markers. The original
+probe prepends 68,354 `x` characters under one client ID. A second ID alternates underline on and
+off letter by letter in one delta. One delete then removes the whole temporary span. The result is
+the original **15,680,416-byte** state with **140,001 linked entries**, including **139,978 deleted**.
+The new tombstones come from **68,354 text entries and 68,354 format markers**. GC erases that
+distinction in the stored items. The 3,270 pre-existing tombstones have unknown provenance and the
+10 live markers are unchanged.
+
+The matched plain-text build interleaves one `y` from the second client ID after each `x`, then
+deletes all 136,708 letters. It leaves **136,708 new text tombstones and zero new format tombstones**.
+In both builds the two client IDs alternate along the linked list. Neighbours cannot merge across
+client IDs, so the deleted-entry count equals the pre-delete text and marker count. The suffix versions
+place the same additions after the visible text. They retain the same number of entries in roughly
+15.34 MB. Every measured copy rechecks the visible-script signature and the cell composition.
+
+#### Time per key at 140,001 entries
+
+The first key is the first edit after load and projection. Start is offset 0, middle is offset 27 and
+end is offset 54. The ten subsequent keys start immediately after the previous insertion. The original
+probe's sweep instead walks through the original 54 characters in 11 roughly even steps, starting at
+offset 4. Both use `UndoLayer.type()` and the immediate `changes()` read.
+
+Each row below is a median in milliseconds. The instrumented replay takes five fresh copies for the
+formatted-prefix rows and three per other row. Component columns show the ten warm keys per copy.
+Insert times `Y.Text.insert()` inside the transaction before outer observers. Observer times the
+target cell's `event.delta` getter. View includes the replica's cache checks and uncached cell read,
+with its `toDelta()` time in parentheses. Caret is the relative-position lookup outside the view
+timer. Other includes the remaining transaction handling, undo bookkeeping and row projection.
+The component medians are computed independently.
+
+| Hot history | Key position | First / warm total | Insert | Observer | View (toDelta) | Caret | Other |
+| --- | --- | ---: | ---: | ---: | ---: | ---: | ---: |
+| prefix formatted | sweep | 5.43 / 2.96 | 0.76 | 0.69 | 0.64 (0.63) | 0.54 | 0.21 |
+| prefix formatted | start | 4.97 / 2.57 | 0.62 | 0.65 | 0.61 (0.61) | 0.47 | 0.13 |
+| prefix formatted | middle | 6.42 / 2.65 | 0.66 | 0.67 | 0.62 (0.62) | 0.47 | 0.13 |
+| prefix formatted | end | 4.90 / 2.81 | 0.72 | 0.69 | 0.63 (0.62) | 0.45 | 0.15 |
+| prefix plain | start | 5.45 / 2.64 | 0.66 | 0.69 | 0.61 (0.60) | 0.42 | 0.12 |
+| prefix plain | middle | 6.81 / 3.18 | 0.78 | 0.78 | 0.72 (0.71) | 0.50 | 0.21 |
+| prefix plain | end | 4.92 / 2.83 | 0.72 | 0.74 | 0.65 (0.64) | 0.48 | 0.15 |
+| suffix plain | start | 3.14 / 1.74 | 0.07 | 0.75 | 0.70 (0.69) | 0.04 | 0.13 |
+| suffix plain | middle | 4.12 / 1.53 | 0.04 | 0.71 | 0.63 (0.63) | 0.02 | 0.10 |
+| suffix plain | end | 6.10 / 2.75 | 0.69 | 0.72 | 0.64 (0.63) | 0.46 | 0.13 |
+| suffix formatted | start | 3.25 / 1.75 | 0.05 | 0.76 | 0.71 (0.70) | 0.04 | 0.15 |
+| suffix formatted | middle | 4.46 / 1.77 | 0.06 | 0.75 | 0.68 (0.68) | 0.04 | 0.15 |
+| suffix formatted | end | 5.93 / 2.74 | 0.69 | 0.73 | 0.62 (0.62) | 0.47 | 0.13 |
+
+The replay rebuilt the original bytes and entry counts. Its sweep median was **3.23 ms** (2.30–6.39),
+compared with **22.06 ms** (4.97–50.76) in the original run. The review measured **1.7 ms** median and
+**3.6 ms** maximum on its desktop case. On this laptop, a warm key before a deleted suffix reproduced
+the roughly 2 ms result. That position avoids most of the history in the insert and caret lookup.
+An end key meets the tombstones while looking for the insertion point, and a prefix puts them in the
+path at all three positions. Plain and formatting-origin tombstones timed similarly at matching
+positions. The observer and `toDelta()` still walk the whole cell in every case. These comparisons
+isolate the cost of position and repeated reads. They leave the exact gap between the original run and
+the desktop review unresolved.
+
+#### Entry counts and the typing targets
+
+A single-beat control keeps the same 54 visible characters and prepends the two histories at increasing
+entry counts. Each condition uses three fresh copies per position with one first key and ten warm keys
+per copy. Cells show first / warm median milliseconds. The last column is the maximum key time across
+both builds and all positions at that entry count.
+
+| Entries | Plain start | Plain middle | Plain end | Formatted start | Formatted middle | Formatted end | Max |
+| ---: | ---: | ---: | ---: | ---: | ---: | ---: | ---: |
+| 501 | 0.32 / 0.11 | 0.32 / 0.11 | 0.22 / 0.09 | 0.25 / 0.10 | 0.20 / 0.09 | 0.21 / 0.08 | 0.93 |
+| 1,501 | 0.43 / 0.11 | 0.38 / 0.15 | 0.38 / 0.16 | 0.48 / 0.09 | 0.46 / 0.12 | 0.39 / 0.10 | 0.51 |
+| 4,001 | 0.76 / 0.15 | 0.52 / 0.14 | 0.48 / 0.16 | 0.68 / 0.16 | 0.43 / 0.16 | 0.35 / 0.15 | 0.88 |
+| 8,001 | 1.05 / 0.24 | 1.01 / 0.22 | 0.97 / 0.24 | 0.99 / 0.24 | 1.06 / 0.24 | 1.02 / 0.25 | 1.81 |
+| 16,001 | 1.73 / 0.45 | 1.41 / 0.42 | 1.63 / 0.41 | 1.93 / 0.44 | 1.46 / 0.41 | 1.45 / 0.41 | 2.21 |
+| 24,001 | 2.20 / 0.71 | 2.30 / 0.66 | 2.00 / 0.68 | 2.27 / 0.70 | 2.10 / 0.66 | 1.99 / 0.66 | 3.85 |
+| 32,001 | 2.78 / 1.09 | 2.74 / 0.98 | 2.88 / 1.06 | 2.75 / 0.99 | 2.33 / 0.88 | 2.58 / 0.94 | 3.41 |
+| 64,001 | 4.35 / 2.84 | 4.59 / 2.67 | 4.86 / 2.71 | 4.68 / 2.81 | 4.68 / 2.64 | 4.81 / 2.84 | 5.00 |
+| 96,001 | 5.69 / 4.11 | 5.69 / 4.18 | 5.68 / 4.26 | 5.79 / 4.56 | 5.81 / 4.11 | 5.66 / 4.28 | 6.82 |
+| 140,001 | 29.73 / 23.84 | 23.68 / 19.90 | 22.42 / 18.06 | 22.40 / 20.34 | 28.83 / 23.92 | 20.27 / 16.04 | 39.63 |
+
+In this control the plain middle key's insert, observer, view and caret medians were roughly
+**0.03 / 0.03 / 0.02 / 0.02 ms** at 4,001 entries, **0.64 / 0.67 / 0.60 / 0.61 ms** at
+64,001, and **4.97 / 4.23 / 5.10 / 4.74 ms** at 140,001. The remaining work stayed below 0.2 ms
+at these points. The compact 140,001-entry fixture produced warm medians of 16–24 ms even though
+the full E8 replay was much faster. Entry order, memory layout and run conditions can affect the
+time per walk. These runs establish the number of walks and which ones depend on position.
+
+**On this laptop, every sampled key was under 1 ms through about 4,000 entries and under 8 ms
+through about 96,000 entries** in the single-beat prefix control. Warm medians stayed under
+1 ms through about 24,000 entries at all positions. Some first-key medians crossed 1 ms by
+8,000 entries, and some warm medians crossed it by 32,000. The 140,001-entry results span both
+sides of 8 ms across fixtures and runs. These are observed bands for this reader and workload.
+
+In the script's rewrite check, 1,000 complete plain rewrites of a 54-character beat leave 1,000
+tombstones. Consecutive letters in each draft merge into one entry, and an unrelated cell edit between
+drafts leaves a gap in their clocks. A separate check with 1,000 complete rewrites of a single cell
+and no other edits merged the deleted drafts into **one tombstone**. In the script's fragmented
+pattern, 1,000 staggered 5–20-character replacements revise 12,579 characters and leave 1,830
+tombstones. At the script's observed rates, 4,000 / 24,000 / 96,000 tombstones represent about
+**4,000 / 24,000 / 96,000 complete rewrites interleaved with other edits**, or **500 / 3,100 / 12,200
+beat-lengths** of fragmented revisions. These are workload equivalents. Placement, formatting and
+intervening edits can change how many entries survive.
+
+Yjs performs the position search, insertion and linked-list walks. The prototype asks for two
+whole-cell walks after a key, first by consuming the change event's delta and again by rebuilding
+the cell to read its delta. The undo layer also asks Yjs for a relative caret position. A cheap raw
+insert can therefore coexist with a slow key. When history precedes the edit, the insert and caret
+lookups can also be expensive.
 
 This walk also explains part of the cost of small reconnects. The timed apply includes observers that
 read `YTextEvent.delta`, which traverses the full history of every touched text cell, including its
@@ -237,4 +332,15 @@ node $runner build 15 $large
 node --expose-gc $runner measure $large 3
 $largeDays = (Get-Content (Join-Path $large 'fixture.json') | ConvertFrom-Json).days
 node $runner gc-off 15 $largeDays
+```
+
+The focused hot-cell script emits one JSON object per condition. Prepare writes the day-11,232
+reference state and its signature into scratch space. Matrix uses its own one-beat fixture.
+
+```powershell
+$hot = Join-Path $env:TEMP 'splitpage-e8-hot'
+$hotRunner = 'prototypes/collab/src/native-size/hot-cell.ts'
+node $hotRunner prepare $hot
+node --expose-gc $hotRunner e8 $hot
+node --expose-gc $hotRunner matrix
 ```
