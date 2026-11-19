@@ -86,7 +86,14 @@ test("ranks before the first, after the last, with both null, and at tight prefi
 
   for (const [before, after] of [
     [null, "0001"],
+    [null, "000001"],
+    [null, "0000001"],
+    [null, "000000000001"],
+    [null, "1"],
     ["zzzz", null],
+    ["zzzzzz", null],
+    ["zzzzzzV", null],
+    ["zzzzzy999", null],
     ["1", "2"],
     ["01", "02"],
     ["1", "11"],
@@ -154,8 +161,8 @@ test("repeated insertion always just after the same block holds for 10,000 steps
   }
   const at10000 = after.length;
   t.diagnostic(`always-after lengths: 1,000=${at1000}, 10,000=${at10000}`);
-  assert.ok(at1000 <= 210, `length at 1,000 was ${at1000}`);
-  assert.ok(at10000 <= 2_010, `length at 10,000 was ${at10000}`);
+  assert.equal(at1000, 206);
+  assert.equal(at10000, 2_006);
 });
 
 test("repeated insertion always just before the same block holds for 10,000 steps", t => {
@@ -172,8 +179,8 @@ test("repeated insertion always just before the same block holds for 10,000 step
   }
   const at10000 = before.length;
   t.diagnostic(`always-before lengths: 1,000=${at1000}, 10,000=${at10000}`);
-  assert.ok(at1000 <= 180, `length at 1,000 was ${at1000}`);
-  assert.ok(at10000 <= 1_750, `length at 10,000 was ${at10000}`);
+  assert.equal(at1000, 172);
+  assert.equal(at10000, 1_672);
 });
 
 test("repeated insertion always in the middle holds for 10,000 steps", t => {
@@ -192,24 +199,88 @@ test("repeated insertion always in the middle holds for 10,000 steps", t => {
     if (step === 1_000) at1000 = lastLength;
   }
   t.diagnostic(`always-middle lengths: 1,000=${at1000}, 10,000=${lastLength}`);
-  assert.ok(at1000 <= 180, `length at 1,000 was ${at1000}`);
-  assert.ok(lastLength <= 1_750, `length at 10,000 was ${lastLength}`);
+  assert.equal(at1000, 172);
+  assert.equal(lastLength, 1_672);
 });
 
-test("repeated insertion before the first block and after the last block", () => {
-  let first = nativeInitialRank(0);
+test("10,000 appends and 10,000 prepends keep strict order and compact sizes", t => {
   let last = nativeInitialRank(0);
-  for (let step = 1; step <= 1_000; step++) {
-    const earlier = nativeRankBetween(null, first);
-    assert.match(earlier, VALID_RANK);
-    assert.equal(readerCompare(earlier, first), -1);
-    first = earlier;
-
+  let appendBytes = 0;
+  let append900Bytes = 0;
+  let append900Len = 0;
+  for (let step = 1; step <= 10_000; step++) {
     const later = nativeRankBetween(last, null);
     assert.match(later, VALID_RANK);
     assert.equal(readerCompare(last, later), -1);
     last = later;
+    appendBytes += later.length;
+    if (step === 900) {
+      append900Bytes = appendBytes;
+      append900Len = later.length;
+    }
   }
+  t.diagnostic(`appends from initial(0): 900=${append900Bytes}B (final ${append900Len}), 10,000=${appendBytes}B (final ${last.length})`);
+  assert.equal(append900Len, 7);
+  assert.equal(append900Bytes, 6_300);
+  assert.equal(last.length, 7);
+  assert.equal(appendBytes, 70_000);
+
+  let first = nativeInitialRank(0);
+  let prependBytes = 0;
+  for (let step = 1; step <= 10_000; step++) {
+    const earlier = nativeRankBetween(null, first);
+    assert.match(earlier, VALID_RANK);
+    assert.equal(readerCompare(earlier, first), -1);
+    first = earlier;
+    prependBytes += earlier.length;
+  }
+  t.diagnostic(`prepends from initial(0): 10,000=${prependBytes}B (final ${first.length})`);
+  assert.equal(first.length, 13);
+  assert.equal(prependBytes, 129_994);
+
+  let openFirst = nativeRankBetween(null, null);
+  let openPrependBytes = 0;
+  for (let step = 1; step <= 10_000; step++) {
+    const earlier = nativeRankBetween(null, openFirst);
+    assert.match(earlier, VALID_RANK);
+    assert.equal(readerCompare(earlier, openFirst), -1);
+    openFirst = earlier;
+    openPrependBytes += earlier.length;
+  }
+  t.diagnostic(`prepends from open(null,null): 10,000=${openPrependBytes}B (final ${openFirst.length})`);
+  assert.equal(openFirst.length, 7);
+  assert.equal(openPrependBytes, 70_000);
+});
+
+test("seeded mixed appends, prepends and bounded insertions preserve strict order", () => {
+  const random = mulberry32(20261120);
+  const expected: string[] = [];
+  const ranks = new Map<string, string>();
+  for (let i = 0; i < 4; i++) {
+    const id = `init-${i}`;
+    expected.push(id);
+    ranks.set(id, nativeInitialRank(i));
+  }
+  for (let step = 0; step < 3_000; step++) {
+    const draw = random();
+    const pos = draw < 0.3 ? 0 : draw < 0.6 ? expected.length : Math.floor(random() * (expected.length - 1)) + 1;
+    const beforeId = pos > 0 ? expected[pos - 1] : undefined;
+    const afterId = pos < expected.length ? expected[pos] : undefined;
+    const before = beforeId === undefined ? null : ranks.get(beforeId) ?? null;
+    const after = afterId === undefined ? null : ranks.get(afterId) ?? null;
+    const rank = nativeRankBetween(before, after);
+    assert.match(rank, VALID_RANK, `step ${step}: invalid rank "${rank}"`);
+    if (before !== null) assert.equal(readerCompare(before, rank), -1, `step ${step}: not after before`);
+    if (after !== null) assert.equal(readerCompare(rank, after), -1, `step ${step}: not before after`);
+    const id = `mix-${step}`;
+    expected.splice(pos, 0, id);
+    ranks.set(id, rank);
+  }
+  const sorted = [...ranks.keys()].sort((leftId, rightId) => {
+    const order = readerCompare(ranks.get(leftId) ?? "", ranks.get(rightId) ?? "");
+    return order !== 0 ? order : readerCompare(leftId, rightId);
+  });
+  assert.deepEqual(sorted, expected);
 });
 
 test("seeded generated insertions match chosen positions, and the check catches wrong rank functions", () => {
