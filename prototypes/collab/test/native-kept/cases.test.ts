@@ -96,6 +96,28 @@ test("E14 a single unseen move is stable, but undoing competing moves can still 
   t.diagnostic("Single unseen move: drift 5/5 built, 0/5 kept. Two competing moves and winning move undo: drift 5/5 in both.");
 });
 
+test("E14 undoing the winning move removes B's rank before any cut", () => {
+  const competing = [enter(0, "A"), send(0, 1), move(0, "B", "A", true), enter(1, "B"), send(0, 1), send(1, 0)];
+  const undone = [...competing, undo(1), send(1, 0)];
+  for (const [number, mode] of MODES.entries()) for (const keep of [false, true]) {
+    const winner = replay(short, competing, 2, keep, mode, number);
+    assert.deepEqual(winner.problems, []);
+    assert.deepEqual(winner.lines, ["#H title", "B: def / 2", "A: abc / 1"]);
+    assert.equal(winner.missingRank, false);
+
+    const before = replay(short, undone, 2, keep, mode, number);
+    assert.deepEqual(before.problems, []);
+    assert.deepEqual(before.lines, ["#H title", "A: abc / 1", "B: def / 2"]);
+    assert.ok(before.state?.beats.B);
+    assert.equal(before.state.beats.B.e10Rank, undefined);
+    assert.ok(before.rankUse);
+
+    const after = replay(short, [...undone, cut(0, "A")], 2, keep, mode, number);
+    assert.deepEqual(after.lines, ["B: def / 2", "#H title"]);
+    assert.deepEqual(after.problems, [`step ${undone.length} delete: untouched beats changed scene: B`]);
+  }
+});
+
 test("E14 second-review rank fixtures: a split can keep the restored beat's rank, while redoing heading creation keeps the old failure", () => {
   const split = [cut(0, "F"), move(1, "F", "A", true), send(1, 0), undo(0), act(0, { op: "split", id: "F", at: 1, created: "N" })];
   const heading = [
@@ -261,6 +283,45 @@ test("E14 a late copy can read an orphan, while the author can still undo its ow
       }
     } finally { late.destroy(); }
   } finally { cutCopy.destroy(); writer.destroy(); }
+});
+
+test("E14 retained containers affect undo and the inherited recovery list", async t => {
+  await t.test("undo can be spent on a hidden status instead of the previous visible edit", () => {
+    const bytes = seed(short, undefined, "cells");
+    for (const keep of [false, true]) {
+      const writer = openCopy(bytes, 1, keep), cutter = openCopy(bytes, 2, keep);
+      try {
+        writer.splice("A", "audioText", 1, 1, [{ text: "Ω", marks: {} }]);
+        writer.setField("B", "status", "ready");
+        sync([writer, cutter]);
+        cutter.deleteRows(["B"]);
+        sync([writer, cutter]);
+        const before = ["A: aΩbc / 1", "#H title"];
+        assert.deepEqual(outline(writer), before);
+        assert.equal(writer.beats.get("B")?.get("status"), keep ? "ready" : undefined);
+
+        assert.equal(writer.undoPress(), true);
+        sync([writer, cutter]);
+        for (const copy of [writer, cutter]) {
+          assert.deepEqual(outline(copy), keep ? before : ["A: abc / 1", "#H title"]);
+          assert.equal(copy.beats.get("B")?.get("status"), keep ? "todo" : undefined);
+        }
+      } finally { writer.destroy(); cutter.destroy(); }
+    }
+  });
+
+  await t.test("recovery lists each retained cut beat with a non-empty visual", () => {
+    const bytes = seed(base(), undefined, "cells");
+    for (const keep of [false, true]) {
+      const copy = openCopy(bytes, 1, keep);
+      try {
+        copy.deleteRows(["B", "D", "F"]);
+        assert.deepEqual(outline(copy), ["A: abc / 1", "C: ghi / 3", "#H mno", "E: pqr / 5", "#I stu"]);
+        assert.deepEqual(copy.recovery().map(({ beat, reason }) => [beat, reason]), keep
+          ? [["B", "unplaced"], ["D", "unplaced"], ["F", "unplaced"]] : []);
+      } finally { copy.destroy(); }
+    }
+  });
 });
 
 test("E14 controls cover an empty head, disjoint cuts, a whole scene and both orphan lookup components", t => {
