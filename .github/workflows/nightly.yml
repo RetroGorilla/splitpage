@@ -154,6 +154,8 @@ jobs:
       - uses: actions/checkout@v7
 
       - uses: ./.github/actions/root-test-setup
+        with:
+          shard: ${{ matrix.shard }}/10
 
       - name: Unit, desktop and tool test shard
         run: npm run test:all -- --shard "${{ matrix.shard }}/10"

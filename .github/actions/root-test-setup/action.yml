@@ -1,5 +1,12 @@
 name: Prepare root tests
 description: Install tooling, build the app and prepare Chromium for root tests
+inputs:
+  shard:
+    description: Root shard index and total
+    required: true
+  suite:
+    description: Root test partition
+    default: ''
 runs:
   using: composite
   steps:
@@ -23,13 +30,31 @@ runs:
       shell: bash
       run: git diff --exit-code -- sw.js
 
+    - name: Check whether this shard prints PDFs
+      id: chromium
+      shell: bash
+      env:
+        ROOT_SHARD: ${{ inputs.shard }}
+        ROOT_SUITE: ${{ inputs.suite }}
+      run: |
+        args=(--shard "$ROOT_SHARD")
+        if [ -n "$ROOT_SUITE" ]; then args+=("--suite=$ROOT_SUITE"); fi
+        selection=$(node tools/run-tests.mjs all --list "${args[@]}")
+        case "$(printf '%s\n' "$selection" | tail -n 1)" in
+          'requires Chromium: true') echo 'required=true' >> "$GITHUB_OUTPUT" ;;
+          'requires Chromium: false') echo 'required=false' >> "$GITHUB_OUTPUT" ;;
+          *) exit 1 ;;
+        esac
+
     - name: Select persistent Chromium cache
+      if: steps.chromium.outputs.required == 'true'
       shell: bash
       run: |
         test -n "$RUNNER_TOOL_CACHE"
         echo "PLAYWRIGHT_BROWSERS_PATH=$RUNNER_TOOL_CACHE/splitpage-playwright/$PLAYWRIGHT_VERSION" >> "$GITHUB_ENV"
 
     - name: Install Chromium
+      if: steps.chromium.outputs.required == 'true'
       shell: bash
       run: |
         npx --yes playwright@${PLAYWRIGHT_VERSION} install ${{ runner.environment == 'github-hosted' && '--with-deps' || '' }} chromium

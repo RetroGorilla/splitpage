@@ -7,10 +7,8 @@ const support = (path) => /^(tests\/|src\/test\/|src\/bootstrap\/wiring\/(?:port
   /^src\/.*\.test\.[cm]?[jt]s$/.test(path);
 
 export const TREE_INVENTORIES = [
-  "tests/adapters/collab/formatting-invariant.test.ts",
   "tests/adapters/collab/guarded-subscriptions.test.ts",
   "tests/adapters/collab/operation-families.test.ts",
-  "tests/adapters/collab/trial-replica.test.ts",
   "tests/application/commit-time-writers.test.ts"
 ];
 

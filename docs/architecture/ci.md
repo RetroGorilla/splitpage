@@ -24,6 +24,9 @@ browser tooling, `ci.yml`, `nightly.yml` and unknown paths retain full app
 coverage. Unknown or empty diffs also run everything. Renames are expanded
 into removed and added paths so moving runtime code into a test folder cannot
 hide the runtime change. Test shards retain their own build and stamp check.
+A root shard asks the test runner whether its selection includes printed PDF
+tests. Only those shards install Chromium and its system dependencies.
+`checks` still installs Chromium for the app's browser suites.
 
 Chromium is stored outside the checkout in
 `$RUNNER_TOOL_CACHE/splitpage-playwright/$PLAYWRIGHT_VERSION`. Self-hosted
@@ -61,7 +64,8 @@ old wiring, a test or support file in the partition, copied prototype oracles,
 test-runner or CI code, or package manifests and lockfiles. Unknown diffs run it.
 A change confined to `src/adapters/collab/native/` and `tests/adapters/collab/native/`
 leaves it skipped. Native tests and tree-wide inventories stay in the always-run
-matrix, including guarded subscriptions, trial-replica writes and commit-time writers.
+matrix, including guarded subscriptions and commit-time writers. The trial-replica
+write and formatting-monitor inventories scan the old adapter and run with its matrix.
 
 `tools/old-adapter-tests.mjs` follows imports through test support and old-specific
 wiring. Normal application boot does not move standalone tests into the filtered

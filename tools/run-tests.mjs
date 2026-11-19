@@ -133,6 +133,10 @@ export function unweightedFiles(files, weights = WEIGHTS) {
   return files.filter((file) => !(weights[file] > 0));
 }
 
+export function rootTestNeedsChromium(file) {
+  return /^tests\/adapters\/formats\/[^/]*printed-layout\.test\.mjs$/.test(file);
+}
+
 function runGroup(entry, { repo, node, print, spawn }) {
   const { group } = entry;
   const files = entry.selected;
@@ -225,7 +229,10 @@ export function runTests({
     printError(`run-tests: shard ${shard.index}/${shard.total} matched no discovered test file`);
     return 2;
   }
-  if (listOnly) return 0;
+  if (listOnly) {
+    if (shard) print(`requires Chromium: ${chosen.some((entry) => entry.selected.some(rootTestNeedsChromium))}`);
+    return 0;
+  }
   if (nodeError) {
     printError(nodeError);
     return 2;
