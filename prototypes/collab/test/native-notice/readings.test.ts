@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Y from "yjs";
-import { compareNotices, remoteRemoved, type NoticeBeat, type NoticeReading } from "../../src/native-notice/compare.ts";
+import { compareLocalChanges, compareNotices, remoteRemoved, type NoticeBeat, type NoticeReading } from "../../src/native-notice/compare.ts";
 import { inSyncNow, observeRemoteBeatIds, observeRemoteRemoval, readNotice } from "../../src/native-notice/yjs.ts";
 import { adaptNoticeReview } from "../../src/native-notice/review.ts";
 import { base, sole } from "../native-delete/model.ts";
@@ -31,8 +31,14 @@ test("the four chosen reading rules work from hand-written plain rows", () => {
   assert.deepEqual(kindKeys([a, b, joined], [a, b, joined], [a, { ...joined, row: "C" }]), [["join", "C"]]);
 });
 
-test("seen and unseen deletion give indistinguishable readings and receiving-side signals", () => {
-  function sample(seen: boolean) {
+test("seen and unseen edits inside deleted containers give the same catch-up evidence", () => {
+  const cases = [
+    ["visual", { op: "type", id: "B", field: "visual", at: 1, value: "Ω" }],
+    ["marks", { op: "mark", id: "B", field: "visual", from: 0, to: 1, key: "t:TAG" }],
+    ["record", { op: "field", id: "B", value: "ready" }],
+    ["record", { op: "detail", id: "B", key: "notes", value: "changed" }]
+  ] as const;
+  function sample(seen: boolean, [kind, command]: typeof cases[number]) {
     const start = rankedSeed(base);
     const typist = replicaFrom(start.encode(), 101), remover = replicaFrom(start.encode(), 102);
     const common = inSyncNow(typist).base;
@@ -41,29 +47,57 @@ test("seen and unseen deletion give indistinguishable readings and receiving-sid
     const stopReads = observeRemoteRemoval(typist, (before, after, transaction) => {
       if (remoteRemoved(before, after, new Set(["B"])).length) {
         transitions.push({ before, after, local: transaction.local, origin: transaction.origin,
-          vector: [...Y.encodeStateVector(typist.doc)], snapshot: [...Y.encodeSnapshot(Y.snapshot(typist.doc))] });
+          vector: Y.encodeStateVector(typist.doc), snapshot: Y.encodeSnapshot(Y.snapshot(typist.doc)),
+          snapshotV2: Y.encodeSnapshotV2(Y.snapshot(typist.doc)),
+          deletes: Y.encodeSnapshot(Y.createSnapshot(transaction.deleteSet, new Map())) });
       }
     });
     try {
-      write(typist, { op: "type", id: "B", field: "visual", at: 1, value: "Ω" });
+      write(typist, command);
       const mine = readNotice(typist), beforeVector = Y.encodeStateVector(typist.doc);
       if (seen) deliver(typist, remover);
-      assert.equal(rowText(readNotice(remover), "visual", "B"), seen ? "2Ω" : "2");
+      assert.deepEqual(readNotice(remover), seen ? mine : common);
       write(remover, { op: "rows", ids: ["B"] });
       if (!seen) deliver(typist, remover);
-      const packet = [...Y.encodeStateAsUpdate(remover.doc, beforeVector)];
-      const senderVector = [...Y.encodeStateVector(remover.doc)];
+      const packet = Y.encodeStateAsUpdate(remover.doc, beforeVector);
+      const packetV2 = Y.encodeStateAsUpdateV2(remover.doc, beforeVector);
+      const senderVector = Y.encodeStateVector(remover.doc);
       deliver(remover, typist);
       const final = readNotice(typist);
       assert.deepEqual(removed, ["B"]);
       assert.deepEqual(Y.encodeStateVector(typist.doc), beforeVector, "deleting allocates no items here");
-      assert.deepEqual(kindKeys(common, mine, final), [["visual", "B"]]);
-      return { common, mine, final, transitions, packet, senderVector };
+      assert.deepEqual(kindKeys(common, mine, final), [[kind, "B"]]);
+      return { common, mine, final, transitions, packet, packetV2, senderVector };
     } finally {
       stopReads(); stopIds(); start.destroy(); typist.destroy(); remover.destroy();
     }
   }
-  assert.deepEqual(sample(true), sample(false));
+  for (const example of cases) assert.deepEqual(sample(true, example), sample(false, example));
+});
+
+test("a visible unseen narration letter survives the cut, and a seen letter is removed", () => {
+  for (const seen of [false, true]) {
+    const seed = rankedSeed(base), writer = replicaFrom(seed.encode(), 101), cutter = replicaFrom(seed.encode(), 102);
+    try {
+      write(writer, { op: "type", id: "B", field: "audio", at: 1, value: "Ω" });
+      if (seen) deliver(writer, cutter);
+      write(cutter, { op: "rows", ids: ["B"] });
+      if (!seen) deliver(writer, cutter);
+      deliver(cutter, writer);
+      assert.equal(rowText(readNotice(writer), "narration", "A"), seen ? "abc" : "abcΩ");
+    } finally { seed.destroy(); writer.destroy(); cutter.destroy(); }
+  }
+});
+
+test("a stale base includes someone else's work and an advanced base erases unacknowledged work", () => {
+  const a = beat("A", "abc"), newBeat = beat("N", "someone else's starting text");
+  assert.deepEqual(kindKeys([a], [a, newBeat], [a]), [["narration", "N"]]);
+  assert.deepEqual(compareLocalChanges([a, newBeat], [a], []), []);
+  const old = beat("B", "def", { visual: [{ insert: "2" }] });
+  const mine = { ...old, visual: [{ insert: "2Ω" }] };
+  assert.deepEqual(kindKeys([a, old], [a, mine], [a]), [["visual", "B"]]);
+  assert.deepEqual(kindKeys([a, mine], [a, mine], [a]), []);
+  assert.deepEqual(compareLocalChanges([a, mine], [a], [{ id: "B", kind: "visual", text: "Ω" }]).map(clash => clash.kind), ["visual"]);
 });
 
 test("an append in A and a surviving insert from B give the same reverse reading", () => {

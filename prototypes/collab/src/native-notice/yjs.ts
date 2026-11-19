@@ -1,6 +1,6 @@
 import * as Y from "yjs";
 import { betweenRanks, type MoveReplica } from "../native-moves/ranks.ts";
-import { nativeMarkName, type NativeDeltaItem } from "../native/variant.ts";
+import { nativeMarkName, usesActionKey, type NativeDeltaItem } from "../native/variant.ts";
 import { noticeKey, type NoticeBeat, type NoticeFields, type NoticeReading, type NoticeRun, type NoticeValue } from "./compare.ts";
 
 const rankKey = "e10Rank";
@@ -126,13 +126,26 @@ function restoreGap(replica: MoveReplica, old: NoticeReading, wanted: NoticeBeat
   return [blocks[at - 1]?.rank ?? null, blocks[at]?.rank ?? null];
 }
 
-function writeRuns(text: Y.Text, runs: readonly NoticeRun[], side: "narration" | "visual", part: WriteRestorePart): void {
+function writeRuns(
+  text: Y.Text, runs: readonly NoticeRun[], side: "narration" | "visual", part: WriteRestorePart,
+  actionKey: (name: string) => string
+): void {
+  let previousTags = new Map<string, string>();
   for (const run of runs) {
     const insert = run.insert;
+    const tags = new Map<string, string>();
+    const attributes = Object.fromEntries(Object.entries(run.marks ?? {}).map(([key, value]) => {
+      const name = nativeMarkName(key);
+      if (value !== true || !usesActionKey("chosen", name)) return [key, value];
+      const fresh = tags.get(name) ?? previousTags.get(name) ?? actionKey(name);
+      tags.set(name, fresh);
+      return [fresh, value];
+    }));
+    previousTags = tags;
     if (typeof insert === "string") {
-      part(side, () => text.insert(text.doc ? text.length : 0, insert, { ...run.marks }));
+      part(side, () => text.insert(text.doc ? text.length : 0, insert, attributes));
     } else {
-      part(`${side}-embed`, () => text.insertEmbed(text.doc ? text.length : 0, structuredClone(insert), { ...run.marks }));
+      part(`${side}-embed`, () => text.insertEmbed(text.doc ? text.length : 0, structuredClone(insert), attributes));
     }
   }
 }
@@ -151,12 +164,17 @@ export function putNoticeBack(
   const rank = betweenRanks(left, right, replica.doc.clientID, serial);
   const segment = new Y.Map<unknown>(), record = new Y.Map<unknown>();
   const narration = new Y.Text(), visual = new Y.Text();
+  const actionKey = (name: string) => {
+    const client = replica.doc.clientID;
+    const clock = Y.decodeStateVector(Y.encodeStateVector(replica.doc)).get(client) ?? 0;
+    return `${name}\u001f${client.toString(36)}.${clock.toString(36)}`;
+  };
   replica.undo.stopCapturing();
   replica.transact(() => {
     part("head", () => segment.set("head", { b: freshId }));
     part("narration-cell", () => segment.set("text", narration));
     part("segment", () => replica.segments.set(segmentId, segment));
-    writeRuns(narration, saved.narration, "narration", part);
+    writeRuns(narration, saved.narration, "narration", part, actionKey);
     part("order", () => replica.order.push([segmentId]));
     part("rank", () => record.set(rankKey, rank));
     if (saved.status !== null) part("status", () => record.set("status", structuredClone(saved.status)));
@@ -165,7 +183,7 @@ export function putNoticeBack(
     }
     part("beat", () => replica.beats.set(freshId, record));
     part("visual-cell", () => replica.visuals.set(freshId, visual));
-    writeRuns(visual, saved.visual, "visual", part);
+    writeRuns(visual, saved.visual, "visual", part, actionKey);
   });
   replica.undo.stopCapturing();
 }

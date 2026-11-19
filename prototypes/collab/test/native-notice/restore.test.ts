@@ -4,6 +4,7 @@ import type * as Y from "yjs";
 import { compareNotices, reviewStillOpen, type NoticeBeat, type NoticeReading } from "../../src/native-notice/compare.ts";
 import { putNoticeBack, readNotice, type RestoreWrite } from "../../src/native-notice/yjs.ts";
 import type { MoveReplica } from "../../src/native-moves/ranks.ts";
+import { nativeMarkName, type NativeDeltaItem } from "../../src/native/variant.ts";
 import { base } from "../native-delete/model.ts";
 import { assertConverged, deliver, rankedSeed, replicaFrom, rowText, write } from "./kit.ts";
 
@@ -28,14 +29,47 @@ function richMine(base: NoticeReading): NoticeReading {
 function rawRestore(replica: MoveReplica): unknown {
   const key = "seg-b-saved";
   const segment = replica.segments.get(key), record = replica.beats.get("saved");
+  const normalized = (text: Y.Text | undefined) => (text?.toDelta() as NativeDeltaItem[] | undefined)?.map(item => {
+    if (!item.attributes) return item;
+    const normalizedKey = (key: string) => key.startsWith("t:") && nativeMarkName(key) === key ? "bare-" + key : nativeMarkName(key);
+    return { ...item, attributes: Object.fromEntries(Object.entries(item.attributes).map(([key, value]) => [normalizedKey(key), value])) };
+  });
   return {
     segment: replica.segments.has(key), ordered: replica.order.toArray().includes(key),
-    head: segment?.get("head"), narration: (segment?.get("text") as Y.Text | undefined)?.toDelta(),
+    head: segment?.get("head"), narration: normalized(segment?.get("text") as Y.Text | undefined),
     beat: replica.beats.has("saved"), rank: typeof record?.get("e10Rank") === "string",
     status: record?.get("status"), notes: record?.get("notes"), lengthSeconds: record?.get("lengthSeconds"),
-    visual: replica.visuals.get("saved")?.toDelta()
+    visual: normalized(replica.visuals.get("saved"))
   };
 }
+
+test("each restored tag application uses a fresh writer and clock key", () => {
+  withCopies((first, second, common) => {
+    const tagged = { "t:TAG": true };
+    const mine = common.map(beat => beat.id === "B" ? { ...beat, narration: [
+      { insert: "d", marks: tagged }, { insert: "e", marks: { ...tagged, b: true } }, { insert: " " }, { insert: "f", marks: tagged }
+    ], visual: [{ insert: "2", marks: tagged }] } : beat);
+    for (const copy of [first, second]) {
+      write(copy, { op: "rows", ids: ["B"] });
+      putNoticeBack(copy, mine, "B", "saved-" + copy.doc.clientID, 1);
+    }
+    deliver(first, second); deliver(second, first);
+    assertConverged([first, second]);
+    const taggedKeys = (text: Y.Text | undefined) => (text?.toDelta() as NativeDeltaItem[] | undefined ?? []).flatMap(item =>
+      Object.keys(item.attributes ?? {}).filter(key => nativeMarkName(key) === "t:TAG"));
+    const all = [101, 102].flatMap(client => {
+      const id = "saved-" + client;
+      const [left, adjacent, separated] = taggedKeys(first.segments.get("seg-b-" + id)?.get("text") as Y.Text);
+      const [visual] = taggedKeys(first.visuals.get(id));
+      assert.ok(left && adjacent && separated && visual);
+      assert.equal(left, adjacent);
+      const pattern = new RegExp(`^t:TAG\u001f${client.toString(36)}\\.[0-9a-z]+$`);
+      for (const key of [left, separated, visual]) assert.match(key, pattern);
+      return [left, separated, visual];
+    });
+    assert.equal(new Set(all).size, 6);
+  });
+});
 
 function checkRichRestore(replica: MoveReplica): void {
   assert.deepEqual(rawRestore(replica), {
