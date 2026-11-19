@@ -130,7 +130,8 @@ export function droppedOrder(before: readonly string[], drop: RankDrop): string[
 const claimed = (before: Shown, after: Shown, id: string, created?: string): string =>
   id === STRAY_ROW && !after.rows.has(STRAY_ROW) ? [...after.rows.keys()].find(row => !before.rows.has(row) && row !== created) ?? id : id;
 
-export function promises(cmd: Cmd, before: Shown, after: Shown, replica: ChosenReplica, record: LedgerEvent, storedChanged: boolean, keysBefore?: Set<string>, docChanged = storedChanged): string[] {
+export function promises(cmd: Cmd, before: Shown, after: Shown, replica: ChosenReplica, record: LedgerEvent, storedChanged: boolean,
+  keysBefore?: Set<string>, docChanged = storedChanged, keepCutVisuals = false): string[] {
   const problems: string[] = [];
   switch (cmd.op) {
     case "type": {
@@ -173,7 +174,12 @@ export function promises(cmd: Cmd, before: Shown, after: Shown, replica: ChosenR
     case "unjoin": if (rowOf(after, cmd.id) !== cmd.id) problems.push(`unjoin of ${cmd.id} not shown`); break;
     case "delete": {
       for (const beat of record.deletedBeats) if (rowOf(after, beat)) problems.push(`deleted ${beat} still shown`);
-      for (const beat of record.deletedBeats) if (beat !== STRAY_ROW && (replica.beats.has(beat) || replica.visuals.has(beat))) problems.push(`deleted ${beat} keeps its record or visual cell`);
+      for (const beat of record.deletedBeats) {
+        if (beat === STRAY_ROW) continue;
+        const record = replica.beats.has(beat), visual = replica.visuals.has(beat);
+        if (keepCutVisuals && (!record || !visual)) problems.push(`deleted ${beat} loses its record or visual cell`);
+        if (!keepCutVisuals && (record || visual)) problems.push(`deleted ${beat} keeps its record or visual cell`);
+      }
       for (const beat of record.deletedBeats) if (boundaries(replica).has(beat)) problems.push(`deleted ${beat} keeps a boundary`);
       const left = everything(after);
       for (const char of [...record.erased, ...record.seenVisual]) if (left.includes(char)) problems.push(`deleted letter ${char} still shown`);
@@ -254,6 +260,10 @@ export interface PlayOptions {
   pressChecks?: boolean; mute?: { step: number; call: number }; listCalls?: boolean;
   // why: E15 records a command that throws after it wrote, then keeps playing; by default a throw ends the play
   continueOnThrow?: boolean; logPresses?: boolean;
+  keepCutVisuals?: boolean;
+  skip?: (replica: ChosenReplica, cmd: Cmd, index: number) => boolean;
+  inspect?: (replica: ChosenReplica, step: number) => void;
+  settled?: (replica: ChosenReplica, events: readonly LedgerEvent[], ledger: ReturnType<typeof settle>) => void;
 }
 
 export function play(options: PlayOptions): PlayResult {
@@ -291,6 +301,7 @@ export function play(options: PlayOptions): PlayResult {
     }
     for (const event of from.seen) to.seen.add(event);
     to.replica.changes();
+    options.inspect?.(to.replica, index);
     syncs.push(index);
   };
   const need = (index: number): Copy => { const copy = copies[index]; if (!copy) throw new Error(`Copy ${index} not open`); return copy; };
@@ -306,6 +317,7 @@ export function play(options: PlayOptions): PlayResult {
       }
       if ("from" in step) { send(need(step.from), need(step.to), index); continue; }
       const copy = need(step.by), { replica } = copy, cmd = step.cmd, before = shown(replica), stylesBefore = readStyles(replica);
+      if (options.skip?.(replica, cmd, index)) continue;
       const record: LedgerEvent = { index, by: step.by, op: cmd.op, seen: new Set(copy.seen), typed: [], erased: [], deletedBeats: [], seenVisual: [], createdBeats: [], createdSegment: false, createdHeading: null, fieldSet: null, reverts: null, redoes: null, skipped: [] };
       if (cmd.op === "type") for (const char of cmd.text) record.typed.push({ char, field: cmd.field, owner: cmd.id });
       if (cmd.op === "erase") record.erased = [...textOf(before, cmd.field, cmd.id).slice(cmd.from, cmd.to)];
@@ -348,6 +360,7 @@ export function play(options: PlayOptions): PlayResult {
       });
       for (const problem of options.storage?.check(held, replica, cmd) ?? []) result.local.push(`step ${index} ${cmd.op}: ${problem}`);
       const after = shown(replica), stylesAfter = readStyles(replica), storedChanged = !equal(stylesBefore, stylesAfter);
+      options.inspect?.(replica, index);
       if (itemsBefore && !equal(itemsBefore, letterItems(replica))) result.local.push(`step ${index} split: narration letters were deleted and written again`);
       if (cmd.op === "undo") {
         const popped = depth - replica.undo.undoStack.length, performed = replica.undo.redoStack.length > redoDepth;
@@ -368,7 +381,8 @@ export function play(options: PlayOptions): PlayResult {
       if (events.length === 1) send(copy, waiting, index);
       const problems = neverAcceptable(reachability(replica));
       if (problems.length) result.never.push(`step ${index} ${cmd.op}: ${problems.join("; ")}`);
-      const broken = promises(cmd, before, after, replica, record, storedChanged, keysBefore, !Y.equalSnapshots(snapshot, Y.snapshot(replica.doc)));
+      const broken = promises(cmd, before, after, replica, record, storedChanged, keysBefore,
+        !Y.equalSnapshots(snapshot, Y.snapshot(replica.doc)), options.keepCutVisuals);
       for (const kind of broken.filter(problem => problem.startsWith("kind: "))) bump(result, kind.slice(6), 1);
       const real = broken.filter(problem => !problem.startsWith("kind: "));
       if (real.length) result.local.push(`step ${index} ${cmd.op}: ${real.join("; ")}`);
@@ -403,6 +417,7 @@ export function play(options: PlayOptions): PlayResult {
     try {
       const styles = readStyles(hub.replica), lines = outline(hub.replica, true);
       for (const copy of [...live.slice(1), waiting, late]) {
+        options.inspect?.(copy.replica, steps.length);
         if (!equal(readStyles(copy.replica), styles) || !equal(outline(copy.replica, true), lines)) result.never.push(`copy ${copy.client} disagrees after everything is delivered`);
         result.never.push(...neverAcceptable(reachability(copy.replica)).map(problem => `settled on ${copy.client}: ${problem}`));
       }
@@ -416,7 +431,11 @@ export function play(options: PlayOptions): PlayResult {
       crossings(result, settledView, events, made, syncs, window);
       const keys = shownKeys(hub.replica);
       result.tags = lostTags(asks, events, char => keys.get(char)?.held, chars => chars.some(char => (keys.get(char)?.count ?? 0) > 1));
-      if (options.checkLetters !== false) judge(result, hub.replica, settle(events, letters, [...initial.rows.values()].flat()), events, syncs, window);
+      if (options.checkLetters !== false || options.settled) {
+        const ledger = settle(events, letters, [...initial.rows.values()].flat(), options.keepCutVisuals);
+        if (options.checkLetters !== false) judge(result, hub.replica, ledger, events, syncs, window, options.keepCutVisuals);
+        options.settled?.(hub.replica, events, ledger);
+      }
     } finally { late.replica.destroy(); }
   } catch (error) {
     result.never.push(`${stepIndex >= 0 ? `step ${stepIndex}` : "settling"} threw: ${error instanceof Error ? error.message : String(error)}`);
@@ -564,7 +583,7 @@ function shownKeys(replica: ChosenReplica): Map<string, { held: Set<string>; cou
 
 // why: whether a command's effect stands at the end: an undo that reverted it takes it back, a redo of that undo
 // puts it back
-function standing(index: number, events: readonly LedgerEvent[]): boolean {
+export function standing(index: number, events: readonly LedgerEvent[]): boolean {
   let on = true;
   const forms = new Set([index]), undos = new Set<number>();
   for (const event of events) {
@@ -611,10 +630,14 @@ function timingOf(indices: readonly number[], syncs: readonly number[], window: 
   return high - low <= window && !syncs.some(at => at > low && at < high) ? "sameMoment" : "offline";
 }
 
-function judge(result: PlayResult, replica: ChosenReplica, ledger: ReturnType<typeof settle>, events: readonly LedgerEvent[], syncs: readonly number[], window: number): void {
+function judge(result: PlayResult, replica: ChosenReplica, ledger: ReturnType<typeof settle>, events: readonly LedgerEvent[], syncs: readonly number[],
+  window: number, keepCutVisuals = false): void {
   const view = shown(replica), places: [string, string][] = [];
   for (const value of view.audio.values()) for (const char of value) places.push([char, "audio"]);
   for (const value of view.visual.values()) for (const char of value) places.push([char, "visual"]);
+  if (keepCutVisuals) for (const [id, text] of replica.visuals) if (!view.visual.has(id)) {
+    for (const char of text.toString()) places.push([char, "visual"]);
+  }
   for (const value of view.names.values()) for (const char of value) places.push([char, "name"]);
   for (const value of view.hidden.values()) for (const char of value) places.push([char, "hidden"]);
   for (const [char, alive] of ledger.alive) {
