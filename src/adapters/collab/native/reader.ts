@@ -5,7 +5,7 @@ import type { Run } from "../../../core/text/runs.ts";
 import { nativeBlockOf, nativeItemLength, nativeRunsOf, nativeUnitCounts } from "./inline.ts";
 import type { NativeDeltaItem } from "./inline.ts";
 import type { NativeRoots } from "./roots.ts";
-import { NATIVE_FIELD_PREFIX, decodeNativeValue, deepFrozen } from "./values.ts";
+import { NATIVE_FIELD_PREFIX, decodeNativeValue, deepFrozen, nativeFieldName } from "./values.ts";
 
 export type NativeOutlineEntry = { readonly kind: "heading"; readonly id: string; readonly name: string } | { readonly kind: "row"; readonly id: string };
 
@@ -63,7 +63,10 @@ interface ParsedSpan extends NativeSpanContent { readonly content: string }
 interface ParsedSegment {
   readonly hasText: boolean;
   readonly spans: readonly ParsedSpan[];
-  readonly signature: string;
+}
+
+function samePlacement(left: ParsedSegment, right: ParsedSegment): boolean {
+  return left.hasText === right.hasText && left.spans.length === right.spans.length && left.spans.every((span, index) => span.key === right.spans[index]?.key);
 }
 
 interface UnplacedRef extends NativeSpanPlace { readonly reason: NativeUnplacedReason }
@@ -93,8 +96,8 @@ export function nativeSegmentSpans(segment: unknown): NativeSpanContent[] | null
 
 function parseSegment(segment: unknown): ParsedSegment {
   const spans = nativeSegmentSpans(segment);
-  if (!spans) return { hasText: false, spans: [], signature: "~" };
-  return { hasText: true, spans: spans.map(span => ({ ...span, content: JSON.stringify(span.items) })), signature: spans.map(span => span.key ?? "~").join("|") };
+  if (!spans) return { hasText: false, spans: [] };
+  return { hasText: true, spans: spans.map(span => ({ ...span, content: JSON.stringify(span.items) })) };
 }
 
 function contentsByKey(spans: readonly ParsedSpan[]): Map<string, string> {
@@ -114,8 +117,10 @@ function fileFields(record: Y.Map<unknown>, where: string, problems: Problems): 
   const entries: [string, unknown][] = [];
   for (const key of [...record.keys()].sort()) {
     if (!key.startsWith(NATIVE_FIELD_PREFIX)) continue;
+    const name = nativeFieldName(key);
+    if (name === null) { problems?.push({ kind: "bad-key", where: where + "/" + key }); continue; }
     const value = decoded(record, key, where, problems);
-    if (value) entries.push([key.slice(NATIVE_FIELD_PREFIX.length), value.value]);
+    if (value) entries.push([name, value.value]);
   }
   return Object.fromEntries(entries);
 }
@@ -274,7 +279,7 @@ export class NativeScriptReader {
       const next = parseSegment(record);
       this.parses++;
       this.parsed.set(key, next);
-      if (!old || old.signature !== next.signature || old.hasText !== next.hasText) this.structural = true;
+      if (!old || !samePlacement(old, next)) this.structural = true;
       const before = contentsByKey(old?.spans ?? []), after = contentsByKey(next.spans);
       for (const [block, content] of [...before, ...after]) {
         if (block.startsWith("b:") && (before.get(block) !== content || after.get(block) !== content)) this.dirtyBeats.add(block.slice(2));
@@ -302,7 +307,7 @@ export class NativeScriptReader {
       const parsed = this.segment(segment);
       if (!parsed?.hasText) continue;
       parsed.spans.forEach((span, index) => {
-        const ref = { segment, span: index };
+        const ref = Object.freeze({ segment, span: index });
         if (span.key === null) { candidates.push({ ...ref, reason: "no-head" }); return; }
         if (seen.has(span.key)) { candidates.push({ ...ref, reason: "repeated" }); return; }
         seen.add(span.key);
@@ -403,7 +408,7 @@ export class NativeScriptReader {
   narrationSpans(beat: string): readonly NativeSpanPlace[] {
     this.sync();
     const place = this.places.get(beat);
-    return place ? [place] : [];
+    return Object.freeze(place ? [place] : []);
   }
 
   unplaced(): NativeUnplacedSpan[] {

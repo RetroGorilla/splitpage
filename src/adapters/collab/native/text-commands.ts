@@ -5,7 +5,7 @@ import { nativeCellView, nativeLeftAt, nativeStoredOffset, prepareNativeRuns, wr
 import type { NativeDeltaItem } from "./inline.ts";
 import { nativeSegmentSpans } from "./reader.ts";
 import type { NativeScript } from "./script.ts";
-import { decodeNativeValue, encodeNativeValue } from "./values.ts";
+import { encodeNativeValue } from "./values.ts";
 
 export interface NativeTextTarget {
   readonly beat: string;
@@ -87,10 +87,32 @@ function refuse(reason: NativeRefusal, runs: readonly Run[]): NativeCommitOutcom
   return Object.freeze({ kind: "recovery", reason, runs });
 }
 
-function sameStamp(stored: unknown, stamp: NativeEditStamp): boolean {
+interface EncodedStamp { readonly by: string; readonly at: string }
+
+function encodedStamp(stamp: NativeEditStamp | undefined): EncodedStamp | null | undefined {
+  if (stamp === undefined) return undefined;
+  try {
+    const by: unknown = stamp.by, at: unknown = stamp.at;
+    return typeof by === "string" && typeof at === "string" ? { by: encodeNativeValue(by), at: encodeNativeValue(at) } : null;
+  } catch { return null; }
+}
+
+function sameStamp(stored: unknown, stamp: EncodedStamp): boolean {
   if (!stored || typeof stored !== "object") return false;
   const value = stored as Record<string, unknown>;
-  return decodeNativeValue(value.by)?.value === stamp.by && decodeNativeValue(value.at)?.value === stamp.at;
+  return value.by === stamp.by && value.at === stamp.at;
+}
+
+function resolve(position: unknown, doc: Y.Doc): Y.AbsolutePosition | null {
+  try { return Y.createAbsolutePositionFromRelativePosition(position as Y.RelativePosition, doc); } catch { return null; }
+}
+
+// why: a deleted unit resolves to the same index from either side, a live one does not; public API only
+function unitGone(position: Y.RelativePosition, doc: Y.Doc): boolean {
+  const json = Y.relativePositionToJSON(position) as { item?: unknown; assoc?: number };
+  if (!json.item) return false;
+  const here = resolve(position, doc), other = resolve(Y.createRelativePositionFromJSON({ ...json, assoc: json.assoc === -1 ? 0 : -1 }), doc);
+  return !!here && !!other && here.index === other.index;
 }
 
 // why: the check runs inside the command's own transaction, so what it checked is what it writes to; a command
@@ -98,22 +120,22 @@ function sameStamp(stored: unknown, stamp: NativeEditStamp): boolean {
 export function replaceNativeText(script: NativeScript, range: NativeTextRange, runs: readonly Run[], stamp?: NativeEditStamp): NativeCommitOutcome {
   const unavailable = availability(script);
   if (unavailable) return refuse(unavailable, runs);
-  const prepared = prepareNativeRuns(runs);
-  if (!prepared || (stamp && (typeof stamp.by !== "string" || typeof stamp.at !== "string"))) return refuse("text", runs);
+  const prepared = prepareNativeRuns(runs), encoded = encodedStamp(stamp);
+  if (!prepared || encoded === null) return refuse("text", runs);
   let outcome = refuse("missing", runs);
   script.doc.transact(() => {
     const cell = liveCell(script, range.target);
     if (!cell) return;
-    const from = Y.createAbsolutePositionFromRelativePosition(range.from, script.doc), to = Y.createAbsolutePositionFromRelativePosition(range.to, script.doc);
+    const from = resolve(range.from, script.doc), to = resolve(range.to, script.doc);
     const stored = storedText(cell.items);
     if (!from || !to || from.type !== cell.text || to.type !== cell.text || from.index < cell.start || to.index > cell.end || to.index < from.index
       || splitsPair(stored, from.index - cell.start) || splitsPair(stored, to.index - cell.start)) { outcome = refuse("range", runs); return; }
-    if (!prepared.length && from.index === to.index) { outcome = UNCHANGED; return; }
+    const collapsed = range.from !== range.to && unitGone(range.from, script.doc) && unitGone(range.to, script.doc);
+    const until = collapsed ? from.index : to.index;
+    if (!prepared.length && from.index === until) { outcome = UNCHANGED; return; }
     const end = writeNativeRuns(script.doc, cell.text, from.index, prepared, nativeLeftAt(nativeCellView(cell.items), from.index - cell.start));
-    if (to.index > from.index) cell.text.delete(end, to.index - from.index);
-    if (stamp && !sameStamp(script.roots.edited.get(range.target.beat), stamp)) {
-      script.roots.edited.set(range.target.beat, { by: encodeNativeValue(stamp.by), at: encodeNativeValue(stamp.at) });
-    }
+    if (until > from.index) cell.text.delete(end, until - from.index);
+    if (encoded && !sameStamp(script.roots.edited.get(range.target.beat), encoded)) script.roots.edited.set(range.target.beat, encoded);
     outcome = WRITTEN;
   }, script.origin);
   return outcome;

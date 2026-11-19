@@ -2,6 +2,7 @@ import * as Y from "yjs";
 import type { StoredImageRef } from "../../../core/document/text-policy.ts";
 import { OBJ, cleanMarks, cleanText, normalizeCell, orderedMarks, sameMarks, tagStack, withTagStack } from "../../../core/text/runs.ts";
 import type { Marks, Run } from "../../../core/text/runs.ts";
+import { nativeWellFormed } from "./values.ts";
 
 export type NativeAttributes = Record<string, true>;
 
@@ -108,6 +109,10 @@ function cleanAtom(run: Run): Run | null {
   } catch { return null; }
 }
 
+function keysWellFormed(marks: Marks): boolean {
+  return [...tagStack(marks), ...marks.cmt ?? [], ...marks.href === undefined ? [] : [marks.href]].every(nativeWellFormed);
+}
+
 // why: a batch is checked whole before anything is written, so a later bad run cannot follow an earlier good one
 export function prepareNativeRuns(runs: readonly Run[]): NativePreparedRun[] | null {
   const prepared: NativePreparedRun[] = [];
@@ -116,7 +121,7 @@ export function prepareNativeRuns(runs: readonly Run[]): NativePreparedRun[] | n
     const value = run as Run;
     if (value.atom) {
       const clean = cleanAtom(value), embed = clean ? embedOf(clean) : null;
-      if (!clean || !embed) return null;
+      if (!clean || !embed || !Object.values(embed).every(nativeWellFormed) || !keysWellFormed(clean.marks)) return null;
       prepared.push({ insert: embed, length: 1, plain: plainOf(clean.marks), marks: clean.marks, stack: [], atom: true });
       continue;
     }
@@ -124,7 +129,7 @@ export function prepareNativeRuns(runs: readonly Run[]): NativePreparedRun[] | n
     if (!value.text) continue;
     const marks = orderedMarks(cleanMarks(value.marks, false)), stack = tagStack(marks);
     if (!nativeTextAllowed(value.text) || !sameMarks(marks, orderedMarks(value.marks))) return null;
-    if (stack.some(id => !id || id.includes(APPLICATION)) || new Set(stack).size !== stack.length) return null;
+    if (stack.some(id => !id || id.includes(APPLICATION)) || new Set(stack).size !== stack.length || !keysWellFormed(marks)) return null;
     prepared.push({ insert: value.text, length: value.text.length, plain: plainOf(marks), marks, stack, atom: false });
   }
   return prepared;

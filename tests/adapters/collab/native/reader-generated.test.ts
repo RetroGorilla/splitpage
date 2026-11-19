@@ -4,13 +4,14 @@ import * as Y from "yjs";
 import { dom } from "../../../../src/test/_dom.mjs";
 import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
 import { NativeScriptReader } from "../../../../src/adapters/collab/native/reader.ts";
+import type { NativeRoots } from "../../../../src/adapters/collab/native/roots.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import { convertedScript, edit, shown } from "./helpers.ts";
 
 after(() => { dom.window.close(); });
 
 const SEEDS = 24, STEPS = 160;
-const BEATS = ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8"], HEADINGS = ["H4", "H9"];
+const BEATS = ["R1", "R2", "R3", "R4", "R5", "R6", "R7", "R8"], HEADINGS = ["H4", "H9"], JOINED = ["R1|b:R2", "R2|b:R3", "R5|b:R6"];
 
 function random(seed: number): () => number {
   let state = seed >>> 0;
@@ -42,7 +43,16 @@ function operations(script: NativeScript, pick: <T>(list: readonly T[]) => T, ch
   const roots = script.roots;
   const texts = (): [string, Y.Text][] => [...roots.segments].flatMap(([key, record]) => { const text = record.get("text"); return text instanceof Y.Text ? [[key, text] as [string, Y.Text]] : []; });
   const at = (text: Y.Text): number => Math.floor(chance() * (text.length + 1));
-  const block = (): Record<string, string> => chance() < 0.75 ? { b: pick(BEATS) } : { h: pick(HEADINGS) };
+  const block = (): Record<string, string> => chance() < 0.75 ? { b: pick(chance() < 0.85 ? BEATS : JOINED) } : { h: pick(HEADINGS) };
+  const markers = (text: Y.Text): number[] => {
+    const at: number[] = [];
+    let index = 0;
+    for (const item of text.toDelta() as { insert: unknown }[]) {
+      if (typeof item.insert === "string") index += item.insert.length;
+      else { if ((item.insert as { b?: unknown }).b !== undefined) at.push(index); index++; }
+    }
+    return at;
+  };
   const withText = (act: (text: Y.Text) => void): void => { const list = texts(); if (list.length) act(pick(list)[1]); };
   let made = 0;
   return [
@@ -87,15 +97,40 @@ function operations(script: NativeScript, pick: <T>(list: readonly T[]) => T, ch
       record.set("removed", chance() < 0.3);
     },
     () => { roots.beats.get(pick(BEATS))?.set("joined", chance() < 0.5 ? JSON.stringify({ into: "R1" }) : "{}"); },
-    () => { roots.edited.set(pick(BEATS), chance() < 0.5 ? { at: JSON.stringify("2026"), by: JSON.stringify("x") } : { at: "{bad" }); }
+    () => { roots.edited.set(pick(BEATS), chance() < 0.5 ? { at: JSON.stringify("2026"), by: JSON.stringify("x") } : { at: "{bad" }); },
+    () => {
+      withText(text => {
+        const at = markers(text);
+        if (at.length < 2) return;
+        const first = Math.floor(chance() * (at.length - 1)), left = at[first] as number, right = at[first + 1] as number;
+        const ids = (text.toDelta() as { insert: unknown }[]).flatMap(item => typeof item.insert === "string" ? [] : [String((item.insert as { b?: unknown }).b ?? "")]).filter(Boolean);
+        text.delete(right, 1); text.delete(left, 1);
+        text.insertEmbed(left, { b: (ids[first] ?? "R1") + "|b:" + (ids[first + 1] ?? "R2") }, {});
+      });
+    }
   ];
 }
 
-interface Run { compared: number; changed: number; reasons: Set<string>; problems: Set<string> }
+interface Run { compared: number; changed: number; joinedMarkers: number; reasons: Set<string>; problems: Set<string> }
 
-function runSeed(seed: number, run: Run): void {
+const emptyRun = (): Run => ({ compared: 0, changed: 0, joinedMarkers: 0, reasons: new Set(), problems: new Set() });
+
+type WarmReader = (script: NativeScript) => NativeScriptReader;
+
+function unwatched(roots: NativeRoots): NativeRoots {
+  const blind = (type: object): object => new Proxy(type, {
+    get: (target, key) => {
+      if (key === "observeDeep" || key === "unobserveDeep") return () => undefined;
+      const value: unknown = Reflect.get(target, key, target);
+      return typeof value === "function" ? (value as (...args: unknown[]) => unknown).bind(target) : value;
+    }
+  });
+  return Object.freeze(Object.fromEntries(Object.entries(roots).map(([name, type]) => [name, blind(type as object)]))) as unknown as NativeRoots;
+}
+
+function runSeed(seed: number, run: Run, warmOf: WarmReader = script => script.reader): void {
   const chance = random(seed), pick = <T>(list: readonly T[]): T => list[Math.floor(chance() * list.length)] as T;
-  const script = start(), ops = operations(script, pick, chance);
+  const script = start(), ops = operations(script, pick, chance), reader = warmOf(script);
   let previous = freshly(script);
   for (let step = 0; step < STEPS; step++) {
     const roll = chance();
@@ -105,39 +140,37 @@ function runSeed(seed: number, run: Run): void {
     } else if (roll < 0.35) script.doc.transact(() => { for (let n = 1 + Math.floor(chance() * 3); n > 0; n--) pick(ops)(); });
     else pick(ops)();
     const action = chance();
-    if (action < 0.2) script.reader.refresh();
-    else if (action < 0.3) script.reader.row(pick(BEATS));
+    if (action < 0.2) reader.refresh();
+    else if (action < 0.3) reader.row(pick(BEATS));
     else if (action < 0.75) {
-      const fresh = freshly(script), warm = read(script, script.reader);
+      const fresh = freshly(script), warm = read(script, reader);
       assert.deepEqual(warm, fresh, `seed ${seed}, step ${step}`);
       run.compared++;
       if (JSON.stringify(fresh) !== JSON.stringify(previous)) run.changed++;
       previous = fresh;
-      for (const span of script.reader.unplaced()) run.reasons.add(span.reason);
-      for (const problem of script.reader.problems()) run.problems.add(problem.kind);
+      for (const span of reader.unplaced()) run.reasons.add(span.reason);
+      for (const problem of reader.problems()) run.problems.add(problem.kind);
+      if (JSON.stringify([...script.roots.segments.values()].map((record): unknown => { const text = record.get("text"); return text instanceof Y.Text ? text.toDelta() as unknown : null; })).includes("|b:")) run.joinedMarkers++;
     }
   }
-  assert.deepEqual(read(script, script.reader), freshly(script), `seed ${seed}, end`);
+  assert.deepEqual(read(script, reader), freshly(script), `seed ${seed}, end`);
 }
 
 test("generated structural and text changes: a warm reader always reads what a fresh reader reads", () => {
-  const run: Run = { compared: 0, changed: 0, reasons: new Set(), problems: new Set() };
+  const run = emptyRun();
   for (let seed = 1; seed <= SEEDS; seed++) runSeed(seed, run);
+  assert.ok(run.joinedMarkers > 0, "no marker holding a separator was reached");
   assert.deepEqual([...run.reasons].sort(), ["heading-text", "no-head", "no-order", "no-record", "repeated"]);
   assert.deepEqual([...run.problems].sort(), ["bad-value", "heading-without-row", "hidden-units", "join-not-read", "no-text", "unknown-embed"]);
   assert.ok(run.compared > SEEDS * STEPS * 0.3, String(run.compared));
   assert.ok(run.changed > run.compared * 0.5, JSON.stringify({ compared: run.compared, changed: run.changed }));
 });
 
-test("control: a reader that stops watching after its first read is caught", () => {
-  const chance = random(7), pick = <T>(list: readonly T[]): T => list[Math.floor(chance() * list.length)] as T;
-  const script = start(), ops = operations(script, pick, chance), stale = new NativeScriptReader(script.roots);
-  const before = read(script, stale);
-  stale.close();
-  let caught = false;
-  for (let step = 0; step < STEPS && !caught; step++) {
-    pick(ops)();
-    caught = JSON.stringify(before) !== JSON.stringify(freshly(script));
+test("control: the same comparison loop catches a warm reader whose invalidation is switched off", () => {
+  const readers: NativeScriptReader[] = [];
+  const blind: WarmReader = script => { const reader = new NativeScriptReader(unwatched(script.roots)); readers.push(reader); return reader; };
+  for (let seed = 1; seed <= 3; seed++) {
+    assert.throws(() => { runSeed(seed, emptyRun(), blind); }, new RegExp(`seed ${seed}, `));
   }
-  assert.ok(caught);
+  for (const reader of readers) reader.close();
 });

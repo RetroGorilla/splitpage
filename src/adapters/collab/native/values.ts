@@ -11,8 +11,19 @@ export function decodeNativeValue(stored: unknown): { readonly value: unknown } 
   try { return { value: JSON.parse(stored) as unknown }; } catch { return null; }
 }
 
+export function nativeWellFormed(value: unknown): value is string {
+  return typeof value === "string" && !/\p{Cs}/u.test(value);
+}
+
+// why: the Yjs string codec turns a lone surrogate into U+FFFD, so a field name travels as its escaped JSON form
 export function nativeFieldKey(name: string): string {
-  return NATIVE_FIELD_PREFIX + name;
+  return NATIVE_FIELD_PREFIX + JSON.stringify(name);
+}
+
+export function nativeFieldName(key: string): string | null {
+  if (!key.startsWith(NATIVE_FIELD_PREFIX)) return null;
+  const name = decodeNativeValue(key.slice(NATIVE_FIELD_PREFIX.length))?.value;
+  return typeof name === "string" ? name : null;
 }
 
 export function deepFrozen<T>(value: T): T {

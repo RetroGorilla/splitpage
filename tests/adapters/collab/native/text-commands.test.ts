@@ -9,7 +9,7 @@ import { nativeMarkName } from "../../../../src/adapters/collab/native/inline.ts
 import { nativeSegmentSpans } from "../../../../src/adapters/collab/native/reader.ts";
 import { anchorNativeText, deleteNativeText, replaceNativeText, typeNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
 import type { NativeTextRange, NativeTextTarget } from "../../../../src/adapters/collab/native/text-commands.ts";
-import { closeNativeScript } from "../../../../src/adapters/collab/native/script.ts";
+import { closeNativeScript, openNativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import { ScriptNet, convertedScript, edit, joinedScript, shown } from "./helpers.ts";
 
@@ -245,4 +245,83 @@ test("the shown outline reads every row once, with nothing unplaced", () => {
   net.settle("twice");
   assert.deepEqual(net.agree(), ["R1: ab / ", "R2: middle / ", "R3: cd! / "]);
   assert.deepEqual(shown(a).filter(line => !line.startsWith("R")), []);
+});
+
+test("round 3, fix 2: a tag, comment or link id the string codec would change is refused and nothing is written", () => {
+  const { net, all: [a, b] } = copies(script({ R1: "ab" }), 2);
+  assert.ok(a && b);
+  const before = Y.encodeStateVector(a.doc), at = range(a, NARRATION("R1"), 1);
+  for (const marks of [{ tag: "t:prop:\ud800" }, { cmt: ["c\udc00"] }, { href: "https://x/\ud800" }] as Marks[]) {
+    const outcome = typeNativeText(a, at, "x", marks);
+    assert.ok(outcome.kind === "recovery" && outcome.reason === "text", JSON.stringify(marks));
+  }
+  assert.deepEqual(replaceNativeText(a, at, [{ atom: "who", name: "w\ud800", text: "@w\ud800", marks: {} } as Run]).kind, "recovery");
+  assert.deepEqual(Y.encodeStateVector(a.doc), before);
+  net.settle();
+  assert.deepEqual(net.agree(), ["R1: ab / "]);
+});
+
+test("round 3, fix 3: the stamp is read once, before anything is written", () => {
+  const copy = one({ R1: "ab" });
+  let reads = 0;
+  const stamp = { get by(): string { if (reads++) throw new Error("read twice"); return "writer"; }, at: "2026-11-19T10:00:00Z" };
+  assert.equal(typeNativeText(copy, range(copy, NARRATION("R1"), 2), "c", {}, stamp).kind, "written");
+  assert.equal(narration(copy, "R1"), "abc");
+  assert.deepEqual(copy.roots.edited.get("R1"), { by: JSON.stringify("writer"), at: JSON.stringify(stamp.at) });
+  const throwing = { get by(): string { throw new Error("no stamp"); }, at: "x" }, before = Y.encodeStateVector(copy.doc);
+  assert.equal(typeNativeText(copy, range(copy, NARRATION("R1"), 3), "d", {}, throwing).kind, "recovery");
+  assert.deepEqual(Y.encodeStateVector(copy.doc), before);
+});
+
+test("round 3, fix 6: a handle closes when its document is destroyed", () => {
+  const copy = one({ R1: "ab" }), selection = range(copy, NARRATION("R1"), 0, 1);
+  copy.doc.destroy();
+  assert.equal(copy.closed(), true);
+  assert.deepEqual(deleteNativeText(copy, selection), { kind: "recovery", reason: "closed", runs: [] });
+  assert.deepEqual(anchorNativeText(copy, NARRATION("R1"), 0), { kind: "refused", reason: "closed" });
+});
+
+test("round 3, fix 6: a handle opened inside a running transaction is busy and refuses", () => {
+  const copy = one({ R1: "ab" });
+  let outcome = "", busy = false, second: NativeScript | null = null;
+  copy.doc.transact(() => {
+    second = openNativeScript(copy.doc);
+    busy = second.busy();
+    outcome = anchorNativeText(second, NARRATION("R1"), 0).kind;
+  });
+  assert.deepEqual([busy, outcome], [true, "refused"]);
+  assert.ok(second);
+  assert.equal((second as NativeScript).busy(), false);
+  assert.equal(narration(copy, "R1"), "ab");
+});
+
+test("round 3, fix 6: a malformed relative position is a range refusal, not a throw", () => {
+  const copy = one({ R1: "ab" }), before = Y.encodeStateVector(copy.doc), good = range(copy, NARRATION("R1"), 0, 1);
+  for (const position of [Y.createRelativePositionFromJSON({ item: { client: 424242, clock: 3 }, assoc: 0 }), {} as Y.RelativePosition, null as unknown as Y.RelativePosition]) {
+    assert.deepEqual(deleteNativeText(copy, { ...good, from: position }), { kind: "recovery", reason: "range", runs: [] });
+  }
+  assert.deepEqual(Y.encodeStateVector(copy.doc), before);
+});
+
+test("round 3, item 8: a selection a peer typed into deletes what was typed too, as a live selection does", () => {
+  const { net, all: [a, b] } = copies(script({ R1: "abcdef" }), 2);
+  assert.ok(a && b);
+  const selection = range(b, NARRATION("R1"), 2, 4);
+  type(a, "R1", 3, "X"); net.deliver(a, b);
+  assert.equal(narration(b, "R1"), "abcXdef");
+  assert.equal(deleteNativeText(b, selection).kind, "written");
+  assert.equal(narration(b, "R1"), "abef");
+});
+
+test("round 3, item 8: when a peer deleted both ends of a selection, the selection has collapsed and deletes nothing", () => {
+  const { net, all: [a, b] } = copies(script({ R1: "abcdef" }), 2);
+  assert.ok(a && b);
+  const selection = range(b, NARRATION("R1"), 2, 4), typing = range(b, NARRATION("R1"), 2, 4);
+  type(a, "R1", 3, "X"); cut(a, "R1", 4, 5); cut(a, "R1", 2, 3); net.deliver(a, b);
+  assert.equal(narration(b, "R1"), "abXef");
+  assert.equal(deleteNativeText(b, selection).kind, "unchanged");
+  assert.equal(typeNativeText(b, typing, "Z", {}).kind, "written");
+  assert.equal(narration(b, "R1"), "abZXef");
+  net.settle();
+  assert.deepEqual(net.agree(), ["R1: abZXef / "]);
 });

@@ -137,12 +137,18 @@ test("conversion records the creation and each row's last edit", () => {
   }
 });
 
-test("finding 10: a link's local location is kept out of the shared state", () => {
-  const source = migrateRows(structuredClone(fixtures.find(item => item.name === "supplement.splitpage")?.document)), script = convertedScript(source);
-  const row = source.rows[0];
-  assert.ok(row && (row.imageLinks as { location?: unknown }[]).every(link => link.location));
-  assert.doesNotMatch(String(script.roots.beats.get(row.id)?.get("extra")), /"location"/);
-  assert.ok((script.reader.document().rows[0]?.imageLinks as Record<string, unknown>[]).every(link => !Object.hasOwn(link, "location")));
+test("finding 10: a link's local location is kept out of the shared state, and the rest of each link is kept exactly", () => {
+  const links = [
+    { name: "take.mp4", size: 42, location: { kind: "path", path: "shoot/take.mp4" }, poster: true },
+    { name: "notes.pdf", size: 123, location: { kind: "bundled", name: "notes.pdf" } }
+  ];
+  const source = migrateRows({ schema: 2, title: "T", docId: "d", rev: 0, rows: [{ id: "R1", audioText: "a", visualText: "" }], comments: [], people: [], productionTags: [], brollShots: [] });
+  Object.assign(source.rows[0] as object, { imageLinks: structuredClone(links) });
+  const script = convertedScript(source);
+  assert.doesNotMatch(String(script.roots.beats.get("R1")?.get("extra")), /"location"/);
+  for (const copy of [script, joinedScript(script, 2)]) {
+    assert.deepEqual(copy.reader.document().rows[0]?.imageLinks, [{ name: "take.mp4", size: 42, poster: true }, { name: "notes.pdf", size: 123 }]);
+  }
 });
 
 function base(extra: Record<string, unknown> = {}, rows: Record<string, unknown>[] = [{ id: "R1", audioText: "a", visualText: "" }]): ValidatedDocument {
@@ -213,4 +219,57 @@ test("finding 7: a lone surrogate in the title or a heading name is stored as U+
     assert.equal(copy.reader.document().title, "x�y");
     assert.deepEqual(copy.reader.outline()[0], { kind: "heading", id: "h1", name: "a�b" });
   }
+});
+
+test("round 3, fix 1: a tag nested inside itself converts and reads as one level, also on a late joiner", () => {
+  const ring = TAG_ANCHOR("ring"), html = ring + "x" + ring + "a</span>y</span>";
+  const source = base({ productionTags: [{ id: "t:prop:ring", cat: "prop", name: "ring" }] }, [{ id: "R1", audioText: html, visualText: html }]);
+  const script = convertedScript(source), late = joinedScript(script, 2), expected = cells(ring + "xay</span>");
+  for (const copy of [script, late]) {
+    assert.deepEqual([copy.reader.row("R1")?.narration, copy.reader.row("R1")?.visual], [expected, expected]);
+    assert.deepEqual([copy.reader.unplaced(), copy.reader.problems()], [[], []]);
+  }
+});
+
+test("round 3, fix 2: file field names the string codec would change keep apart on a late joiner", () => {
+  const source = base({ people: [{ id: "p1", name: "P" }] });
+  Object.assign(source.people[0] as object, { "\ud800": 1, "\ufffd": 2 });
+  const script = convertedScript(source), late = joinedScript(script, 2);
+  for (const copy of [script, late]) {
+    assert.deepEqual(copy.reader.document().people, [{ id: "p1", name: "P", "\ud800": 1, "\ufffd": 2 }]);
+    assert.deepEqual(copy.reader.problems(), []);
+  }
+});
+
+test("round 3, fix 2: an id that is not well formed is refused before anything is written", () => {
+  const raw = (extra: Record<string, unknown>, rows: Record<string, unknown>[] = [{ id: "R1", audioText: "a", visualText: "" }]): ValidatedDocument =>
+    ({ ...base(), rows, ...extra }) as unknown as ValidatedDocument;
+  for (const source of [
+    raw({}, [{ id: "R\ud800", audioText: "a", visualText: "" }]), raw({ people: [{ id: "p\udc00", name: "P" }] }),
+    raw({ comments: [{ id: "c\ud800", replies: [] }] }), raw({ comments: [{ id: "c1", replies: [{ id: "r\ud800" }] }] }),
+    raw({ productionTags: [{ id: "t:\ud800", cat: "prop", name: "x" }] }), raw({ brollShots: [{ id: "s\ud800" }] })
+  ]) {
+    const doc = new Y.Doc(), script = openNativeScript(doc);
+    assert.throws(() => { convertToNativeScript(script, source, ports); }, /identity/);
+    assert.equal(Y.encodeStateVector(doc).length, 1);
+  }
+  const doc = new Y.Doc(), script = openNativeScript(doc);
+  assert.throws(() => { convertToNativeScript(script, base(), { ...ports, by: "w\ud800" }); }, /writer/);
+  assert.equal(Y.encodeStateVector(doc).length, 1);
+});
+
+test("round 3, fix 3: a conversion started while another one prepares cannot write the script twice", () => {
+  const doc = new Y.Doc(), script = openNativeScript(doc), source = base(), inner: string[] = [];
+  convertToNativeScript(script, source, { ...ports, cells: html => {
+    if (!inner.length) try { convertToNativeScript(script, source, ports); inner.push("written"); } catch (error) { inner.push((error as Error).message); }
+    return cells(html);
+  } });
+  assert.deepEqual(inner, ["Conversion needs an empty shared script"]);
+  assert.deepEqual(script.roots.order.toArray(), ["b:R1"]);
+  const other = new Y.Doc(), second = openNativeScript(other);
+  let wrote = false;
+  assert.throws(() => {
+    convertToNativeScript(second, source, { ...ports, cells: html => { if (!wrote) { wrote = true; other.getMap("meta").set("format", 1); } return cells(html); } });
+  }, /empty/);
+  assert.deepEqual([second.roots.order.toArray(), second.roots.beats.size], [[], 0]);
 });

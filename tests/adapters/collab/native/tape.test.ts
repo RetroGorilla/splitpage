@@ -2,8 +2,12 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import * as Y from "yjs";
 import { dom } from "../../../../src/test/_dom.mjs";
-import type { Run } from "../../../../src/core/text/runs.ts";
+import { tagStack } from "../../../../src/core/text/runs.ts";
+import type { Marks, Run } from "../../../../src/core/text/runs.ts";
+import { nativeMarkName } from "../../../../src/adapters/collab/native/inline.ts";
+import type { NativeDeltaItem } from "../../../../src/adapters/collab/native/inline.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
+import { nativeSegmentSpans } from "../../../../src/adapters/collab/native/reader.ts";
 import type { NativeReadRow } from "../../../../src/adapters/collab/native/reader.ts";
 import { ScriptNet, cells, convertedScript, edit, joinedScript } from "./helpers.ts";
 import type { Delivery } from "./helpers.ts";
@@ -31,12 +35,53 @@ function model(): Map<string, Run[]> {
   return cellsByTarget;
 }
 
+function sortedJson(value: unknown): string {
+  return JSON.stringify(value, (_, inner: unknown) => inner && typeof inner === "object" && !Array.isArray(inner)
+    ? Object.fromEntries(Object.entries(inner as Record<string, unknown>).sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0))
+    : inner);
+}
+
+function requestedAttributes(marks: Marks, atom: boolean): string[] {
+  const keys = ["b", "i", "u", "s", "hl", "dir", "cue"].filter(key => (marks as Record<string, unknown>)[key]);
+  for (const id of marks.cmt ?? []) keys.push("c:" + id);
+  if (marks.href) keys.push("l:" + marks.href);
+  if (!atom) for (const id of tagStack(marks)) keys.push("t:" + id);
+  return [...new Set(keys)].sort();
+}
+
+function requestedEmbed(unit: Run): unknown {
+  if (unit.atom === "broll") return { k: unit.id, label: unit.text };
+  if (unit.atom === "who") return { w: unit.name };
+  if (unit.atom === "image") return { img: unit.ref };
+  return unit.atom === "video" ? { video: unit.href, host: unit.host } : null;
+}
+
+function requestedUnits(runs: readonly Run[]): string[] {
+  return unitsOf(runs).map(unit => sortedJson([unit.atom ? requestedEmbed(unit) : unit.text, requestedAttributes(unit.marks, !!unit.atom)]));
+}
+
+function storedUnits(script: NativeScript, beat: string, cell: "narration" | "visual"): string[] {
+  const place = script.reader.narrationSpans(beat)[0];
+  const items = cell === "visual"
+    ? (script.roots.visuals.get(beat)?.toDelta() ?? []) as NativeDeltaItem[]
+    : place ? nativeSegmentSpans(script.roots.segments.get(place.segment))?.[place.span]?.items ?? [] : [];
+  return items.flatMap(item => {
+    const attributes = [...new Set(Object.entries(item.attributes ?? {}).filter(([, value]) => value === true).map(([key]) => key.startsWith("t:") ? nativeMarkName(key) : key))].sort();
+    if (typeof item.insert === "string") return Array.from(item.insert, text => sortedJson([text, attributes]));
+    const embed = item.insert as Record<string, unknown>;
+    return [sortedJson([typeof embed.img === "string" ? { img: JSON.parse(embed.img) as unknown } : embed, attributes])];
+  });
+}
+
 function check(scripts: readonly NativeScript[], expected: ReadonlyMap<string, Run[]>, read: Reading): void {
   for (const script of scripts) for (const row of tape.document.rows) {
     const shown = read(script, row.id);
     assert.ok(shown, `copy ${script.doc.clientID} lost row ${row.id}`);
     assert.deepEqual(unitKeys(shown.narration), shownKeys(expected.get(row.id + "/narration") ?? []), `copy ${script.doc.clientID}, ${row.id} narration`);
     assert.deepEqual(unitKeys(shown.visual), shownKeys(expected.get(row.id + "/visual") ?? []), `copy ${script.doc.clientID}, ${row.id} visual`);
+    for (const cell of ["narration", "visual"] as const) {
+      assert.deepEqual(storedUnits(script, row.id, cell), requestedUnits(expected.get(row.id + "/" + cell) ?? []), `copy ${script.doc.clientID}, ${row.id} ${cell} stored attributes`);
+    }
   }
 }
 
@@ -86,6 +131,16 @@ test("control: reading the neighbouring row's text is caught", () => {
   const ids = tape.document.rows.map(row => row.id);
   const wrong: Reading = (script, beat) => script.reader.row(ids[(ids.indexOf(beat) + 1) % ids.length] ?? beat);
   assert.throws(() => runTape("forward", wrong), /op 0: /);
+});
+
+test("control: a stored attribute the commands did not ask for is caught, though the display hides it", () => {
+  const { scripts, expected } = runTape("forward"), copy = scripts[0] as NativeScript, row = tape.document.rows[0];
+  assert.ok(row);
+  assert.ok([...expected.values()].some(runs => requestedUnits(runs).some(unit => !unit.endsWith(",[]]"))));
+  const visual = copy.roots.visuals.get(row.id);
+  assert.ok(visual && visual.length > 0);
+  visual.format(0, 1, { "c:never-asked": null, "x-unknown": true });
+  assert.throws(() => { check([copy], expected, honest); }, /stored attributes/);
 });
 
 test("the tape types every unit it counts", () => {

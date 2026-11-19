@@ -1,12 +1,13 @@
 import * as Y from "yjs";
 import type { ValidatedDocument } from "../../../core/document/validated.ts";
+import { tagStack, withTagStack } from "../../../core/text/runs.ts";
 import type { Run } from "../../../core/text/runs.ts";
 import { prepareNativeRuns, writeNativeRuns } from "./inline.ts";
 import type { NativePreparedRun } from "./inline.ts";
 import { NATIVE_FORMAT_VERSION } from "./roots.ts";
 import type { NativeRoots } from "./roots.ts";
 import type { NativeScript } from "./script.ts";
-import { encodeNativeValue, nativeFieldKey } from "./values.ts";
+import { encodeNativeValue, nativeFieldKey, nativeWellFormed } from "./values.ts";
 
 export interface NativeConversionPorts {
   readonly cells: (html: string) => readonly Run[];
@@ -23,6 +24,8 @@ interface PreparedHeading { readonly id: string; readonly name: string; readonly
 interface PreparedRecord { readonly id: string; readonly key: string; readonly entries: Entries; readonly comment?: string }
 
 export const NATIVE_SEGMENT_BEATS = 30;
+
+const CONVERTING = new WeakSet<Y.Doc>();
 
 const COLLECTIONS = ["rows", "sections", "comments", "people", "productionTags", "brollShots"];
 const META_FIELDS = ["docId", "schema", "wordsPerMinute", "targetSeconds"];
@@ -49,7 +52,7 @@ function bags(value: unknown): Bag[] {
 function unique(entries: readonly Bag[]): void {
   const seen = new Set<string>();
   for (const entry of entries) {
-    if (typeof entry.id !== "string" || !entry.id || seen.has(entry.id)) throw new Error("Duplicated or missing document identity");
+    if (!nativeWellFormed(entry.id) || !entry.id || seen.has(entry.id)) throw new Error("Duplicated, missing or malformed document identity");
     seen.add(entry.id);
   }
 }
@@ -89,8 +92,15 @@ function wellFormed(value: string): string {
   return value.replace(/\p{Cs}/gu, "�");
 }
 
+// why: a file can nest a tag inside itself; one key per tag and unit reads that as one level, as before
+function oneLevel(run: Run): Run {
+  if (run.atom) return run;
+  const stack = tagStack(run.marks), kept = [...new Set(stack)];
+  return kept.length === stack.length ? run : { ...run, marks: withTagStack(run.marks, kept) };
+}
+
 function cell(ports: NativeConversionPorts, html: unknown, where: string): NativePreparedRun[] {
-  const prepared = prepareNativeRuns(ports.cells(typeof html === "string" ? html : ""));
+  const prepared = prepareNativeRuns(ports.cells(typeof html === "string" ? html : "").map(oneLevel));
   if (!prepared) throw new Error("The rich-text reader returned a cell the shared script cannot hold: " + where);
   return prepared;
 }
@@ -148,7 +158,7 @@ function write(script: NativeScript, roots: NativeRoots, plan: ReturnType<typeof
 }
 
 function prepare(source: ValidatedDocument, ports: NativeConversionPorts) {
-  for (const value of [ports.creation, ports.at, ports.by]) if (typeof value !== "string" || !value) throw new Error("Conversion needs a creation id, a time and a writer");
+  for (const value of [ports.creation, ports.at, ports.by]) if (!nativeWellFormed(value) || !value) throw new Error("Conversion needs a creation id, a time and a writer");
   if (typeof source.title !== "string" || !Array.isArray(source.rows)) throw new Error("Conversion needs a validated script");
   const sections = bags(source.sections), tags = bags(source.productionTags), comments = bags(source.comments);
   for (const entries of [bags(source.rows), sections, comments, bags(source.people), tags, bags(source.brollShots)]) unique(entries);
@@ -181,7 +191,13 @@ function prepare(source: ValidatedDocument, ports: NativeConversionPorts) {
 
 export function convertToNativeScript(script: NativeScript, source: ValidatedDocument, ports: NativeConversionPorts): void {
   if (script.closed() || script.busy()) throw new Error("Conversion needs an open script outside any transaction");
-  if (!emptyDocument(script.doc)) throw new Error("Conversion needs an empty shared script");
-  const plan = prepare(source, ports);
-  script.doc.transact(() => { write(script, script.roots, plan); }, "conversion");
+  if (!emptyDocument(script.doc) || CONVERTING.has(script.doc)) throw new Error("Conversion needs an empty shared script");
+  CONVERTING.add(script.doc);
+  try {
+    const plan = prepare(source, ports);
+    script.doc.transact(() => {
+      if (!emptyDocument(script.doc)) throw new Error("Conversion needs an empty shared script");
+      write(script, script.roots, plan);
+    }, "conversion");
+  } finally { CONVERTING.delete(script.doc); }
 }

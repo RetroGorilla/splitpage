@@ -72,11 +72,12 @@ test("finding 6: a malformed beat extra, field value or reply key is a diagnosti
   const script = convertedScript(small({ R1: "ab" }, { people: [{ id: "p1", name: "P" }] }));
   script.roots.beats.get("R1")?.set("extra", "{bad");
   script.roots.beats.get("R1")?.set("status", "not json");
-  script.roots.people.get("p1")?.set("f:name", "{bad");
+  script.roots.people.get("p1")?.set('f:"name"', "{bad");
+  script.roots.people.get("p1")?.set("f:name", JSON.stringify("x"));
   script.roots.replies.set("[bad", new Y.Map<unknown>());
   assert.equal(script.reader.row("R1")?.audioText, "ab");
   assert.deepEqual(script.reader.document().people, [{ id: "p1" }]);
-  assert.deepEqual(problemKinds(script), ["bad-value beats/R1/status", "bad-value beats/R1/extra", "bad-key replies/[bad", "bad-value people/p1/f:name"]);
+  assert.deepEqual(problemKinds(script), ["bad-value beats/R1/status", "bad-value beats/R1/extra", "bad-key replies/[bad", 'bad-value people/p1/f:"name"', "bad-key people/p1/f:name"]);
 });
 
 test("finding 6: a closed reader refuses to read", () => {
@@ -119,6 +120,22 @@ test("finding 8: only refresh() hands out changes; reading rows, the outline or 
   assert.equal(anchorNativeText(script, target, 0, 1).kind, "anchored");
   assert.deepEqual(script.reader.refresh(), { rows: ["R1"], gone: [], headings: [], outline: false });
   assert.deepEqual(script.reader.refresh(), { rows: [], gone: [], headings: [], outline: false });
+});
+
+test("round 3, fix 4: one marker whose id holds a separator and two markers are different placements", () => {
+  const script = convertedScript(small({ R1: "a", R2: "b", R3: "c" })), raw = segmentText(script, "b:R1");
+  assert.deepEqual(script.reader.rows().map(row => row.id), ["R1", "R2", "R3"]);
+  script.doc.transact(() => { raw.delete(3, 1); raw.delete(1, 1); raw.insertEmbed(1, { b: "R2|b:R3" }, {}); });
+  assert.deepEqual(shown(script), freshlyShown(script));
+  assert.deepEqual(script.reader.outline().map(entry => entry.id), ["R1"]);
+});
+
+test("round 3, fix 5: the spans a reader hands out cannot be changed by the caller", () => {
+  const script = convertedScript(small({ R1: "a", R2: "b" })), spans = script.reader.narrationSpans("R2");
+  assert.ok(Object.isFrozen(spans) && spans.every(place => Object.isFrozen(place)));
+  assert.throws(() => { (spans[0] as { span: number }).span = 0; }, TypeError);
+  assert.equal(edit(script, { beat: "R2", cell: "narration" }, 1, 1, [{ text: "!", marks: {} }]).kind, "written");
+  assert.deepEqual(script.reader.rows().map(row => row.audioText), ["a", "b!"]);
 });
 
 test("finding 8: returned rows and outline are frozen and a returned document is the caller's own copy", () => {
