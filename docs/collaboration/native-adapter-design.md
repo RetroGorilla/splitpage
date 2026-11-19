@@ -76,9 +76,9 @@ Each command is one transaction.
 
 **Check before writing** (decision 15). Every command finds each part it will touch by id: its rows' records,
 cells and boundaries, and the ranks of neighbours a move will write. If one is missing, it refuses without writing.
-With kept records E15's histories 17 and 18 no longer arise (E16), but section 10's four-step history does: as
-built, a new heading above its row and a move of a run including it write, then throw, and every copy keeps the
-partial write (E16, E17). A writer aimed at a removed row's hidden record or cell makes no change (E14).
+With kept records E15's histories 17 and 18 no longer arise (E16). On section 10's four-step row, as built, 5 of 16
+commands, among them a heading above it and a run move including it, wrote and then threw; none did under rule (g)
+(E16, E17). A writer aimed at a removed row's hidden record or cell makes no change (E14).
 
 Composition folds in remote changes made meanwhile (E1). The reader writes nothing back. The file is converted
 once, and every copy adopts that conversion (appendix B). Conversion writes each heading's name into its name cell,
@@ -95,9 +95,9 @@ every surviving letter reachable without writing anything.
 | (b) An empty script holding stray letters shows them as a narration-only row | Stray letters stay on screen | — |
 | (c) A boundary repeating a beat id is ignored | Two people remove a row and both undo: it returns once, narration twice (`xx`) | — |
 | (d) A join counts only if its target is the beat directly above | A beat whose target was removed or moved shows as its own row | A later move can make an old join count again (11 in 600 generated histories, E11) |
-| (e) A beat whose record has no rank is read after the block before it in the narration | After two people move the same row at once and the winner undoes, the row shows after its narration neighbour | No fixed place: when that neighbour moves or goes, the row follows the next one, possibly into another scene. A five-step history does this in every delivery (E14, E15); no generated history did (E14) |
+| (e) A beat whose record has no rank is read after the block before it in the narration | After two people move the same row at once and the winner undoes, the row shows after its narration neighbour | No fixed place: when that neighbour moves or goes, the row follows the next one, possibly into another scene (a five-step history, every delivery; E14, E15) |
 | (f) Text between a heading's boundary and the next boundary is narration without a beat, shown in the first of: the beat directly after the heading, the nearest beat above, the next beat further down, the narration-only row | Letters typed in a deleted scene's beat show in a neighbouring beat, editable | The third step can show it under a different scene, and it moves with that beat (E11) |
-| (g) A beat marker whose record or visual cell is missing is not a row; its narration reads as part of the row above. At a segment's first block, rule (a) applies | After section 10's four steps, N's narration shows in B, as before the split | The restoring undo shows nothing; edits kept with that record stay unreachable unless the creator redoes (E17) |
+| (g) A beat marker whose record or visual cell is missing is not a row; its narration reads as if the marker were absent: into the row above; at a segment's start, into that segment's first beat, else the beat before, else the next; after a heading, into the beat after it, the name unchanged; with no beat, the narration-only row | After section 10's four steps, N's narration shows in B, as before the split | The restoring undo shows nothing. Text typed later after the hidden marker moves into N if the creator redoes. A split inside that text lands right after the beat's own marker (E17) |
 
 A beat loses its rank through a same-moment move race (section 10): 3 of 600 generated histories (E14).
 
@@ -107,8 +107,8 @@ One `Y.UndoManager` per person over every root a command writes, headings and na
 `edited`. Only the local command origin is tracked. Grouping follows the app's word rule with `stopCapturing()`
 (E3). Default delete filter; no depth cap.
 
-- Undo takes back only the presser's changes. A press can pass over spent steps (E11), or be spent on a removed
-  row's hidden record and change nothing visible (E14).
+- Undo takes back only the presser's changes. A press can pass over spent steps (E11) or change only a removed
+  row's hidden record (E14).
 - An older redo that would replace someone else's later change returns false: the press is used up and nothing
   changes (E15 histories 9 and 10).
 - Undoing a removal brings back others' unseen visual text, status, fields, visual tags (40 of 40 generated
@@ -125,7 +125,7 @@ record changes lost with a removed beat fall from 131 (in 110 of 600 histories) 
 changes from 106 (94 of 600) to 0. The kept visual figure counts what is stored, not what is shown: the edit stays
 with the hidden row and shows again if the removal is undone. The other losses are unchanged and small: typing in a
 creation its creator undoes unseen (4 of 600), a split beside a move, a deletion missing a restored row, doubled
-narration, tags, and decision 15's rankless row.
+narration (also after E17's histories), tags, and decision 15's rankless row.
 
 **5a. Tags.** Of 845 requested tags, 800 were kept, 40 undone by their author and 5 lost (E11); the same 5 with
 kept records (E16). Plain Yjs causes both: an undo the tagger had not seen restored deleted letters as new ones
@@ -143,7 +143,7 @@ histories, 600 mixed and 200 double-split generated histories.
 | A beat shown twice, or its surviving narration nowhere | 0 in every set. Narration shown twice by a command of ours: 0 |
 | Copies disagreeing after everything is delivered | 0 in every set, and in E1 to E11, E14 and E15 |
 | A thrown error in a reader or writer | 0 in every set. Writers threw under controls (39) and on section 10's four-step row; section 2 makes these refusals |
-| A shown row without its record or visual cell | 0 of 4,000 generated runs, which seldom make the sequence (E16). Section 10's four steps do it as built in 5 of 5 deliveries; rule (g) removes it (E17) |
+| A shown row without its record or visual cell | 0 of 4,000 generated runs, which seldom make the sequence (E16). Section 10's four steps do it as built in 5 of 5 deliveries; across E17's named histories, 30 of 90 runs as built and 0 of 90 under rule (g) |
 | An existing beat changing scene with one person working | 0 in every set, **except rule (e)'s case**: after two same-moment moves and the winner's undo, deleting the neighbour moves the rankless row out of its scene in every delivery (E14, E15). Decision 15 accepts it |
 
 ## 7. Requirements on the product code
@@ -153,9 +153,9 @@ histories, 600 mixed and 200 double-split generated histories.
 - **Check before writing** and **name cells on conversion** (E15): section 2.
 - **Recovery skips removed rows** (E14): the inherited recovery list shows removed beats with visual text as
   unplaced.
-- **One reading everywhere** (E16, E17): every reader applies rules (a) to (g) the same way: the outline, the lookup
-  by which commands find their rows, the offline notice, the recovery list, and export, autosave and snapshots that
-  turn the script back into a file. As built, the outline showed E16's row and the notice left it out.
+- **One reading everywhere** (E16, E17): rules (a) to (g) apply the same way in the outline, the lookup by which
+  commands find their rows, the offline notice and its put-back, the recovery list, and export, autosave and
+  snapshots that turn the script back into a file. As built, the outline showed E16's row and the notice did not.
 - **Incremental reading** (E8, E11): a full rebuild is 84 to 99% of a 900-beat command. Relay order, memory,
   storage and signals: appendix J.
 
@@ -176,13 +176,13 @@ someone else changed or removed. "Put it back" makes a fresh beat from what the 
 
 - **Counts** (E16, kept records, 85 named and 240 generated histories), with the person's own journal of pending
   edits: 46 false banners of 325, 26 misses of 238 losses (appendix I).
-- **Seen against unseen** still leave identical evidence for visual text, visual tags, status and fields (4 of 4
-  pairs, E16), hence decision 12's possible clash. After the remover's undo, no card and the edit shows (8 of 8).
+- **Seen and unseen** edits to visual text, visual tags, status and fields still leave identical evidence (4 of 4
+  pairs, E16), hence decision 12's possible clash.
 - **Tags** (decision 17): E16's sweep lost 6 of 28 unseen tags and flagged all 6.
-- **Who is told:** only the returning person. Someone who stays online while another person removes a beat they
-  edited sees the row go, with no message; their edits stay with the hidden row and return if the remover undoes.
-  The design uses no online signal: with kept records the one built for removals fires only for undone creations
-  (E16; appendix I). An edit on a row that stays removed, and a lost tag, go untold for them.
+- **Who is told:** only the returning person. Someone online while another person removes a beat they edited sees
+  the row go, with no message; their edits return if the remover undoes. No online signal is used: with kept
+  records the removal signal fires only for undone creations (E16; appendix I). An edit on a row that stays removed,
+  and a lost tag, go untold for them.
 
 ## 10. Races on one row under undo
 
@@ -190,18 +190,17 @@ E1 to E17 are merged; none is pending. They found four histories where an undo m
 row.
 
 - **An undone creation after a cut and its undo** (E16). Alice splits B, making N; Bob cuts N; Alice undoes her
-  split; Bob undoes his cut. No race is needed: each step reaches everyone first. Alice's undo deletes N's record
-  and visual cell, which the cut had kept; Bob's undo brings back only N's marker and narration. As built every copy
-  shows N with neither, in 5 of 5 deliveries, and most commands on it fail. Rule (g) answers it (decision 18): N's
-  narration shows in B, as before the split. Bob's status and visual text on N stay stored, unseen, unless Alice
-  redoes her split. Text typed into B after the hidden marker moves into N if she does, and cutting B takes that
-  text with it (E17). Options: [appendix N](#n-a-row-without-its-record).
-- **Rank** (E15). Two people move the same row at once; the winner's undo leaves it without a rank, and rule (e)
-  places it. Decision 15 accepts it; options: [appendix L](#l-a-rows-place-after-competing-moves-and-undo).
-- **Record** (E15). Two people remove the same row offline, both undo, and one redoes. With records deleted the row
-  lost its record and visual cell; kept records keep both.
-- **A segment's first row** (E15, E16). The same race loses the segment's `head` key in either version: the row's
-  narration shows, editable, at the start of the next beat (appendix I).
+  split; Bob undoes his cut. No race is needed. Alice's undo deletes N's record and visual cell, which the cut had
+  kept; Bob's undo brings back only N's marker and narration. As built every copy shows N with neither (5 of 5
+  deliveries), and most commands on it fail. Rule (g) answers it (decision 18): N's narration shows in B, as before
+  the split, and Bob's undo shows nothing. Bob's status and visual text on N went with Alice's undo and come back
+  only if she redoes her split. Text typed into B after the hidden marker moves into N if she does, and cutting B
+  takes that text with it (E17; [appendix N](#n-a-row-without-its-record)).
+- **Rank** (E15). Two same-moment moves and the winner's undo leave a row without a rank; rule (e) places it
+  (decision 15; [appendix L](#l-a-rows-place-after-competing-moves-and-undo)).
+- **Record** (E15). Two people remove a row offline, both undo, one redoes: kept records keep its record and cell.
+- **A segment's first row** (E15, E16). The same race loses the `head` key: the row's narration shows, editable, at
+  the start of the next beat (appendix I).
 
 The last three follow from one Yjs rule: of two writes to one key the higher client's stays, and plain undo never
 overwrites another person's write.
@@ -218,8 +217,8 @@ Where each experiment's histories enter as tests is this note's reading of the s
 | 3 | Split, join, removal with kept records, headings, reading rules (a) to (g) | E9, E10, E11 and E14 sets; rule (g) on a marker without its record; section 6 at zero but decision 15's case; recovery lists no removed row |
 | 4 | Moves | E10's collision table; a move including a row without its record refused unwritten |
 | 5 | Records, status, comments | Exact row changes; author-only bodies |
-| 6 | Undo | E3, E11, E14 and E16 tests; E15's histories under option A; E17's named histories under rule (g); one change per press |
-| 7 | Session, editor, relay with the wrapper, server storage, offline notice | E13's pair table; E16's notice counts; outline, notice and recovery agree on E17's histories; a 15 MB first load on a slow link; store and reload |
+| 6 | Undo | E3, E11, E14 and E16 tests; E15's histories under option A; E17's histories under rule (g); one change per press |
+| 7 | Session, editor, relay with the wrapper, server storage, offline notice | E13's pair table; E16's notice counts; every reader agrees on E17's histories; a 15 MB first load on a slow link; store and reload |
 | 8 | Delete the old adapter | Every deleted test mapped; `npm run verify` |
 
 ## 12. What changed in round 7
@@ -311,8 +310,9 @@ with records deleted, and a keystroke 0.274 to 0.291 ms against 0.271 to 0.276; 
 maps in full (E14).
 
 Rule (g) stores nothing. Its read and keystroke times stayed within the spread between passes, and a split with
-its undo took about 0.6 ms more than as built (E17). It re-reads a segment whenever records or visual cells change;
-the read cost when many of them change at once was not measured.
+its undo took about 0.6 ms more than as built (E17). The prototype clears every cached segment view whenever a
+record or visual cell is added or removed; that re-reading cost during editing, including when many records change
+at once, was not measured.
 
 An editing copy keeps every letter its own undo history deleted, and `clear()` frees none (appendix B): pasting and
 deleting a 10,000-letter block 100 times gave 1,003,678 encoded bytes against 3,678 in a fresh copy (E3). A copy
@@ -499,7 +499,7 @@ they fall in. Tags use E11's five-delivery rule.
 | Typing lost when an unseen creation undo removes a new heading | 1 in 1 of 600 | 1 in 1 of 600 |
 | A split half stays behind after an offline move | 1 in 1 of 600 | 1 in 1 of 600 |
 | A deletion misses a row restored by an unseen undo | 3 in 3 of 600 | 3 in 3 of 600 |
-| A double delete and double undo doubles the narration | 3 in 1 of 600 | 3 in 1 of 600 |
+| A double delete and double undo doubles the narration | 3 in 1 of 600 | 3 in 1 of 600. The same shape after E17's histories 4c and 5c: both people cut N unseen and each undoes; four N markers and `bb` are stored and one row `N: bb` shows, in every option and delivery. Histories 4c and 5c themselves end with two N markers stored and one N and one `b` shown; no continuation showed N twice (E17) |
 | Production tag lost | 5 of 845 | 5 of 845 |
 
 The one kept record loss is a field on a beat whose creating split was undone; it is absent with or without the cut
@@ -518,15 +518,23 @@ histories); a rankless row placed by rule (e), 3 of 600 histories with kept reco
 ### N. A row without its record
 
 E17 compared what to do when a beat's marker comes back without its record and visual cell (section 10's four
-steps and their variants, on kept records). Each option ran 18 named histories in five deliveries, 90 runs.
+steps and their variants, on kept records). Each option ran 18 named histories in five deliveries, 90 runs, plus
+E15's 21 histories, the segment-head race, 16 commands on the four-step state, and E14's and E16's generated sets.
+In all of them, no option lost narration, showed a row twice, left copies disagreeing or failed a reader.
 
 | Option | What happens | Cost | Against it |
 | --- | --- | --- | --- |
-| K, as built | The row shows without its record or cell in 30 of 90 runs (480 of 3,000 copy-steps). 5 of 16 commands throw after writing: a heading above N or above B, and three moves. The row list shows N; the notice reader leaves it out | — | The defect |
-| **R, rule (g) (chosen)** | 0 of 90. Alice's undo wins: the document reads as before the split, and Bob's undo shows nothing. No command throws after writing; joining the hidden row throws before writing. Outline and notice agree | Stores nothing. Read and keystroke times within the spread between passes; a split and its undo about 0.6 ms slower. About 20 lines and a 4-line hook. Read cost when many records change at once not measured | Bob's edits on N stay stored and unreachable. It moves no generated figure |
-| U, an undo filter that keeps created records and cells | 0 of 90. Bob's undo wins: N comes back whole with his status and visual text. Every command works | About 31 bytes kept per undone creation (30.6 per split, 30.8 per insert), for good; hidden records up to 15% more. About 7 lines | N has no rank and is read by rule (e): an insert before it lands at the top, and moving B alone leaves N behind. Typing in an undone new beat's visual cell stays stored, unseen (3 seeds) |
+| K, as built | The row shows without its record or cell in 30 of 90 runs (480 of 3,000 copy-steps). 5 of 16 commands throw after writing: a heading above N or above B, and three moves that leave `B, N, A` stored. The row list shows N; the notice reader leaves it out. Restoring a cut neighbour from the notice throws before writing | — | The defect |
+| **R, rule (g) (chosen)** | 0 of 90. Alice's undo wins: the document reads as before the split, and Bob's undo shows nothing; Alice's redo brings N back with its record, cell, rank and Bob's status. No command throws after writing; joining the hidden row throws before writing. Outline and notice agree, and restoring from the notice works | Stores nothing. Read and keystroke times within the spread between passes; a split and its undo about 0.6 ms slower; the re-reading cost during editing not measured. About 20 lines and a 4-line hook | The hidden marker stays in the text: later typing after it moves into N on Alice's redo, and cutting B takes it. A split inside that text lands right after the beat's own marker. It moves no generated figure |
+| U, an undo filter that keeps created records and cells | 0 of 90. Bob's undo wins: N comes back whole with his status and visual text, and all 16 commands work. It also removes E16's one remaining record loss | About 31 bytes kept per undone creation (30.6 per split, 30.8 per insert), for good. About 7 lines | N has no rank and follows rule (e): an unrelated move gives it one, cutting B can carry it across a scene line, and restoring from the notice throws until it has one. The filter refuses to delete any record or visual cell in the root maps, on undo and redo, whichever command made it, so a redo no longer deletes containers a command deleted directly. A remote creation undo no longer reaches the beat-map observer |
 
-In every option, no narration was lost, no row shown twice, no copies disagreed and no reader failed. None changes
-the segment-head race, the doubled narration of a double delete and double undo, or rule (e)'s placement. R and U
-together were not tried. The owner chose R. Per E17, it writes nothing, so copies agree by construction, and it
-stores nothing; U's costs and K's defect are above.
+**Other routes.** Creating the record and cell in an untracked transaction nested inside the command does not work:
+Yjs keeps the outer origin. A separate, outer, untracked transaction run before the tracked one does work (E17's
+review): undo removes the marker and rank and keeps the record. Its cost is a second transaction, with its own
+moment when other copies can see it and its own way to fail half-done. It was not wired into the commands, and R
+and U together were not tried.
+
+None of the options changes the segment-head race, the doubled narration of a double delete and double undo, or
+rule (e)'s placement. The owner chose R. Per E17, it writes and stores nothing, it is the one option under which
+outline, notice and restore-from-notice all work on the four-step state, and the cost is that Bob's undo shows
+nothing.
