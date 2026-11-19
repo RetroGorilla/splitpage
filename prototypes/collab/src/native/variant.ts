@@ -129,7 +129,7 @@ function writeRuns(text: Y.Text, index: number, runs: readonly Run[], choose: Ke
   return index;
 }
 
-function attributesAt(delta: readonly NativeDeltaItem[], offset: number): Record<string, unknown> | null {
+export function attributesAt(delta: readonly NativeDeltaItem[], offset: number): Record<string, unknown> | null {
   let index = 0;
   if (offset < 0) return null;
   for (const item of delta) {

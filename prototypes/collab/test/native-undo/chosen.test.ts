@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import * as Y from "yjs";
 import { DELIVERIES, study } from "../../src/native-undo/chosen-report.ts";
 import { runHistory } from "../../src/native-undo/generator.ts";
 import { CheckFailure } from "../../src/native-undo/harness.ts";
@@ -61,6 +62,39 @@ test("chosen keys, continuous seed 254 emits the manager update followed by null
   assert.deepEqual(run.losses, []);
   assert.equal(run.stats.checks, 3);
 });
+
+for (const scheme of ["act", "name", "chosen"] as const) {
+  test(`${scheme} keys, reversed tag undo and redo clean up the original start marker`, () => {
+    for (const mode of ["reverse", "forward", "merged"] as const) {
+      const w = world([{ id: "R1", audioText: "", visualText: "vr" }], { scheme, auditTags: true });
+      const b = w.copy("B"), c = w.copy("C");
+      const tagged = ["R1:  / [vr|t:T1] (todo)"];
+      w.command("B", [{ do: "format", beat: "R1", field: "visualText", from: 0, to: 2, mark: "t:T1", on: true }]);
+      assert.deepEqual(settled(w, "tag"), tagged);
+      const tagStart = (update: Uint8Array) => Y.decodeUpdate(update).structs.find(item =>
+        item instanceof Y.Item && item.content instanceof Y.ContentFormat && item.content.value === true);
+      const original = b.log[0] && tagStart(b.log[0].update);
+      assert.ok(original);
+      assert.ok(w.undo("B"));
+      assert.ok(w.redo("B"));
+      const updates = b.log.slice(1).map(entry => entry.update);
+      assert.equal(updates.length, 2);
+      const restored = updates[1] && tagStart(updates[1]);
+      assert.ok(restored);
+      assert.notEqual(restored.id.clock, original.id.clock);
+      const cleanup: Uint8Array[] = [];
+      c.replica.doc.on("update", (update: Uint8Array, origin: unknown) => { if (origin === null) cleanup.push(update); });
+      if (mode === "merged") Y.applyUpdate(c.replica.doc, Y.mergeUpdates(updates), "remote");
+      else w.deliver("B", "C", mode);
+      assert.deepEqual(cleanup.map(update => [...Y.decodeUpdate(update).ds.clients].map(([client, ranges]) =>
+        [client, ranges.map(range => [range.clock, range.len])])),
+      mode === "reverse" ? [[[b.client, [[original.id.clock, 1]]]]] : []);
+      assert.deepEqual(settled(w, mode), tagged);
+      assert.equal(w.stats.tagDifferences.length, 0);
+      for (const { replica } of w.copies) replica.destroy();
+    }
+  });
+}
 
 test("undoing a plain insertion can clear the space someone else typed with a tag", () => {
   const w = world([{ id: "R1", audioText: "xy" }], { clients: [3, 2, 1], scheme: "chosen", auditTags: true });
@@ -144,8 +178,22 @@ const muteFormat = (copy: Copy, omit: (mark: string, value: true | null) => bool
   };
 };
 
+function muteFreshTypingTag({ replica }: Copy): void {
+  const splice = replica.splice.bind(replica);
+  replica.splice = (beat, field, from, to, insert) => {
+    const { text } = replica.cell(beat, field), format = text.format;
+    text.format = (index, length, attrs) => {
+      const kept = Object.fromEntries(Object.entries(attrs).filter(([key, value]) =>
+        !(value === true && key.startsWith("t:"))));
+      if (Object.keys(kept).length) format.call(text, index, length, kept);
+    };
+    try { splice(beat, field, from, to, insert); } finally { text.format = format; }
+  };
+}
+
 const muted: Record<ProbedWrite, (copy: Copy) => void> = {
   type: ({ layer }) => { layer.type = () => undefined; },
+  freshTypingTag: muteFreshTypingTag,
   erase: ({ layer }) => { layer.erase = () => undefined; },
   format: copy => { muteFormat(copy, kind => !kind.startsWith("t:")); },
   tag: copy => { muteFormat(copy, (kind, value) => kind.startsWith("t:") && value === true); },
@@ -179,6 +227,7 @@ for (const [command, mute] of Object.entries(muted) as [ProbedWrite, (copy: Copy
       }
     }
     t.diagnostic(`${command}: ${used} used, ${effective} effective, ${failed} failed, ${other} other failures`);
+    if (command === "freshTypingTag") assert.deepEqual({ used, effective }, { used: 422, effective: 422 });
     assert.ok(effective > 0);
     assert.deepEqual(missed, []);
     assert.equal(failed, effective);

@@ -43,12 +43,17 @@ under plain or chosen keys, including the marker rewrites. These classifications
 | C · A tag covers two plain characters outside the author's selection, batched 31. | 1 | 1 | 1 |
 | Total A / B / C | 3 / 1 / 1 | 128 / 2 / 1 | 105 / 2 / 1 |
 
+The display-based label hides earlier unexpected bold in seven of the 102 redundant simple-on commands in
+each column, four on restored text and three on typing pulled into a bold range, including batched 170.
+
 - **B, restored boundary.** Start with `ghij` and client ids A=1, C=3. C bolds `gh`, deletes `ghi`
   and undoes that deletion. A, who has yet to see C's writes, inserts a plain `l` between `h` and `i`.
-  Reverse delivery gives `[ghl|b]ij`. A unbolds the excess successfully.
-- **B, undo of marked typing.** Start with `vw`. C types bold `rpz` before `v` and syncs.
-  A inserts plain `u ` between `r` and `p`, ahead of C receiving it. C undoes the original typing.
-  B receives A's insertion first and sees `u ` followed by bold `vw`. Unbolding `vw` works.
+  Reverse delivery settles on `[ghl|b]ij` on every copy. The excess bold stays until someone removes it.
+- **B, undo of marked typing.** Start with `vw` and client ids A=2, B=1, C=3. B replaces `vw` with
+  identical plain text and sends it to C. C types bold `rpz` before `v` and syncs. A inserts plain
+  `u ` between `r` and `p`, and C undoes its typing before receiving A's insertion. The plain-key and
+  chosen copies all settle on `u [vw|b]`. Nobody bolded `vw`, and the bold stays until someone removes it.
+  The generated history settles on `zu [mo|b]` if settled before B's unbold command.
 - **C, wrong assignment.** Start with plain `vw`. A selects only `w` and applies `T1`. Unseen by A,
   B types plain `mm` just before `w`. Both writers and a late joiner show `v[mmw|T1]`. B untags
   only `mm` and all show `vmm[w|T1]`. The flagged command was B's correct removal. The wrong
@@ -102,27 +107,36 @@ Transport and persistence must still consume both Yjs updates, including the nul
 
 ### Missing tag histories
 
-These are all missing-tag histories in the mixed schedules under plain or chosen keys. All are batched except
+These are all missing-tag histories in the mixed schedules across the three key schemes. All are batched except
 the final row. Brackets denote `T1`. Local gaps marked **transient** close at settlement. The report's
 `--details` output gives the exact command, update delivery, stack actions, target character identities,
 request step numbers and each observed cell for every row and every additional unrequested tag.
 
 | Seed | Keys | History and outcome |
 | --- | --- | --- |
-| 0 | Plain | In a split beat's visual cell, A types tagged `poq`, syncs, then appends tagged `nsk ` while B replaces `q` with a plain `n`. The appended four characters survive without their tag. |
+| 0 | Per action and plain | In a split beat's visual cell, A types tagged `poq`, syncs, then appends tagged `nsk ` while B replaces `q` with a plain `n`. The appended four characters survive without their tag. |
 | 3 | Plain | A tags `gh` and syncs. A explicitly tags `g` again while C, who saw only the first application, untags `g`. At merge the new request leaves `g` plain. |
-| 14 | Chosen | C inserts tagged `run ` into `xy` and syncs. A inserts plain text before the space and sends it to B, then undoes. Before receiving the undo, B adds plain text before `n`. After merge, `n` stays tagged and C's original space is plain. The short fixture yields `x[ru]Z[n] y`. |
-| 23 | Plain and chosen | In `ghij`, B deletes `j` and undoes before receiving A's tag on the original `j`. A sees `ghi[j]` before sync. All copies settle on plain `ghij`. A later restore produces another identity for the same `j` without the tag. |
+| 14 | Per action and chosen | C inserts tagged `run ` into `xy` and syncs. A inserts plain text before the space and sends it to B, then undoes. Before receiving the undo, B adds plain text before `n`. After merge, `n` stays tagged and C's original space is plain. The short fixture yields `x[ru]Z[n] y`. |
+| 23 | All three | In `ghij`, B deletes `j` and undoes before receiving A's tag on the original `j`. A sees `ghi[j]` before sync. All copies settle on plain `ghij`. A later restore produces another identity for the same `j` without the tag. |
 | 34 | Plain | A tags `y` in visual `xy`. C receives it and untags the range including `y`. A, who has yet to receive the removal, tags `y` again. Merge loses A's second request. |
-| 84 | Plain and chosen | **Transient.** B tags `y` in a compound, inserts `z ` before it, then undoes and redoes. B sends the reversal batch in reverse to C. Cleanup relayed through C reaches A ahead of B's full batch. A sees `xz y` while B and C see `xz [y]`. After settling the tag returns. |
-| 130 | Plain | A tags `w` in `vw` and deletes both letters. B, unaware of A's edits, types tagged `p` after `w`. The remaining `p` goes plain at merge. |
-| 160 | Plain and chosen | **Transient.** B tags `vr` and syncs, then undoes and redoes. C receives B's batch in reverse and sends cleanup to A ahead of B's full batch. A temporarily sees both `v` and `r` plain. Their tags return at settlement. |
-| 176 | Plain and chosen | C deletes and restores `y` in visual `xy` while B tags the original `y` in a compound. Sync retains the restored `y` without its tag. |
+| 84 | All three | **Transient.** B tags `y` in a compound, inserts `z ` before it, then undoes and redoes. B sends the reversal batch in reverse to C. Cleanup relayed through C reaches A ahead of B's full batch. A sees `xz y` while B and C see `xz [y]`. After settling the tag returns. |
+| 130 | Per action and plain | A tags `w` in `vw` and sends the tag to B. B types tagged `p` after `w`, using the seen tag. A deletes `vw` before receiving `p`, and formatting cleanup deletes the markers `p` depends on. When B receives the deletion, `p` goes plain. |
+| 139 | Per action | A types tagged `zrl`. B receives that write ahead of A's plain insertion at the end of the tag and sees the tag extend over `v`. B types tagged `z ` after `v` using the same key. After A's plain insertion arrives, B's `z ` is plain on every copy. |
+| 160 | All three | **Transient.** B tags `vr` and syncs, then undoes and redoes. C receives B's batch in reverse and sends cleanup to A ahead of B's full batch. A temporarily sees both `v` and `r` plain. Their tags return at settlement. |
+| 176 | All three | C deletes and restores `y` in visual `xy` while B tags the original `y` in a compound. Sync retains the restored `y` without its tag. |
 | 208 | Plain | A inserts tagged `ro ` into `vw`. Unseen by A, B tags `w`, then separately types and erases a letter. B's undo skips that exhausted entry and reaches its tag compound. All three of A's inserted characters lose their tags at merge. |
-| 230 | Plain | A deletes `w` from `vw`, tags `v`, then undoes the tag. C, before seeing A's changes, appends tagged `n`. Sync keeps `n` but drops its tag. |
+| 230 | Per action and plain | A deletes `w` from `vw`, tags `v`, then undoes the tag. C, before seeing A's changes, appends tagged `n`. Sync keeps `n` but drops its tag. |
 | 234 | Plain | A types `uz ` and syncs. C inserts tagged `ozt ` just before A's space while B tags `z ` on its copy. B's original space is plain at merge. |
-| 262 | Plain and chosen | B replaces `gh` with `q` and undoes. On the original `ghij`, C tags `hi` and inserts `oks` before `g`. Sync shows restored plain `h` and tagged `i`. Another restore of `h` also lacks its tag. |
-| Continuous 0 | Plain | B types tagged `tzl` at the start of `abcdef`. C receives it and replaces `lab` with plain `u`. B, before seeing that edit, types tagged `ms` after `l`. Both letters are seen plain locally. At settled checks `m` survives plain. |
+| 262 | All three | B replaces `gh` with `q` and undoes. On the original `ghij`, C tags `hi` and inserts `oks` before `g`. Sync shows restored plain `h` and tagged `i`. Another restore of `h` also lacks its tag. |
+| Continuous 0 | Per action and plain | B types tagged `tzl` at the start of `abcdef`. C receives it and replaces `lab` with plain `u`. B, before seeing that edit, types tagged `ms` after `l`. Both letters are seen plain locally. At settled checks `m` survives plain. |
+
+The relay limit is to deliver each writer's updates in the order they were made, or merge that writer's batch
+into one update before applying it. The named three-copy test starts with plain visual `vr`, uses client ids
+A=1, B=2, C=3, and settles after B tags both letters. B then undoes and redoes before C receives either update.
+On each key scheme, C applies redo first, then undo, and relays its cleanup while the world settles. C's
+null-origin cleanup deletes the original start marker. The redo marker survives and all copies retain the tag,
+so the permanent loss reported for this short trace did not reproduce. Sending undo then redo, or merging
+the two updates before C applies them, preserves the tag without generating that cleanup.
 
 ### Chosen-scheme controls and limits
 
@@ -130,10 +144,17 @@ Each control turns one write path into a silent in-memory no-op and reruns the 6
 Used counts histories that called the path. Effective counts histories with a visible or marker write, a
 fresh application key, or an applied press. Each edit is checked before the next command. The two other
 redo failures were already empty presses which changed stack housekeeping or broke a typing group.
+For chosen keys, each explicitly tagged character is checked for a raw key with the writer's client id
+and a clock within the typing write. A visible inherited tag can pass the display check while failing that
+key check. The typing-key control mutes positive tag writes at `Y.Text.format` during the splice. It covers
+403 histories with explicitly tagged typing and 19 more with only tail re-keying. For a tail rewrite the
+harness reads the pre-write keys on either side of the insertion and checks for a newly allocated marker,
+including markers deleted in the same replacement.
 
 | Muted write | Used | Effective | Failed among effective | Other failures |
 | --- | ---: | ---: | ---: | ---: |
 | Typing | 600 | 600 | 600 | 0 |
+| Fresh key on tagged typing or tail re-key | 422 | 422 | 422 | 0 |
 | Deleting | 576 | 576 | 576 | 0 |
 | Simple formatting | 594 | 568 | 568 | 0 |
 | Tagging | 419 | 419 | 419 | 0 |
@@ -155,6 +176,10 @@ The harness still uses the current implementation's pre-command positions, visib
 markers as inputs, along with client ids, state vectors, delivered operations and the encoded removal
 vector. It validates assigned character and field identities by kind and value, binds restored identities
 through Yjs's `redone` link, and uses the raw order of split boundaries in its projection check.
+The A/B/C labels use the implementation's display and the harness's bound restoration flags. In generated
+runs the settled mark comparison records bold mismatches without failing, and it stops comparing that letter
+and kind after the first mismatch. The generated tag audit counts missing and extra marks. The fixed-order
+tests assert only the settled missing-tag totals from that audit.
 An update still determines whether to install a model command entry, with an independent prediction
 checked against that fact. For 282 of 4,786 chosen-scheme presses (264 undo, 18 redo), character and
 field effects alone could not tell whether markers would make an entry apply. The expected stacks for

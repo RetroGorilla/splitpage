@@ -1,6 +1,6 @@
 import * as Y from "yjs";
 import type { Marks } from "../../../../src/core/text/runs.ts";
-import { NativeReplica, nativeCopy, nativeMarkName, usesActionKey } from "../native/variant.ts";
+import { NativeReplica, attributesAt, nativeCopy, nativeMarkName, usesActionKey } from "../native/variant.ts";
 import type { NativeDeltaItem, NativeField, NativeScheme } from "../native/variant.ts";
 import { RECORD_ROOTS, UndoLayer, readRecords, readStatus } from "./layer.ts";
 import type { CreationRule, RecordRoot, UndoCaret, UndoStackItem } from "./layer.ts";
@@ -36,7 +36,7 @@ export class CheckFailure extends Error {}
 export type E3Type = Y.Text | Y.Map<unknown> | Y.Array<unknown>;
 export interface MarkMismatch { readonly at: string; readonly char: string; readonly kind: string; readonly expected: boolean }
 export type WriteCommand = "type" | "erase" | "format" | "split" | "join" | "field" | "undo" | "redo";
-export type ProbedWrite = WriteCommand | "tag" | "untag";
+export type ProbedWrite = WriteCommand | "tag" | "untag" | "freshTypingTag";
 export interface CommandDifference {
   readonly step: number; readonly perAction: boolean; readonly predicted: boolean; readonly updated: boolean;
   readonly formats: readonly FormatProbe[]; readonly markerOnly: boolean
@@ -62,7 +62,7 @@ export interface WorldStats {
 interface Logged { readonly update: Uint8Array; readonly op: string }
 interface OpRecord { readonly copy: string; readonly client: number; readonly start: number; readonly end: number; readonly context: ReadonlySet<string> }
 interface Watched { updates: number; added: { item: UndoStackItem; type: string }[]; updated: number }
-interface YChar { readonly id: Y.ID; readonly value: string; readonly names: ReadonlySet<string> }
+interface YChar { readonly id: Y.ID; readonly value: string; readonly names: ReadonlySet<string>; readonly keys: readonly string[] }
 interface TextEdit {
   readonly container: string;
   readonly before: CommandChar[];
@@ -104,10 +104,11 @@ export function textChars(text: Y.Text): YChar[] {
       if (content.value === null) attributes.delete(content.key); else attributes.set(content.key, content.value);
       continue;
     }
-    const names = new Set([...attributes].filter(([, value]) => value === true).map(([name]) => nativeMarkName(name)));
+    const keys = [...attributes].filter(([, value]) => value === true).map(([name]) => name);
+    const names = new Set(keys.map(nativeMarkName));
     if (content instanceof Y.ContentString) {
-      for (let index = 0; index < content.str.length; index++) result.push({ id: Y.createID(item.id.client, item.id.clock + index), value: content.str.charAt(index), names });
-    } else if (content instanceof Y.ContentEmbed) result.push({ id: item.id, value: JSON.stringify(content.embed), names });
+      for (let index = 0; index < content.str.length; index++) result.push({ id: Y.createID(item.id.client, item.id.clock + index), value: content.str.charAt(index), names, keys });
+    } else if (content instanceof Y.ContentEmbed) result.push({ id: item.id, value: JSON.stringify(content.embed), names, keys });
   }
   return result;
 }
@@ -367,7 +368,43 @@ export class World {
     }
   }
 
-  private part(copy: Copy, op: string, part: Part, seen: Seen): PlannedPart {
+  private checkFreshTypingTags(copy: Copy, text: Y.Text, at: number, length: number, tags: readonly string[], fromClock: number): void {
+    const endClock = Y.getState(copy.replica.doc.store, copy.client);
+    for (const char of textChars(text).slice(at, at + length)) {
+      for (const tag of tags) {
+        const prefix = `${tag}\u001f${copy.client.toString(36)}.`;
+        const fresh = char.keys.some(raw => {
+          if (!raw.startsWith(prefix)) return false;
+          const suffix = raw.slice(prefix.length), clock = Number.parseInt(suffix, 36);
+          return clock >= fromClock && clock < endClock && clock.toString(36) === suffix;
+        });
+        if (!fresh) this.fail(`${copy.name}: typed character ${JSON.stringify(char.value)} has no fresh ${tag} key from this command`);
+      }
+    }
+  }
+
+  private checkTypingTagTails(copy: Copy, text: Y.Text, tails: readonly string[], fromClock: number): void {
+    const doc = copy.replica.doc;
+    const keys = (doc.store.clients.get(copy.client) ?? []).flatMap(item =>
+      item.id.clock >= fromClock && item instanceof Y.Item && item.parent === text &&
+      item.content instanceof Y.ContentFormat && item.content.value === true ? [item.content.key] : []);
+    for (const tail of tails) {
+      const application = tail.split("\u001f").slice(0, 2).join("\u001f");
+      const prefix = `${application}\u001f${copy.client.toString(36)}.`;
+      if (!keys.some(key => key.startsWith(prefix))) this.fail(`${copy.name}: typing did not write a fresh key for the tag tail`);
+    }
+  }
+
+  private typingTagTails(replica: NativeReplica, part: Extract<Part, { do: "insert" }>, left: YChar | undefined, right: YChar | undefined, tags: readonly string[]): string[] {
+    if (!right) return [];
+    // why: a compound can change the raw text before the audio projection used for typing refreshes
+    const projected = part.field === "audioText" && part.at > 0
+      ? attributesAt(replica.block(part.beat).delta, part.at - 1) ?? {} : null;
+    const keys = projected ? Object.keys(projected).filter(key => projected[key] === true) : left?.keys ?? [];
+    return keys.filter(raw => raw.startsWith("t:") && !tags.includes(nativeMarkName(raw)) && right.keys.includes(raw));
+  }
+
+  private part(copy: Copy, op: string, part: Part, seen: Seen, fromClock: number): PlannedPart {
     const replica = copy.replica, model = this.model;
     switch (part.do) {
       case "insert": case "delete": case "format": {
@@ -376,8 +413,15 @@ export class World {
           const at = view.start + part.at, left = view.chars[at - 1], right = view.chars[at];
           const expected = model.insert(op, view.container, part.text.split(""), left ? this.modelOf(left.id) : null, right ? this.modelOf(right.id) : null, part.marks ?? [], seen);
           const inserted = expected.map(char => ({ id: char.id, value: char.value, names: new Set(part.marks) }));
+          const tags = this.scheme === "chosen" ? (part.marks ?? []).filter(mark => mark.startsWith("t:")) : [];
+          const tails = this.scheme === "chosen" && inserted.length ? this.typingTagTails(replica, part, left, right, tags) : [];
+          if (tags.length || tails.length) this.write("freshTypingTag", inserted.length > 0);
           return { expected, text: this.edit(view, chars => [...chars.slice(0, at), ...inserted, ...chars.slice(at)]),
-            run: () => { replica.splice(part.beat, part.field, part.at, part.at, [{ text: part.text, marks: marksOf(part.marks ?? []) }]); } };
+            run: () => { replica.splice(part.beat, part.field, part.at, part.at, [{ text: part.text, marks: marksOf(part.marks ?? []) }]); },
+            check: () => {
+              if (tags.length && inserted.length) this.checkFreshTypingTags(copy, view.text, at, inserted.length, tags, fromClock);
+              if (tails.length) this.checkTypingTagTails(copy, view.text, tails, fromClock);
+            } };
         }
         const ids = view.chars.slice(view.start + part.from, view.start + part.to).map(char => this.modelOf(char.id));
         if (part.do === "delete") {
@@ -535,9 +579,10 @@ export class World {
     const copy = this.copy(name), seen = this.seenBy(copy);
     this.history.push(`${name} ${label} @${this.clock}`);
     const op = this.model.begin(name, spec), opened = this.open(copy, op);
-    const planned = parts.map(part => this.part(copy, op, part, seen));
+    const planned = parts.map(part => this.part(copy, op, part, seen, opened.from));
     const { watched } = this.guarded(copy, op, opened, () => { run(copy.layer); });
     this.bindCreations(copy, opened.from, planned.flatMap(part => part.expected));
+    for (const part of planned) part.check?.();
     this.checkText(copy, planned.flatMap(part => part.text ? [part.text] : []));
     this.settleEntry(copy, watched, label);
   }
@@ -557,7 +602,7 @@ export class World {
     const { watched } = this.guarded(copy, op, opened, () => {
       copy.layer.command(() => {
         for (const part of parts) {
-          const from = Y.getState(copy.replica.doc.store, copy.client), planned = this.part(copy, op, part, seen);
+          const from = Y.getState(copy.replica.doc.store, copy.client), planned = this.part(copy, op, part, seen, from);
           planned.run();
           this.bindCreations(copy, from, planned.expected);
           if (planned.text) { this.checkText(copy, [planned.text]); edits.push(planned.text); }
