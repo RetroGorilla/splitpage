@@ -110,11 +110,6 @@ jobs:
       - name: No new comments
         run: npm run check:comments
 
-      - name: Collaboration prototype tests
-        if: needs.changes.outputs.collab == 'true'
-        run: npm test
-        working-directory: prototypes/collab
-
       - name: Build index.html and stamp sw.js
         if: needs.changes.outputs.app == 'true'
         run: node build.mjs --test
@@ -237,43 +232,77 @@ jobs:
       - name: Unit, desktop and tool test shard
         run: npm run test:all -- --shard "${{ matrix.shard }}/4"
 
+  collab-tests:
+    name: Collaboration prototype tests (${{ matrix.shard }}/4)
+    needs: changes
+    if: needs.changes.outputs.collab == 'true' && needs.changes.outputs.tested != 'true'
+    runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
+    timeout-minutes: 15
+    strategy:
+      fail-fast: false
+      matrix:
+        shard: [1, 2, 3, 4]
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            desktop/package-lock.json
+            prototypes/collab/package-lock.json
+
+      - name: Install the prototype's packages
+        run: npm ci
+        working-directory: prototypes/collab
+
+      - name: Collaboration prototype test shard
+        run: node --test --test-shard="${{ matrix.shard }}/4" "test/**/*.test.ts" "test/**/*.test.mjs"
+        working-directory: prototypes/collab
+
   gate:
-    needs: [changes, checks, tests, desktop-smoke]
+    needs: [changes, checks, tests, collab-tests, desktop-smoke]
     if: always()
     runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 2
     steps:
       - name: Every required job passed, or the change was prose only
         run: |
-          echo "changes=$CHANGES code=$CODE root_tests=$ROOT_TESTS tested=$TESTED desktop=$DESKTOP checks=$CHECKS tests=$TESTS smoke=$SMOKE"
+          echo "changes=$CHANGES code=$CODE root_tests=$ROOT_TESTS collab=$COLLAB tested=$TESTED desktop=$DESKTOP checks=$CHECKS tests=$TESTS collab_tests=$COLLAB_TESTS smoke=$SMOKE"
           [ "$CHANGES" = success ] || exit 1
           if [ "$CODE" = true ] && [ "$TESTED" != true ]; then
             want_tests=skipped
             if [ "$ROOT_TESTS" = true ]; then want_tests=success; fi
+            want_collab=skipped
+            if [ "$COLLAB" = true ]; then want_collab=success; fi
             want_smoke=skipped
             if [ "$DESKTOP" = true ]; then want_smoke=success; fi
-            [ "$CHECKS" = success ] && [ "$TESTS" = "$want_tests" ] && [ "$SMOKE" = "$want_smoke" ]
+            [ "$CHECKS" = success ] && [ "$TESTS" = "$want_tests" ] && [ "$COLLAB_TESTS" = "$want_collab" ] && [ "$SMOKE" = "$want_smoke" ]
           else
-            [ "$CHECKS" = skipped ] && [ "$TESTS" = skipped ] && [ "$SMOKE" = skipped ]
+            [ "$CHECKS" = skipped ] && [ "$TESTS" = skipped ] && [ "$COLLAB_TESTS" = skipped ] && [ "$SMOKE" = skipped ]
           fi
         env:
           CHANGES: ${{ needs.changes.result }}
           CODE: ${{ needs.changes.outputs.code }}
           ROOT_TESTS: ${{ needs.changes.outputs.root_tests }}
+          COLLAB: ${{ needs.changes.outputs.collab }}
           TESTED: ${{ needs.changes.outputs.tested }}
           DESKTOP: ${{ needs.changes.outputs.desktop }}
           CHECKS: ${{ needs.checks.result }}
           TESTS: ${{ needs.tests.result }}
+          COLLAB_TESTS: ${{ needs.collab-tests.result }}
           SMOKE: ${{ needs.desktop-smoke.result }}
 
       - name: Write the passed tree's marker
-        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && needs.changes.outputs.tree != ''
+        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.collab-tests.result == 'success' || needs.collab-tests.result == 'skipped') && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && needs.changes.outputs.tree != ''
         run: echo "$TREE" > "$RUNNER_TEMP/passed-tree.txt"
         env:
           TREE: ${{ needs.changes.outputs.tree }}
 
       - name: Upload the passed tree's marker
-        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && needs.changes.outputs.tree != ''
+        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.collab-tests.result == 'success' || needs.collab-tests.result == 'skipped') && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && needs.changes.outputs.tree != ''
         uses: actions/upload-artifact@v7
         with:
           name: ci-passed-tree-${{ needs.changes.outputs.tree }}

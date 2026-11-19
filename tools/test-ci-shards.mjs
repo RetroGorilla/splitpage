@@ -20,18 +20,30 @@ assert.equal(smoke.if, "needs.changes.outputs.desktop == 'true' && needs.changes
 assert.equal(changes.outputs.desktop, "${{ steps.classify.outputs.desktop }}");
 assert.equal(changes.outputs.collab, "${{ steps.classify.outputs.collab }}");
 assert.equal(changes.outputs.root_tests, "${{ steps.classify.outputs.root_tests }}");
-const prototypeTests = checks.steps.find((s) => s.name === "Collaboration prototype tests");
-assert.equal(prototypeTests.if, "needs.changes.outputs.collab == 'true'");
-assert.equal(prototypeTests.run, "npm test");
-assert.equal(prototypeTests["working-directory"], "prototypes/collab");
+const collabTests = workflow.jobs["collab-tests"];
+assert.equal(checks.steps.some((s) => s["working-directory"] === "prototypes/collab" || /node --test|npm test/.test(s.run ?? "")), false);
 const install = checks.steps.find((s) => s.name === "Install tooling");
 assert.ok(install.run.includes("npm ci --prefix prototypes/collab"));
-assert.ok(checks.steps.indexOf(install) < checks.steps.indexOf(prototypeTests));
+assert.equal(collabTests.needs, "changes");
+assert.equal(collabTests.if, "needs.changes.outputs.collab == 'true' && needs.changes.outputs.tested != 'true'");
+assert.equal(collabTests["runs-on"], checks["runs-on"]);
+assert.equal(collabTests.strategy["fail-fast"], false);
+const collabShards = collabTests.strategy.matrix.shard;
+assert.deepEqual(collabShards, Array.from({ length: collabShards.length }, (_, i) => i + 1));
+assert.ok(collabShards.length > 1);
+assert.equal(collabTests.name, `Collaboration prototype tests (\${{ matrix.shard }}/${collabShards.length})`);
+const collabInstalls = collabTests.steps.filter((s) => /\bnpm ci\b/.test(s.run ?? ""));
+assert.deepEqual(collabInstalls.map((s) => [s.run, s["working-directory"]]), [["npm ci", "prototypes/collab"]]);
+const collabScript = JSON.parse(readFileSync(join(REPO, "prototypes/collab/package.json"), "utf8")).scripts.test;
+assert.match(collabScript, /^node --test "/);
+const collabRuns = collabTests.steps.filter((s) => s.run?.includes("node --test"));
+assert.deepEqual(collabRuns.map((s) => [s.run, s["working-directory"]]), [[collabScript.replace(/^node --test /, `node --test --test-shard="\${{ matrix.shard }}/${collabShards.length}" `), "prototypes/collab"]]);
+assert.ok(collabTests.steps.indexOf(collabInstalls[0]) < collabTests.steps.indexOf(collabRuns[0]));
 assert.equal(checks.steps.find((s) => s.run === "node tools/build-preload.mjs && node tools/check-preload.mjs").if, "needs.changes.outputs.root_tests == 'true'");
 for (const s of checks.steps.filter((s) => /^node build\.mjs|playwright@/.test(s.run ?? "") || s.run?.includes("playwright@"))) {
   assert.equal(s.if, "needs.changes.outputs.app == 'true'");
 }
-for (const job of [checks, workflow.jobs["npm-cache"]]) {
+for (const job of [checks, collabTests, workflow.jobs["npm-cache"]]) {
   assert.ok(job.steps.find((s) => s.uses?.startsWith("actions/setup-node@")).with["cache-dependency-path"].split("\n").includes("prototypes/collab/package-lock.json"));
 }
 assert.ok(workflow.jobs["npm-cache"].steps.some((s) => s.run?.includes("npm ci --ignore-scripts --prefix prototypes/collab")));
@@ -69,10 +81,12 @@ const fastMutants = fastJob.steps.find((s) => s.run?.includes("tools/mutants.mjs
 assert.equal(fastMutants, 'shopt -s extglob\nnode tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --shard "${{ matrix.shard }}/6" --concurrency 4 --no-baseline --fail-on-survivor\n');
 assert.deepEqual(fastReport.needs, ["mutants-fast-baseline", "mutants-fast"]);
 assert.equal(fastReport.if, "failure()");
-assert.deepEqual(gate.needs, ["changes", "checks", "tests", "desktop-smoke"]);
+assert.deepEqual(gate.needs, ["changes", "checks", "tests", "collab-tests", "desktop-smoke"]);
 assert.equal(gate.if, "always()");
 const step = gate.steps[0];
 assert.equal(step.env.SMOKE, "${{ needs.desktop-smoke.result }}");
+assert.equal(step.env.COLLAB_TESTS, "${{ needs.collab-tests.result }}");
+assert.equal(step.env.COLLAB, "${{ needs.changes.outputs.collab }}");
 assert.equal(step.env.DESKTOP, "${{ needs.changes.outputs.desktop }}");
 assert.equal(step.env.TESTS, "${{ needs.tests.result }}");
 assert.equal(step.env.CHECKS, "${{ needs.checks.result }}");
@@ -86,7 +100,7 @@ assert.equal(changes.outputs.tree, "${{ steps.tested.outputs.tree }}");
 assert.equal(changes.permissions.actions, "read");
 const lookup = changes.steps.find((s) => s.id === "tested");
 assert.equal(lookup.run, "node tools/ci-tested-tree.mjs ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && '--lookup' || '' }}");
-const ran = "needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && needs.changes.outputs.tree != ''";
+const ran = "needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.collab-tests.result == 'success' || needs.collab-tests.result == 'skipped') && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && needs.changes.outputs.tree != ''";
 const upload = gate.steps.find((s) => s.uses?.startsWith("actions/upload-artifact@"));
 assert.equal(upload.with.name, "ci-passed-tree-${{ needs.changes.outputs.tree }}");
 assert.equal(upload.if, ran);
@@ -108,7 +122,7 @@ for (const change of bash ? results : []) {
           for (const test of others) {
             for (const smokeResult of others) {
               const result = spawnSync(bash, ["-e", "-c", step.run], {
-                env: { ...process.env, CHANGES: change, CODE: code, ROOT_TESTS: code, TESTED: tested, DESKTOP: desktop, CHECKS: check, TESTS: test, SMOKE: smokeResult },
+                env: { ...process.env, CHANGES: change, CODE: code, ROOT_TESTS: code, COLLAB: "false", TESTED: tested, DESKTOP: desktop, CHECKS: check, TESTS: test, COLLAB_TESTS: "skipped", SMOKE: smokeResult },
                 encoding: "utf8",
                 timeout: 5000
               });
@@ -124,16 +138,37 @@ for (const change of bash ? results : []) {
     }
   }
 }
+for (const code of bash ? ["true", "false"] : []) {
+  for (const tested of ["true", "false", ""]) {
+    for (const collab of ["true", "false"]) {
+      for (const collabResult of results) {
+        const ranFresh = code === "true" && tested !== "true";
+        const others = ranFresh ? "success" : "skipped";
+        const result = spawnSync(bash, ["-e", "-c", step.run], {
+          env: { ...process.env, CHANGES: "success", CODE: code, ROOT_TESTS: code, COLLAB: collab, TESTED: tested, DESKTOP: "false", CHECKS: others, TESTS: others, COLLAB_TESTS: collabResult, SMOKE: "skipped" },
+          encoding: "utf8",
+          timeout: 5000
+        });
+        const wantCollab = ranFresh && collab === "true" ? "success" : "skipped";
+        assert.equal(result.status === 0, collabResult === wantCollab, JSON.stringify({ code, tested, collab, collabTests: collabResult, error: result.error?.message }));
+        cases++;
+      }
+    }
+  }
+}
 for (const check of bash ? results : []) {
   for (const test of results) {
     for (const smokeResult of results) {
-      const result = spawnSync(bash, ["-e", "-c", step.run], {
-        env: { ...process.env, CHANGES: "success", CODE: "true", ROOT_TESTS: "false", TESTED: "false", DESKTOP: "false", CHECKS: check, TESTS: test, SMOKE: smokeResult },
-        encoding: "utf8",
-        timeout: 5000
-      });
-      assert.equal(result.status === 0, check === "success" && test === "skipped" && smokeResult === "skipped", JSON.stringify({ prototypeOnly: true, check, test, smoke: smokeResult, error: result.error?.message }));
-      cases++;
+      for (const collabResult of results) {
+        const result = spawnSync(bash, ["-e", "-c", step.run], {
+          env: { ...process.env, CHANGES: "success", CODE: "true", ROOT_TESTS: "false", COLLAB: "true", TESTED: "false", DESKTOP: "false", CHECKS: check, TESTS: test, COLLAB_TESTS: collabResult, SMOKE: smokeResult },
+          encoding: "utf8",
+          timeout: 5000
+        });
+        const expected = check === "success" && test === "skipped" && smokeResult === "skipped" && collabResult === "success";
+        assert.equal(result.status === 0, expected, JSON.stringify({ prototypeOnly: true, check, test, smoke: smokeResult, collabTests: collabResult, error: result.error?.message }));
+        cases++;
+      }
     }
   }
 }
