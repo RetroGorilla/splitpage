@@ -95,6 +95,7 @@ async function upload(rate: number, mb: number, mode: "queued" | "state", extend
           writer = openCopy(link.url, 3, extended ? { messageReconnectTimeout: longWindow } : {}, hydrated);
         }
         const firstArrival = arrivals.length;
+        const firstByte = link.bytes.upload;
         const start = performance.now();
         writer.connect();
         await until(() => base.doc.getText("offline").length === total && !writer.provider.hasUnsyncedChanges && writer.provider.synced,
@@ -106,6 +107,7 @@ async function upload(rate: number, mb: number, mode: "queued" | "state", extend
         const received = arrivals.slice(firstArrival);
         return { rate: Number.isFinite(rate) ? rate : "uncapped", mb, mode, extended, elapsed, ...copySummary(writer, start),
           incremental: received.filter(packet => packet.type === messageYjsUpdate).length,
+          uploadedBytes: link.bytes.upload - firstByte,
           lastUpload: seconds((received.at(-1)?.at ?? start) - start),
           uploadStep2: received.filter(packet => packet.type === messageYjsSyncStep2)
             .map(packet => ({ bytes: packet.bytes, at: seconds(packet.at - start) })) };
