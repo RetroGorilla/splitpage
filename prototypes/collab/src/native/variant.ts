@@ -8,7 +8,22 @@ import type { Arrangement, Placement } from "../native-moves/order.ts";
 export type NativeField = "audioText" | "visualText";
 export type NativeAttributes = Record<string, true>;
 export interface NativeDeltaItem { insert: string | Record<string, unknown>; attributes?: Record<string, unknown> }
-export interface NativeBlock { id: string; kind: "b" | "h"; segment: string; start: number; end: number; delta: NativeDeltaItem[] }
+export interface NativeSpan { segment: string; start: number; end: number; delta: NativeDeltaItem[] }
+export interface NativeBlock { id: string; kind: "b" | "h"; segment: string; start: number; end: number; delta: NativeDeltaItem[]; spans?: NativeSpan[] }
+export interface NativeRules { prefix: boolean; empty: boolean; repeat: boolean; adjacent: boolean }
+export type NativeRule = keyof NativeRules;
+export const NO_RULES: NativeRules = Object.freeze({ prefix: false, empty: false, repeat: false, adjacent: false });
+export const ALL_RULES: NativeRules = Object.freeze({ prefix: true, empty: true, repeat: true, adjacent: true });
+export const STRAY_ROW = "~stray";
+export interface NativeTextSpan {
+  text: Y.Text; start: number; end: number; opened: "own" | "unowned"; boundary?: "head" | "embed" | null; record?: Y.Map<unknown>;
+}
+interface SegmentView { signature: string; spans: NativeSpan[]; keys: (string | null)[] }
+interface OwnedEntry { id: string; kind: "b" | "h"; own: [string, number]; spans: [string, number][] }
+interface Ownership {
+  signatures: Map<string, string>; entries: Map<string, OwnedEntry>; order: string[]; stray: [string, number][];
+  owners: Map<string, Set<string>>; hits: Record<NativeRule, number>;
+}
 export interface NativeRemoval { by: string; at: number; seen: Record<string, number> }
 export interface NativeJoin { into: string; glue: string }
 export interface NativePart { beat: string | null; length: number }
@@ -89,6 +104,8 @@ export function nativeMarks(attributes: Record<string, unknown> | undefined): Ma
   if (links[0]) marks.href = links[0];
   return marks;
 }
+
+export function nativeEmbed(run: Run): Record<string, unknown> | null { return embedOf(run); }
 
 function embedOf(run: Run): Record<string, unknown> | null {
   if (run.atom === "broll") return { k: run.id, label: run.text };
@@ -184,6 +201,13 @@ export class NativeReplica {
   keepCreated = true;
   private readingRule: NativeReading = "follow";
   readonly scheme: NativeScheme;
+  static defaultRules: NativeRules = NO_RULES;
+  private ruleSet: NativeRules = NativeReplica.defaultRules;
+  private readonly segmentViews = new Map<string, SegmentView>();
+  private readonly staleSegments = new Set<string>();
+  private ownership: Ownership | null = null;
+  private adjacentHits = 0;
+  private strayShown = false;
 
   constructor(client: number, captureTimeout = 0, scheme: NativeScheme = "name") {
     this.doc.clientID = client;
@@ -194,12 +218,12 @@ export class NativeReplica {
       for (const event of events) {
         const id = event.path[0];
         if (typeof id === "string") {
-          this.dirtySegments.add(id); this.views.delete(id);
+          this.dirtySegments.add(id); this.views.delete(id); this.segmentViews.delete(id); this.staleSegments.add(id);
           if (event instanceof Y.YTextEvent) this.textChanges.push({ segment: id, delta: event.delta });
           else this.structureChanged = true;
         } else if (event instanceof Y.YMapEvent) {
-          this.structureChanged = true;
-          for (const key of event.keysChanged as Set<string>) { this.dirtySegments.add(key); this.views.delete(key); }
+          this.structureChanged = true; this.ownership = null;
+          for (const key of event.keysChanged as Set<string>) { this.dirtySegments.add(key); this.views.delete(key); this.segmentViews.delete(key); }
         }
       }
     });
@@ -214,7 +238,7 @@ export class NativeReplica {
       }
     });
     for (const name of ["comments", "people", "tags", "shots", "meta"] as const) this.doc.getMap(name).observeDeep(() => { this.dirtyRecords.add(name); });
-    this.order.observe(() => { this.structureChanged = true; });
+    this.order.observe(() => { this.structureChanged = true; this.ownership = null; });
     // why: the library undoes a creation by deleting the created type with all that anyone wrote in it since; the
     // filter keeps a beat's record and visual cell whatever transaction made them, so only their placement is undone
     const deleteFilter = (item: Y.Item): boolean =>
@@ -230,6 +254,21 @@ export class NativeReplica {
   get reading(): NativeReading { return this.readingRule; }
   set reading(value: NativeReading) { this.readingRule = value; this.structureChanged = true; }
 
+  get rules(): NativeRules { return this.ruleSet; }
+  set rules(value: NativeRules) {
+    this.ruleSet = Object.freeze({ ...value });
+    this.views.clear(); this.home.clear(); this.segmentViews.clear(); this.ownership = null; this.structureChanged = true;
+  }
+
+  // why: the reading rules need text spans that a boundary does not open; without them the original block view stands
+  protected get spanning(): boolean { return this.ruleSet.prefix || this.ruleSet.repeat || this.ruleSet.empty; }
+
+  ruleUse(): Record<NativeRule, number> {
+    this.changes();
+    const hits = this.spanning ? this.resolve().hits : { prefix: 0, empty: 0, repeat: 0, adjacent: 0 };
+    return { ...hits, empty: this.strayShown ? 1 : 0, adjacent: this.adjacentHits };
+  }
+
   get segments(): Y.Map<Y.Map<unknown>> { return this.doc.getMap("segments"); }
   get beats(): Y.Map<Y.Map<unknown>> { return this.doc.getMap("beats"); }
   get visuals(): Y.Map<Y.Text> { return this.doc.getMap("visuals"); }
@@ -243,7 +282,7 @@ export class NativeReplica {
   }
 
   // why: an act's key is its writer and that writer's clock when it began, so a reloaded copy never reuses one
-  private actKey(name: string): string {
+  protected actKey(name: string): string {
     const clock = Y.decodeStateVector(Y.encodeStateVector(this.doc)).get(this.doc.clientID) ?? 0;
     return `${name}${ACT}${this.doc.clientID.toString(36)}.${clock.toString(36)}`;
   }
@@ -338,7 +377,160 @@ export class NativeReplica {
     return blocks;
   }
 
+  private segmentView(segment: string): SegmentView {
+    const cached = this.segmentViews.get(segment);
+    if (cached) return cached;
+    const record = this.segments.get(segment), text = record?.get("text"), spans: NativeSpan[] = [], keys: (string | null)[] = [];
+    if (record && text instanceof Y.Text) {
+      const head = boundaryOf(record.get("head"));
+      let current: NativeSpan = { segment, start: 0, end: 0, delta: [] }, index = 0;
+      spans.push(current); keys.push(head ? `${head.kind}:${head.id}` : null);
+      for (const item of text.toDelta() as NativeDeltaItem[]) {
+        const length = typeof item.insert === "string" ? item.insert.length : 1;
+        const boundary = typeof item.insert === "string" ? null : boundaryOf(item.insert);
+        if (boundary) {
+          current = { segment, start: index + 1, end: index + 1, delta: [] };
+          spans.push(current); keys.push(`${boundary.kind}:${boundary.id}`);
+        } else { current.delta.push(item); current.end = index + length; }
+        index += length;
+      }
+    }
+    const signature = keys.map((key, at) => key ?? (spans[at] && spans[at].end > spans[at].start ? "+" : "-")).join("|");
+    const view = { signature, spans, keys };
+    this.segmentViews.set(segment, view);
+    return view;
+  }
+
+  // why: rules (a) to (c) decide which beat shows each stored span; the decision depends only on which boundaries each
+  // segment holds and whether its prefix has text, so it is kept until one of those changes
+  private resolve(): Ownership {
+    if (this.ownership) {
+      for (const segment of this.staleSegments) {
+        if (this.ownership.signatures.get(segment) !== this.segmentView(segment).signature) { this.ownership = null; break; }
+      }
+    }
+    this.staleSegments.clear();
+    if (this.ownership) return this.ownership;
+    const rules = this.ruleSet, entries = new Map<string, OwnedEntry>(), order: string[] = [], signatures = new Map<string, string>();
+    const hits: Record<NativeRule, number> = { prefix: 0, empty: 0, repeat: 0, adjacent: 0 };
+    const top: [string, number][] = [];
+    let lastBeat: OwnedEntry | null = null, stray: [string, number][] = [];
+    for (const segment of new Set(this.order.toArray())) {
+      const view = this.segmentView(segment), here: OwnedEntry[] = [], leading: [string, number][] = [];
+      signatures.set(segment, view.signature);
+      let previous: OwnedEntry | null = null;
+      view.keys.forEach((key, at) => {
+        const span = view.spans[at], filled = !!span && span.end > span.start;
+        if (key === null) { if (filled) leading.push([segment, at]); return; }
+        if (entries.has(key)) {
+          if (!rules.repeat) return;
+          hits.repeat++;
+          if (previous) previous.spans.push([segment, at]); else if (filled) leading.push([segment, at]);
+          return;
+        }
+        const entry: OwnedEntry = { id: key.slice(2), kind: key.startsWith("h:") ? "h" : "b", own: [segment, at], spans: [[segment, at]] };
+        entries.set(key, entry); order.push(key); here.push(entry); previous = entry;
+      });
+      if (leading.length) {
+        const first = here.find(entry => entry.kind === "b");
+        if (rules.prefix && first) { first.spans.unshift(...leading); hits.prefix++; }
+        else if (rules.prefix && lastBeat) { lastBeat.spans.push(...leading); hits.prefix++; }
+        else if (rules.prefix || rules.empty) top.push(...leading);
+      }
+      lastBeat = here.filter(entry => entry.kind === "b").at(-1) ?? lastBeat;
+    }
+    if (top.length) {
+      const first = order.map(key => entries.get(key)).find(entry => entry?.kind === "b");
+      if (first && rules.prefix) { first.spans.unshift(...top); hits.prefix++; }
+      else if (!first && rules.empty) { stray = top; hits.empty++; }
+    }
+    const owners = new Map<string, Set<string>>();
+    const own = (segment: string, key: string): void => { const set = owners.get(segment) ?? new Set<string>(); set.add(key); owners.set(segment, set); };
+    for (const [key, entry] of entries) for (const [segment] of entry.spans) own(segment, key);
+    for (const [segment] of stray) own(segment, `b:${STRAY_ROW}`);
+    this.ownership = { signatures, entries, order, stray, owners, hits };
+    return this.ownership;
+  }
+
+  private compose(id: string, kind: "b" | "h", refs: readonly [string, number][], own: [string, number] | null): NativeBlock {
+    const spans = refs.map(([segment, at]) => this.segmentView(segment).spans[at]).filter((span): span is NativeSpan => !!span);
+    const anchor = own ? this.segmentView(own[0]).spans[own[1]] : spans[0];
+    if (!anchor) throw new Error(`Missing span for ${id}`);
+    let end = anchor.end;
+    for (const [segment, at] of refs) if (own && segment === own[0] && at >= own[1]) end = Math.max(end, this.segmentView(segment).spans[at]?.end ?? end);
+    return { id, kind, segment: anchor.segment, start: anchor.start, end, delta: spans.flatMap(span => span.delta), spans };
+  }
+
+  private spanBlock(id: string, kind: "b" | "h"): NativeBlock | null {
+    const ownership = this.resolve();
+    if (kind === "b" && id === STRAY_ROW) return ownership.stray.length ? this.compose(id, kind, ownership.stray, null) : null;
+    const entry = ownership.entries.get(`${kind}:${id}`);
+    return entry ? this.compose(entry.id, entry.kind, entry.spans, entry.own) : null;
+  }
+
+  // why: a span is split where it lies only when a boundary opens it, so the text before the new boundary keeps its beat
+  spansOf(beat: string, field: NativeField, kind: "b" | "h" = "b"): NativeTextSpan[] {
+    if (field === "visualText") { const { text, start, end } = this.cell(beat, field); return [{ text, start, end, opened: "own" }]; }
+    if (!this.spanning) { const { text, start, end } = kind === "b" ? this.cell(beat, field) : this.headingRange(beat); return [{ text, start, end, opened: "own" }]; }
+    const ownership = this.resolve(), entry = beat === STRAY_ROW && kind === "b" ? null : ownership.entries.get(`${kind}:${beat}`);
+    const refs = entry?.spans ?? (beat === STRAY_ROW ? ownership.stray : null);
+    if (!refs || !refs.length) throw new Error(`Missing beat ${beat}`);
+    return refs.map(([segment, at]): NativeTextSpan => {
+      const view = this.segmentView(segment), span = view.spans[at], record = this.segments.get(segment), text = record?.get("text");
+      if (!span || !record || !(text instanceof Y.Text)) throw new Error(`Missing span of ${beat}`);
+      const boundary = view.keys[at] === null ? null : at === 0 ? "head" : "embed";
+      return { text, start: span.start, end: span.end, opened: boundary === null || !entry || !this.opensInPlace(entry, segment, at) ? "unowned" : "own", boundary, record };
+    });
+  }
+
+  private opensInPlace(entry: OwnedEntry, segment: string, at: number): boolean {
+    const keys = this.segmentView(segment).keys;
+    if (keys[at] === null) return false;
+    for (let index = at; index >= 0; index--) {
+      const key = keys[index], owner = key === null || key === undefined ? undefined : this.ownership?.entries.get(key);
+      if (owner && owner.own[0] === segment && owner.own[1] === index) return owner === entry;
+    }
+    return false;
+  }
+
+  private headingRange(id: string): { text: Y.Text; start: number; end: number } {
+    const block = this.block(id, "h"), text = this.segments.get(block.segment)?.get("text");
+    if (!(text instanceof Y.Text)) throw new Error(`Missing heading text ${id}`);
+    return { text, start: block.start, end: block.end };
+  }
+
+  locate(spans: readonly NativeTextSpan[], offset: number, prefer: "own" | "any" = "any"): { span: NativeTextSpan; index: number; at: number } {
+    let start = 0, fallback: { span: NativeTextSpan; index: number; at: number } | null = null;
+    for (const [at, span] of spans.entries()) {
+      const length = span.end - span.start;
+      if (offset >= start && offset <= start + length) {
+        const found = { span, index: span.start + offset - start, at };
+        if (prefer === "any" || span.opened === "own") return found;
+        fallback ??= found;
+      }
+      start += length;
+    }
+    if (fallback) return fallback;
+    throw new Error(`Offset ${offset} outside the cell`);
+  }
+
+  pieces(spans: readonly NativeTextSpan[], from: number, to: number): { text: Y.Text; from: number; to: number }[] {
+    const result: { text: Y.Text; from: number; to: number }[] = [];
+    let start = 0;
+    for (const span of spans) {
+      const length = span.end - span.start, low = Math.max(from, start), high = Math.min(to, start + length);
+      if (high > low) result.push({ text: span.text, from: span.start + low - start, to: span.start + high - start });
+      start += length;
+    }
+    return result;
+  }
+
   block(beat: string, kind: "b" | "h" = "b"): NativeBlock {
+    if (this.spanning) {
+      const found = this.spanBlock(beat, kind);
+      if (!found) throw new Error(`Missing beat ${beat}`);
+      return found;
+    }
     const guess = this.home.get(`${kind}:${beat}`) ?? `seg-${kind}-${beat}`;
     const found = this.view(guess).find(block => block.id === beat && block.kind === kind);
     if (found) return found;
@@ -360,7 +552,90 @@ export class NativeReplica {
     return { text, start: block.start, end: block.end };
   }
 
+  // why: every writer under the reading rules maps the offset a person sees through the same spans the reader showed
+  protected spliceSpans(beat: string, field: NativeField, from: number, to: number, insert: readonly Run[], kind: "b" | "h" = "b",
+    write?: (text: Y.Text, index: number, runs: readonly Run[], left: Record<string, unknown> | null) => number): void {
+    this.transact(() => {
+      const spans = this.spansOf(beat, field, kind), total = spans.reduce((sum, span) => sum + span.end - span.start, 0);
+      if (from < 0 || to < from || to > total) throw new Error(`Range outside ${beat}`);
+      const cuts = this.pieces(spans, from, to), before = from > 0 ? this.pieces(spans, from - 1, from)[0] : undefined;
+      const left = before ? attributesAt(before.text.toDelta() as NativeDeltaItem[], before.from) : null;
+      const at = insert.length ? this.locate(spans, from) : null;
+      let added = 0;
+      if (at) {
+        const end = write ? write(at.span.text, at.index, insert, left)
+          : this.scheme === "name" ? writeRuns(at.span.text, at.index, insert, this.choose, null) : this.typeAct(at.span.text, at.index, insert, left);
+        added = end - at.index;
+      }
+      for (const cut of cuts.reverse()) {
+        const shift = at && cut.text === at.span.text && cut.from >= at.index ? added : 0;
+        cut.text.delete(cut.from + shift, cut.to - cut.from);
+      }
+    });
+  }
+
+  protected copyInto(text: Y.Text, index: number, items: readonly NativeDeltaItem[]): number {
+    for (const item of items) {
+      const attributes = { ...item.attributes ?? {} };
+      if (typeof item.insert === "string") { text.insert(index, item.insert, attributes); index += item.insert.length; }
+      else { text.insertEmbed(index, item.insert, attributes); index += 1; }
+    }
+    return index;
+  }
+
+  protected sliceOf(spans: readonly NativeTextSpan[], from: number, to: number): NativeDeltaItem[] {
+    return this.pieces(spans, from, to).flatMap(piece => {
+      const result: NativeDeltaItem[] = [];
+      let index = 0;
+      for (const item of piece.text.toDelta() as NativeDeltaItem[]) {
+        const length = typeof item.insert === "string" ? item.insert.length : 1, low = Math.max(index, piece.from), high = Math.min(index + length, piece.to);
+        if (high > low) {
+          const insert = typeof item.insert === "string" ? item.insert.slice(low - index, high - index) : item.insert;
+          result.push(item.attributes ? { insert, attributes: item.attributes } : { insert });
+        }
+        index += length;
+      }
+      return result;
+    });
+  }
+
+  // why: a boundary put inside text that no boundary opens would hand the text before it to the new beat (rule a), so
+  // that part moves next to its beat first, as a binding moves the tail of a split paragraph
+  protected splitSpans(beat: string, offset: number, created: string, fields: Record<string, unknown>): void {
+    this.transact(() => {
+      const spans = this.spansOf(beat, "audioText"), at = this.locate(spans, offset, "own");
+      const lengthBefore = (index: number): number => spans.slice(0, index).reduce((sum, span) => sum + span.end - span.start, 0);
+      if (at.span.opened === "own") {
+        const around = attributesAt(at.span.text.toDelta() as NativeDeltaItem[], at.index - 1) ?? {};
+        at.span.text.insertEmbed(at.index, { b: created }, Object.fromEntries(Object.entries(around).filter(([, value]) => value === true)));
+      } else {
+        const ownAt = spans.findIndex(span => span.opened === "own");
+        if (ownAt > at.at) {
+          const own = spans[ownAt] as NativeTextSpan, stop = lengthBefore(ownAt);
+          const moved = this.sliceOf(spans, offset, stop), cuts = this.pieces(spans, offset, stop);
+          own.text.insertEmbed(own.start, { b: created }, {});
+          this.copyInto(own.text, own.start + 1, moved);
+          for (const cut of cuts.reverse()) cut.text.delete(cut.from, cut.to - cut.from);
+        } else {
+          let lastOwn = -1;
+          spans.forEach((span, index) => { if (span.opened === "own" && index < at.at) lastOwn = index; });
+          const target = spans[lastOwn];
+          if (!target) throw new Error(`No beat text before the split in ${beat}`);
+          const startMoved = lengthBefore(lastOwn + 1), moved = this.sliceOf(spans, startMoved, offset), cuts = this.pieces(spans, startMoved, offset);
+          at.span.text.insertEmbed(at.index, { b: created }, {});
+          for (const cut of cuts.reverse()) cut.text.delete(cut.from, cut.to - cut.from);
+          this.copyInto(target.text, target.end, moved);
+        }
+      }
+      const map = new Y.Map<unknown>();
+      this.beats.set(created, map);
+      for (const [key, value] of Object.entries(fields)) map.set(key, value);
+      this.visuals.set(created, new Y.Text());
+    });
+  }
+
   splice(beat: string, field: NativeField, from: number, to: number, insert: readonly Run[]): void {
+    if (this.spanning && field === "audioText") { this.spliceSpans(beat, field, from, to, insert); return; }
     this.transact(() => {
       const cell = this.cell(beat, field);
       if (from < 0 || to < from || cell.start + to > cell.end) throw new Error(`Range outside ${beat}`);
@@ -396,6 +671,16 @@ export class NativeReplica {
   }
 
   format(beat: string, field: NativeField, from: number, to: number, marks: Record<string, true | null>): void {
+    if (this.spanning && field === "audioText") {
+      this.undo.stopCapturing();
+      this.transact(() => {
+        const spans = this.spansOf(beat, field), attributes: Record<string, true | null> = {};
+        for (const [name, value] of Object.entries(marks)) attributes[usesActionKey(this.scheme, name) && value ? this.actKey(name) : name] = value;
+        for (const piece of this.pieces(spans, from, to)) piece.text.format(piece.from, piece.to - piece.from, attributes);
+      });
+      this.undo.stopCapturing();
+      return;
+    }
     this.undo.stopCapturing();
     this.transact(() => {
       const cell = this.cell(beat, field), held = new Set<string>();
@@ -511,6 +796,7 @@ export class NativeReplica {
   }
 
   split(beat: string, offset: number, created: string, fields: Record<string, unknown> = {}): void {
+    if (this.spanning) { this.splitSpans(beat, offset, created, fields); return; }
     const ref = blockRef("b", beat), children = [...this.arrangement().placed].filter(([, place]) => place.a === ref)
       .flatMap(([key, place]) => { const record = this.record(key); return record ? [[record, place] as const] : []; });
     this.transact(() => {
@@ -585,6 +871,10 @@ export class NativeReplica {
   }
 
   naturalBlocks(): NativeBlock[] {
+    if (this.spanning) {
+      const ownership = this.resolve();
+      return ownership.order.flatMap(key => { const entry = ownership.entries.get(key); return entry ? [this.compose(entry.id, entry.kind, entry.spans, entry.own)] : []; });
+    }
     const seen = new Set<string>();
     return [...new Set(this.order.toArray())].flatMap(segment => this.view(segment)).filter(block => {
       const key = `${block.kind}:${block.id}`;
@@ -650,26 +940,40 @@ export class NativeReplica {
 
   protected invalidateStructure(): void { this.structureChanged = true; }
 
+  // why: observers run when the outermost transaction ends, so a compound command that reads rows after its own write
+  // drops the cached views first
+  protected forgetViews(): void {
+    this.views.clear(); this.home.clear(); this.segmentViews.clear(); this.ownership = null; this.structureChanged = true;
+  }
+
   // why: the second reading: a join flag only hides the boundary above its beat, so a joined beat belongs to the nearest
   // visible row above it in stored order, and a removed joined beat to the removed beat directly above it
   private contiguousHeads(blocks: readonly NativeBlock[]): Map<string, NativeHead> {
-    const heads = new Map<string, NativeHead>();
-    let shown: string | null = null, hidden: string | null = null, above = false;
-    this.loops = [];
+    const heads = new Map<string, NativeHead>(), adjacent = this.ruleSet.adjacent;
+    let shown: string | null = null, hidden: string | null = null, above = false, previous: string | null = null, visible: string | null = null;
+    this.loops = []; this.adjacentHits = 0;
     for (const block of blocks) {
       if (block.kind === "h") {
-        if (this.breaksContiguousGroup?.(block.id)) { shown = null; hidden = null; above = false; }
+        if (this.breaksContiguousGroup?.(block.id)) { shown = null; hidden = null; above = false; previous = null; visible = null; }
         continue;
       }
-      const id = block.id;
-      const joined = this.joined(id) !== null;
+      const id = block.id, join = this.joined(id);
+      // why: rule (d): a join counts only when the beat it names is the one shown directly above; a removed beat
+      // joins the removed beat directly above it
       if (this.removal(id)) {
-        if (!(joined && above && hidden !== null)) hidden = id;
+        const counts = join !== null && (!adjacent || join.into === previous);
+        if (join !== null && above && hidden !== null && !counts) this.adjacentHits++;
+        if (!(counts && above && hidden !== null)) hidden = id;
         heads.set(id, { id: hidden, hidden: true }); above = true;
       } else {
-        if (!(joined && shown !== null)) shown = id;
-        heads.set(id, { id: shown, hidden: false }); above = false;
+        const joins = join !== null && (!adjacent || join.into === visible) && shown !== null;
+        if (join !== null && shown !== null && !joins) this.adjacentHits++;
+        visible = id;
+        const head: string = joins && shown !== null ? shown : id;
+        shown = head;
+        heads.set(id, { id: head, hidden: false }); above = false;
       }
+      previous = id;
     }
     return heads;
   }
@@ -703,6 +1007,12 @@ export class NativeReplica {
       this.groups.set(head.id, [...(this.groups.get(head.id) ?? []), block.id]);
       this.owner.set(block.id, head.id);
     }
+    // why: rule (b): with no beat left to carry them, stray letters show as one row with narration only
+    const stray = this.spanning && this.ruleSet.empty && !blocks.length ? this.spanBlock(STRAY_ROW, "b") : null;
+    this.strayShown = !!stray;
+    if (stray) {
+      members.set(STRAY_ROW, [stray]); this.groups.set(STRAY_ROW, [STRAY_ROW]); this.owner.set(STRAY_ROW, STRAY_ROW);
+    }
     return new Map([...members].map(([id, group]) => [id, this.row(id, group)]));
   }
 
@@ -715,6 +1025,13 @@ export class NativeReplica {
     const text = this.textChanges, touched = new Set(this.dirtyBeats), records = [...this.dirtyRecords];
     let structural = this.structureChanged;
     for (const segment of this.dirtySegments) {
+      if (this.spanning) {
+        const signature = this.segmentView(segment).signature;
+        if (this.layout.get(segment) !== signature) structural = true;
+        this.layout.set(segment, signature);
+        for (const key of this.resolve().owners.get(segment) ?? []) touched.add(key.slice(2));
+        continue;
+      }
       const after = this.view(segment), signature = after.map(block => `${block.kind}:${block.id}`).join("|");
       if (this.layout.get(segment) !== signature) structural = true;
       this.layout.set(segment, signature);
@@ -763,10 +1080,10 @@ export class NativeReplica {
     for (const [head, ids] of this.hiddenGroups) {
       const removal = this.removal(head), members = ids.map(id => this.block(id)), unseen: string[] = [];
       if (!removal) continue;
-      for (const block of members) {
-        const text = this.segments.get(block.segment)?.get("text") as Y.Text;
-        let index = block.start, open = false;
-        for (const item of block.delta) {
+      for (const block of members) for (const span of block.spans ?? [block]) {
+        const text = this.segments.get(span.segment)?.get("text") as Y.Text;
+        let index = span.start, open = false;
+        for (const item of span.delta) {
           const length = typeof item.insert === "string" ? item.insert.length : 1;
           for (let offset = 0; offset < length; offset++, index++) {
             const seen = (this.removal(block.id) ?? removal).seen, id = this.characterIdentity(text, index), late = id.clock >= (seen[String(id.client)] ?? 0);

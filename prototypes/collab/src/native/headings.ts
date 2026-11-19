@@ -1,7 +1,7 @@
 import * as Y from "yjs";
 import { blockRef } from "../native-moves/order.ts";
 import type { Placement } from "../native-moves/order.ts";
-import { NativeReplica } from "./variant.ts";
+import { NativeReplica, STRAY_ROW } from "./variant.ts";
 import type { NativeBlock, NativeDeltaItem, NativeRow } from "./variant.ts";
 
 export type NativeHeadingRemoval = "delete" | "flag";
@@ -86,6 +86,8 @@ export class NativeHeadingReplica extends NativeReplica {
 
   outline(): NativeOutlineEntry[] {
     const rows = new Map(this.rows().map(row => [row.id, row])), outline: NativeOutlineEntry[] = [];
+    const stray = rows.get(STRAY_ROW);
+    if (stray) outline.push({ kind: "row", row: stray });
     for (const block of this.blocks()) {
       if (block.kind === "h") {
         if (!this.isRemoved(block.id)) outline.push({ kind: "heading", id: block.id, name: block.delta });
