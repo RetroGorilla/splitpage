@@ -5,6 +5,23 @@ import { NativeHeadingReplica } from "../native/headings.ts";
 import { removeRow } from "../native/rows.ts";
 import { deleteNativeRows } from "./delete.ts";
 
+class TimedReplica extends NativeHeadingReplica {
+  measureWrite = false;
+  writeStart = 0;
+  writeEnd = 0;
+
+  override transact(change: () => void): void {
+    if (!this.measureWrite) {
+      super.transact(change);
+      return;
+    }
+    this.measureWrite = false;
+    this.writeStart = performance.now();
+    super.transact(change);
+    this.writeEnd = performance.now();
+  }
+}
+
 function fixture(size: number, perSegment: number): Uint8Array {
   const replica = new NativeHeadingReplica(1, "flag");
   replica.doc.transact(() => {
@@ -31,8 +48,8 @@ function fixture(size: number, perSegment: number): Uint8Array {
   return result;
 }
 
-function load(bytes: Uint8Array): NativeHeadingReplica {
-  const replica = new NativeHeadingReplica(2, "flag");
+function load(bytes: Uint8Array): TimedReplica {
+  const replica = new TimedReplica(2, "flag");
   replica.keepCreated = false;
   Y.applyUpdate(replica.doc, bytes, "remote");
   assert.equal(replica.doc.gc, true);
@@ -61,33 +78,47 @@ function bytesFor(bytes: Uint8Array, ids: string[], variant: "flag" | "keep" | "
   }
 }
 
-function times(bytes: Uint8Array, id: string, variant: "flag" | "keep" | "drop"): number[][] {
-  const deletion: number[] = [], undo: number[] = [];
+function times(bytes: Uint8Array, id: string, variant: "flag" | "keep" | "drop"): Record<string, number[]> {
+  const samples = {
+    plan: [] as number[], write: [] as number[], deleteRead: [] as number[], deleteTotal: [] as number[],
+    undoPress: [] as number[], undoRead: [] as number[], undoTotal: [] as number[]
+  };
   for (let n = 0; n < 48; n++) {
     const replica = load(bytes);
     try {
+      replica.measureWrite = true;
       const start = performance.now();
       if (variant === "flag") removeRow(replica, id, "a");
-      else deleteNativeRows(replica, { rows: [id] }, variant);
-      replica.changes();
+      else {
+        deleteNativeRows(replica, { rows: [id] }, variant);
+        replica.changes();
+      }
       const deleted = performance.now();
       assert.ok(replica.undo.undo());
+      const undone = performance.now();
       replica.changes();
       const restored = performance.now();
+      const { writeStart, writeEnd } = replica;
+      assert.ok(start <= writeStart && writeStart <= writeEnd && writeEnd <= deleted);
       if (n >= 8) {
-        deletion.push(deleted - start);
-        undo.push(restored - deleted);
+        samples.plan.push(writeStart - start);
+        samples.write.push(writeEnd - writeStart);
+        samples.deleteRead.push(deleted - writeEnd);
+        samples.deleteTotal.push(deleted - start);
+        samples.undoPress.push(undone - deleted);
+        samples.undoRead.push(restored - undone);
+        samples.undoTotal.push(restored - deleted);
       }
     } finally {
       replica.destroy();
     }
   }
-  return [deletion, undo].map(values => {
+  return Object.fromEntries(Object.entries(samples).map(([stage, values]) => {
     values.sort((a, b) => a - b);
     const lower = values[19], upper = values[20], p95 = values[37];
     assert.ok(lower !== undefined && upper !== undefined && p95 !== undefined);
-    return [(lower + upper) / 2, p95].map(value => Number(value.toFixed(3)));
-  });
+    return [stage, [(lower + upper) / 2, p95].map(value => Number(value.toFixed(3)))];
+  }));
 }
 
 for (const size of [300, 900]) for (const perSegment of [30, 1]) {

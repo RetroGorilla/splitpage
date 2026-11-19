@@ -205,19 +205,19 @@ for (const [name, edit, seen, restored, after, stack, marked] of [
   }
 });
 
-for (const crossed of [false, true]) test(`E9 two deleters, one undo, then a ${crossed ? "crossed" : "seen"} second undo`, () => {
+for (const schedule of ["seen", "crossed", "offline"] as const) test(`E9 two deleters undo with ${schedule} delivery`, () => {
   const [a, b] = copies();
   try {
     const removed = advance(base, rows("B"), "keep");
     write(a, rows("B"), "keep");
     write(b, rows("B"), "keep");
-    exchange(a, b);
+    if (schedule !== "offline") exchange(a, b);
     check(a, [removed]);
     check(b, [removed]);
     press(a, a.undo, "undo", base);
-    if (!crossed) exchange(a, b);
+    if (schedule === "seen") exchange(a, b);
     assert.ok(b.undo.undo());
-    if (crossed) check(b, [base]);
+    if (schedule !== "seen") check(b, [base]);
     exchange(a, b);
     assertPeers(a, b);
     assert.deepEqual(readStored(a).segments.S?.units, [
@@ -232,10 +232,49 @@ for (const crossed of [false, true]) test(`E9 two deleters, one undo, then a ${c
   }
 });
 
+test("E9 bare Y.Text duplicates a span when both writers delete and undo before syncing", () => {
+  const first = new Y.Doc(), second = new Y.Doc();
+  const a = first.getText("text"), b = second.getText("text");
+  a.insert(0, "abcdefghi");
+  Y.applyUpdate(second, Y.encodeStateAsUpdate(first));
+  const firstUndo = new Y.UndoManager(a), secondUndo = new Y.UndoManager(b);
+  try {
+    for (const [text, manager] of [[a, firstUndo], [b, secondUndo]] as const) {
+      text.delete(3, 3);
+      assert.equal(text.toString(), "abcghi");
+      assert.ok(manager.undo());
+      assert.equal(text.toString(), "abcdefghi");
+    }
+    const fromFirst = Y.encodeStateAsUpdate(first), fromSecond = Y.encodeStateAsUpdate(second);
+    Y.applyUpdate(first, fromSecond);
+    Y.applyUpdate(second, fromFirst);
+    assert.equal(a.toString(), "abcdefdefghi");
+    assert.equal(b.toString(), "abcdefdefghi");
+  } finally {
+    firstUndo.destroy();
+    secondUndo.destroy();
+    first.destroy();
+    second.destroy();
+  }
+});
+
 interface CreationTotals { lost: number; placed: number; stranded: number; recovery: number; bytes: number; freshBytes: number }
+interface CreationControlCount { used: number; effective: number; failed: number }
+type CreationControls = Record<"undo" | "redo", CreationControlCount>;
+
+function checkCreationControl(
+  replica: DeleteReplica, withoutPress: StoredReading, expected: StoredReading, counts: CreationControlCount
+): void {
+  counts.used++;
+  assert.notDeepEqual(withoutPress, expected);
+  counts.effective++;
+  assert.throws(() => check(replica, [expected]), { code: "ERR_ASSERTION" });
+  counts.failed++;
+}
 
 function creation(
-  command: Extract<DeleteCommand, { op: "split" | "insert" }>, keep: boolean, seedNumber: number, totals: CreationTotals
+  command: Extract<DeleteCommand, { op: "split" | "insert" }>, keep: boolean, seedNumber: number,
+  totals: CreationTotals, controls: CreationControls
 ): void {
   const [a, b] = copies(base, 1 + seedNumber, 70 - seedNumber);
   const layer = keep ? new UndoLayer(a, { creations: "keep-always", grouping: "yjs" }) : null;
@@ -258,8 +297,9 @@ function creation(
     try {
       for (const update of incoming) Y.applyUpdate(muted.doc, update, "remote");
       const bothLetters = advance(advance(created, type(id, "audio", at), "keep"), type(id, "visual", 0, "Ψ"), "keep");
-      check(muted, [advance(bothLetters, { op: "field", id, value: "ready" }, "keep")]);
-      assert.throws(() => check(muted, [deleted]), { code: "ERR_ASSERTION" });
+      const withoutUndo = advance(bothLetters, { op: "field", id, value: "ready" }, "keep");
+      check(muted, [withoutUndo]);
+      checkCreationControl(muted, withoutUndo, deleted, controls.undo);
     } finally {
       muted.destroy();
     }
@@ -291,7 +331,9 @@ function creation(
       redone = structuredClone(redone);
       redone.beats[id] = {};
     }
-    press(a, manager, "redo", redone);
+    checkCreationControl(a, deleted, redone, controls.redo);
+    assert.ok(manager.redo());
+    check(a, [redone]);
     exchange(a, b);
     assertPeers(a, b);
     check(b, [redone]);
@@ -319,13 +361,24 @@ function expectedCreation(
 }
 
 test("E9 creation undo with unseen typing, plain and keep-always", t => {
+  const counts: CreationControls = {
+    undo: { used: 0, effective: 0, failed: 0 }, redo: { used: 0, effective: 0, failed: 0 }
+  };
+  const historiesPerCase = 40;
+  let historiesRun = 0;
   for (const command of [
     { op: "split", id: "B", at: 1, created: "N" },
     { op: "insert", before: "D", created: "N", value: "@" }
   ] as const) for (const keep of [false, true]) {
     const totals = { lost: 0, placed: 0, stranded: 0, recovery: 0, bytes: 0, freshBytes: 0 };
-    for (let n = 1; n <= 40; n++) creation(command, keep, n, totals);
-    t.diagnostic(JSON.stringify({ op: command.op, keep, histories: 40, ...totals }));
+    for (let n = 1; n <= historiesPerCase; n++) {
+      creation(command, keep, n, totals, counts);
+      historiesRun++;
+    }
+    t.diagnostic(JSON.stringify({ op: command.op, keep, histories: historiesPerCase, ...totals }));
   }
-  t.diagnostic("silent creation undo and redo, each used/effective/failed 160/160/160");
+  for (const [action, { used, effective, failed }] of Object.entries(counts)) {
+    assert.deepEqual([used, effective, failed], [historiesRun, historiesRun, historiesRun]);
+    t.diagnostic(`silent creation ${action}, used/effective/failed ${used}/${effective}/${failed}`);
+  }
 });

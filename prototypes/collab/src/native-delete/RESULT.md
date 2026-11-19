@@ -43,18 +43,35 @@ The last column assumes three readings with narration and visual strings keyed b
 | Type in F while the scene I is deleted | The kept segment strands F’s unseen narration. The dropped segment erases it. | F was edited and deleted. The two outcomes look the same. |
 | Insert a neighboring beat, then type in its visual | The new segment, order entry, record and cell are independent of the B deletion. Both columns are editable. | No new data was lost. |
 | Type in H’s or I’s name while that heading is removed | Flag leaves the name and new letter in heading recovery. Real deletion of embedded H puts the unseen letter in D’s narration. For head I it strands the letter in a kept segment or loses it in a dropped segment. | A heading-aware reading can offer the offline name. A beat-only reading misses the name edit and sees at most a changed D. |
+| Both delete B and both undo | Each restored B reads `def` before syncing. The merged B reads empty, with `defdef` stored behind its second boundary. | A notice offering the offline text would offer `def`. Typing it back into the visible B would store a third copy. A check for offline text changes alone misses this case because the base and offline text match. |
+| Undo a creation while someone writes in the new beat | The new beat disappears. Undo of a split leaves the narration in the original beat. Plain undo loses the new visual and also loses the narration of a standalone insert. Keep-always retains the visual in recovery and the standalone insert’s narration in a segment outside the order list. | The missing beat and its offline edits are visible to the comparison. No plain reading sees the retained narration outside the order list. It cannot tell whether the text was lost, hidden or moved. |
+| Redo B’s deletion while an unseen narration letter survives | B disappears again and A shows `abcΩ`, including the letter the typist put in B. | The readings show a missing B and changed A. They cannot prove that the extra letter in A is the one typed in B. |
 
-Three readings also miss an edit followed by a reversal to the same value. An offline notice can say what changed in visible text. It needs extra evidence to say where an edit went or why it vanished. It does not fix the reachability defect.
+The notice helps the person who was offline. If the deleter was offline and the typist stayed online, the deleter’s offline reading already shows the row gone. The merged reading also omits the stranded text because it has no beat id to read through. The comparison finds no clash, and the online typist only sees the row vanish. Three readings also miss an edit followed by a reversal to the same value. They need extra evidence to say where an edit went or why it vanished.
+
+### What a different reader could reach
+
+| Case | Cause and what a reader could do with the stored data |
+| --- | --- |
+| Unseen narration in an embedded beat or scene lands in the preceding block, including after redo. An embedded heading’s name can land in narration. | Yjs preserves the insert in the surviving text. Its old boundary is gone. The stored shape assigns a range by boundary, so plain text in that range carries no former beat or heading id. A reader can show the letter in its current range. Putting it back in the intended beat would require evidence of where it came from. |
+| A prefix survives deletion of a segment head, including a heading, a joined member, a run or a scene. A script can end up empty with such a prefix. | The shape has no boundary for the prefix, and the current reader skips text there. A reader could give it to the segment’s first beat, or to the row above when the segment has no beat. If the script has no rows, a reader could show a narration-only row for the stray text. |
+| An unseen visual edit or field write disappears. Dropping a segment erases its unseen narration and split embeds. Plain creation undo loses writes inside the containers it removes. | Yjs discards writes into a deleted container. A reader has no surviving text or value to expose. Formatting on deleted characters likewise has no target to display. |
+| Dropping a segment leaves a concurrently split beat’s visual in recovery. With keep-always, undo of a creation can leave a visual in recovery and standalone narration outside the order list. | The stored shape separates text, order, records and visuals. The reader can find the unplaced visual but offers no row editor for it. An unlisted narration segment requires a reader that looks beyond the order list. The prefix rules above only examine ordered segments. |
+| Two undos leave B empty with `defdef` stored, or undoing a concurrent erase gives `defe`. | Yjs undo re-creates deleted content, so both copies of the restored letters are live. For B, the current reader keeps the first block with that id and skips the text behind the duplicate boundary. Ignoring the repeated boundary while reading text would show `defdef`. It would keep both copies visible. |
+| C is joined to a deleted B and appears under A. | C still stores B as the target. The current reader joins it to the visible row above, and the model deliberately copies that rule by ignoring `into` when grouping. The test shows model and reader agreement. It does not establish that A is the row the person meant. A rule requiring the named target to be the beat directly above would keep C separate. |
+
+These reading rules write nothing. They are possibilities from a scratch reader and are outside this experiment’s implementation.
 
 ## Undo and redo
 
 One selective `Y.UndoManager` per writer, with the command origin tracked and no creation filter for these runs. A row, run, scene or heading deletion is one step. Without a race, undo brings back the narration, record, visual, heading and original order. Redo removes them again. The other copy gets no undo entry from either press.
 
 - In inline B, bold, tag and comment marks received before the deletion return on the restored characters in both cells. Marks written during the deletion did not return in either cell. The separate comment record stayed throughout. A relative position aimed at the original `e` resolved back to `e` for the deleter and to `f` on the other copy. A position into the original visual cell resolved on the deleter and returned null on the other copy. The visible comment anchor here is its mark. The pointer probe is a separate check.
-- When B’s narration typing reaches the deleter before undo, it first reads in A. Undo puts it back inside B at the original gap. When the typing arrives after that undo, it lands at the end of B, as `defΩ`. The typist can still undo their own letter. A redo of the row deletion leaves the unseen letter in A again in either delivery order.
+- When B’s narration typing reaches the deleter before undo, it first reads in A. Undo puts it back inside B at the original gap as `dΩef`. If the delete and undo both happen before the typing arrives, the unseen letter lands at the end of the restored beat as `defΩ`. The typist can still undo their own letter. Redoing the row deletion leaves the unseen letter in A again in either delivery order.
 - When B’s visual typing crosses the delete, the letter stays gone after the deleter’s undo. The typist’s next undo skips that step and removes their earlier letter in F. The same skip happens for earlier narration or visual typing which the deleter had seen and restored. In those two cases the restored letter stays visible. The typist’s stack still names the original item.
 - Another writer’s prior narration erase can still be undone after restoration. If the erase crossed the row delete, the deleter’s undo already brought that letter back. Undoing the erase then adds it a second time, as `defe`. Seen and unseen visual erase steps both skip to the earlier F edit. A seen bold or status edit is restored, but its own undo also skips. An unseen status write can leave the restored field absent when it arrived before undo.
-- When both delete B and only one undoes, B returns in place with its record and visual. If both undo, the shared text has `abc | B | B | defdef | C | ghi`. The reader keeps the first B boundary. Everyone sees an empty B narration and one visual cell, with six live but unreachable letters behind the second boundary. This happened when the undos crossed and when the second writer received the first undo before pressing.
+- When both delete B and only one undoes, B returns in place with its record and visual. If both undo, the shared text has `abc | B | B | defdef | C | ghi`. Everyone sees an empty B narration and one visual cell, with six live but unreachable letters behind the second boundary. This happened after crossed undos, after the second writer saw the first undo, and when both writers deleted and undid entirely offline. The offline route is likelier than two online writers both pressing undo in the same exchange.
+- The bare `Y.Text` test starts with `abcdefghi`. Each copy deletes `def` and undoes before syncing. Both finish with `abcdefdefghi`. Yjs undo re-creates deleted items as new content, so the two restores coexist. That accounts for the doubled text and boundary when the row is restored. The delete transaction only removed the original items.
 
 ## Undoing a creation
 
@@ -75,7 +92,7 @@ The flag keeps name typing in a recoverable heading at its old location. Clearin
 
 ## Numbers
 
-There were 37 named two-copy races per variant. Each variant ran 2,220 generated three-copy histories with a late joiner. Each delivery mode ran 12 seeds for each named shape. The third writer types two dependent letters. One copy receives that writer’s batch first and is checked before the full exchange. Modes are forward, reversed, repeated, shuffled and full state. The generated forks showed no disagreements, crashes or duplicate blocks. The double undo defect is a separate named test.
+There were 37 named two-copy races per variant. Each variant ran 2,220 generated three-copy histories with a late joiner. Each delivery mode ran 12 seeds for each named shape. The third writer types two dependent letters. One copy receives that writer’s batch first and is checked before the full exchange. Modes are forward, reversed, repeated, shuffled and full state. The generated forks showed no disagreements, crashes or duplicate blocks. The double undo defect has separate named tests.
 
 | Typed letters in generated histories | Keep segment | Drop segment when all observed blocks are selected |
 | --- | ---: | ---: |
@@ -123,14 +140,24 @@ GC on, stock encoded updates, ASCII fixture with 120 narration and 48 visual cha
 
 An encoded copy of the active writer still carries what its undo step holds. After one cut its encoded update was 7 bytes above the initial state for an embedded beat, or 11 bytes for a single-beat segment kept in place. The one mark added 44 bytes. The fresh copy keeps deletion metadata.
 
-Milliseconds on Windows ARM64, Node 24.22.1. Median and p95, 40 samples after eight warmups each. Delete includes selection lookup, the transaction and projection changes. Undo includes the library press and projection changes. The timer excludes loading, rendering in the editor and encoding to disk. At 300 beats all medians passed 8 ms. At 900 beats all undo medians passed, but three real-delete medians crossed 8 ms. Both real-delete variants make identical writes in the 30-beat segments. Their timing difference there is a measure of run noise.
+Milliseconds on Windows ARM64, Node 24.22.1. Each variant has 40 samples after eight warmups. The delete timer measures planning, the outer write transaction including observers, and the following `replica.changes()` rebuild. The undo timer measures the library press and its rebuild separately. Loading, editor rendering and encoding to disk are outside the timer.
 
-| Beats | Beats/segment | Mark delete / undo | Range delete / undo | Drop delete / undo |
-| ---: | ---: | --- | --- | --- |
-| 300 | 30 | 2.352 [4.578] / 2.218 [5.259] | 2.598 [6.391] / 2.310 [2.834] | 2.417 [2.967] / 2.134 [5.103] |
-| 900 | 30 | 7.524 [11.084] / 7.340 [10.563] | 7.569 [10.721] / 7.203 [11.189] | 8.029 [11.814] / 7.080 [10.490] |
-| 300 | 1 | 2.392 [2.927] / 2.285 [7.188] | 2.696 [3.172] / 2.324 [7.023] | 2.706 [3.564] / 2.387 [6.381] |
-| 900 | 1 | 7.851 [12.628] / 7.489 [12.746] | 8.306 [12.773] / 7.410 [12.046] | 8.535 [13.420] / 7.408 [11.877] |
+At 900 beats, the write transaction took 0.046–0.056 ms at the median and the undo press took 0.029–0.049 ms. The rebuild took 5.63–6.29 ms at the median. Mark and range both paid it. At 30 beats per segment the delete rebuild took 6.16 ms for the mark and 5.96 ms for the range. Crossings of the 8 ms budget came from the shared full-row rebuild. They say nothing about the real-delete write versus the mark. The range and drop writes are identical at 30 beats per segment. The difference between those timings shows run noise.
+
+| Beats | Beats/segment | Variant | Delete plan / write / rebuild medians | Undo press / rebuild medians | Total delete / undo median [p95] |
+| ---: | ---: | --- | --- | --- | --- |
+| 300 | 30 | Mark | 0.007 / 0.033 / 1.842 | 0.021 / 1.765 | 1.878 [4.481] / 1.791 [3.206] |
+| 300 | 30 | Range | 0.114 / 0.044 / 1.964 | 0.036 / 1.945 | 2.146 [3.017] / 1.979 [5.911] |
+| 300 | 30 | Drop | 0.098 / 0.038 / 1.792 | 0.029 / 1.735 | 1.925 [5.581] / 1.770 [2.298] |
+| 900 | 30 | Mark | 0.023 / 0.046 / 6.158 | 0.030 / 5.667 | 6.232 [10.616] / 5.694 [9.413] |
+| 900 | 30 | Range | 0.265 / 0.054 / 5.962 | 0.048 / 5.633 | 6.287 [9.780] / 5.674 [10.762] |
+| 900 | 30 | Drop | 0.260 / 0.047 / 5.763 | 0.046 / 5.880 | 6.097 [9.887] / 5.976 [9.570] |
+| 300 | 1 | Mark | 0.007 / 0.020 / 1.844 | 0.014 / 1.767 | 1.872 [2.922] / 1.780 [2.538] |
+| 300 | 1 | Range | 0.205 / 0.031 / 1.875 | 0.025 / 1.803 | 2.129 [6.551] / 1.841 [6.257] |
+| 300 | 1 | Drop | 0.207 / 0.037 / 1.861 | 0.025 / 1.765 | 2.120 [2.955] / 1.790 [5.753] |
+| 900 | 1 | Mark | 0.023 / 0.048 / 6.292 | 0.029 / 6.050 | 6.384 [10.819] / 6.138 [10.032] |
+| 900 | 1 | Range | 0.625 / 0.056 / 6.003 | 0.049 / 5.865 | 6.694 [11.844] / 5.924 [10.149] |
+| 900 | 1 | Drop | 0.621 / 0.052 / 6.289 | 0.045 / 5.883 | 7.000 [11.624] / 5.932 [10.591] |
 
 ### Values read from the implementation
 
