@@ -124,7 +124,7 @@ function history(seed: number, options: Options = {}) {
     }
     first.script.reader.refresh();
     const settled = TARGETS.map(cell => rawKeys(first, cell)), rendered = TARGETS.map(cell => renderedTags(first, cell));
-    let requested = 0, excused = 0, kept = 0, missing = 0, notRendered = 0, mutedExpected = 0;
+    let requested = 0, excused = 0, kept = 0, missing = 0, uncovered = 0, notRendered = 0, mutedExpected = 0;
     const short: string[] = [];
     for (const application of applications) for (const letter of application.letters) {
       requested++;
@@ -134,9 +134,10 @@ function history(seed: number, options: Options = {}) {
       notRendered += Number(!rendered[application.target]?.get(letter)?.includes(application.tag));
       if (application.key && settled[application.target]?.get(letter)?.includes(application.key)) { kept++; continue; }
       missing++;
+      uncovered += Number(!settled[application.target]?.get(letter)?.some(key => key !== application.key && key.startsWith("t:" + application.tag + "\u001f")));
       short.push(`${letter} in cell ${application.target}: ${application.tag} of command ${application.seq}`);
     }
-    return { requested, kept, excused, missing, notRendered, mutedExpected, outcomes, commands: seq, short };
+    return { requested, kept, excused, missing, uncovered, notRendered, mutedExpected, outcomes, commands: seq, short };
   } finally { world.close(); }
 }
 
@@ -145,15 +146,16 @@ function history(seed: number, options: Options = {}) {
 const KNOWN_SHORTFALLS = ["seed 6: q in cell 1: t:prop:rope of command 5", "seed 6: r in cell 1: t:prop:rope of command 5"];
 
 test("generated tag histories on three copies: every command checks locally, copies agree, and each application keeps its key", t => {
-  const totals = { requested: 0, kept: 0, excused: 0, missing: 0, notRendered: 0, commands: 0 }, outcomes: Record<string, number> = {}, shortfalls: string[] = [];
+  const totals = { requested: 0, kept: 0, excused: 0, missing: 0, uncovered: 0, notRendered: 0, commands: 0 }, outcomes: Record<string, number> = {}, shortfalls: string[] = [];
   for (let seed = 1; seed <= SEEDS; seed++) {
     const result = history(seed);
     shortfalls.push(...result.short.map(entry => `seed ${seed}: ${entry}`));
-    for (const key of ["requested", "kept", "excused", "missing", "notRendered", "commands"] as const) totals[key] += result[key];
+    for (const key of ["requested", "kept", "excused", "missing", "uncovered", "notRendered", "commands"] as const) totals[key] += result[key];
     for (const [kind, count] of Object.entries(result.outcomes)) outcomes[kind] = (outcomes[kind] ?? 0) + count;
   }
   t.diagnostic(JSON.stringify({ ...totals, outcomes }));
   assert.deepEqual(shortfalls, KNOWN_SHORTFALLS);
+  assert.equal(totals.uncovered, 0, "on every shortfall letter another application of the same tag still carries it");
   assert.equal(totals.kept + totals.excused + totals.missing, totals.requested);
   assert.ok(totals.kept > totals.requested * 0.4, JSON.stringify(totals));
   assert.ok((outcomes.unchanged ?? 0) > 0 && (outcomes.written ?? 0) > totals.commands * 0.8, JSON.stringify(outcomes));

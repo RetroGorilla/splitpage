@@ -22,7 +22,7 @@ export interface NativeTextRange {
   readonly target: NativeTextTarget;
   readonly from: Y.RelativePosition;
   readonly to: Y.RelativePosition;
-  readonly seen: readonly (readonly [number, number])[];
+  readonly seen?: readonly (readonly [number, number])[];
 }
 
 interface PlainId { readonly client: number; readonly clock: number }
@@ -101,7 +101,9 @@ export function anchorNativeText(script: NativeScript, target: NativeTextTarget,
     return { kind: "refused", reason: "range" };
   }
   const start = Y.createRelativePositionFromTypeIndex(cell.text, cell.start + nativeStoredOffset(view, from), 0);
-  const end = from === to ? start : Y.createRelativePositionFromTypeIndex(cell.text, cell.start + nativeStoredOffset(view, to), -1);
+  if (from === to) return { kind: "anchored", range: Object.freeze({ target, from: start, to: start }) };
+  const end = Y.createRelativePositionFromTypeIndex(cell.text, cell.start + nativeStoredOffset(view, to), -1);
+  // why: only a selection can lose both ends to a peer, so only a selection keeps what its copy had seen
   const seen = Object.freeze([...Y.decodeStateVector(Y.encodeStateVector(script.doc))].map(pair => Object.freeze(pair)));
   return { kind: "anchored", range: Object.freeze({ target, from: start, to: end, seen }) };
 }
@@ -128,24 +130,31 @@ function sameStamp(stored: unknown, stamp: EncodedStamp): boolean {
 
 const wholeNumber = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
 
-function plainId(value: unknown): PlainId | null | undefined {
+type IdsRead = Map<object, PlainId | undefined>;
+
+function plainId(value: unknown, read: IdsRead): PlainId | null | undefined {
   if (value === null || value === undefined) return null;
   if (typeof value !== "object") return undefined;
+  if (read.has(value)) return read.get(value);
   const source = value as Readonly<Record<string, unknown>>, client = source.client, clock = source.clock;
-  return wholeNumber(client) && wholeNumber(clock) ? Object.freeze({ client, clock }) : undefined;
+  const id = wholeNumber(client) && wholeNumber(clock) ? Object.freeze({ client, clock }) : undefined;
+  read.set(value, id);
+  return id;
 }
 
 // why: each field is read once into plain data and checked before Yjs sees it; a fractional or negative clock, or
 // an association other than the anchor's, reached Yjs and corrupted the cell
-function plainPosition(value: unknown, assoc: number): PlainPosition | null {
+function plainPosition(value: unknown, assoc: number, read: IdsRead): PlainPosition | null {
   if (!value || typeof value !== "object") return null;
-  const source = value as Readonly<Record<string, unknown>>, type = plainId(source.type), item = plainId(source.item);
+  const source = value as Readonly<Record<string, unknown>>, type = plainId(source.type, read), item = plainId(source.item, read);
   const tname = source.tname, association = source.assoc;
   if (type === undefined || item === undefined || association !== assoc || (tname !== null && tname !== undefined && typeof tname !== "string")) return null;
   const name = typeof tname === "string" ? tname : null;
   if ((type === null) === (name === null)) return null;
   return Object.freeze({ type, tname: name, item, assoc });
 }
+
+const NO_SEEN: ReadonlyMap<number, number> = new Map();
 
 function seenOf(value: unknown): ReadonlyMap<number, number> | null {
   if (!Array.isArray(value)) return null;
@@ -174,11 +183,11 @@ function unitGone(position: PlainPosition, doc: Y.Doc): boolean {
 // command checked
 export function nativeRangeSnapshot(range: NativeTextRange): NativeRangeData | null {
   try {
-    const target: unknown = range.target, from: unknown = range.from, to: unknown = range.to, seen = seenOf(range.seen);
+    const target: unknown = range.target, from: unknown = range.from, to: unknown = range.to, seen = to === from ? NO_SEEN : seenOf(range.seen);
     if (!target || typeof target !== "object" || !seen) return null;
     const beat: unknown = (target as NativeTextTarget).beat, cell: unknown = (target as NativeTextTarget).cell;
     if (typeof beat !== "string" || (cell !== "narration" && cell !== "visual")) return null;
-    const start = plainPosition(from, 0), end = to === from ? null : plainPosition(to, -1);
+    const read: IdsRead = new Map(), start = plainPosition(from, 0, read), end = to === from ? null : plainPosition(to, -1, read);
     if (!start || (to !== from && !end)) return null;
     return Object.freeze({ target: Object.freeze({ beat, cell }), from: start, to: end, seen });
   } catch { return null; }

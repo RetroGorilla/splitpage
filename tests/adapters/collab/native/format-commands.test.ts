@@ -397,8 +397,67 @@ test("review round 1, fix 1: a malformed position or seen list is a range refusa
   const typing = range(a, NARRATION("R1"), 4, 4), held = once(typing.from);
   assert.equal(typeNativeText(a, { ...typing, from: held, to: held }, "X", {}).kind, "written");
   assert.equal(reads, 1);
+  const type = good.from.type as Y.ID, shared = { get client(): number { if (reads++) throw new Error("read twice"); return type.client; }, clock: type.clock };
+  reads = 0;
+  assert.equal(formatNativeText(a, { ...good, from: positionWith(good.from, { type: shared }), to: positionWith(good.to, { type: shared }) }, { kind: "plain", mark: "u", on: true }).kind, "written");
+  assert.equal(reads, 1);
   net.settle();
-  assert.deepEqual(net.agree(), ["R1: a<strong>bc</strong>dX / "]);
+  assert.deepEqual(net.agree(), ["R1: a<strong><u>bc</u></strong>dX / "]);
+});
+
+test("closing round, item 2: a caret keeps no state vector, and typing at one behaves as before", () => {
+  const [net, a, b] = pair(source({ R1: "abcd" }));
+  const caret = range(b, NARRATION("R1"), 2, 2), selection = range(b, NARRATION("R1"), 1, 3);
+  assert.equal("seen" in caret, false);
+  assert.ok(selection.seen?.length);
+  assert.equal(typeNativeText(a, range(a, NARRATION("R1"), 2, 2), "X", {}).kind, "written");
+  net.settle();
+  unwritten(b, () => {
+    assert.equal(formatNativeText(b, caret, BOLD).kind, "unchanged");
+    assert.equal(deleteNativeText(b, caret).kind, "unchanged");
+  });
+  assert.equal(typeNativeText(b, caret, "Y", {}).kind, "written");
+  net.settle();
+  assert.deepEqual(net.agree(), ["R1: abXYcd / "]);
+});
+
+test("closing round, item 1, as built: a stale selection that still holds a letter of its own covers what a peer typed into it", () => {
+  const [net, a, b] = pair(source({ R1: "abcd" }));
+  const selection = range(b, NARRATION("R1"), 0, 3), deleting = range(b, NARRATION("R1"), 0, 3);
+  assert.equal(typeNativeText(a, range(a, NARRATION("R1"), 2, 2), "X", {}).kind, "written");
+  assert.equal(deleteNativeText(a, range(a, NARRATION("R1"), 3, 4)).kind, "written");
+  assert.equal(deleteNativeText(a, range(a, NARRATION("R1"), 0, 1)).kind, "written");
+  net.settle();
+  assert.equal(html(b, "R1"), "bXd");
+  assert.equal(formatNativeText(b, selection, BOLD).kind, "written");
+  net.settle();
+  assert.deepEqual(net.agree(), ["R1: <strong>bX</strong>d / "]);
+  assert.equal(deleteNativeText(b, deleting).kind, "written");
+  net.settle();
+  assert.deepEqual(net.agree(), ["R1: d / "]);
+});
+
+test("closing round, item 1, as built: a stored embed no reader shows is a unit the stale selection still holds", () => {
+  const [net, a, b] = pair(source({ R1: "ac" }));
+  const segment = a.roots.segments.get("b:R1"), text = segment?.get("text"), span = nativeSegmentSpans(segment)?.[0];
+  assert.ok(text instanceof Y.Text && span);
+  text.insertEmbed(span.start + 1, { kind: "unknown" });
+  net.settle();
+  assert.equal(html(b, "R1"), "ac");
+  const selection = range(b, NARRATION("R1"), 0, 2), deleting = range(b, NARRATION("R1"), 0, 2);
+  // why: the peer edits the text directly, since a delete command on c also removes the hidden unit before it
+  text.insert(span.start + 2, "X");
+  text.delete(span.start + 3, 1);
+  text.delete(span.start, 1);
+  net.settle();
+  assert.equal(stored(b, "R1"), "￼X");
+  assert.equal(formatNativeText(b, selection, BOLD).kind, "written");
+  net.settle();
+  assert.deepEqual(net.agree(), ["R1: <strong>X</strong> / ", "problem unknown-embed segments/b:R1#0"]);
+  assert.equal(deleteNativeText(b, deleting).kind, "written");
+  net.settle();
+  assert.deepEqual(net.agree(), ["R1:  / "]);
+  assert.equal(stored(b, "R1"), "");
 });
 
 test("review round 1, fix 2: a link over a video goes on the letters only, and a video a peer stored with a link stays shown with a problem", () => {
