@@ -3,7 +3,8 @@ import { loadGraph } from "./dep-report.mjs";
 const oldSource = (path) => path.startsWith("src/adapters/collab/") && !path.startsWith("src/adapters/collab/native/");
 const oldTest = (path) => path.startsWith("tests/collab/") ||
   path.startsWith("tests/adapters/collab/") && !path.startsWith("tests/adapters/collab/native/");
-const support = (path) => /^(tests\/|src\/test\/|src\/bootstrap\/wiring\/(?:ports\/)?shared-)/.test(path);
+const support = (path) => /^(tests\/|src\/test\/|src\/bootstrap\/wiring\/(?:ports\/)?shared-)/.test(path) ||
+  /^src\/.*\.test\.[cm]?[jt]s$/.test(path);
 
 export const TREE_INVENTORIES = [
   "tests/adapters/collab/formatting-invariant.test.ts",
@@ -14,6 +15,7 @@ export const TREE_INVENTORIES = [
 ];
 
 const MIXED_TESTS = [
+  "src/features/find/ports.test.ts",
   "tests/features/empty-script/before.test.ts",
   "tests/features/tags/panel-mount.test.ts",
   "tests/features/tags/production-tags-mount.test.ts"

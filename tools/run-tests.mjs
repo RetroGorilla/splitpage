@@ -174,6 +174,10 @@ export function runTests({
     printError("run-tests: --shard needs an index/total with 1 <= index <= total and cannot be combined with --only");
     return 2;
   }
+  if (suite !== null && (!shard || !["always", "old-adapter"].includes(suite))) {
+    printError("run-tests: --suite must be always or old-adapter and requires --shard");
+    return 2;
+  }
   if (env.GOLDEN_UPDATE !== undefined) {
     printError(`run-tests: GOLDEN_UPDATE is set (${JSON.stringify(env.GOLDEN_UPDATE)}), which would make the golden tests rewrite their fixtures instead of checking them.`);
     printError("run-tests: unset it; to regenerate fixtures on purpose run: node src/test/golden-helpers.mjs --update <name>[,<name>...] | all");
