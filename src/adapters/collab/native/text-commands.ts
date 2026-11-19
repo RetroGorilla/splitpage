@@ -22,6 +22,18 @@ export interface NativeTextRange {
   readonly target: NativeTextTarget;
   readonly from: Y.RelativePosition;
   readonly to: Y.RelativePosition;
+  readonly seen?: readonly (readonly [number, number])[];
+}
+
+interface PlainId { readonly client: number; readonly clock: number }
+
+interface PlainPosition { readonly type: PlainId | null; readonly tname: string | null; readonly item: PlainId | null; readonly assoc: number }
+
+export interface NativeRangeData {
+  readonly target: NativeTextTarget;
+  readonly from: PlainPosition;
+  readonly to: PlainPosition | null;
+  readonly seen: ReadonlyMap<number, number>;
 }
 
 export type NativeRefusal = "missing" | "range" | "text" | "busy" | "closed";
@@ -45,7 +57,15 @@ interface LiveCell {
 const WRITTEN: NativeCommitOutcome = Object.freeze({ kind: "written" });
 const UNCHANGED: NativeCommitOutcome = Object.freeze({ kind: "unchanged" });
 
-function availability(script: NativeScript): NativeRefusal | null {
+export interface NativeLiveRange {
+  readonly text: Y.Text;
+  readonly start: number;
+  readonly items: readonly NativeDeltaItem[];
+  readonly from: number;
+  readonly until: number;
+}
+
+export function nativeAvailability(script: NativeScript): NativeRefusal | null {
   throwNativeFailures(script);
   if (script.closed() || script.reader.isClosed()) return "closed";
   return script.busy() ? "busy" : null;
@@ -72,7 +92,7 @@ function splitsPair(text: string, at: number): boolean {
 }
 
 export function anchorNativeText(script: NativeScript, target: NativeTextTarget, from: number, to = from): NativeAnchoring {
-  const unavailable = availability(script);
+  const unavailable = nativeAvailability(script);
   if (unavailable) return { kind: "refused", reason: unavailable };
   const cell = liveCell(script, target);
   if (!cell) return { kind: "refused", reason: "missing" };
@@ -81,8 +101,11 @@ export function anchorNativeText(script: NativeScript, target: NativeTextTarget,
     return { kind: "refused", reason: "range" };
   }
   const start = Y.createRelativePositionFromTypeIndex(cell.text, cell.start + nativeStoredOffset(view, from), 0);
-  const end = from === to ? start : Y.createRelativePositionFromTypeIndex(cell.text, cell.start + nativeStoredOffset(view, to), -1);
-  return { kind: "anchored", range: Object.freeze({ target, from: start, to: end }) };
+  if (from === to) return { kind: "anchored", range: Object.freeze({ target, from: start, to: start }) };
+  const end = Y.createRelativePositionFromTypeIndex(cell.text, cell.start + nativeStoredOffset(view, to), -1);
+  // why: only a selection can lose both ends to a peer, so only a selection keeps what its copy had seen
+  const seen = Object.freeze([...Y.decodeStateVector(Y.encodeStateVector(script.doc))].map(pair => Object.freeze(pair)));
+  return { kind: "anchored", range: Object.freeze({ target, from: start, to: end, seen }) };
 }
 
 function refuse(reason: NativeRefusal, runs: readonly Run[]): NativeCommitOutcome {
@@ -105,45 +128,110 @@ function sameStamp(stored: unknown, stamp: EncodedStamp): boolean {
   return value.by === stamp.by && value.at === stamp.at;
 }
 
-function associated(range: NativeTextRange): boolean {
-  const from = (range.from as { assoc?: unknown } | null)?.assoc, to = (range.to as { assoc?: unknown } | null)?.assoc;
-  return Number.isInteger(from) && (from as number) >= 0 && (range.to === range.from || (Number.isInteger(to) && (to as number) < 0));
+const wholeNumber = (value: unknown): value is number => Number.isSafeInteger(value) && (value as number) >= 0;
+
+type IdsRead = Map<object, PlainId | undefined>;
+
+function plainId(value: unknown, read: IdsRead): PlainId | null | undefined {
+  if (value === null || value === undefined) return null;
+  if (typeof value !== "object") return undefined;
+  if (read.has(value)) return read.get(value);
+  const source = value as Readonly<Record<string, unknown>>, client = source.client, clock = source.clock;
+  const id = wholeNumber(client) && wholeNumber(clock) ? Object.freeze({ client, clock }) : undefined;
+  read.set(value, id);
+  return id;
 }
 
-function resolve(position: unknown, doc: Y.Doc): Y.AbsolutePosition | null {
-  try { return Y.createAbsolutePositionFromRelativePosition(position as Y.RelativePosition, doc); } catch { return null; }
+// why: each field is read once into plain data and checked before Yjs sees it; a fractional or negative clock, or
+// an association other than the anchor's, reached Yjs and corrupted the cell
+function plainPosition(value: unknown, assoc: number, read: IdsRead): PlainPosition | null {
+  if (!value || typeof value !== "object") return null;
+  const source = value as Readonly<Record<string, unknown>>, type = plainId(source.type, read), item = plainId(source.item, read);
+  const tname = source.tname, association = source.assoc;
+  if (type === undefined || item === undefined || association !== assoc || (tname !== null && tname !== undefined && typeof tname !== "string")) return null;
+  const name = typeof tname === "string" ? tname : null;
+  if ((type === null) === (name === null)) return null;
+  return Object.freeze({ type, tname: name, item, assoc });
+}
+
+const NO_SEEN: ReadonlyMap<number, number> = new Map();
+
+function seenOf(value: unknown): ReadonlyMap<number, number> | null {
+  if (!Array.isArray(value)) return null;
+  const seen = new Map<number, number>();
+  for (const pair of value as readonly unknown[]) {
+    if (!Array.isArray(pair) || pair.length !== 2) return null;
+    const client: unknown = pair[0], clock: unknown = pair[1];
+    if (!wholeNumber(client) || !wholeNumber(clock) || seen.has(client)) return null;
+    seen.set(client, clock);
+  }
+  return seen;
+}
+
+function resolve(position: PlainPosition, doc: Y.Doc): Y.AbsolutePosition | null {
+  try { return Y.createAbsolutePositionFromRelativePosition(Y.createRelativePositionFromJSON(position), doc); } catch { return null; }
 }
 
 // why: a deleted unit resolves to the same index from either side, a live one does not; public API only
-function unitGone(position: Y.RelativePosition, doc: Y.Doc): boolean {
-  const json = Y.relativePositionToJSON(position) as { item?: unknown; assoc?: number };
-  if (!json.item) return false;
-  const here = resolve(position, doc), other = resolve(Y.createRelativePositionFromJSON({ ...json, assoc: json.assoc === -1 ? 0 : -1 }), doc);
+function unitGone(position: PlainPosition, doc: Y.Doc): boolean {
+  if (!position.item) return false;
+  const here = resolve(position, doc), other = resolve({ ...position, assoc: position.assoc === -1 ? 0 : -1 }, doc);
   return !!here && !!other && here.index === other.index;
 }
 
-// why: the check runs inside the command's own transaction, so what it checked is what it writes to; a command
-// called while another transaction is open refuses, since that transaction's changes are not yet observed
+// why: a range is read once into plain data, so a caller's later change to it, or a getter, cannot alter what the
+// command checked
+export function nativeRangeSnapshot(range: NativeTextRange): NativeRangeData | null {
+  try {
+    const target: unknown = range.target, from: unknown = range.from, to: unknown = range.to, seen = to === from ? NO_SEEN : seenOf(range.seen);
+    if (!target || typeof target !== "object" || !seen) return null;
+    const beat: unknown = (target as NativeTextTarget).beat, cell: unknown = (target as NativeTextTarget).cell;
+    if (typeof beat !== "string" || (cell !== "narration" && cell !== "visual")) return null;
+    const read: IdsRead = new Map(), start = plainPosition(from, 0, read), end = to === from ? null : plainPosition(to, -1, read);
+    if (!start || (to !== from && !end)) return null;
+    return Object.freeze({ target: Object.freeze({ beat, cell }), from: start, to: end, seen });
+  } catch { return null; }
+}
+
+// why: when a peer deleted both end units, the selection still holds what it held: it collapses only if no unit
+// alive between the ends existed when it was anchored, so surviving text is covered and later typing alone is not
+function heldAlive(text: Y.Text, from: number, to: number, seen: ReadonlyMap<number, number>): boolean {
+  for (let index = from; index < to; index++) {
+    const item = Y.createRelativePositionFromTypeIndex(text, index, 0).item;
+    if (item && item.clock < (seen.get(item.client) ?? 0)) return true;
+  }
+  return false;
+}
+
+// why: called inside the command's own transaction, so what it checked is what the command writes to; a stale range
+// covers text a peer typed inside it
+export function nativeLiveRange(script: NativeScript, range: NativeRangeData): NativeLiveRange | NativeRefusal {
+  const cell = liveCell(script, range.target);
+  if (!cell) return "missing";
+  const from = resolve(range.from, script.doc), to = range.to ? resolve(range.to, script.doc) : from;
+  const stored = storedText(cell.items);
+  if (!from || !to || from.type !== cell.text || to.type !== cell.text || from.index < cell.start || to.index > cell.end || to.index < from.index
+    || splitsPair(stored, from.index - cell.start) || splitsPair(stored, to.index - cell.start)) return "range";
+  const collapsed = !!range.to && unitGone(range.from, script.doc) && unitGone(range.to, script.doc) && !heldAlive(cell.text, from.index, to.index, range.seen);
+  return { text: cell.text, start: cell.start, items: cell.items, from: from.index, until: collapsed ? from.index : to.index };
+}
+
+// why: a command called while another transaction is open refuses, since that transaction's changes are not yet
+// observed
 export function replaceNativeText(script: NativeScript, range: NativeTextRange, runs: readonly Run[], stamp?: NativeEditStamp): NativeCommitOutcome {
-  const unavailable = availability(script);
+  const unavailable = nativeAvailability(script);
   if (unavailable) return refuse(unavailable, runs);
-  const prepared = prepareNativeRuns(runs), encoded = encodedStamp(stamp);
+  const prepared = prepareNativeRuns(runs), encoded = encodedStamp(stamp), checked = nativeRangeSnapshot(range);
   if (!prepared || encoded === null) return refuse("text", runs);
+  if (!checked) return refuse("range", runs);
   let outcome = refuse("missing", runs);
   script.doc.transact(() => {
-    const cell = liveCell(script, range.target);
-    if (!cell) return;
-    if (!associated(range)) { outcome = refuse("range", runs); return; }
-    const from = resolve(range.from, script.doc), to = resolve(range.to, script.doc);
-    const stored = storedText(cell.items);
-    if (!from || !to || from.type !== cell.text || to.type !== cell.text || from.index < cell.start || to.index > cell.end || to.index < from.index
-      || splitsPair(stored, from.index - cell.start) || splitsPair(stored, to.index - cell.start)) { outcome = refuse("range", runs); return; }
-    const collapsed = range.from !== range.to && unitGone(range.from, script.doc) && unitGone(range.to, script.doc);
-    const until = collapsed ? from.index : to.index;
-    if (!prepared.length && from.index === until) { outcome = UNCHANGED; return; }
-    const end = writeNativeRuns(script.doc, cell.text, from.index, prepared, nativeLeftAt(nativeCellView(cell.items), from.index - cell.start));
-    if (until > from.index) cell.text.delete(end, until - from.index);
-    if (encoded && !sameStamp(script.roots.edited.get(range.target.beat), encoded)) script.roots.edited.set(range.target.beat, encoded);
+    const live = nativeLiveRange(script, checked);
+    if (typeof live === "string") { outcome = refuse(live, runs); return; }
+    if (!prepared.length && live.from === live.until) { outcome = UNCHANGED; return; }
+    const end = writeNativeRuns(script.doc, live.text, live.from, prepared, nativeLeftAt(nativeCellView(live.items), live.from - live.start));
+    if (live.until > live.from) live.text.delete(end, live.until - live.from);
+    if (encoded && !sameStamp(script.roots.edited.get(checked.target.beat), encoded)) script.roots.edited.set(checked.target.beat, encoded);
     outcome = WRITTEN;
   }, script.origin);
   return outcome;
