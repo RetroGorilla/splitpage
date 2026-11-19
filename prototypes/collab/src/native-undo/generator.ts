@@ -6,7 +6,7 @@ import type { Delivery, Loss, Part, Step, WorldOptions, WorldStats } from "./har
 export type Pace = "batched" | "continuous";
 export interface HistoryOptions {
   seed: number; steps: number; pace: Pace; modes: readonly Delivery[]; checkEvery?: number; scheme?: NativeScheme; creations?: CreationRule;
-  prepare?: (world: World) => void; onExtraPressUpdates?: (count: number) => void
+  prepare?: (world: World) => void; onExtraPressUpdates?: (count: number) => void; auditTags?: boolean
 }
 export interface HistoryResult { stats: WorldStats; losses: Loss[]; history: string[]; steps: Step[]; actions: Record<string, number>; clients: number[] }
 
@@ -37,6 +37,7 @@ export function runHistory(options: HistoryOptions): HistoryResult {
   const clients = [1, 2, 3].sort(() => next() - 0.5);
   const world = new World(HISTORY_ROWS, {
     clients, creations: options.creations ?? "keep-always", ...(options.scheme ? { scheme: options.scheme } : {}),
+    auditTags: options.auditTags ?? false,
     ...(options.onExtraPressUpdates ? { onExtraPressUpdates: options.onExtraPressUpdates } : {})
   });
   try { return generate(options, world, next, clients); }

@@ -27,7 +27,7 @@ export interface NativeRecovery {
 interface NativeHead { id: string; hidden: boolean }
 export interface NativeDocumentSource { rows?: unknown; sections?: unknown; comments?: unknown; people?: unknown; productionTags?: unknown; brollShots?: unknown; [key: string]: unknown }
 
-export type NativeScheme = "name" | "act";
+export type NativeScheme = "name" | "act" | "chosen";
 export type NativeUndoOutcome = "undone" | "used-up" | "empty";
 interface NativeFlagNote { beat: string; key: string; wrote: string | null; before: unknown; after: unknown }
 interface NativeActNote { text: Y.Text; names: string[]; seen: string[]; minted: string[]; from: Y.RelativePosition; to: Y.RelativePosition }
@@ -66,6 +66,10 @@ export function nativeAttributes(marks: Marks): NativeAttributes {
 export function nativeMarkName(key: string): string {
   const at = key.indexOf(ACT);
   return at < 0 ? key : key.slice(0, at);
+}
+
+export function usesActionKey(scheme: NativeScheme, name: string): boolean {
+  return scheme === "act" || (scheme === "chosen" && name.startsWith("t:"));
 }
 
 export function nativeMarks(attributes: Record<string, unknown> | undefined): Marks {
@@ -127,7 +131,7 @@ function writeRuns(text: Y.Text, index: number, runs: readonly Run[], choose: Ke
   return index;
 }
 
-function attributesAt(delta: readonly NativeDeltaItem[], offset: number): Record<string, unknown> | null {
+export function attributesAt(delta: readonly NativeDeltaItem[], offset: number): Record<string, unknown> | null {
   let index = 0;
   if (offset < 0) return null;
   for (const item of delta) {
@@ -256,6 +260,7 @@ export class NativeReplica {
     if (this.scheme === "name") return wanted;
     const result: NativeAttributes = {};
     for (const name of Object.keys(wanted)) {
+      if (!usesActionKey(this.scheme, name)) { result[name] = true; continue; }
       const kept = Object.keys(beside ?? {}).filter(key => beside?.[key] === true && nativeMarkName(key) === name);
       for (const key of kept.length ? kept : [this.actKey(name)]) result[key] = true;
     }
@@ -359,7 +364,7 @@ export class NativeReplica {
     this.transact(() => {
       const cell = this.cell(beat, field);
       if (from < 0 || to < from || cell.start + to > cell.end) throw new Error(`Range outside ${beat}`);
-      const act = this.scheme === "act" && insert.length > 0;
+      const act = this.scheme !== "name" && insert.length > 0;
       const left = !act ? null : from > 0 ? attributesAt(this.cellDelta(beat, field), from - 1)
         : cell.start > 0 ? attributesAt(cell.text.toDelta() as NativeDeltaItem[], cell.start - 1) : null;
       // why: inserting before deleting keeps the typed text in its gap when another copy's text lands beside it
@@ -372,14 +377,17 @@ export class NativeReplica {
   // formatting on again after it. Typed with the left's keys and then changed, it writes none: see retire
   private typeAct(text: Y.Text, at: number, runs: readonly Run[], left: Record<string, unknown> | null): number {
     let index = at, beside = Object.keys(left ?? {}).filter(key => left?.[key] === true);
+    beside = beside.filter(key => usesActionKey(this.scheme, nativeMarkName(key)));
     for (const run of runs) {
       const embed = embedOf(run), length = embed ? 1 : run.text.length, names = Object.keys(nativeAttributes(run.marks));
       if (!length) continue;
-      const taken = Object.fromEntries(beside.map(key => [key, true]));
+      const plain = names.filter(name => !usesActionKey(this.scheme, name));
+      const action = names.filter(name => usesActionKey(this.scheme, name));
+      const taken = Object.fromEntries([...beside, ...plain].map(key => [key, true]));
       if (embed) text.insertEmbed(index, embed, taken); else text.insert(index, run.text, taken);
       const kept = beside.filter(key => names.includes(nativeMarkName(key)));
       for (const key of beside) if (!kept.includes(key)) this.retire(text, key, index, index + length);
-      const fresh = Object.fromEntries(names.filter(name => !kept.some(key => nativeMarkName(key) === name)).map(name => [this.actKey(name), true]));
+      const fresh = Object.fromEntries(action.filter(name => this.scheme === "chosen" || !kept.some(key => nativeMarkName(key) === name)).map(name => [this.actKey(name), true]));
       if (Object.keys(fresh).length) text.format(index, length, fresh);
       beside = [...kept, ...Object.keys(fresh)];
       index += length;
@@ -391,20 +399,19 @@ export class NativeReplica {
     this.undo.stopCapturing();
     this.transact(() => {
       const cell = this.cell(beat, field), held = new Set<string>();
-      let attributes = marks, index = 0;
+      const attributes: Record<string, true | null> = {}, minted: string[] = [];
+      let index = 0;
       for (const item of this.cellDelta(beat, field)) {
         const next = index + (typeof item.insert === "string" ? item.insert.length : 1);
         if (next > from && index < to) for (const [key, value] of Object.entries(item.attributes ?? {})) if (value === true) held.add(key);
         index = next;
       }
-      if (this.scheme === "act") {
-        attributes = {};
-        for (const [name, value] of Object.entries(marks)) {
-          if (value) attributes[this.actKey(name)] = true;
-          else for (const key of held) if (nativeMarkName(key) === name) this.retire(cell.text, key, cell.start + from, cell.start + to);
-        }
+      for (const [name, value] of Object.entries(marks)) {
+        if (!usesActionKey(this.scheme, name)) attributes[name] = value;
+        else if (value) { const key = this.actKey(name); attributes[key] = true; minted.push(key); }
+        else for (const key of held) if (nativeMarkName(key) === name) this.retire(cell.text, key, cell.start + from, cell.start + to);
       }
-      this.pending.push({ act: { text: cell.text, names: Object.keys(marks).filter(name => marks[name]), seen: [...held], minted: this.scheme === "act" ? Object.keys(attributes) : [],
+      this.pending.push({ act: { text: cell.text, names: Object.keys(marks).filter(name => marks[name]), seen: [...held], minted,
         from: Y.createRelativePositionFromTypeIndex(cell.text, cell.start + from, 0), to: Y.createRelativePositionFromTypeIndex(cell.text, cell.start + to, -1) } });
       if (Object.keys(attributes).length) cell.text.format(cell.start + from, to - from, attributes);
     });
@@ -473,7 +480,7 @@ export class NativeReplica {
     }
     const missing = act.names.filter(name => !showing.has(name));
     if (!missing.length) return false;
-    this.doc.transact(() => { act.text.format(start, end - start, Object.fromEntries(missing.map(name => [this.scheme === "act" ? this.actKey(name) : name, true]))); }, "takeback");
+    this.doc.transact(() => { act.text.format(start, end - start, Object.fromEntries(missing.map(name => [usesActionKey(this.scheme, name) ? this.actKey(name) : name, true]))); }, "takeback");
     return true;
   }
 
