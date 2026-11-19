@@ -94,6 +94,10 @@ jobs:
       - name: Install tooling
         run: npm ci && npm ci --prefix desktop && npm ci --prefix prototypes/collab
 
+      - name: Prototype shard command matches its test script
+        if: needs.changes.outputs.collab == 'true'
+        run: node tools/test-ci-collab-shards.mjs
+
       - name: Desktop browser scripts are generated from their checked sources
         if: needs.changes.outputs.root_tests == 'true'
         run: node tools/build-preload.mjs && node tools/check-preload.mjs
