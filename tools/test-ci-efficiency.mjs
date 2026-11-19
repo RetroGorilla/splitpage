@@ -13,7 +13,7 @@ const appSteps = ["Build index.html and stamp sw.js", "sw.js is committed with t
 assert.equal(ci.jobs.changes.outputs.app, "${{ steps.classify.outputs.app }}");
 assert.equal(ci.jobs.checks.if, "needs.changes.outputs.code == 'true'" + (ci.jobs.changes.outputs.tested ? " && needs.changes.outputs.tested != 'true'" : ""));
 assert.equal(ci.jobs.changes.outputs.root_tests, "${{ steps.classify.outputs.root_tests }}");
-assert.equal(ci.jobs.tests.if, "needs.changes.outputs.root_tests == 'true' && needs.changes.outputs.tested != 'true'");
+assert.equal(ci.jobs.tests.if, "needs.changes.outputs.root_due == 'true'");
 for (const name of appSteps) assert.equal(steps.find((s) => s.name === name)?.if, "needs.changes.outputs.app == 'true'", name);
 assert.equal(steps.find((s) => s.name === "Upload the built app")?.if, "needs.changes.outputs.app == 'true' && github.event_name == 'push'");
 for (const name of ["Lint", "Types", "Layers and dependencies", "No new comments"]) {
@@ -33,10 +33,14 @@ assert.ok(cache.run.includes("$RUNNER_TOOL_CACHE/splitpage-playwright/$PLAYWRIGH
 assert.ok(!cache.run.includes("github.workspace"));
 assert.ok(steps.findIndex((s) => s.name === cache.name) < steps.findIndex((s) => s.name === "Install Chromium"));
 assert.ok(steps.find((s) => s.name === "Install Chromium").run.includes("--with-deps"));
-const testSteps = ci.jobs.tests.steps;
+const testSteps = parse(readFileSync(join(REPO, ".github/actions/root-test-setup/action.yml"), "utf8")).runs.steps;
 assert.equal(testSteps.find((s) => s.name === cache.name)?.run, cache.run);
 assert.ok(testSteps.find((s) => s.name === "Install Chromium")?.run.includes("--with-deps"));
-assert.ok(testSteps.findIndex((s) => s.name === "Install Chromium") < testSteps.findIndex((s) => s.run?.includes("npm run test:all")));
+assert.ok(testSteps.findIndex((s) => s.name === cache.name) < testSteps.findIndex((s) => s.name === "Install Chromium"));
+for (const job of [ci.jobs.tests, ci.jobs["old-adapter-tests"], readWorkflow("nightly").jobs["root-tests"]]) {
+  assert.equal(job.steps[1].uses, "./.github/actions/root-test-setup");
+  assert.ok(job.steps[2].run.includes("npm run test:all"));
+}
 assert.equal(ci.jobs.tests.env.SPLITPAGE_CHROME_ARGS, ci.jobs.checks.env.SPLITPAGE_CHROME_ARGS);
 
 const gitPath = process.platform === "win32" ? spawnSync("git", ["--exec-path"], { encoding: "utf8" }).stdout?.trim() : null;
