@@ -431,6 +431,9 @@ export class NativeReplica {
       view.keys.forEach((key, at) => {
         const span = view.spans[at], filled = !!span && span.end > span.start;
         if (key === null) { if (filled) leading.push([segment, at]); return; }
+        const unopened = this.unopened?.(key) ?? null;
+        if (unopened === "drop") return;
+        if (unopened === "above") { if (previous) previous.spans.push([segment, at]); else if (filled) leading.push([segment, at]); return; }
         if (entries.has(key)) {
           if (!rules.repeat) return;
           hits.repeat++;
@@ -972,6 +975,10 @@ export class NativeReplica {
   }
 
   protected breaksContiguousGroup?: (heading: string) => boolean;
+
+  // why: E17's option R reads a boundary as no row and gives its text to the entry above, like a repeated boundary;
+  // "drop" exists only for E17's wrong-reading control. Absent, every boundary opens its entry as before
+  protected unopened?: (key: string) => "above" | "drop" | null;
 
   protected invalidateStructure(): void { this.structureChanged = true; }
 

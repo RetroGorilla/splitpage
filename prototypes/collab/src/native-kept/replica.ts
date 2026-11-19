@@ -15,7 +15,7 @@ export class KeptReplica extends ChosenReplica {
     super(client, rules, "cells");
   }
 
-  private live(id: string): boolean {
+  protected live(id: string): boolean {
     try {
       this.block(id);
       return true;
@@ -25,11 +25,11 @@ export class KeptReplica extends ChosenReplica {
     }
   }
 
-  private orphan(id: string): boolean {
+  protected orphan(id: string): boolean {
     return id !== STRAY_ROW && (this.beats.has(id) || this.visuals.has(id)) && !this.live(id);
   }
 
-  private available(id: string): boolean {
+  protected available(id: string): boolean {
     return !this.beats.has(id) && !this.visuals.has(id) && !this.live(id);
   }
 
