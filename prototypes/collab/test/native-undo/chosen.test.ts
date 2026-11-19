@@ -64,7 +64,7 @@ test("chosen keys, continuous seed 254 emits the manager update followed by null
 });
 
 for (const scheme of ["act", "name", "chosen"] as const) {
-  test(`${scheme} keys, reversed tag undo and redo clean up the original start marker`, () => {
+  test(`${scheme} keys in the replica layer with delta observers retain a tag after reversed undo and redo`, () => {
     for (const mode of ["reverse", "forward", "merged"] as const) {
       const w = world([{ id: "R1", audioText: "", visualText: "vr" }], { scheme, auditTags: true });
       const b = w.copy("B"), c = w.copy("C");

@@ -130,13 +130,18 @@ request step numbers and each observed cell for every row and every additional u
 | 262 | All three | B replaces `gh` with `q` and undoes. On the original `ghij`, C tags `hi` and inserts `oks` before `g`. Sync shows restored plain `h` and tagged `i`. Another restore of `h` also lacks its tag. |
 | Continuous 0 | Per action and plain | B types tagged `tzl` at the start of `abcdef`. C receives it and replaces `lab` with plain `u`. B, before seeing that edit, types tagged `ms` after `l`. Both letters are seen plain locally. At settled checks `m` survives plain. |
 
-The relay limit is to deliver each writer's updates in the order they were made, or merge that writer's batch
-into one update before applying it. The named three-copy test starts with plain visual `vr`, uses client ids
-A=1, B=2, C=3, and settles after B tags both letters. B then undoes and redoes before C receives either update.
-On each key scheme, C applies redo first, then undo, and relays its cleanup while the world settles. C's
-null-origin cleanup deletes the original start marker. The redo marker survives and all copies retain the tag,
-so the permanent loss reported for this short trace did not reproduce. Sending undo then redo, or merging
-the two updates before C applies them, preserves the tag without generating that cleanup.
+**Relay limit.** Deliver each writer's updates in the order they were made, or merge that writer's batch
+into one update before applying it. The raw three-copy test starts with plain `vr`. B tags both letters and
+syncs, then undoes and redoes before C receives either update. When C applies redo before undo, its
+null-origin cleanup deletes the redo's start marker. C sends that cleanup to A before A applies B's two
+updates in order. Full-state exchange leaves A, B and C on plain `vr` under all three key schemes.
+The per-application and per-action variants use the same writer-and-clock suffix for this single tag
+application. Sending undo before redo or merging B's two updates preserves the tag without that cleanup.
+
+The separate replica-layer test retains the tag on all copies. Its text observers read `event.delta` during
+integration. Adding just that read on C to the raw test, with the same delivery and relay sequence, changes
+C's cleanup to delete the original start marker. The redo marker survives. This standalone replay is outside
+the generated history counts.
 
 ### Chosen-scheme controls and limits
 
