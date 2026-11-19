@@ -147,6 +147,19 @@ function byRank(map: Y.Map<Y.Map<unknown>>): [string, Y.Map<unknown>][] {
   return entries.sort(([leftId, left], [rightId, right]) => rank(left) < rank(right) ? -1 : rank(left) > rank(right) ? 1 : leftId < rightId ? -1 : leftId > rightId ? 1 : 0);
 }
 
+// why: a run's shape is known, so it is frozen field by field instead of by a walk over every value
+function frozenRuns(runs: Run[]): readonly Run[] {
+  for (const run of runs) {
+    const marks = run.marks;
+    if (marks.cmt) Object.freeze(marks.cmt);
+    if (marks.innerTags) Object.freeze(marks.innerTags);
+    Object.freeze(marks);
+    if (run.atom === "image") deepFrozen(run.ref);
+    Object.freeze(run);
+  }
+  return Object.freeze(runs);
+}
+
 function samePlace(left: NativeSpanPlace | undefined, right: NativeSpanPlace | undefined): boolean {
   return left?.segment === right?.segment && left?.span === right?.span;
 }
@@ -385,7 +398,10 @@ export class NativeScriptReader {
     const place = this.places.get(id), span = place ? this.spanAt(place) : null, visual = this.roots.visuals.get(id);
     this.builtFrom.set(id, span?.content ?? "");
     const narration = nativeRunsOf(span?.items ?? []), visualRuns = nativeRunsOf((visual instanceof Y.Text ? visual.toDelta() : []) as NativeDeltaItem[]);
-    return deepFrozen({ id, narration, visual: visualRuns, audioText: toHtml(narration), visualText: toHtml(visualRuns), fields: this.beatFields(id, null) });
+    return Object.freeze({
+      id, narration: frozenRuns(narration), visual: frozenRuns(visualRuns), audioText: toHtml(narration), visualText: toHtml(visualRuns),
+      fields: deepFrozen(this.beatFields(id, null))
+    });
   }
 
   outline(): readonly NativeOutlineEntry[] {

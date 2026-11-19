@@ -5,6 +5,9 @@ import { NativeScriptReader } from "../../../../src/adapters/collab/native/reade
 import { largeState, loadedCopy, splitUpdate } from "./structural.ts";
 
 const LIMIT_MS = 8;
+// why: measured 5.3 to 5.6 ms after slice 2 against 8.4 to 9.2 ms before it on the same machine; the limit sits
+// between them, so a return of the per-character row building fails while ordinary noise does not
+const COLD_LIMIT_MS = 7.5;
 const flag = (name: string, fallback: number): number => Number(process.argv.find(value => value.startsWith(`--${name}=`))?.split("=")[1] ?? fallback);
 const rounds = flag("rounds", 5), samples = flag("samples", 40), warmup = flag("warmup", 8);
 
@@ -50,6 +53,25 @@ for (const [name, beat, offset] of [["Split inside a segment", "B451", 60], ["Sp
   if (!within) failures.push(`${name}: median ${median(medians).toFixed(3)} ms is over ${LIMIT_MS} ms`);
   if (!oneParse) failures.push(`${name}: reparsed ${[...parses].join(", ")} segments, not 1`);
 }
+const cold: number[] = [], coldTails: number[] = [], loaded = loadedCopy(state, 3);
+for (let round = 0; round < rounds; round++) {
+  const timed: number[] = [];
+  for (let n = 0; n < samples; n++) {
+    const fresh = new NativeScriptReader(loaded.roots), start = performance.now();
+    fresh.rows();
+    const elapsed = performance.now() - start;
+    fresh.close();
+    if (n >= warmup) timed.push(elapsed);
+  }
+  cold.push(median(timed)); coldTails.push(p95(timed));
+}
+loaded.reader.close();
+const coldCell = (values: number[]): string => `${median(values).toFixed(3)} [${Math.min(...values).toFixed(3)}-${Math.max(...values).toFixed(3)}]`;
+const coldWithin = median(cold) <= COLD_LIMIT_MS;
+lines.push("", "A cold read: a fresh reader builds every row of the loaded 900-beat script. Same rounds and cells.", "");
+lines.push(`| Case | Median ms | p95 ms | Limit ${COLD_LIMIT_MS} ms |`, "| --- | --- | --- | --- |");
+lines.push(`| Cold read of every row | ${coldCell(cold)} | ${coldCell(coldTails)} | ${coldWithin ? "within" : "over"} |`);
+if (!coldWithin) failures.push(`Cold read: median ${median(cold).toFixed(3)} ms is over ${COLD_LIMIT_MS} ms`);
 dom.window.close();
 process.stdout.write(lines.join("\n") + "\n");
 if (failures.length) {
