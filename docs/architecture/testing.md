@@ -60,11 +60,11 @@ touches. CI classifies paths with `tools/ci-changes.mjs` first: Markdown prose
 skips the code jobs, except `docs/help.md`, which feeds the app build. A prose-only
 PR still runs `changes` and `gate`. No label is needed for that path. For code
 changes CI runs lint, types, the
-dependency and comment gates, the build, every discovered unit, desktop and
-tool test, and, for app-affecting changes, the smoke, CSP and persistence browser suites. CI never
-narrows to the test files a change touched; `--only` is a local tool. CI
-distributes the full discovered test set across the required root matrices, while
-lint, types and the other checks run in a separate job.
+dependency and comment gates, the build and the required root test matrices.
+App-affecting changes also run the smoke, CSP and persistence browser suites.
+Pull requests skip the old-adapter matrix when the filter allows it. Pushes to
+`main` and the nightly root run execute every discovered root test.
+`--only` selects files for local feedback.
 
 App-affecting changes also require the dev desktop smoke. Test-only changes
 outside desktop do not build the app in the checks job; desktop test changes
@@ -452,7 +452,8 @@ src/test/formats`, `npm run test:all -- --only tools/test-comment-gate`.
 Discovery and its orphan, overlap and empty-group checks still run over
 everything, the selected files are listed, and the run says it is not the
 full gate. A filter that matches nothing exits 2. It is for local feedback
-only; CI runs the whole set through the required root matrices.
+only. PR CI runs the always-run matrix and includes the old-adapter matrix
+when the filter requires it. Pushes to `main` and nightly run the full set.
 
 `--shard <index/total>` balances files using the recorded timing weights
 described above. `--suite=always` and `--suite=old-adapter` select disjoint file sets before balancing.

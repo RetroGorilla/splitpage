@@ -54,9 +54,9 @@ const OLD_ADAPTER_INPUTS = [
 
 export function needsOldAdapterTests(files, repo = REPO, inventory = null) {
   if (files === null || files.length === 0) return true;
-  const candidates = files.filter((path) => !nativePath(path));
+  const candidates = files.filter((path) => !nativePath(path) && needsChecks([path]));
   if (candidates.some((path) => COPIED_PROTOTYPE_FILES.has(path) || OLD_ADAPTER_INPUTS.some((re) => re.test(path)))) return true;
-  if (!candidates.some((path) => needsChecks([path]))) return false;
+  if (candidates.length === 0) return false;
   const { dependencies, wiringImporters } = inventory ?? oldAdapterFiles(repo);
   return candidates.some((path) => dependencies.has(path) || wiringImporters.includes(path) ||
     /^(?:tests|src\/test|src\/bootstrap\/wiring)\//.test(path) && !existsSync(join(repo, path)));

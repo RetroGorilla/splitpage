@@ -14,6 +14,7 @@ const oldAdapterArea = (path) => !nativePath(path) &&
 const oldSource = (path) => path.startsWith("src/adapters/collab/") && !nativePath(path);
 const candidate = (path) => !nativePath(path) && /^tests\/(?:collab|adapters\/collab)\/.*\.test\.[cm]?[jt]s$/.test(path);
 const testLibraries = new Set(["builtin:assert/strict", "builtin:test", "builtin:util", "package:lib0", "package:yjs"]);
+const runtimeLoaders = new Set(["process", "require", "fetch", "Worker", "module", "eval", "Function"]);
 
 export function oldAdapterFiles(repo, graph = loadGraph(repo)) {
   const imports = new Map();
@@ -27,7 +28,8 @@ export function oldAdapterFiles(repo, graph = loadGraph(repo)) {
     let safe = true;
     for (const path of reach) {
       const module = graph.get(path);
-      if (!oldAdapterArea(path) || !module || module.unresolved.length) {
+      if (!oldAdapterArea(path) || !module || module.unresolved.length ||
+        module.globals.some(({ name }) => runtimeLoaders.has(name))) {
         safe = false;
         break;
       }

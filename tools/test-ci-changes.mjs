@@ -97,6 +97,9 @@ for (const files of [
 eq("real old-adapter support triggers the filter", needsOldAdapterTests(["tests/core/migrate-ports.ts"]), true);
 eq("shipping feature changes stay outside the old-adapter filter", needsOldAdapterTests(["src/features/editing/cell-buffer.ts"]), false);
 eq("prose alone skips old-adapter checks on a PR", needsOldAdapterTests(["README.md"]), false);
+eq("prose inside the old test folder skips both root matrices", [
+  needsRootTests(["tests/collab/mutants.md"]), needsOldAdapterTests(["tests/collab/mutants.md"])
+], [false, false]);
 eq("an unrelated feature test stays outside the old-adapter filter", needsOldAdapterTests(["tests/features/writer/idle-word-count.test.ts"]), false);
 
 const repo = mkdtempSync(join(tmpdir(), "splitpage-ci-changes-"));
