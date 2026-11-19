@@ -5,11 +5,9 @@ import { compareNotices, type NoticeBeat } from "../../src/native-notice/compare
 import { observeRemoteRemoval, readNotice } from "../../src/native-notice/yjs.ts";
 import { base } from "../native-delete/model.ts";
 import { assertConverged, deliver, rankedSeed, replicaFrom, rowText, write } from "./kit.ts";
+import { tagSweepCases as tagCases, tagSweepRemovals as removals } from "./histories.ts";
 
 const tag = "t:TAG";
-const removals = ["cut", "same", "all", "first"] as const;
-const audioRanges = [[0, 1], [0, 2], [0, 3], [1, 2], [1, 3], [2, 3]] as const;
-const tagCases = [...audioRanges.map(range => ({ field: "audio" as const, range })), { field: "visual" as const, range: [0, 1] as const }];
 
 function tagged(beat: NoticeBeat, field: "audio" | "visual"): string {
   return beat[field === "audio" ? "narration" : "visual"].map(run => {
