@@ -3,7 +3,7 @@ import type { Run } from "../../../../src/core/text/runs.ts";
 import { MoveReplica, betweenRanks } from "../native-moves/ranks.ts";
 import type { RankDrop } from "../native-moves/ranks.ts";
 import { ALL_RULES, STRAY_ROW, nativeAttributes, nativeEmbed, nativeMarkName } from "../native/variant.ts";
-import type { NativeDeltaItem, NativeField, NativeRules } from "../native/variant.ts";
+import type { NativeBlock, NativeDeltaItem, NativeField, NativeRules } from "../native/variant.ts";
 
 const RANK = "e10Rank";
 const isTag = (name: string): boolean => name.startsWith("t:");
@@ -13,10 +13,38 @@ export interface ChosenCut { text: Y.Text; from: number; to: number }
 export class ChosenReplica extends MoveReplica {
   private count = 0;
 
+  private rankReads = 0;
+
   constructor(client: number, rules: NativeRules = ALL_RULES) {
     super(client, "flat");
     this.keepCreated = false;
+    this.copyFreeSplit = true;
     this.rules = rules;
+  }
+
+  // why: rule (e): Yjs does not redo a map entry a newer write replaced, so a restored record can lack its rank; that
+  // beat is read between the ranked neighbours of its stored place, and nothing is written
+  protected override groupsOf(natural: NativeBlock[]): Map<string, { head: string; rank: string }> {
+    const ranks = natural.map(block => this.rankOf(block.kind, block.id));
+    if (!this.rules.rank || ranks.every(rank => typeof rank === "string")) return super.groupsOf(natural);
+    this.rankReads++;
+    const groups = new Map<string, { head: string; rank: string }>();
+    for (const [index, block] of natural.entries()) {
+      const head = `${block.kind}:${block.id}`, own = ranks[index];
+      if (typeof own === "string") { groups.set(head, { head, rank: own }); continue; }
+      const left = ranks.slice(0, index).findLast((rank): rank is string => typeof rank === "string") ?? null;
+      let right = ranks.slice(index + 1).find((rank): rank is string => typeof rank === "string") ?? null;
+      if (left !== null && (right === null || left >= right)) right = ranks.filter((rank): rank is string => typeof rank === "string" && rank > left).sort()[0] ?? null;
+      const rank = betweenRanks(left, right, 0, index + 1);
+      ranks[index] = rank;
+      // why: a group led by another head makes a move or a new heading write this rank, so the beat stays where it was shown
+      groups.set(head, { head: `${head}?`, rank });
+    }
+    return groups;
+  }
+
+  override ruleUse(): Record<keyof NativeRules, number> {
+    return { ...super.ruleUse(), rank: this.rankReads };
   }
 
   // why: decision 1: a plain key per simple mark, a key per application for tags, and an explicit attributes object

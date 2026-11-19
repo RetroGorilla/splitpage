@@ -18,8 +18,9 @@ export interface Generated { seed: number; steps: Step[]; lateAt: number; offlin
 
 // why: commands are picked from the rows the acting copy shows, the way a person picks them; the picks are recorded
 // as plain commands and replayed unchanged under every delivery mode
-export function generateHistory(number: number, length = 40): Generated {
+export function generateHistory(number: number, length = 40, twins = false): Generated {
   const random = randomFor(number * 104729 + 7), pick = <T>(items: readonly T[]): T => items[Math.floor(random() * items.length)] as T;
+  const second = randomFor(number * 7919 + 3), twinPick = <T>(items: readonly T[]): T => items[Math.floor(second() * items.length)] as T;
   const chance = (p: number): boolean => random() < p;
   const bytes = seed(GENERATED_SPEC()), log: Uint8Array[] = [], known = [new Set<number>(), new Set<number>(), new Set<number>()];
   const watched = (replica: ChosenReplica, index: number): ChosenReplica => {
@@ -71,6 +72,17 @@ export function generateHistory(number: number, length = 40): Generated {
       break;
     }
     steps.push({ by, cmd });
+    if (!twins || second() >= 0.35) continue;
+    for (const [who, split] of twinSplits(copies, twinPick, () => ++serial)) {
+      const replica = need(copies[who] ?? undefined, "copy");
+      try { perform(replica, split); } catch (error) {
+        thrown.push(`${split.op}: ${error instanceof Error ? error.message : String(error)}`);
+        crashed = thrown.at(-1) ?? null;
+      }
+      steps.push({ by: who, cmd: split });
+      if (crashed) break;
+    }
+    if (crashed) break;
   }
   for (const copy of copies) copy?.destroy();
   return { seed: number, steps, lateAt, offline, thrown, crashed };
@@ -132,6 +144,22 @@ function choose(replica: ChosenReplica, pick: <T>(items: readonly T[]) => T, cha
     case "redo": return replica.undo.redoStack.length ? { op: "redo" } : null;
   }
   return null;
+}
+
+// why: two copies that show the same rule-read row each split it before seeing the other's split
+function twinSplits(copies: readonly (ChosenReplica | null)[], pick: <T>(items: readonly T[]) => T, next: () => number): [number, Cmd][] {
+  const pairs: [number, number, string][] = [];
+  for (const [one, first] of copies.entries()) for (const [other, second] of copies.entries()) {
+    if (!first || !second || other <= one) continue;
+    const mine = shown(first), theirs = shown(second);
+    for (const [beat, text] of mine.audio) {
+      if (beat === STRAY_ROW || theirs.audio.get(beat) !== text) continue;
+      if (first.spansOf(beat, "audioText").some(span => span.opened === "unowned" && span.end > span.start)) pairs.push([one, other, beat]);
+    }
+  }
+  if (!pairs.length) return [];
+  const [one, other, beat] = pick(pairs), length = shown(need(copies[one] ?? undefined, "copy")).audio.get(beat)?.length ?? 0;
+  return [one, other].map((who): [number, Cmd] => [who, { op: "split", id: beat, at: pickNumber(pick, length + 1), created: `T${who}${next()}` }]);
 }
 
 function pickNumber(pick: <T>(items: readonly T[]) => T, below: number): number {

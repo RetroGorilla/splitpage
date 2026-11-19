@@ -81,7 +81,7 @@ export class MoveReplica extends NativeHeadingReplica {
     return text;
   }
 
-  private groupsOf(natural: NativeBlock[]): Map<string, RankGroup> {
+  protected groupsOf(natural: NativeBlock[]): Map<string, RankGroup> {
     const groups = new Map<string, RankGroup>();
     if (this.design === "flat") {
       for (const block of natural) {

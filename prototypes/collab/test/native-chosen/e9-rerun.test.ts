@@ -63,6 +63,8 @@ function check(replica: ChosenReplica, alternatives: readonly StoredReading[]): 
   const accepted = need(expected, "expected state");
   assert.deepEqual(readVisible(replica), ruleView(accepted), "rows under the reading rules");
   assert.deepEqual(neverAcceptable(reachability(replica)), [], "reachability");
+  // why: rule (e) reads a beat without a rank, so a writer that left one out is caught here rather than by a throw
+  for (const [id, record] of [...replica.beats, ...replica.headings]) assert.equal(typeof record.get("e10Rank"), "string", `rank of ${id}`);
   return accepted;
 }
 

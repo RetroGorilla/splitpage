@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { ChosenReplica } from "../../src/native-chosen/replica.ts";
+import { ALL_RULES } from "../../src/native/variant.ts";
 import { neverAcceptable, reachability } from "./check.ts";
 import { base, load, outline, seed, sync } from "./kit.ts";
 import type { Spec } from "./kit.ts";
@@ -273,16 +274,18 @@ test("rule d changes what is shown between a move and its undo: a join stops cou
   done(copies);
 });
 
-test("a move and a delete of the same row, then the delete undone: the restored record has no rank and the reader throws", () => {
+test("a move and a delete of the same row, then the delete undone: the restored record has no rank; rule (e) reads it", () => {
   const steps: Step[] = [
     { by: 0, cmd: { op: "delete", rows: ["F"] } },
     { by: 1, cmd: { op: "move", drop: { unit: "row", first: "F", target: "A", after: true } } },
     { from: 1, to: 0 },
     { by: 0, cmd: { op: "undo" } }
   ];
-  const result = play({ spec: base(), steps, writers: 2, mode: "forward", seed: 1 });
-  // why: the verdict's second never-acceptable kind; Yjs will not redo a map entry a newer entry overrode
-  assert.deepEqual(result.never, ["step 3 threw: Missing rank for b:F"]);
+  // why: the first version's second never-acceptable kind; Yjs will not redo a map entry a newer entry overrode
+  const off = play({ spec: base(), steps, writers: 2, mode: "forward", seed: 1, rules: { ...ALL_RULES, rank: false } });
+  assert.deepEqual(off.never, ["step 3 threw: Missing rank for b:F"]);
+  const on = play({ spec: base(), steps, writers: 2, mode: "forward", seed: 1 });
+  assert.deepEqual([on.never, on.local, on.lines.at(-1)], [[], [], "F: vwx / 6"]);
 });
 
 test("a scene deleted while someone types in one of its beats: the letter ends up in the removed heading's name", () => {

@@ -20,6 +20,7 @@ export interface LedgerEvent {
 }
 
 interface Instance { char: string; field: LetterField; owner: string; born: number; state: "alive" | "dead" | "uncertain"; why: string; revival: boolean; killers: Set<number> }
+interface BeatVersion { beat: string; born: number; alive: boolean; killers: Set<number> }
 
 export interface LedgerResult {
   alive: Map<string, { count: number; field: LetterField; revivals: number }>;
@@ -35,7 +36,10 @@ export interface LedgerResult {
 // command removed as a new instance; anything the library decides that this cannot know is uncertain
 export function settle(events: readonly LedgerEvent[], initial: { char: string; field: LetterField; owner: string }[], beats: string[]): LedgerResult {
   const instances: Instance[] = initial.map(item => ({ ...item, born: -1, state: "alive", why: "", revival: false, killers: new Set() }));
-  const beatState = new Map<string, "alive" | "dead" | "uncertain">(beats.map(id => [id, "alive"]));
+  const versions: BeatVersion[] = beats.map(beat => ({ beat, born: -1, alive: true, killers: new Set() }));
+  const beatsKilledBy = new Map<number, BeatVersion[]>(), beatsRevivedBy = new Map<number, BeatVersion[]>(), uncertainBeats = new Set<string>();
+  const seesVersion = (event: LedgerEvent, version: BeatVersion): boolean => (version.born < 0 || version.born === event.index || event.seen.has(version.born))
+    && ![...version.killers].some(killer => event.seen.has(killer) || killer === event.index);
   const losses: LedgerResult["losses"] = [];
   const byIndex = new Map(events.map(event => [event.index, event]));
   const killedBy = new Map<number, Instance[]>(), revivedBy = new Map<number, Instance[]>(), structural = new Map<number, Instance[]>();
@@ -79,16 +83,23 @@ export function settle(events: readonly LedgerEvent[], initial: { char: string; 
       else if (removal) { kill(removal.by, instance, structural, removal.kind, true); losses.push({ kind: removal.kind, char: typed.char, events: [event.index, removal.by.index] }); }
     }
     for (const char of event.erased) for (const instance of instances) if (instance.char === char) kill(event, instance, killedBy, "erased");
-    // why: an undo of a row deletion restores the row as new items, which a deletion made without seeing that undo
-    // cannot reach; the row and what the undo brought back stay
-    const restorer = (beat: string): LedgerEvent | undefined => events.find(other => other.index < event.index && !event.seen.has(other.index)
-      && other.reverts !== null && byIndex.get(other.reverts)?.deletedBeats.includes(beat));
-    const missed = new Set(event.deletedBeats.filter(beat => restorer(beat)));
-    const deleted = new Set(event.deletedBeats.filter(beat => !missed.has(beat))), visible = new Set(event.seenVisual);
-    for (const beat of deleted) beatState.set(beat, "dead");
-    for (const beat of missed) losses.push({ kind: "a deletion missed a row that another person's unseen undo had restored", char: "", events: [restorer(beat)?.index ?? event.index, event.index] });
+    // why: an undo of a row deletion restores the row as a new version, which a deletion made without seeing that undo
+    // cannot reach; that version and what was written in it stay
+    const missed: BeatVersion[] = [], visible = new Set(event.seenVisual);
+    for (const beat of event.deletedBeats) {
+      const seen = versions.filter(version => version.beat === beat && seesVersion(event, version));
+      for (const version of seen) { version.alive = false; version.killers.add(event.index); uncertainBeats.delete(beat); }
+      if (seen.length) beatsKilledBy.set(event.index, [...beatsKilledBy.get(event.index) ?? [], ...seen]);
+      for (const version of versions) if (version.beat === beat && version.alive) {
+        missed.push(version);
+        losses.push({ kind: "a deletion missed a row that another person's unseen undo had restored", char: "", events: [version.born, event.index] });
+      }
+    }
+    const inMissed = (instance: Instance): boolean => missed.some(version => version.beat === instance.owner
+      && (instance.born === version.born || byIndex.get(instance.born)?.seen.has(version.born) === true));
+    const deleted = new Set(event.deletedBeats);
     for (const instance of instances) {
-      if (instance.field !== "visual" || !deleted.has(instance.owner)) continue;
+      if (instance.field !== "visual" || !deleted.has(instance.owner) || inMissed(instance)) continue;
       if (visibleTo(event, instance) && visible.has(instance.char)) kill(event, instance, killedBy, "deleted with its row");
       else if (instance.state === "alive" && events.some(later => later.reverts === event.index)) instance.state = "uncertain";
       else if (instance.state === "alive") {
@@ -96,7 +107,7 @@ export function settle(events: readonly LedgerEvent[], initial: { char: string; 
         losses.push({ kind: "unseen visual change discarded with a deleted beat", char: instance.char, events: [instance.born, event.index] });
       }
     }
-    for (const beat of event.createdBeats) beatState.set(beat, "alive");
+    for (const beat of event.createdBeats) versions.push({ beat, born: event.index, alive: true, killers: new Set() });
   };
   for (const event of events) {
     if (event.reverts !== null) {
@@ -113,9 +124,11 @@ export function settle(events: readonly LedgerEvent[], initial: { char: string; 
         else if (removal) { kill(removal.by, back, structural, removal.kind, true); losses.push({ kind: removal.kind, char: back.char, events: [event.index, removal.by.index] }); }
       }
       for (const instance of structural.get(target.index) ?? []) instance.state = "uncertain";
-      for (const beat of target.deletedBeats) beatState.set(beat, "alive");
+      const back = (beatsKilledBy.get(target.index) ?? []).map((version): BeatVersion => ({ beat: version.beat, born: event.index, alive: true, killers: new Set() }));
+      versions.push(...back);
+      beatsRevivedBy.set(event.index, back);
       for (const beat of target.createdBeats) {
-        beatState.set(beat, "dead");
+        for (const version of versions) if (version.beat === beat && version.alive) { version.alive = false; version.killers.add(event.index); }
         for (const instance of instances) {
           if (instance.owner !== beat || instance.state !== "alive") continue;
           if (instance.field === "audio" && !target.createdSegment) continue;
@@ -139,8 +152,10 @@ export function settle(events: readonly LedgerEvent[], initial: { char: string; 
       if (!undo || !target) continue;
       for (const instance of revivedBy.get(undo.index) ?? []) kill(event, instance, killedBy, "revival redone away");
       for (const instance of instances.filter(item => item.born === target.index && item.killers.has(undo.index))) instances.push({ ...instance, born: event.index, state: "alive", why: "", revival: true, killers: new Set() });
-      for (const beat of target.deletedBeats) beatState.set(beat, "dead");
-      for (const beat of target.createdBeats) beatState.set(beat, "uncertain");
+      const again = beatsRevivedBy.get(undo.index) ?? [];
+      for (const version of again) { version.alive = false; version.killers.add(event.index); }
+      beatsKilledBy.set(event.index, again);
+      for (const beat of target.createdBeats) { versions.push({ beat, born: event.index, alive: true, killers: new Set() }); uncertainBeats.add(beat); }
       // why: the redo restores what the creation undo itself deleted, so letters the creator had seen come back and
       // letters that arrived after the undo stay gone
       for (const instance of killedBy.get(undo.index) ?? []) {
@@ -162,6 +177,9 @@ export function settle(events: readonly LedgerEvent[], initial: { char: string; 
   }
   for (const char of result.alive.keys()) result.dead.delete(char);
   for (const char of result.uncertain) { result.alive.delete(char); result.dead.delete(char); }
-  for (const [beat, state] of beatState) (state === "alive" ? result.beatsAlive : state === "dead" ? result.beatsDead : result.beatsUncertain).add(beat);
+  for (const beat of new Set(versions.map(version => version.beat))) {
+    const alive = versions.some(version => version.beat === beat && version.alive);
+    (uncertainBeats.has(beat) ? result.beatsUncertain : alive ? result.beatsAlive : result.beatsDead).add(beat);
+  }
   return result;
 }

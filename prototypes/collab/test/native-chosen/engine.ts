@@ -75,6 +75,7 @@ export function readStored(replica: ChosenReplica): StoredReading {
 export function readStyles(replica: ChosenReplica): unknown {
   return {
     segments: Object.fromEntries([...replica.segments].map(([id, record]) => [id, (record.get("text") as Y.Text).toDelta()])),
+    heads: Object.fromEntries([...replica.segments].map(([id, record]) => [id, record.get("head") ?? null])),
     visuals: Object.fromEntries([...replica.visuals].map(([id, cell]) => [id, cell.toDelta()])),
     beats: replica.beats.toJSON(), headings: replica.headings.toJSON(), order: replica.order.toArray()
   };

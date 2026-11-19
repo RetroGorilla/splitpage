@@ -151,10 +151,17 @@ export function promises(cmd: Cmd, before: Shown, after: Shown, replica: ChosenR
     case "field": if (replica.beats.get(cmd.id)?.get(cmd.key) !== cmd.value) problems.push(`field ${cmd.key} on ${cmd.id} not set`); break;
     case "split": {
       const was = textOf(before, "audio", cmd.id), first = claimed(before, after, cmd.id, cmd.created);
-      if (textOf(after, "audio", first) !== was.slice(0, cmd.at) || textOf(after, "audio", cmd.created) !== was.slice(cmd.at) || !rowOf(after, cmd.created)) {
-        problems.push(`split of ${cmd.id} at ${cmd.at} shows ${textOf(after, "audio", first)} | ${textOf(after, "audio", cmd.created)}`);
-      }
+      const kept = textOf(after, "audio", first), given = textOf(after, "audio", cmd.created);
+      const exact = kept === was.slice(0, cmd.at) && given === was.slice(cmd.at);
+      // why: a split never copies narration, so inside text a rule shows it can only put the boundary where one fits
+      const placed = replica.splitPlacement !== "exact" && kept + given === was;
+      const rows = after.order.filter(id => !id.startsWith("#")), firstRow = rowOf(after, first), createdRow = rowOf(after, cmd.created);
+      if (createdRow && firstRow && createdRow !== firstRow && rows.indexOf(createdRow) !== rows.indexOf(firstRow) + 1) problems.push(`split-off ${cmd.created} is not shown below ${first}`);
+      if (!createdRow || (!exact && !placed)) problems.push(`split of ${cmd.id} at ${cmd.at} shows ${kept} | ${given}`);
+      else if (!exact) problems.push(`kind: a split inside rule-read text was placed ${replica.splitPlacement}`);
       if (after.visual.get(cmd.created) !== "") problems.push(`split-off ${cmd.created} has no empty visual cell`);
+      // why: rule (e) reads a missing rank only after an undo; a writer always writes one
+      if (typeof replica.beats.get(cmd.created)?.get("e10Rank") !== "string") problems.push(`split-off ${cmd.created} has no rank`);
       break;
     }
     case "join": { const row = rowOf(after, cmd.id); if (!row || row === cmd.id) problems.push(`join of ${cmd.id} not shown`); break; }
@@ -162,12 +169,14 @@ export function promises(cmd: Cmd, before: Shown, after: Shown, replica: ChosenR
     case "delete": {
       for (const beat of record.deletedBeats) if (rowOf(after, beat)) problems.push(`deleted ${beat} still shown`);
       for (const beat of record.deletedBeats) if (beat !== STRAY_ROW && (replica.beats.has(beat) || replica.visuals.has(beat))) problems.push(`deleted ${beat} keeps its record or visual cell`);
+      for (const beat of record.deletedBeats) if (boundaries(replica).has(beat)) problems.push(`deleted ${beat} keeps a boundary`);
       const left = everything(after);
       for (const char of [...record.erased, ...record.seenVisual]) if (left.includes(char)) problems.push(`deleted letter ${char} still shown`);
       break;
     }
     case "heading": {
       if (after.names.get(cmd.id) !== cmd.text) problems.push(`heading ${cmd.id} not shown`);
+      if (typeof replica.headings.get(cmd.id)?.get("e10Rank") !== "string") problems.push(`heading ${cmd.id} has no rank`);
       const expected = [...before.order], row = rowOf(before, cmd.above) ?? cmd.above;
       expected.splice(expected.indexOf(row), 0, `#${cmd.id}`);
       if (!equal(after.order, expected)) problems.push(`heading ${cmd.id} not directly above ${row}: ${after.order.join(" ")}`);
@@ -191,9 +200,31 @@ export function promises(cmd: Cmd, before: Shown, after: Shown, replica: ChosenR
   return problems;
 }
 
+// why: the stored narration letters by identity; a split must leave every one where it was
+export function letterItems(replica: ChosenReplica): string[] {
+  const found: string[] = [];
+  for (const record of replica.segments.values()) {
+    const text = record.get("text");
+    if (text instanceof Y.Text) for (let item = text._start; item; item = item.right) {
+      if (!item.deleted && item.content instanceof Y.ContentString) for (let at = 0; at < item.length; at++) found.push(`${item.id.client}:${item.id.clock + at}`);
+    }
+  }
+  return found.sort();
+}
+
+function boundaries(replica: ChosenReplica): Set<string> {
+  const found = new Set<string>();
+  for (const record of replica.segments.values()) {
+    const head = record.get("head"), text = record.get("text");
+    if (head && typeof head === "object" && "b" in head) found.add(String(head.b));
+    if (text instanceof Y.Text) for (const item of text.toDelta() as NativeDeltaItem[]) if (typeof item.insert === "object" && "b" in item.insert) found.add(String(item.insert.b));
+  }
+  return found;
+}
+
 export type Kinds = Record<string, number>;
-export interface TagAsk { index: number; by: number; name: string; on: boolean; ids: string[]; seen: ReadonlySet<number> }
-export interface TagLoss { index: number; name: string; letters: number; missing: number; concurrent: string[] }
+export interface TagAsk { index: number; by: number; name: string; on: boolean; ids: string[]; seen: ReadonlySet<number>; beat: string }
+export interface TagLoss { index: number; name: string; letters: number; missing: number; concurrent: string[]; cause: string }
 export interface TagOutcome { requested: number; kept: number; lost: TagLoss[] }
 export interface PlayResult { never: string[]; local: string[]; kinds: Kinds; timing: Record<string, { sameMoment: number; offline: number }>; lines: string[]; uses: Record<string, number>; events: number; tags: TagOutcome }
 export interface ControlCount { used: number; effective: number; failed: number; throws: number; coverage: number; storageOnly: number }
@@ -262,14 +293,16 @@ export function play(options: PlayOptions): PlayResult {
       if (cmd.op === "heading") record.createdHeading = { id: cmd.id, standalone: replica.block(cmd.above).start === 0 };
       made.set(index, cmd);
       if (cmd.op === "format" && cmd.field === "audio" && cmd.key.startsWith("t:")) {
-        asks.push({ index, by: step.by, name: cmd.key, on: cmd.on, ids: letterIds(replica, cmd.id, cmd.from, cmd.to), seen: new Set(copy.seen) });
+        asks.push({ index, by: step.by, name: cmd.key, on: cmd.on, ids: [...textOf(before, "audio", cmd.id).slice(cmd.from, cmd.to)], seen: new Set(copy.seen), beat: cmd.id });
       }
       const stack = undoStacks.get(step.by) ?? [], redo = redoStacks.get(step.by) ?? [];
       undoStacks.set(step.by, stack); redoStacks.set(step.by, redo);
       const depth = replica.undo.undoStack.length, redoDepth = replica.undo.redoStack.length, saved = options.controls ? replica.encode() : null;
       const keysBefore = cmd.op === "format" ? keysIn(replica, cmd.id, cmd.field) : undefined, snapshot = Y.snapshot(replica.doc);
+      const itemsBefore = cmd.op === "split" ? letterItems(replica) : null;
       const calls = options.controls ? watch(replica, () => { perform(replica, cmd); }) : (perform(replica, cmd), []);
       const after = shown(replica), stylesAfter = readStyles(replica), storedChanged = !equal(stylesBefore, stylesAfter);
+      if (itemsBefore && !equal(itemsBefore, letterItems(replica))) result.local.push(`step ${index} split: narration letters were deleted and written again`);
       if (cmd.op === "undo") {
         const popped = depth - replica.undo.undoStack.length, performed = replica.undo.redoStack.length > redoDepth;
         if (popped > 0) {
@@ -327,11 +360,11 @@ export function play(options: PlayOptions): PlayResult {
       }
       result.lines = lines;
       result.never.push(...neverAcceptable(reachability(hub.replica)).map(problem => `settled: ${problem}`));
-      result.uses = hub.replica.ruleUse();
+      result.uses = { ...hub.replica.ruleUse(), rank: everyone.reduce((sum, copy) => sum + copy.replica.ruleUse().rank, 0) };
       result.events = events.length;
       crossings(result, shown(hub.replica), events, made, syncs, window);
-      const keys = tagKeys(hub.replica);
-      result.tags = lostTags(asks, events, id => keys.get(finalId(hub.replica.doc, id)));
+      const keys = shownKeys(hub.replica);
+      result.tags = lostTags(asks, events, char => keys.get(char)?.held, chars => chars.some(char => (keys.get(char)?.count ?? 0) > 1));
       if (options.checkLetters !== false) judge(result, hub.replica, settle(events, letters, [...initial.rows.values()].flat()), events, syncs, window);
     } finally { late.replica.destroy(); }
   } catch (error) {
@@ -377,48 +410,23 @@ function crossings(result: PlayResult, view: Shown, events: readonly LedgerEvent
   }
 }
 
-function letterIds(replica: ChosenReplica, beat: string, from: number, to: number): string[] {
-  const ids: string[] = [];
-  let offset = 0;
-  for (const span of replica.spansOf(beat, "audioText")) for (let at = span.start; at < span.end; at++, offset++) {
-    if (offset < from || offset >= to) continue;
-    const { client, clock } = replica.characterIdentity(span.text, at);
-    ids.push(`${client}:${clock}`);
-  }
-  return ids;
-}
-
-// why: the attribute keys each live letter carries, read item by item the way Y.Text's own delta reads them
-function tagKeys(replica: ChosenReplica): Map<string, Set<string>> {
-  const keys = new Map<string, Set<string>>();
-  for (const segment of replica.segments.values()) {
-    const text = segment.get("text");
-    if (!(text instanceof Y.Text)) continue;
-    const current = new Map<string, unknown>();
-    for (let item = text._start; item; item = item.right) {
-      if (item.deleted) continue;
-      const { content } = item;
-      if (content instanceof Y.ContentFormat) { if (content.value === null) current.delete(content.key); else current.set(content.key, content.value); }
-      else if (content instanceof Y.ContentString) {
-        const held = new Set([...current].filter(([, value]) => value === true).map(([key]) => key));
-        for (let at = 0; at < content.str.length; at++) keys.set(`${item.id.client}:${item.id.clock + at}`, held);
+// why: every letter in these histories is unique, so a requested tag is judged on the narration letters the rows
+// show, whichever stored item now carries each one
+function shownKeys(replica: ChosenReplica): Map<string, { held: Set<string>; count: number }> {
+  const keys = new Map<string, { held: Set<string>; count: number }>();
+  for (const entry of replica.outline()) {
+    if (entry.kind !== "row") continue;
+    for (const item of entry.row.audio) {
+      if (typeof item.insert !== "string") continue;
+      const held = new Set(Object.entries(item.attributes ?? {}).filter(([, value]) => value === true).map(([key]) => key));
+      for (const char of item.insert) {
+        const known = keys.get(char);
+        // why: a letter shown twice keeps a tag only if both places carry it
+        keys.set(char, known ? { held: new Set([...known.held].filter(key => held.has(key))), count: known.count + 1 } : { held, count: 1 });
       }
     }
   }
   return keys;
-}
-
-// why: a letter brought back by an undo is a new item; Yjs links the old one to it through `redone`
-function finalId(doc: Y.Doc, id: string): string {
-  let [client = 0, clock = 0] = id.split(":").map(Number);
-  for (let guard = 0; guard < 100; guard++) {
-    let item: unknown;
-    try { item = Y.getItem(doc.store, Y.createID(client, clock)); } catch { break; }
-    if (!(item instanceof Y.Item) || !item.redone) break;
-    const offset = clock - item.id.clock;
-    client = item.redone.client; clock = item.redone.clock + offset;
-  }
-  return `${client}:${clock}`;
 }
 
 // why: whether a command's effect stands at the end: an undo that reverted it takes it back, a redo of that undo
@@ -435,7 +443,8 @@ function standing(index: number, events: readonly LedgerEvent[]): boolean {
 
 // why: a requested tag is lost when a letter it was put on is still shown without it, and no standing untag of that
 // tag name, made after seeing the request, covered that letter
-export function lostTags(asks: readonly TagAsk[], events: readonly LedgerEvent[], keysOf: (id: string) => ReadonlySet<string> | undefined): TagOutcome {
+export function lostTags(asks: readonly TagAsk[], events: readonly LedgerEvent[], keysOf: (id: string) => ReadonlySet<string> | undefined,
+  copies?: (chars: readonly string[]) => boolean): TagOutcome {
   const outcome: TagOutcome = { requested: 0, kept: 0, lost: [] };
   for (const ask of asks) {
     if (!ask.on || !ask.ids.length) continue;
@@ -447,7 +456,12 @@ export function lostTags(asks: readonly TagAsk[], events: readonly LedgerEvent[]
     const missing = alive.filter(id => ![...keysOf(id) ?? []].some(key => nativeMarkName(key) === ask.name) && !removed(id));
     if (!missing.length) { outcome.kept++; continue; }
     const concurrent = events.filter(event => event.by !== ask.by && !ask.seen.has(event.index) && !event.seen.has(ask.index)).map(event => `${event.op} by ${event.by}`);
-    outcome.lost.push({ index: ask.index, name: ask.name, letters: alive.length, missing: missing.length, concurrent });
+    const restored = events.some(removal => !ask.seen.has(removal.index) && removal.by !== ask.by
+      && (removal.deletedBeats.includes(ask.beat) || missing.some(char => removal.erased.includes(char)))
+      && events.some(undo => undo.reverts === removal.index && standing(undo.index, events)));
+    const cause = (copies?.(missing) ?? false) ? "a letter shown twice after a double delete and double undo"
+      : restored ? "letters deleted and brought back by an undo the tagger had not seen" : "other";
+    outcome.lost.push({ index: ask.index, name: ask.name, letters: alive.length, missing: missing.length, concurrent, cause });
   }
   return outcome;
 }
@@ -483,6 +497,7 @@ function judge(result: PlayResult, replica: ChosenReplica, ledger: ReturnType<ty
   for (const char of ledger.uncertain) bump(result, places.some(([item]) => item === char) ? "library-decided letter kept" : "library-decided letter gone", 1);
   for (const loss of ledger.losses) bump(result, loss.kind, 1, timingOf(loss.events, syncs, window));
   const rows = new Set([...view.rows.values()].flat());
+  for (const beat of rows) if (beat !== STRAY_ROW && typeof replica.beats.get(beat)?.get("e10Rank") !== "string") bump(result, "a row brought back by an undo after an unseen move is read at its stored place", 1);
   for (const beat of ledger.beatsAlive) if (!rows.has(beat)) result.local.push(`beat ${beat} is alive by the commands but not shown`);
   for (const beat of ledger.beatsDead) if (rows.has(beat)) result.local.push(`beat ${beat} was deleted but is shown`);
   for (const event of events) {

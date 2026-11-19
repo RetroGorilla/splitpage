@@ -11,7 +11,7 @@ import type { Controls, PlayResult, Step } from "./play.ts";
 const SIZE = Number(process.env.E11_SEEDS ?? 600);
 
 const category = (problem: string): string => {
-  if (problem.includes("threw: ")) return `threw: ${problem.slice(problem.indexOf("threw: ") + 7).replace(/b:\S+/g, "b:#")}`;
+  if (problem.includes("threw: ")) return `threw: ${problem.slice(problem.indexOf("threw: ") + 7).replace(/b:[^\s]+/g, "b:#")}`;
   const text = problem.replace(/^(step \d+ \w+|settled( on \d+)?|settling): /, "");
   return text.replace(/\b(letter|narration|beat|beats|copy|row|heading) \S+/g, "$1 #").replace(/\(\w+\)/g, "").replace(/\s+/g, " ").slice(0, 90);
 };
@@ -32,13 +32,16 @@ function shrink(steps: Step[], number: number, kind: string): Step[] {
   return current;
 }
 
-test("E11 new generated histories: three copies, a late joiner, five deliveries, offline stretches", t => {
+interface Survey { never: Record<string, { count: number; seed: number }>; local: Record<string, { count: number; sample: string }>; thrown: Record<string, number>; tags: { requested: number; causes: Record<string, number> } }
+
+function survey(t: { diagnostic: (message: string) => void }, size: number, twins: boolean): Survey {
   const kinds: Record<string, number> = {}, timing: Record<string, { sameMoment: number; offline: number }> = {}, never: Record<string, { count: number; seed: number }> = {};
   const local: Record<string, { count: number; sample: string }> = {}, thrown: Record<string, number> = {}, uses: Record<string, number> = {}, ops: Record<string, number> = {};
-  let histories = 0, commands = 0, withLoss = 0, clean = 0, formatsByDelivery = 0;
-  const tags = { requested: 0, kept: 0, histories: 0, historiesWithTags: 0, lost: [] as unknown[] };
-  for (let number = 1; number <= SIZE; number++) {
-    const history = generateHistory(number), results = runAll(history.steps, number);
+  let histories = 0, commands = 0, withLoss = 0, clean = 0, formatsByDelivery = 0, twinPairs = 0;
+  const tags = { requested: 0, kept: 0, histories: 0, historiesWithTags: 0, causes: {} as Record<string, number>, lost: [] as unknown[] };
+  for (let number = 1; number <= size; number++) {
+    const history = generateHistory(number, 40, twins), results = runAll(history.steps, number);
+    twinPairs += history.steps.filter(step => "by" in step && step.cmd.op === "split" && step.cmd.created.startsWith("T")).length / 2;
     histories++;
     for (const step of history.steps) if ("by" in step) { commands++; ops[step.cmd.op] = (ops[step.cmd.op] ?? 0) + 1; }
     for (const problem of history.thrown) { const key = problem.replace(/[A-Z]\w*\d+|\b[A-Z]\b/g, "#"); thrown[key] = (thrown[key] ?? 0) + 1; }
@@ -59,24 +62,40 @@ test("E11 new generated histories: three copies, a late joiner, five deliveries,
     if (losing >= 0) {
       tags.histories++;
       tags.lost.push({ seed: number, mode: MODES[losing], modes: results.filter(result => result.tags.lost.length).length, lost: results[losing]?.tags.lost });
+      for (const loss of results[losing]?.tags.lost ?? []) tags.causes[loss.cause] = (tags.causes[loss.cause] ?? 0) + 1;
     }
     if (Object.keys(first.kinds).some(kind => !kind.startsWith("library-decided"))) withLoss++;
     if (!results.some(result => result.never.length || result.local.length) && !Object.keys(first.kinds).length) clean++;
   }
   const smallest: Record<string, unknown> = {};
   for (const [kind, { seed }] of Object.entries(never)) {
-    const steps = shrink(generateHistory(seed).steps, seed, kind);
+    const steps = shrink(generateHistory(seed, 40, twins).steps, seed, kind);
     smallest[kind] = { seed, steps, rows: runAll(steps, seed)[0]?.lines };
   }
-  t.diagnostic(JSON.stringify({ histories, commands, clean, withLoss, formatsByDelivery, ops, uses, kinds, timing, thrown }));
+  t.diagnostic(JSON.stringify({ histories, commands, twinPairs, clean, withLoss, formatsByDelivery, ops, uses, kinds, timing, thrown }));
   t.diagnostic(JSON.stringify({ never, smallest }));
   t.diagnostic(JSON.stringify({ local }));
   t.diagnostic(JSON.stringify({ tags }));
+  return { never, local, thrown, tags };
+}
+
+// why: the never-acceptable kind part A leaves, reported in RESULT.md; pinned so any other kind fails here
+const LEFT_BY_PART_A = ["narration # is shown only in a removed heading"];
+
+test("E11 new generated histories: three copies, a late joiner, five deliveries, offline stretches", t => {
+  const { never, local, thrown, tags } = survey(t, SIZE, false);
   assert.ok(tags.requested > 0, "the histories ask for production tags");
+  assert.equal(tags.causes.other, undefined, "every lost tag is one of the two library behaviours named in RESULT.md");
   assert.deepEqual(Object.keys(local), [], "every command did what it promised on its copy");
-  assert.deepEqual(Object.keys(thrown).filter(key => !/Missing rank/.test(key)), [], "no writer refused a request picked from the rows");
-  // why: the one never-acceptable kind found, reported as the verdict in RESULT.md; pinned so any other kind fails here
-  assert.deepEqual(Object.keys(never).sort(), ["narration # is shown only in a removed heading", "threw: Missing rank for b:#"]);
+  assert.deepEqual(Object.keys(thrown), [], "no writer refused a request picked from the rows");
+  assert.deepEqual(Object.keys(never).sort(), LEFT_BY_PART_A);
+});
+
+test("E11 generated histories with same-moment double splits of rows the rules read", t => {
+  const { never, local, thrown } = survey(t, Number(process.env.E11_TWIN_SEEDS ?? 200), true);
+  assert.deepEqual(Object.keys(local), [], "every command did what it promised on its copy");
+  assert.deepEqual(Object.keys(thrown), [], "no writer refused a request picked from the rows");
+  assert.deepEqual(Object.keys(never).filter(kind => !LEFT_BY_PART_A.includes(kind)), []);
 });
 
 const CONTROL_SEEDS = Number(process.env.E11_CONTROL_SEEDS ?? 25);
@@ -96,10 +115,11 @@ test("E11 new generated histories: silent-write controls, one per library call a
 
 test("E11 new generated histories: with one reading rule off, the histories that use it fail", t => {
   const table: Record<string, { needed: number; failed: number; byReach: number; threw: number }> = {};
-  for (let number = 1; number <= Math.min(SIZE, 150); number++) {
+  for (let number = 1; number <= SIZE; number++) {
     const { steps } = generateHistory(number), normal = play({ spec: GENERATED_SPEC(), steps, writers: 3, mode: "forward", seed: number, checkLetters: false });
-    for (const rule of ["prefix", "empty", "repeat", "adjacent"] as const) {
-      if (!normal.uses[rule]) continue;
+    for (const rule of ["prefix", "empty", "repeat", "adjacent", "rank"] as const) {
+      // why: rule (e) is needed by few histories, so all of them are checked; the others are checked in the first 150
+      if (!normal.uses[rule] || (rule !== "rank" && number > 150)) continue;
       const row = table[rule] ??= { needed: 0, failed: 0, byReach: 0, threw: 0 };
       row.needed++;
       const off = play({ spec: GENERATED_SPEC(), steps, writers: 3, mode: "forward", seed: number, rules: { ...ALL_RULES, [rule]: false } });
@@ -110,5 +130,5 @@ test("E11 new generated histories: with one reading rule off, the histories that
     }
   }
   t.diagnostic(JSON.stringify(table));
-  for (const rule of ["prefix", "repeat", "empty"] as const) if (table[rule]) assert.equal(table[rule].failed, table[rule].needed, rule);
+  for (const rule of ["prefix", "repeat", "empty", "rank"] as const) if (table[rule]) assert.equal(table[rule].failed, table[rule].needed, rule);
 });

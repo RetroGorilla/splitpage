@@ -10,10 +10,10 @@ export type NativeAttributes = Record<string, true>;
 export interface NativeDeltaItem { insert: string | Record<string, unknown>; attributes?: Record<string, unknown> }
 export interface NativeSpan { segment: string; start: number; end: number; delta: NativeDeltaItem[] }
 export interface NativeBlock { id: string; kind: "b" | "h"; segment: string; start: number; end: number; delta: NativeDeltaItem[]; spans?: NativeSpan[] }
-export interface NativeRules { prefix: boolean; empty: boolean; repeat: boolean; adjacent: boolean }
+export interface NativeRules { prefix: boolean; empty: boolean; repeat: boolean; adjacent: boolean; rank: boolean; headless: boolean }
 export type NativeRule = keyof NativeRules;
-export const NO_RULES: NativeRules = Object.freeze({ prefix: false, empty: false, repeat: false, adjacent: false });
-export const ALL_RULES: NativeRules = Object.freeze({ prefix: true, empty: true, repeat: true, adjacent: true });
+export const NO_RULES: NativeRules = Object.freeze({ prefix: false, empty: false, repeat: false, adjacent: false, rank: false, headless: false });
+export const ALL_RULES: NativeRules = Object.freeze({ prefix: true, empty: true, repeat: true, adjacent: true, rank: true, headless: true });
 export const STRAY_ROW = "~stray";
 export interface NativeTextSpan {
   text: Y.Text; start: number; end: number; opened: "own" | "unowned"; boundary?: "head" | "embed" | null; record?: Y.Map<unknown>;
@@ -208,6 +208,9 @@ export class NativeReplica {
   private ownership: Ownership | null = null;
   private adjacentHits = 0;
   private strayShown = false;
+  // why: a split that copies narration duplicates it when two people split the same rule-read text at once
+  protected copyFreeSplit = false;
+  splitPlacement = "exact";
 
   constructor(client: number, captureTimeout = 0, scheme: NativeScheme = "name") {
     this.doc.clientID = client;
@@ -265,7 +268,7 @@ export class NativeReplica {
 
   ruleUse(): Record<NativeRule, number> {
     this.changes();
-    const hits = this.spanning ? this.resolve().hits : { prefix: 0, empty: 0, repeat: 0, adjacent: 0 };
+    const hits = this.spanning ? this.resolve().hits : { prefix: 0, empty: 0, repeat: 0, adjacent: 0, rank: 0, headless: 0 };
     return { ...hits, empty: this.strayShown ? 1 : 0, adjacent: this.adjacentHits };
   }
 
@@ -412,7 +415,7 @@ export class NativeReplica {
     this.staleSegments.clear();
     if (this.ownership) return this.ownership;
     const rules = this.ruleSet, entries = new Map<string, OwnedEntry>(), order: string[] = [], signatures = new Map<string, string>();
-    const hits: Record<NativeRule, number> = { prefix: 0, empty: 0, repeat: 0, adjacent: 0 };
+    const hits: Record<NativeRule, number> = { prefix: 0, empty: 0, repeat: 0, adjacent: 0, rank: 0, headless: 0 };
     const top: [string, number][] = [];
     let lastBeat: OwnedEntry | null = null, stray: [string, number][] = [];
     for (const segment of new Set(this.order.toArray())) {
@@ -605,9 +608,14 @@ export class NativeReplica {
     this.transact(() => {
       const spans = this.spansOf(beat, "audioText"), at = this.locate(spans, offset, "own");
       const lengthBefore = (index: number): number => spans.slice(0, index).reduce((sum, span) => sum + span.end - span.start, 0);
+      this.splitPlacement = "exact";
       if (at.span.opened === "own") {
         const around = attributesAt(at.span.text.toDelta() as NativeDeltaItem[], at.index - 1) ?? {};
         at.span.text.insertEmbed(at.index, { b: created }, Object.fromEntries(Object.entries(around).filter(([, value]) => value === true)));
+      } else if (this.copyFreeSplit) {
+        const own = spans.find(span => span.opened === "own");
+        if (own && spans.indexOf(own) > at.at) { own.text.insertEmbed(own.start, { b: created }, {}); this.splitPlacement = "at the beat's own text"; }
+        else { at.span.text.insertEmbed(at.index, { b: created }, {}); this.splitPlacement = "where the caret is, read by the rules"; }
       } else {
         const ownAt = spans.findIndex(span => span.opened === "own");
         if (ownAt > at.at) {
