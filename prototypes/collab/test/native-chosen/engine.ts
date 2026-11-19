@@ -8,24 +8,29 @@ export type Mode = typeof MODES[number];
 
 const methods = [
   [Y.Text.prototype, "insert"], [Y.Text.prototype, "insertEmbed"], [Y.Text.prototype, "delete"], [Y.Text.prototype, "format"],
-  [Y.Map.prototype, "set"], [Y.Map.prototype, "delete"], [Y.Array.prototype, "insert"], [Y.Array.prototype, "delete"],
+  [Y.Map.prototype, "set"], [Y.Map.prototype, "delete"], [Y.Array.prototype, "insert"], [Y.Array.prototype, "push"], [Y.Array.prototype, "delete"],
   [Y.UndoManager.prototype, "undo"], [Y.UndoManager.prototype, "redo"]
 ] as const;
 
 // why: a silent-write control: every library write call is listed, and the one numbered `omit` does nothing
-export function watch(replica: ChosenReplica, run: () => void, omit = -1): string[] {
+export function watch(replica: ChosenReplica, run: () => void, omit = -1, ownCalls = false): string[] {
   const calls: string[] = [];
+  let inside = 0;
   const roots = new Map<unknown, string>([[replica.beats, "beats"], [replica.visuals, "visuals"], [replica.segments, "segments"], [replica.headings, "headings"], [replica.names, "names"]]);
   const restore = methods.map(([parent, key]) => {
     const descriptor = Object.getOwnPropertyDescriptor(parent, key);
     if (!descriptor) throw new Error(`No ${key}`);
     const original = descriptor.value as (...args: unknown[]) => unknown;
     Object.defineProperty(parent, key, { ...descriptor, value(this: unknown, ...args: unknown[]): unknown {
+      // why: with ownCalls, a call the library makes inside another listed call, such as a new list's own insert, is not
+      // ours to mute; E11's recorded counts list them, so that stays the default
+      if (inside && ownCalls) return original.apply(this, args);
       const index = calls.length;
-      const where = parent === Y.Map.prototype ? `:${roots.get(this) ?? String(args[0]).replace(/^~stray:.*$/, "~stray claim")}` : "";
+      const where = parent === Y.Map.prototype ? `:${roots.get(this) ?? String(args[0]).replace(/^~stray:.*$/, "~stray claim").replace(/^rank:.*$/, "rank entry")}` : "";
       calls.push(`${parent.constructor.name}.${key}${where}`);
-      if (index !== omit) return original.apply(this, args);
-      return parent === Y.UndoManager.prototype ? null : undefined;
+      if (index === omit) return parent === Y.UndoManager.prototype ? null : undefined;
+      inside++;
+      try { return original.apply(this, args); } finally { inside--; }
     } });
     return () => { Object.defineProperty(parent, key, descriptor); };
   });
