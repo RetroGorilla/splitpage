@@ -33,7 +33,10 @@ function shrink(steps: Step[], number: number, kind: string, names: ChosenNames)
   return current;
 }
 
-interface Survey { never: Record<string, { count: number; seed: number }>; local: Record<string, { count: number; sample: string }>; thrown: Record<string, number>; tags: { requested: number; causes: Record<string, number> } }
+interface Survey {
+  never: Record<string, { count: number; seed: number }>; local: Record<string, { count: number; sample: string }>; thrown: Record<string, number>; tags: { requested: number; causes: Record<string, number> };
+  drift: { place: number; scene: number; seeds: number[] };
+}
 
 // why: `steps` replays the step lists made without the option under it, so the same histories can be compared
 function survey(t: { diagnostic: (message: string) => void }, size: number, twins: boolean, names: ChosenNames = "inline", steps: ChosenNames = names): Survey {
@@ -41,6 +44,7 @@ function survey(t: { diagnostic: (message: string) => void }, size: number, twin
   const local: Record<string, { count: number; sample: string }> = {}, thrown: Record<string, number> = {}, uses: Record<string, number> = {}, ops: Record<string, number> = {};
   let histories = 0, commands = 0, withLoss = 0, clean = 0, formatsByDelivery = 0, twinPairs = 0;
   const tags = { requested: 0, kept: 0, histories: 0, historiesWithTags: 0, causes: {} as Record<string, number>, lost: [] as unknown[] };
+  const drift = { place: 0, scene: 0, seeds: [] as number[] };
   for (let number = 1; number <= size; number++) {
     const history = generateHistory(number, 40, twins, steps), results = runAll(history.steps, number, names);
     twinPairs += history.steps.filter(step => "by" in step && step.cmd.op === "split" && step.cmd.created.startsWith("T")).length / 2;
@@ -66,6 +70,8 @@ function survey(t: { diagnostic: (message: string) => void }, size: number, twin
       tags.lost.push({ seed: number, mode: MODES[losing], modes: results.filter(result => result.tags.lost.length).length, lost: results[losing]?.tags.lost });
       for (const loss of results[losing]?.tags.lost ?? []) tags.causes[loss.cause] = (tags.causes[loss.cause] ?? 0) + 1;
     }
+    if (results.some(result => result.drift.place)) { drift.place++; drift.seeds.push(number); }
+    if (results.some(result => result.drift.scene)) drift.scene++;
     if (Object.keys(first.kinds).some(kind => !kind.startsWith("library-decided"))) withLoss++;
     if (!results.some(result => result.never.length || result.local.length) && !Object.keys(first.kinds).length) clean++;
   }
@@ -78,7 +84,8 @@ function survey(t: { diagnostic: (message: string) => void }, size: number, twin
   t.diagnostic(JSON.stringify({ never, smallest }));
   t.diagnostic(JSON.stringify({ local }));
   t.diagnostic(JSON.stringify({ tags }));
-  return { never, local, thrown, tags };
+  t.diagnostic(JSON.stringify({ ranklessDrift: drift }));
+  return { never, local, thrown, tags, drift };
 }
 
 // why: the never-acceptable kind part A leaves, reported in RESULT.md; pinned so any other kind fails here

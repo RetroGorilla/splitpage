@@ -38,6 +38,7 @@ export function settle(events: readonly LedgerEvent[], initial: { char: string; 
   const instances: Instance[] = initial.map(item => ({ ...item, born: -1, state: "alive", why: "", revival: false, killers: new Set() }));
   const versions: BeatVersion[] = beats.map(beat => ({ beat, born: -1, alive: true, killers: new Set() }));
   const beatsKilledBy = new Map<number, BeatVersion[]>(), beatsRevivedBy = new Map<number, BeatVersion[]>(), uncertainBeats = new Set<string>();
+  const uncreatedBy = new Map<number, BeatVersion[]>(), recreatedBy = new Map<number, BeatVersion[]>();
   const seesVersion = (event: LedgerEvent, version: BeatVersion): boolean => (version.born < 0 || version.born === event.index || event.seen.has(version.born))
     && ![...version.killers].some(killer => event.seen.has(killer) || killer === event.index);
   const losses: LedgerResult["losses"] = [];
@@ -127,8 +128,13 @@ export function settle(events: readonly LedgerEvent[], initial: { char: string; 
       const back = (beatsKilledBy.get(target.index) ?? []).map((version): BeatVersion => ({ beat: version.beat, born: event.index, alive: true, killers: new Set() }));
       versions.push(...back);
       beatsRevivedBy.set(event.index, back);
+      // why: undoing a redo of a creation removes what that redo created again
+      for (const version of recreatedBy.get(target.index) ?? []) if (version.alive) { version.alive = false; version.killers.add(event.index); }
       for (const beat of target.createdBeats) {
-        for (const version of versions) if (version.beat === beat && version.alive) { version.alive = false; version.killers.add(event.index); }
+        for (const version of versions) if (version.beat === beat && version.alive) {
+          version.alive = false; version.killers.add(event.index);
+          uncreatedBy.set(event.index, [...uncreatedBy.get(event.index) ?? [], version]);
+        }
         for (const instance of instances) {
           if (instance.owner !== beat || instance.state !== "alive") continue;
           if (instance.field === "audio" && !target.createdSegment) continue;
@@ -155,7 +161,12 @@ export function settle(events: readonly LedgerEvent[], initial: { char: string; 
       const again = beatsRevivedBy.get(undo.index) ?? [];
       for (const version of again) { version.alive = false; version.killers.add(event.index); }
       beatsKilledBy.set(event.index, again);
-      for (const beat of target.createdBeats) { versions.push({ beat, born: event.index, alive: true, killers: new Set() }); uncertainBeats.add(beat); }
+      // why: a redo brings back the beats its undo took away; only a command the redoer had not seen leaves that open
+      const unseen = events.some(other => other.index < event.index && other.by !== event.by && !event.seen.has(other.index));
+      const created = (uncreatedBy.get(undo.index) ?? []).map((version): BeatVersion => ({ beat: version.beat, born: event.index, alive: true, killers: new Set() }));
+      versions.push(...created);
+      recreatedBy.set(event.index, created);
+      if (unseen) for (const beat of target.createdBeats) uncertainBeats.add(beat);
       // why: the redo restores what the creation undo itself deleted, so letters the creator had seen come back and
       // letters that arrived after the undo stay gone
       for (const instance of killedBy.get(undo.index) ?? []) {

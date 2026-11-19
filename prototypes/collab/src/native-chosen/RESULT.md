@@ -13,7 +13,16 @@ Terms used below:
 
 ## Verdict
 
-**With both parts, the combination holds.** No never-acceptable result appeared in any of these sets:
+**With both parts, the combination holds, except for one thing that rule (e) leaves open.** A beat read by rule (e) has no place of its own: each read works out its place from its stored neighbours. A later command that did not touch that beat can therefore move it, even across a scene line. The smallest history has 6 steps and fails in all five deliveries (`second.test.ts`):
+
+1. Stored order is `A, B, #H`. Alice moves A into H, then deletes B.
+2. Bob has not seen that, and moves B into H.
+3. Bob's move reaches Alice, and she undoes her deletion. B has no rank, and Alice sees `#H, A, B`.
+4. Alice alone deletes A and sees `B, #H`. B has left scene H, and the check reports "B changed scene with one person working".
+
+None of the generated histories did this. A rankless beat appeared in 5 of the 600 histories, and in 5 of the 600 made with name cells. None changed place or scene on a later command, in those sets or in either set of 200 double-split histories. The counter that looks for this fires on the history above. This is owner question Q4; no remedy is built.
+
+Apart from that, no never-acceptable result appeared in any of these sets:
 
 - E9: the 37 named histories and 2,220 generated runs;
 - E10: all 229 histories × 5 deliveries;
@@ -26,8 +35,9 @@ In every set:
 - copies agreed;
 - nothing was stored but shown nowhere;
 - no beat was shown twice;
-- no split copied narration;
-- every command did what it promised on the copy that ran it.
+- **narration shown twice by a command of ours: zero.** No split, or any other writer, copies narration;
+- **narration doubled by two people undoing the same deletion: the owner's accepted outcome, counted here** (3 in 600). Yjs restores two separate stored items, which is the bare `Y.Text` behaviour E9 recorded. With one beat `x`, two people each delete it and undo their own deletion, and every copy shows `xx` (`second.test.ts`). This is not the duplication the first review round removed, which came from a split copying text;
+- every command did what it promised on the copy that ran it. The exception is a split of a rankless beat, whose new beat also has no rank (item 2 of the second review, below).
 
 **Part A alone does not hold.** With names kept in the segment text, one never-acceptable kind remains: narration shows only inside a removed heading's name. It hits 27 letters in 19 of the 600 histories, 7 of the 200 double-split histories, 60 E9 generated runs and E9's named "scene beat". The smallest generated case has 9 steps:
 
@@ -47,6 +57,20 @@ Part B closes it, so **the owner's choice is part B, or part A with this kind ac
 | Narration ends up inside a removed heading's name (first version, item 1) | 19 of 600; E9 "scene beat" | Part B: the name has its own cell, so the segment text holds only narration. Rule (f) shows text after a heading's boundary in a beat. 0 in every set. |
 | A reader throws "Missing rank" after an undo restores a beat that someone else moved unseen (first version, item 2) | 5 of 600 | Rule (e): a beat whose record has no rank is read at its stored place, and nothing is written. 0 throws. |
 | Two splits at the same moment of a row a rule produced duplicate its narration (found in review) | 3 of 600; 4 commands | The split never copies narration. It writes a boundary, a record and a visual cell, and nothing else (`review.test.ts`). |
+
+## Second review: what is now pinned
+
+No reader or writer changed in this round. Each item below is a named test in `second.test.ts` that pins today's behaviour in all five deliveries, unless it says otherwise.
+
+| Item | History | Today's behaviour |
+| --- | --- | --- |
+| 1. A rankless beat changes place | See the verdict | `B, #H`: B leaves scene H on Alice's own deletion of A. Generated sets: 0 of 1,600 histories. |
+| 2. A rankless beat makes another | Delete F against an unseen move of F; deliver the move; undo the delete; split F | Rows `F: v`, `N: wx`, in the right place. N stores the rank key with no value, because a split copies the old beat's rank and F has none. The split's own check reports "split-off N has no rank". |
+| 2. A rankless heading | Create J; Bob, having seen it, moves scene J above I; Alice undoes the creation, receives the move, and redoes | J comes back with no rank and reads at its stored place, `#J` above `#H`. Its name cell is kept and editable (`#J QX`). Run with name cells. |
+| 3. The accepted doubling | One beat `x`; two people each delete it and undo their own deletion | `A: xx` on every copy, with and without a sync before the undos. Counted as "a double delete then a double undo doubles the narration". |
+| 4. Nearest-point split | Recovered text before or after a beat's own text, then a split at the caret | The break moves by the whole recovered text: 1 or 100 letters (see Q2). |
+| 5. Ledger after a redo | Split, undo, redo, undo on one copy | Judged at every step: alive, dead, alive, dead. A control with an unseen command from another copy leaves the redone beat uncertain. |
+| 6. Rule (f) across a scene line | `#H, A, #I, B`; delete A against unseen typing in it; move scene I above H | `#H, #I, B: Xb`, then `#I, B: Xb, #H`. The letter follows B though it is stored after H's boundary. Copies agree, and the letter stays editable (`B: XYb`). Run with name cells. See Q3. |
 
 ## Part A: the corrections
 
@@ -119,6 +143,16 @@ E9 rerun: 26,631 controls used, all effective; 26,509 caught by a check and 122 
 
 **6. The ledger.** The ledger now follows beats by version. A deletion ends the versions its author saw. An undo brings those back as a new version, and a redo ends that version again. A deletion "missed" a row only when a version its author had not seen is left alive. This replaces the shortcut that looked for "any earlier unseen restore". That shortcut ignored a later redo and the letter's real identity.
 
+After the second review, a redo of a creation also brings back the beat versions its undo ended, and an undo of that redo ends them again. The beat is left uncertain only when another copy made a command the redoer had not seen. Before, every creation redo made the beat uncertain, so the ledger stopped judging an ordinary single-copy split, undo, redo, undo.
+
+What remains true of the ledger:
+
+- `ledger.ts` has no imports. It reads only the recorded commands.
+- The replay still takes each undo's target from the real Yjs stack depths.
+- It models Yjs-style revivals: an undo brings things back as new versions.
+
+So it is good for accounting, and it is a limited independent check on undo.
+
 What the ledger and harness still take from the implementation (the reviewer's list):
 
 | Input | Where |
@@ -160,7 +194,14 @@ E2 and E5 differences, by rule (the review's measurement):
 
 ### Rule (f)
 
-Text between a heading's boundary and the next boundary is narration without a beat. Like rule (a), the reader gives it to a beat, and it is edited there.
+Text between a heading's boundary and the next boundary is narration without a beat. Like rule (a), the reader gives it to a beat, and it is edited there. The reader tries these places in order:
+
+1. the beat directly after the heading, if the next entry is a beat;
+2. else the nearest beat above;
+3. else the next beat further down, **which can be under a different scene**;
+4. else the narration-only row.
+
+Step 3 can cross a scene line. With `#H, A, #I, B`, delete A against unseen typing in it, and the letter starts B under I. Move scene I above H, and the letter goes with B, although it is stored after H's boundary. This is owner question Q3.
 
 | The scene… | Where the text shows | Hand-written rows (unseen `Ω` typed in E while E is deleted) |
 | --- | --- | --- |
@@ -212,7 +253,7 @@ A name cell is deleted only by undoing the heading's creation, which is core Yjs
 | The creator had seen the rename | Removed by the undo | Removed by the undo |
 | …and then redoes | Comes back | Comes back (`#J XY`) |
 
-In the 600 histories this happened once, unseen, in both shapes. This is owner question Q3.
+In the 600 histories this happened once, unseen, in both shapes. This is owner question Q5.
 
 ### Reruns with names in cells
 
@@ -308,6 +349,8 @@ One command at 900 beats, rules on (total, of which row rebuild):
 
 Name cells add 13–15 bytes per heading here and no time that stands out from the noise. The Yjs write itself is 0.02–0.07 ms in every case.
 
+The second review ran the script three times as well. For a 900-beat deletion it measured 3.844–3.885 ms with names inline and 4.047–4.490 ms with name cells. Both reviews see deletion with name cells about 0.2 ms slower at the low end, and both see one slow run near 4.5 ms.
+
 ## Owner questions
 
 **Q1. Which shape for heading names?**
@@ -317,49 +360,72 @@ Name cells add 13–15 bytes per heading here and no time that stands out from t
 
 **Q2. A split whose caret falls inside text a reading rule shows.** A split never copies narration, so it cannot always split there.
 
-- (a) Split at the nearest point that needs no copy (built). Noticed as: when the caret is before the beat's own words, the split falls at the start of those words. A split went to the nearest point 3 times in 600 histories (8 with name cells).
-- (b) Refuse the split there and say why. Noticed as: a message, and the person splits elsewhere.
-- (c) Move the beat's own boundary to the caret first, which is an embed delete and insert, not a narration copy, and needs the rule-12 steps. Noticed as: the split falls at the caret; two people doing it at once can each move the boundary.
+What a person sees today, where `|` is the caret and `X` stands for recovered text, which is narration someone typed into a beat that was then deleted:
 
-**Q3. Undoing a heading's creation after an unseen rename (name cells).**
+| Row before | Person asks for | Person gets | Break moved by |
+| --- | --- | --- | --- |
+| `B: X b`, with X recovered and shown before B's own `b` | `B:` (empty) / `N: X b`, caret before X | `B: X` / `N: b` | the whole of X (1 letter, or 100 with 100 letters) |
+| `B: b X`, with X recovered and shown after B's own `b` | `B: b X` / `N:` (empty), caret at the end of the row | `B: b` / `N: X` | the whole of X |
+
+Every copy agrees on these rows. A split went to the nearest point 3 times in 600 histories (8 with name cells).
+
+- (a) Split at the nearest point that needs no copy (built). Noticed as: the break can land the whole recovered text away from the caret. The two pictures above.
+- (b) Refuse the split there and say why. Noticed as: a message, and the person splits elsewhere.
+- (c) Move the beat's own boundary to the caret first. That is an embed delete and insert, not a narration copy, and needs the rule-12 steps. Noticed as: the split falls at the caret; two people doing it at once can each move the boundary.
+
+**Q3. Where rule (f) shows narration that has no beat in its scene.** The reader tries, in order: the beat directly after the heading; the nearest beat above; the next beat further down; the narration-only row. The third step can cross a scene line. With `#H, A, #I, B`, unseen typing in a deleted A shows at the start of B under I. When scene I is moved above H, the letter goes with B.
+
+- (a) As built. Noticed as: rarely, a few letters someone typed in a deleted scene appear at the start of a row in the next scene, and they move with that row. Copies agree, and the letters stay editable.
+- (b) Stay in the scene as a narration-only row under the heading, which typing gives a record, like rule (b). Noticed as: an extra row with no visual under the heading, which someone has to merge or delete.
+- (c) The row above, even across a scene line upwards. Noticed as: the letters appear at the end of the last row of the previous scene. When there is no row above, it needs (a) or (b) as well.
+
+**Q4. Fields Yjs does not redo after an unseen overwrite: rank, status and join.** Yjs does not redo a map entry that a newer write replaced. So when an undo restores a deleted beat that someone else changed unseen, the record comes back without that field. What follows from this today, each pinned in a named test:
+
+- **Rank.** The beat is read at its stored place (rule (e)). That place is worked out on every read, so a later command can move the beat, even into another scene (the verdict's history). A split of that beat makes a new beat that also has no rank. A heading created again by a redo after an unseen scene move also has no rank; it reads at its stored place, and its name cell stays editable.
+- **Status.** It reads as no status.
+- **Join.** It reads as a row of its own.
+
+The options:
+
+- (a) Read at the stored place, and read missing fields as unset (built). Noticed as: the restored row comes back where it was stored. Rarely, after a later unrelated command, it jumps somewhere else, even across a scene line. A status or join set unseen is gone.
+- (b) The person who undid writes a position back. Not built. What it would write: the undoing copy, in the same step as its undo press, writes a rank for each beat or heading the undo brought back without one. That rank is the place rule (e) showed it at on that copy at that moment. Status and join could be written back the same way, from what that copy last showed before the deletion. This is a write on top of the library's undo and needs the rule-12 steps. Noticed as: the row stays where the undoer saw it come back, and later commands do not move it. Two people undoing at the same moment each write a rank; the later write wins.
+- (c) Something the person can see. Not built. A row read by rule (e) is marked "place not fixed" until someone moves it, and moving it writes a rank. Noticed as: a marker on the row, and the row can still jump until someone moves it.
+
+**Q5. Undoing a heading's creation after an unseen rename (name cells).**
 
 - (a) Keep core Yjs's default. Noticed as: the rename is lost with the heading, 1 in 600.
 - (b) Use the editor bindings' filter, which keeps a created text that still holds content. Noticed as: a name with no heading, which needs a place to list it.
 
-**Q4. Fields Yjs does not redo after an unseen overwrite** (status, join, rank).
-
-- (a) Read them as unset (built for status and join; rank uses rule (e)). Noticed as: after an undo, a status set unseen is gone, and a join set unseen is gone, so the row stands alone.
-- (b) The undoer's copy writes them back from what it last saw. This is a write on top of the library's undo and needs the rule-12 steps. Noticed as: the row comes back exactly as the undoer saw it.
-
-**Q5. Rule (d) and old joins.** A later move can make an old join count again (11 in 600).
+**Q6. Rule (d) and old joins.** A later move can make an old join count again (11 in 600).
 
 - (a) Keep it. Noticed as: rarely, a moved row merges with the row it was once joined to.
 - (b) Clear a join once it stops counting. That is an extra write that only one copy may make. Noticed as: a separated row stays separate.
 
-**Q6. Tags lost through an unseen undo of a deletion** (5 of 845, plain Yjs; bold is the same).
+**Q7. Tags lost through an unseen undo of a deletion** (5 of 845, plain Yjs; bold is the same).
 
 - (a) Accept it as library behaviour.
 - (b) The offline notice also compares marks per beat. Noticed as: the person returning is told; the online person still is not.
 
-**Q7. Undo passes over spent items** (16 in 600).
+**Q8. Undo passes over spent items** (16 in 600).
 
 - (a) Keep the library's behaviour. Noticed as: a press occasionally undoes something older.
 - (b) One press spends one item. That departs from the library and needs the rule-12 steps.
 
-**Q8. The offline-notice gap.**
+**Q9. The offline-notice gap.**
 
 - (a) Accept it. Noticed as: a person who stayed online can lose visual text or fields with no message.
 - (b) Run the same check on every copy when a large remote change arrives. Noticed as: both people are told.
 
-**Q9. Formatting that depends on delivery order** (marks only; copies agree once everything is delivered).
+**Q10. Formatting that depends on delivery order** (marks only; copies agree once everything is delivered).
 
 - (a) Accept it. Noticed as: a mark's exact edge differs between sessions.
 - (b) Turn off Yjs's formatting clean-up. That departs from the library.
 
 ## What I am least sure of
 
-- **Rule (f)'s placement.** The rows are my choice: the beat below when the next entry is a beat, else the beat above, else the next beat further down. Two headings created at the same place above one beat needed the third fallback, found by a generated history (seed 233), not by design.
-- **The ledger.** It agrees with what is shown in every set. However, its beat-version rules were changed twice during this round, and 10 letters remain library-decided.
+- **Rule (f)'s placement.** The order is my choice, and its third step was added after a generated history (seed 233), not by design. That step can cross a scene line (Q3).
+- **Rankless beats in the generated sets.** Only 5 of 600 histories hold one, so "0 changed place" says little about how often the verdict's history would happen in real use.
+- **The ledger.** It agrees with what is shown in every set. Its beat-version rules were changed in each review round, and 10 letters remain library-decided.
 - **The E2/E5 rule attribution.** These are the review's numbers, not ones I measured again.
 - **Cost.** Three runs on a shared PC. Deletion with name cells has one slow run (4.59 ms) that I cannot separate from noise.
 - **Same moment or offline.** This depends on the window: at six steps, record losses at the same moment rise from 14 to 20 and visual losses from 19 to 26.

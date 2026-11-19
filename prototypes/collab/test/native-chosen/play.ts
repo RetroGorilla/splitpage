@@ -229,7 +229,10 @@ export type Kinds = Record<string, number>;
 export interface TagAsk { index: number; by: number; name: string; on: boolean; ids: string[]; seen: ReadonlySet<number>; beat: string }
 export interface TagLoss { index: number; name: string; letters: number; missing: number; concurrent: string[]; cause: string }
 export interface TagOutcome { requested: number; kept: number; lost: TagLoss[] }
-export interface PlayResult { never: string[]; local: string[]; kinds: Kinds; timing: Record<string, { sameMoment: number; offline: number }>; lines: string[]; uses: Record<string, number>; events: number; tags: TagOutcome }
+export interface PlayResult {
+  never: string[]; local: string[]; kinds: Kinds; timing: Record<string, { sameMoment: number; offline: number }>; lines: string[]; uses: Record<string, number>; events: number; tags: TagOutcome;
+  drift: { place: number; scene: number };
+}
 export interface ControlCount { used: number; effective: number; failed: number; throws: number; coverage: number; storageOnly: number }
 export type Controls = Map<string, ControlCount>;
 
@@ -239,7 +242,7 @@ export interface PlayOptions { spec: Spec; steps: readonly Step[]; writers: numb
 
 export function play(options: PlayOptions): PlayResult {
   const { spec, steps, writers, mode, rules = ALL_RULES, window = 3, names = "inline" } = options, bytes = seed(spec, rules, names);
-  const result: PlayResult = { never: [], local: [], kinds: {}, timing: {}, lines: [], uses: {}, events: 0, tags: { requested: 0, kept: 0, lost: [] } };
+  const result: PlayResult = { never: [], local: [], kinds: {}, timing: {}, lines: [], uses: {}, events: 0, tags: { requested: 0, kept: 0, lost: [] }, drift: { place: 0, scene: 0 } };
   const copies: (Copy | null)[] = [], log: Uint8Array[] = [], events: LedgerEvent[] = [], syncs: number[] = [], asks: TagAsk[] = [], made = new Map<number, Cmd>();
   const undoStacks = new Map<number, number[]>(), redoStacks = new Map<number, number[]>();
   // why: like a provider, every update a copy makes is relayed, including the formatting clean-up Yjs writes on receipt
@@ -307,6 +310,7 @@ export function play(options: PlayOptions): PlayResult {
       const depth = replica.undo.undoStack.length, redoDepth = replica.undo.redoStack.length, saved = options.controls ? replica.encode() : null;
       const keysBefore = cmd.op === "format" ? keysIn(replica, cmd.id, cmd.field) : undefined, snapshot = Y.snapshot(replica.doc);
       const itemsBefore = cmd.op === "split" ? letterItems(replica) : null;
+      const rankless = [...replica.beats].filter(([, beat]) => typeof beat.get("e10Rank") !== "string").map(([id]) => id);
       const calls = options.controls ? watch(replica, () => { perform(replica, cmd); }) : (perform(replica, cmd), []);
       const after = shown(replica), stylesAfter = readStyles(replica), storedChanged = !equal(stylesBefore, stylesAfter);
       if (itemsBefore && !equal(itemsBefore, letterItems(replica))) result.local.push(`step ${index} split: narration letters were deleted and written again`);
@@ -333,6 +337,7 @@ export function play(options: PlayOptions): PlayResult {
       for (const kind of broken.filter(problem => problem.startsWith("kind: "))) bump(result, kind.slice(6), 1);
       const real = broken.filter(problem => !problem.startsWith("kind: "));
       if (real.length) result.local.push(`step ${index} ${cmd.op}: ${real.join("; ")}`);
+      drift(result, cmd, before, after, rankless);
       if (["type", "erase", "format", "field", "split", "join", "unjoin", "delete"].includes(cmd.op)) {
         const was = sceneMap(before), changed = [...sceneMap(after)].filter(([beat, scene]) => was.has(beat) && was.get(beat) !== scene).map(([beat]) => beat);
         if (changed.length) result.never.push(`step ${index} ${cmd.op}: beats ${changed.join(",")} changed scene with one person working`);
@@ -380,6 +385,28 @@ export function play(options: PlayOptions): PlayResult {
     for (const copy of [...copies, waiting]) copy?.replica.destroy();
   }
   return result;
+}
+
+// why: a beat read by rule (e) has no place of its own; count each time a command that did not ask for it moves that
+// beat among the rows that stay, and when that crosses a scene line
+function drift(result: PlayResult, cmd: Cmd, before: Shown, after: Shown, rankless: readonly string[]): void {
+  if (!rankless.length || cmd.op === "undo" || cmd.op === "redo" || cmd.op === "restoreHeading") return;
+  let expected = before.order.filter(id => id !== STRAY_ROW);
+  if (cmd.op === "move") expected = droppedOrder(expected, cmd.drop);
+  if (cmd.op === "heading") {
+    const at = expected.indexOf(rowOf(before, cmd.above) ?? cmd.above);
+    if (at < 0) return;
+    expected = [...expected.slice(0, at), `#${cmd.id}`, ...expected.slice(at)];
+  }
+  const actual = after.order.filter(id => id !== STRAY_ROW), wanted = expected.filter(id => actual.includes(id)), got = actual.filter(id => wanted.includes(id));
+  if (equal(wanted, got)) return;
+  const scene = (list: readonly string[], row: string): string | null => list.slice(0, list.indexOf(row)).findLast(id => id.startsWith("#")) ?? null;
+  for (const beat of rankless) {
+    const row = rowOf(before, beat);
+    if (!row || row !== rowOf(after, beat) || !got.includes(row) || !equal(wanted.filter(id => id !== row), got.filter(id => id !== row))) continue;
+    result.drift.place++;
+    if (scene(wanted, row) !== scene(got, row)) result.drift.scene++;
+  }
 }
 
 // why: two accepted outcomes of moves made at the same moment as another command, read from the settled rows
