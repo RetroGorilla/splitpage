@@ -5,8 +5,6 @@ import type { Sweep } from "./sweep.ts";
 
 const pick = (total: Sweep) => [total.runs, total.problems, total.orphans, total.dropped, total.droppedRuns, total.bareRuns, total.missingRank, total.stale, total.presses, total.passedOver, total.emptyPresses];
 
-// why: runs, problems, orphan ids, record or cell ids that disappeared, runs with one, runs with a boundary lacking
-// either, rankless runs, stale steps, presses, presses that passed over an entry, presses that changed nothing
 const EXPECTED: Record<string, Record<"K" | "R" | "U" | "U0", number[]>> = {
   "E9": { K: [2257, 0, 2440, 0, 0, 0, 0, 0, 0, 0, 0], R: [2257, 0, 2440, 0, 0, 0, 0, 0, 0, 0, 0], U: [2257, 0, 2440, 0, 0, 0, 0, 0, 0, 0, 0], U0: [2257, 0, 2440, 0, 0, 0, 0, 0, 0, 0, 0] },
   "E10": { K: [1145, 0, 55, 32, 8, 0, 0, 0, 1816, 0, 8], R: [1145, 0, 55, 32, 8, 0, 0, 0, 1816, 0, 8], U: [1145, 0, 63, 0, 0, 0, 0, 0, 1816, 0, 8], U0: [1145, 0, 55, 32, 8, 0, 0, 0, 1816, 0, 8] },
