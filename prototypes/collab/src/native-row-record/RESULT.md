@@ -78,7 +78,7 @@ In K, N is shown with neither its record nor its visual cell. Each step is deliv
   - **Direct deletion of the containers.** This differs from ordinary commands. Delete B's record and cell in one tracked transaction, then undo, then redo. Under K and R the redo deletes them again; under U they stay.
   - Code: about 7 lines in `variants.ts`, effectively one statement.
 - **Other routes.** Nesting an untracked transaction inside the tracked command does not work: Yjs keeps the outer origin.
-  - A separate, outer, untracked transaction does work on plain Yjs (`review.test.ts`, point 6). It creates the record first, then the tracked command writes the boundary and rank. Undo removes the boundary and rank and keeps the record; redo brings both back.
+  - A separate, outer, untracked transaction does work with the replica's own undo manager, in K, R and U (`review.test.ts`, point 6). It creates the record and cell first, then a tracked transaction writes the boundary and rank. Undo removes the boundary and rank and keeps the record; redo brings both back.
   - The cost is a second transaction, with its own moment when other copies can see it and its own way to fail half-done. It was not wired into the replica's commands.
   - `deleteFilter` is the smallest change shown here that keeps a creation in one transaction. A smallest solution in general is not established.
 

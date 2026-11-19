@@ -203,16 +203,16 @@ test("E17 review 5: two stored N markers, then both cut N unseen and both undo",
 });
 
 test("E17 review 6: a container made in an outer untracked transaction survives undo, and redo restores the rest", () => {
-  const doc = new Y.Doc(), beats = doc.getMap<Y.Map<unknown>>("beats"), text = doc.getText("text");
-  try {
-    text.insert(0, "ab");
-    const manager = new Y.UndoManager([beats, text], { trackedOrigins: new Set(["command"]), captureTimeout: 0 }), record = new Y.Map<unknown>();
-    doc.transact(() => { beats.set("N", record); }, "setup");
-    doc.transact(() => { text.insertEmbed(1, { b: "N" }); record.set("rank", "m"); }, "command");
-    const read = (): unknown[] => [beats.has("N"), beats.get("N")?.get("rank") ?? null, (text.toDelta() as unknown[]).length];
+  for (const option of ROW_OPTIONS) inWorld(option, justTwo(), 1, world => {
+    const replica = world.peer(ALICE), text = replica.segments.get("S")?.get("text"), record = new Y.Map<unknown>();
+    assert.ok(text instanceof Y.Text);
+    replica.doc.transact(() => { replica.beats.set("N", record); replica.visuals.set("N", new Y.Text()); });
+    replica.transact(() => { text.insertEmbed(1, { b: "N" }); record.set("e10Rank", "000010V"); });
+    replica.changes();
+    const read = (): unknown[] => [replica.beats.has("N"), replica.visuals.has("N"), rankOf(world), countBoundaries(replica, "N")];
     const states = [read()];
-    manager.undo(); states.push(read());
-    manager.redo(); states.push(read());
-    assert.deepEqual(states, [[true, "m", 3], [true, null, 1], [true, "m", 3]]);
-  } finally { doc.destroy(); }
+    world.run([undo(ALICE)]); states.push(read());
+    world.run([redo(ALICE)]); states.push(read());
+    assert.deepEqual([states, world.threw], [[[true, true, true, 1], [true, true, false, 0], [true, true, true, 1]], []], option);
+  });
 });
