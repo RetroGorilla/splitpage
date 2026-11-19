@@ -63,10 +63,17 @@ export class MoveReplica extends NativeHeadingReplica {
     });
   }
 
+  // why: E15 stores a flat rank in other shapes through these three; the defaults are the E10 key
+  protected readFlat(record: Y.Map<unknown>): unknown { return record.get(FLAT); }
+
+  protected writeFlat(record: Y.Map<unknown>, rank: unknown): void { record.set(FLAT, rank); }
+
+  protected flatFields(rank: unknown): Record<string, unknown> { return { [FLAT]: rank }; }
+
   initializeRanks(): void {
     const natural = this.naturalBlocks();
     this.doc.transact(() => {
-      if (this.design === "flat") natural.forEach((block, index) => recordOf(this, ref(block)).set(FLAT, initialRank(index)));
+      if (this.design === "flat") natural.forEach((block, index) => { this.writeFlat(recordOf(this, ref(block)), initialRank(index)); });
       if (this.design === "run") this.order.toArray().forEach((segment, index) => this.segments.get(segment)?.set(BASE_RANK, initialRank(index)));
     }, "hydration");
   }
@@ -85,7 +92,7 @@ export class MoveReplica extends NativeHeadingReplica {
     const groups = new Map<string, RankGroup>();
     if (this.design === "flat") {
       for (const block of natural) {
-        const head = ref(block), rank = recordOf(this, head).get(FLAT);
+        const head = ref(block), rank = this.readFlat(recordOf(this, head));
         if (typeof rank !== "string") throw new Error(`Missing rank for ${head}`);
         groups.set(head, { head, rank });
       }
@@ -139,7 +146,7 @@ export class MoveReplica extends NativeHeadingReplica {
   private writeRank(block: NativeBlock, rank: string): void {
     const head = ref(block);
     if (this.design === "flat") {
-      recordOf(this, head).set(FLAT, rank);
+      this.writeFlat(recordOf(this, head), rank);
       return;
     }
     const segment = required(this.segments.get(block.segment), "cut's segment");
@@ -240,7 +247,7 @@ export class MoveReplica extends NativeHeadingReplica {
   }
 
   override split(beat: string, offset: number, created: string, fields: Record<string, unknown> = {}): void {
-    const additions = this.design === "flat" ? { ...fields, [FLAT]: recordOf(this, `b:${beat}`).get(FLAT) } : fields;
+    const additions = this.design === "flat" ? { ...fields, ...this.flatFields(this.readFlat(recordOf(this, `b:${beat}`))) } : fields;
     super.split(beat, offset, created, additions);
   }
 

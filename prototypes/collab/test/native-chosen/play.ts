@@ -8,8 +8,8 @@ import type { NativeDeltaItem, NativeField, NativeRules } from "../../src/native
 import { neverAcceptable, reachability } from "./check.ts";
 import { deliver, readStyles, watch } from "./engine.ts";
 import type { Mode } from "./engine.ts";
-import { load, outline, seed } from "./kit.ts";
-import type { Spec } from "./kit.ts";
+import { load as loadCopy, outline, seed } from "./kit.ts";
+import type { MakeReplica, Spec } from "./kit.ts";
 import { settle } from "./ledger.ts";
 import type { LedgerEvent, LetterField } from "./ledger.ts";
 
@@ -163,7 +163,7 @@ export function promises(cmd: Cmd, before: Shown, after: Shown, replica: ChosenR
       else if (!exact) problems.push(`kind: a split inside rule-read text was placed ${replica.splitPlacement}`);
       if (after.visual.get(cmd.created) !== "") problems.push(`split-off ${cmd.created} has no empty visual cell`);
       // why: rule (e) reads a missing rank only after an undo; a writer always writes one
-      if (typeof replica.beats.get(cmd.created)?.get("e10Rank") !== "string") problems.push(`split-off ${cmd.created} has no rank`);
+      if (typeof replica.storedRank("b", cmd.created) !== "string") problems.push(`split-off ${cmd.created} has no rank`);
       break;
     }
     case "insert": if (textOf(after, "audio", cmd.id) !== cmd.text || after.visual.get(cmd.id) !== "") problems.push(`inserted ${cmd.id} not shown`); break;
@@ -179,7 +179,7 @@ export function promises(cmd: Cmd, before: Shown, after: Shown, replica: ChosenR
     }
     case "heading": {
       if (after.names.get(cmd.id) !== cmd.text) problems.push(`heading ${cmd.id} not shown`);
-      if (typeof replica.headings.get(cmd.id)?.get("e10Rank") !== "string") problems.push(`heading ${cmd.id} has no rank`);
+      if (typeof replica.storedRank("h", cmd.id) !== "string") problems.push(`heading ${cmd.id} has no rank`);
       const expected = [...before.order], row = rowOf(before, cmd.above) ?? cmd.above;
       expected.splice(expected.indexOf(row), 0, `#${cmd.id}`);
       if (!equal(after.order, expected)) problems.push(`heading ${cmd.id} not directly above ${row}: ${after.order.join(" ")}`);
@@ -231,18 +231,27 @@ export interface TagLoss { index: number; name: string; letters: number; missing
 export interface TagOutcome { requested: number; kept: number; lost: TagLoss[] }
 export interface PlayResult {
   never: string[]; local: string[]; kinds: Kinds; timing: Record<string, { sameMoment: number; offline: number }>; lines: string[]; uses: Record<string, number>; events: number; tags: TagOutcome;
-  drift: { place: number; scene: number };
+  drift: { place: number; scene: number }; cells: Record<string, string>;
 }
 export interface ControlCount { used: number; effective: number; failed: number; throws: number; coverage: number; storageOnly: number }
 export type Controls = Map<string, ControlCount>;
 
 interface Copy { replica: ChosenReplica; seen: Set<number>; client: number; known: Set<number>; initial: Uint8Array; journal: ({ update: Uint8Array } | { cmd: Cmd })[] }
 
-export interface PlayOptions { spec: Spec; steps: readonly Step[]; writers: number; mode: Mode; seed: number; rules?: NativeRules; names?: ChosenNames; controls?: Controls; window?: number; checkLetters?: boolean }
+// why: E15 adds checks one command's rows cannot make, such as a rank's storage shape; it reads before and after
+export interface StorageCheck { snap: (replica: ChosenReplica) => unknown; check: (before: unknown, replica: ChosenReplica, cmd: Cmd) => string[] }
+
+export interface PlayOptions {
+  spec: Spec; steps: readonly Step[]; writers: number; mode: Mode; seed: number; rules?: NativeRules; names?: ChosenNames; controls?: Controls; window?: number;
+  checkLetters?: boolean; make?: MakeReplica; storage?: StorageCheck; ownCalls?: boolean;
+}
 
 export function play(options: PlayOptions): PlayResult {
-  const { spec, steps, writers, mode, rules = ALL_RULES, window = 3, names = "inline" } = options, bytes = seed(spec, rules, names);
-  const result: PlayResult = { never: [], local: [], kinds: {}, timing: {}, lines: [], uses: {}, events: 0, tags: { requested: 0, kept: 0, lost: [] }, drift: { place: 0, scene: 0 } };
+  const { spec, steps, writers, mode, rules = ALL_RULES, window = 3, names = "inline", make } = options, bytes = seed(spec, rules, names, make);
+  const load = (encoded: Uint8Array, client: number, ...rest: [NativeRules, ChosenNames]): ChosenReplica => loadCopy(encoded, client, ...rest, make);
+  const result: PlayResult = {
+    never: [], local: [], kinds: {}, timing: {}, lines: [], uses: {}, events: 0, tags: { requested: 0, kept: 0, lost: [] }, drift: { place: 0, scene: 0 }, cells: {}
+  };
   const copies: (Copy | null)[] = [], log: Uint8Array[] = [], events: LedgerEvent[] = [], syncs: number[] = [], asks: TagAsk[] = [], made = new Map<number, Cmd>();
   const undoStacks = new Map<number, number[]>(), redoStacks = new Map<number, number[]>();
   // why: like a provider, every update a copy makes is relayed, including the formatting clean-up Yjs writes on receipt
@@ -310,8 +319,9 @@ export function play(options: PlayOptions): PlayResult {
       const depth = replica.undo.undoStack.length, redoDepth = replica.undo.redoStack.length, saved = options.controls ? replica.encode() : null;
       const keysBefore = cmd.op === "format" ? keysIn(replica, cmd.id, cmd.field) : undefined, snapshot = Y.snapshot(replica.doc);
       const itemsBefore = cmd.op === "split" ? letterItems(replica) : null;
-      const rankless = [...replica.beats].filter(([, beat]) => typeof beat.get("e10Rank") !== "string").map(([id]) => id);
-      const calls = options.controls ? watch(replica, () => { perform(replica, cmd); }) : (perform(replica, cmd), []);
+      const rankless = [...replica.beats.keys()].filter(id => typeof replica.storedRank("b", id) !== "string"), held = options.storage?.snap(replica);
+      const calls = options.controls ? watch(replica, () => { perform(replica, cmd); }, -1, options.ownCalls) : (perform(replica, cmd), []);
+      for (const problem of options.storage?.check(held, replica, cmd) ?? []) result.local.push(`step ${index} ${cmd.op}: ${problem}`);
       const after = shown(replica), stylesAfter = readStyles(replica), storedChanged = !equal(stylesBefore, stylesAfter);
       if (itemsBefore && !equal(itemsBefore, letterItems(replica))) result.local.push(`step ${index} split: narration letters were deleted and written again`);
       if (cmd.op === "undo") {
@@ -350,7 +360,7 @@ export function play(options: PlayOptions): PlayResult {
           replica.changes();
           return replica;
         } : (): ChosenReplica => load(saved, copy.client + 9000, rules, names);
-        control(options.controls, rebuild, cmd, calls, before, record, stylesBefore);
+        control(options.controls, rebuild, cmd, calls, before, record, stylesBefore, options.storage, options.ownCalls);
       }
       if (options.controls) copy.journal.push({ cmd });
     }
@@ -374,7 +384,9 @@ export function play(options: PlayOptions): PlayResult {
       result.never.push(...neverAcceptable(reachability(hub.replica)).map(problem => `settled: ${problem}`));
       result.uses = { ...hub.replica.ruleUse(), rank: everyone.reduce((sum, copy) => sum + copy.replica.ruleUse().rank, 0) };
       result.events = events.length;
-      crossings(result, shown(hub.replica), events, made, syncs, window);
+      const settledView = shown(hub.replica);
+      result.cells = Object.fromEntries([...settledView.audio, ...[...settledView.names].map(([id, name]) => [`#${id}`, name] as const)]);
+      crossings(result, settledView, events, made, syncs, window);
       const keys = shownKeys(hub.replica);
       result.tags = lostTags(asks, events, char => keys.get(char)?.held, chars => chars.some(char => (keys.get(char)?.count ?? 0) > 1));
       if (options.checkLetters !== false) judge(result, hub.replica, settle(events, letters, [...initial.rows.values()].flat()), events, syncs, window);
@@ -531,7 +543,7 @@ function judge(result: PlayResult, replica: ChosenReplica, ledger: ReturnType<ty
   for (const char of ledger.uncertain) bump(result, places.some(([item]) => item === char) ? "library-decided letter kept" : "library-decided letter gone", 1);
   for (const loss of ledger.losses) bump(result, loss.kind, 1, timingOf(loss.events, syncs, window));
   const rows = new Set([...view.rows.values()].flat());
-  for (const beat of rows) if (beat !== STRAY_ROW && typeof replica.beats.get(beat)?.get("e10Rank") !== "string") bump(result, "a row brought back by an undo after an unseen move is read at its stored place", 1);
+  for (const beat of rows) if (beat !== STRAY_ROW && typeof replica.storedRank("b", beat) !== "string") bump(result, "a row brought back by an undo after an unseen move is read at its stored place", 1);
   for (const beat of ledger.beatsAlive) if (!rows.has(beat)) result.local.push(`beat ${beat} is alive by the commands but not shown`);
   for (const beat of ledger.beatsDead) if (rows.has(beat)) result.local.push(`beat ${beat} was deleted but is shown`);
   for (const event of events) {
@@ -547,7 +559,7 @@ function judge(result: PlayResult, replica: ChosenReplica, ledger: ReturnType<ty
   }
 }
 
-function control(counts: Controls, rebuild: () => ChosenReplica, cmd: Cmd, calls: readonly string[], before: Shown, record: LedgerEvent, stylesBefore: unknown): void {
+function control(counts: Controls, rebuild: () => ChosenReplica, cmd: Cmd, calls: readonly string[], before: Shown, record: LedgerEvent, stylesBefore: unknown, storage?: StorageCheck, ownCalls = false): void {
   const reference = rebuild();
   let normalStyles: unknown, normal: Shown;
   try { perform(reference, cmd); normalStyles = readStyles(reference); normal = shown(reference); } finally { reference.destroy(); }
@@ -556,14 +568,14 @@ function control(counts: Controls, rebuild: () => ChosenReplica, cmd: Cmd, calls
     counts.set(key, count);
     count.used++;
     try {
-      const keysBefore = cmd.op === "format" ? keysIn(replica, cmd.id, cmd.field) : undefined;
+      const keysBefore = cmd.op === "format" ? keysIn(replica, cmd.id, cmd.field) : undefined, held = storage?.snap(replica);
       let replay: string[];
-      try { replay = watch(replica, () => { perform(replica, cmd); }, omit); } catch { count.effective++; count.throws++; continue; }
+      try { replay = watch(replica, () => { perform(replica, cmd); }, omit, ownCalls); } catch { count.effective++; count.throws++; continue; }
       if (omit !== -2 && !equal(replay, calls)) { count.coverage++; continue; }
       const styles = readStyles(replica), after = shown(replica);
       if (equal(styles, normalStyles) && equal(after, normal)) continue;
       count.effective++;
-      const problems = [...promises(cmd, before, after, replica, record, !equal(styles, stylesBefore), keysBefore), ...neverAcceptable(reachability(replica))];
+      const problems = [...promises(cmd, before, after, replica, record, !equal(styles, stylesBefore), keysBefore), ...neverAcceptable(reachability(replica)), ...storage?.check(held, replica, cmd) ?? []];
       if (problems.length) count.failed++;
       else if (equal(after, normal)) count.storageOnly++;
     } catch { count.effective++; count.throws++; } finally { replica.destroy(); }

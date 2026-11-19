@@ -14,6 +14,9 @@ export interface Spec {
   headings: Record<string, Record<string, unknown>>;
 }
 
+export type MakeReplica = (client: number, rules: NativeRules, names: ChosenNames) => ChosenReplica;
+const chosen: MakeReplica = (client, rules, names) => new ChosenReplica(client, rules, names);
+
 export const b = (id: string): { b: string } => ({ b: id });
 export const h = (id: string): { h: string } => ({ h: id });
 
@@ -33,8 +36,8 @@ export function base(): Spec {
 }
 
 // why: with names in cells, the text right after a heading's boundary in a spec is that heading's name
-export function seed(spec: Spec, rules: NativeRules = ALL_RULES, names: ChosenNames = "inline"): Uint8Array {
-  const replica = new ChosenReplica(900, rules, names);
+export function seed(spec: Spec, rules: NativeRules = ALL_RULES, names: ChosenNames = "inline", make: MakeReplica = chosen): Uint8Array {
+  const replica = make(900, rules, names);
   replica.doc.transact(() => {
     for (const [id, data] of Object.entries(spec.segments)) {
       const record = new Y.Map<unknown>(), text = new Y.Text();
@@ -64,8 +67,8 @@ export function seed(spec: Spec, rules: NativeRules = ALL_RULES, names: ChosenNa
   return bytes;
 }
 
-export function load(bytes: Uint8Array, client: number, rules: NativeRules = ALL_RULES, names: ChosenNames = "inline"): ChosenReplica {
-  const replica = new ChosenReplica(client, rules, names);
+export function load(bytes: Uint8Array, client: number, rules: NativeRules = ALL_RULES, names: ChosenNames = "inline", make: MakeReplica = chosen): ChosenReplica {
+  const replica = make(client, rules, names);
   Y.applyUpdate(replica.doc, bytes, "remote");
   replica.changes();
   return replica;
