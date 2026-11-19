@@ -6,7 +6,6 @@ import type { RankDrop } from "../native-moves/ranks.ts";
 import { ALL_RULES, STRAY_ROW, nativeAttributes, nativeEmbed, nativeMarkName } from "../native/variant.ts";
 import type { NativeBlock, NativeDeltaItem, NativeField, NativeRules } from "../native/variant.ts";
 
-const RANK = "e10Rank";
 const isTag = (name: string): boolean => name.startsWith("t:");
 
 export interface ChosenCut { text: Y.Text; from: number; to: number }
@@ -30,7 +29,7 @@ export class ChosenReplica extends MoveReplica {
   // why: rule (e): Yjs does not redo a map entry a newer write replaced, so a restored record can lack its rank; that
   // beat is read between the ranked neighbours of its stored place, and nothing is written
   protected override groupsOf(natural: NativeBlock[]): Map<string, { head: string; rank: string }> {
-    const ranks = natural.map(block => this.rankOf(block.kind, block.id));
+    const ranks = natural.map(block => this.storedRank(block.kind, block.id));
     if (!this.rules.rank || ranks.every(rank => typeof rank === "string")) return super.groupsOf(natural);
     this.rankReads++;
     const groups = new Map<string, { head: string; rank: string }>();
@@ -170,20 +169,23 @@ export class ChosenReplica extends MoveReplica {
   materialize(claim: string): string {
     const spans = this.spansOf(STRAY_ROW, "audioText"), first = spans[0];
     if (!first) throw new Error("No narration-only row to give a record");
-    const ranks = this.naturalBlocks().map(block => this.rankOf(block.kind, block.id)).filter((rank): rank is string => typeof rank === "string").sort();
+    const ranks = this.naturalBlocks().map(block => this.storedRank(block.kind, block.id)).filter((rank): rank is string => typeof rank === "string").sort();
+    const rank = betweenRanks(null, ranks[0] ?? null, this.doc.clientID, ++this.count);
+    this.creating?.(`b:${claim}`, rank);
     this.transact(() => {
-      first.text.insertEmbed(first.start, { b: claim }, {});
+      first.text.insertEmbed(first.start, this.marker("b", claim), {});
       const record = new Y.Map<unknown>();
       this.beats.set(claim, record);
-      record.set(RANK, betweenRanks(null, ranks[0] ?? null, this.doc.clientID, ++this.count));
+      this.writeFlat(record, rank);
       this.visuals.set(claim, new Y.Text());
     });
     this.forgetViews();
     return claim;
   }
 
-  private rankOf(kind: "b" | "h", id: string): unknown {
-    return (kind === "h" ? this.headings : this.beats).get(id)?.get(RANK);
+  storedRank(kind: "b" | "h", id: string): unknown {
+    const record = (kind === "h" ? this.headings : this.beats).get(id);
+    return record ? this.readFlat(record) : undefined;
   }
 
   // why: decision 2: a row is deleted by cutting its text with its boundaries and deleting its record and visual cell;
@@ -222,15 +224,16 @@ export class ChosenReplica extends MoveReplica {
 
   insertBeat(before: string, id: string, value: string, fields: Record<string, unknown> = {}): void {
     const block = this.block(before), shown = this.blocks(), at = shown.findIndex(item => item.kind === "b" && item.id === before);
-    const above = shown[at - 1], right = this.rankOf("b", before), left = above ? this.rankOf(above.kind, above.id) : null;
+    const above = shown[at - 1], right = this.storedRank("b", before), left = above ? this.storedRank(above.kind, above.id) : null;
     const rank = typeof right === "string" && (left === null || (typeof left === "string" && left < right))
       ? betweenRanks(left as string | null, right, this.doc.clientID, ++this.count) : right;
+    this.creating?.(`b:${id}`, rank, `b:${before}`);
     this.transact(() => {
-      this.addSegment(`seg-b-${id}`, { b: id }, [{ text: value, marks: {} }], this.order.toArray().indexOf(block.segment));
+      this.addSegment(`seg-b-${id}`, this.marker("b", id), [{ text: value, marks: {} }], this.order.toArray().indexOf(block.segment));
       const record = new Y.Map<unknown>();
       this.beats.set(id, record);
       for (const [key, item] of Object.entries(fields)) record.set(key, item);
-      record.set(RANK, rank);
+      this.writeFlat(record, rank);
       this.visuals.set(id, new Y.Text());
     });
   }

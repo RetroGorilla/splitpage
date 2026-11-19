@@ -8,8 +8,8 @@ import type { NativeDeltaItem, NativeField, NativeRules } from "../../src/native
 import { neverAcceptable, reachability } from "./check.ts";
 import { deliver, readStyles, watch } from "./engine.ts";
 import type { Mode } from "./engine.ts";
-import { load, outline, seed } from "./kit.ts";
-import type { Spec } from "./kit.ts";
+import { load as loadCopy, outline, seed } from "./kit.ts";
+import type { MakeReplica, Spec } from "./kit.ts";
 import { settle } from "./ledger.ts";
 import type { LedgerEvent, LetterField } from "./ledger.ts";
 
@@ -61,7 +61,8 @@ export function sceneMap(view: Shown): Map<string, string | null> {
 const textOf = (view: Shown, field: LetterField, id: string): string => (field === "name" ? view.names.get(id) : field === "audio" ? view.audio.get(id) : view.visual.get(id)) ?? "";
 export const everything = (view: Shown): string => [...view.audio.values(), ...view.visual.values(), ...view.names.values(), ...view.hidden.values()].join("");
 
-export function perform(replica: ChosenReplica, cmd: Cmd): void {
+export function perform(replica: ChosenReplica, cmd: Cmd): boolean | undefined {
+  let pressed: boolean | undefined;
   switch (cmd.op) {
     case "type":
       if (cmd.field === "name") replica.typeHeading(cmd.id, cmd.at, cmd.text);
@@ -86,10 +87,11 @@ export function perform(replica: ChosenReplica, cmd: Cmd): void {
     case "removeHeading": replica.removeHeading(cmd.id); break;
     case "restoreHeading": replica.restoreHeading(cmd.id); break;
     case "move": replica.drop(cmd.drop); break;
-    case "undo": replica.undoPress(); break;
-    case "redo": replica.redoPress(); break;
+    case "undo": pressed = replica.undoPress(); break;
+    case "redo": pressed = replica.redoPress(); break;
   }
   replica.changes();
+  return pressed;
 }
 
 function marksOf(replica: ChosenReplica, id: string, field: "audio" | "visual"): Record<string, unknown>[] {
@@ -163,7 +165,7 @@ export function promises(cmd: Cmd, before: Shown, after: Shown, replica: ChosenR
       else if (!exact) problems.push(`kind: a split inside rule-read text was placed ${replica.splitPlacement}`);
       if (after.visual.get(cmd.created) !== "") problems.push(`split-off ${cmd.created} has no empty visual cell`);
       // why: rule (e) reads a missing rank only after an undo; a writer always writes one
-      if (typeof replica.beats.get(cmd.created)?.get("e10Rank") !== "string") problems.push(`split-off ${cmd.created} has no rank`);
+      if (typeof replica.storedRank("b", cmd.created) !== "string") problems.push(`split-off ${cmd.created} has no rank`);
       break;
     }
     case "insert": if (textOf(after, "audio", cmd.id) !== cmd.text || after.visual.get(cmd.id) !== "") problems.push(`inserted ${cmd.id} not shown`); break;
@@ -179,7 +181,7 @@ export function promises(cmd: Cmd, before: Shown, after: Shown, replica: ChosenR
     }
     case "heading": {
       if (after.names.get(cmd.id) !== cmd.text) problems.push(`heading ${cmd.id} not shown`);
-      if (typeof replica.headings.get(cmd.id)?.get("e10Rank") !== "string") problems.push(`heading ${cmd.id} has no rank`);
+      if (typeof replica.storedRank("h", cmd.id) !== "string") problems.push(`heading ${cmd.id} has no rank`);
       const expected = [...before.order], row = rowOf(before, cmd.above) ?? cmd.above;
       expected.splice(expected.indexOf(row), 0, `#${cmd.id}`);
       if (!equal(after.order, expected)) problems.push(`heading ${cmd.id} not directly above ${row}: ${after.order.join(" ")}`);
@@ -231,19 +233,37 @@ export interface TagLoss { index: number; name: string; letters: number; missing
 export interface TagOutcome { requested: number; kept: number; lost: TagLoss[] }
 export interface PlayResult {
   never: string[]; local: string[]; kinds: Kinds; timing: Record<string, { sameMoment: number; offline: number }>; lines: string[]; uses: Record<string, number>; events: number; tags: TagOutcome;
-  drift: { place: number; scene: number };
+  drift: { place: number; scene: number }; cells: Record<string, string>;
+  press?: PressCount; calls?: Record<number, string[]>; stored?: string; threw?: string[]; presses?: PressRecord[];
 }
-export interface ControlCount { used: number; effective: number; failed: number; throws: number; coverage: number; storageOnly: number }
+// why: what one undo or redo press returned, how it changed the presser's two stacks, and whether the document changed
+export interface PressRecord { step: number; op: "undo" | "redo"; returned: boolean | undefined; undo: [number, number]; redo: [number, number]; same: boolean }
+// why: E15's checks on undo and redo presses, kept apart so E11's recorded counts stay as they were
+export interface PressCount { presses: number; scene: number; drift: number; seenLater: number; problems: string[] }
+export interface ControlCount { used: number; effective: number; failed: number; throws: number; coverage: number; storageOnly: number; checkThrows?: number }
 export type Controls = Map<string, ControlCount>;
 
 interface Copy { replica: ChosenReplica; seen: Set<number>; client: number; known: Set<number>; initial: Uint8Array; journal: ({ update: Uint8Array } | { cmd: Cmd })[] }
 
-export interface PlayOptions { spec: Spec; steps: readonly Step[]; writers: number; mode: Mode; seed: number; rules?: NativeRules; names?: ChosenNames; controls?: Controls; window?: number; checkLetters?: boolean }
+// why: E15 adds checks one command's rows cannot make, such as a rank's storage shape; it reads before and after
+export interface StorageCheck { snap: (replica: ChosenReplica) => unknown; check: (before: unknown, replica: ChosenReplica, cmd: Cmd) => string[] }
+
+export interface PlayOptions {
+  spec: Spec; steps: readonly Step[]; writers: number; mode: Mode; seed: number; rules?: NativeRules; names?: ChosenNames; controls?: Controls; window?: number;
+  checkLetters?: boolean; make?: MakeReplica; storage?: StorageCheck; ownCalls?: boolean;
+  pressChecks?: boolean; mute?: { step: number; call: number }; listCalls?: boolean;
+  // why: E15 records a command that throws after it wrote, then keeps playing; by default a throw ends the play
+  continueOnThrow?: boolean; logPresses?: boolean;
+}
 
 export function play(options: PlayOptions): PlayResult {
-  const { spec, steps, writers, mode, rules = ALL_RULES, window = 3, names = "inline" } = options, bytes = seed(spec, rules, names);
-  const result: PlayResult = { never: [], local: [], kinds: {}, timing: {}, lines: [], uses: {}, events: 0, tags: { requested: 0, kept: 0, lost: [] }, drift: { place: 0, scene: 0 } };
+  const { spec, steps, writers, mode, rules = ALL_RULES, window = 3, names = "inline", make } = options, bytes = seed(spec, rules, names, make);
+  const load = (encoded: Uint8Array, client: number, ...rest: [NativeRules, ChosenNames]): ChosenReplica => loadCopy(encoded, client, ...rest, make);
+  const result: PlayResult = {
+    never: [], local: [], kinds: {}, timing: {}, lines: [], uses: {}, events: 0, tags: { requested: 0, kept: 0, lost: [] }, drift: { place: 0, scene: 0 }, cells: {}
+  };
   const copies: (Copy | null)[] = [], log: Uint8Array[] = [], events: LedgerEvent[] = [], syncs: number[] = [], asks: TagAsk[] = [], made = new Map<number, Cmd>();
+  const carried = new Map<number, Set<string>>();
   const undoStacks = new Map<number, number[]>(), redoStacks = new Map<number, number[]>();
   // why: like a provider, every update a copy makes is relayed, including the formatting clean-up Yjs writes on receipt
   const open = (client: number, encoded: Uint8Array, known: Iterable<number> = []): Copy => {
@@ -302,6 +322,7 @@ export function play(options: PlayOptions): PlayResult {
       if (cmd.op === "field") record.fieldSet = { beat: cmd.id, key: cmd.key };
       if (cmd.op === "heading") record.createdHeading = { id: cmd.id, standalone: names === "cells" || replica.block(cmd.above).start === 0 };
       made.set(index, cmd);
+      if (cmd.op === "move") carried.set(index, carriedBy(cmd.drop, before));
       if (cmd.op === "format" && cmd.field === "audio" && cmd.key.startsWith("t:")) {
         asks.push({ index, by: step.by, name: cmd.key, on: cmd.on, ids: [...textOf(before, "audio", cmd.id).slice(cmd.from, cmd.to)], seen: new Set(copy.seen), beat: cmd.id });
       }
@@ -310,8 +331,22 @@ export function play(options: PlayOptions): PlayResult {
       const depth = replica.undo.undoStack.length, redoDepth = replica.undo.redoStack.length, saved = options.controls ? replica.encode() : null;
       const keysBefore = cmd.op === "format" ? keysIn(replica, cmd.id, cmd.field) : undefined, snapshot = Y.snapshot(replica.doc);
       const itemsBefore = cmd.op === "split" ? letterItems(replica) : null;
-      const rankless = [...replica.beats].filter(([, beat]) => typeof beat.get("e10Rank") !== "string").map(([id]) => id);
-      const calls = options.controls ? watch(replica, () => { perform(replica, cmd); }) : (perform(replica, cmd), []);
+      const rankless = [...replica.beats.keys()].filter(id => typeof replica.storedRank("b", id) !== "string"), held = options.storage?.snap(replica);
+      const muted = options.mute?.step === index ? options.mute.call : -1;
+      let returned: boolean | undefined;
+      const run = (): void => {
+        try { returned = perform(replica, cmd); } catch (error) {
+          if (!options.continueOnThrow) throw error;
+          replica.changes();
+          (result.threw ??= []).push(`step ${index} ${cmd.op}: ${error instanceof Error ? error.message : String(error)}`);
+        }
+      };
+      const calls = options.controls || options.listCalls || muted >= 0 ? watch(replica, run, muted, options.ownCalls || muted >= 0 || options.listCalls) : (run(), []);
+      if (options.listCalls) (result.calls ??= {})[index] = calls;
+      if (options.logPresses && (cmd.op === "undo" || cmd.op === "redo")) (result.presses ??= []).push({
+        step: index, op: cmd.op, returned, undo: [depth, replica.undo.undoStack.length], redo: [redoDepth, replica.undo.redoStack.length], same: Y.equalSnapshots(snapshot, Y.snapshot(replica.doc))
+      });
+      for (const problem of options.storage?.check(held, replica, cmd) ?? []) result.local.push(`step ${index} ${cmd.op}: ${problem}`);
       const after = shown(replica), stylesAfter = readStyles(replica), storedChanged = !equal(stylesBefore, stylesAfter);
       if (itemsBefore && !equal(itemsBefore, letterItems(replica))) result.local.push(`step ${index} split: narration letters were deleted and written again`);
       if (cmd.op === "undo") {
@@ -338,6 +373,7 @@ export function play(options: PlayOptions): PlayResult {
       const real = broken.filter(problem => !problem.startsWith("kind: "));
       if (real.length) result.local.push(`step ${index} ${cmd.op}: ${real.join("; ")}`);
       drift(result, cmd, before, after, rankless);
+      if (options.pressChecks) pressCheck(result.press ??= { presses: 0, scene: 0, drift: 0, seenLater: 0, problems: [] }, index, cmd, record, events, made, carried, before, after);
       if (["type", "erase", "format", "field", "split", "join", "unjoin", "delete"].includes(cmd.op)) {
         const was = sceneMap(before), changed = [...sceneMap(after)].filter(([beat, scene]) => was.has(beat) && was.get(beat) !== scene).map(([beat]) => beat);
         if (changed.length) result.never.push(`step ${index} ${cmd.op}: beats ${changed.join(",")} changed scene with one person working`);
@@ -350,7 +386,7 @@ export function play(options: PlayOptions): PlayResult {
           replica.changes();
           return replica;
         } : (): ChosenReplica => load(saved, copy.client + 9000, rules, names);
-        control(options.controls, rebuild, cmd, calls, before, record, stylesBefore);
+        control(options.controls, rebuild, cmd, calls, before, record, stylesBefore, options.storage, options.ownCalls);
       }
       if (options.controls) copy.journal.push({ cmd });
     }
@@ -371,10 +407,13 @@ export function play(options: PlayOptions): PlayResult {
         result.never.push(...neverAcceptable(reachability(copy.replica)).map(problem => `settled on ${copy.client}: ${problem}`));
       }
       result.lines = lines;
+      if (options.listCalls) result.stored = JSON.stringify(styles);
       result.never.push(...neverAcceptable(reachability(hub.replica)).map(problem => `settled: ${problem}`));
       result.uses = { ...hub.replica.ruleUse(), rank: everyone.reduce((sum, copy) => sum + copy.replica.ruleUse().rank, 0) };
       result.events = events.length;
-      crossings(result, shown(hub.replica), events, made, syncs, window);
+      const settledView = shown(hub.replica);
+      result.cells = Object.fromEntries([...settledView.audio, ...[...settledView.names].map(([id, name]) => [`#${id}`, name] as const)]);
+      crossings(result, settledView, events, made, syncs, window);
       const keys = shownKeys(hub.replica);
       result.tags = lostTags(asks, events, char => keys.get(char)?.held, chars => chars.some(char => (keys.get(char)?.count ?? 0) > 1));
       if (options.checkLetters !== false) judge(result, hub.replica, settle(events, letters, [...initial.rows.values()].flat()), events, syncs, window);
@@ -407,6 +446,66 @@ function drift(result: PlayResult, cmd: Cmd, before: Shown, after: Shown, rankle
     result.drift.place++;
     if (scene(wanted, row) !== scene(got, row)) result.drift.scene++;
   }
+}
+
+// why: E15: a press takes back or puts back one command; rows that command did not place keep their scene and their
+// order among themselves, and a press that moves a row or heading someone else moved later, seen, is counted
+// why: every beat and heading a move carried, read on the mover's screen: a range's rows and the headings inside it,
+// or a scene's heading and its rows
+function carriedBy(drop: RankDrop, view: Shown): Set<string> {
+  if (drop.unit === "scene") return new Set([`#${drop.first}`, ...[...sceneMap(view)].filter(([, scene]) => scene === drop.first).map(([beat]) => beat)]);
+  const from = view.order.indexOf(rowOf(view, drop.first) ?? ""), to = view.order.indexOf(rowOf(view, drop.last ?? drop.first) ?? "");
+  return new Set(from < 0 ? [drop.first] : view.order.slice(from, Math.max(from, to) + 1).flatMap(id => id.startsWith("#") ? [id] : view.rows.get(id) ?? [id]));
+}
+
+function pressCheck(count: PressCount, index: number, cmd: Cmd, record: LedgerEvent, events: readonly LedgerEvent[], made: ReadonlyMap<number, Cmd>,
+  carried: ReadonlyMap<number, ReadonlySet<string>>, before: Shown, after: Shown): void {
+  if (cmd.op !== "undo" && cmd.op !== "redo") return;
+  const originOf = (at: number | null): number | null => {
+    const event = at === null ? undefined : events.find(item => item.index === at), source = at === null ? undefined : made.get(at);
+    if (!event || !source) return null;
+    return source.op === "undo" ? originOf(event.reverts) : source.op === "redo" ? originOf(event.redoes) : event.index;
+  };
+  const origin = originOf(cmd.op === "undo" ? record.reverts : record.redoes), source = origin === null ? undefined : made.get(origin);
+  if (origin === null || !source) return;
+  count.presses++;
+  const scenes = [sceneMap(before), sceneMap(after)] as const, beats = new Set<string>(), headings = new Set<string>();
+  const rowMembers = (id: string): string[] => [before, after].flatMap(view => view.rows.get(rowOf(view, id) ?? "") ?? [id]);
+  // why: a range of rows carries the headings inside it, and with them their scenes
+  const span = (first: string, last: string | undefined): string[] => [before, after].flatMap(view => {
+    const from = view.order.indexOf(rowOf(view, first) ?? ""), to = view.order.indexOf(rowOf(view, last ?? first) ?? "");
+    return from < 0 ? [] : view.order.slice(from, Math.max(from, to) + 1).flatMap(id => id.startsWith("#") ? [id] : view.rows.get(id) ?? []);
+  });
+  const underHeading = (id: string): void => { headings.add(id); for (const map of scenes) for (const [beat, scene] of map) if (scene === id) beats.add(beat); };
+  switch (source.op) {
+    case "move":
+      if (source.drop.unit === "scene") underHeading(source.drop.first);
+      else for (const id of span(source.drop.first, source.drop.last ?? undefined)) if (id.startsWith("#")) underHeading(id.slice(1)); else beats.add(id);
+      break;
+    case "delete": for (const id of source.rows) for (const beat of rowMembers(id)) beats.add(beat); break;
+    case "split": for (const beat of [...rowMembers(source.id), source.created]) beats.add(beat); break;
+    case "join": case "unjoin": for (const beat of rowMembers(source.id)) beats.add(beat); break;
+    case "insert": beats.add(source.id); break;
+    case "heading": case "removeHeading": case "restoreHeading": underHeading(source.id); break;
+    default: break;
+  }
+  const changed = [...scenes[1]].filter(([beat, scene]) => scenes[0].has(beat) && scenes[0].get(beat) !== scene && !beats.has(beat)
+    && !headings.has(scene ?? "") && !headings.has(scenes[0].get(beat) ?? "")).map(([beat]) => beat);
+  if (changed.length) { count.scene++; count.problems.push(`step ${index} ${cmd.op}: beats ${changed.join(",")} changed scene with one person working`); }
+  const placed = (view: Shown, id: string): boolean => id.startsWith("#") ? headings.has(id.slice(1)) : (view.rows.get(id) ?? []).some(beat => beats.has(beat));
+  const kept = (view: Shown, other: Shown): string[] => view.order.filter(id => other.order.includes(id) && !placed(before, id) && !placed(after, id));
+  const was = kept(before, after), now = kept(after, before);
+  if (!equal(was, now)) { count.drift++; count.problems.push(`step ${index} ${cmd.op}: rows the pressed command did not place changed order: ${was.join(",")} became ${now.join(",")}`); }
+  if (source.op !== "move") return;
+  const item = source.drop.unit === "scene" ? `#${source.drop.first}` : source.drop.first;
+  const place = (view: Shown): string | null => { const id = item.startsWith("#") ? item : rowOf(view, item) ?? ""; const at = view.order.indexOf(id); return at < 0 ? null : view.order[at - 1] ?? "top"; };
+  if (place(before) === null || place(before) === place(after)) return;
+  // why: a later placement is a move that carried the same row or heading (alone, in a range or in its scene), or a
+  // redo of one; an undo goes back to an earlier one
+  const sameItem = (at: number | null): boolean => at !== null && made.get(at)?.op === "move" && (carried.get(at)?.has(item) ?? false);
+  const later = events.find(event => event.index > origin && event.by !== record.by && record.seen.has(event.index) && (made.get(event.index)?.op === "move"
+    ? sameItem(event.index) && standing(event.index, events) : event.redoes !== null && sameItem(originOf(event.redoes))));
+  if (later) { count.seenLater++; count.problems.push(`step ${index} ${cmd.op}: moved ${item}, which step ${later.index} by another person moved later and the presser had seen`); }
 }
 
 // why: two accepted outcomes of moves made at the same moment as another command, read from the settled rows
@@ -531,7 +630,7 @@ function judge(result: PlayResult, replica: ChosenReplica, ledger: ReturnType<ty
   for (const char of ledger.uncertain) bump(result, places.some(([item]) => item === char) ? "library-decided letter kept" : "library-decided letter gone", 1);
   for (const loss of ledger.losses) bump(result, loss.kind, 1, timingOf(loss.events, syncs, window));
   const rows = new Set([...view.rows.values()].flat());
-  for (const beat of rows) if (beat !== STRAY_ROW && typeof replica.beats.get(beat)?.get("e10Rank") !== "string") bump(result, "a row brought back by an undo after an unseen move is read at its stored place", 1);
+  for (const beat of rows) if (beat !== STRAY_ROW && typeof replica.storedRank("b", beat) !== "string") bump(result, "a row brought back by an undo after an unseen move is read at its stored place", 1);
   for (const beat of ledger.beatsAlive) if (!rows.has(beat)) result.local.push(`beat ${beat} is alive by the commands but not shown`);
   for (const beat of ledger.beatsDead) if (rows.has(beat)) result.local.push(`beat ${beat} was deleted but is shown`);
   for (const event of events) {
@@ -547,7 +646,7 @@ function judge(result: PlayResult, replica: ChosenReplica, ledger: ReturnType<ty
   }
 }
 
-function control(counts: Controls, rebuild: () => ChosenReplica, cmd: Cmd, calls: readonly string[], before: Shown, record: LedgerEvent, stylesBefore: unknown): void {
+function control(counts: Controls, rebuild: () => ChosenReplica, cmd: Cmd, calls: readonly string[], before: Shown, record: LedgerEvent, stylesBefore: unknown, storage?: StorageCheck, ownCalls = false): void {
   const reference = rebuild();
   let normalStyles: unknown, normal: Shown;
   try { perform(reference, cmd); normalStyles = readStyles(reference); normal = shown(reference); } finally { reference.destroy(); }
@@ -556,16 +655,16 @@ function control(counts: Controls, rebuild: () => ChosenReplica, cmd: Cmd, calls
     counts.set(key, count);
     count.used++;
     try {
-      const keysBefore = cmd.op === "format" ? keysIn(replica, cmd.id, cmd.field) : undefined;
+      const keysBefore = cmd.op === "format" ? keysIn(replica, cmd.id, cmd.field) : undefined, held = storage?.snap(replica);
       let replay: string[];
-      try { replay = watch(replica, () => { perform(replica, cmd); }, omit); } catch { count.effective++; count.throws++; continue; }
+      try { replay = watch(replica, () => { perform(replica, cmd); }, omit, ownCalls); } catch { count.effective++; count.throws++; continue; }
       if (omit !== -2 && !equal(replay, calls)) { count.coverage++; continue; }
       const styles = readStyles(replica), after = shown(replica);
       if (equal(styles, normalStyles) && equal(after, normal)) continue;
       count.effective++;
-      const problems = [...promises(cmd, before, after, replica, record, !equal(styles, stylesBefore), keysBefore), ...neverAcceptable(reachability(replica))];
+      const problems = [...promises(cmd, before, after, replica, record, !equal(styles, stylesBefore), keysBefore), ...neverAcceptable(reachability(replica)), ...storage?.check(held, replica, cmd) ?? []];
       if (problems.length) count.failed++;
       else if (equal(after, normal)) count.storageOnly++;
-    } catch { count.effective++; count.throws++; } finally { replica.destroy(); }
+    } catch { count.effective++; count.throws++; count.checkThrows = (count.checkThrows ?? 0) + 1; } finally { replica.destroy(); }
   }
 }

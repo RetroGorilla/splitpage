@@ -1,10 +1,11 @@
 import * as Y from "yjs";
 import type { ChosenNames, ChosenReplica } from "../../src/native-chosen/replica.ts";
 import { ALL_RULES, STRAY_ROW } from "../../src/native/variant.ts";
+import type { NativeRules } from "../../src/native/variant.ts";
 import { randomFor } from "../native/e5-histories.ts";
 import { need } from "../native-delete/model.ts";
-import { base, load, seed } from "./kit.ts";
-import type { Spec } from "./kit.ts";
+import { base, load as loadCopy, seed } from "./kit.ts";
+import type { MakeReplica, Spec } from "./kit.ts";
 import { perform, shown } from "./play.ts";
 import type { Cmd, Step } from "./play.ts";
 
@@ -18,11 +19,12 @@ export interface Generated { seed: number; steps: Step[]; lateAt: number; offlin
 
 // why: commands are picked from the rows the acting copy shows, the way a person picks them; the picks are recorded
 // as plain commands and replayed unchanged under every delivery mode
-export function generateHistory(number: number, length = 40, twins = false, names: ChosenNames = "inline"): Generated {
+export function generateHistory(number: number, length = 40, twins = false, names: ChosenNames = "inline", make?: MakeReplica): Generated {
   const random = randomFor(number * 104729 + 7), pick = <T>(items: readonly T[]): T => items[Math.floor(random() * items.length)] as T;
   const second = randomFor(number * 7919 + 3), twinPick = <T>(items: readonly T[]): T => items[Math.floor(second() * items.length)] as T;
   const chance = (p: number): boolean => random() < p;
-  const bytes = seed(GENERATED_SPEC(), ALL_RULES, names), log: Uint8Array[] = [], known = [new Set<number>(), new Set<number>(), new Set<number>()];
+  const load = (bytes: Uint8Array, client: number, rules: NativeRules, names: ChosenNames): ChosenReplica => loadCopy(bytes, client, rules, names, make);
+  const bytes = seed(GENERATED_SPEC(), ALL_RULES, names, make), log: Uint8Array[] = [], known = [new Set<number>(), new Set<number>(), new Set<number>()];
   const watched = (replica: ChosenReplica, index: number): ChosenReplica => {
     replica.doc.on("update", (update: Uint8Array, origin: unknown) => { if (origin !== "remote") need(known[index], "known set").add(log.push(update) - 1); });
     return replica;

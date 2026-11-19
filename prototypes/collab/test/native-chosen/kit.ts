@@ -14,6 +14,9 @@ export interface Spec {
   headings: Record<string, Record<string, unknown>>;
 }
 
+export type MakeReplica = (client: number, rules: NativeRules, names: ChosenNames) => ChosenReplica;
+const chosen: MakeReplica = (client, rules, names) => new ChosenReplica(client, rules, names);
+
 export const b = (id: string): { b: string } => ({ b: id });
 export const h = (id: string): { h: string } => ({ h: id });
 
@@ -33,13 +36,16 @@ export function base(): Spec {
 }
 
 // why: with names in cells, the text right after a heading's boundary in a spec is that heading's name
-export function seed(spec: Spec, rules: NativeRules = ALL_RULES, names: ChosenNames = "inline"): Uint8Array {
-  const replica = new ChosenReplica(900, rules, names);
+export function seed(spec: Spec, rules: NativeRules = ALL_RULES, names: ChosenNames = "inline", make: MakeReplica = chosen): Uint8Array {
+  const replica = make(900, rules, names), places = new Map<Unit, number>();
+  for (const id of new Set(spec.order)) for (const unit of [spec.segments[id]?.head, ...spec.segments[id]?.units ?? []]) if (unit && typeof unit === "object") places.set(unit, places.size);
+  // why: the hydrated boundary is the spec's own unit unless the replica adds to it (E15's option E adds its rank)
+  const boundary = (unit: { b: string } | { h: string }): Record<string, string> => "b" in unit ? replica.hydratedBoundary(places.get(unit) ?? -1, "b", unit.b) : replica.hydratedBoundary(places.get(unit) ?? -1, "h", unit.h);
   replica.doc.transact(() => {
     for (const [id, data] of Object.entries(spec.segments)) {
       const record = new Y.Map<unknown>(), text = new Y.Text();
       replica.segments.set(id, record);
-      if (data.head) record.set("head", data.head);
+      if (data.head) record.set("head", boundary(data.head));
       record.set("text", text);
       let heading = data.head && "h" in data.head ? data.head.h : null;
       for (const unit of data.units) {
@@ -48,7 +54,7 @@ export function seed(spec: Spec, rules: NativeRules = ALL_RULES, names: ChosenNa
           if (!replica.names.has(heading)) replica.names.set(heading, cell);
           cell.insert(cell.length, unit, {});
         } else if (typeof unit === "string") text.insert(text.length, unit, {});
-        else text.insertEmbed(text.length, unit, {});
+        else text.insertEmbed(text.length, boundary(unit), {});
         if (typeof unit === "object") heading = "h" in unit ? unit.h : null;
       }
     }
@@ -64,8 +70,8 @@ export function seed(spec: Spec, rules: NativeRules = ALL_RULES, names: ChosenNa
   return bytes;
 }
 
-export function load(bytes: Uint8Array, client: number, rules: NativeRules = ALL_RULES, names: ChosenNames = "inline"): ChosenReplica {
-  const replica = new ChosenReplica(client, rules, names);
+export function load(bytes: Uint8Array, client: number, rules: NativeRules = ALL_RULES, names: ChosenNames = "inline", make: MakeReplica = chosen): ChosenReplica {
+  const replica = make(client, rules, names);
   Y.applyUpdate(replica.doc, bytes, "remote");
   replica.changes();
   return replica;

@@ -47,7 +47,7 @@ export function betweenRanks(left: string | null, right: string | null, client: 
 }
 
 const ref = (block: NativeBlock): string => blockRef(block.kind, block.id);
-const initialRank = (index: number): string => digits((index + 1) * 32, 6) + "V";
+export const initialRank = (index: number): string => digits((index + 1) * 32, 6) + "V";
 
 function boundary(block: NativeBlock): number { return Math.max(0, block.start - 1); }
 
@@ -63,10 +63,23 @@ export class MoveReplica extends NativeHeadingReplica {
     });
   }
 
+  // why: E15 stores a flat rank in other shapes through these three; the defaults are the E10 key
+  protected readFlat(record: Y.Map<unknown>): unknown { return record.get(FLAT); }
+
+  protected writeFlat(record: Y.Map<unknown>, rank: unknown): void { record.set(FLAT, rank); }
+
+  protected flatFields(rank: unknown): Record<string, unknown> { return { [FLAT]: rank }; }
+
+  // why: E15's option E is told each new block's first rank before its boundary is written; by default no one is told
+  protected creating?(ref: string, rank: unknown, from?: string): void;
+
+  // why: the boundary a hydration writes for the block at this place in the natural order; E15's option E adds its rank
+  hydratedBoundary(index: number, kind: "b" | "h", id: string): Record<string, string> { return this.marker(kind, id); }
+
   initializeRanks(): void {
     const natural = this.naturalBlocks();
     this.doc.transact(() => {
-      if (this.design === "flat") natural.forEach((block, index) => recordOf(this, ref(block)).set(FLAT, initialRank(index)));
+      if (this.design === "flat") natural.forEach((block, index) => { this.writeFlat(recordOf(this, ref(block)), initialRank(index)); });
       if (this.design === "run") this.order.toArray().forEach((segment, index) => this.segments.get(segment)?.set(BASE_RANK, initialRank(index)));
     }, "hydration");
   }
@@ -85,7 +98,7 @@ export class MoveReplica extends NativeHeadingReplica {
     const groups = new Map<string, RankGroup>();
     if (this.design === "flat") {
       for (const block of natural) {
-        const head = ref(block), rank = recordOf(this, head).get(FLAT);
+        const head = ref(block), rank = this.readFlat(recordOf(this, head));
         if (typeof rank !== "string") throw new Error(`Missing rank for ${head}`);
         groups.set(head, { head, rank });
       }
@@ -139,7 +152,7 @@ export class MoveReplica extends NativeHeadingReplica {
   private writeRank(block: NativeBlock, rank: string): void {
     const head = ref(block);
     if (this.design === "flat") {
-      recordOf(this, head).set(FLAT, rank);
+      this.writeFlat(recordOf(this, head), rank);
       return;
     }
     const segment = required(this.segments.get(block.segment), "cut's segment");
@@ -240,7 +253,9 @@ export class MoveReplica extends NativeHeadingReplica {
   }
 
   override split(beat: string, offset: number, created: string, fields: Record<string, unknown> = {}): void {
-    const additions = this.design === "flat" ? { ...fields, [FLAT]: recordOf(this, `b:${beat}`).get(FLAT) } : fields;
+    const rank = this.design === "flat" ? this.readFlat(recordOf(this, `b:${beat}`)) : undefined;
+    const additions = this.design === "flat" ? { ...fields, ...this.flatFields(rank) } : fields;
+    this.creating?.(`b:${created}`, rank, `b:${beat}`);
     super.split(beat, offset, created, additions);
   }
 
@@ -254,6 +269,7 @@ export class MoveReplica extends NativeHeadingReplica {
     const block = required(byRef.get(target), "beat after new heading");
     order.splice(order.indexOf(target), 0, heading);
     const writes = this.planRanks(order, new Set([heading]), groups, natural);
+    this.creating?.(heading, writes.find(write => write.head === heading)?.rank);
     this.transact(() => {
       super.createHeading(beat, id, name);
       const standalone = block.start === 0, segment = standalone ? `seg-h-${id}` : block.segment;
