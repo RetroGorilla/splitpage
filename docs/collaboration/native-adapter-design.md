@@ -514,3 +514,19 @@ The one kept record loss is a field on a beat whose creating split was undone; i
 
 Also accepted, not in E16's ledger: two people dropping into each other's spot meet neither request (E10, all 8
 histories); a rankless row placed by rule (e), 3 of 600 histories with kept records (E14), decision 15.
+
+### N. A row without its record
+
+E17 compared what to do when a beat's marker comes back without its record and visual cell (section 10's four
+steps and their variants, on kept records). Each option ran 18 named histories in five deliveries, 90 runs.
+
+| Option | What happens | Cost | Against it |
+| --- | --- | --- | --- |
+| K, as built | The row shows without its record or cell in 30 of 90 runs (480 of 3,000 copy-steps). 5 of 16 commands throw after writing: a heading above N or above B, and three moves. The row list shows N; the notice reader leaves it out | — | The defect |
+| **R, rule (g) (chosen)** | 0 of 90. Alice's undo wins: the document reads as before the split, and Bob's undo shows nothing. No command throws after writing; joining the hidden row throws before writing. Outline and notice agree | Stores nothing. Read and keystroke times within the spread between passes; a split and its undo about 0.6 ms slower. About 20 lines and a 4-line hook. Read cost when many records change at once not measured | Bob's edits on N stay stored and unreachable. It moves no generated figure |
+| U, an undo filter that keeps created records and cells | 0 of 90. Bob's undo wins: N comes back whole with his status and visual text. Every command works | About 31 bytes kept per undone creation (30.6 per split, 30.8 per insert), for good; hidden records up to 15% more. About 7 lines | N has no rank and is read by rule (e): an insert before it lands at the top, and moving B alone leaves N behind. Typing in an undone new beat's visual cell stays stored, unseen (3 seeds) |
+
+In every option, no narration was lost, no row shown twice, no copies disagreed and no reader failed. None changes
+the segment-head race, the doubled narration of a double delete and double undo, or rule (e)'s placement. R and U
+together were not tried. The owner chose R. Per E17, it writes nothing, so copies agree by construction, and it
+stores nothing; U's costs and K's defect are above.
