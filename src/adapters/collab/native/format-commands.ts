@@ -1,5 +1,7 @@
-import { cleanMarks } from "../../../core/text/runs.ts";
+import { cleanMarks, tagNameOf, withTagStack } from "../../../core/text/runs.ts";
+import type { Marks } from "../../../core/text/runs.ts";
 import { nativeMarkName, nativeRangeUnits, nativeTagKey } from "./inline.ts";
+import type { NativeRangeUnits } from "./inline.ts";
 import type { NativeScript } from "./script.ts";
 import { nativeAvailability, nativeLiveRange, nativeRangeSnapshot } from "./text-commands.ts";
 import type { NativeRefusal, NativeTextRange } from "./text-commands.ts";
@@ -23,9 +25,14 @@ export type NativeFormatOutcome =
 interface CheckedChange {
   readonly key: string;
   readonly on: boolean;
-  readonly textOnly: boolean;
+  readonly carry: Marks;
   readonly family: string | null;
   readonly tag: string | null;
+}
+
+interface Writes {
+  readonly clear: Readonly<Record<string, null>>;
+  readonly set: Readonly<Record<string, true>> | null;
 }
 
 const PLAIN: readonly string[] = ["b", "i", "u", "s", "hl", "dir", "cue"];
@@ -39,23 +46,24 @@ function refused(reason: NativeFormatRefusal): NativeFormatOutcome {
 
 function plainChange(mark: unknown, on: unknown): CheckedChange | null {
   if (typeof mark !== "string" || !PLAIN.includes(mark) || typeof on !== "boolean") return null;
-  return { key: mark, on, textOnly: mark === "dir" || mark === "cue", family: null, tag: null };
+  return { key: mark, on, carry: { [mark]: true } as Marks, family: null, tag: null };
 }
 
 function commentChange(id: unknown, on: unknown): CheckedChange | null {
   if (!nativeWellFormed(id) || !id || typeof on !== "boolean" || cleanMarks({ cmt: [id] }).cmt?.[0] !== id) return null;
-  return { key: "c:" + id, on, textOnly: false, family: null, tag: null };
+  return { key: "c:" + id, on, carry: { cmt: [id] }, family: null, tag: null };
 }
 
 function linkChange(href: unknown): CheckedChange | null {
-  if (href === null) return { key: "l:", on: false, textOnly: false, family: "l:", tag: null };
+  if (href === null) return { key: "l:", on: false, carry: {}, family: "l:", tag: null };
   if (!nativeWellFormed(href) || !href || cleanMarks({ href }).href !== href) return null;
-  return { key: "l:" + href, on: true, textOnly: false, family: "l:", tag: null };
+  return { key: "l:" + href, on: true, carry: { href }, family: "l:", tag: null };
 }
 
+// why: a tag id must have the form the cell's tag markup reads, whether or not the registry names it yet
 function tagChange(id: unknown, on: unknown): CheckedChange | null {
-  if (!nativeWellFormed(id) || !id || id.includes(APPLICATION) || typeof on !== "boolean" || cleanMarks({ tag: id }).tag !== id) return null;
-  return { key: "t:" + id, on, textOnly: true, family: null, tag: id };
+  if (!nativeWellFormed(id) || !id || id.includes(APPLICATION) || typeof on !== "boolean" || cleanMarks({ tag: id }).tag !== id || !tagNameOf(id)) return null;
+  return { key: "t:" + id, on, carry: withTagStack({}, [id]), family: null, tag: id };
 }
 
 // why: every value the caller hands in is read once, here, and the command writes only what this returned
@@ -77,24 +85,20 @@ function seenApplications(keys: ReadonlySet<string>, name: string): string[] {
 
 // why: design section 2: plain kinds, comments and links write one plain key; a tag writes a fresh application key and
 // an untag clears the applications seen on the range; nothing is re-keyed
-function attributesFor(script: NativeScript, change: CheckedChange, units: ReturnType<typeof nativeRangeUnits>): Record<string, true | null> | null {
-  const shown = change.textOnly ? units.text : units.text + units.atoms;
-  if (!shown) return null;
+function writesFor(script: NativeScript, change: CheckedChange, units: NativeRangeUnits): Writes | null {
   if (change.tag !== null) {
-    if (change.on) return { [nativeTagKey(script.doc, change.tag)]: true };
+    if (change.on) return units.eligible ? { clear: {}, set: { [nativeTagKey(script.doc, change.tag)]: true } } : null;
     const seen = seenApplications(units.keys, change.key);
-    return seenApplications(units.shownKeys, change.key).length ? Object.fromEntries(seen.map(key => [key, null])) : null;
+    return seenApplications(units.shownKeys, change.key).length ? { clear: Object.fromEntries(seen.map(key => [key, null])), set: null } : null;
   }
   if (change.family !== null) {
     const others = [...units.keys].filter(key => key.startsWith(change.family as string) && (!change.on || key !== change.key)).sort();
     const shownOthers = [...units.shownKeys].some(key => key.startsWith(change.family as string) && (!change.on || key !== change.key));
     if (!shownOthers && !(change.on && units.lacking)) return null;
-    const attributes: Record<string, true | null> = Object.fromEntries(others.map(key => [key, null]));
-    if (change.on) attributes[change.key] = true;
-    return attributes;
+    return { clear: Object.fromEntries(others.map(key => [key, null])), set: change.on ? { [change.key]: true } : null };
   }
-  if (change.on) return units.lacking ? { [change.key]: true } : null;
-  return units.shownKeys.has(change.key) ? { [change.key]: null } : null;
+  if (change.on) return units.lacking ? { clear: {}, set: { [change.key]: true } } : null;
+  return units.shownKeys.has(change.key) ? { clear: { [change.key]: null }, set: null } : null;
 }
 
 export function formatNativeText(script: NativeScript, range: NativeTextRange, change: NativeMarkChange): NativeFormatOutcome {
@@ -108,10 +112,12 @@ export function formatNativeText(script: NativeScript, range: NativeTextRange, c
     const live = nativeLiveRange(script, snapshot);
     if (typeof live === "string") { outcome = refused(live); return; }
     if (live.until <= live.from) { outcome = UNCHANGED; return; }
-    const units = nativeRangeUnits(live.items, live.from - live.start, live.until - live.start, checked.on ? checked.key : null, checked.textOnly);
-    const attributes = attributesFor(script, checked, units);
-    if (!attributes) { outcome = UNCHANGED; return; }
-    live.text.format(live.from, live.until - live.from, attributes);
+    const units = nativeRangeUnits(live.items, live.from - live.start, live.until - live.start, checked.on ? checked.key : null, checked.carry);
+    const writes = writesFor(script, checked, units);
+    if (!writes) { outcome = UNCHANGED; return; }
+    if (Object.keys(writes.clear).length) live.text.format(live.from, live.until - live.from, writes.clear);
+    // why: a mark goes only on units whose kind can carry it; the rest of the range still gets it
+    if (writes.set) for (const [start, end] of units.stretches) live.text.format(live.start + start, end - start, writes.set);
     outcome = WRITTEN;
   }, script.origin);
   return outcome;

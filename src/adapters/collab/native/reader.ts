@@ -33,7 +33,7 @@ export interface NativeUnplacedSpan {
   readonly length: number;
 }
 
-export type NativeProblemKind = "no-text" | "hidden-units" | "unknown-embed" | "bad-value" | "bad-key" | "heading-without-row" | "join-not-read";
+export type NativeProblemKind = "no-text" | "hidden-units" | "unknown-embed" | "unshown-marks" | "bad-value" | "bad-key" | "heading-without-row" | "join-not-read";
 
 export interface NativeReaderProblem {
   readonly kind: NativeProblemKind;
@@ -458,6 +458,7 @@ export class NativeScriptReader {
     const counts = nativeUnitCounts(items);
     if (counts.unknown) problems.push({ kind: "unknown-embed", where });
     if (counts.hidden > counts.unknown) problems.push({ kind: "hidden-units", where });
+    if (counts.unshown) problems.push({ kind: "unshown-marks", where });
   }
 
   private collect(problems: Problems): Pick<DocumentShape, "title" | "docId" | "rev" | "schema" | "comments" | "people" | "productionTags" | "brollShots"> & Record<string, unknown> {

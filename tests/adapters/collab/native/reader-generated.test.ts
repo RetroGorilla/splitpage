@@ -132,7 +132,7 @@ function formatOnce(script: NativeScript, pick: <T>(list: readonly T[]) => T, ch
   const on = chance() < 0.7;
   const change = pick<NativeMarkChange>([
     { kind: "plain", mark: pick(["b", "i", "u", "s", "hl", "cue"] as const), on }, { kind: "comment", id: pick(["c1", "c2"]), on },
-    { kind: "link", href: on ? pick(["https://a.example/", "https://b.example/"]) : null }, { kind: "tag", id: pick(["t1", "t2"]), on }
+    { kind: "link", href: on ? pick(["https://a.example/", "https://b.example/"]) : null }, { kind: "tag", id: pick(["t:prop:one", "t:prop:two"]), on }
   ]);
   const outcome = anchored.kind === "anchored" ? formatNativeText(script, anchored.range, change) : anchored;
   const kind = outcome.kind === "refused" ? "refused " + outcome.reason : outcome.kind;

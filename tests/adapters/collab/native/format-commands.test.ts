@@ -5,7 +5,7 @@ import { dom } from "../../../../src/test/_dom.mjs";
 import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
 import type { ValidatedDocument } from "../../../../src/core/document/validated.ts";
 import { setMark } from "../../../../src/core/text/edits.ts";
-import type { Run } from "../../../../src/core/text/runs.ts";
+import type { MarkName, Run } from "../../../../src/core/text/runs.ts";
 import { formatNativeText } from "../../../../src/adapters/collab/native/format-commands.ts";
 import type { NativeFormatOutcome, NativeMarkChange } from "../../../../src/adapters/collab/native/format-commands.ts";
 import { nativeMarkName } from "../../../../src/adapters/collab/native/inline.ts";
@@ -13,8 +13,9 @@ import type { NativeDeltaItem } from "../../../../src/adapters/collab/native/inl
 import { nativeSegmentSpans } from "../../../../src/adapters/collab/native/reader.ts";
 import { closeNativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
-import { anchorNativeText, replaceNativeText, typeNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
+import { anchorNativeText, deleteNativeText, replaceNativeText, typeNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
 import type { NativeTextRange, NativeTextTarget } from "../../../../src/adapters/collab/native/text-commands.ts";
+import { printCell, readCell } from "./format-harness.ts";
 import { ScriptNet, cells, convertedScript, joinedScript } from "./helpers.ts";
 
 after(() => { dom.window.close(); });
@@ -224,7 +225,7 @@ test("the mark is read once, so a caller's getter cannot change what was checked
   assert.equal(narrationRuns(a, "R1")[0]?.marks.tag, LAMP);
   let rangeReads = 0;
   const held = range(a, NARRATION("R1"), 0, 1);
-  const tricky = { from: held.from, to: held.to, get target(): NativeTextTarget { return rangeReads++ ? NARRATION("R9") : NARRATION("R1"); } } as NativeTextRange;
+  const tricky = { from: held.from, to: held.to, seen: held.seen, get target(): NativeTextTarget { return rangeReads++ ? NARRATION("R9") : NARRATION("R1"); } } as NativeTextRange;
   assert.equal(formatNativeText(a, tricky, BOLD).kind, "written");
   assert.equal(rangeReads, 1);
 });
@@ -351,4 +352,189 @@ test("rows and runs with formatting are frozen", () => {
   const row = a.reader.row("R1");
   assert.ok(row);
   for (const value of [row, row.narration, row.narration[0], row.narration[0]?.marks, row.narration[1]?.marks.cmt, row.visual]) assert.ok(Object.isFrozen(value));
+});
+
+function storedItems(copy: NativeScript, beat: string): readonly NativeDeltaItem[] {
+  return nativeSegmentSpans(copy.roots.segments.get("b:" + beat))?.[0]?.items ?? [];
+}
+
+const stored = (copy: NativeScript, beat: string): string => printCell(readCell(storedItems(copy, beat)));
+
+function positionWith(position: Y.RelativePosition, change: Readonly<Record<string, unknown>>): Y.RelativePosition {
+  return { type: position.type, tname: position.tname, item: position.item, assoc: position.assoc, ...change } as Y.RelativePosition;
+}
+
+test("review round 1, fix 1: a malformed position or seen list is a range refusal before Yjs sees it, for formatting, typing and deleting", () => {
+  const [net, a] = pair(source({ R1: "abcd" }));
+  const good = range(a, NARRATION("R1"), 1, 3), caret = range(a, NARRATION("R1"), 2, 2);
+  const start = good.from.item as Y.ID, end = good.to.item as Y.ID, bent = positionWith(caret.from, { item: { client: start.client, clock: start.clock + 0.5 } });
+  const malformed: NativeTextRange[] = [
+    { ...good, to: positionWith(good.to, { item: { client: end.client, clock: end.clock + 0.5 } }) },
+    { ...good, from: positionWith(good.from, { item: { client: start.client, clock: start.clock + 0.5 } }) },
+    { ...good, from: positionWith(good.from, { item: { client: -1, clock: start.clock } }) },
+    { ...good, to: positionWith(good.to, { item: { client: end.client, clock: String(end.clock) } }) },
+    { ...good, from: positionWith(good.from, { type: { client: 0.5, clock: 0 } }) },
+    { ...good, to: positionWith(good.to, { assoc: -2 }) },
+    { ...good, from: positionWith(good.from, { assoc: 1 }) },
+    { ...good, seen: [[a.doc.clientID, 0.5]] },
+    { ...good, seen: [[1, 1], [1, 2]] },
+    { ...caret, from: bent, to: bent }
+  ];
+  unwritten(a, () => {
+    for (const bad of malformed) {
+      assert.deepEqual(formatNativeText(a, bad, BOLD), { kind: "refused", reason: "range" }, JSON.stringify(bad));
+      assert.deepEqual(typeNativeText(a, bad, "X", {}), { kind: "recovery", reason: "range", runs: [{ text: "X", marks: {} }] }, JSON.stringify(bad));
+      assert.deepEqual(deleteNativeText(a, bad), { kind: "recovery", reason: "range", runs: [] }, JSON.stringify(bad));
+    }
+  });
+  let reads = 0;
+  const once = (position: Y.RelativePosition): Y.RelativePosition => ({
+    type: position.type, tname: position.tname, assoc: position.assoc, get item() { if (reads++) throw new Error("read twice"); return position.item; }
+  }) as Y.RelativePosition;
+  assert.equal(formatNativeText(a, { ...good, from: once(good.from) }, BOLD).kind, "written");
+  assert.equal(reads, 1);
+  reads = 0;
+  const typing = range(a, NARRATION("R1"), 4, 4), held = once(typing.from);
+  assert.equal(typeNativeText(a, { ...typing, from: held, to: held }, "X", {}).kind, "written");
+  assert.equal(reads, 1);
+  net.settle();
+  assert.deepEqual(net.agree(), ["R1: a<strong>bc</strong>dX / "]);
+});
+
+test("review round 1, fix 2: a link over a video goes on the letters only, and a video a peer stored with a link stays shown with a problem", () => {
+  const [net, a, b] = pair(source({ R1: "ab" }));
+  const video: Run = { atom: "video", href: "https://example.com/clip", host: "example.com", text: "", marks: {} }, one = "https://one.example/";
+  assert.equal(replaceNativeText(a, range(a, NARRATION("R1"), 1, 1), [video]).kind, "written");
+  net.settle();
+  assert.equal(format(b, NARRATION("R1"), 0, 3, { kind: "link", href: one }), "written");
+  net.settle();
+  assert.deepEqual(net.agree(), [`R1: ${html(a, "R1")} / `]);
+  assert.equal(stored(a, "R1"), `[a|l:${one}]￼[b|l:${one}]`);
+  assert.deepEqual(narrationRuns(b, "R1").map(run => [run.atom ?? run.text, run.marks.href]), [["a", one], ["video", undefined], ["b", one]]);
+  assert.equal(anchorNativeText(b, NARRATION("R1"), 1, 2).kind, "anchored");
+  const segment = a.roots.segments.get("b:R1"), text = segment?.get("text"), span = nativeSegmentSpans(segment)?.[0];
+  assert.ok(text instanceof Y.Text && span);
+  text.format(span.start + 1, 1, { [`l:${one}`]: true });
+  net.settle();
+  const rows = net.agree();
+  assert.deepEqual(rows.slice(1), ["problem unshown-marks segments/b:R1#0"]);
+  assert.deepEqual(narrationRuns(b, "R1").map(run => [run.atom ?? run.text, run.marks.href]), [["a", one], ["video", undefined], ["b", one]]);
+  assert.equal(anchorNativeText(b, NARRATION("R1"), 1, 2).kind, "anchored");
+});
+
+test("review round 1, fix 3a: a tag or direction across a person mention is stored on the letters only", () => {
+  const [net, a, b] = pair(source({ R1: "ab" }));
+  const who: Run = { atom: "who", name: "Ann", text: "@Ann", marks: {} };
+  assert.equal(replaceNativeText(a, range(a, NARRATION("R1"), 1, 1), [who]).kind, "written");
+  net.settle();
+  assert.equal(format(b, NARRATION("R1"), 0, 3, tag(LAMP)), "written");
+  assert.equal(format(b, NARRATION("R1"), 0, 3, { kind: "plain", mark: "dir", on: true }), "written");
+  net.settle();
+  assert.equal(net.agree().length, 1);
+  assert.equal(stored(a, "R1"), `[a|dir,t:${LAMP}]￼[b|dir,t:${LAMP}]`);
+});
+
+test("review round 1, fix 3b: two links set at once over crossing letters read the same everywhere and report the hidden one", () => {
+  const [net, a, b] = pair(source({ R1: "abcd" }));
+  const one = "https://one.example/", two = "https://two.example/";
+  assert.equal(format(a, NARRATION("R1"), 0, 3, { kind: "link", href: one }), "written");
+  assert.equal(format(b, NARRATION("R1"), 1, 4, { kind: "link", href: two }), "written");
+  net.settle();
+  assert.deepEqual(net.agree().slice(1), ["problem unshown-marks segments/b:R1#0"]);
+  assert.deepEqual(narrationRuns(b, "R1").map(run => [run.atom ? "" : run.text, run.marks.href]), [["abc", one], ["d", two]]);
+  assert.equal(stored(a, "R1"), `[a|l:${one}][bc|l:${one},l:${two}][d|l:${two}]`);
+});
+
+test("review round 1, fix 3c: a tag id without the form tag markup reads is refused before writing", () => {
+  const [net, a] = pair(source({ R1: "abc" }));
+  unwritten(a, () => {
+    for (const id of ["c:x", "t:Prop:x", "t:prop:", "t:prop", "lamp", "x:prop:lamp"]) for (const on of [true, false]) {
+      assert.deepEqual(formatNativeText(a, range(a, NARRATION("R1"), 0, 2), tag(id, on)), { kind: "refused", reason: "mark" }, id);
+    }
+  });
+  net.settle();
+  assert.deepEqual(net.agree(), ["R1: abc / "]);
+});
+
+test("review round 1, fix 4: a stale selection whose ends a peer deleted still covers the letters left alive inside it", () => {
+  const [net, a, b] = pair(source({ R1: "abcd" }));
+  const selection = range(b, NARRATION("R1"), 0, 3), deleting = range(b, NARRATION("R1"), 0, 3);
+  assert.equal(deleteNativeText(a, range(a, NARRATION("R1"), 2, 3)).kind, "written");
+  assert.equal(deleteNativeText(a, range(a, NARRATION("R1"), 0, 1)).kind, "written");
+  net.settle();
+  assert.equal(html(b, "R1"), "bd");
+  assert.equal(formatNativeText(b, selection, BOLD).kind, "written");
+  net.settle();
+  assert.deepEqual(net.agree(), ["R1: <strong>b</strong>d / "]);
+  assert.equal(deleteNativeText(b, deleting).kind, "written");
+  net.settle();
+  assert.deepEqual(net.agree(), ["R1: d / "]);
+});
+
+// why: core cell normalisation reads a link, comment or direction on part of a tag across the whole tag, in the app
+// alone too; the letters still store exactly what was asked
+test("review round 1, pin 6, as built: a link, comment or direction set or cleared on part of a tag is stored on those letters only", () => {
+  const url = "https://one.example/", lamp = ANCHOR("lamp") + "abcd</span>e";
+  const kinds: [NativeMarkChange, NativeMarkChange, MarkName, unknown, string][] = [
+    [{ kind: "link", href: url }, { kind: "link", href: null }, "href", url, "l:" + url],
+    [{ kind: "comment", id: "c1", on: true }, { kind: "comment", id: "c1", on: false }, "cmt", ["c1"], "c:c1"],
+    [{ kind: "plain", mark: "dir", on: true }, { kind: "plain", mark: "dir", on: false }, "dir", true, "dir"]
+  ];
+  for (const [on, off, name, value, key] of kinds) {
+    const [net, a, b] = pair(source({ R1: lamp }));
+    const plain = narrationRuns(a, "R1");
+    assert.equal(format(a, NARRATION("R1"), 1, 2, on), "written");
+    net.settle();
+    net.agree();
+    assert.equal(stored(b, "R1"), `[a|t:${LAMP}][b|${key},t:${LAMP}][cd|t:${LAMP}]e`, name);
+    const partial = setMark(plain, 1, 2, name, value);
+    assert.deepEqual(narrationRuns(b, "R1"), partial, name);
+    assert.equal(format(b, NARRATION("R1"), 0, 4, on), "written");
+    net.settle();
+    const whole = narrationRuns(a, "R1");
+    assert.equal(format(a, NARRATION("R1"), 1, 2, off), "written");
+    net.settle();
+    net.agree();
+    assert.equal(stored(b, "R1"), `[a|${key},t:${LAMP}][b|t:${LAMP}][cd|${key},t:${LAMP}]e`, name);
+    assert.deepEqual(narrationRuns(b, "R1"), setMark(whole, 1, 2, name, null), name);
+    assert.deepEqual([partial, narrationRuns(b, "R1")].map(runs => runs.map(run => [run.atom ? "" : run.text, run.marks[name]])), [[["abcd", value], ["e", undefined]], [["abcd", value], ["e", undefined]]], name);
+  }
+});
+
+const ownersOf = (copy: NativeScript, owners: ReadonlyMap<number, string>): string => storedItems(copy, "R1").flatMap(item => typeof item.insert !== "string" ? [] : [...item.insert].map(ch => ch + Object.keys(item.attributes ?? {})
+  .filter(key => nativeMarkName(key) === "t:" + LAMP).map(key => owners.get(parseInt(key.slice(key.indexOf("\u001f") + 1), 36)) ?? "?").sort().join(""))).join(" ");
+
+// why: each untag clears both applications on its own letters and Y.Text.format restores what it saw after its end,
+// so c and d get both back; bare Y.Text.format does the same in every client and delivery order
+test("review round 1, pin 8, as built: two untags at once over crossing letters leave both applications after the first untag's end", () => {
+  for (const clients of [[2, 3], [3, 2]]) for (const order of ["forward", "reverse"] as const) {
+    const [net, a, b] = pair(source({ R1: "abcd" }), 1, clients), owners = new Map([[a.doc.clientID, "A"], [b.doc.clientID, "B"]]);
+    assert.equal(format(a, NARRATION("R1"), 0, 3, tag(LAMP)), "written");
+    assert.equal(format(b, NARRATION("R1"), 1, 4, tag(LAMP)), "written");
+    net.settle();
+    assert.equal(format(a, NARRATION("R1"), 0, 2, tag(LAMP, false)), "written");
+    assert.equal(format(b, NARRATION("R1"), 1, 3, tag(LAMP, false)), "written");
+    net.settle(order);
+    net.agree();
+    assert.equal(ownersOf(a, owners), "a b cAB dAB", `clients ${clients.join(",")}, ${order}: asked for a b c dB`);
+    assert.deepEqual(narrationRuns(b, "R1").map(run => [run.atom ? "" : run.text, run.marks.tag]), [["ab", undefined], ["cd", LAMP]]);
+  }
+  for (const clients of [[1, 2], [2, 1]]) for (const reverse of [false, true]) {
+    const docs = [...clients, 3].map(client => { const doc = new Y.Doc(); doc.clientID = client; doc.getText("t"); return doc; });
+    const [a, b, late] = docs as [Y.Doc, Y.Doc, Y.Doc];
+    const sync = (): void => { for (const from of docs) for (const to of docs) if (from !== to) Y.applyUpdate(to, Y.encodeStateAsUpdate(from, Y.encodeStateVector(to)), "remote"); };
+    a.getText("t").insert(0, "abcd");
+    sync();
+    a.getText("t").format(0, 3, { A: true });
+    b.getText("t").format(1, 3, { B: true });
+    sync();
+    const base = Y.encodeStateVector(late);
+    a.getText("t").format(0, 2, { A: null, B: null });
+    b.getText("t").format(1, 2, { A: null, B: null });
+    const updates = [Y.encodeStateAsUpdate(a, base), Y.encodeStateAsUpdate(b, base)];
+    for (const update of reverse ? updates.reverse() : updates) Y.applyUpdate(late, update, "remote");
+    sync();
+    for (const doc of docs) assert.equal(printCell(readCell(doc.getText("t").toDelta() as NativeDeltaItem[])), "ab[cd|A,B]", `raw Yjs, clients ${clients.join(",")}, reverse ${reverse}`);
+    for (const doc of docs) doc.destroy();
+  }
 });

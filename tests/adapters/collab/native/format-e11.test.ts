@@ -9,7 +9,7 @@ import type { RaceWriter } from "./format-harness.ts";
 after(() => { dom.window.close(); });
 
 const CELL: NativeTextTarget = { beat: "one", cell: "narration" };
-const TAG: NativeMarkChange = { kind: "tag", id: "t_prop", on: true }, KEY = "t:t_prop";
+const TAG: NativeMarkChange = { kind: "tag", id: "t:prop:lamp", on: true }, KEY = "t:t:prop:lamp";
 
 function settled(clients: readonly number[], history: (world: RaceWorld, a: RaceWriter, b: RaceWriter) => void): string {
   const world = new RaceWorld({ one: { audioText: "abcdef", visualText: "" } }, clients);

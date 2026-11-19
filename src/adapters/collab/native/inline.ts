@@ -110,6 +110,30 @@ function cleanAtom(run: Run): Run | null {
   } catch { return null; }
 }
 
+function atomCarries(atom: Run, marks: Marks): boolean {
+  return cleanAtom({ ...atom, marks } as Run) !== null;
+}
+
+// why: an atom stored with a mark its kind cannot carry stays visible with the marks it can, and the cell reports it,
+// since a peer on other code may store one
+function carriedAtom(atom: Run): Run | null {
+  const marks = atom.marks, kept: Record<string, unknown> = {}, comments = (marks.cmt ?? []).filter(id => atomCarries(atom, { cmt: [id] }));
+  for (const key of PLAIN_MARKS) if (marks[key] && atomCarries(atom, { [key]: true } as Marks)) kept[key] = true;
+  if (comments.length) kept.cmt = comments;
+  if (marks.href !== undefined && atomCarries(atom, { href: marks.href })) kept.href = marks.href;
+  return cleanAtom({ ...atom, marks: orderedMarks(kept as Marks) } as Run);
+}
+
+function unshownKeys(attributes: Readonly<Record<string, unknown>>, atom: boolean): boolean {
+  let links = 0;
+  for (const key in attributes) {
+    if (attributes[key] !== true) continue;
+    if (key.startsWith("l:") && ++links > 1) return true;
+    if (atom && (key === "dir" || key === "cue" || key.startsWith("t:"))) return true;
+  }
+  return false;
+}
+
 function keysWellFormed(marks: Marks): boolean {
   return [...tagStack(marks), ...marks.cmt ?? [], ...marks.href === undefined ? [] : [marks.href]].every(nativeWellFormed);
 }
@@ -239,6 +263,7 @@ interface ItemView {
   readonly shownCount: number;
   readonly shown: readonly number[] | null;
   readonly unknown: boolean;
+  readonly unshown: boolean;
 }
 
 const NO_KEYS: readonly string[] = Object.freeze([]);
@@ -279,10 +304,13 @@ function itemViews(items: readonly NativeDeltaItem[], positions: boolean): ItemV
         shown = [];
         for (let at = 0; at < value.length; at++) if (!hiddenAt(value, at)) { shown.push(at); kept += value.charAt(at); }
       } else if (positions) shown = Array.from({ length: value.length }, (_, at) => at);
-      return { run: kept ? { text: kept, marks: marksOf(item.attributes, keys, false) } : null, keys, start, shownCount: kept.length, shown: positions ? shown : null, unknown: false };
+      const unshown = !!item.attributes && unshownKeys(item.attributes, false);
+      return { run: kept ? { text: kept, marks: marksOf(item.attributes, keys, false) } : null, keys, start, shownCount: kept.length, shown: positions ? shown : null, unknown: false, unshown };
     }
-    const atom = atomOf(item.insert, marksOf(item.attributes, NO_KEYS, true)), clean = atom ? cleanAtom(atom) : null;
-    return { run: clean, keys: NO_KEYS, start, shownCount: clean ? 1 : 0, shown: positions ? clean ? [0] : [] : null, unknown: !atom };
+    const atom = atomOf(item.insert, marksOf(item.attributes, NO_KEYS, true));
+    let clean = atom ? cleanAtom(atom) : null, unshown = !!atom && !!item.attributes && unshownKeys(item.attributes, true);
+    if (atom && !clean) { clean = carriedAtom(atom); unshown ||= !!clean; }
+    return { run: clean, keys: NO_KEYS, start, shownCount: clean ? 1 : 0, shown: positions ? clean ? [0] : [] : null, unknown: !atom, unshown };
   });
 }
 
@@ -326,14 +354,15 @@ export function nativeLeftAt(view: NativeCellView, stored: number): NativeLeft |
   return low > 0 ? view.lefts[low - 1] ?? null : null;
 }
 
-export function nativeUnitCounts(items: readonly NativeDeltaItem[]): { readonly hidden: number; readonly unknown: number } {
-  let hidden = 0, unknown = 0;
+export function nativeUnitCounts(items: readonly NativeDeltaItem[]): { readonly hidden: number; readonly unknown: number; readonly unshown: number } {
+  let hidden = 0, unknown = 0, unshown = 0;
   itemViews(items, false).forEach((view, index) => {
     const item = items[index];
     if (view.unknown) unknown++;
+    if (view.unshown) unshown++;
     hidden += (item ? nativeItemLength(item) : 0) - view.shownCount;
   });
-  return { hidden, unknown };
+  return { hidden, unknown, unshown };
 }
 
 function shownLength(value: string): number {
@@ -344,37 +373,40 @@ function shownLength(value: string): number {
 }
 
 export interface NativeRangeUnits {
-  readonly text: number;
-  readonly atoms: number;
+  readonly eligible: number;
   readonly lacking: number;
   readonly keys: ReadonlySet<string>;
   readonly shownKeys: ReadonlySet<string>;
+  readonly stretches: readonly (readonly [number, number])[];
 }
 
-// why: what a formatting command sees in its range: units the reader shows, the keys on them and on hidden units,
-// and how many shown units lack the key it would set
-export function nativeRangeUnits(items: readonly NativeDeltaItem[], from: number, to: number, key: string | null, textOnly: boolean): NativeRangeUnits {
-  const keys = new Set<string>(), shownKeys = new Set<string>();
-  let offset = 0, text = 0, atoms = 0, lacking = 0;
+// why: what a formatting command sees in its range: the units the reader shows, the keys on them and on hidden units,
+// and the stretches whose units can carry the mark it would set (all text, and atoms whose kind keeps that mark)
+export function nativeRangeUnits(items: readonly NativeDeltaItem[], from: number, to: number, key: string | null, carry: Marks): NativeRangeUnits {
+  const keys = new Set<string>(), shownKeys = new Set<string>(), stretches: [number, number][] = [];
+  let offset = 0, eligible = 0, lacking = 0;
   for (const item of items) {
     const length = nativeItemLength(item), start = Math.max(from, offset), end = Math.min(to, offset + length);
     offset += length;
     if (end <= start) continue;
     const attributes = item.attributes ?? {};
-    let shown = 0, atom = false;
+    let shown = 0, carries = true;
     if (typeof item.insert === "string") shown = shownLength(item.insert.slice(start - (offset - length), end - (offset - length)));
-    else if (!textOnly) {
+    else {
       const read = atomOf(item.insert, {});
-      atom = !!read && !!cleanAtom(read);
-      shown = atom ? 1 : 0;
+      shown = read && cleanAtom(read) ? 1 : 0;
+      carries = !!read && !!shown && atomCarries(read, carry);
     }
     for (const name in attributes) {
       if (attributes[name] !== true) continue;
       keys.add(name);
       if (shown) shownKeys.add(name);
     }
-    if (atom) atoms++; else text += shown;
+    if (!carries) continue;
+    const last = stretches.at(-1);
+    if (last && last[1] === start) last[1] = end; else stretches.push([start, end]);
+    eligible += shown;
     if (shown && key !== null && attributes[key] !== true) lacking += shown;
   }
-  return { text, atoms, lacking, keys, shownKeys };
+  return { eligible, lacking, keys, shownKeys, stretches };
 }

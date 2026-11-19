@@ -9,7 +9,7 @@ import { shown } from "./helpers.ts";
 
 after(() => { dom.window.close(); });
 
-const T = "t_abcdefg", U = "t_bcdefgh", TAG_T = "t:" + T, TAG_U = "t:" + U;
+const T = "t:prop:abcdefg", U = "t:sound:bcdefgh", TAG_T = "t:" + T, TAG_U = "t:" + U;
 const INITIAL: Readonly<Record<string, string>> = { one: "abcdefgh", two: "abcdefgh" };
 const CELLS = Object.keys(INITIAL);
 
