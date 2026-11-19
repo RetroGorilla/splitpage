@@ -137,6 +137,14 @@ const NAMED: Readonly<Record<string, { plan: Planned[]; expected: string[] }>> =
     plan: [a(move("scene", "h:H1", "b:B4", null)), b({ op: "removeHeading", id: "H1" })],
     expected: [B2, B3, B4, H0, B0, B1, "recovery #H1: D"]
   },
+  "3: a split of the anchor wins against a move of the placed beat made at the same moment": {
+    plan: [B1_AFTER_B3, take, a(row("B1", "b:B4")), b({ op: "split", row: "B3", at: 1, id: "S9" })],
+    expected: [H0, B0, H1, B2, "B3: g / M", "S9: h / ", B1, B4]
+  },
+  "3: a scene move made at the same moment as a row move inside it takes the next beat along": {
+    plan: [a(move("scene", "h:H1", "b:B4", null)), b(row("B3", "b:B0"))],
+    expected: [H1, B2, H0, B0, B3, B4, B1]
+  },
   "3: removing the heading a beat was moved under": {
     plan: [a(move("into", "b:B0", "b:B0", "h:H1")), b({ op: "removeHeading", id: "H1" })],
     expected: [H0, B1, B0, B2, B3, B4, "recovery #H1: D"]

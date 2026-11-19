@@ -1,5 +1,11 @@
 # E7: moving beats and scenes
 
+## Status
+
+- **Measured with the old removal rule.** The owner decided today that removing a beat is a real Yjs deletion with no `removed` mark. E7 was built and measured with the mark. Under the new rule, a placement's anchor can disappear. That case is not tested here.
+- **Not the only option.** A follow-up experiment compares placement with a smaller rule: a rank at the start of a run of beats, read in Yjs text order. Placement is the fallback if that smaller rule fails.
+- **One path is untested.** A move can fall back to pinning every block. That never ran in the generated histories and should not ship untested.
+
 ## Verdict
 
 Candidate (d) holds: a placement value on the block's own record.
@@ -30,12 +36,16 @@ A split points blocks placed after the split beat at the new second half, so the
 
 | Candidate | Movable unit; mid-segment beat | 1 Identity | 2 One place | 3 Races | 4 Undo | 5 Cost |
 | --- | --- | --- | --- | --- | --- | --- |
-| (a) delete and re-insert | the beat's text; copied | fails: typing at the same moment is lost from view 200/200 and left behind 200/200; a split-off is left behind 200/200 | fails: two moves lose or double the beat 200/200 | fails (see 1) | not tried | 167 update bytes, 92 stored bytes per row move; copies the text |
+| (a) delete and re-insert | the beat's text; copied | fails: typing made during the move stays in the old container, where it is not shown, 200/200; a split-off is left behind 200/200 | fails: two moves store the moved text twice 200/200. The reader shows each beat id once, so a person saw no doubled or missing row (0/200) | fails (see 1) | not tried | 167 update bytes, 92 stored bytes per row move; copies the text |
 | (b) number per segment | the segment; a mid-segment beat drags its segment-mates | holds | holds | fails: split then move drags the split-off along 200/200, and so does moving the new beat 200/200 | not tried | small |
-| (b) number per block | the block; text stays in its segment | fails: a split-off made at the same moment is left behind 200/200 | holds | fails: two splits come out of typed order 90/200 | not tried | small |
+| (b) number per block | the block; text stays in its segment | fails: a split-off made at the same moment is left behind 200/200 | holds | fails: two splits come out of typed order 90/200, with this reader (see below) | not tried | small |
 | (c) order list of segments | the segment | holds | holds (one entry kept per id) | fails: drags segment-mates 200/200 in both split races | not tried | small |
-| (c) order list of blocks | the block | fails: split-off left behind 200/200 | holds | fails: two splits out of typed order 105/200 | not tried | small |
-| (d) placement on the block | any shown run | holds: 0 in every race; 2,060 of 2,080 generated typing cases end in the moved beat, the rest are explained below | holds: 0 | holds: 0 lost, doubled or uneditable in 1,000 generated histories | holds: 6 named undo cases | 36 to 43 update bytes per row move, 16.7 to 18.4 bytes kept per move |
+| (c) order list of blocks | the block | fails: split-off left behind 200/200 | holds | fails: two splits out of typed order 105/200, with this reader (see below) | not tried | small |
+| (d) placement on the block | any shown run | holds: 0 in every race; 412 of 416 generated typing cases end in the moved beat, the rest are explained below | holds: 0 | holds: 0 lost, doubled or uneditable in 200 generated histories, each delivered five ways | holds: 7 named undo cases | 36 to 43 update bytes per row move, 16.7 to 18.4 bytes kept per move |
+
+Two notes on the per-block candidates:
+- The split-off left behind (200/200) comes from storing a position per block. Text stays in its segment, so a beat split off by someone who has not seen the move stays at the source. A different reader cannot fix that.
+- The two splits out of typed order (90 and 105 of 200) depend on the reader. These readers break ties between equal positions by key. An independent analysis read equal positions from the same segment in Yjs text order instead, and that fixed its two-split examples. I did not rerun the 200 races with that reader.
 
 ## Numbers
 
@@ -83,7 +93,7 @@ Times in ms, median / p95.
 
 ## Generated histories
 
-1,000 histories: 200 seeds × 5 deliveries (forward, reverse, twice, shuffled, state), three writers, 30 steps each, and a late joiner from the stored state. 23,545 commands. Moves: 3,310 of one row, 1,150 runs, 1,110 scenes and 880 into a scene, mixed with typing in narration, visual cells and heading names, and with split, join, unjoin, remove, restore, heading create, rename, remove and restore.
+200 histories, three writers, 30 steps each. Each history is delivered five ways (forward, reverse, twice, shuffled, state) and read by a late joiner from the stored state. The five deliveries of one history give one outcome for a person, so the counts below are per history. The 200 histories hold 4,709 commands. Of those, 662 move one row, 230 move a run, 222 move a scene and 176 move a row into a scene. The rest are typing in narration, visual cells and heading names, plus split, join, unjoin, remove, restore, heading create, rename, remove and restore. The generated histories contain no undo or redo.
 
 | Check | Count |
 | --- | ---: |
@@ -94,26 +104,26 @@ Times in ms, median / p95.
 | Blocks not shown exactly once (outline or recovery) | 0 |
 | Unmoved blocks out of their natural order | 0 |
 | Crashes | 0 |
-| Pairs of moves at the same moment that share a block | 3,200 |
+| Pairs of moves at the same moment that share a block | 640 |
 
-After every command and every delivery, each copy's stored state, shown order and rows match the model's.
+After every command, in every delivery, each copy's stored state, shown order and rows match the model's.
 
-Typing at the same moment as a move of that beat: 2,080 cases.
-- 2,060 end in the moved beat or in a beat split off it.
-- 15 were deleted by a later edit.
-- 5 landed in a heading name created at the same spot at the same moment. This is E5's end-of-gap race, not a move effect.
+Typing at the same moment as a move of that beat: 416 cases.
+- 412 end in the moved beat or in a beat split off it.
+- 3 were deleted by a later edit.
+- 1 landed in a heading name created at the same spot at the same moment. This is E5's end-of-gap race, not a move effect.
 
-Splits at the same moment as a move of that beat: 1,170 cases.
-- 905: the split-off is shown right after the moved beat.
-- 225: someone moved the beat or the split-off again later.
-- 30: a heading was created at the same moment between the beat and the split-off, so the split-off sits under that heading.
-- 10: two splits at the same spot at the same moment. The other split-off ends the travelling run, so this one stays at the source. Yjs puts the two at the same text position, ordered by client.
+Splits at the same moment as a move of that beat: 234 cases.
+- 181: the split-off is shown right after the moved beat.
+- 45: someone moved the beat or the split-off again later.
+- 6: a heading was created at the same moment between the beat and the split-off, so the split-off sits under that heading.
+- 2: two splits at the same spot at the same moment. The other split-off ends the travelling run, so this one stays at the source. Yjs puts the two at the same text position, ordered by client.
 
-Settled rows (forward delivery): 1,120 rows. 720 have a placed first beat. 984 start inside a shared segment.
+Settled rows (forward delivery, one per history): 1,120 rows. 720 have a placed first beat. 984 start inside a shared segment.
 
 ### Silent controls
 
-Each control mutes one write at the Yjs call that makes it (`Y.Text.insert`, `insertEmbed`, `delete`, `Y.Map.set` or `delete`, `Y.Array.insert`), only during one command. "Used" counts histories with that command. "Effective" counts those where the model says the muted write did something. Every effective history must fail at that same command. A throw or a lost check would count as a failure of the control.
+Each control mutes one write at the Yjs call that makes it (`Y.Text.insert`, `insertEmbed`, `delete`, `Y.Map.set` or `delete`, `Y.Array.insert`), only during one command. A control runs in every delivery, so the counts in this table are delivered runs: divide by five for histories. "Used" counts runs whose history has that command. "Effective" counts those where the model says the muted write did something. Every effective run must fail at that same command. A throw or a lost check would count as a failure of the control.
 
 | Command | Muted write | Used | Effective | Failed at that command |
 | --- | --- | ---: | ---: | ---: |
@@ -180,6 +190,11 @@ Requirement 4, undo through the E3 layer (one `Y.UndoManager` per person, with `
 - A undoes a scene move after B renamed the heading: the scene goes back and keeps the rename. Redo moves it again.
 - A undoes a split of the beat another beat sits after: the order goes back, with the moved beat after the whole beat.
 
+Reported by the independent analysis and reproduced here. Each one has a test that pins today's behaviour:
+- **A split's re-point wins over a deliberate move.** A first puts B1 after B3, and B sees it. Then, at the same moment, A moves B1 after B4 and B splits B3. B1 ends up after the second half of B3 ("h"), before B4. What a person sees: A's second move does not happen. The split rewrote B1's placement to point at the new half, and that write won.
+- **Undoing the split that ended a moved beat's run.** A splits B1 into "b" and "c" (S9). B moves B1 after B3, splits B1 at its start into S10 and joins S10 back into B1. Then A undoes the original split. Afterwards the moved row B1 is empty at its new place, and the source shows "bc". That text also reads as joined into B0's row, because the join is read with whatever row is above it. What a person sees: the moved row is empty and both letters are back where the beat used to be. Nothing is lost.
+- **A scene move takes along a beat that was not selected.** At the same moment, A moves the second scene (`#H1`, B2, B3, B4) to the top and B puts B3 after B0. Afterwards the first scene holds B0, B3, B4, B1. What a person sees: B4 followed B3 into the other scene, although B selected only B3. In A's move, B4 was placed after B3, so it goes wherever B3 goes.
+
 ## Values read from the implementation
 
 - The literal outlines in `e7-named.test.ts` were printed from a run first, then checked by hand against the rule above before they were written in. They show what a person sees. They do not prove the rule is the right one.
@@ -187,13 +202,16 @@ Requirement 4, undo through the E3 layer (one `Y.UndoManager` per person, with `
 - The controls find the record to mute with `recordOf(replica, ref)`. That only aims the mute. The parts to mute come from the model's plan.
 - The concurrent-split categories were named after looking at the cases. Each category is defined from the history and the model's final state.
 - All the numbers in "Numbers" are measured from the implementation.
-- The identity and undo outlines in `test/native/e7-identity.test.ts` were written before the first run and passed unchanged.
+- The identity and undo outlines in `test/native/e7-identity.test.ts` were written before the first run and passed unchanged. The exception is the case reported by the analysis: its outline was printed from a run and matched against the report.
+- The two reported cases in `e7-named.test.ts` were also printed from a run and matched against the report.
 - `e7-model.ts` reuses E5's model, including its list-integration rule. E5's caveats carry over.
 
 ## What this does not cover
 
 - Cut and paste across rows. Pasting text is still delete and insert, so it has candidate (a)'s problems: typing at the same moment stays at the old place. The result suggests one thing. When a person cuts whole beats and pastes them in the same document, the app could turn that into a placement move, which keeps identity. Text cut out of a beat stays a copy, as in any editor.
-- Undo from generated histories. Undo is covered only by the six named cases.
+- Undo and redo in generated histories. The generated histories contain neither. Undo is covered only by the seven named cases.
+- Removal as a real Yjs deletion. The owner has now decided removal works that way, with no `removed` mark. E7 used the mark, so a placement whose anchor is deleted is not tested.
+- The "pin every block" fallback. It never ran.
 - Presence, drag feedback and screen code.
 - More than three writers, and long offline periods with many moves.
 - A real script. The measurements use synthetic beats, run once on one machine.
@@ -218,6 +236,7 @@ Requirement 4, undo through the E3 layer (one `Y.UndoManager` per person, with `
 
 - The reading rule is ours, not the library's. It has five parts: anchor, stamp, travelling run, loop breaking and dependents. A shared misunderstanding could pass both the implementation and the model, since one person wrote both.
 - The stamp is "one more than any stamp this copy has seen". Two moves at the same moment can get the same stamp, and then the tie goes by block id. That is consistent but arbitrary.
-- `u` (where the travelling run ends) is fixed when the block is first placed. Later edits can make the run shorter or longer than the person saw. The 225 "moved again later" and 10 "same-spot split" cases come from this.
-- "Pin every block" is a fallback for when the local check does not settle. It never ran in the generated histories, so its cost and its effect on others' moves are untested.
+- `u` (where the travelling run ends) is fixed when the block is first placed. Later edits can make the run shorter or longer than the person saw. The 45 "moved again later" and 2 "same-spot split" cases come from this.
+- "Pin every block" is a fallback for when the local check does not settle. It never ran in the generated histories, so its cost and its effect on others' moves are untested. It should not ship untested.
+- Last writer wins per key can override a deliberate move. A split's re-point and a scene move's placements both beat or drag a move made at the same moment (see the reported cases above).
 - Timing: one move at 900 beats has a p95 near the 8 ms limit. Most of that is the whole-row rebuild, which this experiment did not change.

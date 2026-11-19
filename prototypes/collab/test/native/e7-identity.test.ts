@@ -148,6 +148,24 @@ test("E7 undo: a scene move undoes and redoes, also after the heading is renamed
   } finally { all.forEach(replica => { replica.destroy(); }); }
 });
 
+test("E7 undo: undoing the split that ended a moved beat's run leaves the moved row empty and both letters at the source", () => {
+  const all = copies(2), [splitter, other] = all as [NativeHeadingReplica, NativeHeadingReplica], layer = layered(splitter);
+  try {
+    layer.command(() => { splitter.split("B1", 1, "S9"); });
+    settle(all);
+    moveRow(other, "B1", "B3", true);
+    other.split("B1", 0, "S10");
+    other.join("S10", "B1", " ");
+    other.changes();
+    settle(all);
+    assert.deepEqual(agreed(all), ["#H0", "B0: O / P", "S9: c", "#H1", "B2: ef / L", "B3: gh / M", "B1+S10: b / K", "B4: ij / N"]);
+    layer.undo();
+    splitter.changes();
+    settle(all);
+    assert.deepEqual(agreed(all), ["#H0", "B0+S10: O bc / P", "#H1", "B2: ef / L", "B3: gh / M", "B1:  / K", "B4: ij / N"]);
+  } finally { all.forEach(replica => { replica.destroy(); }); }
+});
+
 test("E7 undo: undoing a split of the beat a moved beat sits after puts it back after the whole beat", () => {
   const [replica] = copies(1) as [NativeHeadingReplica], layer = layered(replica);
   try {
