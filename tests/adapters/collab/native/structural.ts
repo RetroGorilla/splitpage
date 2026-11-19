@@ -4,6 +4,8 @@ import type { ValidatedDocument } from "../../../../src/core/document/validated.
 import { nativeSegmentSpans } from "../../../../src/adapters/collab/native/reader.ts";
 import { openNativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
+import { splitNativeRow } from "../../../../src/adapters/collab/native/structure-commands.ts";
+import { anchorNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
 import { convertedScript } from "./helpers.ts";
 
 export const LARGE_BEATS = 900;
@@ -36,25 +38,12 @@ export function loadedCopy(state: Uint8Array, clientID: number): NativeScript {
   return copy;
 }
 
-// why: slice 3 owns the split command; this writes the shape the design gives a split so a copy can receive one
-export function splitUpdate(state: Uint8Array, beat: string, offset: number, id: string): Uint8Array {
-  const writer = loadedCopy(state, 77), place = narrationText(writer, beat), outline = writer.reader.outline();
-  const at = outline.findIndex(entry => entry.kind === "row" && entry.id === beat), next = outline[at + 1];
-  const rankOf = (entryId: string | undefined): string => String(writer.roots.beats.get(entryId ?? "")?.get("rank") ?? writer.roots.headings.get(entryId ?? "")?.get("rank") ?? "");
-  const left = rankOf(beat), right = next ? rankOf(next.id) : "";
-  if (offset > place.end - place.start || (right && left + "V" >= right)) throw new Error("No place to split " + beat);
-  const before = Y.encodeStateVector(writer.doc);
-  writer.doc.transact(() => {
-    place.text.insertEmbed(place.start + offset, { b: id }, {});
-    const record = new Y.Map<unknown>();
-    writer.roots.beats.set(id, record);
-    record.set("rank", left + "V");
-    record.set("status", JSON.stringify("ready"));
-    record.set("extra", "{}");
-    const visual = new Y.Text();
-    writer.roots.visuals.set(id, visual);
-  }, writer.origin);
+export function splitUpdate(state: Uint8Array, beat: string, offset: number): { readonly update: Uint8Array; readonly created: string } {
+  const writer = loadedCopy(state, 77), before = Y.encodeStateVector(writer.doc);
+  const anchored = anchorNativeText(writer, { beat, cell: "narration" }, offset);
+  const outcome = anchored.kind === "anchored" ? splitNativeRow(writer, anchored.range) : anchored;
+  if (outcome.kind !== "written") throw new Error(`No split of ${beat} at ${offset}: ${outcome.kind}`);
   const update = Y.encodeStateAsUpdate(writer.doc, before);
   writer.reader.close();
-  return update;
+  return { update, created: outcome.created };
 }

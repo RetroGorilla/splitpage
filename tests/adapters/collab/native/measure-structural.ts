@@ -37,7 +37,7 @@ lines.push("Each sample: a warm copy of the 900-beat script receives one split f
 lines.push("the reader's refresh and reading every changed row. Cells: median of the per-round medians [smallest-largest].", "");
 lines.push(`| Case | Median ms | p95 ms | Segments reparsed | Full rebuild ms | Limit ${LIMIT_MS} ms |`, "| --- | --- | --- | --- | --- | --- |");
 for (const [name, beat, offset] of [["Split inside a segment", "B451", 60], ["Split at a segment's start", "B480", 0]] as const) {
-  const update = splitUpdate(state, beat, offset, "N1"), medians: number[] = [], tails: number[] = [], fulls: number[] = [], parses = new Set<number>();
+  const { update } = splitUpdate(state, beat, offset), medians: number[] = [], tails: number[] = [], fulls: number[] = [], parses = new Set<number>();
   for (let round = 0; round < rounds; round++) {
     const timed: number[] = [], full: number[] = [];
     for (let n = 0; n < samples; n++) {
