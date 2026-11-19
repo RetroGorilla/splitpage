@@ -53,7 +53,7 @@ export function deleteIn(replica: NativeReplica, rowId: string, field: NativeFie
 // why: a later beat of the row stays joined to the part of the row after the split, so the beats it named before the
 // split point are renamed to the beat the split begins
 function repoint(replica: NativeReplica, row: NativeRow, from: number, begins: string): void {
-  if (replica.reading === "contiguous") return;
+  if (replica.reading === "contiguous" && !replica.rules.adjacent) return;
   const earlier = new Set(row.members.slice(0, from));
   for (const member of row.members.slice(from)) {
     const join = replica.joined(member);
