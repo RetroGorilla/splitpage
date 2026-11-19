@@ -22,6 +22,8 @@ Terms used below:
 
 None of the generated histories did this. A rankless beat appeared in 5 of the 600 histories, and in 5 of the 600 made with name cells. None changed place or scene on a later command, in those sets or in either set of 200 double-split histories. The counter that looks for this fires on the history above. This is owner question Q4; no remedy is built.
 
+**Correction, 2026-11-19.** Rule (e) can also be needed without any deletion. Start at `A, B, #H`. Copy 0 moves A into H and sends that move to copy 1. At the same moment, copy 0 moves B below A and copy 1 moves B directly under H. After both moves arrive, the higher-numbered copy 1 wins. Copy 1 undoes its move. B loses its rank and both copies show `#H, A, B`. Copy 0 receives the undo and deletes only A. Both copies show `B, #H` in all five deliveries, whether cuts remove or keep the beat containers. [E14 rank-loss result](../native-kept/RESULT.md#where-b-returns)
+
 Apart from that, no never-acceptable result appeared in any of these sets:
 
 - E9: the 37 named histories and 2,220 generated runs;
