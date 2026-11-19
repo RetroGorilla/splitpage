@@ -3,12 +3,11 @@ import { after, test } from "node:test";
 import * as Y from "yjs";
 import { dom } from "../../../../src/test/_dom.mjs";
 import type { Run } from "../../../../src/core/text/runs.ts";
-import { replaceNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import type { NativeReadRow } from "../../../../src/adapters/collab/native/reader.ts";
-import { ScriptNet, cells, convertedScript, joinedScript } from "./helpers.ts";
+import { ScriptNet, cells, convertedScript, edit, joinedScript } from "./helpers.ts";
 import type { Delivery } from "./helpers.ts";
-import { spliceUnits, typingTape, unitKeys, unitsOf } from "./tape.ts";
+import { shownKeys, spliceUnits, typingTape, unitKeys, unitsOf } from "./tape.ts";
 
 after(() => { dom.window.close(); });
 
@@ -36,8 +35,8 @@ function check(scripts: readonly NativeScript[], expected: ReadonlyMap<string, R
   for (const script of scripts) for (const row of tape.document.rows) {
     const shown = read(script, row.id);
     assert.ok(shown, `copy ${script.doc.clientID} lost row ${row.id}`);
-    assert.deepEqual(unitKeys(shown.narration), unitKeys(expected.get(row.id + "/narration") ?? []), `copy ${script.doc.clientID}, ${row.id} narration`);
-    assert.deepEqual(unitKeys(shown.visual), unitKeys(expected.get(row.id + "/visual") ?? []), `copy ${script.doc.clientID}, ${row.id} visual`);
+    assert.deepEqual(unitKeys(shown.narration), shownKeys(expected.get(row.id + "/narration") ?? []), `copy ${script.doc.clientID}, ${row.id} narration`);
+    assert.deepEqual(unitKeys(shown.visual), shownKeys(expected.get(row.id + "/visual") ?? []), `copy ${script.doc.clientID}, ${row.id} visual`);
   }
 }
 
@@ -50,9 +49,9 @@ function runTape(order: Order, read: Reading = honest, mute = -1): { scripts: Na
     assert.ok(units);
     spliceUnits(units, op.from, op.to, op.insert);
     const at = index++;
-    if (at !== mute) assert.equal(replaceNativeText(writer, op.target, op.from, op.to, op.insert).kind, "written", `op ${at} refused`);
+    if (at !== mute) assert.equal(edit(writer, op.target, op.from, op.to, op.insert).kind, "written", `op ${at} refused`);
     const row = read(writer, op.target.beat);
-    assert.deepEqual(unitKeys((op.target.cell === "narration" ? row?.narration : row?.visual) ?? []), unitKeys(units), `op ${at}: ${op.target.beat} ${op.target.cell}`);
+    assert.deepEqual(unitKeys((op.target.cell === "narration" ? row?.narration : row?.visual) ?? []), shownKeys(units), `op ${at}: ${op.target.beat} ${op.target.cell}`);
   }
   settle(net, order);
   const late = joinedScript(scripts[0] as NativeScript, 9);
@@ -74,7 +73,7 @@ test("the tape's expectations come from its own commands and leave the source te
 for (const order of ["forward", "reverse", "twice", "state"] as const) {
   test(`the typing tape on three copies and a late joiner, delivered ${order}: every copy and a fresh reader read the commands' text`, () => {
     const { scripts } = runTape(order);
-    for (const script of scripts) assert.deepEqual(script.reader.unplaced(), []);
+    for (const script of scripts) assert.deepEqual([script.reader.unplaced(), script.reader.problems()], [[], []]);
   });
 }
 

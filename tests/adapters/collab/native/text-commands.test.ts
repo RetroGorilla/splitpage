@@ -3,21 +3,23 @@ import { after, test } from "node:test";
 import * as Y from "yjs";
 import { dom } from "../../../../src/test/_dom.mjs";
 import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
-import type { DocumentShape } from "../../../../src/core/document/validated.ts";
+import type { ValidatedDocument } from "../../../../src/core/document/validated.ts";
 import type { Marks, Run } from "../../../../src/core/text/runs.ts";
 import { nativeMarkName } from "../../../../src/adapters/collab/native/inline.ts";
-import type { NativeDeltaItem } from "../../../../src/adapters/collab/native/inline.ts";
-import { deleteNativeText, replaceNativeText, typeNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
+import { nativeSegmentSpans } from "../../../../src/adapters/collab/native/reader.ts";
+import { anchorNativeText, deleteNativeText, replaceNativeText, typeNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
+import type { NativeTextRange, NativeTextTarget } from "../../../../src/adapters/collab/native/text-commands.ts";
+import { closeNativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
-import { ScriptNet, convertedScript, joinedScript, shown } from "./helpers.ts";
+import { ScriptNet, convertedScript, edit, joinedScript, shown } from "./helpers.ts";
 
 after(() => { dom.window.close(); });
 
-const NARRATION = (beat: string) => ({ beat, cell: "narration" as const });
-const VISUAL = (beat: string) => ({ beat, cell: "visual" as const });
+const NARRATION = (beat: string): NativeTextTarget => ({ beat, cell: "narration" });
+const VISUAL = (beat: string): NativeTextTarget => ({ beat, cell: "visual" });
 const TAG = "t:prop:lamp";
 
-function script(rows: Record<string, string>, visuals: Record<string, string> = {}): DocumentShape {
+function script(rows: Record<string, string>, visuals: Record<string, string> = {}): ValidatedDocument {
   return migrateRows({
     schema: 2, title: "Commands", docId: "doc-commands", rev: 0,
     rows: Object.entries(rows).map(([id, audioText]) => ({ id, audioText, visualText: visuals[id] ?? "" })),
@@ -25,26 +27,44 @@ function script(rows: Record<string, string>, visuals: Record<string, string> = 
   });
 }
 
-function copies(source: DocumentShape, count = 3): { net: ScriptNet; all: NativeScript[] } {
+function copies(source: ValidatedDocument, count = 3): { net: ScriptNet; all: NativeScript[] } {
   const seed = convertedScript(source, 1), all = Array.from({ length: count }, (_, index) => joinedScript(seed, index + 2));
   return { net: new ScriptNet(all), all };
+}
+
+function one(rows: Record<string, string>, visuals: Record<string, string> = {}): NativeScript {
+  const copy = copies(script(rows, visuals), 1).all[0];
+  assert.ok(copy);
+  return copy;
 }
 
 function narration(copy: NativeScript, beat: string): string {
   return (copy.reader.row(beat)?.narration ?? []).map(run => run.atom ? "￼" : run.text).join("");
 }
 
+function range(copy: NativeScript, target: NativeTextTarget, from: number, to = from): NativeTextRange {
+  const anchored = anchorNativeText(copy, target, from, to);
+  assert.equal(anchored.kind, "anchored");
+  return (anchored as { range: NativeTextRange }).range;
+}
+
 function type(copy: NativeScript, beat: string, at: number, text: string, marks: Marks = {}): void {
-  assert.equal(typeNativeText(copy, NARRATION(beat), at, text, marks).kind, "written");
+  assert.equal(typeNativeText(copy, range(copy, NARRATION(beat), at), text, marks).kind, "written");
 }
 
 function cut(copy: NativeScript, beat: string, from: number, to: number): void {
-  assert.equal(deleteNativeText(copy, NARRATION(beat), from, to).kind, "written");
+  assert.equal(deleteNativeText(copy, range(copy, NARRATION(beat), from, to)).kind, "written");
+}
+
+function segmentText(copy: NativeScript, key: string): Y.Text {
+  const text = copy.roots.segments.get(key)?.get("text");
+  assert.ok(text instanceof Y.Text);
+  return text;
 }
 
 test("T01: a cut and a keystroke inside it on two copies", () => {
-  const { net, all: [a, b, c] } = copies(script({ R1: "abcd" }));
-  assert.ok(a && b && c);
+  const { net, all: [a, b] } = copies(script({ R1: "abcd" }));
+  assert.ok(a && b);
   cut(a, "R1", 1, 3); type(b, "R1", 2, "X");
   net.settle();
   assert.deepEqual(net.agree(), ["R1: aXd / "]);
@@ -67,101 +87,155 @@ test("T04: typing, typing at the start and a cut on two copies", () => {
   assert.deepEqual(net.agree(), ["R1: Zabxyc / "]);
 });
 
+test("finding 1: a selection taken before a peer's edit still names the same letters", () => {
+  const { net, all: [a, b] } = copies(script({ R1: "abc" }), 2);
+  assert.ok(a && b);
+  const selection = range(b, NARRATION("R1"), 1, 2);
+  type(a, "R1", 0, "X"); net.deliver(a, b);
+  assert.equal(deleteNativeText(b, selection).kind, "written");
+  assert.equal(narration(b, "R1"), "Xac");
+  const gone = range(b, NARRATION("R1"), 1, 2);
+  cut(a, "R1", 0, 3); net.settle();
+  assert.equal(deleteNativeText(b, gone).kind, "unchanged");
+  assert.equal(narration(b, "R1"), "c");
+});
+
+test("finding 1: a span shortened before the command runs never lets it reach the next boundary", () => {
+  const copy = one({ R1: "abc", R2: "abc" }), selection = range(copy, NARRATION("R1"), 1, 3);
+  segmentText(copy, "b:R1").delete(0, 1);
+  assert.equal(deleteNativeText(copy, selection).kind, "written");
+  assert.deepEqual(copy.reader.rows().map(row => row.id + "=" + row.audioText), ["R1=", "R2=abc"]);
+});
+
+test("finding 1: inside another open transaction a command refuses and writes nothing", () => {
+  const copy = one({ R1: "abc", R2: "abc" }), selection = range(copy, NARRATION("R1"), 2, 3), outcomes: string[] = [];
+  copy.doc.transact(() => {
+    segmentText(copy, "b:R1").delete(0, 1);
+    outcomes.push(deleteNativeText(copy, selection).kind);
+    copy.roots.beats.delete("R2");
+    outcomes.push(typeNativeText(copy, selection, "Z", {}).kind);
+    outcomes.push(anchorNativeText(copy, NARRATION("R1"), 0).kind);
+  });
+  assert.deepEqual(outcomes, ["recovery", "recovery", "refused"]);
+  assert.deepEqual(nativeSegmentSpans(copy.roots.segments.get("b:R1"))?.map(span => [span.key, span.end - span.start]), [["b:R1", 2], ["b:R2", 3]]);
+  assert.equal(narration(copy, "R1"), "bc");
+});
+
+test("finding 1: a command called from an observer refuses", () => {
+  const { net, all: [a, b] } = copies(script({ R1: "abc" }), 2);
+  assert.ok(a && b);
+  const selection = range(b, NARRATION("R1"), 0, 1), seen: string[] = [];
+  b.roots.segments.observeDeep(() => { seen.push(deleteNativeText(b, selection).kind); });
+  type(a, "R1", 3, "d"); net.deliver(a, b);
+  assert.deepEqual(seen, ["recovery"]);
+  assert.equal(narration(b, "R1"), "abcd");
+});
+
+test("finding 4: units the cell policy hides are refused before writing", () => {
+  const copy = one({ R1: "ab" });
+  copy.doc.on("update", () => undefined);
+  const before = Y.encodeStateVector(copy.doc), at = range(copy, NARRATION("R1"), 1);
+  for (const text of ["​", "￼", "x\u0007", "\r", "\ud800"]) {
+    const outcome = typeNativeText(copy, at, text, {});
+    assert.ok(outcome.kind === "recovery" && outcome.reason === "text", JSON.stringify(text));
+  }
+  const bad: Run[] = [{ text: "Q", marks: {} }, { atom: "image", ref: { sha256: "a".repeat(64), extension: 10n } as never, text: "", marks: {} }];
+  assert.deepEqual(replaceNativeText(copy, range(copy, NARRATION("R1"), 0, 1), bad), { kind: "recovery", reason: "text", runs: bad });
+  assert.deepEqual(replaceNativeText(copy, at, [{ text: "x", marks: { tag: "bad\u001fid" } }]).kind, "recovery");
+  assert.deepEqual(Y.encodeStateVector(copy.doc), before);
+  assert.equal(narration(copy, "R1"), "ab");
+});
+
+test("finding 6: a row whose segment text is gone refuses in both cells", () => {
+  const copy = one({ R1: "ab" });
+  copy.roots.segments.get("b:R1")?.delete("text");
+  for (const target of [NARRATION("R1"), VISUAL("R1")]) assert.deepEqual(anchorNativeText(copy, target, 0), { kind: "refused", reason: "missing" });
+  assert.deepEqual(copy.reader.problems(), [{ kind: "no-text", where: "segments/b:R1" }]);
+});
+
+test("finding 6: a closed script refuses, also with a range taken before it closed", () => {
+  const copy = one({ R1: "abc", R2: "def" }), selection = range(copy, NARRATION("R1"), 2, 3);
+  closeNativeScript(copy);
+  const before = Y.encodeStateVector(copy.doc);
+  assert.deepEqual(anchorNativeText(copy, NARRATION("R1"), 0), { kind: "refused", reason: "closed" });
+  assert.deepEqual(deleteNativeText(copy, selection), { kind: "recovery", reason: "closed", runs: [] });
+  assert.deepEqual(Y.encodeStateVector(copy.doc), before);
+  assert.throws(() => copy.reader.rows(), /closed/);
+});
+
 test("the visual cell types and deletes on its own, and every copy reads it", () => {
   const { net, all: [a, b] } = copies(script({ R1: "ab" }, { R1: "<strong>wide</strong> shot" }));
   assert.ok(a && b);
-  assert.equal(typeNativeText(a, VISUAL("R1"), 4, "!", {}).kind, "written");
-  assert.equal(deleteNativeText(b, VISUAL("R1"), 0, 1).kind, "written");
+  assert.equal(edit(a, VISUAL("R1"), 4, 4, [{ text: "!", marks: {} }]).kind, "written");
+  assert.equal(edit(b, VISUAL("R1"), 0, 1, []).kind, "written");
   net.settle("reverse");
   assert.deepEqual(net.agree(), ["R1: ab / <strong>ide</strong>! shot"]);
 });
 
 test("typing writes the attributes it is given, not the neighbour's", () => {
-  const { all: [a] } = copies(script({ R1: "<strong>bold</strong>" }), 1);
-  assert.ok(a);
-  type(a, "R1", 4, " plain");
-  type(a, "R1", 0, ">", { i: true });
-  assert.equal(a.reader.row("R1")?.audioText, "<em>&gt;</em><strong>bold</strong> plain");
+  const copy = one({ R1: "<strong>bold</strong>" });
+  type(copy, "R1", 4, " plain");
+  type(copy, "R1", 0, ">", { i: true });
+  assert.equal(copy.reader.row("R1")?.audioText, "<em>&gt;</em><strong>bold</strong> plain");
 });
 
 function tagKeys(copy: NativeScript, beat: string): string[] {
-  const place = copy.reader.narrationPlace(beat);
-  assert.ok(place);
-  return [...new Set((place.items as NativeDeltaItem[]).flatMap(item => Object.keys(item.attributes ?? {}).filter(key => nativeMarkName(key) === "t:" + TAG)))];
+  const items = nativeSegmentSpans(copy.roots.segments.get("b:" + beat))?.[0]?.items ?? [];
+  return [...new Set(items.flatMap(item => Object.keys(item.attributes ?? {}).filter(key => nativeMarkName(key) === "t:" + TAG)))];
 }
 
 test("typing next to a tag application keeps its key; a separate application gets a fresh one", () => {
-  const { all: [a] } = copies(script({ R1: "a lamp b" }), 1);
-  assert.ok(a);
-  const tagged: Marks = { tag: TAG };
-  type(a, "R1", 2, "L", tagged); type(a, "R1", 3, "AMP", tagged);
-  assert.equal(tagKeys(a, "R1").length, 1);
-  type(a, "R1", 12, "X", tagged);
-  assert.equal(tagKeys(a, "R1").length, 2);
-  assert.match(String(a.reader.row("R1")?.audioText), /^a <span class="tag-anchor"[^>]*>LAMP<\/span>lamp b<span class="tag-anchor"[^>]*>X<\/span>$/);
+  const copy = one({ R1: "a lamp b" }), tagged: Marks = { tag: TAG };
+  type(copy, "R1", 2, "L", tagged); type(copy, "R1", 3, "AMP", tagged);
+  assert.equal(tagKeys(copy, "R1").length, 1);
+  type(copy, "R1", 12, "X", tagged);
+  assert.equal(tagKeys(copy, "R1").length, 2);
+  assert.match(String(copy.reader.row("R1")?.audioText), /^a <span class="tag-anchor"[^>]*>LAMP<\/span>lamp b<span class="tag-anchor"[^>]*>X<\/span>$/);
 });
 
 test("a replacement inserts before it deletes, in one transaction", () => {
-  const { all: [a] } = copies(script({ R1: "abcd" }), 1);
-  assert.ok(a);
-  const place = a.reader.narrationPlace("R1"), calls: string[] = [];
-  assert.ok(place);
-  const text = place.text as Y.Text & Record<string, unknown>, insert = text.insert.bind(text), remove = text.delete.bind(text);
+  const copy = one({ R1: "abcd" }), text = segmentText(copy, "b:R1") as Y.Text & Record<string, unknown>, calls: string[] = [];
+  const insert = text.insert.bind(text), remove = text.delete.bind(text);
   text.insert = (...args: Parameters<Y.Text["insert"]>) => { calls.push("insert"); assert.ok(args[2] && typeof args[2] === "object"); insert(...args); };
   text.delete = (...args: Parameters<Y.Text["delete"]>) => { calls.push("delete"); remove(...args); };
+  const selection = range(copy, NARRATION("R1"), 1, 3);
   let transactions = 0;
-  a.doc.on("afterTransaction", () => { transactions++; });
-  assert.equal(replaceNativeText(a, NARRATION("R1"), 1, 3, [{ text: "X", marks: {} }]).kind, "written");
+  copy.doc.on("afterTransaction", () => { transactions++; });
+  assert.equal(replaceNativeText(copy, selection, [{ text: "X", marks: {} }]).kind, "written");
   assert.deepEqual(calls, ["insert", "delete"]);
   assert.equal(transactions, 1);
-  assert.equal(narration(a, "R1"), "aXd");
+  assert.equal(narration(copy, "R1"), "aXd");
 });
 
-test("refusals write nothing and hand the runs back", () => {
-  const { all: [a] } = copies(script({ R1: "a🎬b" }), 1);
-  assert.ok(a);
-  const runs: Run[] = [{ text: "new", marks: {} }], before = Y.encodeStateVector(a.doc);
-  const cases = [
-    [replaceNativeText(a, NARRATION("R9"), 0, 0, runs), "missing"],
-    [replaceNativeText(a, VISUAL("R9"), 0, 0, runs), "missing"],
-    [replaceNativeText(a, NARRATION("R1"), 0, 5, runs), "range"],
-    [replaceNativeText(a, NARRATION("R1"), 2, 1, runs), "range"],
-    [replaceNativeText(a, NARRATION("R1"), 0.5, 1, runs), "range"],
-    [replaceNativeText(a, NARRATION("R1"), 2, 2, runs), "range"],
-    [replaceNativeText(a, NARRATION("R1"), 0, 2, runs), "range"],
-    [replaceNativeText(a, NARRATION("R1"), 0, 0, [{ text: "\ud800", marks: {} }]), "text"]
-  ] as const;
-  for (const [outcome, reason] of cases) {
-    assert.equal(outcome.kind, "recovery");
-    assert.ok(outcome.kind === "recovery" && outcome.reason === reason, reason);
-    assert.ok(outcome.kind === "recovery" && outcome.runs.length === 1);
-  }
-  assert.deepEqual(Y.encodeStateVector(a.doc), before);
-  assert.equal(narration(a, "R1"), "a🎬b");
+test("anchoring refuses a missing row, a bad range and a split surrogate pair", () => {
+  const copy = one({ R1: "a🎬b" }), before = Y.encodeStateVector(copy.doc);
+  for (const [target, from, to, reason] of [
+    [NARRATION("R9"), 0, 0, "missing"], [VISUAL("R9"), 0, 0, "missing"], [NARRATION("R1"), 0, 5, "range"], [NARRATION("R1"), 2, 1, "range"],
+    [NARRATION("R1"), 0.5, 1, "range"], [NARRATION("R1"), 2, 2, "range"], [NARRATION("R1"), 0, 2, "range"]
+  ] as const) assert.deepEqual(anchorNativeText(copy, target, from, to), { kind: "refused", reason }, `${target.beat} ${from} ${to}`);
+  assert.deepEqual(Y.encodeStateVector(copy.doc), before);
+  assert.equal(narration(copy, "R1"), "a🎬b");
 });
 
 test("an empty edit is unchanged and writes nothing", () => {
-  const { all: [a] } = copies(script({ R1: "abcd" }), 1);
-  assert.ok(a);
-  const before = Y.encodeStateVector(a.doc);
-  assert.equal(typeNativeText(a, NARRATION("R1"), 2, "", {}).kind, "unchanged");
-  assert.equal(deleteNativeText(a, NARRATION("R1"), 3, 3).kind, "unchanged");
-  assert.deepEqual(Y.encodeStateVector(a.doc), before);
+  const copy = one({ R1: "abcd" }), before = Y.encodeStateVector(copy.doc);
+  assert.equal(typeNativeText(copy, range(copy, NARRATION("R1"), 2), "", {}).kind, "unchanged");
+  assert.equal(deleteNativeText(copy, range(copy, NARRATION("R1"), 3)).kind, "unchanged");
+  assert.deepEqual(Y.encodeStateVector(copy.doc), before);
 });
 
-test("an edit stamp is written with the typing, once per change of stamp", () => {
-  const { all: [a] } = copies(script({ R1: "abcd" }), 1);
-  assert.ok(a);
+test("an edit stamp is written with the typing, once per change of stamp, also on deletion", () => {
+  const copy = one({ R1: "abcd" });
   let edits = 0;
-  a.roots.edited.observe(() => { edits++; });
+  copy.roots.edited.observe(() => { edits++; });
   const stamp = { by: "writer", at: "2026-11-19T10:00:00Z" };
-  assert.equal(typeNativeText(a, NARRATION("R1"), 0, "x", {}, stamp).kind, "written");
-  assert.equal(typeNativeText(a, NARRATION("R1"), 1, "y", {}, stamp).kind, "written");
+  assert.equal(typeNativeText(copy, range(copy, NARRATION("R1"), 0), "x", {}, stamp).kind, "written");
+  assert.equal(typeNativeText(copy, range(copy, NARRATION("R1"), 1), "y", {}, stamp).kind, "written");
   assert.equal(edits, 1);
-  assert.deepEqual(a.roots.edited.get("R1"), stamp);
-  assert.deepEqual(a.reader.row("R1")?.fields.updatedBy, "writer");
-  assert.equal(typeNativeText(a, NARRATION("R1"), 2, "z", {}).kind, "written");
-  assert.equal(edits, 1);
+  assert.deepEqual([copy.reader.row("R1")?.fields.updatedBy, copy.reader.row("R1")?.fields.updatedAt], [stamp.by, stamp.at]);
+  assert.equal(typeNativeText(copy, range(copy, NARRATION("R1"), 2), "z", {}).kind, "written");
+  assert.equal(deleteNativeText(copy, range(copy, NARRATION("R1"), 0, 1), { ...stamp, at: "2026-11-19T10:01:00Z" }).kind, "written");
+  assert.equal(edits, 2);
 });
 
 test("the shown outline reads every row once, with nothing unplaced", () => {
@@ -170,5 +244,5 @@ test("the shown outline reads every row once, with nothing unplaced", () => {
   type(a, "R2", 0, "middle"); type(b, "R3", 2, "!");
   net.settle("twice");
   assert.deepEqual(net.agree(), ["R1: ab / ", "R2: middle / ", "R3: cd! / "]);
-  assert.deepEqual(shown(a).filter(line => line.startsWith("unplaced")), []);
+  assert.deepEqual(shown(a).filter(line => !line.startsWith("R")), []);
 });

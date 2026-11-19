@@ -1,9 +1,12 @@
 import * as Y from "yjs";
-import type { DocumentShape } from "../../../core/document/validated.ts";
+import type { ValidatedDocument } from "../../../core/document/validated.ts";
 import type { Run } from "../../../core/text/runs.ts";
-import { writeNativeRuns } from "./inline.ts";
+import { prepareNativeRuns, writeNativeRuns } from "./inline.ts";
+import type { NativePreparedRun } from "./inline.ts";
 import { NATIVE_FORMAT_VERSION } from "./roots.ts";
+import type { NativeRoots } from "./roots.ts";
 import type { NativeScript } from "./script.ts";
+import { encodeNativeValue, nativeFieldKey } from "./values.ts";
 
 export interface NativeConversionPorts {
   readonly cells: (html: string) => readonly Run[];
@@ -13,6 +16,11 @@ export interface NativeConversionPorts {
 }
 
 type Bag = Record<string, unknown>;
+type Entries = readonly (readonly [string, string])[];
+
+interface PreparedBeat { readonly id: string; readonly heads: readonly PreparedHeading[]; readonly entries: Entries; readonly narration: readonly NativePreparedRun[]; readonly visual: readonly NativePreparedRun[]; readonly edited: Entries }
+interface PreparedHeading { readonly id: string; readonly name: string; readonly entries: Entries }
+interface PreparedRecord { readonly id: string; readonly key: string; readonly entries: Entries; readonly comment?: string }
 
 export const NATIVE_SEGMENT_BEATS = 30;
 
@@ -38,10 +46,6 @@ function bags(value: unknown): Bag[] {
   });
 }
 
-function json(value: unknown): unknown {
-  return JSON.parse(JSON.stringify(value)) as unknown;
-}
-
 function unique(entries: readonly Bag[]): void {
   const seen = new Set<string>();
   for (const entry of entries) {
@@ -50,8 +54,17 @@ function unique(entries: readonly Bag[]): void {
   }
 }
 
-function rest(source: Bag, skip: readonly string[]): string {
-  return JSON.stringify(Object.fromEntries(Object.keys(source).filter(key => !skip.includes(key) && source[key] !== undefined).sort().map(key => [key, json(source[key])])));
+function present(source: Bag, skip: readonly string[]): string[] {
+  return Object.keys(source).filter(key => !skip.includes(key) && source[key] !== undefined).sort();
+}
+
+function fileEntries(source: Bag, skip: readonly string[]): Entries {
+  return present(source, skip).map(key => [nativeFieldKey(key), encodeNativeValue(source[key])] as const);
+}
+
+function namedEntries(source: Bag, names: readonly string[], skip: readonly string[]): Entries {
+  const extra = Object.fromEntries(present(source, [...skip, ...names]).map(key => [key, source[key]]));
+  return [...names.filter(name => source[name] !== undefined).map(name => [name, encodeNativeValue(source[name])] as const), ["extra", encodeNativeValue(extra)]];
 }
 
 function withoutLocations(links: unknown): unknown {
@@ -61,91 +74,114 @@ function withoutLocations(links: unknown): unknown {
     : link);
 }
 
-function rowExtra(row: Bag): string {
-  const kept: Bag = { ...row };
+function sharedRow(row: Bag): Bag {
+  const kept: Bag = Object.fromEntries(Object.entries(row));
   if (Object.hasOwn(kept, "imageLinks")) kept.imageLinks = withoutLocations(kept.imageLinks);
   if (Array.isArray(kept.moreImages)) kept.moreImages = (kept.moreImages as unknown[]).map(slot =>
-    slot && typeof slot === "object" && !Array.isArray(slot) && Object.hasOwn(slot, "links") ? { ...slot as Bag, links: withoutLocations((slot as Bag).links) } : slot);
-  return rest(kept, [...ROW_TEXT, ...BEAT_FIELDS]);
+    slot && typeof slot === "object" && !Array.isArray(slot) && Object.hasOwn(slot, "links")
+      ? Object.fromEntries(Object.entries(slot as Bag).map(([key, value]) => [key, key === "links" ? withoutLocations(value) : value]))
+      : slot);
+  return kept;
 }
 
-function fieldsRecord(source: Bag, skip: readonly string[], rank: string): Y.Map<unknown> {
-  const record = new Y.Map<unknown>();
-  for (const key of Object.keys(source).sort()) if (!skip.includes(key) && source[key] !== undefined) record.set(key, json(source[key]));
-  record.set("rank", rank);
-  return record;
-}
-
-function cleanText(value: string): string {
+// why: Y.Text stores UTF-16 but updates carry UTF-8, so a lone surrogate would arrive on another copy as U+FFFD
+function wellFormed(value: string): string {
   return value.replace(/\p{Cs}/gu, "�");
 }
 
-export function convertToNativeScript(script: NativeScript, source: DocumentShape, ports: NativeConversionPorts): void {
-  const roots = script.roots, sections = bags(source.sections), tags = bags(source.productionTags);
-  if (script.doc.store.clients.size) throw new Error("Conversion needs an empty shared script");
-  for (const entries of [source.rows, sections, source.comments, source.people, tags, source.brollShots] as Bag[][]) unique(entries);
-  for (const comment of source.comments) unique(bags(comment.replies));
-  const narration = source.rows.map(row => ports.cells(row.audioText ?? "")), visuals = source.rows.map(row => ports.cells(row.visualText ?? ""));
-  const headingsBefore = new Map<string, Bag[]>();
-  for (const section of sections) {
-    const list = headingsBefore.get(String(section.firstSceneId)) ?? [];
-    list.push(section);
-    headingsBefore.set(String(section.firstSceneId), list);
-  }
-  script.doc.transact(() => {
-    const meta = roots.meta;
-    meta.set("format", NATIVE_FORMAT_VERSION);
-    for (const key of META_FIELDS) if (source[key] !== undefined) meta.set(key, json(source[key]));
-    meta.set("extra", rest(source, [...COLLECTIONS, ...META_FIELDS, "title"]));
-    const title = new Y.Text();
-    meta.set("title", title);
-    title.insert(0, cleanText(source.title), {});
-    roots.births.set(ports.creation, { at: ports.at, by: ports.by });
-    let rank = 0, segment: { text: Y.Text; at: number; beats: number } | null = null;
-    const open = (kind: "b" | "h", id: string): { text: Y.Text; at: number; beats: number } => {
-      const record = new Y.Map<unknown>(), text = new Y.Text(), key = kind + ":" + id;
-      roots.segments.set(key, record);
-      record.set("head", { [kind]: id });
-      record.set("text", text);
-      roots.order.push([key]);
-      return { text, at: 0, beats: 0 };
-    };
-    source.rows.forEach((row, index) => {
-      for (const section of headingsBefore.get(row.id) ?? []) {
-        const id = String(section.id);
-        roots.headings.set(id, fieldsRecord(section, ["id", "name", "firstSceneId"], nativeInitialRank(rank++)));
-        const name = new Y.Text();
-        roots.names.set(id, name);
-        name.insert(0, cleanText(String(section.name ?? "")), {});
-        segment = open("h", id);
-      }
-      if (!segment || segment.beats >= NATIVE_SEGMENT_BEATS) segment = open("b", row.id);
-      else { segment.text.insertEmbed(segment.at, { b: row.id }, {}); segment.at += 1; }
-      segment.beats++;
-      segment.at = writeNativeRuns(script.doc, segment.text, segment.at, narration[index] ?? [], null);
-      const beat = new Y.Map<unknown>();
-      roots.beats.set(row.id, beat);
-      beat.set("rank", nativeInitialRank(rank++));
-      for (const key of BEAT_FIELDS) if (row[key] !== undefined) beat.set(key, json(row[key]));
-      beat.set("extra", rowExtra(row));
-      const visual = new Y.Text();
-      roots.visuals.set(row.id, visual);
-      writeNativeRuns(script.doc, visual, 0, visuals[index] ?? [], null);
-      const stamp: Bag = {};
-      if (row.updatedAt !== undefined) stamp.at = json(row.updatedAt);
-      if (row.updatedBy !== undefined) stamp.by = json(row.updatedBy);
-      if (Object.keys(stamp).length) roots.edited.set(row.id, stamp);
-    });
-    for (const [root, entries] of [[roots.people, source.people], [roots.tags, tags], [roots.shots, source.brollShots]] as const) {
-      (entries as Bag[]).forEach((entry, index) => { root.set(String(entry.id), fieldsRecord(entry, ["id"], nativeInitialRank(index))); });
+function cell(ports: NativeConversionPorts, html: unknown, where: string): NativePreparedRun[] {
+  const prepared = prepareNativeRuns(ports.cells(typeof html === "string" ? html : ""));
+  if (!prepared) throw new Error("The rich-text reader returned a cell the shared script cannot hold: " + where);
+  return prepared;
+}
+
+function emptyDocument(doc: Y.Doc): boolean {
+  return Y.decodeStateVector(Y.encodeStateVector(doc)).size === 0;
+}
+
+function writeRecord(map: Y.Map<Y.Map<unknown>>, key: string, entries: Entries, rank: string, extra: readonly (readonly [string, string])[] = []): void {
+  const record = new Y.Map<unknown>();
+  map.set(key, record);
+  for (const [field, value] of [...entries, ...extra]) record.set(field, value);
+  record.set("rank", rank);
+}
+
+function write(script: NativeScript, roots: NativeRoots, plan: ReturnType<typeof prepare>): void {
+  const meta = roots.meta;
+  meta.set("format", NATIVE_FORMAT_VERSION);
+  for (const [key, value] of plan.meta) meta.set(key, value);
+  const title = new Y.Text();
+  meta.set("title", title);
+  title.insert(0, plan.title, {});
+  roots.births.set(plan.creation[0], plan.creation[1]);
+  let rank = 0, segment: { text: Y.Text; at: number; beats: number } | null = null;
+  const open = (kind: "b" | "h", id: string): { text: Y.Text; at: number; beats: number } => {
+    const record = new Y.Map<unknown>(), text = new Y.Text(), key = kind + ":" + id;
+    roots.segments.set(key, record);
+    record.set("head", { [kind]: id });
+    record.set("text", text);
+    roots.order.push([key]);
+    return { text, at: 0, beats: 0 };
+  };
+  for (const beat of plan.beats) {
+    for (const heading of beat.heads) {
+      writeRecord(roots.headings, heading.id, heading.entries, nativeInitialRank(rank++));
+      const name = new Y.Text();
+      roots.names.set(heading.id, name);
+      name.insert(0, heading.name, {});
+      segment = open("h", heading.id);
     }
-    source.comments.forEach((comment, index) => {
-      roots.comments.set(comment.id, fieldsRecord(comment, ["id", "replies"], nativeInitialRank(index)));
-      bags(comment.replies).forEach((reply, position) => {
-        const record = fieldsRecord(reply, ["id"], nativeInitialRank(position));
-        record.set("commentId", comment.id);
-        roots.replies.set(JSON.stringify([comment.id, reply.id]), record);
-      });
-    });
-  }, "conversion");
+    if (!segment || segment.beats >= NATIVE_SEGMENT_BEATS) segment = open("b", beat.id);
+    else { segment.text.insertEmbed(segment.at, { b: beat.id }, {}); segment.at += 1; }
+    segment.beats++;
+    segment.at = writeNativeRuns(script.doc, segment.text, segment.at, beat.narration, null);
+    writeRecord(roots.beats, beat.id, beat.entries, nativeInitialRank(rank++));
+    const visual = new Y.Text();
+    roots.visuals.set(beat.id, visual);
+    writeNativeRuns(script.doc, visual, 0, beat.visual, null);
+    if (beat.edited.length) roots.edited.set(beat.id, Object.fromEntries(beat.edited));
+  }
+  for (const [map, records] of [[roots.people, plan.people], [roots.tags, plan.tags], [roots.shots, plan.shots], [roots.comments, plan.comments]] as const) {
+    records.forEach((record, index) => { writeRecord(map, record.key, record.entries, nativeInitialRank(index)); });
+  }
+  for (const reply of plan.replies) writeRecord(roots.replies, reply.key, reply.entries, reply.rank, [["commentId", reply.comment]]);
+}
+
+function prepare(source: ValidatedDocument, ports: NativeConversionPorts) {
+  for (const value of [ports.creation, ports.at, ports.by]) if (typeof value !== "string" || !value) throw new Error("Conversion needs a creation id, a time and a writer");
+  if (typeof source.title !== "string" || !Array.isArray(source.rows)) throw new Error("Conversion needs a validated script");
+  const sections = bags(source.sections), tags = bags(source.productionTags), comments = bags(source.comments);
+  for (const entries of [bags(source.rows), sections, comments, bags(source.people), tags, bags(source.brollShots)]) unique(entries);
+  const rowIds = new Set(source.rows.map(row => row.id)), headsOf = new Map<string, PreparedHeading[]>();
+  for (const section of sections) {
+    const anchor = section.firstSceneId;
+    if (typeof anchor !== "string" || !rowIds.has(anchor)) throw new Error("A heading names no row of this script: " + String(section.id));
+    if (headsOf.has(anchor)) throw new Error("Two headings name the same row: " + anchor);
+    headsOf.set(anchor, [{ id: String(section.id), name: wellFormed(typeof section.name === "string" ? section.name : ""), entries: fileEntries(section, ["id", "name", "firstSceneId"]) }]);
+  }
+  const beats: PreparedBeat[] = source.rows.map(row => ({
+    id: row.id, heads: headsOf.get(row.id) ?? [],
+    entries: namedEntries(sharedRow(row), BEAT_FIELDS, ROW_TEXT),
+    narration: cell(ports, row.audioText, row.id + " narration"), visual: cell(ports, row.visualText, row.id + " visual"),
+    edited: [["at", row.updatedAt] as const, ["by", row.updatedBy] as const].filter(([, value]) => value !== undefined).map(([key, value]) => [key, encodeNativeValue(value)] as const)
+  }));
+  const records = (list: readonly Bag[]): PreparedRecord[] => list.map(entry => ({ id: String(entry.id), key: String(entry.id), entries: fileEntries(entry, ["id"]) }));
+  const replies = comments.flatMap(comment => {
+    const list = bags(comment.replies);
+    unique(list);
+    return list.map((reply, position) => ({ key: JSON.stringify([comment.id, reply.id]), comment: String(comment.id), rank: nativeInitialRank(position), entries: fileEntries(reply, ["id"]) }));
+  });
+  return {
+    meta: namedEntries(source, META_FIELDS, [...COLLECTIONS, "title"]), title: wellFormed(source.title),
+    creation: [ports.creation, { at: ports.at, by: ports.by }] as const, beats,
+    people: records(bags(source.people)), tags: records(tags), shots: records(bags(source.brollShots)),
+    comments: comments.map(comment => ({ id: String(comment.id), key: String(comment.id), entries: fileEntries(comment, ["id", "replies"]) })), replies
+  };
+}
+
+export function convertToNativeScript(script: NativeScript, source: ValidatedDocument, ports: NativeConversionPorts): void {
+  if (script.closed() || script.busy()) throw new Error("Conversion needs an open script outside any transaction");
+  if (!emptyDocument(script.doc)) throw new Error("Conversion needs an empty shared script");
+  const plan = prepare(source, ports);
+  script.doc.transact(() => { write(script, script.roots, plan); }, "conversion");
 }

@@ -28,7 +28,7 @@ function sampleSplit(state: Uint8Array, update: Uint8Array): { incremental: numb
   return { incremental, parses, full };
 }
 
-const state = largeState(), lines: string[] = [];
+const state = largeState(), lines: string[] = [], failures: string[] = [];
 lines.push(`Node ${process.version} ${process.arch}. ${rounds} rounds of ${samples} samples, the first ${warmup} of each round untimed.`);
 lines.push("Each sample: a warm copy of the 900-beat script receives one split from another copy; the time covers applying the update,");
 lines.push("the reader's refresh and reading every changed row. Cells: median of the per-round medians [smallest-largest].", "");
@@ -45,7 +45,14 @@ for (const [name, beat, offset] of [["Split inside a segment", "B451", 60], ["Sp
     medians.push(median(timed)); tails.push(p95(timed)); fulls.push(median(full));
   }
   const cell = (values: number[]): string => `${median(values).toFixed(3)} [${Math.min(...values).toFixed(3)}-${Math.max(...values).toFixed(3)}]`;
-  lines.push(`| ${name} | ${cell(medians)} | ${cell(tails)} | ${[...parses].join(", ")} | ${cell(fulls)} | ${median(medians) <= LIMIT_MS ? "within" : "over"} |`);
+  const within = median(medians) <= LIMIT_MS, oneParse = parses.size === 1 && parses.has(1);
+  lines.push(`| ${name} | ${cell(medians)} | ${cell(tails)} | ${[...parses].join(", ")} | ${cell(fulls)} | ${within ? "within" : "over"} |`);
+  if (!within) failures.push(`${name}: median ${median(medians).toFixed(3)} ms is over ${LIMIT_MS} ms`);
+  if (!oneParse) failures.push(`${name}: reparsed ${[...parses].join(", ")} segments, not 1`);
 }
 dom.window.close();
 process.stdout.write(lines.join("\n") + "\n");
+if (failures.length) {
+  process.stderr.write(failures.join("\n") + "\n");
+  process.exitCode = 1;
+}

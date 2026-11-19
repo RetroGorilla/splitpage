@@ -1,5 +1,6 @@
-import type { DocumentShape } from "../../../../src/core/document/validated.ts";
-import { orderedMarks } from "../../../../src/core/text/runs.ts";
+import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
+import type { DocumentShape, ValidatedDocument } from "../../../../src/core/document/validated.ts";
+import { normalizeCell, orderedMarks } from "../../../../src/core/text/runs.ts";
 import type { Run } from "../../../../src/core/text/runs.ts";
 import type { NativeTextTarget } from "../../../../src/adapters/collab/native/text-commands.ts";
 import { cells, fixture } from "./helpers.ts";
@@ -7,7 +8,7 @@ import { cells, fixture } from "./helpers.ts";
 export type TapeOp = { readonly op: "turn"; readonly writer: number } | { readonly op: "splice"; readonly target: NativeTextTarget; readonly from: number; readonly to: number; readonly insert: readonly Run[] };
 
 export interface TypingTape {
-  readonly document: DocumentShape;
+  readonly document: ValidatedDocument;
   readonly source: DocumentShape;
   readonly ops: readonly TapeOp[];
   readonly typed: number;
@@ -24,6 +25,10 @@ export function unitsOf(runs: readonly Run[]): Run[] {
 
 export function unitLength(unit: Run): number {
   return unit.atom ? 1 : unit.text.length;
+}
+
+export function shownKeys(runs: readonly Run[]): string[] {
+  return unitKeys(normalizeCell(runs));
 }
 
 export function unitKeys(runs: readonly Run[]): string[] {
@@ -45,7 +50,7 @@ export function spliceUnits(units: Run[], from: number, to: number, insert: read
 // then half of each of the first five beats replaced by the next beat's words
 export function typingTape(writers: number): TypingTape {
   const source = fixture("src/starters/long-demo.json"), ops: TapeOp[] = [], lengths = new Map<string, number>();
-  const document = { ...structuredClone(source), rows: source.rows.map(row => ({ ...structuredClone(row), audioText: "", visualText: "" })) };
+  const document = migrateRows({ ...structuredClone(source), rows: source.rows.map(row => ({ ...structuredClone(row), audioText: "", visualText: "" })) });
   let turn = 0, typed = 0, typing = 0, atoms = 0, corrections = 0;
   const next = (): void => { ops.push({ op: "turn", writer: turn++ % writers }); };
   for (const row of source.rows) {

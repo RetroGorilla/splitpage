@@ -8,13 +8,27 @@ export interface NativeScript {
   readonly roots: NativeRoots;
   readonly reader: NativeScriptReader;
   readonly origin: object;
+  readonly busy: () => boolean;
+  readonly closed: () => boolean;
+  readonly close: () => void;
 }
 
 export function openNativeScript(doc: Y.Doc): NativeScript {
-  const roots = declareNativeRoots(doc);
-  return Object.freeze({ doc, roots, reader: new NativeScriptReader(roots), origin: Object.freeze({ script: doc.guid }) });
+  const roots = declareNativeRoots(doc), reader = new NativeScriptReader(roots);
+  let open = false, closed = false;
+  const begin = (): void => { open = true; }, end = (): void => { open = false; };
+  doc.on("beforeAllTransactions", begin);
+  doc.on("afterAllTransactions", end);
+  const close = (): void => {
+    if (closed) return;
+    closed = true;
+    doc.off("beforeAllTransactions", begin);
+    doc.off("afterAllTransactions", end);
+    reader.close();
+  };
+  return Object.freeze({ doc, roots, reader, origin: Object.freeze({ script: doc.guid }), busy: () => open, closed: () => closed, close });
 }
 
 export function closeNativeScript(script: NativeScript): void {
-  script.reader.close();
+  script.close();
 }

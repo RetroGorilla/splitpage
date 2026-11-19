@@ -4,7 +4,7 @@ import * as Y from "yjs";
 import { dom } from "../../../../src/test/_dom.mjs";
 import { NativeScriptReader } from "../../../../src/adapters/collab/native/reader.ts";
 import { freshlyShown, shown } from "./helpers.ts";
-import { LARGE_BEATS, largeState, loadedCopy, splitUpdate } from "./structural.ts";
+import { LARGE_BEATS, largeState, loadedCopy, narrationText, splitUpdate } from "./structural.ts";
 
 after(() => { dom.window.close(); });
 
@@ -44,9 +44,7 @@ test("control: a full rebuild reads the same split but reparses every segment", 
 
 test("a keystroke from another copy reparses one segment and rebuilds one row, with no structural pass", () => {
   const copy = loadedCopy(state, 2), writer = loadedCopy(state, 3), before = copy.reader.counts();
-  const place = writer.reader.narrationPlace("B451");
-  assert.ok(place);
-  const vector = Y.encodeStateVector(writer.doc);
+  const place = narrationText(writer, "B451"), vector = Y.encodeStateVector(writer.doc);
   writer.doc.transact(() => { place.text.insert(place.start + 5, "k", {}); }, writer.origin);
   Y.applyUpdate(copy.doc, Y.encodeStateAsUpdate(writer.doc, vector), "remote");
   const changes = copy.reader.refresh(), after = copy.reader.counts();

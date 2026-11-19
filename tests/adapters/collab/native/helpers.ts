@@ -4,12 +4,14 @@ import * as Y from "yjs";
 import "../../../../src/test/_dom.mjs";
 import { scriptCellOf } from "../../../../src/bootstrap/richtext.ts";
 import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
-import type { DocumentShape } from "../../../../src/core/document/validated.ts";
+import type { DocumentShape, ValidatedDocument } from "../../../../src/core/document/validated.ts";
 import type { Run } from "../../../../src/core/text/runs.ts";
 import { convertToNativeScript } from "../../../../src/adapters/collab/native/convert.ts";
 import { NativeScriptReader } from "../../../../src/adapters/collab/native/reader.ts";
 import { openNativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
+import { anchorNativeText, replaceNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
+import type { NativeCommitOutcome, NativeEditStamp, NativeTextTarget } from "../../../../src/adapters/collab/native/text-commands.ts";
 
 export type Delivery = "forward" | "reverse" | "twice";
 
@@ -17,7 +19,7 @@ export const fixtures = (JSON.parse(readFileSync(new URL("../../../collab/fixtur
   fixtures: { name: string; document: DocumentShape }[];
 }).fixtures;
 
-export function fixture(name: string): DocumentShape {
+export function fixture(name: string): ValidatedDocument {
   const found = fixtures.find(item => item.name === name);
   assert.ok(found, name);
   return migrateRows(structuredClone(found.document));
@@ -27,7 +29,12 @@ export function cells(html: string): readonly Run[] {
   return scriptCellOf(html);
 }
 
-export function convertedScript(document: DocumentShape, clientID = 1): NativeScript {
+export function edit(script: NativeScript, target: NativeTextTarget, from: number, to: number, runs: readonly Run[], stamp?: NativeEditStamp): NativeCommitOutcome {
+  const anchored = anchorNativeText(script, target, from, to);
+  return anchored.kind === "anchored" ? replaceNativeText(script, anchored.range, runs, stamp) : { kind: "recovery", reason: anchored.reason, runs };
+}
+
+export function convertedScript(document: ValidatedDocument, clientID = 1): NativeScript {
   const doc = new Y.Doc();
   doc.clientID = clientID;
   const script = openNativeScript(doc);
@@ -48,7 +55,7 @@ export function shown(script: NativeScript, reader = script.reader): string[] {
     const row = reader.row(entry.id);
     return row ? `${row.id}: ${row.audioText} / ${row.visualText}` : `${entry.id}: missing`;
   })());
-  return [...outline, ...reader.unplaced().map(span => `unplaced ${span.segment} ${span.reason} ${span.length}`)];
+  return [...outline, ...reader.unplaced().map(span => `unplaced ${span.segment} ${span.reason} ${span.length}`), ...reader.problems().map(problem => `problem ${problem.kind} ${problem.where}`)];
 }
 
 export function freshlyShown(script: NativeScript): string[] {
