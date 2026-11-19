@@ -421,8 +421,7 @@ them, and prints how many ran in each group.
 | --- | --- | --- | --- |
 | `frontend` | `src/test/*.test.mjs` | `node --test` | always |
 | `source` | `*.test.{ts,mts,cts,js,mjs,cjs}` under `src/`, outside `src/test/` | `node --test` | once a migrated area (below) holds TypeScript source and its `tests/` folder has no test |
-| `tests` | Five always-run root shards on a fresh root-test change and on every push to `main`. The native adapter, source inventories and mixed standalone checks are in this matrix. |
-| `old-adapter-tests` | Six shards when a pull request affects the old adapter or its dependencies or test support, and on every push to `main`. See [the filter](ci.md#old-shared-document-adapter). |
+| `tests` | `tests/**/*.test.*` | `node --test` | once `tests/` holds TypeScript |
 | `desktop` | `desktop/test/*.test.mjs` | `node <file>`, one at a time | always |
 | `tools` | `tools/test-*.mjs` | `node <file>`, one at a time | always |
 
@@ -457,7 +456,7 @@ only; CI runs the whole set through the required root matrices.
 
 `--shard <index/total>` balances files using the recorded timing weights
 described above. `--suite=always` and `--suite=old-adapter` select disjoint file sets before balancing.
-PR CI uses five always-run shards and six old-adapter shards when the change
+PR CI uses eight always-run shards and three old-adapter shards when the change
 requires them. The ten unfiltered nightly shards use `--shard 1/10` through
 `--shard 10/10`. Full discovery, area coverage,
 orphan, overlap, required-group and golden-update guards still run in each
@@ -820,7 +819,8 @@ to `main` or a `hotfix/` branch. Its jobs call the scripts above and nothing els
 | --- | --- |
 | `changes` | `tools/ci-changes.mjs`: does the diff touch anything but prose? On a push to `main`, `tools/ci-tested-tree.mjs`: did another run already pass this exact tree? ([ci.md](ci.md)) |
 | `checks` | Node from `.nvmrc`: lint, typecheck, check:deps and check:comments for non-prose changes requiring a fresh run; for app-affecting changes, also build, check the `sw.js` stamp, run browser suites 01 and 52, then 21 suites covering save, typing, undo, export, writer position and typing work (the list and the reason for each are in [ci.md](ci.md); about 75 s), and upload the built app |
-| `tests` | When `tools/ci-changes.mjs` reports `root_tests=true` (any non-prose change outside `prototypes/collab/`, a prototype oracle that `tests/collab/` copies, or an unknown diff) and no earlier run passed the same tree, ten independent matrix jobs run `test:all -- --shard 1/10` through `10/10`, after building their own app and checking the worker stamp. Together they execute every discovered unit, desktop and tool test exactly once. They run in parallel with `checks`, subject to available runner slots. A prototype-only change skips them |
+| `tests` | Eight always-run root shards, `--shard 1/8` through `8/8`, for fresh root-test changes and every push to `main`. |
+| `old-adapter-tests` | Three shards, `--shard 1/3` through `3/3`, when the [filter](ci.md#old-shared-document-adapter) requires them and on every push to `main`. |
 | `collab-tests` | When `tools/ci-changes.mjs` reports `collab=true` (a change under `prototypes/collab/`, to `ci.yml`, or an unknown diff) and no earlier run passed the same tree, matrix jobs install only `prototypes/collab` and run its tests with Node's `--test-shard=<i>/<n>`; together they run every prototype test file once, in parallel with `checks`. On the same flag `checks` runs `tools/test-ci-collab-shards.mjs`, which fails when the shard command and the prototype's `test` script differ |
 | `gate` | Checks expected job results and each required matrix leg before uploading the passed-tree marker. See [CI configuration](ci.md#githubworkflowsciyml). |
 | `desktop-smoke` | Electron dev-target smoke on `ubuntu-latest` under Xvfb, on pull requests and pushes to `main` when `tools/ci-changes.mjs` reports `desktop=true`; about 5.5 min, in parallel with the other jobs |

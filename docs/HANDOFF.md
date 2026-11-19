@@ -125,8 +125,8 @@ only exits non-zero for a command that throws, so read its `RESULT:` line.
 **CI** (`.github/workflows/ci.yml`) classifies paths before running code checks.
 Markdown prose skips them except `docs/help.md`, an app build input. Code changes
 run lint, types, the dependency and comment gates, generated-file checks and
-five root test shards. Old shared-document adapter changes and their dependencies
-also run six dedicated shards. Both matrices run on pushes to `main`. App changes also
+eight root test shards. Old shared-document adapter changes and their dependencies
+also run three dedicated shards. Both matrices run on pushes to `main`. App changes also
 run core/CSP and the selected save, typing, undo, export and Writer suites.
 [docs/architecture/testing.md](architecture/testing.md#ci) lists the
 jobs. A separate job, `desktop-smoke`, runs `desktop/test/smoke.mjs

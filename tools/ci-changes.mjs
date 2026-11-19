@@ -4,7 +4,7 @@ import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isMain } from "./main-module.mjs";
 import { COLLAB_ORACLE_COPIES } from "./collab-oracle-copies.mjs";
-import { oldAdapterFiles } from "./old-adapter-tests.mjs";
+import { nativePath, oldAdapterFiles } from "./old-adapter-tests.mjs";
 
 const REPO = dirname(dirname(fileURLToPath(import.meta.url)));
 
@@ -43,24 +43,22 @@ export function needsRootTests(files) {
   return files.some((f) => COPIED_PROTOTYPE_FILES.has(f) || (!f.startsWith("prototypes/collab/") && needsChecks([f])));
 }
 
-const NATIVE = /^(?:src|tests)\/adapters\/collab\/native\//;
 const OLD_ADAPTER_INPUTS = [
   /^(?:src\/(?:core|application|adapters\/collab)|shared|tests\/(?:collab|adapters\/collab))\//,
   /^src\/bootstrap\/wiring\/(?:ports\/)?shared-/,
   /^\.github\/(?:actions|workflows)\//,
   /^tools\/(?:ci-|test-ci-|run-tests\.mjs|test-weights\.json|timing-reporter\.mjs|dep-report\.mjs|source-scan\.mjs|main-module\.mjs|old-adapter-tests\.mjs|collab-oracle-copies\.mjs)/,
   /^(?:desktop\/)?package(?:-lock)?\.json$/,
-  /^(?:\.nvmrc|build\.mjs|docs\/collaboration\/stage-0\/2-fields\.md)$/,
-  /^src\/test\/fixtures\//
+  /^(?:\.nvmrc|build\.mjs)$/
 ];
 
-export function needsOldAdapterTests(files, repo = REPO) {
+export function needsOldAdapterTests(files, repo = REPO, inventory = null) {
   if (files === null || files.length === 0) return true;
-  const candidates = files.filter((path) => !NATIVE.test(path));
+  const candidates = files.filter((path) => !nativePath(path));
   if (candidates.some((path) => COPIED_PROTOTYPE_FILES.has(path) || OLD_ADAPTER_INPUTS.some((re) => re.test(path)))) return true;
   if (!candidates.some((path) => needsChecks([path]))) return false;
-  const { dependencies, isOldTest } = oldAdapterFiles(repo);
-  return candidates.some((path) => dependencies.has(path) || isOldTest(path) ||
+  const { dependencies } = inventory ?? oldAdapterFiles(repo);
+  return candidates.some((path) => dependencies.has(path) ||
     /^(?:tests|src\/test)\//.test(path) && !existsSync(join(repo, path)));
 }
 

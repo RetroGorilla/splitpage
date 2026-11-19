@@ -1,62 +1,44 @@
 import { loadGraph } from "./dep-report.mjs";
 
-const oldSource = (path) => path.startsWith("src/adapters/collab/") && !path.startsWith("src/adapters/collab/native/");
-const oldTest = (path) => path.startsWith("tests/collab/") ||
-  path.startsWith("tests/adapters/collab/") && !path.startsWith("tests/adapters/collab/native/");
-const support = (path) => /^(tests\/|src\/test\/|src\/bootstrap\/wiring\/(?:ports\/)?shared-)/.test(path) ||
-  /^src\/.*\.test\.[cm]?[jt]s$/.test(path);
-
 export const TREE_INVENTORIES = [
   "tests/adapters/collab/guarded-subscriptions.test.ts",
   "tests/adapters/collab/operation-families.test.ts",
+  "tests/adapters/collab/trial-replica.test.ts",
   "tests/application/commit-time-writers.test.ts"
 ];
 
-const MIXED_TESTS = [
-  "src/features/find/ports.test.ts",
-  "tests/features/empty-script/before.test.ts",
-  "tests/features/tags/panel-mount.test.ts",
-  "tests/features/tags/production-tags-mount.test.ts"
-];
+export const nativePath = (path) => /^(?:src|tests)\/adapters\/collab\/native\//.test(path);
+const oldAdapterArea = (path) => !nativePath(path) &&
+  /^(?:src\/(?:core|application|adapters\/collab)\/|shared\/|src\/bootstrap\/wiring\/(?:ports\/)?shared-|tests\/)/.test(path);
 
-const BOOT_FIXTURES = [
-  "src/test/shared-find-replace-app.test.mjs",
-  "src/test/shared-hook-app.test.mjs",
-  "src/test/shared-hook-measure-app.test.mjs",
-  "src/test/shared-hook-peer-app.test.mjs",
-  "src/test/shared-hook-routes-app.test.mjs",
-  "src/test/shared-writer-app.test.mjs"
-];
+const oldSource = (path) => path.startsWith("src/adapters/collab/") && !nativePath(path);
+const candidate = (path) => !nativePath(path) && /^tests\/(?:collab|adapters\/collab)\/.*\.test\.[cm]?[jt]s$/.test(path);
+const testLibraries = new Set(["builtin:assert/strict", "builtin:test", "builtin:util", "package:lib0", "package:yjs"]);
 
-function reachable(start, next) {
-  const visited = new Set(start);
-  for (const path of visited) {
-    for (const dependency of next(path)) visited.add(dependency);
-  }
-  return visited;
-}
-
-export function oldAdapterFiles(repo) {
-  const graph = loadGraph(repo);
-  const sources = [...graph.keys()].filter(oldSource);
-  const edges = (path) => (graph.get(path)?.edges ?? []).filter(({ kind }) => kind === "file" || kind === "missing");
-  const callers = new Map();
-  for (const path of graph.keys()) {
-    if (!support(path)) continue;
-    for (const { target, typeOnly } of edges(path)) {
-      if (typeOnly) continue;
-      const list = callers.get(target) ?? [];
-      list.push(path);
-      callers.set(target, list);
+export function oldAdapterFiles(repo, graph = loadGraph(repo)) {
+  const imports = new Map();
+  const dependencies = new Set();
+  for (const test of graph.keys()) {
+    if (!candidate(test) || TREE_INVENTORIES.includes(test)) continue;
+    const reach = new Set([test]);
+    let safe = true;
+    for (const path of reach) {
+      const module = graph.get(path);
+      if (!oldAdapterArea(path) || !module || module.unresolved.length) {
+        safe = false;
+        break;
+      }
+      for (const edge of module.edges) {
+        if (edge.kind === "file" || edge.kind === "missing") reach.add(edge.target);
+        if (!edge.typeOnly && (edge.kind === "builtin" || edge.kind === "package") && !testLibraries.has(edge.target)) safe = false;
+      }
+      if (!safe) break;
     }
+    if (!safe || ![...reach].some(oldSource)) continue;
+    imports.set(test, reach);
+    for (const path of reach) dependencies.add(path);
   }
-  const reachesOldSource = reachable(sources, (path) => callers.get(path) ?? []);
-  const isOldTest = (path) => !TREE_INVENTORIES.includes(path) && !MIXED_TESTS.includes(path) && !path.startsWith("tests/adapters/collab/native/") &&
-    (oldTest(path) || reachesOldSource.has(path) || BOOT_FIXTURES.includes(path));
-  const testDependencies = reachable([...graph.keys()].filter(isOldTest), (path) =>
-    edges(path).map(({ target }) => target).filter(support));
-  const adapterDependencies = reachable(sources, (path) => edges(path).map(({ target }) => target));
-  return { isOldTest, dependencies: new Set([...testDependencies, ...adapterDependencies]) };
+  return { isOldTest: (path) => imports.has(path), dependencies, imports };
 }
 
 export function partitionRootTests(entries, isOldTest) {

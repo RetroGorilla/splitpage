@@ -195,7 +195,7 @@ jobs:
           retention-days: 30
 
   tests:
-    name: Tests (${{ matrix.shard }}/5)
+    name: Tests (${{ matrix.shard }}/8)
     needs: changes
     if: needs.changes.outputs.root_due == 'true'
     runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
@@ -205,20 +205,20 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5]
+        shard: [1, 2, 3, 4, 5, 6, 7, 8]
     steps:
       - uses: actions/checkout@v7
 
       - uses: ./.github/actions/root-test-setup
         with:
-          shard: ${{ matrix.shard }}/5
+          shard: ${{ matrix.shard }}/8
           suite: always
 
       - name: Unit, desktop and tool test shard
-        run: npm run test:all -- --shard "${{ matrix.shard }}/5" --suite=always
+        run: npm run test:all -- --shard "${{ matrix.shard }}/8" --suite=always
 
   old-adapter-tests:
-    name: Old adapter tests (${{ matrix.shard }}/6)
+    name: Old adapter tests (${{ matrix.shard }}/3)
     needs: changes
     if: needs.changes.outputs.old_adapter == 'true'
     runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
@@ -228,17 +228,17 @@ jobs:
     strategy:
       fail-fast: false
       matrix:
-        shard: [1, 2, 3, 4, 5, 6]
+        shard: [1, 2, 3]
     steps:
       - uses: actions/checkout@v7
 
       - uses: ./.github/actions/root-test-setup
         with:
-          shard: ${{ matrix.shard }}/6
+          shard: ${{ matrix.shard }}/3
           suite: old-adapter
 
       - name: Old adapter test shard
-        run: npm run test:all -- --shard "${{ matrix.shard }}/6" --suite=old-adapter
+        run: npm run test:all -- --shard "${{ matrix.shard }}/3" --suite=old-adapter
 
   collab-tests:
     name: Collaboration prototype tests (${{ matrix.shard }}/4)
@@ -341,8 +341,8 @@ jobs:
           ROOT_TESTS: ${{ needs.changes.outputs.root_due }}
           OLD_ADAPTER: ${{ needs.changes.outputs.old_adapter }}
           COLLAB: ${{ needs.changes.outputs.code == 'true' && needs.changes.outputs.tested != 'true' && needs.changes.outputs.collab == 'true' }}
-          ROOT_SHARDS: '5'
-          OLD_SHARDS: '6'
+          ROOT_SHARDS: '8'
+          OLD_SHARDS: '3'
           COLLAB_SHARDS: '4'
 
       - name: Write the passed tree's marker

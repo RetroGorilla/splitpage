@@ -33,7 +33,7 @@ for (const job of [checks, collabTests, workflow.jobs["npm-cache"]]) {
 }
 assert.ok(workflow.jobs["npm-cache"].steps.some((s) => s.run?.includes("npm ci --ignore-scripts --prefix prototypes/collab")));
 assert.deepEqual(rootShards, Array.from({ length: shardCount }, (_, index) => index + 1));
-assert.equal(shardCount, 5);
+assert.equal(shardCount, 8);
 assert.equal(tests.name, `Tests (\${{ matrix.shard }}/${shardCount})`);
 assert.equal(tests.strategy["fail-fast"], false);
 assert.equal(tests.needs, "changes");
@@ -77,7 +77,7 @@ const individual = gate.steps[1];
 assert.equal(individual.if, "needs.changes.outputs.root_due == 'true' || needs.changes.outputs.old_adapter == 'true' || (needs.changes.outputs.code == 'true' && needs.changes.outputs.tested != 'true' && needs.changes.outputs.collab == 'true')");
 const collabCount = collabTests.strategy.matrix.shard.length;
 const oldCount = workflow.jobs["old-adapter-tests"].strategy.matrix.shard.length;
-assert.equal(oldCount, 6);
+assert.equal(oldCount, 3);
 assert.equal(workflow.jobs["old-adapter-tests"].name, `Old adapter tests (\${{ matrix.shard }}/${oldCount})`);
 assert.deepEqual(individual.env, {
   GH_TOKEN: "${{ github.token }}",

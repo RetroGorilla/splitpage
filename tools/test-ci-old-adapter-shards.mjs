@@ -3,14 +3,18 @@ import { readFileSync } from "node:fs";
 import { join } from "node:path";
 import { parse } from "yaml";
 import { oldAdapterFiles, partitionRootTests, TREE_INVENTORIES } from "./old-adapter-tests.mjs";
-import { assignShards, discover, rootTestNeedsChromium } from "./run-tests.mjs";
+import { assignShards, discover, rootTestNeedsChromium, unweightedFiles } from "./run-tests.mjs";
+import { needsOldAdapterTests } from "./ci-changes.mjs";
 import { loadGraph } from "./dep-report.mjs";
 import { REPO, listRepoFiles } from "./source-scan.mjs";
 
 const { jobs } = parse(readFileSync(join(REPO, ".github/workflows/ci.yml"), "utf8"));
 const found = discover(listRepoFiles()).groups;
 const all = found.flatMap((entry) => entry.files).sort();
-const suites = partitionRootTests(found, oldAdapterFiles().isOldTest);
+const modules = loadGraph();
+const inventory = oldAdapterFiles(REPO, modules);
+const suites = partitionRootTests(found, inventory.isOldTest);
+assert.deepEqual(unweightedFiles(all), [], "Every root test must have a recorded weight");
 const covered = [];
 for (const [suite, job] of [["always", jobs.tests], ["old-adapter", jobs["old-adapter-tests"]]]) {
   const count = job.strategy.matrix.shard.length;
@@ -30,18 +34,24 @@ for (const [suite, job] of [["always", jobs.tests], ["old-adapter", jobs["old-ad
 }
 assert.deepEqual(covered.sort(), all, "each discovered test must run in exactly one of the two workflow matrices");
 const always = suites.always.flatMap((entry) => entry.files);
-for (const path of [...TREE_INVENTORIES, ...all.filter((file) => file.startsWith("tests/adapters/collab/native/"))]) {
+const alwaysPrefixes = [
+  "src/test/shared-", "src/test/undo-caret-parity", "src/test/panel-escape",
+  "tests/adapters/collab/native/", "tests/features/editing/", "tests/features/writer/buffer-",
+  "tests/features/writer/visual-buffer", "tests/features/writer/flow-command-ports",
+  "tests/features/title/title-buffer", "tests/features/rows/scene-name-buffer", "tests/features/recovery-panel/"
+];
+for (const path of [...TREE_INVENTORIES, ...all.filter((file) => alwaysPrefixes.some((prefix) => file.startsWith(prefix)))]) {
   assert.ok(always.includes(path), `${path} must be in the always-run matrix`);
 }
 const old = suites["old-adapter"].flatMap((entry) => entry.files);
 for (const path of [
-  "tests/adapters/collab/formatting-invariant.test.ts",
-  "tests/adapters/collab/text-generator.test.ts",
-  "tests/adapters/collab/trial-replica.test.ts",
-  "tests/application/session/shared-session-replica.test.ts",
-  "tests/features/writer/buffer-binding.test.ts",
-  "src/test/shared-split-records-typed-comments-app.test.mjs"
+  "tests/adapters/collab/text-generator.test.ts"
 ]) assert.ok(old.includes(path), `${path} must be in the old-adapter matrix`);
+for (const test of old) {
+  for (const path of inventory.imports.get(test)) {
+    assert.ok(needsOldAdapterTests([path], REPO, inventory), `${test} depends on ${path}, which must trigger the old matrix`);
+  }
+}
 assert.deepEqual(jobs.checks.steps.filter((s) => s.run === "node tools/test-ci-old-adapter-shards.mjs").map((s) => s.if), [undefined]);
 const nightly = parse(readFileSync(join(REPO, ".github/workflows/nightly.yml"), "utf8")).jobs["root-tests"];
 const nightlyCount = nightly.strategy.matrix.shard.length;
@@ -55,7 +65,6 @@ assert.deepEqual(nightly.steps.find((step) => step.uses === "./.github/actions/r
   shard: `\${{ matrix.shard }}/${nightlyCount}`
 });
 const browserUsers = new Set(["tests/adapters/formats/fixtures/inspect-script-print.mjs"]);
-const modules = loadGraph();
 for (const dependency of browserUsers) {
   for (const [path, { edges }] of modules) {
     if (edges.some((edge) => edge.target === dependency)) browserUsers.add(path);

@@ -92,9 +92,10 @@ for (const files of [
   ["tests/adapters/collab/guarded-subscriptions.test.ts"], ["tests/collab/undo/model.ts"],
   ["tools/run-tests.mjs"], [".github/workflows/ci.yml"], [".github/actions/root-test-setup/action.yml"],
   ["package.json"], ["package-lock.json"], ["prototypes/collab/test/oracles.ts"],
-  ["tests/features/writer/buffer-binding.test.ts"], ["tests/features/writer/buffer-support.ts"],
   ["tests/features/writer/removed-old-test.test.ts"]
 ]) eq(`old-adapter checks run for ${JSON.stringify(files)}`, needsOldAdapterTests(files), true);
+eq("real old-adapter support triggers the filter", needsOldAdapterTests(["tests/core/migrate-ports.ts"]), true);
+eq("shipping feature changes stay outside the old-adapter filter", needsOldAdapterTests(["src/features/editing/cell-buffer.ts"]), false);
 eq("prose alone skips old-adapter checks on a PR", needsOldAdapterTests(["README.md"]), false);
 eq("an unrelated feature test stays outside the old-adapter filter", needsOldAdapterTests(["tests/features/writer/idle-word-count.test.ts"]), false);
 
