@@ -6,7 +6,6 @@ import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
 import { formatNativeText } from "../../../../src/adapters/collab/native/format-commands.ts";
 import type { NativeMarkChange } from "../../../../src/adapters/collab/native/format-commands.ts";
 import { NativeScriptReader } from "../../../../src/adapters/collab/native/reader.ts";
-import type { NativeRoots } from "../../../../src/adapters/collab/native/roots.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import { anchorNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
 import type { NativeTextTarget } from "../../../../src/adapters/collab/native/text-commands.ts";
@@ -142,17 +141,6 @@ function formatOnce(script: NativeScript, pick: <T>(list: readonly T[]) => T, ch
 
 type WarmReader = (script: NativeScript) => NativeScriptReader;
 
-function unwatched(roots: NativeRoots): NativeRoots {
-  const blind = (type: object): object => new Proxy(type, {
-    get: (target, key) => {
-      if (key === "observeDeep" || key === "unobserveDeep") return () => undefined;
-      const value: unknown = Reflect.get(target, key, target);
-      return typeof value === "function" ? (value as (...args: unknown[]) => unknown).bind(target) : value;
-    }
-  });
-  return Object.freeze(Object.fromEntries(Object.entries(roots).map(([name, type]) => [name, blind(type as object)]))) as unknown as NativeRoots;
-}
-
 function runSeed(seed: number, run: Run, warmOf: WarmReader = script => script.reader, formatting: Formatting = "none"): void {
   const chance = random(seed), pick = <T>(list: readonly T[]): T => list[Math.floor(chance() * list.length)] as T;
   const script = start(), ops = operations(script, pick, chance), reader = warmOf(script);
@@ -186,15 +174,15 @@ test("generated structural and text changes: a warm reader always reads what a f
   const run = emptyRun();
   for (let seed = 1; seed <= SEEDS; seed++) runSeed(seed, run);
   assert.ok(run.joinedMarkers > 0, "no marker holding a separator was reached");
-  assert.deepEqual([...run.reasons].sort(), ["heading-text", "no-head", "no-order", "no-record", "repeated"]);
-  assert.deepEqual([...run.problems].sort(), ["bad-value", "heading-without-row", "hidden-units", "join-not-read", "no-text", "unknown-embed"]);
+  assert.deepEqual([...run.reasons].sort(), ["no-order"]);
+  assert.deepEqual([...run.problems].sort(), ["bad-value", "heading-without-row", "hidden-units", "join-not-read", "missing-beat-record", "missing-heading-record", "missing-name", "missing-visual", "no-order", "no-segment", "no-text", "unknown-embed"]);
   assert.ok(run.compared > SEEDS * STEPS * 0.3, String(run.compared));
   assert.ok(run.changed > run.compared * 0.5, JSON.stringify({ compared: run.compared, changed: run.changed }));
 });
 
 test("control: the same comparison loop catches a warm reader whose invalidation is switched off", () => {
   const readers: NativeScriptReader[] = [];
-  const blind: WarmReader = script => { const reader = new NativeScriptReader(unwatched(script.roots)); readers.push(reader); return reader; };
+  const blind: WarmReader = script => { const reader = new NativeScriptReader(script.roots); readers.push(reader); return reader; };
   for (let seed = 1; seed <= 3; seed++) {
     assert.throws(() => { runSeed(seed, emptyRun(), blind); }, new RegExp(`seed ${seed}, `));
   }
@@ -211,7 +199,7 @@ test("generated formatting, tag and comment commands among the structural change
 
 test("control: with formatting commands alone, the comparison catches a warm reader whose invalidation is switched off", () => {
   const readers: NativeScriptReader[] = [];
-  const blind: WarmReader = script => { const reader = new NativeScriptReader(unwatched(script.roots)); readers.push(reader); return reader; };
+  const blind: WarmReader = script => { const reader = new NativeScriptReader(script.roots); readers.push(reader); return reader; };
   for (let seed = 1; seed <= 3; seed++) {
     const run = emptyRun();
     runSeed(seed, run, undefined, "only");

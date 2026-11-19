@@ -11,6 +11,7 @@ export type NativeOutlineEntry = { readonly kind: "heading"; readonly id: string
 
 export interface NativeReadRow {
   readonly id: string;
+  readonly members: readonly string[];
   readonly narration: readonly Run[];
   readonly visual: readonly Run[];
   readonly audioText: string;
@@ -25,7 +26,7 @@ export interface NativeReadChanges {
   readonly outline: boolean;
 }
 
-export type NativeUnplacedReason = "no-head" | "repeated" | "no-record" | "heading-text" | "no-order";
+export type NativeUnplacedReason = "no-order";
 
 export interface NativeUnplacedSpan {
   readonly segment: string;
@@ -33,7 +34,7 @@ export interface NativeUnplacedSpan {
   readonly length: number;
 }
 
-export type NativeProblemKind = "no-text" | "hidden-units" | "unknown-embed" | "unshown-marks" | "bad-value" | "bad-key" | "heading-without-row" | "join-not-read";
+export type NativeProblemKind = "no-text" | "hidden-units" | "unknown-embed" | "unshown-marks" | "bad-value" | "bad-key" | "heading-without-row" | "join-not-read" | "missing-beat-record" | "missing-visual" | "missing-heading-record" | "missing-name" | "no-order" | "no-segment";
 
 export interface NativeReaderProblem {
   readonly kind: NativeProblemKind;
@@ -70,9 +71,9 @@ function samePlacement(left: ParsedSegment, right: ParsedSegment): boolean {
 }
 
 interface UnplacedRef extends NativeSpanPlace { readonly reason: NativeUnplacedReason }
-interface StoredBlock { readonly kind: "b" | "h"; readonly id: string; readonly shown: boolean }
+interface StoredBlock { readonly kind: "b" | "h"; readonly id: string; readonly shown: boolean; readonly spans: NativeSpanPlace[] }
 type DeepListener = (events: Y.YEvent<Y.AbstractType<unknown>>[]) => void;
-interface NativeWatched { readonly observeDeep: (listener: DeepListener) => void; readonly unobserveDeep: (listener: DeepListener) => void }
+export type NativeWatch = <Event>(type: Y.AbstractType<Event>, listener: DeepListener) => () => void;
 type Problems = NativeReaderProblem[] | null;
 
 const BEAT_FIELDS = ["status", "lengthSeconds", "paragraphStart"];
@@ -98,12 +99,6 @@ function parseSegment(segment: unknown): ParsedSegment {
   const spans = nativeSegmentSpans(segment);
   if (!spans) return { hasText: false, spans: [] };
   return { hasText: true, spans: spans.map(span => ({ ...span, content: JSON.stringify(span.items) })) };
-}
-
-function contentsByKey(spans: readonly ParsedSpan[]): Map<string, string> {
-  const contents = new Map<string, string[]>();
-  for (const span of spans) if (span.key) contents.set(span.key, [...contents.get(span.key) ?? [], span.content]);
-  return new Map([...contents].map(([key, list]) => [key, JSON.stringify(list)]));
 }
 
 function decoded(record: Y.Map<unknown>, key: string, where: string, problems: Problems): { readonly value: unknown } | null {
@@ -160,9 +155,21 @@ function frozenRuns(runs: Run[]): readonly Run[] {
   return Object.freeze(runs);
 }
 
-function samePlace(left: NativeSpanPlace | undefined, right: NativeSpanPlace | undefined): boolean {
-  return left?.segment === right?.segment && left?.span === right?.span;
+interface RowMember { readonly id: string; readonly glue: string }
+export interface NativeRemovedHeading { readonly id: string; readonly name: string }
+
+function sameSpans(left: readonly NativeSpanPlace[], right: readonly NativeSpanPlace[] | undefined): boolean {
+  return left.length === right?.length && left.every((ref, at) => ref.segment === right[at]?.segment && ref.span === right[at]?.span);
 }
+
+function joinOf(record: unknown): { into: string; glue: string } | null {
+  const joined: unknown = record instanceof Y.Map ? record.get("joined") : undefined;
+  if (!joined || typeof joined !== "object") return null;
+  const value = joined as Readonly<Record<string, unknown>>;
+  return typeof value.into === "string" && typeof value.glue === "string" ? { into: value.into, glue: value.glue } : null;
+}
+
+const EMPTY_SPANS: readonly NativeSpanPlace[] = Object.freeze([]);
 
 export class NativeScriptReader {
   private readonly roots: NativeRoots;
@@ -170,15 +177,23 @@ export class NativeScriptReader {
   private readonly dirtySegments = new Set<string>();
   private readonly dirtyBeats = new Set<string>();
   private readonly dirtyHeadings = new Set<string>();
-  private everything = true;
   private structural = true;
   private closed = false;
   private outlineEntries: readonly NativeOutlineEntry[] = Object.freeze([]);
   private readonly headingIndex = new Map<string, number>();
   private places = new Map<string, NativeSpanPlace>();
+  private headingPlaces = new Map<string, NativeSpanPlace>();
   private candidates: UnplacedRef[] = [];
   private readonly rowCache = new Map<string, NativeReadRow>();
-  private readonly builtFrom = new Map<string, string>();
+  private narration = new Map<string, readonly NativeSpanPlace[]>();
+  private readonly builtNarration = new Map<string, string>();
+  private readonly movedSegments = new Set<string>();
+  private spanOwners = new Map<string, string[]>();
+  private groups = new Map<string, RowMember[]>();
+  private groupHeads = new Map<string, string>();
+  private removedHeadings: readonly string[] = [];
+  private structuralProblems: NativeReaderProblem[] = [];
+  private stray: string | null = null;
   private readonly pendingRows = new Set<string>();
   private readonly pendingGone = new Set<string>();
   private readonly pendingHeadings = new Set<string>();
@@ -188,45 +203,41 @@ export class NativeScriptReader {
   private rowsBuilt = 0;
   private structures = 0;
 
-  constructor(roots: NativeRoots) {
+  constructor(roots: NativeRoots, watch?: NativeWatch) {
     this.roots = roots;
-    this.watch(roots.segments, events => {
+    if (!watch) return;
+    const observe = <Event>(type: Y.AbstractType<Event>, listener: DeepListener): void => { this.detach.push(watch(type, listener)); };
+    observe(roots.segments, events => {
       for (const event of events) {
         const [segment] = event.path;
         if (typeof segment === "string") { this.dirtySegments.add(segment); if (event.path.length === 1) this.structural = true; }
         else for (const key of event.keys.keys()) { this.dirtySegments.add(key); this.structural = true; }
       }
     });
-    this.watch(roots.order, () => { this.structural = true; });
-    this.watch(roots.beats, events => {
+    observe(roots.order, () => { this.structural = true; });
+    observe(roots.beats, events => {
       for (const event of events) {
         const [beat] = event.path;
         if (typeof beat !== "string") { this.structural = true; for (const key of event.keys.keys()) this.dirtyBeats.add(key); continue; }
         this.dirtyBeats.add(beat);
-        if (event.path.length === 1 && event.keys.has("rank")) this.structural = true;
+        if (event.path.length === 1 && (event.keys.has("rank") || event.keys.has("joined"))) this.structural = true;
       }
     });
-    this.watch(roots.visuals, events => {
+    observe(roots.visuals, events => {
       for (const event of events) {
         const [beat] = event.path;
         if (typeof beat === "string") this.dirtyBeats.add(beat);
         else { this.structural = true; for (const key of event.keys.keys()) this.dirtyBeats.add(key); }
       }
     });
-    this.watch(roots.headings, () => { this.structural = true; });
-    this.watch(roots.names, events => {
+    observe(roots.headings, () => { this.structural = true; });
+    observe(roots.names, events => {
       for (const event of events) {
         const [heading] = event.path;
-        if (typeof heading === "string") this.dirtyHeadings.add(heading); else for (const key of event.keys.keys()) this.dirtyHeadings.add(key);
+        if (typeof heading === "string") this.dirtyHeadings.add(heading); else this.structural = true;
       }
     });
-    this.watch(roots.edited, events => { for (const event of events) for (const key of event.keys.keys()) this.dirtyBeats.add(key); });
-  }
-
-  private watch(type: NativeWatched, handle: DeepListener): void {
-    const listener: DeepListener = events => { handle(events); };
-    type.observeDeep(listener);
-    this.detach.push(() => { type.unobserveDeep(listener); });
+    observe(roots.edited, events => { for (const event of events) for (const key of event.keys.keys()) this.dirtyBeats.add(key); });
   }
 
   close(): void {
@@ -239,7 +250,7 @@ export class NativeScriptReader {
   }
 
   counts(): NativeReaderCounts {
-    return { parses: this.parses, rowsBuilt: this.rowsBuilt, structures: this.structures };
+    return Object.freeze({ parses: this.parses, rowsBuilt: this.rowsBuilt, structures: this.structures });
   }
 
   refresh(): NativeReadChanges {
@@ -254,20 +265,18 @@ export class NativeScriptReader {
 
   private sync(): void {
     if (this.closed) throw new Error("The script reader is closed");
-    if (!this.everything && !this.structural && !this.dirtySegments.size && !this.dirtyBeats.size && !this.dirtyHeadings.size) return;
-    if (this.everything) {
-      for (const key of [...this.roots.segments.keys(), ...this.parsed.keys()]) this.dirtySegments.add(key);
-      for (const key of this.roots.beats.keys()) this.dirtyBeats.add(key);
-      this.structural = true;
-      this.everything = false;
-    }
+    if (!this.structural && !this.dirtySegments.size && !this.dirtyBeats.size && !this.dirtyHeadings.size) return;
     this.reparse();
     if (this.structural) this.restructure();
-    for (const id of this.dirtyBeats) {
-      if (!this.places.has(id)) continue;
+    const dirtyRows = new Set<string>();
+    for (const beat of this.dirtyBeats) {
+      const head = this.groupHeads.get(beat);
+      if (head !== undefined) dirtyRows.add(head);
+    }
+    for (const id of dirtyRows) {
       const previous = this.rowCache.get(id), row = this.buildRow(id);
       this.rowCache.set(id, row);
-      if (!previous || previous.audioText !== row.audioText || previous.visualText !== row.visualText || JSON.stringify(previous.fields) !== JSON.stringify(row.fields)) {
+      if (!previous || JSON.stringify(previous) !== JSON.stringify(row)) {
         this.pendingGone.delete(id); this.pendingRows.add(id);
       }
     }
@@ -286,17 +295,24 @@ export class NativeScriptReader {
     for (const key of this.dirtySegments) {
       const old = this.parsed.get(key), record = this.roots.segments.get(key);
       if (record === undefined) {
-        if (old) { this.parsed.delete(key); this.structural = true; for (const span of old.spans) if (span.key?.startsWith("b:")) this.dirtyBeats.add(span.key.slice(2)); }
+        if (this.parsed.delete(key)) this.structural = true;
         continue;
       }
       const next = parseSegment(record);
       this.parses++;
       this.parsed.set(key, next);
-      if (!old || !samePlacement(old, next)) this.structural = true;
-      const before = contentsByKey(old?.spans ?? []), after = contentsByKey(next.spans);
-      for (const [block, content] of [...before, ...after]) {
-        if (block.startsWith("b:") && (before.get(block) !== content || after.get(block) !== content)) this.dirtyBeats.add(block.slice(2));
+      if (!old || !samePlacement(old, next)) {
+        this.structural = true;
+        this.movedSegments.add(key);
+        continue;
       }
+      const owners = this.spanOwners.get(key);
+      next.spans.forEach((span, index) => {
+        if (span.content === old?.spans[index]?.content) return;
+        const owner = owners?.[index];
+        if (owner !== undefined) this.dirtyBeats.add(owner);
+      });
+      if (this.stray !== null && owners?.includes(this.stray)) this.structural = true;
     }
     this.dirtySegments.clear();
   }
@@ -314,47 +330,140 @@ export class NativeScriptReader {
 
   private restructure(): void {
     this.structures++;
-    const seen = new Set<string>(), blocks: StoredBlock[] = [], candidates: UnplacedRef[] = [], places = new Map<string, NativeSpanPlace>();
+    const seen = new Set<string>(), blocks: StoredBlock[] = [], places = new Map<string, NativeSpanPlace>();
+    const top: NativeSpanPlace[] = [], problems: NativeReaderProblem[] = [], headingPlaces = new Map<string, NativeSpanPlace>();
     const ordered = new Set(this.roots.order.toArray().filter((key): key is string => typeof key === "string"));
+    const positions = new Map<string, number>();
+    let previousBeat: StoredBlock | undefined;
     for (const segment of ordered) {
+      positions.set(segment, positions.size);
       const parsed = this.segment(segment);
-      if (!parsed?.hasText) continue;
+      if (!parsed) { problems.push({ kind: "no-segment", where: "segments/" + segment }); continue; }
+      const leading: NativeSpanPlace[] = [];
+      let previous: StoredBlock | undefined, firstBeat: StoredBlock | undefined, lastBeat = previousBeat;
       parsed.spans.forEach((span, index) => {
-        const ref = Object.freeze({ segment, span: index });
-        if (span.key === null) { candidates.push({ ...ref, reason: "no-head" }); return; }
-        if (seen.has(span.key)) { candidates.push({ ...ref, reason: "repeated" }); return; }
-        seen.add(span.key);
-        const kind = span.key.startsWith("h:") ? "h" : "b", id = span.key.slice(2);
-        if (kind === "h") {
-          candidates.push({ ...ref, reason: "heading-text" });
-          const record = this.roots.headings.get(id);
-          blocks.push({ kind, id, shown: record instanceof Y.Map && record.get("removed") !== true });
-          return;
+        const ref = Object.freeze({ segment, span: index }), key = span.key;
+        if (key === null || seen.has(key)) { (previous?.spans ?? leading).push(ref); return; }
+        seen.add(key);
+        const kind = key.startsWith("h:") ? "h" : "b", id = key.slice(2);
+        if (kind === "b") {
+          const hasRecord = this.roots.beats.get(id) instanceof Y.Map, hasVisual = this.roots.visuals.get(id) instanceof Y.Text;
+          if (!hasRecord) problems.push({ kind: "missing-beat-record", where: "beats/" + id });
+          if (!hasVisual) problems.push({ kind: "missing-visual", where: "visuals/" + id });
+          if (!hasRecord || !hasVisual) { (previous?.spans ?? leading).push(ref); return; }
+          places.set(id, ref);
+          previous = { kind, id, shown: true, spans: [ref] };
+          firstBeat ??= previous;
+          lastBeat = previous;
+        } else {
+          const record = this.roots.headings.get(id), hasName = this.roots.names.get(id) instanceof Y.Text;
+          if (!(record instanceof Y.Map)) problems.push({ kind: "missing-heading-record", where: "headings/" + id });
+          if (!hasName) problems.push({ kind: "missing-name", where: "names/" + id });
+          if (record instanceof Y.Map && hasName) headingPlaces.set(id, ref);
+          previous = { kind, id, shown: record instanceof Y.Map && hasName && record.get("removed") !== true, spans: [ref] };
         }
-        const shown = this.roots.beats.get(id) instanceof Y.Map && this.roots.visuals.get(id) instanceof Y.Text;
-        if (shown) places.set(id, ref); else candidates.push({ ...ref, reason: "no-record" });
-        blocks.push({ kind, id, shown });
+        blocks.push(previous);
       });
+      (firstBeat?.spans ?? previousBeat?.spans ?? top).push(...leading);
+      previousBeat = lastBeat;
     }
-    for (const key of this.roots.segments.keys()) {
-      if (ordered.has(key)) continue;
-      this.segment(key)?.spans.forEach((_, index) => { candidates.push({ segment: key, span: index, reason: "no-order" }); });
+    const below: (StoredBlock | undefined)[] = [];
+    let nextBeat: StoredBlock | undefined;
+    for (let at = blocks.length - 1; at >= 0; at--) {
+      below[at] = nextBeat;
+      if (blocks[at]?.kind === "b") nextBeat = blocks[at];
     }
-    for (const id of this.places.keys()) if (!places.has(id)) { this.rowCache.delete(id); this.builtFrom.delete(id); this.pendingRows.delete(id); this.pendingGone.add(id); }
-    for (const [id, place] of places) {
-      if (!samePlace(place, this.places.get(id)) && this.spanAt(place)?.content !== this.builtFrom.get(id)) this.dirtyBeats.add(id);
+    if (nextBeat) nextBeat.spans.push(...top);
+    previousBeat = undefined;
+    for (const [at, block] of blocks.entries()) {
+      if (block.kind === "b") { previousBeat = block; continue; }
+      const next = blocks[at + 1];
+      const owner = next?.kind === "b" ? next : previousBeat ?? below[at];
+      (owner?.spans ?? top).push(...block.spans);
     }
+    this.stray = null;
+    if (!places.size && top.length) {
+      let id = "~stray";
+      while (seen.has("b:" + id) || this.roots.beats.has(id) || this.roots.visuals.has(id)) id += "~";
+      this.stray = id;
+    }
+    const narration = new Map<string, readonly NativeSpanPlace[]>(), owners = new Map<string, string[]>();
+    const assign = (id: string, spans: NativeSpanPlace[]): void => {
+      if (spans.length > 1) spans.sort((a, b) => (positions.get(a.segment) ?? 0) - (positions.get(b.segment) ?? 0) || a.span - b.span);
+      if ((!sameSpans(spans, this.narration.get(id)) || spans.some(ref => this.movedSegments.has(ref.segment)))
+        && this.narrationContent(spans) !== this.builtNarration.get(id)) this.dirtyBeats.add(id);
+      narration.set(id, Object.freeze(spans));
+      for (const ref of spans) {
+        const refs = owners.get(ref.segment) ?? [];
+        refs[ref.span] = id;
+        owners.set(ref.segment, refs);
+      }
+    };
+    for (const block of blocks) if (block.kind === "b") assign(block.id, block.spans);
+    if (this.stray !== null) assign(this.stray, top);
+    for (const id of this.narration.keys()) if (!narration.has(id)) this.builtNarration.delete(id);
+    this.movedSegments.clear();
     this.places = places;
-    this.candidates = candidates;
-    const outline = Object.freeze(this.ranked(blocks).map(block => Object.freeze(block.kind === "h" ? { kind: "heading" as const, id: block.id, name: this.nameOf(block.id) } : { kind: "row" as const, id: block.id })));
-    if (JSON.stringify(outline) !== JSON.stringify(this.outlineEntries)) this.pendingOutline = true;
-    this.outlineEntries = outline;
-    this.headingIndex.clear();
-    outline.forEach((entry, index) => { if (entry.kind === "heading") this.headingIndex.set(entry.id, index); });
+    this.headingPlaces = headingPlaces;
+    this.narration = narration;
+    this.spanOwners = owners;
+    this.structuralProblems = problems;
+    this.candidates = [];
+    for (const key of [...this.roots.segments.keys()].sort()) {
+      if (!ordered.has(key)) this.segment(key)?.spans.forEach((_, index) => { this.candidates.push({ segment: key, span: index, reason: "no-order" }); });
+    }
+    this.updateOutline(this.ranked(blocks), blocks);
     this.structural = false;
   }
 
-  // why: blocks show in rank order and ties keep stored order; a block with no rank reads after the block before it
+  private updateOutline(ranked: readonly StoredBlock[], stored: readonly StoredBlock[]): void {
+    const outline: NativeOutlineEntry[] = [], groups = new Map<string, RowMember[]>(), heads = new Map<string, string>();
+    const start = (id: string): RowMember[] => {
+      outline.push(Object.freeze({ kind: "row", id }));
+      const group = [{ id, glue: "" }];
+      groups.set(id, group);
+      heads.set(id, id);
+      return group;
+    };
+    const stray = this.stray;
+    if (stray !== null && this.narration.get(stray)?.some(ref => (this.spanAt(ref)?.items.length ?? 0) > 0)) start(stray);
+    let previous: RowMember[] | undefined;
+    for (const block of ranked) {
+      const id = block.id;
+      if (block.kind === "h") {
+        outline.push(Object.freeze({ kind: "heading", id, name: this.nameOf(id) }));
+        previous = undefined;
+        continue;
+      }
+      const joined = joinOf(this.roots.beats.get(id)), head = previous?.[0];
+      if (head && previous && joined && joined.into === previous.at(-1)?.id) {
+        previous.push({ id, glue: joined.glue });
+        heads.set(id, head.id);
+      } else previous = start(id);
+    }
+    for (const id of this.groups.keys()) {
+      if (groups.has(id)) continue;
+      this.rowCache.delete(id); this.pendingRows.delete(id); this.pendingGone.add(id);
+    }
+    for (const [id, group] of groups) {
+      const before = this.groups.get(id);
+      if (group.length !== before?.length || group.some((member, index) => member.id !== before[index]?.id || member.glue !== before[index]?.glue)) {
+        this.dirtyBeats.add(id);
+      }
+    }
+    this.groups = groups;
+    this.groupHeads = heads;
+    this.removedHeadings = stored.flatMap(block => block.kind === "h" && !block.shown
+      && this.roots.headings.get(block.id)?.get("removed") === true && this.roots.names.get(block.id) instanceof Y.Text ? [block.id] : []);
+    if (outline.length !== this.outlineEntries.length || outline.some((entry, at) => {
+      const before = this.outlineEntries[at];
+      return entry.kind !== before?.kind || entry.id !== before.id || (entry.kind === "heading" && before.kind === "heading" && entry.name !== before.name);
+    })) this.pendingOutline = true;
+    this.outlineEntries = Object.freeze(outline);
+    this.headingIndex.clear();
+    outline.forEach((entry, index) => { if (entry.kind === "heading") this.headingIndex.set(entry.id, index); });
+  }
+
   private ranked(blocks: readonly StoredBlock[]): StoredBlock[] {
     let previous = "";
     const keyed = blocks.map((block, index) => {
@@ -375,11 +484,20 @@ export class NativeScriptReader {
     return this.parsed.get(place.segment)?.spans[place.span] ?? null;
   }
 
+  private narrationContent(spans: readonly NativeSpanPlace[]): string {
+    const content: string[] = [];
+    for (const ref of spans) {
+      const span = this.spanAt(ref);
+      if (span?.items.length) content.push(span.content);
+    }
+    return content.length === 1 ? content[0] ?? "" : JSON.stringify(content);
+  }
+
   private beatFields(id: string, problems: Problems): Record<string, unknown> {
     const record = this.roots.beats.get(id), entries: [string, unknown][] = [];
     if (record instanceof Y.Map) {
       entries.push(...namedFields(record, BEAT_FIELDS, "beats/" + id, problems));
-      if (record.has("joined")) problems?.push({ kind: "join-not-read", where: "beats/" + id });
+      if (record.has("joined") && this.groupHeads.get(id) === id) problems?.push({ kind: "join-not-read", where: "beats/" + id });
     }
     const edited = this.roots.edited.get(id);
     if (edited && typeof edited === "object") {
@@ -395,11 +513,22 @@ export class NativeScriptReader {
 
   private buildRow(id: string): NativeReadRow {
     this.rowsBuilt++;
-    const place = this.places.get(id), span = place ? this.spanAt(place) : null, visual = this.roots.visuals.get(id);
-    this.builtFrom.set(id, span?.content ?? "");
-    const narration = nativeRunsOf(span?.items ?? []), visualRuns = nativeRunsOf((visual instanceof Y.Text ? visual.toDelta() : []) as NativeDeltaItem[]);
+    const group = this.groups.get(id) ?? [], audio: NativeDeltaItem[] = [], visual: NativeDeltaItem[] = [];
+    for (const member of group) {
+      const refs = this.narration.get(member.id) ?? EMPTY_SPANS;
+      this.builtNarration.set(member.id, this.narrationContent(refs));
+      const items = refs.length === 1 && refs[0] ? this.spanAt(refs[0])?.items ?? [] : refs.flatMap(ref => this.spanAt(ref)?.items ?? []);
+      if (member.glue && audio.length && items.length) audio.push({ insert: member.glue });
+      audio.push(...items);
+      const cell = this.roots.visuals.get(member.id);
+      const delta = (cell instanceof Y.Text ? cell.toDelta() : []) as NativeDeltaItem[];
+      if (visual.length && delta.length) visual.push({ insert: "\n" });
+      visual.push(...delta);
+    }
+    const narration = nativeRunsOf(audio), visualRuns = nativeRunsOf(visual);
     return Object.freeze({
-      id, narration: frozenRuns(narration), visual: frozenRuns(visualRuns), audioText: toHtml(narration), visualText: toHtml(visualRuns),
+      id, members: Object.freeze(id === this.stray ? [] : group.map(member => member.id)),
+      narration: frozenRuns(narration), visual: frozenRuns(visualRuns), audioText: toHtml(narration), visualText: toHtml(visualRuns),
       fields: deepFrozen(this.beatFields(id, null))
     });
   }
@@ -414,29 +543,46 @@ export class NativeScriptReader {
     return this.rowCache.get(id) ?? null;
   }
 
-  rows(): NativeReadRow[] {
-    return this.outline().flatMap(entry => {
+  rows(): readonly NativeReadRow[] {
+    return Object.freeze(this.outline().flatMap(entry => {
       const row = entry.kind === "row" ? this.rowCache.get(entry.id) : undefined;
       return row ? [row] : [];
-    });
+    }));
+  }
+
+  beatBoundary(beat: string): NativeSpanPlace | null {
+    this.sync();
+    return this.places.get(beat) ?? null;
+  }
+
+  headingBoundary(heading: string, removed: boolean): NativeSpanPlace | null {
+    this.sync();
+    const place = this.headingPlaces.get(heading);
+    return place && (this.roots.headings.get(heading)?.get("removed") === true) === removed ? place : null;
   }
 
   narrationSpans(beat: string): readonly NativeSpanPlace[] {
     this.sync();
-    const place = this.places.get(beat);
-    return Object.freeze(place ? [place] : []);
+    if (beat === this.stray && !this.groupHeads.has(beat)) return EMPTY_SPANS;
+    const spans = this.narration.get(beat) ?? EMPTY_SPANS, own = this.places.get(beat);
+    return spans.length < 2 ? spans : Object.freeze(spans.filter(ref => ref === own || this.spanAt(ref)?.items.length));
   }
 
-  unplaced(): NativeUnplacedSpan[] {
+  recovery(): readonly NativeRemovedHeading[] {
     this.sync();
-    return this.candidates.flatMap(ref => {
-      const span = this.spanAt(ref);
-      return span && span.end > span.start ? [{ segment: ref.segment, reason: ref.reason, length: span.end - span.start }] : [];
-    });
+    return Object.freeze(this.removedHeadings.map(id => Object.freeze({ id, name: this.nameOf(id) })));
   }
 
-  problems(): NativeReaderProblem[] {
-    const entries = this.outline(), problems: NativeReaderProblem[] = [];
+  unplaced(): readonly NativeUnplacedSpan[] {
+    this.sync();
+    return Object.freeze(this.candidates.flatMap(ref => {
+      const span = this.spanAt(ref);
+      return span && span.end > span.start ? [Object.freeze({ segment: ref.segment, reason: ref.reason, length: span.end - span.start })] : [];
+    }));
+  }
+
+  problems(): readonly NativeReaderProblem[] {
+    const entries = this.outline(), problems: NativeReaderProblem[] = [...this.structuralProblems];
     for (const key of [...this.roots.segments.keys()].sort()) {
       const parsed = this.segment(key);
       if (!parsed) continue;
@@ -448,9 +594,14 @@ export class NativeScriptReader {
       if (visual instanceof Y.Text) this.cellProblems(visual.toDelta() as NativeDeltaItem[], "visuals/" + id, problems);
       this.beatFields(id, problems);
     }
+    for (const id of this.headingPlaces.keys()) {
+      const name = this.roots.names.get(id);
+      if (name && name.toString().length !== name.length) problems.push({ kind: "bad-value", where: "names/" + id });
+    }
     entries.forEach((entry, index) => { if (entry.kind === "heading" && entries[index + 1]?.kind !== "row") problems.push({ kind: "heading-without-row", where: "headings/" + entry.id }); });
+    for (const span of this.unplaced()) problems.push({ kind: "no-order", where: "segments/" + span.segment });
     this.collect(problems);
-    return problems;
+    return deepFrozen(problems);
   }
 
   private cellProblems(items: readonly NativeDeltaItem[], where: string, problems: NativeReaderProblem[]): void {
@@ -502,6 +653,6 @@ export class NativeScriptReader {
       if (entry.kind !== "heading" || next?.kind !== "row") return [];
       return [{ ...record instanceof Y.Map ? fileFields(record, "headings/" + entry.id, null) : {}, id: entry.id, name: entry.name, firstSceneId: next.id }];
     });
-    return structuredClone({ ...this.collect(null), rows, ...sections.length ? { sections } : {} });
+    return deepFrozen({ ...this.collect(null), rows, ...sections.length ? { sections } : {} });
   }
 }

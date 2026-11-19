@@ -104,21 +104,24 @@ function writesFor(script: NativeScript, change: CheckedChange, units: NativeRan
 export function formatNativeText(script: NativeScript, range: NativeTextRange, change: NativeMarkChange): NativeFormatOutcome {
   const unavailable = nativeAvailability(script);
   if (unavailable) return refused(unavailable);
-  const checked = checkedChange(change), snapshot = nativeRangeSnapshot(range);
-  if (!checked) return refused("mark");
-  if (!snapshot) return refused("range");
-  let outcome = refused("missing");
-  script.doc.transact(() => {
+  return script.doc.transact(() => {
+    const checked = checkedChange(change), snapshot = nativeRangeSnapshot(range);
+    if (!checked) return refused("mark");
+    if (!snapshot || snapshot.target.cell === "name") return refused("range");
     const live = nativeLiveRange(script, snapshot);
-    if (typeof live === "string") { outcome = refused(live); return; }
-    if (live.until <= live.from) { outcome = UNCHANGED; return; }
-    const units = nativeRangeUnits(live.items, live.from - live.start, live.until - live.start, checked.on ? checked.key : null, checked.carry);
-    const writes = writesFor(script, checked, units);
-    if (!writes) { outcome = UNCHANGED; return; }
-    if (Object.keys(writes.clear).length) live.text.format(live.from, live.until - live.from, writes.clear);
-    // why: a mark goes only on units whose kind can carry it; the rest of the range still gets it
-    if (writes.set) for (const [start, end] of units.stretches) live.text.format(live.start + start, end - start, writes.set);
-    outcome = WRITTEN;
+    if (typeof live === "string") return refused(live);
+    let outcome = UNCHANGED;
+    const planned = live.pieces.map(piece => {
+      const units = nativeRangeUnits(piece.items, piece.from - piece.start, piece.until - piece.start, checked.on ? checked.key : null, checked.carry);
+      return { piece, units, writes: writesFor(script, checked, units) };
+    });
+    for (const { piece, units, writes } of planned) {
+      if (!writes || piece.until <= piece.from) continue;
+      if (Object.keys(writes.clear).length) piece.text.format(piece.from, piece.until - piece.from, writes.clear);
+      // why: a mark goes only on units whose kind can carry it
+      if (writes.set) for (const [start, end] of units.stretches) piece.text.format(piece.start + start, end - start, writes.set);
+      outcome = WRITTEN;
+    }
+    return outcome;
   }, script.origin);
-  return outcome;
 }
