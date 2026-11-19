@@ -18,6 +18,7 @@ export interface NativePreparedRun {
   readonly marks: Marks;
   readonly stack: readonly string[];
   readonly atom: boolean;
+  readonly shared?: number;
 }
 
 export interface NativeLeft {
@@ -153,8 +154,8 @@ function chain(marks: Marks, depth: number): string {
 export function writeNativeRuns(doc: Y.Doc, text: Y.Text, index: number, runs: readonly NativePreparedRun[], left: NativeLeft | null): number {
   let at = index, beside = left;
   for (const run of runs) {
-    const keys: string[] = [], continued = beside && !beside.atom && !run.atom ? beside : null;
-    while (continued && keys.length < run.stack.length && keys.length < continued.keys.length && chain(continued.marks, keys.length) === chain(run.marks, keys.length)) {
+    const keys: string[] = [], continued = beside && !beside.atom && !run.atom ? beside : null, shared = run.shared ?? run.stack.length;
+    while (continued && keys.length < shared && keys.length < continued.keys.length && chain(continued.marks, keys.length) === chain(run.marks, keys.length)) {
       keys.push(continued.keys[keys.length] as string);
     }
     const fresh = run.stack.slice(keys.length), attributes: Record<string, true> = { ...run.plain };
@@ -164,7 +165,7 @@ export function writeNativeRuns(doc: Y.Doc, text: Y.Text, index: number, runs: r
     else text.insertEmbed(at, run.insert, attributes);
     for (const id of fresh.slice(1)) { const key = mintKey(doc, id); keys.push(key); text.format(at, run.length, { [key]: true }); }
     at += run.length;
-    beside = { marks: run.marks, keys, atom: run.atom };
+    beside = { marks: run.marks, keys: keys.slice(0, shared), atom: run.atom };
   }
   return at;
 }

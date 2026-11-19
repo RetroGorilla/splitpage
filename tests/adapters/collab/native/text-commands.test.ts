@@ -4,6 +4,7 @@ import * as Y from "yjs";
 import { dom } from "../../../../src/test/_dom.mjs";
 import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
 import type { ValidatedDocument } from "../../../../src/core/document/validated.ts";
+import type { StoredImageRef } from "../../../../src/core/document/text-policy.ts";
 import type { Marks, Run } from "../../../../src/core/text/runs.ts";
 import { nativeMarkName } from "../../../../src/adapters/collab/native/inline.ts";
 import { nativeSegmentSpans } from "../../../../src/adapters/collab/native/reader.ts";
@@ -139,7 +140,9 @@ test("finding 4: units the cell policy hides are refused before writing", () => 
     const outcome = typeNativeText(copy, at, text, {});
     assert.ok(outcome.kind === "recovery" && outcome.reason === "text", JSON.stringify(text));
   }
-  const bad: Run[] = [{ text: "Q", marks: {} }, { atom: "image", ref: { sha256: "a".repeat(64), extension: 10n } as never, text: "", marks: {} }];
+  const ref: StoredImageRef = { sha256: "a".repeat(64) };
+  Object.assign(ref, { extension: 10n });
+  const bad: Run[] = [{ text: "Q", marks: {} }, { atom: "image", ref, text: "", marks: {} }];
   assert.deepEqual(replaceNativeText(copy, range(copy, NARRATION("R1"), 0, 1), bad), { kind: "recovery", reason: "text", runs: bad });
   assert.deepEqual(replaceNativeText(copy, at, [{ text: "x", marks: { tag: "bad\u001fid" } }]).kind, "recovery");
   assert.deepEqual(Y.encodeStateVector(copy.doc), before);
@@ -301,6 +304,19 @@ test("round 3, fix 6: a malformed relative position is a range refusal, not a th
     assert.deepEqual(deleteNativeText(copy, { ...good, from: position }), { kind: "recovery", reason: "range", runs: [] });
   }
   assert.deepEqual(Y.encodeStateVector(copy.doc), before);
+});
+
+test("closing round, item 2: a position whose association is not a whole number of the expected sign is a range refusal", () => {
+  const copy = one({ R1: "abc" }), before = Y.encodeStateVector(copy.doc), good = range(copy, NARRATION("R1"), 1, 2);
+  const withAssoc = (position: Y.RelativePosition, assoc: number): Y.RelativePosition => Y.createRelativePositionFromJSON({ ...Y.relativePositionToJSON(position), assoc });
+  for (const bad of [
+    { ...good, from: withAssoc(good.from, NaN) }, { ...good, from: withAssoc(good.from, Infinity) }, { ...good, from: withAssoc(good.from, 0.5) },
+    { ...good, from: withAssoc(good.from, -1) }, { ...good, to: withAssoc(good.to, NaN) }, { ...good, to: withAssoc(good.to, 0) }
+  ]) assert.deepEqual(deleteNativeText(copy, bad), { kind: "recovery", reason: "range", runs: [] });
+  assert.deepEqual(Y.encodeStateVector(copy.doc), before);
+  assert.equal(narration(copy, "R1"), "abc");
+  assert.equal(deleteNativeText(copy, good).kind, "written");
+  assert.equal(narration(copy, "R1"), "ac");
 });
 
 test("round 3, item 8: a selection a peer typed into deletes what was typed too, as a live selection does", () => {

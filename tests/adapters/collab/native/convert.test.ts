@@ -7,6 +7,7 @@ import type { DocumentShape, ValidatedDocument } from "../../../../src/core/docu
 import { convertToNativeScript, NATIVE_SEGMENT_BEATS } from "../../../../src/adapters/collab/native/convert.ts";
 import { nativeBlockOf } from "../../../../src/adapters/collab/native/inline.ts";
 import type { NativeDeltaItem } from "../../../../src/adapters/collab/native/inline.ts";
+import { nativeSegmentSpans } from "../../../../src/adapters/collab/native/reader.ts";
 import { openNativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import { cells, convertedScript, fixture, fixtures, freshlyShown, joinedScript, shown } from "./helpers.ts";
@@ -174,7 +175,7 @@ test("finding 2: extension values keep every key on every copy, adapter fields c
 });
 
 test("finding 2: a value with no JSON form stops conversion before anything is written", () => {
-  for (const source of [base({ people: [{ id: "p1", name: "P", payload: 10n }] }), base({}, [{ id: "R1", audioText: "a", visualText: "", big: 10n }]), { ...base(), wordsPerMinute: 10n } as unknown as ValidatedDocument]) {
+  for (const source of [base({ people: [{ id: "p1", name: "P", payload: 10n }] }), base({}, [{ id: "R1", audioText: "a", visualText: "", big: 10n }]), Object.assign(base(), { wordsPerMinute: 10n })]) {
     const doc = new Y.Doc(), script = openNativeScript(doc);
     doc.on("update", () => undefined);
     assert.throws(() => { convertToNativeScript(script, source, ports); }, /BigInt/);
@@ -205,16 +206,15 @@ test("finding 3: nested production tags keep their nesting and their application
 });
 
 test("finding 7: an orphan heading and two headings on one row are refused before writing", () => {
-  const raw = { schema: 2, title: "T", docId: "d", rev: 0, rows: [{ id: "R1", audioText: "a" }], comments: [], people: [], productionTags: [], brollShots: [] };
   for (const sections of [[{ id: "h1", name: "H", firstSceneId: "nope" }], [{ id: "h1", name: "H1", firstSceneId: "R1" }, { id: "h2", name: "H2", firstSceneId: "R1" }]]) {
     const doc = new Y.Doc(), script = openNativeScript(doc);
-    assert.throws(() => { convertToNativeScript(script, { ...raw, sections } as unknown as ValidatedDocument, ports); }, /heading/i);
+    assert.throws(() => { convertToNativeScript(script, Object.assign(base(), { sections }), ports); }, /heading/i);
     assert.equal(Y.encodeStateVector(doc).length, 1);
   }
 });
 
 test("finding 7: a lone surrogate in the title or a heading name is stored as U+FFFD on every copy", () => {
-  const source = { ...base(), title: "x\ud800y", sections: [{ id: "h1", name: "a\udc00b", firstSceneId: "R1" }] } as unknown as ValidatedDocument, script = convertedScript(source), late = joinedScript(script, 2);
+  const source = Object.assign(base(), { title: "x\ud800y", sections: [{ id: "h1", name: "a\udc00b", firstSceneId: "R1" }] }), script = convertedScript(source), late = joinedScript(script, 2);
   for (const copy of [script, late]) {
     assert.equal(copy.reader.document().title, "x�y");
     assert.deepEqual(copy.reader.outline()[0], { kind: "heading", id: "h1", name: "a�b" });
@@ -231,6 +231,41 @@ test("round 3, fix 1: a tag nested inside itself converts and reads as one level
   }
 });
 
+function tagKeysPerUnit(items: readonly NativeDeltaItem[]): string[][] {
+  return items.flatMap(item => {
+    const keys = Object.keys(item.attributes ?? {}).filter(key => key.startsWith("t:")).sort();
+    return typeof item.insert === "string" ? Array.from(item.insert, () => keys) : [keys];
+  });
+}
+
+test("closing round, item 1: a tag repeated inside itself keeps its own application, apart from the one that follows", () => {
+  const ring = TAG_ANCHOR("ring"), html = ring + ring + "x</span></span>" + ring + "y</span>";
+  const source = base({ productionTags: [{ id: "t:prop:ring", cat: "prop", name: "ring" }] }, [{ id: "R1", audioText: html, visualText: html }]);
+  const script = convertedScript(source);
+  for (const copy of [script, joinedScript(script, 2)]) {
+    const visual = copy.roots.visuals.get("R1"), narration = nativeSegmentSpans(copy.roots.segments.get("b:R1"))?.[0]?.items ?? [];
+    for (const keys of [tagKeysPerUnit(narration), tagKeysPerUnit((visual?.toDelta() ?? []) as NativeDeltaItem[])]) {
+      assert.equal(keys.length, 2);
+      assert.ok(keys[0]?.length === 1 && keys[1]?.length === 1 && keys[0][0] !== keys[1][0], JSON.stringify(keys));
+    }
+    assert.deepEqual(copy.reader.row("R1")?.narration, cells(ring + "xy</span>"));
+  }
+});
+
+test("closing round, item 3: conversion reads each port once and writes what it checked", () => {
+  const reads = { creation: 0, at: 0, by: 0, cells: 0 }, answers = ["creation-1", "c\ud800"];
+  const counted = {
+    get creation(): string { return answers[reads.creation++] ?? "late"; },
+    get at(): string { reads.at++; return "2026-11-19T00:00:00Z"; },
+    get by(): string { reads.by++; return "converter"; },
+    get cells(): typeof cells { reads.cells++; return cells; }
+  };
+  const doc = new Y.Doc(), script = openNativeScript(doc);
+  convertToNativeScript(script, base(), counted);
+  assert.deepEqual(reads, { creation: 1, at: 1, by: 1, cells: 1 });
+  assert.deepEqual([...script.roots.births.keys()], ["creation-1"]);
+});
+
 test("round 3, fix 2: file field names the string codec would change keep apart on a late joiner", () => {
   const source = base({ people: [{ id: "p1", name: "P" }] });
   Object.assign(source.people[0] as object, { "\ud800": 1, "\ufffd": 2 });
@@ -243,7 +278,7 @@ test("round 3, fix 2: file field names the string codec would change keep apart 
 
 test("round 3, fix 2: an id that is not well formed is refused before anything is written", () => {
   const raw = (extra: Record<string, unknown>, rows: Record<string, unknown>[] = [{ id: "R1", audioText: "a", visualText: "" }]): ValidatedDocument =>
-    ({ ...base(), rows, ...extra }) as unknown as ValidatedDocument;
+    Object.assign(base(), { rows }, extra);
   for (const source of [
     raw({}, [{ id: "R\ud800", audioText: "a", visualText: "" }]), raw({ people: [{ id: "p\udc00", name: "P" }] }),
     raw({ comments: [{ id: "c\ud800", replies: [] }] }), raw({ comments: [{ id: "c1", replies: [{ id: "r\ud800" }] }] }),

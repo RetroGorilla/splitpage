@@ -103,6 +103,11 @@ function sameStamp(stored: unknown, stamp: EncodedStamp): boolean {
   return value.by === stamp.by && value.at === stamp.at;
 }
 
+function associated(range: NativeTextRange): boolean {
+  const from = (range.from as { assoc?: unknown } | null)?.assoc, to = (range.to as { assoc?: unknown } | null)?.assoc;
+  return Number.isInteger(from) && (from as number) >= 0 && (range.to === range.from || (Number.isInteger(to) && (to as number) < 0));
+}
+
 function resolve(position: unknown, doc: Y.Doc): Y.AbsolutePosition | null {
   try { return Y.createAbsolutePositionFromRelativePosition(position as Y.RelativePosition, doc); } catch { return null; }
 }
@@ -126,6 +131,7 @@ export function replaceNativeText(script: NativeScript, range: NativeTextRange, 
   script.doc.transact(() => {
     const cell = liveCell(script, range.target);
     if (!cell) return;
+    if (!associated(range)) { outcome = refuse("range", runs); return; }
     const from = resolve(range.from, script.doc), to = resolve(range.to, script.doc);
     const stored = storedText(cell.items);
     if (!from || !to || from.type !== cell.text || to.type !== cell.text || from.index < cell.start || to.index > cell.end || to.index < from.index

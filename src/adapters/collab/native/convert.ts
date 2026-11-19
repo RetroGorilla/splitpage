@@ -92,17 +92,22 @@ function wellFormed(value: string): string {
   return value.replace(/\p{Cs}/gu, "�");
 }
 
-// why: a file can nest a tag inside itself; one key per tag and unit reads that as one level, as before
-function oneLevel(run: Run): Run {
-  if (run.atom) return run;
+// why: a file can nest a tag inside itself; one key per tag and unit keeps the inner application on those units,
+// so from the first repeated tag down they share no key with a neighbour
+function oneLevel(run: Run): { readonly run: Run; readonly shared?: number } {
+  if (run.atom) return { run };
   const stack = tagStack(run.marks), kept = [...new Set(stack)];
-  return kept.length === stack.length ? run : { ...run, marks: withTagStack(run.marks, kept) };
+  if (kept.length === stack.length) return { run };
+  const repeated = stack.find((id, depth) => stack.indexOf(id) !== depth) as string;
+  return { run: { ...run, marks: withTagStack(run.marks, kept) }, shared: kept.indexOf(repeated) };
 }
 
-function cell(ports: NativeConversionPorts, html: unknown, where: string): NativePreparedRun[] {
-  const prepared = prepareNativeRuns(ports.cells(typeof html === "string" ? html : "").map(oneLevel));
-  if (!prepared) throw new Error("The rich-text reader returned a cell the shared script cannot hold: " + where);
-  return prepared;
+function cell(cells: NativeConversionPorts["cells"], html: unknown, where: string): NativePreparedRun[] {
+  return cells(typeof html === "string" ? html : "").flatMap(source => {
+    const { run, shared } = oneLevel(source), prepared = prepareNativeRuns([run]);
+    if (!prepared) throw new Error("The rich-text reader returned a cell the shared script cannot hold: " + where);
+    return shared === undefined ? prepared : prepared.map(item => ({ ...item, shared }));
+  });
 }
 
 function emptyDocument(doc: Y.Doc): boolean {
@@ -158,7 +163,9 @@ function write(script: NativeScript, roots: NativeRoots, plan: ReturnType<typeof
 }
 
 function prepare(source: ValidatedDocument, ports: NativeConversionPorts) {
-  for (const value of [ports.creation, ports.at, ports.by]) if (!nativeWellFormed(value) || !value) throw new Error("Conversion needs a creation id, a time and a writer");
+  const { cells, creation, at, by } = ports;
+  for (const value of [creation, at, by]) if (!nativeWellFormed(value) || !value) throw new Error("Conversion needs a creation id, a time and a writer");
+  if (typeof cells !== "function") throw new Error("Conversion needs the rich-text reader");
   if (typeof source.title !== "string" || !Array.isArray(source.rows)) throw new Error("Conversion needs a validated script");
   const sections = bags(source.sections), tags = bags(source.productionTags), comments = bags(source.comments);
   for (const entries of [bags(source.rows), sections, comments, bags(source.people), tags, bags(source.brollShots)]) unique(entries);
@@ -172,7 +179,7 @@ function prepare(source: ValidatedDocument, ports: NativeConversionPorts) {
   const beats: PreparedBeat[] = source.rows.map(row => ({
     id: row.id, heads: headsOf.get(row.id) ?? [],
     entries: namedEntries(sharedRow(row), BEAT_FIELDS, ROW_TEXT),
-    narration: cell(ports, row.audioText, row.id + " narration"), visual: cell(ports, row.visualText, row.id + " visual"),
+    narration: cell(cells, row.audioText, row.id + " narration"), visual: cell(cells, row.visualText, row.id + " visual"),
     edited: [["at", row.updatedAt] as const, ["by", row.updatedBy] as const].filter(([, value]) => value !== undefined).map(([key, value]) => [key, encodeNativeValue(value)] as const)
   }));
   const records = (list: readonly Bag[]): PreparedRecord[] => list.map(entry => ({ id: String(entry.id), key: String(entry.id), entries: fileEntries(entry, ["id"]) }));
@@ -183,7 +190,7 @@ function prepare(source: ValidatedDocument, ports: NativeConversionPorts) {
   });
   return {
     meta: namedEntries(source, META_FIELDS, [...COLLECTIONS, "title"]), title: wellFormed(source.title),
-    creation: [ports.creation, { at: ports.at, by: ports.by }] as const, beats,
+    creation: [creation, { at, by }] as const, beats,
     people: records(bags(source.people)), tags: records(tags), shots: records(bags(source.brollShots)),
     comments: comments.map(comment => ({ id: String(comment.id), key: String(comment.id), entries: fileEntries(comment, ["id", "replies"]) })), replies
   };
