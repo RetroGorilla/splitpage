@@ -31,20 +31,24 @@ export function nativePublication() {
   };
 }
 
-export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocument, failedClose: () => void, stored?: Uint8Array) {
+export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocument, failedClose: () => boolean, stored?: Uint8Array) {
   const actor = ports.editor(), at = new Date(ports.now()).toISOString();
   const options = { actor, sanitize: sanitizeHtml };
   const native = openNativeSession(stored ? { kind: "state", state: stored } : {
     kind: "document", document: source, conversion: { cells: scriptCellOf, creation: source.docId, at, by: actor }
   }, options);
+  try {
+    if (stored && !native.isStoredScript()) throw new Error("The stored state does not hold a well-formed native script");
+  } catch (error) { native.close(); throw error; }
   const publication = nativePublication();
   let stopInput: (() => void) | null = null, terminal: Uint8Array | null = null;
+  let initial: ValidatedDocument | null = null;
   const stop = native.subscribe(event => {
     try {
       if (event.kind === "changed") publication.publish(native.document(), "remote");
       else if (event.reason === "failed") {
         terminal = event.state;
-        try { failedClose(); } finally {
+        if (failedClose()) {
           notices.show(stopInput
             ? "The shared session stopped. Leaving again will retry keeping your writing."
             : "The shared session stopped. Your writing was kept in a standalone copy.", "warn");
@@ -65,8 +69,15 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
     unbind: () => { stopInput?.(); stopInput = null; },
     settle: () => null,
     start: () => {
-      publication.publish(native.document(), "hydration");
+      initial = enterSharedDocument(native.document());
+      publication.publish(initial, "hydration");
     },
+    failedEntry: () => {
+      if (!terminal) return null;
+      const recovered = landing();
+      return JSON.stringify(initial) === JSON.stringify(recovered) ? null : recovered;
+    },
+    stopIngress: native.holdIngress,
     landing,
     live: () => {},
     dispose: attempt => { attempt(stop); attempt(native.close); }

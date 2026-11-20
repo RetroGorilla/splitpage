@@ -104,7 +104,7 @@ import { compressImageFile, videoFirstFrame } from "../../features/rows/beat-med
 import { videoFiles } from "./video-files.ts";
 import { desktopVideo } from "./desktop-video.ts";
 import { externalLinks } from "./ports/desktop.ts";
-import { sharedGalleryCommands } from "./ports/shared-commands.ts";
+import { refuseNativeEditorCommand, sharedGalleryCommands } from "./ports/shared-commands.ts";
 import { IS_MAC } from "../../features/common/key-chips.ts";
 import {
   acceptTagGhost,
@@ -132,7 +132,7 @@ import {
 import { showActionToast, showToast } from "./effects-owner.ts";
 import { viewFlags } from "./preferences-owner.ts";
 import { breakUndoGroup, configureUndo, sharedUndoRoute, stepSharedUndo, undoOwner } from "./undo.ts";
-import { sharedSessionParts } from "./shared-session.ts";
+import { nativeEditorActive, sharedSessionParts } from "./shared-session.ts";
 import { resolveSharedBufferedSelection } from "../../adapters/collab/buffer-selection.ts";
 import { resolveSharedRecordedSelection, sharedRowShowing } from "../../adapters/collab/recorded-selection.ts";
 import { sharedAnchorTarget } from "../../adapters/collab/anchors.ts";
@@ -339,7 +339,9 @@ export function mountCellEditingFeature(): { readonly dispose: () => void } {
       announce: announceGalleryEdit,
       gallery: sharedGalleryCommands
     });
-    return { dispose: installCellEditing(editing) };
+    return { dispose: installCellEditing({ ...editing, editGallery: (...args) => {
+      return refuseNativeEditorCommand() ? { changed: false, held: true } : editing.editGallery(...args);
+    } }) };
   }, () => [() => connectWriter((control) => {
     scheduleWriterStats = control?.scheduleWriterStats ?? inactiveWriter;
     const step = control?.writerUndoStep;
@@ -728,6 +730,7 @@ const editorFocusPorts: EditorFocusPorts = {
     focusMemory().unmutePrompt();
   },
   blurredCell: function (cellEl) {
+    if (nativeEditorActive()) return;
     const clean = sanitizeHtml(cellEl.innerHTML);
     if (clean !== storedHtmlFromDom(cellEl.innerHTML)) cellEl.innerHTML = clean;
     cellEditing().sync(cellEl);

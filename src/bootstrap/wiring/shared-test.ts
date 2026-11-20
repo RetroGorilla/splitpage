@@ -29,6 +29,7 @@ import { hydrateSharedDocumentFromState } from "../../adapters/collab/hydrate.ts
 import type { SharedDocumentHandle } from "../../adapters/collab/types.ts";
 import { timingMarks } from "../../../shared/timing-marks.ts";
 import { openNativeEditor } from "./native-shared-session.ts";
+import { hasNativeFormat } from "../../adapters/collab/native/session.ts";
 import { createNativeTestPeer } from "./shared-native-test-peer.ts";
 
 declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
@@ -143,7 +144,10 @@ function startSharedTestHook(): () => void {
         structure: { cells: html => fromHtml(html) }, report,
         timers: { now: () => Date.now(), start: (run, ms) => setTimeout(run, ms), stop: timer => { clearTimeout(timer as ReturnType<typeof setTimeout>); } },
         now: () => Date.now(),
-        ...(stored ? { hydrate: (handle: SharedDocumentHandle) => { hydrateSharedDocumentFromState(handle, stored); } } : {}),
+        ...(stored ? { hydrate: (handle: SharedDocumentHandle) => {
+          if (hasNativeFormat(stored)) throw new Error("A native script needs the native backend");
+          hydrateSharedDocumentFromState(handle, stored);
+        } } : {}),
         opening: openingStatus
       };
       const nativeEntry = options?.backend === "native";

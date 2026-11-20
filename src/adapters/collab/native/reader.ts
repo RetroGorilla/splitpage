@@ -4,7 +4,7 @@ import { projectSharedJoinedFields } from "../../../core/collab/projection/joins
 import type { DocumentShape } from "../../../core/document/validated.ts";
 import { toHtml } from "../../../core/text/html.ts";
 import type { Run } from "../../../core/text/runs.ts";
-import { nativeBlockOf, nativeItemLength, nativeRunsOf, nativeUnitCounts } from "./inline.ts";
+import { nativeBlockOf, nativeCellView, nativeItemLength, nativeRunsOf, nativeUnitCounts } from "./inline.ts";
 import type { NativeDeltaItem } from "./inline.ts";
 import type { NativeRoots } from "./roots.ts";
 import {
@@ -684,6 +684,23 @@ export class NativeScriptReader {
   row(id: string): NativeReadRow | null {
     this.sync();
     return this.rowCache.get(id) ?? null;
+  }
+
+  narrationCaret(row: string, offset: number): { readonly beat: string; readonly offset: number } | null {
+    this.sync();
+    if (row === this.stray || !Number.isInteger(offset) || offset < 0) return null;
+    let length = 0, hasItems = false;
+    for (const { id, glue } of this.groups.get(row) ?? []) {
+      const spans = this.narration.get(id) ?? EMPTY_SPANS;
+      const items = spans.flatMap(span => this.spanAt(span)?.items ?? []);
+      if (hasItems && items.length) length += glue.length;
+      if (offset < length) return null;
+      const end = length + nativeCellView(items).length;
+      if (offset <= end) return { beat: id, offset: offset - length };
+      length = end;
+      hasItems ||= items.length > 0;
+    }
+    return null;
   }
 
   rows(): readonly NativeReadRow[] {

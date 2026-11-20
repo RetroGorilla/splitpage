@@ -67,7 +67,9 @@ export function mountNativeSharedInput({ native, session, stamp, report }: Nativ
       session.refuse(STALE);
       return;
     }
-    const anchored = native.commands.anchorText({ beat, cell: "narration" }, offset);
+    const target = native.narrationCaret(beat, offset);
+    if (!target) { session.refuse(STALE); return; }
+    const anchored = native.commands.anchorText({ beat: target.beat, cell: "narration" }, target.offset);
     if (anchored.kind === "refused") { session.refuse(anchored.reason); return; }
     const result = native.commands.typeText(anchored.range, input.data, {}, stamp());
     if (result.kind === "written") placement = { beat, offset: offset + input.data.length, cell };
@@ -95,7 +97,7 @@ export function mountNativeSharedInput({ native, session, stamp, report }: Nativ
             if (field === "audioText" || field === "visualText") cell.innerHTML = row[field] ?? "";
             renderRow(id);
           }
-        } else writerControls()?.renderWriter();
+        } else writerControls()?.restoreWriterPaint();
       }
       session.refuse(UNSUPPORTED);
     } catch (error) {

@@ -22,7 +22,7 @@ publication.publish(native.document(), "hydration");
 assert.equal(app.read(doc => doc?.rows.length), LARGE_BEATS);
 let latest: readonly unknown[] = [];
 app.subscribe(change => { latest = change.changes.cells; });
-const elapsed: number[] = [], reads: number[] = [], diffs: number[] = [];
+const elapsed: number[] = [], reads: number[] = [], diffs: number[] = [], staleChecks: number[] = [];
 const stop = native.subscribe(event => {
   if (event.kind !== "changed") return;
   const start = performance.now(), snapshot = native.document(), read = performance.now();
@@ -35,6 +35,10 @@ const stop = native.subscribe(event => {
 try {
   const warmup = 10, count = 100;
   for (let sample = 0; sample < warmup + count; sample++) {
+    const checking = performance.now();
+    const checkedRow = native.document().rows.find(row => row.id === "B451");
+    staleChecks.push(performance.now() - checking);
+    assert.ok(checkedRow);
     const at = native.commands.anchorText({ beat: "B451", cell: "narration" }, 60);
     if (at.kind !== "anchored") throw new Error(at.reason);
     const stamp = { by: "Writer", at: new Date(sample * 1000).toISOString() };
@@ -45,7 +49,8 @@ try {
     ]));
   }
   console.log(`Node ${process.version} ${process.arch}, ${LARGE_BEATS} beats, ${count} samples after ${warmup} warmups. DOM paint excluded.`);
-  for (const [label, values] of [["Snapshot + publication", elapsed], ["Snapshot", reads], ["Publication and app diff", diffs]] as const) {
+  for (const [label, values] of [["Snapshot + publication", elapsed], ["Snapshot", reads], ["Publication and app diff", diffs],
+    ["Pre-write stale check snapshot and row lookup", staleChecks]] as const) {
     assert.equal(values.length, warmup + count);
     const timed = values.slice(warmup).sort((a, b) => a - b);
     const median = ((timed[49] ?? NaN) + (timed[50] ?? NaN)) / 2, p95 = timed[94] ?? NaN;

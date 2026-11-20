@@ -10,6 +10,7 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>) 
   return {
     read: peer.document,
     type: (beat: string, offset: number, text: string) => {
+      if (!app.acceptsPeerUpdate()) return { kind: "refused", reason: "closed" } as const;
       const anchored = peer.commands.anchorText({ beat, cell: "narration" }, offset);
       if (anchored.kind !== "anchored") return anchored;
       const result = peer.commands.typeText(anchored.range, text, {});

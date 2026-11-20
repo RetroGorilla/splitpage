@@ -12,7 +12,7 @@ import { createSharedSession } from "../../application/session/shared-session.ts
 import type { DocumentOpeningActivity } from "../../application/transitions/ports.ts";
 import type { ReplicaPort, SharedDocumentSession, SharedSessionPorts } from "../../application/session/shared-session.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
-import { adoptShared, collectReplacementErrors, currentDocument, holdMergeBase, holdSessionCommands, landStandalone, mergeBase, sessionEntryRefusal, sharedSession } from "./session-owner.ts";
+import { adoptReplacement, adoptShared, collectReplacementErrors, currentDocument, holdMergeBase, holdSessionCommands, landStandalone, mergeBase, sessionEntryRefusal, sharedSession } from "./session-owner.ts";
 import type { OwnerSwap } from "./session-owner.ts";
 import type { SharedUndoRoute } from "./undo.ts";
 import { routeSharedUndo, undoOwner } from "./undo.ts";
@@ -95,18 +95,24 @@ export interface SharedEditorBackend {
   readonly abandon?: () => void;
   readonly drop?: () => void;
   readonly start: () => void;
+  readonly failedEntry?: () => ValidatedDocument | null;
+  readonly stopIngress?: () => () => void;
   readonly landing: () => ValidatedDocument | null;
   readonly live: (on: boolean) => void;
   readonly dispose: (attempt: (step: () => void) => boolean) => void;
   readonly unsupportedCommands?: string;
 }
 
-type OpenBackend = (hydration: ValidatedDocument, failedClose: () => void) => SharedEditorBackend;
+type OpenBackend = (hydration: ValidatedDocument, failedClose: () => boolean) => SharedEditorBackend;
 
 let running: Running | null = null;
 
 export function sharedSessionParts(): SharedSessionParts | null {
   return running?.backend.parts ?? null;
+}
+
+export function nativeEditorActive(): boolean {
+  return !!running?.backend.stopIngress;
 }
 
 function copyOf(doc: ValidatedDocument): Record<string, unknown> {
@@ -144,10 +150,10 @@ export async function enterSharedSession(ports: SharedSwitchPorts, open?: OpenBa
   const holdReason = sessionEntryRefusal();
   if (holdReason) return { ok: false, reason: holdReason };
   const release = holdSessionCommands(SHARED_SWITCHING, "entries");
-  try { return await enterAvailableSession(ports, open); } finally { release(); }
+  try { return await enterAvailableSession(ports, release, open); } finally { release(); }
 }
 
-async function enterAvailableSession(ports: SharedSwitchPorts, open?: OpenBackend): Promise<SharedSwitchOutcome> {
+async function enterAvailableSession(ports: SharedSwitchPorts, releaseEntries: () => void, open?: OpenBackend): Promise<SharedSwitchOutcome> {
   const faults = new Faults();
   const first = refusedNow(ports, faults);
   if (first) return failed(ports, faults, first);
@@ -174,11 +180,11 @@ async function enterAvailableSession(ports: SharedSwitchPorts, open?: OpenBacken
     releaseCommands();
     return failed(ports, faults, SHARED_ENTER_FAILED);
   }
-  return enter(ports, faults, { kept, hydration, releaseCommands }, open ?? (doc => openLegacyBackend(ports, doc)));
+  return enter(ports, faults, { kept, hydration, releaseCommands, releaseEntries }, open ?? (doc => openLegacyBackend(ports, doc, faults)));
 }
 
-function openLegacyBackend(ports: SharedSwitchPorts, hydration: ValidatedDocument): SharedEditorBackend {
-  const handle = createSharedDocument(), faults = new Faults();
+function openLegacyBackend(ports: SharedSwitchPorts, hydration: ValidatedDocument, faults: Faults): SharedEditorBackend {
+  const handle = createSharedDocument();
   let on = true, parts: SharedSessionParts | null = null;
   const author = sharedAuthorPort({ handle: () => on ? handle : null, name: ports.editor });
   try {
@@ -204,23 +210,24 @@ function openLegacyBackend(ports: SharedSwitchPorts, hydration: ValidatedDocumen
     };
   } catch (error) {
     destroy(step => faults.attempt(step), handle);
-    faults.report(ports);
     throw error;
   }
 }
 
-function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { readonly kept: Record<string, unknown>; readonly hydration: ValidatedDocument;
-  readonly releaseCommands: () => void }, open: OpenBackend): SharedSwitchOutcome {
+async function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { readonly kept: Record<string, unknown>; readonly hydration: ValidatedDocument;
+  readonly releaseCommands: () => void; readonly releaseEntries: () => void }, open: OpenBackend): Promise<SharedSwitchOutcome> {
   const { kept, hydration, releaseCommands } = prepared, base = mergeBase();
-  let alive = true, backend: SharedEditorBackend;
+  let alive = true, backend: SharedEditorBackend, entering = true, failedDuringEntry = false;
   try {
     backend = open(hydration, () => {
-      if (running?.backend !== backend) return;
+      if (entering) { failedDuringEntry = true; return false; }
+      if (running?.backend !== backend) return false;
       const result = leaveSharedSession(ports);
       if (!result.ok) ports.report(new Error(`The failed shared session could not land: ${result.reason}`));
+      return true;
     });
   } catch (error) {
-    faults.errors.push(error);
+    faults.errors.unshift(error);
     releaseCommands();
     return failed(ports, faults, SHARED_ENTER_FAILED);
   }
@@ -251,9 +258,15 @@ function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { readonly ke
     // why: detaching runs once everything else has landed; a rollback that reaches it puts back what it changed
     made.detaching = true;
     ports.detach();
+    if (backend.failedEntry) {
+      // why: adoption can interrupt a native transaction, whose terminal bytes arrive on a microtask
+      await Promise.resolve();
+      if (failedDuringEntry) throw new Error("The native session closed during entry");
+    }
     // why: the D34 reset belongs to a successful entry, so a failed one keeps the standalone history
     undoOwner().adopt(null);
   } catch (error) {
+    if (backend.failedEntry && !failedDuringEntry) await Promise.resolve();
     faults.errors.unshift(error);
     running = null;
     // why: a shared callback whose timer cannot be cancelled must still not act once the session is gone
@@ -265,7 +278,16 @@ function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { readonly ke
     faults.attempt(() => { undoOwner().track(); });
     if (made.stopRoute) faults.attempt(made.stopRoute);
     faults.attempt(() => { holdMergeBase(base); });
-    if (made.detaching && ports.reattach) faults.attempt(ports.reattach);
+    let recovered = false;
+    if (failedDuringEntry) faults.attempt(() => {
+      const snapshot = backend.failedEntry?.();
+      if (!snapshot) return;
+      const landed = ports.migrate({ ...copyOf(snapshot), docId: ports.docId() });
+      collectReplacementErrors(faults.errors, () => adoptReplacement(landed, ports.standalone));
+      recovered = true;
+      ports.left?.(true);
+    });
+    if (!recovered && made.detaching && ports.reattach) faults.attempt(ports.reattach);
     backend.dispose(step => faults.attempt(step));
     releaseCommands();
     return failed(ports, faults, SHARED_ENTER_FAILED);
@@ -274,6 +296,8 @@ function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { readonly ke
   faults.attempt(() => { swap.commit(); });
   made.releaseSession?.();
   releaseCommands();
+  if (backend.failedEntry) prepared.releaseEntries();
+  entering = false;
   faults.report(ports);
   return { ok: true };
 }
@@ -303,10 +327,12 @@ function leaveAvailableSession(ports: SharedSwitchPorts): SharedSwitchOutcome {
   if (!faults.attempt(() => { holding = now.backend.settle(); })) return failed(ports, faults, SHARED_LEAVE_FAILED);
   if (holding) return { ok: false, reason: holding };
   const holds: { session: (() => void) | null; commands: (() => void) | null } = { session: null, commands: null };
+  let resumeIngress: (() => void) | undefined;
   const keep = (error: unknown): SharedSwitchOutcome => {
     faults.errors.unshift(error);
     now.backend.live(true);
     faults.attempt(() => { now.backend.bind(now.session); });
+    resumeIngress?.();
     holds.session?.();
     holds.commands?.();
     return failed(ports, faults, SHARED_LEAVE_FAILED);
@@ -317,6 +343,7 @@ function leaveAvailableSession(ports: SharedSwitchPorts): SharedSwitchOutcome {
   holds.commands = holdSessionCommands(SHARED_SWITCHING);
   let landed: ValidatedDocument;
   try {
+    resumeIngress = now.backend.stopIngress?.();
     // why: the copy is taken after the bindings settled on restart, and admission stays closed until it has landed
     const current = now.backend.landing();
     landed = ports.migrate({ ...(current ? copyOf(current) : now.kept), docId: ports.docId() });

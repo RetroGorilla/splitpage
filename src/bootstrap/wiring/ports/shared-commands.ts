@@ -10,7 +10,7 @@ import type { SharedValueCommands } from "../../../application/commands/shared-v
 import type { CommandOutcome } from "../../../application/session/document-session.ts";
 import type { UndoControl } from "../../../application/editing/undo-control.ts";
 import { sessionStamps, sessionTextPorts } from "../session-owner.ts";
-import { sharedSessionParts } from "../shared-session.ts";
+import { nativeEditorActive, sharedSessionParts } from "../shared-session.ts";
 import type { SharedSessionParts } from "../shared-session.ts";
 import { sharedUndoRoute, stepSharedUndo, undoOwner } from "../undo.ts";
 import { notices } from "./effects.ts";
@@ -24,6 +24,12 @@ import { timingMarks } from "../../../../shared/timing-marks.ts";
 declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 const refuse = sharedCommandRefusalNotice(notices);
+
+export function refuseNativeEditorCommand(): boolean {
+  if (!nativeEditorActive()) return false;
+  refuse("not shared");
+  return true;
+}
 const SELECTION_SPANS = "split-selection-spans-beats", SELECTION_GONE = "split-selection-gone";
 
 function refused(outcome: CommandOutcome): void {
