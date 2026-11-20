@@ -19,6 +19,8 @@ files:
   - ipc-history-blob.ts
   - ipc-tabstrip.ts
   - ipc-test-mode.ts
+  - native-replica-ipc.ts
+  - native-replica-files.ts
   - ipc-print.ts
   - bundle-copy.ts
   - bundle-jobs.ts

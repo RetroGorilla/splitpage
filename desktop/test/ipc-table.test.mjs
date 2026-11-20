@@ -81,7 +81,8 @@ const REGISTERED_BEFORE_SPLIT = [
   "splitpage:blob-get invoke", "splitpage:blob-missing invoke", "splitpage:tabstrip-window-id-sync sendSync",
   "splitpage:tabstrip-get-state invoke", "splitpage:tabstrip-new-tab send", "splitpage:tabstrip-activate send",
   "splitpage:tabstrip-close send", "splitpage:tabstrip-reorder send", "splitpage:tabstrip-move-here send",
-  "splitpage:tabstrip-tear-off send", "splitpage:is-test-mode-sync sendSync", "splitpage:test-request-close send",
+  "splitpage:tabstrip-tear-off send", "splitpage:is-test-mode-sync sendSync", "splitpage:test-native-replica invoke",
+  "splitpage:test-request-close send",
   "splitpage:test-request-close-tab send", "splitpage:test-request-quit send", "splitpage:test-draft-status invoke",
   "splitpage:test-crash-renderer send", "splitpage:test-dup-loser invoke", "splitpage:test-shell invoke"
 ];

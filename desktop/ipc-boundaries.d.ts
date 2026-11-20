@@ -130,7 +130,7 @@ export interface DesktopTabStripIpcDependencies extends Pick<DesktopMainCommon, 
 }
 
 export interface DesktopTestModeIpcDependencies extends Pick<DesktopMainCommon, "testMode" | "tabOf" | "tabs" | "windowsById" | "requestCloseTab" | "draftStore" | "draftsPreviousSession" | "shellStateForWindow" | "createTab" | "activateTab" | "reorderTab" | "moveTabToWindow"> {
-  app: Pick<App, "quit">;
+  app: Pick<App, "quit" | "getPath">;
   BrowserWindow: Pick<typeof BrowserWindow, "fromWebContents">;
   Menu: Pick<typeof Menu, "getApplicationMenu">;
   chooseDuplicateLoser: typeof chooseDuplicateLoser;

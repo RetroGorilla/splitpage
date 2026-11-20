@@ -225,7 +225,10 @@ export async function attachNativeLocalStore(
         return;
       } catch (error) { requested.reject(error); }
     }
-    await release();
+    try { await release(); }
+    catch (error) {
+      if (result.kind === "stored") result = { ...nativeLocalStoreFailure(error), generation: next, committed };
+    }
     listeners.clear();
     const outcome = { ...result, state };
     finished.resolve(outcome);

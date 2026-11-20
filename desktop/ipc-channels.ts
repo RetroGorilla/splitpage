@@ -129,6 +129,7 @@ const CHANNELS = [
   { name: "splitpage:tabstrip-tear-off", direction: "send", argsSchema: ["tabId", "number", "number"], allowedOrigins: STRIP },
   { name: "splitpage:tabstrip-state", direction: "receive", argsSchema: ["object"], allowedOrigins: STRIP },
 
+  { name: "splitpage:test-native-replica", direction: "invoke", argsSchema: ["array"], allowedOrigins: APP, testOnly: true },
   { name: "splitpage:test-request-close", direction: "send", argsSchema: NONE, allowedOrigins: APP, testOnly: true },
   { name: "splitpage:test-request-close-tab", direction: "send", argsSchema: NONE, allowedOrigins: APP, testOnly: true },
   { name: "splitpage:test-request-quit", direction: "send", argsSchema: NONE, allowedOrigins: APP, testOnly: true },

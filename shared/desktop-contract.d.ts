@@ -1,3 +1,5 @@
+import type { NativeReplicaReply, NativeReplicaRequest } from "./native-replica-ipc.d.ts";
+
 export interface DesktopWireFile {
   id: string;
   name: string;
@@ -356,6 +358,7 @@ export interface DesktopIpcContract {
   "splitpage:test-draft-status": DesktopChannelCall<[string?], DesktopWireDraftStatus>;
   "splitpage:test-dup-loser": DesktopChannelCall<[{ docId?: unknown; homeKey?: unknown; seq?: unknown }, { docId?: unknown; homeKey?: unknown; seq?: unknown }], "a" | "b" | null>;
   "splitpage:test-shell": DesktopChannelCall<[string, DesktopWireTestShellArgs | null], DesktopWireTestShellResult>;
+  "splitpage:test-native-replica": DesktopChannelCall<[NativeReplicaRequest], NativeReplicaReply>;
 }
 
 export type DesktopIpcArgs<C extends keyof DesktopIpcContract> = DesktopIpcContract[C]["args"];
