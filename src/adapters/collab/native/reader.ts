@@ -752,6 +752,32 @@ export class NativeScriptReader {
     return this.places.get(beat) ?? null;
   }
 
+  narrationOwner(text: Y.AbsolutePosition["type"], index: number, assoc: number): { readonly beat: string; readonly inside: boolean } | null {
+    this.sync();
+    for (const [segment, owners] of this.spanOwners) {
+      if (this.roots.segments.get(segment)?.get("text") !== text) continue;
+      const spans = this.parsed.get(segment)?.spans;
+      const at = spans?.findIndex(({ start, end }) => index >= start && index <= end) ?? -1;
+      const span = spans?.[at], beat = owners[at];
+      return span && beat !== undefined ? { beat, inside: assoc < 0 ? index > span.start : index < span.end } : null;
+    }
+    return null;
+  }
+
+  rowMembers(beat: string): readonly Readonly<RowMember>[] {
+    this.sync();
+    const head = this.groupHeads.get(beat);
+    const members = head === undefined ? undefined : this.groups.get(head);
+    if (!members) return [];
+    return Object.freeze(members.map(member => Object.freeze({ ...member })));
+  }
+
+  showsHeading(heading: string): boolean {
+    this.sync();
+    return this.outlineEntries.some((entry, index) =>
+      entry.kind === "heading" && entry.id === heading && this.outlineEntries[index + 1]?.kind === "row");
+  }
+
   previewJoinedGallery(beat: string, gallery: Readonly<Record<string, unknown>>): Record<string, unknown> | null {
     this.sync();
     const head = this.groupHeads.get(beat);
