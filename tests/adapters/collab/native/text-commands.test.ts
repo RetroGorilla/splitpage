@@ -6,8 +6,11 @@ import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
 import type { ValidatedDocument } from "../../../../src/core/document/validated.ts";
 import type { StoredImageRef } from "../../../../src/core/document/text-policy.ts";
 import type { Marks, Run } from "../../../../src/core/text/runs.ts";
+import { formatNativeText } from "../../../../src/adapters/collab/native/format-commands.ts";
+import { createNativeHeading, renameNativeHeading } from "../../../../src/adapters/collab/native/heading-commands.ts";
 import { nativeMarkName } from "../../../../src/adapters/collab/native/inline.ts";
 import { nativeSegmentSpans } from "../../../../src/adapters/collab/native/reader.ts";
+import { splitNativeRow } from "../../../../src/adapters/collab/native/structure-commands.ts";
 import { anchorNativeText, deleteNativeText, replaceNativeText, typeNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
 import type { NativeTextRange, NativeTextTarget } from "../../../../src/adapters/collab/native/text-commands.ts";
 import { closeNativeScript, openNativeScript } from "../../../../src/adapters/collab/native/script.ts";
@@ -351,4 +354,60 @@ test("round 3, item 8: when a peer deleted both ends of a selection, the selecti
   assert.equal(narration(b, "R1"), "abZXef");
   net.settle();
   assert.deepEqual(net.agree(), ["R1: abZXef / "]);
+});
+
+test("a refused caret or selection, including root-named positions, leaves doc.share and encoded state unchanged", () => {
+  const source = migrateRows({
+    schema: 2, title: "Commands", docId: "doc-refused-caret", rev: 0,
+    rows: [{ id: "R1", audioText: "abcd", visualText: "vis" }],
+    sections: [{ id: "H1", name: "Scene", firstSceneId: "R1" }],
+    comments: [], people: [], productionTags: [], brollShots: []
+  });
+  const copy = convertedScript(source, 2);
+  try {
+    const shareBefore = [...copy.doc.share.keys()].sort();
+    const stateBefore = Y.encodeStateAsUpdate(copy.doc);
+    const vectorBefore = Y.encodeStateVector(copy.doc);
+    const goodCaret = range(copy, NARRATION("R1"), 1);
+    const goodSelection = range(copy, NARRATION("R1"), 1, 3);
+    const goodNameSelection = range(copy, { beat: "H1", cell: "name" }, 0, 2);
+    const rootNamed = (tname: string, assoc = 0): Y.RelativePosition =>
+      Y.createRelativePositionFromJSON({ type: null, tname, item: null, assoc });
+    const roguePositions: readonly Y.RelativePosition[] = [
+      rootNamed("rogue-root", 0),
+      rootNamed("", 0),
+      rootNamed("beats", 0),
+      { type: goodCaret.from.type, tname: "rogue-with-type", item: null, assoc: 0 } as unknown as Y.RelativePosition,
+      Y.createRelativePositionFromJSON({ type: { client: 999999, clock: 99 }, tname: null, item: null, assoc: 0 }),
+      Y.createRelativePositionFromJSON({ type: goodCaret.from.type, tname: null, item: { client: 999999, clock: 99 }, assoc: 0 })
+    ];
+    for (const position of roguePositions) {
+      const badCaret: NativeTextRange = { target: NARRATION("R1"), from: position, to: position };
+      const badName: NativeTextRange = { target: { beat: "H1", cell: "name" }, from: position, to: position };
+      assert.deepEqual(typeNativeText(copy, badCaret, "X", {}), { kind: "recovery", reason: "range", runs: [{ text: "X", marks: {} }] });
+      assert.deepEqual(deleteNativeText(copy, badCaret), { kind: "recovery", reason: "range", runs: [] });
+      assert.deepEqual(formatNativeText(copy, badCaret, { kind: "plain", mark: "b", on: true }), { kind: "refused", reason: "range" });
+      assert.deepEqual(splitNativeRow(copy, badCaret), { kind: "refused", reason: "range" });
+      assert.deepEqual(createNativeHeading(copy, badCaret, "H2", "Two"), { kind: "refused", reason: "range" });
+      assert.deepEqual(renameNativeHeading(copy, badName, "Other"), { kind: "refused", reason: "range" });
+    }
+    const badSelectionEnd: NativeTextRange = { ...goodSelection, to: rootNamed("rogue-end", -1) };
+    const badSelectionStart: NativeTextRange = { ...goodSelection, from: rootNamed("rogue-start", 0) };
+    const badNameSelection: NativeTextRange = { ...goodNameSelection, to: rootNamed("rogue-name", -1) };
+    for (const bad of [badSelectionEnd, badSelectionStart]) {
+      assert.deepEqual(typeNativeText(copy, bad, "X", {}), { kind: "recovery", reason: "range", runs: [{ text: "X", marks: {} }] });
+      assert.deepEqual(deleteNativeText(copy, bad), { kind: "recovery", reason: "range", runs: [] });
+      assert.deepEqual(formatNativeText(copy, bad, { kind: "plain", mark: "b", on: true }), { kind: "refused", reason: "range" });
+    }
+    assert.deepEqual(renameNativeHeading(copy, badNameSelection, "Other"), { kind: "refused", reason: "range" });
+    assert.deepEqual([...copy.doc.share.keys()].sort(), shareBefore);
+    assert.equal(copy.doc.share.has("rogue-root"), false);
+    assert.equal(copy.doc.share.has(""), false);
+    assert.equal(copy.doc.share.has("rogue-with-type"), false);
+    assert.equal(copy.doc.share.has("rogue-end"), false);
+    assert.equal(copy.doc.share.has("rogue-start"), false);
+    assert.equal(copy.doc.share.has("rogue-name"), false);
+    assert.deepEqual(Y.encodeStateAsUpdate(copy.doc), stateBefore);
+    assert.deepEqual(Y.encodeStateVector(copy.doc), vectorBefore);
+  } finally { copy.doc.destroy(); }
 });

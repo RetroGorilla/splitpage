@@ -1,5 +1,5 @@
 import * as Y from "yjs";
-import { readNativeGallery } from "./gallery.ts";
+import { normalizeNativeGallery, readNativeGallery } from "./gallery.ts";
 import { projectSharedJoinedFields } from "../../../core/collab/projection/joins.ts";
 import type { DocumentShape } from "../../../core/document/validated.ts";
 import { toHtml } from "../../../core/text/html.ts";
@@ -9,7 +9,7 @@ import type { NativeDeltaItem } from "./inline.ts";
 import type { NativeRoots } from "./roots.ts";
 import {
   NATIVE_BEAT_FIELDS, NATIVE_FIELD_PREFIX, NATIVE_GALLERY_FIELDS, NATIVE_GALLERY_KEY, decodeNativeValue, deepFrozen,
-  isNativeBeatExtra, isNativeBeatField, nativeFieldKey, nativeFieldName, nativeGalleryOf
+  isNativeBeatExtra, isNativeBeatField, nativeFieldKey, nativeFieldName, nativeGalleryOf, sameNativeValue
 } from "./values.ts";
 
 type CommentCell = "visualText" | "audioText";
@@ -117,10 +117,10 @@ function gallerySlots(fields: Readonly<Record<string, unknown>>): { readonly pat
 
 function gallerySlotShown(source: Readonly<Record<string, unknown>>, output: Readonly<Record<string, unknown>>): boolean {
   return Object.entries(source).every(([key, value]) => {
-    if (key !== "links" || !Array.isArray(value)) return JSON.stringify(value) === JSON.stringify(output[key]);
+    if (key !== "links" || !Array.isArray(value)) return sameNativeValue(value, output[key]);
     const links = Array.isArray(output.links) ? output.links : [];
     return value.every((link: unknown) => fieldBag(link) && links.some((shown: unknown) => fieldBag(shown)
-      && Object.entries(link).every(([name, field]) => JSON.stringify(field) === JSON.stringify(shown[name]))));
+      && Object.entries(link).every(([name, field]) => sameNativeValue(field, shown[name]))));
   });
 }
 
@@ -629,7 +629,10 @@ export class NativeScriptReader {
         beat: members[member]?.id, picture, links: Array.isArray(links) ? links.filter(galleryLink).map(fields => ({ fields })) : []
       } };
     }));
-    const { row, overflow } = projectSharedJoinedFields(root, members.map(member => ({ ...member.fields, id: member.id })), records);
+    const { row: projected, overflow } = projectSharedJoinedFields(root, members.map(member => ({ ...member.fields, id: member.id })), records);
+    // why: previewing a write checks whether the assembled gallery would change on reload; reading keeps only what
+    // reload keeps
+    const row = replacement ? projected : normalizeNativeGallery(projected);
     if (problems) {
       const shown = gallerySlots(row).map(({ slot }) => slot);
       members.forEach((member, index) => {
