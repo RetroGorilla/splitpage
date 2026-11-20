@@ -45,7 +45,9 @@ export interface Command {
 export type DocumentStructureIntent =
   | { readonly kind: "remove-beat" | "remove-heading"; readonly id: string }
   | { readonly kind: "add-heading"; readonly id: string; readonly beat: string; readonly name: string }
-  | { readonly kind: "rename-heading"; readonly id: string; readonly name: string };
+  | { readonly kind: "rename-heading"; readonly id: string; readonly name: string }
+  | { readonly kind: "move-beat"; readonly id: string; readonly target: string; readonly after: boolean; readonly intoScene?: string }
+  | { readonly kind: "swap-beats"; readonly id: string; readonly direction: -1 | 1 };
 
 export type CommandOutcome =
   | { readonly kind: "applied"; readonly generation: number; readonly changes: ChangeSet }

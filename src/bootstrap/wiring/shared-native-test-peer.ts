@@ -2,6 +2,7 @@ import { applyNativePeerUpdate } from "../../adapters/collab/native/peer-update.
 import { openNativeSession } from "../../adapters/collab/native/session.ts";
 import { sanitizeHtml } from "../richtext.ts";
 import type { NativeFieldTarget } from "../../adapters/collab/native/record-commands.ts";
+import type { NativeMoveBlock } from "../../adapters/collab/native/move-commands.ts";
 
 export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>) {
   const peer = openNativeSession({ kind: "state", state: app.encodeState() }, { actor: "Peer", sanitize: sanitizeHtml });
@@ -36,6 +37,7 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>) 
       return at.kind === "anchored" ? forward(peer.commands.splitRow(at.range)) : at;
     },
     removeBeat: (id: string) => forward(peer.commands.removeRows([id])),
+    moveBeat: (id: string, drop: NativeMoveBlock | null) => forward(peer.commands.moveBlocks([{ kind: "beat", id }], drop)),
     removeComment: (id: string) => forward(peer.commands.removeComment({ comment: id })),
     step: (direction: "undo" | "redo") => app.commands[direction](),
     type: (beat: string, offset: number, text: string) => edit(beat, offset, offset, text),

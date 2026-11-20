@@ -3,7 +3,7 @@ import type { NativeEditStamp, NativeTextPlacement, NativeTextRange, NativeUndoP
 import type { CellRange } from "../../application/editing/cell-editing.ts";
 import type { ReportPort } from "../../application/session/ports.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
-import { isBlankBeat } from "../../application/commands/rows.ts";
+import { isBlankBeat, swapBeatsCommand } from "../../application/commands/rows.ts";
 import { sceneBeforeBeat } from "../../core/document/scenes.ts";
 import { headingPos } from "../../core/flow/flow.ts";
 import { cellLength, projection } from "../../core/text/runs.ts";
@@ -14,6 +14,7 @@ import { undoGesture } from "../../features/undo/routes.ts";
 import { scriptCellOf } from "../richtext.ts";
 import { guardUnload } from "../startup/page-lifetime.ts";
 import { narrationAt, narrationSurfaceOf, shownNarrationSurface } from "./native-narration-surfaces.ts";
+import { rowDrag } from "./editor-owners.ts";
 import type { NarrationSurface } from "./native-narration-surfaces.ts";
 import { documentReader } from "./ports/document.ts";
 import { editAllowed } from "./session-owner.ts";
@@ -21,7 +22,7 @@ import { writerControls } from "./writer.ts";
 
 interface NativeInputPorts {
   readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint">;
-  readonly session: Pick<SharedDocumentSession, "admit" | "refuse" | "subscribe">;
+  readonly session: Pick<SharedDocumentSession, "admit" | "refuse" | "run" | "subscribe">;
   readonly editAttribution: () => NativeEditStamp;
   readonly now?: () => number;
   readonly report: ReportPort;
@@ -129,6 +130,11 @@ function editingKey(key: KeyboardEvent): boolean {
 
 function splitKey(key: KeyboardEvent): boolean {
   return key.key === "Enter" && !key.ctrlKey && !key.metaKey && !key.shiftKey;
+}
+
+function moveDirection(key: KeyboardEvent): -1 | 1 | null {
+  if (!key.altKey || key.ctrlKey || key.metaKey) return null;
+  return key.key === "ArrowUp" ? -1 : key.key === "ArrowDown" ? 1 : null;
 }
 
 export function mountNativeSharedInput({ native, session, editAttribution, now = Date.now, report, publish = () => {} }: NativeInputPorts) {
@@ -541,6 +547,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
 
   function intercept(event: Event): void {
     const target = event.target instanceof Element ? event.target : null;
+    if (event.type === "drop" && target?.closest("#rows .row") && rowDrag().dragging()) return;
     const cell = target?.closest(EDITABLE);
     const narration = target && cell ? narrationAt(target, cell) : null;
     const heading = headingAt(cell ?? null);
@@ -562,9 +569,9 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     } else if (!cell && !(event.type === "drop" && target?.closest("#rows .visual-cell"))) return;
     if (event.type === "keydown") {
       const key = event as KeyboardEvent;
-      if (narration && (draft?.composing || key.isComposing || key.keyCode === 229)) {
+      if ((narration || heading) && (draft?.composing || key.isComposing || key.keyCode === 229)) {
         event.stopImmediatePropagation();
-        if (undoGesture(key) || (splitKey(key) || joining) && !key.isComposing && key.keyCode !== 229) {
+        if (undoGesture(key) || (splitKey(key) || joining || removeHeading || moveDirection(key)) && !key.isComposing && key.keyCode !== 229) {
           event.preventDefault();
           if (!stopped) session.refuse(PENDING);
         }
@@ -608,6 +615,15 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     event.stopImmediatePropagation();
     try {
       if (narration && stopped) { session.refuse(stopped); return; }
+      const move = event.type === "keydown" && moveDirection(event as KeyboardEvent);
+      if (move && narration) {
+        const id = narration.getAttribute("data-id");
+        if (id) {
+          const outcome = session.run(swapBeatsCommand(id, move));
+          if (outcome.kind === "failed") report(outcome.error);
+        }
+        return;
+      }
       if (narration && joining) { join(narration, joining); return; }
       if (heading && (removeHeading || event.type === "beforeinput" && event.cancelable)) {
         headingInput(event, heading, !!removeHeading);

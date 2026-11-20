@@ -210,7 +210,57 @@ test("Writer: renaming and removing a heading replay the heading caret", async t
   assert.equal(show.mock.callCount(), 0);
 });
 
+const threeBeats = () => [...twoBeats, { id: "r3", audioText: "Again" }];
+const rowOrder = () => hook.read().app.rows.map(row => row.id);
+
+test("Split: move-down and a row drag use native history", async t => {
+  const show = await enter(t, threeBeats());
+  document.querySelector('#rows [data-action="move-down"][data-id="r1"]').click();
+  assert.deepEqual(rowOrder(), ["r2", "r1", "r3"]);
+  const row = id => document.querySelector('#rows .row[data-id="' + id + '"]');
+  const drag = (target, type, clientY = 0) => target.dispatchEvent(new window.MouseEvent(type, { bubbles: true, cancelable: true, clientY }));
+  row("r2").setAttribute("draggable", "true");
+  drag(row("r2"), "dragstart");
+  drag(cell("r3"), "dragover", 200);
+  drag(cell("r3"), "drop", 200);
+  assert.deepEqual(rowOrder(), ["r1", "r3", "r2"]);
+  views.Split.caret(null, "r1", 0);
+  assert.equal(press(cell(), "z"), true);
+  assert.deepEqual(rowOrder(), ["r2", "r1", "r3"]);
+  assert.equal(press(document.activeElement, "z"), true);
+  assert.deepEqual(rowOrder(), ["r1", "r2", "r3"]);
+  assert.equal(show.mock.callCount(), 0);
+});
+
 for (const [name, kind] of Object.entries(views)) {
+  test(name + ": Alt+Arrow moves the beat, replays its caret and converges with a competing move", async t => {
+    const show = await enter(t, threeBeats()), view = kind.open(t);
+    kind.caret(view, "r2", 2);
+    const move = key => press(document.activeElement, key, { altKey: true, ctrlKey: false });
+    assert.equal(move("ArrowUp"), true);
+    assert.deepEqual(rowOrder(), ["r2", "r1", "r3"]);
+    assert.deepEqual(kind.at(view, "r2"), ["r2", 2, 2]);
+    assert.equal(press(document.activeElement, "z"), true);
+    assert.deepEqual(rowOrder(), ["r1", "r2", "r3"]);
+    assert.deepEqual(kind.at(view, "r2"), ["r2", 2, 2]);
+    assert.equal(press(document.activeElement, "y"), true);
+    assert.deepEqual(rowOrder(), ["r2", "r1", "r3"]);
+    assert.deepEqual(kind.at(view, "r2"), ["r2", 2, 2]);
+    assert.equal(press(document.activeElement, "z"), true);
+    await Promise.resolve();
+    hook.nativePeer.hold();
+    assert.equal(move("ArrowUp"), true);
+    assert.equal(hook.nativePeer.moveBeat("r2", null).kind, "written");
+    hook.nativePeer.deliver();
+    await Promise.resolve();
+    const order = rowOrder().join(",");
+    assert.ok(order === "r2,r1,r3" || order === "r1,r3,r2", order);
+    assert.deepEqual(hook.read().peer, hook.read().app);
+    const selector = name === "Split" ? "#rows .row" : "#writer-doc .wr-beat";
+    assert.equal([...document.querySelectorAll(selector)].map(el => el.dataset.id).join(","), order);
+    assert.equal(show.mock.callCount(), 0);
+  });
+
   test(name + ": Backspace removes a blank beat and undo restores it", async t => {
     const show = await enter(t, [twoBeats[0], { id: "r2", audioText: "" }]), view = kind.open(t);
     kind.caret(view, "r2", 0);

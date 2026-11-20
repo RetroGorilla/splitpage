@@ -1,0 +1,39 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;F.openFile(new File([JSON.stringify({schema:2,title:'Native structure',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello'},{id:'r2',audioText:'World'},{id:'r3',audioText:'Again'}]})],'native-structure.splitpage'))
+wait F.state().title === 'Native structure'
+eval S.enter({backend:'native'})
+eval window.rows=()=>S.read().app.rows;window.cell=id=>document.querySelector('#rows .cell-editable[data-id="'+id+'"][data-field="audioText"]');window.at=(id,i)=>{const el=cell(id);el.focus();const r=document.createRange();r.setStart(el.firstChild,i);r.collapse(true);getSelection().removeAllRanges();getSelection().addRange(r);return true};window.agree=()=>JSON.stringify(S.read().app)===JSON.stringify(S.read().peer);window.order=()=>rows().map(r=>r.id).join(',');at('r1',2)
+key Enter
+wait rows().length === 4 && agree()
+eval window.created=rows()[1].id;true
+expect cell('r1').textContent === 'He' && cell(created).textContent === 'llo' && document.activeElement === cell(created) && getSelection().focusOffset === 0
+key Backspace
+wait rows().length === 3 && agree()
+expect cell('r1').textContent === 'He llo' && getSelection().focusOffset === 3
+key ctrl KeyZ
+wait rows().length === 4 && agree()
+expect document.activeElement === cell(created) && getSelection().focusOffset === 0
+key ctrl KeyZ
+wait cell('r1').textContent === 'Hello' && order() === 'r1,r2,r3' && agree()
+expect document.activeElement === cell('r1') && getSelection().focusOffset === 2
+jsclick #rows [data-action="add-section"][data-id="r2"]
+type Scene
+key Enter
+wait S.read().app.sections?.[0]?.name === 'Scene' && agree()
+jsclick #rows .section-header[data-section-id]:not([data-section-id=""]) [data-section-action="rename"]
+type Changed
+key Enter
+wait S.read().app.sections?.[0]?.name === 'Changed' && agree()
+jsclick #rows .section-header[data-section-id]:not([data-section-id=""]) [data-section-action="remove"]
+wait !S.read().app.sections?.length && agree()
+eval at('r2',2)
+key alt ArrowUp
+wait order() === 'r2,r1,r3' && agree()
+expect document.activeElement === cell('r2') && getSelection().focusOffset === 2
+jsclick #rows [data-action="delete-row"][data-id="r2"]
+jsclick #rows [data-action="delete-row"][data-id="r2"]
+wait order() === 'r1,r3' && agree()
+key ctrl KeyZ
+wait order() === 'r2,r1,r3' && agree()
+expect cell('r2').textContent === 'World'

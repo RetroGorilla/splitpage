@@ -191,6 +191,7 @@ function startSharedTestHook(): () => void {
       join: (lower: string, upper: string) => nativePeer?.join(lower, upper),
       split: (beat: string, offset: number) => nativePeer?.split(beat, offset),
       removeBeat: (id: string) => nativePeer?.removeBeat(id),
+      moveBeat: (...args: Parameters<NonNullable<typeof nativePeer>["moveBeat"]>) => nativePeer?.moveBeat(...args),
       removeComment: (id: string) => nativePeer?.removeComment(id),
       hold: () => nativePeer?.hold(),
       deliver: () => nativePeer?.deliver(),

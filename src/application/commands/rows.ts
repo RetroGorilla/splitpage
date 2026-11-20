@@ -114,6 +114,7 @@ export function moveBeatCommand(rowId: string, targetId: string, after: boolean,
   return {
     name: "move-scene",
     needs: "edit",
+    structure: { kind: "move-beat", id: rowId, target: targetId, after, ...intoScene ? { intoScene } : {} },
     plan: function (doc, capability) {
       const can = capability.moves();
       if (!can.allowed) return { refused: can.reason };
@@ -145,6 +146,7 @@ export function swapBeatsCommand(rowId: string, dir: -1 | 1): Command {
   return {
     name: "swap-scenes",
     needs: "edit",
+    structure: { kind: "swap-beats", id: rowId, direction: dir },
     plan: function (doc, capability) {
       const can = capability.moves();
       if (!can.allowed) return { refused: can.reason };
