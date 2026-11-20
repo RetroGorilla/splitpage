@@ -11,7 +11,7 @@ import { buildExportDocument } from "../../../src/core/document/export-document.
 import { buildScriptPrintPage } from "../../../src/adapters/formats/script-print.ts";
 
 test("section headings repeat across printed pages while all scenes retain their order", { timeout: 120000 }, async () => {
-  assert.ok(freemem() >= 4 * 1024 ** 3, "Printed PDF checks require at least 4 GB free RAM");
+  assert.ok(freemem() >= 2048 * 1024 ** 2, "Printed PDF checks require at least 2048 MiB of free RAM");
   const fixture = scriptFixture("long");
   const source = migratedThenSet({ ...fixture.source, sections: [
     { id: "s1", name: "Opening section", firstSceneId: "r1" },

@@ -8,7 +8,7 @@ import "./fixtures/write-list-print-fixtures.mjs";
 import { inspectPrintedFixtures } from "./fixtures/inspect-script-print.mjs";
 
 test("printed PDF pages obey the layout rules and reject each deliberate break", {timeout:120000}, async (context) => {
-  assert.ok(freemem() >= 4 * 1024 ** 3, "Printed PDF checks require at least 4 GB free RAM");
+  assert.ok(freemem() >= 2048 * 1024 ** 2, "Printed PDF checks require at least 2048 MiB of free RAM");
   const originalFetch = globalThis.fetch;
   let remainingEmptyLists = 2;
   let emptyLists = 0;

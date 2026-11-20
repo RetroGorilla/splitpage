@@ -42,11 +42,16 @@ rule groups per fixture and eleven fail-first/restoration probes (267 checks).
 It runs automatically in the existing Linux `tests` matrix job and locally
 through `npm test`, `test:all` and `verify`; a focused run is
 `npm test -- --only tests/adapters/formats/printed-layout.test.mjs`.
-It requires at least 4 GB free RAM and uses an installed browser from
-`SPLITPAGE_CHROME`, Windows Edge, the existing runner cache or PATH. It does
-not skip when a browser is missing. Local test runtime was 9.2 seconds plus
-startup. Successful runs delete their TEMP directory. Failures preserve
-PDFs, screenshots, page records and `summary.txt`
+Both it and `tests/adapters/formats/scene-printed-layout.test.mjs` fail at
+startup if the system reports less than 2048 MiB of free RAM. Across three
+isolated Windows Edge runs per file, the largest sampled working set summed
+across Node and all browser descendants was 1355 MiB for the fixture check
+and 1096 MiB for the scene check. A focused rerun through the repository
+test runner peaked at 1523 MiB. The floor leaves 525 MiB above that peak
+for run-to-run variation. The tests require an installed browser from
+`SPLITPAGE_CHROME`, Windows Edge, the existing runner cache or PATH. Local
+test runtime was 9.2 seconds plus startup. Successful runs delete their TEMP
+directory. Failures preserve PDFs, screenshots, page records and `summary.txt`
 in a unique `splitpage-print-layout-*` TEMP directory. The standalone
 inspector still accepts `<out> --lists --probes` after fixture generation.
 
