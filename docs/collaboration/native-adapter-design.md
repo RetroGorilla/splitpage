@@ -14,6 +14,7 @@ Slices 1 to 6 are on `main`. The native shared-document command layer and undo a
 Slices 7a, 7c and 7h are merged. The native editor entry and Split narration typing are on `main`. PR #1673 builds 7d, the relay server and its storage. The old adapter stays untouched until slice 8.
 PR #1671 adds native undo selection replay and typing group boundaries for focus changes.
 Slice 7b-2 in PR #1675 adds buffered Split-view narration typing, composition, relative caret placement, and handling of native commit outcomes.
+This PR builds slice 7e's offline-notice journal, comparison and put-back command.
 
 ## Server-stop results and backup runbook
 
@@ -314,6 +315,7 @@ someone else changed or removed. "Put it back" makes a fresh beat from what the 
 
 - **Counts** (E16, kept records, 85 named and 240 generated histories), with the person's own journal of pending
   edits: 46 false banners of 325, 26 misses of 238 losses (appendix I).
+- **Product counts** ([7e replay](../../tests/adapters/collab/native/offline-notice-e16.test.ts), with issuing-copy checks and a muted-write control per generated command kind) found 47 false banners of 325 and 26 misses of 238 losses. The tag sweep lost 6 of 28 unseen tags and flagged all 6.
 - **Seen and unseen** edits to visual text, visual tags, status and fields still leave identical evidence (4 of 4
   pairs, E16), hence decision 12's possible clash.
 - **Tags** (decision 17): E16's sweep lost 6 of 28 unseen tags and flagged all 6.

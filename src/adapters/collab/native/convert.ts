@@ -71,7 +71,7 @@ function namedEntries(source: Bag, names: readonly string[]): [string, string][]
   return names.filter(name => source[name] !== undefined).map(name => [name, encodeNativeValue(source[name])]);
 }
 
-function beatEntries(row: Bag): Entries {
+export function nativeBeatEntries(row: Readonly<Bag>): Entries {
   const extras = Object.keys(row).filter(name => isNativeBeatExtra(name) && row[name] !== undefined).sort();
   const gallery = nativeGalleryOf(row);
   const entries = namedEntries(row, NATIVE_BEAT_FIELDS);
@@ -176,7 +176,7 @@ function prepare(source: ValidatedDocument, ports: NativeConversionPorts) {
   }
   const beats: PreparedBeat[] = source.rows.map(row => ({
     id: row.id, heads: headsOf.get(row.id) ?? [],
-    entries: beatEntries(row),
+    entries: nativeBeatEntries(row),
     narration: cell(cells, row.audioText, row.id + " narration"), visual: cell(cells, row.visualText, row.id + " visual"),
     edited: [["at", row.updatedAt] as const, ["by", row.updatedBy] as const].filter(([, value]) => value !== undefined).map(([key, value]) => [key, encodeNativeValue(value)] as const)
   }));

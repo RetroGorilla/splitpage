@@ -4,7 +4,7 @@ import { transactNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { nativeWriteAvailability } from "./text-commands.ts";
 import type { NativeRefusal } from "./text-commands.ts";
-import { decodeNativeValue, encodeNativeValue, nativeWellFormed, recordBag, sameNativeValue } from "./values.ts";
+import { decodeNativeValue, encodeNativeValue, NATIVE_STORED_VALUE_DEPTH, nativeWellFormed, recordBag, sameNativeValue } from "./values.ts";
 
 type RecordRefusal = NativeRefusal | "value" | "taken" | "author" | "stored" | "anchor";
 
@@ -48,16 +48,19 @@ export function nativeRecordId(value: unknown): value is string {
 const MAX_DEPTH = 64;
 const MAX_UNITS = 15_000_000;
 
-export function copyRecordValue(value: unknown): unknown {
+export function copyRecordValue(value: unknown, stored = false): unknown {
   const copiedObjects = new WeakMap<object, unknown>();
-  let remaining = MAX_UNITS;
+  const depthLimit = stored ? NATIVE_STORED_VALUE_DEPTH + 1 : MAX_DEPTH;
+  const unitsLimit = stored ? Number.MAX_SAFE_INTEGER : MAX_UNITS;
+  const validString = (item: unknown) => stored ? typeof item === "string" : nativeWellFormed(item);
+  let remaining = unitsLimit;
   function charge(units: number): void {
     remaining -= units;
     if (remaining < 0) throw new RangeError("File value is too large");
   }
   function copy(item: unknown, depth: number): unknown {
     charge(typeof item === "string" ? item.length + 1 : 1);
-    if (depth > MAX_DEPTH) throw new RangeError("File value is too deeply nested");
+    if (depth > depthLimit) throw new RangeError("File value is too deeply nested");
     if (item === null || typeof item !== "object") return item;
     if (copiedObjects.has(item)) return copiedObjects.get(item);
     copiedObjects.set(item, undefined);
@@ -80,17 +83,17 @@ export function copyRecordValue(value: unknown): unknown {
   }
 
   const copied = copy(value, 0);
-  remaining = MAX_UNITS;
+  remaining = unitsLimit;
   function check(item: unknown, depth: number): void {
     charge(typeof item === "string" ? item.length + 1 : 1);
-    if (depth > MAX_DEPTH) throw new RangeError("File value is too deeply nested");
-    if (item === null || typeof item === "boolean" || typeof item === "number" && Number.isFinite(item) || nativeWellFormed(item)) return;
+    if (depth > depthLimit) throw new RangeError("File value is too deeply nested");
+    if (item === null || typeof item === "boolean" || typeof item === "number" && Number.isFinite(item) || validString(item)) return;
     if (Array.isArray(item)) {
       for (const child of item as unknown[]) check(child, depth + 1);
     } else if (recordBag(item)) {
       for (const [key, child] of Object.entries(item)) {
         charge(key.length);
-        if (!nativeWellFormed(key)) throw new TypeError("Malformed field name");
+        if (!validString(key)) throw new TypeError("Malformed field name");
         check(child, depth + 1);
       }
     } else throw new TypeError("Expected a plain file value");
