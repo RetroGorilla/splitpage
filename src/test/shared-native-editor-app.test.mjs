@@ -19,6 +19,8 @@ import { enterSharedSession, forceLeaveSharedSession } from "../bootstrap/wiring
 import { openNativeEditor } from "../bootstrap/wiring/native-shared-session.ts";
 import { entrySwitchFixture } from "../../tests/bootstrap/shared-entry-switch-support.ts";
 import { setTimeout as delay } from "node:timers/promises";
+import { Doc, encodeStateAsUpdate } from "yjs";
+import { applyNativePeerUpdate } from "../adapters/collab/native/peer-update.ts";
 
 window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};
@@ -282,6 +284,24 @@ test("typing replaces a selection and keeps the caret after the replacement", as
   assert.deepEqual(cellSelection(cell("audioText")), { from: 2, to: 2 });
 });
 
+test("a selection across joined members stays visible as a refused edit", async t => {
+  const doc = migrateRows({ title: "Join", rows: [{ id: "r1", audioText: "Hello" }, { id: "r2", audioText: "World" }] });
+  adoptReplacement(doc);
+  const show = t.mock.method(notices, "show", () => {});
+  assert.deepEqual(await hook.enterFrom(nativeBytes(doc, " "), { backend: "native" }), { ok: true });
+  t.after(cleanSession);
+  const target = cell("audioText");
+  target.focus();
+  setCellSelection(target, 4, 7);
+  assert.equal(beforeInput(target, "insertText", "X"), true);
+  await flushed();
+  assert.equal(target.textContent, "HellXorld");
+  assert.equal(text(), "Hello World");
+  assert.equal(hook.read().peer.rows[0].audioText, "Hello World");
+  assert.equal(show.mock.callCount(), 1);
+  assert.deepEqual(hook.leave(), { ok: false, reason: "native-selection-stale" });
+});
+
 test("typing then deleting the buffered letter is unchanged and publishes no edit", async t => {
   const show = await enter(t);
   const seen = t.mock.fn();
@@ -298,6 +318,27 @@ test("typing then deleting the buffered letter is unchanged and publishes no edi
   assert.deepEqual(cellSelection(target), { from: 2, to: 2 });
   assert.equal(seen.mock.callCount(), 0);
   assert.equal(show.mock.callCount(), 0);
+});
+
+test("composition can begin at the end of a buffered key without repainting the cell", async t => {
+  await enter(t);
+  const target = cell("audioText");
+  target.focus();
+  setCellSelection(target, 2);
+  assert.equal(beforeInput(target, "insertText", "x"), true);
+  assert.equal(compose(target, "start", ""), false);
+  target.firstChild.insertData(3, "e");
+  target.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertCompositionText", isComposing: true, data: "e" }));
+  assert.equal(hook.nativePeer.type("r1", 0, "Y").kind, "written");
+  await flushed();
+  assert.equal(cell("audioText"), target);
+  assert.equal(target.textContent, "Hexello");
+  assert.equal(hook.read().peer.rows[0].audioText, "YHello");
+  assert.equal(compose(target, "end", "\u00e9"), false);
+  await Promise.resolve();
+  assert.equal(text(), "YHex\u00e9llo");
+  assert.equal(hook.read().peer.rows[0].audioText, "YHex\u00e9llo");
+  assert.deepEqual(cellSelection(cell("audioText")), { from: 5, to: 5 });
 });
 
 for (const committed of [true, false]) test("composition shields the DOM and " + (committed ? "commits once" : "cancels without writing"), async t => {
@@ -394,7 +435,7 @@ for (const [guard, expected] of [
   assert.equal(write.mock.callCount(), guard === "write recovery" ? 1 : 0);
 });
 
-for (const reason of ["text", "full", "future-refusal"]) test("a commit refusal keeps the text and stops on " + reason, t => {
+for (const reason of ["text", "future-refusal"]) test("a commit refusal keeps the text and stops on " + reason, t => {
   const doc = migrateRows({ title: "Native script", rows: [{ id: "r1", audioText: "Hello" }] });
   adoptReplacement(doc);
   const native = openNativeSession({ kind: "state", state: nativeBytes(doc) }, { actor: "Writer", sanitize: sanitizeHtml });
@@ -425,17 +466,17 @@ for (const reason of ["text", "full", "future-refusal"]) test("a commit refusal 
 async function openDirect(t) {
   const fixture = entrySwitchFixture(), refused = t.mock.fn();
   const ports = { ...fixture.ports, commandRefused: refused };
-  let native;
+  let native, binding;
   assert.deepEqual(await enterSharedSession(ports, (doc, failed) => {
     const opened = openNativeEditor(ports, doc, failed);
     native = opened.native;
-    return opened.backend;
+    return { ...opened.backend, bind: session => { binding = session; opened.backend.bind(session); } };
   }), { ok: true });
   t.after(cleanSession);
   const target = document.querySelector('#rows .cell-editable[data-id="R1"][data-field="audioText"]');
   target.focus();
   setCellSelection(target, 8);
-  return { native, refused, errors: fixture.errors, target };
+  return { native, binding, refused, errors: fixture.errors, target };
 }
 
 for (const reason of ["busy", "closed"]) test("the adapter returns " + reason + " and the buffered text stays visible", async t => {
@@ -448,6 +489,35 @@ for (const reason of ["busy", "closed"]) test("the adapter returns " + reason + 
   assert.equal(target.textContent, "Captured! words");
   assert.equal(text(), "Captured words");
   assert.deepEqual(refused.mock.calls.map(call => call.arguments), [[reason]]);
+});
+
+test("a hold that begins after the editor accepts a key prevents the buffered write", async t => {
+  const { native, binding, refused, target } = await openDirect(t);
+  assert.equal(beforeInput(target, "insertText", "!"), true);
+  const release = binding.hold("held-before-flush");
+  t.after(release);
+  assert.deepEqual(hook.leave(), { ok: false, reason: "held-before-flush" });
+  assert.equal(target.textContent, "Captured! words");
+  assert.equal(native.narrationHtml("R1"), "Captured words");
+  assert.deepEqual(refused.mock.calls.map(call => call.arguments), [["held-before-flush"]]);
+});
+
+test("the size event leaves the session active and its full refusal keeps the buffered text", async t => {
+  const { native, refused, target } = await openDirect(t), peer = new Doc();
+  t.after(() => peer.destroy());
+  const events = t.mock.fn();
+  t.after(native.subscribe(events));
+  assert.equal(beforeInput(target, "insertText", "!"), true);
+  peer.getMap("sizeFixture").set("payload", "x".repeat(native.sizeLimits.limit));
+  assert.equal(applyNativePeerUpdate(native, encodeStateAsUpdate(peer)), true);
+  await Promise.resolve();
+  assert.equal(sharedSession(), true);
+  assert.equal(native.size, "full");
+  assert.deepEqual(events.mock.calls.map(call => call.arguments[0].kind), ["changed", "size"]);
+  assert.deepEqual(hook.leave(), { ok: false, reason: "full" });
+  assert.equal(target.textContent, "Captured! words");
+  assert.equal(native.narrationHtml("R1"), "Captured words");
+  assert.deepEqual(refused.mock.calls.map(call => call.arguments), [["full"]]);
 });
 
 test("failed close reopens from terminal bytes and settles a queued keystroke into the copy", async t => {

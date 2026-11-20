@@ -44,34 +44,39 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
   let input: ReturnType<typeof mountNativeSharedInput> | null = null, terminal: Uint8Array | null = null;
   let initial: ValidatedDocument | null = null;
   let published = native.revision();
-  function publish(held?: Parameters<typeof keepNativeFieldPaint>[0]): void {
+  function publish(buffered?: Parameters<typeof keepNativeFieldPaint>[0]): void {
     const revision = native.revision();
     if (published === revision) return;
     const snapshot = native.document();
-    if (held) keepNativeFieldPaint(held, snapshot.rows.find(row => row.id === held.beat));
+    if (buffered) keepNativeFieldPaint(buffered, snapshot.rows.find(row => row.id === buffered.beat));
     published = revision;
     publication.publish(snapshot, "remote");
   }
   const stop = native.subscribe(event => {
     try {
+      if (event.kind === "size") return;
       if (event.kind === "changed") {
-        if (!input?.held()) publish();
-      } else if (event.kind === "closed") {
+        if (!input?.buffered()) publish();
+      } else {
         terminal = event.state;
         if (event.reason !== "failed") {
-          if (input?.held()) input.stop();
+          if (input?.buffered()) input.stop();
           return;
         }
-        if (input?.held()) {
-          const recovered = openNativeSession({ kind: "state", state: terminal }, options);
+        if (input?.buffered()) {
+          let bytes: Uint8Array | null = null;
           try {
-            if (!input.recover(recovered)) {
-              input.stop();
-              notices.show("The shared session stopped. Unsent writing is still in the editor.", "warn");
-              return;
-            }
-            terminal = recovered.encodeState();
-          } finally { recovered.close(); }
+            const recovered = openNativeSession({ kind: "state", state: terminal }, options);
+            try { bytes = input.recover(recovered); } finally { recovered.close(); }
+          } catch (error) {
+            ports.report(error);
+          }
+          if (!bytes) {
+            input.stop();
+            notices.show("The shared session stopped. Unsent writing is still in the editor.", "warn");
+            return;
+          }
+          terminal = bytes;
         }
         if (failedClose()) {
           notices.show(input

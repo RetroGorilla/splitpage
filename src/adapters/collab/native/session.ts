@@ -2,7 +2,7 @@ import * as Y from "yjs";
 import { continuesSharedTypingWord } from "../../../application/editing/undo/shared-undo.ts";
 import type { ValidatedDocument } from "../../../core/document/validated.ts";
 import type { MigratePorts } from "../../../core/migrate.ts";
-import type { Marks } from "../../../core/text/runs.ts";
+import type { Marks, Run } from "../../../core/text/runs.ts";
 import {
   createNativeComment, createNativeReply, removeNativeComment, reopenNativeComment, resolveNativeComment, setNativeCommentBody
 } from "./comment-commands.ts";
@@ -15,6 +15,8 @@ import { moveNativeBlocks } from "./move-commands.ts";
 import { clearNativeField, setNativeField } from "./record-commands.ts";
 import { openNativeScript } from "./script.ts";
 import type { NativeScript } from "./script.ts";
+import { createNativeSizeTracker, resolveNativeSizeOptions } from "./size.ts";
+import type { NativeSessionSize, NativeSizeOptions } from "./size.ts";
 import { joinNativeRow, removeNativeRows, splitNativeRow, unjoinNativeRow } from "./structure-commands.ts";
 import { anchorNativeText, deleteNativeText, replaceNativeText, typeNativeText } from "./text-commands.ts";
 import type { NativeEditStamp, NativeTextRange, NativeTextTarget } from "./text-commands.ts";
@@ -27,7 +29,7 @@ export type NativeSessionSource =
   | { readonly kind: "document"; readonly document: ValidatedDocument; readonly conversion: NativeConversionPorts }
   | { readonly kind: "state"; readonly state: Uint8Array };
 
-export interface NativeSessionOptions {
+export interface NativeSessionOptions extends NativeSizeOptions {
   readonly actor: string;
   readonly sanitize: MigratePorts["sanitize"];
 }
@@ -36,6 +38,7 @@ type CloseReason = "requested" | "failed";
 
 export type NativeSessionChange =
   | { readonly kind: "changed" }
+  | { readonly kind: "size"; readonly state: NativeSessionSize }
   | { readonly kind: "closed"; readonly reason: CloseReason; readonly state: Uint8Array };
 
 type ChangeListener = (change: NativeSessionChange) => void;
@@ -52,29 +55,42 @@ export function hasNativeFormat(bytes: Uint8Array): boolean {
   } finally { doc.destroy(); }
 }
 
-function openSessionScript(source: NativeSessionSource, updated: () => void) {
+function openSessionScript(
+  source: NativeSessionSource,
+  sizeOptions: ReturnType<typeof resolveNativeSizeOptions>,
+  updated: (update: Uint8Array, transaction: Y.Transaction) => void,
+  publishRecovery: () => void,
+  sizeRefusal: NonNullable<NativeScript["sizeRefusal"]>
+) {
   const doc = new Y.Doc(), script = openNativeScript(doc);
   try {
     if (source.kind === "state") Y.applyUpdate(doc, source.state);
     if (source.kind === "document") convertToNativeScript(script, source.document, source.conversion);
-    const undo = openNativeUndo(script);
+    const size = createNativeSizeTracker(doc, sizeOptions, publishRecovery);
+    const undo = openNativeUndo({ ...script, sizeRefusal });
     const { guardSharedCallback } = script;
-    const publishUpdate = () => guardSharedCallback(updated);
+    const publishUpdate = (update: Uint8Array, _origin: unknown, _doc: Y.Doc, transaction: Y.Transaction) =>
+      guardSharedCallback(() => updated(update, transaction));
     doc.on("update", publishUpdate);
-    return { script, undo, publishUpdate };
+    return { script, size, undo, publishUpdate };
   } catch (error) {
     doc.destroy();
     throw error;
   }
 }
 
-export function openNativeSession(source: NativeSessionSource, { actor, sanitize }: NativeSessionOptions) {
+export function openNativeSession(source: NativeSessionSource, options: NativeSessionOptions) {
+  const sizeOptions = resolveNativeSizeOptions(options);
+  const { actor, sanitize } = options;
   const listeners = new Set<ChangeListener>();
   const body = { sanitize };
   let active = false, scheduled = false, publishing = false, changed = false, holds = 0;
   let closing: CloseReason | null = null, revision = 0;
   let typing: { readonly target: NativeTextTarget; readonly endsInSpace: boolean } | null = null;
-  const { script, undo, publishUpdate } = openSessionScript(source, updated), doc = script.doc;
+  const { script, size, undo, publishUpdate } = openSessionScript(source, sizeOptions, updated, schedule, sizeRefusal), doc = script.doc;
+  let reportedSize: NativeSessionSize = size.state;
+  const writing = { ...script, sizeRefusal };
+  const adding = { ...script, sizeRefusal: () => sizeRefusal(true) };
 
   function schedule(): void {
     if (scheduled) return;
@@ -83,9 +99,10 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
     scheduled = true;
   }
 
-  function updated(): void {
+  function updated(update: Uint8Array, transaction: Y.Transaction): void {
     revision++;
     changed = true;
+    size.recordUpdate(update.byteLength, transaction.deleteSet.clients.size > 0);
     schedule();
   }
 
@@ -103,8 +120,12 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
       changed = false;
       emit(listeners, { kind: "changed" });
     }
+    if (!scheduled && size.state !== reportedSize) {
+      reportedSize = size.state;
+      emit(listeners, { kind: "size", state: reportedSize });
+    }
+    if (script.busy()) requestClose("failed");
     publishing = false;
-    if (script.busy()) closing = "failed";
     if (closing && !scheduled) finishClose(closing);
   }
 
@@ -130,6 +151,7 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
 
   function requestClose(reason: CloseReason): void {
     closing = reason;
+    size.stopRecovery();
     if (!publishing) schedule();
   }
 
@@ -141,7 +163,17 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
     return "busy";
   }
 
-  function bind<Args extends unknown[], Result>(command: (script: NativeScript, ...args: Args) => Result, separate = true) {
+  function sizeRefusal(adds = false): "full" | null {
+    if (adds && size.state === "full") {
+      if (size.checkRecovery()) schedule();
+      if (size.state === "full") return "full";
+    }
+    return size.atCeiling ? "full" : null;
+  }
+
+  function bind<Args extends unknown[], Result>(
+    command: (script: NativeScript, ...args: Args) => Result, commandScript: NativeScript, separate = true
+  ) {
     return (...args: Args): Result => {
       const reason = refusal();
       if (reason) {
@@ -153,7 +185,7 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
           typing = null;
           undo.stopCapturing();
         }
-        return command(script, ...args);
+        return command(commandScript, ...args);
       });
     };
   }
@@ -168,34 +200,34 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
   }
 
   const commands = Object.freeze({
-    anchorText: bind(anchorNativeText, false),
-    typeText: bind((script, range: NativeTextRange, text: string, marks: Marks, stamp?: NativeEditStamp) =>
+    anchorText: bind(anchorNativeText, script, false),
+    typeText: bind((script: NativeScript, range: NativeTextRange, text: string, marks: Marks, stamp?: NativeEditStamp) =>
       typeNativeText(script, range, text, marks, stamp, target => {
         const previous = typing?.target.beat === target.beat && typing.target.cell === target.cell ? typing : null;
         if (!previous || !continuesSharedTypingWord(previous.endsInSpace, text)) undo.stopCapturing();
         typing = { target, endsInSpace: text ? /\s$/.test(text) : previous?.endsInSpace ?? false };
-      }), false),
-    replaceText: bind((script, ...args: [NativeTextRange, Parameters<typeof replaceNativeText>[2], NativeEditStamp?]) =>
-      replaceNativeText(script, ...args)),
-    deleteText: bind(deleteNativeText),
-    formatText: bind(formatNativeText),
-    splitRow: bind(splitNativeRow),
-    joinRow: bind(joinNativeRow),
-    unjoinRow: bind(unjoinNativeRow),
-    removeRows: bind(removeNativeRows),
-    createHeading: bind(createNativeHeading),
-    renameHeading: bind(renameNativeHeading),
-    removeHeading: bind(removeNativeHeading),
-    restoreHeading: bind(restoreNativeHeading),
-    moveBlocks: bind(moveNativeBlocks),
-    setField: bind(setNativeField),
-    clearField: bind(clearNativeField),
-    createComment: bind((script, comment: NativeNewComment) => createNativeComment(script, comment, body)),
-    createReply: bind((script, comment: string, reply: NativeNewReply) => createNativeReply(script, comment, reply, body)),
-    setCommentBody: bind((script, target: NativeCommentTarget, html: string) => setNativeCommentBody(script, target, actor, html, body)),
-    resolveComment: bind(resolveNativeComment),
-    reopenComment: bind(reopenNativeComment),
-    removeComment: bind(removeNativeComment),
+      }), writing, false),
+    replaceText: bind((script: NativeScript, range: NativeTextRange, runs: readonly Run[], stamp?: NativeEditStamp) =>
+      replaceNativeText(script, range, runs, stamp), writing),
+    deleteText: bind(deleteNativeText, writing),
+    formatText: bind(formatNativeText, adding),
+    splitRow: bind(splitNativeRow, adding),
+    joinRow: bind(joinNativeRow, adding),
+    unjoinRow: bind(unjoinNativeRow, writing),
+    removeRows: bind(removeNativeRows, writing),
+    createHeading: bind(createNativeHeading, adding),
+    renameHeading: bind(renameNativeHeading, writing),
+    removeHeading: bind(removeNativeHeading, writing),
+    restoreHeading: bind(restoreNativeHeading, adding),
+    moveBlocks: bind(moveNativeBlocks, adding),
+    setField: bind(setNativeField, adding),
+    clearField: bind(clearNativeField, writing),
+    createComment: bind((script, comment: NativeNewComment) => createNativeComment(script, comment, body), adding),
+    createReply: bind((script, comment: string, reply: NativeNewReply) => createNativeReply(script, comment, reply, body), adding),
+    setCommentBody: bind((script, target: NativeCommentTarget, html: string) => setNativeCommentBody(script, target, actor, html, body), adding),
+    resolveComment: bind(resolveNativeComment, adding),
+    reopenComment: bind(reopenNativeComment, adding),
+    removeComment: bind(removeNativeComment, writing),
     undo: () => press("undo"),
     redo: () => press("redo")
   });
@@ -211,6 +243,8 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
       schedule();
       return false;
     },
+    get size(): NativeSessionSize { return reportedSize; },
+    sizeLimits: sizeOptions.limits,
     document: () => script.reader.document(),
     revision: () => revision,
     narrationCaret: (row: string, offset: number) => script.reader.narrationCaret(row, offset),

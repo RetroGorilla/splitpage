@@ -4,7 +4,7 @@ import type { NativeDeltaItem } from "./inline.ts";
 import { nativeSegmentSpans } from "./reader.ts";
 import { transactNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
-import { nativeAvailability, nativeLiveRange, nativeRangeSnapshot } from "./text-commands.ts";
+import { nativeLiveRange, nativeRangeSnapshot, nativeWriteAvailability } from "./text-commands.ts";
 import type { NativeRefusal, NativeTextRange } from "./text-commands.ts";
 import { mintNativeId, nativeWellFormed } from "./values.ts";
 
@@ -112,7 +112,7 @@ function splitPoint(script: NativeScript, beat: string, text: Y.Text, index: num
 // why: design section 2 and decision 7: a split writes a boundary, a record holding only the parent's rank and an
 // empty visual cell, never narration; ties in rank read in stored order, so two splits at once keep narration order
 export function splitNativeRow(script: NativeScript, at: NativeTextRange): NativeSplitOutcome {
-  const checked = nativeRangeSnapshot(at), unavailable = nativeAvailability(script);
+  const checked = nativeRangeSnapshot(at), unavailable = nativeWriteAvailability(script);
   if (unavailable) return refused(unavailable);
   if (!checked || checked.target.cell !== "narration" || checked.to !== null) return refused("range");
   if (!beatId(checked.target.beat)) return refused("missing");
@@ -164,7 +164,7 @@ function readJoin(beat: unknown, into: unknown, glue: unknown): { readonly beat:
 // why: design section 2: a join sets `joined` on the lower beat, naming the beat directly above as the person saw it;
 // when that is no longer the beat directly above, the command refuses rather than join another row
 export function joinNativeRow(script: NativeScript, beat: string, into: string, glue: string): NativeRowOutcome {
-  const checked = readJoin(beat, into, glue), unavailable = nativeAvailability(script);
+  const checked = readJoin(beat, into, glue), unavailable = nativeWriteAvailability(script);
   if (unavailable) return refused(unavailable);
   if (!checked) return refused("text");
   let outcome: NativeRowOutcome = refused("missing");
@@ -180,7 +180,7 @@ export function joinNativeRow(script: NativeScript, beat: string, into: string, 
 }
 
 export function unjoinNativeRow(script: NativeScript, beat: string): NativeRowOutcome {
-  const id = beatId(beat), unavailable = nativeAvailability(script);
+  const id = beatId(beat), unavailable = nativeWriteAvailability(script);
   if (unavailable) return refused(unavailable);
   if (!id) return refused("missing");
   let outcome: NativeRowOutcome = refused("missing");
@@ -228,7 +228,7 @@ function merged(cuts: readonly Cut[]): Map<Y.Text, [number, number][]> {
 // why: design decision 4: removing a row deletes the narration the reader shows for it with its boundary, or its
 // segment's head key; its record and visual cell stay, so a removal's undo brings back what others wrote there unseen
 export function removeNativeRows(script: NativeScript, beats: readonly string[]): NativeRowOutcome {
-  const ids = readIds(beats), unavailable = nativeAvailability(script);
+  const ids = readIds(beats), unavailable = nativeWriteAvailability(script);
   if (unavailable) return refused(unavailable);
   if (!ids) return refused("missing");
   if (!ids.length) return UNCHANGED;

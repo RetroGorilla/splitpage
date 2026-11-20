@@ -12,11 +12,11 @@ import { editAllowed } from "./session-owner.ts";
 import { writerControls } from "./writer.ts";
 
 interface NativeInputPorts {
-  readonly native: ReturnType<typeof openNativeSession>;
+  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "narrationCaret" | "narrationHtml" | "narrationOffset">;
   readonly session: Pick<SharedDocumentSession, "admit" | "refuse" | "subscribe">;
   readonly editAttribution: () => NativeEditStamp;
   readonly report: ReportPort;
-  readonly publish?: (held?: { readonly cell: Element; readonly beat: string }) => void;
+  readonly publish?: (buffered?: { readonly cell: Element; readonly beat: string }) => void;
 }
 
 const NARRATION = '#rows .cell-editable[data-field="audioText"][data-id]';
@@ -34,7 +34,7 @@ interface Draft {
   readonly selection: CellRange;
   readonly html: string;
   composing: boolean;
-  composition: boolean;
+  readonly composition: boolean;
   text: string;
 }
 
@@ -147,26 +147,26 @@ export function mountNativeSharedInput({ native, session, editAttribution, repor
     return admission?.reason ?? (editAllowed() ? null : UNSUPPORTED);
   }
 
-  function commit(held: Draft, target: NativeInputPorts["native"]) {
-    const { range, text, selection, composition } = held;
+  function commit(buffered: Draft, target: NativeInputPorts["native"]) {
+    const { range, text, selection, composition } = buffered;
     if (!range) return null;
-    const stamp = editAttribution();
-    if (!composition && selection.from === selection.to) return target.commands.typeText(range, text, {}, stamp);
-    if (!text) return target.commands.deleteText(range, stamp);
-    return target.commands.replaceText(range, [{ text, marks: {} }], stamp);
+    const attribution = editAttribution();
+    if (!composition && selection.from === selection.to) return target.commands.typeText(range, text, {}, attribution);
+    if (!text) return target.commands.deleteText(range, attribution);
+    return target.commands.replaceText(range, [{ text, marks: {} }], attribution);
   }
 
   function finish(): string | null {
     clearTimeout(timer);
     timer = undefined;
-    const held = draft;
-    if (stopped || !held) return stopped;
-    if (held.composing) return PENDING;
+    const buffered = draft;
+    if (stopped || !buffered) return stopped;
+    if (buffered.composing) return PENDING;
     const refusal = admissionRefusal();
     if (refusal) return stop(refusal);
     let result;
     try {
-      result = commit(held, native);
+      result = commit(buffered, native);
     } catch (error) {
       uncertain = true;
       report(error);
@@ -176,18 +176,18 @@ export function mountNativeSharedInput({ native, session, editAttribution, repor
       if (!result) return stop(STALE);
       if (result.kind === "recovery") return stop(result.reason);
       draft = null;
-      if (result.kind === "unchanged") restore(held);
-      placement = held;
-      publish(held);
+      if (result.kind === "unchanged") restore(buffered);
+      placement = buffered;
+      publish(buffered);
     } catch (error) {
       report(error);
     } finally { placement = null; }
     return null;
   }
 
-  function restore(held: Pick<Draft, "cell" | "selection" | "html">): void {
-    held.cell.innerHTML = held.html;
-    if (document.activeElement === held.cell) setCellSelection(held.cell, held.selection.from, held.selection.to);
+  function restore(buffered: Pick<Draft, "cell" | "selection" | "html">): void {
+    buffered.cell.innerHTML = buffered.html;
+    if (document.activeElement === buffered.cell) setCellSelection(buffered.cell, buffered.selection.from, buffered.selection.to);
   }
 
   function write(input: InputEvent, cell: Element): void {
@@ -198,15 +198,15 @@ export function mountNativeSharedInput({ native, session, editAttribution, repor
     if (refusal) { session.refuse(refusal); return; }
     const selection = inputRange(input, cell);
     if (!selection) { session.refuse(deletion ? UNSUPPORTED : STALE); return; }
-    const held = draft;
-    if (held && insideDraft(held, cell, selection)) {
-      reviseDraft(held, selection, text);
+    const buffered = draft;
+    if (buffered && insideDraft(buffered, cell, selection)) {
+      reviseDraft(buffered, selection, text);
       preview(cell, selection, text);
-      if (/\s$/.test(held.text)) finish();
+      if (/\s$/.test(buffered.text)) finish();
       return;
     }
     if (touchesProtectedText(cell, selection)) { session.refuse(UNSUPPORTED); return; }
-    const matches = !held || native.narrationHtml(held.beat) === documentReader.read(doc => doc?.rows.find(row => row.id === held.beat)?.audioText);
+    const matches = buffered?.cell !== cell || native.narrationHtml(buffered.beat) === documentReader.read(doc => doc?.rows.find(row => row.id === buffered.beat)?.audioText);
     if (finish()) return;
     const fresh = cell.isConnected ? cell : document.querySelector(NARRATION + '[data-id="' + cssAttr(cell.getAttribute("data-id") ?? "") + '"]');
     if (!fresh) { session.refuse(STALE); return; }
@@ -240,29 +240,29 @@ export function mountNativeSharedInput({ native, session, editAttribution, repor
       draft = anchored;
       return;
     }
-    const held = draft;
-    if (!held?.composing || held.cell !== cell) return;
+    const buffered = draft;
+    if (!buffered?.composing || buffered.cell !== cell) return;
     const nested = composingInside;
     composingInside = null;
-    held.composing = false;
+    buffered.composing = false;
     if (nested) {
       restore(nested);
       if (event.data) {
-        reviseDraft(held, nested.selection, event.data);
+        reviseDraft(buffered, nested.selection, event.data);
         preview(cell, nested.selection, event.data);
       }
       finish();
       return;
     }
     if (!event.data) {
-      restore(held);
+      restore(buffered);
       draft = null;
       publish();
       return;
     }
-    held.text = event.data;
-    restore(held);
-    preview(cell, held.selection, event.data);
+    buffered.text = event.data;
+    restore(buffered);
+    preview(cell, buffered.selection, event.data);
     finish();
   }
 
@@ -271,8 +271,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, repor
     const cell = target?.closest(EDITABLE);
     const narration = cell?.matches(NARRATION) ? cell : null;
     if (event.type === "focusout") {
-      const held = draft;
-      if (held?.cell === cell && !held.composing) queueMicrotask(() => { if (draft === held) finish(); });
+      const buffered = draft;
+      if (buffered && buffered.cell === cell && !buffered.composing) queueMicrotask(() => { if (draft === buffered) finish(); });
       return;
     }
     if (event.type === "pointerdown") {
@@ -300,7 +300,12 @@ export function mountNativeSharedInput({ native, session, editAttribution, repor
         catch (error) { report(error); stop(PENDING); }
         return;
       }
-      if (draft?.composing && (event.type === "beforeinput" || event.type === "input")) {
+      if (draft?.composing && draft.cell === narration && (event.type === "beforeinput" || event.type === "input")) {
+        const change = event as InputEvent;
+        if (event.type === "beforeinput" && !change.isComposing && !change.inputType.includes("Composition")) {
+          event.preventDefault();
+          session.refuse(UNSUPPORTED);
+        }
         event.stopImmediatePropagation();
         return;
       }
@@ -336,16 +341,16 @@ export function mountNativeSharedInput({ native, session, editAttribution, repor
   for (const type of EVENTS) window.addEventListener(type, intercept, true);
   return {
     finish,
-    held: () => draft !== null,
+    buffered: () => draft !== null,
     stop: () => { clearTimeout(timer); if (!stopped) stop(PENDING); },
-    recover: (reopened: NativeInputPorts["native"]): boolean => {
-      if (!draft) return true;
-      if (draft.composing || uncertain || !draft.range) return false;
+    recover: (reopened: ReturnType<typeof openNativeSession>): Uint8Array | null => {
+      if (!draft || draft.composing || uncertain || !draft.range) return null;
       const result = commit(draft, reopened);
-      if (!result || result.kind === "recovery") return false;
+      if (!result || result.kind === "recovery") return null;
+      const bytes = reopened.encodeState();
       draft = null;
       stopped = null;
-      return true;
+      return bytes;
     },
     dispose: () => {
       clearTimeout(timer);
@@ -356,6 +361,6 @@ export function mountNativeSharedInput({ native, session, editAttribution, repor
   };
 }
 
-export function keepNativeFieldPaint(held: { readonly cell: Element; readonly beat: string }, row: Parameters<typeof noteFieldPainted>[2] | undefined): void {
-  if (row?.audioText === held.cell.innerHTML) noteFieldPainted(held.cell, "audioText", row);
+export function keepNativeFieldPaint(buffered: { readonly cell: Element; readonly beat: string }, row: Parameters<typeof noteFieldPainted>[2] | undefined): void {
+  if (row?.audioText === buffered.cell.innerHTML) noteFieldPainted(buffered.cell, "audioText", row);
 }

@@ -28,7 +28,7 @@ export function openNativeUndo(script: NativeScript) {
   }
 
   function press(direction: "undo" | "redo"): NativeUndoOutcome {
-    const unavailable = nativeAvailability(script) ?? (disposed ? "closed" : null);
+    const unavailable = nativeAvailability(script) ?? (disposed ? "closed" : script.sizeRefusal?.());
     if (unavailable) return Object.freeze({ kind: "refused", reason: unavailable });
     manager.stopCapturing();
     // why: Yjs must finish the transaction while its undoing or redoing flag is still set

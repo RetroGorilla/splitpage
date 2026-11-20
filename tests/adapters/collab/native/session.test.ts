@@ -76,6 +76,23 @@ test("checking healthy peer delivery schedules no session work", t => {
   assert.equal(enqueue.mock.callCount(), 0);
 });
 
+test("a relative narration caret resolves in its visible joined row after a peer edit", t => {
+  const author = fromDocument({ A: "ab", B: "cd" });
+  t.after(author.close);
+  written(author.commands.joinRow("B", "A", " "));
+  const peer = open({ kind: "state", state: author.encodeState() });
+  t.after(peer.close);
+  const lower = { beat: "B", cell: "narration" } as const;
+  assert.deepEqual(author.narrationCaret("A", 4), { beat: "B", offset: 1 });
+  const start = anchor(author, 1, 1, lower);
+  type(peer, 0, "Y");
+  Y.applyUpdate(author.ydoc, peer.encodeState(), "peer");
+  written(author.commands.typeText(start, "X", {}));
+  assert.equal(author.narrationHtml("A"), "Yab cXd");
+  assert.equal(author.narrationOffset("A", start), 6);
+  assert.equal(author.narrationOffset("B", start), null);
+});
+
 test("empty, converted and encoded opens use a fresh undo binding", t => {
   const empty = open({ kind: "empty" }), author = fromDocument();
   t.after(() => { empty.close(); author.close(); });

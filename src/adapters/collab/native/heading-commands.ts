@@ -1,8 +1,8 @@
 import * as Y from "yjs";
 import { nativeRankBetween } from "./rank.ts";
-import { nativeAvailability, nativeLiveRange, nativeRangeSnapshot } from "./text-commands.ts";
+import { nativeAvailability, nativeLiveRange, nativeRangeSnapshot, nativeWriteAvailability } from "./text-commands.ts";
 import type { NativeRefusal, NativeTextRange } from "./text-commands.ts";
-import { transactNativeCommand } from "./script.ts";
+import { transactNativeCommand, transactPreparedNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { nativeWellFormed } from "./values.ts";
 
@@ -21,8 +21,7 @@ function refused(reason: NativeRefusal | "rank"): NativeHeadingOutcome {
 export function createNativeHeading(script: NativeScript, at: NativeTextRange, id: string, name: string): NativeHeadingOutcome {
   const unavailable = nativeAvailability(script);
   if (unavailable) return refused(unavailable);
-  return transactNativeCommand(script, () => {
-    const checked = nativeRangeSnapshot(at);
+  return transactPreparedNativeCommand(script, () => nativeRangeSnapshot(at), checked => {
     if (!checked || checked.target.cell !== "narration" || checked.to) return refused("range");
     if (!nativeWellFormed(id) || !id) return refused("missing");
     if (!nativeWellFormed(name)) return refused("text");
@@ -52,14 +51,13 @@ export function createNativeHeading(script: NativeScript, at: NativeTextRange, i
       roots.order.insert(segmentIndex, [key]);
     } else text.insertEmbed(placement.at, marker, {});
     return WRITTEN;
-  });
+  }, refused);
 }
 
 export function renameNativeHeading(script: NativeScript, range: NativeTextRange, name: string): NativeHeadingOutcome {
   const unavailable = nativeAvailability(script);
   if (unavailable) return refused(unavailable);
-  return transactNativeCommand(script, () => {
-    const checked = nativeRangeSnapshot(range);
+  return transactPreparedNativeCommand(script, () => nativeRangeSnapshot(range), checked => {
     if (!checked || checked.target.cell !== "name") return refused("range");
     if (!nativeWellFormed(name)) return refused("text");
     const live = nativeLiveRange(script, checked);
@@ -68,11 +66,11 @@ export function renameNativeHeading(script: NativeScript, range: NativeTextRange
     if (name.length) live.text.insert(live.from, name, {});
     if (live.until > live.from) live.text.delete(live.from + name.length, live.until - live.from);
     return WRITTEN;
-  });
+  }, refused, () => name !== "");
 }
 
 function markHeading(script: NativeScript, id: string, removed: boolean): NativeHeadingOutcome {
-  const unavailable = nativeAvailability(script);
+  const unavailable = nativeWriteAvailability(script);
   if (unavailable) return refused(unavailable);
   return transactNativeCommand(script, () => {
     if (!nativeWellFormed(id) || !id) return refused("missing");
