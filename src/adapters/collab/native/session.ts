@@ -31,7 +31,9 @@ export interface NativeSessionOptions {
   readonly sanitize: MigratePorts["sanitize"];
 }
 
-export type NativeSessionChange = "changed" | "undo-reset" | "closed";
+export type NativeSessionChange =
+  | { readonly kind: "changed" | "closed" }
+  | { readonly kind: "undo-reset"; readonly ydoc: Y.Doc };
 
 type ChangeListener = (change: NativeSessionChange) => void;
 
@@ -41,10 +43,8 @@ function openCopy(source: NativeSessionSource, updated: () => void) {
     if (source.kind === "state") Y.applyUpdate(doc, source.state);
     if (source.kind === "document") convertToNativeScript(script, source.document, source.conversion);
     const undo = openNativeUndo(script);
-    // why: reentry during argument copying must keep each command's own refusal shape
-    const busyScript: NativeScript = { ...script, busy: () => true };
     doc.on("update", updated);
-    return { script, busyScript, undo };
+    return { script, undo };
   } catch (error) {
     doc.destroy();
     throw error;
@@ -53,37 +53,49 @@ function openCopy(source: NativeSessionSource, updated: () => void) {
 
 export function openNativeSession(source: NativeSessionSource, { actor, sanitize }: NativeSessionOptions) {
   const listeners = new Set<ChangeListener>();
-  const pendingPeerUpdates: Uint8Array[] = [];
-  const peerOrigin = {};
   const body = { sanitize };
-  let active = false, closeRequested = false, closed = false, settleScheduled = false;
-  let events: NativeSessionChange[] = [];
+  let active = false, closeRequested = false, scheduled = false;
+  let changed = false, undoReset = false;
   let typing: { readonly target: NativeTextTarget; readonly endsInSpace: boolean } | null = null;
   let current = openCopy(source, updated);
 
-  function notify(change: NativeSessionChange): void {
-    if (!events.length) queueMicrotask(publish);
-    if (events.at(-1) !== change) events.push(change);
+  function schedule(): void {
+    if (scheduled) return;
+    scheduled = true;
+    // why: only after the stack unwinds can a busy flag distinguish interrupted cleanup from an active transaction
+    queueMicrotask(publish);
   }
 
   function updated(): void {
-    notify("changed");
+    changed = true;
+    schedule();
   }
 
-  function publish(): void {
-    const ready = events;
-    events = [];
-    for (const change of ready) for (const listener of listeners) {
+  function emit(subscribers: ReadonlySet<ChangeListener>, change: NativeSessionChange): void {
+    for (const listener of [...subscribers]) {
       // why: one failed subscriber must not interrupt delivery to the others
       try { listener(change); } catch { continue; }
     }
-    if (closed) listeners.clear();
+  }
+
+  function publish(): void {
+    if (current.script.busy()) recover();
+    const didChange = changed, reopened = undoReset ? current.script.doc : null;
+    changed = undoReset = false;
+    if (didChange) emit(listeners, { kind: "changed" });
+    if (reopened) emit(listeners, { kind: "undo-reset", ydoc: reopened });
+
+    scheduled = false;
+    if (changed || undoReset) schedule();
+    else if (closeRequested) {
+      retire(current);
+      emit(listeners, { kind: "closed" });
+      listeners.clear();
+    }
   }
 
   function retire(copy: typeof current): void {
-    copy.script.doc.off("update", updated);
     copy.undo.destroy();
-    copy.script.close();
     copy.script.doc.destroy();
   }
 
@@ -92,51 +104,26 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
     current = openCopy({ kind: "state", state: Y.encodeStateAsUpdate(old.script.doc) }, updated);
     typing = null;
     retire(old);
-    notify("undo-reset");
-  }
-
-  function settle(): void {
-    active = true;
-    try {
-      if (current.script.busy()) recover();
-      for (let update = pendingPeerUpdates.shift(); update; update = pendingPeerUpdates.shift()) {
-        Y.applyUpdate(current.script.doc, update, peerOrigin);
-      }
-    } finally {
-      active = false;
-      if (closeRequested) {
-        closed = true;
-        retire(current);
-        notify("closed");
-      } else if (current.script.busy() || pendingPeerUpdates.length) scheduleSettle();
-    }
-  }
-
-  function scheduleSettle(): void {
-    if (settleScheduled) return;
-    settleScheduled = true;
-    // why: a raw Yjs transaction can still be on the stack, so a busy flag alone cannot justify reopening yet
-    queueMicrotask(() => {
-      settleScheduled = false;
-      if (!closed) settle();
-    });
+    undoReset = true;
+    schedule();
   }
 
   function perform<T>(run: () => T): T {
     active = true;
     try { return run(); } finally {
       active = false;
-      settle();
+      if (current.script.busy()) recover();
     }
   }
 
   function bind<Args extends unknown[], Result>(command: (script: NativeScript, ...args: Args) => Result, separate = true) {
     return (...args: Args): Result => {
-      if (closed) return command(current.script, ...args);
       if (active || current.script.busy()) {
-        if (!active) scheduleSettle();
-        return command(current.busyScript, ...args);
+        if (!active) schedule();
+        // why: reentry during argument copying must keep each command's own refusal shape
+        return command({ ...current.script, busy: () => true }, ...args);
       }
+      if (closeRequested) return command({ ...current.script, closed: () => true }, ...args);
       return perform(() => {
         if (separate) {
           typing = null;
@@ -148,11 +135,11 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
   }
 
   function press(direction: "undo" | "redo"): NativeUndoOutcome {
-    if (closed) return current.undo[direction]();
     if (active || current.script.busy()) {
-      if (!active) scheduleSettle();
+      if (!active) schedule();
       return { kind: "refused", reason: "busy" };
     }
+    if (closeRequested) return { kind: "refused", reason: "closed" };
     return perform(() => {
       typing = null;
       return current.undo[direction]();
@@ -194,29 +181,20 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
 
   return Object.freeze({
     commands,
+    // why: peers apply updates directly between commands. Applying one from a transaction listener is unsupported
+    // because Yjs can fold it into local undo
     get ydoc() { return current.script.doc; },
     document: () => current.script.reader.document(),
     encodeState: () => Y.encodeStateAsUpdate(current.script.doc),
     subscribe(listener: ChangeListener): () => void {
-      if (closed) return () => undefined;
+      if (closeRequested) return () => undefined;
       listeners.add(listener);
       return () => { listeners.delete(listener); };
     },
-    applyPeerUpdate(update: Uint8Array): void {
-      if (closed) return;
-      if (active || current.script.busy()) {
-        pendingPeerUpdates.push(update.slice());
-        if (!active) scheduleSettle();
-        return;
-      }
-      perform(() => Y.applyUpdate(current.script.doc, update, peerOrigin));
-    },
     close(): void {
-      if (closed) return;
+      if (closeRequested) return;
       closeRequested = true;
-      if (!active) {
-        if (current.script.busy()) scheduleSettle(); else settle();
-      }
+      schedule();
     }
   });
 }

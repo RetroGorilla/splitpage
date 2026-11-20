@@ -1,7 +1,12 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { setTimeout } from "node:timers/promises";
+import { HocuspocusProvider, HocuspocusProviderWebsocket, MessageType } from "@hocuspocus/provider";
+import { createDecoder, readVarString, readVarUint } from "lib0/decoding";
+import { createEncoder, toUint8Array, writeVarString, writeVarUint } from "lib0/encoding";
+import { readSyncMessage, writeUpdate } from "y-protocols/sync";
 import * as Y from "yjs";
+import { NativeScriptReader } from "../../../../src/adapters/collab/native/reader.ts";
 import { openNativeSession } from "../../../../src/adapters/collab/native/session.ts";
 import type { NativeSessionChange, NativeSessionSource } from "../../../../src/adapters/collab/native/session.ts";
 import { createRichText } from "../../../../src/adapters/richtext/richtext.ts";
@@ -75,28 +80,35 @@ test("a failed open destroys its partial document", t => {
   assert.equal(destroy.mock.callCount(), 1);
 });
 
-test("a peer update submitted inside a command is copied and applied between commands outside local undo", t => {
-  const a = fromDocument(), b = open({ kind: "state", state: a.encodeState() });
-  t.after(() => { a.close(); b.close(); });
-  const before = Y.encodeStateVector(b.ydoc);
-  type(b, 0, "peer ");
-  const packet = Y.encodeStateAsUpdate(b.ydoc, before);
-  const at = anchor(a, 0);
-  a.ydoc.once("beforeTransaction", () => {
-    a.applyPeerUpdate(packet);
-    packet.fill(0);
+for (const boundary of ["typing", "undo", "redo", "refusal", "throw"] as const) {
+  test(`stock peer delivery after ${boundary} stays out of local undo and converges`, t => {
+    const a = fromDocument(), b = open({ kind: "state", state: a.encodeState() });
+    t.after(() => { a.close(); b.close(); });
+    if (boundary === "throw") {
+      const failure = new Error("observer failure after write");
+      const at = anchor(a, 0);
+      a.ydoc.once("afterTransaction", () => { throw failure; });
+      assert.throws(() => a.commands.typeText(at, "local ", {}), failure);
+    } else type(a, 0, "local ");
+    if (boundary === "undo" || boundary === "redo") written(a.commands.undo());
+    if (boundary === "redo") written(a.commands.redo());
+    if (boundary === "refusal") unchanged(a, () => a.commands.setField(status, "invalid"), { kind: "refused", reason: "value" });
+
+    Y.applyUpdate(b.ydoc, a.encodeState(), "peer");
+    type(b, 0, "peer ", visual);
+    Y.applyUpdate(a.ydoc, b.encodeState(), "peer");
+    assert.deepEqual(a.document(), b.document());
+    assert.equal(a.document().rows[0]?.audioText, boundary === "undo" ? "a" : "local a");
+    assert.equal(a.document().rows[0]?.visualText, "peer ");
+    if (boundary === "undo") written(a.commands.redo());
+    written(a.commands.undo());
+    unchanged(a, a.commands.undo, UNCHANGED);
+    Y.applyUpdate(b.ydoc, a.encodeState(), "peer");
+    assert.deepEqual(a.document(), b.document());
     assert.equal(a.document().rows[0]?.audioText, "a");
-    assert.deepEqual(a.commands.typeText(at, "nested", {}), {
-      kind: "recovery", reason: "busy", runs: [{ text: "nested", marks: {} }]
-    });
-    assert.deepEqual(a.commands.undo(), { kind: "refused", reason: "busy" });
+    assert.equal(a.document().rows[0]?.visualText, "peer ");
   });
-  written(a.commands.typeText(at, "local ", {}));
-  assert.match(a.document().rows[0]?.audioText ?? "", /^(?:local peer |peer local )a$/);
-  written(a.commands.undo());
-  assert.equal(a.document().rows[0]?.audioText, "peer a");
-  unchanged(a, a.commands.undo, UNCHANGED);
-});
+}
 
 test("stock delivery changes the plain Y.Doc and subscribers run safely after transactions", async t => {
   const a = fromDocument(), b = open({ kind: "empty" });
@@ -104,15 +116,17 @@ test("stock delivery changes the plain Y.Doc and subscribers run safely after tr
   const broken = b.subscribe(() => { throw new Error("subscriber"); });
   const received: string[] = [];
   const stop = b.subscribe(change => {
-    received.push(change + ":" + b.document().rows[0]?.audioText);
+    received.push(change.kind + ":" + b.document().rows[0]?.audioText);
   });
   Y.applyUpdate(b.ydoc, a.encodeState(), { provider: true });
   assert.deepEqual(received, []);
   await Promise.resolve();
   assert.deepEqual(received, ["changed:a"]);
   unchanged(b, b.commands.undo, UNCHANGED);
+  const schedule = t.mock.method(globalThis, "queueMicrotask");
   type(b, 0, "z");
   type(b, 1, "z");
+  assert.equal(schedule.mock.callCount(), 1);
   await Promise.resolve();
   assert.deepEqual(received, ["changed:a", "changed:zza"]);
   stop();
@@ -123,44 +137,41 @@ test("stock delivery changes the plain Y.Doc and subscribers run safely after tr
 });
 
 test("session admission waits out a raw Yjs transaction without replacing its document", async t => {
-  const a = fromDocument(), b = open({ kind: "state", state: a.encodeState() });
-  t.after(() => { a.close(); b.close(); });
+  const a = fromDocument();
+  t.after(a.close);
   const doc = a.ydoc, at = anchor(a, 0);
-  type(b, 0, "peer ");
   doc.transact(() => {
-    a.applyPeerUpdate(b.encodeState());
-    assert.equal(a.document().rows[0]?.audioText, "a");
     assert.deepEqual(a.commands.undo(), { kind: "refused", reason: "busy" });
-    assert.deepEqual(a.commands.anchorText(narration, 0), { kind: "refused", reason: "busy" });
+    assert.deepEqual(a.commands.typeText(at, "nested", {}), {
+      kind: "recovery", reason: "busy", runs: [{ text: "nested", marks: {} }]
+    });
     assert.equal(a.ydoc, doc);
   });
   await Promise.resolve();
   assert.equal(a.ydoc, doc);
-  assert.equal(a.document().rows[0]?.audioText, "peer a");
+  assert.equal(a.document().rows[0]?.audioText, "a");
   written(a.commands.typeText(at, "local ", {}));
 });
 
 test("reentry during argument copying is refused before a nested command can write", t => {
-  const session = fromDocument(), peer = open({ kind: "state", state: session.encodeState() });
-  t.after(() => { session.close(); peer.close(); });
-  type(peer, 0, "p");
+  const session = fromDocument();
+  t.after(session.close);
   const before = session.encodeState();
   const value = { get nested() {
-    session.applyPeerUpdate(peer.encodeState());
-    assert.deepEqual(session.encodeState(), before);
     unchanged(session, () => session.commands.setField(status, "ready"), { kind: "refused", reason: "busy" });
     unchanged(session, session.commands.undo, { kind: "refused", reason: "busy" });
     return "value";
   } };
   written(session.commands.setField(beatField("A", "field"), value));
   assert.notDeepEqual(session.encodeState(), before);
-  assert.equal(session.document().rows[0]?.audioText, "pa");
+  assert.equal(session.document().rows[0]?.audioText, "a");
   assert.equal(session.document().rows[0]?.status, "todo");
   assert.deepEqual(session.document().rows[0]?.field, { nested: "value" });
 });
 
 test("interrupted cleanup reopens current stored state, retires history and publishes undo reset", async t => {
   const destroyUndo = t.mock.method(Y.UndoManager.prototype, "destroy");
+  const closeReader = t.mock.method(NativeScriptReader.prototype, "close");
   const session = fromDocument(), changes: NativeSessionChange[] = [];
   t.after(session.close);
   const doc = session.ydoc;
@@ -176,12 +187,79 @@ test("interrupted cleanup reopens current stored state, retires history and publ
   assert.deepEqual(session.encodeState(), Y.encodeStateAsUpdate(doc));
   assert.equal(session.document().rows[0]?.audioText, "xya");
   assert.equal(destroyUndo.mock.callCount(), 1);
+  assert.equal(closeReader.mock.callCount(), 1);
   unchanged(session, session.commands.undo, UNCHANGED);
   await Promise.resolve();
-  assert.deepEqual(changes, ["changed", "undo-reset"]);
+  assert.deepEqual(changes, [{ kind: "changed" }, { kind: "undo-reset", ydoc: session.ydoc }]);
   type(session, 2, "z");
   written(session.commands.undo());
   assert.equal(session.document().rows[0]?.audioText, "xya");
+});
+
+test("stock Yjs stops emitting updates on the same document after an update listener throws", t => {
+  const doc = new Y.Doc();
+  t.after(() => doc.destroy());
+  const text = doc.getText("script"), failure = new Error("interrupted cleanup");
+  doc.once("update", () => { throw failure; });
+  assert.throws(() => text.insert(0, "a"), failure);
+  const updates: Uint8Array[] = [];
+  doc.on("update", update => { updates.push(update); });
+  text.insert(1, "b");
+  assert.equal(text.toString(), "ab");
+  assert.deepEqual(updates, []);
+});
+
+test("undo reset carries the live document for a stock provider to rebind and exchange updates", async t => {
+  const session = fromDocument(), peer = open({ kind: "state", state: session.encodeState() });
+  const socket = new HocuspocusProviderWebsocket({ url: "ws://unused.invalid", autoConnect: false });
+  const outgoing: Uint8Array[] = [];
+  function attach(document: Y.Doc) {
+    const provider = new HocuspocusProvider({
+      websocketProvider: socket, document, name: "script", awareness: null,
+      onOutgoingMessage: ({ message }) => { outgoing.push(message.toUint8Array()); }
+    });
+    provider.attach();
+    return provider;
+  }
+  const old = session.ydoc;
+  let provider = attach(old);
+  t.after(() => { provider.destroy(); socket.destroy(); session.close(); peer.close(); });
+  session.subscribe(change => {
+    if (change.kind === "undo-reset") {
+      provider.destroy();
+      provider = attach(change.ydoc);
+    }
+  });
+
+  const at = anchor(session, 0), failure = new Error("interrupted update");
+  old.once("update", () => { throw failure; });
+  assert.throws(() => session.commands.typeText(at, "x", {}), failure);
+  await Promise.resolve();
+  assert.notEqual(provider.document, old);
+  assert.equal(provider.document, session.ydoc);
+  outgoing.length = 0;
+
+  Y.applyUpdate(peer.ydoc, session.encodeState(), "peer");
+  type(peer, 0, "p", visual);
+  const frame = createEncoder();
+  writeVarString(frame, "script");
+  writeVarUint(frame, MessageType.Sync);
+  writeUpdate(frame, peer.encodeState());
+  provider.onMessage(new MessageEvent("message", { data: toUint8Array(frame) }));
+  assert.deepEqual(session.document(), peer.document());
+  assert.equal(session.document().rows[0]?.visualText, "p");
+  assert.deepEqual(outgoing, []);
+  unchanged(session, session.commands.undo, UNCHANGED);
+
+  type(session, 1, "y");
+  assert.equal(outgoing.length, 1);
+  assert.equal(provider.hasUnsyncedChanges, true);
+  assert(outgoing[0]);
+  const sent = createDecoder(outgoing[0]);
+  assert.equal(readVarString(sent), "script");
+  assert.equal(readVarUint(sent), MessageType.Sync);
+  readSyncMessage(sent, createEncoder(), peer.ydoc, "provider");
+  assert.deepEqual(peer.document(), session.document());
 });
 
 test("busy after a failed raw delivery recovers at the next boundary", async t => {
@@ -197,6 +275,21 @@ test("busy after a failed raw delivery recovers at the next boundary", async t =
   assert.equal(session.document().rows[0]?.audioText, "pa");
   unchanged(session, session.commands.undo, UNCHANGED);
 });
+
+for (const direction of ["undo", "redo"] as const) {
+  test(`a busy ${direction} press schedules recovery after a raw transaction fails before any update`, async t => {
+    const session = fromDocument(), doc = session.ydoc;
+    t.after(session.close);
+    const failure = new Error("interrupted before write");
+    doc.once("beforeTransaction", () => { throw failure; });
+    assert.throws(() => doc.transact(() => undefined), failure);
+    unchanged(session, session.commands[direction], { kind: "refused", reason: "busy" });
+    assert.equal(session.ydoc, doc);
+    await Promise.resolve();
+    assert.notEqual(session.ydoc, doc);
+    unchanged(session, session.commands[direction], UNCHANGED);
+  });
+}
 
 test("an undo listener throw with completed cleanup preserves command admission", t => {
   const session = fromDocument();
@@ -226,7 +319,7 @@ test("a close requested in a raw transaction waits for it to finish", async t =>
   assert.equal(session.ydoc, doc);
 });
 
-test("a close during argument copying waits for the command to finish", t => {
+test("a close during argument copying waits for the command to finish", async t => {
   const session = fromDocument(), doc = session.ydoc;
   t.after(session.close);
   const destroy = t.mock.method(doc, "destroy");
@@ -235,13 +328,14 @@ test("a close during argument copying waits for the command to finish", t => {
     assert.equal(destroy.mock.callCount(), 0);
     return "value";
   } }));
+  await Promise.resolve();
   assert.equal(destroy.mock.callCount(), 1);
   const reopened = open({ kind: "state", state: session.encodeState() });
   t.after(reopened.close);
   assert.deepEqual(reopened.document().rows[0]?.field, { nested: "value" });
 });
 
-test("close during a command retires its undo binding only after the write", async t => {
+test("close during a command delivers the committed document before retiring undo and reporting closed", async t => {
   const destroyUndo = t.mock.method(Y.UndoManager.prototype, "destroy");
   const session = fromDocument(), doc = session.ydoc;
   t.after(session.close);
@@ -249,8 +343,10 @@ test("close during a command retires its undo binding only after the write", asy
     assert.equal(destroyUndo.mock.callCount(), 1);
     return Y.Doc.prototype.destroy.call(this);
   });
-  const changes: NativeSessionChange[] = [];
-  session.subscribe(change => changes.push(change));
+  const changes: string[] = [];
+  session.subscribe(change => {
+    changes.push(change.kind === "changed" ? `changed:${session.document().rows[0]?.audioText}` : change.kind);
+  });
   const update = anchor(session, 0);
   doc.once("beforeTransaction", () => {
     session.close();
@@ -259,23 +355,83 @@ test("close during a command retires its undo binding only after the write", asy
     assert.equal(session.document().rows[0]?.audioText, "a");
   });
   written(session.commands.typeText(update, "x", {}));
-  assert.equal(destroyDoc.mock.callCount(), 1);
-  const reopened = open({ kind: "state", state: session.encodeState() });
-  t.after(reopened.close);
-  assert.equal(reopened.document().rows[0]?.audioText, "xa");
   unchanged(session, session.commands.undo, { kind: "refused", reason: "closed" });
   unchanged(session, () => session.commands.typeText(update, "z", {}), {
     kind: "recovery", reason: "closed", runs: [{ text: "z", marks: {} }]
   });
   const late: NativeSessionChange[] = [];
   session.subscribe(change => late.push(change));
-  type(reopened, 0, "p");
-  unchanged(session, () => session.applyPeerUpdate(reopened.encodeState()), undefined);
-  session.close();
-  assert.equal(destroyDoc.mock.callCount(), 1);
+  assert.equal(destroyDoc.mock.callCount(), 0);
   await Promise.resolve();
-  assert.deepEqual(changes, ["changed", "closed"]);
+  assert.equal(destroyDoc.mock.callCount(), 1);
+  assert.deepEqual(changes, ["changed:xa", "closed"]);
+  assert.throws(session.document, /closed/);
   assert.deepEqual(late, []);
+  const reopened = open({ kind: "state", state: session.encodeState() });
+  t.after(reopened.close);
+  assert.equal(reopened.document().rows[0]?.audioText, "xa");
+});
+
+test("a subscriber closing on changed and the other subscribers all receive closed", async t => {
+  const session = fromDocument(), doc = session.ydoc;
+  t.after(session.close);
+  const schedule = t.mock.method(globalThis, "queueMicrotask");
+  const changes: string[] = [];
+  session.subscribe(change => {
+    changes.push(`first:${change.kind}`);
+    if (change.kind === "changed") session.close();
+  });
+  session.subscribe(change => {
+    changes.push(change.kind === "changed" ? `second:${session.document().rows[0]?.audioText}` : `second:${change.kind}`);
+  });
+  type(session, 0, "x");
+  await Promise.resolve();
+  assert.deepEqual(changes, ["first:changed", "second:xa", "first:closed", "second:closed"]);
+  assert.equal(schedule.mock.callCount(), 1);
+  session.close();
+  doc.getText("retired").insert(0, "x");
+  await Promise.resolve();
+  assert.equal(schedule.mock.callCount(), 1);
+  assert.deepEqual(changes, ["first:changed", "second:xa", "first:closed", "second:closed"]);
+});
+
+test("closing releases subscriber references after delivering closed", async t => {
+  const session = fromDocument();
+  t.after(session.close);
+  const listener = t.mock.fn();
+  const add = t.mock.method(Set.prototype, "add");
+  session.subscribe(listener);
+  const retained = add.mock.calls.find(call => call.arguments[0] === listener)?.this;
+  assert(retained instanceof Set);
+  assert.equal(retained.has(listener), true);
+  session.close();
+  await Promise.resolve();
+  assert.equal(listener.mock.callCount(), 1);
+  assert.deepEqual(listener.mock.calls[0]?.arguments, [{ kind: "closed" }]);
+  assert.equal(retained.size, 0);
+});
+
+test("a write and close from a change subscriber still publish the final write before closed", async t => {
+  const session = fromDocument();
+  t.after(session.close);
+  const changes: string[] = [];
+  session.subscribe(change => {
+    if (change.kind !== "changed") {
+      changes.push(change.kind);
+      return;
+    }
+    const text = session.document().rows[0]?.audioText;
+    changes.push(`changed:${text}`);
+    if (text === "xa") {
+      session.ydoc.once("beforeTransaction", session.close);
+      type(session, 1, "y");
+    }
+  });
+  type(session, 0, "x");
+  await Promise.resolve();
+  assert.deepEqual(changes, ["changed:xa"]);
+  await Promise.resolve();
+  assert.deepEqual(changes, ["changed:xa", "changed:xya", "closed"]);
 });
 
 test("the real body sanitiser runs inside the transaction before a write and a throw is refused", t => {
@@ -348,6 +504,73 @@ test("a non-typing edit separates the typing on both sides", t => {
   assert.equal(session.document().rows[0]?.audioText, "a");
 });
 
+test("typing in two beats of the same cell kind creates two undo steps", t => {
+  const session = fromDocument();
+  t.after(session.close);
+  type(session, 0, "x");
+  type(session, 0, "y", { ...narration, beat: "B" });
+  written(session.commands.undo());
+  assert.deepEqual(session.document().rows.map(row => row.audioText), ["xa", "b", "c"]);
+  written(session.commands.undo());
+  assert.deepEqual(session.document().rows.map(row => row.audioText), ["a", "b", "c"]);
+});
+
+test("an empty typing replacement preserves the preceding space boundary", t => {
+  const session = fromDocument();
+  t.after(session.close);
+  type(session, 0, "x ");
+  written(session.commands.typeText(anchor(session, 2, 3), "", {}));
+  type(session, 2, "y");
+  written(session.commands.undo());
+  assert.equal(session.document().rows[0]?.audioText, "x ");
+  written(session.commands.undo());
+  assert.equal(session.document().rows[0]?.audioText, "a");
+});
+
+test("unchanged typing in another beat leaves the current capture intact", t => {
+  const session = fromDocument();
+  t.after(session.close);
+  type(session, 0, "x");
+  const other = anchor(session, 0, 0, { ...narration, beat: "B" });
+  unchanged(session, () => session.commands.typeText(other, "", {}), UNCHANGED);
+  type(session, 1, "y");
+  written(session.commands.undo());
+  assert.equal(session.document().rows[0]?.audioText, "a");
+  unchanged(session, session.commands.undo, UNCHANGED);
+});
+
+for (const boundary of ["undo", "redo", "recovery"] as const) {
+  test(`an empty typing replacement starts with fresh word state after ${boundary}`, t => {
+    const session = fromDocument();
+    t.after(session.close);
+    type(session, 0, "x ");
+    if (boundary === "undo") {
+      type(session, 2, "y ");
+      written(session.commands.undo());
+    } else if (boundary === "redo") {
+      unchanged(session, session.commands.redo, UNCHANGED);
+    } else {
+      const failure = new Error("interrupted before write"), at = anchor(session, 2);
+      session.ydoc.once("beforeTransaction", () => { throw failure; });
+      assert.throws(() => session.commands.typeText(at, "y", {}), failure);
+    }
+    written(session.commands.typeText(anchor(session, 2, 3), "", {}));
+    type(session, 2, "z");
+    written(session.commands.undo());
+    assert.equal(session.document().rows[0]?.audioText, "x a");
+  });
+}
+
+test("both empty undo and empty redo stop capture before starting their press", t => {
+  const session = fromDocument();
+  t.after(session.close);
+  const stop = t.mock.method(Y.UndoManager.prototype, "stopCapturing");
+  unchanged(session, session.commands.undo, UNCHANGED);
+  assert.equal(stop.mock.callCount(), 1);
+  unchanged(session, session.commands.redo, UNCHANGED);
+  assert.equal(stop.mock.callCount(), 2);
+});
+
 test("a taken minted ID refuses without writing until a local write advances the clock", t => {
   const client = 571;
   const taken = "c" + client.toString(36) + "-0";
@@ -402,7 +625,7 @@ for (const seed of [2, 19, 73, 108]) {
       const pending = packets.splice(0);
       copies.forEach((copy, index) => {
         for (const update of arrangePackets(pending.filter(packet => packet.from !== copy).map(packet => packet.update), "shuffled", seed + index)) {
-          copy.applyPeerUpdate(update);
+          Y.applyUpdate(copy.ydoc, update, "peer");
         }
       });
     }
@@ -431,7 +654,7 @@ for (const seed of [2, 19, 73, 108]) {
     exchange();
     const late = open({ kind: "empty" }, "Late");
     t.after(late.close);
-    late.applyPeerUpdate(c.encodeState());
+    Y.applyUpdate(late.ydoc, c.encodeState(), "peer");
     for (const copy of [...copies, late]) {
       const document = copy.document();
       assert.deepEqual(document.rows.map(({ id, audioText, visualText }) => [id, audioText, visualText]), [
