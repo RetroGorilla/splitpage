@@ -2,7 +2,7 @@ import type * as Y from "yjs";
 import { cleanId } from "../../../core/document/text-policy.ts";
 import { transactNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
-import { nativeAvailability } from "./text-commands.ts";
+import { nativeWriteAvailability } from "./text-commands.ts";
 import type { NativeRefusal } from "./text-commands.ts";
 import { decodeNativeValue, encodeNativeValue, nativeWellFormed, recordBag, sameNativeValue } from "./values.ts";
 
@@ -25,7 +25,7 @@ export function copyArgument<T>(read: () => T): { value: T } | null {
 }
 
 export function transactRecord<T, R extends NativeRecordOutcome>(script: NativeScript, copy: () => { value: T } | null, write: (input: T) => R): R | Extract<NativeRecordOutcome, { kind: "refused" }> {
-  const input = copy(), unavailable = nativeAvailability(script);
+  const input = copy(), unavailable = nativeWriteAvailability(script);
   if (unavailable) return refuseRecord(unavailable);
   if (!input) return refuseRecord("value");
   return transactNativeCommand(script, () => {

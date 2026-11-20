@@ -73,9 +73,10 @@ jobs:
             package-lock.json
             desktop/package-lock.json
             prototypes/collab/package-lock.json
+            collab-server/package-lock.json
 
       - name: Download every locked package into the npm cache
-        run: npm ci --ignore-scripts && npm ci --ignore-scripts --prefix desktop && npm ci --ignore-scripts --prefix prototypes/collab
+        run: npm ci --ignore-scripts && npm ci --ignore-scripts --prefix desktop && npm ci --ignore-scripts --prefix prototypes/collab && npm ci --ignore-scripts --prefix collab-server
 
   checks:
     needs: changes
@@ -95,9 +96,10 @@ jobs:
             package-lock.json
             desktop/package-lock.json
             prototypes/collab/package-lock.json
+            collab-server/package-lock.json
 
       - name: Install tooling
-        run: npm ci && npm ci --prefix desktop && npm ci --prefix prototypes/collab
+        run: npm ci && npm ci --prefix desktop && npm ci --prefix prototypes/collab && npm ci --prefix collab-server
 
       - name: Prototype shard command matches its test script
         if: needs.changes.outputs.collab == 'true'

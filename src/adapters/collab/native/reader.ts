@@ -4,7 +4,7 @@ import { projectSharedJoinedFields } from "../../../core/collab/projection/joins
 import type { DocumentShape } from "../../../core/document/validated.ts";
 import { toHtml } from "../../../core/text/html.ts";
 import type { Run } from "../../../core/text/runs.ts";
-import { nativeBlockOf, nativeItemLength, nativeRunsOf, nativeUnitCounts } from "./inline.ts";
+import { nativeBlockOf, nativeCellView, nativeItemLength, nativeRunsOf, nativeUnitCounts } from "./inline.ts";
 import type { NativeDeltaItem } from "./inline.ts";
 import { projectNativeRegistries } from "./registry-projection.ts";
 import type { NativeRoots } from "./roots.ts";
@@ -687,6 +687,25 @@ export class NativeScriptReader {
     return this.rowCache.get(id) ?? null;
   }
 
+  narrationCaret(row: string, offset: number): { readonly beat: string; readonly offset: number } | null {
+    this.sync();
+    if (row === this.stray || !Number.isInteger(offset)) return null;
+    const members = this.groups.get(row) ?? [];
+    let length = 0, hasItems = false;
+    for (const { id, glue } of members) {
+      const spans = this.narration.get(id) ?? EMPTY_SPANS;
+      const items = spans.flatMap(span => this.spanAt(span)?.items ?? []);
+      if (hasItems && items.length) length += glue.length;
+      if (offset < length) return null;
+      const width = nativeCellView(items).length;
+      if (width && offset <= length + width) return { beat: id, offset: offset - length };
+      length += width;
+      hasItems ||= items.length > 0;
+    }
+    const first = members[0];
+    return first && !length && offset === 0 ? { beat: first.id, offset: 0 } : null;
+  }
+
   rows(): readonly NativeReadRow[] {
     return Object.freeze(this.outline().flatMap(entry => {
       const row = entry.kind === "row" ? this.rowCache.get(entry.id) : undefined;
@@ -732,6 +751,32 @@ export class NativeScriptReader {
   beatBoundary(beat: string): NativeSpanPlace | null {
     this.sync();
     return this.places.get(beat) ?? null;
+  }
+
+  narrationOwner(text: Y.AbsolutePosition["type"], index: number, assoc: number): { readonly beat: string; readonly inside: boolean } | null {
+    this.sync();
+    for (const [segment, owners] of this.spanOwners) {
+      if (this.roots.segments.get(segment)?.get("text") !== text) continue;
+      const spans = this.parsed.get(segment)?.spans;
+      const at = spans?.findIndex(({ start, end }) => index >= start && index <= end) ?? -1;
+      const span = spans?.[at], beat = owners[at];
+      return span && beat !== undefined ? { beat, inside: assoc < 0 ? index > span.start : index < span.end } : null;
+    }
+    return null;
+  }
+
+  rowMembers(beat: string): readonly Readonly<RowMember>[] {
+    this.sync();
+    const head = this.groupHeads.get(beat);
+    const members = head === undefined ? undefined : this.groups.get(head);
+    if (!members) return [];
+    return Object.freeze(members.map(member => Object.freeze({ ...member })));
+  }
+
+  showsHeading(heading: string): boolean {
+    this.sync();
+    return this.outlineEntries.some((entry, index) =>
+      entry.kind === "heading" && entry.id === heading && this.outlineEntries[index + 1]?.kind === "row");
   }
 
   previewJoinedGallery(beat: string, gallery: Readonly<Record<string, unknown>>): Record<string, unknown> | null {

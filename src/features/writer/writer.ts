@@ -409,6 +409,7 @@ export function startWriter(given: WriterFeaturePorts) {
   GUARDED_EVENTS.forEach(function (type) { root.addEventListener(type, guardWriterEdit, true); });
   return {
     renderWriter, drawWriter, paintWriterDraw, updateWriterStats, scheduleWriterStats,
+    restoreWriterPaint: () => given.editing.paint().whilePainting(() => { flowWriter?.repaint(true); }),
     onWriterFormat, updateWriterFormatState, readWriterSize, applyWriterSize,
     openWriter, closeWriter, writerUndoStep,
     connectFlowUndo, writerReplayed, writerFlowControl,

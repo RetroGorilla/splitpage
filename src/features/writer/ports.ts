@@ -38,7 +38,7 @@ export interface FlowWriter {
   readonly openVisual: (rowId: string, highlight?: { from: number; to: number }) => void;
   readonly isCurrent: () => boolean;
   readonly finish: () => FlowRange | null;
-  readonly repaint: () => void;
+  readonly repaint: (restore?: boolean) => void;
   readonly caret: (rowId: string, offset: number | "end") => void;
   readonly format: (command: string) => void;
   readonly marks: () => Record<string, boolean>;

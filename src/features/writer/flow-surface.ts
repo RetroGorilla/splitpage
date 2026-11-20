@@ -76,7 +76,7 @@ export interface Surface {
   readonly settle?: () => boolean;
   readonly finish: () => FlowRange | null;
   readonly paint: () => void;
-  readonly repaint: () => void;
+  readonly repaint: (restore?: boolean) => void;
   readonly refreshBeat: (rowId: string) => void;
   readonly focusBack: () => void;
   readonly selection: () => FlowRange | null;
@@ -122,7 +122,7 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
   const ports: SurfacePorts = inputPorts.bufferedText ? { ...inputPorts, syncBeat: () => {} } : inputPorts;
   const root = ports.root;
   const epoch = ports.lifetime.epoch();
-  const rendered = new WeakMap<HTMLElement, string>();
+  let rendered = new WeakMap<HTMLElement, string>();
   const paintedBeats = ports.paintedText ? createPaintedBeats(ports.paintedText) : null;
   let composing = false;
   const queuedPastes: Pick<DataTransfer, "getData">[] = [];
@@ -457,7 +457,8 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     return mapped ? { anchor: point(mapped.rowId, mapped.anchor), head: point(mapped.rowId, mapped.head) } : null;
   }
 
-  function repaint(): void {
+  function repaint(restore = false): void {
+    if (restore) rendered = new WeakMap();
     if (composing || syncingComposition) { repaintOwed = true; return; }
     const selected = selection(true);
     const before = selected ? remapForRepaint(selected) : null;

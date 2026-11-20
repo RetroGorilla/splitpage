@@ -17,10 +17,11 @@ runs:
         cache-dependency-path: |
           package-lock.json
           desktop/package-lock.json
+          collab-server/package-lock.json
 
     - name: Install tooling
       shell: bash
-      run: npm ci && npm ci --prefix desktop
+      run: npm ci && npm ci --prefix desktop && npm ci --prefix collab-server
 
     - name: Build index.html and stamp sw.js
       shell: bash
