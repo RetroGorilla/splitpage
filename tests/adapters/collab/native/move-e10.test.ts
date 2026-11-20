@@ -92,23 +92,24 @@ function openCopies(clients: readonly number[]): { net: ScriptNet; all: NativeSc
   return { net: new ScriptNet(all), all, undo: all.map(undoOf) };
 }
 
+function serializeY(value: unknown, stripChildRank: boolean, stripOwnRank: boolean): unknown {
+  if (value instanceof Y.Text) return { $text: value.toDelta() as unknown };
+  if (value instanceof Y.Array) return { $array: value.toArray().map(item => serializeY(item, false, false)) };
+  if (value instanceof Y.Map) {
+    return [...value.entries()]
+      .filter(([key]) => !(stripOwnRank && key === "rank"))
+      .sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
+      .map(([key, item]) => [key, serializeY(item, false, stripChildRank)]);
+  }
+  return value;
+}
+
 function snapshotWithoutRanks(script: NativeScript): string {
-  const mapEntries = (map: Y.Map<Y.Map<unknown>>) => [...map.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([id, rec]) => [
-    id, [...rec.entries()].filter(([key]) => key !== "rank").sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
-  ]);
-  const textEntries = (map: Y.Map<Y.Text>): [string, unknown][] => [...map.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([id, text]) => [id, text.toDelta() as unknown]);
-  const segments: [string, unknown, unknown][] = [...script.roots.segments.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([id, seg]) => [
-    id, seg.get("head") ?? null, seg.get("text") instanceof Y.Text ? (seg.get("text") as Y.Text).toDelta() as unknown : null
-  ]);
-  return JSON.stringify({
-    order: script.roots.order.toArray(),
-    segments,
-    beats: mapEntries(script.roots.beats),
-    headings: mapEntries(script.roots.headings),
-    visuals: textEntries(script.roots.visuals),
-    names: textEntries(script.roots.names),
-    edited: [...script.roots.edited.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
-  });
+  const rootEntries = Object.entries(script.roots).sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0);
+  const declared = rootEntries.map(([name]) => name);
+  const shared = [...script.doc.share.keys()].sort();
+  assert.deepEqual(shared, declared, "document has roots outside NativeRoots");
+  return JSON.stringify(rootEntries.map(([name, root]) => [name, serializeY(root, name === "beats" || name === "headings", false)]));
 }
 
 function blockTag(block: { readonly kind: "beat" | "heading"; readonly id: string }): string {

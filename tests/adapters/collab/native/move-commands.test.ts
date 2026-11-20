@@ -382,6 +382,59 @@ test("every caller index and field is copied before any validation, so a later g
   assert.deepEqual(moveNativeBlocks(dropCase, [beat("A")], badDropKind), { kind: "refused", reason: "closed" });
   assert.equal(dropCase.closed(), true);
   assert.deepEqual(stateOf(dropCase), s3);
+
+  const badListDropCase = one({ A: "a", B: "b" }), dropEvents: string[] = [];
+  const dropAfterBadList = {
+    get kind(): "beat" { dropEvents.push("kind"); return "beat"; },
+    get id(): string { dropEvents.push("id"); closeNativeScript(badListDropCase); return "B"; }
+  };
+  const s4 = stateOf(badListDropCase);
+  assert.deepEqual(moveNativeBlocks(badListDropCase, [null as unknown as NativeMoveBlock], dropAfterBadList), { kind: "refused", reason: "closed" });
+  assert.deepEqual(dropEvents, ["kind", "id"]);
+  assert.equal(badListDropCase.closed(), true);
+  assert.deepEqual(stateOf(badListDropCase), s4);
+});
+
+test("an array with a hole supplied through its prototype is read by index, matching removeNativeRows", () => {
+  const copy = one({ A: "a", B: "b", C: "c" });
+  class ProtoList extends Array<NativeMoveBlock> {}
+  ProtoList.prototype[0] = beat("C");
+  const sparse = new ProtoList(1);
+  assert.equal(Object.hasOwn(sparse, 0), false);
+  assert.deepEqual(moveNativeBlocks(copy, sparse, beat("A")), { kind: "written" });
+  assert.deepEqual(outlineIds(copy), ["C", "A", "B"]);
+});
+
+test("preview refuses range unwritten when a peer move applied in beforeTransaction invalidates the plan", () => {
+  const { all: [a, b], undo } = copiesOf(structureScript({ A: "a", B: "b", C: "c", D: "d" }), [2, 3]);
+  assert.ok(a && b);
+  assert.deepEqual(outlineIds(a), ["A", "B", "C", "D"]);
+  assert.deepEqual(moveNativeBlocks(b, [beat("D")], beat("A")), { kind: "written" });
+  const peerUpdate = Y.encodeStateAsUpdate(b.doc, Y.encodeStateVector(a.doc));
+  const rankC = a.roots.beats.get("C")?.get("rank");
+  a.doc.once("beforeTransaction", () => { Y.applyUpdate(a.doc, peerUpdate, "remote"); });
+  assert.deepEqual(moveNativeBlocks(a, [beat("C")], beat("B")), { kind: "refused", reason: "range" });
+  assert.equal(a.roots.beats.get("C")?.get("rank"), rankC);
+  assert.deepEqual(a.roots.beats.get("D")?.get("rank"), b.roots.beats.get("D")?.get("rank"));
+  assert.deepEqual(stateOf(a), stateOf(b));
+  assert.deepEqual(outlineIds(a), ["D", "A", "B", "C"]);
+  for (const manager of undo) manager.destroy();
+  a.close(); b.close();
+});
+
+test("as built (deferred to slice 7): a peer removal applied inside beforeTransaction still lets a move write B's rank", () => {
+  const { all: [a, b], undo } = copiesOf(structureScript({ A: "a", B: "b", C: "c", D: "d" }), [2, 3]);
+  assert.ok(a && b);
+  assert.deepEqual(outlineIds(a), ["A", "B", "C", "D"]);
+  assert.deepEqual(removeNativeRows(b, ["B"]), { kind: "written" });
+  const peerUpdate = Y.encodeStateAsUpdate(b.doc, Y.encodeStateVector(a.doc));
+  const rankBefore = a.roots.beats.get("B")?.get("rank");
+  a.doc.once("beforeTransaction", () => { Y.applyUpdate(a.doc, peerUpdate, "remote"); });
+  assert.deepEqual(moveNativeBlocks(a, [beat("B")], beat("A")), { kind: "written" });
+  assert.notEqual(a.roots.beats.get("B")?.get("rank"), rankBefore);
+  assert.deepEqual(outlineIds(a), ["A", "C", "D"]);
+  for (const manager of undo) manager.destroy();
+  a.close(); b.close();
 });
 
 test("unchanged candidates refuse stored when a drop neighbour's stored rank is malformed", () => {

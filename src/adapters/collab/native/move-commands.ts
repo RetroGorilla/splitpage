@@ -59,36 +59,45 @@ function validateRawBlock(raw: RawBlock | null): NativeMoveBlock | null {
   return Object.freeze({ kind: raw.kind, id: raw.id });
 }
 
-// why: every caller index and field is copied once by index before any validation so no iterator runs and side-effect
-// getters on later entries run before availability is checked
-function copyBlocks(blocks: readonly NativeMoveBlock[]): readonly NativeMoveBlock[] | null {
+// why: copy every caller index and field of blocks and drop before validating any so no iterator runs and side-effect
+// getters run before availability checks; indexed reads match readIds on prototype-supplied holes
+function readRawBlocks(blocks: readonly NativeMoveBlock[]): readonly RawBlock[] | null {
   try {
     if (!Array.isArray(blocks)) return null;
     const list: readonly unknown[] = blocks, length = list.length;
     if (!Number.isSafeInteger(length) || length < 0) return null;
-    const rawEntries: (RawBlock | null)[] = [];
-    for (let index = 0; index < length; index++) {
-      rawEntries.push(Object.hasOwn(list, index) ? readRawBlock(list[index]) : null);
-    }
-    const copied: NativeMoveBlock[] = [], seen = new Set<string>();
-    for (const raw of rawEntries) {
-      const block = validateRawBlock(raw);
-      if (!block) return null;
-      const key = blockKey(block);
-      if (seen.has(key)) return null;
-      seen.add(key);
-      copied.push(block);
-    }
-    return copied;
+    const rawEntries: RawBlock[] = [];
+    for (let index = 0; index < length; index++) rawEntries.push(readRawBlock(list[index]));
+    return rawEntries;
   } catch { return null; }
 }
 
-function copyDrop(drop: NativeMoveBlock | null): { readonly target: NativeMoveBlock | null } | null {
+function readRawDrop(drop: NativeMoveBlock | null): { readonly raw: RawBlock | null } | null {
   try {
-    if (drop === null) return { target: null };
-    const raw = readRawBlock(drop), target = validateRawBlock(raw);
-    return target ? { target } : null;
+    if (drop === null) return { raw: null };
+    return { raw: readRawBlock(drop) };
   } catch { return null; }
+}
+
+function validateBlocks(rawEntries: readonly RawBlock[] | null): readonly NativeMoveBlock[] | null {
+  if (!rawEntries) return null;
+  const copied: NativeMoveBlock[] = [], seen = new Set<string>();
+  for (const raw of rawEntries) {
+    const block = validateRawBlock(raw);
+    if (!block) return null;
+    const key = blockKey(block);
+    if (seen.has(key)) return null;
+    seen.add(key);
+    copied.push(block);
+  }
+  return copied;
+}
+
+function validateDrop(copied: { readonly raw: RawBlock | null } | null): { readonly target: NativeMoveBlock | null } | null {
+  if (!copied) return null;
+  if (copied.raw === null) return { target: null };
+  const target = validateRawBlock(copied.raw);
+  return target ? { target } : null;
 }
 
 function liveRecord(script: NativeScript, block: NativeRankedBlock): Y.Map<unknown> | null {
@@ -142,9 +151,11 @@ function matchesExpected(
 // why: design section 2 and decision 9: a move writes ranks only, carrying a joined row's members together without
 // changing `joined`, pinning rankless drop neighbours and followers (rule (e)), and previewing via the reader's ranking
 export function moveNativeBlocks(script: NativeScript, blocks: readonly NativeMoveBlock[], drop: NativeMoveBlock | null): NativeMoveOutcome {
-  const copiedBlocks = copyBlocks(blocks), copiedDrop = copyDrop(drop), unavailable = nativeAvailability(script);
+  const rawBlocks = readRawBlocks(blocks), rawDrop = readRawDrop(drop), unavailable = nativeAvailability(script);
   if (unavailable === "closed" || unavailable === "busy") return refused(unavailable);
+  const copiedBlocks = validateBlocks(rawBlocks);
   if (!copiedBlocks) return refused("list");
+  const copiedDrop = validateDrop(rawDrop);
   if (!copiedDrop) return refused("drop");
   let outcome: NativeMoveOutcome = refused("missing");
   script.doc.transact(() => {

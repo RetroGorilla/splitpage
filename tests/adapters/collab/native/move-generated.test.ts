@@ -30,8 +30,17 @@ function random(seed: number): () => number {
 
 type Write = "Text.insertEmbed" | "Text.insert" | "Text.delete" | "Map.set" | "Map.delete" | "Array.insert";
 type Kind = "type" | "delete" | "split" | "join" | "unjoin" | "remove" | "heading-create" | "heading-remove" | "move";
-interface Call { readonly command: number; readonly kind: Kind; readonly slot: number; readonly write: Write; readonly hadRank?: boolean }
-interface Options { readonly mute?: Call; readonly calls?: Call[]; readonly spoil?: boolean }
+interface Call { readonly command: number; readonly kind: Kind; readonly slot: number; readonly write: Write; readonly blockKey?: string }
+interface MutedMoveInfo {
+  readonly blockKey: string;
+  readonly orderMatches: boolean;
+  readonly hasRank: boolean;
+  readonly beforeRank: string;
+  readonly keptRank: string;
+  readonly prevRank: string | null;
+  readonly nextRank: string | null;
+}
+interface Options { readonly mute?: Call; readonly calls?: Call[]; readonly spoil?: boolean; readonly onMutedMove?: (info: MutedMoveInfo) => void }
 
 class LocalCheck extends Error {}
 
@@ -44,14 +53,21 @@ const PATCHED: readonly [object, string, Write][] = [
   [Y.Array.prototype, "insert", "Array.insert"]
 ];
 
+function mapBlockKey(actor: NativeScript, target: unknown): string | undefined {
+  if (!(target instanceof Y.Map)) return undefined;
+  for (const [id, map] of actor.roots.beats) if (map === target) return "beat:" + id;
+  for (const [id, map] of actor.roots.headings) if (map === target) return "heading:" + id;
+  return undefined;
+}
+
 // why: every public Yjs write is numbered per command so controls can mute one write at a time and check detection
-function intercept(command: number, kind: Kind, options: Options): () => void {
+function intercept(command: number, kind: Kind, actor: NativeScript, options: Options): () => void {
   let slot = 0;
   const originals = PATCHED.map(([owner, name, write]) => {
     const table = owner as Record<string, (...args: unknown[]) => unknown>, original = table[name] as (...args: unknown[]) => unknown;
     table[name] = function (this: unknown, ...args: unknown[]): unknown {
-      const hadRank = write === "Map.set" && args[0] === "rank" && this instanceof Y.Map ? this.has("rank") : undefined;
-      const call: Call = hadRank === undefined ? { command, kind, slot: slot++, write } : { command, kind, slot: slot++, write, hadRank };
+      const key = write === "Map.set" && args[0] === "rank" ? mapBlockKey(actor, this) : undefined;
+      const call: Call = key === undefined ? { command, kind, slot: slot++, write } : { command, kind, slot: slot++, write, blockKey: key };
       options.calls?.push(call);
       if (options.mute?.command === command && options.mute.slot === call.slot) return undefined;
       return original.apply(this, args);
@@ -251,7 +267,7 @@ function history(seed: number, options: Options = {}): Counts {
   };
 
   const execute = (command: number, kind: Kind, actorIndex: number, actor: NativeScript, act: () => { kind: string; created?: string }): { kind: string; created?: string } => {
-    const before = Y.encodeStateAsUpdate(actor.doc), restore = intercept(command, kind, options);
+    const before = Y.encodeStateAsUpdate(actor.doc), restore = intercept(command, kind, actor, options);
     let outcome: { kind: string; created?: string };
     try { outcome = act(); } finally { restore(); }
     if (outcome.kind === "written") noteWritten(actorIndex, kind);
@@ -275,6 +291,20 @@ function history(seed: number, options: Options = {}): Counts {
       throw new LocalCheck(`seed ${seed}, command ${command}: ${outcomeKind} (expected ${expected})\n${compared(want, withRanks)}\n${compared(got, withRanks)}`);
     }
     if (outcomeKind === "written" && moveCheck) verifyMoveRanks(seed, command, beforeEntries, got, moveCheck);
+    if (options.onMutedMove && options.mute?.command === command && options.mute.blockKey) {
+      const targetKey = options.mute.blockKey, at = got.findIndex(entry => moveKey(entry) === targetKey);
+      const entry = at >= 0 ? got[at] : undefined, beforeEntry = beforeEntries.find(item => moveKey(item) === targetKey);
+      const prev = at > 0 ? got[at - 1] : undefined, next = at >= 0 && at + 1 < got.length ? got[at + 1] : undefined;
+      options.onMutedMove({
+        blockKey: targetKey,
+        orderMatches: got.length === want.length && got.every((item, idx) => moveKey(item) === moveKey(want[idx] as Entry)),
+        hasRank: entry?.hasRank === true && beforeEntry?.hasRank === true,
+        beforeRank: beforeEntry?.storedRank ?? "",
+        keptRank: entry?.storedRank ?? "",
+        prevRank: prev ? prev.shownRank : null,
+        nextRank: next ? next.shownRank : null
+      });
+    }
   };
 
   for (let step = 0; step < STEPS; step++) {
@@ -494,7 +524,7 @@ test("generated moves mixed with row, heading, text and undo commands on three c
   assert.equal(total("visualStored"), total("visualLetters"));
   assert.ok(total("moves") > 200 && total("tiedMoves") > 10 && total("movesWithRankless") >= 10, JSON.stringify(totals));
   assert.ok(total("undos") > 20 && total("redos") > 5, JSON.stringify(totals));
-  assert.ok(total("splits") > 50 && total("joins") > 20 && total("unjoins") > 3 && total("removals") > 30, JSON.stringify(totals));
+  assert.ok(total("splits") > 50 && total("joins") > 20 && total("unjoins") > 5 && total("removals") > 30, JSON.stringify(totals));
   assert.ok(total("headingCreates") > 20 && total("headingRemoves") > 10, JSON.stringify(totals));
   assert.ok(total("refused") > 50 && total("unchanged") > 20, JSON.stringify(totals));
 });
@@ -509,19 +539,28 @@ test("control: muting each individual write of a move fails the local check at t
       reached++;
       writes.set(call.write, (writes.get(call.write) ?? 0) + 1);
       let threw = false;
-      try { history(seed, { mute: call }); } catch (error) {
+      const captured: MutedMoveInfo[] = [];
+      try { history(seed, { mute: call, onMutedMove: info => { captured.push(info); } }); } catch (error) {
         threw = true;
         assert.ok(error instanceof LocalCheck && error.message.startsWith(`seed ${seed}, command ${call.command}:`), `${JSON.stringify(call)}: ${String(error)}`);
         caught++;
       }
       if (!threw) {
-        assert.equal(call.hadRank, true, `rankless write escaped mute check: ${JSON.stringify(call)}`);
+        assert.equal(captured.length, 1, `uncaught mute had ${captured.length} records: ${JSON.stringify(call)}`);
+        const [info] = captured;
+        assert.ok(info, `uncaught mute had no record info: ${JSON.stringify(call)}`);
+        assert.equal(info.orderMatches, true, `uncaught mute order mismatch: ${JSON.stringify({ call, info })}`);
+        assert.equal(info.hasRank, true, `rankless write escaped mute check: ${JSON.stringify({ call, info })}`);
+        assert.equal(info.keptRank, info.beforeRank, `uncaught mute did not keep old rank: ${JSON.stringify({ call, info })}`);
+        assert.equal(isValidNativeRank(info.keptRank), true, `invalid kept rank: ${JSON.stringify({ call, info })}`);
+        assert.ok(info.prevRank === null || info.prevRank < info.keptRank, `kept rank not after prev: ${JSON.stringify({ call, info })}`);
+        assert.ok(info.nextRank === null || info.keptRank < info.nextRank, `kept rank not before next: ${JSON.stringify({ call, info })}`);
         alreadyInGap++;
       }
     }
   }
-  t.diagnostic(`${reached} move writes muted, ${caught} caught at their command, ${alreadyInGap} already valid in target gap: ${JSON.stringify(Object.fromEntries(writes))}`);
-  assert.ok(caught > 40 && caught / reached > 0.95, JSON.stringify({ reached, caught, alreadyInGap, writes: Object.fromEntries(writes) }));
+  t.diagnostic(`${reached} move writes muted, ${caught} caught at their command, ${alreadyInGap} kept valid rank strictly between neighbours: ${JSON.stringify(Object.fromEntries(writes))}`);
+  assert.ok(caught > 40, JSON.stringify({ reached, caught, alreadyInGap, writes: Object.fromEntries(writes) }));
   assert.deepEqual([...writes.keys()], ["Map.set"]);
 });
 
@@ -538,7 +577,7 @@ test("control: muting a rankless-neighbour write of a move is caught at that com
   const before = view(a), remaining = before.filter(e => e.id !== "D"), moving = before.filter(e => e.id === "D");
   const check = planMoveCheck(before, moving, remaining, 2);
   assert.equal(check.pinned.length, 1);
-  const restore = intercept(0, "move", { calls });
+  const restore = intercept(0, "move", a, { calls });
   try { assert.deepEqual(moveNativeBlocks(a, [{ kind: "beat", id: "D" }], { kind: "beat", id: "C" }), { kind: "written" }); }
   finally { restore(); }
   assert.equal(calls.length, 2);
@@ -554,7 +593,7 @@ test("control: muting a rankless-neighbour write of a move is caught at that com
     fresh.net.settle();
     const fbBefore = view(fa), fbRem = fbBefore.filter(e => e.id !== "D"), fbMov = fbBefore.filter(e => e.id === "D");
     const fbCheck = planMoveCheck(fbBefore, fbMov, fbRem, 2);
-    const undoMute = intercept(0, "move", { mute: call });
+    const undoMute = intercept(0, "move", fa, { mute: call });
     try { moveNativeBlocks(fa, [{ kind: "beat", id: "D" }], { kind: "beat", id: "C" }); } finally { undoMute(); }
     assert.throws(() => verifyMoveRanks(0, 0, fbBefore, view(fa), fbCheck), LocalCheck);
     fundoB.destroy(); fa.close(); fb.close();
