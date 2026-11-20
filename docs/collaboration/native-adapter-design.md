@@ -14,7 +14,8 @@ Slices 1 to 6 are on `main`. The native shared-document command layer and undo a
 Slices 7a, 7c and 7h are merged. The native editor entry and Split narration typing are on `main`. PR #1673 builds 7d, the relay server and its storage. The old adapter stays untouched until slice 8.
 PR #1671 adds native undo selection replay and typing group boundaries for focus changes.
 Slice 7b-2 in PR #1675 adds buffered Split-view narration typing, composition, relative caret placement, and handling of native commit outcomes.
-This PR builds slice 7e's offline-notice journal, comparison and put-back command.
+PR #1669 builds slice 7e's offline-notice journal, comparison and put-back command.
+Slice 7f in PR #1668 adds the browser local store with transaction receipts, an update log and atomic checkpoints.
 
 ## Server-stop results and backup runbook
 
@@ -374,7 +375,7 @@ questions. Earlier rounds: [appendix K](#k-earlier-rounds).
 
 **(a) Apply peer updates only between local commands.** The provider or local store applies bytes directly to the exposed `Y.Doc` with a peer origin. Applying an update inside a transaction listener is unsupported. Applying one in `beforeTransaction` folds it into the local origin, so undo can take back the peer’s edit and a command can read stale layout. [Session tests](../../tests/adapters/collab/native/session.test.ts) pin direct peer delivery after typing, undo, redo, refusal and a throw. [Undo tests](../../tests/adapters/collab/native/undo-commands.test.ts), [move command tests](../../tests/adapters/collab/native/move-commands.test.ts).
 
-**(b) Keep transaction listeners from throwing.** The session registers no listener that can throw in `beforeTransaction`, `afterTransactionCleanup`, `update`, a late-registered `beforeAllTransactions` or an early-registered `afterAllTransactions`. A throw at any of these points can leave every later command refused as `busy`, as pinned in [undo tests](../../tests/adapters/collab/native/undo-commands.test.ts). The session owns one `Y.Doc` throughout its life. If the script stays busy, the session closes as failed and hands back its encoded bytes in `closed`. There may be no final `changed` if Yjs emitted no update. The bytes on `closed` are then the caller's source of truth. In the relay part the caller destroys its provider and opens a new session from those bytes with a new provider and fresh undo. [Session tests](../../tests/adapters/collab/native/session.test.ts) pin the byte handoff and provider exchange.
+**(b) Keep transaction listeners from throwing.** The session registers no listener that can throw in `beforeTransaction`, `afterTransactionCleanup`, `update`, a late-registered `beforeAllTransactions` or an early-registered `afterAllTransactions`. A throw at any of these points can leave every later command refused as `busy`, as pinned in [undo tests](../../tests/adapters/collab/native/undo-commands.test.ts). The session owns one `Y.Doc` throughout its life. If the script stays busy, the session closes as failed and hands back its encoded bytes in `closed`. There may be no final `changed` if Yjs emitted no update. The bytes on `closed` are then the caller's source of truth. In the relay part the caller destroys its provider and opens a new session from those bytes with a new provider and fresh undo. With a local store attached, the store commits the recovery checkpoint and installs the replacement under the same writer lock. [Session tests](../../tests/adapters/collab/native/session.test.ts) pin the byte handoff and provider exchange.
 
 **(c) Close a script only between commands.** A close from `beforeTransaction` after a press has checked availability still lets the press write. [Undo tests](../../tests/adapters/collab/native/undo-commands.test.ts). A requested close delivers the final `changed` while `document()` can read the committed edit, then delivers `closed` exactly once to each subscriber. A failed close can omit the final `changed` if Yjs emitted no update. The bytes on `closed` are then the caller's source of truth. [Session tests](../../tests/adapters/collab/native/session.test.ts) pin both paths, including throws from subscribers and a destroy listener.
 
@@ -423,6 +424,12 @@ On `main`, the native layer has no persistent client store wired into the app.
 - **B.** Stage the local store separately. Until it is available, a person can keep editing in a loaded offline session and cannot rely on reopening unsynced work after a restart.
 
 The owner chose option A on 2026-11-20.
+
+On 2026-11-20 the owner chose an appending store owned by Splitpage, using standard Yjs updates and checkpoints.
+
+Peer updates waiting for a missing dependency emit no applied update and are not appended, since the server still holds the script and resends them on the next sync.
+Measurements use Node with simulated IndexedDB. Real-browser write latency, disk durability and tab-kill lock release remain untested.
+The two-second open deadline also reports an ordinary slow open as `blocked`.
 
 ### Undo across a restart
 
