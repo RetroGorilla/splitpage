@@ -5,7 +5,7 @@ import { dom } from "../../../../src/test/_dom.mjs";
 import { readNativeOnce } from "../../../../src/adapters/collab/native/reader.ts";
 import { removeNativeRows } from "../../../../src/adapters/collab/native/structure-commands.ts";
 import { freshlyShown, shown } from "./helpers.ts";
-import { LARGE_BEATS, largeState, loadedCopy, narrationText, splitUpdate } from "./structural.ts";
+import { LARGE_BEATS, largeState, loadedCopy, moveUpdate, narrationText, splitUpdate } from "./structural.ts";
 
 after(() => { dom.window.close(); });
 
@@ -42,6 +42,21 @@ test("a removal from another copy reparses only its own segment and keeps the re
   assert.equal(copy.reader.row("B451"), null);
   assert.equal(copy.reader.outline().filter(entry => entry.kind === "row").length, LARGE_BEATS - 1);
   assert.ok(copy.roots.beats.has("B451") && copy.roots.visuals.has("B451"));
+  assert.deepEqual(shown(copy), freshlyShown(copy));
+});
+
+test("a move from another copy reparses zero segments on a warm reader and matches a fresh read", () => {
+  const copy = loadedCopy(state, 2), before = copy.reader.counts();
+  const update = moveUpdate(state, [{ kind: "beat", id: "B451" }], { kind: "beat", id: "B10" });
+  Y.applyUpdate(copy.doc, update, "remote");
+  const changes = copy.reader.refresh(), after = copy.reader.counts();
+  assert.equal(after.parses - before.parses, 0);
+  assert.equal(after.structures - before.structures, 1);
+  assert.equal(changes.outline, true);
+  assert.deepEqual(changes.gone, []);
+  const outline = copy.reader.outline().flatMap(entry => entry.kind === "row" ? [entry.id] : []);
+  assert.equal(outline.length, LARGE_BEATS);
+  assert.equal(outline[outline.indexOf("B10") - 1], "B451");
   assert.deepEqual(shown(copy), freshlyShown(copy));
 });
 

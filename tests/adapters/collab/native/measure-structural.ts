@@ -3,7 +3,7 @@ import * as Y from "yjs";
 import { dom } from "../../../../src/test/_dom.mjs";
 import { readNativeOnce } from "../../../../src/adapters/collab/native/reader.ts";
 import type { NativeScriptReader } from "../../../../src/adapters/collab/native/reader.ts";
-import { largeState, loadedCopy, splitUpdate } from "./structural.ts";
+import { largeState, loadedCopy, moveUpdate, splitUpdate } from "./structural.ts";
 
 const LIMIT_MS = 8;
 // why: measured 5.3 to 5.6 ms after slice 2 against 8.4 to 9.2 ms before it on the same machine; the limit sits
@@ -38,11 +38,16 @@ function sampleSplit(state: Uint8Array, update: Uint8Array): { incremental: numb
 
 const state = largeState(), lines: string[] = [], failures: string[] = [];
 lines.push(`Node ${process.version} ${process.arch}. ${rounds} rounds of ${samples} samples, the first ${warmup} of each round untimed.`);
-lines.push("Each sample: a warm copy of the 900-beat script receives one split from another copy; the time covers applying the update,");
+lines.push("Each sample: a warm copy of the 900-beat script receives one structural update from another copy; the time covers applying the update,");
 lines.push("the reader's refresh and reading every changed row. Cells: median of the per-round medians [smallest-largest].", "");
 lines.push(`| Case | Median ms | p95 ms | Segments reparsed | Full rebuild ms | Limit ${LIMIT_MS} ms |`, "| --- | --- | --- | --- | --- | --- |");
-for (const [name, beat, offset] of [["Split inside a segment", "B451", 60], ["Split at a segment's start", "B480", 0]] as const) {
-  const { update } = splitUpdate(state, beat, offset), medians: number[] = [], tails: number[] = [], fulls: number[] = [], parses = new Set<number>();
+const cases: readonly { readonly name: string; readonly update: Uint8Array; readonly expectedParses: number }[] = [
+  { name: "Split inside a segment", update: splitUpdate(state, "B451", 60).update, expectedParses: 1 },
+  { name: "Split at a segment's start", update: splitUpdate(state, "B480", 0).update, expectedParses: 1 },
+  { name: "Move one row across scenes", update: moveUpdate(state, [{ kind: "beat", id: "B451" }], { kind: "beat", id: "B10" }), expectedParses: 0 }
+];
+for (const { name, update, expectedParses } of cases) {
+  const medians: number[] = [], tails: number[] = [], fulls: number[] = [], parses = new Set<number>();
   for (let round = 0; round < rounds; round++) {
     const timed: number[] = [], full: number[] = [];
     for (let n = 0; n < samples; n++) {
@@ -53,10 +58,10 @@ for (const [name, beat, offset] of [["Split inside a segment", "B451", 60], ["Sp
     medians.push(median(timed)); tails.push(p95(timed)); fulls.push(median(full));
   }
   const cell = (values: number[]): string => `${median(values).toFixed(3)} [${Math.min(...values).toFixed(3)}-${Math.max(...values).toFixed(3)}]`;
-  const within = median(medians) <= LIMIT_MS, oneParse = parses.size === 1 && parses.has(1);
+  const within = median(medians) <= LIMIT_MS, parsesOk = parses.size === 1 && parses.has(expectedParses);
   lines.push(`| ${name} | ${cell(medians)} | ${cell(tails)} | ${[...parses].join(", ")} | ${cell(fulls)} | ${within ? "within" : "over"} |`);
   if (!within) failures.push(`${name}: median ${median(medians).toFixed(3)} ms is over ${LIMIT_MS} ms`);
-  if (!oneParse) failures.push(`${name}: reparsed ${[...parses].join(", ")} segments, not 1`);
+  if (!parsesOk) failures.push(`${name}: reparsed ${[...parses].join(", ")} segments, not ${expectedParses}`);
 }
 const cold: number[] = [], coldTails: number[] = [], loaded = loadedCopy(state, 3);
 for (let round = 0; round < rounds; round++) {

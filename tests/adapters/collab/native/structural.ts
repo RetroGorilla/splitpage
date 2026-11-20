@@ -1,6 +1,8 @@
 import * as Y from "yjs";
 import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
 import type { ValidatedDocument } from "../../../../src/core/document/validated.ts";
+import { moveNativeBlocks } from "../../../../src/adapters/collab/native/move-commands.ts";
+import type { NativeMoveBlock } from "../../../../src/adapters/collab/native/move-commands.ts";
 import { nativeSegmentSpans } from "../../../../src/adapters/collab/native/reader.ts";
 import { openNativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
@@ -46,4 +48,13 @@ export function splitUpdate(state: Uint8Array, beat: string, offset: number): { 
   const update = Y.encodeStateAsUpdate(writer.doc, before);
   writer.reader.close();
   return { update, created: outcome.created };
+}
+
+export function moveUpdate(state: Uint8Array, blocks: readonly NativeMoveBlock[], drop: NativeMoveBlock | null): Uint8Array {
+  const writer = loadedCopy(state, 77), before = Y.encodeStateVector(writer.doc);
+  const outcome = moveNativeBlocks(writer, blocks, drop);
+  if (outcome.kind !== "written") throw new Error(`No move: ${outcome.kind}`);
+  const update = Y.encodeStateAsUpdate(writer.doc, before);
+  writer.reader.close();
+  return update;
 }

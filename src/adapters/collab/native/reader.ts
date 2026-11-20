@@ -60,6 +60,14 @@ export interface NativeSpanContent {
   readonly items: readonly NativeDeltaItem[];
 }
 
+export interface NativeRankedBlock {
+  readonly kind: "beat" | "heading";
+  readonly id: string;
+  readonly head: string | null;
+  readonly rank: string;
+  readonly bound: string | null;
+}
+
 interface ParsedSpan extends NativeSpanContent { readonly content: string }
 
 interface ParsedSegment {
@@ -631,6 +639,17 @@ export class NativeScriptReader {
   beatBoundary(beat: string): NativeSpanPlace | null {
     this.sync();
     return this.places.get(beat) ?? null;
+  }
+
+  rankedOrder(): readonly NativeRankedBlock[] {
+    this.sync();
+    return Object.freeze(this.rankedBlocks.map(({ block, rank, bound }) => Object.freeze({
+      kind: block.kind === "h" ? "heading" as const : "beat" as const,
+      id: block.id,
+      head: block.kind === "b" ? this.groupHeads.get(block.id) ?? null : null,
+      rank,
+      bound
+    })));
   }
 
   ranksAboveBeat(beat: string): { readonly before: string | null; readonly after: string | null } | null {
