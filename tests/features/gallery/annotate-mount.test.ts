@@ -71,7 +71,8 @@ function setup(t: TestContext) {
   let accepted = true, held = false;
   const ports: GalleryPorts = {
     document: reader.document, notices: notices.notices,
-    pictures: store.pictures, ownership: ownership.ownership,
+    pictures: { ...store.pictures, store: picture => { void store.pictures.persist([picture.sha256]); return picture; } },
+    ownership: ownership.ownership,
     cells: { editGallery: (rowId, message, edit) => {
       const source = reader.document.current()?.rows[0];
       assert.ok(source);

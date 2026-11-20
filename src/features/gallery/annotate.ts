@@ -763,8 +763,7 @@ function flatten(marks: Mark[]): Promise<ImageRef | null> {
     return blob ? blob.arrayBuffer() : null;
   }).then(function (buf) {
     const rec = buf ? pictures.intern(new Uint8Array(buf)) : null;
-    if (rec) pictures.persist([rec.sha256]);
-    return rec;
+    return rec ? pictures.store(rec) : null;
   }).then(null, function () { return null; });
 }
 

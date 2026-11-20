@@ -11,7 +11,8 @@ import type { SharedDocumentSession } from "../../application/session/shared-ses
 import { plainText } from "../../core/document/text-policy.ts";
 import type { DocumentComment, DocumentReply, DocumentRow } from "../../core/document/validated.ts";
 import type { RowStatusId } from "../../core/document/timing.ts";
-import { addGalleryPicture, replaceGalleryPicture } from "../../core/document/gallery.ts";
+import { addGalleryPicture, replaceGalleryPicture, rowSlots } from "../../core/document/gallery.ts";
+import type { ImageRef } from "../../core/document/ports.ts";
 import { compressImageFile } from "../../features/rows/beat-media.ts";
 import { capabilities } from "./ports/capabilities.ts";
 import { documentReader } from "./ports/document.ts";
@@ -20,21 +21,24 @@ import { pictures } from "./ports/pictures.ts";
 
 type NativeRecordsSession = ReturnType<typeof openNativeSession>;
 type Admission = Pick<SharedDocumentSession, "admit" | "refuse">;
+const STALE_BEAT = "That beat no longer exists.";
 
 export function createNativeEditorRecords(
   native: NativeRecordsSession, session: () => Admission | null, actor: string, now: () => number, report: ReportPort
 ) {
   const selections = new Map<string, NativeTextRange>();
+  const localAppends = new Map<string, { before: ReturnType<typeof nativeGalleryOf>; after: ReturnType<typeof nativeGalleryOf> }>();
 
-  function refuse(reason: string, owner: Admission | null): RecordCommandRun {
+  function refuse(reason: string, owner: Admission | null, beat = false): RecordCommandRun {
     if (reason === "full") notices.show("This shared script is full. Export a copy to keep working.", "warn");
+    else if (beat && reason === "missing") notices.show(STALE_BEAT, "warn");
     else if (owner) owner.refuse(reason);
     else notices.show("This is not available in a shared session yet.", "warn");
     return RECORD_REFUSED;
   }
 
   function run(
-    permission: "edit" | "comment", write: () => NativeRecordOutcome, done?: string
+    permission: "edit" | "comment", write: () => NativeRecordOutcome, done?: string, beat = false
   ): RecordCommandRun {
     const owner = session();
     if (!owner) return refuse("closed", owner);
@@ -45,7 +49,7 @@ export function createNativeEditorRecords(
       const capability = capabilities[permission]();
       if (!capability.allowed) return refuse(capability.reason, owner);
       const result = write();
-      if (result.kind === "refused") return refuse(result.reason, owner);
+      if (result.kind === "refused") return refuse(result.reason, owner, beat);
       if (result.kind === "unchanged") return NOTHING_RAN;
       if (done) notices.show(done, "ok");
       return RECORD_CHANGED;
@@ -56,22 +60,41 @@ export function createNativeEditorRecords(
   }
 
   const commands = native.commands;
-  function gallery(rowId: string, message: string, edit: GalleryEdit): RecordCommandRun {
+  function gallery(rowId: string, message: string, edit: GalleryEdit, append?: readonly string[]): RecordCommandRun {
     return run("edit", () => {
       if (native.isClosingOrClosed()) return { kind: "refused", reason: "closed" };
       const shown = documentReader.current()?.rows.find(row => row.id === rowId);
       const latest = native.document().rows.find(row => row.id === rowId);
       if (!shown || !latest) return { kind: "refused", reason: "missing" };
-      if (!sameNativeValue(nativeGalleryOf(shown), nativeGalleryOf(latest))) return { kind: "refused", reason: "value" };
+      const before = nativeGalleryOf(shown), current = nativeGalleryOf(latest);
+      if (!sameNativeValue(before, current)) {
+        const local = localAppends.get(rowId);
+        if (append && local && sameNativeValue(local.before, before) && sameNativeValue(local.after, current)
+          && append.every(sha => rowSlots(latest).some(slot => slot.ref?.sha256 === sha))) return { kind: "unchanged" };
+        return { kind: "refused", reason: "value" };
+      }
       const row = JSON.parse(JSON.stringify(latest)) as DocumentRow;
       if (!edit(row)) return { kind: "unchanged" };
-      return commands.setField({ kind: "gallery", id: rowId }, nativeGalleryOf(row));
-    }, message);
+      const after = nativeGalleryOf(row);
+      const result = commands.setField({ kind: "gallery", id: rowId }, after);
+      if (append && result.kind === "written") {
+        const local = { before, after };
+        localAppends.set(rowId, local);
+        queueMicrotask(() => { if (localAppends.get(rowId) === local) localAppends.delete(rowId); });
+      }
+      return result;
+    }, message, true);
+  }
+
+  async function storePictures(shas: readonly string[]): Promise<boolean> {
+    // why: cleanup can fail after a gallery reference commits, so its bytes must already be durable
+    const missing = await pictures.persist(shas);
+    return !missing.length && shas.every(sha => pictures.isDurable(sha));
   }
 
   async function addPictures(rowId: string, files: readonly File[], slot?: number): Promise<void> {
     const shown = documentReader.current()?.rows.find(row => row.id === rowId);
-    if (!shown) { refuse("missing", session()); return; }
+    if (!shown) { refuse("missing", session(), true); return; }
     try {
       const urls = await Promise.all(files.map(file => compressImageFile(file, 1000, 0.78)));
       const refs = urls.map((url, index) => {
@@ -79,15 +102,13 @@ export function createNativeEditorRecords(
         if (!ref) throw new Error("not a picture the registry takes");
         return { ref, name: files[index]?.name };
       });
-      // why: a transaction can leave a committed reference even when cleanup fails before it reports success
       const shas = refs.map(({ ref }) => ref.sha256);
-      const missing = await pictures.persist(shas);
-      if (missing.length || shas.some(sha => !pictures.isDurable(sha))) {
+      if (!await storePictures(shas)) {
         notices.show("Could not store the picture, so it was not added.", "warn");
         return;
       }
       const latest = documentReader.current()?.rows.find(row => row.id === rowId);
-      if (!session() || !latest || slot !== undefined && !sameNativeValue(nativeGalleryOf(shown), nativeGalleryOf(latest))) {
+      if (!session() || latest && slot !== undefined && !sameNativeValue(nativeGalleryOf(shown), nativeGalleryOf(latest))) {
         notices.show("The picture finished loading after the script changed, so it was not added.", "warn");
         return;
       }
@@ -97,7 +118,7 @@ export function createNativeEditorRecords(
         if (slot !== undefined && refs[0]) return replaceGalleryPicture(row, slot, refs[0].ref, refs[0].name);
         for (const { ref, name } of refs) addGalleryPicture(row, ref, name);
         return true;
-      });
+      }, slot === undefined ? shas : undefined);
     } catch {
       notices.show("Could not use that image.", "error");
     }
@@ -107,8 +128,9 @@ export function createNativeEditorRecords(
     beatField: (rowId: string, field: "status" | "lengthSeconds", value: RowStatusId | number | null) => run("edit", () => {
       const target = { kind: "editor-beat" as const, id: rowId, field };
       return value === null ? commands.clearField(target) : commands.setField(target, value);
-    }),
-    gallery,
+    }, undefined, true),
+    gallery: (rowId: string, message: string, edit: GalleryEdit) => gallery(rowId, message, edit),
+    storePicture: async (picture: ImageRef) => await storePictures([picture.sha256]) ? picture : null,
     addPictures,
     anchor: (id: string, rowId: string, field: "audioText" | "visualText", from: number, to: number, html: string) => run("comment", () => {
       if (native.isClosingOrClosed()) return { kind: "refused", reason: "closed" };

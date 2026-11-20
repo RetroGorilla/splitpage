@@ -120,13 +120,14 @@ test("record outcomes retain refusals and mark only written results as changed",
       () => admission, "Editor", () => 0, fixture.ports.report);
     assert.deepEqual(records.beatField("R1", "lengthSeconds", 42), { changed: false, held: true });
     assert.equal(command.mock.callCount(), 1);
-    assert.deepEqual(refused.mock.calls.at(-1)?.arguments, [reason]);
+    if (reason === "missing") assert.deepEqual(show.mock.calls.at(-1)?.arguments, ["That beat no longer exists.", "warn"]);
+    else assert.deepEqual(refused.mock.calls.at(-1)?.arguments, [reason]);
   }
   const records = createNativeEditorRecords(native, () => admission, "Editor", () => 0, fixture.ports.report);
   assert.deepEqual(records.beatField("R1", "lengthSeconds", 42), { changed: true, held: false });
   assert.deepEqual(records.beatField("R1", "lengthSeconds", 42), { changed: false, held: false });
-  assert.equal(refused.mock.callCount(), 11);
-  assert.equal(show.mock.callCount(), 0);
+  assert.equal(refused.mock.callCount(), 10);
+  assert.equal(show.mock.callCount(), 1);
   const release = native.holdIngress();
   assert.deepEqual(records.beatField("R1", "lengthSeconds", 40), { changed: false, held: true });
   assert.deepEqual(refused.mock.calls.at(-1)?.arguments, ["busy"]);

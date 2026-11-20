@@ -177,7 +177,7 @@ for (const removal of ["join", "removeBeat"]) test(`stale controls refuse a beat
   const edit = t.mock.fn(() => true);
   assert.deepEqual(gallery("r2", "Gallery edited", edit), { changed: false, held: true });
   assert.equal(edit.mock.callCount(), 0);
-  assert.deepEqual(show.mock.calls.map(call => call.arguments), Array.from({ length: 5 }, () => [unsupported, "warn"]));
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), Array.from({ length: 5 }, () => ["That beat no longer exists.", "warn"]));
   assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
   await Promise.resolve();
   assert.deepEqual(hook.read().app.rows.map(nativeGalleryOf), expected.map(nativeGalleryOf));

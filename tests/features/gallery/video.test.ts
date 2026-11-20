@@ -21,7 +21,7 @@ function setup(opts: { allowed?: boolean; thumbnail?: (host: string, ref: string
   const folds: { entry: unknown; touches: (step: Step) => boolean; changed: boolean }[] = [];
   const ports: GalleryVideoPorts = {
     document: fakeDocument(doc).document,
-    pictures: pictures.pictures,
+    pictures: { ...pictures.pictures, store: picture => { void pictures.pictures.persist([picture.sha256]); return picture; } },
     ownership: ownership.ownership,
     undo: {
       fold: (entry, touches, change) => {
