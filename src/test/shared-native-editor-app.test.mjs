@@ -58,6 +58,10 @@ function deleteRange(target, from, to, direction = "Backward") {
   return event.defaultPrevented;
 }
 
+function bound(run) {
+  return Object.assign((...args) => run(...args), { withSelection: (_before, ...args) => ({ result: run(...args), recordAfter() {} }) });
+}
+
 function compose(target, type, data) {
   const event = new window.CompositionEvent("composition" + type, { bubbles: true, cancelable: true, data });
   target.dispatchEvent(event);
@@ -570,7 +574,7 @@ for (const [guard, expected] of [
   const write = t.mock.fn(() => ({ kind: "recovery", reason: "busy", runs: [] }));
   const input = mountNativeSharedInput({
     native: { ...native, narrationCaret: guard === "missing caret target" ? () => null : native.narrationCaret,
-      commands: { ...native.commands, anchorText: anchor, typeText: write } },
+      commands: { ...native.commands, anchorText: anchor, typeText: bound(write) } },
     editAttribution: () => ({ by: "Writer", at: "now" }), report,
     session: { admit: () => guard === "admission failure" ? { kind: "failed", error } : null, refuse, subscribe: () => () => {} }
   });
@@ -595,7 +599,7 @@ for (const reason of ["text", "future-refusal"]) test("a commit refusal keeps th
   const refuse = t.mock.fn(), publish = t.mock.fn();
   const write = t.mock.fn(() => ({ kind: "recovery", reason, runs: [] }));
   const input = mountNativeSharedInput({
-    native: { ...native, commands: { ...native.commands, typeText: write } },
+    native: { ...native, commands: { ...native.commands, typeText: bound(write) } },
     editAttribution: () => ({ by: "Writer", at: "now" }), report: assert.fail, publish,
     session: { admit: () => null, refuse, subscribe: () => () => {} }
   });
@@ -999,7 +1003,7 @@ function inputProbe(t, options = {}) {
         const tracked = native.trackNarrationPaint(beat);
         return { ...tracked, dispose: () => { order.push("dispose"); tracked.dispose(); } };
       },
-      commands: { ...native.commands, typeText: (...args) => { order.push("write"); return write(...args); } }
+      commands: { ...native.commands, typeText: bound((...args) => { order.push("write"); return write(...args); }) }
     },
     report: assert.fail, editAttribution: () => ({ by: "Writer", at: "now" }),
     publish: () => { options.publish?.(); paint(); },
