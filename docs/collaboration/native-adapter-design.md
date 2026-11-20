@@ -85,6 +85,14 @@ Composition folds in remote changes made meanwhile (E1). The reader writes nothi
 once, and every copy adopts that conversion (appendix B). Conversion writes each heading's name into its name cell,
 not the segment text: the prototype import does the latter, so its headings read blank (E15).
 
+**Stale selections.** A selection holds Yjs relative positions and, when it is not collapsed, the state its copy had seen; a caret holds no state vector ([format-commands.test.ts](../../tests/adapters/collab/native/format-commands.test.ts), "closing round, item 2"). A selection that still holds a letter of its own covers what a peer typed into it ([format-commands.test.ts](../../tests/adapters/collab/native/format-commands.test.ts), "closing round, item 1, as built"). A selection with no letter of its own left has collapsed, and the command changes nothing, even where a peer typed into it ([text-commands.test.ts](../../tests/adapters/collab/native/text-commands.test.ts), "round 3, item 8"). Owner.
+
+**Marks on part of a tag.** A link, comment or text direction set or cleared on part of a tag is stored on those letters only. Every copy reads it across the whole tag, the same as core `setMark` reads it in an unshared script ([format-commands.test.ts](../../tests/adapters/collab/native/format-commands.test.ts), "review round 1, pin 6, as built"). Owner.
+
+**Marks a unit cannot carry.** A link over a video goes on the letters only, and the video is not written ([format-commands.test.ts](../../tests/adapters/collab/native/format-commands.test.ts), "review round 1, fix 2"). A stored mark the reader cannot show is reported as an `unshown-marks` problem, and its unit stays visible. The same test stores a link on a video by a direct Yjs write to show this. Owner.
+
+**A tag repeated inside itself.** Conversion gives the repeated letters one application of their own, which differs from the application on the letters that follow, in the narration and in the visual cell ([convert.test.ts](../../tests/adapters/collab/native/convert.test.ts), "closing round, item 1"). Owner.
+
 ## 3. Reading rules
 
 Blocks show in rank order; ties follow stored order (E10). A joined beat shares the row above (E2). Seven rules make
@@ -101,6 +109,8 @@ every surviving letter reachable without writing anything.
 | (g) A beat marker whose record or visual cell is missing is not a row; its narration reads as if the marker were absent, in a neighbouring row ([appendix N](#n-a-row-without-its-record)) | After section 10's four steps, N's narration shows in B, editable, as before the split | The restoring undo brings back the narration, not the row. Text typed inside or after the hidden text moves into N on a redo; a split inside it lands right after the beat's own marker (E17) |
 
 A beat loses its rank through a same-moment move race (section 10): 3 of 600 generated histories (E14).
+
+**Tags on the same letters.** A writer who untags, then retags a tag on exactly another tag's letters: which of the two reads as the outer tag follows the writers' client ids. With writer client 5 the retagged tag reads outer; with writer client 20 the other tag does. Every copy agrees and both tags stay ([format-commands.test.ts](../../tests/adapters/collab/native/format-commands.test.ts), "carried item 1, as built: across writers"). Accepted as built (Owner).
 
 ## 4. Undo
 
@@ -131,6 +141,8 @@ missing a restored row, doubled narration (also after E17's histories), tags, an
 kept records (E16). Plain Yjs causes both: an undo the tagger had not seen restored deleted letters as new ones
 (4), and a doubled letter kept the tag on one copy (1). Decision 17 flags such a loss. Outcomes that lose nothing:
 [appendix H](#h-outcomes-that-lose-nothing).
+
+**5b. A mark lost with a deleted letter.** A marks `pqr` and types a plain `X` inside it. B deletes `X`, and at the same time C removes the mark from `p`. Every copy then reads `opqr`, with the mark gone from `q` and `r` too. The test runs this with three copies, for a tag and for bold ([format-generated.test.ts](../../tests/adapters/collab/native/format-generated.test.ts), "found by the generated histories"). On raw Yjs with no observer, every copy reads `opqr` when it opened the text before the first updates arrived, and `op[qr|b]` when it opened the text after them (same test). Accepted with no repair writes (Owner). Generated counts: [appendix M](#m-accepted-losses-counted).
 
 ## 6. Never acceptable
 
@@ -213,13 +225,17 @@ requirements from the outside review.
 | # | Slice | Gate |
 | --- | --- | --- |
 | 1 | Shape, conversion with name cells, typing, deleting text, incremental reader | The spike's tape on three copies and a late joiner; headings named in cells; a 900-beat structural change within 8 ms |
-| 2 | Formatting and tags | E4, E6 and E11's tag counts on the adapter; crossing display |
+| 2 | Formatting and tags | E4, E6 and E11's two tag-loss causes in a cell; crossing display |
 | 3 | Split, join, removal with kept records, headings, reading rules (a) to (g) | E9, E10, E11 and E14 sets; rule (g) on a marker without its record; E17's command table and the split timing with a parse counter (appendix O); section 6 at zero but decision 15's case; recovery lists no removed row |
 | 4 | Moves | E10's collision table; a move including a row without its record refused unwritten |
 | 5 | Records, status, comments | Exact row changes; author-only bodies |
-| 6 | Undo | E3, E11, E14 and E16 tests; E15's histories under option A; E17's histories under rule (g); creation undo and redo timing (appendix O); one change per press |
+| 6 | Undo | E3, E11, E14 and E16 tests; E15's histories under option A; E17's histories under rule (g); creation undo and redo timing (appendix O); one change per press; E11's full tag recount (845 requested, 800 kept, 40 undone, 5 lost) |
 | 7 | Session, editor, relay with the wrapper, server storage, offline notice | E13's pair table; E16's notice counts; every reader agrees on E17's histories; first loads per decision 16; a large offline return under stock timers; two writers past the size limit; server stops per decision 19; stale-target editor cases (appendix O); store and reload |
 | 8 | Delete the old adapter | Every deleted test mapped; `npm run verify` |
+
+Slices 1 and 2 are merged (PRs #1649 and #1651). Slice 3 is built as two pull requests: 3a, split, join and removal with
+kept records; 3b, headings and reading rules (a) to (g). The E11 full tag recount moved from slice 2 to slice 6, because
+it needs the structural commands and undo. Slice 2 reproduced both E11 tag-loss causes in a cell ([format-e11.test.ts](../../tests/adapters/collab/native/format-e11.test.ts)). Owner.
 
 ## 12. What changed in round 8
 
@@ -389,6 +405,8 @@ after an undo; text composed beside a deleted letter landing across a same-momen
 people deleting the same `b` of `abc` and both undoing give `abbc` (appendix B); a letter at a tag's edge takes the
 tag by client order (E6).
 
+**Concurrent untagging.** A tags `abc`, B tags `bcd`, and both have both applications. A clears `ab` while B clears `bc`; both applications survive on `c` and `d`, so `c` stays tagged on every copy. Plain `Y.Text.format` gives the same result in each client order and delivery order the test tries ([format-commands.test.ts](../../tests/adapters/collab/native/format-commands.test.ts), "review round 1, pin 8", including its raw Yjs part). Accepted with no repair writes (Owner).
+
 ### I. Smaller open points
 
 Each is the design's default unless the owner objects.
@@ -415,6 +433,8 @@ Each is the design's default unless the owner objects.
 | Undo passing over spent steps | Library behaviour (16 in 600, E11) | A press occasionally undoes something older |
 | A person who stays online while a beat they edited is removed | Not told; no online signal is used. With kept records the beat-map signal fell from 131 to 12 banners of 325, all from undone creations, and the row-reading observer misses 92 of 192 losses (E16) | The row disappears with no message; their edits return only if the remover undoes. A tag lost that way is not flagged for them (decision 17) |
 | Hidden edits on a removed row | No route to them other than the remover's undo (E16 did not measure one) | Status, fields and visual text on a row that stays removed are stored but not reachable |
+| Rank between two blocks | Owner, as built: the same neighbours give the same rank, and so does the rank with both neighbours null ([rank.test.ts](../../tests/adapters/collab/native/rank.test.ts), "ranks between adjacent and distant initial ranks"; "ranks before the first, after the last, with both null, and at tight prefixes") | Nothing visible |
+| Rank length at the open ends | Owner, as built: 10,000 appends from the initial rank keep the rank at 7 characters at step 900 and at step 10,000, 70,000 characters in all ([rank.test.ts](../../tests/adapters/collab/native/rank.test.ts), "10,000 appends and 10,000 prepends keep strict order and compact sizes") | Nothing visible |
 
 ### J. Relay, size and the reconnect wrapper
 
@@ -517,6 +537,8 @@ The one kept record loss is a field on a beat whose creating split was undone; i
 
 Also accepted, not in E16's ledger: two people dropping into each other's spot meet neither request (E10, all 8
 histories); a rankless row placed by rule (e), 3 of 600 histories with kept records (E14), decision 15.
+
+Also not in E16's ledger: the generated tag histories ([format-generated.test.ts](../../tests/adapters/collab/native/format-generated.test.ts), "generated tag histories on three copies") lose a stored application on two letters, `q` and `r` of one rope application (seed 6, 30 seeds in all). In each case another application of the same tag still covers the letter, as the test asserts for every shortfall. The test's own comment attributes the shortfall to the library, reproduced on raw Yjs by the next test (section 5b).
 
 ### N. A row without its record
 
