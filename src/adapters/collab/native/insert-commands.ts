@@ -107,5 +107,5 @@ export function createFirstNativeBeat(script: NativeScript, narration = ""): Nat
     if (order.some(block => block.kind === "beat")) return Object.freeze({ kind: "unchanged" });
     return insertBeat(script, { id: null, scene: null, old: [], audio, picture: [],
       entries: nativeBeatEntries({ status: "todo", lengthSeconds: normalizeBeatLength(undefined) }) }, order);
-  }, refused);
+  }, refused, () => true);
 }

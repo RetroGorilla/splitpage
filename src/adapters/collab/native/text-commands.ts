@@ -386,6 +386,13 @@ export function resolveNativeUndoSelection(script: NativeScript, recorded: Nativ
   return Object.freeze({ anchor, head: samePoint ? anchor : head });
 }
 
+export function deleteNativePieces(live: NativeLiveRange, added = 0): void {
+  for (const piece of live.pieces.toReversed()) {
+    const shift = piece.text === live.text && piece.from >= live.from ? added : 0;
+    if (piece.until > piece.from) piece.text.delete(piece.from + shift, piece.until - piece.from);
+  }
+}
+
 // why: a command called while another transaction is open refuses, since that transaction's changes are not yet
 // observed
 export function replaceNativeText(script: NativeScript, range: NativeTextRange, runs: readonly Run[], stamp?: NativeEditStamp,
@@ -405,10 +412,7 @@ export function replaceNativeText(script: NativeScript, range: NativeTextRange, 
     beforeWrite?.(checked.target);
     const end = writeNativeRuns(script.doc, live.text, live.from, prepared, nativeLeftAt(nativeCellView(live.items), live.from - live.start));
     const added = end - live.from;
-    for (const piece of live.pieces.toReversed()) {
-      const shift = piece.text === live.text && piece.from >= live.from ? added : 0;
-      if (piece.until > piece.from) piece.text.delete(piece.from + shift, piece.until - piece.from);
-    }
+    deleteNativePieces(live, added);
     if (encoded && updateStamp) script.roots.edited.set(checked.target.beat, encoded);
     if (afterWrite) {
       const anchor = undoEndpoint(checked.target, live.text, end, 0);

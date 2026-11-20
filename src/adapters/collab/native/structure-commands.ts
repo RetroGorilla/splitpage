@@ -1,11 +1,12 @@
 import * as Y from "yjs";
+import { copyNativeCompoundInput } from "./compound-input.ts";
 import { nativeTextAllowed } from "./inline.ts";
 import type { NativeDeltaItem } from "./inline.ts";
 import { nativeSegmentSpans } from "./reader.ts";
-import { transactNativeCommand } from "./script.ts";
+import { transactNativeCommand, transactPreparedNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
-import { nativeLiveRange, nativeRangeSnapshot, nativeWriteAvailability } from "./text-commands.ts";
-import type { NativeRefusal, NativeTextRange } from "./text-commands.ts";
+import { deleteNativePieces, nativeAvailability, nativeLiveRange, nativeRangeSnapshot, nativeWriteAvailability } from "./text-commands.ts";
+import type { NativeLiveRange, NativeRefusal, NativeTextRange } from "./text-commands.ts";
 import { mintNativeId, nativeWellFormed } from "./values.ts";
 
 export type NativeRowRefusal = NativeRefusal | "taken" | "above" | "stored";
@@ -116,26 +117,48 @@ export function splitNativeRow(script: NativeScript, at: NativeTextRange): Nativ
   if (unavailable) return refused(unavailable);
   if (!checked || checked.target.cell !== "narration" || checked.to !== null) return refused("range");
   if (!beatId(checked.target.beat)) return refused("missing");
-  let outcome: NativeSplitOutcome = refused("missing");
-  transactNativeCommand(script, () => {
-    const roots = script.roots, live = nativeLiveRange(script, checked), parent = roots.beats.get(checked.target.beat);
-    if (typeof live === "string") { outcome = refused(live); return; }
-    if (!(parent instanceof Y.Map)) return;
-    const at = splitPoint(script, checked.target.beat, live.text, live.from);
-    if (!at) { outcome = refused("range"); return; }
-    const ranked = parent.has("rank"), rank: unknown = parent.get("rank"), created = mintNativeId(script.doc, "r");
-    if (ranked && (typeof rank !== "string" || !nativeWellFormed(rank))) { outcome = refused("stored"); return; }
-    if (roots.beats.has(created) || roots.visuals.has(created) || script.reader.hasBeatMarker(created)) { outcome = refused("taken"); return; }
-    // why: given the formatting in force at its place, the boundary writes no formatting change of its own that a
-    // later undo of that formatting could leave behind
-    at.text.insertEmbed(at.index, { b: created }, at.index > 0 ? attributesBefore(at.text, at.index) : {});
-    const record = new Y.Map<unknown>();
-    roots.beats.set(created, record);
-    if (ranked) record.set("rank", rank);
-    roots.visuals.set(created, new Y.Text());
-    outcome = Object.freeze({ kind: "written", created });
+  return transactNativeCommand(script, () => {
+    const live = nativeLiveRange(script, checked);
+    return typeof live === "string" ? refused(live) : writeSplit(script, checked.target.beat, live, false);
   });
-  return outcome;
+}
+
+function writeSplit(script: NativeScript, beat: string, live: NativeLiveRange, deleting: boolean): NativeSplitOutcome {
+  const { roots } = script, parent = roots.beats.get(beat);
+  if (!(parent instanceof Y.Map)) return refused("missing");
+  const at = splitPoint(script, beat, live.text, live.from);
+  if (!at) return refused("range");
+  const ranked = parent.has("rank"), rank: unknown = parent.get("rank"), created = mintNativeId(script.doc, "r");
+  if (ranked && (typeof rank !== "string" || !nativeWellFormed(rank))) return refused("stored");
+  if (roots.beats.has(created) || roots.visuals.has(created) || script.reader.hasBeatMarker(created)) return refused("taken");
+  let index = at.index;
+  if (deleting) {
+    for (const piece of live.pieces) {
+      if (piece.text === at.text) index -= Math.max(0, Math.min(at.index, piece.until) - piece.from);
+    }
+    deleteNativePieces(live);
+  }
+  // why: given the formatting in force at its place, the boundary writes no formatting change of its own that a
+  // later undo of that formatting could leave behind
+  at.text.insertEmbed(index, { b: created }, index > 0 ? attributesBefore(at.text, index) : {});
+  const record = new Y.Map<unknown>();
+  roots.beats.set(created, record);
+  if (ranked) record.set("rank", rank);
+  roots.visuals.set(created, new Y.Text());
+  return Object.freeze({ kind: "written", created });
+}
+
+export function deleteAndSplitNativeRow(script: NativeScript, selection: NativeTextRange): NativeSplitOutcome {
+  const unavailable = nativeAvailability(script);
+  if (unavailable) return refused(unavailable);
+  return transactPreparedNativeCommand(script,
+    () => nativeRangeSnapshot(copyNativeCompoundInput(selection) as NativeTextRange), checked => {
+      if (script.closed() || script.reader.isClosed()) return refused("closed");
+      if (!checked?.to || checked.target.cell !== "narration") return refused("range");
+      if (!beatId(checked.target.beat)) return refused("missing");
+      const live = nativeLiveRange(script, checked);
+      return typeof live === "string" ? refused(live) : writeSplit(script, checked.target.beat, live, true);
+    }, refused, () => true);
 }
 
 function sameJoin(stored: unknown, value: NativeJoinValue): boolean {

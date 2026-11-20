@@ -18,11 +18,11 @@ import type { NativePendingEditsData } from "./pending-edits.ts";
 import { moveNativeBlocks } from "./move-commands.ts";
 import { clearNativeField, setNativeField } from "./record-commands.ts";
 import { changeNativeRegistry } from "./registry-commands.ts";
-import { beforeNativeWrite, openNativeScript } from "./script.ts";
+import { beforeNativeWrite, openNativeScript, withNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { createNativeSizeTracker, resolveNativeSizeOptions } from "./size.ts";
 import type { NativeSessionSize, NativeSizeOptions } from "./size.ts";
-import { joinNativeRow, removeNativeRows, splitNativeRow, unjoinNativeRow } from "./structure-commands.ts";
+import { deleteAndSplitNativeRow, joinNativeRow, removeNativeRows, splitNativeRow, unjoinNativeRow } from "./structure-commands.ts";
 import { anchorNativeText, deleteNativeText, replaceNativeText, resolveNativeTextPoint, typeNativeText } from "./text-commands.ts";
 import type { NativeEditStamp, NativeTextPlacement, NativeTextRange, NativeTextTarget, NativeUndoSelectionInput } from "./text-commands.ts";
 import { openNativeUndo } from "./undo-commands.ts";
@@ -48,6 +48,7 @@ export type NativeSessionChange =
   | { readonly kind: "closed"; readonly reason: CloseReason; readonly state: Uint8Array };
 
 type ChangeListener = (change: NativeSessionChange) => void;
+const COMPOUND_RANGE_REFUSAL = Object.freeze({ kind: "refused", reason: "range" } as const);
 
 export function hasNativeFormat(bytes: Uint8Array): boolean {
   const doc = new Y.Doc();
@@ -103,6 +104,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
   let reportedSize: NativeSessionSize = size.state;
   const writing = { ...script, sizeRefusal };
   const adding = { ...script, sizeRefusal: () => sizeRefusal(true) };
+  const compoundWriting = { ...writing, closed: () => closing !== null || script.closed() };
 
   function schedule(): void {
     if (scheduled) return;
@@ -191,9 +193,9 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
 
   function bindCommand<Args extends unknown[], Result extends { readonly created?: string; readonly kind: string }>(
     command: (script: NativeScript, ...args: Args) => Result, commandScript: NativeScript, separate: boolean,
-    journalMode: "none" | "edit" | "split"
+    journalMode: "none" | "edit" | "split", selectionRefusal?: () => Result
   ) {
-    function run(args: Args, capture?: (write: (prepareWrite: () => void) => Result) => Result): Result {
+    function run(args: Args, capture?: (write: (prepareWrite: () => boolean) => Result) => Result): Result {
       const reason = refusal();
       if (reason) {
         // why: reentry during argument copying must keep each command's own refusal shape
@@ -205,7 +207,10 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
           undo.stopCapturing();
         }
         if (journalMode !== "none") journal?.sync();
-        const result = capture ? capture(prepareWrite => command({ ...commandScript, prepareWrite }, ...args))
+        const result = capture ? capture(prepareWrite => {
+          if (!selectionRefusal) return command({ ...commandScript, prepareWrite }, ...args);
+          return withNativeCommand(commandScript, prepareWrite) ? command(commandScript, ...args) : selectionRefusal();
+        })
           : command(commandScript, ...args);
         if (journalMode !== "none") journal?.sync(result.created ? { created: result.created, split: journalMode === "split" } : {});
         return result;
@@ -216,7 +221,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
       withSelection(before: NativeUndoSelectionInput | null, ...args: Args) {
         let finish: ((after?: NativeUndoSelectionInput | null) => void) | undefined;
         const result = run(args, write => {
-          const recorded = undo.captureSelection(before, write);
+          const recorded = undo.captureSelection(before, write, selectionRefusal !== undefined);
           finish = recorded.recordAfter;
           return recorded.result;
         });
@@ -233,10 +238,16 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
 
   function bind<Args extends unknown[], Result extends { readonly created?: string; readonly kind: string }>(
     command: (script: NativeScript, ...args: Args) => Result, commandScript: NativeScript, separate = true,
-    journalMode: "edit" | "split" = "edit"
+    journalMode: "edit" | "split" = "edit", selectionRefusal?: () => Result
   ) {
-    const { run, withSelection } = bindCommand(command, commandScript, separate, journalMode);
+    const { run, withSelection } = bindCommand(command, commandScript, separate, journalMode, selectionRefusal);
     return Object.freeze(Object.assign(run, { withSelection }));
+  }
+
+  function bindCompound<Args extends unknown[], Result extends { readonly created?: string; readonly kind: string }>(
+    command: (script: NativeScript, ...args: Args) => Result | typeof COMPOUND_RANGE_REFUSAL, journalMode: "edit" | "split" = "edit"
+  ) {
+    return bind(command, compoundWriting, true, journalMode, () => COMPOUND_RANGE_REFUSAL);
   }
 
   function press(direction: "undo" | "redo"): NativeUndoOutcome {
@@ -252,7 +263,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
   }
 
   const commands = Object.freeze({
-    createFirstBeat: bind(createFirstNativeBeat, adding),
+    createFirstBeat: bindCompound(createFirstNativeBeat),
     anchorText: bindCommand(anchorNativeText, script, false, "none").run,
     typeText: bind((script: NativeScript, range: NativeTextRange, text: string, marks: Marks, stamp?: NativeEditStamp, placement?: NativeTextPlacement) =>
       typeNativeText(script, range, text, marks, stamp, target => {
@@ -265,6 +276,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     deleteText: bind(deleteNativeText, writing),
     formatText: bind(formatNativeText, adding),
     splitRow: bind(splitNativeRow, adding, true, "split"),
+    deleteAndSplit: bindCompound(deleteAndSplitNativeRow, "split"),
     putBack: bind(putBackNativeBeat, adding),
     joinRow: bind(joinNativeRow, adding),
     unjoinRow: bind(unjoinNativeRow, writing),

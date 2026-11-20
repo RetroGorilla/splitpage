@@ -1,4 +1,5 @@
 import * as Y from "yjs";
+import { copyNativeCompoundInput } from "./compound-input.ts";
 import { observeNativePress, withNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { nativeAvailability, resolveNativeUndoSelection, snapshotNativeUndoAnchor } from "./text-commands.ts";
@@ -55,7 +56,7 @@ export function openNativeUndo(script: NativeScript) {
     record(stackItem, null, prior);
   });
 
-  function captureSelection<T>(before: NativeUndoSelectionInput | null, write: (prepareWrite: () => void) => T) {
+  function captureSelection<T>(before: NativeUndoSelectionInput | null, write: (prepareWrite: () => boolean) => T, strict = false) {
     const ticket: SelectionCapture = {
       before: null, typedCaret: null,
       recordTypedCaret(anchor) { ticket.typedCaret = anchor; }
@@ -63,7 +64,9 @@ export function openNativeUndo(script: NativeScript) {
     capture = ticket;
     try {
       const result = write(() => {
-        ticket.before = before && snapshotNativeUndoAnchor(script, before);
+        const input = strict ? copyNativeCompoundInput(before) as NativeUndoSelectionInput | null | undefined : before;
+        ticket.before = input ? snapshotNativeUndoAnchor(script, input) : null;
+        return input === null || ticket.before !== null;
       });
       return {
         result,
@@ -71,8 +74,10 @@ export function openNativeUndo(script: NativeScript) {
           if (pending?.capture !== ticket) return;
           const { selection } = pending;
           pending = null;
-          selection.after = after === undefined ? ticket.typedCaret
-            : after && withNativeCommand(script, () => snapshotNativeUndoAnchor(script, after));
+          selection.after = after === undefined ? ticket.typedCaret : after && withNativeCommand(script, () => {
+            const input = strict ? copyNativeCompoundInput(after) as NativeUndoSelectionInput | undefined : after;
+            return input ? snapshotNativeUndoAnchor(script, input) : null;
+          });
         }
       };
     } finally { capture = null; }
