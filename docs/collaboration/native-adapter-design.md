@@ -12,6 +12,8 @@ pictures and screen design are out of scope.
 
 Slices 1 to 6 are on `main`. The native shared-document command layer and undo are built.
 The app has no native wiring yet. Slices 7a and 7h are merged. This PR builds 7c, the relay connection. The old adapter stays untouched until slice 8.
+The native registry audit found that writes to different props on one shot overwrite each other because `props` is stored as one encoded array.
+Registry commands are pending a per-prop stored shape and a minted tag ID that survives core reload. [Reproductions](../../tests/adapters/collab/native/registry-shape.test.ts).
 
 ## Decisions made
 
