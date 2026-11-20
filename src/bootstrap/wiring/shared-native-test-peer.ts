@@ -2,6 +2,7 @@ import { applyNativePeerUpdate } from "../../adapters/collab/native/peer-update.
 import { openNativeSession } from "../../adapters/collab/native/session.ts";
 import { sanitizeHtml } from "../richtext.ts";
 import type { NativeFieldTarget } from "../../adapters/collab/native/record-commands.ts";
+import type { NativeRegistryChange } from "../../adapters/collab/native/registry-commands.ts";
 
 export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>) {
   const peer = openNativeSession({ kind: "state", state: app.encodeState() }, { actor: "Peer", sanitize: sanitizeHtml });
@@ -30,6 +31,7 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>) 
       applyNativePeerUpdate(peer, bytes);
     },
     field: (target: NativeFieldTarget, value: unknown) => forward(peer.commands.setField(target, value)),
+    registry: (change: NativeRegistryChange) => forward(peer.commands.changeRegistry(change)),
     join: (lower: string, upper: string) => forward(peer.commands.joinRow(lower, upper, " ")),
     removeBeat: (id: string) => forward(peer.commands.removeRows([id])),
     removeComment: (id: string) => forward(peer.commands.removeComment({ comment: id })),

@@ -4,6 +4,7 @@ import type { DocumentShape } from "../../core/document/validated.ts";
 import type { Command, CommandOutcome, CommandRefusal, DocumentView, Plan, SharedPlan } from "../session/document-session.ts";
 import type { DocumentEdits } from "../session/document-edits.ts";
 import type { LiveEdit } from "./document-edit.ts";
+import type { TagChange, TagRef } from "./production-records.ts";
 
 export interface SharedRecordPorts {
   readonly author: () => { readonly id: string; readonly by: string } | null;
@@ -19,6 +20,11 @@ export interface SharedRecordCommands<Ports = SharedRecordPorts> {
 export interface RegistryEditor {
   readonly addPerson: (name: string) => { readonly run: RecordCommandRun; readonly id: string };
   readonly removePerson: (id: string) => RecordCommandRun;
+  readonly registerTag: (cat: string, name: unknown) => RecordCommandRun;
+  readonly updateTags: (tags: readonly (TagRef & { readonly id: string | null })[], change: TagChange) => RecordCommandRun;
+  readonly renameTag: (id: string | null, name: string) => RecordCommandRun;
+  readonly removeTags: (ids: readonly string[]) => RecordCommandRun;
+  readonly gear: (raw: string) => RecordCommandRun;
 }
 
 export interface EditorRegistryCommands extends SharedRecordCommands {

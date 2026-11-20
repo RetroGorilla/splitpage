@@ -8,8 +8,10 @@ import type { RecordCommandRun, RegistryEditor } from "../../application/command
 import { NOTHING_RAN, RECORD_CHANGED, RECORD_REFUSED } from "../../application/commands/shared-records.ts";
 import type { ReportPort } from "../../application/session/ports.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
-import { cappedText, plainText } from "../../core/document/text-policy.ts";
+import { cappedName, cappedText, plainText } from "../../core/document/text-policy.ts";
 import { PERSON_NAME_MAX, personNamed } from "../../core/production/records.ts";
+import { isBlankTagName } from "../../core/production/tags.ts";
+import { normalizeTagName, registryKey } from "../../core/document/tags.ts";
 import type { NativeRegistryChange } from "../../adapters/collab/native/registry-commands.ts";
 import type { DocumentComment, DocumentReply, DocumentRow } from "../../core/document/validated.ts";
 import type { RowStatusId } from "../../core/document/timing.ts";
@@ -65,8 +67,9 @@ export function createNativeEditorRecords(
   }
 
   const commands = native.commands;
-  function changeRegistry(change: NativeRegistryChange): RecordCommandRun {
-    return run("edit", () => commands.changeRegistry(change), undefined, false, settle);
+  function changeRegistry(change: NativeRegistryChange, checked?: () => boolean): RecordCommandRun {
+    return run("edit", () => checked && !checked() ? { kind: "refused", reason: "missing" }
+      : commands.changeRegistry(change), undefined, false, settle);
   }
 
   const registry: RegistryEditor = {
@@ -77,7 +80,40 @@ export function createNativeEditorRecords(
       const id = !result.held && !native.isClosingOrClosed() ? personNamed(native.document(), name)?.id ?? "" : "";
       return { run: result, id };
     },
-    removePerson: id => changeRegistry({ kind: "remove", collection: "people", ids: [id] })
+    removePerson: id => changeRegistry({ kind: "remove", collection: "people", ids: [id] }),
+    registerTag: (cat, raw) => {
+      const name = cappedName(String(raw ?? ""), 80);
+      return isBlankTagName(name) ? NOTHING_RAN : changeRegistry({ kind: "create", collection: "tags", fields: { cat, name } });
+    },
+    updateTags: (tags, { owner, notes, status }) => {
+      const ownerName = owner && "name" in owner ? cappedText(owner.name, PERSON_NAME_MAX) : undefined;
+      if (ownerName === "") return NOTHING_RAN;
+      return changeRegistry({
+        kind: "updateTags",
+        tags: tags.map(({ cat, name }) => ({ cat, name })),
+        fields: { ...(owner && "id" in owner ? { owner: owner.id } : {}),
+          ...(notes === undefined ? {} : { notes }), ...(typeof status === "string" ? { status } : {}) },
+        ...(ownerName === undefined ? {} : { ownerName }), ...(typeof status === "object" ? { cycle: true } : {})
+      }, () => {
+        if (native.isClosingOrClosed()) return false;
+        const current = new Map(native.document().productionTags.map(tag => [tag?.id, tag]));
+        return tags.every(({ id, cat, name }) => {
+          if (!id) return true;
+          const tag = current.get(id);
+          return !!tag && registryKey(tag.cat, tag.name) === registryKey(cat, name);
+        });
+      });
+    },
+    renameTag: (id, name) => name ? changeRegistry({ kind: "set", collection: "tags", ids: id ? [id] : [], fields: { name } }, () => !!id) : NOTHING_RAN,
+    removeTags: ids => changeRegistry({ kind: "remove", collection: "tags", ids }),
+    gear: raw => {
+      const names = new Map<string, string>();
+      for (const line of raw.split(/\r\n|\r|\n/)) {
+        const name = cappedText(line, 80), key = normalizeTagName(name);
+        if (name && !names.has(key)) names.set(key, name);
+      }
+      return changeRegistry({ kind: "gear", names: [...names.values()] });
+    }
   };
   function gallery(rowId: string, message: string, edit: GalleryEdit, append?: readonly string[]): RecordCommandRun {
     return run("edit", () => {

@@ -107,6 +107,8 @@ export function collectTagsFromRows(rows: readonly ProductionRow[] | null | unde
 }
 
 export function registerProductionTag(cat: string, name: unknown) {
+  const native = recordEdits?.shared.native?.();
+  if (native) return native.registerTag(cat, name).changed;
   return editRecords(shared => registerTagCommand({ cat: cat, name: String(name == null ? "" : name) }, shared));
 }
 

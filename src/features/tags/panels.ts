@@ -35,7 +35,7 @@ import { idMap } from "../../core/document/id-map.ts";
 import { cappedLongText, cappedText, escapeHtml, plainText, safeId as safeIdFrom } from "../../core/document/text-policy.ts";
 import { planQuickAdd } from "../../core/production/tags.ts";
 import { addPersonCommand, deletePersonCommand, deleteTagsCommand, gearQuickAddCommand, tagCellsCommand, updateTagsCommand } from "../../application/commands/production-records.ts";
-import { NOTHING_RAN, recordCommandRun } from "../../application/commands/shared-records.ts";
+import { NOTHING_RAN, RECORD_REFUSED, recordCommandRun } from "../../application/commands/shared-records.ts";
 import type { RecordCommandRun, SharedRecordBuild } from "../../application/commands/shared-records.ts";
 import { createTypedDrafts, heldWrite, isHeld, typedOrphansHtml } from "../common/typed-drafts.ts";
 import type { TypedDraft, TypedDrafts, TypedSave, TypedWrite } from "../common/typed-drafts.ts";
@@ -198,12 +198,12 @@ export function renderGearList() {
 function fillGearQuickAdd() {
   const box = (document.getElementById("gear-quickadd-input") as HTMLTextAreaElement | null);
   if (!box || document.activeElement === box) return;
-  const draft = (ports as TagPanelPorts).shared.ports() ? typed().draft("gear-quickadd-input", "") : null;
+  const draft = sharedRegistryLife() ? typed().draft("gear-quickadd-input", "") : null;
   if (draft !== null) { box.value = draft; box.setAttribute("data-unsaved", "true"); return; }
   const names = gearEntries().map(function (e) { return e.name; })
     .sort(function (a, b) { return a.localeCompare(b); });
   box.value = names.join("\n");
-  if ((ports as TagPanelPorts).shared.ports()) box.defaultValue = box.value;
+  if (sharedRegistryLife()) box.defaultValue = box.value;
 }
 
 export function applyGearQuickAdd() {
@@ -215,8 +215,11 @@ function gearSave(raw: string): TypedWrite {
   const plan = (ports as TagPanelPorts).document.read(planned);
   const added = plan.added, removed = plan.removed;
 
-  const run = editRecords(shared => gearQuickAddCommand(planned, shared));
+  const native = (ports as TagPanelPorts).shared.native?.();
+  const run = native?.gear(raw) ?? editRecords(shared => gearQuickAddCommand(planned, shared));
   if (run.held) return heldWrite(run);
+  const box = document.getElementById("gear-quickadd-input") as HTMLTextAreaElement | null;
+  if (native && box?.value === raw) box.defaultValue = raw;
   if (!run.changed) { fillGearQuickAdd(); return "saved"; }
   renderProduction();
   fillGearQuickAdd();
@@ -344,7 +347,7 @@ export function tagAllMentions(key: string | null) {
 }
 
 function tagEntityDetailHtml(item: PresentedProductionEntry, renaming: boolean, gear: boolean, detailId: string, prep = false, idKey = item.key) {
-  if ((ports as TagPanelPorts).shared.ports() && typed().draft("tag-rename-input", item.id ?? "") !== null) renaming = true;
+  if (sharedRegistryLife() && typed().draft("tag-rename-input", item.id ?? "") !== null) renaming = true;
   const k = escapeHtml(item.key);
   const name = escapeHtml(item.name);
   const st = tagStatus(item.status) || (TAG_STATUSES[0] as PanelTagStatus);
@@ -387,7 +390,7 @@ function tagEntityDetailHtml(item: PresentedProductionEntry, renaming: boolean, 
       (gear ? ' aria-label="Add a person to the crew list">' + iconHtml("i-plus") + 'Person' : '>Add person') +
     '</button>';
   const personRow = ((ports as TagPanelPorts).view.tagAddingPersonKey() === item.key ||
-    !!(ports as TagPanelPorts).shared.ports() && typed().draft("tag-person-input", item.id ?? "") !== null)
+    !!sharedRegistryLife() && typed().draft("tag-person-input", item.id ?? "") !== null)
     ? '<div class="tag-person-row">' +
         '<input type="text" class="tag-person-input ev-field" data-registry-id="' + escapeHtml(item.id || '') + '" data-key="' + k +
           '" placeholder="Their name" maxlength="60" aria-label="The new person’s name">' +
@@ -463,7 +466,10 @@ function tagEntityHtml(item: PresentedProductionEntry, opts?: { gear?: boolean; 
   opts = opts || {};
   const gear = !!opts.gear;
   const renaming = (ports as TagPanelPorts).view.tagRenamingKey() === item.key;
-  const expanded = (ports as TagPanelPorts).view.tagExpandedKey() === item.key || renaming;
+  const shared = (ports as TagPanelPorts).shared;
+  const hasDraft = shared.native?.() && item.id && ["tag-notes-input", "tag-person-input", "tag-rename-input"]
+    .some(box => typed().draft(box, item.id as string) !== null);
+  const expanded = (ports as TagPanelPorts).view.tagExpandedKey() === item.key || renaming || hasDraft;
   const k = escapeHtml(item.key);
   const selected = opts.selection && (ports as TagPanelPorts).selection.selected(item.key);
   const idKey = item.key + (opts.idSuffix ?? "");
@@ -655,8 +661,12 @@ function renderProductionByShoot(entries?: readonly PresentedProductionEntry[]) 
 }
 
 export function renderProduction() {
-  const draw = (): void => { renderProductionPanel(); renderGearList(); };
-  const shared = (ports as TagPanelPorts).shared.ports();
+  const draw = (): void => {
+    renderProductionPanel();
+    renderGearList();
+    if ((ports as TagPanelPorts).shared.native?.() && !document.getElementById("gear-panel")?.hidden) fillGearQuickAdd();
+  };
+  const shared = sharedRegistryLife();
   if (!shared) { typedLife = null; typed().clear(); draw(); return; }
   drawingTags++;
   try { keepingTyped(shared, ["production-list", "production-bulk", "gear-list", "gear-panel"], draw); }
@@ -686,7 +696,7 @@ function tagUnsavedLabel(draft: TypedDraft): string {
 }
 
 function goneTagDraft(draft: TypedDraft): void {
-  if (!(ports as TagPanelPorts).shared.ports()) return;
+  if (!sharedRegistryLife()) return;
   (ports as TagPanelPorts).notices.show(tagUnsavedLabel(draft) + ". The text is kept at the top of the list.", "warn");
 }
 
@@ -709,26 +719,28 @@ function showTagOrphans(rootIds: readonly string[]): void {
 }
 
 type TypedBox = HTMLInputElement | HTMLTextAreaElement;
-type TypedSpot = { readonly root: HTMLElement; readonly selector: string };
+type TypedSpot = { readonly root: HTMLElement; readonly selector: string; readonly fallback?: string };
 
 const TYPED_BOXES = [".tag-notes-input", ".tag-person-input", ".tag-rename-input", "#bulk-person-input", "#gear-quickadd-input"];
 
 function reviseTagBox(el: TypedBox): void {
   const box = TAG_DRAFT_BOXES.find(box => el.id === box || el.classList.contains(box));
   if (!box) return;
-  typed().revise(box, el.getAttribute("data-registry-id") ?? "", el.value, el.defaultValue);
-  el.toggleAttribute("data-unsaved", el.value !== el.defaultValue);
+  const nativeNote = box === "tag-notes-input" && (ports as TagPanelPorts).shared.native?.();
+  const drawn = nativeNote && !unsavedTyping(el) ? el.value : el.defaultValue;
+  typed().revise(box, el.getAttribute("data-registry-id") ?? "", el.value, drawn);
+  el.toggleAttribute("data-unsaved", el.value !== drawn);
 }
 
 function onTypedInput(event: Event): void {
-  if (!(ports as TagPanelPorts).shared.ports() || !typedLife) return;
+  if (!sharedRegistryLife() || !typedLife) return;
   const box = event.target as TypedBox;
   if (!box.matches?.(TYPED_BOXES.join(", ")) || box.classList.contains("tag-notes-input")) return;
   reviseTagBox(box);
 }
 
 function dismissTypedBox(event: Event): void {
-  if (!(ports as TagPanelPorts).shared.ports()) return;
+  if (!sharedRegistryLife()) return;
   const target = event.target as HTMLElement;
   if (!target?.closest) return;
   const cancel = target.closest('[data-action="tag-person-cancel"], [data-action="tag-rename-cancel"], [data-action="bulk-person-cancel"]');
@@ -742,11 +754,16 @@ function dismissTypedBox(event: Event): void {
 
 function typedSpot(root: HTMLElement, el: TypedBox): TypedSpot {
   const scene = el.closest("[data-scene-group]")?.getAttribute("data-scene-group") ?? null;
-  return { root, selector: (scene === null ? "" : '[data-scene-group="' + cssAttr(scene) + '"] ') + typedBoxKey(el) };
+  const prefix = scene === null ? "" : '[data-scene-group="' + cssAttr(scene) + '"] ';
+  const record = el.getAttribute("data-registry-id"), cls = el.classList[0];
+  return { root, selector: prefix + typedBoxKey(el), ...(record && cls && (ports as TagPanelPorts).shared.native?.() ? {
+    fallback: prefix + "." + cssAttr(cls) + '[data-registry-id="' + cssAttr(record) + '"]'
+  } : {}) };
 }
 
 function typedBoxAt(spot: TypedSpot): TypedBox | null {
-  return spot.root.isConnected ? spot.root.querySelector<TypedBox>(spot.selector) : null;
+  if (!spot.root.isConnected) return null;
+  return spot.root.querySelector<TypedBox>(spot.selector) ?? (spot.fallback ? spot.root.querySelector<TypedBox>(spot.fallback) : null);
 }
 
 function typedBoxKey(el: TypedBox): string {
@@ -939,7 +956,7 @@ function isPrepTextField(el: Element): el is HTMLInputElement | HTMLTextAreaElem
 
 function prepNotice(message: string): void {
   const p = ports as TagPanelPorts;
-  if (p.shared.ports()) { p.notices.show(message, "ok"); return; }
+  if (sharedRegistryLife()) { p.notices.show(message, "ok"); return; }
   const epoch = p.lifetime.epoch();
   const last = p.undo.last();
   p.notices.showAction(message, "ok", "Undo", () => {
@@ -1007,8 +1024,25 @@ function editRecords(build: SharedRecordBuild, quiet = false) {
   return recordCommandRun((ports as TagPanelPorts).edits, quiet ? { ports: shared.ports, refused: () => {} } : shared, build);
 }
 
+function sharedRegistryLife() {
+  const shared = (ports as TagPanelPorts).shared;
+  return shared.native?.() ?? shared.ports();
+}
+
+function removeTags(items: readonly PresentedProductionEntry[], rewrites: boolean, build: SharedRecordBuild): RecordCommandRun {
+  const shared = (ports as TagPanelPorts).shared;
+  const native = shared.native?.();
+  if (!native) return editRecords(build);
+  const ids = items.flatMap(item => item.id ? [item.id] : []);
+  if (!rewrites && ids.length === items.length) return native.removeTags(ids);
+  shared.refused({ kind: "rejected", reason: "not shared" });
+  return RECORD_REFUSED;
+}
+
 function updateTags(items: readonly PresentedProductionEntry[], change: TagChange, quiet = false) {
-  return editRecords(shared => updateTagsCommand(items.map(tagRef), change, (ports as TagPanelPorts).ids, shared), quiet);
+  const p = ports as TagPanelPorts;
+  return p.shared.native?.()?.updateTags(items.map(item => ({ ...tagRef(item), id: item.id })), change)
+    ?? editRecords(shared => updateTagsCommand(items.map(tagRef), change, p.ids, shared), quiet);
 }
 
 function findTagByKey(key: string | null) {
@@ -1047,7 +1081,7 @@ export function armRemoveTag(btn: Element, key: string | null) {
     const item = findTagByKey(key);
     if (!item) return;
     (ports as TagPanelPorts).undo.breakCoalescing();
-    if ((ports as TagPanelPorts).shared.ports()) {
+    if (sharedRegistryLife()) {
       (ports as TagPanelPorts).shared.refused({ kind: "rejected", reason: "not shared" });
       return;
     }
@@ -1081,7 +1115,7 @@ export function armDeleteTag(btn: Element, key: string | null) {
     (ports as TagPanelPorts).deletion.disarm("tag");
     const item = findTagByKey(key);
     if (!item) return;
-    if (editRecords(shared => deleteTagsCommand([{ cat: item.cat.id, name: item.name, unlabel: false }], function () { return []; }, (ports as TagPanelPorts).edits.stamps, shared)).held) return;
+    if (removeTags([item], false, shared => deleteTagsCommand([{ cat: item.cat.id, name: item.name, unlabel: false }], function () { return []; }, (ports as TagPanelPorts).edits.stamps, shared)).held) return;
     (ports as TagPanelPorts).notices.show("Deleted " + item.name + " from the production list", "ok");
     return;
   }
@@ -1127,14 +1161,15 @@ function setOwnerOf(items: readonly PresentedProductionEntry[], choice: OwnerCho
   const known = "id" in choice ? personById(choice.id) : (ports as TagPanelPorts).document.read(function (doc) { return personNamed(doc, choice.name); });
   const owner = known ? known.id : "";
   const n = items.filter(function (item) { return (!known && "name" in choice) || entryValue(item, "owner") !== owner; }).length;
-  if (!(ports as TagPanelPorts).shared.ports()) closing();
+  if (!sharedRegistryLife()) closing();
   const run = updateTags(items, { owner: choice }, quiet);
   if (run.held) return run;
   closing();
   if (!quiet) renderProduction();
   if (!n) return run;
   const who = "id" in choice ? personById(choice.id) : (ports as TagPanelPorts).document.read(function (doc) { return personNamed(doc, choice.name); });
-  (ports as TagPanelPorts).notices.show(who ? ("Assigned " + n + " item" + (n === 1 ? "" : "s") + " to " + who.name)
+  const name = who?.name ?? ((ports as TagPanelPorts).shared.native?.() && "name" in choice ? cappedText(choice.name, PERSON_NAME_MAX) : "");
+  (ports as TagPanelPorts).notices.show(name ? ("Assigned " + n + " item" + (n === 1 ? "" : "s") + " to " + name)
                 : ("Unassigned " + n + " item" + (n === 1 ? "" : "s")), "ok");
   return run;
 }
@@ -1156,7 +1191,7 @@ export function bulkSetStatus(statusId: string) {
 export function bulkAddPerson() {
   const input = (document.getElementById("bulk-person-input") as HTMLInputElement | null);
   if (!input) return;
-  if (!(ports as TagPanelPorts).shared.ports()) (ports as TagPanelPorts).view.setTagAddingPerson(null);
+  if (!sharedRegistryLife()) (ports as TagPanelPorts).view.setTagAddingPerson(null);
   if (!cappedText(input.value, PERSON_NAME_MAX)) { closeBulkPerson(); renderProduction(); return; }
   typed().submit("bulk-person-input", "", input.value, bulkPersonSave);
 }
@@ -1177,8 +1212,8 @@ export function bulkDeleteSelected() {
   (ports as TagPanelPorts).undo.breakCoalescing();
   const labelled = items.filter(function (item) { return !item.orphaned; }).map(tagRef);
   const unlabelled = (ports as TagPanelPorts).document.read(function (doc) { return retagMentions((ports as TagPanelPorts).text, doc, labelled); });
-  if (!(ports as TagPanelPorts).shared.ports()) (ports as TagPanelPorts).selection.clear();
-  if (editRecords(build => deleteTagsCommand(items.map(function (item) {
+  if (!sharedRegistryLife()) (ports as TagPanelPorts).selection.clear();
+  if (removeTags(items, labelled.length > 0, build => deleteTagsCommand(items.map(function (item) {
     return { cat: item.cat.id, name: item.name, unlabel: !item.orphaned };
   }), retagRewrites((ports as TagPanelPorts).text, labelled, null), (ports as TagPanelPorts).edits.stamps, build)).held) return;
   (ports as TagPanelPorts).selection.clear();
@@ -1278,7 +1313,8 @@ export function setTagOwner(key: string | null, personId: string) {
 
 function notesSave(key: string, record: string): TypedSave {
   return (text, quiet) => {
-    const item = (ports as TagPanelPorts).shared.ports() ? productionEntries().find(item => item.id === record) : findTagByKey(key);
+    const item = sharedRegistryLife() && (record || !(ports as TagPanelPorts).shared.native?.())
+      ? productionEntries().find(item => item.id === record) : findTagByKey(key);
     if (!item) return plainText(text).trim() ? "gone" : "saved";
     return heldWrite(updateTags([item], { notes: cappedLongText(plainText(text), 2000) }, quiet));
   };
@@ -1289,7 +1325,7 @@ export function setTagNotes(key: string | null, text: string, resubmit = false) 
   const item = findTagByKey(key);
   if (!item) return;
   const record = item.id ?? "";
-  if (!resubmit && (ports as TagPanelPorts).shared.ports() && typed().draft("tag-notes-input", record) !== null) {
+  if (!resubmit && sharedRegistryLife() && typed().draft("tag-notes-input", record) !== null) {
     typed().revise("tag-notes-input", record, text, item.notes ?? "");
     return;
   }
@@ -1298,7 +1334,7 @@ export function setTagNotes(key: string | null, text: string, resubmit = false) 
 
 function personSave(key: string | null): TypedSave {
   return (text, quiet) => {
-    const shared = (ports as TagPanelPorts).shared.ports() !== null;
+    const shared = sharedRegistryLife() !== null;
     if (!shared) (ports as TagPanelPorts).view.setTagAddingPerson(null);
     const item = findTagByKey(key);
     if (shared && key !== null && !item) return "gone";
@@ -1368,15 +1404,17 @@ function renameOnce(key: string | null, renamed: string, quiet: boolean): { read
   const movedNotes = notes === null ? null : renamedNotes(notes, key, nextKey);
   if (notes !== null && movedNotes !== null) prep.renameNotes(notes, movedNotes);
   const renaming = (ports as TagPanelPorts).view.tagRenamingKey();
-  const shared = (ports as TagPanelPorts).shared.ports() !== null;
+  const shared = sharedRegistryLife() !== null;
   if (!shared) (ports as TagPanelPorts).view.setTagRenaming(null);
   (ports as TagPanelPorts).undo.breakCoalescing();
   let wrote: TypedWrite = "saved";
-  const changed = renameTag(item.cat.id, item.name, renamed, { ...(tagEditPorts as RemoveTagPorts), run: command => {
-    const run = editRecords(() => command, quiet);
+  const native = p.shared.native?.();
+  const recordRename = (run: RecordCommandRun) => {
     wrote = heldWrite(run);
     return run.changed;
-  } });
+  };
+  const changed = native ? recordRename(native.renameTag(item.id, clean))
+    : renameTag(item.cat.id, item.name, renamed, { ...(tagEditPorts as RemoveTagPorts), run: command => recordRename(editRecords(() => command, quiet)) });
   const held = isHeld(wrote);
   if (held) (ports as TagPanelPorts).view.setTagRenaming(quiet ? renaming : key);
   else if (shared) (ports as TagPanelPorts).view.setTagRenaming(null);
