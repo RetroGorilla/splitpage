@@ -51,6 +51,10 @@ const NOTHING: SharedUndoOutcome = Object.freeze({ ok: false, empty: true });
 // why: rule 71 on #1414: a refusal no later state can lift drops its step; "not now" and other refusals keep it.
 function permanent(reason: string): boolean { return reason.startsWith("undo-unsupported:") || reason === "invalid-operation"; }
 
+export function continuesSharedTypingWord(endsInSpace: boolean, typed: string): boolean {
+  return !(endsInSpace && /\S/.test(typed));
+}
+
 export function createSharedUndo(ports: SharedUndoPorts): SharedUndo {
   const done: SharedUndoEntry[] = [];
   const undone: SharedUndoEntry[] = [];
@@ -79,7 +83,7 @@ export function createSharedUndo(ports: SharedUndoPorts): SharedUndo {
     const typed = record.typing ?? "";
     undone.length = 0;
     serial++;
-    if (grouping && group !== null && last && last.group === group && now - last.at < SHARED_COALESCE_MS && !(last.endsInSpace && /\S/.test(typed))) {
+    if (grouping && group !== null && last && last.group === group && now - last.at < SHARED_COALESCE_MS && continuesSharedTypingWord(last.endsInSpace, typed)) {
       const merged = mergeSharedUndoRecords(last.record, record);
       if (merged) {
         last.record = merged;

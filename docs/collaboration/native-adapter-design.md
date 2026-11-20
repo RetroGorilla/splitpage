@@ -11,7 +11,7 @@ pictures and screen design are out of scope.
 ## Build status
 
 Slices 1 to 6 are on `main`. The native shared-document command layer and undo are built.
-The app has no native wiring yet. Slice 7 has not started. The old adapter stays untouched until slice 8.
+The app has no native wiring yet. Slice 7 is in progress in parts. This PR builds 7a, the native session. The old adapter stays untouched until slice 8.
 
 ## Decisions made
 
@@ -251,26 +251,26 @@ questions. Earlier rounds: [appendix K](#k-earlier-rounds).
 
 ## Rules the session keeps (slice 7)
 
-**(a) Apply peer updates only between local commands.** Applying one in `beforeTransaction` folds it into the local transaction under the local origin. After typing, the next undo removes the peer's text on every copy. After an undo or redo, the next inverse press does the same. Even an empty press can report `written` with `entry: null`. Updates applied in `afterTransaction`, `update` or `afterAllTransactions` keep the peer's text. A command can also read stale layout during the folded-in update. A move can write a rank for a row the peer just removed. [Undo tests](../../tests/adapters/collab/native/undo-commands.test.ts), [move command tests](../../tests/adapters/collab/native/move-commands.test.ts).
+**(a) Apply peer updates only between local commands.** The provider or local store applies bytes directly to the exposed `Y.Doc` with a peer origin. Applying an update inside a transaction listener is unsupported. Applying one in `beforeTransaction` folds it into the local origin, so undo can take back the peer’s edit and a command can read stale layout. [Session tests](../../tests/adapters/collab/native/session.test.ts) pin direct peer delivery after typing, undo, redo, refusal and a throw. [Undo tests](../../tests/adapters/collab/native/undo-commands.test.ts), [move command tests](../../tests/adapters/collab/native/move-commands.test.ts).
 
-**(b) Keep transaction listeners from throwing.** The session registers no listener that can throw in `beforeTransaction`, `afterTransactionCleanup`, `update`, a late-registered `beforeAllTransactions` or an early-registered `afterAllTransactions`. A throw at any of these points leaves every later command refused as `busy`. Treat that script as closed and reopen it. The busy refusal is pinned in [undo tests](../../tests/adapters/collab/native/undo-commands.test.ts). Session reopening is not pinned.
+**(b) Keep transaction listeners from throwing.** The session registers no listener that can throw in `beforeTransaction`, `afterTransactionCleanup`, `update`, a late-registered `beforeAllTransactions` or an early-registered `afterAllTransactions`. A throw at any of these points can leave every later command refused as `busy`, as pinned in [undo tests](../../tests/adapters/collab/native/undo-commands.test.ts). The session owns one `Y.Doc` throughout its life. If the script stays busy, the session closes as failed and hands back its encoded bytes in `closed`. There may be no final `changed` if Yjs emitted no update. The bytes on `closed` are then the caller's source of truth. In the relay part the caller destroys its provider and opens a new session from those bytes with a new provider and fresh undo. [Session tests](../../tests/adapters/collab/native/session.test.ts) pin the byte handoff and provider exchange.
 
-**(c) Close a script only between commands.** A close from `beforeTransaction` after a press has checked availability still lets the press write. [Undo tests](../../tests/adapters/collab/native/undo-commands.test.ts).
+**(c) Close a script only between commands.** A close from `beforeTransaction` after a press has checked availability still lets the press write. [Undo tests](../../tests/adapters/collab/native/undo-commands.test.ts). A requested close delivers the final `changed` while `document()` can read the committed edit, then delivers `closed` exactly once to each subscriber. A failed close can omit the final `changed` if Yjs emitted no update. The bytes on `closed` are then the caller's source of truth. [Session tests](../../tests/adapters/collab/native/session.test.ts) pin both paths, including throws from subscribers and a destroy listener.
 
 **(d) Deliver each person's undo and redo in order.** A redo that overtakes its undo lets formatting cleanup drop a restored tag on every copy. See [section 8](#8-relay-and-size). Not pinned in the native tests. E13 pins it in [relay order tests](../../prototypes/collab/test/native-relay/order.test.ts), with a library reproduction in [raw tag relay tests](../../prototypes/collab/test/native-undo/raw-tag-relay.test.ts).
 
-**(e) Supply the real comment body sanitiser.** `NativeCommentBodyPorts.sanitize` runs inside the write transaction before any write. It must leave the document and script lifecycle alone. The command catches a throw and refuses the body. The body check refuses text that would change on reload. [Record command tests](../../tests/adapters/collab/native/record-commands.test.ts) pin refusal of bodies the core changes. Callback timing, a throw from the sanitiser itself, and its document and lifecycle restrictions are not pinned. [Slice 5 PR](https://github.com/RetroGorilla/splitpage/pull/1658).
+**(e) Supply the real comment body sanitiser.** `NativeCommentBodyPorts.sanitize` runs inside the write transaction before any write. It must leave the document and script lifecycle alone. The command catches a throw and refuses the body. The body check refuses text that would change on reload. [Record command tests](../../tests/adapters/collab/native/record-commands.test.ts) pin refusal of bodies the core changes. [Session tests](../../tests/adapters/collab/native/session.test.ts) pin callback timing and refusal on a throw from the sanitiser itself. Its document and lifecycle restrictions are not pinned. [Slice 5 PR](https://github.com/RetroGorilla/splitpage/pull/1658).
 
-**(f) Own word grouping and the undo binding's lifetime in the session.** `openNativeUndo` exposes `undo()`, `redo()`, `stopCapturing()`, frozen `undoStack` and `redoStack` summaries of opaque entry numbers, and `destroy()`. Call `stopCapturing()` at a word-group boundary and `destroy()` when retiring the binding. Elapsed time alone leaves typing in the same group. Even an empty redo ends the group. Presses on a destroyed binding refuse as `closed`. [Undo tests](../../tests/adapters/collab/native/undo-commands.test.ts) pin the binding behaviour. The session's word rule and lifetime are not pinned. [Slice 6 PR](https://github.com/RetroGorilla/splitpage/pull/1659).
+**(f) Own word grouping and the undo binding's lifetime in the session.** `openNativeUndo` exposes `undo()`, `redo()`, `stopCapturing()`, frozen `undoStack` and `redoStack` summaries of opaque entry numbers, and `destroy()`. Call `stopCapturing()` at a word-group boundary and `destroy()` when retiring the binding. Elapsed time alone leaves typing in the same group. Even an empty redo ends the group. Presses on a destroyed binding refuse as `closed`. [Undo tests](../../tests/adapters/collab/native/undo-commands.test.ts) pin the binding behaviour. [Session tests](../../tests/adapters/collab/native/session.test.ts) pin instant and elapsed word grouping by beat and cell, unchanged and empty replacements, capture stops on presses, fresh word state after a press or a new session open, and undo retirement. [Slice 6 PR](https://github.com/RetroGorilla/splitpage/pull/1659).
 
-**(g) A taken minted ID stays taken until that copy's clock advances.** Retrying before then keeps returning `taken`. Another write that advances the clock, such as setting a field to a new value, gives the retry a new ID. The refusal for comments and replies, including IDs held by removed records, is pinned in [record command tests](../../tests/adapters/collab/native/record-commands.test.ts). Retry after a clock advance is not pinned. [Slice 5 PR](https://github.com/RetroGorilla/splitpage/pull/1658).
+**(g) A taken minted ID stays taken until that copy's clock advances.** Retrying before then keeps returning `taken`. Another write that advances the clock, such as setting a field to a new value, gives the retry a new ID. The refusal for comments and replies, including IDs held by removed records, is pinned in [record command tests](../../tests/adapters/collab/native/record-commands.test.ts). [Session tests](../../tests/adapters/collab/native/session.test.ts) pin retry before and after a clock advance. [Slice 5 PR](https://github.com/RetroGorilla/splitpage/pull/1658).
 
 **(h) Open for slice 7.**
 
 - Pinned. Refused carets and selections, including root-named relative positions, leave `doc.share` and the encoded state unchanged. [Text command tests](../../tests/adapters/collab/native/text-commands.test.ts). [Slice 3a PR, Deferred](https://github.com/RetroGorilla/splitpage/pull/1654).
 - Open for slice 7. The 15 MB encoded size refusal is absent from individual native commands. Not pinned. [Slice 5 PR](https://github.com/RetroGorilla/splitpage/pull/1658), [appendix O](#o-acceptance-cases-from-the-outside-review).
 - Pinned. Removing a comment leaves its inline mark in `document()`, matching core reload, which keeps orphan comment marks. [Record command tests](../../tests/adapters/collab/native/record-commands.test.ts). [Slice 5 PR](https://github.com/RetroGorilla/splitpage/pull/1658).
-- Open for slice 7. Author-only editing compares names. The session supplies the actor. [Record command tests](../../tests/adapters/collab/native/record-commands.test.ts) pin the equal-name edit. Session actor selection is not pinned. [Slice 5 PR](https://github.com/RetroGorilla/splitpage/pull/1658).
+- Author-only editing compares names. The session supplies the actor. [Record command tests](../../tests/adapters/collab/native/record-commands.test.ts) pin the equal-name edit. [Session tests](../../tests/adapters/collab/native/session.test.ts) pin actor selection for comment and reply bodies. [Slice 5 PR](https://github.com/RetroGorilla/splitpage/pull/1658).
 - Pinned. `document()` returns a snapshot frozen at every depth, and with several headings stacked above one row only the heading directly above it appears in `sections` while `problems()` reports each omitted heading. [Reader tests](../../tests/adapters/collab/native/reader.test.ts), [record command tests](../../tests/adapters/collab/native/record-commands.test.ts). [Slice 3b PR](https://github.com/RetroGorilla/splitpage/pull/1653), [native reader](../../src/adapters/collab/native/reader.ts).
 - Open for slice 7. Selection anchors carry the cost of retaining a state vector. A caret does not carry one. [Formatting tests](../../tests/adapters/collab/native/format-commands.test.ts) pin the caret and selection behaviour. The cost is not pinned. [Section 2](#2-what-each-command-writes), [slice 2 PR](https://github.com/RetroGorilla/splitpage/pull/1651).
 - Open for slice 7. A picture change on a joined row is checked against the assembled gallery before the core's form is applied, so it can be refused for a link the reader hides. Pinned as built. [Record race tests](../../tests/adapters/collab/native/record-races.test.ts).
@@ -290,6 +290,8 @@ On `main`, the native writer stores both applications. The reader clips the disp
 - **A.** Keep the current display. A person sees part of the second tag disappear in the overlap.
 - **B.** Keep the same nesting and disclose the hidden part. A person can see why the tag looks shorter.
 
+The owner chose option A on 2026-11-20.
+
 ### Client-side storage
 
 The older plan's [Local replica storage](../COLLABORATION-PLAN.md#local-replica-storage) calls for a store that reports when a write completes. It uses IndexedDB in the browser and a main-process store on desktop. Its [Offline guarantees](../COLLABORATION-PLAN.md#offline-guarantees) describe reopening retained work. This note's [section 9](#9-offline-notice) describes a pending-edit journal for the notice. It specifies no local store or restart guarantee. The two passages cover different parts of offline work and do not disagree.
@@ -298,6 +300,8 @@ On `main`, the native layer has no persistent client store wired into the app.
 
 - **A.** Include the plan's local store in the session work. A person can recover confirmed local edits on restart subject to the plan's storage conditions.
 - **B.** Stage the local store separately. Until it is available, a person can keep editing in a loaded offline session and cannot rely on reopening unsynced work after a restart.
+
+The owner chose option A on 2026-11-20.
 
 ### Undo across a restart
 
@@ -308,6 +312,8 @@ On `main`, `openNativeUndo` creates an in-memory history binding. No session res
 - **A.** Start a fresh undo history on reopening. A person can undo edits from the new session.
 - **B.** Preserve undo history across restart. A person can also undo edits from before they closed the app.
 
+The owner chose option A on 2026-11-20.
+
 ### Validation limits
 
 The older plan's [Validation and resource limits](../COLLABORATION-PLAN.md#validation-and-resource-limits) call for separate bounds and checks before rejected updates affect other copies. The plan requires an explicit outcome for two valid edits that exceed a limit together. This note's [appendix B](#b-checks) and [appendix I](#i-smaller-open-points) specify a 15 MB encoded limit and local edit refusal. [Appendix O](#o-acceptance-cases-from-the-outside-review) records the gap for server checks and merged edits.
@@ -316,6 +322,8 @@ On `main`, native commands check individual inputs. The encoded per-command limi
 
 - **A.** Use the local size check and define what happens when a merge goes over the limit. A person can hit a warning or refusal while editing. They need a clear outcome when offline edits combine.
 - **B.** Add the plan's server-side limits to the local check. A person whose valid local work would push the shared copy over its limit can be stopped from publishing it and keep it for export.
+
+The owner chose option A on 2026-11-20.
 
 ### Backup timing
 
@@ -326,6 +334,8 @@ On `main`, no native server storage or backup workflow is wired in.
 - **A.** Require daily backups and a restore drill before limited release. A person can expect recovery from the last backup if the server store is lost.
 - **B.** Set the schedule and release gate when slice 7 designs backups. A person has no promised backup interval until that decision is made.
 
+The owner chose option A on 2026-11-20.
+
 ### Server storage and saved status
 
 The older plan's [Server storage](../COLLABORATION-PLAN.md#server-storage) and [Durability receipts](../COLLABORATION-PLAN.md#durability-receipts) require a committed update journal before a durable receipt. Its update supersedes that first-version choice. This note's [decision 19](#decisions-made) starts with stock snapshots written 2 to 10 s after an edit. [Appendix O](#o-acceptance-cases-from-the-outside-review) calls for server-stop tests before deciding whether the journal and receipts should come first.
@@ -334,6 +344,8 @@ On `main`, the native layer has no server store or saved-status integration.
 
 - **A.** Keep snapshots if the server-stop results are acceptable to the owner. Recent edits can be missing from the server after a stop, and a person gets no receipt that they were saved there.
 - **B.** Require the journal and durable receipts before others use the layer. A person can tell which edits were committed to server storage before a server process stop.
+
+The owner chose option A on 2026-11-20.
 
 ## Appendix
 
