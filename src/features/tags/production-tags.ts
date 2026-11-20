@@ -115,6 +115,8 @@ export function registryEntryById(id: string) {
 }
 
 export function findOrAddPerson(name: string) {
+  const native = recordEdits?.shared.native?.();
+  if (native) return native.addPerson(name).id;
   editRecords(shared => addPersonCommand(name, (randomIds as NonNullable<typeof randomIds>), shared));
   const person = (readSession as NonNullable<typeof readSession>)(function (doc) { return personNamed(doc, name); });
   return person ? person.id : "";

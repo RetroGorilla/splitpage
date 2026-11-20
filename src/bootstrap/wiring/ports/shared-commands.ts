@@ -1,6 +1,6 @@
 import type { SharedCommentPorts } from "../../../application/commands/comments.ts";
 import type { SharedGalleryCommands } from "../../../application/commands/gallery.ts";
-import type { SharedRecordCommands, SharedRecordPorts } from "../../../application/commands/shared-records.ts";
+import type { EditorRegistryCommands, SharedRecordCommands, SharedRecordPorts } from "../../../application/commands/shared-records.ts";
 import type { SharedSettledSelection, SharedStructureCommands } from "../../../application/commands/shared-structure.ts";
 import { sharedBufferedTarget } from "../../../adapters/collab/buffer.ts";
 import { holdSharedCapture } from "../../../adapters/collab/ingress.ts";
@@ -150,7 +150,8 @@ export const sharedValueCommands: SharedValueCommands = {
 
 const recordPorts = new WeakMap<SharedSessionParts, SharedRecordPorts>();
 
-export const sharedRecordCommands: SharedRecordCommands = {
+export const sharedRecordCommands: EditorRegistryCommands = {
+  native: () => nativeEditorRecords()?.registry ?? null,
   ports: () => {
     const parts = sharedSessionParts();
     if (!parts) return null;

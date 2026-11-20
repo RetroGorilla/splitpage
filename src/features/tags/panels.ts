@@ -1302,7 +1302,9 @@ function personSave(key: string | null): TypedSave {
     if (!shared) (ports as TagPanelPorts).view.setTagAddingPerson(null);
     const item = findTagByKey(key);
     if (shared && key !== null && !item) return "gone";
-    const run = item ? updateTags([item], { owner: { name: text } }, quiet) : editRecords(shared => addPersonCommand(text, (ports as TagPanelPorts).ids, shared), quiet);
+    const native = (ports as TagPanelPorts).shared.native?.();
+    const run = item ? updateTags([item], { owner: { name: text } }, quiet)
+      : native?.addPerson(text).run ?? editRecords(shared => addPersonCommand(text, (ports as TagPanelPorts).ids, shared), quiet);
     if (run.held) return heldWrite(run);
     if ((ports as TagPanelPorts).view.tagAddingPersonKey() === key) (ports as TagPanelPorts).view.setTagAddingPerson(null);
     if (!quiet) renderProduction();
@@ -1319,7 +1321,10 @@ export function armPersonDelete(btn: Element, personId: string | null) {
   if ((ports as TagPanelPorts).deletion.armedId("tag") === "person:" + personId) {
     (ports as TagPanelPorts).deletion.disarm("tag");
     const person = personById(personId);
-    if (editRecords(shared => (deletePersonCommand as PanelNullableCall<typeof deletePersonCommand, "0">)(personId, shared)).held) return;
+    const native = (ports as TagPanelPorts).shared.native?.();
+    const result = native && personId ? native.removePerson(personId)
+      : editRecords(shared => (deletePersonCommand as PanelNullableCall<typeof deletePersonCommand, "0">)(personId, shared));
+    if (result.held) return;
     renderProduction();
     (ports as TagPanelPorts).notices.show("Removed " + (person ? person.name : "that person") +
       " — their items are now unassigned", "ok");

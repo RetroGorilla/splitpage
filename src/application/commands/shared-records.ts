@@ -16,6 +16,15 @@ export interface SharedRecordCommands<Ports = SharedRecordPorts> {
   readonly refused: (outcome: CommandOutcome) => void;
 }
 
+export interface RegistryEditor {
+  readonly addPerson: (name: string) => { readonly run: RecordCommandRun; readonly id: string };
+  readonly removePerson: (id: string) => RecordCommandRun;
+}
+
+export interface EditorRegistryCommands extends SharedRecordCommands {
+  readonly native?: () => RegistryEditor | null;
+}
+
 export type SharedRecordBuild = (shared?: SharedRecordPorts) => Command;
 
 export interface RecordCommandRun {

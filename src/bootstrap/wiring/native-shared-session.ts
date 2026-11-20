@@ -49,7 +49,8 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
   let input: ReturnType<typeof mountNativeSharedInput> | null = null, terminal: Uint8Array | null = null;
   let commandSession: Parameters<SharedEditorBackend["bind"]>[0] | null = null;
   let stopRecords: (() => void) | null = null;
-  const records = createNativeEditorRecords(native, () => commandSession, actor, ports.now, ports.report);
+  const records = createNativeEditorRecords(native, () => commandSession, actor, ports.now, ports.report,
+    () => input?.finish(undefined, false, true) ?? null);
   let initial: ValidatedDocument | null = null;
   let published = native.revision();
   function publish(buffered?: Parameters<typeof keepNativeFieldPaint>[0]): void {
