@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import { HocuspocusProvider } from "@hocuspocus/provider";
-import { messageYjsSyncStep2, messageYjsUpdate } from "y-protocols/sync";
+import { messageYjsSyncStep1, messageYjsSyncStep2, messageYjsUpdate } from "y-protocols/sync";
 import { openNativeRelay } from "../../../../src/adapters/collab/native/relay.ts";
 import { openRelayFixture, relayFrameType, seedRelaySession } from "./relay-harness.ts";
 
@@ -32,13 +32,15 @@ test("token refusals and repeated drops before a download never use the first-lo
   let accept = true;
   const kit = await openRelayFixture(t, { async onAuthenticate() { if (!accept) throw { reason: "token-refused" }; } });
   const bridge = kit.bridge(), { signals } = kit;
+  let now = 0;
   bridge.configure = link => {
     if (!accept) return;
     link.download = (frame, forward) => { if (relayFrameType(frame) !== messageYjsSyncStep2) forward(); };
   };
-  const copy = kit.copy(await bridge.listen());
+  const copy = kit.copy(await bridge.listen(), undefined, undefined, () => now);
   const first = await signals.until(() => bridge.links[0]?.sent.includes(messageYjsSyncStep2) ? bridge.links[0] : undefined);
   accept = false;
+  now += 60_000;
   first.cut();
   for (let attempt = 0; attempt < 3; attempt++) {
     const event = await signals.until(() => copy.events.filter(event => event.kind === "authentication-failed")[attempt]);
@@ -49,6 +51,66 @@ test("token refusals and repeated drops before a download never use the first-lo
   assert.equal(copy.relay.status().firstSyncDone, false);
   assert.equal(copy.session.ydoc.isDestroyed, false);
   assert.equal(copy.events.some(event => event.kind === "first-load-too-large"), false);
+});
+
+for (const cuts of [2, 5]) {
+  test(`${cuts} immediate first-load cuts leave a one-row session alive and the next attempt syncs`, { timeout: 15_000 }, async t => {
+    const state = seedState();
+    const kit = await openRelayFixture(t, { async onLoadDocument() { return state; } });
+    const bridge = kit.bridge(), { signals } = kit;
+    bridge.configure = link => {
+      if (bridge.links.length <= cuts) {
+        link.download = (frame, forward) => { if (relayFrameType(frame) !== messageYjsSyncStep2) forward(); };
+      }
+    };
+    const copy = kit.copy(await bridge.listen(), undefined, undefined, () => 0);
+    for (let index = 0; index < cuts; index++) {
+      const link = await signals.until(() => bridge.links[index]?.sent.includes(messageYjsSyncStep2) ? bridge.links[index] : undefined);
+      link.cut();
+      await signals.until(() => !copy.relay.status().connected || undefined);
+      assert.equal(copy.session.ydoc.isDestroyed, false);
+      assert.equal(copy.events.some(event => event.kind === "first-load-too-large"), false);
+    }
+    await signals.until(() => copy.relay.status().firstSyncDone || undefined);
+    assert.equal(copy.relay.session(), copy.session);
+    assert.equal(copy.session.document().rows[0]?.audioText, "word");
+  });
+}
+
+test("first-load cuts count at the configured receive timeout minus 100 ms", { timeout: 15_000 }, async t => {
+  const attach = HocuspocusProvider.prototype.attach;
+  t.mock.method(HocuspocusProvider.prototype, "attach", function (this: HocuspocusProvider) {
+    this.configuration.websocketProvider.setConfiguration({ messageReconnectTimeout: 9000 });
+    attach.call(this);
+  });
+  const state = seedState();
+  const kit = await openRelayFixture(t, { async onLoadDocument() { return state; } });
+  const bridge = kit.bridge(), { signals } = kit;
+  let firstVector: (() => void) | undefined;
+  bridge.configure = link => {
+    const first = bridge.links.length === 1;
+    link.download = (frame, forward) => {
+      const type = relayFrameType(frame);
+      if (first && type === messageYjsSyncStep1) firstVector = forward;
+      else if (type !== messageYjsSyncStep2) forward();
+    };
+  };
+  let now = 0;
+  const copy = kit.copy(await bridge.listen(), undefined, undefined, () => now);
+  const release = await signals.until(() => firstVector);
+  await signals.until(() => copy.relay.status().connected || undefined);
+  now += 60_000;
+  release();
+  const durations = [8899, 8900, 8901];
+  for (const [index, duration] of durations.entries()) {
+    const link = await signals.until(() => bridge.links[index]?.sent.includes(messageYjsSyncStep2) ? bridge.links[index] : undefined);
+    now += duration;
+    link.cut();
+    await signals.until(() => !copy.relay.status().connected || undefined);
+    if (index < durations.length - 1) assert.equal(copy.session.ydoc.isDestroyed, false);
+  }
+  await signals.until(() => copy.events.find(event => event.kind === "first-load-too-large"));
+  assert.equal(copy.session.ydoc.isDestroyed, true);
 });
 
 test("the first state reply marks first sync even when stock synced and pending zero arrive early", { timeout: 12_000 }, async t => {
@@ -190,13 +252,15 @@ for (const kind of ["relay", "session", "failed while closing"] as const) {
 test("after first sync the connection can recover from repeated drops", { timeout: 15_000 }, async t => {
   const kit = await openRelayFixture(t);
   const bridge = kit.bridge();
-  const copy = kit.copy(await bridge.listen());
+  let now = 0;
+  const copy = kit.copy(await bridge.listen(), undefined, undefined, () => now);
   await kit.signals.until(() => copy.relay.status().firstSyncDone || undefined);
   for (let index = 0; index < 2; index++) {
     await kit.signals.until(() => copy.relay.status().pendingChangeCount === 0 || undefined);
     const previousEvents = copy.events.length;
     const live = bridge.links[index];
     assert(live);
+    now += 60_000;
     live.cut();
     await kit.signals.until(() => bridge.links[index + 1]?.sent.includes(messageYjsSyncStep2) || undefined);
     assert.equal(copy.relay.status().firstSyncDone, true);
@@ -220,7 +284,8 @@ test("an interrupted first reply replaces the failed session and gives the repla
         forward();
       };
     };
-    const copy = kit.copy(await bridge.listen());
+    let now = 0;
+    const copy = kit.copy(await bridge.listen(), undefined, undefined, () => now);
     const failure = new Error("first reply cleanup");
     const logs: unknown[][] = [];
     t.mock.method(console, "error", (...args: unknown[]) => { logs.push(args); });
@@ -228,6 +293,7 @@ test("an interrupted first reply replaces the failed session and gives the repla
     async function dropStartedLoad(index: number) {
       const link = await signals.until(() => bridge.links[index]?.sent.includes(messageYjsSyncStep2) ? bridge.links[index] : undefined);
       assert.equal(copy.relay.status().firstSyncDone, false);
+      now += 60_000;
       link.cut();
     }
     await dropStartedLoad(0);

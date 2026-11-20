@@ -71,12 +71,12 @@ export async function openRelayFixture(t: TestContext, options: Partial<ServerCo
       close.push(() => bridge.close());
       return bridge;
     },
-    copy(address = url, source: NativeSessionSource = { kind: "empty" }, onEvent?: (event: NativeRelayEvent) => void) {
+    copy(address = url, source: NativeSessionSource = { kind: "empty" }, onEvent?: (event: NativeRelayEvent) => void, now?: () => number) {
       const events: NativeRelayEvent[] = [];
       const session = openNativeSession(source, sessionOptions);
       session.subscribe(() => signals.notify());
       const relay = openNativeRelay(session, {
-        url: address, name: NAME, token: TOKEN, sessionOptions,
+        url: address, name: NAME, token: TOKEN, sessionOptions, ...now && { now },
         onEvent(event) {
           if (event.kind === "session-replaced") event.session.subscribe(() => signals.notify());
           events.push(event);
