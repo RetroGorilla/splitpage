@@ -517,6 +517,22 @@ test("an entirely empty joined visual row anchors its head at offset zero", t =>
   selection(a.commands.redo(), visual, 0);
 });
 
+test("a captured range has no selection when only its second Yjs type disappears", t => {
+  const [a, b] = copies(t);
+  const created = written(b.commands.splitRow(anchor(b, aText, 1))).created;
+  type(b, target(created, "visual"), 0, "x");
+  written(b.commands.joinRow(created, "A", "--"));
+  send(b, a);
+  const visual = target("A", "visual");
+  assert.equal(a.document().rows[0]?.visualText, "12<br>x");
+  statusWithSelection(a, visual, 1, 4);
+  for (let i = 0; i < 3; i++) written(b.commands.undo());
+  send(b, a);
+  assert.equal(a.document().rows[0]?.visualText, "12");
+  selection(a.commands.undo());
+  selection(a.commands.redo());
+});
+
 test("moving a beat follows its ID and keeps its offset", t => {
   const [a, b] = copies(t);
   statusWithSelection(a, bText, 2);
