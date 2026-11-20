@@ -1,9 +1,18 @@
 import * as Y from "yjs";
 
+function nativeClock(doc: Y.Doc): number {
+  return Y.decodeStateVector(Y.encodeStateVector(doc)).get(doc.clientID) ?? 0;
+}
+
 // why: the client id and clock distinguish records minted by copies that have not received each other's updates
 export function mintNativeId(doc: Y.Doc, prefix: string): string {
-  const clock = Y.decodeStateVector(Y.encodeStateVector(doc)).get(doc.clientID) ?? 0;
-  return prefix + doc.clientID.toString(36) + "-" + clock.toString(36);
+  return prefix + doc.clientID.toString(36) + "-" + nativeClock(doc).toString(36);
+}
+
+export function mintNativeTagId(doc: Y.Doc, offset = 0): string {
+  const pair = ((BigInt(nativeClock(doc)) + BigInt(offset)) << 32n) + BigInt(doc.clientID);
+  const digits = pair.toString(36);
+  return digits.length <= 16 ? "t_" + digits : "t_" + (pair / 1_000_000n).toString(36) + "-" + pair % 1_000_000n;
 }
 
 export const NATIVE_FIELD_PREFIX = "f:";

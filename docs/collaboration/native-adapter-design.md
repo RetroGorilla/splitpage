@@ -12,8 +12,7 @@ pictures and screen design are out of scope.
 
 Slices 1 to 6 are on `main`. The native shared-document command layer and undo are built.
 The app has no native wiring yet. Slices 7a and 7h are merged. This PR builds 7c, the relay connection. The old adapter stays untouched until slice 8.
-The native registry audit found that writes to different props on one shot overwrite each other because `props` is stored as one encoded array.
-Registry commands are pending a per-prop stored shape and a minted tag ID that survives core reload. [Reproductions](../../tests/adapters/collab/native/registry-shape.test.ts).
+The native registry slice adds people, production tag and shot commands with local undo. Shot props stay one stored array after the core reload check in section 5. [Registry tests](../../tests/adapters/collab/native/registry-commands.test.ts).
 
 ## Decisions made
 
@@ -81,6 +80,10 @@ Each command is one transaction.
 | Create, rename, remove heading | Boundary or segment, record, rank, name cell; rename edits the name cell; remove sets `removed` |
 | Move | A new rank per moved block, and the shown rank of a rankless neighbour (rule (e)); a tie at the drop re-ranks the right side |
 | Fields, status, resolve, body | `Y.Map.set`, only if the value differs (appendix B) |
+| Create person, production tag or shot | One record map keyed by minted ID, its field keys and its rank. Tag IDs encode the writer and clock in the core's tag ID form |
+| Edit registry fields, cycle tag status, quick-add gear | Changed field keys only. A new owner or tag gets a new record. Quick add marks only omitted orphaned gear removed |
+| Move, remove, restore registry entries | Move writes a rank and re-ranks the right side of a tie at the drop. Remove sets `removed` and restore clears it. The reader keeps comment assignee names, clears missing owners and derives tags and shots from surviving labels and keyed lines as on reload |
+| Add, remove or reorder shot props | One changed encoded `props` array in list order. An added prop may also create its tag in the same transaction |
 
 **Check before writing** (decision 15). Every command finds each part it will touch by id: its rows' records,
 cells and boundaries, and the ranks of neighbours a move will write. If one is missing, it refuses without writing.
@@ -151,6 +154,8 @@ kept records (E16). Plain Yjs causes both: an undo the tagger had not seen resto
 [appendix H](#h-outcomes-that-lose-nothing).
 
 **5b. A mark lost with a deleted letter.** A marks `pqr` and types a plain `X` inside it. B deletes `X`, and at the same time C removes the mark from `p`. Every copy then reads `opqr`, with the mark gone from `q` and `r` too. The test runs this with three copies, for a tag and for bold ([format-generated.test.ts](../../tests/adapters/collab/native/format-generated.test.ts), "found by the generated histories"). On raw Yjs with no observer, every copy reads `opqr` when it opened the text before the first updates arrived, and `op[qr|b]` when it opened the text after them (same test). Accepted with no repair writes (Owner). Generated counts: [appendix M](#m-accepted-losses-counted).
+
+**5c. Shot props.** A per-prop map converged in all 144 test histories. In two histories, adding different props at the same time to a shot with 39 props produced 41, and core reload kept 40. Same-rank additions in that layout sorted by prop ID. The stored shape stays one ordered array, so two writes to the same shot's props have one winner. An addition can be lost, or a removal can be reversed by the other writer's array. [Candidate test](../../tests/adapters/collab/native/prop-shape.test.ts), [command races](../../tests/adapters/collab/native/registry-races.test.ts).
 
 ## 6. Never acceptable
 

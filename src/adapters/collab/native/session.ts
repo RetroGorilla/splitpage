@@ -13,6 +13,7 @@ import { formatNativeText } from "./format-commands.ts";
 import { createNativeHeading, removeNativeHeading, renameNativeHeading, restoreNativeHeading } from "./heading-commands.ts";
 import { moveNativeBlocks } from "./move-commands.ts";
 import { clearNativeField, setNativeField } from "./record-commands.ts";
+import { changeNativeRegistry } from "./registry-commands.ts";
 import { openNativeScript } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { joinNativeRow, removeNativeRows, splitNativeRow, unjoinNativeRow } from "./structure-commands.ts";
@@ -176,6 +177,7 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
     moveBlocks: bind(moveNativeBlocks),
     setField: bind(setNativeField),
     clearField: bind(clearNativeField),
+    changeRegistry: bind(changeNativeRegistry),
     createComment: bind((script, comment: NativeNewComment) => createNativeComment(script, comment, body)),
     createReply: bind((script, comment: string, reply: NativeNewReply) => createNativeReply(script, comment, reply, body)),
     setCommentBody: bind((script, target: NativeCommentTarget, html: string) => setNativeCommentBody(script, target, actor, html, body)),

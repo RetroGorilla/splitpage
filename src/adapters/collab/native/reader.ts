@@ -6,6 +6,7 @@ import { toHtml } from "../../../core/text/html.ts";
 import type { Run } from "../../../core/text/runs.ts";
 import { nativeBlockOf, nativeItemLength, nativeRunsOf, nativeUnitCounts } from "./inline.ts";
 import type { NativeDeltaItem } from "./inline.ts";
+import { projectNativeRegistries } from "./registry-projection.ts";
 import type { NativeRoots } from "./roots.ts";
 import {
   NATIVE_BEAT_FIELDS, NATIVE_FIELD_PREFIX, NATIVE_GALLERY_FIELDS, NATIVE_GALLERY_KEY, decodeNativeValue, deepFrozen,
@@ -907,7 +908,7 @@ export class NativeScriptReader {
       replies.set(ids[0], list);
     }
     const records = (root: Y.Map<Y.Map<unknown>>, name: string): Record<string, unknown>[] =>
-      byRank(root).filter(([, record]) => name !== "comments" || record.get("removed") !== true)
+      byRank(root).filter(([, record]) => record.get("removed") !== true)
         .map(([id, record]) => ({ ...fileFields(record, name + "/" + id, problems), id }));
     return {
       ...fields,
@@ -934,7 +935,9 @@ export class NativeScriptReader {
       if (entry.kind !== "heading" || next?.kind !== "row") return [];
       return [{ ...record instanceof Y.Map ? fileFields(record, "headings/" + entry.id, null) : {}, id: entry.id, name: entry.name, firstSceneId: next.id }];
     });
-    return deepFrozen({ ...this.collect(null), rows, ...sections.length ? { sections } : {} });
+    const document = { ...this.collect(null), rows, ...sections.length ? { sections } : {} };
+    projectNativeRegistries(document, this.roots, () => this.rows());
+    return deepFrozen(document);
   }
 }
 
