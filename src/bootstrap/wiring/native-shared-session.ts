@@ -5,7 +5,7 @@ import { enterSharedDocument } from "../../core/migrate.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { scriptCellOf, sanitizeHtml } from "../richtext.ts";
 import { paintRowTimes } from "../../features/rows/render.ts";
-import { mountNativeSharedInput } from "./native-shared-input.ts";
+import { keepNativeFieldPaint, mountNativeSharedInput } from "./native-shared-input.ts";
 import { createNativeEditorRecords } from "./native-shared-records.ts";
 import { mountNativeRecordEvents } from "./native-shared-record-events.ts";
 import { notices } from "./ports/effects.ts";
@@ -45,18 +45,48 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
     if (stored && !native.isStoredScript()) throw new Error("The stored state does not hold a well-formed native script");
   } catch (error) { native.close(); throw error; }
   const publication = nativePublication();
-  let stopInput: (() => void) | null = null, terminal: Uint8Array | null = null;
+  let input: ReturnType<typeof mountNativeSharedInput> | null = null, terminal: Uint8Array | null = null;
   let commandSession: Parameters<SharedEditorBackend["bind"]>[0] | null = null;
   let stopRecords: (() => void) | null = null;
   const records = createNativeEditorRecords(native, () => commandSession, actor, ports.now, ports.report);
   let initial: ValidatedDocument | null = null;
+  let published = native.revision();
+  function publish(buffered?: Parameters<typeof keepNativeFieldPaint>[0]): void {
+    const revision = native.revision();
+    if (published === revision) return;
+    const snapshot = native.document();
+    if (buffered) keepNativeFieldPaint(buffered, snapshot.rows.find(row => row.id === buffered.beat));
+    published = revision;
+    publication.publish(snapshot, "remote");
+  }
   const stop = native.subscribe(event => {
     try {
-      if (event.kind === "changed") publication.publish(native.document(), "remote");
-      else if (event.kind === "closed" && event.reason === "failed") {
+      if (event.kind === "size") return;
+      if (event.kind === "changed") {
+        if (!input?.buffered()) publish();
+      } else {
         terminal = event.state;
+        if (event.reason !== "failed") {
+          if (input?.buffered()) input.stop();
+          return;
+        }
+        if (input?.buffered()) {
+          let bytes: Uint8Array | null = null;
+          try {
+            const recovered = openNativeSession({ kind: "state", state: terminal }, options);
+            try { bytes = input.recover(recovered); } finally { recovered.close(); }
+          } catch (error) {
+            ports.report(error);
+          }
+          if (!bytes) {
+            input.stop();
+            notices.show("The shared session stopped. Unsent writing is still in the editor.", "warn");
+            return;
+          }
+          terminal = bytes;
+        }
         if (failedClose()) {
-          notices.show(stopInput
+          notices.show(input
             ? "The shared session stopped. Leaving again will retry keeping your writing."
             : "The shared session stopped. Your writing was kept in a standalone copy.", "warn");
         }
@@ -82,20 +112,21 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
         });
         stopRecords = () => { stopEvents(); stopTimes(); };
       }
-      stopInput ??= mountNativeSharedInput({
-        native, session, editAttribution: () => ({ at: new Date(ports.now()).toISOString(), by: actor }), report: ports.report
+      input ??= mountNativeSharedInput({
+        native, session, editAttribution: () => ({ at: new Date(ports.now()).toISOString(), by: actor }), report: ports.report, publish
       });
     },
     unbind: () => {
       commandSession = null;
       stopRecords?.();
       stopRecords = null;
-      stopInput?.();
-      stopInput = null;
+      input?.dispose();
+      input = null;
     },
-    settle: () => null,
+    settle: () => input?.finish() ?? null,
     start: () => {
       initial = enterSharedDocument(native.document());
+      published = native.revision();
       publication.publish(initial, "hydration");
     },
     failedEntry: () => {

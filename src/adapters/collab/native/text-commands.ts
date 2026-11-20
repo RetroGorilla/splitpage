@@ -68,7 +68,7 @@ export type NativeAnchoring =
   | { readonly kind: "refused"; readonly reason: NativeRefusal };
 
 export type NativeCommitOutcome =
-  | { readonly kind: "written" }
+  | { readonly kind: "written"; readonly caret?: Y.RelativePosition; readonly selection?: readonly [Y.RelativePosition | null, Y.RelativePosition | null] }
   | { readonly kind: "unchanged" }
   | { readonly kind: "recovery"; readonly reason: NativeRefusal; readonly runs: readonly Run[] };
 
@@ -81,6 +81,8 @@ interface LiveCell {
 
 const WRITTEN: NativeCommitOutcome = Object.freeze({ kind: "written" });
 const UNCHANGED: NativeCommitOutcome = Object.freeze({ kind: "unchanged" });
+
+export type NativeTextPlacement = readonly [number | null, number | null];
 
 export interface NativeLivePiece {
   readonly text: Y.Text;
@@ -254,6 +256,14 @@ function resolve(position: PlainPosition, doc: Y.Doc): Y.AbsolutePosition | null
   try { return Y.createAbsolutePositionFromRelativePosition(Y.createRelativePositionFromJSON(position), doc); } catch { return null; }
 }
 
+export function resolveNativeTextPoint(script: NativeScript, point: unknown, assoc: 0 | -1): Y.AbsolutePosition | null {
+  if (assoc !== 0 && assoc !== -1) return null;
+  try {
+    const checked = plainPosition(point, assoc, new Map());
+    return checked && resolve(checked, script.doc);
+  } catch { return null; }
+}
+
 // why: a deleted unit resolves to the same index from either side, a live one does not; public API only
 function unitGone(position: PlainPosition, doc: Y.Doc): boolean {
   if (!position.item) return false;
@@ -379,12 +389,13 @@ export function resolveNativeUndoSelection(script: NativeScript, recorded: Nativ
 // why: a command called while another transaction is open refuses, since that transaction's changes are not yet
 // observed
 export function replaceNativeText(script: NativeScript, range: NativeTextRange, runs: readonly Run[], stamp?: NativeEditStamp,
-  beforeWrite?: (target: NativeTextTarget) => void, adds?: boolean, afterWrite?: (anchor: NativeUndoAnchor) => void): NativeCommitOutcome {
+  beforeWrite?: (target: NativeTextTarget) => void, adds?: boolean, afterWrite?: (anchor: NativeUndoAnchor) => void,
+  placement?: NativeTextPlacement): NativeCommitOutcome {
   const unavailable = nativeAvailability(script);
   if (unavailable) return refuse(unavailable, runs);
   return transactPreparedNativeCommand(script, () => ({
-    prepared: prepareNativeRuns(runs), encoded: encodedStamp(stamp), checked: nativeRangeSnapshot(range)
-  }), ({ prepared, encoded, checked }) => {
+    prepared: prepareNativeRuns(runs), encoded: encodedStamp(stamp), checked: nativeRangeSnapshot(range), points: capturePlacement(placement)
+  }), ({ prepared, encoded, checked, points }) => {
     if (!prepared || encoded === null) return refuse("text", runs);
     if (!checked || checked.target.cell === "name") return refuse("range", runs);
     const live = nativeLiveRange(script, checked);
@@ -403,15 +414,26 @@ export function replaceNativeText(script: NativeScript, range: NativeTextRange, 
       const anchor = undoEndpoint(checked.target, live.text, end, 0);
       afterWrite({ anchor, head: anchor });
     }
-    return WRITTEN;
+    if (!points) return WRITTEN;
+    const caret = Y.createRelativePositionFromTypeIndex(live.text, end, -1);
+    const at = (offset: number | null, assoc: 0 | -1) => offset === null ? null
+      : Y.createRelativePositionFromTypeIndex(live.text, live.from + Math.max(0, Math.min(added, offset)), assoc);
+    return { kind: "written", caret, selection: [at(points[0], 0), at(points[1], -1)] };
   }, reason => refuse(reason, runs), ({ prepared }) => adds ?? prepared?.length !== 0);
 }
 
-export function typeNativeText(script: NativeScript, range: NativeTextRange, text: string, marks: Marks, stamp?: NativeEditStamp,
-  beforeWrite?: (target: NativeTextTarget) => void, afterWrite?: (anchor: NativeUndoAnchor) => void): NativeCommitOutcome {
-  return replaceNativeText(script, range, text ? [{ text, marks }] : [], stamp, beforeWrite, text !== "", afterWrite);
+function capturePlacement(placement: NativeTextPlacement | undefined): NativeTextPlacement | null {
+  if (!placement) return null;
+  const first = placement[0], last = placement[1];
+  return [wholeNumber(first) ? first : null, wholeNumber(last) ? last : null];
 }
 
-export function deleteNativeText(script: NativeScript, range: NativeTextRange, stamp?: NativeEditStamp): NativeCommitOutcome {
-  return replaceNativeText(script, range, [], stamp);
+export function typeNativeText(script: NativeScript, range: NativeTextRange, text: string, marks: Marks, stamp?: NativeEditStamp,
+  beforeWrite?: (target: NativeTextTarget) => void, afterWrite?: (anchor: NativeUndoAnchor) => void,
+  placement?: NativeTextPlacement): NativeCommitOutcome {
+  return replaceNativeText(script, range, text ? [{ text, marks }] : [], stamp, beforeWrite, text !== "", afterWrite, placement);
+}
+
+export function deleteNativeText(script: NativeScript, range: NativeTextRange, stamp?: NativeEditStamp, placement?: NativeTextPlacement): NativeCommitOutcome {
+  return replaceNativeText(script, range, [], stamp, undefined, false, undefined, placement);
 }

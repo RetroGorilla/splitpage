@@ -13,13 +13,13 @@ import { formatNativeText } from "./format-commands.ts";
 import { createNativeHeading, removeNativeHeading, renameNativeHeading, restoreNativeHeading } from "./heading-commands.ts";
 import { moveNativeBlocks } from "./move-commands.ts";
 import { clearNativeField, setNativeField } from "./record-commands.ts";
-import { openNativeScript } from "./script.ts";
+import { beforeNativeWrite, openNativeScript } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { createNativeSizeTracker, resolveNativeSizeOptions } from "./size.ts";
 import type { NativeSessionSize, NativeSizeOptions } from "./size.ts";
 import { joinNativeRow, removeNativeRows, splitNativeRow, unjoinNativeRow } from "./structure-commands.ts";
-import { anchorNativeText, deleteNativeText, replaceNativeText, typeNativeText } from "./text-commands.ts";
-import type { NativeEditStamp, NativeTextRange, NativeTextTarget, NativeUndoSelectionInput } from "./text-commands.ts";
+import { anchorNativeText, deleteNativeText, replaceNativeText, resolveNativeTextPoint, typeNativeText } from "./text-commands.ts";
+import type { NativeEditStamp, NativeTextPlacement, NativeTextRange, NativeTextTarget, NativeUndoSelectionInput } from "./text-commands.ts";
 import { openNativeUndo } from "./undo-commands.ts";
 import type { NativeUndoOutcome } from "./undo-commands.ts";
 import { NATIVE_FORMAT_VERSION } from "./roots.ts";
@@ -85,7 +85,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
   const listeners = new Set<ChangeListener>();
   const body = { sanitize };
   let active = false, scheduled = false, publishing = false, changed = false, holds = 0;
-  let closing: CloseReason | null = null;
+  let closing: CloseReason | null = null, revision = 0;
   let typing: { readonly target: NativeTextTarget; readonly endsInSpace: boolean } | null = null;
   const { script, size, undo, publishUpdate } = openSessionScript(source, sizeOptions, updated, schedule, sizeRefusal), doc = script.doc;
   let reportedSize: NativeSessionSize = size.state;
@@ -100,6 +100,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
   }
 
   function updated(update: Uint8Array, transaction: Y.Transaction): void {
+    revision++;
     changed = true;
     size.recordUpdate(update.byteLength, transaction.deleteSet.clients.size > 0);
     schedule();
@@ -231,14 +232,14 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
 
   const commands = Object.freeze({
     anchorText: bindCommand(anchorNativeText, script, false).run,
-    typeText: bind((script: NativeScript, range: NativeTextRange, text: string, marks: Marks, stamp?: NativeEditStamp) =>
+    typeText: bind((script: NativeScript, range: NativeTextRange, text: string, marks: Marks, stamp?: NativeEditStamp, placement?: NativeTextPlacement) =>
       typeNativeText(script, range, text, marks, stamp, target => {
         const previous = typing?.target.beat === target.beat && typing.target.cell === target.cell ? typing : null;
         if (!previous || !continuesSharedTypingWord(previous.endsInSpace, text)) undo.stopCapturing();
         typing = { target, endsInSpace: text ? /\s$/.test(text) : previous?.endsInSpace ?? false };
-      }, undo.typingRecorder), writing, false),
-    replaceText: bind((script: NativeScript, range: NativeTextRange, runs: readonly Run[], stamp?: NativeEditStamp) =>
-      replaceNativeText(script, range, runs, stamp), writing),
+      }, undo.typingRecorder, placement), writing, false),
+    replaceText: bind((script: NativeScript, range: NativeTextRange, runs: readonly Run[], stamp?: NativeEditStamp, placement?: NativeTextPlacement) =>
+      replaceNativeText(script, range, runs, stamp, undefined, undefined, undefined, placement), writing),
     deleteText: bind(deleteNativeText, writing),
     formatText: bind(formatNativeText, adding),
     splitRow: bind(splitNativeRow, adding),
@@ -277,7 +278,26 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     get size(): NativeSessionSize { return reportedSize; },
     sizeLimits: sizeOptions.limits,
     document: () => script.reader.document(),
-    narrationCaret: (row: string, offset: number) => script.reader.narrationCaret(row, offset),
+    revision: () => revision,
+    narrationCaret: (row: string, offset: number, right?: boolean) => script.reader.narrationCaret(row, offset, right),
+    narrationHtml: (row: string) => script.reader.row(row)?.audioText,
+    narrationOffset: (row: string, range: Pick<NativeTextRange, "from">, assoc: 0 | -1 = 0) => {
+      if (refusal()) return null;
+      return perform(() => {
+        try {
+          const position = resolveNativeTextPoint(script, range.from, assoc);
+          return position ? script.reader.narrationOffset(row, position) : null;
+        } catch { return null; }
+      });
+    },
+    trackNarrationPaint: (row: string) => {
+      let retained: ReturnType<typeof script.reader.narrationPaint> | null = null;
+      const dispose = beforeNativeWrite(script, () => { retained ??= script.reader.narrationPaint(row, true); });
+      return {
+        point: (offset: number, assoc: 0 | -1) => (retained ?? script.reader.narrationPaint(row, false))(offset, assoc),
+        dispose
+      };
+    },
     isStoredScript: () => script.roots.meta.get("format") === NATIVE_FORMAT_VERSION
       && script.roots.meta.get("title") instanceof Y.Text && script.roots.births.size > 0
       && !!script.reader.document().docId && !script.reader.problems().some(({ kind }) =>
