@@ -1,5 +1,6 @@
 import type * as Y from "yjs";
 import { NativeScriptReader } from "./reader.ts";
+import type { NativeWatch } from "./reader.ts";
 import { declareNativeRoots } from "./roots.ts";
 import type { NativeRoots } from "./roots.ts";
 
@@ -48,7 +49,13 @@ export function throwNativeFailures(script: NativeScript): void {
 }
 
 export function openNativeScript(doc: Y.Doc): NativeScript {
-  const state = documentState(doc), roots = declareNativeRoots(doc), reader = new NativeScriptReader(roots);
+  const state = documentState(doc), roots = declareNativeRoots(doc);
+  const watch: NativeWatch = (type, listener) => {
+    const guarded: typeof listener = events => guardSharedCallback(state, () => listener(events));
+    type.observeDeep(guarded);
+    return () => { type.unobserveDeep(guarded); };
+  };
+  const reader = new NativeScriptReader(roots, watch);
   let closed = false;
   const close = (): void => {
     if (closed) return;

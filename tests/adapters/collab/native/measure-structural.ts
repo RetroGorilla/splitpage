@@ -1,7 +1,8 @@
 import { performance } from "node:perf_hooks";
 import * as Y from "yjs";
 import { dom } from "../../../../src/test/_dom.mjs";
-import { NativeScriptReader } from "../../../../src/adapters/collab/native/reader.ts";
+import { readNativeOnce } from "../../../../src/adapters/collab/native/reader.ts";
+import type { NativeScriptReader } from "../../../../src/adapters/collab/native/reader.ts";
 import { largeState, loadedCopy, splitUpdate } from "./structural.ts";
 
 const LIMIT_MS = 8;
@@ -17,6 +18,12 @@ const median = (values: readonly number[]): number => {
 };
 const p95 = (values: readonly number[]): number => [...values].sort((a, b) => a - b)[Math.ceil(values.length * 0.95) - 1] ?? NaN;
 
+function timeRows(reader: NativeScriptReader): number {
+  const start = performance.now();
+  reader.rows();
+  return performance.now() - start;
+}
+
 function sampleSplit(state: Uint8Array, update: Uint8Array): { incremental: number; parses: number; full: number } {
   const copy = loadedCopy(state, 2), before = copy.reader.counts();
   const start = performance.now();
@@ -24,10 +31,8 @@ function sampleSplit(state: Uint8Array, update: Uint8Array): { incremental: numb
   const changes = copy.reader.refresh();
   for (const id of changes.rows) copy.reader.row(id);
   const incremental = performance.now() - start, parses = copy.reader.counts().parses - before.parses;
-  const fresh = new NativeScriptReader(copy.roots), fullStart = performance.now();
-  fresh.rows();
-  const full = performance.now() - fullStart;
-  fresh.close(); copy.reader.close();
+  const full = readNativeOnce(copy.roots, timeRows);
+  copy.reader.close();
   return { incremental, parses, full };
 }
 
@@ -57,10 +62,7 @@ const cold: number[] = [], coldTails: number[] = [], loaded = loadedCopy(state, 
 for (let round = 0; round < rounds; round++) {
   const timed: number[] = [];
   for (let n = 0; n < samples; n++) {
-    const fresh = new NativeScriptReader(loaded.roots), start = performance.now();
-    fresh.rows();
-    const elapsed = performance.now() - start;
-    fresh.close();
+    const elapsed = readNativeOnce(loaded.roots, timeRows);
     if (n >= warmup) timed.push(elapsed);
   }
   cold.push(median(timed)); coldTails.push(p95(timed));

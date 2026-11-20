@@ -4,7 +4,6 @@ import * as Y from "yjs";
 import { dom } from "../../../../src/test/_dom.mjs";
 import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
 import type { ValidatedDocument } from "../../../../src/core/document/validated.ts";
-import { NativeScriptReader } from "../../../../src/adapters/collab/native/reader.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import { anchorNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
 import { convertedScript, edit, freshlyShown, shown } from "./helpers.ts";
@@ -27,7 +26,7 @@ function problemKinds(script: NativeScript): string[] {
 }
 
 for (const ordered of [true, false]) {
-  test(`finding 5: empty spans with no owner that later get text are reported by a warm reader (${ordered ? "in" : "out of"} the order)`, () => {
+  test(`finding 5: new text in empty spans is read if their segment is ordered and reported otherwise (${ordered ? "in" : "out of"} the order)`, () => {
     const script = convertedScript(small({ R1: "a", R2: "b" })), stray = new Y.Map<unknown>(), text = new Y.Text();
     script.doc.transact(() => {
       script.roots.segments.set("s:stray", stray);
@@ -38,7 +37,8 @@ for (const ordered of [true, false]) {
     });
     assert.deepEqual(script.reader.unplaced(), []);
     script.doc.transact(() => { text.insert(3, "r", {}); text.insert(2, "h", {}); text.insert(1, "x", {}); text.insert(0, "z", {}); });
-    assert.deepEqual(script.reader.unplaced().map(span => span.reason), ordered ? ["no-record", "no-record", "heading-text", "repeated"] : ["no-order", "no-order", "no-order", "no-order"]);
+    assert.deepEqual(script.reader.unplaced().map(span => span.reason), ordered ? [] : ["no-order", "no-order", "no-order", "no-order"]);
+    assert.deepEqual(script.reader.rows().map(row => row.audioText), ordered ? ["a", "bzxhr"] : ["a", "b"]);
     assert.deepEqual(shown(script), freshlyShown(script));
   });
 }
@@ -55,7 +55,8 @@ test("finding 5: reordering segments that hold the same beat changes the text a 
   assert.equal(script.reader.row("R1")?.audioText, "a");
   script.doc.transact(() => { script.roots.order.delete(0, 1); script.roots.order.push(["b:R1"]); });
   assert.equal(script.reader.row("R1")?.audioText, "DUP");
-  assert.deepEqual(script.reader.unplaced(), [{ segment: "b:R1", reason: "repeated", length: 1 }]);
+  assert.equal(script.reader.row("R2")?.audioText, "ab");
+  assert.deepEqual(script.reader.unplaced(), []);
   assert.deepEqual(shown(script), freshlyShown(script));
 });
 
@@ -81,14 +82,14 @@ test("finding 6: a malformed beat extra, field value or reply key is a diagnosti
 });
 
 test("finding 6: a closed reader refuses to read", () => {
-  const script = convertedScript(small({ R1: "ab" })), reader = new NativeScriptReader(script.roots);
+  const script = convertedScript(small({ R1: "ab" })), reader = script.reader;
   assert.equal(reader.row("R1")?.audioText, "ab");
   reader.close();
   assert.equal(reader.isClosed(), true);
   for (const read of [() => reader.row("R1"), () => reader.refresh(), () => reader.outline(), () => reader.narrationSpans("R1"), () => reader.document()]) assert.throws(read, /closed/);
 });
 
-test("finding 7: a stored join is reported, not read, and the beat keeps its own row", () => {
+test("finding 7: a malformed join is reported and the beat keeps its own row", () => {
   const script = convertedScript(small({ R1: "a", R2: "b" }));
   script.roots.beats.get("R2")?.set("joined", JSON.stringify({ into: "R1" }));
   assert.deepEqual(script.reader.outline().map(entry => entry.id), ["R1", "R2"]);
@@ -138,14 +139,14 @@ test("round 3, fix 5: the spans a reader hands out cannot be changed by the call
   assert.deepEqual(script.reader.rows().map(row => row.audioText), ["a", "b!"]);
 });
 
-test("finding 8: returned rows and outline are frozen and a returned document is the caller's own copy", () => {
+test("finding 8: returned rows, outline and document are frozen", () => {
   const source = small({ R1: "a" }, { people: [{ id: "p1", name: "P", nested: { v: 1 } }] });
   (source.rows[0] as Record<string, unknown>).nested = { v: 1 };
   const script = convertedScript(source), row = script.reader.row("R1");
   assert.ok(row);
   for (const value of [row, row.narration, row.narration[0], row.fields, row.fields.nested, script.reader.outline(), script.reader.outline()[0]]) assert.ok(Object.isFrozen(value));
   const copy = script.reader.document();
-  (copy.rows[0]?.nested as { v: number }).v = 2;
-  (copy.people[0]?.nested as { v: number }).v = 2;
+  assert.throws(() => { (copy.rows[0]?.nested as { v: number }).v = 2; }, TypeError);
+  assert.throws(() => { (copy.people[0]?.nested as { v: number }).v = 2; }, TypeError);
   assert.deepEqual([script.reader.document().rows[0]?.nested, script.reader.document().people[0]?.nested, script.reader.row("R1")?.fields.nested], [{ v: 1 }, { v: 1 }, { v: 1 }]);
 });

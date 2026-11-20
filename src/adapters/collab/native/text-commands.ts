@@ -6,11 +6,11 @@ import type { NativeDeltaItem } from "./inline.ts";
 import { nativeSegmentSpans } from "./reader.ts";
 import { throwNativeFailures } from "./script.ts";
 import type { NativeScript } from "./script.ts";
-import { encodeNativeValue } from "./values.ts";
+import { encodeNativeValue, nativeWellFormed } from "./values.ts";
 
 export interface NativeTextTarget {
   readonly beat: string;
-  readonly cell: "narration" | "visual";
+  readonly cell: "narration" | "visual" | "name";
 }
 
 export interface NativeEditStamp {
@@ -57,7 +57,7 @@ interface LiveCell {
 const WRITTEN: NativeCommitOutcome = Object.freeze({ kind: "written" });
 const UNCHANGED: NativeCommitOutcome = Object.freeze({ kind: "unchanged" });
 
-export interface NativeLiveRange {
+export interface NativeLivePiece {
   readonly text: Y.Text;
   readonly start: number;
   readonly items: readonly NativeDeltaItem[];
@@ -65,22 +65,61 @@ export interface NativeLiveRange {
   readonly until: number;
 }
 
+export interface NativeLiveRange extends NativeLivePiece { readonly pieces: readonly NativeLivePiece[] }
+
 export function nativeAvailability(script: NativeScript): NativeRefusal | null {
   throwNativeFailures(script);
   if (script.closed() || script.reader.isClosed()) return "closed";
   return script.busy() ? "busy" : null;
 }
 
-// why: one live check for both cells: a row shows only while its narration span is placed and its records exist
-function liveCell(script: NativeScript, target: NativeTextTarget): LiveCell | null {
-  const places = script.reader.narrationSpans(target.beat), place = places[0];
-  if (places.length !== 1 || !place) return null;
-  const segment = script.roots.segments.get(place.segment), span = nativeSegmentSpans(segment)?.[place.span];
-  const visual = script.roots.visuals.get(target.beat);
-  if (!span || span.key !== "b:" + target.beat || !(script.roots.beats.get(target.beat) instanceof Y.Map) || !(visual instanceof Y.Text)) return null;
-  if (target.cell === "visual") return { text: visual, start: 0, end: visual.length, items: visual.toDelta() as NativeDeltaItem[] };
-  const text = segment?.get("text");
-  return text instanceof Y.Text ? { text, start: span.start, end: span.end, items: span.items } : null;
+function liveCells(script: NativeScript, target: NativeTextTarget): LiveCell[] {
+  if (target.cell === "name") {
+    const cell = script.roots.names.get(target.beat);
+    if (!(cell instanceof Y.Text) || !script.reader.headingBoundary(target.beat, false)) return [];
+    const name = cell.toString();
+    return name.length === cell.length ? [{ text: cell, start: 0, end: cell.length, items: [{ insert: name }] }] : [];
+  }
+  const places = script.reader.narrationSpans(target.beat);
+  if (!places.length) return [];
+  if (target.cell === "visual") {
+    const visual = script.roots.visuals.get(target.beat);
+    return script.reader.beatBoundary(target.beat) && visual instanceof Y.Text
+      ? [{ text: visual, start: 0, end: visual.length, items: visual.toDelta() as NativeDeltaItem[] }] : [];
+  }
+  const segments = new Map<string, { text: Y.Text; spans: NonNullable<ReturnType<typeof nativeSegmentSpans>> }>();
+  const cells: LiveCell[] = [], own = script.reader.beatBoundary(target.beat);
+  for (const place of places) {
+    let segment = segments.get(place.segment);
+    if (!segment) {
+      const record = script.roots.segments.get(place.segment), text = record?.get("text"), spans = nativeSegmentSpans(record);
+      if (!(text instanceof Y.Text) || !spans) return [];
+      segment = { text, spans };
+      segments.set(place.segment, segment);
+    }
+    const span = segment.spans[place.span];
+    if (!span) return [];
+    if (span.start === span.end && place !== own) continue;
+    cells.push({ text: segment.text, start: span.start, end: span.end, items: span.items });
+  }
+  return cells;
+}
+
+function readTarget(target: NativeTextTarget): NativeTextTarget | null {
+  try {
+    const beat: unknown = target.beat, cell: unknown = target.cell;
+    return nativeWellFormed(beat) && (cell === "narration" || cell === "visual" || cell === "name") ? Object.freeze({ beat, cell }) : null;
+  } catch { return null; }
+}
+
+function shownPosition(cells: readonly LiveCell[], offset: number, name: boolean): { text: Y.Text; index: number } | null {
+  for (const cell of cells) {
+    const view = name ? null : nativeCellView(cell.items), size = view?.length ?? cell.end - cell.start;
+    if (offset > size) { offset -= size; continue; }
+    if (splitsPair(view?.text ?? storedText(cell.items), offset)) return null;
+    return { text: cell.text, index: cell.start + (view ? nativeStoredOffset(view, offset) : offset) };
+  }
+  return null;
 }
 
 function storedText(items: readonly NativeDeltaItem[]): string {
@@ -94,18 +133,19 @@ function splitsPair(text: string, at: number): boolean {
 export function anchorNativeText(script: NativeScript, target: NativeTextTarget, from: number, to = from): NativeAnchoring {
   const unavailable = nativeAvailability(script);
   if (unavailable) return { kind: "refused", reason: unavailable };
-  const cell = liveCell(script, target);
-  if (!cell) return { kind: "refused", reason: "missing" };
-  const view = nativeCellView(cell.items);
-  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < from || to > view.length || splitsPair(view.text, from) || splitsPair(view.text, to)) {
-    return { kind: "refused", reason: "range" };
-  }
-  const start = Y.createRelativePositionFromTypeIndex(cell.text, cell.start + nativeStoredOffset(view, from), 0);
-  if (from === to) return { kind: "anchored", range: Object.freeze({ target, from: start, to: start }) };
-  const end = Y.createRelativePositionFromTypeIndex(cell.text, cell.start + nativeStoredOffset(view, to), -1);
+  const checked = readTarget(target);
+  if (!checked) return { kind: "refused", reason: "range" };
+  const cells = liveCells(script, checked);
+  if (!cells.length) return { kind: "refused", reason: "missing" };
+  if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < from) return { kind: "refused", reason: "range" };
+  const first = shownPosition(cells, from, checked.cell === "name"), last = from === to ? first : shownPosition(cells, to, checked.cell === "name");
+  if (!first || !last) return { kind: "refused", reason: "range" };
+  const start = Y.createRelativePositionFromTypeIndex(first.text, first.index, 0);
+  if (from === to) return { kind: "anchored", range: Object.freeze({ target: checked, from: start, to: start }) };
+  const end = Y.createRelativePositionFromTypeIndex(last.text, last.index, -1);
   // why: only a selection can lose both ends to a peer, so only a selection keeps what its copy had seen
   const seen = Object.freeze([...Y.decodeStateVector(Y.encodeStateVector(script.doc))].map(pair => Object.freeze(pair)));
-  return { kind: "anchored", range: Object.freeze({ target, from: start, to: end, seen }) };
+  return { kind: "anchored", range: Object.freeze({ target: checked, from: start, to: end, seen }) };
 }
 
 function refuse(reason: NativeRefusal, runs: readonly Run[]): NativeCommitOutcome {
@@ -185,11 +225,11 @@ export function nativeRangeSnapshot(range: NativeTextRange): NativeRangeData | n
   try {
     const target: unknown = range.target, from: unknown = range.from, to: unknown = range.to, seen = to === from ? NO_SEEN : seenOf(range.seen);
     if (!target || typeof target !== "object" || !seen) return null;
-    const beat: unknown = (target as NativeTextTarget).beat, cell: unknown = (target as NativeTextTarget).cell;
-    if (typeof beat !== "string" || (cell !== "narration" && cell !== "visual")) return null;
+    const checked = readTarget(target as NativeTextTarget);
+    if (!checked) return null;
     const read: IdsRead = new Map(), start = plainPosition(from, 0, read), end = to === from ? null : plainPosition(to, -1, read);
     if (!start || (to !== from && !end)) return null;
-    return Object.freeze({ target: Object.freeze({ beat, cell }), from: start, to: end, seen });
+    return Object.freeze({ target: checked, from: start, to: end, seen });
   } catch { return null; }
 }
 
@@ -206,14 +246,25 @@ function heldAlive(text: Y.Text, from: number, to: number, seen: ReadonlyMap<num
 // why: called inside the command's own transaction, so what it checked is what the command writes to; a stale range
 // covers text a peer typed inside it
 export function nativeLiveRange(script: NativeScript, range: NativeRangeData): NativeLiveRange | NativeRefusal {
-  const cell = liveCell(script, range.target);
-  if (!cell) return "missing";
+  const cells = liveCells(script, range.target);
+  if (!cells.length) return "missing";
   const from = resolve(range.from, script.doc), to = range.to ? resolve(range.to, script.doc) : from;
-  const stored = storedText(cell.items);
-  if (!from || !to || from.type !== cell.text || to.type !== cell.text || from.index < cell.start || to.index > cell.end || to.index < from.index
-    || splitsPair(stored, from.index - cell.start) || splitsPair(stored, to.index - cell.start)) return "range";
-  const collapsed = !!range.to && unitGone(range.from, script.doc) && unitGone(range.to, script.doc) && !heldAlive(cell.text, from.index, to.index, range.seen);
-  return { text: cell.text, start: cell.start, items: cell.items, from: from.index, until: collapsed ? from.index : to.index };
+  if (!from || !to) return "range";
+  const contains = (cell: LiveCell, at: Y.AbsolutePosition): boolean =>
+    at.type === cell.text && at.index >= cell.start && at.index <= cell.end && !splitsPair(storedText(cell.items), at.index - cell.start);
+  const first = cells.findIndex(cell => contains(cell, from)), last = cells.findIndex(cell => contains(cell, to));
+  if (first < 0 || last < first || (first === last && to.index < from.index)) return "range";
+  let pieces = cells.slice(first, last + 1).map((cell, index) => ({
+    text: cell.text, start: cell.start, items: cell.items,
+    from: index === 0 ? from.index : cell.start, until: index === last - first ? to.index : cell.end
+  }));
+  if (range.to && unitGone(range.from, script.doc) && unitGone(range.to, script.doc)
+    && !pieces.some(piece => heldAlive(piece.text, piece.from, piece.until, range.seen))) {
+    const firstPiece = pieces[0];
+    if (firstPiece) pieces = [{ ...firstPiece, until: firstPiece.from }];
+  }
+  const primary = pieces[0];
+  return primary ? { ...primary, pieces } : "range";
 }
 
 // why: a command called while another transaction is open refuses, since that transaction's changes are not yet
@@ -221,20 +272,23 @@ export function nativeLiveRange(script: NativeScript, range: NativeRangeData): N
 export function replaceNativeText(script: NativeScript, range: NativeTextRange, runs: readonly Run[], stamp?: NativeEditStamp): NativeCommitOutcome {
   const unavailable = nativeAvailability(script);
   if (unavailable) return refuse(unavailable, runs);
-  const prepared = prepareNativeRuns(runs), encoded = encodedStamp(stamp), checked = nativeRangeSnapshot(range);
-  if (!prepared || encoded === null) return refuse("text", runs);
-  if (!checked) return refuse("range", runs);
-  let outcome = refuse("missing", runs);
-  script.doc.transact(() => {
+  return script.doc.transact(() => {
+    const prepared = prepareNativeRuns(runs), encoded = encodedStamp(stamp), checked = nativeRangeSnapshot(range);
+    if (!prepared || encoded === null) return refuse("text", runs);
+    if (!checked || checked.target.cell === "name") return refuse("range", runs);
     const live = nativeLiveRange(script, checked);
-    if (typeof live === "string") { outcome = refuse(live, runs); return; }
-    if (!prepared.length && live.from === live.until) { outcome = UNCHANGED; return; }
+    if (typeof live === "string") return refuse(live, runs);
+    if (!prepared.length && !live.pieces.some(piece => piece.until > piece.from)) return UNCHANGED;
+    const updateStamp = encoded && script.reader.beatBoundary(checked.target.beat) && !sameStamp(script.roots.edited.get(checked.target.beat), encoded);
     const end = writeNativeRuns(script.doc, live.text, live.from, prepared, nativeLeftAt(nativeCellView(live.items), live.from - live.start));
-    if (live.until > live.from) live.text.delete(end, live.until - live.from);
-    if (encoded && !sameStamp(script.roots.edited.get(checked.target.beat), encoded)) script.roots.edited.set(checked.target.beat, encoded);
-    outcome = WRITTEN;
+    const added = end - live.from;
+    for (const piece of live.pieces.toReversed()) {
+      const shift = piece.text === live.text && piece.from >= live.from ? added : 0;
+      if (piece.until > piece.from) piece.text.delete(piece.from + shift, piece.until - piece.from);
+    }
+    if (encoded && updateStamp) script.roots.edited.set(checked.target.beat, encoded);
+    return WRITTEN;
   }, script.origin);
-  return outcome;
 }
 
 export function typeNativeText(script: NativeScript, range: NativeTextRange, text: string, marks: Marks, stamp?: NativeEditStamp): NativeCommitOutcome {

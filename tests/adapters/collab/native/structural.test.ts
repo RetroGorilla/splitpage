@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import * as Y from "yjs";
 import { dom } from "../../../../src/test/_dom.mjs";
-import { NativeScriptReader } from "../../../../src/adapters/collab/native/reader.ts";
+import { readNativeOnce } from "../../../../src/adapters/collab/native/reader.ts";
 import { freshlyShown, shown } from "./helpers.ts";
 import { LARGE_BEATS, largeState, loadedCopy, narrationText, splitUpdate } from "./structural.ts";
 
@@ -33,13 +33,12 @@ for (const [name, beat, offset, segments] of [["inside a segment", "B451", 60, 1
 test("control: a full rebuild reads the same split but reparses every segment", () => {
   const copy = loadedCopy(state, 2);
   Y.applyUpdate(copy.doc, splitUpdate(state, "B451", 60, "N1"), "remote");
-  const fresh = new NativeScriptReader(copy.roots);
-  try {
+  readNativeOnce(copy.roots, fresh => {
     fresh.rows();
     assert.equal(fresh.counts().parses, copy.roots.order.length);
     assert.ok(fresh.counts().parses > 1);
     assert.deepEqual(fresh.rows().map(row => row.audioText), copy.reader.rows().map(row => row.audioText));
-  } finally { fresh.close(); }
+  });
 });
 
 test("a keystroke from another copy reparses one segment and rebuilds one row, with no structural pass", () => {
