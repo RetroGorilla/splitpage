@@ -116,18 +116,43 @@ test("E16's 85 named and 240 generated histories use the product offline notice"
   t.diagnostic(JSON.stringify(summaries));
 });
 
-test("the E16 witness catches a muted text write when seed 10 issues it", t => {
-  const history = generatedHistory(10, 2), insert = Y.Text.prototype.insert;
-  let muted = 0;
-  assert.throws(() => scoreHistory(history, (copy, command, ids) => {
-    if (command.op !== "type" || command.field === "name" || muted) return playNoticeCommand(copy, command, ids);
-    const mock = t.mock.method(Y.Text.prototype, "insert", function (this: Y.Text, at: number, value: string, attrs?: Record<string, unknown>) {
-      if (!muted && value === command.value) muted++;
-      else insert.call(this, at, value, attrs);
-    });
-    try { return playNoticeCommand(copy, command, ids); } finally { mock.mock.restore(); }
-  }), { code: "ERR_ASSERTION", message: /issued type/ });
-  assert.equal(muted, 1);
+test("the E16 witness catches a muted write for each generated command kind", t => {
+  const controls = [
+    ["type", 10, Y.Text.prototype, "insert"],
+    ["erase", 81, Y.Text.prototype, "delete"],
+    ["mark", 2, Y.Text.prototype, "format"],
+    ["field", 3, Y.Map.prototype, "set", "status"],
+    ["detail", 11, Y.Map.prototype, "set", 'f:"notes"'],
+    ["split", 5, Y.Text.prototype, "insertEmbed"],
+    ["insert", 11, Y.Array.prototype, "push"],
+    ["rows", 0, Y.Text.prototype, "delete"],
+    ["create", 0, Y.Text.prototype, "insert"],
+    ["join", 4, Y.Map.prototype, "set", "joined"],
+    ["move", 6, Y.Map.prototype, "set", "rank"],
+    ["undo", 9, Y.Item.prototype, "delete"]
+  ] as const;
+  const generated = [2, 3].flatMap(copies => Array.from({ length: 120 }, (_, seed) => generatedHistory(seed, copies)));
+  const issuedKinds = new Set(generated.flatMap(history => history.stretches.flatMap(({ steps }) =>
+    steps.flatMap(step => "command" in step ? [step.command.op] : []))));
+  assert.deepEqual(new Set(controls.map(([kind]) => kind)), issuedKinds);
+  for (const [kind, seed, prototype, method, key] of controls) {
+    const history = generatedHistory(seed, 2);
+    const table = prototype as unknown as Record<string, (...args: unknown[]) => unknown>;
+    const original = need(table[method], method);
+    let muted = 0;
+    assert.throws(() => scoreHistory(history, (copy, command, ids) => {
+      if (command.op !== kind || muted) return playNoticeCommand(copy, command, ids);
+      const mock = t.mock.method(table, method, function (this: unknown, ...args: unknown[]): unknown {
+        if (!muted && (key === undefined || args[0] === key)) {
+          muted++;
+          return undefined;
+        }
+        return Reflect.apply(original, this, args) as unknown;
+      });
+      try { return playNoticeCommand(copy, command, ids); } finally { mock.mock.restore(); }
+    }), { code: "ERR_ASSERTION", message: new RegExp("issued " + kind + " ") }, kind);
+    assert.equal(muted, 1, kind);
+  }
 });
 
 test("E16's tag sweep distinguishes loss through an unseen delete and undo from retained tags", t => {

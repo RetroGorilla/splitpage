@@ -572,7 +572,6 @@ export class NativeScriptReader {
     if (this.noticeBeats) {
       this.noticeLayout = true;
       for (const [id, head] of this.groupHeads) if (heads.get(id) !== head) this.noticeBeats.add(id);
-      for (const id of heads.keys()) if (!this.groupHeads.has(id)) this.noticeBeats.add(id);
     }
     this.groups = groups;
     this.groupHeads = heads;

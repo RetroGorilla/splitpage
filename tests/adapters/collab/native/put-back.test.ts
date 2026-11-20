@@ -181,6 +181,17 @@ test("put-back restores the journal's converted field at depth 65", () => {
   }
 });
 
+test("put-back refuses a Map in saved fields with byte-identical state", () => {
+  const copy = noticeCopy(noticeSeed(base), 2, true);
+  try {
+    const bytes = copy.encodeState(), journal = copy.pendingEdits?.data();
+    assert.deepEqual(copy.commands.putBack({ ...savedBeat(), fields: { notes: new Map([["key", "value"]]) } }),
+      { kind: "refused", reason: "text" });
+    assert.deepEqual(copy.encodeState(), bytes);
+    assert.deepEqual(copy.pendingEdits?.data(), journal);
+  } finally { copy.close(); }
+});
+
 test("put-back normalizes saved fields to the core's reload form before writing", () => {
   const copy = noticeCopy(noticeSeed(base), 2);
   try {

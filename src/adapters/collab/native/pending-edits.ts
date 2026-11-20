@@ -1,3 +1,5 @@
+import { addNoticeEffects, currentNoticeEffects, noticeEffects } from "./notice-effects.ts";
+import type { NativeNoticePeriods } from "./notice-effects.ts";
 import type { NativeReadBeat, NativeScriptReader } from "./reader.ts";
 import { deepFrozen, sameNativeValue } from "./values.ts";
 
@@ -22,6 +24,7 @@ interface PendingBeat {
   restored?: number;
   landingId?: string;
   heading?: true;
+  periods?: NativeNoticePeriods;
 }
 
 export interface NativePendingEdit extends Readonly<PendingBeat> {
@@ -118,6 +121,20 @@ export function openNativePendingEdits(reader: NativeScriptReader, saved?: Nativ
 
   function note(key: string, id: string, old: NativeReadBeat | null): PendingBeat {
     const entry = entries.get(key) ?? { id, first: through + 1, last: through + 1, before: old };
+    const prior = held.get(key);
+    if (checkpoint && entry.last <= checkpoint.through) {
+      entry.periods = {
+        start: old, settled: {}, prefix: currentNoticeEffects(entry.before, prior ? prior.after : old, entry.periods),
+        peer: !!prior || entry.periods?.peer === true
+      };
+    } else if (prior) {
+      const periods = entry.periods;
+      const start = periods ? periods.start : entry.before;
+      entry.periods = {
+        start: old, settled: addNoticeEffects(periods?.settled ?? {}, noticeEffects(start, prior.after)),
+        ...periods?.prefix && { prefix: periods.prefix }, peer: true
+      };
+    }
     entry.last = through + 1;
     entries.set(key, entry);
     held.delete(key);
@@ -129,10 +146,19 @@ export function openNativePendingEdits(reader: NativeScriptReader, saved?: Nativ
   }
 
   function sync(command?: NativeJournalCommand): void {
-    const changes = reader.refreshNotice(), oldPlacements = placements, oldHeadings = headings;
-    if (changes.layout) ({ placements, headings } = placementOf(reader));
-
+    const changes = reader.refreshNotice(), oldPlacements = placements;
     let edited = false;
+    if (changes.layout) {
+      const oldHeadings = headings;
+      ({ placements, headings } = placementOf(reader));
+      if (command) for (const [id, above] of oldHeadings) {
+        if (headings.has(id)) continue;
+        const entry = note("h:" + id, id, null);
+        entry.heading = true;
+        entry.landingId = above;
+        edited = true;
+      }
+    }
     for (const id of changes.beats) {
       const old = beats.get(id) ?? null, after = updateBeat(id);
       if (!command) continue;
@@ -150,13 +176,6 @@ export function openNativePendingEdits(reader: NativeScriptReader, saved?: Nativ
       else delete entry.landingId;
       edited = true;
     }
-    if (command && changes.layout) for (const [id, above] of oldHeadings) {
-      if (headings.has(id)) continue;
-      const entry = note("h:" + id, id, null);
-      entry.heading = true;
-      entry.landingId = above;
-      edited = true;
-    }
     if (edited) through++;
   }
 
@@ -167,16 +186,23 @@ export function openNativePendingEdits(reader: NativeScriptReader, saved?: Nativ
       for (const [key, entry] of entries) if (!held.has(key)) held.set(key, reading(entry));
     },
     data(): NativePendingEditsData {
-      const indexes = new Map<readonly string[], number>();
+      const indexes = new Map<string, number>(), orders: (readonly string[])[] = [];
+      const packedOrders = new Map<readonly string[], number>();
       const packed = pending().map(({ after, ...entry }) => {
         if (!after) return { ...entry, after: null };
         const { sceneOrder, ...placement } = after.placement;
-        const order = indexes.get(sceneOrder) ?? indexes.size;
-        indexes.set(sceneOrder, order);
+        let order = packedOrders.get(sceneOrder);
+        if (order === undefined) {
+          const key = JSON.stringify(sceneOrder);
+          order = indexes.get(key) ?? orders.length;
+          if (order === orders.length) orders.push(sceneOrder);
+          indexes.set(key, order);
+          packedOrders.set(sceneOrder, order);
+        }
         return { ...entry, after: { ...after, placement: { ...placement, order } } };
       });
       return deepFrozen({
-        through, entries: packed, ...indexes.size && { orders: [...indexes.keys()] }, ...checkpoint && { checkpoint }
+        through, entries: packed, ...orders.length && { orders }, ...checkpoint && { checkpoint }
       });
     },
     confirmationPoint(): number {
@@ -198,7 +224,13 @@ export function openNativePendingEdits(reader: NativeScriptReader, saved?: Nativ
           held.delete(key);
         } else if (entry.first <= confirmed) {
           entry.first = confirmed + 1;
-          if (confirmedBeats.has(key)) entry.before = confirmedBeats.get(key) ?? null;
+          if (confirmedBeats.has(key)) {
+            entry.before = confirmedBeats.get(key) ?? null;
+            if (entry.periods?.prefix) {
+              const { start, settled } = entry.periods;
+              entry.periods = { start, settled, peer: entry.periods.peer };
+            }
+          }
           if (entry.split && entry.split.at <= confirmed) delete entry.split;
           if (entry.created !== undefined && entry.created <= confirmed) delete entry.created;
           if (entry.restored !== undefined && entry.restored <= confirmed) delete entry.restored;
