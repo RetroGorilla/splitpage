@@ -53,10 +53,7 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
     let downloadStarted = false;
     target.subscribe(sessionChanged);
     // why: stock synced also fires on an upload acknowledgement before the download can have arrived
-    const firstReply = () => {
-      target.checkPeerDelivery();
-      updateStatus({ firstSyncDone: true });
-    };
+    const firstReply = () => updateStatus({ firstSyncDone: true });
     // why: the browser sees only complete frames, and the stock server sends this vector before its state reply
     const stateRequest = () => { downloadStarted = true; };
     return new StateFirstProvider({
@@ -80,7 +77,7 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
       onUnsyncedChanges({ number }) {
         updateStatus({ pendingChangeCount: number });
       }
-    }, firstReply, stateRequest);
+    }, firstReply, stateRequest, target.checkPeerDelivery);
   }
 
   function sessionChanged(change: NativeSessionChange): void {

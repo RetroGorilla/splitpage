@@ -15,11 +15,13 @@ export class StateFirstProvider extends HocuspocusProvider {
   private duringReply: Uint8Array[] | null = null;
   private readonly onFirstReply: () => void;
   private readonly onStateRequest: () => void;
+  private readonly checkPeerDelivery: () => boolean;
 
-  constructor(configuration: HocuspocusProviderConfiguration, onFirstReply: () => void, onStateRequest: () => void) {
+  constructor(configuration: HocuspocusProviderConfiguration, onFirstReply: () => void, onStateRequest: () => void, checkPeerDelivery: () => boolean) {
     super(configuration);
     this.onFirstReply = onFirstReply;
     this.onStateRequest = onStateRequest;
+    this.checkPeerDelivery = checkPeerDelivery;
   }
 
   override async onOpen(event: Event) {
@@ -49,7 +51,8 @@ export class StateFirstProvider extends HocuspocusProvider {
     } else {
       super.onMessage(event);
     }
-    if (this.awaitingFirstReply && sync === messageYjsSyncStep2) {
+    const delivered = this.checkPeerDelivery();
+    if (this.awaitingFirstReply && sync === messageYjsSyncStep2 && delivered) {
       this.awaitingFirstReply = false;
       this.onFirstReply();
     }

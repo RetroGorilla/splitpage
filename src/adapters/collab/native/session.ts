@@ -192,8 +192,10 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
     // because Yjs can fold it into local undo
     ydoc: doc,
     isClosingOrClosed: () => closing !== null,
-    checkPeerDelivery(): void {
-      if (script.busy()) schedule();
+    checkPeerDelivery(): boolean {
+      if (!script.busy()) return true;
+      schedule();
+      return false;
     },
     document: () => script.reader.document(),
     encodeState: () => Y.encodeStateAsUpdate(doc),

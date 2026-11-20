@@ -193,11 +193,16 @@ test("after first sync the connection can recover from repeated drops", { timeou
   const copy = kit.copy(await bridge.listen());
   await kit.signals.until(() => copy.relay.status().firstSyncDone || undefined);
   for (let index = 0; index < 2; index++) {
+    await kit.signals.until(() => copy.relay.status().pendingChangeCount === 0 || undefined);
+    const previousEvents = copy.events.length;
     const live = bridge.links[index];
     assert(live);
     live.cut();
     await kit.signals.until(() => bridge.links[index + 1]?.sent.includes(messageYjsSyncStep2) || undefined);
     assert.equal(copy.relay.status().firstSyncDone, true);
+    const disconnects = copy.events.slice(previousEvents).filter(event =>
+      event.kind === "status" && !event.status.connected && event.status.pendingChangeCount === 0);
+    assert.equal(disconnects.length, 1);
   }
   assert.equal(copy.events.some(event => event.kind === "first-load-too-large"), false);
 });
@@ -227,6 +232,7 @@ test("an interrupted first reply replaces the failed session and gives the repla
     }
     await dropStartedLoad(0);
     const replacement = await signals.until(() => copy.events.find(event => event.kind === "session-replaced"));
+    assert.equal(copy.events.some(event => event.kind === "status" && event.status.firstSyncDone), false);
     assert.equal(copy.session.ydoc.isDestroyed, true);
     assert(logs.some(args => args.includes(failure)));
     assert.deepEqual(replacement.session.commands.undo(), { kind: "unchanged" });
@@ -235,6 +241,32 @@ test("an interrupted first reply replaces the failed session and gives the repla
     assert.equal(copy.relay.session(), replacement.session);
     assert.equal(replacement.session.document().rows[0]?.audioText, "word");
     assert.equal(copy.events.some(event => event.kind === "first-load-too-large"), false);
+  }
+);
+
+test("a cleanup throw during a live peer update replaces the busy session without waiting for a local command",
+  { timeout: 15_000 }, async t => {
+    const state = seedState();
+    const { copy, signals } = await openRelayFixture(t, { async onLoadDocument() { return state; } });
+    const viewer = copy(), peer = copy();
+    await signals.until(() => viewer.relay.status().firstSyncDone && peer.relay.status().firstSyncDone &&
+      viewer.relay.status().pendingChangeCount === 0 && peer.relay.status().pendingChangeCount === 0 || undefined);
+
+    const failure = new Error("peer update cleanup");
+    const logs: unknown[][] = [];
+    t.mock.method(console, "error", (...args: unknown[]) => { logs.push(args); });
+    viewer.session.ydoc.once("afterTransactionCleanup", () => { throw failure; });
+    const at = peer.session.commands.anchorText({ beat: "R", cell: "narration" }, 4);
+    assert(at.kind === "anchored");
+    assert.equal(peer.session.commands.typeText(at.range, " from peer", {}).kind, "written");
+
+    const replacement = await signals.until(() => viewer.events.find(event => event.kind === "session-replaced"));
+    assert(logs.some(args => args.includes(failure)));
+    assert.equal(viewer.session.ydoc.isDestroyed, true);
+    assert.equal(replacement.session.document().rows[0]?.audioText, "word from peer");
+    await signals.until(() => viewer.relay.status().firstSyncDone || undefined);
+    assert.equal(viewer.relay.session(), replacement.session);
+    assert.deepEqual(replacement.session.commands.undo(), { kind: "unchanged" });
   }
 );
 

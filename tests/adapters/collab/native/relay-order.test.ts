@@ -306,7 +306,7 @@ async function writeDuringReply(t: TestContext, closeDuringReply: boolean) {
 test("an interrupted reply releases its temporary write buffer", t => {
   const document = new Y.Doc();
   const socket = new HocuspocusProviderWebsocket({ url: "ws://127.0.0.1", autoConnect: false });
-  const provider = new StateFirstProvider({ name: "buffer", document, websocketProvider: socket }, () => undefined, () => undefined);
+  const provider = new StateFirstProvider({ name: "buffer", document, websocketProvider: socket }, () => undefined, () => undefined, () => true);
   t.after(() => { provider.destroy(); socket.destroy(); document.destroy(); });
   const failure = new Error("interrupted reply");
   t.mock.method(HocuspocusProvider.prototype, "onMessage", () => { throw failure; });
@@ -322,7 +322,7 @@ test("only the opening request gates writes, only the first download is reported
   const document = new Y.Doc();
   const socket = new HocuspocusProviderWebsocket({ url: "ws://127.0.0.1", autoConnect: false });
   const firstReply = t.mock.fn(), stateRequest = t.mock.fn();
-  const provider = new StateFirstProvider({ name: "script", document, websocketProvider: socket }, firstReply, stateRequest);
+  const provider = new StateFirstProvider({ name: "script", document, websocketProvider: socket }, firstReply, stateRequest, () => true);
   t.after(() => { provider.destroy(); socket.destroy(); document.destroy(); });
   const stock = t.mock.method(HocuspocusProvider.prototype, "onMessage", () => undefined);
   function frame(write: (encoder: ReturnType<typeof createEncoder>) => void) {
