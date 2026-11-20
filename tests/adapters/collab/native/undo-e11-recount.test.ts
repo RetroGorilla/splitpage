@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { readFileSync } from "node:fs";
 import test from "node:test";
 import * as Y from "yjs";
@@ -66,7 +66,8 @@ function seedNative(spec: Spec): NativeScript {
       return name;
     }
     const record = spec.beats[marker.b], visual = new Y.Text();
-    roots.beats.set(marker.b, new Y.Map(Object.entries({ rank: nativeInitialRank(rank++), extra: JSON.stringify(record ?? {}) })));
+    const fields = Object.entries(record ?? {}).map(([key, value]) => [`f:${JSON.stringify(key)}`, JSON.stringify(value)] as const);
+    roots.beats.set(marker.b, new Y.Map([["rank", nativeInitialRank(rank++)], ...fields]));
     roots.visuals.set(marker.b, visual);
     visual.insert(0, spec.visuals[marker.b] ?? "", {});
     return null;

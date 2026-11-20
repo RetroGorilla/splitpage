@@ -21,7 +21,7 @@ export const AUTHOR = "Alice";
 export const RESOLUTION = { by: "Bob", at: AT };
 export const COMMENT = { comment: "thread" };
 export const REPLY = { ...COMMENT, reply: "answer" };
-export const IMAGE = { sha256: "a".repeat(64), mime: "image/png", width: 10, height: 20 };
+export const IMAGE = { sha256: "a".repeat(64), width: 10, height: 20, mime: "image/png" };
 
 export const BODY_PORTS = { sanitize: (html: string): string => withDocumentPorts(STATE_FIELDS, ports => ports.sanitize(html)) };
 export const createNativeComment = (script: NativeScript, input: NativeNewComment) => createComment(script, input, BODY_PORTS);
@@ -124,24 +124,23 @@ export function beatStep(field: string, value: unknown, id = "A"): RecordStep {
     run: script => clear ? clearNativeField(script, target) : setNativeField(script, target, value),
     expect(snapshot, read) {
       const record = item(snapshot, "beats", id);
-      if (field === "status" || field === "lengthSeconds" || field === "paragraphStart" || field === "extra") {
-        if (clear) Reflect.deleteProperty(record, field);
-        else record[field] = JSON.stringify(value);
-      } else {
-        const extra = JSON.parse(String(record.extra ?? "{}")) as Fields;
-        if (clear) Reflect.deleteProperty(extra, field);
-        else extra[field] = value;
-        record.extra = JSON.stringify(extra);
-      }
+      const key = ["status", "lengthSeconds", "paragraphStart"].includes(field) ? field : fileKey(field);
+      const galleryFields = ["imageRef", "imageName", "imageAnnotation", "imageLinks", "moreImages"];
+      const galleryField = galleryFields.includes(field);
+      const cleared = clear && field === "imageRef" ? null : value;
+      if (galleryField) {
+        const gallery = JSON.parse(String(record.gallery ?? '{"imageRef":null}')) as Fields;
+        if (cleared === undefined) Reflect.deleteProperty(gallery, field);
+        else gallery[field] = cleared;
+        record.gallery = JSON.stringify(Object.fromEntries(galleryFields.filter(name => Object.hasOwn(gallery, name)).map(name => [name, gallery[name]])));
+      } else if (clear) Reflect.deleteProperty(record, key);
+      else record[key] = JSON.stringify(value);
       const row = read.rows.find(row => row.id === id), file = read.document.rows.find(row => row.id === id);
       assert.ok(row && file);
       const fields = row.fields as Fields;
       for (const view of [fields, file]) {
-        if (field === "extra") {
-          for (const key of Object.keys(view)) if (!["id", "audioText", "visualText", "status", "lengthSeconds", "paragraphStart", "updatedBy", "updatedAt"].includes(key)) Reflect.deleteProperty(view, key);
-          if (!clear) Object.assign(view, value);
-        } else if (clear) Reflect.deleteProperty(view, field);
-        else view[field] = value;
+        if (cleared === undefined) Reflect.deleteProperty(view, field);
+        else view[field] = cleared;
       }
       return undefined;
     }

@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import * as Y from "yjs";
 import { dom } from "../../../../src/test/_dom.mjs";
@@ -471,18 +471,19 @@ test("plain Yjs undo of the winning concurrent rank erases the key", () => {
 
 test("joined fields show the highest status and both galleries, with diagnostics for fields that have no place", () => {
   const a = script("AB"), b = joinedScript(a, 200), net = new ScriptNet([a, b]);
-  const left = { sha256: "a".repeat(64), mime: "image/png" }, right = { sha256: "b".repeat(64), mime: "image/png" };
+  const left = { sha256: "a".repeat(64), mime: "image/png", width: 10, height: 20 }, right = { ...left, sha256: "b".repeat(64) };
   try {
     for (const copy of [a, b]) check(copy);
     const upper = a.roots.beats.get("A"), lower = b.roots.beats.get("B");
     assert.ok(upper && lower);
     a.doc.transact(() => {
       upper.set("status", JSON.stringify("ready"));
-      upper.set("extra", JSON.stringify({ imageRef: left, imageName: "Upper" }));
+      upper.set("gallery", JSON.stringify({ imageRef: left, imageName: "Upper" }));
     });
     b.doc.transact(() => {
       lower.set("status", JSON.stringify("todo"));
-      lower.set("extra", JSON.stringify({ imageRef: right, imageName: "Lower", note: "lower note" }));
+      lower.set("gallery", JSON.stringify({ imageRef: right, imageName: "Lower" }));
+      lower.set('f:"note"', JSON.stringify("lower note"));
       lower.set("joined", { into: "A", glue: " " });
     });
     settle(a, b, net, ["A=a b"]);
@@ -506,7 +507,10 @@ test("joined fields show the highest status and both galleries, with diagnostics
         ]);
       }
     } finally { late.doc.destroy(); }
-    lower.set("extra", JSON.stringify({ imageRef: left, imageName: "Different name" }));
+    b.doc.transact(() => {
+      lower.set("gallery", JSON.stringify({ imageRef: left, imageName: "Different name" }));
+      lower.delete('f:"note"');
+    });
     settle(a, b, net, ["A=a b"]);
     const duplicate = joinedScript(a, 902);
     try {

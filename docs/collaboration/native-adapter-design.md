@@ -56,7 +56,8 @@ The owner approved the build. See [the open choices before slice 7](#where-the-o
 One `Y.Doc` per script. Segment text (`Y.Text`) holds narration and one-unit boundary embeds, `{b}` for beats and
 `{h}` for headings; a segment's first block is named by its `head` key. Visual cells and heading names are separate
 `Y.Text`s. Records are `Y.Map`s: each beat and heading has a `rank`, a joined beat `joined = {into, glue}`. Every
-other field is a plain value; of two writes at once Yjs keeps one. A removed beat's record and visual cell stay
+other field is a plain value at its own key, with the beat's gallery fields together in one value. Simultaneous
+writes to different keys both survive. Of two writes to one key Yjs keeps one. A removed beat's record and visual cell stay
 with no boundary; the outline ignores them. Roots: [appendix G](#g-roots).
 
 **Formatting.** Plain keys `b`, `i`, `u`, `s`, `hl`, `dir`, `cue`, `c:<commentId>`, `l:<url>`. A production tag is
@@ -130,7 +131,7 @@ One `Y.UndoManager` per person over every root a command writes, headings and na
 - Undoing a removal brings back others' unseen visual text, status, fields, visual tags (40 of 40 generated
   histories each) and a single unseen move (80 of 80), but not an unseen narration tag (0 of 80). An unseen join or
   unjoin takes effect (E14).
-- After two writes at once to one field, the winner's undo leaves it empty: rank, status, join (E15).
+- After two writes at once to one field, the winner's undo leaves it empty: rank, status, join (E15) and beat extra fields.
 - Undoing a creation removes everything written into it, seen or unseen (E11, E14); see section 10 for a row cut
   and restored meanwhile.
 
@@ -468,7 +469,7 @@ E5's checks are the template.
 | `births` | Creation id to `{at, by}`: the one conversion of the file |
 | `order` | Segment keys in stored order |
 | `segments` | Per segment: `head` (`{b: beatId}` or `{h: headingId}`) and `text` (narration and boundaries) |
-| `beats` | Per beat: `rank`, `status`, `lengthSeconds`, `paragraphStart`, `extra`; `joined = {into, glue}` when set. Kept after the beat is removed |
+| `beats` | Per beat: `rank`, `status`, `lengthSeconds`, `paragraphStart`; `joined = {into, glue}` when set. `gallery` holds the primary image, name, annotation, links and secondary pictures together. Each other extra field has its own `f:` key followed by its JSON-encoded name. Kept after the beat is removed |
 | `visuals` | One visual cell (`Y.Text`) per beat, kept after the beat is removed |
 | `headings` | Per heading: `rank`, other fields; `removed` when set |
 | `names` | One name cell (`Y.Text`) per heading, written at conversion |
@@ -489,6 +490,7 @@ E11, 600 generated histories, names in cells, unless marked:
 | Formatting differing by delivery order, marks only | 8 histories |
 | An undo press changed only formatting on letters someone else had erased | 2 |
 | A restored row without a rank read at its stored place (rule (e)) | 5 histories; 3 with kept records (E14, E17) |
+| Two people edit the gallery of the same beat at once | One writer's whole gallery survives and stays intact on core reload, even when the writers edited different gallery fields |
 
 Also, with no text lost: plain bold in E4's 60 two-copy trials, 72 letters missing bold at merge and 34 left bold
 after an undo; text composed beside a deleted letter landing across a same-moment insertion, 25 of 20,000 (E1); two

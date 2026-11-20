@@ -148,7 +148,9 @@ test("finding 10: a link's local location is kept out of the shared state, and t
   const source = migrateRows({ schema: 2, title: "T", docId: "d", rev: 0, rows: [{ id: "R1", audioText: "a", visualText: "" }], comments: [], people: [], productionTags: [], brollShots: [] });
   Object.assign(source.rows[0] as object, { imageLinks: structuredClone(links) });
   const script = convertedScript(source);
-  assert.doesNotMatch(String(script.roots.beats.get("R1")?.get("extra")), /"location"/);
+  const stored = script.roots.beats.get("R1")?.get("gallery");
+  assert.equal(typeof stored, "string");
+  assert.doesNotMatch(String(stored), /"location"/);
   for (const copy of [script, joinedScript(script, 2)]) {
     assert.deepEqual(copy.reader.document().rows[0]?.imageLinks, [{ name: "take.mp4", size: 42, poster: true }, { name: "notes.pdf", size: 123 }]);
   }
@@ -174,6 +176,56 @@ test("finding 2: extension values keep every key on every copy, adapter fields c
     assert.deepEqual(copy.reader.problems(), []);
   }
   assert.equal(script.roots.beats.get("R1")?.get("joined"), undefined);
+  assert.deepEqual(script.roots.beats.get("R1")?.toJSON(), {
+    rank: "00000WV", status: '"todo"', gallery: '{"imageRef":null}', 'f:"extra"': '"row extra"', 'f:"nested"': '{"constructor":1}',
+    'f:"rank"': '"row rank"', 'f:"joined"': '{"into":"R0","glue":" "}'
+  });
+});
+
+test("conversion omits undefined gallery members and a gallery with no members", () => {
+  const source = base({}, [{ id: "R1", audioText: "" }, { id: "R2", audioText: "" }]);
+  Object.assign(source.rows[0] ?? {}, { imageName: undefined });
+  Reflect.deleteProperty(source.rows[1] ?? {}, "imageRef");
+  Object.assign(source.rows[1] ?? {}, { imageName: undefined });
+  const script = convertedScript(source);
+  assert.equal(script.roots.beats.get("R1")?.get("gallery"), '{"imageRef":null}');
+  assert.equal(script.roots.beats.get("R2")?.has("gallery"), false);
+  script.doc.destroy();
+});
+
+test("conversion refuses an extra too deeply nested for the reader before writing", () => {
+  let nested: unknown = 0;
+  for (let depth = 0; depth < 1_500; depth++) nested = [nested];
+  const source = base(), doc = new Y.Doc(), script = openNativeScript(doc);
+  Object.assign(source.rows[0] ?? {}, { nested });
+  assert.throws(() => convertToNativeScript(script, source, ports), /too deeply nested/);
+  assert.equal(Y.encodeStateVector(doc).length, 1);
+  doc.destroy();
+});
+
+test("beat extras serialize in raw name order, omitting an own undefined field", () => {
+  const source = base({}, [{ id: "R1", audioText: "a", visualText: "", ["\u0000"]: "null byte", ['"']: "quote" }]);
+  const row = source.rows[0];
+  assert.ok(row);
+  source.rows[0] = { id: row.id, status: row.status, ["\u0000"]: row["\u0000"], ['"']: row['"'], imageRef: row.imageRef,
+    updatedAt: row.updatedAt, updatedBy: row.updatedBy, visualText: row.visualText, audioText: row.audioText, absent: undefined };
+  const script = convertedScript(source);
+  try {
+    assert.equal(JSON.stringify(script.reader.document().rows[0]), JSON.stringify(source.rows[0]));
+    assert.equal(script.roots.beats.get("R1")?.has('f:"absent"'), false);
+    assert.equal(Object.hasOwn(script.reader.document().rows[0] ?? {}, "absent"), false);
+  } finally { script.doc.destroy(); }
+});
+
+test("conversion and document projection preserve a wide beat record", () => {
+  const source = base(), row = source.rows[0];
+  assert.ok(row);
+  const fields = Object.fromEntries(Array.from({ length: 140_001 }, (_, index) => ["k" + index, index]));
+  Object.assign(row, fields);
+  const script = convertedScript(source);
+  try {
+    assert.deepEqual(script.reader.document().rows[0], row);
+  } finally { script.doc.destroy(); }
 });
 
 test("finding 2: a value with no JSON form stops conversion before anything is written", () => {

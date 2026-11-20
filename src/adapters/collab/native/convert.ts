@@ -2,13 +2,16 @@ import * as Y from "yjs";
 import type { ValidatedDocument } from "../../../core/document/validated.ts";
 import { tagStack, withTagStack } from "../../../core/text/runs.ts";
 import type { Run } from "../../../core/text/runs.ts";
+import { encodeNativeGallery, normalizeNativeGallery } from "./gallery.ts";
 import { prepareNativeRuns, writeNativeRuns } from "./inline.ts";
 import type { NativePreparedRun } from "./inline.ts";
 import { NATIVE_FORMAT_VERSION } from "./roots.ts";
 import type { NativeRoots } from "./roots.ts";
 import { transactNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
-import { encodeNativeValue, nativeFieldKey, nativeWellFormed } from "./values.ts";
+import {
+  NATIVE_BEAT_FIELDS, NATIVE_GALLERY_KEY, encodeNativeValue, isNativeBeatExtra, nativeFieldKey, nativeGalleryOf, nativeWellFormed
+} from "./values.ts";
 
 export interface NativeConversionPorts {
   readonly cells: (html: string) => readonly Run[];
@@ -30,8 +33,6 @@ const CONVERTING = new WeakSet<Y.Doc>();
 
 const COLLECTIONS = ["rows", "sections", "comments", "people", "productionTags", "brollShots"];
 const META_FIELDS = ["docId", "schema", "wordsPerMinute", "targetSeconds"];
-const BEAT_FIELDS = ["status", "lengthSeconds", "paragraphStart"];
-const ROW_TEXT = ["id", "audioText", "visualText", "updatedAt", "updatedBy"];
 const DIGITS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
 export function nativeInitialRank(index: number): string {
@@ -66,26 +67,22 @@ function fileEntries(source: Bag, skip: readonly string[]): Entries {
   return present(source, skip).map(key => [nativeFieldKey(key), encodeNativeValue(source[key])] as const);
 }
 
-function namedEntries(source: Bag, names: readonly string[], skip: readonly string[]): Entries {
-  const extra = Object.fromEntries(present(source, [...skip, ...names]).map(key => [key, source[key]]));
-  return [...names.filter(name => source[name] !== undefined).map(name => [name, encodeNativeValue(source[name])] as const), ["extra", encodeNativeValue(extra)]];
+function namedEntries(source: Bag, names: readonly string[]): [string, string][] {
+  return names.filter(name => source[name] !== undefined).map(name => [name, encodeNativeValue(source[name])]);
 }
 
-function withoutLocations(links: unknown): unknown {
-  if (!Array.isArray(links)) return links;
-  return (links as unknown[]).map(link => link && typeof link === "object" && !Array.isArray(link)
-    ? Object.fromEntries(Object.entries(link as Bag).filter(([key]) => key !== "location"))
-    : link);
+function beatEntries(row: Bag): Entries {
+  const extras = Object.keys(row).filter(name => isNativeBeatExtra(name) && row[name] !== undefined).sort();
+  const gallery = nativeGalleryOf(row);
+  const entries = namedEntries(row, NATIVE_BEAT_FIELDS);
+  if (Object.keys(gallery).length) entries.push([NATIVE_GALLERY_KEY, encodeNativeGallery(normalizeNativeGallery(gallery))]);
+  for (const name of extras) entries.push([nativeFieldKey(name), encodeNativeValue(row[name])]);
+  return entries;
 }
 
-function sharedRow(row: Bag): Bag {
-  const kept: Bag = Object.fromEntries(Object.entries(row));
-  if (Object.hasOwn(kept, "imageLinks")) kept.imageLinks = withoutLocations(kept.imageLinks);
-  if (Array.isArray(kept.moreImages)) kept.moreImages = (kept.moreImages as unknown[]).map(slot =>
-    slot && typeof slot === "object" && !Array.isArray(slot) && Object.hasOwn(slot, "links")
-      ? Object.fromEntries(Object.entries(slot as Bag).map(([key, value]) => [key, key === "links" ? withoutLocations(value) : value]))
-      : slot);
-  return kept;
+function metaEntries(source: Bag): Entries {
+  const extra = Object.fromEntries(present(source, [...COLLECTIONS, "title", ...META_FIELDS]).map(key => [key, source[key]]));
+  return [...namedEntries(source, META_FIELDS), ["extra", encodeNativeValue(extra)]];
 }
 
 // why: Y.Text stores UTF-16 but updates carry UTF-8, so a lone surrogate would arrive on another copy as U+FFFD
@@ -179,7 +176,7 @@ function prepare(source: ValidatedDocument, ports: NativeConversionPorts) {
   }
   const beats: PreparedBeat[] = source.rows.map(row => ({
     id: row.id, heads: headsOf.get(row.id) ?? [],
-    entries: namedEntries(sharedRow(row), BEAT_FIELDS, ROW_TEXT),
+    entries: beatEntries(row),
     narration: cell(cells, row.audioText, row.id + " narration"), visual: cell(cells, row.visualText, row.id + " visual"),
     edited: [["at", row.updatedAt] as const, ["by", row.updatedBy] as const].filter(([, value]) => value !== undefined).map(([key, value]) => [key, encodeNativeValue(value)] as const)
   }));
@@ -190,7 +187,7 @@ function prepare(source: ValidatedDocument, ports: NativeConversionPorts) {
     return list.map((reply, position) => ({ key: JSON.stringify([comment.id, reply.id]), comment: String(comment.id), rank: nativeInitialRank(position), entries: fileEntries(reply, ["id"]) }));
   });
   return {
-    meta: namedEntries(source, META_FIELDS, [...COLLECTIONS, "title"]), title: wellFormed(source.title),
+    meta: metaEntries(source), title: wellFormed(source.title),
     creation: [creation, { at, by }] as const, beats,
     people: records(bags(source.people)), tags: records(tags), shots: records(bags(source.brollShots)),
     comments: comments.map(comment => ({ id: String(comment.id), key: String(comment.id), entries: fileEntries(comment, ["id", "replies"]) })), replies

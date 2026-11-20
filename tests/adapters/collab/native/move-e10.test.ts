@@ -71,7 +71,6 @@ function seedE10(): Uint8Array {
         script.roots.beats.set(id, rec);
         rec.set("rank", rank);
         if (id === "C") rec.set("paragraphStart", JSON.stringify(true));
-        rec.set("extra", JSON.stringify({}));
         script.roots.visuals.set(id, visual);
         visual.insert(0, vis, {});
         text?.insert(text.length, body, {});

@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import { openNativeUndo } from "../../../../src/adapters/collab/native/undo-commands.ts";
 import type { NativeUndoOutcome } from "../../../../src/adapters/collab/native/undo-commands.ts";

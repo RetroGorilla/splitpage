@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import test from "node:test";
 import * as Y from "yjs";
 import { formatNativeText } from "../../../../src/adapters/collab/native/format-commands.ts";

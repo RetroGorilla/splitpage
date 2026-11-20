@@ -7,16 +7,64 @@ export function mintNativeId(doc: Y.Doc, prefix: string): string {
 }
 
 export const NATIVE_FIELD_PREFIX = "f:";
+export const NATIVE_BEAT_FIELDS = ["status", "lengthSeconds", "paragraphStart"] as const;
+export const NATIVE_GALLERY_KEY = "gallery";
+export const NATIVE_GALLERY_FIELDS = new Set(["imageRef", "imageName", "imageAnnotation", "imageLinks", "moreImages"]);
+const NAMED_BEAT_FIELDS = new Set<string>(NATIVE_BEAT_FIELDS);
+const RESERVED_BEAT_FIELDS = new Set(["id", "audioText", "visualText", "rank", "joined", "updatedBy", "updatedAt"]);
+const MAX_STORED_DEPTH = 1024;
+
+export function isNativeBeatField(name: string): boolean {
+  return NAMED_BEAT_FIELDS.has(name);
+}
+
+export function isReservedBeatField(name: string): boolean {
+  return RESERVED_BEAT_FIELDS.has(name);
+}
+
+export function isNativeBeatExtra(name: string): boolean {
+  return !isNativeBeatField(name) && (!isReservedBeatField(name) || name === "rank" || name === "joined")
+    && !NATIVE_GALLERY_FIELDS.has(name) && name !== "visualImage";
+}
+
+export function nativeGalleryOf(fields: Readonly<Record<string, unknown>>): Record<string, unknown> {
+  const gallery: Record<string, unknown> = {};
+  for (const name of NATIVE_GALLERY_FIELDS) if (Object.hasOwn(fields, name) && fields[name] !== undefined) gallery[name] = fields[name];
+  return gallery;
+}
 
 export function encodeNativeValue(value: unknown): string {
   const text = JSON.stringify(value) as string | undefined;
   if (text === undefined) throw new TypeError("A file value has no JSON form");
+  if (text.length > MAX_STORED_DEPTH * 2 && !decodeNativeValue(text)) throw new RangeError("A file value is too deeply nested");
   return text;
 }
 
 export function decodeNativeValue(stored: unknown): { readonly value: unknown } | null {
   if (typeof stored !== "string") return null;
-  try { return { value: JSON.parse(stored) as unknown }; } catch { return null; }
+  try {
+    const value: unknown = JSON.parse(stored);
+    return readableDepth(value, 0) ? { value } : null;
+  } catch { return null; }
+}
+
+function readableDepth(value: unknown, depth: number): boolean {
+  if (value === null || typeof value !== "object") return true;
+  if (depth >= MAX_STORED_DEPTH) return false;
+  for (const child of Object.values(value) as unknown[]) if (!readableDepth(child, depth + 1)) return false;
+  return true;
+}
+
+export function recordBag(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+export function sameNativeValue(left: unknown, right: unknown): boolean {
+  if (left === right) return true;
+  if (Array.isArray(left)) return Array.isArray(right) && left.length === right.length && left.every((item, index) => sameNativeValue(item, right[index]));
+  if (!recordBag(left) || !recordBag(right)) return false;
+  const keys = Object.keys(left);
+  return keys.length === Object.keys(right).length && keys.every(key => Object.hasOwn(right, key) && sameNativeValue(left[key], right[key]));
 }
 
 export function nativeWellFormed(value: unknown): value is string {
