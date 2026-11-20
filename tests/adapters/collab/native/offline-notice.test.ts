@@ -58,8 +58,12 @@ test("a command with selection is journaled once and recording the after selecti
     const journal = writer.pendingEdits;
     assert.ok(journal);
     const before = noticeRange(writer, "B", "narration", 1);
-    const step = writer.commands.typeText.withSelection(before, before, "x", {});
+    const revision = writer.revision();
+    const step = writer.commands.typeText.withSelection(before, before, "x", {}, undefined, [null, null]);
     assert.equal(step.result.kind, "written");
+    assert.ok(step.result.caret);
+    assert.equal(writer.narrationOffset("B", { from: step.result.caret }, -1), 2);
+    assert.equal(writer.revision(), revision + 1);
     const data = journal.data(), bytes = writer.encodeState();
     assert.equal(data.through, 1);
     assert.deepEqual(data.entries.map(entry => [entry.id, entry.first, entry.last, entry.after && text(entry.after)]),
@@ -68,6 +72,7 @@ test("a command with selection is journaled once and recording the after selecti
     step.recordAfter(noticeRange(writer, "B", "narration", 0));
     assert.deepEqual(journal.data(), data);
     assert.deepEqual(writer.encodeState(), bytes);
+    assert.equal(writer.revision(), revision + 1);
     assert.equal(writer.commands.undo().kind, "written");
     const redo = writer.commands.redo();
     assert.equal(redo.kind, "written");
