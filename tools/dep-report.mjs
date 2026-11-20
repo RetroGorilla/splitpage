@@ -60,6 +60,7 @@ const BINDING_KINDS = new Set([
 ].map((name) => ts.SyntaxKind[name]));
 
 export function layerOf(path) {
+  if (path.startsWith("collab-server/")) return "collab-server";
   if (path.startsWith("prototypes/")) return "prototypes";
   if (path.startsWith("src/test/") || path.startsWith("tests/") || /\.test\.[cm]?[jt]s$/.test(path)) return "tests";
   const core = /^src\/core\/([^/]+)\//.exec(path);
@@ -93,6 +94,8 @@ export function layerAllows(source, target) {
   if (source === target) return true;
   if (target === "prototypes") return false;
   if (source === "prototypes") return isCore(target) || target === "shared";
+  if (source === "collab-server") return target === "collab-server";
+  if (target === "collab-server") return source === "tests" || source === "tools";
   if (target === "tests") return ["tools", "other"].includes(source);
   if (isCore(source)) {
     if (target === "shared") return true;
@@ -649,8 +652,8 @@ export function findViolations(modules) {
         if (!layerAllows(m.layer, targetLayer)) add("layer", m.path, e.target, e.line, `${m.layer} may not import ${targetLayer}`);
       } else if (e.kind === "builtin" || e.kind === "package") {
         if (!platformImportAllowed(m.layer)) add("platform-import", m.path, e.target, e.line, `${m.layer} may not import ${e.target}`);
-        if (["package:yjs", "package:lib0", "package:isomorphic.js"].includes(e.target) && !["tests", "prototypes"].includes(m.layer) && !m.path.startsWith("src/adapters/collab/")) {
-          add("collab-import", m.path, e.target, e.line, "Collaboration runtime packages belong in src/adapters/collab/ or tests");
+        if (["package:yjs", "package:lib0", "package:isomorphic.js"].includes(e.target) && !["tests", "prototypes"].includes(m.layer) && !m.path.startsWith("src/adapters/collab/") && !(m.layer === "collab-server" && e.target === "package:yjs")) {
+          add("collab-import", m.path, e.target, e.line, "Collaboration runtime packages belong in their adapter, server or test layer");
         }
         if (e.target === "package:@hocuspocus/provider" && !["tests", "prototypes"].includes(m.layer) && !m.path.startsWith("src/adapters/collab/native/")) {
           add("collab-import", m.path, e.target, e.line, "The relay provider belongs in src/adapters/collab/native/ or tests");
