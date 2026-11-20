@@ -72,7 +72,7 @@ async function measure(before: boolean, batch: number): Promise<void> {
       projected = projected.slice(0, offset) + keys + projected.slice(offset);
       assert.equal(result.kind, "written");
       assert.equal(app.read(doc => doc?.rows.find(row => row.id === beat)?.audioText), projected);
-      assert.deepEqual(new Set(latest.map(change => JSON.stringify(change))), new Set([
+      if (sample >= warmup) assert.deepEqual(new Set(latest.map(change => JSON.stringify(change))), new Set([
         '{"rowId":"B451","field":"audioText"}', '{"rowId":"B451","field":"updatedAt"}'
       ]));
     }

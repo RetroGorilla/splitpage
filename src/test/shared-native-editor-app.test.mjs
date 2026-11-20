@@ -62,7 +62,7 @@ function compose(target, type, data) {
 }
 
 async function enter(t, rows = [{ id: "r1", audioText: "Hello", visualText: "Look" }]) {
-  adoptReplacement(migrateRows({ title: "Native script", rows }));
+  adoptReplacement(migrateRows({ schema: 2, title: "Native script", rows }));
   const show = t.mock.method(notices, "show", () => {});
   assert.deepEqual(await hook.enter({ backend: "native" }), { ok: true });
   t.after(cleanSession);
@@ -284,6 +284,21 @@ test("typing replaces a selection and keeps the caret after the replacement", as
   assert.deepEqual(cellSelection(cell("audioText")), { from: 2, to: 2 });
 });
 
+test("native narration replacement cannot edit a protected production tag", async t => {
+  const tagged = 'A <span class="tag-anchor" data-tag-cat="prop" data-tag-name="Mug" contenteditable="false">Mug</span> B';
+  const show = await enter(t, [{ id: "r1", audioText: tagged }]);
+  const target = cell("audioText"), before = text();
+  assert.ok(target.querySelector('.tag-anchor[contenteditable="false"]'), target.innerHTML);
+  target.focus();
+  setCellSelection(target, 1, 6);
+  assert.equal(beforeInput(target, "insertText", "x"), true);
+  await flushed();
+  assert.equal(target.textContent, "A Mug B");
+  assert.equal(text(), before);
+  assert.equal(hook.read().peer.rows[0].audioText, before);
+  assert.equal(show.mock.callCount(), 1);
+});
+
 test("a selection across joined members stays visible as a refused edit", async t => {
   const doc = migrateRows({ title: "Join", rows: [{ id: "r1", audioText: "Hello" }, { id: "r2", audioText: "World" }] });
   adoptReplacement(doc);
@@ -466,18 +481,28 @@ for (const reason of ["text", "future-refusal"]) test("a commit refusal keeps th
 async function openDirect(t) {
   const fixture = entrySwitchFixture(), refused = t.mock.fn();
   const ports = { ...fixture.ports, commandRefused: refused };
-  let native, binding;
+  let native, backend, binding;
   assert.deepEqual(await enterSharedSession(ports, (doc, failed) => {
     const opened = openNativeEditor(ports, doc, failed);
     native = opened.native;
+    backend = opened.backend;
     return { ...opened.backend, bind: session => { binding = session; opened.backend.bind(session); } };
   }), { ok: true });
   t.after(cleanSession);
   const target = document.querySelector('#rows .cell-editable[data-id="R1"][data-field="audioText"]');
   target.focus();
   setCellSelection(target, 8);
-  return { native, binding, refused, errors: fixture.errors, target };
+  return { native, backend, binding, refused, errors: fixture.errors, target };
 }
+
+test("a buffered write publishes once even when the native changed event follows", async t => {
+  const { backend, target } = await openDirect(t);
+  const before = backend.replica.revision();
+  assert.equal(beforeInput(target, "insertText", "!"), true);
+  await flushed();
+  assert.equal(text(), "Captured! words");
+  assert.equal(backend.replica.revision(), before + 1);
+});
 
 for (const reason of ["busy", "closed"]) test("the adapter returns " + reason + " and the buffered text stays visible", async t => {
   const { native, refused, target } = await openDirect(t);

@@ -77,7 +77,7 @@ test("checking healthy peer delivery schedules no session work", t => {
 });
 
 test("a relative narration caret resolves in its visible joined row after a peer edit", t => {
-  const author = fromDocument({ A: "ab", B: "cd" });
+  const author = fromDocument({ A: "ab", B: "cd", C: "ef" });
   t.after(author.close);
   written(author.commands.joinRow("B", "A", " "));
   const peer = open({ kind: "state", state: author.encodeState() });
