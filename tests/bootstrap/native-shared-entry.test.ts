@@ -115,7 +115,8 @@ test("record outcomes retain refusals and mark only written results as changed",
   } };
   for (const reason of ["missing", "range", "value", "taken", "author", "stored", "anchor", "text", "busy", "closed", "future"]) {
     const command = t.mock.fn(() => ({ kind: "refused" as const, reason: reason as "busy" }));
-    const records = createNativeEditorRecords({ ...native, commands: { ...native.commands, setField: command } },
+    const setField = Object.assign(command, { withSelection: native.commands.setField.withSelection });
+    const records = createNativeEditorRecords({ ...native, commands: { ...native.commands, setField } },
       () => admission, "Editor", () => 0, fixture.ports.report);
     assert.deepEqual(records.beatField("R1", "lengthSeconds", 42), { changed: false, held: true });
     assert.equal(command.mock.callCount(), 1);
