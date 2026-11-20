@@ -4,6 +4,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import * as Y from "yjs";
 import { createNativeHeading, renameNativeHeading } from "../../../../src/adapters/collab/native/heading-commands.ts";
+import { applyNativePeerUpdate } from "../../../../src/adapters/collab/native/peer-update.ts";
 import { NativeScriptReader } from "../../../../src/adapters/collab/native/reader.ts";
 import { setNativeField } from "../../../../src/adapters/collab/native/record-commands.ts";
 import { openNativeScript } from "../../../../src/adapters/collab/native/script.ts";
@@ -538,6 +539,28 @@ test("merged copies retain both edits, enter full together and refuse further ad
     assert.equal(session.size, "full");
     assertUnwritten(session, () => session.commands.setField(beatField("A", "status"), "ready"), full);
   }
+});
+
+test("editor narration obeys full admission while the peer ingress path applies and tracks updates", async t => {
+  const seed = fromRows({ A: "a" }), state = bytes(seed);
+  const reader = fromState(state, { sizeLimit: state.byteLength, sizeMinimumStep: 64 });
+  const writer = fromState(state);
+  t.after(() => { seed.close(); reader.close(); writer.close(); });
+  assert.equal(reader.size, "full");
+  const caret = reader.narrationCaret("A", 1);
+  assert(caret);
+  assertUnwritten(reader, () => reader.commands.typeText(anchor(reader, caret.offset, caret.offset, caret.beat), "x", {}),
+    { kind: "recovery", reason: "full", runs: [{ text: "x", marks: {} }] });
+
+  assert.equal(writer.commands.typeText(anchor(writer, 1), "y".repeat(600), {}).kind, "written");
+  const release = reader.holdIngress();
+  assertUnwritten(reader, () => applyNativePeerUpdate(reader, bytes(writer)), false);
+  release();
+  assert.equal(applyNativePeerUpdate(reader, bytes(writer)), true);
+  await Promise.resolve();
+  assert.deepEqual(bytes(reader), bytes(writer));
+  assert.equal(reader.document().rows[0]?.audioText, "a" + "y".repeat(600));
+  assertUnwritten(reader, reader.commands.undo, full);
 });
 
 test("size events run outside transactions, coalesce crossed lines and follow reentrant changed events", async t => {

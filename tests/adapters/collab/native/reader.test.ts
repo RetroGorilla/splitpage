@@ -28,6 +28,36 @@ function problemKinds(script: NativeScript): string[] {
   return script.reader.problems().map(problem => `${problem.kind} ${problem.where}`);
 }
 
+test("narration caret accepts member boundaries and refuses glue interiors and fractional offsets", t => {
+  const script = convertedScript(small({ R1: "Hello", R2: "World" }));
+  t.after(() => { script.doc.destroy(); });
+  assert.equal(joinNativeRow(script, "R2", "R1", "--").kind, "written");
+  assert.deepEqual(script.reader.narrationCaret("R1", 5), { beat: "R1", offset: 5 });
+  assert.equal(script.reader.narrationCaret("R1", 6), null);
+  assert.deepEqual(script.reader.narrationCaret("R1", 7), { beat: "R2", offset: 0 });
+  assert.equal(script.reader.narrationCaret("R1", 2.5), null);
+  assert.equal(script.reader.narrationCaret("R1", -1), null);
+});
+
+test("a narration-only stray row supplies no caret target", t => {
+  const script = convertedScript(small({ R1: "stray words" }));
+  t.after(() => { script.doc.destroy(); });
+  script.roots.visuals.delete("R1");
+  const row = script.reader.rows()[0];
+  assert.ok(row);
+  assert.deepEqual(row.members, []);
+  assert.equal(row.audioText, "stray words");
+  assert.equal(script.reader.narrationCaret(row.id, 0), null);
+});
+
+test("a truly empty joined row can still receive its first letter", t => {
+  const script = convertedScript(small({ R1: "", R2: "" }));
+  t.after(() => { script.doc.destroy(); });
+  assert.equal(joinNativeRow(script, "R2", "R1", " ").kind, "written");
+  assert.equal(script.reader.row("R1")?.audioText, "");
+  assert.deepEqual(script.reader.narrationCaret("R1", 0), { beat: "R1", offset: 0 });
+});
+
 for (const ordered of [true, false]) {
   test(`finding 5: new text in empty spans is read if their segment is ordered and reported otherwise (${ordered ? "in" : "out of"} the order)`, () => {
     const script = convertedScript(small({ R1: "a", R2: "b" })), stray = new Y.Map<unknown>(), text = new Y.Text();
