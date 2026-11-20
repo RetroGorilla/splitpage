@@ -191,6 +191,12 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
     // why: peers apply updates directly between commands. Applying one from a transaction listener is unsupported
     // because Yjs can fold it into local undo
     ydoc: doc,
+    isClosingOrClosed: () => closing !== null,
+    checkPeerDelivery(): boolean {
+      if (!script.busy()) return true;
+      schedule();
+      return false;
+    },
     document: () => script.reader.document(),
     encodeState: () => Y.encodeStateAsUpdate(doc),
     subscribe(listener: ChangeListener): () => void {
