@@ -134,6 +134,62 @@ const views = {
 };
 
 for (const [name, kind] of Object.entries(views)) {
+  test(name + ": Enter flushes typing, splits once and replays both carets", async t => {
+    const show = await enter(t), view = kind.open(t);
+    kind.caret(view, "r1", 2);
+    typeKeys(kind.surface(), "x");
+    assert.equal(app(), "Hello");
+    assert.equal(press(kind.surface(), "Enter", { ctrlKey: false }), true);
+    const { app: local } = hook.read();
+    const created = local.rows[1].id;
+    assert.deepEqual(local.rows.map(row => row.audioText), ["Hex", "llo"]);
+    assert.deepEqual(kind.at(view, created), [created, 0, 0]);
+    assert.equal(kind.host(created).textContent.replace(/\u200b/g, ""), "llo");
+    assert.equal(press(document.activeElement, "z"), true);
+    assert.equal(app(), "Hexllo");
+    assert.deepEqual(kind.at(view), ["r1", 3, 3]);
+    assert.equal(press(kind.surface(), "z"), true);
+    assert.equal(app(), "Hello");
+    assert.equal(press(kind.surface(), "y"), true);
+    assert.equal(press(kind.surface(), "y"), true);
+    assert.deepEqual(kind.at(view, created), [created, 0, 0]);
+    await Promise.resolve();
+    assert.deepEqual(hook.read().peer, hook.read().app);
+    assert.equal(show.mock.callCount(), 0);
+  });
+
+  test(name + ": Enter refuses a selection or an open composition", async t => {
+    const show = await enter(t), view = kind.open(t);
+    kind.caret(view, "r1", 1, 3);
+    assert.equal(press(kind.surface(), "Enter", { ctrlKey: false }), true);
+    kind.caret(view, "r1", 2);
+    compose(kind.surface(), "start", "");
+    assert.equal(press(kind.surface(), "Enter", { ctrlKey: false }), true);
+    assert.equal(beforeInput(kind.surface(), "insertParagraph", null), true);
+    compose(kind.surface(), "end", "");
+    assert.equal(app(), "Hello");
+    assert.equal(show.mock.callCount(), 3);
+  });
+
+  for (const peerSplits of [true, false]) {
+    test(name + ": Enter converges with a simultaneous peer " + (peerSplits ? "split" : "insertion"), async t => {
+      const show = await enter(t), view = kind.open(t);
+      hook.nativePeer.hold();
+      kind.caret(view, "r1", 2);
+      assert.equal(press(kind.surface(), "Enter", { ctrlKey: false }), true);
+      const other = peerSplits ? hook.nativePeer.split("r1", 4) : hook.nativePeer.type("r1", 3, "Y");
+      assert.equal(other.kind, "written");
+      hook.nativePeer.deliver();
+      await Promise.resolve();
+      const { app: local, peer: remote } = hook.read();
+      const expected = peerSplits ? ["He", "ll", "o"] : ["He", "lYlo"];
+      assert.deepEqual(remote, local);
+      assert.deepEqual(local.rows.map(row => row.audioText), expected);
+      assert.deepEqual(local.rows.map(row => kind.host(row.id).textContent.replace(/\u200b/g, "")), expected);
+      assert.equal(show.mock.callCount(), 0);
+    });
+  }
+
   test(name + ": Ctrl+Z takes back each typed word with the caret where it began, and Ctrl+Y and Ctrl+Shift+Z put them back", async t => {
     const show = await enter(t), view = kind.open(t);
     kind.caret(view, "r1", 5);
@@ -541,7 +597,6 @@ const outOfScope = [
   }, () => beforeInput(root(), "insertText", "x")],
   ["Backspace at the start of a beat", view => { view.caret("r2", 0); }, () => beforeInput(root(), "deleteContentBackward", null)],
   ["Delete at the end of a beat", view => { view.caret("r1", 6); }, () => beforeInput(root(), "deleteContentForward", null)],
-  ["Enter", view => { view.caret("r1", 2); }, () => press(root(), "Enter", { ctrlKey: false })],
   ["Ctrl+B", view => { view.caret("r1", 1, 3); }, () => press(root(), "b")],
   ["a rich paste", view => { view.caret("r1", 2); }, () => {
     const event = new window.Event("paste", { bubbles: true, cancelable: true });

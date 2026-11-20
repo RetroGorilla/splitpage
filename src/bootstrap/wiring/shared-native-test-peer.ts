@@ -31,6 +31,10 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>) 
     },
     field: (target: NativeFieldTarget, value: unknown) => forward(peer.commands.setField(target, value)),
     join: (lower: string, upper: string) => forward(peer.commands.joinRow(lower, upper, " ")),
+    split: (beat: string, offset: number) => {
+      const at = peer.commands.anchorText({ beat, cell: "narration" }, offset);
+      return at.kind === "anchored" ? forward(peer.commands.splitRow(at.range)) : at;
+    },
     removeBeat: (id: string) => forward(peer.commands.removeRows([id])),
     removeComment: (id: string) => forward(peer.commands.removeComment({ comment: id })),
     step: (direction: "undo" | "redo") => app.commands[direction](),

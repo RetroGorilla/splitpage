@@ -15,7 +15,7 @@ import { editAllowed } from "./session-owner.ts";
 import { writerControls } from "./writer.ts";
 
 interface NativeInputPorts {
-  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "endTypingGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint">;
+  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint">;
   readonly session: Pick<SharedDocumentSession, "admit" | "refuse" | "subscribe">;
   readonly editAttribution: () => NativeEditStamp;
   readonly now?: () => number;
@@ -120,6 +120,10 @@ function editingKey(key: KeyboardEvent): boolean {
   const mod = key.ctrlKey || key.metaKey;
   return key.key === "Enter" || mod && /^[biuyz]$/i.test(key.key)
     || key.altKey && (key.key === "ArrowUp" || key.key === "ArrowDown");
+}
+
+function splitKey(key: KeyboardEvent): boolean {
+  return key.key === "Enter" && !key.ctrlKey && !key.metaKey && !key.shiftKey;
 }
 
 export function mountNativeSharedInput({ native, session, editAttribution, now = Date.now, report, publish = () => {} }: NativeInputPorts) {
@@ -300,6 +304,46 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     return buffered.units >= BATCH_UNITS || /\s$/.test(buffered.text);
   }
 
+  function caretAnchor(beat: string, offset: number) {
+    const target = { beat, cell: "narration" } as const;
+    const anchored = native.commands.anchorText(target, offset);
+    return anchored.kind === "anchored" ? anchored.range : null;
+  }
+
+  function structureCaret(cell: Element) {
+    const refusal = admissionRefusal();
+    if (refusal) { session.refuse(refusal); return null; }
+    const selection = cellSelection(cell);
+    if (!selection || selection.from !== selection.to) { session.refuse(UNSUPPORTED); return null; }
+    const current = flushForInput(cell, selection);
+    if (!current) return null;
+    const beat = current.cell.getAttribute("data-id") ?? "";
+    const row = documentReader.read(doc => doc?.rows.find(item => item.id === beat));
+    const surface = narrationSurfaceOf(current.cell);
+    if (current.stale || !row || !surface.painted(current.cell, row) || row.audioText !== native.narrationHtml(beat)) {
+      session.refuse(STALE);
+      return null;
+    }
+    const offset = current.selection.from;
+    const point = native.narrationCaret(beat, offset);
+    const before = point && caretAnchor(point.beat, point.offset);
+    if (!point || !before) { session.refuse(STALE); return null; }
+    return { beat, offset, before, surface };
+  }
+
+  function split(cell: Element): void {
+    if (draft?.composing) { session.refuse(PENDING); return; }
+    const caret = structureCaret(cell);
+    if (!caret) return;
+    const step = native.commands.splitRow.withSelection(caret.before, caret.before);
+    if (step.result.kind === "refused") { session.refuse(step.result.reason); return; }
+    const beat = step.result.created;
+    step.recordAfter(caretAnchor(beat, 0));
+    publish();
+    const fresh = caret.surface.cell(beat);
+    if (fresh) caret.surface.place(fresh, beat, 0, 0, true);
+  }
+
   function write(input: InputEvent, cell: Element): void {
     const deletion = /^delete(Content|Word|SoftLine|HardLine)(Backward|Forward)$/.test(input.inputType);
     const text = input.data ?? "";
@@ -408,7 +452,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       const key = event as KeyboardEvent;
       if (narration && (draft?.composing || key.isComposing || key.keyCode === 229)) {
         event.stopImmediatePropagation();
-        if (undoGesture(key)) {
+        if (undoGesture(key) || splitKey(key) && !key.isComposing && key.keyCode !== 229) {
           event.preventDefault();
           if (!stopped) session.refuse(PENDING);
         }
@@ -452,6 +496,11 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     event.stopImmediatePropagation();
     try {
       if (narration && stopped) { session.refuse(stopped); return; }
+      if (narration && (event.type === "keydown" && splitKey(event as KeyboardEvent)
+        || event.type === "beforeinput" && event.cancelable && (event as InputEvent).inputType === "insertParagraph")) {
+        split(narration);
+        return;
+      }
       if (event.type === "beforeinput" && narration && event.cancelable) { write(event as InputEvent, narration); return; }
       if (event.type === "input" && cell) {
         if (cell instanceof HTMLInputElement) cell.value = documentReader.current()?.title ?? "";
