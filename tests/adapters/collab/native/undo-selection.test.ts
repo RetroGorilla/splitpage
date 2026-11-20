@@ -303,6 +303,22 @@ test("an unannotated write adds no selection metadata to its Yjs stack item", t 
   assert.equal((event as { stackItem: { meta: Map<unknown, unknown> } }).stackItem.meta.size, 0);
 });
 
+test("typing admits the write before reading its selection under both command guards", t => {
+  const [s] = copies(t);
+  const direct = openNativeScript(s.ydoc);
+  t.after(() => direct.close());
+  const at = anchor(s, aText, 1), attempts: unknown[] = [];
+  const step = s.commands.typeText.withSelection({ ...at, get from() {
+    attempts.push(s.commands.undo(), setNativeField(direct, beatField("A", "note"), "nested"));
+    return at.from;
+  } }, at, "x", {});
+  written(step.result);
+  step.recordAfter();
+  assert.deepEqual(attempts, Array(2).fill({ kind: "refused", reason: "busy" }));
+  selection(s.commands.undo(), aText, 1);
+  selection(s.commands.redo(), aText, 2);
+});
+
 test("the stored positions copy caller-supplied nested IDs", t => {
   const [s] = copies(t);
   const at = anchor(s, aText, 1);
