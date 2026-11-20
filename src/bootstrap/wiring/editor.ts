@@ -132,7 +132,7 @@ import {
 import { showActionToast, showToast } from "./effects-owner.ts";
 import { viewFlags } from "./preferences-owner.ts";
 import { breakUndoGroup, configureUndo, sharedUndoRoute, stepSharedUndo, undoOwner } from "./undo.ts";
-import { sharedSessionParts } from "./shared-session.ts";
+import { nativeEditorActive, sharedSessionParts } from "./shared-session.ts";
 import { resolveSharedBufferedSelection } from "../../adapters/collab/buffer-selection.ts";
 import { resolveSharedRecordedSelection, sharedRowShowing } from "../../adapters/collab/recorded-selection.ts";
 import { sharedAnchorTarget } from "../../adapters/collab/anchors.ts";
@@ -728,6 +728,7 @@ const editorFocusPorts: EditorFocusPorts = {
     focusMemory().unmutePrompt();
   },
   blurredCell: function (cellEl) {
+    if (nativeEditorActive()) return;
     const clean = sanitizeHtml(cellEl.innerHTML);
     if (clean !== storedHtmlFromDom(cellEl.innerHTML)) cellEl.innerHTML = clean;
     cellEditing().sync(cellEl);
