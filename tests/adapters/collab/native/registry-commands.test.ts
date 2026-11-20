@@ -189,7 +189,11 @@ test("missing and damaged stored inputs refuse a whole registry command", () => 
     person.set("rank", "bad0");
     unchanged(script, { kind: "move", collection: "people", id: "p2", before: "p1" }, "stored");
     unchanged(script, { kind: "create", collection: "people", fields: { name: "New" } }, "stored");
-    shot.set(nativeFieldKey("props"), "not JSON");
+    const props = shot.get("props");
+    assert.ok(props instanceof Y.Map);
+    const lamp = props.get("t_lamp");
+    assert.ok(lamp instanceof Y.Map);
+    lamp.set("name", "not JSON");
     unchanged(script, { kind: "addProp", id: "bs1", prop: "Rope" }, "stored");
     tag.set(nativeFieldKey("status"), encodeNativeValue("unknown"));
     unchanged(script, { kind: "cycleTagStatus", ids: ["t_rope", "t_lamp"] }, "stored");
@@ -248,6 +252,7 @@ test("field guards read names, resolved targets, and touched encodings before co
     tag.delete("removed");
     tag.set(nativeFieldKey("notes"), "bad JSON");
     unchanged(script, bulk, "stored");
+    shot.delete("props");
     shot.set(nativeFieldKey("props"), encodeNativeValue({ length: 1, prop: "Lamp" }));
     assert.deepEqual(script.reader.document().brollShots[0]?.props, []);
     unchanged(script, { kind: "addProp", id: "bs1", prop: "Rope" }, "stored");

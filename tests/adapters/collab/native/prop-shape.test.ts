@@ -1,14 +1,14 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Y from "yjs";
-import { nativeInitialRank } from "../../../../src/adapters/collab/native/convert.ts";
+import { changeNativeRegistry } from "../../../../src/adapters/collab/native/registry-commands.ts";
+import type { NativeRegistryChange } from "../../../../src/adapters/collab/native/registry-commands.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
-import { decodeNativeValue, encodeNativeValue } from "../../../../src/adapters/collab/native/values.ts";
-import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
+import { LEGACY_SHOT_PROPS, NATIVE_SHOT_PROPS } from "../../../../src/adapters/collab/native/shot-props.ts";
+import { decodeNativeValue } from "../../../../src/adapters/collab/native/values.ts";
 import { BROLL_PROPS_MAX } from "../../../../src/core/document/broll.ts";
-import type { DocumentShape, DocumentShot } from "../../../../src/core/document/validated.ts";
-import { addBrollProp } from "../../../../src/core/production/records.ts";
-import { convertedScript, joinedScript } from "./helpers.ts";
+import type { BrollProp } from "../../../../src/core/document/broll.ts";
+import { registryCopies, registryReload, registrySource } from "./registry-harness.ts";
 
 type TrialEdit = { readonly kind: "add" | "edit"; readonly id: string; readonly name: string }
   | { readonly kind: "remove" | "move"; readonly id: string };
@@ -20,117 +20,101 @@ const edits: readonly TrialEdit[] = [
   { kind: "move", id: "t_seed1" }, { kind: "move", id: "t_seed2" }
 ];
 
-function source(count: number) {
-  const props = Array.from({ length: count }, (_, at) => ({ id: "t_seed" + (at + 1), name: "Prop " + (at + 1) }));
-  return migrateRows({ title: "Prop pairs", rows: [], comments: [], people: [], brollShots: [{ id: "shot", name: "Wide", origin: "list", props }],
-    productionTags: [{ id: "t_rope", cat: "prop", name: "Rope" }, { id: "t_case", cat: "prop", name: "Case" }] });
+function initialProps(count: number): BrollProp[] {
+  return Array.from({ length: count }, (_, at) => ({ id: "t_seed" + (at + 1), name: "Prop " + (at + 1) }));
+}
+
+function source(props: readonly BrollProp[]) {
+  return registrySource({ brollShots: [{ id: "shot", name: "Wide", origin: "list", props }] });
 }
 
 function propsOf(script: NativeScript): Y.Map<Y.Map<unknown>> {
-  const props = script.roots.shots.get("shot")?.get("candidate-props");
-  assert.ok(props instanceof Y.Map);
-  return props as Y.Map<Y.Map<unknown>>;
+  const record = script.roots.shots.get("shot"), map = record?.get(NATIVE_SHOT_PROPS);
+  assert.ok(map instanceof Y.Map);
+  assert.equal(record?.has(LEGACY_SHOT_PROPS), false);
+  return map as Y.Map<Y.Map<unknown>>;
 }
 
-function newProp(props: Y.Map<Y.Map<unknown>>, prop: { id: string }, at: number): void {
-  const record = new Y.Map<unknown>();
-  props.set(prop.id, record);
-  record.set("value", encodeNativeValue(prop));
-  record.set("rank", nativeInitialRank(at));
+function read(script: NativeScript) {
+  return script.reader.document().brollShots[0]?.props;
 }
 
-// why: keep the rejected layout executable apart from the production reader's whole-array field
-function read(script: NativeScript): DocumentShape {
-  const document = script.reader.document(), shot = document.brollShots[0];
-  assert.ok(shot);
-  const props = [...propsOf(script)].sort(([left, a], [right, b]) => {
-    const one = String(a.get("rank")), two = String(b.get("rank"));
-    return one < two ? -1 : one > two ? 1 : left < right ? -1 : left > right ? 1 : 0;
-  }).map(([, prop]) => decodeNativeValue(prop.get("value"))?.value) as NonNullable<DocumentShot["props"]>;
-  return { ...document, brollShots: [{ ...shot, props }] };
+function command(initial: readonly BrollProp[], edit: TrialEdit): NativeRegistryChange {
+  if (edit.kind === "add") return { kind: "addProp", id: "shot", prop: edit.name };
+  if (edit.kind === "remove") return { kind: "removeProp", id: "shot", prop: edit.id };
+  if (edit.kind === "move") return { kind: "moveProp", id: "shot", prop: edit.id, before: null };
+  assert.ok("name" in edit);
+  return { kind: "set", collection: "shots", ids: ["shot"],
+    fields: { props: initial.map(prop => prop.id === edit.id ? { id: edit.id, name: edit.name } : prop) } };
 }
 
-function reload(document: DocumentShape): DocumentShape {
-  return migrateRows(JSON.parse(JSON.stringify(document)));
+function expected(initial: readonly BrollProp[], pending: readonly TrialEdit[]): BrollProp[] {
+  const props = new Map(initial.map(prop => [prop.id, prop.name])), tail = new Set<string>();
+  for (const edit of pending) {
+    if ("name" in edit) props.set(edit.id, edit.name);
+    if (edit.kind === "add" || edit.kind === "move") tail.add(edit.id);
+  }
+  for (const edit of pending) if (edit.kind === "remove") props.delete(edit.id);
+  return [...[...props.keys()].filter(id => !tail.has(id)), ...[...tail].sort()]
+    .flatMap(id => props.has(id) ? [{ id, name: props.get(id) as string }] : []);
 }
 
-function write(script: NativeScript, edit: TrialEdit, at: number): void {
-  const props = propsOf(script);
-  script.doc.transact(() => {
-    if (edit.kind === "remove") { props.delete(edit.id); return; }
-    if (edit.kind === "add") {
-      const trial = migrateRows(structuredClone(read(script)));
-      assert.ok(addBrollProp(trial, "shot", edit.name));
-      const prop = trial.brollShots[0]?.props?.at(-1);
-      assert.ok(prop && typeof prop.id === "string");
-      newProp(props, { ...prop, id: prop.id }, at);
-      return;
-    }
-    const record = props.get(edit.id);
-    assert.ok(record);
-    if (edit.kind === "edit") record.set("value", encodeNativeValue({ id: edit.id, name: edit.name }));
-    else record.set("rank", nativeInitialRank(at));
-  });
+function issue(script: NativeScript, initial: readonly BrollProp[], edit: TrialEdit,
+  apply: typeof changeNativeRegistry = changeNativeRegistry): void {
+  const operation = command(initial, edit), label = JSON.stringify(operation);
+  assert.equal(apply(script, operation).kind, "written", label);
+  const snapshot = script.reader.document();
+  assert.deepEqual(registryReload(snapshot), snapshot, "Core reload after " + label);
+  assert.deepEqual(read(script), expected(initial, [edit]), "Local command effect for " + label);
 }
 
-test("candidate prop map keeps independent writes but exceeds the core's limit on concurrent additions", () => {
-  const drops: string[] = [];
-  let runs = 0;
+test("the keyed prop shape preserves every generated edit and caps the projection before core reload", () => {
+  let runs = 0, overflows = 0;
   for (const count of [3, BROLL_PROPS_MAX - 1]) {
-    const document = source(count), seed = convertedScript(document);
-    try {
-      seed.doc.transact(() => {
-        const props = new Y.Map<Y.Map<unknown>>();
-        seed.roots.shots.get("shot")?.set("candidate-props", props);
-        document.brollShots[0]?.props?.forEach((prop, at) => {
-          assert.ok(prop && typeof prop.id === "string");
-          newProp(props, { ...prop, id: prop.id }, at);
-        });
-      });
-      assert.deepEqual(read(seed), document);
-      const seen = Y.encodeStateVector(seed.doc);
-      for (const [at, first] of edits.entries()) for (const second of edits.slice(at)) for (const reverse of [false, true]) {
-        const left = joinedScript(seed, 4), right = joinedScript(seed, 9), replay = joinedScript(seed, 10);
-        try {
-          const later = second.kind === "edit" ? { ...second, name: second.name + " on the right" } : second;
-          write(left, first, count);
-          write(right, later, count);
-          for (const script of [left, right]) assert.deepEqual(reload(read(script)), read(script));
-          const one = Y.encodeStateAsUpdate(left.doc, seen), two = Y.encodeStateAsUpdate(right.doc, seen);
-          for (const update of reverse ? [two, one] : [one, two]) for (const script of [left, right, replay]) Y.applyUpdate(script.doc, update);
-          const end = read(left);
-          assert.deepEqual(read(right), end);
-          assert.deepEqual(read(replay), end);
-          const props = end.brollShots[0]?.props;
-          assert.ok(props);
-          for (const [id, record] of propsOf(left)) {
-            assert.ok(props.some(prop => prop?.id === id));
-            assert.deepEqual(props.find(prop => prop?.id === id), decodeNativeValue(record.get("value"))?.value);
-          }
-          const pending = [first, later], removed = new Set(pending.filter(edit => edit.kind === "remove").map(edit => edit.id));
-          for (const id of removed) assert.equal(props.some(prop => prop?.id === id), false);
-          for (const edit of pending) {
-            if (removed.has(edit.id)) continue;
-            if (edit.kind === "add" || edit.kind === "edit") {
-              const winner = later.kind === "edit" && later.id === edit.id ? later : edit;
-              assert.equal(props.find(prop => prop?.id === edit.id)?.name, winner.name);
+    const initial = initialProps(count);
+    for (const [at, first] of edits.entries()) for (const second of edits.slice(at)) {
+      const later = second.kind === "edit" ? { ...second, name: second.name + " on the right" } : second;
+      const history = JSON.stringify({ count, first, later });
+      try {
+        registryCopies((left, right, settle) => {
+          assert.deepEqual(read(left), initial);
+          assert.deepEqual([...propsOf(left).keys()], initial.map(prop => prop.id));
+          issue(left, initial, first);
+          issue(right, initial, later);
+          settle();
+          const merged = expected(initial, [first, later]), stored = propsOf(left);
+          assert.deepEqual(read(left), merged.slice(0, BROLL_PROPS_MAX));
+          const active = [...stored].filter(([, record]) => record.get("removed") !== true);
+          assert.deepEqual(active.map(([id, record]) => ({ id, name: decodeNativeValue(record.get("name"))?.value }))
+            .sort((one, two) => one.id < two.id ? -1 : one.id > two.id ? 1 : 0),
+          merged.toSorted((one, two) => one.id < two.id ? -1 : one.id > two.id ? 1 : 0));
+          for (const edit of [first, later]) {
+            const record = stored.get(edit.id);
+            assert.ok(record);
+            if (edit.kind === "remove") assert.equal(record.get("removed"), true);
+            if (edit.kind === "move") {
+              const stable = initial.filter(prop => ![first, later].some(operation => operation.id === prop.id && operation.kind === "move"));
+              assert.ok(stable.every(prop => String(stored.get(prop.id)?.get("rank")) < String(record.get("rank"))));
             }
-            if (edit.kind === "move") assert.equal(propsOf(left).get(edit.id)?.get("rank"), nativeInitialRank(count));
           }
-          const reloaded = reload(end);
-          if (props.length <= BROLL_PROPS_MAX) assert.deepEqual(reloaded, end);
-          else {
-            assert.equal(props.length, BROLL_PROPS_MAX + 1);
-            assert.equal(props.at(-2)?.id, "t_case");
-            assert.equal(props.at(-1)?.id, "t_rope");
-            assert.deepEqual(reloaded.brollShots[0]?.props, props.slice(0, BROLL_PROPS_MAX));
-            drops.push(`${count} ${first.kind} ${first.id} + ${second.kind} ${second.id}`);
+          if (merged.length > BROLL_PROPS_MAX) {
+            assert.deepEqual(merged.slice(-2).map(prop => prop.id), ["t_case", "t_rope"]);
+            overflows++;
           }
           runs++;
-        } finally { for (const script of [left, right, replay]) script.doc.destroy(); }
+        }, undefined, source(initial));
+      } catch (error) {
+        throw new Error("Prop history failed: " + history, { cause: error });
       }
-    } finally { seed.doc.destroy(); }
+    }
   }
   assert.equal(runs, 144);
-  assert.deepEqual(drops, ["39 add t_rope + add t_case", "39 add t_rope + add t_case"]);
+  assert.equal(overflows, 2);
+});
+
+test("the generated prop oracle rejects a command reporting success without changing its entry", () => {
+  const initial = initialProps(3);
+  for (const edit of edits) registryCopies(left => {
+    assert.throws(() => issue(left, initial, edit, () => ({ kind: "written" })), /Local command effect/);
+  }, undefined, source(initial));
 });

@@ -162,6 +162,14 @@ test("native registry maps keep different entries and different top-level fields
 
 type PropEdit = (document: ValidatedDocument) => boolean;
 
+function useLegacyProps(script: NativeScript): void {
+  const shot = script.roots.shots.get("bs1");
+  assert.ok(shot);
+  const props = script.reader.document().brollShots[0]?.props;
+  shot.delete("props");
+  writeField(script.roots.shots, "bs1", "props", props);
+}
+
 function propNames(document: Pick<ValidatedDocument, "brollShots">): (string | undefined)[] {
   const props = document.brollShots[0]?.props;
   assert.ok(props);
@@ -188,6 +196,7 @@ test("one encoded props array loses an independent addition on the same shot", (
   assert.equal(addCase(combined), true);
   assert.deepEqual(propNames(combined), ["Lamp", "Rope", "Case"]);
   withCopies(source(), (left, right, settle) => {
+    for (const copy of [left, right]) useLegacyProps(copy);
     assert.deepEqual(editProps(left, addRope), ["Lamp", "Rope"]);
     const winner = editProps(right, addCase);
     assert.deepEqual(winner, ["Lamp", "Case"]);
@@ -204,6 +213,7 @@ test("one encoded props array can overwrite the concurrent removal of a differen
   assert.equal(addCase(combined), true);
   assert.deepEqual(propNames(combined), ["Case"]);
   withCopies(source(), (left, right, settle) => {
+    for (const copy of [left, right]) useLegacyProps(copy);
     assert.deepEqual(editProps(left, removeLamp), []);
     const winner = editProps(right, addCase);
     assert.deepEqual(winner, ["Lamp", "Case"]);

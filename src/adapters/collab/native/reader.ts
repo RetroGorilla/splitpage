@@ -10,6 +10,8 @@ import { compareNativeRankedIds } from "./rank.ts";
 import { nativeRegistryRowChanged, projectNativeRegistries } from "./registry-projection.ts";
 import type { NativeRegistryRowInputs } from "./registry-projection.ts";
 import type { NativeRoots } from "./roots.ts";
+import { NATIVE_SHOT_PROPS, nativeShotPropEntries } from "./shot-props.ts";
+import type { NativeShotPropEntry } from "./shot-props.ts";
 import {
   NATIVE_BEAT_FIELDS, NATIVE_FIELD_PREFIX, NATIVE_GALLERY_FIELDS, NATIVE_GALLERY_KEY, decodeNativeValue, deepFrozen,
   isNativeBeatExtra, isNativeBeatField, nativeFieldKey, nativeFieldName, nativeGalleryOf, sameNativeValue
@@ -235,9 +237,20 @@ function byRank(map: Y.Map<Y.Map<unknown>>): [string, Y.Map<unknown>][] {
   return entries.sort(([leftId, left], [rightId, right]) => compareNativeRankedIds(leftId, rankOf(left), rightId, rankOf(right)));
 }
 
-function visibleRecords(root: Y.Map<Y.Map<unknown>>, name: string, problems: Problems): Record<string, unknown>[] {
+function visibleRecords(root: Y.Map<Y.Map<unknown>>, name: string, problems: Problems,
+  shotProps?: Map<string, NativeShotPropEntry[]>): Record<string, unknown>[] {
   return byRank(root).filter(([, record]) => record.get("removed") !== true)
-    .map(([id, record]) => ({ ...fileFields(record, name + "/" + id, problems), id }));
+    .map(([id, record]) => {
+      const where = name + "/" + id, fields = fileFields(record, where, problems);
+      if (name === "shots" && record.has(NATIVE_SHOT_PROPS)) {
+        const map = record.get(NATIVE_SHOT_PROPS);
+        const entries = map instanceof Y.Map ? nativeShotPropEntries(map) : null;
+        if (entries) shotProps?.set(id, entries);
+        else problems?.push({ kind: "bad-value", where: where + "/" + NATIVE_SHOT_PROPS });
+        fields.props = [];
+      }
+      return { ...fields, id };
+    });
 }
 
 // why: a run's shape is known, so it is frozen field by field instead of by a walk over every value
@@ -1072,11 +1085,11 @@ export class NativeScriptReader {
     };
   }
 
-  private storedRegistries(problems: Problems): Registries {
+  private storedRegistries(problems: Problems, shotProps?: Map<string, NativeShotPropEntry[]>): Registries {
     return {
       people: visibleRecords(this.roots.people, "people", problems) as DocumentShape["people"],
       productionTags: visibleRecords(this.roots.tags, "tags", problems) as DocumentShape["productionTags"],
-      brollShots: visibleRecords(this.roots.shots, "shots", problems) as DocumentShape["brollShots"]
+      brollShots: visibleRecords(this.roots.shots, "shots", problems, shotProps) as DocumentShape["brollShots"]
     };
   }
 
@@ -1094,8 +1107,9 @@ export class NativeScriptReader {
     });
     const document = { ...this.collect(null), rows, ...sections.length ? { sections } : {} };
     if (this.registryCache) return deepFrozen({ ...document, ...this.registryCache.records });
-    const snapshot = { ...document, ...this.storedRegistries(null) };
-    const inputs = projectNativeRegistries(snapshot, this.roots, () => this.rows());
+    const shotProps = new Map<string, NativeShotPropEntry[]>();
+    const snapshot = { ...document, ...this.storedRegistries(null, shotProps) };
+    const inputs = projectNativeRegistries(snapshot, this.roots, () => this.rows(), shotProps);
     const { people, productionTags, brollShots } = snapshot;
     this.registryCache = { inputs, records: deepFrozen({ people, productionTags, brollShots }) };
     return deepFrozen(snapshot);

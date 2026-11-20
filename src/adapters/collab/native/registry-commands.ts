@@ -1,5 +1,6 @@
 import * as Y from "yjs";
-import { BROLL_NAME_MAX, BROLL_PROPS_MAX, BROLL_PROP_NAME_MAX, BROLL_TEXT_MAX, brollPropKey, brollStatusId, newBrollShot, normalizeBrollProps } from "../../../core/document/broll.ts";
+import { BROLL_NAME_MAX, BROLL_PROPS_MAX, BROLL_PROP_NAME_MAX, BROLL_TEXT_MAX, brollStatusId, newBrollShot, normalizeBrollProps } from "../../../core/document/broll.ts";
+import type { BrollProp } from "../../../core/document/broll.ts";
 import { isTagId, nextTagStatus, normalizeTagName, registryKey, TAG_STATUS_IDS, tagCategoryId, tagStatusId } from "../../../core/document/tags.ts";
 import { cappedLongText, cappedText, plainText } from "../../../core/document/text-policy.ts";
 import type { DocumentShape, DocumentTag } from "../../../core/document/validated.ts";
@@ -10,6 +11,8 @@ import type { NativeRecordOutcome } from "./record-values.ts";
 import { nativeShotLinePlan, nativeTagNamesInRows } from "./registry-projection.ts";
 import { transactPreparedNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
+import { prepareNativeShotProps } from "./shot-prop-commands.ts";
+import { NATIVE_SHOT_PROPS, newNativeShotProps } from "./shot-props.ts";
 import { nativeWriteAvailability } from "./text-commands.ts";
 import { decodeNativeValue, encodeNativeValue, mintNativeId, mintNativeTagId, nativeFieldKey, recordBag, sameNativeValue } from "./values.ts";
 
@@ -30,6 +33,7 @@ export type NativeRegistryChange =
   | { readonly kind: "remove" | "restore"; readonly collection: Collection; readonly ids: readonly string[] }
   | { readonly kind: "move"; readonly collection: Collection; readonly id: string; readonly before: string | null }
   | { readonly kind: "addProp" | "removeProp"; readonly id: string; readonly prop: string }
+  | { readonly kind: "moveProp"; readonly id: string; readonly prop: string; readonly before: string | null }
   | { readonly kind: "gear"; readonly names: readonly string[] };
 
 interface Slot { readonly id: string; readonly map: RecordMap; readonly rank: string | null }
@@ -94,13 +98,14 @@ function planFields(writes: Write[], map: RecordMap, fields: Fields): boolean {
   return true;
 }
 
-function append(writes: Write[], root: Root, id: string, fields: Fields, rank: string): void {
+function append(writes: Write[], root: Root, id: string, fields: Fields, rank: string, props?: readonly BrollProp[]): void {
   const entries = Object.entries(fields).map(([key, value]) => [nativeFieldKey(key), encodeNativeValue(value)] as const);
   writes.push(() => {
     const map = new Y.Map<unknown>();
     root.set(id, map);
     map.set("rank", rank);
     for (const [key, value] of entries) map.set(key, value);
+    if (props) map.set(NATIVE_SHOT_PROPS, newNativeShotProps(props));
   });
 }
 
@@ -109,7 +114,11 @@ function planNew(script: NativeScript, writes: Write[], collection: Collection, 
   if (!order) return refuseRecord("stored");
   const id = collection === "tags" ? mintNativeTagId(script.doc) : mintNativeId(script.doc, collection === "people" ? "p" : "bs");
   if (root.has(id)) return refuseRecord("taken");
-  append(writes, root, id, fields, nativeRankBetween(order.at(-1)?.rank ?? null, null));
+  const rank = nativeRankBetween(order.at(-1)?.rank ?? null, null);
+  if (collection === "shots") {
+    const { props, ...ordinary } = fields;
+    append(writes, root, id, ordinary, rank, props as BrollProp[]);
+  } else append(writes, root, id, fields, rank);
   return id;
 }
 
@@ -227,7 +236,13 @@ function set(script: NativeScript, collection: Collection, ids: readonly string[
     if (rename) return rename;
     const before = cycle ? stored(map, "status", TAG_STATUS_IDS[0]) : undefined;
     if (cycle && !tagStatusId(before)) return refuseRecord("stored");
-    if (!planFields(writes, map, cycle ? { status: nextTagStatus(before) } : owned)) return refuseRecord("stored");
+    const { props, ...ordinary } = owned;
+    if (!planFields(writes, map, cycle ? { status: nextTagStatus(before) } : ordinary)) return refuseRecord("stored");
+    if (props !== undefined) {
+      const list = prepareNativeShotProps(map, document.productionTags);
+      if (!list) return refuseRecord("stored");
+      if (!list.replace(writes, props as BrollProp[])) return refuseRecord("value");
+    }
   }
   return finish(writes);
 }
@@ -322,29 +337,29 @@ function move(root: Root, id: string, before: string | null): Result {
   return finish(writes);
 }
 
-function changeProp(script: NativeScript, id: string, prop: string, add: boolean): Result {
+function changeProp(script: NativeScript, id: string, prop: string, kind: "addProp" | "removeProp" | "moveProp", before: string | null): Result {
   const shot = target(script.roots.shots, id);
   if (!(shot instanceof Y.Map)) return shot;
-  const raw = stored(shot, "props", []), document = script.reader.document(), writes: Write[] = [];
-  if (!Array.isArray(raw)) return refuseRecord("stored");
-  const props = normalizeBrollProps(raw, document.productionTags), projected = projectedTagIds(script, document);
-  if (add) {
+  const document = script.reader.document(), writes: Write[] = [];
+  const props = prepareNativeShotProps(shot, document.productionTags);
+  if (!props) return refuseRecord("stored");
+  if (kind === "addProp") {
     const name = normalizeTagName(prop);
-    if (props.some(entry => normalizeTagName(entry.name) === name)) return RECORD_UNCHANGED;
+    if (props.hasName(name)) return RECORD_UNCHANGED;
     if (prop !== prop.trim()) return refuseRecord("value");
-    if (props.length >= BROLL_PROPS_MAX) return refuseRecord("value");
+    if (props.activeCount >= BROLL_PROPS_MAX) return refuseRecord("value");
+    const projected = projectedTagIds(script, document);
     const tag = document.productionTags.find(entry => entry?.cat === "prop" && entry.id && !projected.has(entry.id) && normalizeTagName(entry.name) === name);
     const tagId = tag?.id ?? planNew(script, writes, "tags", { ...defaults("tags"), cat: "prop", name: prop });
     if (typeof tagId !== "string") return tagId;
     if (!isTagId(tagId)) return refuseRecord("stored");
-    props.push({ id: tagId, name: tag?.name ?? prop });
+    props.add(writes, { id: tagId, name: tag?.name ?? prop });
+  } else if (kind === "removeProp") {
+    props.remove(writes, prop);
   } else {
-    const at = props.findIndex(entry => brollPropKey(entry.id, entry.name) === prop);
-    if (at < 0) return RECORD_UNCHANGED;
-    props.splice(at, 1);
+    const refusal = props.move(writes, prop, before);
+    if (refusal) return refuseRecord(refusal);
   }
-  const encoded = encodeNativeValue(props.map(entry => projected.has(entry.id) ? { ...entry, id: "" } : entry));
-  writes.push(() => { shot.set(nativeFieldKey("props"), encoded); });
   return finish(writes);
 }
 
@@ -373,10 +388,11 @@ function gear(script: NativeScript, names: readonly string[]): Result {
 function applyChange(script: NativeScript, change: Fields): Result {
   const { kind, collection: rawCollection, fields, ownerName, id, before, prop } = change;
   const collection = collectionOf(rawCollection);
-  if (kind === "addProp" || kind === "removeProp") {
+  if (kind === "addProp" || kind === "removeProp" || kind === "moveProp") {
     if (!nativeRecordId(id)) return refuseRecord("missing");
     if (typeof prop !== "string" || !(kind === "addProp" ? trimmed(prop.trim(), BROLL_PROP_NAME_MAX) : prop.length > 0)) return refuseRecord("value");
-    return changeProp(script, id, prop, kind === "addProp");
+    if (kind === "moveProp" && before !== null && (typeof before !== "string" || !before)) return refuseRecord("value");
+    return changeProp(script, id, prop, kind, typeof before === "string" ? before : null);
   }
   if (kind === "gear") {
     const names = listOf(change.names, (name): name is string => trimmed(name, 80));
