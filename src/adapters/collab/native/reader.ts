@@ -799,6 +799,7 @@ export class NativeScriptReader {
     const metaFields = Object.fromEntries(namedFields(meta, META_FIELDS, "meta", problems));
     const replies = new Map<string, Record<string, unknown>[]>();
     for (const [key, record] of byRank(this.roots.replies)) {
+      if (record.get("removed") === true) continue;
       const ids = decodeNativeValue(key)?.value, commentId = record.get("commentId");
       if (!Array.isArray(ids) || ids.length !== 2 || typeof ids[0] !== "string" || typeof ids[1] !== "string" || ids[0] !== commentId) {
         problems?.push({ kind: "bad-key", where: "replies/" + key });
@@ -809,7 +810,8 @@ export class NativeScriptReader {
       replies.set(ids[0], list);
     }
     const records = (root: Y.Map<Y.Map<unknown>>, name: string): Record<string, unknown>[] =>
-      byRank(root).map(([id, record]) => ({ ...fileFields(record, name + "/" + id, problems), id }));
+      byRank(root).filter(([, record]) => name !== "comments" || record.get("removed") !== true)
+        .map(([id, record]) => ({ ...fileFields(record, name + "/" + id, problems), id }));
     return {
       ...metaFields,
       title: title instanceof Y.Text ? title.toString() : "",
