@@ -1,4 +1,4 @@
-import type { NativeReplicaInvoke } from "../../../../shared/native-replica-ipc.d.ts";
+import type { NativeReplicaInvoke } from "../../../../shared/native-replica.d.ts";
 import { attachNativeLocalStore, nativeLocalStoreFailure } from "./local-store.ts";
 import type { NativeLocalStore } from "./local-store.ts";
 

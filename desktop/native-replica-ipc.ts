@@ -1,9 +1,11 @@
 "use strict";
 
-import type { NativeReplicaReply, NativeReplicaRequest } from "../shared/native-replica-ipc.d.ts";
+import type * as NodeCrypto from "node:crypto";
+import type { Event, RenderProcessGoneDetails } from "electron";
+import type { NativeReplicaReply, NativeReplicaRequest } from "../shared/native-replica.d.ts";
 import type { createNativeReplicaFiles, NativeReplicaFileSystem } from "./native-replica-files.ts";
 
-const { randomBytes }: typeof import("node:crypto") = require("node:crypto");
+const { randomBytes }: typeof NodeCrypto = require("node:crypto");
 const filesModule: { createNativeReplicaFiles: typeof createNativeReplicaFiles; MAX_REPLICA_UPDATE_BYTES: number } =
   require("./native-replica-files.ts");
 
@@ -13,11 +15,14 @@ const BLOCKED = { kind: "failed", reason: "blocked" } as const;
 const CLOSED = { kind: "failed", reason: "closed" } as const;
 const STORED = { kind: "stored" } as const;
 
-type RendererEnd = "destroyed" | "render-process-gone";
+type RendererEndListener = {
+  (event: "destroyed", listener: () => void): unknown;
+  (event: "render-process-gone", listener: (event: Event, details: RenderProcessGoneDetails) => void): unknown;
+};
 interface Renderer {
-  once(event: RendererEnd, listener: () => void): unknown;
-  removeListener(event: RendererEnd, listener: () => void): unknown;
-  isDestroyed(): boolean;
+  readonly once: RendererEndListener;
+  readonly removeListener: RendererEndListener;
+  readonly isDestroyed: () => boolean;
 }
 type Replica = Awaited<ReturnType<ReturnType<typeof createNativeReplicaFiles>["open"]>>;
 
@@ -26,7 +31,7 @@ interface Lease {
   readonly id: string;
   readonly replica: Promise<Replica>;
   done: Promise<unknown>;
-  close?: Promise<unknown>;
+  close?: Promise<void>;
   detach?: () => void;
 }
 
@@ -56,7 +61,7 @@ function createNativeReplicaIpc(userData: string, disk?: NativeReplicaFileSystem
   const files = filesModule.createNativeReplicaFiles(userData, disk);
   const leases = new Map<string, Lease | null>();
 
-  function release(name: string, lease: Lease): Promise<unknown> {
+  function release(name: string, lease: Lease): Promise<void> {
     lease.close ??= lease.done.then(() => {
       lease.detach?.();
       leases.delete(name);

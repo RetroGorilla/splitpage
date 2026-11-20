@@ -22,7 +22,9 @@ async function open(t: TestContext, store: NativeLocalStore, name: string) {
   return replica;
 }
 
-export function localStoreContract(backend: string, create: (t: TestContext) => ContractFixture | Promise<ContractFixture>): void {
+export function localStoreContract(
+  backend: string, create: (t: TestContext) => ContractFixture | Promise<ContractFixture>, timerTestTimeout = bounded.timeout
+): void {
   test(`${backend}: an acknowledged edit and a failed edit get separate receipts, and retry is FIFO`, bounded, async t => {
     const { store, failAppend } = await create(t), replica = await open(t, store, "retry-order");
     seedReplica(replica.session);
@@ -206,7 +208,7 @@ export function localStoreContract(backend: string, create: (t: TestContext) => 
     assert.deepEqual(await reopened.flush(), stored(3));
   });
 
-  test(`${backend}: ordinary close cancels its pending checkpoint timer`, { timeout: 30000 }, async t => {
+  test(`${backend}: ordinary close cancels its pending checkpoint timer`, { timeout: timerTestTimeout }, async t => {
     const { store } = await create(t), replica = await open(t, store, "close-cancel");
     t.mock.timers.enable({ apis: ["setTimeout"] });
     const scheduled = t.mock.method(globalThis, "setTimeout"), canceled = t.mock.method(globalThis, "clearTimeout");

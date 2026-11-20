@@ -4,7 +4,7 @@ export type NativeReplicaRequest =
   | ["read", name: string, lease: string, through: number | null]
   | ["write", name: string, lease: string, generation: number, checkpoint: boolean, bytes: Uint8Array];
 
-export interface NativeReplicaWireEntry {
+export interface NativeReplicaEntry {
   readonly generation: number;
   readonly checkpoint: boolean;
   readonly bytes: Uint8Array;
@@ -13,7 +13,7 @@ export interface NativeReplicaWireEntry {
 export type NativeReplicaReply =
   | { readonly kind: "failed"; readonly reason: "blocked" | "closed" | "quota" | "io" }
   | { readonly kind: "opened"; readonly lease: string }
-  | { readonly kind: "read"; readonly entries: readonly NativeReplicaWireEntry[] }
+  | { readonly kind: "read"; readonly entries: readonly NativeReplicaEntry[] }
   | { readonly kind: "stored" };
 
 export type NativeReplicaInvoke = (request: NativeReplicaRequest) => Promise<NativeReplicaReply>;

@@ -1,4 +1,5 @@
 import * as Y from "yjs";
+import type { NativeReplicaEntry } from "../../../../shared/native-replica.d.ts";
 import { nativeCallbackGuard } from "./script.ts";
 import { openNativeSession, type NativeSessionOptions } from "./session.ts";
 
@@ -43,12 +44,6 @@ export type NativeLocalStoreOpen = NativeLocalStoreFailure | {
 export interface NativeLocalStore {
   readonly open: (name: string, options: NativeSessionOptions) => Promise<NativeLocalStoreOpen>;
   readonly delete: (name: string) => Promise<{ readonly kind: "stored" } | NativeLocalStoreFailure>;
-}
-
-export interface NativeReplicaEntry {
-  readonly generation: number;
-  readonly bytes: Uint8Array;
-  readonly checkpoint: boolean;
 }
 
 export interface NativeReplicaConnection {

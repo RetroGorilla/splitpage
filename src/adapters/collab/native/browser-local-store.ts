@@ -1,5 +1,6 @@
+import type { NativeReplicaEntry } from "../../../../shared/native-replica.d.ts";
 import { attachNativeLocalStore, nativeLocalStoreFailure } from "./local-store.ts";
-import type { NativeLocalStore, NativeLocalStoreFailure, NativeLocalStoreOpen, NativeReplicaEntry, NativeReplicaConnection } from "./local-store.ts";
+import type { NativeLocalStore, NativeLocalStoreFailure, NativeLocalStoreOpen, NativeReplicaConnection } from "./local-store.ts";
 
 const DATABASE = "splitpage-native-replica-log";
 const REPLICAS = "replicas";

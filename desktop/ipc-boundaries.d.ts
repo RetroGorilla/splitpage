@@ -149,7 +149,7 @@ export interface DesktopPrintIpcDependencies {
 
 export type DesktopRegisterIpcGroup = (wrappers: DesktopIpcWrappers) => void;
 
-export interface DesktopCloseQuitDependencies extends Pick<DesktopMainCommon, "testMode" | "tabs" | "windowsById" | "draftStore" | "activateTab">, Pick<DesktopTestModeIpcDependencies, "app" | "liveWindows"> {
+export interface DesktopCloseQuitDependencies extends Pick<DesktopMainCommon, "testMode" | "tabs" | "windowsById" | "draftStore" | "activateTab">, Pick<DesktopTestModeIpcDependencies, "liveWindows"> {
   app: Pick<App, "on" | "quit">;
   dialog: Pick<DesktopFileIpcDependencies["dialog"], "showMessageBoxSync">;
   tabHasFile: (tab: DesktopMainTab | null | undefined) => boolean;

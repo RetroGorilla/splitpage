@@ -1,4 +1,4 @@
-import type { NativeReplicaReply, NativeReplicaRequest } from "./native-replica-ipc.d.ts";
+import type { NativeReplicaReply, NativeReplicaRequest } from "./native-replica.d.ts";
 
 export interface DesktopWireFile {
   id: string;

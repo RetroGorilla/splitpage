@@ -7,7 +7,7 @@ import { basename, join } from "node:path";
 import type { TestContext } from "node:test";
 import type { createNativeReplicaIpc as CreateReplicaIpc } from "../../../../desktop/native-replica-ipc.ts";
 import type { NativeReplicaFileSystem } from "../../../../desktop/native-replica-files.ts";
-import type { NativeReplicaInvoke } from "../../../../shared/native-replica-ipc.d.ts";
+import type { NativeReplicaInvoke } from "../../../../shared/native-replica.d.ts";
 import { createDesktopNativeLocalStore } from "../../../../src/adapters/collab/native/desktop-local-store.ts";
 
 const require = createRequire(import.meta.url);
@@ -60,14 +60,14 @@ export async function desktopFixture(t: TestContext, durableAppends = true) {
     },
     rename: (from, to) => step(`${basename(String(from))}:rename`, () => disk.rename(from, to))
   };
-  const process = replicasAt(directory, fileSystem);
-  const first = process.window(), second = process.window();
+  const main = replicasAt(directory, fileSystem);
+  const first = main.window(), second = main.window();
   function intercept(phase: string, action: DiskAction): void {
     assert.equal(armed, undefined);
     armed = { phase, action };
   }
   return {
-    directory, process, first, second, phases, intercept,
+    directory, main, first, second, phases, intercept,
     store: first.store, other: second.store, contention: "blocked" as const,
     restart: () => replicasAt(directory).window(),
     failAppend(reason?: "quota") {

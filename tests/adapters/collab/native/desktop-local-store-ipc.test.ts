@@ -11,7 +11,7 @@ const closed = { kind: "failed", reason: "closed" };
 const bytes = new Uint8Array([0, 0]);
 
 test("desktop main validates every argument before accepting a replica request", async t => {
-  const { directory, process, first } = await desktopFixture(t);
+  const { directory, main, first } = await desktopFixture(t);
   const id = "valid";
   const opened = await first.invoke(["open", id]);
   assert.equal(opened.kind, "opened");
@@ -27,10 +27,11 @@ test("desktop main validates every argument before accepting a replica request",
     ["write", id, lease, 1, 0, bytes], ["write", id, lease, 1, false, "bytes"],
     ["write", id, lease, 1, false, []], ["write", id, lease, 1, false, new Uint8Array()],
     ["write", id, lease, 1, false, bytes.buffer], ["write", id, lease, 1, false, new Uint8ClampedArray(2)],
+    ["write", id, lease, 1, false, new Uint8Array(new SharedArrayBuffer(2))],
     ["write", id, lease, 1, false, new DataView(bytes.buffer)], ["write", id, lease, 1, false, new Uint16Array(2)],
     ["write", id, lease, 1, false, new Uint8Array(32_000_001).subarray(0, 1)], ["write", id, lease, 1, false, bytes, 0]
   ]) {
-    await assert.rejects(process.handle(first.sender, request), /Invalid native replica request/);
+    await assert.rejects(main.handle(first.sender, request), /Invalid native replica request/);
   }
   assert.deepEqual(await readdir(directory), []);
   assert.deepEqual(await first.invoke(["read", id, lease, 0]), { kind: "read", entries: [] });

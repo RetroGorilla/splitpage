@@ -3,12 +3,12 @@ import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
 import { join } from "node:path";
 import { test, type TestContext } from "node:test";
-import type { NativeReplicaInvoke } from "../../../../shared/native-replica-ipc.d.ts";
+import type { NativeReplicaInvoke } from "../../../../shared/native-replica.d.ts";
 import { desktopFixture } from "./desktop-local-store-fixture.ts";
 import { eventResult } from "./indexeddb-fixture.ts";
 import { STORE_OPTIONS, STORED, seedSession, stored, typeAt } from "./local-store-fixture.ts";
 
-async function commands(t: TestContext) {
+function commands(t: TestContext) {
   const session = seedSession({ A: "start" });
   t.after(() => session.close());
   const initial = session.encodeState();
@@ -50,7 +50,7 @@ for (const fault of [
   ["append:sync", "before"], ["append:sync", "after"]
 ] as const) {
   test(`append interruption ${fault.join(" ")} preserves acknowledged edits on restart`, async t => {
-    const fixture = await desktopFixture(t), updates = await commands(t);
+    const fixture = await desktopFixture(t), updates = commands(t);
     const writer = await claim(fixture.first.invoke, "append-fault");
     assert.deepEqual(await writer.write(1, updates.initial), STORED);
     assert.deepEqual(await writer.write(2, updates.a), STORED);
@@ -101,7 +101,7 @@ for (const file of ["checkpoint.new", "updates.new"]) {
     ["rename", "before"], ["rename", "after"]
   ] as const) {
     test(`checkpoint interruption ${file} ${operation} ${point} preserves the newer tail`, async t => {
-      const fixture = await desktopFixture(t), updates = await commands(t);
+      const fixture = await desktopFixture(t), updates = commands(t);
       const writer = await claim(fixture.first.invoke, "checkpoint-fault");
       assert.deepEqual(await writer.write(1, updates.initial, true), STORED);
       assert.deepEqual(await writer.write(2, updates.a), STORED);
@@ -121,9 +121,34 @@ for (const file of ["checkpoint.new", "updates.new"]) {
   }
 }
 
+if (process.platform !== "win32") {
+  for (const file of ["checkpoint.new", "updates.new"]) {
+    test(`a failed directory flush after ${file} rename preserves acknowledged edits`, async t => {
+      const fixture = await desktopFixture(t), updates = commands(t), name = "directory-sync";
+      const writer = await claim(fixture.first.invoke, name);
+      assert.deepEqual(await writer.write(1, updates.initial, true), STORED);
+      assert.deepEqual(await writer.write(2, updates.a), STORED);
+      assert.deepEqual(await writer.write(3, updates.b), STORED);
+      let reached = false;
+      fixture.intercept(`${file}:rename`, async perform => {
+        await perform();
+        const directory = createHash("sha256").update(name).digest("hex");
+        fixture.intercept(`${directory}:sync`, async () => {
+          reached = true;
+          throw new Error("injected directory sync failure");
+        });
+      });
+      assert.deepEqual(await writer.write(2, updates.throughA, true), { kind: "failed", reason: "io" });
+      assert.equal(reached, true);
+      assert.deepEqual(await writer.close(), STORED);
+      await expectCopy(fixture, name, 3, "ABstart");
+    });
+  }
+}
+
 for (const form of ["short header", "short payload", "bad checksum"] as const) {
   test(`a torn tail with a ${form} is discarded and the next append survives`, async t => {
-    const fixture = await desktopFixture(t), updates = await commands(t), name = "torn";
+    const fixture = await desktopFixture(t), updates = commands(t), name = "torn";
     const file = logAt(fixture.directory, name);
     const writer = await claim(fixture.first.invoke, name);
     assert.deepEqual(await writer.write(1, updates.initial, true), STORED);
@@ -151,7 +176,7 @@ for (const form of ["short header", "short payload", "bad checksum"] as const) {
 }
 
 test("a checksum failure before the last record refuses the replica", async t => {
-  const fixture = await desktopFixture(t), updates = await commands(t), name = "damaged";
+  const fixture = await desktopFixture(t), updates = commands(t), name = "damaged";
   const writer = await claim(fixture.first.invoke, name);
   assert.deepEqual(await writer.write(1, updates.initial), STORED);
   assert.deepEqual(await writer.write(2, updates.a), STORED);

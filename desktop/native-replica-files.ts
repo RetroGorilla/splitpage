@@ -1,12 +1,15 @@
 "use strict";
 
-import type { FileHandle } from "node:fs/promises";
-import type { NativeReplicaWireEntry } from "../shared/native-replica-ipc.d.ts";
+import type * as NodeFs from "node:fs/promises";
+import type * as NodeCrypto from "node:crypto";
+import type * as NodePath from "node:path";
+import type * as NodeZlib from "node:zlib";
+import type { NativeReplicaEntry } from "../shared/native-replica.d.ts";
 
-const fs: typeof import("node:fs/promises") = require("node:fs/promises");
-const { createHash }: typeof import("node:crypto") = require("node:crypto");
-const { join }: typeof import("node:path") = require("node:path");
-const { crc32 }: typeof import("node:zlib") = require("node:zlib");
+const fs: typeof NodeFs = require("node:fs/promises");
+const { createHash }: typeof NodeCrypto = require("node:crypto");
+const { join }: typeof NodePath = require("node:path");
+const { crc32 }: typeof NodeZlib = require("node:zlib");
 
 type NativeReplicaFileSystem = Pick<typeof fs, "mkdir" | "open" | "readFile" | "rename" | "rm">;
 const MAX_REPLICA_UPDATE_BYTES = 32_000_000;
@@ -17,7 +20,7 @@ function checksum(record: Buffer): number {
   return crc32(record.subarray(HEADER_BYTES), crc32(record.subarray(0, 12)));
 }
 
-function pack({ generation, bytes }: NativeReplicaWireEntry): Buffer {
+function pack({ generation, bytes }: NativeReplicaEntry): Buffer {
   const record = Buffer.allocUnsafe(HEADER_BYTES + bytes.byteLength);
   record.writeUInt32LE(bytes.byteLength, 0);
   record.writeBigUInt64LE(BigInt(generation), 4);
@@ -26,7 +29,7 @@ function pack({ generation, bytes }: NativeReplicaWireEntry): Buffer {
   return record;
 }
 
-function unpack(file: Buffer, offset: number, checkpoint: boolean): NativeReplicaWireEntry | undefined {
+function unpack(file: Buffer, offset: number, checkpoint: boolean): NativeReplicaEntry | undefined {
   if (file.length - offset < HEADER_BYTES) return;
   const length = file.readUInt32LE(offset);
   const end = offset + HEADER_BYTES + length;
@@ -47,7 +50,7 @@ function missing(error: unknown): boolean {
   return (error as NodeJS.ErrnoException | undefined)?.code === "ENOENT";
 }
 
-async function useFile<T>(handle: FileHandle, run: () => Promise<T>): Promise<T> {
+async function useFile<T>(handle: NodeFs.FileHandle, run: () => Promise<T>): Promise<T> {
   try { return await run(); }
   finally { await handle.close(); }
 }
@@ -87,7 +90,7 @@ function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSyste
       throw new Error("Invalid native replica checkpoint");
     }
     const contents = await read(log) ?? EMPTY;
-    let tail: NativeReplicaWireEntry[] = [];
+    let tail: NativeReplicaEntry[] = [];
     let length = 0;
     let previous = 0;
     const base = checkpoint?.generation ?? 0;
@@ -125,7 +128,7 @@ function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSyste
 
     if (repair) await repairLog();
 
-    async function append(entry: NativeReplicaWireEntry): Promise<void> {
+    async function append(entry: NativeReplicaEntry): Promise<void> {
       if (repair) await repairLog();
       const record = pack(entry);
       const handle = await disk.open(log, "a+");
@@ -145,7 +148,7 @@ function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSyste
       tail.push(entry);
     }
 
-    async function compact(entry: NativeReplicaWireEntry): Promise<void> {
+    async function compact(entry: NativeReplicaEntry): Promise<void> {
       // why: the original log must cover the checkpoint until its rename is durable
       await replace(snapshot, pack(entry));
       await syncDirectory(dir);
@@ -162,7 +165,7 @@ function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSyste
       read(through: number | null) {
         return (checkpoint ? [checkpoint, ...tail] : tail.slice()).filter(entry => through === null || entry.generation <= through);
       },
-      async write(entry: NativeReplicaWireEntry): Promise<void> {
+      async write(entry: NativeReplicaEntry): Promise<void> {
         const base = checkpoint?.generation ?? 0;
         const last = tail.at(-1)?.generation ?? base;
         if (entry.checkpoint ? entry.generation < base || entry.generation > last + 1 : entry.generation !== last + 1) {

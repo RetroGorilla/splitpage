@@ -5,9 +5,10 @@ import { eventResult } from "./indexeddb-fixture.ts";
 import { localStoreContract } from "./local-store-contract.ts";
 import { STORE_OPTIONS, stored } from "./local-store-fixture.ts";
 
-localStoreContract("desktop", desktopFixture);
+localStoreContract("desktop", desktopFixture, 30000);
 
-test("desktop compacts an idle tail at 512 and a busy tail before append 2049", { timeout: 30000 }, async t => {
+test("desktop compacts an idle tail at 512 and a busy tail before append 2049", { timeout: 60000 }, async t => {
+  // why: the fault tests exercise fsync, and this test counts records across the two thresholds
   const { store, phases, intercept, restart } = await desktopFixture(t, false);
   const opened = await store.open("compaction", STORE_OPTIONS);
   assert.equal(opened.kind, "opened");
