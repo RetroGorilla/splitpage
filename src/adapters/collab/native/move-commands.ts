@@ -3,7 +3,7 @@ import { NativeRankError, isValidNativeRank, nativeRankBetween } from "./rank.ts
 import type { NativeRankedBlock } from "./reader.ts";
 import { transactNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
-import { nativeAvailability } from "./text-commands.ts";
+import { nativeWriteAvailability } from "./text-commands.ts";
 import { nativeWellFormed } from "./values.ts";
 
 export interface NativeMoveBlock {
@@ -11,7 +11,7 @@ export interface NativeMoveBlock {
   readonly id: string;
 }
 
-export type NativeMoveRefusal = "missing" | "drop" | "list" | "stored" | "range" | "busy" | "closed";
+export type NativeMoveRefusal = "missing" | "drop" | "list" | "stored" | "range" | "busy" | "closed" | "full";
 
 export type NativeMoveOutcome =
   | { readonly kind: "written" }
@@ -152,8 +152,8 @@ function matchesExpected(
 // why: design section 2 and decision 9: a move writes ranks only, carrying a joined row's members together without
 // changing `joined`, pinning rankless drop neighbours and followers (rule (e)), and previewing via the reader's ranking
 export function moveNativeBlocks(script: NativeScript, blocks: readonly NativeMoveBlock[], drop: NativeMoveBlock | null): NativeMoveOutcome {
-  const rawBlocks = readRawBlocks(blocks), rawDrop = readRawDrop(drop), unavailable = nativeAvailability(script);
-  if (unavailable === "closed" || unavailable === "busy") return refused(unavailable);
+  const rawBlocks = readRawBlocks(blocks), rawDrop = readRawDrop(drop), unavailable = nativeWriteAvailability(script);
+  if (unavailable) return refused(unavailable);
   const copiedBlocks = validateBlocks(rawBlocks);
   if (!copiedBlocks) return refused("list");
   const copiedDrop = validateDrop(rawDrop);

@@ -46,7 +46,7 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
   const stop = native.subscribe(event => {
     try {
       if (event.kind === "changed") publication.publish(native.document(), "remote");
-      else if (event.reason === "failed") {
+      else if (event.kind === "closed" && event.reason === "failed") {
         terminal = event.state;
         if (failedClose()) {
           notices.show(stopInput
