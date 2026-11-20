@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import * as Y from "yjs";
+import { tagStack } from "../../../../src/core/text/runs.ts";
 import { nativeInitialRank } from "../../../../src/adapters/collab/native/convert.ts";
 import { readNativeOnce } from "../../../../src/adapters/collab/native/reader.ts";
 import { declareNativeRoots } from "../../../../src/adapters/collab/native/roots.ts";
@@ -151,4 +152,114 @@ export function playNoticeCommand(copy: NoticeTestSession, command: NoticeHistor
     case "undo": return commands.undo();
     case "redo": return commands.redo();
   }
+}
+
+function witness(copy: NoticeTestSession) {
+  return readNativeOnce(declareNativeRoots(copy.ydoc), reader => {
+    const names = new Map(reader.outline().flatMap(entry => entry.kind === "heading" ? [[entry.id, entry.name] as const] : []));
+    return reader.rankedOrder().map(block =>
+      block.kind === "beat" ? { id: block.id, kind: block.kind, beat: reader.noticeBeat(block.id) } :
+        { id: block.id, kind: block.kind, name: names.get(block.id) });
+  });
+}
+
+type Reading = ReturnType<typeof witness>;
+
+export function noticeCommandWitness() {
+  const backwards: Reading[] = [], forwards: Reading[] = [];
+  return (copy: NoticeTestSession, command: NoticeHistoryCommand, ids: Map<string, string>, play = playNoticeCommand) => {
+    const before = witness(copy), outcome = play(copy, command, ids), after = witness(copy);
+    const key = (id: string) => ids.get(id) ?? id;
+    const at = (reading: Reading, id: string, kind: "beat" | "heading" = "beat") =>
+      reading.findIndex(block => block.kind === kind && block.id === key(id));
+    const beat = (reading: Reading, id: string) => reading[at(reading, id)]?.beat;
+    const name = (reading: Reading, id: string) => reading[at(reading, id, "heading")]?.name;
+    const cell = (reading: Reading, id: string, field: "audio" | "visual") =>
+      beat(reading, id)?.[field === "audio" ? "narration" : field] ?? [];
+    const text = (reading: Reading, id: string, field: "audio" | "visual" | "name") =>
+      field === "name" ? name(reading, id) : cell(reading, id, field).map(run => run.text).join("");
+    const message = "issued " + command.op + " " + JSON.stringify(command);
+    switch (command.op) {
+      case "type":
+      case "erase": {
+        const old = need(text(before, command.id, command.field), "old text");
+        const from = command.op === "type" ? command.at : command.from;
+        const to = command.op === "type" ? command.at : command.to;
+        const insert = command.op === "type" ? command.value : "";
+        if (command.field !== "name") assert.ok(beat(after, command.id), message);
+        assert.equal(text(after, command.id, command.field), old.slice(0, from) + insert + old.slice(to), message);
+        break;
+      }
+      case "mark": {
+        assert.equal(text(after, command.id, command.field), text(before, command.id, command.field), message);
+        const tag = "t:prop:" + command.key.slice(2).toLowerCase();
+        const shown = cell(after, command.id, command.field).flatMap(run =>
+          Array.from({ length: run.text.length }, () => command.key === "b" ? run.marks.b === true : tagStack(run.marks).includes(tag)));
+        assert.deepEqual(shown.slice(command.from, command.to), Array.from({ length: command.to - command.from }, () => true), message);
+        break;
+      }
+      case "field":
+      case "detail": {
+        const field = command.op === "field" ? "status" : command.key;
+        const expected = command.op === "field" && command.value === "filmed" ? "shot" : command.value;
+        assert.deepEqual(beat(after, command.id)?.fields[field], expected, message);
+        break;
+      }
+      case "split": {
+        const old = need(text(before, command.id, "audio"), "parent text");
+        assert.equal(text(after, command.id, "audio"), old.slice(0, command.at), message);
+        assert.equal(text(after, command.created, "audio"), old.slice(command.at), message);
+        assert.equal(at(after, command.created), at(after, command.id) + 1, message);
+        break;
+      }
+      case "insert":
+        assert.equal(text(after, command.created, "audio"), command.value, message);
+        assert.equal(at(after, command.created) + 1, at(after, command.before), message);
+        break;
+      case "rows": {
+        const selected = new Set(command.ids.map(key));
+        for (const block of before) if (block.beat && (selected.has(block.id) || selected.has(block.beat.row))) {
+          assert.equal(at(after, block.id), -1, message);
+        }
+        break;
+      }
+      case "scene": {
+        const start = at(before, command.id, "heading"), end = before.findIndex((block, index) => index > start && block.kind === "heading");
+        assert.ok(start >= 0, message);
+        assert.equal(at(after, command.id, "heading"), -1, message);
+        for (const block of before.slice(start + 1, end === -1 ? undefined : end)) assert.equal(at(after, block.id), -1, message);
+        break;
+      }
+      case "heading":
+        assert.ok(at(before, command.id, "heading") >= 0, message);
+        assert.equal(at(after, command.id, "heading"), -1, message);
+        break;
+      case "create":
+        assert.equal(name(after, command.id), command.value, message);
+        assert.equal(at(after, command.id, "heading") + 1, at(after, command.above), message);
+        break;
+      case "join":
+        assert.deepEqual(beat(after, command.id)?.joined, { into: before[at(before, command.id) - 1]?.id, glue: " " }, message);
+        break;
+      case "unjoin":
+        assert.equal(beat(after, command.id)?.joined, null, message);
+        break;
+      case "move":
+        assert.ok(at(after, command.after) >= 0, message);
+        assert.equal(at(after, command.id), at(after, command.after) + 1, message);
+        break;
+      case "undo":
+      case "redo": {
+        const [from, to] = command.op === "undo" ? [backwards, forwards] : [forwards, backwards];
+        assert.deepEqual(after, need(from.pop(), "preceding edit"), message);
+        to.push(before);
+        return outcome;
+      }
+    }
+    if (outcome.kind === "written") {
+      backwards.push(before);
+      forwards.length = 0;
+    }
+    return outcome;
+  };
 }

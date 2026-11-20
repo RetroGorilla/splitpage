@@ -1,6 +1,6 @@
 import { tagStack } from "../../../core/text/runs.ts";
 import type { Run } from "../../../core/text/runs.ts";
-import type { NativePendingEdit, NativePendingEditsData, NativeSavedBeat } from "./pending-edits.ts";
+import type { NativePendingEdit, NativeSavedBeat } from "./pending-edits.ts";
 import type { NativeReadBeat, NativeScriptReader } from "./reader.ts";
 import { sameNativeValue } from "./values.ts";
 
@@ -36,39 +36,22 @@ function units(runs: readonly Run[], marked: boolean): Map<string, number> {
   return counts;
 }
 
-function cellClashed(edits: readonly NativePendingEdit[], column: "narration" | "visual",
-  merged: NativeReadBeat | null, marked: boolean): boolean {
-  const change = new Map<string, { delta: number; wanted: number }>();
-  for (const { before, after } of edits) {
-    if (!before || !after || sameNativeValue(before[column], after[column])) continue;
-    const old = units(before[column], marked), saved = units(after[column], marked);
-    for (const unit of new Set([...old.keys(), ...saved.keys()])) {
-      const wanted = saved.get(unit) ?? 0, difference = wanted - (old.get(unit) ?? 0);
-      if (difference) change.set(unit, { delta: (change.get(unit)?.delta ?? 0) + difference, wanted });
-    }
+function cellClashed(before: readonly Run[], mine: readonly Run[], merged: readonly Run[] | undefined, marked: boolean): boolean {
+  const old = units(before, marked), saved = units(mine, marked), live = units(merged ?? [], marked);
+  for (const unit of new Set([...old.keys(), ...saved.keys()])) {
+    const wanted = saved.get(unit) ?? 0, delta = wanted - (old.get(unit) ?? 0), present = live.get(unit) ?? 0;
+    if (merged === undefined ? delta !== 0 : delta > 0 && present < wanted || delta < 0 && present > wanted) return true;
   }
-  const live = units(merged?.[column] ?? [], marked);
-  return [...change].some(([unit, { delta, wanted }]) => {
-    const present = live.get(unit) ?? 0;
-    return merged === null ? delta !== 0 : delta > 0 && present < wanted || delta < 0 && present > wanted;
-  });
+  return false;
 }
 
-function recordClashed(edits: readonly NativePendingEdit[], merged: NativeReadBeat | null): boolean {
-  const values = new Map<string, { from: unknown; to: unknown }>();
-  for (const { before, after } of edits) {
-    if (!before || !after) continue;
-    const keys = new Set([...Object.keys(before.fields), ...Object.keys(after.fields)]);
-    keys.delete("updatedAt");
-    keys.delete("updatedBy");
-    for (const key of keys) {
-      const from = Object.hasOwn(before.fields, key) ? before.fields[key] : undefined;
-      const to = Object.hasOwn(after.fields, key) ? after.fields[key] : undefined;
-      if (!sameNativeValue(from, to)) values.set(key, { from: values.has(key) ? values.get(key)?.from : from, to });
-    }
-  }
-  return [...values].some(([key, { from, to }]) => !sameNativeValue(from, to) &&
-    (!merged || !sameNativeValue(to, Object.hasOwn(merged.fields, key) ? merged.fields[key] : undefined)));
+function recordClashed(before: NativeReadBeat, mine: NativeSavedBeat, merged: NativeReadBeat | null): boolean {
+  const keys = new Set([...Object.keys(before.fields), ...Object.keys(mine.fields)]);
+  keys.delete("updatedAt");
+  keys.delete("updatedBy");
+  const value = (beat: NativeReadBeat, key: string) => Object.hasOwn(beat.fields, key) ? beat.fields[key] : undefined;
+  return [...keys].some(key => !sameNativeValue(value(before, key), value(mine, key)) &&
+    (!merged || !sameNativeValue(value(mine, key), value(merged, key))));
 }
 
 function splitLostText(mine: NativeSavedBeat, merged: NativeReadBeat): boolean {
@@ -78,45 +61,40 @@ function splitLostText(mine: NativeSavedBeat, merged: NativeReadBeat): boolean {
   return matched !== wanted.length;
 }
 
-export function compareNativeOfflineNotice(journal: NativePendingEditsData, reader: NativeScriptReader): readonly NativeOfflineClash[] {
-  const pending = new Map<string, { edits: NativePendingEdit[]; last: NativePendingEdit }>();
-  for (const edit of journal.entries) {
-    const existing = pending.get(edit.id);
-    if (existing) {
-      existing.edits.push(edit);
-      existing.last = edit;
-    } else pending.set(edit.id, { edits: [edit], last: edit });
-  }
+export function compareNativeOfflineNotice(edits: readonly NativePendingEdit[], reader: NativeScriptReader): readonly NativeOfflineClash[] {
+  const pending = edits.filter(entry => entry.peer);
+  if (!pending.length) return [];
   const order = reader.rankedOrder(), positions = new Map(order.map(({ id, kind }, index) => [kind + ":" + id, index]));
-  const result: NativeOfflineClash[] = [];
-  for (const [id, { edits, last }] of pending) {
-    const mine = last.after, merged = reader.noticeBeat(id);
+  const result: NativeOfflineClash[] = [], displaced = new Map<string, { entry: NativePendingEdit; clash: NativeOfflineClash }>();
+  for (const entry of pending) {
+    const { id, before, after: mine, landing, split } = entry;
+    const merged = entry.heading ? null : reader.noticeBeat(id);
     const kinds: NativeClashKind[] = [];
     let near: string | undefined;
     if (mine) {
-      if ((!merged && edits.some(edit => edit.inserted)) || cellClashed(edits, "narration", merged, false)) kinds.push("narration");
-      if (cellClashed(edits, "visual", merged, false)) kinds.push("visual");
-      if (cellClashed(edits, "narration", merged, true) || cellClashed(edits, "visual", merged, true)) kinds.push("marks");
-      if (recordClashed(edits, merged)) kinds.push("record");
-      const firstJoin = edits.find(({ before, after }) => before && after && !sameNativeValue(before.joined, after.joined))?.before;
-      if (firstJoin && !sameNativeValue(firstJoin.joined, mine.joined) &&
-        (!merged || merged.row !== mine.row || !sameNativeValue(merged.joined, mine.joined))) kinds.push("join");
+      if (entry.created !== undefined && !merged || before && cellClashed(before.narration, mine.narration, merged?.narration, false)) kinds.push("narration");
+      if (before) {
+        if (cellClashed(before.visual, mine.visual, merged?.visual, false)) kinds.push("visual");
+        if (cellClashed(before.narration, mine.narration, merged?.narration, true) ||
+          cellClashed(before.visual, mine.visual, merged?.visual, true)) kinds.push("marks");
+        if (recordClashed(before, mine, merged)) kinds.push("record");
+        if (!sameNativeValue(before.joined, mine.joined) &&
+          (!merged || merged.row !== mine.row || !sameNativeValue(merged.joined, mine.joined))) kinds.push("join");
+      }
 
-      const split = edits.findLast(edit => edit.splitFrom);
-      if (split?.splitFrom) {
+      if (split) {
         if (!merged || splitLostText(mine, merged)) kinds.push("split-text");
-        const parent = positions.get("beat:" + split.splitFrom);
-        if (merged && parent !== undefined && parent + 1 !== positions.get("beat:" + id)) {
+        const parent = positions.get("beat:" + split.parent);
+        if (merged && mine.placement.left === split.parent && parent !== undefined && parent + 1 !== positions.get("beat:" + id)) {
           kinds.push("split-move");
-          near = split.splitFrom;
+          near = split.parent;
         }
       }
-      if (merged && edits.some(edit => edit.restored)) {
+      if (merged && entry.restored !== undefined) {
         const saved = textOf(mine.narration), live = textOf(merged.narration);
-        if (saved && (live === saved + saved || live === "")) kinds.push("double-undo");
+        if (live !== saved && (live === saved + saved || live === "")) kinds.push("double-undo");
       }
-    } else if (last.landing && !merged) {
-      const landing = pending.get(last.landing.id)?.last.after ?? last.landing;
+    } else if (landing && !merged && (!entry.heading || !positions.has("heading:" + id))) {
       const live = reader.noticeBeat(landing.id);
       const saved = textOf(landing.narration), shown = textOf(live?.narration ?? []);
       if (shown.length > saved.length && shown.startsWith(saved)) {
@@ -124,8 +102,13 @@ export function compareNativeOfflineNotice(journal: NativePendingEditsData, read
         near = landing.id;
       }
     }
-    if (kinds.length) result.push(Object.freeze({ id, kinds: Object.freeze(kinds), mine, merged,
-      possibleRemoval: mine !== null && merged === null, ...near === undefined ? {} : { near } }));
+    if (!kinds.length) continue;
+    const clash = Object.freeze({ id, kinds: Object.freeze(kinds), mine, merged,
+      possibleRemoval: mine !== null && merged === null, ...near === undefined ? {} : { near } });
+    if (landing && kinds.includes("displaced")) {
+      const prior = displaced.get(landing.id);
+      if (!prior || prior.entry.heading && !entry.heading) displaced.set(landing.id, { entry, clash });
+    } else result.push(clash);
   }
-  return Object.freeze(result);
+  return Object.freeze(result.concat([...displaced.values()].map(({ clash }) => clash)));
 }

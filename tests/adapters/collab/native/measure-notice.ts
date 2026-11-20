@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { performance } from "node:perf_hooks";
 import { dom } from "../../../../src/test/_dom.mjs";
 import { noticeCopy, noticeRange } from "./notice-harness.ts";
+import { measureNoticeGrowth } from "./notice-growth.ts";
 import { largeState } from "./structural.ts";
 
 const state = largeState(), samples = 1000, warmup = 100;
@@ -19,7 +20,7 @@ function timing(enabled: boolean): number[] {
       assert.equal(result.kind, "written");
       if (index >= warmup) times.push(elapsed);
     }
-    if (enabled) assert.equal(copy.pendingEdits?.data().entries.length, warmup + samples);
+    if (enabled) assert.equal(copy.pendingEdits?.data().entries.length, 1);
     return times;
   } finally { copy.close(); }
 }
@@ -36,5 +37,6 @@ try {
     return { plain: median(plain), journal: median(journal), added: median(journal.map((value, index) => value - (plain[index] ?? NaN))) };
   });
   const result = Object.fromEntries((["plain", "journal", "added"] as const).map(key => [key, median(runs.map(run => run[key]))]));
-  process.stdout.write(JSON.stringify({ runtime: process.version, arch: process.arch, samples, warmup, runs, result }, null, 2) + "\n");
+  const growth = [measureNoticeGrowth(state, false), measureNoticeGrowth(state, true)];
+  process.stdout.write(JSON.stringify({ runtime: process.version, arch: process.arch, samples, warmup, runs, result, growth }, null, 2) + "\n");
 } finally { dom.window.close(); }

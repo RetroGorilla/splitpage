@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import * as Y from "yjs";
+import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
 import { tagStack } from "../../../../src/core/text/runs.ts";
 import { nativeMarkName } from "../../../../src/adapters/collab/native/inline.ts";
 import type { NativePutBackBeat } from "../../../../src/adapters/collab/native/insert-commands.ts";
@@ -9,6 +10,7 @@ import { declareNativeRoots } from "../../../../src/adapters/collab/native/roots
 import type { NativeRoots } from "../../../../src/adapters/collab/native/roots.ts";
 import { base } from "./notice-histories.ts";
 import { noticeCopy, noticeDeliver, noticeRange, noticeSeed } from "./notice-harness.ts";
+import { convertedScript } from "./helpers.ts";
 
 const LAMP = "t:prop:lamp", ROPE = "t:prop:rope";
 type Copy = ReturnType<typeof noticeCopy>;
@@ -155,6 +157,47 @@ test("a put-back stays pending and can itself be removed before confirmation", (
   }
 });
 
+test("put-back restores the journal's converted field at depth 65", () => {
+  let nested: unknown = "leaf";
+  for (let level = 0; level < 65; level++) nested = { child: nested };
+  const source = convertedScript(migrateRows({
+    title: "Deep field", rows: [{ id: "A", audioText: "abc", visualText: "" }, { id: "B", audioText: "def", visualText: "", nested }]
+  }));
+  const state = Y.encodeStateAsUpdate(source.doc), writer = noticeCopy(state, 2, true), cutter = noticeCopy(state, 3);
+  try {
+    assert.equal(writer.commands.typeText(noticeRange(writer, "B", "narration", 1), "Ω", {}).kind, "written");
+    assert.equal(cutter.commands.removeRows(["B"]).kind, "written");
+    noticeDeliver(cutter, writer);
+    const [clash] = writer.offlineNotice("returning");
+    assert.ok(clash?.mine);
+    assert.deepEqual(clash.mine.fields.nested, nested);
+    const id = putBack(writer, clash.mine);
+    assert.deepEqual(writer.document().rows.find(row => row.id === id)?.nested, nested);
+    assert.equal(audio(writer, id), "dΩef");
+  } finally {
+    source.doc.destroy();
+    writer.close();
+    cutter.close();
+  }
+});
+
+test("put-back normalizes saved fields to the core's reload form before writing", () => {
+  const copy = noticeCopy(noticeSeed(base), 2);
+  try {
+    const id = putBack(copy, { ...savedBeat(), narration: [{ text: "Words", marks: {} }], visual: [],
+      fields: { status: "invalid-status", lengthSeconds: -4, paragraphStart: false, imageRef: "bad", notes: "keep" } });
+    const roots = declareNativeRoots(copy.ydoc), record = roots.beats.get(id);
+    assert.equal(record?.get("status"), '"todo"');
+    assert.equal(record?.has("lengthSeconds"), false);
+    assert.equal(record?.has("paragraphStart"), false);
+    const before = copy.document().rows.find(row => row.id === id);
+    assert.ok(before);
+    assert.deepEqual(before, { id, status: "todo", imageRef: null, notes: "keep", audioText: "Words", visualText: "" });
+    const reloaded = migrateRows(structuredClone(copy.document())).rows.find(row => row.id === id);
+    assert.deepEqual(reloaded, { ...before, updatedAt: "", updatedBy: null });
+  } finally { copy.close(); }
+});
+
 test("put-back after double delete and double undo adds a third copy of the narration", () => {
   const state = noticeSeed(base), first = noticeCopy(state, 2, true), second = noticeCopy(state, 3, true);
   try {
@@ -180,7 +223,9 @@ test("put-back uses the saved scene, surviving neighbours, and the equal-rank gr
   const cases = [
     { saved: savedBeat(), remove: ["A", "B"], expected: (id: string) => [id, "C", "D"] },
     { saved: savedBeat("B", null, ["A", "B", "C"]), remove: ["A", "B", "C"], expected: (id: string) => ["D", id, "E"] },
-    { saved: savedBeat("E", "H", ["E"]), remove: ["E"], heading: "H", expected: (id: string) => ["A", "B", "C", "D", id, "F"] }
+    { saved: savedBeat("E", "H", ["E"]), remove: ["E"], heading: "H", expected: (id: string) => ["A", "B", "C", "D", id, "F"] },
+    { saved: savedBeat("old", "H", ["A", "old", "B"]), remove: ["E"], heading: "H",
+      expected: (id: string) => ["A", "B", "C", "D", id, "F"] }
   ];
   for (const scenario of cases) {
     const copy = noticeCopy(state, 2);
@@ -235,7 +280,7 @@ test("put-back refuses invalid, unavailable and malformed-rank input before writ
   try {
     const before = copy.encodeState(), journal = copy.pendingEdits?.data();
     const bad = [
-      { ...saved, id: "" },
+      { ...saved, id: "", placement: { ...saved.placement, sceneOrder: [""] } },
       { ...saved, placement: { ...saved.placement, scene: "\ud800" } },
       { ...saved, placement: { ...saved.placement, sceneOrder: ["C"] } },
       { ...saved, placement: { ...saved.placement, sceneOrder: ["B", 3] } },

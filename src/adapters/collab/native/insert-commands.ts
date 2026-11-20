@@ -1,10 +1,10 @@
 import * as Y from "yjs";
+import { normalizeBeatLength, rowStatusId } from "../../../core/document/timing.ts";
 import { nativeBeatEntries } from "./convert.ts";
 import { prepareNativeRuns, writeNativeRuns } from "./inline.ts";
 import type { NativeSavedBeat } from "./pending-edits.ts";
 import { nativeRankBetween, NativeRankError } from "./rank.ts";
 import type { NativeRankedBlock } from "./reader.ts";
-import { copyRecordValue } from "./record-values.ts";
 import { transactNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { nativeAvailability } from "./text-commands.ts";
@@ -25,14 +25,18 @@ function prepare(saved: NativePutBackBeat) {
   try {
     const { id, placement, narration, visual, fields } = saved;
     const { scene, sceneOrder } = placement;
-    const old = copyRecordValue(sceneOrder), record = copyRecordValue(fields);
-    if (!nativeWellFormed(id) || !id || (scene !== null && !nativeWellFormed(scene)) ||
-      !Array.isArray(old) || !(old as unknown[]).every(nativeWellFormed) || !old.includes(id) || !recordBag(record)) return null;
+    if (!Array.isArray(sceneOrder)) return null;
+    const old = Array.from(structuredClone(sceneOrder) as readonly unknown[]), record = structuredClone(fields);
+    if (!id || (scene !== null && !nativeWellFormed(scene)) ||
+      !old.every(nativeWellFormed) || !old.includes(id) || !recordBag(record)) return null;
     const audio = prepareNativeRuns(structuredClone(narration)), picture = prepareNativeRuns(structuredClone(visual));
     if (!audio || !picture) return null;
-    Reflect.deleteProperty(record, "rank");
-    Reflect.deleteProperty(record, "joined");
-    return { id, scene, old: old as string[], audio, picture, entries: nativeBeatEntries(record) };
+    const content: Record<string, unknown> = {
+      ...record, status: rowStatusId(record.status) ?? "todo", lengthSeconds: normalizeBeatLength(record.lengthSeconds)
+    };
+    for (const key of ["rank", "joined"]) Reflect.deleteProperty(content, key);
+    if (content.paragraphStart !== true) Reflect.deleteProperty(content, "paragraphStart");
+    return { id, scene, old, audio, picture, entries: nativeBeatEntries(content) };
   } catch { return null; }
 }
 

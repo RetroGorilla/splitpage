@@ -1,12 +1,21 @@
 import assert from "node:assert/strict";
 import test from "node:test";
 import type { NativePendingEditsData } from "../../../../src/adapters/collab/native/pending-edits.ts";
+import { readNativeOnce } from "../../../../src/adapters/collab/native/reader.ts";
+import { declareNativeRoots } from "../../../../src/adapters/collab/native/roots.ts";
 import { tagStack } from "../../../../src/core/text/runs.ts";
 import { base, sole } from "./notice-histories.ts";
 import { noticeCopy, noticeDeliver, noticeRange, noticeSeed } from "./notice-harness.ts";
+import { measureNoticeGrowth } from "./notice-growth.ts";
+import { largeState } from "./structural.ts";
 
 const text = (beat: { readonly narration: readonly { readonly text: string }[] }) =>
   beat.narration.map(run => run.text).join("");
+
+test("the journal is bounded by beats touched across 10,000 keystrokes and 900 beats", t => {
+  const state = largeState();
+  for (const across of [false, true]) t.diagnostic(JSON.stringify(measureNoticeGrowth(state, across)));
+});
 
 test("only local written commands enter the journal and only a returning copy gets a notice", () => {
   const state = noticeSeed(base), writer = noticeCopy(state, 2, true), cutter = noticeCopy(state, 3, true);
@@ -18,6 +27,7 @@ test("only local written commands enter the journal and only a returning copy ge
     assert.deepEqual(writer.pendingEdits?.data(), { through: 0, entries: [] });
 
     assert.equal(writer.commands.typeText(caret, "Ω", {}).kind, "written");
+    assert.equal(writer.pendingEdits?.data().entries[0]?.landing, null);
     noticeDeliver(writer, cutter);
     assert.deepEqual(cutter.pendingEdits?.data(), { through: 0, entries: [] });
     assert.deepEqual(writer.offlineNotice("returning"), []);
@@ -45,7 +55,7 @@ test("plain data reopens with the saved beat and a receipt clears only acknowled
   const state = noticeSeed(base), writer = noticeCopy(state, 2, true), cutter = noticeCopy(state, 3, true);
   try {
     assert.equal(writer.commands.setField({ kind: "beat", id: "B", field: "status" }, "ready").kind, "written");
-    const receipt = writer.pendingEdits?.data().through;
+    const receipt = writer.pendingEdits?.confirmationPoint();
     assert.equal(receipt, 1);
     assert.equal(writer.commands.typeText(noticeRange(writer, "B", "visual", 1), "Ψ", {}).kind, "written");
     assert.equal(writer.commands.setField({ kind: "beat", id: "B", field: "notes" }, { text: "details" }).kind, "written");
@@ -59,7 +69,8 @@ test("plain data reopens with the saved beat and a receipt clears only acknowled
     try {
       assert.deepEqual(restored.pendingEdits?.data(), data);
       restored.pendingEdits?.clearThrough(receipt);
-      assert.deepEqual(restored.pendingEdits?.data().entries.map(({ sequence }) => sequence), [2, 3, 4]);
+      assert.deepEqual(restored.pendingEdits?.data().entries.map(({ first, last }) => [first, last]), [[2, 4]]);
+      assert.equal(restored.pendingEdits?.data().entries[0]?.before?.fields.status, "ready");
       assert.equal(cutter.commands.removeRows(["B"]).kind, "written");
       noticeDeliver(cutter, restored);
       const [clash] = restored.offlineNotice("returning");
@@ -104,6 +115,30 @@ test("a heading rename writes without adding a beat to the journal", () => {
   } finally { copy.close(); }
 });
 
+test("a fresh Yjs tag application with the same visible reading adds no pending edit", () => {
+  const copy = noticeCopy(noticeSeed(base), 2, true);
+  const tag = { kind: "tag", id: "t:prop:lamp", on: true } as const;
+  try {
+    const range = noticeRange(copy, "B", "visual", 0, 1);
+    assert.equal(copy.commands.formatText(range, tag).kind, "written");
+    copy.pendingEdits?.clearThrough(1);
+    const before = copy.encodeState();
+    assert.equal(copy.commands.formatText(range, tag).kind, "written");
+    assert.notDeepEqual(copy.encodeState(), before);
+    assert.deepEqual(copy.pendingEdits?.data(), { through: 1, entries: [] });
+  } finally { copy.close(); }
+});
+
+test("a heading cut at the start of the script has no displaced-text predecessor", () => {
+  const copy = noticeCopy(noticeSeed(base), 2, true);
+  try {
+    assert.equal(copy.commands.createHeading(noticeRange(copy, "A", "narration", 0), "start", "Start").kind, "written");
+    const before = copy.pendingEdits?.data();
+    assert.equal(copy.commands.removeHeading("start").kind, "written");
+    assert.deepEqual(copy.pendingEdits?.data(), before);
+  } finally { copy.close(); }
+});
+
 test("a joined member's own field is journaled even when it is absent from the displayed row", () => {
   const initial = structuredClone(base);
   initial.beats.C = { joined: { into: "B", glue: " " } };
@@ -124,6 +159,22 @@ test("a joined member's own field is journaled even when it is absent from the d
     writer.close();
     cutter.close();
   }
+});
+
+test("cutting a joined member updates placement while its visible row stays", () => {
+  const initial = structuredClone(base);
+  initial.beats.C = { joined: { into: "B", glue: " " } };
+  const copy = noticeCopy(noticeSeed(initial), 2, true);
+  try {
+    const rows = copy.document().rows.map(row => row.id);
+    assert.equal(copy.commands.removeRows(["C"]).kind, "written");
+    assert.deepEqual(copy.document().rows.map(row => row.id), rows);
+    assert.equal(copy.commands.setField({ kind: "beat", id: "B", field: "notes" }, "kept").kind, "written");
+    const data = copy.pendingEdits?.data(), saved = data?.entries.find(entry => entry.id === "B")?.after;
+    assert.equal(data?.entries.find(entry => entry.id === "C")?.after, null);
+    assert.ok(saved);
+    assert.deepEqual(data?.orders?.[saved.placement.order], ["A", "B", "D"]);
+  } finally { copy.close(); }
 });
 
 test("a concurrent winning status is shown beside the returning writer's status", () => {
@@ -180,6 +231,196 @@ test("undoing a local split does not report a peer's text that lands back in the
   }
 });
 
+test("local split, move, join, edit, cut and undo produce no clash on their own", () => {
+  const state = noticeSeed(base), copy = noticeCopy(state, 2, true), peer = noticeCopy(state, 3);
+  try {
+    const split = copy.commands.splitRow(noticeRange(copy, "B", "narration", 1));
+    assert.equal(split.kind, "written");
+    assert.equal(copy.commands.moveBlocks([{ kind: "beat", id: "B" }], { kind: "beat", id: "D" }).kind, "written");
+    assert.equal(copy.commands.joinRow("C", split.created, " ").kind, "written");
+    assert.equal(copy.commands.typeText(noticeRange(copy, "A", "visual", 1), "Ω", {}).kind, "written");
+    assert.equal(copy.commands.setField({ kind: "beat", id: "A", field: "notes" }, "local").kind, "written");
+    assert.equal(copy.commands.removeRows(["D"]).kind, "written");
+    assert.equal(copy.commands.undo().kind, "written");
+    assert.deepEqual(copy.offlineNotice("returning"), []);
+    assert.equal(peer.commands.setField({ kind: "beat", id: "F", field: "notes" }, "peer").kind, "written");
+    noticeDeliver(peer, copy);
+    assert.deepEqual(copy.offlineNotice("returning"), []);
+  } finally { copy.close(); peer.close(); }
+});
+
+test("a restored creation stays pending past a receipt through its undo", () => {
+  const state = noticeSeed(sole), writer = noticeCopy(state, 2, true), peer = noticeCopy(state, 3);
+  try {
+    assert.equal(writer.commands.removeRows(["A"]).kind, "written");
+    const journal = writer.pendingEdits;
+    assert.ok(journal);
+    const removed = journal.data().entries[0]?.before;
+    assert.ok(removed);
+    const result = writer.commands.putBack({ ...removed, placement: { scene: null, left: null, right: null, sceneOrder: ["A"] } });
+    assert.equal(result.kind, "written");
+    assert.equal(writer.commands.undo().kind, "written");
+    const throughUndo = journal.confirmationPoint();
+    assert.equal(writer.commands.redo().kind, "written");
+    journal.clearThrough(throughUndo);
+    assert.deepEqual(journal.data().entries.map(entry => [entry.id, entry.first, entry.created]),
+      [[result.created, throughUndo + 1, throughUndo + 1]]);
+    noticeDeliver(writer, peer);
+    assert.equal(peer.commands.removeRows([result.created]).kind, "written");
+    noticeDeliver(peer, writer);
+    assert.deepEqual(writer.offlineNotice("returning").map(clash => [clash.id, clash.kinds]), [[result.created, ["narration"]]]);
+  } finally { writer.close(); peer.close(); }
+});
+
+test("a scene cut reports each displaced transfer once and a beat with no same-scene predecessor stays silent", () => {
+  const state = noticeSeed(base);
+  for (const scene of [false, true]) {
+    const cutter = noticeCopy(state, 2, true), writer = noticeCopy(state, 3);
+    try {
+      if (scene) assert.equal(cutter.commands.removeHeading("I").kind, "written");
+      assert.equal(cutter.commands.removeRows(["F"]).kind, "written");
+      assert.equal(cutter.pendingEdits?.data().entries.find(entry => entry.id === "F")?.landingId, scene ? "E" : undefined);
+      assert.equal(writer.commands.typeText(noticeRange(writer, "F", "narration", 1), "Ω", {}).kind, "written");
+      noticeDeliver(writer, cutter);
+      assert.deepEqual(cutter.offlineNotice("returning").map(clash => [clash.id, clash.near, clash.kinds]),
+        scene ? [["F", "E", ["displaced"]]] : []);
+    } finally { cutter.close(); writer.close(); }
+  }
+});
+
+test("a cut compares the current local landing text and requires the source to stay absent", () => {
+  const state = noticeSeed(base), cutter = noticeCopy(state, 2, true), peer = noticeCopy(state, 3);
+  const secondCutter = noticeCopy(state, 4, true), restorer = noticeCopy(state, 5);
+  try {
+    assert.equal(cutter.commands.removeRows(["B"]).kind, "written");
+    assert.equal(cutter.commands.typeText(noticeRange(cutter, "A", "narration", 3), "L", {}).kind, "written");
+    assert.equal(peer.commands.setField({ kind: "beat", id: "C", field: "notes" }, "peer").kind, "written");
+    noticeDeliver(peer, cutter);
+    assert.deepEqual(cutter.offlineNotice("returning"), []);
+    assert.equal(secondCutter.commands.removeRows(["B"]).kind, "written");
+    assert.equal(restorer.commands.removeRows(["B"]).kind, "written");
+    assert.equal(restorer.commands.undo().kind, "written");
+    assert.equal(restorer.commands.typeText(noticeRange(restorer, "A", "narration", 3), "P", {}).kind, "written");
+    noticeDeliver(restorer, secondCutter);
+    assert.equal(secondCutter.document().rows.find(row => row.id === "B")?.audioText, "def");
+    assert.equal(secondCutter.document().rows.find(row => row.id === "A")?.audioText, "abcP");
+    assert.deepEqual(secondCutter.offlineNotice("returning"), []);
+  } finally { cutter.close(); peer.close(); secondCutter.close(); restorer.close(); }
+});
+
+test("a text overwrite can remove a pending insertion but does not diagnose double undo", () => {
+  const state = noticeSeed(base), writer = noticeCopy(state, 2, true), peer = noticeCopy(state, 3);
+  try {
+    assert.equal(writer.commands.typeText(noticeRange(writer, "B", "narration", 1), "Ω", {}).kind, "written");
+    noticeDeliver(writer, peer);
+    assert.equal(peer.commands.deleteText(noticeRange(peer, "B", "narration", 0, 4)).kind, "written");
+    noticeDeliver(peer, writer);
+    assert.deepEqual(writer.offlineNotice("returning").map(clash => clash.kinds), [["narration"]]);
+  } finally { writer.close(); peer.close(); }
+});
+
+test("edit stamps alone do not turn a reverted edit into a removal clash", () => {
+  const state = noticeSeed(base), writer = noticeCopy(state, 2, true), peer = noticeCopy(state, 3);
+  try {
+    const stamp = { at: "2030-01-01T00:00:00Z", by: "writer" };
+    assert.equal(writer.commands.typeText(noticeRange(writer, "B", "narration", 1), "Ω", {}, stamp).kind, "written");
+    assert.equal(writer.commands.deleteText(noticeRange(writer, "B", "narration", 1, 2), stamp).kind, "written");
+    assert.equal(peer.commands.removeRows(["B"]).kind, "written");
+    noticeDeliver(peer, writer);
+    assert.deepEqual(writer.offlineNotice("returning"), []);
+  } finally { writer.close(); peer.close(); }
+});
+
+test("join cards require a pending join mismatch in the merged reading", () => {
+  const initial = structuredClone(base);
+  initial.beats.C = { joined: { into: "B", glue: " " } };
+  const cases = [
+    { state: noticeSeed(initial), local: "visual", remote: "cut", kinds: [] },
+    { state: noticeSeed(base), local: "join", remote: "unrelated", kinds: [] },
+    { state: noticeSeed(base), local: "join", remote: "cut", kinds: [["join"]] },
+    { state: noticeSeed(base), local: "cancel", remote: "join", kinds: [] }
+  ];
+  for (const { state, local, remote, kinds } of cases) {
+    const writer = noticeCopy(state, 2, true), peer = noticeCopy(state, 3);
+    try {
+      if (local === "visual") assert.equal(writer.commands.typeText(noticeRange(writer, "C", "visual", 1), "Ω", {}).kind, "written");
+      else assert.equal(writer.commands.joinRow("C", "B", " ").kind, "written");
+      if (local === "cancel") assert.equal(writer.commands.unjoinRow("C").kind, "written");
+      if (remote === "cut") assert.equal(peer.commands.removeRows(["B"]).kind, "written");
+      if (remote === "join") assert.equal(peer.commands.joinRow("C", "B", " ").kind, "written");
+      if (remote === "unrelated") assert.equal(peer.commands.setField({ kind: "beat", id: "F", field: "notes" }, "peer").kind, "written");
+      noticeDeliver(peer, writer);
+      assert.deepEqual(writer.offlineNotice("returning").map(clash => clash.kinds), kinds, JSON.stringify({ local, remote }));
+    } finally { writer.close(); peer.close(); }
+  }
+});
+
+test("the split origin belongs only to the new beat and a removed parent is not a move", () => {
+  const state = noticeSeed(base);
+  for (const removeParent of [false, true]) {
+    const writer = noticeCopy(state, 2, true), peer = noticeCopy(state, 3);
+    try {
+      const split = writer.commands.splitRow(noticeRange(writer, "B", "narration", 1));
+      assert.equal(split.kind, "written");
+      noticeDeliver(writer, peer);
+      if (removeParent) assert.equal(peer.commands.removeRows(["B"]).kind, "written");
+      else assert.equal(peer.commands.moveBlocks([{ kind: "beat", id: "A" }], { kind: "beat", id: "D" }).kind, "written");
+      noticeDeliver(peer, writer);
+      assert.deepEqual(writer.offlineNotice("returning").map(clash => [clash.id, clash.kinds]),
+        removeParent ? [["B", ["narration"]]] : []);
+    } finally { writer.close(); peer.close(); }
+  }
+});
+
+test("a peer undo returning erased visual text is reported as a visual clash", () => {
+  const state = noticeSeed(base), writer = noticeCopy(state, 2, true), peer = noticeCopy(state, 3);
+  try {
+    assert.equal(writer.commands.deleteText(noticeRange(writer, "B", "visual", 0, 1)).kind, "written");
+    assert.equal(peer.commands.deleteText(noticeRange(peer, "B", "visual", 0, 1)).kind, "written");
+    assert.equal(peer.commands.undo().kind, "written");
+    noticeDeliver(peer, writer);
+    const [clash] = writer.offlineNotice("returning");
+    assert.equal(clash?.merged?.visual[0]?.text, "2");
+    assert.deepEqual(clash?.kinds, ["visual"]);
+  } finally { writer.close(); peer.close(); }
+});
+
+test("an empty beat stays silent after its removal and undo alongside a peer update", () => {
+  const initial = structuredClone(sole);
+  initial.segments.S = { head: { kind: "b", id: "A" }, units: [] };
+  const state = noticeSeed(initial), copy = noticeCopy(state, 2, true), peer = noticeCopy(state, 3);
+  try {
+    assert.equal(copy.commands.removeRows(["A"]).kind, "written");
+    assert.equal(copy.commands.undo().kind, "written");
+    assert.equal(peer.commands.setField({ kind: "beat", id: "A", field: "notes" }, "peer").kind, "written");
+    noticeDeliver(peer, copy);
+    assert.equal(copy.document().rows[0]?.audioText, "");
+    assert.deepEqual(copy.offlineNotice("returning"), []);
+  } finally { copy.close(); peer.close(); }
+});
+
+test("undo on an already visible beat does not diagnose double undo when a peer erases it", () => {
+  const state = noticeSeed(base), writer = noticeCopy(state, 2, true), peer = noticeCopy(state, 3);
+  try {
+    assert.equal(writer.commands.typeText(noticeRange(writer, "B", "narration", 1), "Ω", {}).kind, "written");
+    assert.equal(writer.commands.undo().kind, "written");
+    assert.equal(peer.commands.deleteText(noticeRange(peer, "B", "narration", 0, 3)).kind, "written");
+    noticeDeliver(peer, writer);
+    assert.equal(writer.document().rows.find(row => row.id === "B")?.audioText, "");
+    assert.deepEqual(writer.offlineNotice("returning"), []);
+  } finally { writer.close(); peer.close(); }
+});
+
+test("a local transaction alone does not mark pending edits as having a peer update", () => {
+  const copy = noticeCopy(noticeSeed(base), 2, true);
+  try {
+    assert.equal(copy.commands.setField({ kind: "beat", id: "B", field: "status" }, "ready").kind, "written");
+    declareNativeRoots(copy.ydoc).beats.get("B")?.set("status", '"shot"');
+    assert.equal(copy.document().rows.find(row => row.id === "B")?.status, "shot");
+    assert.deepEqual(copy.offlineNotice("returning"), []);
+  } finally { copy.close(); }
+});
+
 test("a returned marker without its record has no beat in the notice reading", () => {
   const state = noticeSeed(base), splitter = noticeCopy(state, 2), cutter = noticeCopy(state, 3), writer = noticeCopy(state, 4, true);
   try {
@@ -210,6 +451,20 @@ test("a returned marker without its record has no beat in the notice reading", (
   }
 });
 
+test("the reader's narration-only fallback is not a physical notice beat", () => {
+  const state = noticeSeed(sole), writer = noticeCopy(state, 2, true), cutter = noticeCopy(state, 3);
+  try {
+    assert.equal(writer.commands.typeText(noticeRange(writer, "A", "narration", 1), "Ω", {}).kind, "written");
+    assert.equal(cutter.commands.removeRows(["A"]).kind, "written");
+    noticeDeliver(cutter, writer);
+    const visible = writer.document().rows[0];
+    assert.equal(visible?.audioText, "Ω");
+    assert.ok(visible);
+    assert.equal(readNativeOnce(declareNativeRoots(writer.ydoc), reader => reader.noticeBeat(visible.id)), null);
+    assert.deepEqual(writer.offlineNotice("returning").map(clash => clash.id), ["A"]);
+  } finally { writer.close(); cutter.close(); }
+});
+
 test("the existing split command cannot create a beat after removal of the sole beat", () => {
   const copy = noticeCopy(noticeSeed(sole), 2, true);
   try {
@@ -225,7 +480,7 @@ test("the existing split command cannot create a beat after removal of the sole 
     assert.deepEqual(copy.pendingEdits?.data(), journal);
     const saved = journal?.entries[0]?.before;
     assert.ok(saved);
-    const result = copy.commands.putBack(saved);
+    const result = copy.commands.putBack({ ...saved, placement: { scene: null, left: null, right: null, sceneOrder: ["A"] } });
     assert.equal(result.kind, "written");
     assert.deepEqual(copy.document().rows.map(row => [row.id, row.audioText, row.visualText]), [[result.created, "abc", "1"]]);
     assert.equal(copy.commands.undo().kind, "written");

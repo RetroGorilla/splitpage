@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import test from "node:test";
+import * as Y from "yjs";
 import { tagStack } from "../../../../src/core/text/runs.ts";
 import { readNativeOnce } from "../../../../src/adapters/collab/native/reader.ts";
 import { declareNativeRoots } from "../../../../src/adapters/collab/native/roots.ts";
@@ -7,7 +8,7 @@ import { base, generatedHistory, namedHistories, need, tagSweepCases, tagSweepRe
 import type { NoticeHistory, NoticeHistoryCommand } from "./notice-histories.ts";
 import { NoticeHistoryLedger } from "./notice-history-model.ts";
 import type { NoticeHistoryLoss } from "./notice-history-model.ts";
-import { noticeCopy, noticeDeliver, noticeRange, noticeSeed, playNoticeCommand } from "./notice-harness.ts";
+import { noticeCommandWitness, noticeCopy, noticeDeliver, noticeRange, noticeSeed, playNoticeCommand } from "./notice-harness.ts";
 
 function retainedByUndo(loss: NoticeHistoryLoss): boolean {
   return loss.cause === "cut-undo" &&
@@ -16,9 +17,10 @@ function retainedByUndo(loss: NoticeHistoryLoss): boolean {
 
 const scoreKey = (id: string, kind: string) => id + "/" + kind;
 
-function scoreHistory(history: NoticeHistory) {
+function scoreHistory(history: NoticeHistory, play = playNoticeCommand) {
   const state = noticeSeed(history.initial), ids = new Map<string, string>();
   const copies = Array.from({ length: history.copies }, (_, person) => noticeCopy(state, 101 + person, true));
+  const checked = copies.map(() => noticeCommandWitness());
   const ledger = new NoticeHistoryLedger(copies.length), outcomes = new Set<string>(), failures: string[] = [];
   let issued = 0, deliveries = 0;
   try {
@@ -39,14 +41,12 @@ function scoreHistory(history: NoticeHistory) {
           ledger.write(step.person, step.effect);
           const copy = need(copies[step.person], "writer");
           const before = copy.encodeState();
-          try {
-            const outcome = playNoticeCommand(copy, step.command, ids);
+          {
+            const outcome = need(checked[step.person], "writer witness")(copy, step.command, ids, play);
             if (outcome.kind !== "written") {
               assert.deepEqual(copy.encodeState(), before);
               if (outcome.kind !== "unchanged") failures.push(JSON.stringify([step.command, outcome.kind]));
             }
-          } catch (error) {
-            failures.push(JSON.stringify([step.command, (error as Error).message]));
           }
           issued++;
         }
@@ -114,6 +114,20 @@ test("E16's 85 named and 240 generated histories use the product offline notice"
     { commands: 6376, deliveries: 1504, banners: 78, falseBanners: 23, hits: 89, misses: 8 }
   ]);
   t.diagnostic(JSON.stringify(summaries));
+});
+
+test("the E16 witness catches a muted text write when seed 10 issues it", t => {
+  const history = generatedHistory(10, 2), insert = Y.Text.prototype.insert;
+  let muted = 0;
+  assert.throws(() => scoreHistory(history, (copy, command, ids) => {
+    if (command.op !== "type" || command.field === "name" || muted) return playNoticeCommand(copy, command, ids);
+    const mock = t.mock.method(Y.Text.prototype, "insert", function (this: Y.Text, at: number, value: string, attrs?: Record<string, unknown>) {
+      if (!muted && value === command.value) muted++;
+      else insert.call(this, at, value, attrs);
+    });
+    try { return playNoticeCommand(copy, command, ids); } finally { mock.mock.restore(); }
+  }), { code: "ERR_ASSERTION", message: /issued type/ });
+  assert.equal(muted, 1);
 });
 
 test("E16's tag sweep distinguishes loss through an unseen delete and undo from retained tags", t => {

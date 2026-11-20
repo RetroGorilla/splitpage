@@ -52,7 +52,10 @@ function openSessionScript(source: NativeSessionSource, updated: () => void, sav
     const journal = saved ? openNativePendingEdits(script.reader, saved === true ? undefined : saved) : null;
     const undo = openNativeUndo(script);
     const { guardSharedCallback } = script;
-    const publishUpdate = () => guardSharedCallback(updated);
+    const publishUpdate = (_update: Uint8Array, _origin: unknown, _doc: Y.Doc, transaction: Y.Transaction) => guardSharedCallback(() => {
+      if (!transaction.local) journal?.peer();
+      updated();
+    });
     doc.on("update", publishUpdate);
     return { script, undo, publishUpdate, journal };
   } catch (error) {
@@ -149,7 +152,7 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
         }
         if (journalMode !== "none") journal?.sync();
         const result = command(script, ...args);
-        if (journalMode !== "none" && result.kind === "written") {
+        if (journalMode !== "none") {
           journal?.sync(result.created ? { created: result.created, split: journalMode === "split" } : {});
         }
         return result;
@@ -164,7 +167,7 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
       typing = null;
       journal?.sync();
       const result = undo[direction]();
-      if (result.kind === "written") journal?.sync({ undo: direction === "undo" });
+      journal?.sync({ press: direction });
       return result;
     });
   }
@@ -216,9 +219,11 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
     },
     document: () => script.reader.document(),
     encodeState: () => Y.encodeStateAsUpdate(doc),
-    pendingEdits: journal && Object.freeze({ data: journal.data, clearThrough: journal.clearThrough }),
+    pendingEdits: journal && Object.freeze({
+      data: journal.data, confirmationPoint: journal.confirmationPoint, clearThrough: journal.clearThrough
+    }),
     offlineNotice: (connection: "returning" | "online") =>
-      connection === "returning" && journal ? compareNativeOfflineNotice(journal.data(), script.reader) : [],
+      connection === "returning" && journal ? compareNativeOfflineNotice(journal.pending(), script.reader) : [],
     subscribe(listener: ChangeListener): () => void {
       if (closing) return () => undefined;
       listeners.add(listener);

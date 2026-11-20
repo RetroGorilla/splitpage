@@ -290,7 +290,8 @@ export class NativeScriptReader {
   private stray: string | null = null;
   private readonly pendingRows = new Set<string>();
   private readonly pendingGone = new Set<string>();
-  private noticeRows: Set<string> | null = null;
+  private noticeBeats: Set<string> | null = null;
+  private noticeLayout = false;
   private readonly pendingHeadings = new Set<string>();
   private pendingOutline = false;
   private readonly detach: (() => void)[] = [];
@@ -357,11 +358,13 @@ export class NativeScriptReader {
     return changes;
   }
 
-  refreshNoticeRows(): NativeReadChanges {
-    this.noticeRows ??= new Set();
-    const changes = this.refresh(), rows = [...this.noticeRows];
-    this.noticeRows.clear();
-    return { ...changes, rows };
+  refreshNotice(): { beats: readonly string[]; layout: boolean } {
+    this.noticeBeats ??= new Set();
+    this.refresh();
+    const changes = { beats: [...this.noticeBeats], layout: this.noticeLayout };
+    this.noticeBeats.clear();
+    this.noticeLayout = false;
+    return changes;
   }
 
   private sync(): void {
@@ -371,13 +374,13 @@ export class NativeScriptReader {
     if (this.structural) this.restructure();
     const dirtyRows = new Set<string>();
     for (const beat of this.dirtyBeats) {
+      this.noticeBeats?.add(beat);
       const head = this.groupHeads.get(beat);
       if (head !== undefined) dirtyRows.add(head);
     }
     for (const id of dirtyRows) {
       const previous = this.rowCache.get(id), row = this.buildRow(id);
       this.rowCache.set(id, row);
-      this.noticeRows?.add(id);
       if (!previous || row.audioText !== previous.audioText || row.visualText !== previous.visualText) this.indexCommentAnchors(row);
       if (!previous || JSON.stringify(previous) !== JSON.stringify(row)) {
         this.pendingGone.delete(id); this.pendingRows.add(id);
@@ -566,6 +569,11 @@ export class NativeScriptReader {
         this.dirtyBeats.add(id);
       }
     }
+    if (this.noticeBeats) {
+      this.noticeLayout = true;
+      for (const [id, head] of this.groupHeads) if (heads.get(id) !== head) this.noticeBeats.add(id);
+      for (const id of heads.keys()) if (!this.groupHeads.has(id)) this.noticeBeats.add(id);
+    }
     this.groups = groups;
     this.groupHeads = heads;
     this.removedHeadings = stored.flatMap(block => block.kind === "h" && !block.shown
@@ -701,12 +709,12 @@ export class NativeScriptReader {
   noticeBeat(id: string): NativeReadBeat | null {
     this.sync();
     const row = this.groupHeads.get(id), cell = this.roots.visuals.get(id);
-    if (row === undefined || !this.places.has(id) || !(cell instanceof Y.Text)) return null;
+    if (row === undefined || id === this.stray) return null;
     const single = this.groups.get(row)?.length === 1 ? this.rowCache.get(row) : undefined;
     return Object.freeze({
       id, row,
       narration: single?.narration ?? frozenRuns(nativeRunsOf(this.narrationItems(this.narration.get(id) ?? EMPTY_SPANS))),
-      visual: single?.visual ?? frozenRuns(nativeRunsOf(cell.toDelta() as NativeDeltaItem[])),
+      visual: single?.visual ?? frozenRuns(nativeRunsOf((cell?.toDelta() ?? []) as NativeDeltaItem[])),
       fields: single?.fields ?? deepFrozen(this.beatFields(id, null)),
       joined: deepFrozen(joinOf(this.roots.beats.get(id)))
     });
