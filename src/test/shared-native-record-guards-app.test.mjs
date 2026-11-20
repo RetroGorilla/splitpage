@@ -15,6 +15,10 @@ import { setBeatFilmed } from "../bootstrap/wiring/beat-status.ts";
 import { setCellSelection } from "../features/common/cell-selection.ts";
 import { openCommentsPanel } from "../features/comments/comments.ts";
 import { blobStore, createMemoryBackend, setBackend } from "../adapters/storage/02c-blobs.ts";
+import { createHeldFetch, createHeldImageDecode } from "./_m4-matrix.mjs";
+import { rowSlots } from "../core/document/gallery.ts";
+import { closeAnnotator, openAnnotator } from "../features/gallery/annotate.ts";
+import { closeGalleryOverlay, openGalleryOverlay } from "../features/gallery/overlay.ts";
 
 window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};
@@ -30,6 +34,15 @@ const file = () => new window.File(["sample"], "picture.png", { type: "image/png
 const ref = char => ({ sha256: char.repeat(64), width: 1, height: 1, mime: "image/png" });
 const unsupported = "This is not available in a shared session yet.";
 const png = "data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mP8z8BQDwAEhQGAhKmMIQAAAABJRU5ErkJggg==";
+const pngBytes = new Uint8Array(Buffer.from(png.split(",")[1], "base64"));
+const originalPicture = "data:image/gif;base64,R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7";
+
+const settle = () => new Promise(resolve => setImmediate(resolve));
+
+async function until(predicate) {
+  for (let tick = 0; tick < 40 && !predicate(); tick++) await settle();
+  assert.ok(predicate(), "the expected editor update occurred");
+}
 
 async function enter(t, comments = [], rows = [
   { id: "r1", status: "todo", audioText: "Hello", visualText: "Look" },
@@ -74,8 +87,9 @@ function fakeImageDecoder(t) {
   t.mock.method(window.HTMLCanvasElement.prototype, "toDataURL", () => png);
 }
 
-test("a picture reference recovered from a failed close reloads its bytes from storage", async t => {
+async function enterWithNative(t, rows) {
   const fixture = entrySwitchFixture();
+  if (rows) adoptReplacement(migrateRows({ title: "Gallery", rows }));
   let native;
   assert.deepEqual(await enterSharedSession(fixture.ports, (doc, failed) => {
     const opened = openNativeEditor(fixture.ports, doc, failed);
@@ -83,12 +97,10 @@ test("a picture reference recovered from a failed close reloads its bytes from s
     return opened.backend;
   }), { ok: true });
   t.after(() => { if (sharedSession()) leaveRunningSharedSession(); });
-  fakeImageDecoder(t);
-  setBackend({ ...createMemoryBackend(), persistent: true });
-  t.after(() => setBackend(null));
-  const failure = new Error("Interrupted gallery cleanup");
-  native.ydoc.once("afterTransactionCleanup", () => { throw failure; });
-  await nativeEditorRecords().addPictures("R1", [file()]);
+  return { fixture, native };
+}
+
+async function assertRecoveredPicture(fixture, failure) {
   assert.equal(sharedSession(), false);
   assert.deepEqual(fixture.errors, [failure]);
   const recovered = JSON.stringify(currentDocument());
@@ -99,8 +111,94 @@ test("a picture reference recovered from a failed close reloads its bytes from s
   adoptReplacement(migrateRows(JSON.parse(recovered)));
   assert.equal(currentDocument().rows[0].imageRef.sha256, sha);
   assert.deepEqual(await pictures.ensureBytes([sha], { strict: true }), []);
-  assert.deepEqual(pictures.bytesFor(sha), new Uint8Array(Buffer.from(png.split(",")[1], "base64")));
+  assert.deepEqual(pictures.bytesFor(sha), pngBytes);
+}
+
+test("a picture reference recovered from a failed close reloads its bytes from storage", async t => {
+  const { fixture, native } = await enterWithNative(t);
+  fakeImageDecoder(t);
+  setBackend({ ...createMemoryBackend(), persistent: true });
+  t.after(() => setBackend(null));
+  const failure = new Error("Interrupted gallery cleanup");
+  native.ydoc.once("afterTransactionCleanup", () => { throw failure; });
+  await nativeEditorRecords().addPictures("R1", [file()]);
+  await assertRecoveredPicture(fixture, failure);
 });
+
+function galleryAction(t, route) {
+  const decoder = createHeldImageDecode({ dataUrl: png });
+  t.after(decoder.install());
+  const row = { id: "r1", audioText: "Hello", visualText: "Look" };
+  if (route === "annotation") {
+    row.imageRef = pictures.internDataUrl(originalPicture);
+    assert.ok(row.imageRef);
+    t.mock.method(URL, "createObjectURL", () => "blob:gallery-annotation");
+    t.after(closeAnnotator);
+    return { row, act: async () => {
+      assert.equal(openAnnotator("r1", 0), true);
+      const img = find("#annotate-img");
+      await until(() => typeof img.onload === "function");
+      img.onload();
+      assert.equal(window.__annotateTest.state().ready, true);
+      const frame = find("#annotate-frame");
+      for (const type of ["pointerdown", "pointerup"]) {
+        const event = new window.MouseEvent(type, { bubbles: true, button: 0 });
+        Object.defineProperties(event, { pointerId: { value: 7 }, pointerType: { value: "pen" } });
+        frame.dispatchEvent(event);
+      }
+      assert.equal(window.__annotateTest.state().marks.length, 1);
+      find("#annotate-done").click();
+    } };
+  }
+  row.imageLinks = [{ href: "https://youtu.be/dQw4w9WgXcQ", poster: true }];
+  const held = createHeldFetch({ answer: () => ({ bytes: pngBytes, headers: { "content-type": "image/png" } }) });
+  window.__videoTest.setFetch(held.fetch);
+  t.after(() => { window.__videoTest.setFetch(null); closeGalleryOverlay(); });
+  return { row, act: () => {
+    openGalleryOverlay("r1", 0);
+    find('[data-gact="retry-thumb"]').click();
+  } };
+}
+
+for (const route of ["annotation", "thumbnail"]) {
+  for (const backend of ["failed", "memory-only"]) test(`native ${route} leaves no reference with a ${backend} store`, async t => {
+    const { row, act } = galleryAction(t, route);
+    const show = await enter(t, [], [row]);
+    setBackend(createMemoryBackend());
+    t.after(() => setBackend(null));
+    const persist = backend === "failed" ? t.mock.method(pictures, "persist", async shas => shas) : t.mock.method(pictures, "persist");
+    const before = hook.read();
+    await act();
+    await until(() => show.mock.calls.some(call => /Could not (save the annotated picture|get this video)/.test(call.arguments[0])));
+    assert.equal(persist.mock.callCount(), 1);
+    assert.deepEqual(hook.read(), before);
+    assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
+  });
+
+  test(`native ${route} recovered after failed cleanup reloads from durable storage`, async t => {
+    const { row, act } = galleryAction(t, route);
+    const { fixture, native } = await enterWithNative(t, [row]);
+    const backend = createMemoryBackend();
+    const pending = Promise.withResolvers(), release = Promise.withResolvers();
+    setBackend({ ...backend, persistent: true, put: async (...args) => {
+      pending.resolve();
+      await release.promise;
+      return backend.put(...args);
+    } });
+    t.after(() => { release.resolve(); setBackend(null); });
+    await act();
+    await pending.promise;
+    await settle();
+    const slot = rowSlots(currentDocument().rows[0])[0];
+    assert.equal(slot.ref?.sha256, row.imageRef?.sha256);
+    assert.equal(slot.annotation, null);
+    const failure = new Error("Interrupted gallery cleanup");
+    native.ydoc.once("afterTransactionCleanup", () => { throw failure; });
+    release.resolve();
+    await until(() => !sharedSession());
+    await assertRecoveredPicture(fixture, failure);
+  });
+}
 
 for (const backend of ["failed", "memory-only"]) test(`a ${backend} picture store leaves no reference`, async t => {
   const show = await enter(t);
@@ -132,8 +230,28 @@ test("an asynchronous picture replacement refuses a slot changed by a peer while
   assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
 });
 
+test("two pastes of the same picture before publication add it once without a refusal notice", async t => {
+  const show = await enter(t);
+  fakeImageDecoder(t);
+  const stored = Promise.withResolvers();
+  t.mock.method(pictures, "isDurable", () => true);
+  const persist = t.mock.method(pictures, "persist", () => stored.promise);
+  const target = cell("visualText"), picture = file();
+  for (let repeat = 0; repeat < 2; repeat++) assert.equal(transfer("paste", target, [picture]).defaultPrevented, true);
+  await until(() => persist.mock.callCount() === 2);
+  stored.resolve([]);
+  await settle();
+  for (const copy of Object.values(hook.read())) {
+    assert.deepEqual(rowSlots(copy.rows[0]).map(slot => slot.name), ["picture.png"]);
+  }
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), [["Picture added to beat A.1", "ok"]]);
+  assert.equal(hook.nativePeer.step("undo").kind, "written");
+  assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
+});
+
 test("posting after peer beat removal keeps the comment draft available to copy", async t => {
   const show = await enter(t);
+  const cancel = t.mock.method(nativeEditorRecords().comments, "cancel");
   openPanel();
   commentToolbar();
   assert.equal(find("#comment-modal").hidden, false);
@@ -144,7 +262,32 @@ test("posting after peer beat removal keeps the comment draft available to copy"
   find("#comment-post").click();
   assert.equal(find(".typed-unsaved-text")?.value, "Unposted comment");
   assert.equal(hook.read().app.comments.length, 0);
+  assert.equal(cancel.mock.callCount(), 1);
   assert.match(show.mock.calls.at(-1).arguments[0], /your comment was not saved/);
+});
+
+test("peer thread removal produces no draft or notice for an untouched body editor", async t => {
+  const show = await enter(t, [{ id: "thread", rowId: "r1", field: "audioText", author: getEditorName(), body: "Original" }]);
+  openPanel();
+  find('[data-action="edit-comment-body"]').click();
+  assert.equal(find(".comment-body-editor").textContent, "Original");
+  assert.equal(hook.nativePeer.removeComment("thread").kind, "written");
+  await Promise.resolve();
+  assert.equal(find(".comment-body-editor"), null);
+  assert.equal(find(".typed-unsaved-text"), null);
+  assert.equal(show.mock.callCount(), 0);
+});
+
+test("saving an unchanged comment body adds no update or notice", async t => {
+  const show = await enter(t, [{ id: "thread", rowId: "r1", field: "audioText", author: getEditorName(), body: "Original" }]);
+  openPanel();
+  const before = hook.read();
+  find('[data-action="edit-comment-body"]').click();
+  find('[data-action="save-comment-body"]').click();
+  await Promise.resolve();
+  assert.deepEqual(hook.read(), before);
+  assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
+  assert.equal(show.mock.callCount(), 0);
 });
 
 for (const reply of [false, true]) test(`peer thread removal keeps an unsaved ${reply ? "reply" : "comment"} body edit`, async t => {

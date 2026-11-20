@@ -344,6 +344,27 @@ test("a native input binding unsubscribes its paint listener when torn down", as
   assert.equal(stopPaint.mock.callCount(), 1);
 });
 
+test("native unbind unsubscribes the duration repaint separately from editor input", async t => {
+  const fixture = entrySwitchFixture();
+  t.after(() => { if (sharedSession()) leaveRunningSharedSession(); });
+  const stopDuration = t.mock.fn(), stopInput = t.mock.fn();
+  const subscribed = t.mock.fn();
+  assert.deepEqual(await enterSharedSession(fixture.ports, (doc, failed) => {
+    const { backend } = openNativeEditor(fixture.ports, doc, failed);
+    return { ...backend, bind: session => backend.bind({
+      ...session, subscribe: listener => {
+        subscribed(listener);
+        if (subscribed.mock.callCount() === 1) return stopDuration;
+        return stopInput;
+      }
+    }) };
+  }), { ok: true });
+  assert.equal(subscribed.mock.callCount(), 2);
+  assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+  assert.equal(stopInput.mock.callCount(), 1);
+  assert.equal(stopDuration.mock.callCount(), 1);
+});
+
 test("leaving unsubscribes the bridge before the queued update and closes the native adapter", async () => {
   const fixture = entrySwitchFixture();
   const captured: { value?: ReturnType<typeof openNativeEditor> } = {};
