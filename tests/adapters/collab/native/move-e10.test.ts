@@ -92,9 +92,43 @@ function openCopies(clients: readonly number[]): { net: ScriptNet; all: NativeSc
   return { net: new ScriptNet(all), all, undo: all.map(undoOf) };
 }
 
+function snapshotWithoutRanks(script: NativeScript): string {
+  const mapEntries = (map: Y.Map<Y.Map<unknown>>) => [...map.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([id, rec]) => [
+    id, [...rec.entries()].filter(([key]) => key !== "rank").sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
+  ]);
+  const textEntries = (map: Y.Map<Y.Text>): [string, unknown][] => [...map.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([id, text]) => [id, text.toDelta() as unknown]);
+  const segments: [string, unknown, unknown][] = [...script.roots.segments.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0).map(([id, seg]) => [
+    id, seg.get("head") ?? null, seg.get("text") instanceof Y.Text ? (seg.get("text") as Y.Text).toDelta() as unknown : null
+  ]);
+  return JSON.stringify({
+    order: script.roots.order.toArray(),
+    segments,
+    beats: mapEntries(script.roots.beats),
+    headings: mapEntries(script.roots.headings),
+    visuals: textEntries(script.roots.visuals),
+    names: textEntries(script.roots.names),
+    edited: [...script.roots.edited.entries()].sort(([a], [b]) => a < b ? -1 : a > b ? 1 : 0)
+  });
+}
+
+function blockTag(block: { readonly kind: "beat" | "heading"; readonly id: string }): string {
+  return block.kind + ":" + block.id;
+}
+
 function move(script: NativeScript, blocks: readonly NativeMoveBlock[], drop: NativeMoveBlock | null): void {
+  const beforeSnap = snapshotWithoutRanks(script), beforeOrder = script.reader.rankedOrder();
+  const movedKeys = blocks.flatMap(ref => {
+    if (ref.kind === "heading") return [blockTag(ref)];
+    return beforeOrder.filter(entry => entry.kind === "beat" && entry.head === ref.id).map(blockTag);
+  });
+  const movedSet = new Set(movedKeys);
+  const remaining = beforeOrder.map(blockTag).filter(key => !movedSet.has(key));
+  const insertAt = drop === null ? remaining.length : remaining.indexOf(blockTag(drop));
+  const expected = [...remaining.slice(0, insertAt), ...movedKeys, ...remaining.slice(insertAt)];
   assert.deepEqual(moveNativeBlocks(script, blocks, drop), { kind: "written" });
   script.reader.refresh();
+  assert.equal(snapshotWithoutRanks(script), beforeSnap, "move wrote something other than ranks");
+  assert.deepEqual(script.reader.rankedOrder().map(blockTag), expected, "moved blocks did not land as a run directly before drop");
 }
 
 function typeIn(script: NativeScript, id: string, cell: "narration" | "visual", at: number, text: string): void {
@@ -370,10 +404,15 @@ const CASES: readonly E10Case[] = [
   },
   {
     name: "delete segment head",
-    run: ({ a, b }) => { move(a, [beat("D")], beat("G")); remove(b, "D"); },
+    run: ({ a, b }) => {
+      move(a, [beat("D")], beat("G"));
+      a.doc.transact(() => { a.roots.beats.get("D")?.set("status", JSON.stringify("ready")); }, a.origin);
+      remove(b, "D");
+    },
     check: script => {
       assert.equal(orderString(script), "#P A B C #Q E F G H");
       assert.equal(script.roots.visuals.get("D")?.toString(), "D");
+      assert.equal(script.roots.beats.get("D")?.get("status"), JSON.stringify("ready"));
     }
   },
   {
@@ -423,6 +462,10 @@ for (const item of CASES) {
           assert.ok(a.reader.row("H")?.visualText.includes("Z"), `${item.name}: 3rd writer visual kept`);
           const pHeading = a.reader.outline().find(e => e.kind === "heading" && e.id === "P");
           assert.equal(pHeading?.kind === "heading" ? pHeading.name : null, "xz", `${item.name}: 3rd writer rename kept`);
+          assert.ok(
+            a.reader.row("A")?.narration.some(run => run.marks.tag === "t:prop:lamp" || run.marks.innerTags?.includes("t:prop:lamp")),
+            `${item.name}: 3rd writer tag kept`
+          );
           assert.ok(a.reader.recovery().some(h => h.id === "T"), `${item.name}: 3rd writer removed heading in recovery`);
         }
         for (const row of a.reader.rows()) {

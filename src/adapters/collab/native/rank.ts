@@ -7,20 +7,23 @@ const INITIAL_OPEN_RANK = "V00000V";
 // why: a rank ending in "0" has no string between it and itself + "0", so valid ranks end in 1-9, A-Z or a-z
 const RANK_PATTERN = /^[0-9A-Za-z]*[1-9A-Za-z]$/;
 
+export class NativeRankError extends RangeError {}
+
 export function isValidNativeRank(value: unknown): value is string {
   return typeof value === "string" && RANK_PATTERN.test(value);
 }
 
 function assertRank(value: string, label: string): void {
   if (!isValidNativeRank(value)) {
-    throw new RangeError(`Invalid ${label} rank: expected base-62 digits not ending in "0"`);
+    throw new NativeRankError(`Invalid ${label} rank: expected base-62 digits not ending in "0"`);
   }
 }
 
-function decodeChunk(source: string): number {
+function decodeChunkAt(source: string, offset: number): number {
   let value = 0;
   for (let i = 0; i < CHUNK_WIDTH; i++) {
-    value = value * BASE + (i < source.length ? DIGITS.indexOf(source.charAt(i)) : 0);
+    const pos = offset + i;
+    value = value * BASE + (pos < source.length ? DIGITS.indexOf(source.charAt(pos)) : 0);
   }
   return value;
 }
@@ -36,16 +39,22 @@ function encodeChunk(value: number): string {
 }
 
 function rankAfter(before: string): string {
-  if (before.length === 0) return encodeChunk(CHUNK_STEP) + "V";
-  const value = decodeChunk(before);
-  if (value < MAX_CHUNK) return encodeChunk(Math.min(value + CHUNK_STEP, MAX_CHUNK)) + "V";
-  return "z".repeat(CHUNK_WIDTH) + rankAfter(before.slice(CHUNK_WIDTH));
+  let offset = 0;
+  while (offset < before.length) {
+    const value = decodeChunkAt(before, offset);
+    if (value < MAX_CHUNK) return "z".repeat(offset) + encodeChunk(Math.min(value + CHUNK_STEP, MAX_CHUNK)) + "V";
+    offset += CHUNK_WIDTH;
+  }
+  return "z".repeat(offset) + encodeChunk(CHUNK_STEP) + "V";
 }
 
 function rankBefore(after: string): string {
-  const value = decodeChunk(after);
-  if (value > 0) return encodeChunk(value >= CHUNK_STEP ? value - CHUNK_STEP : value - 1) + "V";
-  return "0".repeat(CHUNK_WIDTH) + rankBefore(after.slice(CHUNK_WIDTH));
+  let offset = 0;
+  for (;;) {
+    const value = decodeChunkAt(after, offset);
+    if (value > 0) return "0".repeat(offset) + encodeChunk(value >= CHUNK_STEP ? value - CHUNK_STEP : value - 1) + "V";
+    offset += CHUNK_WIDTH;
+  }
 }
 
 export function nativeRankBetween(before: string | null, after: string | null): string {
@@ -57,7 +66,7 @@ export function nativeRankBetween(before: string | null, after: string | null): 
   }
   if (after === null) return rankAfter(before);
   if (before >= after) {
-    throw new RangeError("Expected before rank to sort strictly before after rank");
+    throw new NativeRankError("Expected before rank to sort strictly before after rank");
   }
   let prefix = "";
   let upper: string | null = after;

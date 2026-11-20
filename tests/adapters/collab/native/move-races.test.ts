@@ -93,6 +93,53 @@ test("decision 15: a move next to a rankless row pins its shown rank so removing
   }
 });
 
+test("decision 15: moving a block whose follower is rankless pins the follower so the moved run lands intact at once", () => {
+  const source = structureScript(
+    { A: "a", B: "b", C: "c", D: "d", E: "e", F: "f", G: "g", H: "h" }, {},
+    [{ id: "P", name: "P", before: "A" }, { id: "Q", name: "Q", before: "E" }]
+  );
+  for (const [blocks, expected] of [
+    [[beat("A"), beat("D")], ["#P", "B", "C", "#Q", "E", "A", "D", "F", "G", "H"]],
+    [[beat("A")], ["#P", "B", "C", "D", "#Q", "E", "A", "F", "G", "H"]]
+  ] as const) {
+    for (const clients of [[2, 3], [3, 2], [2, 3, 4], [4, 3, 2]] as const) for (const order of ORDERS) {
+      const { net, all, undo } = copiesOf(source, clients);
+      const [a, b] = all, [undoA, undoB] = undo;
+      assert.ok(a && b && undoA && undoB);
+      move(a, [beat("B")], beat("G"));
+      move(b, [beat("B")], null);
+      net.settle(order);
+      const aWins = clients[0] > clients[1];
+      press(aWins ? undoA : undoB, aWins ? a : b);
+      net.settle(order);
+      assert.equal(a.roots.beats.get("B")?.has("rank"), false);
+      assert.deepEqual(outlineIds(a), ["#P", "A", "B", "C", "D", "#Q", "E", "F", "G", "H"]);
+      move(a, blocks, beat("F"));
+      assert.deepEqual(outlineIds(a), expected, `immediate ${clients.join(",")}, ${order}`);
+      assert.equal(a.roots.beats.get("B")?.has("rank"), true);
+      net.settle(order);
+      for (const copy of all) assert.deepEqual(outlineIds(copy), expected, `settled ${clients.join(",")}, ${order}`);
+      net.agree();
+      for (const manager of undo) manager.destroy();
+      for (const copy of all) copy.close();
+    }
+  }
+});
+
+test("leading rankless follower stays ahead of later ranked blocks when its predecessor moves away", () => {
+  const source = structureScript({ A: "a", B: "b", C: "c", D: "d" });
+  const { all: [copy] } = copiesOf(source, [2]);
+  assert.ok(copy);
+  copy.doc.transact(() => {
+    copy.roots.beats.get("A")?.delete("rank");
+    copy.roots.beats.get("B")?.delete("rank");
+  });
+  move(copy, [beat("A")], null);
+  assert.deepEqual(outlineIds(copy), ["B", "C", "D", "A"]);
+  assert.equal(copy.roots.beats.get("B")?.has("rank"), true);
+  copy.close();
+});
+
 test("decision 15 (E15 history 4): three same-moment moves of one row and winner's undo leave it rankless under rule (e)", () => {
   const source = structureScript({ A: "a", B: "b", C: "c", D: "d" });
   for (const clients of [[2, 3, 4], [4, 3, 2]] as const) for (const order of ORDERS) {

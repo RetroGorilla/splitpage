@@ -1,10 +1,12 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
+import * as Y from "yjs";
 import { dom } from "../../../../src/test/_dom.mjs";
+import { nativeInitialRank } from "../../../../src/adapters/collab/native/convert.ts";
 import { createNativeHeading, removeNativeHeading } from "../../../../src/adapters/collab/native/heading-commands.ts";
 import { moveNativeBlocks } from "../../../../src/adapters/collab/native/move-commands.ts";
 import type { NativeMoveBlock } from "../../../../src/adapters/collab/native/move-commands.ts";
-import { closeNativeScript } from "../../../../src/adapters/collab/native/script.ts";
+import { closeNativeScript, openNativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import { removeNativeRows } from "../../../../src/adapters/collab/native/structure-commands.ts";
 import { anchorNativeText, typeNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
@@ -340,7 +342,7 @@ test("move refuses busy inside an open transaction and closed on a closed script
 });
 
 test("caller inputs are copied once by index without running iterators; throwing getters refuse plainly", () => {
-  const copy = one({ A: "a", B: "b", C: "c" }), before = stateOf(copy);
+  const copy = one({ A: "a", B: "b", C: "c" });
   const withIter = [beat("C")];
   let iterated = false;
   withIter[Symbol.iterator] = function* (): Generator<NativeMoveBlock> { iterated = true; yield beat("A"); };
@@ -357,7 +359,102 @@ test("caller inputs are copied once by index without running iterators; throwing
   assert.deepEqual(moveNativeBlocks(copy, throwingKind, beat("B")), { kind: "refused", reason: "list" });
   assert.deepEqual(moveNativeBlocks(copy, [beat("A")], throwingDrop), { kind: "refused", reason: "drop" });
   assert.deepEqual(stateOf(copy), held);
-  assert.ok(before.update.length > 0);
+});
+
+test("every caller index and field is copied before any validation, so a later getter closing the script refuses closed", () => {
+  const listCase = one({ A: "a", B: "b" }), badThenClose: unknown[] = [null];
+  Object.defineProperty(badThenClose, 1, { get: () => { closeNativeScript(listCase); return beat("A"); }, enumerable: true });
+  const s1 = stateOf(listCase);
+  assert.deepEqual(moveNativeBlocks(listCase, badThenClose as NativeMoveBlock[], beat("B")), { kind: "refused", reason: "closed" });
+  assert.equal(listCase.closed(), true);
+  assert.deepEqual(stateOf(listCase), s1);
+
+  const fieldCase = one({ A: "a", B: "b" });
+  const badKindThenClose = [{ kind: "other" as "beat", get id(): string { closeNativeScript(fieldCase); return "A"; } }];
+  const s2 = stateOf(fieldCase);
+  assert.deepEqual(moveNativeBlocks(fieldCase, badKindThenClose, beat("B")), { kind: "refused", reason: "closed" });
+  assert.equal(fieldCase.closed(), true);
+  assert.deepEqual(stateOf(fieldCase), s2);
+
+  const dropCase = one({ A: "a", B: "b" });
+  const badDropKind = { kind: "other" as "beat", get id(): string { closeNativeScript(dropCase); return "B"; } };
+  const s3 = stateOf(dropCase);
+  assert.deepEqual(moveNativeBlocks(dropCase, [beat("A")], badDropKind), { kind: "refused", reason: "closed" });
+  assert.equal(dropCase.closed(), true);
+  assert.deepEqual(stateOf(dropCase), s3);
+});
+
+test("unchanged candidates refuse stored when a drop neighbour's stored rank is malformed", () => {
+  const copy = one({ A: "a", B: "b", C: "c" });
+  const rankB = String(copy.roots.beats.get("B")?.get("rank"));
+  copy.doc.transact(() => { copy.roots.beats.get("B")?.set("rank", rankB + "!"); });
+  const before = stateOf(copy);
+  assert.deepEqual(moveNativeBlocks(copy, [beat("A")], beat("B")), { kind: "refused", reason: "stored" });
+  assert.deepEqual(moveNativeBlocks(copy, [], beat("B")), { kind: "refused", reason: "stored" });
+  assert.deepEqual(stateOf(copy), before);
+});
+
+test("valid 120,000-character ranks at either end allocate iteratively and never refuse as stored", () => {
+  const lowCopy = one({ A: "a", B: "b" });
+  lowCopy.doc.transact(() => { lowCopy.roots.beats.get("A")?.set("rank", "0".repeat(120_000) + "V"); });
+  assert.deepEqual(moveNativeBlocks(lowCopy, [beat("B")], beat("A")), { kind: "written" });
+  assert.deepEqual(outlineIds(lowCopy), ["B", "A"]);
+
+  const highCopy = one({ A: "a", B: "b" });
+  highCopy.doc.transact(() => { highCopy.roots.beats.get("B")?.set("rank", "z".repeat(120_000) + "V"); });
+  assert.deepEqual(moveNativeBlocks(highCopy, [beat("A")], null), { kind: "written" });
+  assert.deepEqual(outlineIds(highCopy), ["B", "A"]);
+});
+
+test("closing the script inside beforeTransaction refuses closed without writing or throwing", () => {
+  const copy = one({ A: "a", B: "b" }), before = stateOf(copy);
+  copy.doc.once("beforeTransaction", () => { copy.close(); });
+  assert.deepEqual(moveNativeBlocks(copy, [beat("B")], beat("A")), { kind: "refused", reason: "closed" });
+  assert.equal(copy.closed(), true);
+  assert.deepEqual(stateOf(copy), before);
+});
+
+test("array subclasses are accepted as block lists, matching removeNativeRows", () => {
+  class BlockList extends Array<NativeMoveBlock> {}
+  const copy = one({ A: "a", B: "b", C: "c" });
+  const list = new BlockList(beat("C"), beat("B"));
+  assert.deepEqual(moveNativeBlocks(copy, list, beat("A")), { kind: "written" });
+  assert.deepEqual(outlineIds(copy), ["C", "B", "A"]);
+});
+
+test("moving a large 132,000-row selection does not overflow the call stack", () => {
+  const total = 132_000, chunk = 30;
+  const script = openNativeScript(new Y.Doc());
+  const blocks: NativeMoveBlock[] = [];
+  script.doc.transact(() => {
+    const keys: string[] = [];
+    for (let start = 0; start < total; start += chunk) {
+      const head = "B" + start, key = "b:" + head;
+      const seg = new Y.Map<unknown>(), text = new Y.Text();
+      script.roots.segments.set(key, seg);
+      seg.set("head", { b: head });
+      seg.set("text", text);
+      keys.push(key);
+      for (let off = 0; off < chunk && start + off < total; off++) {
+        const idx = start + off, id = "B" + idx;
+        if (off > 0) text.insertEmbed(off - 1, { b: id }, {});
+        const rec = new Y.Map<unknown>();
+        script.roots.beats.set(id, rec);
+        rec.set("rank", nativeInitialRank(idx));
+        script.roots.visuals.set(id, new Y.Text());
+        if (idx < total - 1) blocks.push(beat(id));
+      }
+    }
+    script.roots.order.push(keys);
+  }, "conversion");
+  try {
+    assert.deepEqual(moveNativeBlocks(script, blocks, null), { kind: "written" });
+    const order = script.reader.outline();
+    assert.equal(order.length, total);
+    assert.equal(order[0]?.id, "B" + (total - 1));
+    assert.equal(order[1]?.id, "B0");
+    assert.equal(order.at(-1)?.id, "B" + (total - 2));
+  } finally { script.close(); }
 });
 
 test("a caller getter that closes the script or runs a nested command is handled cleanly without partial writes", () => {

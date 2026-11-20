@@ -14,7 +14,7 @@ import { copiesOf, structureScript } from "./structure-harness.ts";
 
 after(() => { dom.window.close(); });
 
-const SEEDS = 40, STEPS = 75, CONTROL_SEEDS = 5;
+const SEEDS = 40, STEPS = 80, CONTROL_SEEDS = 5;
 const ROWS = { R1: "abc", R2: "def", R3: "ghi", R4: "jkl", R5: "mno", R6: "pqr" };
 const VISUALS = { R1: "1", R2: "2", R3: "3", R4: "4", R5: "5", R6: "6" };
 
@@ -30,7 +30,7 @@ function random(seed: number): () => number {
 
 type Write = "Text.insertEmbed" | "Text.insert" | "Text.delete" | "Map.set" | "Map.delete" | "Array.insert";
 type Kind = "type" | "delete" | "split" | "join" | "unjoin" | "remove" | "heading-create" | "heading-remove" | "move";
-interface Call { readonly command: number; readonly kind: Kind; readonly slot: number; readonly write: Write }
+interface Call { readonly command: number; readonly kind: Kind; readonly slot: number; readonly write: Write; readonly hadRank?: boolean }
 interface Options { readonly mute?: Call; readonly calls?: Call[]; readonly spoil?: boolean }
 
 class LocalCheck extends Error {}
@@ -50,7 +50,8 @@ function intercept(command: number, kind: Kind, options: Options): () => void {
   const originals = PATCHED.map(([owner, name, write]) => {
     const table = owner as Record<string, (...args: unknown[]) => unknown>, original = table[name] as (...args: unknown[]) => unknown;
     table[name] = function (this: unknown, ...args: unknown[]): unknown {
-      const call: Call = { command, kind, slot: slot++, write };
+      const hadRank = write === "Map.set" && args[0] === "rank" && this instanceof Y.Map ? this.has("rank") : undefined;
+      const call: Call = hadRank === undefined ? { command, kind, slot: slot++, write } : { command, kind, slot: slot++, write, hadRank };
       options.calls?.push(call);
       if (options.mute?.command === command && options.mute.slot === call.slot) return undefined;
       return original.apply(this, args);
@@ -133,19 +134,21 @@ function moveRef(entry: Entry): NativeMoveBlock {
 interface MoveCheck {
   readonly ascending: readonly string[];
   readonly pinned: readonly (readonly [string, string])[];
+  readonly leadingPinned: readonly string[];
   readonly leftBound: string | null;
   readonly rightBound: string | null;
 }
 
 function planMoveCheck(before: readonly Entry[], moving: readonly Entry[], remaining: readonly Entry[], insertAt: number): MoveCheck {
-  const ascending: string[] = [], pinned: [string, string][] = [];
+  const ascending: string[] = [], pinned: [string, string][] = [], leadingPinned: string[] = [], movingKeys = new Set(moving.map(moveKey));
+  const handled = new Set<string>(movingKeys);
   const left = insertAt > 0 ? remaining[insertAt - 1] ?? null : null;
   let leftBound: string | null = null;
   if (left) {
     if (left.shownRank !== "") {
       leftBound = left.shownRank;
-      if (!left.hasRank) pinned.push([moveKey(left), leftBound]);
-    } else ascending.push(moveKey(left));
+      if (!left.hasRank) { pinned.push([moveKey(left), leftBound]); handled.add(moveKey(left)); }
+    } else { ascending.push(moveKey(left)); handled.add(moveKey(left)); }
   }
   for (const entry of moving) ascending.push(moveKey(entry));
   let upper: Entry | null = null;
@@ -154,64 +157,47 @@ function planMoveCheck(before: readonly Entry[], moving: readonly Entry[], remai
     if (!entry) break;
     if (entry.shownRank !== "" && (leftBound === null || entry.shownRank > leftBound)) { upper = entry; break; }
     ascending.push(moveKey(entry));
+    handled.add(moveKey(entry));
   }
   const rightBound = upper ? upper.shownRank : null;
-  if (upper && rightBound !== null && !upper.hasRank) pinned.push([moveKey(upper), rightBound]);
-  return { ascending, pinned, leftBound, rightBound };
-}
-
-function moveWant(
-  script: NativeScript,
-  before: readonly Entry[],
-  moving: readonly Entry[],
-  remaining: readonly Entry[],
-  insertAt: number,
-  check: MoveCheck
-): Entry[] {
-  const rankless = before.filter(entry => !entry.hasRank && !check.ascending.includes(moveKey(entry)) && !check.pinned.some(([key]) => key === moveKey(entry)));
-  if (!rankless.length) return [...remaining.slice(0, insertAt), ...moving, ...remaining.slice(insertAt)];
-  const ranks = new Map<string, string>();
-  for (const [id, rec] of script.roots.beats) { const r = rec.get("rank"); if (typeof r === "string") ranks.set("beat:" + id, r); }
-  for (const [id, rec] of script.roots.headings) { const r = rec.get("rank"); if (typeof r === "string") ranks.set("heading:" + id, r); }
-  for (const [key, r] of check.pinned) ranks.set(key, r);
-  const byKey = new Map(before.map(entry => [moveKey(entry), entry]));
-  const storedOrder: string[] = [], seen = new Set<string>();
-  for (const segKey of script.roots.order.toArray()) {
-    for (const span of nativeSegmentSpans(script.roots.segments.get(segKey)) ?? []) {
-      if (!span.key || seen.has(span.key)) continue;
-      seen.add(span.key);
-      storedOrder.push((span.key.startsWith("h:") ? "heading:" : "beat:") + span.key.slice(2));
-    }
+  if (upper && rightBound !== null && !upper.hasRank) { pinned.push([moveKey(upper), rightBound]); handled.add(moveKey(upper)); }
+  for (let index = 1; index < before.length; index++) {
+    const prev = before[index - 1], current = before[index];
+    if (!prev || !current || !movingKeys.has(moveKey(prev))) continue;
+    const key = moveKey(current);
+    if (handled.has(key) || current.hasRank) continue;
+    if (current.shownRank !== "") { pinned.push([key, current.shownRank]); handled.add(key); }
+    else { leadingPinned.push(key); handled.add(key); }
   }
-  const slotOf = new Map(check.ascending.map((key, index) => [key, (check.leftBound ?? "") + "\u0001" + String(index).padStart(6, "0")]));
-  // why: under rule (e), an unpinned rankless block follows its narration predecessor when that predecessor moves
-  let prevRank = "";
-  const effective = new Map<string, { readonly rank: string; readonly stored: number }>();
-  storedOrder.forEach((key, stored) => {
-    const allocated = slotOf.get(key), fixed = ranks.get(key);
-    if (allocated !== undefined) prevRank = allocated;
-    else if (fixed !== undefined) prevRank = fixed;
-    if (byKey.has(key)) effective.set(key, { rank: prevRank, stored });
-  });
-  return [...before].sort((left, right) => {
-    const a = effective.get(moveKey(left)), b = effective.get(moveKey(right));
-    if (!a || !b) return 0;
-    return a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : a.stored - b.stored;
-  });
+  return { ascending, pinned, leadingPinned, leftBound, rightBound };
 }
 
 function verifyMoveRanks(seed: number, command: number, before: readonly Entry[], got: readonly Entry[], check: MoveCheck): void {
   const byKey = new Map(got.map(entry => [moveKey(entry), entry]));
-  const prevByKey = new Map(before.map(entry => [moveKey(entry), entry]));
+  const planned = new Set<string>([...check.ascending, ...check.leadingPinned, ...check.pinned.map(([key]) => key)]);
+  for (const prev of before) {
+    const key = moveKey(prev);
+    if (planned.has(key)) continue;
+    const entry = byKey.get(key);
+    if (!entry || entry.hasRank !== prev.hasRank || entry.storedRank !== prev.storedRank) {
+      throw new LocalCheck(`seed ${seed}, command ${command}: uninvolved block ${key} changed rank`);
+    }
+  }
   for (const [key, rank] of check.pinned) {
     const entry = byKey.get(key);
     if (!entry || !entry.hasRank || entry.storedRank !== rank) {
       throw new LocalCheck(`seed ${seed}, command ${command}: rankless neighbour ${key} was not pinned to ${rank}`);
     }
   }
+  for (const key of check.leadingPinned) {
+    const entry = byKey.get(key);
+    if (!entry || !entry.hasRank || !isValidNativeRank(entry.storedRank)) {
+      throw new LocalCheck(`seed ${seed}, command ${command}: leading rankless follower ${key} was not given a valid rank`);
+    }
+  }
   let previous = check.leftBound;
   for (const key of check.ascending) {
-    const entry = byKey.get(key), prev = prevByKey.get(key);
+    const entry = byKey.get(key);
     if (!entry || !entry.hasRank || !isValidNativeRank(entry.storedRank)) {
       throw new LocalCheck(`seed ${seed}, command ${command}: ${key} has no valid rank after move`);
     }
@@ -221,29 +207,31 @@ function verifyMoveRanks(seed: number, command: number, before: readonly Entry[]
     if (check.rightBound !== null && !(entry.storedRank < check.rightBound)) {
       throw new LocalCheck(`seed ${seed}, command ${command}: ${key} rank ${entry.storedRank} is not before ${check.rightBound}`);
     }
-    if (prev && prev.hasRank && prev.storedRank === entry.storedRank) {
-      const sameGap = (check.leftBound === null || check.leftBound < prev.storedRank) && (check.rightBound === null || prev.storedRank < check.rightBound);
-      if (!sameGap) throw new LocalCheck(`seed ${seed}, command ${command}: ${key} kept stale rank ${prev.storedRank}`);
-    }
     previous = entry.storedRank;
   }
 }
 
 interface Counts {
   commands: number; written: number; unchanged: number; refused: number;
-  moves: number; tiedMoves: number; ranklessMoves: number; headingCreates: number; headingRemoves: number;
+  moves: number; tiedMoves: number; ranklessMoves: number; movesWithRankless: number;
+  undos: number; redos: number;
+  headingCreates: number; headingRemoves: number;
   splits: number; joins: number; unjoins: number; removals: number;
   letters: number; shown: number; twice: number; storedTwice: number; unplaced: number; deleted: number; notDeleted: number; lost: number;
   records: number; shownRows: number; keptRows: number; vanished: number; missingParts: number;
   visualLetters: number; visualStored: number; visualOnHidden: number; multiSegmentBeats: number;
 }
 
+const RANK_OR_FLAG: ReadonlySet<Kind> = new Set(["move", "join", "unjoin", "heading-remove"]);
+
 function history(seed: number, options: Options = {}): Counts {
   const chance = random(seed), pick = <T>(list: readonly T[]): T => list[Math.floor(chance() * list.length)] as T;
-  const { net, all } = copiesOf(structureScript(ROWS, VISUALS, [{ id: "H0", name: "Scene 0", before: "R4" }]), [2, 3, 4]);
+  const { net, all, undo } = copiesOf(structureScript(ROWS, VISUALS, [{ id: "H0", name: "Scene 0", before: "R4" }]), [2, 3, 4]);
   const counts: Counts = {
     commands: 0, written: 0, unchanged: 0, refused: 0,
-    moves: 0, tiedMoves: 0, ranklessMoves: 0, headingCreates: 0, headingRemoves: 0,
+    moves: 0, tiedMoves: 0, ranklessMoves: 0, movesWithRankless: 0,
+    undos: 0, redos: 0,
+    headingCreates: 0, headingRemoves: 0,
     splits: 0, joins: 0, unjoins: 0, removals: 0,
     letters: 0, shown: 0, twice: 0, storedTwice: 0, unplaced: 0, deleted: 0, notDeleted: 0, lost: 0,
     records: 0, shownRows: 0, keptRows: 0, vanished: 0, missingParts: 0,
@@ -251,14 +239,22 @@ function history(seed: number, options: Options = {}): Counts {
   };
   const letters = new Set(Object.values(ROWS).join("")), visualLetters = new Set<string>(), deletions = new Map<string, number[]>();
   const records = new Set(Object.keys(ROWS)), removed = new Set<string>(), usedHeadings = new Set(["H0"]);
+  const undoKinds = all.map(() => [] as Kind[]), redoKinds = all.map(() => [] as Kind[]);
   let fresh = 0, headingSeq = 1;
   const letter = (base: number): string => String.fromCharCode(base + fresh++);
   const deleting = (gone: string, command: number): void => { deletions.set(gone, [...deletions.get(gone) ?? [], command]); };
 
-  const execute = (command: number, kind: Kind, actor: NativeScript, act: () => { kind: string; created?: string }): { kind: string; created?: string } => {
+  const noteWritten = (actorIndex: number, kind: Kind): void => {
+    undoKinds[actorIndex]?.push(kind);
+    const redoStack = redoKinds[actorIndex];
+    if (redoStack) redoStack.length = 0;
+  };
+
+  const execute = (command: number, kind: Kind, actorIndex: number, actor: NativeScript, act: () => { kind: string; created?: string }): { kind: string; created?: string } => {
     const before = Y.encodeStateAsUpdate(actor.doc), restore = intercept(command, kind, options);
     let outcome: { kind: string; created?: string };
     try { outcome = act(); } finally { restore(); }
+    if (outcome.kind === "written") noteWritten(actorIndex, kind);
     if (options.spoil && outcome.kind === "refused") {
       actor.doc.transact(() => { actor.roots.beats.get("R1")?.set("spoiled", command); }, actor.origin);
     }
@@ -269,8 +265,8 @@ function history(seed: number, options: Options = {}): Counts {
   };
 
   const checkLocal = (
-    command: number, actor: NativeScript, want: readonly Entry[], wantStored: readonly string[],
-    outcomeKind: string, expected: string, withRanks: boolean, moveCheck?: MoveCheck, beforeEntries?: readonly Entry[]
+    command: number, actor: NativeScript, beforeEntries: readonly Entry[], want: readonly Entry[], wantStored: readonly string[],
+    outcomeKind: string, expected: string, withRanks: boolean, moveCheck?: MoveCheck
   ): void => {
     actor.reader.refresh();
     counts[outcomeKind === "written" ? "written" : outcomeKind === "unchanged" ? "unchanged" : "refused"]++;
@@ -278,23 +274,39 @@ function history(seed: number, options: Options = {}): Counts {
     if (outcomeKind !== expected || compared(got, withRanks) !== compared(want, withRanks) || sorted(stored) !== sorted(wantStored)) {
       throw new LocalCheck(`seed ${seed}, command ${command}: ${outcomeKind} (expected ${expected})\n${compared(want, withRanks)}\n${compared(got, withRanks)}`);
     }
-    if (outcomeKind === "written" && moveCheck && beforeEntries) verifyMoveRanks(seed, command, beforeEntries, got, moveCheck);
+    if (outcomeKind === "written" && moveCheck) verifyMoveRanks(seed, command, beforeEntries, got, moveCheck);
   };
 
   for (let step = 0; step < STEPS; step++) {
-    const actor = pick(all), roll = chance();
-    if (roll < 0.2) { const to = pick(all.filter(copy => copy !== actor)); net.deliver(actor, to); continue; }
+    const actorIndex = Math.floor(chance() * all.length), actor = all[actorIndex];
+    const actorUndo = undo[actorIndex], uStack = undoKinds[actorIndex], rStack = redoKinds[actorIndex];
+    assert.ok(actor && actorUndo && uStack && rStack);
+    const roll = chance();
+    if (roll < 0.18) { const to = pick(all.filter(copy => copy !== actor)); net.deliver(actor, to); continue; }
+    if (roll < 0.28) {
+      const topRedo = rStack.at(-1), topUndo = uStack.at(-1);
+      if (topRedo && RANK_OR_FLAG.has(topRedo) && chance() < 0.35) {
+        rStack.pop();
+        if (actorUndo.redo()) { uStack.push(topRedo); counts.redos++; actor.reader.refresh(); }
+        continue;
+      }
+      if (topUndo && RANK_OR_FLAG.has(topUndo)) {
+        uStack.pop();
+        if (actorUndo.undo()) { rStack.push(topUndo); counts.undos++; actor.reader.refresh(); }
+        continue;
+      }
+    }
     const before = view(actor), stored = storedLetters(actor);
     const rows = before.filter(entry => !entry.heading && entry.own >= 0 && actor.roots.beats.get(entry.id) instanceof Y.Map);
     const heads = before.filter(entry => entry.heading || entry.head === entry.id);
     if (!rows.length || !heads.length) continue;
     const row = pick(rows), at = before.indexOf(row), command = counts.commands++;
 
-    if (roll < 0.48) {
-      if (chance() < 0.14) {
+    if (roll < 0.56) {
+      if (chance() < 0.12) {
         const ref = moveRef(pick(heads));
-        const outcome = execute(command, "move", actor, () => moveNativeBlocks(actor, [ref], ref));
-        checkLocal(command, actor, before, stored, outcome.kind, "refused", true);
+        const outcome = execute(command, "move", actorIndex, actor, () => moveNativeBlocks(actor, [ref], ref));
+        checkLocal(command, actor, before, before, stored, outcome.kind, "refused", true);
         continue;
       }
       const startIndex = Math.floor(chance() * heads.length), firstHead = heads[startIndex];
@@ -308,23 +320,24 @@ function history(seed: number, options: Options = {}): Counts {
       const remainingHeads = remaining.filter(entry => entry.heading || entry.head === entry.id);
       const dropEntry = chance() < 0.25 || !remainingHeads.length ? null : pick(remainingHeads);
       const insertAt = dropEntry ? remaining.indexOf(dropEntry) : remaining.length;
-      const baseWant = [...remaining.slice(0, insertAt), ...moving, ...remaining.slice(insertAt)];
-      const same = baseWant.length === before.length && baseWant.every((entry, idx) => entry === before[idx]);
+      const want = [...remaining.slice(0, insertAt), ...moving, ...remaining.slice(insertAt)];
+      const same = want.length === before.length && want.every((entry, idx) => entry === before[idx]);
       const expected = same ? "unchanged" : "written";
       const moveCheck = same ? undefined : planMoveCheck(before, moving, remaining, insertAt);
-      const want = moveCheck ? moveWant(actor, before, moving, remaining, insertAt, moveCheck) : before;
+      const hasRankless = before.some(entry => !entry.hasRank);
       const blocks = chosenHeads.map(moveRef), drop = dropEntry ? moveRef(dropEntry) : null;
-      const outcome = execute(command, "move", actor, () => moveNativeBlocks(actor, blocks, drop));
+      const outcome = execute(command, "move", actorIndex, actor, () => moveNativeBlocks(actor, blocks, drop));
       if (outcome.kind === "written") {
         counts.moves++;
+        if (hasRankless) counts.movesWithRankless++;
         if (moveCheck && moveCheck.ascending.length > moving.length) counts.tiedMoves++;
         if (moveCheck && moveCheck.pinned.length > 0) counts.ranklessMoves++;
       }
-      checkLocal(command, actor, want, stored, outcome.kind, expected, false, moveCheck, before);
+      checkLocal(command, actor, before, want, stored, outcome.kind, expected, false, moveCheck);
       continue;
     }
 
-    if (roll < 0.58) {
+    if (roll < 0.65) {
       const visual = chance() < 0.3, cell = visual ? row.visual : row.narration, offset = Math.floor(chance() * (cell.length + 1));
       const typed = letter(visual ? 0xac00 : 0x4e00);
       (visual ? visualLetters : letters).add(typed);
@@ -332,25 +345,25 @@ function history(seed: number, options: Options = {}): Counts {
       const want = before.map(entry => entry !== row ? entry : visual
         ? { ...entry, visual: cell.slice(0, offset) + typed + cell.slice(offset) }
         : { ...entry, narration: cell.slice(0, offset) + typed + cell.slice(offset) });
-      const outcome = execute(command, "type", actor, () => {
+      const outcome = execute(command, "type", actorIndex, actor, () => {
         const anchored = anchorNativeText(actor, { beat: row.id, cell: visual ? "visual" : "narration" }, offset);
         return anchored.kind === "anchored" ? replaceNativeText(actor, anchored.range, [{ text: typed, marks: {} }]) : anchored;
       });
-      checkLocal(command, actor, want, wantStored, outcome.kind, "written", true);
-    } else if (roll < 0.63 && row.narration.length) {
+      checkLocal(command, actor, before, want, wantStored, outcome.kind, "written", true);
+    } else if (roll < 0.7 && row.narration.length) {
       const from = Math.floor(chance() * row.narration.length), to = Math.min(row.narration.length, from + 1 + Math.floor(chance() * 2));
       const gone = [...row.narration.slice(from, to)];
       for (const value of gone) deleting(value, command);
       const wantStored = stored.filter(value => !gone.includes(value));
       const want = before.map(entry => entry !== row ? entry : { ...entry, narration: entry.narration.slice(0, from) + entry.narration.slice(to) });
-      const outcome = execute(command, "delete", actor, () => {
+      const outcome = execute(command, "delete", actorIndex, actor, () => {
         const anchored = anchorNativeText(actor, { beat: row.id, cell: "narration" }, from, to);
         return anchored.kind === "anchored" ? replaceNativeText(actor, anchored.range, []) : anchored;
       });
-      checkLocal(command, actor, want, wantStored, outcome.kind, "written", true);
-    } else if (roll < 0.74) {
+      checkLocal(command, actor, before, want, wantStored, outcome.kind, "written", true);
+    } else if (roll < 0.79) {
       const offset = Math.floor(chance() * (row.narration.length + 1));
-      const outcome = execute(command, "split", actor, () => {
+      const outcome = execute(command, "split", actorIndex, actor, () => {
         const anchored = anchorNativeText(actor, { beat: row.id, cell: "narration" }, offset);
         return anchored.kind === "anchored" ? splitNativeRow(actor, anchored.range) : anchored;
       });
@@ -363,40 +376,40 @@ function history(seed: number, options: Options = {}): Counts {
         { id: created, heading: false, head: created, name: "", narration: row.narration.slice(cut), visual: "", hasRank: row.hasRank, storedRank: row.storedRank, shownRank: row.shownRank, joined: "", pieces: [], own: -1 },
         ...before.slice(at + 1)
       ];
-      checkLocal(command, actor, want, stored, outcome.kind, "written", true);
-    } else if (roll < 0.81) {
+      checkLocal(command, actor, before, want, stored, outcome.kind, "written", true);
+    } else if (roll < 0.85) {
       const above = before[at - 1], glue = pick([" ", "", " - "]);
       const expected = !above || above.heading ? "refused" : row.joined === JSON.stringify({ into: above.id, glue }) ? "unchanged" : "written";
       const want = expected === "written" && above ? before.map(entry => entry !== row ? entry : { ...entry, joined: JSON.stringify({ into: above.id, glue }) }) : before;
       const into = above && !above.heading ? above.id : pick(rows).id;
-      const outcome = execute(command, "join", actor, () => joinNativeRow(actor, row.id, into, glue));
+      const outcome = execute(command, "join", actorIndex, actor, () => joinNativeRow(actor, row.id, into, glue));
       if (outcome.kind === "written") counts.joins++;
-      checkLocal(command, actor, want, stored, outcome.kind, expected, true);
-    } else if (roll < 0.85) {
+      checkLocal(command, actor, before, want, stored, outcome.kind, expected, true);
+    } else if (roll < 0.88) {
       const expected = row.joined ? "written" : "unchanged";
       const want = before.map(entry => entry !== row ? entry : { ...entry, joined: "" });
-      const outcome = execute(command, "unjoin", actor, () => unjoinNativeRow(actor, row.id));
+      const outcome = execute(command, "unjoin", actorIndex, actor, () => unjoinNativeRow(actor, row.id));
       if (outcome.kind === "written") counts.unjoins++;
-      checkLocal(command, actor, want, stored, outcome.kind, expected, true);
-    } else if (roll < 0.92) {
+      checkLocal(command, actor, before, want, stored, outcome.kind, expected, true);
+    } else if (roll < 0.94) {
       const shownHeadings = before.filter(entry => entry.heading);
       if (shownHeadings.length && chance() < 0.45) {
         const target = pick(shownHeadings);
         const want = before.filter(entry => entry !== target);
-        const outcome = execute(command, "heading-remove", actor, () => removeNativeHeading(actor, target.id));
+        const outcome = execute(command, "heading-remove", actorIndex, actor, () => removeNativeHeading(actor, target.id));
         if (outcome.kind === "written") counts.headingRemoves++;
-        checkLocal(command, actor, want, stored, outcome.kind, "written", false);
+        checkLocal(command, actor, before, want, stored, outcome.kind, "written", false);
       } else {
         const candidates = rows.filter(entry => entry.head === entry.id && entry.pieces.length === 1);
         const target = candidates.length ? pick(candidates) : row;
         const targetAt = before.indexOf(target), above = before[targetAt - 1];
         const tied = !!above && above.shownRank === target.shownRank;
-        const canPlace = target.head === target.id && target.pieces.length === 1 && !tied;
+        const canPlace = target.head === target.id && target.pieces.length === 1 && !tied && (above ? target.shownRank !== "" : true);
         const id = `H${actor.doc.clientID}-${headingSeq++}`;
         while (usedHeadings.has(id)) headingSeq++;
         usedHeadings.add(id);
         const name = "S" + id;
-        const outcome = execute(command, "heading-create", actor, () => {
+        const outcome = execute(command, "heading-create", actorIndex, actor, () => {
           const anchored = anchorNativeText(actor, { beat: target.id, cell: "narration" }, 0);
           return anchored.kind === "anchored" ? createNativeHeading(actor, anchored.range, id, name) : anchored;
         });
@@ -405,7 +418,7 @@ function history(seed: number, options: Options = {}): Counts {
           ? [...before.slice(0, targetAt), { id, heading: true, head: null, name, narration: "", visual: "", hasRank: true, storedRank: "", shownRank: "", joined: "", pieces: [], own: -1 }, ...before.slice(targetAt)]
           : before;
         if (outcome.kind === "written") counts.headingCreates++;
-        checkLocal(command, actor, want, stored, outcome.kind, expected, false);
+        checkLocal(command, actor, before, want, stored, outcome.kind, expected, false);
       }
     } else {
       const chosen = new Set([row.id, ...chance() < 0.35 && rows.length > 1 ? [pick(rows).id] : []]), gone: string[] = [];
@@ -413,9 +426,9 @@ function history(seed: number, options: Options = {}): Counts {
       for (const value of gone) deleting(value, command);
       const wantStored = stored.filter(value => !gone.includes(value));
       const want = before.filter(entry => !(!entry.heading && chosen.has(entry.id)));
-      const outcome = execute(command, "remove", actor, () => removeNativeRows(actor, [...chosen]));
+      const outcome = execute(command, "remove", actorIndex, actor, () => removeNativeRows(actor, [...chosen]));
       if (outcome.kind === "written") counts.removals++;
-      checkLocal(command, actor, want, wantStored, outcome.kind, "written", true);
+      checkLocal(command, actor, before, want, wantStored, outcome.kind, "written", true);
     }
   }
 
@@ -461,11 +474,12 @@ function history(seed: number, options: Options = {}): Counts {
     }
   }
   for (const segs of byBeat.values()) if (segs.size > 1) counts.multiSegmentBeats++;
+  for (const manager of undo) manager.destroy();
   for (const copy of all) copy.close();
   return counts;
 }
 
-test("generated moves mixed with row, heading and text commands on three copies: local checks and settled accounting hold", t => {
+test("generated moves mixed with row, heading, text and undo commands on three copies: local checks and settled accounting hold", t => {
   const totals: Record<string, number> = {};
   for (let seed = 1; seed <= SEEDS; seed++) for (const [key, value] of Object.entries(history(seed))) totals[key] = (totals[key] ?? 0) + value;
   t.diagnostic(JSON.stringify(totals));
@@ -478,14 +492,15 @@ test("generated moves mixed with row, heading and text commands on three copies:
   assert.equal(total("shown") + total("unplaced") + total("deleted"), total("letters"));
   assert.equal(total("shownRows") + total("keptRows"), total("records"));
   assert.equal(total("visualStored"), total("visualLetters"));
-  assert.ok(total("moves") > 200 && total("tiedMoves") > 10, JSON.stringify(totals));
-  assert.ok(total("splits") > 50 && total("joins") > 20 && total("unjoins") > 5 && total("removals") > 30, JSON.stringify(totals));
+  assert.ok(total("moves") > 200 && total("tiedMoves") > 10 && total("movesWithRankless") >= 10, JSON.stringify(totals));
+  assert.ok(total("undos") > 20 && total("redos") > 5, JSON.stringify(totals));
+  assert.ok(total("splits") > 50 && total("joins") > 20 && total("unjoins") > 3 && total("removals") > 30, JSON.stringify(totals));
   assert.ok(total("headingCreates") > 20 && total("headingRemoves") > 10, JSON.stringify(totals));
   assert.ok(total("refused") > 50 && total("unchanged") > 20, JSON.stringify(totals));
 });
 
 test("control: muting each individual write of a move fails the local check at that command", t => {
-  let reached = 0, caught = 0;
+  let reached = 0, caught = 0, alreadyInGap = 0;
   const writes = new Map<Write, number>();
   for (let seed = 1; seed <= CONTROL_SEEDS; seed++) {
     const calls: Call[] = [];
@@ -493,16 +508,20 @@ test("control: muting each individual write of a move fails the local check at t
     for (const call of calls.filter(entry => entry.kind === "move")) {
       reached++;
       writes.set(call.write, (writes.get(call.write) ?? 0) + 1);
-      assert.throws(
-        () => history(seed, { mute: call }),
-        (error: unknown) => error instanceof LocalCheck && error.message.startsWith(`seed ${seed}, command ${call.command}:`),
-        JSON.stringify(call)
-      );
-      caught++;
+      let threw = false;
+      try { history(seed, { mute: call }); } catch (error) {
+        threw = true;
+        assert.ok(error instanceof LocalCheck && error.message.startsWith(`seed ${seed}, command ${call.command}:`), `${JSON.stringify(call)}: ${String(error)}`);
+        caught++;
+      }
+      if (!threw) {
+        assert.equal(call.hadRank, true, `rankless write escaped mute check: ${JSON.stringify(call)}`);
+        alreadyInGap++;
+      }
     }
   }
-  t.diagnostic(`${reached} move writes muted, ${caught} caught at their command: ${JSON.stringify(Object.fromEntries(writes))}`);
-  assert.ok(reached > 40 && caught === reached, JSON.stringify({ reached, caught, writes: Object.fromEntries(writes) }));
+  t.diagnostic(`${reached} move writes muted, ${caught} caught at their command, ${alreadyInGap} already valid in target gap: ${JSON.stringify(Object.fromEntries(writes))}`);
+  assert.ok(caught > 40 && caught / reached > 0.95, JSON.stringify({ reached, caught, alreadyInGap, writes: Object.fromEntries(writes) }));
   assert.deepEqual([...writes.keys()], ["Map.set"]);
 });
 
