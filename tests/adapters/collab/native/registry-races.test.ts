@@ -4,6 +4,7 @@ import * as Y from "yjs";
 import { changeNativeRegistry } from "../../../../src/adapters/collab/native/registry-commands.ts";
 import type { NativeRegistryChange } from "../../../../src/adapters/collab/native/registry-commands.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
+import { openNativeUndo } from "../../../../src/adapters/collab/native/undo-commands.ts";
 import { decodeNativeValue, encodeNativeValue, mintNativeId, mintNativeTagId, nativeFieldKey } from "../../../../src/adapters/collab/native/values.ts";
 import type { DocumentShape } from "../../../../src/core/document/validated.ts";
 import { registryCopies, registrySource } from "./registry-harness.ts";
@@ -385,5 +386,122 @@ test("a restore that saw one removal is hidden by an unseen removal and fields s
     write(left, restore);
     settle();
     assert.equal(record(left, collection, id)?.name, "Updated");
+  });
+});
+
+test("a move race and the winner's undo leave a usable rankless list in each registry", () => {
+  for (const [collection, first, second, third, fields, prefix] of [
+    ["people", "p1", "p2", "p3", { name: "New person" }, "p"],
+    ["tags", "t_lamp", "t_rope", "t_case", { name: "New tag", cat: "gear" }, "t_"],
+    ["shots", "bs1", "bs2", "bs3", { name: "New shot" }, "bs"]
+  ] as const) registryCopies((left, right, settle) => {
+    const undo = openNativeUndo(right), move = { kind: "move", collection, id: first, before: null } as const;
+    try {
+      const original = read(left, collection).map(entry => entry?.id);
+      for (const script of [left, right]) write(script, move);
+      settle();
+      assert.deepEqual(read(left, collection).map(entry => entry?.id), [...original.slice(1), first]);
+      assert.equal(undo.undo().kind, "written");
+      settle();
+      for (const script of [left, right]) assert.equal(script.roots[collection].get(first)?.has("rank"), false);
+      assert.deepEqual(read(left, collection).map(entry => entry?.id), original);
+      const id = collection === "tags" ? mintNativeTagId(left.doc) : mintNativeId(left.doc, prefix);
+      assert.deepEqual(changeNativeRegistry(left, { kind: "create", collection, fields }), { kind: "written", created: id });
+      write(left, { ...move, id: third, before: second });
+      settle();
+      const reordered = [first, third, second, ...original.slice(3), id];
+      assert.deepEqual(read(left, collection).map(entry => entry?.id), reordered);
+      assert.equal(left.roots[collection].get(first)?.has("rank"), false);
+      write(right, { ...move, before: third });
+      settle();
+      assert.equal(left.roots[collection].get(first)?.has("rank"), true);
+      assert.deepEqual(read(left, collection).map(entry => entry?.id), reordered);
+    } finally { undo.destroy(); }
+  });
+});
+
+test("a move before a rankless anchor keeps the visible order", () => {
+  registryCopies((left, right, settle) => {
+    const undo = openNativeUndo(right), move = { kind: "move", collection: "people", id: "p1", before: null } as const;
+    try {
+      for (const script of [left, right]) write(script, move);
+      settle();
+      assert.equal(undo.undo().kind, "written");
+      settle();
+      assert.equal(left.roots.people.get("p1")?.has("rank"), false);
+      write(left, { ...move, id: "p2", before: "p1" });
+      settle();
+      assert.deepEqual(read(left, "people").map(entry => entry?.id), ["p2", "p1", "p3"]);
+    } finally { undo.destroy(); }
+  });
+});
+
+test("a name race and undo hide the nameless person like reload and still allow restore and rename", () => {
+  registryCopies((left, right, settle) => {
+    const undo = openNativeUndo(right);
+    try {
+      write(left, set("people", "p1", { name: "First name" }));
+      write(right, set("people", "p1", { name: "Second name" }));
+      settle();
+      assert.equal(record(left, "people", "p1")?.name, "Second name");
+      assert.equal(undo.undo().kind, "written");
+      settle();
+      assert.equal(left.roots.people.get("p1")?.has(nativeFieldKey("name")), false);
+      assert.equal(record(left, "people", "p1"), null);
+      assert.equal(record(left, "tags", "t_lamp")?.owner, "");
+      const remove = { kind: "remove", collection: "people", ids: ["p1"] } as const;
+      write(left, remove);
+      write(left, { ...remove, kind: "restore" });
+      settle();
+      assert.equal(record(left, "people", "p1"), null);
+      write(right, set("people", "p1", { name: "Recovered name" }));
+      settle();
+      assert.equal(record(left, "people", "p1")?.name, "Recovered name");
+      assert.equal(record(left, "tags", "t_lamp")?.owner, "p1");
+    } finally { undo.destroy(); }
+  });
+});
+
+test("a prop array race and undo default to empty and still accept prop commands", () => {
+  registryCopies((left, right, settle) => {
+    const undo = openNativeUndo(right);
+    try {
+      write(left, { kind: "addProp", id: "bs1", prop: "Rope" });
+      write(right, { kind: "addProp", id: "bs1", prop: "Case" });
+      settle();
+      assert.deepEqual(record(left, "shots", "bs1")?.props, [{ id: "t_lamp", name: "Lamp" }, { id: "t_case", name: "Case" }]);
+      assert.equal(undo.undo().kind, "written");
+      settle();
+      assert.equal(left.roots.shots.get("bs1")?.has(nativeFieldKey("props")), false);
+      assert.deepEqual(record(left, "shots", "bs1")?.props, []);
+      const before = Y.encodeStateAsUpdate(left.doc);
+      assert.deepEqual(changeNativeRegistry(left, { kind: "removeProp", id: "bs1", prop: "t_lamp" }), { kind: "unchanged" });
+      assert.deepEqual(Y.encodeStateAsUpdate(left.doc), before);
+      write(left, { kind: "addProp", id: "bs1", prop: "Rope" });
+      settle();
+      assert.deepEqual(record(right, "shots", "bs1")?.props, [{ id: "t_rope", name: "Rope" }]);
+    } finally { undo.destroy(); }
+  });
+});
+
+test("a tag status race and undo default to needed for both status cycle commands", () => {
+  for (const cycle of [
+    { kind: "cycleTagStatus", ids: ["t_lamp"] },
+    { kind: "updateTags", tags: [{ cat: "prop", name: "Lamp" }], fields: {}, cycle: true }
+  ] as const) registryCopies((left, right, settle) => {
+    const undo = openNativeUndo(right);
+    try {
+      write(left, set("tags", "t_lamp", { status: "sourcing" }));
+      write(right, set("tags", "t_lamp", { status: "have" }));
+      settle();
+      assert.equal(record(left, "tags", "t_lamp")?.status, "have");
+      assert.equal(undo.undo().kind, "written");
+      settle();
+      assert.equal(left.roots.tags.get("t_lamp")?.has(nativeFieldKey("status")), false);
+      assert.equal(record(left, "tags", "t_lamp")?.status, "needed");
+      write(left, cycle);
+      settle();
+      assert.equal(record(right, "tags", "t_lamp")?.status, "sourcing");
+    } finally { undo.destroy(); }
   });
 });

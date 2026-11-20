@@ -1,10 +1,10 @@
 import * as Y from "yjs";
 import { BROLL_NAME_MAX, BROLL_PROPS_MAX, BROLL_PROP_NAME_MAX, BROLL_TEXT_MAX, brollPropKey, brollStatusId, newBrollShot, normalizeBrollProps } from "../../../core/document/broll.ts";
-import { isTagId, nextTagStatus, normalizeTagName, registryKey, tagCategoryId, tagStatusId } from "../../../core/document/tags.ts";
+import { isTagId, nextTagStatus, normalizeTagName, registryKey, TAG_STATUS_IDS, tagCategoryId, tagStatusId } from "../../../core/document/tags.ts";
 import { cappedLongText, cappedText, plainText } from "../../../core/document/text-policy.ts";
 import type { DocumentShape, DocumentTag } from "../../../core/document/validated.ts";
 import { PERSON_NAME_MAX } from "../../../core/production/records.ts";
-import { isValidNativeRank, nativeRankBetween } from "./rank.ts";
+import { compareNativeRankedIds, isValidNativeRank, nativeRankBetween } from "./rank.ts";
 import { copyArgument, copyRecordValue, nativeRecordId, RECORD_UNCHANGED, RECORD_WRITTEN, refuseRecord } from "./record-values.ts";
 import type { NativeRecordOutcome } from "./record-values.ts";
 import { nativeShotLinePlan, nativeTagNamesInRows } from "./registry-projection.ts";
@@ -32,7 +32,7 @@ export type NativeRegistryChange =
   | { readonly kind: "addProp" | "removeProp"; readonly id: string; readonly prop: string }
   | { readonly kind: "gear"; readonly names: readonly string[] };
 
-interface Slot { readonly id: string; readonly map: RecordMap; readonly rank: string }
+interface Slot { readonly id: string; readonly map: RecordMap; readonly rank: string | null }
 
 function collectionOf(value: unknown): Collection | null {
   return value === "people" || value === "tags" || value === "shots" ? value : null;
@@ -62,15 +62,20 @@ function slots(root: Root, keepRemoved: boolean): Slot[] | null {
   for (const [id, map] of root) {
     if (!(map instanceof Y.Map)) return null;
     if (map.get("removed") === true && !keepRemoved) continue;
-    const rank = map.get("rank");
-    if (!isValidNativeRank(rank)) return null;
+    let rank: string | null = null;
+    if (map.has("rank")) {
+      const value = map.get("rank");
+      if (!isValidNativeRank(value)) return null;
+      rank = value;
+    }
     entries.push({ id, map, rank });
   }
-  return entries.sort((a, b) => a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : a.id < b.id ? -1 : a.id > b.id ? 1 : 0);
+  return entries.sort((a, b) => compareNativeRankedIds(a.id, a.rank, b.id, b.rank));
 }
 
-function stored(map: RecordMap, field: string): unknown {
-  return decodeNativeValue(map.get(nativeFieldKey(field)))?.value;
+function stored(map: RecordMap, field: string, missing?: unknown): unknown {
+  const key = nativeFieldKey(field);
+  return map.has(key) ? decodeNativeValue(map.get(key))?.value : missing;
 }
 
 function finish(writes: readonly Write[], created?: string): Result {
@@ -192,7 +197,7 @@ function create(script: NativeScript, collection: Collection, request: Fields, o
 }
 
 function checkRename(script: NativeScript, collection: Collection, map: RecordMap, id: string, fields: Fields, document: DocumentShape): Refused | null {
-  const name = stored(map, "name");
+  const name = stored(map, "name", "");
   if (typeof name !== "string") return refuseRecord("stored");
   if (collection === "shots" || !("name" in fields) || fields.name === name) return null;
   if (collection === "people") return document.people.some(person => person.id !== id && normalizeTagName(person.name) === normalizeTagName(fields.name))
@@ -220,7 +225,7 @@ function set(script: NativeScript, collection: Collection, ids: readonly string[
     if (!(map instanceof Y.Map)) return map;
     const rename = checkRename(script, collection, map, id, owned, document);
     if (rename) return rename;
-    const before = cycle ? stored(map, "status") : undefined;
+    const before = cycle ? stored(map, "status", TAG_STATUS_IDS[0]) : undefined;
     if (cycle && !tagStatusId(before)) return refuseRecord("stored");
     if (!planFields(writes, map, cycle ? { status: nextTagStatus(before) } : owned)) return refuseRecord("stored");
   }
@@ -249,8 +254,9 @@ function updateTags(script: NativeScript, tags: unknown, fields: unknown, ownerN
     if (id && root.has(id) && (!(existing instanceof Y.Map) || existing.get("removed") !== true)) {
       const map = target(root, id);
       if (!(map instanceof Y.Map)) return map;
-      if (cycle && !tagStatusId(tag?.status)) return refuseRecord("stored");
-      if (!planFields(writes, map, cycle ? { ...owned, status: nextTagStatus(tag?.status) } : owned)) return refuseRecord("stored");
+      const before = cycle ? stored(map, "status", TAG_STATUS_IDS[0]) : undefined;
+      if (cycle && !tagStatusId(before)) return refuseRecord("stored");
+      if (!planFields(writes, map, cycle ? { ...owned, status: nextTagStatus(before) } : owned)) return refuseRecord("stored");
       continue;
     }
     if (!add) {
@@ -273,11 +279,13 @@ function removeOrRestore(script: NativeScript, collection: Collection, ids: read
     const map = target(script.roots[collection], id, restore);
     if (!(map instanceof Y.Map)) return map;
     if (names) {
-      const name = stored(map, "name");
+      const name = stored(map, "name", "");
       if (typeof name !== "string") return refuseRecord("stored");
       const key = normalizeTagName(name);
-      if (names.has(key)) return refuseRecord("value");
-      names.add(key);
+      if (key) {
+        if (names.has(key)) return refuseRecord("value");
+        names.add(key);
+      }
     }
     writes.push(() => { if (restore) map.delete("removed"); else map.set("removed", true); });
   }
@@ -290,13 +298,15 @@ function move(root: Root, id: string, before: string | null): Result {
   const at = order.findIndex(entry => entry.id === id);
   if (at < 0) return refuseRecord("missing");
   const moving = order[at] as Slot;
-  if (before === id || (order[at + 1]?.id ?? null) === before) return RECORD_UNCHANGED;
+  const next = order[at + 1]?.id ?? null, drop = before === id ? next : before;
+  if (moving.rank !== null && drop === next) return RECORD_UNCHANGED;
   order.splice(at, 1);
-  const to = before === null ? order.length : order.findIndex(entry => entry.id === before);
+  const to = drop === null ? order.length : order.findIndex(entry => entry.id === drop);
   if (to < 0) return refuseRecord("missing");
   const left = order[to - 1]?.rank ?? null, right = order[to]?.rank ?? null;
   const writes: Write[] = [];
-  if (left !== null && left === right) {
+  const atDrop = order[to];
+  if (atDrop && atDrop.rank === left) {
     let rank = left;
     const tail = order.slice(to).findIndex(entry => entry.rank !== left), end = tail < 0 ? order.length : to + tail;
     const after = order[end]?.rank ?? null;
@@ -315,12 +325,13 @@ function move(root: Root, id: string, before: string | null): Result {
 function changeProp(script: NativeScript, id: string, prop: string, add: boolean): Result {
   const shot = target(script.roots.shots, id);
   if (!(shot instanceof Y.Map)) return shot;
-  const raw = stored(shot, "props"), document = script.reader.document(), writes: Write[] = [];
+  const raw = stored(shot, "props", []), document = script.reader.document(), writes: Write[] = [];
   if (!Array.isArray(raw)) return refuseRecord("stored");
   const props = normalizeBrollProps(raw, document.productionTags), projected = projectedTagIds(script, document);
   if (add) {
     const name = normalizeTagName(prop);
     if (props.some(entry => normalizeTagName(entry.name) === name)) return RECORD_UNCHANGED;
+    if (prop !== prop.trim()) return refuseRecord("value");
     if (props.length >= BROLL_PROPS_MAX) return refuseRecord("value");
     const tag = document.productionTags.find(entry => entry?.cat === "prop" && entry.id && !projected.has(entry.id) && normalizeTagName(entry.name) === name);
     const tagId = tag?.id ?? planNew(script, writes, "tags", { ...defaults("tags"), cat: "prop", name: prop });
@@ -364,7 +375,7 @@ function applyChange(script: NativeScript, change: Fields): Result {
   const collection = collectionOf(rawCollection);
   if (kind === "addProp" || kind === "removeProp") {
     if (!nativeRecordId(id)) return refuseRecord("missing");
-    if (!(kind === "addProp" ? trimmed(prop, BROLL_PROP_NAME_MAX) : typeof prop === "string" && prop.length > 0) || typeof prop !== "string") return refuseRecord("value");
+    if (typeof prop !== "string" || !(kind === "addProp" ? trimmed(prop.trim(), BROLL_PROP_NAME_MAX) : prop.length > 0)) return refuseRecord("value");
     return changeProp(script, id, prop, kind === "addProp");
   }
   if (kind === "gear") {

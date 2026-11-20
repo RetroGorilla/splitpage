@@ -82,6 +82,7 @@ test("registry commands validate the copied request and every target before writ
     unchanged(script, { kind: "move", collection: "shots", id: "bs1", before: "bs2" });
     unchanged(script, { kind: "move", collection: "shots", id: "bs1", before: "bs1" });
     unchanged(script, { kind: "addProp", id: "bs1", prop: "Lamp" });
+    unchanged(script, { kind: "addProp", id: "bs1", prop: " Lamp " });
     unchanged(script, { kind: "removeProp", id: "bs1", prop: "t_rope" });
     unchanged(script, { kind: "gear", names: ["Drone"] });
     unchanged(script, { kind: "updateTags", tags: [], fields: {}, ownerName: "New person" });

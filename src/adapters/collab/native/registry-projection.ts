@@ -1,7 +1,7 @@
 import * as Y from "yjs";
-import { BROLL_NAME_MAX, BROLL_PROP_NAME_MAX, normalizeBrollProps } from "../../../core/document/broll.ts";
+import { BROLL_NAME_MAX, BROLL_PROP_NAME_MAX, newBrollShot, normalizeBrollProps } from "../../../core/document/broll.ts";
 import { noFreeze } from "../../../core/document/freeze.ts";
-import { ensureTagIds, isTagId, normalizeTagName, registryKey } from "../../../core/document/tags.ts";
+import { ensureTagIds, isTagId, normalizeTagName, registryKey, TAG_STATUS_IDS } from "../../../core/document/tags.ts";
 import { hasLoneSurrogate, plainText, settledNames } from "../../../core/document/text-policy.ts";
 import type { DocumentShape, DocumentTag } from "../../../core/document/validated.ts";
 import { applyBrollRecords, planBrollRecordsInState } from "../../../core/production/broll.ts";
@@ -83,7 +83,11 @@ function propNormalizer(tags: DocumentShape["productionTags"]) {
 }
 
 export function projectNativeRegistries(document: DocumentShape, roots: NativeRoots, rows: () => readonly RegistryCellRow[]): void {
-  const tagsRemoved = hasRemoved(roots.tags), shotsRemoved = hasRemoved(roots.shots);
+  const tagsRemoved = hasRemoved(roots.tags) || document.productionTags.some(tag => tag && !tag.name);
+  const shotsRemoved = hasRemoved(roots.shots) || document.brollShots.some(shot => !shot.name);
+  document.people = document.people.filter(person => !!person.name);
+  document.productionTags = document.productionTags.flatMap(tag => tag?.name ? [{ owner: "", notes: "", status: TAG_STATUS_IDS[0], ...tag }] : []);
+  document.brollShots = document.brollShots.flatMap(shot => shot.name ? [newBrollShot(shot.id, shot)] : []);
   if (hasRemoved(roots.people)) document.people = repairNames(document.people, PERSON_NAME_MAX, normalizeTagName);
   if (tagsRemoved) document.productionTags = repairNames(document.productionTags.filter(tag => !!tag), 80, (name, tag) => registryKey(tag.cat, name));
   if (shotsRemoved) document.brollShots = repairNames(document.brollShots, BROLL_NAME_MAX, normalizeTagName);

@@ -6,6 +6,7 @@ import { toHtml } from "../../../core/text/html.ts";
 import type { Run } from "../../../core/text/runs.ts";
 import { nativeBlockOf, nativeCellView, nativeItemLength, nativeRunsOf, nativeUnitCounts } from "./inline.ts";
 import type { NativeDeltaItem } from "./inline.ts";
+import { compareNativeRankedIds } from "./rank.ts";
 import { projectNativeRegistries } from "./registry-projection.ts";
 import type { NativeRoots } from "./roots.ts";
 import {
@@ -220,8 +221,7 @@ function rankOf(record: unknown): string | null {
 
 function byRank(map: Y.Map<Y.Map<unknown>>): [string, Y.Map<unknown>][] {
   const entries = [...map].filter((entry): entry is [string, Y.Map<unknown>] => entry[1] instanceof Y.Map);
-  const rank = (record: Y.Map<unknown>): string => rankOf(record) ?? "";
-  return entries.sort(([leftId, left], [rightId, right]) => rank(left) < rank(right) ? -1 : rank(left) > rank(right) ? 1 : leftId < rightId ? -1 : leftId > rightId ? 1 : 0);
+  return entries.sort(([leftId, left], [rightId, right]) => compareNativeRankedIds(leftId, rankOf(left), rightId, rankOf(right)));
 }
 
 // why: a run's shape is known, so it is frozen field by field instead of by a walk over every value

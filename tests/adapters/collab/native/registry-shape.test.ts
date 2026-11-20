@@ -28,7 +28,7 @@ test("snapshot indexes the tag registry once for 2,000 one-prop shots", () => {
     };
     projectNativeRegistries(document, script.roots, () => { throw new Error("No removed records"); });
     assert.equal(visits, count);
-    assert.deepEqual(document.brollShots, registries(count).brollShots);
+    assert.deepEqual(document.brollShots, migrateRows({ ...source(), ...registries(count) }).brollShots);
   } finally { script.doc.destroy(); }
 });
 
@@ -40,7 +40,7 @@ test("the snapshot prop lookup preserves the first named tag and exact ID lookup
       { id: "t_other", cat: "gear", name: "Strap" }
     ];
     const props = [{ id: "t_second", name: "Stale" }, { id: "", name: "Lamp" }, { id: "t_other", name: "Old" }];
-    const brollShots = [{ id: "bs1", props }];
+    const brollShots = [{ id: "bs1", name: "Wide", props }];
     const document = { ...source(), productionTags, brollShots };
     const expected = normalizeBrollProps(props, productionTags);
     projectNativeRegistries(document, script.roots, () => { throw new Error("No removed records"); });
