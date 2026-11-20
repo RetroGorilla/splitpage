@@ -1,6 +1,6 @@
 import * as Y from "yjs";
 import { nativeRankBetween } from "./rank.ts";
-import { nativeAvailability, nativeLiveRange, nativeRangeSnapshot } from "./text-commands.ts";
+import { nativeAvailability, nativeLiveRange, nativeRangeSnapshot, nativeWriteAvailability } from "./text-commands.ts";
 import type { NativeRefusal, NativeTextRange } from "./text-commands.ts";
 import { transactNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
@@ -21,8 +21,10 @@ function refused(reason: NativeRefusal | "rank"): NativeHeadingOutcome {
 export function createNativeHeading(script: NativeScript, at: NativeTextRange, id: string, name: string): NativeHeadingOutcome {
   const unavailable = nativeAvailability(script);
   if (unavailable) return refused(unavailable);
+  const checked = nativeRangeSnapshot(at);
+  const sizeRefusal = script.sizeRefusal?.();
+  if (sizeRefusal) return refused(sizeRefusal);
   return transactNativeCommand(script, () => {
-    const checked = nativeRangeSnapshot(at);
     if (!checked || checked.target.cell !== "narration" || checked.to) return refused("range");
     if (!nativeWellFormed(id) || !id) return refused("missing");
     if (!nativeWellFormed(name)) return refused("text");
@@ -58,8 +60,10 @@ export function createNativeHeading(script: NativeScript, at: NativeTextRange, i
 export function renameNativeHeading(script: NativeScript, range: NativeTextRange, name: string): NativeHeadingOutcome {
   const unavailable = nativeAvailability(script);
   if (unavailable) return refused(unavailable);
+  const checked = nativeRangeSnapshot(range);
+  const sizeRefusal = script.sizeRefusal?.(name !== "");
+  if (sizeRefusal) return refused(sizeRefusal);
   return transactNativeCommand(script, () => {
-    const checked = nativeRangeSnapshot(range);
     if (!checked || checked.target.cell !== "name") return refused("range");
     if (!nativeWellFormed(name)) return refused("text");
     const live = nativeLiveRange(script, checked);
@@ -72,7 +76,7 @@ export function renameNativeHeading(script: NativeScript, range: NativeTextRange
 }
 
 function markHeading(script: NativeScript, id: string, removed: boolean): NativeHeadingOutcome {
-  const unavailable = nativeAvailability(script);
+  const unavailable = nativeWriteAvailability(script);
   if (unavailable) return refused(unavailable);
   return transactNativeCommand(script, () => {
     if (!nativeWellFormed(id) || !id) return refused("missing");

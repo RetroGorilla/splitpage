@@ -13,6 +13,7 @@ export interface NativeScript {
   readonly closed: () => boolean;
   readonly close: () => void;
   readonly guardSharedCallback: (call: () => void) => void;
+  readonly sizeRefusal?: (adds?: boolean) => "full" | null;
 }
 
 interface PressObservation { readonly origin: object; changed: boolean }

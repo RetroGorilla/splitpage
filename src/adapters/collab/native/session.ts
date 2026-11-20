@@ -13,10 +13,10 @@ import { formatNativeText } from "./format-commands.ts";
 import { createNativeHeading, removeNativeHeading, renameNativeHeading, restoreNativeHeading } from "./heading-commands.ts";
 import { moveNativeBlocks } from "./move-commands.ts";
 import { clearNativeField, setNativeField } from "./record-commands.ts";
-import { openNativeScript, throwNativeFailures } from "./script.ts";
+import { openNativeScript } from "./script.ts";
 import type { NativeScript } from "./script.ts";
-import { createNativeSizeTracker, FULL_REFUSAL, fullRecovery, resolveNativeSizeLimits } from "./size.ts";
-import type { NativeSessionSize, NativeSizeRecovery, NativeSizeRefusal } from "./size.ts";
+import { createNativeSizeTracker, resolveNativeSizeOptions } from "./size.ts";
+import type { NativeSessionSize, NativeSizeOptions } from "./size.ts";
 import { joinNativeRow, removeNativeRows, splitNativeRow, unjoinNativeRow } from "./structure-commands.ts";
 import { anchorNativeText, deleteNativeText, replaceNativeText, typeNativeText } from "./text-commands.ts";
 import type { NativeEditStamp, NativeTextRange, NativeTextTarget } from "./text-commands.ts";
@@ -28,11 +28,9 @@ export type NativeSessionSource =
   | { readonly kind: "document"; readonly document: ValidatedDocument; readonly conversion: NativeConversionPorts }
   | { readonly kind: "state"; readonly state: Uint8Array };
 
-export interface NativeSessionOptions {
+export interface NativeSessionOptions extends NativeSizeOptions {
   readonly actor: string;
   readonly sanitize: MigratePorts["sanitize"];
-  readonly sizeLimit?: number;
-  readonly sizeWarning?: number;
 }
 
 type CloseReason = "requested" | "failed";
@@ -44,52 +42,40 @@ export type NativeSessionChange =
 
 type ChangeListener = (change: NativeSessionChange) => void;
 
-interface FullPolicy<Args extends unknown[], Full> {
-  readonly adds?: (...args: Args) => boolean;
-  readonly refuse: (...args: Args) => Full;
-}
-
-const REFUSE_FULL = Object.freeze({ refuse: () => FULL_REFUSAL });
-const TYPE_FULL: FullPolicy<[NativeTextRange, string, Marks, (NativeEditStamp | undefined)?], NativeSizeRecovery> = Object.freeze({
-  adds: (_range: NativeTextRange, text: string) => typeof text !== "string" || text.length > 0,
-  refuse: (_range: NativeTextRange, text: string, marks: Marks) => fullRecovery(text ? [{ text, marks }] : [])
-});
-const REPLACE_FULL: FullPolicy<[NativeTextRange, readonly Run[], (NativeEditStamp | undefined)?], NativeSizeRecovery> = Object.freeze({
-  adds: (_range: NativeTextRange, runs: readonly Run[]) => !Array.isArray(runs) || runs.length > 0,
-  refuse: (_range: NativeTextRange, runs: readonly Run[]) => fullRecovery(runs)
-});
-const RENAME_FULL: FullPolicy<[NativeTextRange, string], NativeSizeRefusal> = Object.freeze({
-  adds: (_range: NativeTextRange, name: string) => typeof name !== "string" || name.length > 0,
-  refuse: () => FULL_REFUSAL
-});
-
-function openSessionScript(source: NativeSessionSource, updated: (update: Uint8Array, transaction: Y.Transaction) => void) {
+function openSessionScript(
+  source: NativeSessionSource,
+  sizeOptions: ReturnType<typeof resolveNativeSizeOptions>,
+  updated: (update: Uint8Array) => void,
+  sizeRefusal: NonNullable<NativeScript["sizeRefusal"]>
+) {
   const doc = new Y.Doc(), script = openNativeScript(doc);
   try {
     if (source.kind === "state") Y.applyUpdate(doc, source.state);
     if (source.kind === "document") convertToNativeScript(script, source.document, source.conversion);
-    const undo = openNativeUndo(script);
+    const size = createNativeSizeTracker(doc, sizeOptions);
+    const undo = openNativeUndo({ ...script, sizeRefusal });
     const { guardSharedCallback } = script;
-    const publishUpdate = (update: Uint8Array, _origin: unknown, _doc: Y.Doc, transaction: Y.Transaction) =>
-      guardSharedCallback(() => updated(update, transaction));
+    const publishUpdate = (update: Uint8Array) => guardSharedCallback(() => updated(update));
     doc.on("update", publishUpdate);
-    return { script, undo, publishUpdate };
+    return { script, size, undo, publishUpdate };
   } catch (error) {
     doc.destroy();
     throw error;
   }
 }
 
-export function openNativeSession(source: NativeSessionSource, { actor, sanitize, sizeLimit, sizeWarning }: NativeSessionOptions) {
-  const limits = resolveNativeSizeLimits(sizeLimit, sizeWarning);
+export function openNativeSession(source: NativeSessionSource, options: NativeSessionOptions) {
+  const sizeOptions = resolveNativeSizeOptions(options);
+  const { actor, sanitize } = options;
   const listeners = new Set<ChangeListener>();
   const body = { sanitize };
   let active = false, scheduled = false, publishing = false, changed = false;
   let closing: CloseReason | null = null;
   let typing: { readonly target: NativeTextTarget; readonly endsInSpace: boolean } | null = null;
-  const { script, undo, publishUpdate } = openSessionScript(source, updated), doc = script.doc;
-  const size = createNativeSizeTracker(doc, limits);
+  const { script, size, undo, publishUpdate } = openSessionScript(source, sizeOptions, updated, sizeRefusal), doc = script.doc;
   let reportedSize: NativeSessionSize = size.state;
+  const writing = { ...script, sizeRefusal };
+  const adding = { ...script, sizeRefusal: () => sizeRefusal(true) };
 
   function schedule(): void {
     if (scheduled) return;
@@ -98,9 +84,9 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
     scheduled = true;
   }
 
-  function updated(update: Uint8Array, transaction: Y.Transaction): void {
+  function updated(update: Uint8Array): void {
     changed = true;
-    size.recordUpdate(update.byteLength, transaction, active);
+    size.recordUpdate(update.byteLength);
     schedule();
   }
 
@@ -160,33 +146,30 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
     return "busy";
   }
 
-  function fullForAdd(): boolean {
-    if (!size.mayBeFull()) return false;
-    throwNativeFailures(script);
-    if (script.closed() || script.reader.isClosed()) return false;
-    const full = size.isFullForAdd();
-    if (size.state !== reportedSize) schedule();
-    return full;
+  function sizeRefusal(adds = false): "full" | null {
+    if (adds && size.state === "full") {
+      size.checkRecovery();
+      if (size.state === "full") return "full";
+      schedule();
+    }
+    return size.atCeiling ? "full" : null;
   }
 
-  function bind<Args extends unknown[], Result, Full = never>(
-    command: (script: NativeScript, ...args: Args) => Result,
-    separate = true,
-    onFull?: { readonly adds?: (...args: NoInfer<Args>) => boolean; readonly refuse: (...args: NoInfer<Args>) => Full }
+  function bind<Args extends unknown[], Result>(
+    command: (script: NativeScript, ...args: Args) => Result, commandScript: NativeScript, separate = true
   ) {
-    return (...args: Args): Result | Full => {
+    return (...args: Args): Result => {
       const reason = refusal();
       if (reason) {
         // why: reentry during argument copying must keep each command's own refusal shape
         return command({ ...script, busy: () => reason === "busy", closed: () => reason === "closed" }, ...args);
       }
-      if (onFull && (!onFull.adds || onFull.adds(...args)) && fullForAdd()) return onFull.refuse(...args);
       return perform(() => {
         if (separate) {
           typing = null;
           undo.stopCapturing();
         }
-        return command(script, ...args);
+        return command(commandScript, ...args);
       });
     };
   }
@@ -201,34 +184,34 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
   }
 
   const commands = Object.freeze({
-    anchorText: bind(anchorNativeText, false),
+    anchorText: bind(anchorNativeText, script, false),
     typeText: bind((script: NativeScript, range: NativeTextRange, text: string, marks: Marks, stamp?: NativeEditStamp) =>
       typeNativeText(script, range, text, marks, stamp, target => {
         const previous = typing?.target.beat === target.beat && typing.target.cell === target.cell ? typing : null;
         if (!previous || !continuesSharedTypingWord(previous.endsInSpace, text)) undo.stopCapturing();
         typing = { target, endsInSpace: text ? /\s$/.test(text) : previous?.endsInSpace ?? false };
-      }), false, TYPE_FULL),
-    replaceText: bind((script: NativeScript, ...args: [NativeTextRange, Parameters<typeof replaceNativeText>[2], NativeEditStamp?]) =>
-      replaceNativeText(script, ...args), true, REPLACE_FULL),
-    deleteText: bind(deleteNativeText),
-    formatText: bind(formatNativeText, true, REFUSE_FULL),
-    splitRow: bind(splitNativeRow, true, REFUSE_FULL),
-    joinRow: bind(joinNativeRow, true, REFUSE_FULL),
-    unjoinRow: bind(unjoinNativeRow),
-    removeRows: bind(removeNativeRows),
-    createHeading: bind(createNativeHeading, true, REFUSE_FULL),
-    renameHeading: bind(renameNativeHeading, true, RENAME_FULL),
-    removeHeading: bind(removeNativeHeading),
-    restoreHeading: bind(restoreNativeHeading, true, REFUSE_FULL),
-    moveBlocks: bind(moveNativeBlocks, true, REFUSE_FULL),
-    setField: bind(setNativeField, true, REFUSE_FULL),
-    clearField: bind(clearNativeField),
-    createComment: bind((script, comment: NativeNewComment) => createNativeComment(script, comment, body), true, REFUSE_FULL),
-    createReply: bind((script, comment: string, reply: NativeNewReply) => createNativeReply(script, comment, reply, body), true, REFUSE_FULL),
-    setCommentBody: bind((script, target: NativeCommentTarget, html: string) => setNativeCommentBody(script, target, actor, html, body), true, REFUSE_FULL),
-    resolveComment: bind(resolveNativeComment, true, REFUSE_FULL),
-    reopenComment: bind(reopenNativeComment, true, REFUSE_FULL),
-    removeComment: bind(removeNativeComment),
+      }), writing, false),
+    replaceText: bind((script: NativeScript, range: NativeTextRange, runs: readonly Run[], stamp?: NativeEditStamp) =>
+      replaceNativeText(script, range, runs, stamp), writing),
+    deleteText: bind(deleteNativeText, writing),
+    formatText: bind(formatNativeText, adding),
+    splitRow: bind(splitNativeRow, adding),
+    joinRow: bind(joinNativeRow, adding),
+    unjoinRow: bind(unjoinNativeRow, writing),
+    removeRows: bind(removeNativeRows, writing),
+    createHeading: bind(createNativeHeading, adding),
+    renameHeading: bind(renameNativeHeading, writing),
+    removeHeading: bind(removeNativeHeading, writing),
+    restoreHeading: bind(restoreNativeHeading, adding),
+    moveBlocks: bind(moveNativeBlocks, adding),
+    setField: bind(setNativeField, adding),
+    clearField: bind(clearNativeField, writing),
+    createComment: bind((script, comment: NativeNewComment) => createNativeComment(script, comment, body), adding),
+    createReply: bind((script, comment: string, reply: NativeNewReply) => createNativeReply(script, comment, reply, body), adding),
+    setCommentBody: bind((script, target: NativeCommentTarget, html: string) => setNativeCommentBody(script, target, actor, html, body), adding),
+    resolveComment: bind(resolveNativeComment, adding),
+    reopenComment: bind(reopenNativeComment, adding),
+    removeComment: bind(removeNativeComment, writing),
     undo: () => press("undo"),
     redo: () => press("redo")
   });
@@ -244,8 +227,8 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
       schedule();
       return false;
     },
-    get size(): NativeSessionSize { return size.state; },
-    sizeLimits: limits,
+    get size(): NativeSessionSize { return reportedSize; },
+    sizeLimits: sizeOptions.limits,
     document: () => script.reader.document(),
     encodeState: () => Y.encodeStateAsUpdate(doc),
     subscribe(listener: ChangeListener): () => void {

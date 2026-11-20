@@ -36,7 +36,7 @@ export interface NativeRangeData {
   readonly seen: ReadonlyMap<number, number>;
 }
 
-export type NativeRefusal = "missing" | "range" | "text" | "busy" | "closed";
+export type NativeRefusal = "missing" | "range" | "text" | "busy" | "closed" | "full";
 
 export type NativeAnchoring =
   | { readonly kind: "anchored"; readonly range: NativeTextRange }
@@ -67,10 +67,14 @@ export interface NativeLivePiece {
 
 export interface NativeLiveRange extends NativeLivePiece { readonly pieces: readonly NativeLivePiece[] }
 
-export function nativeAvailability(script: NativeScript): NativeRefusal | null {
+export function nativeAvailability(script: NativeScript): "busy" | "closed" | null {
   if (script.busy()) return "busy";
   throwNativeFailures(script);
   return script.closed() || script.reader.isClosed() ? "closed" : null;
+}
+
+export function nativeWriteAvailability(script: NativeScript): "busy" | "closed" | "full" | null {
+  return nativeAvailability(script) ?? script.sizeRefusal?.() ?? null;
 }
 
 function liveCells(script: NativeScript, target: NativeTextTarget): LiveCell[] {
@@ -268,11 +272,14 @@ export function nativeLiveRange(script: NativeScript, range: NativeRangeData): N
 // why: a command called while another transaction is open refuses, since that transaction's changes are not yet
 // observed
 export function replaceNativeText(script: NativeScript, range: NativeTextRange, runs: readonly Run[], stamp?: NativeEditStamp,
-  beforeWrite?: (target: NativeTextTarget) => void): NativeCommitOutcome {
+  beforeWrite?: (target: NativeTextTarget) => void, adds?: boolean): NativeCommitOutcome {
   const unavailable = nativeAvailability(script);
   if (unavailable) return refuse(unavailable, runs);
+  const prepared = Array.isArray(runs) ? prepareNativeRuns(runs) : null;
+  const encoded = encodedStamp(stamp), checked = nativeRangeSnapshot(range);
+  const sizeRefusal = script.sizeRefusal?.(adds ?? prepared?.length !== 0);
+  if (sizeRefusal) return refuse(sizeRefusal, runs);
   return transactNativeCommand(script, () => {
-    const prepared = prepareNativeRuns(runs), encoded = encodedStamp(stamp), checked = nativeRangeSnapshot(range);
     if (!prepared || encoded === null) return refuse("text", runs);
     if (!checked || checked.target.cell === "name") return refuse("range", runs);
     const live = nativeLiveRange(script, checked);
@@ -293,7 +300,7 @@ export function replaceNativeText(script: NativeScript, range: NativeTextRange, 
 
 export function typeNativeText(script: NativeScript, range: NativeTextRange, text: string, marks: Marks, stamp?: NativeEditStamp,
   beforeWrite?: (target: NativeTextTarget) => void): NativeCommitOutcome {
-  return replaceNativeText(script, range, text ? [{ text, marks }] : [], stamp, beforeWrite);
+  return replaceNativeText(script, range, text ? [{ text, marks }] : [], stamp, beforeWrite, text !== "");
 }
 
 export function deleteNativeText(script: NativeScript, range: NativeTextRange, stamp?: NativeEditStamp): NativeCommitOutcome {

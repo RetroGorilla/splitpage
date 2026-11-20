@@ -121,6 +121,31 @@ async function flushMicrotasks(): Promise<void> {
   await Promise.resolve();
 }
 
+function measureExactEncode(): void {
+  const doc = new Y.Doc(), script = openNativeScript(doc);
+  try {
+    Y.applyUpdate(doc, largeState());
+    const text = "x".repeat(16_400);
+    doc.transact(() => {
+      for (const visual of script.roots.visuals.values()) visual.insert(0, text);
+    });
+    const start = performance.now();
+    const encoded = Y.encodeStateAsUpdate(doc);
+    const ms = performance.now() - start;
+    process.stdout.write(JSON.stringify({
+      beats: script.roots.visuals.size, bytes: encoded.byteLength, ms, maxRssMiB: process.resourceUsage().maxRSS / 1024
+    }) + "\n");
+  } finally {
+    doc.destroy();
+  }
+}
+
+if (process.argv.includes("--exact")) {
+  measureExactEncode();
+  dom.window.close();
+  process.exit(0);
+}
+
 const state = largeState();
 const withoutMedians: number[] = [], withoutP95s: number[] = [];
 const withMedians: number[] = [], withP95s: number[] = [];
