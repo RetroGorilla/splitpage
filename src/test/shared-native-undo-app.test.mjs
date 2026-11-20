@@ -83,8 +83,8 @@ function nativeBytes(doc, command) {
   } finally { native.close(); }
 }
 
-async function enter(t, rows = [{ id: "r1", audioText: "Hello", visualText: "Look" }], command) {
-  const doc = migrateRows({ schema: 2, title: "Native script", rows });
+async function enter(t, rows = [{ id: "r1", audioText: "Hello", visualText: "Look" }], command, sections) {
+  const doc = migrateRows({ schema: 2, title: "Native script", rows, sections });
   adoptReplacement(doc);
   const show = t.mock.method(notices, "show", () => {});
   assert.deepEqual(await (command ? hook.enterFrom(nativeBytes(doc, command), { backend: "native" }) : hook.enter({ backend: "native" })), { ok: true });
@@ -153,6 +153,60 @@ test("Split: removing a beat with a simultaneous peer insertion preserves the pe
   assert.equal(views.Split.at(null)?.[0], "r1");
   await Promise.resolve();
   assert.deepEqual(hook.read().app, hook.read().peer);
+  assert.equal(show.mock.callCount(), 0);
+});
+
+test("Split: scene controls add, rename and remove one heading in three undo steps", async t => {
+  const show = await enter(t, twoBeats);
+  const name = value => {
+    const field = document.querySelector(".section-rename input");
+    field.value = value;
+    field.form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+  };
+  document.querySelector('#rows [data-action="add-section"][data-id="r2"]').click();
+  name("Scene");
+  const added = hook.read().app.sections[0];
+  assert.equal(added.firstSceneId, "r2");
+  const header = () => document.querySelector('.section-header[data-section-id="' + added.id + '"]');
+  assert.equal(header().querySelector(".section-name").textContent, "Scene");
+  header().querySelector('[data-section-action="rename"]').click();
+  name("Changed");
+  assert.equal(hook.read().app.sections[0].name, "Changed");
+  header().querySelector('[data-section-action="remove"]').click();
+  assert.equal(header(), null);
+  assert.equal(hook.read().app.sections?.length ?? 0, 0);
+  views.Split.caret(null, "r2", 0);
+  assert.equal(press(cell("r2"), "z"), true);
+  assert.equal(hook.read().app.sections[0].name, "Changed");
+  assert.equal(press(cell("r2"), "z"), true);
+  assert.deepEqual(hook.read().app.sections, [added]);
+  assert.equal(press(cell("r2"), "z"), true);
+  assert.equal(hook.read().app.sections?.length ?? 0, 0);
+  await Promise.resolve();
+  assert.deepEqual(hook.read().peer, hook.read().app);
+  assert.equal(show.mock.callCount(), 0);
+});
+
+test("Writer: renaming and removing a heading replay the heading caret", async t => {
+  const show = await enter(t, twoBeats, undefined, [{ id: "section", name: "Scene", firstSceneId: "r2" }]);
+  const view = writer(t), heading = () => root().querySelector(".wr-heading");
+  const at = offset => ({ kind: "heading", sceneId: "section", offset });
+  view.flow.place({ anchor: at(5), head: at(5) });
+  typeKeys(root(), " two");
+  assert.equal(heading().textContent, "Scene two");
+  assert.equal(hook.read().app.sections[0].name, "Scene two");
+  assert.deepEqual(view.flow.selection().head, at(9));
+  view.flow.place({ anchor: at(0), head: at(0) });
+  assert.equal(press(root(), "Backspace", { ctrlKey: false }), true);
+  assert.equal(heading(), null);
+  assert.equal(press(root(), "z"), true);
+  assert.equal(heading().textContent, "Scene two");
+  assert.deepEqual(view.flow.selection().head, at(0));
+  assert.equal(press(root(), "z"), true);
+  assert.equal(heading().textContent, "Scene tw");
+  assert.deepEqual(view.flow.selection().head, at(8));
+  await Promise.resolve();
+  assert.deepEqual(hook.read().peer, hook.read().app);
   assert.equal(show.mock.callCount(), 0);
 });
 

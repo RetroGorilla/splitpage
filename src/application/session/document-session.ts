@@ -42,7 +42,10 @@ export interface Command {
   readonly plan: (doc: DocumentView, capability: CapabilityPort) => Plan | CommandRefusal | null;
 }
 
-export type DocumentStructureIntent = { readonly kind: "remove-beat"; readonly id: string };
+export type DocumentStructureIntent =
+  | { readonly kind: "remove-beat" | "remove-heading"; readonly id: string }
+  | { readonly kind: "add-heading"; readonly id: string; readonly beat: string; readonly name: string }
+  | { readonly kind: "rename-heading"; readonly id: string; readonly name: string };
 
 export type CommandOutcome =
   | { readonly kind: "applied"; readonly generation: number; readonly changes: ChangeSet }

@@ -4,6 +4,8 @@ import type { CommandOutcome, DocumentStructureIntent } from "../../application/
 import type { ReportPort } from "../../application/session/ports.ts";
 import { changesBetween } from "../../application/session/projection-changes.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
+import { sceneBeforeBeat, sceneFirstBeatId } from "../../core/document/scenes.ts";
+import { cappedText } from "../../core/document/text-policy.ts";
 import { editAllowed } from "./session-owner.ts";
 import type { mountNativeSharedInput } from "./native-shared-input.ts";
 
@@ -35,17 +37,43 @@ export function createNativeEditorStructure({ native, session, input, publish, r
       if (pending) return { kind: "rejected", reason: pending, notified: true };
       const before = native.document();
       const current = typing.currentCaret();
-      let after: NativeUndoSelectionInput | null = current?.range ?? null;
-      let land: (() => void) | undefined;
-      const at = before.rows.findIndex(row => row.id === intent.id);
-      const selection = current?.range ?? anchor(intent.id, 0);
-      const step = native.commands.removeRows.withSelection(selection, [intent.id]);
-      if (!current || current.row === intent.id) {
-        const row = before.rows[at + 1] ?? before.rows[at - 1];
-        after = row ? anchor(row.id, 0) : null;
-        if (row) {
-          const point = { target: { beat: row.id, cell: "narration" as const }, offset: 0 };
-          land = () => typing.show({ anchor: point, head: point });
+      let after: NativeUndoSelectionInput | null = current?.range ?? null, landing: string | undefined;
+      let step;
+      switch (intent.kind) {
+        case "remove-beat": {
+          const at = before.rows.findIndex(row => row.id === intent.id);
+          if (at < 0) return owner.refuse("missing");
+          const selection = current?.range ?? anchor(intent.id, 0);
+          step = native.commands.removeRows.withSelection(selection, [intent.id]);
+          if (!current || current.row === intent.id) {
+            landing = (before.rows[at + 1] ?? before.rows[at - 1])?.id;
+            after = landing ? anchor(landing, 0) : null;
+          }
+          break;
+        }
+        case "add-heading": {
+          const name = cappedText(intent.name, 200), at = anchor(intent.beat, 0);
+          if (!name || sceneBeforeBeat(before, intent.beat)) return { kind: "noop" };
+          if (!at) return owner.refuse("missing");
+          after ??= at;
+          step = native.commands.createHeading.withSelection(after, at, intent.id, name);
+          break;
+        }
+        case "rename-heading":
+        case "remove-heading": {
+          const scene = before.sections?.find(item => item.id === intent.id);
+          if (!scene) return owner.refuse("missing");
+          after ??= anchor(sceneFirstBeatId(scene), 0);
+          if (intent.kind === "remove-heading") {
+            step = native.commands.removeHeading.withSelection(after, intent.id);
+          } else {
+            const name = cappedText(intent.name, 200);
+            if (!name) return { kind: "noop" };
+            const range = native.commands.anchorText({ beat: intent.id, cell: "name" }, 0, scene.name.length);
+            if (range.kind === "refused") return owner.refuse(range.reason);
+            step = native.commands.renameHeading.withSelection(after, range.range, name);
+          }
+          break;
         }
       }
       if (step.result.kind === "refused") return owner.refuse(step.result.reason);
@@ -53,7 +81,10 @@ export function createNativeEditorStructure({ native, session, input, publish, r
       step.recordAfter(after);
       const changes = changesBetween(before, native.document());
       publish();
-      land?.();
+      if (landing) {
+        const point = { target: { beat: landing, cell: "narration" as const }, offset: 0 };
+        typing.show({ anchor: point, head: point });
+      }
       return { kind: "applied", generation: owner.generation(), changes };
     } catch (error) {
       report(error);

@@ -5,6 +5,7 @@ import type { ReportPort } from "../../application/session/ports.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
 import { isBlankBeat } from "../../application/commands/rows.ts";
 import { sceneBeforeBeat } from "../../core/document/scenes.ts";
+import { headingPos } from "../../core/flow/flow.ts";
 import { cellLength, projection } from "../../core/text/runs.ts";
 import { domToPos, posToDom } from "../../features/common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../../features/common/cell-selection.ts";
@@ -402,6 +403,56 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (fresh) caret.surface.place(fresh, upper.id, seam, seam, true);
   }
 
+  function headingAt(cell: Element | null): Element | null {
+    if (cell?.id !== "writer-doc") return null;
+    const node = document.getSelection()?.focusNode;
+    const heading = (node instanceof Element ? node : node?.parentElement)?.closest(".wr-heading");
+    return heading && cell.contains(heading) ? heading : null;
+  }
+
+  function headingInput(event: Event, heading: Element, remove: boolean): void {
+    const refusal = admissionRefusal();
+    if (refusal) { session.refuse(refusal); return; }
+    if (beforePress()) return;
+    const id = heading.getAttribute("data-scene") ?? "";
+    const doc = native.document(), scene = doc.sections?.find(item => item.id === id);
+    const selection = cellSelection(heading);
+    if (!scene || !selection || !heading.isConnected || heading.textContent !== scene.name) { session.refuse(STALE); return; }
+    const target = { beat: id, cell: "name" } as const;
+    const before = native.commands.anchorText(target, selection.from, selection.to);
+    if (before.kind === "refused") { session.refuse(before.reason); return; }
+    if (remove) {
+      const index = doc.rows.findIndex(row => row.id === scene.firstSceneId);
+      const previous = doc.rows[index - 1];
+      const beat = previous?.id ?? scene.firstSceneId, offset = previous ? cellLength(scriptCellOf(previous.audioText)) : 0;
+      const point = native.narrationCaret(beat, offset);
+      const step = native.commands.removeHeading.withSelection(before.range, id);
+      if (step.result.kind === "refused") { session.refuse(step.result.reason); return; }
+      if (step.result.kind === "unchanged") return;
+      step.recordAfter(point && caretAnchor(point.beat, point.offset));
+      publish();
+      const fresh = shownNarrationSurface().cell(beat);
+      if (fresh) shownNarrationSurface().place(fresh, beat, offset, offset, true);
+      return;
+    }
+    const input = event as InputEvent;
+    const range = inputRange(input, heading);
+    const text = input.inputType === "insertText" ? input.data : /^delete(?:Content|Word)(?:Backward|Forward)$/.test(input.inputType) ? "" : null;
+    if (!range || text === null || input.isComposing || /[\r\n]/.test(text)) { session.refuse(UNSUPPORTED); return; }
+    const name = scene.name.slice(0, range.from) + text + scene.name.slice(range.to);
+    if (!name.trim() || [...name].length > 200) { session.refuse(UNSUPPORTED); return; }
+    const edit = native.commands.anchorText(target, range.from, range.to);
+    if (edit.kind === "refused") { session.refuse(edit.reason); return; }
+    const step = native.commands.renameHeading.withSelection(before.range, edit.range, text);
+    if (step.result.kind === "refused") { session.refuse(step.result.reason); return; }
+    if (step.result.kind === "unchanged") return;
+    const offset = range.from + text.length, after = native.commands.anchorText(target, offset);
+    if (after.kind === "anchored") step.recordAfter(after.range);
+    publish();
+    const at = headingPos(id, offset);
+    writerControls()?.writerFlowControl()?.place({ anchor: at, head: at });
+  }
+
   function write(input: InputEvent, cell: Element): void {
     const deletion = /^delete(Content|Word|SoftLine|HardLine)(Backward|Forward)$/.test(input.inputType);
     const text = input.data ?? "";
@@ -492,6 +543,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const target = event.target instanceof Element ? event.target : null;
     const cell = target?.closest(EDITABLE);
     const narration = target && cell ? narrationAt(target, cell) : null;
+    const heading = headingAt(cell ?? null);
+    const removeHeading = heading && joinDirection(event, heading) === -1;
     const joining = narration && joinDirection(event, narration);
     if (event.type === "focusout") {
       const buffered = draft;
@@ -518,7 +571,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         return;
       }
       if (undoGesture(key) && cell?.matches(UNDO_SURFACES)) return;
-      if (!editingKey(key) && !joining) {
+      if (!editingKey(key) && !joining && !removeHeading) {
         if (key.key.startsWith("Arrow") || key.key === "Home" || key.key === "End" || key.key === "Tab") finish();
         return;
       }
@@ -556,6 +609,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     try {
       if (narration && stopped) { session.refuse(stopped); return; }
       if (narration && joining) { join(narration, joining); return; }
+      if (heading && (removeHeading || event.type === "beforeinput" && event.cancelable)) {
+        headingInput(event, heading, !!removeHeading);
+        return;
+      }
       if (narration && (event.type === "keydown" && splitKey(event as KeyboardEvent)
         || event.type === "beforeinput" && event.cancelable && (event as InputEvent).inputType === "insertParagraph")) {
         split(narration);
@@ -599,6 +656,12 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   }
 
   function show(selection: NativeUndoSelection): void {
+    if (selection.head.target.cell === "name") {
+      const head = headingPos(selection.head.target.beat, selection.head.offset);
+      const anchor = selection.anchor.target.cell === "name" ? headingPos(selection.anchor.target.beat, selection.anchor.offset) : head;
+      writerControls()?.writerFlowControl()?.place({ anchor, head }, true);
+      return;
+    }
     const head = rowPoint(selection.head), anchor = selection.anchor === selection.head ? head : rowPoint(selection.anchor);
     if (!head) return;
     const surface = shownNarrationSurface(), cell = surface.cell(head.row);
