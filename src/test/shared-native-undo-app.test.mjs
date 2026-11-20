@@ -190,6 +190,26 @@ for (const [name, kind] of Object.entries(views)) {
     });
   }
 
+  for (const backwards of [true, false]) {
+    test(name + ": " + (backwards ? "Backspace" : "Delete") + " joins beats and replays the seam", async t => {
+      const show = await enter(t, twoBeats), view = kind.open(t);
+      const id = backwards ? "r2" : "r1", offset = backwards ? 0 : 5;
+      kind.caret(view, id, offset);
+      assert.equal(press(document.activeElement, backwards ? "Backspace" : "Delete", { ctrlKey: false }), true);
+      assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["Hello World"]);
+      assert.equal(kind.host("r1").textContent.replace(/\u200b/g, ""), "Hello World");
+      assert.deepEqual(kind.at(view), ["r1", 6, 6]);
+      assert.equal(press(kind.surface(), "z"), true);
+      assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["Hello", "World"]);
+      assert.deepEqual(kind.at(view, id), [id, offset, offset]);
+      assert.equal(press(document.activeElement, "y"), true);
+      assert.deepEqual(kind.at(view), ["r1", 6, 6]);
+      await Promise.resolve();
+      assert.deepEqual(hook.read().peer, hook.read().app);
+      assert.equal(show.mock.callCount(), 0);
+    });
+  }
+
   test(name + ": Ctrl+Z takes back each typed word with the caret where it began, and Ctrl+Y and Ctrl+Shift+Z put them back", async t => {
     const show = await enter(t), view = kind.open(t);
     kind.caret(view, "r1", 5);
@@ -595,8 +615,6 @@ const outOfScope = [
   ["typing over a selection across two beats", view => {
     view.flow.place({ anchor: { kind: "beat", rowId: "r1", offset: 2 }, head: { kind: "beat", rowId: "r2", offset: 2 } });
   }, () => beforeInput(root(), "insertText", "x")],
-  ["Backspace at the start of a beat", view => { view.caret("r2", 0); }, () => beforeInput(root(), "deleteContentBackward", null)],
-  ["Delete at the end of a beat", view => { view.caret("r1", 6); }, () => beforeInput(root(), "deleteContentForward", null)],
   ["Ctrl+B", view => { view.caret("r1", 1, 3); }, () => press(root(), "b")],
   ["a rich paste", view => { view.caret("r1", 2); }, () => {
     const event = new window.Event("paste", { bubbles: true, cancelable: true });

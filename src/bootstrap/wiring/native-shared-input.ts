@@ -3,10 +3,13 @@ import type { NativeEditStamp, NativeTextPlacement, NativeTextRange, NativeUndoP
 import type { CellRange } from "../../application/editing/cell-editing.ts";
 import type { ReportPort } from "../../application/session/ports.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
+import { sceneBeforeBeat } from "../../core/document/scenes.ts";
+import { cellLength, projection } from "../../core/text/runs.ts";
 import { domToPos, posToDom } from "../../features/common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../../features/common/cell-selection.ts";
 import { noteFieldPainted, renderRow } from "../../features/rows/render.ts";
 import { undoGesture } from "../../features/undo/routes.ts";
+import { scriptCellOf } from "../richtext.ts";
 import { guardUnload } from "../startup/page-lifetime.ts";
 import { narrationAt, narrationSurfaceOf, shownNarrationSurface } from "./native-narration-surfaces.ts";
 import type { NarrationSurface } from "./native-narration-surfaces.ts";
@@ -344,6 +347,46 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (fresh) caret.surface.place(fresh, beat, 0, 0, true);
   }
 
+  function joinDirection(event: Event, cell: Element): -1 | 1 | null {
+    const key = event.type === "keydown" ? event as KeyboardEvent : null;
+    const input = event.type === "beforeinput" ? event as InputEvent : null;
+    if (key && (key.ctrlKey || key.metaKey || key.altKey || key.shiftKey)) return null;
+    if (input && (!input.cancelable || input.isComposing)) return null;
+    const intent = key?.key ?? input?.inputType;
+    const direction = intent === "Backspace" || intent === "deleteContentBackward" ? -1
+      : intent === "Delete" || intent === "deleteContentForward" ? 1 : null;
+    if (!direction) return null;
+    const selected = cellSelection(cell);
+    if (!selected || selected.from !== selected.to) return null;
+    const boundary = direction === -1 ? 0 : cellLength(scriptCellOf(cell.innerHTML));
+    return selected.from === boundary ? direction : null;
+  }
+
+  function join(cell: Element, direction: -1 | 1): void {
+    const caret = structureCaret(cell);
+    if (!caret) return;
+    const doc = native.document();
+    const at = doc.rows.findIndex(row => row.id === caret.beat);
+    const lower = doc.rows[at + (direction === 1 ? 1 : 0)];
+    const upper = doc.rows[at + (direction === -1 ? -1 : 0)];
+    if (!upper || !lower || sceneBeforeBeat(doc, lower.id)) { session.refuse(UNSUPPORTED); return; }
+    const a = scriptCellOf(upper.audioText), b = scriptCellOf(lower.audioText);
+    const length = cellLength(a);
+    if (caret.offset !== (direction === -1 ? 0 : length)) { session.refuse(STALE); return; }
+    const point = native.narrationCaret(upper.id, length);
+    if (!point) { session.refuse(STALE); return; }
+    const glue = length && cellLength(b) && !/\s$/.test(projection(a)) ? " " : "";
+    const seam = length + glue.length;
+    const step = native.commands.joinRow.withSelection(caret.before, lower.id, point.beat, glue);
+    if (step.result.kind === "refused") { session.refuse(step.result.reason); return; }
+    if (step.result.kind === "unchanged") return;
+    const after = cellLength(b) ? caretAnchor(lower.id, 0) : caretAnchor(point.beat, point.offset);
+    step.recordAfter(after);
+    publish();
+    const fresh = caret.surface.cell(upper.id);
+    if (fresh) caret.surface.place(fresh, upper.id, seam, seam, true);
+  }
+
   function write(input: InputEvent, cell: Element): void {
     const deletion = /^delete(Content|Word|SoftLine|HardLine)(Backward|Forward)$/.test(input.inputType);
     const text = input.data ?? "";
@@ -434,6 +477,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const target = event.target instanceof Element ? event.target : null;
     const cell = target?.closest(EDITABLE);
     const narration = target && cell ? narrationAt(target, cell) : null;
+    const joining = narration && joinDirection(event, narration);
     if (event.type === "focusout") {
       const buffered = draft;
       if (buffered && cell && (buffered.cell === cell || cell.contains(buffered.cell))) {
@@ -452,14 +496,14 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       const key = event as KeyboardEvent;
       if (narration && (draft?.composing || key.isComposing || key.keyCode === 229)) {
         event.stopImmediatePropagation();
-        if (undoGesture(key) || splitKey(key) && !key.isComposing && key.keyCode !== 229) {
+        if (undoGesture(key) || (splitKey(key) || joining) && !key.isComposing && key.keyCode !== 229) {
           event.preventDefault();
           if (!stopped) session.refuse(PENDING);
         }
         return;
       }
       if (undoGesture(key) && cell?.matches(UNDO_SURFACES)) return;
-      if (!editingKey(key)) {
+      if (!editingKey(key) && !joining) {
         if (key.key.startsWith("Arrow") || key.key === "Home" || key.key === "End" || key.key === "Tab") finish();
         return;
       }
@@ -496,6 +540,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     event.stopImmediatePropagation();
     try {
       if (narration && stopped) { session.refuse(stopped); return; }
+      if (narration && joining) { join(narration, joining); return; }
       if (narration && (event.type === "keydown" && splitKey(event as KeyboardEvent)
         || event.type === "beforeinput" && event.cancelable && (event as InputEvent).inputType === "insertParagraph")) {
         split(narration);
