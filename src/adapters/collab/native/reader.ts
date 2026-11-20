@@ -60,6 +60,14 @@ export interface NativeSpanContent {
   readonly items: readonly NativeDeltaItem[];
 }
 
+export interface NativeRankedBlock {
+  readonly kind: "beat" | "heading";
+  readonly id: string;
+  readonly head: string | null;
+  readonly rank: string;
+  readonly bound: string | null;
+}
+
 interface ParsedSpan extends NativeSpanContent { readonly content: string }
 
 interface ParsedSegment {
@@ -224,6 +232,7 @@ export class NativeScriptReader {
   private spanOwners = new Map<string, string[]>();
   private groups = new Map<string, RowMember[]>();
   private groupHeads = new Map<string, string>();
+  private storedBlocks: readonly StoredBlock[] = [];
   private rankedBlocks: readonly RankedBlock[] = [];
   private removedHeadings: readonly string[] = [];
   private structuralProblems: NativeReaderProblem[] = [];
@@ -452,6 +461,7 @@ export class NativeScriptReader {
     for (const key of [...this.roots.segments.keys()].sort()) {
       if (!ordered.has(key)) this.segment(key)?.spans.forEach((_, index) => { this.candidates.push({ segment: key, span: index, reason: "no-order" }); });
     }
+    this.storedBlocks = blocks;
     this.rankedBlocks = this.ranked(blocks);
     this.updateOutline(this.rankedBlocks, blocks);
     this.structural = false;
@@ -505,11 +515,12 @@ export class NativeScriptReader {
     outline.forEach((entry, index) => { if (entry.kind === "heading") this.headingIndex.set(entry.id, index); });
   }
 
-  private ranked(blocks: readonly StoredBlock[], newHeading?: { readonly id: string; readonly rank: string }): RankedBlock[] {
+  private ranked(blocks: readonly StoredBlock[], newHeading?: { readonly id: string; readonly rank: string }, overrides?: ReadonlyMap<string, string>): RankedBlock[] {
     let previous: string | null = null, bound: string | null = null;
     const keyed = blocks.map((block, index) => {
       const record = block.kind === "h" ? this.roots.headings.get(block.id) : this.roots.beats.get(block.id);
-      const rank = block.kind === "h" && block.id === newHeading?.id ? newHeading.rank : rankOf(record);
+      const override = overrides?.get(block.kind + ":" + block.id);
+      const rank = override !== undefined ? override : block.kind === "h" && block.id === newHeading?.id ? newHeading.rank : rankOf(record);
       if (rank !== null) { previous = rank; bound = rank; }
       else if (record instanceof Y.Map && record.has("rank")) bound = "";
       return { block, rank: previous ?? "", bound, index };
@@ -631,6 +642,25 @@ export class NativeScriptReader {
   beatBoundary(beat: string): NativeSpanPlace | null {
     this.sync();
     return this.places.get(beat) ?? null;
+  }
+
+  rankedOrder(): readonly NativeRankedBlock[] {
+    this.sync();
+    return Object.freeze(this.rankedBlocks.map(({ block, rank, bound }) => Object.freeze({
+      kind: block.kind === "h" ? "heading" as const : "beat" as const,
+      id: block.id,
+      head: block.kind === "b" ? this.groupHeads.get(block.id) ?? null : null,
+      rank,
+      bound
+    })));
+  }
+
+  previewMoveOrder(ranks: ReadonlyMap<string, string>): readonly { readonly kind: "beat" | "heading"; readonly id: string }[] {
+    this.sync();
+    return Object.freeze(this.ranked(this.storedBlocks, undefined, ranks).map(({ block }) => Object.freeze({
+      kind: block.kind === "h" ? "heading" as const : "beat" as const,
+      id: block.id
+    })));
   }
 
   ranksAboveBeat(beat: string): { readonly before: string | null; readonly after: string | null } | null {
