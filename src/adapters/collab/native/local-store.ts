@@ -19,6 +19,6 @@ export type NativeLocalStoreOpen = NativeLocalStoreFailure | {
 };
 
 export interface NativeLocalStore {
-  open(name: string, options: NativeSessionOptions): Promise<NativeLocalStoreOpen>;
-  delete(name: string): Promise<NativeLocalStoreReceipt>;
+  readonly open: (name: string, options: NativeSessionOptions) => Promise<NativeLocalStoreOpen>;
+  readonly delete: (name: string) => Promise<NativeLocalStoreReceipt>;
 }

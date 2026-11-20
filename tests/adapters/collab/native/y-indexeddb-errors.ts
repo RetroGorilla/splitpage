@@ -10,11 +10,11 @@ const leases: IDBDatabase[] = [];
 let provider: IndexeddbPersistence | undefined;
 try {
   const factory = indexedDB;
-  const { promise: blockedDelete, resolve: deleteBlocked } = eventResult<void>();
+  const { promise: blockedDelete, resolve: deleteBlocked } = eventResult<undefined>();
   const remove = factory.deleteDatabase.bind(factory);
   factory.deleteDatabase = name => {
     const request = remove(name);
-    request.addEventListener("blocked", () => deleteBlocked());
+    request.addEventListener("blocked", () => deleteBlocked(undefined));
     return request;
   };
   const open = factory.open.bind(factory);
@@ -28,7 +28,9 @@ try {
     IDBObjectStore.prototype.add = add;
     const request = add.call(this, value, key);
     const queue = (this.transaction as unknown as { _requests: { operation: () => unknown }[] })._requests;
-    queue.at(-1)!.operation = () => { throw new DOMException("Storage limit reached", "QuotaExceededError"); };
+    const pending = queue.at(-1);
+    assert.ok(pending);
+    pending.operation = () => { throw new DOMException("Storage limit reached", "QuotaExceededError"); };
     return request;
   };
   doc.getText("script").insert(0, "offline");
@@ -44,10 +46,10 @@ try {
 
   const held = await idbResult(open("held", 1));
   leases.push(held);
-  const { promise: blockedOpen, resolve: openBlocked } = eventResult<void>();
+  const { promise: blockedOpen, resolve: openBlocked } = eventResult<undefined>();
   factory.open = name => {
     const request = open(name, 2);
-    request.addEventListener("blocked", () => openBlocked());
+    request.addEventListener("blocked", () => openBlocked(undefined));
     return request;
   };
   const blockedDoc = new Y.Doc();

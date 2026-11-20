@@ -29,9 +29,9 @@ function failure(error: unknown): NativeLocalStoreFailure {
 
 function acquire(locks: Pick<LockManager, "request">, name: string): Promise<(() => Promise<void>) | null> {
   return new Promise((resolve, reject) => {
-    const hold = deferred<void>();
+    const hold = deferred<undefined>();
     const released = locks.request(`${DATABASE}:${name}`, { ifAvailable: true }, lock => {
-      resolve(lock ? async () => { hold.resolve(); await released; } : null);
+      resolve(lock ? async () => { hold.resolve(undefined); await released; } : null);
       return lock ? hold.promise : undefined;
     });
     void released.catch(reject);
@@ -48,7 +48,7 @@ function openDatabase(factory: IDBFactory): Promise<IDBDatabase | NativeLocalSto
     };
     request.onupgradeneeded = () => {
       // why: after reporting a blocked open, the queued upgrade must not change the database later
-      if (blocked) request.transaction!.abort();
+      if (blocked) request.transaction?.abort();
       else request.result.createObjectStore(REPLICAS);
     };
     request.onerror = () => reject(request.error);
@@ -88,12 +88,10 @@ async function attachSession(
   release: () => Promise<void>, storage: BrowserLocalStorePorts["storage"]
 ): Promise<NativeLocalStoreOpen> {
   let stopped: NativeLocalStoreFailure | undefined;
-  let disconnect: (() => void) | undefined;
 
   function stop(reason: "closed" | "version"): void {
     stopped = { kind: "failed", reason };
     database.close();
-    disconnect?.();
   }
 
   database.onversionchange = () => stop("version");
@@ -106,7 +104,7 @@ async function attachSession(
 
   const session = openNativeSession(state === undefined ? { kind: "empty" } : { kind: "state", state }, options);
   const listeners = new Set<(receipt: NativeLocalStoreReceipt) => void>();
-  const ending = deferred<void>();
+  const ending = deferred<undefined>();
   let latest: Promise<NativeLocalStoreReceipt> = Promise.resolve(STORED);
   let queued = false;
   let finalState: Uint8Array | undefined;
@@ -149,14 +147,18 @@ async function attachSession(
     else {
       finalState = change.state;
       if (change.reason === "failed") save();
-      ending.resolve();
+      ending.resolve(undefined);
     }
   });
 
-  disconnect = () => {
+  function disconnect(reason: "closed" | "version"): void {
+    stop(reason);
     unsubscribe();
-    ending.resolve();
-  };
+    ending.resolve(undefined);
+  }
+
+  database.onversionchange = () => disconnect("version");
+  database.onclose = () => disconnect("closed");
 
   return {
     kind: "opened", restored: state !== undefined, session, persistent: requestPersistence(storage),

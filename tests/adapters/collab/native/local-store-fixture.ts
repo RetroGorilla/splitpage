@@ -40,6 +40,9 @@ export function typeAt(session: StoreSession, offset: number, text: string, beat
 
 export async function storedBytes(factory: IDBFactory, name: string): Promise<Uint8Array | undefined> {
   const connection = await idbResult(factory.open(DB_NAME));
-  try { return await idbResult(connection.transaction(REPLICAS).objectStore(REPLICAS).get(name)); }
-  finally { connection.close(); }
+  try {
+    const value: unknown = await idbResult(connection.transaction(REPLICAS).objectStore(REPLICAS).get(name));
+    assert.ok(value === undefined || value instanceof Uint8Array);
+    return value;
+  } finally { connection.close(); }
 }

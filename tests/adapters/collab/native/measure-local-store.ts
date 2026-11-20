@@ -11,7 +11,7 @@ import { LARGE_BEATS, largeDocument } from "./structural.ts";
 function median(values: readonly number[]): number {
   const sorted = [...values].sort((a, b) => a - b);
   const mid = Math.floor(sorted.length / 2);
-  return (sorted[Math.floor((sorted.length - 1) / 2)]! + sorted[mid]!) / 2;
+  return ((sorted[Math.floor((sorted.length - 1) / 2)] ?? NaN) + (sorted[mid] ?? NaN)) / 2;
 }
 
 function keystroke(session: StoreSession, index: number): number {

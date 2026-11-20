@@ -1,3 +1,4 @@
+import assert from "node:assert/strict";
 import type { TestContext } from "node:test";
 import { IDBObjectStore } from "fake-indexeddb";
 
@@ -30,7 +31,9 @@ export function failNextIdbWrite(t: TestContext, method: "add" | "put", reason: 
     else {
       // why: fake-indexeddb runs real request and transaction events but has no storage quota
       const queue = (this.transaction as unknown as { _requests: { operation: () => unknown }[] })._requests;
-      queue.at(-1)!.operation = () => { throw new DOMException("Storage limit reached", "QuotaExceededError"); };
+      const pending = queue.at(-1);
+      assert.ok(pending);
+      pending.operation = () => { throw new DOMException("Storage limit reached", "QuotaExceededError"); };
     }
     return request;
   });

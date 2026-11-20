@@ -5,7 +5,7 @@ import { bootApp, closeApp } from "../../../../src/test/_app-boot.mjs";
 import { STORED, STORE_OPTIONS, seedReplica, storedBytes } from "./local-store-fixture.ts";
 
 async function exportAppData() {
-  const hook = (window as unknown as { __appDataTest: { build(): Promise<Record<string, unknown>> } }).__appDataTest;
+  const hook = (window as unknown as { __appDataTest: { build: () => Promise<Record<string, unknown>> } }).__appDataTest;
   const result = await hook.build();
   assert.equal(result.format, "splitpage-app-data");
   Reflect.deleteProperty(result, "exportedAt");

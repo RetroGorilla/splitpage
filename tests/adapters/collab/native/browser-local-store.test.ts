@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test, type TestContext } from "node:test";
 import { forceCloseDatabase, IDBObjectStore, IDBVersionChangeEvent } from "fake-indexeddb";
 import { createBrowserNativeLocalStore } from "../../../../src/adapters/collab/native/browser-local-store.ts";
-import type { NativeLocalStore, NativeLocalStoreFailure } from "../../../../src/adapters/collab/native/local-store.ts";
+import type { NativeLocalStore, NativeLocalStoreFailure, NativeLocalStoreReceipt } from "../../../../src/adapters/collab/native/local-store.ts";
 import { eventResult, failNextIdbWrite, idbDone, idbResult } from "./indexeddb-fixture.ts";
 import { DB_NAME, REPLICAS, STORED, STORE_OPTIONS, fixture, seedReplica, storedBytes, typeAt, type OpenReplica } from "./local-store-fixture.ts";
 
@@ -23,6 +23,11 @@ function nextFailure(replica: OpenReplica): Promise<NativeLocalStoreFailure> {
   });
 }
 
+function connectionFrom(request: IDBOpenDBRequest | undefined): IDBDatabase {
+  assert.ok(request);
+  return request.result;
+}
+
 test("local store saves edits before a same-turn flush and hydrates on restart with fresh undo", bounded, async t => {
   const { factory, store } = fixture(), opened = t.mock.method(factory, "open");
   const before = await open(t, store, "restart");
@@ -33,7 +38,7 @@ test("local store saves edits before a same-turn flush and hydrates on restart w
   const bytes = before.session.encodeState();
   const expected = before.session.document();
   assert.deepEqual(await before.flush(), STORED);
-  const connection = opened.mock.calls[0]!.result!.result;
+  const connection = connectionFrom(opened.mock.calls[0]?.result);
   assert.deepEqual(await storedBytes(factory, "restart"), bytes);
   const lost = nextFailure(before);
   forceCloseDatabase(connection as unknown as Parameters<typeof forceCloseDatabase>[0]);
@@ -55,15 +60,15 @@ test("local store saves edits before a same-turn flush and hydrates on restart w
 
 test("writes start automatically, coalesce while queued, and report only when the latest transaction completes", bounded, async t => {
   const { factory, store } = fixture(), { session, flush, subscribe } = await open(t, store, "commit");
-  const receipts = t.mock.fn();
+  const receipts = t.mock.fn<(receipt: NativeLocalStoreReceipt) => void>();
   subscribe(receipts);
-  const success = eventResult<void>();
+  const success = eventResult<undefined>();
   const put = IDBObjectStore.prototype.put;
   let complete = false;
   const observed = t.mock.method(IDBObjectStore.prototype, "put", function (this: IDBObjectStore, value: unknown, key?: IDBValidKey) {
     assert.equal(this.transaction.durability, "strict");
     const request = put.call(this, value, key);
-    request.addEventListener("success", () => success.resolve());
+    request.addEventListener("success", () => success.resolve(undefined));
     this.transaction.addEventListener("complete", () => { complete = true; });
     return request;
   });
@@ -78,7 +83,7 @@ test("writes start automatically, coalesce while queued, and report only when th
   assert.equal(await Promise.race([receipt, Promise.resolve("pending")]), "pending");
   assert.deepEqual(await receipt, STORED);
   assert.equal(observed.mock.callCount(), 2);
-  assert.deepEqual(receipts.mock.calls.map(call => call.arguments), [[STORED]]);
+  assert.deepEqual(receipts.mock.calls.map(call => call.arguments[0]), [STORED]);
   assert.deepEqual(await storedBytes(factory, "commit"), session.encodeState());
 });
 
@@ -233,15 +238,15 @@ test("an upgrade lets the active transaction finish and refuses the queued snaps
   const { session } = replica;
   seedReplica(session);
   assert.deepEqual(await replica.flush(), STORED);
-  const database = observed.mock.calls[0]!.result!.result;
+  const database = connectionFrom(observed.mock.calls[0]?.result);
   const put = IDBObjectStore.prototype.put;
-  const writing = eventResult<void>();
+  const writing = eventResult<undefined>();
   t.mock.method(IDBObjectStore.prototype, "put", function (this: IDBObjectStore, value: unknown, key?: IDBValidKey) {
     const request = put.call(this, value, key);
-    request.addEventListener("success", () => writing.resolve());
+    request.addEventListener("success", () => writing.resolve(undefined));
     return request;
   });
-  const receipts = t.mock.fn();
+  const receipts = t.mock.fn<(receipt: NativeLocalStoreReceipt) => void>();
   replica.subscribe(receipts);
   typeAt(session, 0, "active ");
   const active = session.encodeState();
@@ -251,7 +256,7 @@ test("an upgrade lets the active transaction finish and refuses the queued snaps
   database.onversionchange?.(new IDBVersionChangeEvent("versionchange", { oldVersion: 1, newVersion: 2 }));
   const terminal = { kind: "failed", reason: "version" };
   assert.deepEqual(await replica.closed, terminal);
-  assert.deepEqual(receipts.mock.calls.map(call => call.arguments), [[terminal]]);
+  assert.deepEqual(receipts.mock.calls.map(call => call.arguments[0]), [terminal]);
   assert.deepEqual(await storedBytes(factory, "upgrade-in-flight"), active);
   const upgraded = await idbResult(factory.open(DB_NAME, 2));
   upgraded.close();
@@ -298,7 +303,7 @@ test("an already closed IndexedDB connection reports the write failure instead o
   seedReplica(replica.session);
   assert.deepEqual(await replica.flush(), STORED);
   const failed = nextFailure(replica);
-  observed.mock.calls[0]!.result!.result.close();
+  connectionFrom(observed.mock.calls[0]?.result).close();
   typeAt(replica.session, 0, "kept in memory ");
   const result = await replica.flush();
   assert.equal(result.kind, "failed");
