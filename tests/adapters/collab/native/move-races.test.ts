@@ -4,6 +4,7 @@ import { dom } from "../../../../src/test/_dom.mjs";
 import { createNativeHeading, removeNativeHeading } from "../../../../src/adapters/collab/native/heading-commands.ts";
 import { moveNativeBlocks } from "../../../../src/adapters/collab/native/move-commands.ts";
 import type { NativeMoveBlock } from "../../../../src/adapters/collab/native/move-commands.ts";
+import { setNativeField } from "../../../../src/adapters/collab/native/record-commands.ts";
 import { nativeSegmentSpans } from "../../../../src/adapters/collab/native/reader.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import { anchorNativeText, typeNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
@@ -13,7 +14,7 @@ import { caret, copiesOf, join, press, remove, rowsOf, split, stateOf, storedOf,
 after(() => { dom.window.close(); });
 
 const CLIENTS: readonly (readonly number[])[] = [[2, 3], [3, 2]];
-const ORDERS: readonly Delivery[] = ["forward", "reverse", "twice"];
+const ORDERS: readonly Delivery[] = ["forward", "reverse", "twice", "shuffled", "state"];
 const beat = (id: string): NativeMoveBlock => ({ kind: "beat", id });
 const heading = (id: string): NativeMoveBlock => ({ kind: "heading", id });
 
@@ -155,6 +156,16 @@ test("decision 15 (E15 history 4): three same-moment moves of one row and winner
     assert.equal(a.roots.beats.get("B")?.has("rank"), false);
     assert.deepEqual(outlineIds(a), ["A", "B", "C", "D"]);
     net.agree();
+    const otherLoser = winner === 0 ? [c, undoC] as const : [a, undoA] as const;
+    for (const [copy, history] of [[b, undoB], otherLoser] as const) {
+      const before = stateOf(copy);
+      assert.equal(history.undo(), null);
+      assert.deepEqual(stateOf(copy), before);
+      assert.equal(history.undoStack.length, 0);
+      net.settle(order);
+      assert.deepEqual(outlineIds(a), ["A", "B", "C", "D"]);
+      net.agree();
+    }
     undoA.destroy(); undoB.destroy(); undoC.destroy();
     a.close(); b.close(); c.close();
   }
@@ -644,10 +655,16 @@ test("decision 15 (E15 history 14 adapted): a split-off row can move before a re
       net.settle(order);
       assert.deepEqual(outlineIds(a), ["A", "B"]);
       const n = split(a, "B", 1);
+      assert.equal(typeNativeText(a, caret(a, n, 0), "n", {}).kind, "written");
+      assert.equal(setNativeField(a, { kind: "beat", id: n, field: "status" }, "ready").kind, "written");
       move(a, [beat(n)], beat("B"));
       net.settle(order);
       assert.deepEqual(outlineIds(a), ["A", n, "B"]);
       assert.equal(a.reader.row("B")?.audioText, "b");
+      for (const copy of [a, b]) {
+        assert.equal(copy.reader.row(n)?.audioText, "n");
+        assert.equal(copy.reader.row(n)?.fields.status, "ready");
+      }
       net.agree();
     } finally { a.doc.destroy(); b.doc.destroy(); }
   }

@@ -1,10 +1,12 @@
 ﻿import assert from "node:assert/strict";
 import test from "node:test";
 import * as Y from "yjs";
+import { formatNativeText } from "../../../../src/adapters/collab/native/format-commands.ts";
 import { anchorNativeText, typeNativeText, deleteNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
+import { openNativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import { openNativeUndo } from "../../../../src/adapters/collab/native/undo-commands.ts";
-import { ScriptNet, convertedScript, joinedScript } from "./helpers.ts";
-import { caret, remove, rowsOf, stateOf, structureScript } from "./structure-harness.ts";
+import { ScriptNet, convertedScript, edit, joinedScript } from "./helpers.ts";
+import { caret, remove, rowsOf, split, stateOf, structureScript } from "./structure-harness.ts";
 
 function fixture() {
   const a = convertedScript(structureScript({ A: "a", B: "b" }), 1), b = joinedScript(a, 2);
@@ -42,9 +44,12 @@ test("E3: one press applies one group and publishes one update; empty presses le
 });
 
 test("E3: undo and redo refuse a busy script and a closed handle without consuming steps or writing", () => {
-  const { a, b } = fixture(), history = openNativeUndo(a, 0);
+  const { a, b } = fixture(), history = openNativeUndo(a);
   try {
-    for (const ch of ["x", "y"]) assert.equal(typeNativeText(a, caret(a, "A", 0), ch, {}).kind, "written");
+    for (const ch of ["x", "y"]) {
+      assert.equal(typeNativeText(a, caret(a, "A", 0), ch, {}).kind, "written");
+      history.stopCapturing();
+    }
     assert.equal(history.undo().kind, "written");
     const before = stateOf(a);
     const check = (reason: "busy" | "closed") => {
@@ -99,7 +104,7 @@ test("E11: one press passes over a group that removed all it typed", () => {
 });
 
 test("E14: a press on a cut row changes its stored visual while the outline stays the same", () => {
-  const { a, b, net } = fixture(), history = openNativeUndo(a, 0);
+  const { a, b, net } = fixture(), history = openNativeUndo(a);
   try {
     const visual = a.roots.visuals.get("B");
     assert.ok(visual);
@@ -161,4 +166,160 @@ test("stock press limitation: closure inside beforeTransaction cannot cancel the
       assert.notDeepEqual(stateOf(a), before);
     } finally { history.destroy(); a.doc.destroy(); b.doc.destroy(); }
   }
+});
+
+for (const direction of ["undo", "redo"] as const) {
+  test(`${direction} holds the document busy through afterAllTransactions`, () => {
+    const { a, b } = fixture(), history = openNativeUndo(a);
+    try {
+      for (const ch of ["x", "y"]) {
+        assert.equal(typeNativeText(a, caret(a, "A", 0), ch, {}).kind, "written");
+        history.stopCapturing();
+      }
+      if (direction === "redo") assert.equal(history.undo().kind, "written");
+      const at = caret(a, "B", 0), before = stateOf(a);
+      let nested = 0;
+      a.doc.once("afterAllTransactions", () => {
+        const atEvent = stateOf(a);
+        assert.deepEqual(history[direction](), { kind: "refused", reason: "busy" });
+        assert.deepEqual(typeNativeText(a, at, "z", {}), { kind: "recovery", reason: "busy", runs: [{ text: "z", marks: {} }] });
+        assert.deepEqual(stateOf(a), atEvent);
+        nested++;
+      });
+      assert.equal(history[direction]().kind, "written");
+      assert.equal(nested, 1);
+      assert.notDeepEqual(stateOf(a), before);
+      assert.deepEqual(rowsOf(a), [direction === "undo" ? "A: xa" : "A: yxa", "B: b"]);
+      assert.equal(history.undoStack.length, direction === "undo" ? 1 : 2);
+      assert.equal(history.redoStack.length, direction === "undo" ? 1 : 0);
+    } finally { history.destroy(); a.doc.destroy(); b.doc.destroy(); }
+  });
+
+  test(`typing refuses ${direction} in a beforeAllTransactions listener registered before opening`, () => {
+    const seed = convertedScript(structureScript({ A: "a", B: "b" }), 1);
+    const doc = new Y.Doc();
+    Y.applyUpdate(doc, Y.encodeStateAsUpdate(seed.doc));
+    seed.doc.destroy();
+    let armed = false, calls = 0;
+    doc.on("beforeAllTransactions", () => {
+      if (!armed) return;
+      const before = stateOf(a);
+      assert.deepEqual(history[direction](), { kind: "refused", reason: "busy" });
+      assert.deepEqual(stateOf(a), before);
+      calls++;
+    });
+    const a = openNativeScript(doc), history = openNativeUndo(a);
+    try {
+      assert.equal(typeNativeText(a, caret(a, "A", 0), "x", {}).kind, "written");
+      if (direction === "redo") assert.equal(history.undo().kind, "written");
+      history.stopCapturing();
+      const at = caret(a, "A", 0);
+      armed = true;
+      assert.equal(typeNativeText(a, at, "y", {}).kind, "written");
+      armed = false;
+      assert.equal(calls, 1);
+      assert.deepEqual(rowsOf(a), [direction === "undo" ? "A: yxa" : "A: ya", "B: b"]);
+      assert.equal(history.redoStack.length, 0);
+      assert.equal(history.undo().kind, "written");
+      assert.deepEqual(rowsOf(a), [direction === "undo" ? "A: xa" : "A: a", "B: b"]);
+    } finally { history.destroy(); doc.destroy(); }
+  });
+}
+
+test("the history constructor never coerces surplus arguments", () => {
+  for (const makeExtra of [() => Symbol(), () => ({ valueOf() { throw new Error("unexpected coercion"); } }),
+    (close: () => void) => ({ valueOf() { close(); return 0; } })]) {
+    const { a, b } = fixture();
+    const invoke = Reflect.apply as (fn: typeof openNativeUndo, receiver: undefined, args: unknown[]) => ReturnType<typeof openNativeUndo>;
+    const history = invoke(openNativeUndo, undefined, [a, makeExtra(a.close)]);
+    try {
+      for (const ch of ["x", "y"]) assert.equal(typeNativeText(a, caret(a, "A", 0), ch, {}).kind, "written");
+      assert.equal(a.closed(), false);
+      assert.equal(history.undo().kind, "written");
+      assert.deepEqual(rowsOf(a), ["A: a", "B: b"]);
+    } finally { history.destroy(); a.doc.destroy(); b.doc.destroy(); }
+  }
+});
+
+test("an empty redo ends the typing group and outcomes expose only immutable entry numbers", () => {
+  const { a, b } = fixture(), history = openNativeUndo(a);
+  try {
+    assert.equal(typeNativeText(a, caret(a, "A", 0), "x", {}).kind, "written");
+    const before = stateOf(a);
+    assert.deepEqual(history.redo(), { kind: "unchanged" });
+    assert.deepEqual(stateOf(a), before);
+    assert.equal(typeNativeText(a, caret(a, "A", 0), "y", {}).kind, "written");
+    const first = history.undo();
+    assert.equal(first.kind, "written");
+    assert.deepEqual(first, { kind: "written", entry: first.entry });
+    assert.equal(typeof first.entry, "number");
+    assert.equal(Reflect.set(first, "entry", { insertions: [] }), false);
+    assert.equal(Reflect.set(history.undoStack, "0", -1), false);
+    assert.deepEqual(rowsOf(a), ["A: xa", "B: b"]);
+    assert.equal(history.undo().kind, "written");
+    assert.deepEqual(rowsOf(a), ["A: a", "B: b"]);
+    assert.equal(history.redo().kind, "written");
+    assert.equal(history.redo().kind, "written");
+    assert.deepEqual(rowsOf(a), ["A: yxa", "B: b"]);
+  } finally { history.destroy(); a.doc.destroy(); b.doc.destroy(); }
+});
+
+test("E3: bold undo and redo cross a split the undoer has not seen", () => {
+  const { a, b, net } = fixture(), history = openNativeUndo(a);
+  try {
+    const where = anchorNativeText(a, { beat: "A", cell: "narration" }, 0, 1);
+    assert.equal(where.kind, "anchored");
+    assert.equal(formatNativeText(a, where.range, { kind: "plain", mark: "b", on: true }).kind, "written");
+    const n = split(b, "A", 0);
+    assert.equal(history.undo().kind, "written");
+    net.deliver(a, b);
+    assert.deepEqual(b.reader.row(n)?.narration, [{ text: "a", marks: {} }]);
+    assert.equal(a.reader.row(n), null);
+    assert.equal(history.redo().kind, "written");
+    net.settle();
+    for (const copy of [a, b]) assert.deepEqual(copy.reader.row(n)?.narration, [{ text: "a", marks: { b: true } }]);
+  } finally { history.destroy(); a.doc.destroy(); b.doc.destroy(); }
+});
+
+test("E3: deletion undo restores letters around another writer's insertion", () => {
+  const { a, b, net } = fixture(), history = openNativeUndo(a);
+  try {
+    assert.equal(typeNativeText(a, caret(a, "A", 1), "bcd", {}).kind, "written");
+    history.stopCapturing();
+    net.settle();
+    const deletion = anchorNativeText(a, { beat: "A", cell: "narration" }, 1, 3);
+    assert.equal(deletion.kind, "anchored");
+    assert.equal(deleteNativeText(a, deletion.range).kind, "written");
+    assert.equal(typeNativeText(b, caret(b, "A", 2), "X", {}).kind, "written");
+    net.settle();
+    assert.equal(a.reader.row("A")?.audioText, "aXd");
+    assert.equal(history.undo().kind, "written");
+    net.settle();
+    for (const copy of [a, b]) assert.equal(copy.reader.row("A")?.audioText, "abXcd");
+    assert.equal(history.redo().kind, "written");
+    net.settle();
+    for (const copy of [a, b]) assert.equal(copy.reader.row("A")?.audioText, "aXd");
+  } finally { history.destroy(); a.doc.destroy(); b.doc.destroy(); }
+});
+
+test("E3: a peer edit in an unseen visual cell is lost when the creator undoes its split", () => {
+  const { a, b, net } = fixture(), history = openNativeUndo(a);
+  try {
+    const n = split(a, "A", 0);
+    net.settle();
+    assert.equal(edit(b, { beat: n, cell: "visual" }, 0, 0, [{ text: "V", marks: {} }]).kind, "written");
+    assert.equal(b.roots.visuals.get(n)?.toString(), "V");
+    assert.equal(history.undo().kind, "written");
+    net.settle();
+    for (const copy of [a, b]) {
+      assert.deepEqual(rowsOf(copy), ["A: a", "B: b"]);
+      assert.equal(copy.roots.visuals.has(n), false);
+    }
+    assert.equal(history.redo().kind, "written");
+    net.settle();
+    for (const copy of [a, b]) {
+      assert.deepEqual(rowsOf(copy), ["A: ", `${n}: a`, "B: b"]);
+      assert.equal(copy.roots.visuals.get(n)?.toString(), "");
+    }
+  } finally { history.destroy(); a.doc.destroy(); b.doc.destroy(); }
 });

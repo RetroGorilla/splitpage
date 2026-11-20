@@ -7,17 +7,22 @@ export type TestNativeUndo = ReturnType<typeof testNativeUndo>;
 
 function itemOf(outcome: NativeUndoOutcome) {
   assert.notEqual(outcome.kind, "refused");
-  return outcome.kind === "written" ? outcome.item : null;
+  return outcome.kind === "written" ? outcome.entry : null;
 }
 
 export function testNativeUndo(script: NativeScript) {
-  const history = openNativeUndo(script, 0);
+  const history = openNativeUndo(script);
+  const endGroup = history.stopCapturing;
+  script.doc.on("afterTransaction", endGroup);
   return {
     undo: () => itemOf(history.undo()),
     redo: () => itemOf(history.redo()),
     stopCapturing: history.stopCapturing,
     get undoStack() { return history.undoStack; },
     get redoStack() { return history.redoStack; },
-    destroy: history.destroy
+    destroy() {
+      script.doc.off("afterTransaction", endGroup);
+      history.destroy();
+    }
   };
 }

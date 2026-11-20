@@ -14,7 +14,7 @@ export interface NativeScript {
   readonly close: () => void;
 }
 
-interface DocumentState { open: boolean; destroyed: boolean; readonly handles: Set<() => void>; readonly failures: unknown[] }
+interface DocumentState { open: boolean; commanding: boolean; destroyed: boolean; readonly handles: Set<() => void>; readonly failures: unknown[] }
 
 const DOCUMENTS = new WeakMap<Y.Doc, DocumentState>();
 
@@ -22,7 +22,7 @@ const DOCUMENTS = new WeakMap<Y.Doc, DocumentState>();
 // it is kept and thrown by the next command before that command writes anything
 function guardSharedCallback(state: DocumentState, call: () => void): void {
   try { call(); } catch (error) {
-    if (!state.open) throw error;
+    if (!state.open && !state.commanding) throw error;
     state.failures.push(error);
   }
 }
@@ -31,7 +31,7 @@ function guardSharedCallback(state: DocumentState, call: () => void): void {
 function documentState(doc: Y.Doc): DocumentState {
   const known = DOCUMENTS.get(doc);
   if (known) return known;
-  const state: DocumentState = { open: false, destroyed: false, handles: new Set(), failures: [] };
+  const state: DocumentState = { open: false, commanding: false, destroyed: false, handles: new Set(), failures: [] };
   DOCUMENTS.set(doc, state);
   doc.on("beforeAllTransactions", () => guardSharedCallback(state, () => { state.open = true; }));
   doc.on("afterAllTransactions", () => guardSharedCallback(state, () => { state.open = false; }));
@@ -40,6 +40,16 @@ function documentState(doc: Y.Doc): DocumentState {
     for (const close of [...state.handles]) close();
   }));
   return state;
+}
+
+export function withNativeCommand<T>(script: NativeScript, run: () => T): T {
+  const state = documentState(script.doc);
+  state.commanding = true;
+  try { return run(); } finally { state.commanding = false; }
+}
+
+export function transactNativeCommand<T>(script: NativeScript, run: () => T): T {
+  return withNativeCommand(script, () => script.doc.transact(run, script.origin));
 }
 
 export function throwNativeFailures(script: NativeScript): void {
@@ -65,7 +75,7 @@ export function openNativeScript(doc: Y.Doc): NativeScript {
   };
   state.handles.add(close);
   if (state.destroyed) close();
-  return Object.freeze({ doc, roots, reader, origin: Object.freeze({ script: doc.guid }), busy: () => state.open, closed: () => closed, close });
+  return Object.freeze({ doc, roots, reader, origin: Object.freeze({ script: doc.guid }), busy: () => state.commanding || (state.open && !state.destroyed), closed: () => closed, close });
 }
 
 export function closeNativeScript(script: NativeScript): void {

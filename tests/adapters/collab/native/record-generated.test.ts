@@ -99,7 +99,7 @@ function generatedBody(kind: string, suffix: string): string {
   return kind + " &amp; &lt; <strong>" + suffix + "</strong>\nline";
 }
 
-function history(seed: number, writes?: CapturedWrite[], muteUndo = false): Record<string, number> {
+function history(seed: number, writes?: CapturedWrite[], muteUndo = false, extendBold = false): Record<string, number> {
   const next = random(seed), { scripts, net } = recordCopies(shuffled([4, 9, 15], next));
   const counts: Record<string, number> = {};
   const count = (kind: string): void => { counts[kind] = (counts[kind] ?? 0) + 1; };
@@ -125,7 +125,7 @@ function history(seed: number, writes?: CapturedWrite[], muteUndo = false): Reco
   let winningLength = 0;
   const winner = Math.max(...scripts.map(script => script.doc.clientID));
   let splitId = "", splitOffset = 0, typed = "";
-  function reversibleChange(actor: NativeScript, manager: TestNativeUndo, name: string, command: () => void): void {
+  function reversibleChange(actor: NativeScript, manager: TestNativeUndo, name: string, command: () => void, checkRedo?: () => void): void {
     const before = recordSnapshot(actor), beforeRead = recordRead(actor);
     command();
     const after = recordSnapshot(actor), afterRead = recordRead(actor);
@@ -134,6 +134,7 @@ function history(seed: number, writes?: CapturedWrite[], muteUndo = false): Reco
     assert.deepEqual(recordRead(actor), beforeRead, name + ": undo reading");
     count("undo " + name);
     assert.ok(manager.redo(), name);
+    checkRedo?.();
     assert.deepEqual(recordSnapshot(actor), after, name + ": redo snapshot");
     assert.deepEqual(recordRead(actor), afterRead, name + ": redo reading");
     count("redo " + name);
@@ -249,13 +250,23 @@ function history(seed: number, writes?: CapturedWrite[], muteUndo = false): Reco
           { name: "link off", change: { kind: "link", href: null }, shown: {} }
         ];
         for (const { name: kind, change, shown } of marks) {
+          const row = actor.reader.row("F");
+          assert.ok(row);
+          const letters = (runs: typeof row.narration) => runs.flatMap(run => [...run.text].map(char => ({ char, marks: run.marks })));
+          const before = letters(row.narration), from = 0, to = 1;
+          const expected = before.map((letter, index) => index >= from && index < to ? { char: letter.char, marks: shown } : letter);
+          const checkCell = () => {
+            const read = actor.reader.row("F");
+            assert.ok(read);
+            assert.deepEqual(letters(read.narration), expected, kind + ": requested cell");
+          };
           reversibleChange(actor, manager, kind, () => {
-            const range = anchorNativeText(actor, { beat: "F", cell: "narration" }, 0, 1);
+            const range = anchorNativeText(actor, { beat: "F", cell: "narration" }, from, extendBold && kind === "format on" ? to + 1 : to);
             assert.equal(range.kind, "anchored");
             assert.deepEqual(formatNativeText(actor, range.range, change), WRITTEN);
-            assert.deepEqual(actor.reader.row("F")?.narration[0]?.marks, shown);
+            checkCell();
             count(kind);
-          });
+          }, checkCell);
         }
         reversibleChange(actor, manager, "visual type", () => {
           assert.deepEqual(edit(actor, { beat: "F", cell: "visual" }, 0, 0, [{ text: typed, marks: {} }]), WRITTEN);
@@ -359,6 +370,10 @@ test("generated three-copy histories check commands locally and account for sett
     }
   }
   assert.deepEqual(Object.keys(totals).sort(), schedules.flatMap(group => group.kinds.flatMap(kind => irreversible.has(kind) ? [kind] : [kind, "undo " + kind, "redo " + kind])).sort());
+});
+
+test("control: extending bold one letter fails the whole-cell oracle", () => {
+  assert.throws(() => history(3, undefined, false, true), /format on: requested cell/);
 });
 
 test("control: a no-op undo fails the stored snapshot check", () => {

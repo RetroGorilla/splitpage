@@ -2,6 +2,7 @@ import * as Y from "yjs";
 import { nativeTextAllowed } from "./inline.ts";
 import type { NativeDeltaItem } from "./inline.ts";
 import { nativeSegmentSpans } from "./reader.ts";
+import { transactNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { nativeAvailability, nativeLiveRange, nativeRangeSnapshot } from "./text-commands.ts";
 import type { NativeRefusal, NativeTextRange } from "./text-commands.ts";
@@ -116,7 +117,7 @@ export function splitNativeRow(script: NativeScript, at: NativeTextRange): Nativ
   if (!checked || checked.target.cell !== "narration" || checked.to !== null) return refused("range");
   if (!beatId(checked.target.beat)) return refused("missing");
   let outcome: NativeSplitOutcome = refused("missing");
-  script.doc.transact(() => {
+  transactNativeCommand(script, () => {
     const roots = script.roots, live = nativeLiveRange(script, checked), parent = roots.beats.get(checked.target.beat);
     if (typeof live === "string") { outcome = refused(live); return; }
     if (!(parent instanceof Y.Map)) return;
@@ -133,7 +134,7 @@ export function splitNativeRow(script: NativeScript, at: NativeTextRange): Nativ
     if (ranked) record.set("rank", rank);
     roots.visuals.set(created, new Y.Text());
     outcome = Object.freeze({ kind: "written", created });
-  }, script.origin);
+  });
   return outcome;
 }
 
@@ -167,14 +168,14 @@ export function joinNativeRow(script: NativeScript, beat: string, into: string, 
   if (unavailable) return refused(unavailable);
   if (!checked) return refused("text");
   let outcome: NativeRowOutcome = refused("missing");
-  script.doc.transact(() => {
+  transactNativeCommand(script, () => {
     const lower = shownRow(script, checked.beat);
     if (!lower || !shownRow(script, checked.value.into)) return;
     if (rowAbove(script, checked.beat) !== checked.value.into) { outcome = refused("above"); return; }
     if (sameJoin(lower.record.get(JOINED), checked.value)) { outcome = UNCHANGED; return; }
     lower.record.set(JOINED, checked.value);
     outcome = WRITTEN;
-  }, script.origin);
+  });
   return outcome;
 }
 
@@ -183,13 +184,13 @@ export function unjoinNativeRow(script: NativeScript, beat: string): NativeRowOu
   if (unavailable) return refused(unavailable);
   if (!id) return refused("missing");
   let outcome: NativeRowOutcome = refused("missing");
-  script.doc.transact(() => {
+  transactNativeCommand(script, () => {
     const row = shownRow(script, id);
     if (!row) return;
     if (!row.record.has(JOINED)) { outcome = UNCHANGED; return; }
     row.record.delete(JOINED);
     outcome = WRITTEN;
-  }, script.origin);
+  });
   return outcome;
 }
 
@@ -232,7 +233,7 @@ export function removeNativeRows(script: NativeScript, beats: readonly string[])
   if (!ids) return refused("missing");
   if (!ids.length) return UNCHANGED;
   let outcome: NativeRowOutcome = refused("missing");
-  script.doc.transact(() => {
+  transactNativeCommand(script, () => {
     const rows: ShownRow[] = [];
     for (const id of ids) {
       const row = shownRow(script, id);
@@ -242,6 +243,6 @@ export function removeNativeRows(script: NativeScript, beats: readonly string[])
     for (const [text, ranges] of merged(rows.flatMap(row => row.cuts))) for (const [from, to] of ranges.reverse()) text.delete(from, to - from);
     for (const segment of new Set(rows.flatMap(row => row.heads))) segment.delete("head");
     outcome = WRITTEN;
-  }, script.origin);
+  });
   return outcome;
 }

@@ -140,6 +140,9 @@ test("E4 on the adapter: plain bold under same-moment edits, undo and redo, both
   t.diagnostic(`missing at merge ${merge}; left bold after undo ${left}; wrong undo steps ${wrong} of 120; bold on unseen X ${xBold} of 20`);
   assert.deepEqual(measured.map(({ line }) => line), E4_KIND_KEYS);
   assert.deepEqual([merge, left, wrong, xBold], [72, 34, 6, 11]);
+  const cleanup = measured.flatMap(({ low, high }) => [low, high]).flatMap(result =>
+    result.updates.flatMap((count, at) => count === 2 ? [result.steps[at]] : []));
+  assert.deepEqual(cleanup, ["right", "right", "right", "right"]);
   for (const { scenario, low, high } of measured) if (scenario.other === "none") {
     for (const result of [low, high]) assert.equal(result.afterAUndo, scenario.olderTyping !== false ? "abX[cdefghQR|b]" : "abX[cdefgh|b]");
   }

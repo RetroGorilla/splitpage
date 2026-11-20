@@ -4,7 +4,7 @@ import type { Marks, Run } from "../../../core/text/runs.ts";
 import { nativeCellView, nativeLeftAt, nativeStoredOffset, prepareNativeRuns, writeNativeRuns } from "./inline.ts";
 import type { NativeDeltaItem } from "./inline.ts";
 import { nativeSegmentSpans } from "./reader.ts";
-import { throwNativeFailures } from "./script.ts";
+import { throwNativeFailures, transactNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { encodeNativeValue, nativeWellFormed } from "./values.ts";
 
@@ -68,9 +68,9 @@ export interface NativeLivePiece {
 export interface NativeLiveRange extends NativeLivePiece { readonly pieces: readonly NativeLivePiece[] }
 
 export function nativeAvailability(script: NativeScript): NativeRefusal | null {
+  if (script.busy()) return "busy";
   throwNativeFailures(script);
-  if (script.closed() || script.reader.isClosed()) return "closed";
-  return script.busy() ? "busy" : null;
+  return script.closed() || script.reader.isClosed() ? "closed" : null;
 }
 
 function liveCells(script: NativeScript, target: NativeTextTarget): LiveCell[] {
@@ -272,7 +272,7 @@ export function nativeLiveRange(script: NativeScript, range: NativeRangeData): N
 export function replaceNativeText(script: NativeScript, range: NativeTextRange, runs: readonly Run[], stamp?: NativeEditStamp): NativeCommitOutcome {
   const unavailable = nativeAvailability(script);
   if (unavailable) return refuse(unavailable, runs);
-  return script.doc.transact(() => {
+  return transactNativeCommand(script, () => {
     const prepared = prepareNativeRuns(runs), encoded = encodedStamp(stamp), checked = nativeRangeSnapshot(range);
     if (!prepared || encoded === null) return refuse("text", runs);
     if (!checked || checked.target.cell === "name") return refuse("range", runs);
@@ -288,7 +288,7 @@ export function replaceNativeText(script: NativeScript, range: NativeTextRange, 
     }
     if (encoded && updateStamp) script.roots.edited.set(checked.target.beat, encoded);
     return WRITTEN;
-  }, script.origin);
+  });
 }
 
 export function typeNativeText(script: NativeScript, range: NativeTextRange, text: string, marks: Marks, stamp?: NativeEditStamp): NativeCommitOutcome {
