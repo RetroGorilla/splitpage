@@ -11,6 +11,7 @@ import { openNativeSession } from "../adapters/collab/native/session.ts";
 import { scriptCellOf, sanitizeHtml } from "../bootstrap/richtext.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { forceLeaveSharedSession } from "../bootstrap/wiring/shared-session.ts";
+import { breakUndoGroup } from "../bootstrap/wiring/undo.ts";
 import { createSessionCapabilities } from "../application/session/capabilities.ts";
 
 window.Element.prototype.scrollBy = () => {};
@@ -263,6 +264,20 @@ for (const [name, kind] of Object.entries(views)) {
     assert.equal(app(), "Helloabc");
   });
 
+  test(name + ": a press from outside the text while a composition is open is refused with the notice and writes nothing", async t => {
+    const show = await enter(t), view = kind.open(t);
+    kind.caret(view, "r1", 5);
+    typeKeys(kind.surface(), "ab");
+    await flushed();
+    assert.equal(compose(kind.surface(), "start", ""), false);
+    press(document.body, "z");
+    assert.equal(app(), "Helloab");
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+    assert.equal(compose(kind.surface(), "end", "c"), false);
+    await flushed();
+    assert.equal(app(), "Helloabc");
+  });
+
   test(name + ": a press after the buffer stopped on a stale paint is refused and keeps the unsent letter on screen", async t => {
     const show = await enter(t), view = kind.open(t);
     kind.caret(view, "r1", 5);
@@ -298,6 +313,26 @@ for (const [name, kind] of Object.entries(views)) {
     assert.equal(app(), "Hello");
     assert.equal(show.mock.callCount(), 0);
   });
+
+  for (const buffered of [true, false]) {
+    test(name + ": a command boundary " + (buffered ? "with letters still buffered" : "after the letters were sent") + " ends the undo step", async t => {
+      const show = await enter(t), view = kind.open(t);
+      kind.caret(view, "r1", 5);
+      typeKeys(kind.surface(), "ab");
+      if (!buffered) await flushed();
+      breakUndoGroup();
+      await flushed();
+      typeKeys(kind.surface(), "cd");
+      await flushed();
+      assert.equal(app(), "Helloabcd");
+      assert.equal(press(kind.surface(), "z"), true);
+      assert.equal(app(), "Helloab");
+      assert.deepEqual(kind.at(view), ["r1", 7, 7]);
+      assert.equal(press(kind.surface(), "z"), true);
+      assert.equal(app(), "Hello");
+      assert.equal(show.mock.callCount(), 0);
+    });
+  }
 
   test(name + ": the browser's own history input steps the session like the keys", async t => {
     const show = await enter(t), view = kind.open(t);
