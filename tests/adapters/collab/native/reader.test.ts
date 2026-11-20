@@ -5,6 +5,7 @@ import { dom } from "../../../../src/test/_dom.mjs";
 import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
 import type { ValidatedDocument } from "../../../../src/core/document/validated.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
+import { clearNativeField, setNativeField } from "../../../../src/adapters/collab/native/record-commands.ts";
 import { anchorNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
 import { convertedScript, edit, freshlyShown, shown } from "./helpers.ts";
 
@@ -79,6 +80,44 @@ test("finding 6: a malformed beat extra, field value or reply key is a diagnosti
   assert.equal(script.reader.row("R1")?.audioText, "ab");
   assert.deepEqual(script.reader.document().people, [{ id: "p1" }]);
   assert.deepEqual(problemKinds(script), ["bad-value beats/R1/status", 'bad-value beats/R1/f:"note"', "bad-key replies/[bad", 'bad-value people/p1/f:"name"', "bad-key people/p1/f:name"]);
+});
+
+test("only canonical ordinary beat keys are shown, and raw aliases never shadow a command", () => {
+  const script = convertedScript(small({ R1: "ab" })), record = script.roots.beats.get("R1");
+  assert.ok(record);
+  const target = { kind: "beat", id: "R1" } as const;
+  const invalid = new Map([
+    ['f:"status"', '"shot"'], ['f:"note" ', '"alias"'], ["extra", '{"note":"old storage"}'],
+    ['f:"rank"', '"fake rank"'], ['f:"imageRef"', '"fake image"']
+  ]);
+  for (const [key, value] of invalid) record.set(key, value);
+  assert.deepEqual(problemKinds(script).sort(), [...invalid.keys()].map(key => "bad-key beats/R1/" + key).sort());
+  assert.deepEqual(setNativeField(script, { ...target, field: "status" }, "ready"), { kind: "written" });
+  assert.equal(script.reader.document().rows[0]?.status, "ready");
+  assert.deepEqual(setNativeField(script, { ...target, field: "note" }, "written"), { kind: "written" });
+  assert.equal(script.reader.document().rows[0]?.note, "written");
+  assert.deepEqual(clearNativeField(script, { ...target, field: "note" }), { kind: "written" });
+  const row = script.reader.document().rows[0];
+  assert.ok(row);
+  assert.equal(Object.hasOwn(row, "note"), false);
+  assert.equal(Object.hasOwn(row, "extra"), false);
+  assert.equal(Object.hasOwn(row, "rank"), false);
+  assert.equal(row.imageRef, null);
+  assert.deepEqual(problemKinds(script).sort(), [...invalid.keys()].map(key => "bad-key beats/R1/" + key).sort());
+  script.doc.destroy();
+});
+
+test("metadata extra reports invalid JSON, non-records and present undefined", () => {
+  const script = convertedScript(small({ R1: "ab" }));
+  const docId = script.reader.document().docId;
+  for (const stored of ["{bad", "[]", "null", undefined]) {
+    script.roots.meta.set("extra", stored);
+    assert.deepEqual(problemKinds(script), ["bad-value meta/extra"]);
+    assert.equal(script.reader.document().docId, docId);
+  }
+  script.roots.meta.delete("extra");
+  assert.deepEqual(problemKinds(script), []);
+  script.doc.destroy();
 });
 
 test("finding 6: a closed reader refuses to read", () => {

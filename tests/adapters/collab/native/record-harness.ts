@@ -125,14 +125,21 @@ export function beatStep(field: string, value: unknown, id = "A"): RecordStep {
     expect(snapshot, read) {
       const record = item(snapshot, "beats", id);
       const key = ["status", "lengthSeconds", "paragraphStart"].includes(field) ? field : fileKey(field);
-      if (clear) Reflect.deleteProperty(record, key);
+      const galleryField = ["imageRef", "imageName", "imageAnnotation", "imageLinks", "moreImages"].includes(field);
+      const cleared = clear && field === "imageRef" ? null : value;
+      if (galleryField) {
+        const gallery = JSON.parse(String(record.gallery ?? '{"imageRef":null}')) as Fields;
+        if (cleared === undefined) Reflect.deleteProperty(gallery, field);
+        else gallery[field] = cleared;
+        record.gallery = JSON.stringify(gallery);
+      } else if (clear) Reflect.deleteProperty(record, key);
       else record[key] = JSON.stringify(value);
       const row = read.rows.find(row => row.id === id), file = read.document.rows.find(row => row.id === id);
       assert.ok(row && file);
       const fields = row.fields as Fields;
       for (const view of [fields, file]) {
-        if (clear) Reflect.deleteProperty(view, field);
-        else view[field] = value;
+        if (cleared === undefined) Reflect.deleteProperty(view, field);
+        else view[field] = cleared;
       }
       return undefined;
     }

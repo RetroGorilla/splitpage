@@ -177,27 +177,62 @@ test("concurrent writes to one extra field keep one value and the winner's undo 
   });
 });
 
-test("an unseen clear of the primary image leaves a concurrent image name for the core to drop on reload", () => {
-  races((left, right, settle) => {
-    const image = beatField("A", "imageRef"), name = beatField("A", "imageName");
-    assert.deepEqual(setNativeField(left, image, IMAGE), WRITTEN);
-    settle(script => assert.deepEqual(script.reader.row("A")?.fields.imageRef, IMAGE));
-    assert.deepEqual(clearNativeField(left, image), WRITTEN);
-    unchangedRecord(left, () => setNativeField(left, name, "Frame"), "value");
-    assert.deepEqual(setNativeField(right, name, "Frame"), WRITTEN);
-    unchangedRecord(right, () => clearNativeField(right, image), "value");
-    settle(script => {
-      const document = script.reader.document(), row = document.rows[0];
-      assert.ok(row);
-      assert.equal(Object.hasOwn(row, "imageRef"), false);
-      assert.equal(row.imageName, "Frame");
-      const reloaded = migrateRows(structuredClone(document)).rows[0];
-      assert.ok(reloaded);
-      assert.equal(reloaded.imageRef, null);
-      assert.equal(Object.hasOwn(reloaded, "imageName"), false);
+const OTHER_IMAGE = { ...IMAGE, sha256: "b".repeat(64) };
+const POSTER = { href: "https://example.test/primary", poster: true };
+const OTHER_POSTER = { href: "https://example.test/secondary", poster: true };
+const GALLERY_RACES = [
+  {
+    name: "clear primary against annotation",
+    initial: ["imageRef", IMAGE],
+    left: ["imageRef", undefined],
+    right: ["imageAnnotation", { imageRef: OTHER_IMAGE, marks: [{ kind: "pen", color: "#111111", width: 0.02, points: [0, 1] }] }]
+  },
+  {
+    name: "replace primary against a matching named secondary",
+    initial: ["imageRef", IMAGE],
+    left: ["imageRef", OTHER_IMAGE],
+    right: ["moreImages", [{ imageRef: OTHER_IMAGE, name: "Other" }]]
+  },
+  {
+    name: "change primary poster against a matching secondary poster",
+    initial: ["imageLinks", [POSTER]],
+    left: ["imageLinks", [OTHER_POSTER]],
+    right: ["moreImages", [{ links: [OTHER_POSTER] }]]
+  },
+  {
+    name: "clear the last primary image against a secondary picture",
+    initial: ["imageRef", IMAGE],
+    left: ["imageRef", undefined],
+    right: ["moreImages", [{ imageRef: OTHER_IMAGE }]]
+  }
+] as const;
+
+for (const { name, initial, left: leftEdit, right: rightEdit } of GALLERY_RACES) {
+  test("one whole gallery survives " + name, () => {
+    races((left, right, settle) => {
+      const [field, value] = initial;
+      assert.deepEqual(setNativeField(left, beatField("A", field), value), WRITTEN);
+      settle(script => assert.deepEqual(script.reader.row("A")?.fields[field], value));
+      for (const [writer, [field, value]] of [[left, leftEdit], [right, rightEdit]] as const) {
+        const target = beatField("A", field);
+        const outcome = value === undefined ? clearNativeField(writer, target) : setNativeField(writer, target, value);
+        assert.deepEqual(outcome, WRITTEN);
+        assert.deepEqual(writer.reader.row("A")?.fields[field], value === undefined ? null : value);
+        const own = writer.reader.document();
+        assert.deepEqual(migrateRows(structuredClone(own)).rows[0], own.rows[0]);
+      }
+      const winner = left.doc.clientID > right.doc.clientID ? left : right;
+      const gallery = winner.roots.beats.get("A")?.get("gallery"), winningRow = winner.reader.document().rows[0];
+      assert.equal(typeof gallery, "string");
+      settle(script => {
+        const document = script.reader.document();
+        assert.equal(script.roots.beats.get("A")?.get("gallery"), gallery);
+        assert.deepEqual(document.rows[0], winningRow);
+        assert.deepEqual(migrateRows(structuredClone(document)).rows[0], winningRow);
+      });
     });
   });
-});
+}
 
 test("concurrent picture additions to one beat keep one whole picture list in both client orders", () => {
   races((left, right, settle) => {

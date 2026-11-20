@@ -1,4 +1,4 @@
-﻿import type * as Y from "yjs";
+import type * as Y from "yjs";
 import { cleanId } from "../../../core/document/text-policy.ts";
 import { transactNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";

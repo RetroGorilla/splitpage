@@ -8,7 +8,9 @@ import { NATIVE_FORMAT_VERSION } from "./roots.ts";
 import type { NativeRoots } from "./roots.ts";
 import { transactNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
-import { encodeNativeValue, nativeFieldKey, nativeWellFormed } from "./values.ts";
+import {
+  NATIVE_BEAT_FIELDS, NATIVE_GALLERY_KEY, encodeNativeValue, isNativeBeatExtra, nativeFieldKey, nativeGalleryOf, nativeWellFormed
+} from "./values.ts";
 
 export interface NativeConversionPorts {
   readonly cells: (html: string) => readonly Run[];
@@ -30,8 +32,6 @@ const CONVERTING = new WeakSet<Y.Doc>();
 
 const COLLECTIONS = ["rows", "sections", "comments", "people", "productionTags", "brollShots"];
 const META_FIELDS = ["docId", "schema", "wordsPerMinute", "targetSeconds"];
-const BEAT_FIELDS = ["status", "lengthSeconds", "paragraphStart"];
-const ROW_TEXT = ["id", "audioText", "visualText", "updatedAt", "updatedBy"];
 const DIGITS = "0123456789ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz";
 
 export function nativeInitialRank(index: number): string {
@@ -66,12 +66,17 @@ function fileEntries(source: Bag, skip: readonly string[]): Entries {
   return present(source, skip).map(key => [nativeFieldKey(key), encodeNativeValue(source[key])] as const);
 }
 
-function namedEntries(source: Bag, names: readonly string[]): Entries {
-  return names.filter(name => source[name] !== undefined).map(name => [name, encodeNativeValue(source[name])] as const);
+function namedEntries(source: Bag, names: readonly string[]): [string, string][] {
+  return names.filter(name => source[name] !== undefined).map(name => [name, encodeNativeValue(source[name])]);
 }
 
 function beatEntries(row: Bag): Entries {
-  return [...namedEntries(row, BEAT_FIELDS), ...fileEntries(row, [...ROW_TEXT, ...BEAT_FIELDS])];
+  const extras = Object.keys(row).filter(name => isNativeBeatExtra(name) && row[name] !== undefined).sort();
+  const gallery = nativeGalleryOf(row);
+  const entries = namedEntries(row, NATIVE_BEAT_FIELDS);
+  if (Object.keys(gallery).length) entries.push([NATIVE_GALLERY_KEY, encodeNativeValue(gallery)]);
+  for (const name of extras) entries.push([nativeFieldKey(name), encodeNativeValue(row[name])]);
+  return entries;
 }
 
 function metaEntries(source: Bag): Entries {

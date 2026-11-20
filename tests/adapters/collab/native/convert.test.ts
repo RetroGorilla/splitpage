@@ -148,7 +148,7 @@ test("finding 10: a link's local location is kept out of the shared state, and t
   const source = migrateRows({ schema: 2, title: "T", docId: "d", rev: 0, rows: [{ id: "R1", audioText: "a", visualText: "" }], comments: [], people: [], productionTags: [], brollShots: [] });
   Object.assign(source.rows[0] as object, { imageLinks: structuredClone(links) });
   const script = convertedScript(source);
-  const stored = script.roots.beats.get("R1")?.get('f:"imageLinks"');
+  const stored = script.roots.beats.get("R1")?.get("gallery");
   assert.equal(typeof stored, "string");
   assert.doesNotMatch(String(stored), /"location"/);
   for (const copy of [script, joinedScript(script, 2)]) {
@@ -160,7 +160,7 @@ function base(extra: Record<string, unknown> = {}, rows: Record<string, unknown>
   return migrateRows({ schema: 2, title: "T", docId: "d", rev: 0, rows, comments: [], people: [], productionTags: [], brollShots: [], ...extra });
 }
 
-test("finding 2: extension values keep every key on every copy, adapter fields cannot collide with file fields", () => {
+test("finding 2: extensions keep non-reserved fields and cannot supply a beat's rank or join", () => {
   const payloads = [JSON.parse('{"__proto__":{"payload":42}}') as unknown, { constructor: 42 }, { toString: "x", hasOwnProperty: 1 }];
   const people = [
     { id: "p1", name: "One", payload: payloads[0] }, { id: "p2", name: "Two", payload: payloads[1], rank: "mine", extra: "opaque" },
@@ -172,14 +172,39 @@ test("finding 2: extension values keep every key on every copy, adapter fields c
     const read = copy.reader.document();
     assert.deepEqual(read.people, source.people);
     assert.deepEqual(Object.keys(read.people[0]?.payload as object), ["__proto__"]);
-    assert.deepEqual(read.rows[0], { ...source.rows[0], audioText: "a" });
+    assert.deepEqual(read.rows[0], { id: "R1", status: "todo", audioText: "a", visualText: "", imageRef: null,
+      updatedAt: "", updatedBy: null, extra: "row extra", nested: { constructor: 1 } });
     assert.deepEqual(copy.reader.problems(), []);
   }
   assert.equal(script.roots.beats.get("R1")?.get("joined"), undefined);
   assert.deepEqual(script.roots.beats.get("R1")?.toJSON(), {
-    rank: "00000WV", status: '"todo"', 'f:"imageRef"': "null", 'f:"rank"': '"row rank"',
-    'f:"joined"': '{"into":"R0","glue":" "}', 'f:"extra"': '"row extra"', 'f:"nested"': '{"constructor":1}'
+    rank: "00000WV", status: '"todo"', gallery: '{"imageRef":null}', 'f:"extra"': '"row extra"', 'f:"nested"': '{"constructor":1}'
   });
+});
+
+test("beat extras serialize in raw name order, omitting an own undefined field", () => {
+  const source = base({}, [{ id: "R1", audioText: "a", visualText: "", ["\u0000"]: "null byte", ['"']: "quote" }]);
+  const row = source.rows[0];
+  assert.ok(row);
+  source.rows[0] = { id: row.id, status: row.status, ["\u0000"]: row["\u0000"], ['"']: row['"'], imageRef: row.imageRef,
+    updatedAt: row.updatedAt, updatedBy: row.updatedBy, visualText: row.visualText, audioText: row.audioText, absent: undefined };
+  const script = convertedScript(source);
+  try {
+    assert.equal(JSON.stringify(script.reader.document().rows[0]), JSON.stringify(source.rows[0]));
+    assert.equal(script.roots.beats.get("R1")?.has('f:"absent"'), false);
+    assert.equal(Object.hasOwn(script.reader.document().rows[0] ?? {}, "absent"), false);
+  } finally { script.doc.destroy(); }
+});
+
+test("conversion and document projection preserve a wide beat record", () => {
+  const source = base(), row = source.rows[0];
+  assert.ok(row);
+  const fields = Object.fromEntries(Array.from({ length: 140_001 }, (_, index) => ["k" + index, index]));
+  Object.assign(row, fields);
+  const script = convertedScript(source);
+  try {
+    assert.deepEqual(script.reader.document().rows[0], row);
+  } finally { script.doc.destroy(); }
 });
 
 test("finding 2: a value with no JSON form stops conversion before anything is written", () => {

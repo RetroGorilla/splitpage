@@ -6,7 +6,10 @@ import type { Run } from "../../../core/text/runs.ts";
 import { nativeBlockOf, nativeItemLength, nativeRunsOf, nativeUnitCounts } from "./inline.ts";
 import type { NativeDeltaItem } from "./inline.ts";
 import type { NativeRoots } from "./roots.ts";
-import { NATIVE_FIELD_PREFIX, decodeNativeValue, deepFrozen, nativeFieldName } from "./values.ts";
+import {
+  NATIVE_BEAT_FIELDS, NATIVE_FIELD_PREFIX, NATIVE_GALLERY_FIELDS, NATIVE_GALLERY_KEY, decodeNativeValue, deepFrozen,
+  isNativeBeatExtra, isNativeBeatField, nativeFieldKey, nativeFieldName, nativeGalleryOf
+} from "./values.ts";
 
 type CommentCell = "visualText" | "audioText";
 
@@ -88,10 +91,8 @@ type DeepListener = (events: Y.YEvent<Y.AbstractType<unknown>>[]) => void;
 export type NativeWatch = <Event>(type: Y.AbstractType<Event>, listener: DeepListener) => () => void;
 type Problems = NativeReaderProblem[] | null;
 
-const BEAT_FIELDS = ["status", "lengthSeconds", "paragraphStart"];
 const META_FIELDS = ["docId", "schema", "wordsPerMinute", "targetSeconds"];
 const PRIMARY_GALLERY_FIELDS = { imageRef: "imageRef", imageName: "name", imageAnnotation: "annotation", imageLinks: "links" };
-const GALLERY_FIELDS = new Set([...Object.keys(PRIMARY_GALLERY_FIELDS), "moreImages"]);
 
 function fieldBag(value: unknown): value is Readonly<Record<string, unknown>> {
   return !!value && typeof value === "object" && !Array.isArray(value);
@@ -151,6 +152,39 @@ function decoded(record: Y.Map<unknown>, key: string, where: string, problems: P
   return value;
 }
 
+function beatExtraEntries(record: Y.Map<unknown>, where: string, problems: Problems,
+  gallery?: Readonly<Record<string, unknown>>): [string, unknown][] {
+  const entries: [string, unknown][] = [];
+  function appendGallery(fields: Readonly<Record<string, unknown>>): void {
+    for (const [name, value] of Object.entries(fields)) {
+      if (NATIVE_GALLERY_FIELDS.has(name)) entries.push([name, value]);
+      else problems?.push({ kind: "bad-key", where: where + "/" + NATIVE_GALLERY_KEY + "/" + name });
+    }
+  }
+  if (gallery) appendGallery(gallery);
+  record.forEach((stored, key) => {
+    if (key === "rank" || key === "joined" || isNativeBeatField(key)) return;
+    if (key === NATIVE_GALLERY_KEY) {
+      if (gallery) return;
+      if (stored === '{"imageRef":null}') { entries.push(["imageRef", null]); return; }
+      const value = decodeNativeValue(stored)?.value;
+      if (fieldBag(value)) appendGallery(value);
+      else problems?.push({ kind: "bad-value", where: where + "/" + key });
+      return;
+    }
+    const name = nativeFieldName(key);
+    if (name === null || !isNativeBeatExtra(name) || nativeFieldKey(name) !== key) {
+      problems?.push({ kind: "bad-key", where: where + "/" + key });
+      return;
+    }
+    const value = decodeNativeValue(stored);
+    if (value) entries.push([name, value.value]);
+    else problems?.push({ kind: "bad-value", where: where + "/" + key });
+  });
+  if (entries.length > 1) entries.sort(([left], [right]) => left < right ? -1 : left > right ? 1 : 0);
+  return entries;
+}
+
 function fileFieldEntries(record: Y.Map<unknown>, where: string, problems: Problems): [string, unknown][] {
   const entries: [string, unknown][] = [];
   for (const key of [...record.keys()].sort()) {
@@ -176,7 +210,9 @@ function namedFields(record: Y.Map<unknown>, names: readonly string[], where: st
 function metaFields(record: Y.Map<unknown>, problems: Problems): Record<string, unknown> {
   const entries = namedFields(record, META_FIELDS, "meta", problems), extra = decoded(record, "extra", "meta", problems);
   if (extra) {
-    if (extra.value && typeof extra.value === "object" && !Array.isArray(extra.value)) entries.push(...Object.entries(extra.value));
+    if (fieldBag(extra.value)) {
+      for (const entry of Object.entries(extra.value)) entries.push(entry);
+    }
     else problems?.push({ kind: "bad-value", where: "meta/extra" });
   }
   return Object.fromEntries(entries);
@@ -561,12 +597,16 @@ export class NativeScriptReader {
     return content.length === 1 ? content[0] ?? "" : JSON.stringify(content);
   }
 
-  private beatFields(id: string, problems: Problems): Record<string, unknown> {
+  private beatFields(id: string, problems: Problems, gallery?: Readonly<Record<string, unknown>>): Record<string, unknown> {
     const record = this.roots.beats.get(id), entries: [string, unknown][] = [];
     if (record instanceof Y.Map) {
       const where = "beats/" + id;
-      entries.push(...namedFields(record, BEAT_FIELDS, where, problems), ...fileFieldEntries(record, where, problems));
-      if (record.has("joined") && this.groupHeads.get(id) === id) problems?.push({ kind: "join-not-read", where: "beats/" + id });
+      for (const name of NATIVE_BEAT_FIELDS) {
+        const value = decoded(record, name, where, problems);
+        if (value) entries.push([name, value.value]);
+      }
+      for (const entry of beatExtraEntries(record, where, problems, gallery)) entries.push(entry);
+      if (problems && record.has("joined") && this.groupHeads.get(id) === id) problems.push({ kind: "join-not-read", where });
     }
     const edited = this.roots.edited.get(id);
     if (edited && typeof edited === "object") {
@@ -580,11 +620,11 @@ export class NativeScriptReader {
     return Object.fromEntries(entries);
   }
 
-  private rowFields(id: string, problems: Problems): Record<string, unknown> {
-    const root = this.beatFields(id, null), group = this.groups.get(id);
+  private rowFields(id: string, problems: Problems, replacement?: { beat: string; gallery: Readonly<Record<string, unknown>> }): Record<string, unknown> {
+    const root = this.beatFields(id, null, replacement?.beat === id ? replacement.gallery : undefined), group = this.groups.get(id);
     if (!group || group.length < 2) return root;
     const members = group.map(member => ({
-      id: member.id, fields: member.id === id ? root : this.beatFields(member.id, null)
+      id: member.id, fields: member.id === id ? root : this.beatFields(member.id, null, replacement?.beat === member.id ? replacement.gallery : undefined)
     }));
     const galleries = members.map(member => gallerySlots(member.fields));
     const records = galleries.flatMap((slots, member) => slots.map(({ slot }, index) => {
@@ -599,7 +639,7 @@ export class NativeScriptReader {
       members.forEach((member, index) => {
         const where = "beats/" + member.id + "/";
         for (const [key, value] of Object.entries(member.fields)) {
-          if (!GALLERY_FIELDS.has(key) && JSON.stringify(value) !== JSON.stringify(row[key])) problems.push({ kind: "joined-field-not-shown", where: where + key });
+          if (!NATIVE_GALLERY_FIELDS.has(key) && JSON.stringify(value) !== JSON.stringify(row[key])) problems.push({ kind: "joined-field-not-shown", where: where + key });
         }
         const more = member.fields.moreImages;
         if (more !== undefined && (!Array.isArray(more) || more.some(value => !fieldBag(value)))) {
@@ -692,6 +732,13 @@ export class NativeScriptReader {
   beatBoundary(beat: string): NativeSpanPlace | null {
     this.sync();
     return this.places.get(beat) ?? null;
+  }
+
+  previewJoinedGallery(beat: string, gallery: Readonly<Record<string, unknown>>): Record<string, unknown> | null {
+    this.sync();
+    const head = this.groupHeads.get(beat);
+    if (head === undefined || (this.groups.get(head)?.length ?? 0) < 2) return null;
+    return nativeGalleryOf(this.rowFields(head, null, { beat, gallery }));
   }
 
   rankedOrder(): readonly NativeRankedBlock[] {
@@ -825,6 +872,7 @@ export class NativeScriptReader {
       if (visual instanceof Y.Text) this.cellProblems(visual.toDelta() as NativeDeltaItem[], "visuals/" + id, problems);
       this.beatFields(id, problems);
     }
+    for (const id of this.roots.beats.keys()) if (!this.places.has(id)) this.beatFields(id, problems);
     for (const [id, group] of this.groups) if (group.length > 1) this.rowFields(id, problems);
     for (const id of this.headingPlaces.keys()) {
       const name = this.roots.names.get(id);

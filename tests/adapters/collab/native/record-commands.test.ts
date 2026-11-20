@@ -50,7 +50,6 @@ test("every record and thread command changes precisely its stored keys and its 
     try {
       for (const row of document.rows) {
         if (!Object.hasOwn(row, "status")) row.status = "todo";
-        if (!Object.hasOwn(row, "imageRef")) row.imageRef = null;
       }
       assert.deepEqual(reimported.reader.document(), document, step.name + ": file round trip");
     } finally { reimported.doc.destroy(); }
@@ -315,11 +314,23 @@ test("invalid field names, standalone absent clears and nonfinite numbers are ch
   for (const value of [NaN, Infinity]) unchangedRecord(script, () => setNativeField(script, beatField("A", "customNumber"), value), "value");
   unchangedRecord(script, () => setNativeField(script, beatField("A", "payload"), { ["\ud800"]: true }), "value");
   unchangedRecord(script, () => setNativeField(script, beatField("A", ""), "value"), "value");
+  unchangedRecord(script, () => setNativeField(script, beatField("A", "\ud800"), "value"), "value");
   unchangedRecord(script, () => clearNativeField(script, beatField("A", "lengthSeconds")));
   for (const value of ["text", []]) checkRecordStep(script, beatStep("extra", value));
   unchangedRecord(script, () => setNativeField(script, beatField("A", "imageLinks"), [{
     name: "clip.mp4", location: { kind: "bundled", name: "clip.mp4" }
   }]), "value");
+  script.doc.destroy();
+});
+
+test("a noncanonical target id refuses even when its record, visual and boundary exist", () => {
+  const source = migrateRows({ rows: [{ id: "A", audioText: "a", visualText: "" }] });
+  const row = source.rows[0];
+  assert.ok(row);
+  row.id = "A!";
+  const script = convertedScript(source);
+  assert.equal(script.reader.row("A!")?.audioText, "a");
+  unchangedRecord(script, () => setNativeField(script, beatField("A!", "note"), "value"), "missing");
   script.doc.destroy();
 });
 
@@ -351,6 +362,21 @@ test("the core gallery rules refuse excess links, duplicate pictures and legacy 
   assert.deepEqual(setNativeField(script, beatField("A", "imageRef"), IMAGE), WRITTEN);
   unchangedRecord(script, () => setNativeField(script, beatField("A", "moreImages"), [{ imageRef: IMAGE }, { imageRef: IMAGE }]), "value");
   unchangedRecord(script, () => setNativeField(script, beatField("A", "visualImage"), 42), "value");
+  script.doc.destroy();
+});
+
+test("a joined beat refuses an href-only link that would disappear from the projected row on reload", () => {
+  const { scripts: [script] } = recordCopies([5]);
+  assert.ok(script);
+  const links = beatField("B", "imageLinks"), link = { href: "https://example.test/video" };
+  assert.deepEqual(setNativeField(script, beatField("A", "imageRef"), IMAGE), WRITTEN);
+  assert.deepEqual(joinNativeRow(script, "B", "A", " "), WRITTEN);
+  unchangedRecord(script, () => setNativeField(script, links, [link]), "value");
+  assert.equal(script.reader.document().rows[0]?.moreImages, undefined);
+  assert.deepEqual(setNativeField(script, links, [{ ...link, poster: true }]), WRITTEN);
+  const document = script.reader.document();
+  assert.deepEqual(document.rows[0]?.moreImages, [{ links: [{ ...link, poster: true }] }]);
+  assert.deepEqual(migrateRows(structuredClone(document)).rows[0], document.rows[0]);
   script.doc.destroy();
 });
 
@@ -408,8 +434,14 @@ test("malformed stored extras and removed or mismatched reply records refuse", (
   unchangedRecord(script, () => setNativeField(script, beatField("A", "note"), "value"), "stored");
   unchangedRecord(script, () => clearNativeField(script, beatField("A", "note")), "stored");
   record.delete(fileKey("note"));
-  record.set(fileKey("imageRef"), "{bad");
+  record.set(fileKey("note"), undefined);
   unchangedRecord(script, () => setNativeField(script, beatField("A", "note"), "value"), "stored");
+  record.delete(fileKey("note"));
+  record.set("gallery", "{bad");
+  unchangedRecord(script, () => setNativeField(script, beatField("A", "imageRef"), IMAGE), "stored");
+  assert.deepEqual(setNativeField(script, beatField("A", "note"), "value"), WRITTEN);
+  assert.equal(script.reader.row("A")?.fields.note, "value");
+  assert.equal(record.get("gallery"), "{bad");
   const reply = script.roots.replies.get(replyId(REPLY.comment, REPLY.reply));
   assert.ok(reply);
   reply.set("commentId", "different-parent");
@@ -420,7 +452,18 @@ test("malformed stored extras and removed or mismatched reply records refuse", (
   script.doc.destroy();
 });
 
-test("an extra field set and clear each use one undo entry and preserve another writer's field", () => {
+test("clearing a missing field on a beat with no gallery leaves even the gallery key absent", () => {
+  const { scripts: [script] } = recordCopies([5]);
+  assert.ok(script);
+  const record = script.roots.beats.get("A");
+  assert.ok(record);
+  record.delete("gallery");
+  unchangedRecord(script, () => clearNativeField(script, beatField("A", "imageName")));
+  assert.equal(record.has("gallery"), false);
+  script.doc.destroy();
+});
+
+test("ending each command's undo group keeps extra field set and clear independently undoable", () => {
   const { scripts: [writer, peer], net } = recordCopies();
   assert.ok(writer && peer);
   const history = recordUndo(writer), target = beatField("A", "lens");
