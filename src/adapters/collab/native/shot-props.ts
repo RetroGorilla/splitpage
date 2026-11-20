@@ -45,8 +45,9 @@ export function nativeShotPropEntries(map: Y.Map<unknown>): NativeShotPropEntry[
   for (const [key, record] of map) {
     if (!(record instanceof Y.Map)) return null;
     const rank: unknown = record.get("rank"), removed: unknown = record.get("removed");
-    const name = decodeNativeValue(record.get("name"))?.value;
     const id = isTagId(key) ? key : "";
+    const stored: unknown = record.get("name");
+    const name = stored === undefined && !record.has("name") ? id ? "" : decodeNativeValue(key.slice(2))?.value : decodeNativeValue(stored)?.value;
     if (typeof name !== "string" || nativeShotPropKey({ id, name }) !== key ||
         record.has("rank") && !isValidNativeRank(rank) || record.has("removed") && removed !== true) return null;
     entries.push({ key, prop: { id, name }, rank: isValidNativeRank(rank) ? rank : null, removed: removed === true });

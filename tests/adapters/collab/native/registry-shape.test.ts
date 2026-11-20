@@ -80,6 +80,30 @@ test("narration typing reuses registry projections, even after a removal", () =>
   } finally { script.doc.destroy(); }
 });
 
+test("changing a nested prop entry invalidates the warm registry projection", () => {
+  const initial = registrySourceForOrphanProp();
+  const script = convertedScript(initial);
+  try {
+    const before = script.reader.document();
+    assert.equal(script.reader.document().brollShots, before.brollShots);
+    const props = script.roots.shots.get("bs1")?.get("props");
+    assert.ok(props instanceof Y.Map);
+    const prop = props.get("t_orphan");
+    assert.ok(prop instanceof Y.Map);
+    prop.set("name", encodeNativeValue("Renamed"));
+    const after = script.reader.document();
+    assert.notEqual(after.brollShots, before.brollShots);
+    assert.deepEqual(before.brollShots[0]?.props, [{ id: "t_orphan", name: "Orphan" }]);
+    assert.deepEqual(after.brollShots[0]?.props, [{ id: "t_orphan", name: "Renamed" }]);
+    assert.equal(script.reader.document().brollShots, after.brollShots);
+    assert.deepEqual(after, migrateRows(structuredClone(after)));
+  } finally { script.doc.destroy(); }
+});
+
+function registrySourceForOrphanProp(): ValidatedDocument {
+  return migrateRows({ ...source(), brollShots: [{ id: "bs1", name: "Wide", props: [{ id: "t_orphan", name: "Orphan" }] }] });
+}
+
 test("a removed registry follows new inline tags and narration on a surviving keyed shot", () => {
   const initial = migrateRows({ ...source(), rows: [{ id: "r1", audioText: "Narration",
     visualText: '<span class="broll-key" data-broll-id="bs1">B-roll:</span> Wide' }] });

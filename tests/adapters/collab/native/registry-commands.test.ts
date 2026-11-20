@@ -422,6 +422,34 @@ test("prop cap refuses an additional prop and a created prop and tag are one wri
   } finally { script.doc.destroy(); }
 });
 
+test("whole-list prop edits and a targeted move only write the entries they change", () => {
+  const lamp = { id: "t_lamp", name: "Lamp" }, rope = { id: "t_rope", name: "Rope" }, box = { id: "t_case", name: "Case" };
+  const script = convertedScript(registrySource({ brollShots: [{ id: "bs1", name: "Wide", props: [lamp, rope, box] }] }));
+  try {
+    const changes: unknown[] = [];
+    script.roots.shots.observeDeep(events => {
+      changes.push(...events.map(event => [event.path, [...event.keys.keys()]]));
+    });
+    const list = (props: readonly unknown[]): NativeRegistryChange => ({ kind: "set", collection: "shots", ids: ["bs1"], fields: { props } });
+    const move = { kind: "moveProp", id: "bs1", prop: lamp.id, before: rope.id } as const;
+    unchanged(script, list([lamp, rope, box]));
+    unchanged(script, move);
+    assert.deepEqual(changes, []);
+    assert.equal(changeNativeRegistry(script, list([rope, box, lamp])).kind, "written");
+    assert.deepEqual(changes.splice(0), [[["bs1", "props", lamp.id], ["rank"]]]);
+    assert.deepEqual(script.reader.document().brollShots[0]?.props, [rope, box, lamp]);
+    assert.equal(changeNativeRegistry(script, move).kind, "written");
+    assert.deepEqual(changes.splice(0), [[["bs1", "props", lamp.id], ["rank"]]]);
+    assert.deepEqual(script.reader.document().brollShots[0]?.props, [lamp, rope, box]);
+    assert.equal(changeNativeRegistry(script, list([lamp, box])).kind, "written");
+    assert.deepEqual(changes.splice(0), [[["bs1", "props", rope.id], ["removed"]]]);
+    assert.deepEqual(script.reader.document().brollShots[0]?.props, [lamp, box]);
+    assert.equal(changeNativeRegistry(script, list([lamp, rope, box])).kind, "written");
+    assert.deepEqual(changes.splice(0), [[["bs1", "props", rope.id], ["removed"]]]);
+    assert.deepEqual(script.reader.document().brollShots[0]?.props, [lamp, rope, box]);
+  } finally { script.doc.destroy(); }
+});
+
 test("a bulk tag edit updates existing tags, creates missing tags and resolves one shared owner", () => {
   const script = convertedScript(registrySource());
   try {

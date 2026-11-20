@@ -344,10 +344,10 @@ function changeProp(script: NativeScript, id: string, prop: string, kind: "addPr
   const props = prepareNativeShotProps(shot, document.productionTags);
   if (!props) return refuseRecord("stored");
   if (kind === "addProp") {
+    if (props.activeCount >= BROLL_PROPS_MAX) return refuseRecord("value");
     const name = normalizeTagName(prop);
     if (props.hasName(name)) return RECORD_UNCHANGED;
     if (prop !== prop.trim()) return refuseRecord("value");
-    if (props.activeCount >= BROLL_PROPS_MAX) return refuseRecord("value");
     const projected = projectedTagIds(script, document);
     const tag = document.productionTags.find(entry => entry?.cat === "prop" && entry.id && !projected.has(entry.id) && normalizeTagName(entry.name) === name);
     const tagId = tag?.id ?? planNew(script, writes, "tags", { ...defaults("tags"), cat: "prop", name: prop });

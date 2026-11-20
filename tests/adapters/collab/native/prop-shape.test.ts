@@ -5,7 +5,8 @@ import { changeNativeRegistry } from "../../../../src/adapters/collab/native/reg
 import type { NativeRegistryChange } from "../../../../src/adapters/collab/native/registry-commands.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import { LEGACY_SHOT_PROPS, NATIVE_SHOT_PROPS } from "../../../../src/adapters/collab/native/shot-props.ts";
-import { decodeNativeValue } from "../../../../src/adapters/collab/native/values.ts";
+import { openNativeUndo } from "../../../../src/adapters/collab/native/undo-commands.ts";
+import { decodeNativeValue, mintNativeTagId } from "../../../../src/adapters/collab/native/values.ts";
 import { BROLL_PROPS_MAX } from "../../../../src/core/document/broll.ts";
 import type { BrollProp } from "../../../../src/core/document/broll.ts";
 import { registryCopies, registryReload, registrySource } from "./registry-harness.ts";
@@ -37,6 +38,10 @@ function propsOf(script: NativeScript): Y.Map<Y.Map<unknown>> {
 
 function read(script: NativeScript) {
   return script.reader.document().brollShots[0]?.props;
+}
+
+function write(script: NativeScript, operation: NativeRegistryChange): void {
+  assert.equal(changeNativeRegistry(script, operation).kind, "written", JSON.stringify(operation));
 }
 
 function command(initial: readonly BrollProp[], edit: TrialEdit): NativeRegistryChange {
@@ -117,4 +122,161 @@ test("the generated prop oracle rejects a command reporting success without chan
   for (const edit of edits) registryCopies(left => {
     assert.throws(() => issue(left, initial, edit, () => ({ kind: "written" })), /Local command effect/);
   }, undefined, source(initial));
+});
+
+test("same-name additions keep both keys and undo reveals the next ranked entry", () => {
+  const initial = initialProps(3);
+  registryCopies((left, right, settle) => {
+    const one = { id: mintNativeTagId(left.doc), name: "Umbrella" }, two = { id: mintNativeTagId(right.doc), name: "umbrella" };
+    const [winner, other] = one.id < two.id ? [one, two] : [two, one];
+    const actor = winner === one ? left : right;
+    const undo = openNativeUndo(actor);
+    try {
+      for (const [copy, prop] of [[left, one], [right, two]] as const) {
+        write(copy, { kind: "addProp", id: "shot", prop: prop.name });
+        assert.deepEqual(read(copy), [...initial, prop]);
+      }
+      settle();
+      assert.ok(propsOf(left).has(one.id) && propsOf(left).has(two.id));
+      assert.deepEqual(read(left), [...initial, winner]);
+      assert.equal(undo.undo().kind, "written");
+      assert.deepEqual(read(actor), [...initial, other]);
+      settle();
+      assert.deepEqual(read(left), [...initial, other]);
+      assert.equal(undo.redo().kind, "written");
+      assert.deepEqual(read(actor), [...initial, winner]);
+      settle();
+      assert.deepEqual(read(left), [...initial, winner]);
+    } finally { undo.destroy(); }
+  }, undefined, source(initial), true);
+});
+
+test("the winner can undo and redo two concurrent additions using the same existing tag ID", () => {
+  const initial = initialProps(3), rope = { id: "t_rope", name: "Rope" };
+  registryCopies((left, right, settle) => {
+    const undo = openNativeUndo(right);
+    try {
+      for (const copy of [left, right]) write(copy, { kind: "addProp", id: "shot", prop: rope.name });
+      settle();
+      assert.deepEqual(read(left), [...initial, rope]);
+      assert.equal(undo.undo().kind, "written");
+      assert.deepEqual(read(right), initial);
+      settle();
+      assert.deepEqual(read(left), initial);
+      assert.equal(undo.redo().kind, "written");
+      assert.deepEqual(read(right), [...initial, rope]);
+      settle();
+      assert.deepEqual(read(left), [...initial, rope]);
+    } finally { undo.destroy(); }
+  }, undefined, source(initial), true);
+});
+
+test("undo of removal exposes the concurrent edit of the same prop", () => {
+  const initial = initialProps(3), edited = { id: "t_seed2", name: "New name" };
+  const withEdit = initial.map(prop => prop.id === edited.id ? edited : prop);
+  const removed = initial.filter(prop => prop.id !== edited.id);
+  registryCopies((left, right, settle) => {
+    const undo = openNativeUndo(right);
+    try {
+      write(left, { kind: "set", collection: "shots", ids: ["shot"], fields: { props: withEdit } });
+      write(right, { kind: "removeProp", id: "shot", prop: edited.id });
+      settle();
+      assert.deepEqual(read(left), removed);
+      assert.equal(decodeNativeValue(propsOf(left).get(edited.id)?.get("name"))?.value, edited.name);
+      assert.equal(propsOf(left).get(edited.id)?.get("removed"), true);
+      assert.equal(undo.undo().kind, "written");
+      assert.deepEqual(read(right), withEdit);
+      settle();
+      assert.deepEqual(read(left), withEdit);
+      assert.equal(undo.redo().kind, "written");
+      assert.deepEqual(read(right), removed);
+      settle();
+      assert.deepEqual(read(left), removed);
+    } finally { undo.destroy(); }
+  }, undefined, source(initial), true);
+});
+
+test("undo of a winning same-entry name edit leaves other props visible", () => {
+  const initial = initialProps(3);
+  registryCopies((left, right, settle) => {
+    const undo = openNativeUndo(right);
+    const edited = (name: string) => initial.map(prop => prop.id === "t_seed2" ? { ...prop, name } : prop);
+    const setName = (copy: NativeScript, name: string) => {
+      write(copy, { kind: "set", collection: "shots", ids: ["shot"], fields: { props: edited(name) } });
+    };
+    try {
+      setName(left, "First name");
+      setName(right, "Second name");
+      settle();
+      assert.deepEqual(read(left), edited("Second name"));
+      assert.equal(undo.undo().kind, "written");
+      settle();
+      assert.deepEqual(read(left), initial.filter(prop => prop.id !== "t_seed2"));
+      assert.equal(undo.redo().kind, "written");
+      settle();
+      assert.deepEqual(read(left), edited("Second name"));
+    } finally { undo.destroy(); }
+  }, undefined, source(initial), true);
+});
+
+test("concurrent reorders preserve different ranks and the winner's undo follows stock ordering on one rank", () => {
+  const initial = initialProps(4);
+  for (const same of [false, true]) registryCopies((left, right, settle) => {
+    const undo = openNativeUndo(right);
+    const ids = (copy: NativeScript) => read(copy)?.map(prop => prop?.id);
+    try {
+      write(left, { kind: "moveProp", id: "shot", prop: same ? "t_seed2" : "t_seed1", before: same ? "t_seed4" : null });
+      write(right, { kind: "moveProp", id: "shot", prop: "t_seed2", before: null });
+      const merged = same ? ["t_seed1", "t_seed3", "t_seed4", "t_seed2"] : ["t_seed3", "t_seed4", "t_seed1", "t_seed2"];
+      const undone = same ? ["t_seed2", "t_seed1", "t_seed3", "t_seed4"] : ["t_seed2", "t_seed3", "t_seed4", "t_seed1"];
+      settle();
+      assert.deepEqual(ids(left), merged);
+      assert.equal(undo.undo().kind, "written");
+      assert.deepEqual(ids(right), undone);
+      settle();
+      assert.equal(propsOf(left).get("t_seed2")?.has("rank"), !same);
+      assert.deepEqual(ids(left), undone);
+      assert.equal(undo.redo().kind, "written");
+      assert.deepEqual(ids(right), merged);
+      settle();
+      assert.deepEqual(ids(left), merged);
+    } finally { undo.destroy(); }
+  }, undefined, source(initial), true);
+});
+
+test("concurrent adds at the cap keep the hidden entry through undo, redo and removal", () => {
+  const initial = initialProps(BROLL_PROPS_MAX - 1);
+  const rope = { id: "t_rope", name: "Rope" }, box = { id: "t_case", name: "Case" };
+  registryCopies((left, right, settle) => {
+    const undo = openNativeUndo(right);
+    const refuseExtra = () => {
+      const before = Y.encodeStateAsUpdate(left.doc);
+      assert.deepEqual(changeNativeRegistry(left, { kind: "addProp", id: "shot", prop: "Extra" }), { kind: "refused", reason: "value" });
+      assert.deepEqual(Y.encodeStateAsUpdate(left.doc), before);
+    };
+    try {
+      write(left, { kind: "addProp", id: "shot", prop: rope.name });
+      write(right, { kind: "addProp", id: "shot", prop: box.name });
+      settle();
+      assert.deepEqual(read(left), [...initial, box]);
+      assert.equal(propsOf(left).size, BROLL_PROPS_MAX + 1);
+      assert.ok(propsOf(left).get(rope.id));
+      refuseExtra();
+      assert.equal(undo.undo().kind, "written");
+      assert.deepEqual(read(right), [...initial, rope]);
+      settle();
+      assert.deepEqual(read(left), [...initial, rope]);
+      refuseExtra();
+      assert.equal(undo.redo().kind, "written");
+      assert.deepEqual(read(right), [...initial, box]);
+      settle();
+      assert.deepEqual(read(left), [...initial, box]);
+      write(left, { kind: "removeProp", id: "shot", prop: "t_seed1" });
+      settle();
+      assert.deepEqual(read(left), [...initial.slice(1), box, rope]);
+      assert.equal(propsOf(left).size, BROLL_PROPS_MAX + 1);
+      assert.equal(propsOf(left).get("t_seed1")?.get("removed"), true);
+      refuseExtra();
+    } finally { undo.destroy(); }
+  }, undefined, source(initial), true);
 });

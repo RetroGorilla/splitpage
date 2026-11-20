@@ -3,7 +3,7 @@ import { BROLL_PROPS_MAX, brollPropKey, normalizeBrollProps, resolveBrollProps }
 import type { BrollProp } from "../../../core/document/broll.ts";
 import { normalizeTagName } from "../../../core/document/tags.ts";
 import type { DocumentShape } from "../../../core/document/validated.ts";
-import { nativeRankBetween } from "./rank.ts";
+import { compareNativeRankedIds, nativeRankBetween } from "./rank.ts";
 import {
   LEGACY_SHOT_PROPS, NATIVE_SHOT_PROPS, nativeShotPropEntries, nativeShotPropKey, newNativeShotProp, newNativeShotProps,
   orderedNativeShotProps, resolveNativeShotPropEntries, shownNativeShotPropEntries
@@ -18,9 +18,9 @@ type Drop = Pick<NativeShotPropEntry, "key" | "rank">;
 export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape["productionTags"]) {
   const map = shot.get(NATIVE_SHOT_PROPS);
   if (shot.has(NATIVE_SHOT_PROPS) && !(map instanceof Y.Map)) return null;
-  const raw = shot.has(LEGACY_SHOT_PROPS) ? decodeNativeValue(shot.get(LEGACY_SHOT_PROPS))?.value : [];
-  if (!(map instanceof Y.Map) && !Array.isArray(raw)) return null;
-  const legacy = map instanceof Y.Map ? [] : normalizeBrollProps(raw, []);
+  const raw = !(map instanceof Y.Map) && shot.has(LEGACY_SHOT_PROPS) ? decodeNativeValue(shot.get(LEGACY_SHOT_PROPS))?.value : [];
+  if (!Array.isArray(raw)) return null;
+  const legacy = normalizeBrollProps(raw, []);
   const entries = map instanceof Y.Map ? nativeShotPropEntries(map) : orderedNativeShotProps(legacy);
   if (!entries) return null;
   const resolved = resolveNativeShotPropEntries(entries, props => resolveBrollProps(props, tags));
@@ -63,7 +63,10 @@ export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape
   }
 
   function replace(writes: Write[], props: readonly BrollProp[]): boolean {
-    const desired = props.map(prop => ({ prop, entry: byRef.get(brollPropKey(prop.id, prop.name)) ?? byKey.get(nativeShotPropKey(prop)) }));
+    const desired = props.map(prop => {
+      const shown = byRef.get(brollPropKey(prop.id, prop.name));
+      return { prop, shown, entry: shown ? byKey.get(shown.key) : byKey.get(nativeShotPropKey(prop)) };
+    });
     const keys = desired.map(({ prop, entry }) => entry?.key ?? nativeShotPropKey(prop));
     const kept = new Set(keys);
     const omitted = shown.filter(entry => !kept.has(entry.key));
@@ -73,12 +76,11 @@ export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape
     const positions = new Map(active.map((entry, at) => [entry.key, at]));
     const anchor = rankAnchors(keys.map(key => positions.get(key) ?? -1));
     let left: Drop | undefined;
-    for (const [at, { prop, entry }] of desired.entries()) {
+    for (const [at, { prop, shown, entry }] of desired.entries()) {
       const key = keys[at] as string;
       if (anchor.has(at) && entry) {
         left = entry;
-        const projected = byRef.get(brollPropKey(prop.id, prop.name));
-        if ((projected?.prop.name ?? entry.prop.name) !== prop.name) changes.push(map => { propRecord(map, key).set("name", encodeNativeValue(prop.name)); });
+        if ((shown?.prop.name ?? entry.prop.name) !== prop.name) changes.push(map => { propRecord(map, key).set("name", encodeNativeValue(prop.name)); });
         continue;
       }
       let rightAt = keys.findIndex((_, next) => next > at && anchor.has(next));
@@ -90,9 +92,8 @@ export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape
         right = desired[rightAt]?.entry;
         placement = dropRank(key, left, right);
       }
-      const rank = placement ? placement.rank : nativeRankBetween(left?.rank ?? null, null);
-      const projected = byRef.get(brollPropKey(prop.id, prop.name));
-      changes.push(putProp(key, projected?.prop.name === prop.name && entry ? entry.prop : prop, rank, entry));
+      const rank = entry && after(entry, left) && (!right || after(right, entry)) ? entry.rank : placement?.rank ?? null;
+      changes.push(putProp(key, shown?.prop.name === prop.name && entry ? entry.prop : prop, rank, entry));
       left = { key, rank };
     }
     plan(writes, changes);
@@ -101,6 +102,10 @@ export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape
 
   return { activeCount: active.length, hasName: (name: string) => resolved.some(({ prop }) => normalizeTagName(prop.name) === name),
     add, remove, move, replace };
+}
+
+function after(entry: Drop, lower: Drop | undefined): boolean {
+  return !lower || compareNativeRankedIds(lower.key, lower.rank, entry.key, entry.rank) < 0;
 }
 
 function propRecord(map: Y.Map<unknown>, key: string): Y.Map<unknown> {

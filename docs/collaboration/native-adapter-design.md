@@ -200,7 +200,7 @@ Each command is one transaction.
 | Create person, production tag or shot | One record map keyed by minted ID, its field keys and its rank. Tag IDs encode the writer and clock in the core's tag ID form |
 | Edit registry fields, cycle tag status, quick-add gear | Changed field keys only. A new owner or tag gets a new record. Quick add marks only omitted orphaned gear removed |
 | Move, remove, restore registry entries | Move writes a rank and re-ranks the right side of a tie at the drop. Remove sets `removed` and restore clears it. The reader keeps comment assignee names, clears missing owners and derives tags and shots from surviving labels and keyed lines as on reload |
-| Add, remove or reorder shot props | One changed encoded `props` array in list order. An added prop may also create its tag in the same transaction |
+| Add, remove or reorder shot props | Add writes the prop's own entry and may create its tag in the same transaction. Remove sets `removed` on the entry. Reorder writes its rank. A whole-list set writes changed entries and leaves unchanged fields alone |
 
 **Check before writing** (decision 15). Every command finds each part it will touch by id: its rows' records,
 cells and boundaries, and the ranks of neighbours a move will write. If one is missing, it refuses without writing.
@@ -272,7 +272,13 @@ kept records (E16). Plain Yjs causes both: an undo the tagger had not seen resto
 
 **5b. A mark lost with a deleted letter.** A marks `pqr` and types a plain `X` inside it. B deletes `X`, and at the same time C removes the mark from `p`. Every copy then reads `opqr`, with the mark gone from `q` and `r` too. The test runs this with three copies, for a tag and for bold ([format-generated.test.ts](../../tests/adapters/collab/native/format-generated.test.ts), "found by the generated histories"). On raw Yjs with no observer, every copy reads `opqr` when it opened the text before the first updates arrived, and `op[qr|b]` when it opened the text after them (same test). Accepted with no repair writes (Owner). Generated counts: [appendix M](#m-accepted-losses-counted).
 
-**5c. Shot props.** A per-prop map converged in all 144 test histories. In two histories, adding different props at the same time to a shot with 39 props produced 41, and core reload kept 40. Same-rank additions in that layout sorted by prop ID. The stored shape stays one ordered array, so two writes to the same shot's props have one winner. An addition can be lost, or a removal can be reversed by the other writer's array. [Candidate test](../../tests/adapters/collab/native/prop-shape.test.ts), [command races](../../tests/adapters/collab/native/registry-races.test.ts).
+**5c. Shot props.** The earlier candidate exposed 41 props in two of 144 histories and core reload kept 40. The keyed
+reader now caps the projection before reload. All 144 command histories keep the projected document through reload.
+Stock Yjs still picks one writer when both add the same existing tag ID or move the same entry. Undo of the winning
+add clears that entry. Undo of the winning move can leave a rankless entry, which reads before ranked entries.
+If undo clears the fallback name of a prop with an orphaned tag ID, that prop is hidden. A targeted drop that would
+require rewriting a peer's tied rank is refused. [Shape and undo tests](../../tests/adapters/collab/native/prop-shape.test.ts),
+[command races](../../tests/adapters/collab/native/registry-races.test.ts).
 
 ## 6. Never acceptable
 
@@ -622,8 +628,13 @@ E5's checks are the template.
 | `visuals` | One visual cell (`Y.Text`) per beat, kept after the beat is removed |
 | `headings` | Per heading: `rank`, other fields; `removed` when set |
 | `names` | One name cell (`Y.Text`) per heading, written at conversion |
-| `comments`, `replies`, `people`, `tags`, `shots` | The file's fields; bodies are whole strings |
+| `comments`, `replies`, `people`, `tags` | The file's fields; bodies are whole strings |
+| `shots` | The shot's file fields and a nested `props` map. Each key is the tag ID, or `n:` followed by the JSON-encoded normalized name. Its record holds the encoded name, rank and optional `removed` mark |
 | `edited` | Per beat, `{by, at}` of the last typing |
+
+Props read in rank order, with equal ranks ordered by key. The reader shows the first entry for each normalized
+projected name, up to 40. Other active entries stay stored and count toward the add limit. When a test script
+still has an encoded props array, the reader uses it until the first prop edit installs the map.
 
 ### H. Outcomes that lose nothing
 
@@ -642,6 +653,10 @@ E11, 600 generated histories, names in cells, unless marked:
 | Two people edit the gallery of the same beat at once | One writer's whole gallery survives and stays intact on core reload, even when the writers edited different gallery fields |
 | Someone restores a registry entry before receiving another person's removal | The entry disappears again when the unseen removal arrives. Restoring it again brings back its fields |
 | Two people change one registry value at the same moment and the winner undoes | The value falls back to its default until someone sets it again. Rankless entries appear first in ID order and a move gives them a rank |
+| Two people add different props or move different props on one shot | Both entries survive. Equal ranks sort by key and undo on one copy leaves the other copy's edit |
+| Two people add the same normalized prop name under different keys | The first in rank and key order shows. Undo of that addition reveals the next, and redo restores the first |
+| One person removes a prop while another edits it | The removed prop stays hidden. Undo of the removal restores it with the concurrent edit |
+| Two people add different props to a shot with 39 props | Both stay stored and 40 show. Removing a visible prop reveals the overflow entry. Core reload preserves the projection |
 
 Also, with no text lost: plain bold in E4's 60 two-copy trials, 72 letters missing bold at merge and 34 left bold
 after an undo; text composed beside a deleted letter landing across a same-moment insertion, 25 of 20,000 (E1); two

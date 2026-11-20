@@ -23,13 +23,6 @@ try {
     const after = Y.encodeStateAsUpdate(script.doc).length;
     console.log(`${label}: ${Y.encodeStateAsUpdate(script.doc, seen).length} update bytes, ${after - before} snapshot bytes added`);
   };
-  const [first, ...rest] = props;
-  assert.ok(first);
-  measureWrite("add one known prop to ten", { kind: "addProp", id: "bs0", prop: "Prop 10" });
-  measureWrite("move the first of ten props to the end", { kind: "set", collection: "shots", ids: ["bs1"], fields: { props: [...rest, first] } });
-  assert.equal(script.reader.document().brollShots[0]?.props?.length, 11);
-  assert.equal(script.reader.document().brollShots[1]?.props?.at(-1)?.id, first.id);
-
   for (const cold of [true, false]) {
     const sample = (at: number) => {
       if (cold) change({ kind: "set", collection: "tags", ids: ["t_p0"], fields: { notes: at % 2 ? "one" : "two" } });
@@ -42,6 +35,12 @@ try {
     const samples = Array.from({ length: 400 }, (_, at) => sample(at)).sort((a, b) => a - b);
     console.log(`document() with ${cold ? "invalidated" : "warm"} registry cache: median ${samples[200]?.toFixed(3)} ms, p95 ${samples[379]?.toFixed(3)} ms`);
   }
+  const [first, ...rest] = props;
+  assert.ok(first);
+  measureWrite("add one known prop to ten", { kind: "addProp", id: "bs0", prop: "Prop 10" });
+  measureWrite("move the first of ten props to the end", { kind: "set", collection: "shots", ids: ["bs1"], fields: { props: [...rest, first] } });
+  assert.equal(script.reader.document().brollShots[0]?.props?.length, 11);
+  assert.equal(script.reader.document().brollShots[1]?.props?.at(-1)?.id, first.id);
 } finally {
   script.doc.destroy();
   seed.doc.destroy();
