@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import test from "node:test";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import { messageYjsSyncStep2, messageYjsUpdate } from "y-protocols/sync";
+import { openNativeRelay } from "../../../../src/adapters/collab/native/relay.ts";
 import { openRelayFixture, relayFrameType, seedRelaySession } from "./relay-harness.ts";
 
 function seedState() {
@@ -10,6 +11,45 @@ function seedState() {
   seed.close();
   return state;
 }
+
+test("a closing or closed session is refused before constructing a provider", async t => {
+  const session = seedRelaySession();
+  const attach = t.mock.method(HocuspocusProvider.prototype, "attach");
+  const options = {
+    url: "ws://127.0.0.1:1", name: "script", token: "",
+    sessionOptions: { actor: "writer", sanitize: () => "" }, onEvent: () => undefined
+  };
+  session.close();
+  assert.equal(session.ydoc.isDestroyed, false);
+  assert.throws(() => openNativeRelay(session, options), /closing or closed/);
+  await Promise.resolve();
+  assert.equal(session.ydoc.isDestroyed, true);
+  assert.throws(() => openNativeRelay(session, options), /closing or closed/);
+  assert.equal(attach.mock.callCount(), 0);
+});
+
+test("token refusals and repeated drops before a download never use the first-load restart allowance", { timeout: 15_000 }, async t => {
+  let accept = true;
+  const kit = await openRelayFixture(t, { async onAuthenticate() { if (!accept) throw { reason: "token-refused" }; } });
+  const bridge = kit.bridge(), { signals } = kit;
+  bridge.configure = link => {
+    if (!accept) return;
+    link.download = (frame, forward) => { if (relayFrameType(frame) !== messageYjsSyncStep2) forward(); };
+  };
+  const copy = kit.copy(await bridge.listen());
+  const first = await signals.until(() => bridge.links[0]?.sent.includes(messageYjsSyncStep2) ? bridge.links[0] : undefined);
+  accept = false;
+  first.cut();
+  for (let attempt = 0; attempt < 3; attempt++) {
+    const event = await signals.until(() => copy.events.filter(event => event.kind === "authentication-failed")[attempt]);
+    assert.deepEqual(event, { kind: "authentication-failed", reason: "token-refused" });
+    bridge.links[attempt + 1]?.cut();
+  }
+  await signals.until(() => !copy.relay.status().connected || undefined);
+  assert.equal(copy.relay.status().firstSyncDone, false);
+  assert.equal(copy.session.ydoc.isDestroyed, false);
+  assert.equal(copy.events.some(event => event.kind === "first-load-too-large"), false);
+});
 
 test("the first state reply marks first sync even when stock synced and pending zero arrive early", { timeout: 12_000 }, async t => {
   const state = seedState();
@@ -161,6 +201,42 @@ test("after first sync the connection can recover from repeated drops", { timeou
   }
   assert.equal(copy.events.some(event => event.kind === "first-load-too-large"), false);
 });
+
+test("an interrupted first reply replaces the failed session and gives the replacement its own first-load allowance",
+  { timeout: 15_000 }, async t => {
+    const state = seedState();
+    const kit = await openRelayFixture(t, { async onLoadDocument() { return state; } });
+    const bridge = kit.bridge(), { signals } = kit;
+    bridge.configure = link => {
+      const attempt = bridge.links.length;
+      link.download = (frame, forward) => {
+        const type = relayFrameType(frame);
+        if (type === messageYjsUpdate || (type === messageYjsSyncStep2 && (attempt === 1 || attempt === 3))) return;
+        forward();
+      };
+    };
+    const copy = kit.copy(await bridge.listen());
+    const failure = new Error("first reply cleanup");
+    const logs: unknown[][] = [];
+    t.mock.method(console, "error", (...args: unknown[]) => { logs.push(args); });
+    copy.session.ydoc.once("afterTransactionCleanup", () => { throw failure; });
+    async function dropStartedLoad(index: number) {
+      const link = await signals.until(() => bridge.links[index]?.sent.includes(messageYjsSyncStep2) ? bridge.links[index] : undefined);
+      assert.equal(copy.relay.status().firstSyncDone, false);
+      link.cut();
+    }
+    await dropStartedLoad(0);
+    const replacement = await signals.until(() => copy.events.find(event => event.kind === "session-replaced"));
+    assert.equal(copy.session.ydoc.isDestroyed, true);
+    assert(logs.some(args => args.includes(failure)));
+    assert.deepEqual(replacement.session.commands.undo(), { kind: "unchanged" });
+    await dropStartedLoad(2);
+    await signals.until(() => copy.relay.status().firstSyncDone || undefined);
+    assert.equal(copy.relay.session(), replacement.session);
+    assert.equal(replacement.session.document().rows[0]?.audioText, "word");
+    assert.equal(copy.events.some(event => event.kind === "first-load-too-large"), false);
+  }
+);
 
 test("the stock receive wait permits one first-load restart on a slow link, then reports the script cannot load",
   { timeout: 100_000 }, async t => {

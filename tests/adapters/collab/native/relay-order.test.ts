@@ -3,7 +3,7 @@ import test from "node:test";
 import type { TestContext } from "node:test";
 import { HocuspocusProvider, HocuspocusProviderWebsocket, MessageType } from "@hocuspocus/provider";
 import { createEncoder, toUint8Array, writeVarString, writeVarUint } from "lib0/encoding";
-import { messageYjsSyncStep1, messageYjsSyncStep2, messageYjsUpdate, writeSyncStep1 } from "y-protocols/sync";
+import { messageYjsSyncStep1, messageYjsSyncStep2, messageYjsUpdate, writeSyncStep1, writeSyncStep2 } from "y-protocols/sync";
 import * as Y from "yjs";
 import { nativeMarkName } from "../../../../src/adapters/collab/native/inline.ts";
 import type { NativeDeltaItem } from "../../../../src/adapters/collab/native/inline.ts";
@@ -151,20 +151,31 @@ function checkPair(pair: Pair, session: Session, created: string) {
 
 for (const pair of pairs) {
   test(`E13 pair keeps its expected marks across a drop: ${pair.name}`, { timeout: 15_000 }, async t => {
-    await runPair(t, pair, false);
+    await runPair(t, pair, "offline");
   });
 }
 
-test("native undo in a dead socket precedes redo issued on the next connection before its state reply", { timeout: 15_000 }, async t => {
-  await runPair(t, { name: "reconnect order", prep: [nativeTag], first: undo, second: redo, marks: all("t:" + TAG), native: true }, true);
-});
+for (const timing of ["opening", "closing"] as const) {
+  test(`native undo in a dead socket precedes redo while the socket is ${timing}`, { timeout: 15_000 }, async t => {
+    await runPair(t, { name: "reconnect order", prep: [nativeTag], first: undo, second: redo, marks: all("t:" + TAG), native: true }, timing);
+  });
+}
 
-async function runPair(t: TestContext, pair: Pair, early: boolean) {
+async function runPair(t: TestContext, pair: Pair, timing: "offline" | "opening" | "closing") {
   const state = seed(pair.native === true);
   const kit = await openRelayFixture(t, { async onLoadDocument() { return state; } });
   const { signals } = kit;
   const bridge = kit.bridge();
-  const writer = kit.copy(await bridge.listen()), reader = kit.copy();
+  const address = await bridge.listen();
+  const writer = kit.copy(address), reader = kit.copy();
+  const sockets = new Map<string, HocuspocusProviderWebsocket>();
+  if (timing === "closing") {
+    const send = HocuspocusProviderWebsocket.prototype.send;
+    t.mock.method(HocuspocusProviderWebsocket.prototype, "send", function (this: HocuspocusProviderWebsocket, frame: Uint8Array) {
+      sockets.set(this.url, this);
+      send.call(this, frame);
+    });
+  }
   await signals.until(() => (writer.relay.status().firstSyncDone && reader.relay.status().firstSyncDone) || undefined);
   const first = bridge.links[0];
   assert(first);
@@ -186,22 +197,43 @@ async function runPair(t: TestContext, pair: Pair, early: boolean) {
   assert.equal(writer.relay.status().connected, true);
 
   let heldRequest: (() => void) | undefined;
-  if (early) bridge.configure = link => {
+  const downloads: number[] = [];
+  if (timing === "opening") bridge.configure = link => {
     link.download = (frame, forward) => {
-      if (relayFrameType(frame) === messageYjsSyncStep1) heldRequest = forward;
+      const type = relayFrameType(frame);
+      if (type !== undefined) downloads.push(type);
+      if (type === messageYjsSyncStep1) heldRequest = forward;
       else forward();
     };
   };
+  if (timing === "closing") {
+    const socket = sockets.get(address)?.webSocket;
+    assert(socket);
+    socket.close();
+    assert.equal(socket.readyState, WebSocket.CLOSING);
+    assert.equal(writer.relay.status().connected, true);
+    pair.second(commands);
+  }
   first.cut();
   await signals.until(() => !writer.relay.status().connected || undefined);
-  const release = early ? await signals.until(() => heldRequest) : undefined;
-  pair.second(commands);
-  if (!early) {
-    assert.equal(writer.relay.status().connected, false);
+  if (timing !== "closing") {
+    const release = timing === "opening" ? await signals.until(() => downloads.includes(messageYjsSyncStep2) ? heldRequest : undefined) : undefined;
+    if (release) assert.deepEqual(downloads.slice(0, 2), [messageYjsSyncStep1, messageYjsSyncStep2]);
+    pair.second(commands);
+    if (release) {
+      const traffic = "unrelated traffic while request is held";
+      reader.session.ydoc.getText("peer-traffic").insert(0, traffic);
+      await signals.until(() => writer.session.ydoc.getText("peer-traffic").toString() === traffic || undefined);
+      assert.equal(writer.relay.status().connected, true);
+      assert.equal(writer.relay.status().firstSyncDone, true);
+      assert.deepEqual(bridge.links[1]?.sent, [messageYjsSyncStep1]);
+      release();
+    }
+  }
+  if (timing === "offline") {
     assert.equal(writer.relay.status().firstSyncDone, true);
     assert.equal(writer.relay.status().pendingChangeCount, 1);
   }
-  release?.();
 
   const resumed = await signals.until(() => bridge.links[1]?.sent.includes(messageYjsSyncStep2) ? bridge.links[1] : undefined);
   assert.deepEqual(resumed.sent, [messageYjsSyncStep1, messageYjsSyncStep2]);
@@ -230,6 +262,14 @@ test("steady undo and redo reach a live peer in command order", { timeout: 12_00
 });
 
 test("a write after the reply is encoded goes next and a provider-origin echo is suppressed", { timeout: 12_000 }, async t => {
+  await writeDuringReply(t, false);
+});
+
+test("a write buffered during the reply stays in the document if the socket starts closing", { timeout: 12_000 }, async t => {
+  await writeDuringReply(t, true);
+});
+
+async function writeDuringReply(t: TestContext, closeDuringReply: boolean) {
   const kit = await openRelayFixture(t);
   const bridge = kit.bridge(), address = await bridge.listen();
   const reader = kit.copy(), writer = kit.copy(address);
@@ -246,19 +286,27 @@ test("a write after the reply is encoded goes next and a provider-origin echo is
       wrote = true;
       const writerProvider = providers.get(writer.session.ydoc);
       assert(writerProvider);
+      if (closeDuringReply) {
+        send.call(this, frame);
+        assert(this.webSocket);
+        this.webSocket.close();
+        assert.equal(this.webSocket.readyState, WebSocket.CLOSING);
+      }
       writerProvider.documentUpdateHandler(writer.session.encodeState(), writerProvider);
       writer.session.ydoc.getText("callback-write").insert(0, "after reply");
+      if (closeDuringReply) return;
     }
     send.call(this, frame);
   });
   await kit.signals.until(() => reader.session.ydoc.getText("callback-write").toString() === "after reply" || undefined);
-  assert.deepEqual(bridge.links[0]?.sent, [messageYjsSyncStep1, messageYjsSyncStep2, messageYjsUpdate]);
-});
+  if (closeDuringReply) assert.deepEqual(bridge.links[1]?.sent, [messageYjsSyncStep1, messageYjsSyncStep2]);
+  else assert.deepEqual(bridge.links[0]?.sent, [messageYjsSyncStep1, messageYjsSyncStep2, messageYjsUpdate]);
+}
 
 test("an interrupted reply releases its temporary write buffer", t => {
   const document = new Y.Doc();
   const socket = new HocuspocusProviderWebsocket({ url: "ws://127.0.0.1", autoConnect: false });
-  const provider = new StateFirstProvider({ name: "buffer", document, websocketProvider: socket }, () => undefined);
+  const provider = new StateFirstProvider({ name: "buffer", document, websocketProvider: socket }, () => undefined, () => undefined);
   t.after(() => { provider.destroy(); socket.destroy(); document.destroy(); });
   const failure = new Error("interrupted reply");
   t.mock.method(HocuspocusProvider.prototype, "onMessage", () => { throw failure; });
@@ -268,4 +316,36 @@ test("an interrupted reply releases its temporary write buffer", t => {
   writeSyncStep1(encoder, document);
   assert.throws(() => provider.onMessage(new MessageEvent("message", { data: toUint8Array(encoder).buffer })), failure);
   assert.equal(Reflect.get(provider, "duringReply"), null);
+});
+
+test("only the opening request gates writes, only the first download is reported, and steady frames take the stock path", async t => {
+  const document = new Y.Doc();
+  const socket = new HocuspocusProviderWebsocket({ url: "ws://127.0.0.1", autoConnect: false });
+  const firstReply = t.mock.fn(), stateRequest = t.mock.fn();
+  const provider = new StateFirstProvider({ name: "script", document, websocketProvider: socket }, firstReply, stateRequest);
+  t.after(() => { provider.destroy(); socket.destroy(); document.destroy(); });
+  const stock = t.mock.method(HocuspocusProvider.prototype, "onMessage", () => undefined);
+  function frame(write: (encoder: ReturnType<typeof createEncoder>) => void) {
+    const encoder = createEncoder();
+    writeVarString(encoder, "script");
+    writeVarUint(encoder, MessageType.Sync);
+    write(encoder);
+    return new MessageEvent("message", { data: toUint8Array(encoder).buffer });
+  }
+  const request = frame(encoder => writeSyncStep1(encoder, document));
+  const reply = frame(encoder => writeSyncStep2(encoder, document, Y.encodeStateVector(document)));
+  provider.onMessage(request);
+  provider.onMessage(request);
+  assert.equal(stateRequest.mock.callCount(), 1);
+  provider.onMessage(reply);
+  const data = t.mock.getter(reply, "data");
+  provider.onMessage(reply);
+  assert.equal(data.mock.callCount(), 0);
+  assert.equal(stock.mock.callCount(), 4);
+
+  await provider.onOpen(new Event("open"));
+  provider.onMessage(reply);
+  assert.equal(firstReply.mock.callCount(), 1);
+  provider.onMessage(request);
+  assert.equal(stateRequest.mock.callCount(), 2);
 });

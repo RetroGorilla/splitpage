@@ -1,4 +1,4 @@
-import { HocuspocusProvider, MessageType, WebSocketStatus } from "@hocuspocus/provider";
+import { HocuspocusProvider, MessageType } from "@hocuspocus/provider";
 import type { HocuspocusProviderConfiguration } from "@hocuspocus/provider";
 import { createDecoder, readVarString, readVarUint } from "lib0/decoding";
 import { messageYjsSyncStep1, messageYjsSyncStep2 } from "y-protocols/sync";
@@ -14,10 +14,12 @@ export class StateFirstProvider extends HocuspocusProvider {
   private awaitingFirstReply = true;
   private duringReply: Uint8Array[] | null = null;
   private readonly onFirstReply: () => void;
+  private readonly onStateRequest: () => void;
 
-  constructor(configuration: HocuspocusProviderConfiguration, onFirstReply: () => void) {
+  constructor(configuration: HocuspocusProviderConfiguration, onFirstReply: () => void, onStateRequest: () => void) {
     super(configuration);
     this.onFirstReply = onFirstReply;
+    this.onStateRequest = onStateRequest;
   }
 
   override async onOpen(event: Event) {
@@ -27,7 +29,7 @@ export class StateFirstProvider extends HocuspocusProvider {
 
   override documentUpdateHandler(update: Uint8Array, origin: unknown) {
     if (origin === this) return;
-    if (this.sentState && this.configuration.websocketProvider.status === WebSocketStatus.Connected) {
+    if (this.sentState && this.configuration.websocketProvider.webSocket?.readyState === WebSocket.OPEN) {
       super.documentUpdateHandler(update, origin);
     } else {
       this.duringReply?.push(update);
@@ -38,11 +40,12 @@ export class StateFirstProvider extends HocuspocusProvider {
   override onMessage(event: MessageEvent) {
     const sync = this.sentState && !this.awaitingFirstReply ? undefined : relaySyncType(event.data as ArrayBuffer);
     if (!this.sentState && sync === messageYjsSyncStep1) {
+      this.onStateRequest();
       const duringReply: Uint8Array[] = [];
       this.duringReply = duringReply;
       try { super.onMessage(event); } finally { this.duringReply = null; }
       this.sentState = true;
-      for (const update of duringReply) super.documentUpdateHandler(update, null);
+      for (const update of duringReply) this.documentUpdateHandler(update, null);
     } else {
       super.onMessage(event);
     }
