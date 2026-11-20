@@ -28,10 +28,11 @@ export function registryReload(document: DocumentShape): ValidatedDocument {
 
 export function registryCopies(
   run: (left: NativeScript, right: NativeScript, settle: () => void) => void,
-  prepare: (seed: NativeScript) => void = () => undefined
+  prepare: (seed: NativeScript) => void = () => undefined,
+  document = registrySource()
 ): void {
   for (const reverse of [false, true]) {
-    const seed = convertedScript(registrySource());
+    const seed = convertedScript(document);
     try {
       prepare(seed);
       const left = joinedScript(seed, 4), right = joinedScript(seed, 9), replay = joinedScript(seed, 10);

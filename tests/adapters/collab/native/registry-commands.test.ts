@@ -3,10 +3,13 @@ import { test } from "node:test";
 import * as Y from "yjs";
 import { changeNativeRegistry } from "../../../../src/adapters/collab/native/registry-commands.ts";
 import type { NativeRegistryChange } from "../../../../src/adapters/collab/native/registry-commands.ts";
+import { openNativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
+import { openNativeSession } from "../../../../src/adapters/collab/native/session.ts";
 import { encodeNativeValue, mintNativeId, mintNativeTagId, nativeFieldKey } from "../../../../src/adapters/collab/native/values.ts";
 import { BROLL_PROPS_MAX } from "../../../../src/core/document/broll.ts";
 import { isTagId } from "../../../../src/core/document/tags.ts";
+import { mintTagId } from "../../../../src/core/document/tags.ts";
 import { convertedScript } from "./helpers.ts";
 import { registryReload, registrySession, registrySource } from "./registry-harness.ts";
 
@@ -22,6 +25,7 @@ test("registry commands validate the copied request and every target before writ
     const reject = (change: unknown, reason = "value") => unchanged(script, change as NativeRegistryChange, reason);
     reject(null);
     reject({ kind: "not-a-command", ids: [] });
+    reject({ kind: "not-a-command", collection: "tags", ids: ["t_lamp"] });
     reject({ kind: "create", collection: "items", fields: { name: "Cup" } });
     reject({ kind: "create", collection: "people", fields: [] });
     reject({ kind: "create", collection: "people", fields: {} });
@@ -37,6 +41,8 @@ test("registry commands validate the copied request and every target before writ
     reject({ kind: "set", collection: "people", ids: ["p1", "p2"], fields: { name: "Crew" } });
     reject({ kind: "set", collection: "people", ids: ["p1"], fields: { name: "sound" } });
     reject({ kind: "set", collection: "people", ids: ["p1"], fields: { status: "needed" } });
+    reject({ kind: "set", collection: "people", ids: ["p1"], fields: { notes: "Not a person field" } });
+    reject({ kind: "set", collection: "people", ids: ["p1"], fields: {}, ownerName: "New person" });
     reject({ kind: "set", collection: "tags", ids: ["t_lamp"], fields: { name: "Rope" } });
     reject({ kind: "set", collection: "tags", ids: ["t_lamp"], fields: { status: "shot" } });
     reject({ kind: "set", collection: "tags", ids: ["t_lamp"], fields: { notes: "x".repeat(2001) } });
@@ -98,6 +104,75 @@ test("registry commands copy caller values once and refuse busy and closing writ
   } finally { script.doc.destroy(); }
 });
 
+test("registry preparation guards both document handles and skips getters when busy or held", () => {
+  const script = convertedScript(registrySource()), second = openNativeScript(script.doc), session = registrySession();
+  const change = { kind: "create", collection: "people", fields: { name: "New person" } } as const;
+  const edit = { kind: "set", collection: "tags", ids: ["t_lamp"], fields: { notes: "Nested" } } as const;
+  try {
+    for (const handle of [script, second]) {
+      let nestedReads = 0;
+      let nested: ReturnType<typeof changeNativeRegistry> | undefined;
+      unchanged(script, { ...change, get fields(): typeof change.fields {
+        nested = changeNativeRegistry(handle, { ...edit, get fields() { nestedReads++; return edit.fields; } });
+        throw new Error("argument");
+      } }, "value");
+      assert.deepEqual(nested, { kind: "refused", reason: "busy" });
+      assert.equal(nestedReads, 0);
+    }
+    let reads = 0;
+    const argument = { ...change, get fields() { reads++; return change.fields; } };
+    script.doc.transact(() => unchanged(second, argument, "busy"));
+    const state = session.encodeState(), release = session.holdIngress();
+    assert.equal(session.acceptsPeerUpdate(), false);
+    assert.deepEqual(session.commands.changeRegistry(argument), { kind: "refused", reason: "busy" });
+    release();
+    assert.equal(session.acceptsPeerUpdate(), true);
+    assert.deepEqual(session.encodeState(), state);
+    assert.equal(reads, 0);
+    assert.equal(session.commands.changeRegistry({ ...change, get fields() {
+      assert.equal(session.acceptsPeerUpdate(), false);
+      assert.deepEqual(session.commands.changeRegistry(argument), { kind: "refused", reason: "busy" });
+      return change.fields;
+    } }).kind, "written");
+    assert.equal(reads, 0);
+  } finally { script.doc.destroy(); session.close(); }
+});
+
+test("registry operations obey full admission and all refuse at the ceiling", () => {
+  const seed = registrySession();
+  assert.equal(seed.commands.changeRegistry({ kind: "remove", collection: "tags", ids: ["t_case"] }).kind, "written");
+  const state = seed.encodeState();
+  seed.close();
+  const changes: readonly NativeRegistryChange[] = [
+    { kind: "create", collection: "people", fields: { name: "New" } },
+    { kind: "create", collection: "tags", fields: { cat: "prop", name: "New" } },
+    { kind: "create", collection: "shots", fields: { name: "New" } },
+    { kind: "set", collection: "tags", ids: ["t_lamp"], fields: { notes: "New" } },
+    { kind: "updateTags", tags: [{ cat: "prop", name: "New" }], fields: { status: "have" } },
+    { kind: "cycleTagStatus", ids: ["t_lamp"] },
+    { kind: "move", collection: "people", id: "p1", before: null },
+    { kind: "addProp", id: "bs1", prop: "New" },
+    { kind: "gear", names: ["Drone", "New"] },
+    { kind: "remove", collection: "tags", ids: ["t_rope"] },
+    { kind: "restore", collection: "tags", ids: ["t_case"] },
+    { kind: "removeProp", id: "bs1", prop: "t_lamp" }
+  ];
+  for (const ceiling of [false, true]) for (const change of changes) {
+    const session = openNativeSession({ kind: "state", state }, {
+      actor: "Writer", sanitize: String, sizeLimit: ceiling ? Math.floor(state.byteLength / 2) : state.byteLength, sizeCeilingRatio: ceiling ? 1.05 : 3
+    });
+    try {
+      assert.equal(session.size, "full");
+      const before = session.encodeState(), result = session.commands.changeRegistry(change);
+      if (!ceiling && ["remove", "restore", "removeProp"].includes(change.kind)) assert.equal(result.kind, "written", change.kind);
+      else {
+        assert.deepEqual(result, { kind: "refused", reason: "full" }, change.kind);
+        assert.deepEqual(session.encodeState(), before, change.kind);
+      }
+    } finally { session.close(); }
+  }
+});
+
 test("missing and damaged stored inputs refuse a whole registry command", () => {
   const script = convertedScript(registrySource());
   try {
@@ -143,6 +218,63 @@ test("prop commands refuse stored tag IDs the core would replace", () => {
   } finally { script.doc.destroy(); }
 });
 
+test("moves exclude tombstones and appends reserve their ranks for restoration", () => {
+  const script = convertedScript(registrySource());
+  try {
+    const remove = { kind: "remove", collection: "people", ids: ["p3"] } as const;
+    assert.equal(changeNativeRegistry(script, remove).kind, "written");
+    unchanged(script, { kind: "move", collection: "people", id: "p1", before: "p3" }, "missing");
+    const created = changeNativeRegistry(script, { kind: "create", collection: "people", fields: { name: "New" } });
+    assert.ok("created" in created);
+    const rank = (id: string) => String(script.roots.people.get(id)?.get("rank"));
+    assert.ok(rank(created.created) > rank("p3"));
+    assert.equal(changeNativeRegistry(script, { ...remove, kind: "restore" }).kind, "written");
+    assert.deepEqual(script.reader.document().people.map(person => person.id), ["p1", "p2", "p3", created.created]);
+  } finally { script.doc.destroy(); }
+});
+
+test("field guards read names, resolved targets, and touched encodings before committing", () => {
+  const script = convertedScript(registrySource());
+  try {
+    const tag = script.roots.tags.get("t_lamp"), shot = script.roots.shots.get("bs1");
+    assert.ok(tag && shot);
+    tag.set(nativeFieldKey("name"), "bad JSON");
+    unchanged(script, { kind: "set", collection: "tags", ids: ["t_lamp"], fields: { notes: "New" } }, "stored");
+    tag.set(nativeFieldKey("name"), encodeNativeValue("Lamp"));
+    const bulk = { kind: "updateTags", tags: [{ cat: "prop", name: "Rope" }, { cat: "prop", name: "Lamp" }], fields: { notes: "Bulk" } } as const;
+    tag.set("removed", false);
+    unchanged(script, bulk, "stored");
+    tag.delete("removed");
+    tag.set(nativeFieldKey("notes"), "bad JSON");
+    unchanged(script, bulk, "stored");
+    shot.set(nativeFieldKey("props"), encodeNativeValue({ length: 1, prop: "Lamp" }));
+    assert.deepEqual(script.reader.document().brollShots[0]?.props, []);
+    unchanged(script, { kind: "addProp", id: "bs1", prop: "Rope" }, "stored");
+    const clone = shot.clone();
+    script.roots.shots.set("", clone);
+    clone.set(nativeFieldKey("props"), encodeNativeValue([]));
+    unchanged(script, { kind: "addProp", id: "", prop: "Lamp" }, "missing");
+  } finally { script.doc.destroy(); }
+});
+
+test("gear keeps used tags and refuses invalid gear removal targets", () => {
+  const script = convertedScript(registrySource({ rows: [{ id: "r1", audioText: '<span class="tag-anchor" data-tag-cat="gear" data-tag-name="Drone">Drone</span>' }] }));
+  try {
+    const command = { kind: "gear", names: ["Tripod"] } as const;
+    assert.equal(changeNativeRegistry(script, command).kind, "written");
+    assert.deepEqual(script.reader.document().productionTags.filter(tag => tag?.cat === "gear").map(tag => tag?.name), ["Drone", "Tripod"]);
+    const tripod = script.reader.document().productionTags.find(tag => tag?.name === "Tripod");
+    assert.ok(tripod?.id);
+    const entry = script.roots.tags.get(tripod.id);
+    assert.ok(entry);
+    entry.set("removed", false);
+    unchanged(script, { kind: "gear", names: [] }, "stored");
+    entry.delete("removed");
+    script.roots.tags.set("", entry.clone());
+    unchanged(script, { kind: "gear", names: [] }, "stored");
+  } finally { script.doc.destroy(); }
+});
+
 test("tag IDs survive reload at a lettered clock and taken IDs stay taken until the clock moves", () => {
   const script = convertedScript(registrySource());
   try {
@@ -162,6 +294,7 @@ test("tag IDs survive reload at a lettered clock and taken IDs stay taken until 
     unchanged(script, command, "taken");
     unchanged(script, command, "taken");
     unchanged(script, { kind: "gear", names: ["New gear"] }, "taken");
+    unchanged(script, { kind: "updateTags", tags: [{ cat: "prop", name: "Lamp" }, { cat: "prop", name: "New" }], fields: { notes: "Bulk" } }, "taken");
     const moveClock = { kind: "set", collection: "tags", ids: ["t_lamp"], fields: { notes: "New note" } } as const;
     assert.deepEqual(changeNativeRegistry(script, moveClock), { kind: "written" });
     const next = mintNativeTagId(script.doc);
@@ -206,6 +339,51 @@ test("used removals read back like core reload and a kept registry record restor
     change({ kind: "set", collection: "people", ids: ["p3"], fields: { name: "camera" } });
     unchanged(script, { kind: "restore", collection: "people", ids: ["p1"] }, "value");
   } finally { script.doc.destroy(); }
+});
+
+test("removing a legacy name collision heals the visible name without changing its stored form", () => {
+  const broken = "\ud800Lamp", original = registrySource({ people: [{ id: "p1", name: "Lamp" }, { id: "p2", name: broken }] });
+  const script = convertedScript(original);
+  try {
+    assert.equal(script.reader.document().people[1]?.name, broken);
+    const remove = { kind: "remove", collection: "people", ids: ["p1"] } as const;
+    assert.equal(changeNativeRegistry(script, remove).kind, "written");
+    const document = script.reader.document();
+    assert.deepEqual(document.people, [{ id: "p2", name: "Lamp" }]);
+    assert.deepEqual(registryReload(document), document);
+    assert.equal(script.roots.people.get("p2")?.get(nativeFieldKey("name")), encodeNativeValue(broken));
+    assert.equal(changeNativeRegistry(script, { ...remove, kind: "restore" }).kind, "written");
+    assert.deepEqual(script.reader.document().people, original.people);
+  } finally { script.doc.destroy(); }
+});
+
+test("unkeyed shot removal stays absent until core reload derives a new shot ID", () => {
+  const script = convertedScript(registrySource({ rows: [{ id: "r1", visualText: "B-roll: Wide" }] }));
+  try {
+    assert.equal(script.reader.document().brollShots.find(shot => shot.name === "Wide")?.id, "bs1");
+    assert.equal(changeNativeRegistry(script, { kind: "remove", collection: "shots", ids: ["bs1"] }).kind, "written");
+    const captured = script.reader.document();
+    assert.equal(captured.brollShots.some(shot => shot.name === "Wide"), false);
+    const reloaded = registryReload(captured).brollShots.find(shot => shot.name === "Wide");
+    assert.ok(reloaded && reloaded.id !== "bs1");
+  } finally { script.doc.destroy(); }
+});
+
+test("bulk edits materialize projected tags even when their projected IDs name tombstones", () => {
+  const defaultId = mintTagId("prop", "Lamp");
+  for (const id of ["t_lamp", defaultId]) {
+    const script = convertedScript(registrySource({ rows: [{ id: "r1", audioText: '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Lamp">Lamp</span>' }],
+      productionTags: [{ id, name: "Lamp", cat: "prop" }] }));
+    try {
+      assert.equal(changeNativeRegistry(script, { kind: "remove", collection: "tags", ids: [id] }).kind, "written");
+      assert.equal(script.reader.document().productionTags[0]?.id, defaultId);
+      assert.equal(changeNativeRegistry(script, { kind: "updateTags", tags: [{ cat: "prop", name: "Lamp" }], fields: { notes: "New" } }).kind, "written");
+      const tag = script.reader.document().productionTags.find(tag => tag?.name === "Lamp");
+      assert.ok(tag?.id && tag.id !== defaultId && script.roots.tags.has(tag.id));
+      assert.equal(tag.notes, "New");
+      assert.equal(script.roots.tags.get(id)?.get("removed"), true);
+    } finally { script.doc.destroy(); }
+  }
 });
 
 test("shot creation allows a separate list entry with the same name as a keyed shot", () => {

@@ -629,6 +629,7 @@ E11, 600 generated histories, names in cells, unless marked:
 | An undo press changed only formatting on letters someone else had erased | 2 |
 | A restored row without a rank read at its stored place (rule (e)) | 5 histories; 3 with kept records (E14, E17) |
 | Two people edit the gallery of the same beat at once | One writer's whole gallery survives and stays intact on core reload, even when the writers edited different gallery fields |
+| Someone restores a registry entry before receiving another person's removal | The entry disappears again when the unseen removal arrives. Restoring it again brings back its fields |
 
 Also, with no text lost: plain bold in E4's 60 two-copy trials, 72 letters missing bold at merge and 34 left bold
 after an undo; text composed beside a deleted letter landing across a same-moment insertion, 25 of 20,000 (E1); two

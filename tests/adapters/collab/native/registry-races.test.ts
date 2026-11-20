@@ -4,8 +4,9 @@ import * as Y from "yjs";
 import { changeNativeRegistry } from "../../../../src/adapters/collab/native/registry-commands.ts";
 import type { NativeRegistryChange } from "../../../../src/adapters/collab/native/registry-commands.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
+import { decodeNativeValue, encodeNativeValue, mintNativeId, mintNativeTagId, nativeFieldKey } from "../../../../src/adapters/collab/native/values.ts";
 import type { DocumentShape } from "../../../../src/core/document/validated.ts";
-import { registryCopies } from "./registry-harness.ts";
+import { registryCopies, registrySource } from "./registry-harness.ts";
 
 type Registry = Extract<NativeRegistryChange, { kind: "create" }>["collection"];
 type Fields = Readonly<Record<string, unknown>>;
@@ -53,13 +54,15 @@ function edits(side: "left" | "right"): NativeRegistryChange[] {
   ];
 }
 
-function prepareIndependent(seed: NativeScript): void {
-  write(seed, set("shots", "bs2", { props: [{ id: "t_case", name: "Case" }] }));
-  for (const [collection, id, fields] of [
+const hiddenEntries = [
     ["people", "hidden-person-left", { name: "Hidden Left" }], ["people", "hidden-person-right", { name: "Hidden Right" }],
     ["tags", "t_hidden1", { cat: "prop", name: "Hidden Left" }], ["tags", "t_hidden2", { cat: "prop", name: "Hidden Right" }],
     ["shots", "hidden-shot-left", { name: "Hidden Left" }], ["shots", "hidden-shot-right", { name: "Hidden Right" }]
-  ] as const) {
+] as const;
+
+function prepareIndependent(seed: NativeScript): void {
+  write(seed, set("shots", "bs2", { props: [{ id: "t_case", name: "Case" }] }));
+  for (const [collection, id, fields] of hiddenEntries) {
     const added = changeNativeRegistry(seed, { kind: "create", collection, fields });
     assert.ok("created" in added);
     const root = seed.roots[collection], made = root.get(added.created);
@@ -72,6 +75,87 @@ function prepareIndependent(seed: NativeScript): void {
 function entries(document: DocumentShape): Map<string, Fields> {
   return new Map(Object.values(fieldsOf).flatMap(field => document[field].flatMap(entry => entry
     ? [[field + "/" + entry.id, entry] as const] : [])));
+}
+
+function expectedRecord(collection: Registry, id: string, fields: Fields): Fields {
+  if (collection === "people") return { id, ...fields };
+  if (collection === "tags") return { id, owner: "", notes: "", status: "needed", ...fields };
+  return { id, desc: "", status: "unshot", reshoot: false, notes: "", owner: "", audioRef: "", location: "", props: [], origin: "list", ...fields };
+}
+
+function expectCommand(script: NativeScript, change: NativeRegistryChange, run: typeof changeNativeRegistry = changeNativeRegistry): Map<string, Fields> {
+  const base = script.reader.document(), expected = entries(base);
+  const key = (collection: Registry, id: string) => fieldsOf[collection] + "/" + id;
+  const add = (collection: Registry, id: string, fields: Fields) => expected.set(key(collection, id), expectedRecord(collection, id, fields));
+  const patch = (collection: Registry, id: string, fields: Fields) => expected.set(key(collection, id), { ...expected.get(key(collection, id)), ...fields });
+  let order: string[] | undefined;
+  switch (change.kind) {
+    case "create": {
+      const id = change.collection === "tags" ? mintNativeTagId(script.doc) : mintNativeId(script.doc, change.collection === "people" ? "p" : "bs");
+      add(change.collection, id, change.fields);
+      break;
+    }
+    case "set":
+      for (const id of change.ids) {
+        patch(change.collection, id, change.fields);
+        if (change.collection === "tags" && typeof change.fields.name === "string") for (const shot of base.brollShots) {
+          if (shot.props?.some(prop => prop?.id === id)) patch("shots", shot.id, {
+            props: shot.props.map(prop => prop?.id === id ? { id, name: change.fields.name } : prop)
+          });
+        }
+      }
+      break;
+    case "updateTags":
+      for (const ref of change.tags) {
+        const id = base.productionTags.find(tag => tag?.cat === ref.cat && tag.name === ref.name)?.id;
+        if (id) patch("tags", id, change.fields);
+        else add("tags", mintNativeTagId(script.doc), { ...ref, ...change.fields });
+      }
+      break;
+    case "cycleTagStatus":
+      for (const id of change.ids) patch("tags", id, { status: "sourcing" });
+      break;
+    case "move": {
+      order = base[fieldsOf[change.collection]].flatMap(entry => entry?.id && entry.id !== change.id ? [entry.id] : []);
+      order.splice(change.before === null ? order.length : order.indexOf(change.before), 0, change.id);
+      break;
+    }
+    case "remove":
+      for (const id of change.ids) {
+        expected.delete(key(change.collection, id));
+        if (change.collection === "people") for (const [recordKey, record] of expected) {
+          if (record.owner === id) expected.set(recordKey, { ...record, owner: "" });
+        }
+      }
+      break;
+    case "restore":
+      for (const id of change.ids) {
+        const entry = hiddenEntries.find(([, hiddenId]) => hiddenId === id);
+        assert.ok(entry);
+        add(change.collection, id, entry[2]);
+      }
+      break;
+    case "addProp": {
+      const id = mintNativeTagId(script.doc), shot = base.brollShots.find(shot => shot.id === change.id);
+      add("tags", id, { cat: "prop", name: change.prop });
+      patch("shots", change.id, { props: [...shot?.props ?? [], { id, name: change.prop }] });
+      break;
+    }
+    case "removeProp": {
+      const shot = base.brollShots.find(shot => shot.id === change.id);
+      patch("shots", change.id, { props: shot?.props?.filter(prop => prop?.id !== change.prop) });
+      break;
+    }
+    case "gear":
+      for (const tag of base.productionTags) if (tag?.cat === "gear" && tag.id && !change.names.includes(tag.name)) expected.delete(key("tags", tag.id));
+      for (const name of change.names) add("tags", mintNativeTagId(script.doc), { cat: "gear", name });
+      break;
+  }
+  const message = `Command effect for ${JSON.stringify(change)}`;
+  assert.equal(run(script, change).kind, "written", message);
+  assert.deepEqual(entries(script.reader.document()), expected, message);
+  if (change.kind === "move") assert.deepEqual(read(script, change.collection).map(entry => entry?.id), order, message);
+  return expected;
 }
 
 function combined(base: Map<string, Fields>, left: Map<string, Fields>, right: Map<string, Fields>): Map<string, Fields> {
@@ -93,14 +177,30 @@ test("every registry operation can meet an independent operation without losing 
   for (const first of leftEdits) for (const second of rightEdits) {
     registryCopies((left, right, settle) => {
       const base = entries(left.reader.document());
-      write(left, first);
-      write(right, second);
-      const expected = combined(base, entries(left.reader.document()), entries(right.reader.document()));
+      const expected = combined(base, expectCommand(left, first), expectCommand(right, second));
       settle();
       assert.deepEqual(entries(left.reader.document()), expected, JSON.stringify([first, second]));
     }, prepareIndependent);
   }
   assert.equal(leftEdits.length * rightEdits.length * 2, 800);
+});
+
+test("the command oracle catches a muted write for every registry command kind", () => {
+  const kinds = new Set<string>();
+  for (const change of edits("left")) registryCopies(left => {
+    kinds.add(change.kind);
+    const muted: typeof changeNativeRegistry = (script, command) => {
+      if (command.kind === "set" && command.collection === "tags") {
+        return changeNativeRegistry(script, { ...command, fields: { name: command.fields.name } });
+      }
+      if (command.kind === "updateTags") return changeNativeRegistry(script, { ...command, fields: {} });
+      if (command.kind === "gear") return changeNativeRegistry(script, { ...command, names: ["Drone", ...command.names] });
+      if (command.kind === "addProp") return changeNativeRegistry(script, { kind: "create", collection: "tags", fields: { cat: "prop", name: command.prop } });
+      return { kind: "written" };
+    };
+    assert.throws(() => expectCommand(left, change, muted), /Command effect/);
+  }, prepareIndependent);
+  assert.equal(kinds.size, 10);
 });
 
 const fieldPairs: { collection: Registry; id: string; values: readonly (readonly [string, unknown, unknown])[] }[] = [
@@ -226,4 +326,64 @@ test("whole-array prop races converge with the documented add and remove losses"
     settle();
     assert.deepEqual((left.reader.document().brollShots[0]?.props ?? []).map(prop => prop?.name), names);
   }, seed);
+});
+
+test("readding a displayed prop is a no-op across projected tags and same-name tag races", () => {
+  const tagged = registrySource({ rows: [{ id: "r1", audioText: '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Lamp">Lamp</span>' }] });
+  const add = { kind: "addProp", id: "bs2", prop: "Lamp" } as const;
+  registryCopies((left, right, settle) => {
+    write(left, { kind: "remove", collection: "tags", ids: ["t_lamp"] });
+    settle();
+    const projection = left.reader.document().productionTags.find(tag => tag?.name === "Lamp");
+    assert.ok(projection?.id && !left.roots.tags.has(projection.id));
+    const before = Y.encodeStateAsUpdate(left.doc);
+    assert.deepEqual(changeNativeRegistry(left, set("shots", "bs2", { props: [{ id: projection.id, name: "Lamp" }] })), { kind: "refused", reason: "value" });
+    assert.deepEqual(changeNativeRegistry(left, { kind: "create", collection: "shots", fields: { name: "New", props: [{ id: projection.id, name: "Lamp" }] } }), { kind: "refused", reason: "value" });
+    assert.deepEqual(Y.encodeStateAsUpdate(left.doc), before);
+    assert.deepEqual(record(left, "shots", "bs3")?.props, [{ id: projection.id, name: "Lamp" }, { id: "t_case", name: "Case" }]);
+    write(left, { kind: "removeProp", id: "bs3", prop: "t_case" });
+    assert.deepEqual(decodeNativeValue(left.roots.shots.get("bs3")?.get(nativeFieldKey("props")))?.value, [{ id: "", name: "Lamp" }]);
+    write(left, add);
+    write(right, set("shots", "bs2", { notes: "Peer note" }));
+    settle();
+    const [prop] = left.reader.document().brollShots.find(shot => shot.id === "bs2")?.props ?? [];
+    assert.ok(prop?.id && prop.id !== projection.id && left.roots.tags.has(prop.id));
+    write(right, { kind: "restore", collection: "tags", ids: ["t_lamp"] });
+    settle();
+    for (const copy of [left, right]) {
+      const before = Y.encodeStateAsUpdate(copy.doc);
+      assert.deepEqual(changeNativeRegistry(copy, add), { kind: "unchanged" });
+      assert.deepEqual(Y.encodeStateAsUpdate(copy.doc), before);
+      assert.deepEqual(record(copy, "shots", "bs2")?.props, [prop]);
+    }
+  }, seed => seed.roots.shots.get("bs3")?.set(nativeFieldKey("props"), encodeNativeValue([{ id: "", name: "Lamp" }, { id: "t_case", name: "Case" }])), tagged);
+  registryCopies((left, right, settle) => {
+    const change = { kind: "addProp", id: "bs1", prop: "Umbrella" } as const;
+    for (const copy of [left, right]) write(copy, change);
+    settle();
+    assert.equal(read(left, "tags").filter(tag => tag?.name === "Umbrella").length, 2);
+    for (const copy of [left, right]) {
+      const before = Y.encodeStateAsUpdate(copy.doc);
+      assert.deepEqual(changeNativeRegistry(copy, change), { kind: "unchanged" });
+      assert.deepEqual(Y.encodeStateAsUpdate(copy.doc), before);
+      assert.equal(copy.reader.document().brollShots[0]?.props?.filter(prop => prop?.name === "Umbrella").length, 1);
+    }
+  });
+});
+
+test("a restore that saw one removal is hidden by an unseen removal and fields stay recoverable", () => {
+  for (const [collection, id] of [["people", "p1"], ["tags", "t_lamp"], ["shots", "bs1"]] as const) registryCopies((left, right, settle) => {
+    const remove = { kind: "remove", collection, ids: [id] } as const, restore = { ...remove, kind: "restore" } as const;
+    write(left, set(collection, id, { name: "Updated" }));
+    write(left, remove);
+    write(right, remove);
+    write(left, restore);
+    assert.equal(record(left, collection, id)?.name, "Updated");
+    settle();
+    assert.equal(record(left, collection, id), null);
+    assert.equal(record(right, collection, id), null);
+    write(left, restore);
+    settle();
+    assert.equal(record(left, collection, id)?.name, "Updated");
+  });
 });

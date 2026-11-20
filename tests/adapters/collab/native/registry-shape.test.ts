@@ -2,12 +2,68 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Y from "yjs";
 import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
+import { normalizeBrollProps } from "../../../../src/core/document/broll.ts";
 import { addBrollProp, removeBrollProp } from "../../../../src/core/production/records.ts";
 import type { ValidatedDocument } from "../../../../src/core/document/validated.ts";
 import { transactNativeCommand } from "../../../../src/adapters/collab/native/script.ts";
+import { projectNativeRegistries } from "../../../../src/adapters/collab/native/registry-projection.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import { encodeNativeValue, mintNativeId, nativeFieldKey } from "../../../../src/adapters/collab/native/values.ts";
 import { convertedScript, joinedScript } from "./helpers.ts";
+
+function registries(count: number) {
+  const productionTags = Array.from({ length: count }, (_, index) => ({ id: `t_p${index}`, cat: "prop", name: `Prop ${index}` }));
+  const brollShots = productionTags.map(({ id, name }, index) => ({ id: `bs${index}`, name: `Shot ${index}`, props: [{ id, name }] }));
+  return { productionTags, brollShots };
+}
+
+test("snapshot indexes the tag registry once for 2,000 one-prop shots", () => {
+  const count = 2000, script = convertedScript(source());
+  try {
+    const document = { ...source(), ...registries(count) };
+    let visits = 0;
+    const tags = document.productionTags;
+    tags.forEach = callback => {
+      for (const [index, tag] of tags.entries()) { visits++; callback(tag, index, tags); }
+    };
+    projectNativeRegistries(document, script.roots, () => { throw new Error("No removed records"); });
+    assert.equal(visits, count);
+    assert.deepEqual(document.brollShots, registries(count).brollShots);
+  } finally { script.doc.destroy(); }
+});
+
+test("the snapshot prop lookup preserves the first named tag and exact ID lookups", () => {
+  const script = convertedScript(source());
+  try {
+    const productionTags = [
+      { id: "t_first", cat: "prop", name: "Lamp" }, { id: "t_second", cat: "prop", name: "lamp" },
+      { id: "t_other", cat: "gear", name: "Strap" }
+    ];
+    const props = [{ id: "t_second", name: "Stale" }, { id: "", name: "Lamp" }, { id: "t_other", name: "Old" }];
+    const brollShots = [{ id: "bs1", props }];
+    const document = { ...source(), productionTags, brollShots };
+    const expected = normalizeBrollProps(props, productionTags);
+    projectNativeRegistries(document, script.roots, () => { throw new Error("No removed records"); });
+    assert.deepEqual(document.brollShots[0]?.props, expected);
+    assert.deepEqual(expected.map(prop => prop.id), ["t_second", "t_first", "t_other"]);
+  } finally { script.doc.destroy(); }
+});
+
+if (process.env.SPLITPAGE_REGISTRY_BENCHMARK === "1") test("measure a warm 900-beat registry snapshot", () => {
+  const script = convertedScript(migrateRows({ ...source(), ...registries(200),
+    rows: Array.from({ length: 900 }, (_, index) => ({ id: `r${index}`, audioText: "Narration for this beat", visualText: "A wide shot" })) }));
+  try {
+    for (let i = 0; i < 20; i++) script.reader.document();
+    const samples = Array.from({ length: 60 }, () => {
+      const start = performance.now();
+      const snapshot = script.reader.document();
+      const elapsed = performance.now() - start;
+      assert.equal(snapshot.rows.length, 900);
+      return elapsed;
+    }).sort((a, b) => a - b);
+    console.log(`900 beats, 200 tags and 200 shots: median ${samples[30]?.toFixed(3)} ms, p95 ${samples[56]?.toFixed(3)} ms`);
+  } finally { script.doc.destroy(); }
+});
 
 function source(): ValidatedDocument {
   return migrateRows({

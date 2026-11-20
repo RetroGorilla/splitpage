@@ -5,10 +5,12 @@ import { cappedLongText, cappedText, plainText } from "../../../core/document/te
 import type { DocumentShape, DocumentTag } from "../../../core/document/validated.ts";
 import { PERSON_NAME_MAX } from "../../../core/production/records.ts";
 import { isValidNativeRank, nativeRankBetween } from "./rank.ts";
-import { copyArgument, copyRecordValue, nativeRecordId, RECORD_UNCHANGED, RECORD_WRITTEN, refuseRecord, transactRecord } from "./record-values.ts";
+import { copyArgument, copyRecordValue, nativeRecordId, RECORD_UNCHANGED, RECORD_WRITTEN, refuseRecord } from "./record-values.ts";
 import type { NativeRecordOutcome } from "./record-values.ts";
 import { nativeShotLinePlan, nativeTagNamesInRows } from "./registry-projection.ts";
+import { transactPreparedNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
+import { nativeWriteAvailability } from "./text-commands.ts";
 import { decodeNativeValue, encodeNativeValue, mintNativeId, mintNativeTagId, nativeFieldKey, recordBag, sameNativeValue } from "./values.ts";
 
 type Collection = "people" | "tags" | "shots";
@@ -122,13 +124,22 @@ function namedTag(document: DocumentShape, cat: unknown, name: unknown): Documen
   return document.productionTags.find(tag => tag?.cat === cat && normalizeTagName(tag?.name) === normalizeTagName(name)) ?? undefined;
 }
 
+function projectedTagIds(script: NativeScript, document: DocumentShape): ReadonlySet<string> {
+  const ids = new Set<string>();
+  for (const tag of document.productionTags) if (tag?.id) {
+    const map = script.roots.tags.get(tag.id);
+    if (!(map instanceof Y.Map) || map.get("removed") === true) ids.add(tag.id);
+  }
+  return ids;
+}
+
 function defaults(collection: Collection): Fields {
   if (collection === "people") return {};
   if (collection === "tags") return { owner: "", notes: "", status: "needed" };
   return Object.fromEntries(Object.entries(newBrollShot("", { origin: "list" })).filter(([field]) => field !== "id"));
 }
 
-function allowed(collection: Collection, fields: Fields, document: DocumentShape, creating: boolean): boolean {
+function allowed(script: NativeScript, collection: Collection, fields: Fields, document: DocumentShape, creating: boolean): boolean {
   for (const [key, value] of Object.entries(fields)) {
     if (key === "name" && trimmed(value, collection === "people" ? PERSON_NAME_MAX : collection === "tags" ? 80 : BROLL_NAME_MAX)) continue;
     if (collection === "people") return false;
@@ -142,7 +153,10 @@ function allowed(collection: Collection, fields: Fields, document: DocumentShape
     if (key === "origin" && creating && (value === "list" || value === "script")) continue;
     if (key === "location" && typeof value === "string" && cappedText(value, 80) === value) continue;
     if ((key === "desc" || key === "audioRef") && typeof value === "string" && cappedLongText(plainText(value), BROLL_TEXT_MAX) === value) continue;
-    if (key === "props" && Array.isArray(value) && sameNativeValue(value, normalizeBrollProps(value, document.productionTags))) continue;
+    if (key === "props" && Array.isArray(value)) {
+      const normalized = normalizeBrollProps(value, document.productionTags), projected = projectedTagIds(script, document);
+      if (sameNativeValue(value, normalized) && normalized.every(prop => !projected.has(prop.id))) continue;
+    }
     return false;
   }
   return true;
@@ -163,7 +177,7 @@ function shotFieldsSurvive(script: NativeScript, document: DocumentShape, ids: R
 function create(script: NativeScript, collection: Collection, request: Fields, ownerName: unknown): Result {
   const document = script.reader.document();
   if (!Object.hasOwn(request, "name") || collection === "tags" && !Object.hasOwn(request, "cat") ||
-      !allowed(collection, request, document, true) || collection === "people" && ownerName !== undefined) return refuseRecord("value");
+      !allowed(script, collection, request, document, true) || collection === "people" && ownerName !== undefined) return refuseRecord("value");
   if (collection === "people" && document.people.some(person => normalizeTagName(person.name) === normalizeTagName(request.name)) ||
       collection === "tags" && namedTag(document, request.cat, request.name)) return RECORD_UNCHANGED;
   const writes: Write[] = [], fields = { ...defaults(collection), ...request };
@@ -191,7 +205,7 @@ function checkRename(script: NativeScript, collection: Collection, map: RecordMa
 
 function set(script: NativeScript, collection: Collection, ids: readonly string[], request: Fields, ownerName?: unknown, cycle = false): Result {
   const document = script.reader.document(), writes: Write[] = [];
-  if (!allowed(collection, request, document, false) || collection === "people" && ownerName !== undefined) return refuseRecord("value");
+  if (!allowed(script, collection, request, document, false) || collection === "people" && ownerName !== undefined) return refuseRecord("value");
   if (!ids.length) return RECORD_UNCHANGED;
   if (ids.length > 1 && "name" in request) return refuseRecord("value");
   if (collection === "shots" && ("name" in request || "desc" in request)) {
@@ -217,7 +231,7 @@ function updateTags(script: NativeScript, tags: unknown, fields: unknown, ownerN
   if (!Array.isArray(tags) || !recordBag(fields) || cycle !== undefined && cycle !== true ||
       Object.hasOwn(fields, "name") || cycle && Object.hasOwn(fields, "status")) return refuseRecord("value");
   const document = script.reader.document(), writes: Write[] = [], identities = new Set<string>();
-  if (!allowed("tags", fields, document, false)) return refuseRecord("value");
+  if (!allowed(script, "tags", fields, document, false)) return refuseRecord("value");
   if (!tags.length) return RECORD_UNCHANGED;
   const owned = ownerName === undefined ? fields : ownerFields(script, writes, fields, ownerName, document);
   if ("kind" in owned) return owned as Refused;
@@ -252,7 +266,9 @@ function updateTags(script: NativeScript, tags: unknown, fields: unknown, ownerN
 
 function removeOrRestore(script: NativeScript, collection: Collection, ids: readonly string[], restore: boolean): Result {
   const writes: Write[] = [];
-  const names = restore && collection === "people" ? new Set(script.reader.document().people.map(person => normalizeTagName(person.name))) : null;
+  const root = script.roots[collection];
+  const names = restore && collection === "people" ? new Set([...root.values()].flatMap(map =>
+    map instanceof Y.Map && map.get("removed") !== true ? [normalizeTagName(stored(map, "name"))] : [])) : null;
   for (const id of ids) {
     const map = target(script.roots[collection], id, restore);
     if (!(map instanceof Y.Map)) return map;
@@ -301,11 +317,12 @@ function changeProp(script: NativeScript, id: string, prop: string, add: boolean
   if (!(shot instanceof Y.Map)) return shot;
   const raw = stored(shot, "props"), document = script.reader.document(), writes: Write[] = [];
   if (!Array.isArray(raw)) return refuseRecord("stored");
-  const props = normalizeBrollProps(raw, document.productionTags);
+  const props = normalizeBrollProps(raw, document.productionTags), projected = projectedTagIds(script, document);
   if (add) {
-    const tag = namedTag(document, "prop", prop);
-    if (props.some(entry => tag?.id && entry.id === tag.id || !entry.id && normalizeTagName(entry.name) === normalizeTagName(prop))) return RECORD_UNCHANGED;
+    const name = normalizeTagName(prop);
+    if (props.some(entry => normalizeTagName(entry.name) === name)) return RECORD_UNCHANGED;
     if (props.length >= BROLL_PROPS_MAX) return refuseRecord("value");
+    const tag = document.productionTags.find(entry => entry?.cat === "prop" && entry.id && !projected.has(entry.id) && normalizeTagName(entry.name) === name);
     const tagId = tag?.id ?? planNew(script, writes, "tags", { ...defaults("tags"), cat: "prop", name: prop });
     if (typeof tagId !== "string") return tagId;
     if (!isTagId(tagId)) return refuseRecord("stored");
@@ -315,7 +332,8 @@ function changeProp(script: NativeScript, id: string, prop: string, add: boolean
     if (at < 0) return RECORD_UNCHANGED;
     props.splice(at, 1);
   }
-  if (!planFields(writes, shot, { props })) return refuseRecord("stored");
+  const encoded = encodeNativeValue(props.map(entry => projected.has(entry.id) ? { ...entry, id: "" } : entry));
+  writes.push(() => { shot.set(nativeFieldKey("props"), encoded); });
   return finish(writes);
 }
 
@@ -369,6 +387,10 @@ function applyChange(script: NativeScript, change: Fields): Result {
 }
 
 export function changeNativeRegistry(script: NativeScript, change: NativeRegistryChange): Result {
-  return transactRecord(script, () => copyArgument(() => copyRecordValue(change)), input =>
-    recordBag(input) ? applyChange(script, input) : refuseRecord("value"));
+  const unavailable = nativeWriteAvailability(script);
+  if (unavailable) return refuseRecord(unavailable);
+  return transactPreparedNativeCommand(script, () => copyArgument(() => copyRecordValue(change))?.value, (input): Result => {
+    if (script.closed() || script.reader.isClosed()) return refuseRecord("closed");
+    return recordBag(input) ? applyChange(script, input) : refuseRecord("value");
+  }, refuseRecord, input => recordBag(input) && input.kind !== "remove" && input.kind !== "restore" && input.kind !== "removeProp");
 }
