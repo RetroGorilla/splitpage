@@ -25,9 +25,34 @@ export interface NativeTextRange {
   readonly seen?: readonly (readonly [number, number])[];
 }
 
+export interface NativeUndoPoint {
+  readonly target: NativeTextTarget;
+  readonly offset: number;
+}
+
+export interface NativeUndoSelection {
+  readonly anchor: NativeUndoPoint;
+  readonly head: NativeUndoPoint;
+}
+
+export type NativeUndoSelectionInput = NativeTextRange | {
+  readonly anchor: NativeTextRange;
+  readonly head: NativeTextRange;
+};
+
 interface PlainId { readonly client: number; readonly clock: number }
 
 interface PlainPosition { readonly type: PlainId; readonly tname: null; readonly item: PlainId | null; readonly assoc: number }
+
+interface UndoEndpoint {
+  readonly target: NativeTextTarget;
+  readonly position: PlainPosition;
+}
+
+export interface NativeUndoAnchor {
+  readonly anchor: UndoEndpoint;
+  readonly head: UndoEndpoint;
+}
 
 export interface NativeRangeData {
   readonly target: NativeTextTarget;
@@ -118,6 +143,8 @@ function readTarget(target: NativeTextTarget): NativeTextTarget | null {
   } catch { return null; }
 }
 
+const authoredRanges = new WeakMap<Y.Doc, WeakMap<NativeTextRange, NativeUndoAnchor>>();
+
 function shownPosition(cells: readonly LiveCell[], offset: number, name: boolean): { text: Y.Text; index: number } | null {
   for (const cell of cells) {
     const view = name ? null : nativeCellView(cell.items), size = view?.length ?? cell.end - cell.start;
@@ -146,12 +173,25 @@ export function anchorNativeText(script: NativeScript, target: NativeTextTarget,
   if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < from) return { kind: "refused", reason: "range" };
   const first = shownPosition(cells, from, checked.cell === "name"), last = from === to ? first : shownPosition(cells, to, checked.cell === "name");
   if (!first || !last) return { kind: "refused", reason: "range" };
-  const start = Y.createRelativePositionFromTypeIndex(first.text, first.index, 0);
-  if (from === to) return { kind: "anchored", range: Object.freeze({ target: checked, from: start, to: start }) };
-  const end = Y.createRelativePositionFromTypeIndex(last.text, last.index, -1);
-  // why: only a selection can lose both ends to a peer, so only a selection keeps what its copy had seen
-  const seen = Object.freeze([...Y.decodeStateVector(Y.encodeStateVector(script.doc))].map(pair => Object.freeze(pair)));
-  return { kind: "anchored", range: Object.freeze({ target: checked, from: start, to: end, seen }) };
+  const anchor = undoEndpoint(checked, first.text, first.index, 0);
+  const head = from === to ? anchor : undoEndpoint(checked, last.text, last.index, -1);
+  const coords = { target: checked, from: anchor.position, to: head.position };
+  // why: edit commands still need to know whether original text survived a stale range
+  const range = Object.freeze(from === to ? coords : {
+    ...coords, seen: Object.freeze([...Y.decodeStateVector(Y.encodeStateVector(script.doc))].map(pair => Object.freeze(pair)))
+  });
+  let authored = authoredRanges.get(script.doc);
+  if (!authored) { authored = new WeakMap(); authoredRanges.set(script.doc, authored); }
+  authored.set(range, { anchor, head });
+  return { kind: "anchored", range };
+}
+
+function undoEndpoint(target: NativeTextTarget, text: Y.Text, index: number, assoc: number): UndoEndpoint {
+  const { type, item } = Y.createRelativePositionFromTypeIndex(text, index, assoc) as PlainPosition;
+  return { target, position: Object.freeze({
+    type: Object.freeze({ client: type.client, clock: type.clock }),
+    item: item && Object.freeze({ client: item.client, clock: item.clock }), tname: null, assoc
+  }) };
 }
 
 function refuse(reason: NativeRefusal, runs: readonly Run[]): NativeCommitOutcome {
@@ -279,10 +319,78 @@ export function nativeLiveRange(script: NativeScript, range: NativeRangeData): N
   return primary ? { ...primary, pieces } : "range";
 }
 
+function memberOffset(cells: readonly LiveCell[], at: Y.AbsolutePosition, name: boolean): number | null {
+  let offset = 0;
+  for (const part of cells) {
+    const view = name ? null : nativeCellView(part.items);
+    if (part.text === at.type && at.index >= part.start && at.index <= part.end) {
+      const local = at.index - part.start;
+      if (splitsPair(storedText(part.items), local)) return null;
+      return offset + (view ? view.ends.filter(end => end <= local).length : local);
+    }
+    offset += view?.length ?? part.end - part.start;
+  }
+  return null;
+}
+
+function snapshotUndoRange(script: NativeScript, range: NativeTextRange): NativeUndoAnchor | null {
+  const authored = authoredRanges.get(script.doc)?.get(range);
+  if (authored) return authored;
+  const target = readTarget(range.target), from = range.from, to = range.to, ids: IdsRead = new Map();
+  const first = plainPosition(from, 0, ids), last = to === from ? first : plainPosition(to, -1, ids);
+  if (!target || !first || !last) return null;
+  const start = resolve(first, script.doc), end = first === last ? start : resolve(last, script.doc);
+  const cells = liveCells(script, target), name = target.cell === "name";
+  if (!start || !end || memberOffset(cells, start, name) === null || memberOffset(cells, end, name) === null) return null;
+  const anchor = { target, position: first };
+  return { anchor, head: first === last ? anchor : { target, position: last } };
+}
+
+export function snapshotNativeUndoAnchor(script: NativeScript, input: NativeUndoSelectionInput): NativeUndoAnchor | null {
+  try {
+    if (!("anchor" in input)) return snapshotUndoRange(script, input);
+    const anchor = snapshotUndoRange(script, input.anchor), head = snapshotUndoRange(script, input.head);
+    if (!anchor || !head || anchor.anchor !== anchor.head || head.anchor !== head.head) return null;
+    return { anchor: anchor.anchor, head: head.head };
+  } catch { return null; }
+}
+
+function replayUndoEndpoint(script: NativeScript, { target, position }: UndoEndpoint): NativeUndoPoint | null {
+  const at = resolve(position, script.doc);
+  if (!at) return null;
+  const { cell } = target;
+  let { beat } = target;
+  if (cell === "narration") {
+    const owner = script.reader.narrationOwner(at.type, at.index, position.assoc);
+    // why: a boundary or deleted unit alone cannot establish that the anchor followed text into a different beat
+    if (!owner || (owner.beat !== beat && (!owner.inside || unitGone(position, script.doc)))) return null;
+    beat = owner.beat;
+  }
+  if (cell === "name" && !script.reader.showsHeading(beat)) return null;
+  const current = { beat, cell }, cells = liveCells(script, current);
+  const offset = memberOffset(cells, at, cell === "name");
+  if (offset === null) return null;
+  if (cell !== "name" && !cells.some(part => part.items.length)) {
+    const members = script.reader.rowMembers(beat);
+    if (members.length > 1 && (members[0]?.id !== beat ||
+      members.some(member => liveCells(script, { beat: member.id, cell }).some(part => part.items.length)))) return null;
+  }
+  return Object.freeze({ target: Object.freeze(current), offset });
+}
+
+export function resolveNativeUndoSelection(script: NativeScript, recorded: NativeUndoAnchor): NativeUndoSelection | null {
+  const anchor = replayUndoEndpoint(script, recorded.anchor);
+  const head = recorded.head === recorded.anchor ? anchor : replayUndoEndpoint(script, recorded.head);
+  if (!anchor || !head) return null;
+  const samePoint = anchor.offset === head.offset && anchor.target.beat === head.target.beat && anchor.target.cell === head.target.cell;
+  return Object.freeze({ anchor, head: samePoint ? anchor : head });
+}
+
 // why: a command called while another transaction is open refuses, since that transaction's changes are not yet
 // observed
 export function replaceNativeText(script: NativeScript, range: NativeTextRange, runs: readonly Run[], stamp?: NativeEditStamp,
-  beforeWrite?: (target: NativeTextTarget) => void, adds?: boolean, placement?: NativeTextPlacement): NativeCommitOutcome {
+  beforeWrite?: (target: NativeTextTarget) => void, adds?: boolean, afterWrite?: (anchor: NativeUndoAnchor) => void,
+  placement?: NativeTextPlacement): NativeCommitOutcome {
   const unavailable = nativeAvailability(script);
   if (unavailable) return refuse(unavailable, runs);
   return transactPreparedNativeCommand(script, () => ({
@@ -302,6 +410,10 @@ export function replaceNativeText(script: NativeScript, range: NativeTextRange, 
       if (piece.until > piece.from) piece.text.delete(piece.from + shift, piece.until - piece.from);
     }
     if (encoded && updateStamp) script.roots.edited.set(checked.target.beat, encoded);
+    if (afterWrite) {
+      const anchor = undoEndpoint(checked.target, live.text, end, 0);
+      afterWrite({ anchor, head: anchor });
+    }
     if (!points) return WRITTEN;
     const caret = Y.createRelativePositionFromTypeIndex(live.text, end, -1);
     const at = (offset: number | null, assoc: 0 | -1) => offset === null ? null
@@ -317,10 +429,11 @@ function capturePlacement(placement: NativeTextPlacement | undefined): NativeTex
 }
 
 export function typeNativeText(script: NativeScript, range: NativeTextRange, text: string, marks: Marks, stamp?: NativeEditStamp,
-  beforeWrite?: (target: NativeTextTarget) => void, placement?: NativeTextPlacement): NativeCommitOutcome {
-  return replaceNativeText(script, range, text ? [{ text, marks }] : [], stamp, beforeWrite, text !== "", placement);
+  beforeWrite?: (target: NativeTextTarget) => void, afterWrite?: (anchor: NativeUndoAnchor) => void,
+  placement?: NativeTextPlacement): NativeCommitOutcome {
+  return replaceNativeText(script, range, text ? [{ text, marks }] : [], stamp, beforeWrite, text !== "", afterWrite, placement);
 }
 
 export function deleteNativeText(script: NativeScript, range: NativeTextRange, stamp?: NativeEditStamp, placement?: NativeTextPlacement): NativeCommitOutcome {
-  return replaceNativeText(script, range, [], stamp, undefined, false, placement);
+  return replaceNativeText(script, range, [], stamp, undefined, false, undefined, placement);
 }
