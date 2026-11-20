@@ -8,6 +8,7 @@ import type { ValidatedDocument } from "../../../../src/core/document/validated.
 import { transactNativeCommand } from "../../../../src/adapters/collab/native/script.ts";
 import { projectNativeRegistries } from "../../../../src/adapters/collab/native/registry-projection.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
+import { removeNativeRows } from "../../../../src/adapters/collab/native/structure-commands.ts";
 import { encodeNativeValue, mintNativeId, nativeFieldKey } from "../../../../src/adapters/collab/native/values.ts";
 import { cells, convertedScript, edit, joinedScript } from "./helpers.ts";
 
@@ -93,11 +94,17 @@ test("a removed registry follows new inline tags and narration on a surviving ke
     script.roots.shots.get("bs1")?.set("removed", true);
     assert.equal(script.reader.document().brollShots[0]?.audioRef, "New narration");
     assert.equal(edit(script, { beat: "r1", cell: "narration" }, 0, 1, cells("n")).kind, "written");
+    assert.equal(script.reader.document().brollShots[0]?.audioRef, "new narration");
+    assert.equal(edit(script, { beat: "r1", cell: "visual" }, 1, 6, cells(" Tight")).kind, "written");
     const updated = script.reader.document();
-    assert.equal(updated.brollShots[0]?.audioRef, "new narration");
+    assert.equal(updated.brollShots[0]?.name, "Tight");
     const reloaded = migrateRows(structuredClone(updated));
     assert.deepEqual(updated.productionTags, reloaded.productionTags);
     assert.deepEqual(updated.brollShots, reloaded.brollShots);
+    assert.equal(removeNativeRows(script, ["r1"]).kind, "written");
+    const removed = script.reader.document();
+    assert.equal(removed.productionTags.some(tag => tag?.name === "Case"), false);
+    assert.deepEqual(removed.brollShots, []);
   } finally { script.doc.destroy(); }
 });
 
