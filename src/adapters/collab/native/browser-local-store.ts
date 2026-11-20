@@ -1,4 +1,5 @@
 import * as Y from "yjs";
+import { markNativeStoreSession } from "./local-store.ts";
 import type { NativeLocalStore, NativeLocalStoreClose, NativeLocalStoreFailure, NativeLocalStoreOpen, NativeLocalStoreReceipt } from "./local-store.ts";
 import { nativeCallbackGuard } from "./script.ts";
 import { openNativeSession } from "./session.ts";
@@ -147,6 +148,7 @@ async function attachSession(
   const closed = deferred<NativeLocalStoreClose>();
   let drained = deferred<NativeLocalStoreClose>();
   let recovering = false, handoff: ReturnType<typeof deferred<Session>> | undefined;
+  let recovery: Uint8Array | undefined;
   const pending: ReplicaEntry[] = [];
   const generation = entries.at(-1)?.generation ?? 0;
   let committed = generation, next = generation;
@@ -174,7 +176,10 @@ async function attachSession(
     compaction ??= (async () => {
       try {
         // why: the live session may already contain changes beyond the committed generation
-        const bytes = replicaState(await read(database, name, through));
+        const entries = await read(database, name, through);
+        const queued = pending.at(-1);
+        if (through < checkpoint || (queued?.checkpoint && through < queued.generation)) return undefined;
+        const bytes = replicaState(entries);
         await write(database, { name, generation: through, bytes, checkpoint: true });
         checkpoint = through;
         return undefined;
@@ -200,8 +205,14 @@ async function attachSession(
   }
 
   async function drain(): Promise<NativeLocalStoreReceipt> {
-    for (let entry = pending[0]; entry && !stopped; entry = pending[0]) {
-      if (committed - checkpoint >= MAX_TAIL) {
+    while (!stopped) {
+      if (!pending.length && recovery) {
+        pending.push({ name, generation: ++next, bytes: recovery, checkpoint: true });
+        recovery = undefined;
+      }
+      const entry = pending[0];
+      if (!entry) break;
+      if (!entry.checkpoint && committed - checkpoint >= MAX_TAIL) {
         const failed = await compact();
         if (failed) return failedWrite(failed);
         if (stopped) break;
@@ -263,6 +274,7 @@ async function attachSession(
   }
 
   function bind(): void {
+    markNativeStoreSession(session, reopen);
     const doc = session.ydoc, guardSharedCallback = nativeCallbackGuard(doc);
     const updated = (bytes: Uint8Array) => guardSharedCallback(() => saveUpdate(bytes));
     doc.on("update", updated);
@@ -271,10 +283,16 @@ async function attachSession(
       const state = new Uint8Array(change.state);
       doc.off("update", updated);
       recovering = !stopped && change.reason === "failed";
-      if (recovering) pending.push({ name, generation: ++next, bytes: state, checkpoint: true });
+      if (recovering) recovery = state;
       void finish(state);
     });
     connection.disconnect = () => { cancelTimer(); doc.off("update", updated); session.close(); };
+  }
+
+  function reopen(failed: Session): Promise<Session> {
+    if (!recovering || failed !== session) return Promise.reject(new Error("The store has no handover for this session."));
+    handoff ??= deferred<Session>();
+    return handoff.promise;
   }
 
   bind();
@@ -282,11 +300,7 @@ async function attachSession(
     kind: "opened", restored: entries.length > 0, generation, get session() { return session; },
     persistent: requestPersistence(storage),
     flush: () => session.isClosingOrClosed() ? drained.promise : flush(),
-    reopen(failed) {
-      if (!recovering || failed !== session) return Promise.reject(new Error("The store has no handover for this session."));
-      handoff ??= deferred<Session>();
-      return handoff.promise;
-    },
+    reopen,
     subscribe(listener) {
       listeners.add(listener);
       return () => { listeners.delete(listener); };

@@ -274,10 +274,12 @@ test("checkpoint and range delete commit atomically, and only one compaction can
     void idbDone(this.transaction).then(committed.resolve);
     return put.call(this, value);
   });
+  const scheduled = t.mock.method(globalThis, "setTimeout");
   typeAt(session, 0, "z");
   assert.deepEqual(await replica.flush(), stored(514));
   typeAt(session, 0, "w");
   assert.deepEqual(await replica.flush(), stored(515));
+  assert.equal(scheduled.mock.callCount(), 1);
   t.mock.timers.tick(0);
   assert.equal(await committed.promise, "complete");
   const checkpoint = session.encodeState();
@@ -654,7 +656,7 @@ test("hydration classifies warning, limit and ceiling before admitting the first
   }
 });
 
-test("a peer frame waiting for its dependency is replayed by the server and never appended by itself", bounded, async t => {
+test("a peer frame waiting for its dependency stays out of the journal until resent and applied", bounded, async t => {
   const { store } = fixture(), replica = await open(t, store, "peer-pending");
   seedReplica(replica.session);
   assert.deepEqual(await replica.flush(), stored(1));
@@ -695,13 +697,19 @@ test("the busy append queue checkpoints before its tail can grow past 2048 recor
   });
   failNextIdbWrite(t, "put", "abort");
   const text = replica.session.ydoc.getText("busy");
-  for (let index = 0; index < 4300; index++) text.insert(index, "x");
+  const scheduled = t.mock.method(globalThis, "setTimeout"), canceled = t.mock.method(globalThis, "clearTimeout");
+  for (let index = 0; index < 512; index++) text.insert(index, "x");
+  assert.deepEqual(await replica.flush(), stored(512));
+  const timer = scheduled.mock.calls[0]?.result;
+  assert.notEqual(timer, undefined);
+  for (let index = 512; index < 4300; index++) text.insert(index, "x");
   try {
     const failed = await replica.flush();
     assert.equal(failed.kind, "failed");
     assert.equal(failed.operation, "compact");
     assert.equal(failed.committed, 2048);
     assert.equal(commits.length, 2048);
+    assert.ok(canceled.mock.calls.some(call => call.arguments[0] === timer));
     assert.deepEqual(await replica.flush(), stored(4300));
     assert.equal(maxTail, 2048);
     assert.deepEqual(checkpointAt, [2048, 4096]);
@@ -713,6 +721,101 @@ test("the busy append queue checkpoints before its tail can grow past 2048 recor
     await replica.closed;
   }
 });
+
+test("ordinary close cancels its pending checkpoint timer", bounded, async t => {
+  const { store } = fixture(), replica = await open(t, store, "close-cancel");
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const scheduled = t.mock.method(globalThis, "setTimeout"), canceled = t.mock.method(globalThis, "clearTimeout");
+  const text = replica.session.ydoc.getText("timer");
+  for (let index = 0; index < 512; index++) text.insert(index, "x");
+  assert.deepEqual(await replica.flush(), stored(512));
+  const timer = scheduled.mock.calls[0]?.result;
+  assert.notEqual(timer, undefined);
+  replica.session.close();
+  assert.equal((await replica.closed).generation, 512);
+  assert.ok(canceled.mock.calls.some(call => call.arguments[0] === timer));
+});
+
+test("the recovery checkpoint can replace a full tail without an intervening compaction read", bounded, async t => {
+  const { store, factory } = fixture(), replica = await open(t, store, "full-tail-recovery"), { session } = replica;
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  seedReplica(session);
+  const text = session.ydoc.getText("tail");
+  for (let index = 0; index < 2047; index++) text.insert(index, "x");
+  assert.deepEqual(await replica.flush(), stored(2048));
+  const reads = t.mock.method(IDBObjectStore.prototype, "getAll");
+  const fault = new Error("interrupted cleanup");
+  session.ydoc.once("afterTransactionCleanup", () => { throw fault; });
+  assert.throws(() => typeAt(session, 0, "recovered "), fault);
+  assert.equal((await replica.closed).generation, 2049);
+  assert.equal(reads.mock.callCount(), 0);
+  assert.deepEqual((await storedEntries(factory, "full-tail-recovery")).map(row => [row.generation, row.checkpoint]), [[2049, true]]);
+});
+
+for (const phase of ["queued", "committed"] as const) {
+  test(`an idle compaction drops its read when a newer recovery checkpoint is ${phase}`, bounded, async t => {
+    const { store, factory } = fixture(), replica = await open(t, store, `superseded-${phase}`), { session } = replica;
+    t.mock.timers.enable({ apis: ["setTimeout"] });
+    seedReplica(session);
+    const text = session.ydoc.getText("tail");
+    for (let index = 0; index < 511; index++) text.insert(index, "x");
+    assert.deepEqual(await replica.flush(), stored(512));
+
+    const readReady = eventResult<() => boolean>(), getAll = IDBObjectStore.prototype.getAll;
+    const holdRead = t.mock.method(IDBObjectStore.prototype, "getAll", function (this: IDBObjectStore, range?: IDBValidKey | IDBKeyRange) {
+      holdRead.mock.restore();
+      const dispatch = this.transaction.dispatchEvent.bind(this.transaction);
+      t.mock.method(this.transaction, "dispatchEvent", (event: Event) => {
+        if (event.type !== "complete") return dispatch(event);
+        readReady.resolve(() => dispatch(event));
+        return true;
+      });
+      return getAll.call(this, range);
+    });
+    const writeReady = eventResult<() => boolean>(), put = IDBObjectStore.prototype.put;
+    const writes = t.mock.method(IDBObjectStore.prototype, "put", function (this: IDBObjectStore, value: unknown) {
+      if (phase === "queued" && writes.mock.callCount() === 0) {
+        const dispatch = this.transaction.dispatchEvent.bind(this.transaction);
+        t.mock.method(this.transaction, "dispatchEvent", (event: Event) => {
+          if (event.type !== "complete") return dispatch(event);
+          writeReady.resolve(() => dispatch(event));
+          return true;
+        });
+      }
+      return put.call(this, value);
+    });
+    t.mock.timers.tick(0);
+    const deliverRead = await readReady.promise;
+    let replacement: Promise<OpenReplica["session"]> | undefined;
+    session.subscribe(change => {
+      if (change.kind === "closed" && change.reason === "failed") replacement = replica.reopen(session);
+    });
+    const storedRecovery = onReceipt(replica, result => result.kind === "stored" && result.generation === 513);
+    const fault = new Error("interrupted cleanup");
+    session.ydoc.once("afterTransactionCleanup", () => { throw fault; });
+    assert.throws(() => typeAt(session, 0, "recovered "), fault);
+    if (phase === "queued") {
+      const deliverWrite = await writeReady.promise;
+      try { deliverRead(); await setImmediate(); }
+      finally { deliverWrite(); }
+    } else {
+      try { assert.deepEqual(await storedRecovery, stored(513)); }
+      finally { deliverRead(); }
+    }
+    assert.ok(replacement);
+    const reopened = await replacement;
+    assert.equal(reopened.document().rows[0]?.audioText, "recovered start");
+    assert.deepEqual((await storedEntries(factory, `superseded-${phase}`)).map(row => [row.generation, row.checkpoint]), [[513, true]]);
+    assert.equal(writes.mock.callCount(), 1);
+
+    const tail = reopened.ydoc.getText("tail");
+    for (let index = 0; index < 511; index++) tail.insert(0, "x");
+    assert.deepEqual(await replica.flush(), stored(1024));
+    const reads = t.mock.method(IDBObjectStore.prototype, "getAll");
+    t.mock.timers.tick(0);
+    assert.equal(reads.mock.callCount(), 0);
+  });
+}
 
 test("capacity to open the next writer after loss does not depend on a pending checkpoint timer", bounded, async t => {
   const { factory, store } = fixture(), handles = watchConnections(t, factory);

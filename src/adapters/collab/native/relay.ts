@@ -1,4 +1,5 @@
 import { WebSocketStatus } from "@hocuspocus/provider";
+import { nativeStoreOpener } from "./local-store.ts";
 import { openNativeSession } from "./session.ts";
 import type { NativeSessionChange, NativeSessionOptions } from "./session.ts";
 import { StateFirstProvider } from "./state-first-provider.ts";
@@ -33,6 +34,8 @@ const FIRST_LOAD_MARGIN_MS = 100;
 
 export function openNativeRelay(session: Session, { url, name, token, sessionOptions, onEvent, reopen, now = () => performance.now() }: NativeRelayOptions) {
   if (session.isClosingOrClosed()) throw new Error("Cannot open a relay for a closing or closed session.");
+  const storeOpener = nativeStoreOpener(session);
+  if (storeOpener && reopen !== storeOpener) throw new Error("A store-backed relay requires its store's reopen function.");
   const initialStatus: NativeRelayStatus = Object.freeze({ connected: false, firstSyncDone: false, pendingChangeCount: 0 });
   let current = session, status = initialStatus;
   let closing = false;
@@ -101,9 +104,13 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
   }
 
   async function reopenStored(failed: Session, open: NonNullable<NativeRelayOptions["reopen"]>): Promise<void> {
-    try { replace(await open(failed)); }
+    let replacement: Session | undefined;
+    try {
+      replacement = await open(failed);
+      replace(replacement);
+    }
     catch (error) {
-      current.close();
+      replacement?.close();
       emit({ kind: "session-reopen-failed", error });
     }
   }

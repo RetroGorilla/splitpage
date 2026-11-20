@@ -1,5 +1,17 @@
 import type { openNativeSession, NativeSessionOptions } from "./session.ts";
 
+type StoredSession = ReturnType<typeof openNativeSession>;
+type StoreReopen = (failed: StoredSession) => Promise<StoredSession>;
+let openers: WeakMap<StoredSession, StoreReopen> | null = null;
+
+export function markNativeStoreSession(session: StoredSession, reopen: StoreReopen): void {
+  (openers ??= new WeakMap()).set(session, reopen);
+}
+
+export function nativeStoreOpener(session: StoredSession): StoreReopen | undefined {
+  return openers?.get(session);
+}
+
 export type NativeLocalStoreFailure = {
   readonly kind: "failed";
   readonly reason: "locked" | "blocked" | "quota" | "closed" | "version" | "unavailable" | "io";
@@ -20,7 +32,7 @@ export type NativeLocalStoreOpen = NativeLocalStoreFailure | {
   readonly persistent: Promise<boolean>;
   readonly flush: () => Promise<NativeLocalStoreReceipt>;
   readonly subscribe: (listener: (receipt: NativeLocalStoreReceipt) => void) => () => void;
-  readonly reopen: (failed: ReturnType<typeof openNativeSession>) => Promise<ReturnType<typeof openNativeSession>>;
+  readonly reopen: StoreReopen;
   readonly closed: Promise<NativeLocalStoreClose>;
 };
 
