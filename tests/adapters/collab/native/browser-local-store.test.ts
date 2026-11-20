@@ -3,8 +3,10 @@ import { test, type TestContext } from "node:test";
 import { setImmediate } from "node:timers/promises";
 import { forceCloseDatabase, IDBObjectStore, IDBVersionChangeEvent } from "fake-indexeddb";
 import type { IDBFactory } from "fake-indexeddb";
+import * as Y from "yjs";
 import { createBrowserNativeLocalStore } from "../../../../src/adapters/collab/native/browser-local-store.ts";
 import type { NativeLocalStore, NativeLocalStoreReceipt } from "../../../../src/adapters/collab/native/local-store.ts";
+import { applyNativePeerUpdate } from "../../../../src/adapters/collab/native/peer-update.ts";
 import { eventResult, failNextIdbWrite, idbDone, idbResult } from "./indexeddb-fixture.ts";
 import { DB_NAME, REPLICAS, STORED, STORE_OPTIONS, fixture, seedReplica, stored, storedBytes, storedEntries, typeAt, type OpenReplica } from "./local-store-fixture.ts";
 
@@ -436,6 +438,7 @@ test("a version change closes the old session before an active append can releas
   const database = handles[0];
   assert.ok(database);
   versionChange(database);
+  assertClosed(database);
   assert.equal(off.mock.calls.some(call => call.arguments[0] === "update"), true);
   assert.deepEqual(session.commands.undo(), { kind: "refused", reason: "closed" });
   const result = { kind: "failed", reason: "version", generation: 3, committed: 2 };
@@ -563,10 +566,15 @@ test("invalid persisted bytes and failed deletes close their handles", bounded, 
     tx.objectStore(REPLICAS).add({ name: "invalid", generation: 1, bytes: "not bytes", checkpoint: false });
     assert.equal(await idbDone(tx), "complete");
   } finally { database.close(); }
+  const destroyed = t.mock.method(Y.Doc.prototype, "destroy");
   const corrupt = await store.open("invalid", STORE_OPTIONS);
   assert.equal(corrupt.kind, "failed");
   assert.equal(corrupt.reason, "io");
   assert.equal((corrupt.error as Error).message, "Invalid replica bytes");
+  assert.equal(destroyed.mock.callCount(), 1);
+  const scratch = destroyed.mock.calls[0]?.this;
+  assert.ok(scratch instanceof Y.Doc);
+  assert.equal(scratch.isDestroyed, true);
   assertClosed(handles[2]);
   const fault = t.mock.method(IDBObjectStore.prototype, "delete", () => { throw new DOMException("full", "QuotaExceededError"); });
   const denied = await store.delete("invalid");
@@ -595,4 +603,274 @@ test("missing storage facilities refuse open and persistence availability is rep
   assert.equal(await denied.persistent, false);
   seedReplica(denied.session);
   assert.deepEqual(await denied.flush(), stored(1));
+});
+
+test("a later Yjs listener cannot change the bytes queued for an append", bounded, async t => {
+  const { store } = fixture(), replica = await open(t, store, "update-bytes");
+  seedReplica(replica.session);
+  assert.deepEqual(await replica.flush(), stored(1));
+  replica.session.ydoc.once("update", update => update.fill(255));
+  typeAt(replica.session, 0, "keep ");
+  assert.deepEqual(await replica.flush(), stored(2));
+  replica.session.close();
+  await replica.closed;
+  const after = await open(t, store, "update-bytes");
+  assert.equal(after.session.document().rows[0]?.audioText, "keep start");
+});
+
+test("hydration classifies warning, limit and ceiling before admitting the first command", bounded, async t => {
+  const { store } = fixture(), replica = await open(t, store, "size");
+  seedReplica(replica.session);
+  assert.deepEqual(await replica.flush(), stored(1));
+  const bytes = replica.session.encodeState().byteLength;
+  replica.session.close();
+  await replica.closed;
+  for (const [kind, warning, limit, ratio] of [
+    ["warning", bytes - 1, bytes + 1024, 2],
+    ["full", bytes - 2, bytes - 1, 2],
+    ["ceiling", bytes - 4, bytes - 3, 1.001]
+  ] as const) {
+    const loaded = await store.open("size", { ...STORE_OPTIONS, sizeWarning: warning, sizeLimit: limit, sizeCeilingRatio: ratio });
+    assert.equal(loaded.kind, "opened");
+    try {
+      const { session } = loaded;
+      assert.equal(session.size, kind === "warning" ? "warning" : "full");
+      const at = session.commands.anchorText({ beat: "A", cell: "narration" }, 0);
+      assert.equal(at.kind, "anchored");
+      if (kind === "warning") assert.equal(session.commands.typeText(at.range, "x", {}).kind, "written");
+      else {
+        const before = session.encodeState();
+        assert.deepEqual(session.commands.typeText(at.range, "x", {}), {
+          kind: "recovery", reason: "full", runs: [{ text: "x", marks: {} }]
+        });
+        const cut = session.commands.anchorText({ beat: "A", cell: "narration" }, 0, 1);
+        assert.equal(cut.kind, "anchored");
+        if (kind === "ceiling") {
+          assert.deepEqual(session.commands.deleteText(cut.range), { kind: "recovery", reason: "full", runs: [] });
+          assert.deepEqual(session.encodeState(), before);
+        } else assert.equal(session.commands.deleteText(cut.range).kind, "written");
+      }
+    } finally { loaded.session.close(); await loaded.closed; }
+  }
+});
+
+test("a peer frame waiting for its dependency is replayed by the server and never appended by itself", bounded, async t => {
+  const { store } = fixture(), replica = await open(t, store, "peer-pending");
+  seedReplica(replica.session);
+  assert.deepEqual(await replica.flush(), stored(1));
+  const peer = new Y.Doc(), text = peer.getText("peer");
+  t.after(() => peer.destroy());
+  const frames: Uint8Array[] = [];
+  peer.on("update", update => frames.push(update));
+  text.insert(0, "first");
+  text.insert(5, " second");
+  const [first, second] = frames;
+  assert.ok(first && second);
+  assert.equal(applyNativePeerUpdate(replica.session, second), true);
+  assert.deepEqual(await replica.flush(), stored(1));
+  replica.session.close();
+  await replica.closed;
+  const reopened = await open(t, store, "peer-pending");
+  assert.equal(applyNativePeerUpdate(reopened.session, first), true);
+  assert.equal(reopened.session.ydoc.getText("peer").toString(), "first");
+  assert.equal(applyNativePeerUpdate(reopened.session, second), true);
+  assert.equal(reopened.session.ydoc.getText("peer").toString(), "first second");
+  assert.deepEqual(await reopened.flush(), stored(3));
+});
+
+test("the busy append queue checkpoints before its tail can grow past 2048 records", bounded, async t => {
+  const { factory, store } = fixture(), replica = await open(t, store, "busy-checkpoint");
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const commits: number[] = [];
+  replica.subscribe(result => { if (result.kind === "stored") commits.push(result.generation); });
+  let tail = 0, maxTail = 0;
+  const checkpointAt: number[] = [], add = IDBObjectStore.prototype.add, put = IDBObjectStore.prototype.put;
+  t.mock.method(IDBObjectStore.prototype, "add", function (this: IDBObjectStore, value: unknown) {
+    this.transaction.addEventListener("complete", () => { maxTail = Math.max(maxTail, ++tail); });
+    return add.call(this, value);
+  });
+  t.mock.method(IDBObjectStore.prototype, "put", function (this: IDBObjectStore, value: unknown) {
+    this.transaction.addEventListener("complete", () => { checkpointAt.push(commits.length); tail = 0; });
+    return put.call(this, value);
+  });
+  failNextIdbWrite(t, "put", "abort");
+  const text = replica.session.ydoc.getText("busy");
+  for (let index = 0; index < 4300; index++) text.insert(index, "x");
+  try {
+    const failed = await replica.flush();
+    assert.equal(failed.kind, "failed");
+    assert.equal(failed.operation, "compact");
+    assert.equal(failed.committed, 2048);
+    assert.equal(commits.length, 2048);
+    assert.deepEqual(await replica.flush(), stored(4300));
+    assert.equal(maxTail, 2048);
+    assert.deepEqual(checkpointAt, [2048, 4096]);
+    assert.deepEqual(commits, Array.from({ length: 4300 }, (_, i) => i + 1));
+    assert.deepEqual(await storedBytes(factory, "busy-checkpoint"), replica.session.encodeState());
+  } finally {
+    replica.session.close();
+    t.mock.timers.tick(0);
+    await replica.closed;
+  }
+});
+
+test("capacity to open the next writer after loss does not depend on a pending checkpoint timer", bounded, async t => {
+  const { factory, store } = fixture(), handles = watchConnections(t, factory);
+  const replica = await open(t, store, "timer-loss");
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const text = replica.session.ydoc.getText("timer");
+  for (let index = 0; index < 512; index++) text.insert(index, "x");
+  assert.deepEqual(await replica.flush(), stored(512));
+  const database = handles[0];
+  assert.ok(database);
+  const cancel = t.mock.method(globalThis, "clearTimeout");
+  versionChange(database);
+  assert.equal(cancel.mock.callCount(), 1);
+  const barrier = setImmediate("pending");
+  try {
+    assert.notEqual(await Promise.race([replica.closed, barrier]), "pending");
+    const next = await open(t, store, "timer-loss");
+    assert.equal(next.generation, 512);
+  } finally { t.mock.timers.tick(0); }
+});
+
+test("a checkpoint leaves generations committed after its read watermark on disk", bounded, async t => {
+  const { factory, store } = fixture(), replica = await open(t, store, "watermark");
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const text = replica.session.ydoc.getText("watermark");
+  for (let index = 0; index < 512; index++) text.insert(index, "x");
+  assert.deepEqual(await replica.flush(), stored(512));
+  const held = eventResult<() => boolean>(), getAll = IDBObjectStore.prototype.getAll;
+  const capture = t.mock.method(IDBObjectStore.prototype, "getAll", function (this: IDBObjectStore, range?: IDBValidKey | IDBKeyRange) {
+    capture.mock.restore();
+    const dispatch = this.transaction.dispatchEvent.bind(this.transaction);
+    t.mock.method(this.transaction, "dispatchEvent", (event: Event) => {
+      if (event.type !== "complete") return dispatch(event);
+      held.resolve(() => dispatch(event));
+      return true;
+    });
+    return getAll.call(this, range);
+  });
+  const checkpointed = eventResult<string>(), put = IDBObjectStore.prototype.put;
+  const watch = t.mock.method(IDBObjectStore.prototype, "put", function (this: IDBObjectStore, value: unknown) {
+    void idbDone(this.transaction).then(checkpointed.resolve);
+    return put.call(this, value);
+  });
+  t.mock.timers.tick(0);
+  const deliver = await held.promise;
+  try {
+    text.insert(512, "tail");
+    assert.deepEqual(await replica.flush(), stored(513));
+  } finally { deliver(); }
+  assert.equal(await checkpointed.promise, "complete");
+  assert.deepEqual((await storedEntries(factory, "watermark")).map(entry => [entry.generation, entry.checkpoint]), [[512, true], [513, false]]);
+  const expected = replica.session.encodeState();
+  replica.session.close();
+  await replica.closed;
+  const reopened = await open(t, store, "watermark");
+  assert.deepEqual(reopened.session.encodeState(), expected);
+  reopened.session.ydoc.getText("watermark").insert(0, "next");
+  assert.deepEqual(await reopened.flush(), stored(514));
+  const reading = t.mock.method(IDBObjectStore.prototype, "getAll");
+  t.mock.timers.tick(0);
+  assert.equal(reading.mock.callCount(), 0);
+  assert.equal(watch.mock.callCount(), 1);
+  assert.deepEqual((await storedEntries(factory, "watermark")).map(entry => entry.generation), [512, 513, 514]);
+});
+
+test("a scheduled checkpoint rechecks the closing session before it reads the journal", bounded, async t => {
+  const { store } = fixture(), replica = await open(t, store, "closing-timer");
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const text = replica.session.ydoc.getText("timer");
+  for (let index = 0; index < 512; index++) text.insert(index, "x");
+  assert.deepEqual(await replica.flush(), stored(512));
+  const read = t.mock.method(IDBObjectStore.prototype, "getAll");
+  replica.session.close();
+  t.mock.timers.tick(0);
+  await replica.closed;
+  assert.equal(read.mock.callCount(), 0);
+});
+
+test("receipt publication uses the original listener set for each generation", bounded, async t => {
+  const { store } = fixture(), replica = await open(t, store, "listeners");
+  const late = t.mock.fn<(receipt: NativeLocalStoreReceipt) => void>();
+  const old = t.mock.fn<(receipt: NativeLocalStoreReceipt) => void>();
+  const first = replica.subscribe(() => { first(); remove(); replica.subscribe(late); });
+  const remove = replica.subscribe(old);
+  seedReplica(replica.session);
+  assert.deepEqual(await replica.flush(), stored(1));
+  assert.equal(old.mock.callCount(), 1);
+  assert.equal(late.mock.callCount(), 0);
+  typeAt(replica.session, 0, "next ");
+  assert.deepEqual(await replica.flush(), stored(2));
+  assert.equal(old.mock.callCount(), 1);
+  assert.deepEqual(late.mock.calls.map(call => call.arguments[0]), [stored(2)]);
+});
+
+test("loss during a failed session close forbids the terminal checkpoint", bounded, async t => {
+  const { factory, store } = fixture(), handles = watchConnections(t, factory);
+  const { session, flush, closed } = await open(t, store, "failed-after-loss");
+  seedReplica(session);
+  assert.deepEqual(await flush(), stored(1));
+  const confirmed = session.encodeState(), puts = t.mock.method(IDBObjectStore.prototype, "put");
+  const cause = new Error("Yjs cleanup stopped");
+  session.ydoc.once("afterTransactionCleanup", () => { throw cause; });
+  assert.throws(() => typeAt(session, 0, "unconfirmed "), cause);
+  const database = handles[0];
+  assert.ok(database);
+  versionChange(database);
+  assertClosed(database);
+  const result = await closed;
+  assert.equal(result.kind, "failed");
+  assert.equal(result.reason, "version");
+  assert.equal(result.generation, 1);
+  assert.equal(result.committed, 1);
+  assert.notDeepEqual(result.state, confirmed);
+  assert.equal(puts.mock.callCount(), 0);
+  assert.deepEqual(await storedBytes(factory, "failed-after-loss"), confirmed);
+});
+
+test("loss while awaiting a hard checkpoint stops the append waiting behind it", bounded, async t => {
+  const { store, factory } = fixture(), handles = watchConnections(t, factory);
+  const replica = await open(t, store, "hard-checkpoint-loss");
+  const writing = eventResult<undefined>(), put = IDBObjectStore.prototype.put;
+  t.mock.method(IDBObjectStore.prototype, "put", function (this: IDBObjectStore, value: unknown) {
+    const request = put.call(this, value);
+    request.addEventListener("success", () => writing.resolve(undefined));
+    return request;
+  });
+  const failures: NativeLocalStoreReceipt[] = [];
+  replica.subscribe(result => { if (result.kind === "failed") failures.push(result); });
+  const text = replica.session.ydoc.getText("loss");
+  for (let index = 0; index < 2049; index++) text.insert(index, "x");
+  await writing.promise;
+  const database = handles[0];
+  assert.ok(database);
+  versionChange(database);
+  const result = await replica.closed;
+  assert.equal(result.kind, "failed");
+  assert.deepEqual(failures, [{ kind: "failed", reason: "version", generation: 2049, committed: 2048 }]);
+  assert.deepEqual((await storedEntries(factory, "hard-checkpoint-loss")).map(entry => entry.generation), [2048]);
+});
+
+test("appending an existing record key fails without replacing that record", bounded, async t => {
+  const { factory, store } = fixture(), replica = await open(t, store, "duplicate");
+  seedReplica(replica.session);
+  assert.deepEqual(await replica.flush(), stored(1));
+  const committed = await storedEntries(factory, "duplicate"), original = committed[0];
+  assert.ok(original);
+  const database = await idbResult(factory.open(DB_NAME));
+  try {
+    const tx = database.transaction(REPLICAS, "readwrite");
+    tx.objectStore(REPLICAS).add({ ...original, name: "duplicate", generation: 2 });
+    assert.equal(await idbDone(tx), "complete");
+  } finally { database.close(); }
+  typeAt(replica.session, 0, "duplicate ");
+  const result = await replica.flush();
+  assert.equal(result.kind, "failed");
+  assert.equal(result.generation, 2);
+  assert.equal(result.committed, 1);
+  assert.ok(result.error instanceof DOMException);
+  assert.equal(result.error.name, "ConstraintError");
+  assert.deepEqual((await storedEntries(factory, "duplicate"))[1]?.bytes, original.bytes);
 });

@@ -126,11 +126,12 @@ try {
   mock.timers.tick(0);
   assert.equal(await checkpoint.promise, "complete");
   const after = await storedEntries(factory, "size");
-  assert.equal(before.length, 10001);
+  assert.equal(before[0]?.checkpoint, true);
+  assert.equal(before.length, 1810);
   assert.equal(after.length, 1);
   assert.deepEqual(after[0]?.bytes, size.session.encodeState());
   const total = (entries: typeof before) => entries.reduce((sum, entry) => sum + entry.bytes.length, 0);
-  console.log(`After 10000 edits: ${characters} live cell characters, payload before ${total(before)} bytes (${(total(before) / characters).toFixed(4)} B/char), after ${total(after)} bytes (${(total(after) / characters).toFixed(4)} B/char)`);
+  console.log(`After 10000 edits: ${characters} live cell characters, payload before ${total(before)} bytes in ${before.length} records (${(total(before) / characters).toFixed(4)} B/char), after ${total(after)} bytes (${(total(after) / characters).toFixed(4)} B/char)`);
 } finally {
   IDBObjectStore.prototype.put = put;
   size.session.close();

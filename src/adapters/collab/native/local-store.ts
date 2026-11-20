@@ -20,6 +20,7 @@ export type NativeLocalStoreOpen = NativeLocalStoreFailure | {
   readonly persistent: Promise<boolean>;
   readonly flush: () => Promise<NativeLocalStoreReceipt>;
   readonly subscribe: (listener: (receipt: NativeLocalStoreReceipt) => void) => () => void;
+  readonly reopen: (failed: ReturnType<typeof openNativeSession>) => Promise<ReturnType<typeof openNativeSession>>;
   readonly closed: Promise<NativeLocalStoreClose>;
 };
 

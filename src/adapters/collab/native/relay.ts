@@ -14,6 +14,7 @@ export interface NativeRelayStatus {
 export type NativeRelayEvent =
   | { readonly kind: "status"; readonly status: NativeRelayStatus }
   | { readonly kind: "session-replaced"; readonly session: Session; readonly undoHistory: "fresh" }
+  | { readonly kind: "session-reopen-failed"; readonly error: unknown }
   | { readonly kind: "authentication-failed"; readonly reason: string }
   | { readonly kind: "first-load-too-large"; readonly message: string };
 
@@ -23,13 +24,14 @@ export interface NativeRelayOptions {
   readonly token: string;
   readonly sessionOptions: NativeSessionOptions;
   readonly onEvent: (event: NativeRelayEvent) => void;
+  readonly reopen?: (failed: Session) => Promise<Session>;
   readonly now?: () => number;
 }
 
 const FIRST_LOAD_RESTARTS = 1;
 const FIRST_LOAD_MARGIN_MS = 100;
 
-export function openNativeRelay(session: Session, { url, name, token, sessionOptions, onEvent, now = () => performance.now() }: NativeRelayOptions) {
+export function openNativeRelay(session: Session, { url, name, token, sessionOptions, onEvent, reopen, now = () => performance.now() }: NativeRelayOptions) {
   if (session.isClosingOrClosed()) throw new Error("Cannot open a relay for a closing or closed session.");
   const initialStatus: NativeRelayStatus = Object.freeze({ connected: false, firstSyncDone: false, pendingChangeCount: 0 });
   let current = session, status = initialStatus;
@@ -92,7 +94,23 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
       updateStatus({ connected: false });
       return;
     }
-    current = openNativeSession({ kind: "state", state: change.state }, sessionOptions);
+    if (reopen) {
+      updateStatus({ connected: false });
+      void reopenStored(current, reopen);
+    } else replace(openNativeSession({ kind: "state", state: change.state }, sessionOptions));
+  }
+
+  async function reopenStored(failed: Session, open: NonNullable<NativeRelayOptions["reopen"]>): Promise<void> {
+    try { replace(await open(failed)); }
+    catch (error) {
+      current.close();
+      emit({ kind: "session-reopen-failed", error });
+    }
+  }
+
+  function replace(session: Session): void {
+    if (closing) { session.close(); return; }
+    current = session;
     updateStatus(initialStatus);
     provider = attach(current);
     emit({ kind: "session-replaced", session: current, undoHistory: "fresh" });

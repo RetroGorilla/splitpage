@@ -423,6 +423,10 @@ The owner chose option A on 2026-11-20.
 
 On 2026-11-20 the owner chose an appending store owned by Splitpage, using standard Yjs updates and checkpoints.
 
+Peer updates waiting for a missing dependency emit no applied update and are not appended, since the server still holds the script and resends them on the next sync.
+Measurements use Node with simulated IndexedDB. Real-browser write latency, disk durability and tab-kill lock release remain untested.
+The two-second open deadline also reports an ordinary slow open as `blocked`.
+
 ### Undo across a restart
 
 The older plan's [Undo and rendering](../COLLABORATION-PLAN.md#undo-and-rendering) says undo may reset on restart in v1. This note's [section 4](#4-undo) describes a local undo manager and word grouping. It makes no restart promise. The passages are compatible with starting a fresh history.
