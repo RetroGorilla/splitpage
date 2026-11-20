@@ -1,4 +1,4 @@
-import type * as Y from "yjs";
+﻿import type * as Y from "yjs";
 import { NativeScriptReader } from "./reader.ts";
 import type { NativeWatch } from "./reader.ts";
 import { declareNativeRoots } from "./roots.ts";
@@ -14,7 +14,9 @@ export interface NativeScript {
   readonly close: () => void;
 }
 
-interface DocumentState { open: boolean; commanding: boolean; destroyed: boolean; readonly handles: Set<() => void>; readonly failures: unknown[] }
+interface PressObservation { readonly origin: object; changed: boolean }
+
+interface DocumentState { press: PressObservation | null; open: boolean; commanding: boolean; destroyed: boolean; readonly handles: Set<() => void>; readonly failures: unknown[] }
 
 const DOCUMENTS = new WeakMap<Y.Doc, DocumentState>();
 
@@ -31,10 +33,17 @@ function guardSharedCallback(state: DocumentState, call: () => void): void {
 function documentState(doc: Y.Doc): DocumentState {
   const known = DOCUMENTS.get(doc);
   if (known) return known;
-  const state: DocumentState = { open: false, commanding: false, destroyed: false, handles: new Set(), failures: [] };
+  const state: DocumentState = { press: null, open: false, commanding: false, destroyed: false, handles: new Set(), failures: [] };
   DOCUMENTS.set(doc, state);
   doc.on("beforeAllTransactions", () => guardSharedCallback(state, () => { state.open = true; }));
-  doc.on("afterAllTransactions", () => guardSharedCallback(state, () => { state.open = false; }));
+  doc.on("afterAllTransactions", (_, transactions) => guardSharedCallback(state, () => {
+    const press = state.press;
+    // why: the completed transaction carries the same clock and deletion changes Yjs uses to emit an update
+    if (press && !press.changed) press.changed = transactions.some(transaction => transaction.origin === press.origin && (
+      transaction.deleteSet.clients.size > 0 || [...transaction.afterState].some(([client, clock]) => transaction.beforeState.get(client) !== clock)
+    ));
+    state.open = false;
+  }));
   doc.on("destroy", () => guardSharedCallback(state, () => {
     state.destroyed = true;
     for (const close of [...state.handles]) close();
@@ -42,14 +51,23 @@ function documentState(doc: Y.Doc): DocumentState {
   return state;
 }
 
-export function withNativeCommand<T>(script: NativeScript, run: () => T): T {
+function withNativeCommand<T>(script: NativeScript, run: () => T): T {
   const state = documentState(script.doc);
   state.commanding = true;
   try { return run(); } finally { state.commanding = false; }
 }
 
-export function transactNativeCommand<T>(script: NativeScript, run: () => T): T {
-  return withNativeCommand(script, () => script.doc.transact(run, script.origin));
+export function observeNativePress<T>(script: NativeScript, origin: object, run: () => T): { result: T; changed: boolean } {
+  const state = documentState(script.doc), press = { origin, changed: false };
+  state.press = press;
+  try {
+    const result = withNativeCommand(script, run);
+    return { result, changed: press.changed };
+  } finally { state.press = null; }
+}
+
+export function transactNativeCommand<T>(script: NativeScript, run: () => T, origin: unknown = script.origin): T {
+  return withNativeCommand(script, () => script.doc.transact(run, origin));
 }
 
 export function throwNativeFailures(script: NativeScript): void {

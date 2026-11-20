@@ -257,7 +257,7 @@ function replay(state: Uint8Array, { seed, steps, tags }: History, mode: Deliver
             const cell = command.op === "format" ? " in " + JSON.stringify(lettersAt(script, labels.get(command.id) ?? command.id)) : "";
             differences.push(`${at} ${command.op}: ${outcome}${cell}`);
           }
-          if (requested && command.op === "format") requests.push({ step: at, letters: requested, on: command.on, seen: new Set(copy.seen), actual, outcome });
+          if (requested !== undefined && command.op === "format") requests.push({ step: at, letters: requested, on: command.on, seen: new Set(copy.seen), actual, outcome });
         }
         copy.seen.add(at);
         script.reader.refresh();
@@ -272,7 +272,7 @@ function replay(state: Uint8Array, { seed, steps, tags }: History, mode: Deliver
     assert.ok(all.every(copy => copy.known.size === packets.length), `seed ${seed}, ${mode}: delivered all packets`);
     const surviving = survivingTags(hub.script);
     for (const copy of others) assert.deepEqual(survivingTags(copy.script), surviving, `seed ${seed}, ${mode}: surviving tags`);
-    const wanted = requests.filter(ask => ask.on);
+    const wanted = requests.filter(ask => ask.on && ask.letters.length > 0);
     const undone = wanted.filter(ask => active.get(ask.step) === false).map(ask => ask.step);
     const lost = wanted.filter(ask => active.get(ask.step) !== false && [...ask.letters].some(letter => surviving.get(letter) === false
       && !requests.some(off => !off.on && off.seen.has(ask.step) && off.letters.includes(letter) && active.get(off.step) !== false)))
@@ -294,10 +294,19 @@ test("E11: native commands replay the original 600 name-cell histories in five d
   script.doc.destroy();
   const sum = { requested: 0, kept: 0, undone: 0, lost: 0 }, original = { ...sum };
   const lostSeeds: number[] = [];
+  const deliveryDifferences = [], refusedRequests = [];
   const changed: { seed: number; original: ReturnType<typeof totals>; product: ReturnType<typeof totals>; notes: string[] }[] = [];
   assert.deepEqual(histories.map(history => history.seed), Array.from({ length: 600 }, (_, index) => index + 1));
   for (const history of histories) {
     const results: NativeReplay[] = MODES.map((mode, index) => replay(state, history, mode, index));
+    for (const [index, product] of results.entries()) {
+      const baseline = history.baseline[index], mode = MODES[index];
+      assert.ok(baseline && mode);
+      if (JSON.stringify(baseline.lost) !== JSON.stringify(product.lost)) deliveryDifferences.push({ seed: history.seed, mode, original: baseline.lost, product: product.lost });
+      for (const ask of product.requests) if (ask.outcome !== "written" && ask.outcome !== "unchanged") {
+        refusedRequests.push({ seed: history.seed, mode, step: ask.step, on: ask.on, letters: ask.letters, outcome: ask.outcome, lost: product.lost.includes(ask.step) });
+      }
+    }
     const expected = totals(history.baseline), actual = totals(results);
     if (actual.lost) lostSeeds.push(history.seed);
     for (const key of ["requested", "kept", "undone", "lost"] as const) {
@@ -313,9 +322,11 @@ test("E11: native commands replay the original 600 name-cell histories in five d
       `tag ${ask.step}: ${JSON.stringify(ask.letters)} / ${JSON.stringify(ask.actual)} ${ask.outcome}; ${replayed.lost.includes(ask.step) ? "lost" : replayed.undone.includes(ask.step) ? "undone" : "kept"}`);
     changed.push({ seed: history.seed, original: expected, product: actual, notes: [...notes, ...replayed.differences] });
   }
-  t.diagnostic(JSON.stringify({ original, product: sum, lostSeeds, differingSeeds: changed }));
+  t.diagnostic(JSON.stringify({ original, product: sum, lostSeeds, differingSeeds: changed, deliveryDifferences, refusedRequests }));
   assert.deepEqual(original, { requested: 845, kept: 800, undone: 40, lost: 5 });
   assert.deepEqual(sum, original);
   assert.deepEqual(changed, []);
+  assert.deepEqual(deliveryDifferences, [{ seed: 447, mode: "shuffled", original: [10], product: [] }]);
+  assert.deepEqual(refusedRequests, MODES.map(mode => ({ seed: 22, mode, step: 44, on: false, letters: "\u0416", outcome: "missing", lost: false })));
   assert.deepEqual(lostSeeds, [53, 137, 211, 352, 447]);
 });

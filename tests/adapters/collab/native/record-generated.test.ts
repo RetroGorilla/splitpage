@@ -99,7 +99,7 @@ function generatedBody(kind: string, suffix: string): string {
   return kind + " &amp; &lt; <strong>" + suffix + "</strong>\nline";
 }
 
-function history(seed: number, writes?: CapturedWrite[], muteUndo = false, extendBold = false): Record<string, number> {
+function history(seed: number, writes?: CapturedWrite[], muteUndo = false, extendFormat: "format on" | "tag off" | null = null): Record<string, number> {
   const next = random(seed), { scripts, net } = recordCopies(shuffled([4, 9, 15], next));
   const counts: Record<string, number> = {};
   const count = (kind: string): void => { counts[kind] = (counts[kind] ?? 0) + 1; };
@@ -249,7 +249,13 @@ function history(seed: number, writes?: CapturedWrite[], muteUndo = false, exten
           { name: "link on", change: { kind: "link", href: "https://example.com/" }, shown: { href: "https://example.com/" } },
           { name: "link off", change: { kind: "link", href: null }, shown: {} }
         ];
+        const tagNeighbour = (on: boolean) => {
+          const neighbour = anchorNativeText(actor, { beat: "F", cell: "narration" }, 1, 2);
+          assert.equal(neighbour.kind, "anchored");
+          assert.deepEqual(formatNativeText(actor, neighbour.range, { kind: "tag", id: "t:prop:lamp", on }), WRITTEN);
+        };
         for (const { name: kind, change, shown } of marks) {
+          if (kind === "tag off") tagNeighbour(true);
           const row = actor.reader.row("F");
           assert.ok(row);
           const letters = (runs: typeof row.narration) => runs.flatMap(run => [...run.text].map(char => ({ char, marks: run.marks })));
@@ -261,12 +267,13 @@ function history(seed: number, writes?: CapturedWrite[], muteUndo = false, exten
             assert.deepEqual(letters(read.narration), expected, kind + ": requested cell");
           };
           reversibleChange(actor, manager, kind, () => {
-            const range = anchorNativeText(actor, { beat: "F", cell: "narration" }, from, extendBold && kind === "format on" ? to + 1 : to);
+            const range = anchorNativeText(actor, { beat: "F", cell: "narration" }, from, extendFormat === kind ? to + 1 : to);
             assert.equal(range.kind, "anchored");
             assert.deepEqual(formatNativeText(actor, range.range, change), WRITTEN);
             checkCell();
             count(kind);
           }, checkCell);
+          if (kind === "tag off") tagNeighbour(false);
         }
         reversibleChange(actor, manager, "visual type", () => {
           assert.deepEqual(edit(actor, { beat: "F", cell: "visual" }, 0, 0, [{ text: typed, marks: {} }]), WRITTEN);
@@ -373,7 +380,11 @@ test("generated three-copy histories check commands locally and account for sett
 });
 
 test("control: extending bold one letter fails the whole-cell oracle", () => {
-  assert.throws(() => history(3, undefined, false, true), /format on: requested cell/);
+  assert.throws(() => history(3, undefined, false, "format on"), /format on: requested cell/);
+});
+
+test("control: extending untag one letter clears a tagged neighbour and fails the oracle", () => {
+  assert.throws(() => history(3, undefined, false, "tag off"), /tag off: requested cell/);
 });
 
 test("control: a no-op undo fails the stored snapshot check", () => {

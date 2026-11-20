@@ -6,6 +6,7 @@ import { prepareNativeRuns, writeNativeRuns } from "./inline.ts";
 import type { NativePreparedRun } from "./inline.ts";
 import { NATIVE_FORMAT_VERSION } from "./roots.ts";
 import type { NativeRoots } from "./roots.ts";
+import { transactNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { encodeNativeValue, nativeFieldKey, nativeWellFormed } from "./values.ts";
 
@@ -202,7 +203,7 @@ export function convertToNativeScript(script: NativeScript, source: ValidatedDoc
   CONVERTING.add(script.doc);
   try {
     const plan = prepare(source, ports);
-    script.doc.transact(() => {
+    transactNativeCommand(script, () => {
       if (!emptyDocument(script.doc)) throw new Error("Conversion needs an empty shared script");
       write(script, script.roots, plan);
     }, "conversion");

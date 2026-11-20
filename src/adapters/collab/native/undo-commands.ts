@@ -1,5 +1,5 @@
 ﻿import * as Y from "yjs";
-import { withNativeCommand } from "./script.ts";
+import { observeNativePress } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { nativeAvailability } from "./text-commands.ts";
 import type { NativeRefusal } from "./text-commands.ts";
@@ -30,15 +30,10 @@ export function openNativeUndo(script: NativeScript) {
   function press(direction: "undo" | "redo"): NativeUndoOutcome {
     const unavailable = nativeAvailability(script) ?? (disposed ? "closed" : null);
     if (unavailable) return Object.freeze({ kind: "refused", reason: unavailable });
-    return withNativeCommand(script, () => {
-      const undo = direction === "undo";
-      const to = undo ? manager.redoStack : manager.undoStack, before = to.length;
-      manager.stopCapturing();
-      // why: Yjs must finish the transaction while its undoing or redoing flag is still set
-      const item = manager[direction]();
-      if (to.length === before) return UNCHANGED;
-      return Object.freeze({ kind: "written", entry: item ? entryOf(item) : null });
-    });
+    manager.stopCapturing();
+    // why: Yjs must finish the transaction while its undoing or redoing flag is still set
+    const { result: item, changed } = observeNativePress(script, manager, () => manager[direction]());
+    return changed ? Object.freeze({ kind: "written", entry: item ? entryOf(item) : null }) : UNCHANGED;
   }
 
   return Object.freeze({

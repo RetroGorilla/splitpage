@@ -323,3 +323,134 @@ test("E3: a peer edit in an unseen visual cell is lost when the creator undoes i
     }
   } finally { history.destroy(); a.doc.destroy(); b.doc.destroy(); }
 });
+
+for (const direction of ["undo", "redo"] as const) {
+  test(`${direction} reports the transaction's write when history is destroyed before it can capture the inverse`, () => {
+    const { a, b } = fixture(), history = openNativeUndo(a);
+    try {
+      assert.equal(typeNativeText(a, caret(a, "A", 0), "x", {}).kind, "written");
+      if (direction === "redo") assert.equal(history.undo().kind, "written");
+      const entry = (direction === "undo" ? history.undoStack : history.redoStack).at(-1);
+      assert.equal(typeof entry, "number");
+      const before = stateOf(a);
+      a.doc.once("beforeTransaction", history.destroy);
+      assert.deepEqual(history[direction](), { kind: "written", entry });
+      assert.notDeepEqual(stateOf(a), before);
+      assert.equal(a.reader.row("A")?.audioText, direction === "undo" ? "a" : "xa");
+      assert.equal((direction === "undo" ? history.redoStack : history.undoStack).length, 0);
+    } finally { history.destroy(); a.doc.destroy(); b.doc.destroy(); }
+  });
+}
+
+const INTERRUPTED_EVENTS = [
+  "beforeTransaction", "afterTransactionCleanup", "update", "beforeAllTransactions", "afterAllTransactions"
+] as const;
+
+for (const phase of INTERRUPTED_EVENTS) for (const action of ["typing", "undo", "redo"] as const) {
+  test(`stock Yjs interruption: ${phase} throwing during ${action} leaves later commands busy`, () => {
+    const seed = convertedScript(structureScript({ A: "a" }), 1);
+    const doc = new Y.Doc(), failure = new Error(phase);
+    Y.applyUpdate(doc, Y.encodeStateAsUpdate(seed.doc));
+    seed.doc.destroy();
+    let armed = false;
+    const listener = () => { if (armed) throw failure; };
+    if (phase === "afterAllTransactions") doc.on(phase, listener);
+    const a = openNativeScript(doc), history = openNativeUndo(a);
+    try {
+      assert.equal(typeNativeText(a, caret(a, "A", 0), "x", {}).kind, "written");
+      if (action === "redo") assert.equal(history.undo().kind, "written");
+      const at = caret(a, "A", 0);
+      if (phase !== "afterAllTransactions") doc.on(phase, listener);
+      armed = true;
+      const run = () => action === "typing" ? typeNativeText(a, at, "y", {}) : history[action]();
+      assert.throws(run, failure);
+      armed = false;
+      const before = stateOf(a);
+      assert.deepEqual(typeNativeText(a, at, "z", {}), { kind: "recovery", reason: "busy", runs: [{ text: "z", marks: {} }] });
+      assert.deepEqual(history.undo(), { kind: "refused", reason: "busy" });
+      assert.deepEqual(stateOf(a), before);
+    } finally { history.destroy(); doc.destroy(); }
+  });
+}
+
+test("a completed Yjs cleanup releases command admission even when afterTransaction throws", () => {
+  const { a, b } = fixture(), history = openNativeUndo(a);
+  const failure = new Error("observer failure");
+  try {
+    assert.equal(typeNativeText(a, caret(a, "A", 0), "x", {}).kind, "written");
+    a.doc.once("afterTransaction", () => { throw failure; });
+    assert.throws(history.undo, failure);
+    assert.equal(typeNativeText(a, caret(a, "B", 0), "z", {}).kind, "written");
+    assert.equal(a.reader.row("B")?.audioText, "zb");
+  } finally { history.destroy(); a.doc.destroy(); b.doc.destroy(); }
+});
+
+test("a guarded callback failure after the document event clears is deferred until the next command", () => {
+  const { a, b } = fixture(), history = openNativeUndo(a);
+  const failure = new Error("reader close failed");
+  try {
+    a.reader.close = () => { throw failure; };
+    const at = caret(a, "A", 0);
+    a.doc.once("afterAllTransactions", () => { a.doc.destroy(); });
+    assert.equal(typeNativeText(a, at, "x", {}).kind, "written");
+    assert.throws(history.undo, failure);
+    assert.deepEqual(history.undo(), { kind: "refused", reason: "closed" });
+  } finally { history.destroy(); a.doc.destroy(); b.doc.destroy(); }
+});
+
+test("explicit capture lasts past 500 ms; the binding and both stack summaries are frozen", async () => {
+  const { a, b } = fixture(), history = openNativeUndo(a);
+  try {
+    assert.equal(Reflect.set(history, "redo", history.undo), false);
+    assert.equal(typeNativeText(a, caret(a, "A", 0), "x", {}).kind, "written");
+    await new Promise<void>(resolve => setTimeout(resolve, 525));
+    assert.equal(typeNativeText(a, caret(a, "A", 0), "y", {}).kind, "written");
+    assert.equal(Reflect.set(history.undoStack, "0", -1), false);
+    assert.equal(history.undoStack.length, 1);
+    assert.equal(history.undo().kind, "written");
+    assert.equal(a.reader.row("A")?.audioText, "a");
+    assert.equal(Reflect.set(history.redoStack, "0", -1), false);
+    assert.equal(history.redo().kind, "written");
+    assert.equal(a.reader.row("A")?.audioText, "yxa");
+  } finally { history.destroy(); a.doc.destroy(); b.doc.destroy(); }
+});
+
+function peerDuringLocal(phase: "beforeTransaction" | "afterTransaction" | "update" | "afterAllTransactions",
+  action: "typing" | "undo" | "redo" | "empty") {
+  const { a, b, net } = fixture(), history = openNativeUndo(a);
+  try {
+    if (action === "undo" || action === "redo") {
+      assert.equal(typeNativeText(a, caret(a, "A", 0), "x", {}).kind, "written");
+      if (action === "redo") assert.equal(history.undo().kind, "written");
+    }
+    const at = caret(a, "A", 0);
+    assert.equal(typeNativeText(b, caret(b, "B", 0), "P", {}).kind, "written");
+    const packet = Y.encodeStateAsUpdate(b.doc, Y.encodeStateVector(a.doc));
+    a.doc.once(phase, () => { Y.applyUpdate(a.doc, packet, "remote"); });
+    const outcome = action === "typing" ? typeNativeText(a, at, "x", {}) : history[action === "redo" ? "redo" : "undo"]();
+    assert.equal(outcome.kind, "written");
+    assert.equal(a.reader.row("B")?.audioText, "Pb");
+    if (action === "empty") {
+      assert.deepEqual(outcome, { kind: "written", entry: null });
+      assert.equal(history.redoStack.length, 1);
+    }
+    net.settle();
+    assert.equal(b.reader.row("B")?.audioText, "Pb");
+    const inverse = action === "undo" || action === "empty" ? history.redo() : history.undo();
+    assert.equal(inverse.kind, "written");
+    net.settle();
+    const expected = phase === "beforeTransaction" ? "b" : "Pb";
+    for (const copy of [a, b]) assert.equal(copy.reader.row("B")?.audioText, expected);
+    net.agree();
+  } finally { history.destroy(); a.doc.destroy(); b.doc.destroy(); }
+}
+
+test("stock Yjs: peer packets nested in beforeTransaction are captured under the local origin", () => {
+  for (const action of ["typing", "undo", "redo", "empty"] as const) peerDuringLocal("beforeTransaction", action);
+});
+
+test("stock Yjs: peer packets during cleanup and afterAllTransactions keep their remote origin", () => {
+  for (const phase of ["afterTransaction", "update", "afterAllTransactions"] as const) {
+    for (const action of ["typing", "undo", "redo"] as const) peerDuringLocal(phase, action);
+  }
+});
