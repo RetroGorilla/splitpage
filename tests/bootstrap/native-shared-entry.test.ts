@@ -143,15 +143,19 @@ test("native leave holds local commands and peers before capturing and announcin
   assert.equal(native.ydoc.isDestroyed, true);
 });
 
-for (const committed of [false, true]) test("failed close during first adoption rolls back, committed=" + String(committed), async t => {
+for (const delayed of [false, true]) for (const committed of [false, true]) test(`failed close during adoption rolls back, delayed=${delayed}, committed=${committed}`, async t => {
   const fixture = entrySwitchFixture(), original = currentDocument();
   let native: ReturnType<typeof openNativeEditor>["native"] | undefined;
   t.after(onSessionChange(change => {
     if (!native || !sharedSession() || change.kind !== "adopt") return;
-    const at = native.commands.anchorText({ beat: "R1", cell: "narration" }, 0);
-    if (at.kind !== "anchored") throw new Error(at.reason);
-    native.ydoc.once(committed ? "afterTransactionCleanup" : "beforeAllTransactions", () => { throw new Error("during adoption"); });
-    assert.throws(() => native?.commands.typeText(at.range, "kept ", {}), /during adoption/);
+    const session = native;
+    const fail = () => {
+      const at = session.commands.anchorText({ beat: "R1", cell: "narration" }, 0);
+      if (at.kind !== "anchored") throw new Error(at.reason);
+      session.ydoc.once(committed ? "afterTransactionCleanup" : "beforeAllTransactions", () => { throw new Error("during adoption"); });
+      assert.throws(() => session.commands.typeText(at.range, "kept ", {}), /during adoption/);
+    };
+    if (delayed) queueMicrotask(fail); else fail();
   }));
   const result = await enterSharedSession(fixture.ports, (doc, failed) => {
     const opened = openNativeEditor(fixture.ports, doc, failed);

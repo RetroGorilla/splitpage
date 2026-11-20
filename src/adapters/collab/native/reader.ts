@@ -688,19 +688,21 @@ export class NativeScriptReader {
 
   narrationCaret(row: string, offset: number): { readonly beat: string; readonly offset: number } | null {
     this.sync();
-    if (row === this.stray || !Number.isInteger(offset) || offset < 0) return null;
+    if (row === this.stray || !Number.isInteger(offset)) return null;
+    const members = this.groups.get(row) ?? [];
     let length = 0, hasItems = false;
-    for (const { id, glue } of this.groups.get(row) ?? []) {
+    for (const { id, glue } of members) {
       const spans = this.narration.get(id) ?? EMPTY_SPANS;
       const items = spans.flatMap(span => this.spanAt(span)?.items ?? []);
       if (hasItems && items.length) length += glue.length;
       if (offset < length) return null;
-      const end = length + nativeCellView(items).length;
-      if (offset <= end) return { beat: id, offset: offset - length };
-      length = end;
+      const width = nativeCellView(items).length;
+      if (width && offset <= length + width) return { beat: id, offset: offset - length };
+      length += width;
       hasItems ||= items.length > 0;
     }
-    return null;
+    const first = members[0];
+    return first && !length && offset === 0 ? { beat: first.id, offset: 0 } : null;
   }
 
   rows(): readonly NativeReadRow[] {

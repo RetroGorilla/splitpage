@@ -234,6 +234,8 @@ async function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { reado
   const made: { session: SharedDocumentSession | null; swap: OwnerSwap | null; stopRoute: (() => void) | null;
     releaseSession: (() => void) | null; bound: boolean; detaching: boolean } = { session: null, swap: null, stopRoute: null, releaseSession: null,
     bound: false, detaching: false };
+  // why: an adoption microtask can interrupt a native transaction and queue another microtask with its terminal bytes
+  const entrySettled = backend.failedEntry ? new Promise<void>(resolve => { setTimeout(resolve, 0); }) : null;
   try {
     const admission = { admit: () => made.session ? made.session.admit() : { kind: "rejected" as const, reason: SHARED_SWITCHING } };
     // why: replacement listeners may already see the shared owner, so Ctrl+Z must reach its undo owner first
@@ -258,15 +260,14 @@ async function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { reado
     // why: detaching runs once everything else has landed; a rollback that reaches it puts back what it changed
     made.detaching = true;
     ports.detach();
-    if (backend.failedEntry) {
-      // why: adoption can interrupt a native transaction, whose terminal bytes arrive on a microtask
-      await Promise.resolve();
+    if (entrySettled) {
+      await entrySettled;
       if (failedDuringEntry) throw new Error("The native session closed during entry");
     }
     // why: the D34 reset belongs to a successful entry, so a failed one keeps the standalone history
     undoOwner().adopt(null);
   } catch (error) {
-    if (backend.failedEntry && !failedDuringEntry) await Promise.resolve();
+    if (entrySettled && !failedDuringEntry) await entrySettled;
     faults.errors.unshift(error);
     running = null;
     // why: a shared callback whose timer cannot be cancelled must still not act once the session is gone
