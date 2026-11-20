@@ -197,7 +197,7 @@ test("a native input binding unsubscribes its paint listener when torn down", as
     native, report: fixture.ports.report, editAttribution: () => ({ at: "now", by: "Writer" }),
     session: { admit: () => null, refuse: reason => ({ kind: "rejected", reason }), subscribe: () => stopPaint }
   });
-  unbind();
+  unbind.dispose();
   assert.equal(stopPaint.mock.callCount(), 1);
 });
 

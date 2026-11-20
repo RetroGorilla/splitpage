@@ -72,7 +72,7 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
   const listeners = new Set<ChangeListener>();
   const body = { sanitize };
   let active = false, scheduled = false, publishing = false, changed = false, holds = 0;
-  let closing: CloseReason | null = null;
+  let closing: CloseReason | null = null, revision = 0;
   let typing: { readonly target: NativeTextTarget; readonly endsInSpace: boolean } | null = null;
   const { script, undo, publishUpdate } = openSessionScript(source, updated), doc = script.doc;
 
@@ -84,6 +84,7 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
   }
 
   function updated(): void {
+    revision++;
     changed = true;
     schedule();
   }
@@ -211,7 +212,13 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
       return false;
     },
     document: () => script.reader.document(),
+    revision: () => revision,
     narrationCaret: (row: string, offset: number) => script.reader.narrationCaret(row, offset),
+    narrationHtml: (row: string) => script.reader.row(row)?.audioText,
+    narrationOffset: (row: string, range: NativeTextRange) => {
+      const position = Y.createAbsolutePositionFromRelativePosition(range.from, doc);
+      return position ? script.reader.narrationOffset(row, position) : null;
+    },
     isStoredScript: () => script.roots.meta.get("format") === NATIVE_FORMAT_VERSION
       && script.roots.meta.get("title") instanceof Y.Text && script.roots.births.size > 0
       && !!script.reader.document().docId && !script.reader.problems().some(({ kind }) =>

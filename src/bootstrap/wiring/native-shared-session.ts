@@ -4,7 +4,7 @@ import { WHOLE_PROJECTION } from "../../application/session/shared-session.ts";
 import { enterSharedDocument } from "../../core/migrate.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { scriptCellOf, sanitizeHtml } from "../richtext.ts";
-import { mountNativeSharedInput } from "./native-shared-input.ts";
+import { keepNativeFieldPaint, mountNativeSharedInput } from "./native-shared-input.ts";
 import { notices } from "./ports/effects.ts";
 import type { SharedEditorBackend, SharedSwitchPorts } from "./shared-session.ts";
 
@@ -41,15 +41,40 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
     if (stored && !native.isStoredScript()) throw new Error("The stored state does not hold a well-formed native script");
   } catch (error) { native.close(); throw error; }
   const publication = nativePublication();
-  let stopInput: (() => void) | null = null, terminal: Uint8Array | null = null;
+  let input: ReturnType<typeof mountNativeSharedInput> | null = null, terminal: Uint8Array | null = null;
   let initial: ValidatedDocument | null = null;
+  let published = native.revision();
+  function publish(held?: Parameters<typeof keepNativeFieldPaint>[0]): void {
+    const revision = native.revision();
+    if (published === revision) return;
+    const snapshot = native.document();
+    if (held) keepNativeFieldPaint(held, snapshot.rows.find(row => row.id === held.beat));
+    published = revision;
+    publication.publish(snapshot, "remote");
+  }
   const stop = native.subscribe(event => {
     try {
-      if (event.kind === "changed") publication.publish(native.document(), "remote");
-      else if (event.reason === "failed") {
+      if (event.kind === "changed") {
+        if (!input?.held()) publish();
+      } else if (event.kind === "closed") {
         terminal = event.state;
+        if (event.reason !== "failed") {
+          if (input?.held()) input.stop();
+          return;
+        }
+        if (input?.held()) {
+          const recovered = openNativeSession({ kind: "state", state: terminal }, options);
+          try {
+            if (!input.recover(recovered)) {
+              input.stop();
+              notices.show("The shared session stopped. Unsent writing is still in the editor.", "warn");
+              return;
+            }
+            terminal = recovered.encodeState();
+          } finally { recovered.close(); }
+        }
         if (failedClose()) {
-          notices.show(stopInput
+          notices.show(input
             ? "The shared session stopped. Leaving again will retry keeping your writing."
             : "The shared session stopped. Your writing was kept in a standalone copy.", "warn");
         }
@@ -66,14 +91,15 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
     replica: publication.replica, parts: null, unsupportedCommands: UNSUPPORTED,
     undo: () => ({ actions: { undo: unavailable, redo: unavailable }, breakGroup: () => {}, replayed: () => null }),
     bind: session => {
-      stopInput ??= mountNativeSharedInput({
-        native, session, editAttribution: () => ({ at: new Date(ports.now()).toISOString(), by: actor }), report: ports.report
+      input ??= mountNativeSharedInput({
+        native, session, editAttribution: () => ({ at: new Date(ports.now()).toISOString(), by: actor }), report: ports.report, publish
       });
     },
-    unbind: () => { stopInput?.(); stopInput = null; },
-    settle: () => null,
+    unbind: () => { input?.dispose(); input = null; },
+    settle: () => input?.finish() ?? null,
     start: () => {
       initial = enterSharedDocument(native.document());
+      published = native.revision();
       publication.publish(initial, "hydration");
     },
     failedEntry: () => {

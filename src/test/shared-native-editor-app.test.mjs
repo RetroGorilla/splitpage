@@ -15,6 +15,10 @@ import { createSessionCapabilities } from "../application/session/capabilities.t
 import { handleImageFile, removeImage } from "../bootstrap/wiring/rows.ts";
 import { actions } from "../bootstrap/wiring/ports/actions.ts";
 import { mountNativeSharedInput } from "../bootstrap/wiring/native-shared-input.ts";
+import { enterSharedSession, forceLeaveSharedSession } from "../bootstrap/wiring/shared-session.ts";
+import { openNativeEditor } from "../bootstrap/wiring/native-shared-session.ts";
+import { entrySwitchFixture } from "../../tests/bootstrap/shared-entry-switch-support.ts";
+import { setTimeout as delay } from "node:timers/promises";
 
 window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};
@@ -25,8 +29,32 @@ after(closeApp);
 const hook = window.__sharedTest;
 const cell = field => document.querySelector('#rows .cell-editable[data-id="r1"][data-field="' + field + '"]');
 const text = () => hook.read().app.rows[0].audioText;
+const flushed = () => delay(55);
+function cleanSession() {
+  if (!sharedSession() || hook.leave().ok) return;
+  forceLeaveSharedSession();
+  const allowed = () => ({ allowed: true });
+  adoptReplacement(migrateRows({ title: "Standby", rows: [] }),
+    createSessionCapabilities("standalone", { edit: allowed, comment: allowed }));
+}
 function beforeInput(target, inputType, data, extra = {}) {
   const event = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType, data, ...extra });
+  target.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+
+function deleteRange(target, from, to) {
+  const range = document.createRange();
+  range.setStart(target.firstChild, from);
+  range.setEnd(target.firstChild, to);
+  const event = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "deleteContentBackward" });
+  Object.defineProperty(event, "getTargetRanges", { value: () => [range] });
+  target.dispatchEvent(event);
+  return event.defaultPrevented;
+}
+
+function compose(target, type, data) {
+  const event = new window.CompositionEvent("composition" + type, { bubbles: true, cancelable: true, data });
   target.dispatchEvent(event);
   return event.defaultPrevented;
 }
@@ -35,11 +63,11 @@ async function enter(t, rows = [{ id: "r1", audioText: "Hello", visualText: "Loo
   adoptReplacement(migrateRows({ title: "Native script", rows }));
   const show = t.mock.method(notices, "show", () => {});
   assert.deepEqual(await hook.enter({ backend: "native" }), { ok: true });
-  t.after(() => { if (sharedSession()) hook.leave(); });
+  t.after(cleanSession);
   return show;
 }
 
-test("a caret on the old paint is refused while a peer update is waiting to publish", async t => {
+test("a caret on the old paint is refused and the editor retains the uncommitted typing", async t => {
   const show = await enter(t);
   const target = cell("audioText");
   target.focus();
@@ -49,17 +77,16 @@ test("a caret on the old paint is refused while a peer update is waiting to publ
   assert.equal(beforeInput(target, "insertText", "x"), true);
   assert.equal(show.mock.callCount(), 1);
   await Promise.resolve();
-  assert.equal(cell("audioText").textContent, "YHello");
-  assert.equal(text(), "YHello");
+  assert.equal(cell("audioText").textContent, "Hexllo");
+  assert.equal(text(), "Hello");
   assert.equal(hook.read().peer.rows[0].audioText, "YHello");
+  assert.deepEqual(hook.leave(), { ok: false, reason: "native-selection-stale" });
 });
 
-test("only plain narration insertText at a caret reaches the native text command", async t => {
+test("out-of-scope input stays refused on the native path", async t => {
   const show = await enter(t), target = cell("audioText"), visual = cell("visualText"), title = document.getElementById("doc-title");
   const before = hook.read();
   target.focus();
-  setCellSelection(target, 1, 2);
-  assert.equal(beforeInput(target, "insertText", "x"), true);
   setCellSelection(target, 2);
   assert.equal(beforeInput(target, "insertText", "x", { isComposing: true }), true);
   assert.equal(beforeInput(target, "insertFromPaste", "x"), true);
@@ -70,7 +97,7 @@ test("only plain narration insertText at a caret reaches the native text command
   assert.equal(beforeInput(title, "insertText", "x"), true);
   await Promise.resolve();
   assert.deepEqual(hook.read(), before);
-  assert.equal(show.mock.callCount(), 6);
+  assert.equal(show.mock.callCount(), 5);
   for (const call of show.mock.calls) assert.deepEqual(call.arguments, ["This is not available in a shared session yet.", "warn"]);
 });
 
@@ -154,7 +181,7 @@ for (const [members, offset, beat, at, expected] of [
   target.focus();
   setCellSelection(target, offset);
   assert.equal(beforeInput(target, "insertText", "X"), true);
-  await Promise.resolve();
+  await flushed();
   assert.equal(text(), expected);
   assert.equal(hook.read().peer.rows[0].audioText, expected);
 });
@@ -199,34 +226,36 @@ for (const [glue, at, expected] of [[" ", 8, "Hello WoXrld"], [" ", 5, "HelloX W
     adoptReplacement(doc);
     const show = t.mock.method(notices, "show", () => {});
     assert.deepEqual(await hook.enterFrom(nativeBytes(doc, glue), { backend: "native" }), { ok: true });
-    t.after(() => { if (sharedSession()) hook.leave(); });
+    t.after(cleanSession);
     const target = cell("audioText");
     target.focus();
     setCellSelection(target, at);
     assert.equal(beforeInput(target, "insertText", "X"), true);
-    await Promise.resolve();
+    await flushed();
     assert.equal(text(), expected);
     assert.equal(hook.read().peer.rows[0].audioText, expected);
     assert.equal(show.mock.callCount(), glue === "--" ? 1 : 0);
   });
 }
 
-test("two keys against one paint accept only the first and restore its caret", async t => {
+test("200 keys buffer against one paint without losing any keys or the caret", async t => {
   const show = await enter(t), target = cell("audioText");
   target.focus();
   setCellSelection(target, 2);
-  assert.equal(beforeInput(target, "insertText", "x"), true);
-  assert.equal(beforeInput(target, "insertText", "y"), true);
-  assert.equal(show.mock.callCount(), 1);
-  await Promise.resolve();
-  assert.equal(text(), "Hexllo");
-  assert.equal(hook.read().peer.rows[0].audioText, "Hexllo");
-  assert.deepEqual(cellSelection(cell("audioText")), { from: 3, to: 3 });
+  const keys = "0123456789".repeat(20);
+  for (const key of keys) assert.equal(beforeInput(target, "insertText", key), true);
+  const expected = "He" + keys + "llo";
+  assert.equal(text(), "Hello");
+  assert.equal(target.textContent, expected);
+  await flushed();
+  assert.equal(text(), expected);
+  assert.equal(hook.read().peer.rows[0].audioText, expected);
+  assert.deepEqual(cellSelection(cell("audioText")), { from: 202, to: 202 });
   cell("audioText").blur();
-  assert.equal(show.mock.callCount(), 1, "an ordinary blur cannot add a warning");
+  assert.equal(show.mock.callCount(), 0, "an ordinary blur cannot add a warning");
 });
 
-test("coalesced peer insertion preserves both edits while the caret stays before the typed letter", async t => {
+test("a peer insertion during typing keeps both edits and the caret follows the typed letters", async t => {
   await enter(t);
   const target = cell("audioText");
   target.focus();
@@ -234,9 +263,78 @@ test("coalesced peer insertion preserves both edits while the caret stays before
   assert.equal(beforeInput(target, "insertText", "x"), true);
   assert.equal(hook.nativePeer.type("r1", 0, "Y").kind, "written");
   await Promise.resolve();
-  assert.equal(text(), "YHexllo");
-  assert.equal(hook.read().peer.rows[0].audioText, "YHexllo");
-  assert.deepEqual(cellSelection(cell("audioText")), { from: 3, to: 3 });
+  assert.equal(target.textContent, "Hexllo");
+  assert.equal(beforeInput(target, "insertText", "z"), true);
+  await flushed();
+  assert.equal(text(), "YHexzllo");
+  assert.equal(hook.read().peer.rows[0].audioText, "YHexzllo");
+  assert.deepEqual(cellSelection(cell("audioText")), { from: 5, to: 5 });
+});
+
+test("typing replaces a selection and keeps the caret after the replacement", async t => {
+  await enter(t);
+  const target = cell("audioText");
+  target.focus();
+  setCellSelection(target, 1, 3);
+  assert.equal(beforeInput(target, "insertText", "x"), true);
+  await flushed();
+  assert.equal(text(), "Hxlo");
+  assert.deepEqual(cellSelection(cell("audioText")), { from: 2, to: 2 });
+});
+
+test("typing then deleting the buffered letter is unchanged and publishes no edit", async t => {
+  const show = await enter(t);
+  const seen = t.mock.fn();
+  t.after(onSessionChange(seen));
+  const target = cell("audioText");
+  target.focus();
+  setCellSelection(target, 2);
+  assert.equal(beforeInput(target, "insertText", "x"), true);
+  assert.equal(deleteRange(target, 2, 3), true);
+  await flushed();
+  assert.equal(text(), "Hello");
+  assert.equal(hook.read().peer.rows[0].audioText, "Hello");
+  assert.equal(target.textContent, "Hello");
+  assert.deepEqual(cellSelection(target), { from: 2, to: 2 });
+  assert.equal(seen.mock.callCount(), 0);
+  assert.equal(show.mock.callCount(), 0);
+});
+
+for (const committed of [true, false]) test("composition shields the DOM and " + (committed ? "commits once" : "cancels without writing"), async t => {
+  const show = await enter(t), target = cell("audioText");
+  target.focus();
+  setCellSelection(target, 1, 3);
+  for (const key of ["Enter", "Backspace", "Escape", "ArrowLeft"]) {
+    const event = new window.KeyboardEvent("keydown", { bubbles: true, cancelable: true, key, keyCode: 229 });
+    assert.equal(target.dispatchEvent(event), true);
+  }
+  assert.equal(beforeInput(target, "insertParagraph", null), true);
+  assert.equal(show.mock.callCount(), 1);
+  assert.equal(compose(target, "start", ""), false);
+  for (const key of ["Enter", "Backspace", "Escape", "ArrowLeft"]) for (const signal of [{ isComposing: true }, { keyCode: 229 }]) {
+    const event = new window.KeyboardEvent("keydown", { bubbles: true, cancelable: true, key, ...signal });
+    assert.equal(target.dispatchEvent(event), true);
+  }
+  assert.equal(beforeInput(target, "insertCompositionText", "e", { isComposing: true }), false);
+  target.firstChild.replaceData(1, 2, "e");
+  target.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertCompositionText", isComposing: true, data: "e" }));
+  assert.equal(hook.nativePeer.type("r1", 0, "Y").kind, "written");
+  await flushed();
+  assert.equal(target.textContent, "Helo");
+  assert.equal(text(), "Hello");
+  assert.equal(hook.read().peer.rows[0].audioText, "YHello");
+  assert.deepEqual(hook.leave(), { ok: false, reason: "native-input-pending" });
+  const seen = t.mock.fn();
+  t.after(onSessionChange(seen));
+  assert.equal(compose(target, "end", committed ? "\u00e9" : ""), false);
+  await Promise.resolve();
+  const expected = committed ? "YH\u00e9lo" : "YHello";
+  assert.equal(text(), expected);
+  assert.equal(hook.read().peer.rows[0].audioText, expected);
+  assert.equal(cell("audioText").textContent, expected);
+  if (committed) assert.deepEqual(cellSelection(cell("audioText")), { from: 3, to: 3 });
+  assert.equal(seen.mock.callCount(), 1);
+  assert.equal(show.mock.callCount(), 1);
 });
 
 test("publication restores the native caret when the former cell has been detached", async t => {
@@ -246,7 +344,7 @@ test("publication restores the native caret when the former cell has been detach
   setCellSelection(target, 2);
   assert.equal(beforeInput(target, "insertText", "x"), true);
   target.closest(".row").remove();
-  await Promise.resolve();
+  await flushed();
   assert.equal(document.activeElement, cell("audioText"));
   assert.deepEqual(cellSelection(cell("audioText")), { from: 3, to: 3 });
 });
@@ -259,7 +357,7 @@ for (const selector of ["#doc-title", '#rows .cell-editable[data-id="r2"][data-f
     setCellSelection(target, 2);
     assert.equal(beforeInput(target, "insertText", "x"), true);
     next.focus();
-    await Promise.resolve();
+    await flushed();
     assert.equal(text(), "Hexllo");
     assert.equal(document.activeElement, next);
   });
@@ -277,20 +375,105 @@ for (const [guard, expected] of [
   const error = new Error("admission failed"), refuse = t.mock.fn(), report = t.mock.fn();
   const anchor = t.mock.fn(guard === "anchor refusal" ? () => ({ kind: "refused", reason: "range" }) : native.commands.anchorText);
   const write = t.mock.fn(() => ({ kind: "recovery", reason: "busy", runs: [] }));
-  t.after(mountNativeSharedInput({
+  const input = mountNativeSharedInput({
     native: { ...native, narrationCaret: guard === "missing caret target" ? () => null : native.narrationCaret,
       commands: { ...native.commands, anchorText: anchor, typeText: write } },
     editAttribution: () => ({ by: "Writer", at: "now" }), report,
     session: { admit: () => guard === "admission failure" ? { kind: "failed", error } : null, refuse, subscribe: () => () => {} }
-  }));
+  });
+  t.after(input.dispose);
   const target = cell("audioText");
+  t.after(() => { target.textContent = "Hello"; });
   target.focus();
   if (guard === "absent selection") window.getSelection().removeAllRanges(); else setCellSelection(target, 2);
   assert.equal(beforeInput(target, "insertText", "x"), true);
+  input.finish();
   assert.deepEqual(refuse.mock.calls.map(call => call.arguments), [[expected]]);
   assert.deepEqual(report.mock.calls.map(call => call.arguments), guard === "admission failure" ? [[error]] : []);
   assert.equal(anchor.mock.callCount(), ["anchor refusal", "write recovery"].includes(guard) ? 1 : 0);
   assert.equal(write.mock.callCount(), guard === "write recovery" ? 1 : 0);
+});
+
+for (const reason of ["text", "full", "future-refusal"]) test("a commit refusal keeps the text and stops on " + reason, t => {
+  const doc = migrateRows({ title: "Native script", rows: [{ id: "r1", audioText: "Hello" }] });
+  adoptReplacement(doc);
+  const native = openNativeSession({ kind: "state", state: nativeBytes(doc) }, { actor: "Writer", sanitize: sanitizeHtml });
+  t.after(native.close);
+  const refuse = t.mock.fn(), publish = t.mock.fn();
+  const write = t.mock.fn(() => ({ kind: "recovery", reason, runs: [] }));
+  const input = mountNativeSharedInput({
+    native: { ...native, commands: { ...native.commands, typeText: write } },
+    editAttribution: () => ({ by: "Writer", at: "now" }), report: assert.fail, publish,
+    session: { admit: () => null, refuse, subscribe: () => () => {} }
+  });
+  t.after(input.dispose);
+  const target = cell("audioText");
+  t.after(() => { target.textContent = "Hello"; });
+  target.focus();
+  setCellSelection(target, 2);
+  assert.equal(beforeInput(target, "insertText", "x"), true);
+  assert.equal(input.finish(), reason);
+  assert.equal(target.textContent, "Hexllo");
+  assert.equal(beforeInput(target, "insertText", "z"), true);
+  assert.equal(target.textContent, "Hexllo");
+  assert.equal(native.narrationHtml("r1"), "Hello");
+  assert.deepEqual(refuse.mock.calls.map(call => call.arguments), [[reason], [reason]]);
+  assert.equal(publish.mock.callCount(), 0);
+  assert.equal(write.mock.callCount(), 1);
+});
+
+async function openDirect(t) {
+  const fixture = entrySwitchFixture(), refused = t.mock.fn();
+  const ports = { ...fixture.ports, commandRefused: refused };
+  let native;
+  assert.deepEqual(await enterSharedSession(ports, (doc, failed) => {
+    const opened = openNativeEditor(ports, doc, failed);
+    native = opened.native;
+    return opened.backend;
+  }), { ok: true });
+  t.after(cleanSession);
+  const target = document.querySelector('#rows .cell-editable[data-id="R1"][data-field="audioText"]');
+  target.focus();
+  setCellSelection(target, 8);
+  return { native, refused, errors: fixture.errors, target };
+}
+
+for (const reason of ["busy", "closed"]) test("the adapter returns " + reason + " and the buffered text stays visible", async t => {
+  const { native, refused, target } = await openDirect(t);
+  assert.equal(beforeInput(target, "insertText", "!", {}), true);
+  const release = reason === "busy" ? native.holdIngress() : () => {};
+  t.after(release);
+  if (reason === "closed") native.close();
+  assert.deepEqual(hook.leave(), { ok: false, reason });
+  assert.equal(target.textContent, "Captured! words");
+  assert.equal(text(), "Captured words");
+  assert.deepEqual(refused.mock.calls.map(call => call.arguments), [[reason]]);
+});
+
+test("failed close reopens from terminal bytes and settles a queued keystroke into the copy", async t => {
+  const show = t.mock.method(notices, "show", () => {});
+  const { native, target } = await openDirect(t);
+  assert.equal(beforeInput(target, "insertText", "!"), true);
+  const anchor = native.commands.anchorText({ beat: "R1", cell: "narration" }, 0);
+  native.ydoc.once("afterTransactionCleanup", () => { throw new Error("interrupted cleanup"); });
+  assert.throws(() => native.commands.typeText(anchor.range, "Peer: ", {}), /interrupted cleanup/);
+  await Promise.resolve();
+  assert.equal(sharedSession(), false);
+  assert.equal(text(), "Peer: Captured! words");
+  assert.match(String(show.mock.calls[0]?.arguments[0]), /kept in a standalone copy/);
+});
+
+test("failed close during the buffered write reports an uncertain result without replaying it", async t => {
+  const show = t.mock.method(notices, "show", () => {});
+  const { native, target, errors } = await openDirect(t);
+  assert.equal(beforeInput(target, "insertText", "!"), true);
+  native.ydoc.once("afterTransactionCleanup", () => { throw new Error("interrupted cleanup"); });
+  assert.deepEqual(hook.leave(), { ok: false, reason: "native-input-pending" });
+  await Promise.resolve();
+  assert.equal(sharedSession(), true);
+  assert.equal(target.textContent, "Captured! words");
+  assert.equal(errors[0]?.message, "interrupted cleanup");
+  assert.match(String(show.mock.calls[0]?.arguments[0]), /Unsent writing is still in the editor/);
 });
 
 test("a browser-applied title edit restores the title and a toolbar click stops before pending formatting", async t => {

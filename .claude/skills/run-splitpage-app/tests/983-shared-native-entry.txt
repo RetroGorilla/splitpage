@@ -2,7 +2,7 @@ open
 wait document.querySelectorAll('#rows .row').length > 0
 eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;F.openFile(new File([JSON.stringify({schema:2,title:'Native editor',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello',visualText:'Look'},{id:'r2',audioText:'World',visualText:'Wide'}],comments:[]})],'native-entry.splitpage'))
 wait F.state().title === 'Native editor'
-eval window.Q=function(field){return document.querySelector('#rows .cell-editable[data-id="r1"][data-field="'+field+'"]')};window.at=function(field,offset){var c=Q(field);c.focus();getSelection().setBaseAndExtent(c.firstChild,offset,c.firstChild,offset);return true};window.text=function(){return S.read().app.rows[0].audioText};window.warn=function(){return document.querySelector('#toast-host .toast.warn')!==null};window.clear=function(){document.querySelectorAll('#toast-host .toast').forEach(function(t){t.dismiss()});return true};window.original=JSON.stringify(S.read().app);true
+eval window.Q=function(field){return document.querySelector('#rows .cell-editable[data-id="r1"][data-field="'+field+'"]')};window.at=function(field,offset){var c=Q(field);c.focus();getSelection().setBaseAndExtent(c.firstChild,offset,c.firstChild,offset);return true};window.text=function(){return S.read().app.rows[0].audioText};window.warn=function(){return document.querySelector('#toast-host .toast.warn:not(.is-leaving)')!==null};window.clear=function(){document.querySelectorAll('#toast-host .toast').forEach(function(t){t.dismiss()});return true};window.original=JSON.stringify(S.read().app);true
 eval (async function(){window.bad=await S.enterFrom(new Uint8Array([255]),{backend:'native'});return true})()
 expect window.bad.ok === false && window.bad.reason === 'enter-failed'
 expect JSON.stringify(S.read().app) === window.original && S.read().peer === null && Q('audioText').textContent === 'Hello'
@@ -11,7 +11,8 @@ expect S.read().app.docId !== JSON.parse(window.original).docId && S.read().app.
 expect S.peer.type('r1',0,'legacy') === undefined && Q('audioText').textContent === 'Hello'
 eval at('audioText',2)
 press x
-wait Q('audioText').textContent === 'Hexllo'
+wait text() === 'Hexllo'
+expect Q('audioText').textContent === 'Hexllo'
 expect text() === 'Hexllo' && S.read().peer.rows[0].audioText === 'Hexllo'
 expect document.activeElement === Q('audioText') && getSelection().focusOffset === 3
 eval window.before=JSON.stringify(S.read());at('visualText',2)
@@ -20,7 +21,11 @@ expect warn() && JSON.stringify(S.read()) === window.before && Q('visualText').t
 eval at('audioText',3)
 eval clear()
 key Backspace
-expect warn() && JSON.stringify(S.read()) === window.before && Q('audioText').textContent === 'Hexllo'
+wait text() === 'Hello'
+expect !warn() && S.read().peer.rows[0].audioText === 'Hello'
+press x
+wait text() === 'Hexllo'
+eval window.before=JSON.stringify(S.read());true
 eval clear()
 key ctrl KeyZ
 expect warn() && JSON.stringify(S.read()) === window.before
@@ -33,8 +38,9 @@ expect warn() && JSON.stringify(S.read()) === window.before
 eval clear()
 jsclick #rows .row[data-id="r1"] [data-action="cycle-status"]
 expect warn() && JSON.stringify(S.read()) === window.before
-eval clear();window.composed=new CompositionEvent('compositionstart',{bubbles:true,cancelable:true});Q('audioText').dispatchEvent(window.composed);true
-expect window.composed.defaultPrevented && warn() && JSON.stringify(S.read()) === window.before
+eval clear();at('audioText',3);window.composed=new CompositionEvent('compositionstart',{bubbles:true,cancelable:true});Q('audioText').dispatchEvent(window.composed);true
+expect !window.composed.defaultPrevented && !warn() && JSON.stringify(S.read()) === window.before
+eval Q('audioText').dispatchEvent(new CompositionEvent('compositionend',{bubbles:true,data:''}));true
 eval clear();document.getElementById('doc-title').focus();true
 press q
 expect warn() && document.getElementById('doc-title').value === 'Native editor' && JSON.stringify(S.read()) === window.before
@@ -58,3 +64,16 @@ expect window.legacy.kind === 'applied' && S.nativePeer.type('r1',0,'native') ==
 wait text() === 'LYHexllo'
 eval S.leave()
 expect Q('audioText').textContent === 'LYHexllo'
+eval S.enter({backend:'native'})
+eval at('audioText',2);window.keys='0123456789'.repeat(20);for(const key of keys)Q('audioText').dispatchEvent(new InputEvent('beforeinput',{bubbles:true,cancelable:true,inputType:'insertText',data:key}));true
+wait text() === 'LY'+keys+'Hexllo'
+expect Q('audioText').textContent === 'LY'+keys+'Hexllo' && S.read().peer.rows[0].audioText === 'LY'+keys+'Hexllo' && getSelection().focusOffset === 202
+eval at('audioText',2);Q('audioText').dispatchEvent(new InputEvent('beforeinput',{bubbles:true,cancelable:true,inputType:'insertText',data:'x'}));S.nativePeer.type('r1',0,'P');Q('audioText').dispatchEvent(new InputEvent('beforeinput',{bubbles:true,cancelable:true,inputType:'insertText',data:'z'}));true
+wait text() === 'PLYxz'+keys+'Hexllo'
+expect Q('audioText').textContent === 'PLYxz'+keys+'Hexllo' && S.read().peer.rows[0].audioText === text() && getSelection().focusOffset === 5
+eval at('audioText',5);Q('audioText').dispatchEvent(new CompositionEvent('compositionstart',{bubbles:true,data:''}));Q('audioText').firstChild.insertData(5,'K');Q('audioText').dispatchEvent(new InputEvent('input',{bubbles:true,inputType:'insertCompositionText',isComposing:true,data:'K'}));S.nativePeer.type('r1',0,'V');true
+expect Q('audioText').textContent === 'PLYxzK'+keys+'Hexllo' && text() === 'PLYxz'+keys+'Hexllo'
+eval Q('audioText').dispatchEvent(new CompositionEvent('compositionend',{bubbles:true,data:'K'}));true
+wait text() === 'VPLYxzK'+keys+'Hexllo'
+expect S.read().peer.rows[0].audioText === text() && Q('audioText').textContent === text() && getSelection().focusOffset === 7
+eval S.leave()

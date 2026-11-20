@@ -705,6 +705,28 @@ export class NativeScriptReader {
     return first && !length && offset === 0 ? { beat: first.id, offset: 0 } : null;
   }
 
+  narrationOffset(row: string, position: Y.AbsolutePosition): number | null {
+    this.sync();
+    let length = 0, hasItems = false;
+    for (const { id, glue } of this.groups.get(row) ?? []) {
+      const spans = (this.narration.get(id) ?? EMPTY_SPANS).flatMap(ref => {
+        const span = this.spanAt(ref), segment = this.roots.segments.get(ref.segment);
+        return span ? [{ span, text: segment?.get("text") }] : [];
+      });
+      const hasMember = spans.some(({ span }) => span.items.length > 0);
+      if (hasItems && hasMember) length += glue.length;
+      for (const { span, text } of spans) {
+        const view = nativeCellView(span.items);
+        if (text === position.type && position.index >= span.start && position.index <= span.end) {
+          return length + view.ends.filter(end => end <= position.index - span.start).length;
+        }
+        length += view.length;
+      }
+      hasItems ||= hasMember;
+    }
+    return null;
+  }
+
   rows(): readonly NativeReadRow[] {
     return Object.freeze(this.outline().flatMap(entry => {
       const row = entry.kind === "row" ? this.rowCache.get(entry.id) : undefined;
