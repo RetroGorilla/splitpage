@@ -12,7 +12,7 @@ import { scriptCellOf, sanitizeHtml } from "../bootstrap/richtext.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { cellEditing } from "../bootstrap/wiring/editor-owners.ts";
 import { createSessionCapabilities } from "../application/session/capabilities.ts";
-import { removeImage } from "../bootstrap/wiring/rows.ts";
+import { handleImageFile, removeImage } from "../bootstrap/wiring/rows.ts";
 import { mountNativeSharedInput } from "../bootstrap/wiring/native-shared-input.ts";
 import { setBeatLength } from "../features/rows/read-time.ts";
 import { setBeatFilmed } from "../bootstrap/wiring/beat-status.ts";
@@ -1215,6 +1215,19 @@ test("simultaneous field edits preserve different keys and converge on one value
   await Promise.resolve();
   assert.ok(["todo", "ready"].includes(row().app.rows[0].status));
   assert.equal(row().app.rows[0].status, row().peer.rows[0].status);
+});
+
+test("gallery add, remove, reorder and annotation refuse to write to a missing beat", async t => {
+  const show = await enter(t), before = hook.read();
+  handleImageFile("gone", new window.File(["picture"], "picture.png", { type: "image/png" }));
+  removeImage("gone", 0);
+  const change = t.mock.fn(() => { throw new Error("gallery plan ran"); });
+  for (const route of ["Reorder pictures", "Annotate picture"]) {
+    assert.deepEqual(cellEditing().editGallery("gone", route, change), { changed: false, held: true });
+  }
+  assert.equal(change.mock.callCount(), 0);
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), Array.from({ length: 4 }, () => ["That beat no longer exists.", "warn"]));
+  assert.deepEqual(hook.read(), before);
 });
 
 test("gallery edits replace one value and publish to the screen and peer", async t => {

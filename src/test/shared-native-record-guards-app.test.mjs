@@ -61,6 +61,68 @@ function commentToolbar(from = 0, to = 5, target = cell("audioText")) {
   target.closest(".field-wrap").querySelector('[data-cmd="comment"]').click();
 }
 
+function bufferNarration(text) {
+  const target = cell("audioText");
+  target.focus();
+  setCellSelection(target, 2);
+  assert.equal(target.dispatchEvent(new window.InputEvent("beforeinput", {
+    bubbles: true, cancelable: true, inputType: "insertText", data: text
+  })), false);
+  assert.equal(target.textContent, "He" + text + "llo");
+  assert.equal(hook.read().app.rows[0].audioText, "Hello");
+  assert.equal(hook.read().peer.rows[0].audioText, "Hello");
+}
+
+for (const action of ["duration change", "comment post"]) test(`a ${action} lands while narration is buffered`, async t => {
+  const show = await enter(t);
+  if (action === "comment post") {
+    openPanel();
+    commentToolbar(0, 4, cell("visualText"));
+    find("#comment-body-editable").textContent = "Check the shot";
+  }
+  bufferNarration("x");
+  if (action === "duration change") assert.equal(setBeatLength("r1", 83), true);
+  else find("#comment-post").click();
+
+  await until(() => hook.read().app.rows[0].audioText === "Hexllo");
+  for (const copy of [hook.read().app, hook.read().peer]) {
+    assert.equal(copy.rows[0].audioText, "Hexllo");
+    if (action === "duration change") assert.equal(copy.rows[0].lengthSeconds, 83);
+    else assert.deepEqual(copy.comments.map(({ body }) => body), ["Check the shot"]);
+  }
+  assert.equal(cell("audioText").textContent, "Hexllo");
+  if (action === "duration change") assert.equal(find('.row-read[data-id="r1"]').textContent, "1:23");
+  else assert.equal(find(".comment-body").textContent, "Check the shot");
+  assert.equal(show.mock.callCount(), 0);
+});
+
+test("leaving with buffered narration and a pending picture store keeps the narration only", async t => {
+  const show = await enter(t);
+  fakeImageDecoder(t);
+  const waiting = Promise.withResolvers(), stored = Promise.withResolvers();
+  t.after(() => stored.resolve([]));
+  t.mock.method(pictures, "isDurable", () => true);
+  t.mock.method(pictures, "persist", () => { waiting.resolve(); return stored.promise; });
+  const adding = nativeEditorRecords().addPictures("r1", [file()]);
+  await waiting.promise;
+  bufferNarration("z");
+  assert.deepEqual(hook.leave(), { ok: true });
+  assert.equal(hook.read().app.rows[0].audioText, "Hezllo");
+  assert.equal(cell("audioText").textContent, "Hezllo");
+  assert.deepEqual(rowSlots(hook.read().app.rows[0]), []);
+
+  assert.deepEqual(await hook.enter({ backend: "native" }), { ok: true });
+  stored.resolve([]);
+  await adding;
+  for (const copy of [hook.read().app, hook.read().peer]) {
+    assert.equal(copy.rows[0].audioText, "Hezllo");
+    assert.deepEqual(rowSlots(copy.rows[0]), []);
+  }
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), [
+    ["The picture finished loading after the script changed, so it was not added.", "warn"]
+  ]);
+});
+
 function openPanel() {
   openCommentsPanel();
   find('#comments-filter-seg [data-filter="all"]').click();
