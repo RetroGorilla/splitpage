@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
+import { DB_NAME } from "../../../../collab-server/storage.ts";
 import { appendText, serverHarness, storedText } from "./server-harness.ts";
 
 for (const how of ["clean", "kill"] as const) {
@@ -77,3 +80,62 @@ for (const how of ["clean", "kill"] as const) {
     }
   }
 }
+
+test("one relay owns a data folder until it exits, and a crash releases the lock", { timeout: 30_000 }, async t => {
+  const kit = serverHarness(t);
+  kit.seed();
+  const first = kit.launch();
+  const port = await first.port();
+  const writer = kit.copy(port);
+  await kit.until(() => writer.text() === "word" || undefined);
+  const second = kit.launch();
+  const refused = await Promise.race([second.exit, second.port().catch(() => undefined)]);
+  assert.deepEqual(refused, { code: 1, exitSignal: null });
+  assert.match(second.errors(), /Another relay already owns this data directory/);
+  const peer = kit.copy(port);
+  await kit.until(() => peer.text() === "word" || undefined);
+  appendText(writer.session, " kept", 4);
+  await kit.until(() => first.messages.includes("stored") && peer.text() === "word kept" || undefined);
+  assert.equal(storedText(kit.directory), "word kept");
+  assert.deepEqual(await first.stop("kill"), { code: null, exitSignal: "SIGKILL" });
+  writer.close();
+  peer.close();
+  const fresh = kit.copy(await kit.launch().port());
+  await kit.until(() => fresh.relay.status().firstSyncDone || undefined);
+  assert.equal(fresh.text(), "word kept");
+});
+
+test("a refused final SQLite write exits non-zero with one message and preserves the previous snapshot", { timeout: 30_000 }, async t => {
+  const kit = serverHarness(t);
+  kit.seed();
+  const run = kit.launch({ SPLITPAGE_STORE_DEBOUNCE_MS: "60000", SPLITPAGE_STORE_MAX_DEBOUNCE_MS: "60000" });
+  const writer = kit.copy(await run.port());
+  await kit.until(() => writer.text() === "word" || undefined);
+  appendText(writer.session, " pending", 4);
+  await kit.until(() => writer.pending() === 0 || undefined);
+  assert.equal(run.messages.includes("store-started"), false);
+  {
+    using other = new DatabaseSync(join(kit.directory, DB_NAME));
+    other.exec("CREATE TRIGGER refuse_write BEFORE INSERT ON documents BEGIN SELECT RAISE(ABORT, 'private-test-value'); END");
+  }
+  assert.deepEqual(await run.stop("clean"), { code: 1, exitSignal: null });
+  assert.equal(run.errors().trim(), "Relay shutdown failed. The last edits were not stored.");
+  assert.equal(run.messages.includes("stored"), false);
+  assert.equal(storedText(kit.directory), "word");
+});
+
+test("a shutdown that cannot finish a held store exits at its deadline", { timeout: 30_000 }, async t => {
+  const kit = serverHarness(t);
+  kit.seed();
+  const run = kit.launch();
+  const writer = kit.copy(await run.port());
+  await kit.until(() => writer.text() === "word" || undefined);
+  run.send("hold");
+  await kit.until(() => run.messages.includes("armed") || undefined);
+  appendText(writer.session, " held", 4);
+  await kit.until(() => run.messages.includes("store-started") || undefined);
+  run.requestStop();
+  assert.deepEqual(await run.exit, { code: 1, exitSignal: null });
+  assert.equal(run.errors().trim(), "Relay shutdown timed out. Some edits may not have been stored.");
+  assert.equal(storedText(kit.directory), "word");
+});

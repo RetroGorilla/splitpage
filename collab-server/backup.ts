@@ -14,8 +14,8 @@ export function verifyCopy(source: DatabaseSync, copy: DatabaseSync): void {
   try {
     for (const { name, state } of copy.prepare(query).iterate()) {
       const original = expected.next().value;
-      if (!original || original.name !== name || !(state instanceof Uint8Array) ||
-          !(original.state instanceof Uint8Array) || Buffer.compare(state, original.state) !== 0) {
+      if (!original || original.name !== name ||
+          Buffer.compare(state as Uint8Array, original.state as Uint8Array) !== 0) {
         throw new RelayError("Relay backup documents differ from the source snapshot.");
       }
     }
@@ -45,8 +45,9 @@ export async function backupRelay(env: NodeJS.ProcessEnv, copyDatabase = backup)
     source.exec("COMMIT");
     const name = `relay-${date}-${randomUUID()}.sqlite`;
     renameSync(pending, join(destination, name));
-    const backups = readdirSync(destination, { withFileTypes: true }).filter(entry => entry.isFile() && BACKUP_NAME.test(entry.name));
-    for (const { name: expired } of backups.sort((a, b) => b.name.localeCompare(a.name)).slice(keep)) {
+    const older = readdirSync(destination, { withFileTypes: true })
+      .filter(entry => entry.isFile() && entry.name !== name && BACKUP_NAME.test(entry.name));
+    for (const { name: expired } of older.sort((a, b) => b.name.localeCompare(a.name)).slice(keep - 1)) {
       rmSync(join(destination, expired), { force: true });
     }
     return name;

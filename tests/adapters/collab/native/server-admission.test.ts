@@ -9,10 +9,10 @@ import { HocuspocusProvider, MessageType } from "@hocuspocus/provider";
 import { createDecoder, readVarString, readVarUint } from "lib0/decoding";
 import { createEncoder, toUint8Array, writeVarString, writeVarUint } from "lib0/encoding";
 import { WebSocket } from "ws";
-import { Doc, encodeStateAsUpdate } from "yjs";
+import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import { relayConfig, retentionCount } from "../../../../collab-server/config.ts";
 import { DB_NAME, openWriter, verifyDurability } from "../../../../collab-server/storage.ts";
-import { NAME, ORIGIN, TOKEN, serverHarness } from "./server-harness.ts";
+import { NAME, ORIGIN, TOKEN, serverHarness, storedState } from "./server-harness.ts";
 
 const MAIN = new URL("../../../../collab-server/main.ts", import.meta.url);
 
@@ -21,6 +21,28 @@ function socket(t: TestContext, port: number, origin?: string) {
   ws.on("error", () => undefined);
   t.after(() => ws.terminate());
   return ws;
+}
+
+function provider(t: TestContext, url: string, doc = new Doc()) {
+  const events = new EventTarget();
+  let rejectedWrite = false;
+  const client = new HocuspocusProvider({
+    url, name: NAME, token: TOKEN, document: doc, awareness: null,
+    onAuthenticated() { events.dispatchEvent(new Event("change")); },
+    onSynced() { events.dispatchEvent(new Event("change")); },
+    onUnsyncedChanges() { events.dispatchEvent(new Event("change")); }
+  });
+  client.on("message", ({ event }: { event: MessageEvent }) => {
+    const decoder = createDecoder(new Uint8Array(event.data as ArrayBuffer));
+    readVarString(decoder);
+    if (readVarUint(decoder) === MessageType.SyncStatus && readVarUint(decoder) === 0) rejectedWrite = true;
+    events.dispatchEvent(new Event("change"));
+  });
+  t.after(() => { client.destroy(); doc.destroy(); });
+  async function until(predicate: () => boolean) {
+    while (!predicate()) await once(events, "change", { signal: t.signal });
+  }
+  return { client, until, rejected: () => rejectedWrite };
 }
 
 test("only listed origins can upgrade, and only the shared token can load a script", { timeout: 30_000 }, async t => {
@@ -95,33 +117,13 @@ for (const state of ["stored", "live"] as const) {
     }
     const run = kit.launch({ SPLITPAGE_STORE_DEBOUNCE_MS: "60000", SPLITPAGE_STORE_MAX_DEBOUNCE_MS: "60000" });
     const url = `ws://127.0.0.1:${await run.port()}`;
-    function provider(doc: Doc) {
-      const events = new EventTarget();
-      let rejectedWrite = false;
-      const client = new HocuspocusProvider({
-        url, name: NAME, token: TOKEN, document: doc, awareness: null,
-        onAuthenticated() { events.dispatchEvent(new Event("change")); },
-        onSynced() { events.dispatchEvent(new Event("change")); }
-      });
-      client.on("message", ({ event }: { event: MessageEvent }) => {
-        const decoder = createDecoder(new Uint8Array(event.data as ArrayBuffer));
-        readVarString(decoder);
-        if (readVarUint(decoder) === MessageType.SyncStatus && readVarUint(decoder) === 0) rejectedWrite = true;
-        events.dispatchEvent(new Event("change"));
-      });
-      t.after(() => { client.destroy(); doc.destroy(); });
-      async function until(predicate: () => boolean) {
-        while (!predicate()) await once(events, "change", { signal: t.signal });
-      }
-      return { client, until, rejected: () => rejectedWrite };
-    }
     if (state === "live") {
-      const writer = provider(full);
+      const writer = provider(t, url, full);
       await writer.until(() => writer.client.synced && writer.client.unsyncedChanges === 0);
       assert.equal(writer.client.authorizedScope, "read-write");
       assert.equal(run.messages.includes("store-started"), false);
     }
-    const viewer = provider(new Doc());
+    const viewer = provider(t, url);
     await viewer.until(() => viewer.client.synced && viewer.client.document.getMap("fixture").has("data"));
     assert.equal(viewer.client.authorizedScope, "readonly");
     viewer.client.document.getMap("fixture").set("blocked", "do not persist");
@@ -132,6 +134,43 @@ for (const state of ["stored", "live"] as const) {
     assert.equal(db.prepare("SELECT length(state) AS bytes FROM documents").get()?.bytes, 15_000_000);
   });
 }
+
+test("a join waits for the in-progress document before deciding 15 MB access", { timeout: 30_000 }, async t => {
+  const kit = serverHarness(t);
+  const run = kit.launch();
+  const url = `ws://127.0.0.1:${await run.port()}`;
+  run.send("hold-load");
+  await kit.until(() => run.messages.includes("load-armed") || undefined);
+  const first = provider(t, url);
+  await kit.until(() => run.messages.includes("loading") || undefined);
+  const joining = provider(t, url);
+  await joining.until(() => joining.client.synced && joining.client.document.getMap("fixture").has("data"));
+  assert.equal(first.client.authorizedScope, "read-write");
+  assert.equal(joining.client.authorizedScope, "readonly");
+});
+
+test("an existing writer can cross 15 MB and keep writing", { timeout: 30_000 }, async t => {
+  const kit = serverHarness(t);
+  const run = kit.launch({ SPLITPAGE_STORE_DEBOUNCE_MS: "60000", SPLITPAGE_STORE_MAX_DEBOUNCE_MS: "60000" });
+  const writer = provider(t, `ws://127.0.0.1:${await run.port()}`);
+  await writer.until(() => writer.client.synced && writer.client.unsyncedChanges === 0);
+  assert.equal(writer.client.authorizedScope, "read-write");
+  const data = writer.client.document.getMap("fixture");
+  data.set("one", new Uint8Array(8_000_000));
+  await writer.until(() => writer.client.unsyncedChanges === 0);
+  data.set("two", new Uint8Array(7_100_000));
+  await writer.until(() => writer.client.unsyncedChanges === 0);
+  data.set("after", "accepted");
+  await writer.until(() => writer.client.unsyncedChanges === 0);
+  assert.equal(writer.client.authorizedScope, "read-write");
+  assert.deepEqual(await run.stop("clean"), { code: 0, exitSignal: null });
+  const snapshot = storedState(kit.directory);
+  assert.ok(snapshot.byteLength > 15_000_000);
+  const decoded = new Doc();
+  t.after(() => decoded.destroy());
+  applyUpdate(decoded, snapshot);
+  assert.equal(decoded.getMap("fixture").get("after"), "accepted");
+});
 
 test("missing configuration or out-of-range settings fail without including their values", t => {
   const kit = serverHarness(t);
@@ -163,12 +202,12 @@ test("a relay fails cleanly when the configured listener is taken", { timeout: 3
   const kit = serverHarness(t);
   const running = kit.launch();
   const port = await running.port();
-  const blocked = kit.launch({ SPLITPAGE_PORT: String(port) });
+  const blocked = kit.launch({ SPLITPAGE_DATA_DIR: join(kit.directory, "other"), SPLITPAGE_PORT: String(port) });
   assert.deepEqual(await blocked.exit, { code: 1, exitSignal: null });
   assert.match(blocked.errors(), /Relay could not listen on the configured port/);
 });
 
-for (const damage of ["foreign", "empty", "corrupt", "wrong schema", "failed integrity"] as const) {
+for (const damage of ["foreign", "empty", "corrupt", "wrong identity", "wrong schema", "failed integrity"] as const) {
   test(`${damage} database fails startup and its file is preserved`, { timeout: 30_000 }, async t => {
     const kit = serverHarness(t);
     const path = join(kit.directory, DB_NAME);
@@ -177,9 +216,9 @@ for (const damage of ["foreign", "empty", "corrupt", "wrong schema", "failed int
       db.exec("CREATE TABLE other (content TEXT)");
     } else if (damage === "empty" || damage === "corrupt") {
       writeFileSync(path, damage === "empty" ? "" : "not a database");
-    } else if (damage === "wrong schema") {
+    } else if (damage === "wrong identity" || damage === "wrong schema") {
       using db = openWriter(kit.directory);
-      db.exec("ALTER TABLE documents RENAME TO other");
+      db.exec(damage === "wrong identity" ? "PRAGMA application_id=0" : "ALTER TABLE documents RENAME TO other");
     } else {
       let offset: number;
       {
@@ -203,3 +242,21 @@ for (const damage of ["foreign", "empty", "corrupt", "wrong schema", "failed int
     assert.deepEqual(readFileSync(path), before);
   });
 }
+
+test("startup explicitly sets FULL and rejects a writer connection that still reads back NORMAL", t => {
+  const kit = serverHarness(t);
+  const exec = DatabaseSync.prototype.exec;
+  let forceMismatch = false;
+  t.mock.method(DatabaseSync.prototype, "exec", function (this: DatabaseSync, sql: string) {
+    if (!sql.includes("journal_mode=WAL")) return exec.call(this, sql);
+    exec.call(this, "PRAGMA synchronous=NORMAL");
+    exec.call(this, sql);
+    if (forceMismatch) exec.call(this, "PRAGMA synchronous=NORMAL");
+  });
+  {
+    using db = openWriter(kit.directory);
+    assert.equal(db.prepare("PRAGMA synchronous").get()?.synchronous, 2);
+  }
+  forceMismatch = true;
+  assert.throws(() => openWriter(kit.directory).close(), /requires WAL and synchronous=FULL/);
+});

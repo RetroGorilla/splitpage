@@ -11,7 +11,7 @@ pictures and screen design are out of scope.
 ## Build status
 
 Slices 1 to 6 are on `main`. The native shared-document command layer and undo are built.
-The app has no native wiring yet. Slices 7a, 7c and 7h are merged. This PR builds 7d, the relay server and its storage. The old adapter stays untouched until slice 8.
+Slices 7a, 7c and 7h are merged. The native editor entry and Split narration typing are on `main`. This PR builds 7d, the relay server and its storage. The old adapter stays untouched until slice 8.
 
 ## Server-stop results and backup runbook
 
@@ -37,8 +37,8 @@ before the store starts. With repeated edits, the 10-second threshold is checked
 timer can run up to 2 more seconds. Allow roughly the last 12 seconds of edits plus encoding and write time on a
 healthy host. A stalled write or event loop can extend that window. The tests used the stock debounce with short
 settings to reach the store, a longer debounce to stop before it, and a gate in the test process to hold the store
-hook. They did not simulate a mid-transaction kill or power loss. Keeping snapshots for other users remains the
-owner's decision.
+hook. They leave a mid-transaction kill and power loss unmeasured. On 2026-11-20 the owner reviewed these
+results and kept stock snapshots for the first version.
 
 The service lives in `collab-server/`. It uses the stock Hocuspocus Database extension and Node 24.22.1's SQLite
 module (stability 1.2, release candidate). The Node module supplies the online backup API and avoids native add-on
@@ -46,23 +46,84 @@ installation. See the [Node SQLite API](https://nodejs.org/download/release/v24.
 
 ### Backup runbook
 
-1. Build with `docker build -t splitpage-relay collab-server`. On the host, use one persistent data volume on the
-   direct local pool, a read-only root filesystem, and bounded temporary space. For example, start the image with
-   `--read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m` and mount the volume at `/data` with write access for the
-   image's non-root user. Apply host resource limits and restrict ingress to the intended tunnel or proxy.
-2. Set `SPLITPAGE_DATA_DIR` and `SPLITPAGE_PORT` (image defaults `/data` and `8080`),
-   `SPLITPAGE_ALLOWED_ORIGINS` (comma-separated browser/app origins), and `SPLITPAGE_ACCESS_TOKEN` from host
-   secret storage. The debounce settings in milliseconds are `SPLITPAGE_STORE_DEBOUNCE_MS` and
-   `SPLITPAGE_STORE_MAX_DEBOUNCE_MS`. Backup retention is `SPLITPAGE_BACKUP_KEEP` (default seven).
-3. Schedule one `docker exec splitpage-relay node backup-command.ts` daily. It snapshots the live SQLite database
-   with SQLite's online backup API, checks integrity, and compares the bytes for every stored script before
-   publishing a dated file in `backups/` under the data directory. Copy the reported file off-machine and alert
-   if either step fails. One successful copy a day limits backup age to about 24 hours, plus any edits still
-   waiting to reach SQLite when the backup began.
-4. Before anyone else uses the relay, repeat the automated drill on the host in isolation. With the old clients
-   disconnected and public access disabled, put a verified copy in a fresh data volume as `relay.sqlite`. Start
-   the service on it and open the scripts with fresh copies. Check that the scripts match the backup and are
-   missing edits made after it. Decide how to recover those edits before allowing old copies to reconnect.
+**Start the relay.** From the repository root on the Docker host, replace the placeholder pool directory, editor
+origin and token. Use a directory on the direct local pool. Keep the environment file in host secret storage,
+with access limited to the operator. The example exposes the relay only on loopback for the intended tunnel or
+proxy. Set CPU and memory limits for the host. One relay process can own the volume at a time.
+
+```sh
+set -eu
+docker build -t splitpage-relay collab-server
+sudo install -d -m 0700 -o 1000 -g 1000 /REPLACE_WITH_DIRECT_POOL_PATH/splitpage
+docker volume create --driver local --opt type=none --opt o=bind --opt device=/REPLACE_WITH_DIRECT_POOL_PATH/splitpage splitpage-relay-data
+
+umask 077
+config_dir="$HOME/.config/splitpage-relay"
+mkdir -p "$config_dir"
+cat > "$config_dir/relay.env" <<'EOF'
+SPLITPAGE_DATA_DIR=/data
+SPLITPAGE_PORT=8080
+SPLITPAGE_ALLOWED_ORIGINS=https://REPLACE_WITH_EDITOR_HOST,splitpage://app
+SPLITPAGE_ACCESS_TOKEN=REPLACE_WITH_ACCESS_TOKEN
+SPLITPAGE_STORE_DEBOUNCE_MS=2000
+SPLITPAGE_STORE_MAX_DEBOUNCE_MS=10000
+SPLITPAGE_BACKUP_KEEP=7
+EOF
+
+docker run -d --name splitpage-relay --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m --stop-timeout 20 --cpus 2 --memory 2g --publish 127.0.0.1:8080:8080 --env-file "$config_dir/relay.env" --mount type=volume,source=splitpage-relay-data,target=/data splitpage-relay
+docker logs splitpage-relay
+```
+
+**Back up daily and copy off-machine.** Save this as `relay-backup.sh`, replace the remote account, host and
+archive directory, and run `sh relay-backup.sh` once. Use an account with scheduled access to Docker and
+non-interactive SSH access to the archive. The script copies the exact file reported after verification.
+
+```sh
+set -eu
+output=$(docker exec splitpage-relay node backup-command.ts)
+case "$output" in
+  "Verified relay backup relay-"*.sqlite.) ;;
+  *) printf '%s\n' "Backup did not report a verified file." >&2; exit 1 ;;
+esac
+name=${output#Verified relay backup }
+name=${name%.}
+staging=$(mktemp -d)
+trap 'rm -f "$staging/$name"; rmdir "$staging"' EXIT
+docker cp "splitpage-relay:/data/backups/$name" "$staging/$name"
+scp -B "$staging/$name" REPLACE_WITH_ARCHIVE_USER@REPLACE_WITH_ARCHIVE_HOST:/REPLACE_WITH_ARCHIVE_DIRECTORY/
+```
+
+Run `crontab -e` and add the line below with the real script path. Set up an alert for failed jobs and check the
+copied file after the first scheduled run. A successful copy every day limits backup age to about 24 hours,
+plus edits still waiting to reach SQLite when the backup began.
+
+```cron
+15 2 * * * /bin/sh /REPLACE_WITH_SCRIPT_PATH/relay-backup.sh
+```
+
+**Restore in isolation before anyone else uses the relay.** With old clients disconnected, fetch one verified
+backup from the archive. Use a fresh volume, a separate token in a copy of `relay.env` named
+`relay-restore.env`, and keep the restore port out of the public proxy. The helper checks that the volume is
+empty before creating `relay.sqlite`. If it exits with an error, choose a new volume before continuing.
+
+```sh
+set -eu
+umask 077
+config_dir="$HOME/.config/splitpage-relay"
+cp "$config_dir/relay.env" "$config_dir/relay-restore.env"
+"${EDITOR:-vi}" "$config_dir/relay-restore.env"
+backup_name=REPLACE_WITH_VERIFIED_BACKUP_FILENAME
+scp -B "REPLACE_WITH_ARCHIVE_USER@REPLACE_WITH_ARCHIVE_HOST:/REPLACE_WITH_ARCHIVE_DIRECTORY/$backup_name" "$backup_name"
+restore_volume="splitpage-relay-restore-$(date -u +%Y%m%dT%H%M%SZ)"
+if docker volume inspect "$restore_volume" >/dev/null 2>&1; then echo "Choose a new restore volume name." >&2; exit 1; fi
+docker volume create "$restore_volume"
+docker run --rm -i --read-only --mount "type=volume,source=$restore_volume,target=/data" --entrypoint sh splitpage-relay -ec 'contents=$(ls -A /data); test -z "$contents" || { echo "Restore volume is not empty." >&2; exit 1; }; set -C; cat > /data/relay.sqlite' < "$backup_name"
+docker run -d --name splitpage-relay-restore --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m --stop-timeout 20 --cpus 2 --memory 2g --publish 127.0.0.1:8081:8080 --env-file "$config_dir/relay-restore.env" --mount "type=volume,source=$restore_volume,target=/data" splitpage-relay
+docker logs splitpage-relay-restore
+```
+
+Open the recovered scripts with fresh copies. Check that they match the backup and that changes made after it
+are absent. Decide how to recover those changes before allowing old copies to reconnect.
 
 ## Decisions made
 
@@ -88,7 +149,7 @@ Decided by the owner: rows 1 to 13 on 2026-11-18; row 4's new form and rows 14 t
 | 16 | A first load keeps the stock 30 s wait, with the script sizes that fit at each speed, a limit on restarts, and a clear message when a script is too large for the line | Worked out from E13: about 3.5 MB loads at 1 Mbit/s, 7 MB at 2, 14 MB at 4. A larger script gets the message instead of restarting forever | Owner, E13 |
 | 17 | The offline notice flags a production tag lost through someone's unseen delete and undo | The person returning is told; one who stayed online is not | Owner, E12, E16 |
 | 18 | A marker whose record or visual cell is missing is not a row: its narration reads into the row above, and nothing is written (rule (g), E17's option R) | Section 10 | Owner, E17 |
-| 19 | The first version uses stock snapshot storage, the whole state rewritten 2 to 10 s after an edit: a departure from `docs/COLLABORATION-PLAN.md`. Tests stop the server inside that window, show what is lost and whether reconnecting copies restore it, and decide whether the plan's update journal and durable receipts come before others use it | A server stop can lose the last seconds of edits on the server; that reconnecting copies re-send them is an untested assumption | Owner, E13 |
+| 19 | On 2026-11-20 the owner reviewed the [six-row stop table](#server-stop-results-and-backup-runbook) and kept stock snapshot storage for the first version. The update journal and durability receipts are deferred. With default settings about 12 seconds of edits can be waiting on a healthy host, plus encoding and commit time | Clean stops kept the edit in 6 of 6 runs. Returning copies restored uncommitted edits in 2 of 2 kill cases. The edits were lost in both cases where every copy was gone. The first version makes no "saved to server" claim | Owner, E13, slice 7d |
 
 **The guide for same-spot, same-moment conflicts** (owner): it is enough if they merge without losing data about
 nine times in ten; a guide, not a hard rule, and stricter where a defect must never happen (section 6).
@@ -238,6 +299,11 @@ break, an undo sent into a dead socket overtaken by a redo queued for the reconn
 At 15 MB a keystroke took 0.201 ms (E8); a first download at 1 to 4 Mbit/s never finished in 30 s (decision 16).
 Kept records add about 100 bytes per removed row, 160 to 174 for edited ones (E14). Detail:
 [appendix J](#j-relay-size-and-the-reconnect-wrapper).
+
+The server checks the encoded size when a copy joins. At 15 MB and above, the new connection is read-only.
+A connection already admitted as writable keeps that access if the script crosses 15 MB. The clients refuse
+additions at 15 MB, with a 105% ceiling (#1667), and the server still caps each WebSocket payload at
+16,000,000 bytes. The admission tests pin both outcomes.
 
 ## 9. Offline notice
 
@@ -389,7 +455,7 @@ The owner chose option A on 2026-11-20.
 
 ### Server storage and saved status
 
-The older plan's [Server storage](../COLLABORATION-PLAN.md#server-storage) and [Durability receipts](../COLLABORATION-PLAN.md#durability-receipts) require a committed update journal before a durable receipt. Its update supersedes that first-version choice. This note's [decision 19](#decisions-made) starts with stock snapshots written 2 to 10 s after an edit. [Appendix O](#o-acceptance-cases-from-the-outside-review) calls for server-stop tests before deciding whether the journal and receipts should come first.
+The older plan's [Server storage](../COLLABORATION-PLAN.md#server-storage) and [Durability receipts](../COLLABORATION-PLAN.md#durability-receipts) require a committed update journal before a durable receipt. Its update supersedes that first-version choice. After reviewing the [server-stop results](#server-stop-results-and-backup-runbook), the owner confirmed [decision 19](#decisions-made) on 2026-11-20. The first version uses stock snapshots and makes no "saved to server" claim.
 
 On `main`, the native layer has no server store or saved-status integration.
 
@@ -760,9 +826,9 @@ Requirements from the outside review of this note, added to the build order (sec
   limit conflicts, never discarding an update while claiming synchronization succeeded, preserving recoverable data,
   and a test where individually valid edits merge past the limit ("Validation and resource limits"). That gap is
   open.
-- **Server stops** (decision 19): stop the server inside the 2 to 10 s store window; show what is lost and whether
-  reconnecting copies restore it. The plan's receipt checker and kill-before-and-after-receipt tests apply only if
-  these tests call for the update journal.
+- **Server stops** (decision 19): the [six-row stop table](#server-stop-results-and-backup-runbook) covers clean
+  and killed stops before, during and after the store. The plan's receipt checker and kill-before-and-after-receipt
+  tests are deferred with the update journal.
 - **Stale targets in the editor** (E1's four commit outcomes: written, unchanged, moved to the beat's live cell, or
   handed to a recovery list): IME composition and plain buffered typing, in narration and in visual cells, with the
   target removed, replaced, restored, or hidden under rule (g). Each ends as a visible write or a recovery entry,

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { copyFileSync, mkdirSync, readdirSync, rmSync, writeFileSync } from "node:fs";
+import { copyFileSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import test from "node:test";
@@ -108,4 +108,49 @@ test("a changed copy fails verification before it can be published or prune a pr
     return pages;
   }), /documents differ/);
   assert.deepEqual(readdirSync(join(kit.directory, "backups")), [previous]);
+});
+
+test("retention always keeps the just-verified backup and ignores backup-shaped directories", { timeout: 30_000 }, async t => {
+  const kit = serverHarness(t);
+  kit.seed();
+  const config = { SPLITPAGE_DATA_DIR: kit.directory, SPLITPAGE_BACKUP_KEEP: "1" };
+  const first = await backupRelay(config);
+  const directory = join(kit.directory, "backups");
+  const future = first.replace(/relay-\d{4}/, "relay-2099");
+  const unrelated = first.replace(/relay-\d{4}/, "relay-2098");
+  renameSync(join(directory, first), join(directory, future));
+  mkdirSync(join(directory, unrelated));
+  kit.seed("new-script");
+  const justMade = await backupRelay(config);
+  assert.deepEqual(readdirSync(directory).sort(), [justMade, unrelated].sort());
+  using copy = new DatabaseSync(join(directory, justMade), { readOnly: true });
+  assert.equal(copy.prepare("SELECT count(*) AS count FROM documents").get()?.count, 2);
+});
+
+test("backup preflight rejects a foreign source before asking SQLite to copy", { timeout: 30_000 }, async t => {
+  const kit = serverHarness(t);
+  {
+    using db = openWriter(kit.directory);
+    db.exec("PRAGMA application_id=0");
+  }
+  let attempted = false;
+  await assert.rejects(backupRelay({ SPLITPAGE_DATA_DIR: kit.directory }, async () => {
+    attempted = true;
+    return 0;
+  }), /unrecognized identity or schema/);
+  assert.equal(attempted, false);
+  assert.equal(readdirSync(kit.directory).includes("backups"), false);
+});
+
+test("online backup copies the preflight snapshot even when a second connection commits before copying", { timeout: 30_000 }, async t => {
+  const kit = serverHarness(t);
+  using writer = openWriter(kit.directory);
+  writer.exec("INSERT INTO documents VALUES ('one', X'01'), ('two', X'02')");
+  const name = await backupRelay({ SPLITPAGE_DATA_DIR: kit.directory }, async (source, path) => {
+    writer.exec("BEGIN; UPDATE documents SET state = X'03'; COMMIT");
+    return backup(source, path);
+  });
+  assert.deepEqual(writer.prepare("SELECT hex(state) AS state FROM documents ORDER BY name").all().map(row => row.state), ["03", "03"]);
+  using copy = new DatabaseSync(join(kit.directory, "backups", name), { readOnly: true });
+  assert.deepEqual(copy.prepare("SELECT hex(state) AS state FROM documents ORDER BY name").all().map(row => row.state), ["01", "02"]);
 });

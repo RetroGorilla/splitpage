@@ -7,6 +7,22 @@ export const DB_NAME = "relay.sqlite";
 const APPLICATION_ID = 0x53504c54;
 const SCHEMA = "CREATE TABLE documents (name TEXT PRIMARY KEY NOT NULL, state BLOB NOT NULL) STRICT";
 
+export function claimWriter(directory: string): DatabaseSync {
+  let lock: DatabaseSync | undefined;
+  try {
+    mkdirSync(directory, { recursive: true, mode: 0o700 });
+    lock = new DatabaseSync(join(directory, "relay-writer.sqlite"));
+    lock.exec("BEGIN EXCLUSIVE");
+    return lock;
+  } catch (error) {
+    lock?.close();
+    if ((error as { errcode?: number }).errcode === 5) {
+      throw new RelayError("Another relay already owns this data directory.");
+    }
+    throw new RelayError("Relay could not acquire the writer lock. Check data volume permissions.");
+  }
+}
+
 export function verifyDatabase(db: DatabaseSync): void {
   if (db.prepare("PRAGMA application_id").get()?.application_id !== APPLICATION_ID ||
       db.prepare("SELECT sql FROM sqlite_schema WHERE name = 'documents' AND type = 'table'").get()?.sql !== SCHEMA) {
