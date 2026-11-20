@@ -324,13 +324,29 @@ test("stacked headings above one row save only the heading directly above it and
     assert.deepEqual(createNativeHeading(right, rightCaret.range, "h-right", "Right"), { kind: "written" });
     net.settle();
     net.agree();
-    const outline = left.reader.outline();
-    assert.equal(outline.length, 3);
-    const [upper, lower, row] = outline;
-    assert.ok(upper?.kind === "heading" && lower?.kind === "heading" && row?.kind === "row" && row.id === "R1");
+    const order = left.roots.order.toArray();
+    assert.deepEqual(order, ["h:h-left", "h:h-right", "b:R1"]);
+    const leftRank = left.roots.headings.get("h-left")?.get("rank");
+    const rightRank = left.roots.headings.get("h-right")?.get("rank");
+    const rowRank = left.roots.beats.get("R1")?.get("rank");
+    assert.ok(typeof leftRank === "string" && typeof rightRank === "string" && typeof rowRank === "string");
+    assert.equal(leftRank, rightRank);
+    assert.ok(leftRank < rowRank);
+    const created = [
+      { id: "h-left", name: "Left", rank: leftRank, storedAt: order.indexOf("h:h-left") },
+      { id: "h-right", name: "Right", rank: rightRank, storedAt: order.indexOf("h:h-right") }
+    ].sort((a, b) => a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : a.storedAt - b.storedAt);
+    assert.deepEqual(created.map(entry => entry.id), ["h-left", "h-right"]);
+    const [omitted, nearest] = created;
+    assert.ok(omitted && nearest);
     for (const copy of [left, right]) {
-      assert.deepEqual(copy.reader.document().sections, [{ id: lower.id, name: lower.name, firstSceneId: "R1" }]);
-      assert.deepEqual(problemKinds(copy), [`heading-without-row headings/${upper.id}`]);
+      assert.deepEqual(copy.reader.outline(), [
+        { kind: "heading", id: "h-left", name: "Left" },
+        { kind: "heading", id: "h-right", name: "Right" },
+        { kind: "row", id: "R1" }
+      ]);
+      assert.deepEqual(copy.reader.document().sections, [{ id: nearest.id, name: nearest.name, firstSceneId: "R1" }]);
+      assert.deepEqual(problemKinds(copy), [`heading-without-row headings/${omitted.id}`]);
     }
   } finally { left.doc.destroy(); right.doc.destroy(); }
 });

@@ -287,6 +287,21 @@ test("a write followed by a join omits an href-only secondary link to match core
   script.doc.destroy();
 });
 
+test("as built: renaming the head image on a joined row refuses when a member holds a hidden href-only link", () => {
+  const { scripts: [script] } = recordCopies([5]);
+  assert.ok(script);
+  try {
+    assert.deepEqual(setNativeField(script, beatField("A", "imageRef"), IMAGE), WRITTEN);
+    assert.deepEqual(setNativeField(script, beatField("B", "imageLinks"), HREF_ONLY), WRITTEN);
+    assert.deepEqual(joinNativeRow(script, "B", "A", " "), WRITTEN);
+    assert.equal(script.reader.row("A")?.fields.moreImages, undefined);
+    assert.equal(Object.hasOwn(script.reader.document().rows[0] ?? {}, "moreImages"), false);
+    unchangedRecord(script, () => setNativeField(script, beatField("A", "imageName"), "Primary"), "value");
+    assert.equal(script.reader.row("A")?.fields.imageName, undefined);
+    assert.equal(script.reader.document().rows[0]?.imageName, undefined);
+  } finally { script.doc.destroy(); }
+});
+
 test("concurrent head image and member link writes omit an href-only secondary to match core reload", () => {
   races((left, right, settle) => {
     assert.deepEqual(joinNativeRow(left, "B", "A", " "), WRITTEN);
