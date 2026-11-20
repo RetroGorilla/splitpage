@@ -1,6 +1,5 @@
 "use strict";
 
-import type { WebContents } from "electron";
 import type { NativeReplicaReply, NativeReplicaRequest } from "../shared/native-replica-ipc.d.ts";
 import type { createNativeReplicaFiles, NativeReplicaFileSystem } from "./native-replica-files.ts";
 
@@ -14,7 +13,12 @@ const BLOCKED = { kind: "failed", reason: "blocked" } as const;
 const CLOSED = { kind: "failed", reason: "closed" } as const;
 const STORED = { kind: "stored" } as const;
 
-type Renderer = Pick<WebContents, "once" | "removeListener" | "isDestroyed">;
+type RendererEnd = "destroyed" | "render-process-gone";
+interface Renderer {
+  once(event: RendererEnd, listener: () => void): unknown;
+  removeListener(event: RendererEnd, listener: () => void): unknown;
+  isDestroyed(): boolean;
+}
 type Replica = Awaited<ReturnType<ReturnType<typeof createNativeReplicaFiles>["open"]>>;
 
 interface Lease {

@@ -113,32 +113,33 @@ function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSyste
       initialized = true;
     }
 
-    async function truncate(handle: FileHandle): Promise<void> {
-      await handle.truncate(length);
-      await handle.sync();
+    async function repairLog(): Promise<void> {
+      // why: an append-only handle cannot truncate a file on Windows
+      const handle = await disk.open(log, "r+");
+      await useFile(handle, async () => {
+        await handle.truncate(length);
+        await handle.sync();
+      });
       repair = false;
     }
 
-    if (repair) {
-      const handle = await disk.open(log, "r+");
-      await useFile(handle, () => truncate(handle));
-    }
+    if (repair) await repairLog();
 
     async function append(entry: NativeReplicaWireEntry): Promise<void> {
+      if (repair) await repairLog();
       const record = pack(entry);
       const handle = await disk.open(log, "a+");
-      await useFile(handle, async () => {
-        if (repair) await truncate(handle);
-        repair = true;
-        try {
+      repair = true;
+      try {
+        await useFile(handle, async () => {
           await handle.writeFile(record);
           await handle.sync();
           if (length === 0) await syncDirectory(dir);
-        } catch (error) {
-          await truncate(handle).catch(() => {});
-          throw error;
-        }
-      });
+        });
+      } catch (error) {
+        await repairLog().catch(() => {});
+        throw error;
+      }
       repair = false;
       length += record.byteLength;
       tail.push(entry);
