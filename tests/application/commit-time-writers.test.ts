@@ -199,6 +199,7 @@ const FIELDS: readonly Site[] = [
   ["adapters/collab/native/comment-commands.ts#createNativeComment", "anchorId 2, resolvedAt 1, resolvedBy 1, updatedAt 1", "record-stated", "comment-stamp"],
   ["adapters/collab/native/comment-commands.ts#fieldsOf", "createdAt 1", "comment-stamp"],
   ["adapters/collab/native/reader.ts#NativeScriptReader", "docId 1, rev 1", "capture-read", "stored-read"],
+  ["adapters/collab/native/registry-projection.ts#projectNativeRegistries", "owner 1", "stored-read"],
   ["adapters/collab/project.ts#assembleSharedDocument", "rev 1", "capture-read"],
   ["adapters/formats/export-projections.ts#commentEntries", "createdAt 2, resolvedBy 1", "no-document"],
   ["adapters/formats/project-file.ts#buildSplitpageCopy", "docId 1", "no-document"],
@@ -272,6 +273,8 @@ const FIELDS: readonly Site[] = [
 ];
 
 const RECORDS: readonly Site[] = [
+  ["adapters/collab/native/registry-projection.ts#projectNativeRegistries", "brollShots 2, people 2, productionTags 3", "stored-read", "tag-from-text", "shot-from-line"],
+  ["adapters/collab/native/registry-projection.ts#propNormalizer", "productionTags 1", "stored-read"],
   ["adapters/collab/project.ts#assembleSharedDocument", "comments 1", "anchor-repair"],
   ["adapters/collab/project.ts#assembleSharedDocumentFields", "brollShots 1, comments 1, people 1, productionTags 1", "stored-read"],
   ["adapters/formats/csv.ts#scriptTable", "comments 2", "no-document"],
@@ -336,6 +339,8 @@ const FROM_TEXT = ["tag-from-text", "cue-retitle", "shot-from-line", "shot-name-
 const ENGINES: readonly Site[] = [
   ["adapters/collab/buffer.ts#createSharedBufferedText", "Plan.shared (provided) 2, sharedBeatStamp 1, sharedTagsIntroducedByText 1", "stated-write", "recovery-write", "tag-from-text",
     "beat-stamp"],
+  ["adapters/collab/native/registry-projection.ts#nativeShotLinePlan", "planBrollRecordsInState 1", "shot-from-line", "shot-name-from-line"],
+  ["adapters/collab/native/registry-projection.ts#projectNativeRegistries", "applyBrollRecords 1", "shot-from-line", "shot-name-from-line"],
   ["adapters/collab/projection-reader.ts#readProjectionFields", "readSharedStamp 1", "beat-stamp-read"],
   ["adapters/collab/record-codec.ts#readRecordFields", "readSharedResolution 1", "comment-stamp-read"],
   ["adapters/collab/record-executor.ts#prepareSet", "sharedResolutionOperation 1", "comment-stamp"],
