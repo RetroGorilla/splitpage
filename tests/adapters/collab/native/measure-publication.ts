@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { performance } from "node:perf_hooks";
+import { fileURLToPath } from "node:url";
 import "../../../../src/test/_dom.mjs";
 import { openNativeSession } from "../../../../src/adapters/collab/native/session.ts";
 import { createSharedSession } from "../../../../src/application/session/shared-session.ts";
@@ -10,12 +12,11 @@ import { enterSharedDocument } from "../../../../src/core/migrate.ts";
 import { fakeClock } from "../../../application/session-fakes.ts";
 import { largeState, LARGE_BEATS } from "./structural.ts";
 
-const state = largeState();
 const beat = "B451", warmup = 50, count = 1000;
 const allowed = () => ({ allowed: true as const }), noop = () => {};
 
 async function measure(before: boolean, batch: number): Promise<void> {
-  const native = openNativeSession({ kind: "state", state }, { actor: "Writer", sanitize: sanitizeHtml });
+  const native = openNativeSession({ kind: "state", state: largeState() }, { actor: "Writer", sanitize: sanitizeHtml });
   const publication = nativePublication();
   const app = createSharedSession({
     replica: publication.replica, entry: enterSharedDocument, undo: { record: noop },
@@ -93,7 +94,17 @@ async function measure(before: boolean, batch: number): Promise<void> {
   }
 }
 
-console.log(`Node ${process.version} ${process.arch}, ${LARGE_BEATS} beats. DOM paint and buffer wait excluded.`);
-await measure(true, 1);
-await measure(false, 1);
-await measure(false, 10);
+const modes = { before: [true, 1], isolated: [false, 1], burst: [false, 10] } as const;
+const mode = process.argv[2];
+if (mode) {
+  assert.ok(Object.hasOwn(modes, mode), "Unknown publication measurement mode");
+  const [before, batch] = modes[mode as keyof typeof modes];
+  await measure(before, batch);
+} else {
+  console.log(`Node ${process.version} ${process.arch}, ${LARGE_BEATS} beats. DOM paint and buffer wait excluded.`);
+  for (const name of Object.keys(modes)) {
+    const result = spawnSync(process.execPath, [fileURLToPath(import.meta.url), name], { stdio: "inherit" });
+    if (result.error) throw result.error;
+    assert.equal(result.status, 0, "Publication measurement failed for " + name);
+  }
+}
