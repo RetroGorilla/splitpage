@@ -102,6 +102,14 @@ eq("bootstrap may import the collaboration adapter while direct runtime package 
   "src/adapters/collab/probe.ts": 'import "yjs";\nexport const value = 1;\n'
 })), []);
 
+const providerImport = 'import "@hocuspocus/provider";';
+for (const source of ["src/adapters/collab/native/relay.ts", "tests/adapters/collab/native/relay.test.ts", "prototypes/collab/src/probe.ts"]) {
+  eq(`${source} permits the relay provider`, findViolations(graph({ [source]: providerImport })), []);
+}
+for (const source of ["src/adapters/collab/probe.ts", "src/adapters/collab/native-other/probe.ts", "src/bootstrap/probe.ts", "server/probe.ts"]) {
+  eq(`${source} rejects the relay provider`, findViolations(graph({ [source]: providerImport })).map(({ rule }) => rule), ["collab-import"]);
+}
+
 for (const source of ["src/bootstrap/probe.ts", "desktop/probe.ts", "server/probe.ts", "shared/probe.ts", "src/test/probe.test.mjs", "desktop/test/probe.test.mjs"]) {
   for (const target of ["prototypes/collab/src/probe.ts", "prototypes/collab/test/probe.test.ts"]) {
     const prefix = "../".repeat(source.split("/").length - 1);

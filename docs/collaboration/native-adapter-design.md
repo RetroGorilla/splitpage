@@ -11,7 +11,7 @@ pictures and screen design are out of scope.
 ## Build status
 
 Slices 1 to 6 are on `main`. The native shared-document command layer and undo are built.
-The app has no native wiring yet. Slice 7 is in progress in parts. This PR builds 7a, the native session. The old adapter stays untouched until slice 8.
+The app has no native wiring yet. Slices 7a and 7h are merged. This PR builds 7c, the relay connection. The old adapter stays untouched until slice 8.
 
 ## Decisions made
 
@@ -257,7 +257,7 @@ questions. Earlier rounds: [appendix K](#k-earlier-rounds).
 
 **(c) Close a script only between commands.** A close from `beforeTransaction` after a press has checked availability still lets the press write. [Undo tests](../../tests/adapters/collab/native/undo-commands.test.ts). A requested close delivers the final `changed` while `document()` can read the committed edit, then delivers `closed` exactly once to each subscriber. A failed close can omit the final `changed` if Yjs emitted no update. The bytes on `closed` are then the caller's source of truth. [Session tests](../../tests/adapters/collab/native/session.test.ts) pin both paths, including throws from subscribers and a destroy listener.
 
-**(d) Deliver each person's undo and redo in order.** A redo that overtakes its undo lets formatting cleanup drop a restored tag on every copy. See [section 8](#8-relay-and-size). Not pinned in the native tests. E13 pins it in [relay order tests](../../prototypes/collab/test/native-relay/order.test.ts), with a library reproduction in [raw tag relay tests](../../prototypes/collab/test/native-undo/raw-tag-relay.test.ts).
+**(d) Deliver each person's undo and redo in order.** A redo that overtakes its undo lets formatting cleanup drop a restored tag on every copy. See [section 8](#8-relay-and-size). Pinned in the [native relay tests](../../tests/adapters/collab/native/relay-order.test.ts). E13 has a library reproduction in [raw tag relay tests](../../prototypes/collab/test/native-undo/raw-tag-relay.test.ts).
 
 **(e) Supply the real comment body sanitiser.** `NativeCommentBodyPorts.sanitize` runs inside the write transaction before any write. It must leave the document and script lifecycle alone. The command catches a throw and refuses the body. The body check refuses text that would change on reload. [Record command tests](../../tests/adapters/collab/native/record-commands.test.ts) pin refusal of bodies the core changes. [Session tests](../../tests/adapters/collab/native/session.test.ts) pin callback timing and refusal on a throw from the sanitiser itself. Its document and lifecycle restrictions are not pinned. [Slice 5 PR](https://github.com/RetroGorilla/splitpage/pull/1658).
 
