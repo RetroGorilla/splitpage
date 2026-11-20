@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  createNativeComment, createNativeReply, removeNativeComment, resolveNativeComment, setNativeCommentBody
+  removeNativeComment, resolveNativeComment
 } from "../../../../src/adapters/collab/native/comment-commands.ts";
 import { moveNativeBlocks } from "../../../../src/adapters/collab/native/move-commands.ts";
 import { setNativeField } from "../../../../src/adapters/collab/native/record-commands.ts";
@@ -9,8 +9,8 @@ import { joinNativeRow, removeNativeRows } from "../../../../src/adapters/collab
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import type { Delivery } from "./helpers.ts";
 import {
-  AUTHOR, COMMENT, IMAGE, REPLY, RESOLUTION, beatField, commentInput, expectedMint, freshRecordRead, recordCopies,
-  recordRead, recordSnapshot, recordUndo, replyId, replyInput, unchangedRecord
+  AUTHOR, COMMENT, IMAGE, REPLY, RESOLUTION, beatField, commentInput, createNativeComment, createNativeReply, expectedMint,
+  freshRecordRead, recordCopies, recordRead, recordSnapshot, recordUndo, replyId, replyInput, setNativeCommentBody, unchangedRecord
 } from "./record-harness.ts";
 import { split } from "./structure-harness.ts";
 

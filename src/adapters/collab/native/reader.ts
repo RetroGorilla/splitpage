@@ -8,6 +8,8 @@ import type { NativeDeltaItem } from "./inline.ts";
 import type { NativeRoots } from "./roots.ts";
 import { NATIVE_FIELD_PREFIX, decodeNativeValue, deepFrozen, nativeFieldName } from "./values.ts";
 
+type CommentCell = "visualText" | "audioText";
+
 export type NativeOutlineEntry = { readonly kind: "heading"; readonly id: string; readonly name: string } | { readonly kind: "row"; readonly id: string };
 
 export interface NativeReadRow {
@@ -226,6 +228,8 @@ export class NativeScriptReader {
   private headingPlaces = new Map<string, NativeSpanPlace>();
   private candidates: UnplacedRef[] = [];
   private readonly rowCache = new Map<string, NativeReadRow>();
+  private readonly anchorsByRow = new Map<string, Set<string>>();
+  private readonly rowsByAnchor = new Map<string, Map<string, CommentCell>>();
   private narration = new Map<string, readonly NativeSpanPlace[]>();
   private readonly builtNarration = new Map<string, string>();
   private readonly movedSegments = new Set<string>();
@@ -318,6 +322,7 @@ export class NativeScriptReader {
     for (const id of dirtyRows) {
       const previous = this.rowCache.get(id), row = this.buildRow(id);
       this.rowCache.set(id, row);
+      if (!previous || row.audioText !== previous.audioText || row.visualText !== previous.visualText) this.indexCommentAnchors(row);
       if (!previous || JSON.stringify(previous) !== JSON.stringify(row)) {
         this.pendingGone.delete(id); this.pendingRows.add(id);
       }
@@ -494,6 +499,7 @@ export class NativeScriptReader {
     }
     for (const id of this.groups.keys()) {
       if (groups.has(id)) continue;
+      this.dropCommentAnchors(id);
       this.rowCache.delete(id); this.pendingRows.delete(id); this.pendingGone.add(id);
     }
     for (const [id, group] of groups) {
@@ -637,6 +643,41 @@ export class NativeScriptReader {
       const row = entry.kind === "row" ? this.rowCache.get(entry.id) : undefined;
       return row ? [row] : [];
     }));
+  }
+
+  private dropCommentAnchors(id: string): void {
+    for (const anchor of this.anchorsByRow.get(id) ?? []) {
+      const rows = this.rowsByAnchor.get(anchor);
+      rows?.delete(id);
+      if (!rows?.size) this.rowsByAnchor.delete(anchor);
+    }
+    this.anchorsByRow.delete(id);
+  }
+
+  // why: the file reattaches an anchor to its first projected row and checks the visual cell before narration
+  private indexCommentAnchors(row: NativeReadRow): void {
+    this.dropCommentAnchors(row.id);
+    const anchors = new Set<string>();
+    for (const [field, runs] of [["visualText", row.visual], ["audioText", row.narration]] as const) {
+      if (!row[field].includes("cmt-anchor")) continue;
+      for (const run of runs) for (const anchor of run.marks.cmt ?? []) {
+        if (anchors.has(anchor)) continue;
+        anchors.add(anchor);
+        const rows = this.rowsByAnchor.get(anchor) ?? new Map<string, CommentCell>();
+        rows.set(row.id, field);
+        this.rowsByAnchor.set(anchor, rows);
+      }
+    }
+    if (anchors.size) this.anchorsByRow.set(row.id, anchors);
+  }
+
+  commentAnchor(id: string): { readonly rowId: string; readonly field: CommentCell } | null {
+    this.sync();
+    const rows = this.rowsByAnchor.get(id);
+    if (!rows) return null;
+    const first = rows.size === 1 ? rows.keys().next().value : this.outlineEntries.find(entry => entry.kind === "row" && rows.has(entry.id))?.id;
+    const field = first === undefined ? undefined : rows.get(first);
+    return first !== undefined && field !== undefined ? Object.freeze({ rowId: first, field }) : null;
   }
 
   beatBoundary(beat: string): NativeSpanPlace | null {

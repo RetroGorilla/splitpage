@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import * as Y from "yjs";
-import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
+import { migrateRows, withDocumentPorts } from "../../../../src/bootstrap/document-ports.ts";
+import { STATE_FIELDS } from "../../../../src/core/document/fields.ts";
 import {
-  createNativeComment, createNativeReply, removeNativeComment, reopenNativeComment, resolveNativeComment, setNativeCommentBody
+  createNativeComment as createComment, createNativeReply as createReply, removeNativeComment, reopenNativeComment,
+  resolveNativeComment, setNativeCommentBody as setBody
 } from "../../../../src/adapters/collab/native/comment-commands.ts";
+import type { NativeCommentTarget, NativeNewComment, NativeNewReply } from "../../../../src/adapters/collab/native/comment-commands.ts";
 import { clearNativeField, setNativeField } from "../../../../src/adapters/collab/native/record-commands.ts";
 import type { NativeFieldTarget } from "../../../../src/adapters/collab/native/record-commands.ts";
 import type { NativeRecordOutcome } from "../../../../src/adapters/collab/native/record-values.ts";
@@ -17,6 +20,11 @@ export const RESOLUTION = { by: "Bob", at: AT };
 export const COMMENT = { comment: "thread" };
 export const REPLY = { ...COMMENT, reply: "answer" };
 export const IMAGE = { sha256: "a".repeat(64), mime: "image/png", width: 10, height: 20 };
+
+export const BODY_PORTS = { sanitize: (html: string): string => withDocumentPorts(STATE_FIELDS, ports => ports.sanitize(html)) };
+export const createNativeComment = (script: NativeScript, input: NativeNewComment) => createComment(script, input, BODY_PORTS);
+export const createNativeReply = (script: NativeScript, comment: string, input: NativeNewReply) => createReply(script, comment, input, BODY_PORTS);
+export const setNativeCommentBody = (script: NativeScript, target: NativeCommentTarget, actor: string, body: string) => setBody(script, target, actor, body, BODY_PORTS);
 
 export const beatField = (id: string, field: string): NativeFieldTarget => ({ kind: "beat", id, field });
 export const headingField = (field: string): NativeFieldTarget => ({ kind: "heading", id: "H", field });
@@ -222,10 +230,12 @@ export function threadSteps(anchor: string, rank: string, body = "new body", ids
   ];
 }
 
-export function checkRecordStep(script: NativeScript, step: RecordStep, run = () => step.run(script)): void {
+export function checkRecordStep(script: NativeScript, step: RecordStep, run = () => step.run(script)): { before: RecordSnapshot; expected: RecordSnapshot } {
   const snapshot = recordSnapshot(script), read = structuredClone(recordRead(script));
+  const before = structuredClone(snapshot);
   const created = step.expect(snapshot, read, script);
   assert.deepEqual(run(), { kind: "written", ...created ? { created } : {} }, step.name + ": outcome");
   assert.deepEqual(recordSnapshot(script), snapshot, step.name + ": stored snapshot");
   assert.deepEqual(recordRead(script), read, step.name + ": projected document");
+  return { before, expected: snapshot };
 }

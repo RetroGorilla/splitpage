@@ -2,16 +2,17 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Y from "yjs";
 import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
-import { convertedScript } from "./helpers.ts";
+import { convertedScript, edit } from "./helpers.ts";
 import {
-  createNativeComment, createNativeReply, removeNativeComment, reopenNativeComment, resolveNativeComment, setNativeCommentBody
+  createNativeComment as createComment, removeNativeComment, reopenNativeComment, resolveNativeComment
 } from "../../../../src/adapters/collab/native/comment-commands.ts";
 import { removeNativeHeading } from "../../../../src/adapters/collab/native/heading-commands.ts";
 import { clearNativeField, setNativeField } from "../../../../src/adapters/collab/native/record-commands.ts";
 import { joinNativeRow, removeNativeRows, unjoinNativeRow } from "../../../../src/adapters/collab/native/structure-commands.ts";
 import {
-  AT, AUTHOR, COMMENT, IMAGE, REPLY, RESOLUTION, beatField, beatStep, checkRecordStep, commentInput, fullUpdate, headingField,
-  expectedMint, recordCopies, recordRead, recordSnapshot, replyId, replyInput, threadSteps, unchangedRecord
+  AT, AUTHOR, BODY_PORTS, COMMENT, IMAGE, REPLY, RESOLUTION, beatField, beatStep, checkRecordStep, commentInput, fullUpdate, headingField,
+  createNativeComment, createNativeReply, expectedMint, recordCopies, recordRead, recordSnapshot, replyId, replyInput, setNativeCommentBody,
+  threadSteps, unchangedRecord
 } from "./record-harness.ts";
 import type { RecordStep, RecordTestRead } from "./record-harness.ts";
 
@@ -32,7 +33,7 @@ test("every record and thread command changes precisely its stored keys and its 
     beatStep("imageRef", IMAGE),
     ...Object.entries(fields).flatMap(([field, value]) => [beatStep(field, value), beatStep(field, undefined)]),
     beatStep("imageRef", IMAGE), beatStep("imageRef", undefined),
-    ...threadSteps("new-thread", "000012V")
+    ...threadSteps("new-thread", "000012V", "A &amp; B &lt; C\n<strong>bold</strong>")
   ];
   for (const step of steps) {
     const expectedStored = recordSnapshot(receiver), expectedRead: RecordTestRead = structuredClone(recordRead(receiver));
@@ -244,7 +245,7 @@ test("busy and closed, including closure by a later accessor or beforeTransactio
 test("record targeting rejects invalid kinds, nonplain targets and identities the core would rewrite", () => {
   const { scripts: [script] } = recordCopies([5]);
   assert.ok(script);
-  const field = headingField("note"), array = Object.assign([], field), callable = Object.assign(() => null, field);
+  const field = beatField("A", "note"), array = Object.assign([], field), callable = Object.assign(() => null, field);
   for (const invalid of [array, callable]) unchangedRecord(script, () => setNativeField(script, invalid, "value"), "value");
   const badKind = { ...beatField("A", "note"), kind: "other" } as unknown as typeof field;
   unchangedRecord(script, () => setNativeField(script, badKind, "value"), "missing");
@@ -255,6 +256,89 @@ test("record targeting rejects invalid kinds, nonplain targets and identities th
   for (const placement of [{ rowId: " A " }, { anchorId: " anchor " }]) {
     unchangedRecord(script, () => createNativeComment(script, { ...commentInput("anchor"), ...placement }), "missing");
   }
+  script.doc.destroy();
+});
+
+test("body commands keep only bodies that survive core reload unchanged", () => {
+  const { scripts: [script] } = recordCopies([5]);
+  assert.ok(script);
+  const refused = [
+    "a & b", "<b>bold</b>", "x<y", "<p>para</p>", "<script>alert(1)</script>",
+    '<img src="bad" onerror="alert(1)">', '<a href="javascript:alert(1)">link</a>', "nul\u0000x"
+  ];
+  const kept = ["plain", "line\nbreak", "  spaced  ", "", "&amp;", "&lt; <strong>bold</strong>\nline"];
+  try {
+    for (const body of refused) {
+      unchangedRecord(script, () => createNativeComment(script, commentInput("anchor", body)), "value");
+      unchangedRecord(script, () => createNativeReply(script, COMMENT.comment, replyInput("unused", body)), "value");
+      for (const target of [COMMENT, REPLY]) unchangedRecord(script, () => setNativeCommentBody(script, target, AUTHOR, body), "value");
+    }
+    for (const body of kept) {
+      const comment = expectedMint(script, "c");
+      assert.deepEqual(createNativeComment(script, commentInput("anchor", body)), { ...WRITTEN, created: comment }, JSON.stringify(body));
+      const reply = expectedMint(script, "rp");
+      assert.deepEqual(createNativeReply(script, comment, replyInput("unused", body)), { ...WRITTEN, created: reply }, JSON.stringify(body));
+      for (const target of [COMMENT, REPLY]) assert.deepEqual(setNativeCommentBody(script, target, AUTHOR, body), WRITTEN, JSON.stringify(body));
+      const document = script.reader.document(), imported = convertedScript(migrateRows(structuredClone(document)), 20);
+      try { assert.deepEqual(imported.reader.document(), document, JSON.stringify(body)); } finally { imported.doc.destroy(); }
+    }
+  } finally { script.doc.destroy(); }
+});
+
+test("new comments must name the first projected location of an existing inline anchor", () => {
+  const { scripts: [script] } = recordCopies([5]);
+  assert.ok(script);
+  try {
+    assert.equal(script.reader.commentAnchor("thread"), null);
+    assert.deepEqual(edit(script, { beat: "A", cell: "narration" }, 0, 0, [{ text: "a", marks: { cmt: ["thread"] } }]), WRITTEN);
+    const input = commentInput("thread");
+    unchangedRecord(script, () => createNativeComment(script, { ...input, rowId: "B", field: "visualText" }), "anchor");
+    assert.deepEqual(edit(script, { beat: "B", cell: "visual" }, 0, 0, [{ text: "b", marks: { cmt: ["thread"] } }]), WRITTEN);
+    unchangedRecord(script, () => createNativeComment(script, { ...input, rowId: "B", field: "visualText" }), "anchor");
+    unchangedRecord(script, () => createNativeComment(script, { ...input, field: "visualText" }), "anchor");
+    const created = expectedMint(script, "c");
+    assert.deepEqual(createNativeComment(script, input), { ...WRITTEN, created });
+    const document = script.reader.document(), imported = convertedScript(migrateRows(structuredClone(document)), 20);
+    try {
+      assert.deepEqual(imported.reader.document(), document);
+      assert.deepEqual(imported.reader.commentAnchor("thread"), { rowId: "A", field: "audioText" });
+    } finally { imported.doc.destroy(); }
+    assert.deepEqual(edit(script, { beat: "A", cell: "narration" }, 0, 1, []), WRITTEN);
+    assert.deepEqual(script.reader.commentAnchor("thread"), { rowId: "B", field: "visualText" });
+  } finally { script.doc.destroy(); }
+});
+
+test("invalid field names, standalone absent clears, nonfinite numbers and non-record extras are checked independently", () => {
+  const { scripts: [script] } = recordCopies([5]);
+  assert.ok(script);
+  for (const value of [NaN, Infinity]) unchangedRecord(script, () => setNativeField(script, beatField("A", "customNumber"), value), "value");
+  unchangedRecord(script, () => setNativeField(script, beatField("A", "payload"), { ["\ud800"]: true }), "value");
+  unchangedRecord(script, () => setNativeField(script, beatField("A", ""), "value"), "value");
+  unchangedRecord(script, () => clearNativeField(script, beatField("A", "lengthSeconds")));
+  for (const value of ["text", []]) unchangedRecord(script, () => setNativeField(script, beatField("A", "extra"), value), "value");
+  unchangedRecord(script, () => setNativeField(script, beatField("A", "imageLinks"), [{
+    name: "clip.mp4", location: { kind: "bundled", name: "clip.mp4" }
+  }]), "value");
+  script.doc.destroy();
+});
+
+test("thread arguments refuse nonplain inputs and values normalized by the core", () => {
+  const { scripts: [script] } = recordCopies([5]);
+  assert.ok(script);
+  const input = commentInput("anchor");
+  for (const invalid of [
+    { ...input, author: " Alice " }, { ...input, quotedText: "\ud800" }, { ...input, quotedText: "<b>quote</b>" },
+    { ...input, field: "status" as typeof input.field }
+  ]) unchangedRecord(script, () => createNativeComment(script, invalid), "value");
+  unchangedRecord(script, () => createNativeReply(script, COMMENT.comment, Object.assign([], replyInput("unused"))), "value");
+  unchangedRecord(script, () => removeNativeComment(script, Object.assign([], COMMENT)), "value");
+  unchangedRecord(script, () => resolveNativeComment(script, COMMENT, Object.assign([], RESOLUTION)), "value");
+  for (const by of ["", "A".repeat(81)]) unchangedRecord(script, () => resolveNativeComment(script, COMMENT, { by, at: AT }), "value");
+  let read = 0;
+  unchangedRecord(script, () => createComment(script, { ...input, get body(): string { throw new Error("accessor"); } }, {
+    get sanitize() { read++; return BODY_PORTS.sanitize; }
+  }), "value");
+  assert.equal(read, 1);
   script.doc.destroy();
 });
 

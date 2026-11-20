@@ -18,6 +18,7 @@ export interface NativeFieldTarget {
 
 const BEAT_FIELDS = new Set(["status", "lengthSeconds", "paragraphStart", "extra"]);
 const BEAT_RESERVED = new Set(["id", "audioText", "visualText", "rank", "joined", "updatedBy", "updatedAt"]);
+const GALLERY_FIELDS = ["imageRef", "imageName", "imageAnnotation", "imageLinks", "moreImages", "visualImage"];
 const NO_IMAGES = { known: () => null, fromDataUrl: () => null };
 
 function beatValue(field: string, value: unknown): boolean {
@@ -30,7 +31,8 @@ function beatValue(field: string, value: unknown): boolean {
 }
 
 function keptExtras(value: Record<string, unknown>): boolean {
-  const supplied = { imageRef: null, ...value }, normalized = { ...supplied };
+  const fields = GALLERY_FIELDS.filter(field => Object.hasOwn(value, field)).map(field => [field, value[field]] as const);
+  const supplied = { imageRef: null, ...Object.fromEntries(fields) }, normalized = { ...supplied };
   normalizeRowGallery(normalized, NO_IMAGES);
   withoutVideoLocations([normalized]);
   return sameNativeValue(supplied, normalized);

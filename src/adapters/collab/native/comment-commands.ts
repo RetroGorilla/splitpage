@@ -1,5 +1,5 @@
 import * as Y from "yjs";
-import { cappedText, plainName, plainText } from "../../../core/document/text-policy.ts";
+import { cappedText, plainName, plainText, textOf } from "../../../core/document/text-policy.ts";
 import { isValidNativeRank, nativeRankBetween } from "./rank.ts";
 import { nativeLiveBeatRecord } from "./record-commands.ts";
 import { copyArgument, nativeRecordId, plainRecordArgument, RECORD_UNCHANGED, RECORD_WRITTEN, refuseRecord, transactRecord, writeRecordFields } from "./record-values.ts";
@@ -30,6 +30,10 @@ export interface NativeCommentResolution {
   readonly at: string;
 }
 
+export interface NativeCommentBodyPorts {
+  readonly sanitize: (html: string) => string;
+}
+
 export type NativeThreadCreation = { readonly kind: "written"; readonly created: string } | Extract<NativeRecordOutcome, { kind: "refused" }>;
 
 const BODY = nativeFieldKey("body"), AUTHOR = nativeFieldKey("author"), RESOLVED = nativeFieldKey("resolved");
@@ -52,7 +56,16 @@ function fieldsOf(input: NativeNewReply) {
 }
 
 function validNew(input: NativeNewReply): boolean {
-  return named(input.author) && plainName(input.author) === input.author && nativeWellFormed(input.body) && timestamp(input.createdAt);
+  return named(input.author) && plainName(input.author) === input.author && timestamp(input.createdAt);
+}
+
+function copyBodyArguments<T>(read: () => T, ports: NativeCommentBodyPorts) {
+  const input = copyArgument(read), sanitize = copyArgument(() => ports.sanitize);
+  return input && sanitize ? { value: { input: input.value, sanitize: sanitize.value } } : null;
+}
+
+function keptBody(body: unknown, sanitize: NativeCommentBodyPorts["sanitize"]): boolean {
+  return nativeWellFormed(body) && copyArgument(() => sanitize(textOf(body)))?.value === body;
 }
 
 function insertRecord(root: Y.Map<Y.Map<unknown>>, key: string, fields: Record<string, unknown>, parent?: string): Extract<NativeRecordOutcome, { kind: "refused" }> | null {
@@ -80,18 +93,20 @@ function replyKey(comment: string, reply: string): string {
   return JSON.stringify([comment, reply]);
 }
 
-export function createNativeComment(script: NativeScript, comment: NativeNewComment): NativeThreadCreation {
-  return transactRecord(script, () => copyArgument(() => {
+export function createNativeComment(script: NativeScript, comment: NativeNewComment, ports: NativeCommentBodyPorts): NativeThreadCreation {
+  return transactRecord(script, () => copyBodyArguments(() => {
     const base = fieldsOf(comment), { field, rowId, anchorId, quotedText } = comment;
     return { ...base, field, rowId, anchorId, quotedText };
-  }), input => {
+  }, ports), ({ input, sanitize }) => {
     const id = mintNativeId(script.doc, "c"), { field, rowId, anchorId, quotedText, ...base } = input;
-    if (!validNew(input) || !nativeWellFormed(quotedText) || plainText(quotedText) !== quotedText) return refuseRecord("value");
+    if (!validNew(input) || !keptBody(base.body, sanitize) || !nativeWellFormed(quotedText) || plainText(quotedText) !== quotedText) return refuseRecord("value");
     if (field === "title") {
       if (rowId !== null || anchorId !== null || !(script.roots.meta.get("title") instanceof Y.Text)) return refuseRecord("missing");
     } else {
       if (field !== "audioText" && field !== "visualText" && field !== "visualImage") return refuseRecord("value");
       if (!nativeRecordId(rowId) || !nativeRecordId(anchorId) || !nativeLiveBeatRecord(script, rowId)) return refuseRecord("missing");
+      const anchor = script.reader.commentAnchor(anchorId);
+      if (anchor && (anchor.rowId !== rowId || anchor.field !== field)) return refuseRecord("anchor");
     }
     return insertRecord(script.roots.comments, id, {
       ...base, field, rowId, anchorId, quotedText, kind: "anchor", assignee: "", updatedAt: base.createdAt,
@@ -100,10 +115,10 @@ export function createNativeComment(script: NativeScript, comment: NativeNewComm
   });
 }
 
-export function createNativeReply(script: NativeScript, comment: string, reply: NativeNewReply): NativeThreadCreation {
-  return transactRecord(script, () => copyArgument(() => fieldsOf(reply)), input => {
+export function createNativeReply(script: NativeScript, comment: string, reply: NativeNewReply, ports: NativeCommentBodyPorts): NativeThreadCreation {
+  return transactRecord(script, () => copyBodyArguments(() => fieldsOf(reply), ports), ({ input, sanitize }) => {
     const id = mintNativeId(script.doc, "rp");
-    if (!validNew(input)) return refuseRecord("value");
+    if (!validNew(input) || !keptBody(input.body, sanitize)) return refuseRecord("value");
     if (!findRecord(script, { comment })) return refuseRecord("missing");
     return insertRecord(script.roots.replies, replyKey(comment, id), input, comment) ?? Object.freeze({ kind: "written", created: id });
   });
@@ -125,11 +140,11 @@ function findRecord(script: NativeScript, { comment, reply }: NativeCommentTarge
   return record instanceof Y.Map && record.get("commentId") === comment && record.get("removed") !== true ? record : null;
 }
 
-export function setNativeCommentBody(script: NativeScript, target: NativeCommentTarget, actor: string, body: string): NativeRecordOutcome {
-  return transactRecord(script, () => copyArgument(() => readTarget(target)), input => {
+export function setNativeCommentBody(script: NativeScript, target: NativeCommentTarget, actor: string, body: string, ports: NativeCommentBodyPorts): NativeRecordOutcome {
+  return transactRecord(script, () => copyBodyArguments(() => readTarget(target), ports), ({ input, sanitize }) => {
     const found = findRecord(script, input);
     if (!found) return refuseRecord("missing");
-    if (!nativeWellFormed(body)) return refuseRecord("value");
+    if (!keptBody(body, sanitize)) return refuseRecord("value");
     if (!named(actor) || decodeNativeValue(found.get(AUTHOR))?.value !== actor) return refuseRecord("author");
     return writeRecordFields(found, { [BODY]: body });
   });

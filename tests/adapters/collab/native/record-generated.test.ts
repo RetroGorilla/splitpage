@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { isDeepStrictEqual } from "node:util";
 import * as Y from "yjs";
-import { setNativeCommentBody } from "../../../../src/adapters/collab/native/comment-commands.ts";
 import { createNativeHeading, removeNativeHeading, renameNativeHeading } from "../../../../src/adapters/collab/native/heading-commands.ts";
 import { moveNativeBlocks } from "../../../../src/adapters/collab/native/move-commands.ts";
 import { clearNativeField, setNativeField } from "../../../../src/adapters/collab/native/record-commands.ts";
@@ -13,7 +13,7 @@ import { edit } from "./helpers.ts";
 import type { Delivery } from "./helpers.ts";
 import {
   AUTHOR, COMMENT, IMAGE, REPLY, beatField, beatStep, checkRecordStep, fileKey, freshRecordRead, fullUpdate, headingField, recordCopies,
-  recordRead, recordSnapshot, recordUndo, replyId, threadSteps, unchangedRecord
+  recordRead, recordSnapshot, recordUndo, replyId, setNativeCommentBody, threadSteps, unchangedRecord
 } from "./record-harness.ts";
 import type { RecordStep } from "./record-harness.ts";
 import { caret, split } from "./structure-harness.ts";
@@ -76,6 +76,26 @@ function bodyStep(which: "comment" | "reply", body: string): RecordStep {
   };
 }
 
+function mapSnapshot(value: unknown): value is Record<string, unknown> {
+  return value !== null && typeof value === "object" && !Array.isArray(value);
+}
+
+function countMapWrites(before: Record<string, unknown>, expected: Record<string, unknown>): number {
+  let count = 0;
+  for (const key of new Set([...Object.keys(before), ...Object.keys(expected)])) {
+    const previous = before[key], next = expected[key];
+    if (mapSnapshot(next)) {
+      if (!mapSnapshot(previous)) count++;
+      count += countMapWrites(mapSnapshot(previous) ? previous : {}, next);
+    } else if (!isDeepStrictEqual(previous, next)) count++;
+  }
+  return count;
+}
+
+function generatedBody(kind: string, suffix: string): string {
+  return kind + " &amp; &lt; <strong>" + suffix + "</strong>\nline";
+}
+
 function history(seed: number, writes?: CapturedWrite[]): Record<string, number> {
   const next = random(seed), { scripts, net } = recordCopies(shuffled([4, 9, 15], next));
   const counts: Record<string, number> = {};
@@ -87,10 +107,10 @@ function history(seed: number, writes?: CapturedWrite[]): Record<string, number>
       interceptWrites((slot, method, key) => {
         writes.push({ client: actor.doc.clientID, state, step, slot, method, key });
         return false;
-      }, () => checkRecordStep(actor, step));
-      const expected = step.name === "create comment" ? 15 : step.name === "create reply" ? 6 :
-        /^(resolve|reopen) /.test(step.name) ? 3 : 1;
-      assert.equal(writes.length - start, expected, step.name + " must write every key in its expected snapshot diff");
+      }, () => {
+        const { before, expected } = checkRecordStep(actor, step);
+        assert.equal(writes.length - start, countMapWrites(before, expected), step.name + " must write every key in its expected snapshot diff");
+      });
     } else checkRecordStep(actor, step);
     count(step.name);
   };
@@ -132,8 +152,8 @@ function history(seed: number, writes?: CapturedWrite[]): Record<string, number>
 
       const groups = [
         [beatStep("lengthSeconds", length)],
-        [bodyStep("comment", "comment " + suffix), bodyStep("reply", "reply " + suffix)],
-        threadSteps("temporary-" + suffix, "000012V", "temporary edit " + suffix, temporary),
+        [bodyStep("comment", generatedBody("comment", suffix)), bodyStep("reply", generatedBody("reply", suffix))],
+        threadSteps("temporary-" + suffix, "000012V", generatedBody("temporary edit", suffix), temporary),
         [beatStep("status", "ready", "B")],
         [beatStep("extra", { note: "extra " + actor.doc.clientID }), beatStep("imageRef", IMAGE)]
       ];
@@ -144,6 +164,8 @@ function history(seed: number, writes?: CapturedWrite[]): Record<string, number>
       for (const step of threadSteps("kept-" + suffix, "000012V", "unused", surviving).slice(0, 2)) run(actor, step);
       unchangedRecord(actor, () => setNativeCommentBody(actor, COMMENT, "Bob", "foreign"), "author");
       count("refused");
+      unchangedRecord(actor, () => setNativeCommentBody(actor, COMMENT, AUTHOR, "a & b <b>bold</b>\u0000"), "value");
+      count("refused malformed body");
       unchangedRecord(actor, () => clearNativeField(actor, beatField("missing", "status")), "missing");
       count("refused");
       unchangedRecord(actor, () => setNativeField(actor, headingField("note"), "unsupported"), "value");
@@ -223,8 +245,8 @@ function history(seed: number, writes?: CapturedWrite[]): Record<string, number>
       assert.deepEqual(comments.map(comment => comment.id).sort(), ["thread", ...retained.map(ids => ids.comment)].sort());
       for (const comment of comments) {
         if (comment.id === "thread") {
-          assert.equal(comment.body, "comment " + seed + "-15");
-          assert.equal(comment.replies?.[0]?.body, "reply " + seed + "-15");
+          assert.equal(comment.body, generatedBody("comment", seed + "-15"));
+          assert.equal(comment.replies?.[0]?.body, generatedBody("reply", seed + "-15"));
         } else {
           assert.equal(comment.body, "original");
           const entry = retained.find(ids => ids.comment === comment.id);
@@ -252,7 +274,7 @@ test("generated three-copy histories check commands locally and account for sett
   const schedules = [
     { perHistory: 3, reason: "each of the three writers runs this once", kinds: [
       "set beat lengthSeconds", "set beat status", "set beat paragraphStart", "clear beat paragraphStart", "set beat extra",
-      "set beat imageRef", "refused heading set", "refused heading clear", "concurrent comment body", "concurrent reply body", "unchanged",
+      "set beat imageRef", "refused heading set", "refused heading clear", "refused malformed body", "concurrent comment body", "concurrent reply body", "unchanged",
       ...["set beat paragraphStart", "set beat status", "set beat imageRef", "remove comment"].flatMap(kind => ["undo " + kind, "redo " + kind])
     ] },
     { perHistory: 6, reason: "each of the three writers runs this twice", kinds: ["refused"] },

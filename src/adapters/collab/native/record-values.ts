@@ -5,7 +5,7 @@ import { nativeAvailability } from "./text-commands.ts";
 import type { NativeRefusal } from "./text-commands.ts";
 import { decodeNativeValue, encodeNativeValue, nativeWellFormed } from "./values.ts";
 
-type RecordRefusal = NativeRefusal | "value" | "taken" | "author" | "stored";
+type RecordRefusal = NativeRefusal | "value" | "taken" | "author" | "stored" | "anchor";
 
 export type NativeRecordOutcome =
   | { readonly kind: "written" }
