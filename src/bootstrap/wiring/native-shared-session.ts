@@ -8,6 +8,7 @@ import { paintRowTimes } from "../../features/rows/render.ts";
 import { keepNativeFieldPaint, mountNativeSharedInput } from "./native-shared-input.ts";
 import { createNativeEditorRecords } from "./native-shared-records.ts";
 import { mountNativeRecordEvents } from "./native-shared-record-events.ts";
+import { createNativeEditorStructure } from "./native-shared-structure.ts";
 import { nativeUndoRoute } from "./native-shared-undo.ts";
 import { notices } from "./ports/effects.ts";
 import { currentRowsRender } from "./render.ts";
@@ -102,6 +103,7 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
   const backend: SharedEditorBackend = {
     replica: publication.replica, parts: null, unsupportedCommands: UNSUPPORTED,
     nativeRecords: records,
+    structure: createNativeEditorStructure({ native, session: () => commandSession, input: () => input, publish, report: ports.report }),
     undo: admission => nativeUndoRoute({ native, admission, input: () => input, publish: () => { publish(); } }),
     bind: session => {
       commandSession = session;

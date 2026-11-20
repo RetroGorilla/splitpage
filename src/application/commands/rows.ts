@@ -65,6 +65,7 @@ export function deleteBeatCommand(rowId: string, shared?: SharedStructurePorts):
   return {
     name: "delete-scene",
     needs: "edit",
+    structure: { kind: "remove-beat", id: rowId },
     plan: function (doc): Plan | null {
       if (indexOf(doc.rows, rowId) === -1) return null;
       const hadScenes = !!scenesInOrder(doc);

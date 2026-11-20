@@ -133,7 +133,45 @@ const views = {
   }
 };
 
+test("Split: removing a beat with a simultaneous peer insertion preserves the peer letters and undoes the removal", async t => {
+  const show = await enter(t, twoBeats);
+  const remove = () => document.querySelector('#rows .row[data-id="r1"] [data-action="delete-row"]').click();
+  views.Split.caret(null, "r1", 2);
+  hook.nativePeer.hold();
+  remove();
+  assert.equal(app(), "Hello");
+  remove();
+  assert.deepEqual(hook.read().app.rows.map(row => row.id), ["r2"]);
+  assert.equal(hook.nativePeer.type("r1", 2, "Y").kind, "written");
+  hook.nativePeer.deliver();
+  await Promise.resolve();
+  assert.deepEqual(hook.read().app, hook.read().peer);
+  assert.equal(app(), "YWorld");
+  assert.equal(cell("r2").textContent, "YWorld");
+  assert.equal(press(cell("r2"), "z"), true);
+  assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["HeYllo", "World"]);
+  assert.equal(views.Split.at(null)?.[0], "r1");
+  await Promise.resolve();
+  assert.deepEqual(hook.read().app, hook.read().peer);
+  assert.equal(show.mock.callCount(), 0);
+});
+
 for (const [name, kind] of Object.entries(views)) {
+  test(name + ": Backspace removes a blank beat and undo restores it", async t => {
+    const show = await enter(t, [twoBeats[0], { id: "r2", audioText: "" }]), view = kind.open(t);
+    kind.caret(view, "r2", 0);
+    assert.equal(press(document.activeElement, "Backspace", { ctrlKey: false }), true);
+    assert.deepEqual(hook.read().app.rows.map(row => row.id), ["r1"]);
+    assert.deepEqual(kind.at(view), ["r1", 5, 5]);
+    assert.equal(press(kind.surface(), "z"), true);
+    assert.deepEqual(hook.read().app.rows.map(row => row.id), ["r1", "r2"]);
+    assert.deepEqual(kind.at(view, "r2"), ["r2", 0, 0]);
+    assert.equal(press(document.activeElement, "y"), true);
+    assert.deepEqual(kind.at(view), ["r1", 5, 5]);
+    await Promise.resolve();
+    assert.deepEqual(hook.read().peer, hook.read().app);
+    assert.equal(show.mock.callCount(), 0);
+  });
   test(name + ": Enter flushes typing, splits once and replays both carets", async t => {
     const show = await enter(t), view = kind.open(t);
     kind.caret(view, "r1", 2);

@@ -3,6 +3,7 @@ import type { NativeEditStamp, NativeTextPlacement, NativeTextRange, NativeUndoP
 import type { CellRange } from "../../application/editing/cell-editing.ts";
 import type { ReportPort } from "../../application/session/ports.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
+import { isBlankBeat } from "../../application/commands/rows.ts";
 import { sceneBeforeBeat } from "../../core/document/scenes.ts";
 import { cellLength, projection } from "../../core/text/runs.ts";
 import { domToPos, posToDom } from "../../features/common/cell-dom.ts";
@@ -373,6 +374,20 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const a = scriptCellOf(upper.audioText), b = scriptCellOf(lower.audioText);
     const length = cellLength(a);
     if (caret.offset !== (direction === -1 ? 0 : length)) { session.refuse(STALE); return; }
+    const blank = [direction === -1 ? lower : upper, direction === -1 ? upper : lower]
+      .find(row => isBlankBeat(doc, row, { cellOf: scriptCellOf }));
+    if (blank) {
+      const next = blank === upper ? lower : upper, offset = blank === lower ? length : 0;
+      const step = native.commands.removeRows.withSelection(caret.before, [blank.id]);
+      if (step.result.kind === "refused") { session.refuse(step.result.reason); return; }
+      if (step.result.kind === "unchanged") return;
+      const point = native.narrationCaret(next.id, offset);
+      step.recordAfter(point && caretAnchor(point.beat, point.offset));
+      publish();
+      const fresh = caret.surface.cell(next.id);
+      if (fresh) caret.surface.place(fresh, next.id, offset, offset, true);
+      return;
+    }
     const point = native.narrationCaret(upper.id, length);
     if (!point) { session.refuse(STALE); return; }
     const glue = length && cellLength(b) && !/\s$/.test(projection(a)) ? " " : "";
@@ -596,6 +611,18 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     return PENDING;
   }
 
+  function currentCaret() {
+    const active = document.activeElement;
+    const cell = active && shownNarrationSurface().cellAt(active);
+    if (!cell) return null;
+    const selection = cellSelection(cell);
+    const row = cell.getAttribute("data-id");
+    if (!row || !selection || selection.from !== selection.to) return null;
+    const point = native.narrationCaret(row, selection.from);
+    return point && { row, point: { target: { beat: point.beat, cell: "narration" } as const, offset: point.offset },
+      range: caretAnchor(point.beat, point.offset) };
+  }
+
   const pageHide = (): void => { finish(); };
   const visibility = (): void => { if (document.visibilityState === "hidden") pageHide(); };
   const stopUnload = guardUnload(window, () => !!finish());
@@ -605,6 +632,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   return {
     finish,
     beforePress,
+    currentCaret,
     show,
     endGroup: (): void => {
       if (draft) draft.endsGroup = true;

@@ -38,8 +38,11 @@ export interface CommandRefusal {
 export interface Command {
   readonly name: string;
   readonly needs: "edit" | "nothing";
+  readonly structure?: DocumentStructureIntent;
   readonly plan: (doc: DocumentView, capability: CapabilityPort) => Plan | CommandRefusal | null;
 }
+
+export type DocumentStructureIntent = { readonly kind: "remove-beat"; readonly id: string };
 
 export type CommandOutcome =
   | { readonly kind: "applied"; readonly generation: number; readonly changes: ChangeSet }
