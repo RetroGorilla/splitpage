@@ -1,12 +1,12 @@
 # Splitpage collaboration implementation plan
 
-This is the plan of record for collaboration, dated 2026-11-09 and revised the same day after two independent reviews of Stages 0 to 3 converged, and again after a third review reconciled it with `main`. Repository baseline: `439df59535d56e68e010938d328d4b2af38e59af`. Provider facts below were checked against the `@hocuspocus/server` and `@hocuspocus/provider` 4.8.0 packages, the published version on that date. Nothing is built or deployed. Collaboration remains separate from the current release until added to its scope. Implementation starts with an audit and a feasibility prototype; the shared document schema becomes a production decision only after the prototype passes.
+This is the plan of record for collaboration, dated 2026-11-09 and revised the same day after two independent reviews of Stages 0 to 3 converged, and again after a third review reconciled it with `main`. Repository baseline: `439df59535d56e68e010938d328d4b2af38e59af`. Provider facts below were checked against the `@hocuspocus/server` and `@hocuspocus/provider` 4.8.0 packages, the published version on that date. See the [native layer build status](collaboration/native-adapter-design.md#build-status). Collaboration remains separate from the current release until added to its scope. Implementation starts with an audit and a feasibility prototype; the shared document schema becomes a production decision only after the prototype passes.
 
 It supersedes two earlier drafts. The 2026-11-06 plan chose peer-to-peer Yjs over `y-webrtc` with only a signalling server. That was dropped because `y-webrtc` has had no release since 2023, Chromium drops data-channel messages over 256 KiB so large scripts cannot sync through it unmodified, and a guest sees nothing when every other participant is offline. The trade is simpler hosting for availability, and the server now stores readable script content. An earlier 2026-11-09 draft of this server-based plan fixed one narration schema in advance; this version makes the schema a feasibility outcome instead.
 
 ## Update 2026-11-19: the shared-document layer is rebuilt on standard Yjs
 
-The shared-document layer is being rebuilt as set out in [native-adapter-design.md](collaboration/native-adapter-design.md) (round 8). The owner approved building it on 2026-11-19. It proceeds slice by slice, in the eight slices of that note's section 11, one pull request each.
+For the shared-document rebuild, see the [native layer build status](collaboration/native-adapter-design.md#build-status) (round 8). The owner approved building it on 2026-11-19. It proceeds slice by slice, in the eight slices of that note's section 11, one pull request each.
 
 Where this plan and the note disagree about the shared document, its storage shape, undo, removal, moves, the offline notice or the build order, the note wins. The rest of this plan stands: the relay on the owner's own server, accounts and invitations, and anything the note leaves out of scope, such as pictures and screen design.
 
@@ -586,7 +586,7 @@ The proposed defaults are owner-only administration, individually named invitati
 
 Image ordering and the receipt design are Stage 1 selections, not defaults. Confirm the public hostname, off-machine backup destination and actual storage budgets before deployment. Any change to required writing behavior returns to the product contract before implementation.
 
-The Stage 0 artifacts are in [collaboration/stage-0](collaboration/stage-0/README.md); [9-stage-1-experiments.md](collaboration/stage-0/9-stage-1-experiments.md) indexes every Stage 1 trace to its inputs, expected result and entry paths, and lists the product decisions still assumed. The next implementation tasks are Stages 1a and 1b.
+The Stage 0 artifacts are in [collaboration/stage-0](collaboration/stage-0/README.md); [9-stage-1-experiments.md](collaboration/stage-0/9-stage-1-experiments.md) indexes every Stage 1 trace to its inputs, expected result and entry paths, and lists the product decisions still assumed. For the current shared-document work, see the [native layer build status](collaboration/native-adapter-design.md#build-status).
 
 ## 15 Primary technical references
 
