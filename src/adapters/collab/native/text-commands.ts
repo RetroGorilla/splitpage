@@ -25,6 +25,12 @@ export interface NativeTextRange {
   readonly seen?: readonly (readonly [number, number])[];
 }
 
+export interface NativeUndoSelection {
+  readonly target: NativeTextTarget;
+  readonly from: number;
+  readonly to: number;
+}
+
 interface PlainId { readonly client: number; readonly clock: number }
 
 interface PlainPosition { readonly type: PlainId; readonly tname: null; readonly item: PlainId | null; readonly assoc: number }
@@ -248,6 +254,11 @@ export function nativeLiveRange(script: NativeScript, range: NativeRangeData): N
   if (!cells.length) return "missing";
   const from = resolve(range.from, script.doc), to = range.to ? resolve(range.to, script.doc) : from;
   if (!from || !to) return "range";
+  return liveRangeOf(cells, range, from, to, script.doc);
+}
+
+function liveRangeOf(cells: readonly LiveCell[], range: NativeRangeData, from: Y.AbsolutePosition, to: Y.AbsolutePosition,
+  doc: Y.Doc): NativeLiveRange | "range" {
   const contains = (cell: LiveCell, at: Y.AbsolutePosition): boolean =>
     at.type === cell.text && at.index >= cell.start && at.index <= cell.end && !splitsPair(storedText(cell.items), at.index - cell.start);
   const first = cells.findIndex(cell => contains(cell, from)), last = cells.findIndex(cell => contains(cell, to));
@@ -256,13 +267,66 @@ export function nativeLiveRange(script: NativeScript, range: NativeRangeData): N
     text: cell.text, start: cell.start, items: cell.items,
     from: index === 0 ? from.index : cell.start, until: index === last - first ? to.index : cell.end
   }));
-  if (range.to && unitGone(range.from, script.doc) && unitGone(range.to, script.doc)
+  if (range.to && unitGone(range.from, doc) && unitGone(range.to, doc)
     && !pieces.some(piece => heldAlive(piece.text, piece.from, piece.until, range.seen))) {
     const firstPiece = pieces[0];
     if (firstPiece) pieces = [{ ...firstPiece, until: firstPiece.from }];
   }
   const primary = pieces[0];
   return primary ? { ...primary, pieces } : "range";
+}
+
+function undoOwnerOf(script: NativeScript, range: NativeRangeData, at: Y.AbsolutePosition, position: PlainPosition): string | null {
+  const { beat, cell } = range.target;
+  if (cell !== "narration") return beat;
+  const owner = script.reader.narrationOwner(at.type, at.index, position.assoc);
+  // why: only a surviving unit inside the new span establishes that the caret followed its text into another row
+  return owner && (owner.beat === beat || (owner.inside && !unitGone(position, script.doc))) ? owner.beat : null;
+}
+
+function undoCells(script: NativeScript, cell: NativeTextTarget["cell"], first: string, last: string) {
+  if (cell === "name") return {
+    row: first, cells: script.reader.showsHeading(first) ? liveCells(script, { beat: first, cell }) : [], gaps: []
+  };
+  const members = script.reader.rowMembers(first), row = members[0]?.id;
+  if (row === undefined || !members.some(member => member.id === last)) return null;
+  const cells: LiveCell[] = [], gaps: number[] = [];
+  let hasItems = false;
+  for (const { id, glue } of members) {
+    const own = liveCells(script, { beat: id, cell }), hasOwnItems = own.some(part => part.items.length);
+    if (members.length > 1 && !hasOwnItems) continue;
+    gaps[cells.length] = hasItems && hasOwnItems ? (cell === "visual" ? 1 : glue.length) : 0;
+    cells.push(...own);
+    hasItems ||= hasOwnItems;
+  }
+  return { row, cells, gaps };
+}
+
+export function resolveNativeUndoSelection(script: NativeScript, range: NativeRangeData): NativeUndoSelection | null {
+  const { cell } = range.target;
+  const from = resolve(range.from, script.doc), to = range.to ? resolve(range.to, script.doc) : from;
+  if (!from || !to) return null;
+  const first = undoOwnerOf(script, range, from, range.from);
+  const last = range.to ? undoOwnerOf(script, range, to, range.to) : first;
+  if (first === null || last === null) return null;
+  const shown = undoCells(script, cell, first, last);
+  if (!shown) return null;
+  const live = liveRangeOf(shown.cells, range, from, to, script.doc);
+  if (typeof live === "string") return null;
+  const end = live.pieces.at(-1) ?? live;
+  let offset = 0, startOffset: number | undefined;
+  for (const [index, part] of shown.cells.entries()) {
+    offset += shown.gaps[index] ?? 0;
+    const view = cell === "name" ? null : nativeCellView(part.items);
+    const shownAt = (stored: number): number =>
+      offset + (view ? view.ends.filter(unitEnd => unitEnd <= stored - part.start).length : stored - part.start);
+    if (part.text === live.text && part.start === live.start) startOffset = shownAt(live.from);
+    if (startOffset !== undefined && part.text === end.text && part.start === end.start) {
+      return Object.freeze({ target: Object.freeze({ beat: shown.row, cell }), from: startOffset, to: shownAt(end.until) });
+    }
+    offset += view?.length ?? part.end - part.start;
+  }
+  return null;
 }
 
 // why: a command called while another transaction is open refuses, since that transaction's changes are not yet

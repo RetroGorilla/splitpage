@@ -127,8 +127,14 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
     return "busy";
   }
 
-  function bind<Args extends unknown[], Result>(command: (script: NativeScript, ...args: Args) => Result, separate = true) {
-    return (...args: Args): Result => {
+  function endTypingGroup(): void {
+    if (refusal()) return;
+    typing = null;
+    undo.stopCapturing();
+  }
+
+  function bindCommand<Args extends unknown[], Result>(command: (script: NativeScript, ...args: Args) => Result, separate: boolean) {
+    function run(args: Args, capture?: (write: () => Result) => Result): Result {
       const reason = refusal();
       if (reason) {
         // why: reentry during argument copying must keep each command's own refusal shape
@@ -139,9 +145,32 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
           typing = null;
           undo.stopCapturing();
         }
-        return command(script, ...args);
+        return capture ? capture(() => command(script, ...args)) : command(script, ...args);
       });
+    }
+    return {
+      run: (...args: Args) => run(args),
+      withSelection(before: NativeTextRange | null, ...args: Args) {
+        let finish: ((after: NativeTextRange | null) => void) | undefined;
+        const result = run(args, write => {
+          const recorded = undo.captureSelection(before, write);
+          finish = recorded.recordAfter;
+          return recorded.result;
+        });
+        return Object.freeze({
+          result,
+          recordAfter(after: NativeTextRange | null): void {
+            const record = finish;
+            if (record && !refusal()) perform(() => record(after));
+          }
+        });
+      }
     };
+  }
+
+  function bind<Args extends unknown[], Result>(command: (script: NativeScript, ...args: Args) => Result, separate = true) {
+    const { run, withSelection } = bindCommand(command, separate);
+    return Object.freeze(Object.assign(run, { withSelection }));
   }
 
   function press(direction: "undo" | "redo"): NativeUndoOutcome {
@@ -154,7 +183,7 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
   }
 
   const commands = Object.freeze({
-    anchorText: bind(anchorNativeText, false),
+    anchorText: bindCommand(anchorNativeText, false).run,
     typeText: bind((script, range: NativeTextRange, text: string, marks: Marks, stamp?: NativeEditStamp) =>
       typeNativeText(script, range, text, marks, stamp, target => {
         const previous = typing?.target.beat === target.beat && typing.target.cell === target.cell ? typing : null;
@@ -188,6 +217,7 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
 
   return Object.freeze({
     commands,
+    endTypingGroup,
     // why: peers apply updates directly between commands. Applying one from a transaction listener is unsupported
     // because Yjs can fold it into local undo
     ydoc: doc,
