@@ -10,7 +10,11 @@ import { posToDom } from "../features/common/cell-dom.ts";
 import { openNativeSession } from "../adapters/collab/native/session.ts";
 import { scriptCellOf, sanitizeHtml } from "../bootstrap/richtext.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
-import { forceLeaveSharedSession } from "../bootstrap/wiring/shared-session.ts";
+import { enterSharedSession, forceLeaveSharedSession } from "../bootstrap/wiring/shared-session.ts";
+import { openNativeEditor } from "../bootstrap/wiring/native-shared-session.ts";
+import { applyNativePeerUpdate } from "../adapters/collab/native/peer-update.ts";
+import { entrySwitchFixture } from "../../tests/bootstrap/shared-entry-switch-support.ts";
+import { Doc, encodeStateAsUpdate } from "yjs";
 import { breakUndoGroup } from "../bootstrap/wiring/undo.ts";
 import { mountNativeSharedInput } from "../bootstrap/wiring/native-shared-input.ts";
 import { createSessionCapabilities } from "../application/session/capabilities.ts";
@@ -471,6 +475,66 @@ test("Writer: moving between beats shows no notice, and a beat sync that changes
   await Promise.resolve();
   assert.deepEqual([peer(0), peer(1)], ["Hello", "World"]);
 });
+
+async function openFixture(t) {
+  const fixture = entrySwitchFixture(), refused = t.mock.fn();
+  const ports = { ...fixture.ports, commandRefused: refused };
+  let native;
+  assert.deepEqual(await enterSharedSession(ports, (doc, failed) => {
+    const opened = openNativeEditor(ports, doc, failed);
+    native = opened.native;
+    return opened.backend;
+  }), { ok: true });
+  t.after(cleanSession);
+  return { native, refused };
+}
+
+const fixtureViews = {
+  Split: {
+    open: () => null,
+    surface: () => cell("R1"),
+    caret: (_view, offset) => { cell("R1").focus(); setCellSelection(cell("R1"), offset); },
+    host: () => cell("R1")
+  },
+  Writer: {
+    open: t => writer(t),
+    surface: () => root(),
+    caret: (view, offset) => { view.caret("R1", offset); },
+    host: () => beat("R1")
+  }
+};
+
+for (const [name, kind] of Object.entries(fixtureViews)) {
+  test(name + ": an undo press at the size ceiling with a letter buffered is silent and keeps the letter on screen", async t => {
+    const { native, refused } = await openFixture(t), view = kind.open(t), filler = new Doc();
+    t.after(() => filler.destroy());
+    kind.caret(view, 8);
+    assert.equal(beforeInput(kind.surface(), "insertText", "!"), true);
+    filler.getMap("sizeFixture").set("payload", "x".repeat(native.sizeLimits.limit));
+    assert.equal(applyNativePeerUpdate(native, encodeStateAsUpdate(filler)), true);
+    await Promise.resolve();
+    assert.equal(native.size, "full");
+    const revision = native.revision();
+    assert.equal(press(kind.surface(), "z"), true);
+    assert.equal(native.revision(), revision);
+    assert.equal(native.narrationHtml("R1"), "Captured words");
+    assert.equal(kind.host().textContent.replace(/​/g, ""), "Captured! words");
+    assert.deepEqual(refused.mock.calls.map(call => call.arguments), []);
+  });
+
+  test(name + ": an undo press after the session stopped during a composition adds nothing to the stop notice", async t => {
+    const { native, refused } = await openFixture(t), view = kind.open(t);
+    kind.caret(view, 8);
+    assert.equal(compose(kind.surface(), "start", ""), false);
+    native.close();
+    await Promise.resolve();
+    assert.deepEqual(refused.mock.calls.map(call => call.arguments), [["native-input-pending"]]);
+    assert.equal(press(kind.surface(), "z", { isComposing: true }), true);
+    press(document.body, "z");
+    assert.deepEqual(refused.mock.calls.map(call => call.arguments), [["native-input-pending"]]);
+    assert.equal(kind.host().textContent.replace(/​/g, ""), "Captured words");
+  });
+}
 const outOfScope = [
   ["typing over a selection across two beats", view => {
     view.flow.place({ anchor: { kind: "beat", rowId: "r1", offset: 2 }, head: { kind: "beat", rowId: "r2", offset: 2 } });

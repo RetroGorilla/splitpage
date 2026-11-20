@@ -145,12 +145,12 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     return narrationSurfaceOf(like).cell(beat);
   }
 
-  function stop(reason: string): string {
+  function stop(reason: string, quiet = false): string {
     clearTimeout(timer);
     timer = undefined;
     draft?.paint?.dispose();
     stopped = reason;
-    session.refuse(reason);
+    if (!quiet) session.refuse(reason);
     return reason;
   }
 
@@ -202,14 +202,14 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     return step.result;
   }
 
-  function finish(selection?: SelectionCapture, moveCaret = true): string | null {
+  function finish(selection?: SelectionCapture, moveCaret = true, quiet = false): string | null {
     clearTimeout(timer);
     timer = undefined;
     const buffered = draft;
     if (stopped || !buffered) return stopped;
     if (buffered.composing) return PENDING;
     const refusal = admissionRefusal();
-    if (refusal) return stop(refusal);
+    if (refusal) return stop(refusal, quiet);
     let result;
     buffered.paint?.dispose();
     const at = now();
@@ -219,11 +219,11 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     } catch (error) {
       uncertain = true;
       report(error);
-      return stop(PENDING);
+      return stop(PENDING, quiet);
     }
     try {
-      if (!result) return stop(STALE);
-      if (result.kind === "recovery") return stop(result.reason);
+      if (!result) return stop(STALE, quiet);
+      if (result.kind === "recovery") return stop(result.reason, quiet);
       draft = null;
       if (buffered.endsGroup) native.endTypingGroup();
       if (result.kind === "unchanged") restore(buffered);
@@ -408,7 +408,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       const key = event as KeyboardEvent;
       if (narration && (draft?.composing || key.isComposing || key.keyCode === 229)) {
         event.stopImmediatePropagation();
-        if (undoGesture(key)) { event.preventDefault(); session.refuse(PENDING); }
+        if (undoGesture(key)) {
+          event.preventDefault();
+          if (!stopped) session.refuse(PENDING);
+        }
         return;
       }
       if (undoGesture(key) && cell?.matches(UNDO_SURFACES)) return;
@@ -494,7 +497,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   }
 
   function beforePress(): string | null {
-    if (!draft?.composing) return finish();
+    if (stopped || !draft?.composing) return finish(undefined, true, true);
     session.refuse(PENDING);
     return PENDING;
   }
