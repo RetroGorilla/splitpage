@@ -20,6 +20,7 @@ import { anchorNativeText, deleteNativeText, replaceNativeText, typeNativeText }
 import type { NativeEditStamp, NativeTextRange, NativeTextTarget } from "./text-commands.ts";
 import { openNativeUndo } from "./undo-commands.ts";
 import type { NativeUndoOutcome } from "./undo-commands.ts";
+import { NATIVE_FORMAT_VERSION } from "./roots.ts";
 
 export type NativeSessionSource =
   | { readonly kind: "empty" }
@@ -38,6 +39,18 @@ export type NativeSessionChange =
   | { readonly kind: "closed"; readonly reason: CloseReason; readonly state: Uint8Array };
 
 type ChangeListener = (change: NativeSessionChange) => void;
+
+export function hasNativeFormat(bytes: Uint8Array): boolean {
+  const doc = new Y.Doc();
+  try {
+    const meta = doc.getMap("meta");
+    Y.applyUpdate(doc, bytes);
+    return typeof meta.get("format") === "number" && meta.get("title") instanceof Y.Text
+      && doc.getMap("births").size > 0;
+  } catch {
+    return false;
+  } finally { doc.destroy(); }
+}
 
 function openSessionScript(source: NativeSessionSource, updated: () => void) {
   const doc = new Y.Doc(), script = openNativeScript(doc);
@@ -58,7 +71,7 @@ function openSessionScript(source: NativeSessionSource, updated: () => void) {
 export function openNativeSession(source: NativeSessionSource, { actor, sanitize }: NativeSessionOptions) {
   const listeners = new Set<ChangeListener>();
   const body = { sanitize };
-  let active = false, scheduled = false, publishing = false, changed = false;
+  let active = false, scheduled = false, publishing = false, changed = false, holds = 0;
   let closing: CloseReason | null = null;
   let typing: { readonly target: NativeTextTarget; readonly endsInSpace: boolean } | null = null;
   const { script, undo, publishUpdate } = openSessionScript(source, updated), doc = script.doc;
@@ -120,7 +133,7 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
   }
 
   function refusal(): "busy" | "closed" | null {
-    if (active) return "busy";
+    if (active || holds) return "busy";
     if (closing) return "closed";
     if (!script.busy()) return null;
     schedule();
@@ -198,6 +211,17 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
       return false;
     },
     document: () => script.reader.document(),
+    narrationCaret: (row: string, offset: number) => script.reader.narrationCaret(row, offset),
+    isStoredScript: () => script.roots.meta.get("format") === NATIVE_FORMAT_VERSION
+      && script.roots.meta.get("title") instanceof Y.Text && script.roots.births.size > 0
+      && !!script.reader.document().docId && !script.reader.problems().some(({ kind }) =>
+        ["bad-value", "bad-key", "no-text", "no-segment", "no-order", "unknown-embed"].includes(kind)),
+    holdIngress: () => {
+      holds++;
+      let held = true;
+      return () => { if (held) { held = false; holds--; } };
+    },
+    acceptsPeerUpdate: () => refusal() === null,
     encodeState: () => Y.encodeStateAsUpdate(doc),
     subscribe(listener: ChangeListener): () => void {
       if (closing) return () => undefined;

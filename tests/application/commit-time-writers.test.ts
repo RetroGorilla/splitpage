@@ -137,6 +137,10 @@ const WRITERS = {
     family: "other", shared: "operation",
     reason: "The one write into shared state: the command's operation list, passed unchanged."
   },
+  "native-execute-refusal": {
+    family: "other", shared: "not applicable",
+    reason: "Native publication supplies the required replica executor as a refusal. It applies no legacy operations and writes no document fields."
+  },
   "recovery-write": {
     family: "other", shared: "operation",
     reason: "A write nobody commanded: when the document refuses buffered typing, the buffer keeps the field as one list of its own (a beat created and removed in the same list) whose plan declares `undo: false`, so the session records no undo entry (assumed rule 29)."
@@ -384,6 +388,7 @@ const ENGINES: readonly Site[] = [
   ["application/session/shared-session.ts#createSharedSession", "Plan.shared 4, ReplicaPort.execute 1", "shared-execute", "recovery-write"],
   ["bootstrap/wiring/broll.ts#mountBrollFeature", "anchorBrollInGivenRows 1", "broll-key"],
   ["bootstrap/wiring/clipboard.ts#mountCopyPasteFeature", "recordPastedBroll 1", "record-with-text"],
+  ["bootstrap/wiring/native-shared-session.ts#nativePublication", "ReplicaPort.execute (provided) 1", "native-execute-refusal"],
   ["bootstrap/wiring/ports/imports.ts#importFormats", "anchorBrollInRows 1", "file-entry"],
   ["bootstrap/wiring/ports/production.ts#production", "ProductionIndexOwner.recordsPlan 1, ProductionIndexOwner.recordsPlan (provided) 1", "tag-from-text", "cue-retitle"],
   ["bootstrap/wiring/ports/shared-broll-keying.ts#sharedBrollKeyingPorts", "sharedBeatStamp 1", "beat-stamp"],
@@ -428,7 +433,7 @@ const DOORS: Readonly<Record<"stamp" | "amend" | "noteEdit", readonly (readonly 
 const CLASS_COUNTS: Readonly<Record<Shared, number>> = {
   "derivation": 6,
   "operation": 11,
-  "not applicable": 9,
+  "not applicable": 10,
   "undetermined": 4
 };
 
