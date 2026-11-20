@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import test from "node:test";
+import test, { type TestContext } from "node:test";
 import { setTimeout } from "node:timers/promises";
 import { HocuspocusProvider, HocuspocusProviderWebsocket, MessageType } from "@hocuspocus/provider";
 import { createDecoder, readVarString, readVarUint } from "lib0/decoding";
@@ -52,6 +52,20 @@ function unchanged(session: Session, run: () => unknown, expected: unknown): voi
 
 function written(result: { kind: string }): void {
   assert.equal(result.kind, "written");
+}
+
+function closedState(changes: NativeSessionChange[], reason: "requested" | "failed"): Uint8Array {
+  const final = changes.at(-1);
+  assert(final?.kind === "closed");
+  assert.equal(final.reason, reason);
+  assert.equal(changes.filter(change => change.kind === "closed").length, 1);
+  return final.state;
+}
+
+function captureMicrotasks(t: TestContext): VoidFunction[] {
+  const tasks: VoidFunction[] = [];
+  t.mock.method(globalThis, "queueMicrotask", (task: VoidFunction) => { tasks.push(task); });
+  return tasks;
 }
 
 test("empty, converted and encoded opens use a fresh undo binding", t => {
@@ -157,9 +171,11 @@ test("reentry during argument copying is refused before a nested command can wri
   const session = fromDocument();
   t.after(session.close);
   const before = session.encodeState();
+  const tasks = captureMicrotasks(t);
   const value = { get nested() {
     unchanged(session, () => session.commands.setField(status, "ready"), { kind: "refused", reason: "busy" });
     unchanged(session, session.commands.undo, { kind: "refused", reason: "busy" });
+    assert.equal(tasks.length, 0);
     return "value";
   } };
   written(session.commands.setField(beatField("A", "field"), value));
@@ -167,33 +183,51 @@ test("reentry during argument copying is refused before a nested command can wri
   assert.equal(session.document().rows[0]?.audioText, "a");
   assert.equal(session.document().rows[0]?.status, "todo");
   assert.deepEqual(session.document().rows[0]?.field, { nested: "value" });
+  assert.equal(tasks.length, 1);
+  tasks.shift()?.();
+  assert.equal(tasks.length, 0);
+  session.close();
+  tasks.shift()?.();
+  assert.equal(tasks.length, 0);
 });
 
-test("interrupted cleanup reopens current stored state, retires history and publishes undo reset", async t => {
+test("a command interrupted before update closes as failed with the committed write and preserves the original error", async t => {
   const destroyUndo = t.mock.method(Y.UndoManager.prototype, "destroy");
   const closeReader = t.mock.method(NativeScriptReader.prototype, "close");
   const session = fromDocument(), changes: NativeSessionChange[] = [];
   t.after(session.close);
   const doc = session.ydoc;
   session.subscribe(change => changes.push(change));
+  const peer = open({ kind: "state", state: session.encodeState() });
+  t.after(peer.close);
   type(session, 0, "x");
+  type(peer, 0, "p", visual);
+  Y.applyUpdate(doc, peer.encodeState(), "peer");
   await Promise.resolve();
   changes.length = 0;
   const at = anchor(session, 1);
-  const failure = new Error("interrupted update");
-  doc.once("update", () => { throw failure; });
+  const failure = new Error("interrupted cleanup");
+  doc.once("afterTransactionCleanup", () => { throw failure; });
+  doc.once("destroy", () => { throw new Error("destroy listener"); });
   assert.throws(() => session.commands.typeText(at, "y", {}), failure);
-  assert.notEqual(session.ydoc, doc);
-  assert.deepEqual(session.encodeState(), Y.encodeStateAsUpdate(doc));
   assert.equal(session.document().rows[0]?.audioText, "xya");
+  assert.equal(session.ydoc, doc);
+  unchanged(session, session.commands.undo, { kind: "refused", reason: "closed" });
+  assert.equal(changes.length, 0);
+  await Promise.resolve();
   assert.equal(destroyUndo.mock.callCount(), 1);
   assert.equal(closeReader.mock.callCount(), 1);
-  unchanged(session, session.commands.undo, UNCHANGED);
+  assert.equal(doc.isDestroyed, true);
+  assert.deepEqual(changes.map(change => change.kind), ["closed"]);
+  const reopened = open({ kind: "state", state: closedState(changes, "failed") });
+  t.after(reopened.close);
+  assert.equal(reopened.document().rows[0]?.audioText, "xya");
+  assert.equal(reopened.document().rows[0]?.visualText, "p");
+  unchanged(reopened, reopened.commands.undo, UNCHANGED);
+  session.close();
   await Promise.resolve();
-  assert.deepEqual(changes, [{ kind: "changed" }, { kind: "undo-reset", ydoc: session.ydoc }]);
-  type(session, 2, "z");
-  written(session.commands.undo());
-  assert.equal(session.document().rows[0]?.audioText, "xya");
+  assert.equal(changes.length, 1);
+  assert.throws(session.document, /closed/);
 });
 
 test("stock Yjs stops emitting updates on the same document after an update listener throws", t => {
@@ -209,7 +243,7 @@ test("stock Yjs stops emitting updates on the same document after an update list
   assert.deepEqual(updates, []);
 });
 
-test("undo reset carries the live document for a stock provider to rebind and exchange updates", async t => {
+test("failed close lets the caller open a new session and provider; server resync delivers a late frame", async t => {
   const session = fromDocument(), peer = open({ kind: "state", state: session.encodeState() });
   const socket = new HocuspocusProviderWebsocket({ url: "ws://unused.invalid", autoConnect: false });
   const outgoing: Uint8Array[] = [];
@@ -222,36 +256,46 @@ test("undo reset carries the live document for a stock provider to rebind and ex
     return provider;
   }
   const old = session.ydoc;
-  let provider = attach(old);
+  const oldProvider = attach(old);
+  let provider = oldProvider;
   t.after(() => { provider.destroy(); socket.destroy(); session.close(); peer.close(); });
-  session.subscribe(change => {
-    if (change.kind === "undo-reset") {
-      provider.destroy();
-      provider = attach(change.ydoc);
-    }
-  });
+  const changes: NativeSessionChange[] = [];
+  session.subscribe(change => changes.push(change));
 
-  const at = anchor(session, 0), failure = new Error("interrupted update");
-  old.once("update", () => { throw failure; });
+  const at = anchor(session, 0), failure = new Error("interrupted cleanup");
+  old.once("afterTransactionCleanup", () => { throw failure; });
   assert.throws(() => session.commands.typeText(at, "x", {}), failure);
   await Promise.resolve();
+  oldProvider.destroy();
+  const reopened = open({ kind: "state", state: closedState(changes, "failed") });
+  t.after(reopened.close);
+  provider = attach(reopened.ydoc);
   assert.notEqual(provider.document, old);
-  assert.equal(provider.document, session.ydoc);
+  assert.equal(session.ydoc, old);
+  assert.equal(reopened.document().rows[0]?.audioText, "xa");
   outgoing.length = 0;
 
-  Y.applyUpdate(peer.ydoc, session.encodeState(), "peer");
+  Y.applyUpdate(peer.ydoc, reopened.encodeState(), "peer");
   type(peer, 0, "p", visual);
   const frame = createEncoder();
   writeVarString(frame, "script");
   writeVarUint(frame, MessageType.Sync);
   writeUpdate(frame, peer.encodeState());
-  provider.onMessage(new MessageEvent("message", { data: toUint8Array(frame) }));
-  assert.deepEqual(session.document(), peer.document());
-  assert.equal(session.document().rows[0]?.visualText, "p");
+  const delayed = new MessageEvent("message", { data: toUint8Array(frame) });
+  const prior = reopened.encodeState();
+  const priorOld = session.encodeState();
+  oldProvider.onMessage(delayed);
+  assert.notDeepEqual(session.encodeState(), priorOld);
+  assert.deepEqual(reopened.encodeState(), prior);
+  assert.equal(reopened.document().rows[0]?.visualText, "");
+  const serverResync = new MessageEvent("message", { data: toUint8Array(frame) });
+  provider.onMessage(serverResync);
+  assert.deepEqual(reopened.document(), peer.document());
+  assert.equal(reopened.document().rows[0]?.visualText, "p");
   assert.deepEqual(outgoing, []);
-  unchanged(session, session.commands.undo, UNCHANGED);
+  unchanged(reopened, reopened.commands.undo, UNCHANGED);
 
-  type(session, 1, "y");
+  type(reopened, 1, "y");
   assert.equal(outgoing.length, 1);
   assert.equal(provider.hasUnsyncedChanges, true);
   assert(outgoing[0]);
@@ -259,35 +303,42 @@ test("undo reset carries the live document for a stock provider to rebind and ex
   assert.equal(readVarString(sent), "script");
   assert.equal(readVarUint(sent), MessageType.Sync);
   readSyncMessage(sent, createEncoder(), peer.ydoc, "provider");
-  assert.deepEqual(peer.document(), session.document());
+  assert.deepEqual(peer.document(), reopened.document());
 });
 
-test("busy after a failed raw delivery recovers at the next boundary", async t => {
-  const session = fromDocument(), peer = open({ kind: "state", state: session.encodeState() });
-  t.after(() => { session.close(); peer.close(); });
-  type(peer, 0, "p");
-  const doc = session.ydoc, failure = new Error("interrupted delivery");
-  doc.once("update", () => { throw failure; });
-  assert.throws(() => Y.applyUpdate(doc, peer.encodeState(), "provider"), failure);
-  assert.deepEqual(session.commands.anchorText(narration, 0), { kind: "refused", reason: "busy" });
-  await Promise.resolve();
-  assert.notEqual(session.ydoc, doc);
-  assert.equal(session.document().rows[0]?.audioText, "pa");
-  unchanged(session, session.commands.undo, UNCHANGED);
-});
-
-for (const direction of ["undo", "redo"] as const) {
-  test(`a busy ${direction} press schedules recovery after a raw transaction fails before any update`, async t => {
-    const session = fromDocument(), doc = session.ydoc;
-    t.after(session.close);
-    const failure = new Error("interrupted before write");
-    doc.once("beforeTransaction", () => { throw failure; });
-    assert.throws(() => doc.transact(() => undefined), failure);
-    unchanged(session, session.commands[direction], { kind: "refused", reason: "busy" });
-    assert.equal(session.ydoc, doc);
+for (const boundary of ["bound command", "undo", "redo", "requested close"] as const) {
+  test(`a busy script closes as failed at a ${boundary} when the raw write emitted no update`, async t => {
+    const session = fromDocument(), doc = session.ydoc, changes: NativeSessionChange[] = [];
+    const peer = open({ kind: "state", state: session.encodeState() });
+    t.after(() => { session.close(); peer.close(); });
+    session.subscribe(change => changes.push(change));
+    type(session, 0, "x");
+    Y.applyUpdate(peer.ydoc, session.encodeState(), "peer");
+    type(peer, 0, "p", visual);
+    Y.applyUpdate(doc, peer.encodeState(), "peer");
     await Promise.resolve();
-    assert.notEqual(session.ydoc, doc);
-    unchanged(session, session.commands[direction], UNCHANGED);
+    changes.length = 0;
+    type(peer, 1, "q", visual);
+    const failure = new Error("interrupted cleanup");
+    doc.once("afterTransactionCleanup", () => {
+      if (boundary === "requested close") session.close();
+      throw failure;
+    });
+    assert.throws(() => Y.applyUpdate(doc, peer.encodeState(), "peer"), failure);
+    if (boundary !== "requested close") {
+      const run = boundary === "bound command" ? () => session.commands.anchorText(narration, 0) : session.commands[boundary];
+      unchanged(session, run, { kind: "refused", reason: "busy" });
+    }
+    assert.equal(session.ydoc, doc);
+    assert.equal(changes.length, 0);
+    await Promise.resolve();
+    assert.deepEqual(changes.map(change => change.kind), ["closed"]);
+    const reopened = open({ kind: "state", state: closedState(changes, "failed") });
+    t.after(reopened.close);
+    assert.deepEqual(reopened.document(), peer.document());
+    assert.equal(reopened.document().rows[0]?.audioText, "xa");
+    assert.equal(reopened.document().rows[0]?.visualText, "pq");
+    unchanged(session, session.commands.redo, { kind: "refused", reason: "closed" });
   });
 }
 
@@ -309,14 +360,18 @@ test("a close requested in a raw transaction waits for it to finish", async t =>
   const session = fromDocument(), doc = session.ydoc;
   t.after(session.close);
   const destroy = t.mock.method(doc, "destroy");
+  const changes: NativeSessionChange[] = [];
+  session.subscribe(change => changes.push(change));
   doc.transact(() => {
     session.close();
     assert.equal(destroy.mock.callCount(), 0);
   });
   assert.equal(destroy.mock.callCount(), 0);
+  assert.deepEqual(changes, []);
   await Promise.resolve();
   assert.equal(destroy.mock.callCount(), 1);
   assert.equal(session.ydoc, doc);
+  assert.deepEqual(closedState(changes, "requested"), session.encodeState());
 });
 
 test("a close during argument copying waits for the command to finish", async t => {
@@ -344,9 +399,12 @@ test("close during a command delivers the committed document before retiring und
     return Y.Doc.prototype.destroy.call(this);
   });
   const changes: string[] = [];
+  const closed: NativeSessionChange[] = [];
   session.subscribe(change => {
     changes.push(change.kind === "changed" ? `changed:${session.document().rows[0]?.audioText}` : change.kind);
   });
+  session.subscribe(change => closed.push(change));
+  doc.once("destroy", () => { throw new Error("destroy listener"); });
   const update = anchor(session, 0);
   doc.once("beforeTransaction", () => {
     session.close();
@@ -367,7 +425,7 @@ test("close during a command delivers the committed document before retiring und
   assert.deepEqual(changes, ["changed:xa", "closed"]);
   assert.throws(session.document, /closed/);
   assert.deepEqual(late, []);
-  const reopened = open({ kind: "state", state: session.encodeState() });
+  const reopened = open({ kind: "state", state: closedState(closed, "requested") });
   t.after(reopened.close);
   assert.equal(reopened.document().rows[0]?.audioText, "xa");
 });
@@ -379,7 +437,11 @@ test("a subscriber closing on changed and the other subscribers all receive clos
   const changes: string[] = [];
   session.subscribe(change => {
     changes.push(`first:${change.kind}`);
-    if (change.kind === "changed") session.close();
+    if (change.kind === "changed") {
+      session.close();
+      session.close();
+    }
+    throw new Error("subscriber");
   });
   session.subscribe(change => {
     changes.push(change.kind === "changed" ? `second:${session.document().rows[0]?.audioText}` : `second:${change.kind}`);
@@ -407,13 +469,14 @@ test("closing releases subscriber references after delivering closed", async t =
   session.close();
   await Promise.resolve();
   assert.equal(listener.mock.callCount(), 1);
-  assert.deepEqual(listener.mock.calls[0]?.arguments, [{ kind: "closed" }]);
+  assert.deepEqual(listener.mock.calls[0]?.arguments, [{ kind: "closed", reason: "requested", state: session.encodeState() }]);
   assert.equal(retained.size, 0);
 });
 
-test("a write and close from a change subscriber still publish the final write before closed", async t => {
+test("a write and close from a change subscriber publish two bounded batches and one close", t => {
   const session = fromDocument();
   t.after(session.close);
+  const tasks = captureMicrotasks(t);
   const changes: string[] = [];
   session.subscribe(change => {
     if (change.kind !== "changed") {
@@ -428,10 +491,13 @@ test("a write and close from a change subscriber still publish the final write b
     }
   });
   type(session, 0, "x");
-  await Promise.resolve();
+  assert.equal(tasks.length, 1);
+  tasks.shift()?.();
   assert.deepEqual(changes, ["changed:xa"]);
-  await Promise.resolve();
+  assert.equal(tasks.length, 1);
+  tasks.shift()?.();
   assert.deepEqual(changes, ["changed:xa", "changed:xya", "closed"]);
+  assert.equal(tasks.length, 0);
 });
 
 test("the real body sanitiser runs inside the transaction before a write and a throw is refused", t => {
@@ -539,7 +605,7 @@ test("unchanged typing in another beat leaves the current capture intact", t => 
   unchanged(session, session.commands.undo, UNCHANGED);
 });
 
-for (const boundary of ["undo", "redo", "recovery"] as const) {
+for (const boundary of ["undo", "redo"] as const) {
   test(`an empty typing replacement starts with fresh word state after ${boundary}`, t => {
     const session = fromDocument();
     t.after(session.close);
@@ -547,12 +613,8 @@ for (const boundary of ["undo", "redo", "recovery"] as const) {
     if (boundary === "undo") {
       type(session, 2, "y ");
       written(session.commands.undo());
-    } else if (boundary === "redo") {
-      unchanged(session, session.commands.redo, UNCHANGED);
     } else {
-      const failure = new Error("interrupted before write"), at = anchor(session, 2);
-      session.ydoc.once("beforeTransaction", () => { throw failure; });
-      assert.throws(() => session.commands.typeText(at, "y", {}), failure);
+      unchanged(session, session.commands.redo, UNCHANGED);
     }
     written(session.commands.typeText(anchor(session, 2, 3), "", {}));
     type(session, 2, "z");

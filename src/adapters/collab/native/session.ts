@@ -31,13 +31,15 @@ export interface NativeSessionOptions {
   readonly sanitize: MigratePorts["sanitize"];
 }
 
+type CloseReason = "requested" | "failed";
+
 export type NativeSessionChange =
-  | { readonly kind: "changed" | "closed" }
-  | { readonly kind: "undo-reset"; readonly ydoc: Y.Doc };
+  | { readonly kind: "changed" }
+  | { readonly kind: "closed"; readonly reason: CloseReason; readonly state: Uint8Array };
 
 type ChangeListener = (change: NativeSessionChange) => void;
 
-function openCopy(source: NativeSessionSource, updated: () => void) {
+function openSessionScript(source: NativeSessionSource, updated: () => void) {
   const doc = new Y.Doc(), script = openNativeScript(doc);
   try {
     if (source.kind === "state") Y.applyUpdate(doc, source.state);
@@ -54,10 +56,10 @@ function openCopy(source: NativeSessionSource, updated: () => void) {
 export function openNativeSession(source: NativeSessionSource, { actor, sanitize }: NativeSessionOptions) {
   const listeners = new Set<ChangeListener>();
   const body = { sanitize };
-  let active = false, closeRequested = false, scheduled = false;
-  let changed = false, undoReset = false;
+  let active = false, scheduled = false, publishing = false, changed = false;
+  let closing: CloseReason | null = null;
   let typing: { readonly target: NativeTextTarget; readonly endsInSpace: boolean } | null = null;
-  let current = openCopy(source, updated);
+  const { script, undo } = openSessionScript(source, updated), doc = script.doc;
 
   function schedule(): void {
     if (scheduled) return;
@@ -79,70 +81,73 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
   }
 
   function publish(): void {
-    if (current.script.busy()) recover();
-    const didChange = changed, reopened = undoReset ? current.script.doc : null;
-    changed = undoReset = false;
-    if (didChange) emit(listeners, { kind: "changed" });
-    if (reopened) emit(listeners, { kind: "undo-reset", ydoc: reopened });
-
     scheduled = false;
-    if (changed || undoReset) schedule();
-    else if (closeRequested) {
-      retire(current);
-      emit(listeners, { kind: "closed" });
-      listeners.clear();
+    publishing = true;
+    if (changed) {
+      changed = false;
+      emit(listeners, { kind: "changed" });
     }
+    publishing = false;
+    if (script.busy()) closing = "failed";
+    if (closing && !scheduled) finishClose(closing);
   }
 
-  function retire(copy: typeof current): void {
-    copy.undo.destroy();
-    copy.script.doc.destroy();
-  }
-
-  function recover(): void {
-    const old = current;
-    current = openCopy({ kind: "state", state: Y.encodeStateAsUpdate(old.script.doc) }, updated);
-    typing = null;
-    retire(old);
-    undoReset = true;
-    schedule();
+  function finishClose(reason: CloseReason): void {
+    const state = Y.encodeStateAsUpdate(doc);
+    doc.off("update", updated);
+    undo.destroy();
+    script.close();
+    try { doc.destroy(); } catch {
+      // why: an external destroy listener must not prevent the terminal state from reaching subscribers
+    }
+    emit(listeners, { kind: "closed", reason, state });
+    listeners.clear();
   }
 
   function perform<T>(run: () => T): T {
     active = true;
     try { return run(); } finally {
       active = false;
-      if (current.script.busy()) recover();
+      if (script.busy()) requestClose("failed");
     }
+  }
+
+  function requestClose(reason: CloseReason): void {
+    closing = reason;
+    if (!publishing) schedule();
+  }
+
+  function refusal(): "busy" | "closed" | null {
+    if (active) return "busy";
+    if (closing) return "closed";
+    if (!script.busy()) return null;
+    schedule();
+    return "busy";
   }
 
   function bind<Args extends unknown[], Result>(command: (script: NativeScript, ...args: Args) => Result, separate = true) {
     return (...args: Args): Result => {
-      if (active || current.script.busy()) {
-        if (!active) schedule();
+      const reason = refusal();
+      if (reason) {
         // why: reentry during argument copying must keep each command's own refusal shape
-        return command({ ...current.script, busy: () => true }, ...args);
+        return command({ ...script, busy: () => reason === "busy", closed: () => reason === "closed" }, ...args);
       }
-      if (closeRequested) return command({ ...current.script, closed: () => true }, ...args);
       return perform(() => {
         if (separate) {
           typing = null;
-          current.undo.stopCapturing();
+          undo.stopCapturing();
         }
-        return command(current.script, ...args);
+        return command(script, ...args);
       });
     };
   }
 
   function press(direction: "undo" | "redo"): NativeUndoOutcome {
-    if (active || current.script.busy()) {
-      if (!active) schedule();
-      return { kind: "refused", reason: "busy" };
-    }
-    if (closeRequested) return { kind: "refused", reason: "closed" };
+    const reason = refusal();
+    if (reason) return { kind: "refused", reason };
     return perform(() => {
       typing = null;
-      return current.undo[direction]();
+      return undo[direction]();
     });
   }
 
@@ -151,7 +156,7 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
     typeText: bind((script, range: NativeTextRange, text: string, marks: Marks, stamp?: NativeEditStamp) =>
       typeNativeText(script, range, text, marks, stamp, target => {
         const previous = typing?.target.beat === target.beat && typing.target.cell === target.cell ? typing : null;
-        if (!previous || !continuesSharedTypingWord(previous.endsInSpace, text)) current.undo.stopCapturing();
+        if (!previous || !continuesSharedTypingWord(previous.endsInSpace, text)) undo.stopCapturing();
         typing = { target, endsInSpace: text ? /\s$/.test(text) : previous?.endsInSpace ?? false };
       }), false),
     replaceText: bind((script, ...args: [NativeTextRange, Parameters<typeof replaceNativeText>[2], NativeEditStamp?]) =>
@@ -183,18 +188,17 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
     commands,
     // why: peers apply updates directly between commands. Applying one from a transaction listener is unsupported
     // because Yjs can fold it into local undo
-    get ydoc() { return current.script.doc; },
-    document: () => current.script.reader.document(),
-    encodeState: () => Y.encodeStateAsUpdate(current.script.doc),
+    ydoc: doc,
+    document: () => script.reader.document(),
+    encodeState: () => Y.encodeStateAsUpdate(doc),
     subscribe(listener: ChangeListener): () => void {
-      if (closeRequested) return () => undefined;
+      if (closing) return () => undefined;
       listeners.add(listener);
       return () => { listeners.delete(listener); };
     },
     close(): void {
-      if (closeRequested) return;
-      closeRequested = true;
-      schedule();
+      if (closing) return;
+      requestClose("requested");
     }
   });
 }
