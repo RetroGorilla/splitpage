@@ -1,0 +1,21 @@
+{
+  "name": "splitpage-collab-server",
+  "version": "0.0.0",
+  "private": true,
+  "type": "module",
+  "engines": {
+    "node": "24.22.1"
+  },
+  "scripts": {
+    "start": "node main.ts",
+    "backup": "node backup-command.ts"
+  },
+  "dependencies": {
+    "@hocuspocus/extension-database": "4.8.0",
+    "@hocuspocus/server": "4.8.0",
+    "yjs": "13.6.33"
+  },
+  "overrides": {
+    "@hocuspocus/common": "4.8.0"
+  }
+}

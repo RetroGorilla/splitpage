@@ -65,6 +65,11 @@ check("a feature may import application", layerAllows("features/rows", "applicat
 check("bootstrap may import anything", layerAllows("bootstrap", "features/rows") && layerAllows("bootstrap", "adapters"));
 check("production code may not import tests", !layerAllows("application", "tests") && !layerAllows("server", "tests"));
 check("tools may import tests", layerAllows("tools", "tests"));
+check("the collaboration service has its own layer", layerOf("collab-server/main.ts") === "collab-server");
+check("the collaboration service cannot import the app", !layerAllows("collab-server", "adapters"));
+check("the app cannot import the collaboration service", !layerAllows("bootstrap", "collab-server"));
+check("the collaboration service cannot import prototypes", !layerAllows("collab-server", "prototypes"));
+check("tests can import the collaboration service", layerAllows("tests", "collab-server"));
 
 for (const path of ["prototypes/collab/src/probe.ts", "prototypes/collab/test/probe.test.ts", "prototypes/other/probe.ts"]) {
   eq("prototype paths keep their layer even for tests", layerOf(path), "prototypes");
