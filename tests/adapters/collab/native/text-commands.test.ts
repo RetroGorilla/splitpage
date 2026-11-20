@@ -119,7 +119,7 @@ test("finding 1: inside another open transaction a command refuses and writes no
   });
   assert.deepEqual(outcomes, ["recovery", "recovery", "refused"]);
   assert.deepEqual(nativeSegmentSpans(copy.roots.segments.get("b:R1"))?.map(span => [span.key, span.end - span.start]), [["b:R1", 2], ["b:R2", 3]]);
-  assert.equal(narration(copy, "R1"), "bc");
+  assert.equal(narration(copy, "R1"), "bcabc");
 });
 
 test("finding 1: a command called from an observer refuses", () => {

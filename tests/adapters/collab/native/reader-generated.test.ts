@@ -5,13 +5,13 @@ import { dom } from "../../../../src/test/_dom.mjs";
 import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
 import { formatNativeText } from "../../../../src/adapters/collab/native/format-commands.ts";
 import type { NativeMarkChange } from "../../../../src/adapters/collab/native/format-commands.ts";
-import { NativeScriptReader } from "../../../../src/adapters/collab/native/reader.ts";
-import type { NativeRoots } from "../../../../src/adapters/collab/native/roots.ts";
+import { createNativeHeading, removeNativeHeading, renameNativeHeading, restoreNativeHeading } from "../../../../src/adapters/collab/native/heading-commands.ts";
+import { NativeScriptReader, readNativeOnce } from "../../../../src/adapters/collab/native/reader.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import { joinNativeRow, removeNativeRows, splitNativeRow, unjoinNativeRow } from "../../../../src/adapters/collab/native/structure-commands.ts";
 import { anchorNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
 import type { NativeTextTarget } from "../../../../src/adapters/collab/native/text-commands.ts";
-import { convertedScript, edit, shown } from "./helpers.ts";
+import { convertedScript, edit, joinedScript, shown } from "./helpers.ts";
 
 after(() => { dom.window.close(); });
 
@@ -28,15 +28,14 @@ function random(seed: number): () => number {
   };
 }
 
-interface Reading { readonly shown: string[]; readonly document: string }
+interface Reading { readonly shown: string[]; readonly document: string; readonly recovery: ReturnType<NativeScriptReader["recovery"]> }
 
 function read(script: NativeScript, reader: NativeScriptReader): Reading {
-  return { shown: shown(script, reader), document: JSON.stringify(reader.document()) };
+  return { shown: shown(script, reader), document: JSON.stringify(reader.document()), recovery: reader.recovery() };
 }
 
 function freshly(script: NativeScript): Reading {
-  const reader = new NativeScriptReader(script.roots);
-  try { return read(script, reader); } finally { reader.close(); }
+  return readNativeOnce(script.roots, reader => read(script, reader));
 }
 
 function start(): NativeScript {
@@ -126,8 +125,7 @@ const emptyRun = (): Run => ({ compared: 0, changed: 0, joinedMarkers: 0, format
 type Formatting = "none" | "mixed" | "only" | "rows" | "rows-only";
 
 function rowOnce(script: NativeScript, pick: <T>(list: readonly T[]) => T, chance: () => number, run: Run): void {
-  const outline = new NativeScriptReader(script.roots), entries = outline.outline();
-  outline.close();
+  const entries = readNativeOnce(script.roots, reader => reader.outline());
   const rows = entries.flatMap(entry => entry.kind === "heading" ? [] : [entry.id]), beat = pick(rows.length ? rows : BEATS), roll = chance();
   let outcome: { readonly kind: string; readonly reason?: string }, command: string;
   if (roll < 0.4) {
@@ -151,8 +149,7 @@ function rowOnce(script: NativeScript, pick: <T>(list: readonly T[]) => T, chanc
 }
 
 function formatOnce(script: NativeScript, pick: <T>(list: readonly T[]) => T, chance: () => number, run: Run): void {
-  const outline = new NativeScriptReader(script.roots), rows = outline.outline().flatMap(entry => entry.kind === "heading" ? [] : [entry.id]);
-  outline.close();
+  const rows = readNativeOnce(script.roots, reader => reader.outline().flatMap(entry => entry.kind === "heading" ? [] : [entry.id]));
   const target: NativeTextTarget = { beat: pick(rows.length ? rows : BEATS), cell: chance() < 0.7 ? "narration" : "visual" }, from = Math.floor(chance() * 5);
   const anchored = anchorNativeText(script, target, from, from + 1 + Math.floor(chance() * 4));
   const on = chance() < 0.7;
@@ -168,20 +165,71 @@ function formatOnce(script: NativeScript, pick: <T>(list: readonly T[]) => T, ch
 
 type WarmReader = (script: NativeScript) => NativeScriptReader;
 
-function unwatched(roots: NativeRoots): NativeRoots {
-  const blind = (type: object): object => new Proxy(type, {
-    get: (target, key) => {
-      if (key === "observeDeep" || key === "unobserveDeep") return () => undefined;
-      const value: unknown = Reflect.get(target, key, target);
-      return typeof value === "function" ? (value as (...args: unknown[]) => unknown).bind(target) : value;
-    }
-  });
-  return Object.freeze(Object.fromEntries(Object.entries(roots).map(([name, type]) => [name, blind(type as object)]))) as unknown as NativeRoots;
+function compareStructuralCommands(script: NativeScript, reader: NativeScriptReader, seed: number): void {
+  const peer = joinedScript(script, 201);
+  const lower = script.roots.beats.get("R2");
+  assert.ok(lower);
+  let joined = false, removed = false, created = false, name = "Four";
+  const glue = seed % 2 ? " " : "";
+  const target = seed % 2 ? "R5" : "R6", createdName = "New scene " + seed;
+  const check = (step: string): void => {
+    const label = `seed ${seed}, ${step}`, expected = ["R1", ...joined ? [] : ["R2"], "R3", ...removed ? [] : ["H4"], "R4",
+      ...["R5", "R6"].flatMap(beat => created && beat === target ? ["HX", beat] : [beat])];
+    Y.applyUpdate(script.doc, Y.encodeStateAsUpdate(peer.doc, Y.encodeStateVector(script.doc)), "remote");
+    Y.applyUpdate(peer.doc, Y.encodeStateAsUpdate(script.doc, Y.encodeStateVector(peer.doc)), "remote");
+    const late = joinedScript(script, 901);
+    try {
+      const fresh = freshly(script);
+      for (const [copy, view] of [[script, reader], [peer, peer.reader], [late, late.reader]] as const) {
+        assert.deepEqual(view.outline().map(entry => entry.id), expected, label);
+        assert.equal(view.row("R1")?.audioText, joined ? "r1 text" + glue + "r2 text" : "r1 text", label);
+        assert.deepEqual(view.recovery(), removed ? [{ id: "H4", name }] : [], label);
+        if (created) assert.deepEqual(view.outline().find(entry => entry.id === "HX"), { kind: "heading", id: "HX", name: createdName }, label);
+        assert.deepEqual(read(copy, view), fresh, label);
+      }
+    } finally { late.doc.destroy(); }
+  };
+  const joins = (): void => {
+    lower.set("joined", { into: "R1", glue });
+    joined = true;
+    check("joined");
+    lower.delete("joined");
+    joined = false;
+    check("unjoined");
+  };
+  const rename = (): void => {
+    const anchor = anchorNativeText(peer, { beat: "H4", cell: "name" }, 0, name.length);
+    assert.equal(anchor.kind, "anchored");
+    name = "Scene " + seed;
+    assert.equal(anchor.kind === "anchored" && renameNativeHeading(peer, anchor.range, name).kind, "written");
+    check("renamed");
+  };
+  const removal = (): void => {
+    assert.equal(removeNativeHeading(peer, "H4").kind, "written");
+    removed = true;
+    check("removed");
+    assert.equal(restoreNativeHeading(script, "H4").kind, "written");
+    removed = false;
+    check("restored");
+  };
+  const creation = (): void => {
+    const anchor = anchorNativeText(peer, { beat: target, cell: "narration" }, 0);
+    assert.equal(anchor.kind, "anchored");
+    assert.equal(anchor.kind === "anchored" && createNativeHeading(peer, anchor.range, "HX", createdName).kind, "written");
+    created = true;
+    check("created");
+  };
+  const sequences = [[joins, rename, removal, creation], [rename, creation, removal, joins], [removal, joins, rename, creation], [creation, joins, rename, removal]];
+  try {
+    check("initial");
+    for (const act of sequences[seed % sequences.length] ?? []) act();
+  } finally { peer.doc.destroy(); }
 }
 
 function runSeed(seed: number, run: Run, warmOf: WarmReader = script => script.reader, formatting: Formatting = "none"): void {
   const chance = random(seed), pick = <T>(list: readonly T[]): T => list[Math.floor(chance() * list.length)] as T;
   const script = start(), ops = operations(script, pick, chance), reader = warmOf(script);
+  if (formatting !== "only" && formatting !== "rows-only") compareStructuralCommands(script, reader, seed);
   let previous = freshly(script);
   for (let step = 0; step < STEPS; step++) {
     const roll = chance();
@@ -213,17 +261,17 @@ test("generated structural and text changes: a warm reader always reads what a f
   const run = emptyRun();
   for (let seed = 1; seed <= SEEDS; seed++) runSeed(seed, run);
   assert.ok(run.joinedMarkers > 0, "no marker holding a separator was reached");
-  assert.deepEqual([...run.reasons].sort(), ["heading-text", "no-head", "no-order", "no-record", "repeated"]);
-  assert.deepEqual([...run.problems].sort(), ["bad-value", "heading-without-row", "hidden-units", "join-not-read", "no-text", "unknown-embed"]);
+  assert.deepEqual([...run.reasons].sort(), ["no-order"]);
+  assert.deepEqual([...run.problems].sort(), ["bad-value", "heading-without-row", "hidden-units", "join-not-read", "missing-beat-record", "missing-heading-record", "missing-name", "missing-visual", "no-order", "no-segment", "no-text", "unknown-embed"]);
   assert.ok(run.compared > SEEDS * STEPS * 0.3, String(run.compared));
   assert.ok(run.changed > run.compared * 0.5, JSON.stringify({ compared: run.compared, changed: run.changed }));
 });
 
 test("control: the same comparison loop catches a warm reader whose invalidation is switched off", () => {
   const readers: NativeScriptReader[] = [];
-  const blind: WarmReader = script => { const reader = new NativeScriptReader(unwatched(script.roots)); readers.push(reader); return reader; };
-  for (let seed = 1; seed <= 3; seed++) {
-    assert.throws(() => { runSeed(seed, emptyRun(), blind); }, new RegExp(`seed ${seed}, `));
+  const blind: WarmReader = script => { const reader = new NativeScriptReader(script.roots, () => () => undefined); readers.push(reader); return reader; };
+  for (const [seed, first] of [[1, "renamed"], [2, "removed"], [3, "created"], [4, "joined"]] as const) {
+    assert.throws(() => { runSeed(seed, emptyRun(), blind); }, new RegExp(`seed ${seed}, ${first}`));
   }
   for (const reader of readers) reader.close();
 });
@@ -238,7 +286,7 @@ test("generated formatting, tag and comment commands among the structural change
 
 test("control: with formatting commands alone, the comparison catches a warm reader whose invalidation is switched off", () => {
   const readers: NativeScriptReader[] = [];
-  const blind: WarmReader = script => { const reader = new NativeScriptReader(unwatched(script.roots)); readers.push(reader); return reader; };
+  const blind: WarmReader = script => { const reader = new NativeScriptReader(script.roots, () => () => undefined); readers.push(reader); return reader; };
   for (let seed = 1; seed <= 3; seed++) {
     const run = emptyRun();
     runSeed(seed, run, undefined, "only");
@@ -259,12 +307,12 @@ test("generated split, join, unjoin and removal among the structural changes: a 
 
 test("control: with row commands alone, the comparison catches a warm reader whose invalidation is switched off", () => {
   const readers: NativeScriptReader[] = [];
-  const blind: WarmReader = script => { const reader = new NativeScriptReader(unwatched(script.roots)); readers.push(reader); return reader; };
+  const blind: WarmReader = script => { const reader = new NativeScriptReader(script.roots, () => () => undefined); readers.push(reader); return reader; };
   for (let seed = 1; seed <= 3; seed++) {
     const run = emptyRun();
     runSeed(seed, run, undefined, "rows-only");
     assert.ok(run.formatted > 10, String(run.formatted));
-    assert.throws(() => { runSeed(seed, emptyRun(), blind, "rows-only"); }, new RegExp(`seed ${seed}, `));
+    assert.throws(() => { runSeed(seed, emptyRun(), blind, "rows-only"); }, new RegExp(`seed ${seed}, (step \\d+|end)`));
   }
   for (const reader of readers) reader.close();
 });
