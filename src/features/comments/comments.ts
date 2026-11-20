@@ -486,7 +486,7 @@ const COMMENT_BOXES = ["comment-body-editable", "reply-composer", "comment-body-
 let drafts: TypedDrafts | null = null;
 let draftLife: { readonly shared: object; readonly epoch: number } | null = null;
 let commentRows: Record<string, string> = {};
-let bodyEdit: { id: string; reply: string | undefined; original: string; html: string } | null = null;
+let bodyEdit: { id: string; reply: string | undefined; record: string; original: string } | null = null;
 
 function nativeComments() { return ports?.nativeComments?.() ?? null; }
 
@@ -502,8 +502,20 @@ function plainOf(html: string): string {
   return holder.content.textContent ?? "";
 }
 
+function bodyDraftKey(id: string, reply?: string): string {
+  return JSON.stringify([id, reply]);
+}
+
+function bodyDraftExists(record: string, comments: DocumentView["comments"]): boolean {
+  return comments.some(comment => bodyDraftKey(comment.id) === record ||
+    comment.replies?.some(reply => bodyDraftKey(comment.id, reply.id) === record));
+}
+
 function unsavedCommentLabel(draft: TypedDraft): string {
-  if (draft.box === "comment-body-editor") return "The comment was removed, so your edit was not saved";
+  if (draft.box === "comment-body-editor") {
+    const comments = ports?.document.current()?.comments ?? [];
+    return bodyDraftExists(draft.record, comments) ? "Unsaved body edit" : "The comment was removed, so your edit was not saved";
+  }
   if (draft.box === "reply-composer") {
     const comment = (ports as CommentsRuntimePorts).document.current()?.comments.find(comment => comment.id === draft.record);
     if (comment) return comment.author + ": unsaved reply";
@@ -536,9 +548,18 @@ function sameCommentLife(): boolean {
   return same;
 }
 
+function reviseBodyDraft(box: HTMLElement | null): void {
+  if (!bodyEdit || !box || box.dataset.record !== bodyEdit.record) return;
+  const html = (ports as CommentsRuntimePorts).text.sanitizeHtml(box.innerHTML);
+  typed().revise("comment-body-editor", bodyEdit.record, html, bodyEdit.original);
+  box.toggleAttribute("data-unsaved", typed().draft("comment-body-editor", bodyEdit.record) !== null);
+}
+
 function reviseCommentDrafts(): void {
+  if (bodyEdit) reviseBodyDraft(document.querySelector<HTMLElement>("#comments-list .comment-body-editor"));
   const text = (ports as CommentsRuntimePorts).text;
   for (const draft of typed().held()) {
+    if (draft.box === "comment-body-editor") continue;
     let live: string | null = null;
     if (draft.box === "reply-composer") {
       const body = document.querySelector<HTMLElement>('.reply-composer[data-for="' + safeId(draft.record, "c") + '"] .cell-editable');
@@ -560,18 +581,23 @@ export function dismissUnsavedComment(box: string | null, record: string | null)
   renderComments();
 }
 
-function unsavedCommentsHtml(items: readonly CommentRenderRecord[]): string {
-  const hidden = typed().hidden(draft => draft.box === "reply-composer"
-    ? !!expandedReplyIds[draft.record] && items.some(comment => comment.id === draft.record) && !document.getElementById("comments-panel")?.hidden
-    : pendingComment?.id === draft.record && !document.getElementById("comment-modal")?.hidden,
-  draft => draft.box === "reply-composer" ? findCommentIndex(draft.record) !== -1
-    : commentRows[draft.record] === "" || !!(ports as CommentsRuntimePorts).document.current()?.rows.some(row => row.id === commentRows[draft.record]));
+function unsavedCommentsHtml(items: readonly CommentRenderRecord[], comments: readonly CommentRenderRecord[]): string {
+  const hidden = typed().hidden(draft => {
+    if (draft.box === "comment-body-editor") return bodyEdit?.record === draft.record && bodyDraftExists(draft.record, items);
+    return draft.box === "reply-composer"
+      ? !!expandedReplyIds[draft.record] && items.some(comment => comment.id === draft.record) && !document.getElementById("comments-panel")?.hidden
+      : pendingComment?.id === draft.record && !document.getElementById("comment-modal")?.hidden;
+  }, draft => {
+    if (draft.box === "comment-body-editor") return bodyDraftExists(draft.record, comments);
+    return draft.box === "reply-composer" ? findCommentIndex(draft.record) !== -1
+      : commentRows[draft.record] === "" || !!(ports as CommentsRuntimePorts).document.current()?.rows.some(row => row.id === commentRows[draft.record]);
+  });
   return typedOrphansHtml(hidden.map(draft => ({ ...draft, text: plainOf(draft.text) })), unsavedCommentLabel);
 }
 
 function onTypedComment(event: Event): void {
-  if (bodyEdit && event.target instanceof HTMLElement && event.target.matches(".comment-body-editor")) {
-    bodyEdit.html = (ports as CommentsRuntimePorts).text.sanitizeHtml(event.target.innerHTML);
+  if (event.target instanceof HTMLElement && event.target.matches(".comment-body-editor")) {
+    reviseBodyDraft(event.target);
     return;
   }
   if (!commentLife() || !sameCommentLife()) return;
@@ -920,7 +946,9 @@ function bodyControls(id: string, reply: string | undefined, author: string): st
   if (nativeComments()?.author !== author) return "";
   const editing = bodyEdit;
   if (editing && editing.id === id && editing.reply === reply) {
-    return '<div class="comment-body-editor" role="textbox" aria-label="Edit body" contenteditable="true">' + editing.html + '</div>' +
+    const draft = typed().draft("comment-body-editor", editing.record);
+    return '<div class="comment-body-editor" role="textbox" aria-label="Edit body" contenteditable="true" data-record="' +
+      escapeHtml(editing.record) + '"' + (draft === null ? "" : " data-unsaved") + '>' + (draft ?? editing.original) + '</div>' +
       '<button type="button" class="btn-outline" data-action="save-comment-body">Save edit</button> ' +
       '<button type="button" class="btn-outline" data-action="cancel-comment-body">Cancel</button>';
   }
@@ -931,25 +959,34 @@ function bodyControls(id: string, reply: string | undefined, author: string): st
 export function editCommentBody(target: Element): boolean {
   const native = nativeComments();
   const button = target.closest<HTMLButtonElement>("#comments-list button[data-action$='comment-body']");
-  if (!native || !button) return false;
+  if (!native || !button || !ports) return false;
+  const editing = bodyEdit;
   if (button.dataset.action === "edit-comment-body") {
     const id = button.closest<HTMLElement>(".comment-card")?.dataset.id, reply = button.dataset.reply;
-    const comment = ports?.document.current()?.comments.find(item => item.id === id);
+    const comment = ports.document.current()?.comments.find(item => item.id === id);
     const entry = reply === undefined ? comment : comment?.replies?.find(item => item.id === reply);
     if (!id || entry?.author !== native.author || typeof entry.body !== "string") return true;
-    bodyEdit = { id, reply, original: entry.body, html: entry.body };
-  } else if (button.dataset.action === "save-comment-body" && bodyEdit) {
+    reviseBodyDraft(document.querySelector<HTMLElement>("#comments-list .comment-body-editor"));
+    bodyEdit = { id, reply, record: bodyDraftKey(id, reply), original: ports.text.sanitizeHtml(entry.body) };
+  } else if (editing && button.dataset.action === "save-comment-body") {
     const box = button.parentElement?.querySelector<HTMLElement>(".comment-body-editor");
-    if (!box || !ports) return true;
+    if (!box) return true;
     const html = ports.text.sanitizeHtml(box.innerHTML);
     if (!box.textContent?.trim() && !/<img|video-embed-card/.test(html)) {
       ports.notices.show("Write a comment before posting.", "warn");
       return true;
     }
-    bodyEdit.html = html;
-    if (native.body(bodyEdit.id, bodyEdit.reply, html).held) return true;
+    const wrote = typed().submit("comment-body-editor", editing.record, html,
+      text => heldWrite(native.body(editing.id, editing.reply, text)));
+    if (wrote === "kept") {
+      box.setAttribute("data-unsaved", "");
+      return true;
+    }
     bodyEdit = null;
-  } else bodyEdit = null;
+  } else if (editing) {
+    typed().drop("comment-body-editor", editing.record);
+    bodyEdit = null;
+  }
   renderComments();
   document.querySelector<HTMLElement>(".comment-body-editor")?.focus();
   return true;
@@ -1196,21 +1233,11 @@ export function captureReplyDrafts() {
 
 const COMMENTS_HINT_HTML = '<p class="comments-hint">To start a thread, select words in the script and choose Comment.</p>';
 
-function keepRemovedBodyEdit(comments: readonly CommentRenderRecord[]): void {
-  if (!bodyEdit) return;
-  const editing = bodyEdit, thread = comments.find(comment => comment.id === editing.id);
-  if (thread && (editing.reply === undefined || thread.replies.some(reply => reply.id === editing.reply))) return;
-  bodyEdit = null;
-  if (editing.html !== editing.original) {
-    typed().submit("comment-body-editor", JSON.stringify([editing.id, editing.reply]), editing.html, () => "gone");
-  }
-}
-
 export function renderComments() {
   if (drafts && sameCommentLife()) { reviseCommentDrafts(); captureReplyDrafts(); }
   const doc = (ports as CommentsRuntimePorts).document.current() as CommentsReadDocument | null;
   if (!doc) return;
-  keepRemovedBodyEdit(doc.comments);
+  if (bodyEdit && !bodyDraftExists(bodyEdit.record, doc.comments)) bodyEdit = null;
   const listEl = (document.getElementById("comments-list") as HTMLElement);
   if (!listEl) return;
   renderCommentFilterBar();
@@ -1218,7 +1245,7 @@ export function renderComments() {
     return commentMatchesFilterMode(c, (commentFilter as CommentFilter).mode) && commentMatchesAssigneeFilter(c, (commentFilter as CommentFilter).assignee);
   });
   items = items.slice().sort((ports as CommentsRuntimePorts).sort.current() === "recent" ? commentRecentOrder : commentPositionCompare);
-  const unsaved = drafts ? unsavedCommentsHtml(items) : "";
+  const unsaved = drafts ? unsavedCommentsHtml(items, doc.comments) : "";
   if (!items.length) {
     listEl.innerHTML = unsaved + '<div class="comments-empty">' + (doc.comments.length ? "No comments match this filter." : "No comments yet.") + '</div>' +
       COMMENTS_HINT_HTML;

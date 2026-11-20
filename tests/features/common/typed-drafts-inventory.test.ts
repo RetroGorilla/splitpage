@@ -22,6 +22,7 @@ const INVENTORY: Record<Feature, Record<string, string>> = {
   },
   comments: {
     "comment-body-editable": HELPER,
+    "comment-body-editor": HELPER,
     "editableCellHtml": HELPER,
     "comment-name": "writes nothing: the name is read when a comment posts and kept as a local preference",
     "reply-name-input": "writes nothing: the name is read when a reply posts, and a redraw restores it from the reply draft",

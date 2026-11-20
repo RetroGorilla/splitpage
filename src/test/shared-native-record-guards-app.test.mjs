@@ -80,15 +80,26 @@ for (const action of ["duration change", "comment post"]) test(`a ${action} land
     commentToolbar(0, 4, cell("visualText"));
     find("#comment-body-editable").textContent = "Check the shot";
   }
+  t.mock.timers.enable({ apis: ["setTimeout"] });
   bufferNarration("x");
   if (action === "duration change") assert.equal(setBeatLength("r1", 83), true);
   else find("#comment-post").click();
 
-  await until(() => hook.read().app.rows[0].audioText === "Hexllo");
+  const record = action === "duration change"
+    ? copy => copy.rows[0].lengthSeconds
+    : copy => copy.comments.map(({ body }) => body);
+  const expected = action === "duration change" ? 83 : ["Check the shot"];
+  await Promise.resolve();
+  const pending = hook.read();
+  assert.deepEqual(record(pending.peer), expected);
+  assert.equal(pending.peer.rows[0].audioText, "Hello");
+  assert.equal(pending.app.rows[0].audioText, "Hello");
+
+  t.mock.timers.tick(32);
+  await Promise.resolve();
   for (const copy of [hook.read().app, hook.read().peer]) {
     assert.equal(copy.rows[0].audioText, "Hexllo");
-    if (action === "duration change") assert.equal(copy.rows[0].lengthSeconds, 83);
-    else assert.deepEqual(copy.comments.map(({ body }) => body), ["Check the shot"]);
+    assert.deepEqual(record(copy), expected);
   }
   assert.equal(cell("audioText").textContent, "Hexllo");
   if (action === "duration change") assert.equal(find('.row-read[data-id="r1"]').textContent, "1:23");
@@ -350,6 +361,52 @@ test("saving an unchanged comment body adds no update or notice", async t => {
   assert.deepEqual(hook.read(), before);
   assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
   assert.equal(show.mock.callCount(), 0);
+});
+
+test("shared redraws keep a body edit and only Save submits it", async t => {
+  const thread = (id, body) => ({ id, rowId: "r1", field: "audioText", author: getEditorName(), body });
+  await enter(t, [thread("thread", "Original"), thread("first", "First"), thread("second", "Second")]);
+  openPanel();
+  const writes = nativeEditorRecords().comments, save = writes.body;
+  let holding = true;
+  const write = t.mock.method(writes, "body", (...args) => holding ? { changed: false, held: true } : save(...args));
+  const body = () => find('[data-id="thread"] .comment-body-editor');
+  const button = action => find('[data-id="thread"] [data-action="' + action + '"]');
+  button("edit-comment-body").click();
+  const typed = body();
+  typed.textContent = "Keep my edit";
+  typed.dispatchEvent(new window.Event("input", { bubbles: true }));
+  assert.equal(typed.hasAttribute("data-unsaved"), true);
+
+  const redraw = async id => {
+    const before = body();
+    assert.equal(hook.nativePeer.removeComment(id).kind, "written");
+    await Promise.resolve();
+    assert.notEqual(body(), before);
+    assert.equal(body().textContent, "Keep my edit");
+    assert.equal(body().hasAttribute("data-unsaved"), true);
+    for (const copy of [hook.read().app, hook.read().peer]) {
+      assert.equal(copy.comments.find(comment => comment.id === "thread").body, "Original");
+    }
+  };
+  await redraw("first");
+  assert.equal(write.mock.callCount(), 0);
+  button("save-comment-body").click();
+  assert.deepEqual(write.mock.calls.map(call => call.arguments), [["thread", undefined, "Keep my edit"]]);
+  holding = false;
+  await redraw("second");
+  assert.equal(write.mock.callCount(), 1);
+
+  button("save-comment-body").click();
+  await Promise.resolve();
+  assert.deepEqual(write.mock.calls.map(call => call.arguments), [
+    ["thread", undefined, "Keep my edit"], ["thread", undefined, "Keep my edit"]
+  ]);
+  assert.equal(body(), null);
+  assert.equal(find('[data-id="thread"] .comment-body').textContent, "Keep my edit");
+  for (const copy of [hook.read().app, hook.read().peer]) {
+    assert.equal(copy.comments.find(comment => comment.id === "thread").body, "Keep my edit");
+  }
 });
 
 for (const reply of [false, true]) test(`peer thread removal keeps an unsaved ${reply ? "reply" : "comment"} body edit`, async t => {
