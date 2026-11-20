@@ -52,15 +52,39 @@ function intercept(command: number, options: Options): () => void {
   return () => { for (const restore of originals) restore(); };
 }
 
-interface Entry { readonly id: string; readonly heading: boolean; readonly narration: string; readonly visual: string; readonly rank: string; readonly joined: string }
+interface Entry {
+  readonly id: string; readonly heading: boolean; readonly narration: string; readonly visual: string; readonly rank: string; readonly joined: string;
+  readonly pieces: readonly string[]; readonly own: number;
+}
 
+// why: one entry per beat in reading order, a joined row's members each on their own, with the pieces of narration the
+// reader shows for it (its own span and recovered text), so a command's expectation is derived beat by beat
 function view(script: NativeScript): Entry[] {
-  return script.reader.outline().map(entry => {
-    if (entry.kind === "heading") return { id: entry.id, heading: true, narration: "", visual: "", rank: "", joined: "" };
-    const row = script.reader.row(entry.id), record = script.roots.beats.get(entry.id), joined: unknown = record?.get("joined");
-    const text = (runs: readonly { text: string }[] | undefined): string => (runs ?? []).map(run => run.text).join("");
-    return { id: entry.id, heading: false, narration: text(row?.narration), visual: text(row?.visual), rank: String(record?.get("rank") ?? ""), joined: joined === undefined ? "" : JSON.stringify(joined) };
+  const reader = script.reader;
+  return reader.outline().flatMap((entry): Entry[] => {
+    if (entry.kind === "heading") return [{ id: entry.id, heading: true, narration: "", visual: "", rank: "", joined: "", pieces: [], own: -1 }];
+    const members = reader.row(entry.id)?.members ?? [];
+    return (members.length ? members : [entry.id]).map(id => {
+      const record = script.roots.beats.get(id), joined: unknown = record?.get("joined"), places = reader.narrationSpans(id), own = reader.beatBoundary(id);
+      const pieces = places.map(place => (nativeSegmentSpans(script.roots.segments.get(place.segment))?.[place.span]?.items ?? []).map(item => typeof item.insert === "string" ? item.insert : "").join(""));
+      return {
+        id, heading: false, narration: pieces.join(""), visual: script.roots.visuals.get(id)?.toString() ?? "", rank: String(record?.get("rank") ?? ""),
+        joined: joined === undefined ? "" : JSON.stringify(joined), pieces, own: own ? places.indexOf(own) : -1
+      };
+    });
   });
+}
+
+const compared = (entries: readonly Entry[]): string => JSON.stringify(entries.map(entry => [entry.id, entry.heading, entry.narration, entry.visual, entry.rank, entry.joined]));
+
+// why: decision 7: a caret in the own piece splits there, in a recovered piece before it at its start, after it at its
+// end
+function splitCut(row: Entry, offset: number): number {
+  let start = 0, caret = -1;
+  const starts = row.pieces.map(piece => { const at = start; start += piece.length; return at; });
+  for (const [index, piece] of row.pieces.entries()) if (offset <= (starts[index] ?? 0) + piece.length) { caret = index; break; }
+  const ownStart = starts[row.own] ?? 0, ownEnd = ownStart + (row.pieces[row.own]?.length ?? 0);
+  return caret === row.own ? offset : caret < row.own ? ownStart : ownEnd;
 }
 
 function storedLetters(script: NativeScript): string[] {
@@ -71,7 +95,7 @@ interface Counts {
   commands: number; written: number; unchanged: number; refused: number;
   letters: number; shown: number; twice: number; storedTwice: number; unplaced: number; deleted: number; notDeleted: number; lost: number;
   records: number; shownRows: number; keptRows: number; vanished: number; missingParts: number;
-  visualLetters: number; visualStored: number; visualOnHidden: number; joinsOnHidden: number; mutedExpected: number;
+  visualLetters: number; visualStored: number; visualOnHidden: number; joinsOnHidden: number; mutedExpected: number; movedSplits: number;
 }
 
 function history(seed: number, options: Options = {}): Counts {
@@ -79,7 +103,7 @@ function history(seed: number, options: Options = {}): Counts {
   const { net, all } = copiesOf(structureScript(ROWS, VISUALS, [{ id: "H", name: "Scene", before: "R4" }]), [2, 3, 4]);
   const counts: Counts = {
     commands: 0, written: 0, unchanged: 0, refused: 0, letters: 0, shown: 0, twice: 0, storedTwice: 0, unplaced: 0, deleted: 0, notDeleted: 0, lost: 0,
-    records: 0, shownRows: 0, keptRows: 0, vanished: 0, missingParts: 0, visualLetters: 0, visualStored: 0, visualOnHidden: 0, joinsOnHidden: 0, mutedExpected: 0
+    records: 0, shownRows: 0, keptRows: 0, vanished: 0, missingParts: 0, visualLetters: 0, visualStored: 0, visualOnHidden: 0, joinsOnHidden: 0, mutedExpected: 0, movedSplits: 0
   };
   const letters = new Set(Object.values(ROWS).join("")), visualLetters = new Set<string>(), deletions = new Map<string, number[]>();
   const records = new Set(Object.keys(ROWS)), removed = new Set<string>();
@@ -90,7 +114,7 @@ function history(seed: number, options: Options = {}): Counts {
   for (let step = 0; step < STEPS; step++) {
     const actor = pick(all), roll = chance();
     if (roll < 0.22) { const to = pick(all.filter(copy => copy !== actor)); net.deliver(actor, to); continue; }
-    const before = view(actor), rows = before.filter(entry => !entry.heading), stored = storedLetters(actor);
+    const before = view(actor), rows = before.filter(entry => !entry.heading && entry.own >= 0 && actor.roots.beats.get(entry.id) instanceof Y.Map), stored = storedLetters(actor);
     if (!rows.length) continue;
     const row = pick(rows), at = before.indexOf(row), command = counts.commands++;
     let want = before, wantStored = stored, expected = "written", act: () => { kind: string; created?: string };
@@ -113,7 +137,9 @@ function history(seed: number, options: Options = {}): Counts {
       const outcome = run(command, act, options);
       const created = outcome.created ?? "";
       if (outcome.kind === "written") { assert.ok(!records.has(created) && /^r[0-9a-z]+-[0-9a-z]+$/.test(created), created); records.add(created); }
-      want = [...before.slice(0, at), { ...row, narration: row.narration.slice(0, offset) }, { id: created, heading: false, narration: row.narration.slice(offset), visual: "", rank: row.rank, joined: "" }, ...before.slice(at + 1)];
+      const cut = splitCut(row, offset);
+      if (cut !== offset) counts.movedSplits++;
+      want = [...before.slice(0, at), { ...row, narration: row.narration.slice(0, cut) }, { id: created, heading: false, narration: row.narration.slice(cut), visual: "", rank: row.rank, joined: "", pieces: [], own: -1 }, ...before.slice(at + 1)];
       leftovers.push(...check(seed, command, actor, { want, wantStored, kind: outcome.kind, expected }, options, counts));
       continue;
     } else if (roll < 0.76) {
@@ -190,8 +216,8 @@ function check(seed: number, command: number, actor: NativeScript, expectation: 
   const stored = storedLetters(actor);
   if (options.immediate === false) return options.mute?.command === command ? stored.filter(value => !wantStored.includes(value)) : [];
   const got = view(actor), sorted = (list: readonly string[]): string => [...list].sort().join("");
-  if (kind !== expected || JSON.stringify(got) !== JSON.stringify(want) || sorted(stored) !== sorted(wantStored)) {
-    throw new LocalCheck(`seed ${seed}, command ${command}: ${kind} (expected ${expected})\n${JSON.stringify(want)}\n${JSON.stringify(got)}`);
+  if (kind !== expected || compared(got) !== compared(want) || sorted(stored) !== sorted(wantStored)) {
+    throw new LocalCheck(`seed ${seed}, command ${command}: ${kind} (expected ${expected})\n${compared(want)}\n${compared(got)}`);
   }
   return [];
 }
@@ -206,7 +232,8 @@ test("generated row commands on three copies: every command checks locally, copi
   assert.equal(total("shownRows") + total("keptRows"), total("records"));
   assert.equal(totals.visualStored, totals.visualLetters);
   assert.ok((totals.written ?? 0) > (totals.commands ?? 0) * 0.6 && (totals.unchanged ?? 0) > 0 && (totals.refused ?? 0) > 0, JSON.stringify(totals));
-  assert.ok((totals.keptRows ?? 0) > 20 && (totals.visualOnHidden ?? 0) > 0 && (totals.unplaced ?? 0) > 0, JSON.stringify(totals));
+  assert.equal(total("unplaced"), 0, JSON.stringify(totals));
+  assert.ok(total("keptRows") > 20 && total("visualOnHidden") > 0 && total("movedSplits") > 0, JSON.stringify(totals));
 });
 
 test("control: a no-op at any write of a row command fails the local check at that command", t => {

@@ -8,7 +8,7 @@ import { joinNativeRow, removeNativeRows, splitNativeRow, unjoinNativeRow } from
 import { anchorNativeText, replaceNativeText, typeNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
 import type { NativeTextRange, NativeTextTarget } from "../../../../src/adapters/collab/native/text-commands.ts";
 import type { Delivery, ScriptNet } from "./helpers.ts";
-import { caret, copiesOf, join, press, remove, rowsOf, split, stateOf, storedOf, structureScript } from "./structure-harness.ts";
+import { caret, copiesOf, join, press, remove, rowsOf, split, stateOf, storedOf, structureScript, unjoin } from "./structure-harness.ts";
 
 after(() => { dom.window.close(); });
 
@@ -31,7 +31,7 @@ function runs(history: (world: World, order: Delivery) => void): string[][] {
     assert.ok(a && b && undoA && undoB);
     history({ net, a, b, undoA, undoB }, order);
     net.settle(order);
-    readings.push(net.agree().map(line => line.replace(/^r[0-9a-z]+-[0-9a-z]+:/, "N:")));
+    readings.push(net.agree().map(line => line.replace(/\br[0-9a-z]+-[0-9a-z]+\b/g, "N")));
   }
   return readings;
 }
@@ -72,9 +72,9 @@ test("E9 and E14: letters typed unseen into a removed row stay stored: after an 
   assert.deepEqual(settled(({ a, b }) => { remove(a, "C"); typeIn(b, narration("C"), 3, "Ω"); }), ["A: abc / 1", "B: defΩ / 2", ...TAIL]);
 });
 
-test("E9: a letter typed unseen into a removed segment head is stored with no head; rule (a), slice 3b, gives it to the next row", () => {
+test("E9: a letter typed unseen into a removed segment head is stored with no head, and rule (a) shows it in the next row", () => {
   const reading = settled(({ a, b }) => { remove(a, "A"); typeIn(b, narration("A"), 1, "Ω"); });
-  assert.deepEqual(reading, ["B: def / 2", "C: ghi / 3", ...TAIL, "unplaced b:A no-head 1"]);
+  assert.deepEqual(reading, ["B: Ωdef / 2", "C: ghi / 3", ...TAIL]);
 });
 
 test("E14: a removal's undo brings back the row with what another copy wrote unseen into its kept record and visual cell", () => {
@@ -150,21 +150,55 @@ test("E10 and decision 9: a row split while another copy moves it leaves the spl
   assert.deepEqual(reading, ["A: abc / 1", "N: ef / ", "C: ghi / 3", ...TAIL, "B: d / 2"]);
 });
 
-test("E9: both copies removing a row remove it once; both removing and both undoing store its narration twice (rule (c), slice 3b)", () => {
+test("E9: both copies removing a row remove it once; both removing and both undoing store its narration twice, and rule (c) shows both", () => {
   assert.deepEqual(settled(({ a, b }) => { remove(a, "B"); remove(b, "B"); }), ["A: abc / 1", "C: ghi / 3", ...TAIL]);
   assert.deepEqual(settled(({ net, a, b, undoA, undoB }) => { remove(a, "B"); remove(b, "B"); net.settle(); press(undoA, a); press(undoB, b); }), [
-    "A: abc / 1", "B:  / 2", "C: ghi / 3", ...TAIL, "unplaced b:A repeated 6"
+    "A: abc / 1", "B: defdef / 2", "C: ghi / 3", ...TAIL
   ]);
+});
+
+// why: section 2: row commands work on the narration a row shows; after the double undo B's own span is empty and both
+// stored copies sit behind the repeated boundary, so a split anywhere in them lands right after B's own (decision 7)
+function doubled({ net, a, b, undoA, undoB }: World): void {
+  remove(a, "B"); remove(b, "B"); net.settle(); press(undoA, a); press(undoB, b); net.settle();
+  assert.match(storedOf(a), /^\[A\]abc\[B\]\[B\]defdef\[C\]/);
+  assert.equal(a.reader.narrationSpans("B").length, 2);
+}
+
+test("E9 and section 2: join, unjoin and removal work on a row whose boundary is stored twice, on what the row shows", () => {
+  assert.deepEqual(settled(world => { doubled(world); join(world.a, "B", "A", " "); }), ["A: abc defdef / 1<br>2", "C: ghi / 3", ...TAIL]);
+  assert.deepEqual(settled(world => { doubled(world); join(world.a, "B", "A", " "); world.net.settle(); unjoin(world.b, "B"); }), ["A: abc / 1", "B: defdef / 2", "C: ghi / 3", ...TAIL]);
+  assert.deepEqual(settled(world => { doubled(world); join(world.a, "C", "B", ""); }), ["A: abc / 1", "B: defdefghi / 2<br>3", ...TAIL]);
+  for (const at of [1, 4]) {
+    assert.deepEqual(settled(world => { doubled(world); split(world.a, "B", at); }), ["A: abc / 1", "B:  / 2", "N: defdef / ", "C: ghi / 3", ...TAIL], `at ${at}`);
+  }
+  const copies: NativeScript[] = [];
+  assert.deepEqual(settled(world => { doubled(world); copies.push(world.a); remove(world.a, "B"); }), ["A: abc / 1", "C: ghi / 3", ...TAIL]);
+  for (const copy of copies) {
+    assert.equal(storedOf(copy).includes("[B]"), false, storedOf(copy));
+    assert.equal(storedOf(copy).includes("def"), false, storedOf(copy));
+  }
+});
+
+test("removal also takes a repeat of the row's own boundary that holds no text, so the row does not come back", () => {
+  const { net, all: [a, b], undo: [undoA, undoB] } = copiesOf(structureScript({ A: "abc", B: "", C: "ghi" }));
+  assert.ok(a && b && undoA && undoB);
+  remove(a, "B"); remove(b, "B"); net.settle(); press(undoA, a); press(undoB, b); net.settle();
+  assert.equal(storedOf(a), "[A]abc[B][B][C]ghi");
+  assert.equal(a.reader.narrationSpans("B").length, 1);
+  remove(a, "B"); net.settle();
+  assert.equal(storedOf(b), "[A]abc[C]ghi");
+  assert.deepEqual(net.agree(), ["A: abc / ", "C: ghi / "]);
 });
 
 test("E14: a join or unjoin made unseen on a removed row is stored in its kept record and takes effect if the removal is undone", () => {
   assert.deepEqual(settled(({ a, b }) => { remove(a, "B"); join(b, "B", "A"); }), ["A: abc / 1", "C: ghi / 3", ...TAIL]);
-  assert.deepEqual(settled(({ a, b, undoA }) => { remove(a, "B"); join(b, "B", "A"); press(undoA, a); }), ["A: abc / 1", "B: def / 2", "C: ghi / 3", ...TAIL, "problem join-not-read beats/B"]);
+  assert.deepEqual(settled(({ a, b, undoA }) => { remove(a, "B"); join(b, "B", "A"); press(undoA, a); }), ["A: abc def / 1<br>2", "C: ghi / 3", ...TAIL]);
   assert.deepEqual(settled(({ a, b }) => { remove(a, "B"); join(b, "C", "B"); }), ["A: abc / 1", "C: ghi / 3", ...TAIL, "problem join-not-read beats/C"]);
   assert.deepEqual(settled(({ net, a, b, undoA }) => { join(a, "B", "A"); net.settle(); remove(a, "B"); unjoinNativeRow(b, "B"); press(undoA, a); }), ["A: abc / 1", "B: def / 2", "C: ghi / 3", ...TAIL]);
 });
 
-test("E11: a row removed while another copy types in it, then two same-moment splits at the next row's start, store the letter once", () => {
+test("E11: a row removed while another copy types in it, then two same-moment splits at the next row's start, store and show the letter once", () => {
   const copies: NativeScript[] = [];
   const readings = runs(({ net, a, b }) => {
     copies.push(a);
@@ -179,9 +213,9 @@ test("E11: a row removed while another copy types in it, then two same-moment sp
     assert.equal(storedOf(copy).split("Ψ").length - 1, 1, storedOf(copy));
   }
   for (const reading of readings) {
-    assert.equal(reading.join(" ").split("Ψ").length - 1, 0, "the letter reads only as unplaced text before slice 3b's rule (a)");
-    assert.ok(reading.includes("unplaced b:A no-head 1"), reading.join(" | "));
-    assert.equal(reading.filter(line => /^N: (def)? \/ $/.test(line)).length, 2, reading.join(" | "));
+    assert.equal(reading.join(" ").split("Ψ").length - 1, 1, reading.join(" | "));
+    assert.deepEqual(reading.filter(line => !line.startsWith("N:")), ["B: Ψ / 2", "C: ghi / 3", ...TAIL], reading.join(" | "));
+    assert.deepEqual(reading.filter(line => line.startsWith("N:")).sort(), ["N:  / ", "N: def / "], reading.join(" | "));
   }
 });
 
@@ -198,15 +232,14 @@ function fourSteps(world: World, whileLive?: (created: string) => void): string 
   return created;
 }
 
-test("E17's four steps: the row's boundary returns without its record; the reader shows its text unplaced until slice 3b's rule (g)", () => {
+test("E17's four steps: the row's boundary returns without its record, and rule (g) shows its narration in B", () => {
   const readings = runs(world => { fourSteps(world); });
   for (const reading of readings) {
-    assert.deepEqual(reading.filter(line => !line.startsWith("unplaced")), ["A: abc / 1", "B:  / 2", "C: ghi / 3", ...TAIL]);
-    assert.deepEqual(reading.filter(line => line.startsWith("unplaced")), ["unplaced b:A no-record 3"]);
+    assert.deepEqual(reading, ["A: abc / 1", "B: def / 2", "C: ghi / 3", ...TAIL, "problem missing-beat-record beats/N", "problem missing-visual visuals/N"]);
   }
 });
 
-test("E17's command table on the four-step state: every command aimed at the hidden row refuses and writes nothing; commands on B work", () => {
+test("E17's command table on the four-step state: every command aimed at the hidden row refuses and writes nothing; B's narration works", () => {
   for (const clients of CLIENTS) {
     const { net, all: [a, b], undo: [undoA, undoB] } = copiesOf(BASE, clients);
     assert.ok(a && b && undoA && undoB);
@@ -222,35 +255,45 @@ test("E17's command table on the four-step state: every command aimed at the hid
     assert.ok(live);
     assert.match(storedOf(a), new RegExp(`^\\[A\\]abc\\[B\\]\\[${n}\\]def\\[C\\]`));
     const before = stateOf(a), aimed: Record<string, unknown> = {
-      "split with a caret anchored in B before the steps": splitNativeRow(a, inB.caret),
       "split with a caret anchored in N while it was live": splitNativeRow(a, live.caret),
       "anchor in N": anchorNativeText(a, narration(n), 0).kind, "anchor in N's visual": anchorNativeText(a, visual(n), 0).kind,
-      "type with a range anchored in B before the steps": replaceNativeText(a, inB.range.range, [{ text: "x", marks: {} }]).kind,
       "type with a range anchored in N while it was live": replaceNativeText(a, live.range, [{ text: "x", marks: {} }]).kind,
-      "bold with a range anchored in B before the steps": formatNativeText(a, inB.range.range, { kind: "plain", mark: "b", on: true }),
       "bold with a range anchored in N while it was live": formatNativeText(a, live.range, { kind: "plain", mark: "b", on: true }),
       "join N up to B": joinNativeRow(a, n, "B", " "), "join C up to N": joinNativeRow(a, "C", n, " "), "unjoin N": unjoinNativeRow(a, n), "remove N": removeNativeRows(a, [n]),
       "remove B and N": removeNativeRows(a, ["B", n])
     };
     assert.deepEqual(aimed, {
-      "split with a caret anchored in B before the steps": { kind: "refused", reason: "range" },
       "split with a caret anchored in N while it was live": { kind: "refused", reason: "missing" },
       "anchor in N": "refused", "anchor in N's visual": "refused",
-      "type with a range anchored in B before the steps": "recovery", "type with a range anchored in N while it was live": "recovery",
-      "bold with a range anchored in B before the steps": { kind: "refused", reason: "range" },
+      "type with a range anchored in N while it was live": "recovery",
       "bold with a range anchored in N while it was live": { kind: "refused", reason: "missing" },
       "join N up to B": { kind: "refused", reason: "missing" }, "join C up to N": { kind: "refused", reason: "missing" },
       "unjoin N": { kind: "refused", reason: "missing" }, "remove N": { kind: "refused", reason: "missing" }, "remove B and N": { kind: "refused", reason: "missing" }
     }, `clients ${clients.join(",")}`);
     assert.deepEqual(stateOf(a), before);
+    const onB = {
+      "type with a range anchored in B before the steps": replaceNativeText(a, inB.range.range, [{ text: "x", marks: {} }]).kind,
+      "bold with a range anchored in B before the steps": formatNativeText(a, inB.range.range, { kind: "plain", mark: "b", on: true }).kind
+    };
+    a.reader.refresh();
+    // why: undo restored N's narration as new letters, so both ends of the stale range are gone and, by slice 1's rule,
+    // it collapses where they stood; the typing lands after the shown text and the bold has nothing to cover
+    assert.deepEqual([onB, rowsOf(a)[1]], [{
+      "type with a range anchored in B before the steps": "written", "bold with a range anchored in B before the steps": "unchanged"
+    }, "B: defx"], `clients ${clients.join(",")}`);
+    const stale = splitNativeRow(a, inB.caret);
+    assert.ok(stale.kind === "written", JSON.stringify(stale));
+    a.reader.refresh();
+    const m = stale.created;
+    assert.deepEqual(rowsOf(a), ["A: abc", "B: ", `${m}: defx`, "C: ghi", "D: jkl", "E: pqr"]);
     typeIn(a, narration("B"), 0, "y");
-    const m = split(a, "B", 1);
-    join(a, "B", "A"); assert.deepEqual(unjoinNativeRow(a, "B"), { kind: "written" });
+    join(a, m, "B"); assert.deepEqual(unjoinNativeRow(a, m), { kind: "written" });
     net.settle();
-    assert.deepEqual(rowsOf(b), ["A: abc", "B: y", `${m}: `, "C: ghi", "D: jkl", "E: pqr"]);
-    assert.match(storedOf(b), new RegExp(`^\\[A\\]abc\\[B\\]y\\[${m}\\]\\[${n}\\]def\\[C\\]`));
+    assert.deepEqual(rowsOf(b), ["A: abc", "B: y", `${m}: defx`, "C: ghi", "D: jkl", "E: pqr"]);
+    assert.match(storedOf(b), new RegExp(`^\\[A\\]abc\\[B\\]y\\[${m}\\]\\[${n}\\]defx\\[C\\]`));
     remove(a, "B", m); net.settle();
-    assert.deepEqual(net.agree().filter(line => !line.startsWith("#") && !/^[A-E]:/.test(line)), ["unplaced b:A no-record 3"]);
+    assert.match(storedOf(b), /^\[A\]abc\[C\]ghi/);
+    assert.deepEqual(net.agree().filter(line => !line.startsWith("#") && !/^[A-E]:/.test(line)), []);
   }
 });
 

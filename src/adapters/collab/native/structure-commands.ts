@@ -43,22 +43,44 @@ function beatId(value: unknown): string | null {
   return nativeWellFormed(value) && value ? value : null;
 }
 
-// why: design decision 15: a row is found by id with its record, visual cell and every narration span the reader
-// shows for it, before anything is written; a beat boundary among those spans is cut with its text, a heading's is not
+interface ParsedPlace { readonly segment: Y.Map<unknown>; readonly text: Y.Text; readonly spans: NonNullable<ReturnType<typeof nativeSegmentSpans>> }
+
+function parsedPlace(script: NativeScript, key: string, parsed: Map<string, ParsedPlace>): ParsedPlace | null {
+  const known = parsed.get(key);
+  if (known) return known;
+  const segment = script.roots.segments.get(key), text = segment?.get("text"), spans = nativeSegmentSpans(segment);
+  if (!segment || !(text instanceof Y.Text) || !spans) return null;
+  const place = { segment, text, spans };
+  parsed.set(key, place);
+  return place;
+}
+
+function boundaryCut(place: ParsedPlace, index: number, heads: Y.Map<unknown>[], cuts: Cut[], withText: boolean): void {
+  const span = place.spans[index];
+  if (!span) return;
+  const boundary = span.key?.startsWith("b:") === true;
+  if (index === 0 && boundary) heads.push(place.segment);
+  cuts.push({ text: place.text, from: boundary && index > 0 ? span.start - 1 : span.start, to: withText ? span.end : span.start });
+}
+
+// why: design section 2 and decision 15: a row is found with its record, visual cell, own boundary and every span the
+// reader shows for it, before any write; beat boundaries among them go with their text, a heading's boundary stays
 function shownRow(script: NativeScript, beat: string): ShownRow | null {
-  const roots = script.roots, record = roots.beats.get(beat), places = script.reader.narrationSpans(beat);
-  if (!(record instanceof Y.Map) || !(roots.visuals.get(beat) instanceof Y.Text) || !places.length) return null;
-  const cuts: Cut[] = [], heads: Y.Map<unknown>[] = [];
-  let own = 0;
+  const roots = script.roots, record = roots.beats.get(beat), own = script.reader.beatBoundary(beat), places = script.reader.narrationSpans(beat);
+  if (!(record instanceof Y.Map) || !(roots.visuals.get(beat) instanceof Y.Text) || !own || !places.includes(own)) return null;
+  const cuts: Cut[] = [], heads: Y.Map<unknown>[] = [], parsed = new Map<string, ParsedPlace>(), taken = new Set<string>();
   for (const place of places) {
-    const segment = roots.segments.get(place.segment), span = nativeSegmentSpans(segment)?.[place.span], text = segment?.get("text");
-    if (!segment || !span || !(text instanceof Y.Text)) return null;
-    if (span.key === "b:" + beat) own++;
-    const boundary = span.key?.startsWith("b:") === true;
-    if (place.span === 0 && boundary) heads.push(segment);
-    cuts.push({ text, from: boundary && place.span > 0 ? span.start - 1 : span.start, to: span.end });
+    const segment = parsedPlace(script, place.segment, parsed);
+    if (!segment?.spans[place.span]) return null;
+    taken.add(place.segment + "\u001f" + String(place.span));
+    boundaryCut(segment, place.span, heads, cuts, true);
   }
-  return own === 1 ? { record, cuts, heads } : null;
+  // why: a repeat of the row's own boundary the reader hands to no span list would show the row again once the first
+  // goes; only the boundary goes, so its text stays with the row the reader already shows it in
+  for (const [key, segment] of parsed) segment.spans.forEach((span, index) => {
+    if (span.key === "b:" + beat && !taken.has(key + "\u001f" + String(index))) boundaryCut(segment, index, heads, cuts, false);
+  });
+  return { record, cuts, heads };
 }
 
 function clockOf(doc: Y.Doc): number {
@@ -81,6 +103,21 @@ function attributesBefore(text: Y.Text, index: number): Record<string, true> {
   return {};
 }
 
+// why: decision 7: a caret in the row's own span splits there; in recovered text before it, at the own span's start,
+// and after it, at its end, so no narration is copied
+function splitPoint(script: NativeScript, beat: string, text: Y.Text, index: number): { readonly text: Y.Text; readonly index: number } | null {
+  const own = script.reader.beatBoundary(beat), places = script.reader.narrationSpans(beat), parsed = new Map<string, ParsedPlace>();
+  const ownAt = own ? places.indexOf(own) : -1, ownPlace = own ? parsedPlace(script, own.segment, parsed) : null, ownSpan = own ? ownPlace?.spans[own.span] : undefined;
+  if (!own || ownAt < 0 || !ownPlace || !ownSpan) return null;
+  if (text === ownPlace.text && index >= ownSpan.start && index <= ownSpan.end) return { text, index };
+  const caretAt = places.findIndex(place => {
+    const segment = parsedPlace(script, place.segment, parsed), span = segment?.spans[place.span];
+    return !!span && segment?.text === text && index >= span.start && index <= span.end;
+  });
+  if (caretAt < 0) return null;
+  return { text: ownPlace.text, index: caretAt < ownAt ? ownSpan.start : ownSpan.end };
+}
+
 // why: design section 2 and decision 7: a split writes a boundary, a record holding only the parent's rank and an
 // empty visual cell, never narration; ties in rank read in stored order, so two splits at once keep narration order
 export function splitNativeRow(script: NativeScript, at: NativeTextRange): NativeSplitOutcome {
@@ -93,12 +130,14 @@ export function splitNativeRow(script: NativeScript, at: NativeTextRange): Nativ
     const roots = script.roots, live = nativeLiveRange(script, checked), parent = roots.beats.get(checked.target.beat);
     if (typeof live === "string") { outcome = refused(live); return; }
     if (!(parent instanceof Y.Map)) return;
+    const at = splitPoint(script, checked.target.beat, live.text, live.from);
+    if (!at) { outcome = refused("range"); return; }
     const rank: unknown = parent.get("rank"), created = mintedId(script.doc);
     if (rank !== undefined && (typeof rank !== "string" || !nativeWellFormed(rank))) { outcome = refused("stored"); return; }
-    if (roots.beats.has(created) || roots.visuals.has(created)) { outcome = refused("taken"); return; }
+    if (roots.beats.has(created) || roots.visuals.has(created) || script.reader.hasBeatMarker(created)) { outcome = refused("taken"); return; }
     // why: given the formatting in force at its place, the boundary writes no formatting change of its own that a
     // later undo of that formatting could leave behind
-    live.text.insertEmbed(live.from, { b: created }, live.from > 0 ? attributesBefore(live.text, live.from) : {});
+    at.text.insertEmbed(at.index, { b: created }, at.index > 0 ? attributesBefore(at.text, at.index) : {});
     const record = new Y.Map<unknown>();
     roots.beats.set(created, record);
     if (rank !== undefined) record.set("rank", rank);
@@ -114,9 +153,15 @@ function sameJoin(stored: unknown, value: NativeJoinValue): boolean {
   return Object.keys(join).length === 2 && join.into === value.into && join.glue === value.glue;
 }
 
+// why: the beat directly above in reading order is the last member of the row above, as the reader reads a join
 function rowAbove(script: NativeScript, beat: string): string | null {
-  const outline = script.reader.outline(), at = outline.findIndex(entry => entry.kind === "row" && entry.id === beat), above = outline[at - 1];
-  return at > 0 && above?.kind === "row" ? above.id : null;
+  const reader = script.reader, flat = reader.outline().flatMap((entry): readonly (string | null)[] => {
+    if (entry.kind === "heading") return [null];
+    const members = reader.row(entry.id)?.members ?? [];
+    return members.length ? members : [entry.id];
+  });
+  const at = flat.indexOf(beat);
+  return at > 0 ? flat[at - 1] ?? null : null;
 }
 
 function readJoin(beat: unknown, into: unknown, glue: unknown): { readonly beat: string; readonly value: NativeJoinValue } | null {

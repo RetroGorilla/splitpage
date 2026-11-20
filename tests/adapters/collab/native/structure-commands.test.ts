@@ -129,10 +129,10 @@ test("a split copies no rank from a rankless parent and refuses a rank another c
   }
 });
 
-test("a split refuses an empty or malformed target id as missing, writing nothing", () => {
+test("a split refuses an empty target id as missing and a malformed one as a bad range, writing nothing", () => {
   const copy = one({ A: "abc" }), at = caret(copy, "A", 1), before = stateOf(copy);
-  for (const beat of ["", "\ud800"]) {
-    assert.deepEqual(splitNativeRow(copy, { ...at, target: { beat, cell: "narration" } }), { kind: "refused", reason: "missing" }, JSON.stringify(beat));
+  for (const [beat, reason] of [["", "missing"], ["\ud800", "range"]] as const) {
+    assert.deepEqual(splitNativeRow(copy, { ...at, target: { beat, cell: "narration" } }), { kind: "refused", reason }, JSON.stringify(beat));
   }
   assert.deepEqual(stateOf(copy), before);
 });
@@ -162,9 +162,11 @@ test("join writes the lower row's join to the row above, once, and every copy, a
   assert.deepEqual(joinNativeRow(a, "B", "A", " "), { kind: "unchanged" });
   net.settle();
   assert.deepEqual(b.roots.beats.get("B")?.get("joined"), { into: "A", glue: " " });
-  assert.deepEqual(net.agree(), ["A: abc / ", "B: def / ", "problem join-not-read beats/B"]);
+  assert.deepEqual(net.agree(), ["A: abc def / "]);
+  assert.deepEqual(b.reader.row("A")?.members, ["A", "B"]);
   join(b, "B", "A", "");
   net.settle();
+  assert.deepEqual(net.agree(), ["A: abcdef / "]);
   unjoin(a, "B");
   assert.deepEqual(unjoinNativeRow(a, "B"), { kind: "unchanged" });
   net.settle();
