@@ -91,8 +91,8 @@ const edits = (start: number, end: number, session: typeof initial.session) => {
   for (let index = start; index < end; index++) typeAt(session, 60, "x", "B" + (index % LARGE_BEATS));
 };
 Y.applyUpdate(initial.session.ydoc, seed, "initial copy");
-edits(0, 511, initial.session);
-assert.deepEqual(await initial.flush(), stored(512));
+edits(0, 2047, initial.session);
+assert.deepEqual(await initial.flush(), stored(2048));
 initial.session.close();
 mock.timers.tick(0);
 await initial.closed;
@@ -103,17 +103,17 @@ for (let index = 0; index < 40; index++) {
   const opened = await store.open("size", STORE_OPTIONS);
   hydrationSamples.push(performance.now() - start);
   assert.equal(opened.kind, "opened");
-  assert.equal(opened.generation, 512);
+  assert.equal(opened.generation, 2048);
   opened.session.close();
   await opened.closed;
 }
-console.log(`Open and replay 512 records, median ${median(hydrationSamples).toFixed(4)} ms`);
+console.log(`Open and replay 2048 records, median ${median(hydrationSamples).toFixed(4)} ms`);
 
 const size = await store.open("size", STORE_OPTIONS);
 assert.equal(size.kind, "opened");
 const put = IDBObjectStore.prototype.put;
 try {
-  edits(511, 10000, size.session);
+  edits(2047, 10000, size.session);
   assert.deepEqual(await size.flush(), stored(10001));
   const before = await storedEntries(factory, "size");
   const characters = size.session.document().rows.reduce((count, row) =>
