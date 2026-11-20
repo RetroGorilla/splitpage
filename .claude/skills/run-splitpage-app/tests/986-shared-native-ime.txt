@@ -1,0 +1,25 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;F.openFile(new File([JSON.stringify({schema:2,title:'Native IME',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello'},{id:'r2',audioText:'World'}],comments:[]})],'native-ime.splitpage'))
+wait F.state().title === 'Native IME'
+eval S.enter({backend:'native'})
+eval window.C=function(id){return document.querySelector('#rows .cell-editable[data-id="'+id+'"][data-field="audioText"]')};window.at=function(id,n){var e=C(id);e.focus();getSelection().setBaseAndExtent(e.firstChild,n,e.firstChild,n);return true};at('r1',2)
+ime set か
+expect C('r1').textContent === 'Heかllo' && S.read().app.rows[0].audioText === 'Hello'
+ime set かな
+expect C('r1').textContent === 'Heかなllo' && S.read().peer.rows[0].audioText === 'Hello'
+eval S.nativePeer.type('r1',0,'P')
+expect C('r1').textContent === 'Heかなllo' && S.read().peer.rows[0].audioText === 'PHello'
+ime commit かな
+expect C('r1').textContent === 'PHeかなllo' && S.read().app.rows[0].audioText === 'PHeかなllo' && S.read().peer.rows[0].audioText === 'PHeかなllo' && getSelection().focusOffset === 5
+ime set ab
+expect C('r1').textContent === 'PHeかなabllo'
+ime cancel
+expect C('r1').textContent === 'PHeかなllo' && S.read().peer.rows[0].audioText === 'PHeかなllo'
+ime set x
+eval at('r2',2)
+press z
+wait S.read().app.rows[1].audioText === 'Wozrld'
+expect C('r1').textContent === 'PHeかなxllo' && S.read().app.rows[0].audioText === 'PHeかなxllo' && S.read().peer.rows[0].audioText === 'PHeかなxllo'
+expect document.activeElement === C('r2') && getSelection().focusOffset === 3 && S.read().peer.rows[1].audioText === 'Wozrld'
+eval S.leave()

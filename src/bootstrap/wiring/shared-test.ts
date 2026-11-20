@@ -185,7 +185,10 @@ function startSharedTestHook(): () => void {
     leave,
     timing: (on: boolean) => { timingMarks.marksOn = on === true; },
     peer: sharedTestPeerHook(() => peer),
-    nativePeer: { type: (beat: string, offset: number, text: string) => nativePeer?.type(beat, offset, text) },
+    nativePeer: {
+      type: (beat: string, offset: number, text: string) => nativePeer?.type(beat, offset, text),
+      delete: (beat: string, from: number, to: number) => nativePeer?.delete(beat, from, to)
+    },
     read: () => ({ app: documentReader.read(doc => doc ? JSON.parse(JSON.stringify(doc)) as unknown : null), peer: peer?.read() ?? nativePeer?.read() ?? null }),
     recovery: () => {
       const parts = sharedSessionParts();

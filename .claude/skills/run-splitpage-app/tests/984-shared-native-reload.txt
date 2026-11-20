@@ -1,0 +1,13 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;sessionStorage.removeItem('nativeReload');sessionStorage.removeItem('nativeReloadPeer');F.openFile(new File([JSON.stringify({schema:2,title:'Native reload',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello'}],comments:[]})],'native-reload.splitpage'))
+wait F.state().title === 'Native reload'
+eval S.enter({backend:'native'})
+expect S.read().app.rows[0].audioText === 'Hello'
+eval window.nativeCell=document.querySelector('#rows .cell-editable[data-id="r1"][data-field="audioText"]');nativeCell.focus();getSelection().setBaseAndExtent(nativeCell.firstChild,2,nativeCell.firstChild,2);true
+press z
+wait S.read().app.rows[0].audioText === 'Hezllo'
+eval window.addEventListener('beforeunload',function(e){sessionStorage.setItem('nativeReload',JSON.stringify({prevented:e.defaultPrevented,shown:nativeCell.textContent,app:S.read().app.rows[0].audioText}))});window.addEventListener('pagehide',()=>sessionStorage.setItem('nativeReloadPeer',S.read().peer.rows[0].audioText));window.setTimeout(function(){nativeCell.dispatchEvent(new InputEvent('beforeinput',{bubbles:true,cancelable:true,inputType:'insertText',data:'x'}));location.reload()},0);true
+wait sessionStorage.getItem('nativeReload') !== null
+expect sessionStorage.getItem('nativeReload') === JSON.stringify({prevented:false,shown:'Hezxllo',app:'Hezxllo'})
+wait sessionStorage.getItem('nativeReloadPeer') === 'Hezxllo'
