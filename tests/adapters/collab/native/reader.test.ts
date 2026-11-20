@@ -71,14 +71,14 @@ test("finding 6: an unknown embed and hidden units are diagnostics, and the text
 
 test("finding 6: a malformed beat extra, field value or reply key is a diagnostic, never a throw", () => {
   const script = convertedScript(small({ R1: "ab" }, { people: [{ id: "p1", name: "P" }] }));
-  script.roots.beats.get("R1")?.set("extra", "{bad");
+  script.roots.beats.get("R1")?.set('f:"note"', "{bad");
   script.roots.beats.get("R1")?.set("status", "not json");
   script.roots.people.get("p1")?.set('f:"name"', "{bad");
   script.roots.people.get("p1")?.set("f:name", JSON.stringify("x"));
   script.roots.replies.set("[bad", new Y.Map<unknown>());
   assert.equal(script.reader.row("R1")?.audioText, "ab");
   assert.deepEqual(script.reader.document().people, [{ id: "p1" }]);
-  assert.deepEqual(problemKinds(script), ["bad-value beats/R1/status", "bad-value beats/R1/extra", "bad-key replies/[bad", 'bad-value people/p1/f:"name"', "bad-key people/p1/f:name"]);
+  assert.deepEqual(problemKinds(script), ["bad-value beats/R1/status", 'bad-value beats/R1/f:"note"', "bad-key replies/[bad", 'bad-value people/p1/f:"name"', "bad-key people/p1/f:name"]);
 });
 
 test("finding 6: a closed reader refuses to read", () => {

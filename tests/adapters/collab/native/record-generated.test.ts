@@ -162,7 +162,7 @@ function history(seed: number, writes?: CapturedWrite[], muteUndo = false, exten
         [bodyStep("comment", generatedBody("comment", suffix)), bodyStep("reply", generatedBody("reply", suffix))],
         threadSteps("temporary-" + suffix, "000012V", generatedBody("temporary edit", suffix), temporary),
         [beatStep("status", "ready", "B")],
-        [beatStep("extra", { note: "extra " + actor.doc.clientID }), beatStep("imageRef", IMAGE)]
+        [beatStep("note", "extra " + actor.doc.clientID), beatStep("writerNote" + index, suffix), beatStep("imageRef", IMAGE)]
       ];
       for (const group of shuffled(groups, next)) for (const step of group) {
         reversible(actor, manager, step);
@@ -321,6 +321,11 @@ function history(seed: number, writes?: CapturedWrite[], muteUndo = false, exten
       assert.equal(actor.reader.row("A")?.fields.lengthSeconds, winningLength);
       assert.equal(actor.roots.headings.get("H")?.has(fileKey("note")), false);
       assert.equal(actor.reader.row("A")?.fields.note, "extra " + winner);
+      for (const [index, writer] of scripts.entries()) {
+        const field = "writerNote" + index, value = seed + "-" + writer.doc.clientID;
+        assert.equal(actor.roots.beats.get("A")?.get(fileKey(field)), JSON.stringify(value));
+        assert.equal(actor.reader.row("A")?.fields[field], value);
+      }
       assert.deepEqual(actor.reader.row("A")?.fields.imageRef, IMAGE);
       const comments = actor.reader.document().comments;
       assert.deepEqual(comments.map(comment => comment.id).sort(), ["thread", ...retained.map(ids => ids.comment)].sort());
@@ -354,9 +359,12 @@ test("generated three-copy histories check commands locally and account for sett
   }
   const schedules = [
     { perHistory: 3, reason: "each of the three writers runs this once", kinds: [
-      "set beat lengthSeconds", "set beat status", "set beat paragraphStart", "clear beat paragraphStart", "set beat extra",
+      "set beat lengthSeconds", "set beat status", "set beat paragraphStart", "clear beat paragraphStart", "set beat note",
       "set beat imageRef", "refused heading set", "refused heading clear", "refused malformed body", "concurrent comment body", "concurrent reply body", "unchanged",
 
+    ] },
+    { perHistory: 1, reason: "each writer sets one field the other writers do not touch", kinds: [
+      "set beat writerNote0", "set beat writerNote1", "set beat writerNote2"
     ] },
     { perHistory: 6, reason: "each of the three writers runs this twice", kinds: ["refused"] },
     { perHistory: 7, reason: "each writer starts two threads and the cross-device trace starts one", kinds: ["create comment", "create reply"] },

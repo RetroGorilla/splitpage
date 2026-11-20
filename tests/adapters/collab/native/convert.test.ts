@@ -148,7 +148,9 @@ test("finding 10: a link's local location is kept out of the shared state, and t
   const source = migrateRows({ schema: 2, title: "T", docId: "d", rev: 0, rows: [{ id: "R1", audioText: "a", visualText: "" }], comments: [], people: [], productionTags: [], brollShots: [] });
   Object.assign(source.rows[0] as object, { imageLinks: structuredClone(links) });
   const script = convertedScript(source);
-  assert.doesNotMatch(String(script.roots.beats.get("R1")?.get("extra")), /"location"/);
+  const stored = script.roots.beats.get("R1")?.get('f:"imageLinks"');
+  assert.equal(typeof stored, "string");
+  assert.doesNotMatch(String(stored), /"location"/);
   for (const copy of [script, joinedScript(script, 2)]) {
     assert.deepEqual(copy.reader.document().rows[0]?.imageLinks, [{ name: "take.mp4", size: 42, poster: true }, { name: "notes.pdf", size: 123 }]);
   }
@@ -174,6 +176,10 @@ test("finding 2: extension values keep every key on every copy, adapter fields c
     assert.deepEqual(copy.reader.problems(), []);
   }
   assert.equal(script.roots.beats.get("R1")?.get("joined"), undefined);
+  assert.deepEqual(script.roots.beats.get("R1")?.toJSON(), {
+    rank: "00000WV", status: '"todo"', 'f:"imageRef"': "null", 'f:"rank"': '"row rank"',
+    'f:"joined"': '{"into":"R0","glue":" "}', 'f:"extra"': '"row extra"', 'f:"nested"': '{"constructor":1}'
+  });
 });
 
 test("finding 2: a value with no JSON form stops conversion before anything is written", () => {

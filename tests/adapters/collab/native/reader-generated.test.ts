@@ -81,7 +81,8 @@ function operations(script: NativeScript, pick: <T>(list: readonly T[]) => T, ch
       roots.beats.set(id, record);
       record.set("rank", pick(["a", "m", "~", "0"]));
       record.set("status", JSON.stringify(pick(["ready", "draft"])));
-      record.set("extra", pick(["{}", "{bad", JSON.stringify({ note: "n" })]));
+      const note = pick([null, "{bad", JSON.stringify("n")]);
+      if (note !== null) record.set('f:"note"', note);
     },
     () => { const record = roots.beats.get(pick(BEATS)); if (record) { if (chance() < 0.3) record.delete("rank"); else record.set("rank", pick(["a", "m", "~", "0", "a0V"])); } },
     () => {

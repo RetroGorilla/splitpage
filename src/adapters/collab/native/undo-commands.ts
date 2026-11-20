@@ -1,4 +1,4 @@
-﻿import * as Y from "yjs";
+import * as Y from "yjs";
 import { observeNativePress } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { nativeAvailability } from "./text-commands.ts";

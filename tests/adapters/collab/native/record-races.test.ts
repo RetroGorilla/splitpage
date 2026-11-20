@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
 import {
   removeNativeComment, resolveNativeComment
 } from "../../../../src/adapters/collab/native/comment-commands.ts";
 import { moveNativeBlocks } from "../../../../src/adapters/collab/native/move-commands.ts";
-import { setNativeField } from "../../../../src/adapters/collab/native/record-commands.ts";
+import { clearNativeField, setNativeField } from "../../../../src/adapters/collab/native/record-commands.ts";
 import { joinNativeRow, removeNativeRows } from "../../../../src/adapters/collab/native/structure-commands.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import type { Delivery } from "./helpers.ts";
@@ -15,7 +16,7 @@ import {
 import { split } from "./structure-harness.ts";
 
 const WRITTEN = { kind: "written" };
-const orders: readonly Delivery[] = ["forward", "reverse", "twice"];
+const orders: readonly Delivery[] = ["forward", "reverse", "twice", "shuffled", "state"];
 const clients = [[4, 9], [9, 4], [4, 9, 7], [4, 7, 9], [9, 4, 7], [9, 7, 4], [7, 4, 9], [7, 9, 4]];
 
 function races(run: (left: NativeScript, right: NativeScript, settle: (check: (script: NativeScript) => void) => void, third?: NativeScript) => void): void {
@@ -150,7 +151,55 @@ test("concurrent creations mint distinct comments and replies stay under the int
   });
 });
 
-test("as built: concurrent picture additions to one beat keep one whole extra in both client orders", () => {
+test("concurrent writes to different extra fields of one beat both survive a core reload", () => {
+  races((left, right, settle) => {
+    assert.deepEqual(setNativeField(left, beatField("A", "lens"), "wide"), WRITTEN);
+    assert.deepEqual(setNativeField(right, beatField("A", "note"), { scene: 2 }), WRITTEN);
+    settle(script => {
+      const document = script.reader.document();
+      for (const row of [document.rows[0], migrateRows(structuredClone(document)).rows[0]]) {
+        assert.equal(row?.lens, "wide");
+        assert.deepEqual(row?.note, { scene: 2 });
+      }
+    });
+  });
+});
+
+test("concurrent writes to one extra field keep one value and the winner's undo leaves it empty", () => {
+  races((left, right, settle) => {
+    const winner = left.doc.clientID > right.doc.clientID ? left : right;
+    const undo = recordUndo(winner), target = beatField("A", "lens");
+    assert.deepEqual(setNativeField(left, target, "wide"), WRITTEN);
+    assert.deepEqual(setNativeField(right, target, "tight"), WRITTEN);
+    settle(script => assert.equal(script.reader.row("A")?.fields.lens, winner === left ? "wide" : "tight"));
+    assert.ok(undo.undo());
+    settle(script => assert.equal(Object.hasOwn(script.reader.row("A")?.fields ?? {}, "lens"), false));
+  });
+});
+
+test("an unseen clear of the primary image leaves a concurrent image name for the core to drop on reload", () => {
+  races((left, right, settle) => {
+    const image = beatField("A", "imageRef"), name = beatField("A", "imageName");
+    assert.deepEqual(setNativeField(left, image, IMAGE), WRITTEN);
+    settle(script => assert.deepEqual(script.reader.row("A")?.fields.imageRef, IMAGE));
+    assert.deepEqual(clearNativeField(left, image), WRITTEN);
+    unchangedRecord(left, () => setNativeField(left, name, "Frame"), "value");
+    assert.deepEqual(setNativeField(right, name, "Frame"), WRITTEN);
+    unchangedRecord(right, () => clearNativeField(right, image), "value");
+    settle(script => {
+      const document = script.reader.document(), row = document.rows[0];
+      assert.ok(row);
+      assert.equal(Object.hasOwn(row, "imageRef"), false);
+      assert.equal(row.imageName, "Frame");
+      const reloaded = migrateRows(structuredClone(document)).rows[0];
+      assert.ok(reloaded);
+      assert.equal(reloaded.imageRef, null);
+      assert.equal(Object.hasOwn(reloaded, "imageName"), false);
+    });
+  });
+});
+
+test("concurrent picture additions to one beat keep one whole picture list in both client orders", () => {
   races((left, right, settle) => {
     const leftImage = { ...IMAGE, sha256: "b".repeat(64) }, rightImage = { ...IMAGE, sha256: "c".repeat(64) };
     assert.deepEqual(setNativeField(left, beatField("A", "imageRef"), IMAGE), WRITTEN);

@@ -11,7 +11,7 @@ import { clearNativeField, setNativeField } from "../../../../src/adapters/colla
 import { joinNativeRow, removeNativeRows, unjoinNativeRow } from "../../../../src/adapters/collab/native/structure-commands.ts";
 import {
   AT, AUTHOR, BODY_PORTS, COMMENT, IMAGE, REPLY, RESOLUTION, beatField, beatStep, checkRecordStep, commentInput, fullUpdate, headingField,
-  createNativeComment, createNativeReply, expectedMint, recordCopies, recordRead, recordSnapshot, replyId, replyInput, setNativeCommentBody,
+  createNativeComment, createNativeReply, expectedMint, fileKey, recordCopies, recordRead, recordSnapshot, recordUndo, replyId, replyInput, setNativeCommentBody,
   threadSteps, unchangedRecord
 } from "./record-harness.ts";
 import type { RecordStep, RecordTestRead } from "./record-harness.ts";
@@ -27,12 +27,13 @@ test("every record and thread command changes precisely its stored keys and its 
   const fields = {
     status: "ready", lengthSeconds: 0, paragraphStart: true, imageName: "Frame", imageAnnotation: annotation,
     imageLinks: [{ href: "https://example.test/video", poster: true }], moreImages: [{ imageRef: annotation.imageRef, name: "Other" }],
-    custom: { nested: [null, true, "text"] }, extra: { imageRef: null, unknownFileField: 42 }
+    custom: { nested: [null, true, "text"] }, extra: { status: "shot", visualImage: 42, unknownFileField: 42 },
+    ['f:"status"']: "ordinary field"
   };
   const steps: RecordStep[] = [
     beatStep("imageRef", IMAGE),
     ...Object.entries(fields).flatMap(([field, value]) => [beatStep(field, value), beatStep(field, undefined)]),
-    beatStep("imageRef", IMAGE), beatStep("imageRef", undefined),
+    beatStep("imageRef", annotation.imageRef), beatStep("imageRef", undefined),
     ...threadSteps("new-thread", "000012V", "A &amp; B &lt; C\n<strong>bold</strong>")
   ];
   for (const step of steps) {
@@ -87,7 +88,7 @@ test("malformed values, reserved fields and stale rows or headings refuse withou
     ["status", "finished"], ["lengthSeconds", -1], ["lengthSeconds", 1.5], ["lengthSeconds", 86401], ["paragraphStart", false],
     ["imageRef", { sha256: IMAGE.sha256 }], ["imageName", "\ud800"], ["imageAnnotation", { imageRef: IMAGE, marks: [false] }],
     ["imageLinks", [{ href: "javascript:alert(1)" }]], ["imageLinks", [{ name: "file", location: { path: "local" } }]],
-    ["moreImages", [{}]], ["extra", { status: "ready" }], ["custom", cyclic], ["custom", NaN], ["custom", new Date()],
+    ["moreImages", [{}]], ["custom", cyclic], ["custom", NaN], ["custom", new Date()],
     ["custom", { key: undefined }], ["custom", ["\ud800"]], ["custom", new Array<unknown>(1)]
   ];
   for (const [field, value] of invalid) unchangedRecord(script, () => setNativeField(script, beatField("A", field), value), "value");
@@ -308,14 +309,14 @@ test("new comments must name the first projected location of an existing inline 
   } finally { script.doc.destroy(); }
 });
 
-test("invalid field names, standalone absent clears, nonfinite numbers and non-record extras are checked independently", () => {
+test("invalid field names, standalone absent clears and nonfinite numbers are checked independently", () => {
   const { scripts: [script] } = recordCopies([5]);
   assert.ok(script);
   for (const value of [NaN, Infinity]) unchangedRecord(script, () => setNativeField(script, beatField("A", "customNumber"), value), "value");
   unchangedRecord(script, () => setNativeField(script, beatField("A", "payload"), { ["\ud800"]: true }), "value");
   unchangedRecord(script, () => setNativeField(script, beatField("A", ""), "value"), "value");
   unchangedRecord(script, () => clearNativeField(script, beatField("A", "lengthSeconds")));
-  for (const value of ["text", []]) unchangedRecord(script, () => setNativeField(script, beatField("A", "extra"), value), "value");
+  for (const value of ["text", []]) checkRecordStep(script, beatStep("extra", value));
   unchangedRecord(script, () => setNativeField(script, beatField("A", "imageLinks"), [{
     name: "clip.mp4", location: { kind: "bundled", name: "clip.mp4" }
   }]), "value");
@@ -350,7 +351,6 @@ test("the core gallery rules refuse excess links, duplicate pictures and legacy 
   assert.deepEqual(setNativeField(script, beatField("A", "imageRef"), IMAGE), WRITTEN);
   unchangedRecord(script, () => setNativeField(script, beatField("A", "moreImages"), [{ imageRef: IMAGE }, { imageRef: IMAGE }]), "value");
   unchangedRecord(script, () => setNativeField(script, beatField("A", "visualImage"), 42), "value");
-  unchangedRecord(script, () => setNativeField(script, beatField("A", "extra"), { visualImage: 42 }), "value");
   script.doc.destroy();
 });
 
@@ -402,7 +402,13 @@ test("creation refuses invalid input, noncanonical stamps, title placement and c
 test("malformed stored extras and removed or mismatched reply records refuse", () => {
   const { scripts: [script] } = recordCopies([5]);
   assert.ok(script);
-  script.roots.beats.get("A")?.set("extra", "[]");
+  const record = script.roots.beats.get("A");
+  assert.ok(record);
+  record.set(fileKey("note"), "{bad");
+  unchangedRecord(script, () => setNativeField(script, beatField("A", "note"), "value"), "stored");
+  unchangedRecord(script, () => clearNativeField(script, beatField("A", "note")), "stored");
+  record.delete(fileKey("note"));
+  record.set(fileKey("imageRef"), "{bad");
   unchangedRecord(script, () => setNativeField(script, beatField("A", "note"), "value"), "stored");
   const reply = script.roots.replies.get(replyId(REPLY.comment, REPLY.reply));
   assert.ok(reply);
@@ -412,6 +418,39 @@ test("malformed stored extras and removed or mismatched reply records refuse", (
   assert.deepEqual(removeNativeComment(script, REPLY), WRITTEN);
   unchangedRecord(script, () => setNativeCommentBody(script, REPLY, AUTHOR, "hidden"), "missing");
   script.doc.destroy();
+});
+
+test("an extra field set and clear each use one undo entry and preserve another writer's field", () => {
+  const { scripts: [writer, peer], net } = recordCopies();
+  assert.ok(writer && peer);
+  const history = recordUndo(writer), target = beatField("A", "lens");
+  assert.deepEqual(setNativeField(writer, target, "wide"), WRITTEN);
+  unchangedRecord(writer, () => setNativeField(writer, target, "wide"));
+  unchangedRecord(writer, () => setNativeField(writer, target, undefined), "value");
+  assert.deepEqual(setNativeField(peer, beatField("A", "note"), "peer"), WRITTEN);
+  net.settle();
+  assert.deepEqual(clearNativeField(writer, target), WRITTEN);
+  unchangedRecord(writer, () => clearNativeField(writer, target));
+  const check = (lens: string | undefined) => {
+    net.settle();
+    for (const script of [writer, peer]) {
+      const fields = script.reader.row("A")?.fields;
+      assert.equal(fields?.lens, lens);
+      assert.equal(fields?.note, "peer");
+    }
+  };
+  check(undefined);
+  assert.ok(history.undo());
+  check("wide");
+  assert.ok(history.undo());
+  check(undefined);
+  assert.equal(history.undo(), null);
+  assert.ok(history.redo());
+  check("wide");
+  assert.ok(history.redo());
+  check(undefined);
+  assert.equal(history.redo(), null);
+  for (const script of [writer, peer]) script.doc.destroy();
 });
 
 test("a minted ID already held by a flagged record refuses for both comments and replies", () => {
@@ -460,4 +499,20 @@ test("a peer removal arriving in beforeTransaction leaves the stale field comman
   assert.deepEqual(fullUpdate(writer), removal);
   assert.equal(writer.reader.row("B"), null);
   for (const script of [writer, remover]) script.doc.destroy();
+});
+
+test("gallery validation sees a peer's image clear that arrives at transaction entry", () => {
+  const { scripts: [writer, peer], net } = recordCopies();
+  assert.ok(writer && peer);
+  const image = beatField("A", "imageRef"), name = beatField("A", "imageName");
+  assert.deepEqual(setNativeField(writer, image, IMAGE), WRITTEN);
+  net.settle();
+  assert.deepEqual(writer.reader.row("A")?.fields.imageRef, IMAGE);
+  assert.deepEqual(clearNativeField(peer, image), WRITTEN);
+  const cleared = fullUpdate(peer);
+  writer.doc.once("beforeTransaction", () => Y.applyUpdate(writer.doc, cleared, "remote"));
+  assert.deepEqual(setNativeField(writer, name, "Frame"), { kind: "refused", reason: "value" });
+  assert.deepEqual(fullUpdate(writer), cleared);
+  assert.equal(writer.reader.row("A")?.fields.imageName, undefined);
+  for (const script of [writer, peer]) script.doc.destroy();
 });

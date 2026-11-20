@@ -124,23 +124,14 @@ export function beatStep(field: string, value: unknown, id = "A"): RecordStep {
     run: script => clear ? clearNativeField(script, target) : setNativeField(script, target, value),
     expect(snapshot, read) {
       const record = item(snapshot, "beats", id);
-      if (field === "status" || field === "lengthSeconds" || field === "paragraphStart" || field === "extra") {
-        if (clear) Reflect.deleteProperty(record, field);
-        else record[field] = JSON.stringify(value);
-      } else {
-        const extra = JSON.parse(String(record.extra ?? "{}")) as Fields;
-        if (clear) Reflect.deleteProperty(extra, field);
-        else extra[field] = value;
-        record.extra = JSON.stringify(extra);
-      }
+      const key = ["status", "lengthSeconds", "paragraphStart"].includes(field) ? field : fileKey(field);
+      if (clear) Reflect.deleteProperty(record, key);
+      else record[key] = JSON.stringify(value);
       const row = read.rows.find(row => row.id === id), file = read.document.rows.find(row => row.id === id);
       assert.ok(row && file);
       const fields = row.fields as Fields;
       for (const view of [fields, file]) {
-        if (field === "extra") {
-          for (const key of Object.keys(view)) if (!["id", "audioText", "visualText", "status", "lengthSeconds", "paragraphStart", "updatedBy", "updatedAt"].includes(key)) Reflect.deleteProperty(view, key);
-          if (!clear) Object.assign(view, value);
-        } else if (clear) Reflect.deleteProperty(view, field);
+        if (clear) Reflect.deleteProperty(view, field);
         else view[field] = value;
       }
       return undefined;

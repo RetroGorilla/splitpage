@@ -1,4 +1,4 @@
-﻿import type * as Y from "yjs";
+import type * as Y from "yjs";
 import { NativeScriptReader } from "./reader.ts";
 import type { NativeWatch } from "./reader.ts";
 import { declareNativeRoots } from "./roots.ts";

@@ -151,7 +151,7 @@ function decoded(record: Y.Map<unknown>, key: string, where: string, problems: P
   return value;
 }
 
-function fileFields(record: Y.Map<unknown>, where: string, problems: Problems): Record<string, unknown> {
+function fileFieldEntries(record: Y.Map<unknown>, where: string, problems: Problems): [string, unknown][] {
   const entries: [string, unknown][] = [];
   for (const key of [...record.keys()].sort()) {
     if (!key.startsWith(NATIVE_FIELD_PREFIX)) continue;
@@ -160,18 +160,26 @@ function fileFields(record: Y.Map<unknown>, where: string, problems: Problems): 
     const value = decoded(record, key, where, problems);
     if (value) entries.push([name, value.value]);
   }
-  return Object.fromEntries(entries);
+  return entries;
+}
+
+function fileFields(record: Y.Map<unknown>, where: string, problems: Problems): Record<string, unknown> {
+  return Object.fromEntries(fileFieldEntries(record, where, problems));
 }
 
 function namedFields(record: Y.Map<unknown>, names: readonly string[], where: string, problems: Problems): [string, unknown][] {
   const entries: [string, unknown][] = [];
   for (const name of names) { const value = decoded(record, name, where, problems); if (value) entries.push([name, value.value]); }
-  const extra = decoded(record, "extra", where, problems);
+  return entries;
+}
+
+function metaFields(record: Y.Map<unknown>, problems: Problems): Record<string, unknown> {
+  const entries = namedFields(record, META_FIELDS, "meta", problems), extra = decoded(record, "extra", "meta", problems);
   if (extra) {
     if (extra.value && typeof extra.value === "object" && !Array.isArray(extra.value)) entries.push(...Object.entries(extra.value));
-    else problems?.push({ kind: "bad-value", where: where + "/extra" });
+    else problems?.push({ kind: "bad-value", where: "meta/extra" });
   }
-  return entries;
+  return Object.fromEntries(entries);
 }
 
 function rankOf(record: unknown): string | null {
@@ -556,7 +564,8 @@ export class NativeScriptReader {
   private beatFields(id: string, problems: Problems): Record<string, unknown> {
     const record = this.roots.beats.get(id), entries: [string, unknown][] = [];
     if (record instanceof Y.Map) {
-      entries.push(...namedFields(record, BEAT_FIELDS, "beats/" + id, problems));
+      const where = "beats/" + id;
+      entries.push(...namedFields(record, BEAT_FIELDS, where, problems), ...fileFieldEntries(record, where, problems));
       if (record.has("joined") && this.groupHeads.get(id) === id) problems?.push({ kind: "join-not-read", where: "beats/" + id });
     }
     const edited = this.roots.edited.get(id);
@@ -837,7 +846,7 @@ export class NativeScriptReader {
 
   private collect(problems: Problems): Pick<DocumentShape, "title" | "docId" | "rev" | "schema" | "comments" | "people" | "productionTags" | "brollShots"> & Record<string, unknown> {
     const meta = this.roots.meta, title = meta.get("title");
-    const metaFields = Object.fromEntries(namedFields(meta, META_FIELDS, "meta", problems));
+    const fields = metaFields(meta, problems);
     const replies = new Map<string, Record<string, unknown>[]>();
     for (const [key, record] of byRank(this.roots.replies)) {
       if (record.get("removed") === true) continue;
@@ -854,11 +863,11 @@ export class NativeScriptReader {
       byRank(root).filter(([, record]) => name !== "comments" || record.get("removed") !== true)
         .map(([id, record]) => ({ ...fileFields(record, name + "/" + id, problems), id }));
     return {
-      ...metaFields,
+      ...fields,
       title: title instanceof Y.Text ? title.toString() : "",
-      docId: typeof metaFields.docId === "string" ? metaFields.docId : "",
-      rev: typeof metaFields.rev === "number" ? metaFields.rev : 0,
-      schema: typeof metaFields.schema === "number" ? metaFields.schema : 0,
+      docId: typeof fields.docId === "string" ? fields.docId : "",
+      rev: typeof fields.rev === "number" ? fields.rev : 0,
+      schema: typeof fields.schema === "number" ? fields.schema : 0,
       comments: records(this.roots.comments, "comments").map(comment => ({ ...comment, replies: replies.get(String(comment.id)) ?? [] })) as DocumentShape["comments"],
       people: records(this.roots.people, "people") as DocumentShape["people"],
       productionTags: records(this.roots.tags, "tags") as DocumentShape["productionTags"],

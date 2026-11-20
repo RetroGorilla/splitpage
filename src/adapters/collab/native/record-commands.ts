@@ -3,12 +3,12 @@ import { normalizeRowGallery, withoutVideoLocations } from "../../../core/docume
 import { normalizeBeatLength, rowStatusId } from "../../../core/document/timing.ts";
 import { nativeSegmentSpans } from "./reader.ts";
 import {
-  copyArgument, copyRecordValue, nativeRecordId, plainRecordArgument, recordBag, RECORD_UNCHANGED, RECORD_WRITTEN,
+  copyArgument, copyRecordValue, nativeRecordId, plainRecordArgument, RECORD_UNCHANGED, RECORD_WRITTEN,
   refuseRecord, sameNativeValue, transactRecord, writeRecordFields
 } from "./record-values.ts";
 import type { NativeRecordOutcome } from "./record-values.ts";
 import type { NativeScript } from "./script.ts";
-import { decodeNativeValue, nativeWellFormed } from "./values.ts";
+import { decodeNativeValue, nativeFieldKey, nativeWellFormed } from "./values.ts";
 
 export interface NativeFieldTarget {
   readonly kind: "beat" | "heading";
@@ -16,7 +16,7 @@ export interface NativeFieldTarget {
   readonly field: string;
 }
 
-const BEAT_FIELDS = new Set(["status", "lengthSeconds", "paragraphStart", "extra"]);
+const BEAT_FIELDS = new Set(["status", "lengthSeconds", "paragraphStart"]);
 const BEAT_RESERVED = new Set(["id", "audioText", "visualText", "rank", "joined", "updatedBy", "updatedAt"]);
 const GALLERY_FIELDS = ["imageRef", "imageName", "imageAnnotation", "imageLinks", "moreImages", "visualImage"];
 const NO_IMAGES = { known: () => null, fromDataUrl: () => null };
@@ -30,12 +30,25 @@ function beatValue(field: string, value: unknown): boolean {
   }
 }
 
-function keptExtras(value: Record<string, unknown>): boolean {
-  const fields = GALLERY_FIELDS.filter(field => Object.hasOwn(value, field)).map(field => [field, value[field]] as const);
-  const supplied = { imageRef: null, ...Object.fromEntries(fields) }, normalized = { ...supplied };
+function checkExtraChange(record: Y.Map<unknown>, field: string, key: string, value: unknown, clear: boolean): NativeRecordOutcome | null {
+  if (record.has(key) && !decodeNativeValue(record.get(key))) return refuseRecord("stored");
+  if (clear && !record.has(key)) return RECORD_UNCHANGED;
+  const supplied: Record<string, unknown> = { imageRef: null };
+  for (const name of GALLERY_FIELDS) {
+    if (name === field) {
+      if (!clear) supplied[name] = value;
+      continue;
+    }
+    const storedKey = nativeFieldKey(name);
+    if (!record.has(storedKey)) continue;
+    const stored = decodeNativeValue(record.get(storedKey));
+    if (!stored) return refuseRecord("stored");
+    supplied[name] = stored.value;
+  }
+  const normalized = { ...supplied };
   normalizeRowGallery(normalized, NO_IMAGES);
   withoutVideoLocations([normalized]);
-  return sameNativeValue(supplied, normalized);
+  return sameNativeValue(supplied, normalized) ? null : refuseRecord("value");
 }
 
 export function nativeLiveBeatRecord(script: NativeScript, id: string): Y.Map<unknown> | null {
@@ -63,25 +76,14 @@ function changeField(script: NativeScript, target: NativeFieldTarget, value: unk
     if (!record) return refuseRecord("missing");
     if (!nativeWellFormed(field) || !field || BEAT_RESERVED.has(field)) return refuseRecord("value");
     if (!clear && !beatValue(field, copied)) return refuseRecord("value");
-    if (field === "extra" && !clear) {
-      if (!recordBag(copied) || Object.keys(copied).some(key => BEAT_RESERVED.has(key) || key !== "extra" && BEAT_FIELDS.has(key)) ||
-          !keptExtras(copied)) return refuseRecord("value");
+    const named = BEAT_FIELDS.has(field), key = named ? field : nativeFieldKey(field);
+    if (!named) {
+      const checked = checkExtraChange(record, field, key, copied, clear);
+      if (checked) return checked;
     }
-    if (!BEAT_FIELDS.has(field)) {
-      const stored = record.has("extra") ? decodeNativeValue(record.get("extra"))?.value : {};
-      if (!recordBag(stored)) return refuseRecord("stored");
-      if (clear && !Object.hasOwn(stored, field)) return RECORD_UNCHANGED;
-      const next = new Map(Object.entries(stored));
-      if (clear) next.delete(field);
-      else next.set(field, copied);
-      const extra = copyArgument(() => copyRecordValue(Object.fromEntries(next)));
-      if (!extra || !recordBag(extra.value)) return refuseRecord("value");
-      if (!keptExtras(extra.value)) return refuseRecord("value");
-      return writeRecordFields(record, { extra: extra.value });
-    }
-    if (!clear) return writeRecordFields(record, { [field]: copied });
-    if (!record.has(field)) return RECORD_UNCHANGED;
-    record.delete(field);
+    if (!clear) return writeRecordFields(record, { [key]: copied });
+    if (!record.has(key)) return RECORD_UNCHANGED;
+    record.delete(key);
     return RECORD_WRITTEN;
   });
 }

@@ -66,9 +66,17 @@ function fileEntries(source: Bag, skip: readonly string[]): Entries {
   return present(source, skip).map(key => [nativeFieldKey(key), encodeNativeValue(source[key])] as const);
 }
 
-function namedEntries(source: Bag, names: readonly string[], skip: readonly string[]): Entries {
-  const extra = Object.fromEntries(present(source, [...skip, ...names]).map(key => [key, source[key]]));
-  return [...names.filter(name => source[name] !== undefined).map(name => [name, encodeNativeValue(source[name])] as const), ["extra", encodeNativeValue(extra)]];
+function namedEntries(source: Bag, names: readonly string[]): Entries {
+  return names.filter(name => source[name] !== undefined).map(name => [name, encodeNativeValue(source[name])] as const);
+}
+
+function beatEntries(row: Bag): Entries {
+  return [...namedEntries(row, BEAT_FIELDS), ...fileEntries(row, [...ROW_TEXT, ...BEAT_FIELDS])];
+}
+
+function metaEntries(source: Bag): Entries {
+  const extra = Object.fromEntries(present(source, [...COLLECTIONS, "title", ...META_FIELDS]).map(key => [key, source[key]]));
+  return [...namedEntries(source, META_FIELDS), ["extra", encodeNativeValue(extra)]];
 }
 
 function withoutLocations(links: unknown): unknown {
@@ -179,7 +187,7 @@ function prepare(source: ValidatedDocument, ports: NativeConversionPorts) {
   }
   const beats: PreparedBeat[] = source.rows.map(row => ({
     id: row.id, heads: headsOf.get(row.id) ?? [],
-    entries: namedEntries(sharedRow(row), BEAT_FIELDS, ROW_TEXT),
+    entries: beatEntries(sharedRow(row)),
     narration: cell(cells, row.audioText, row.id + " narration"), visual: cell(cells, row.visualText, row.id + " visual"),
     edited: [["at", row.updatedAt] as const, ["by", row.updatedBy] as const].filter(([, value]) => value !== undefined).map(([key, value]) => [key, encodeNativeValue(value)] as const)
   }));
@@ -190,7 +198,7 @@ function prepare(source: ValidatedDocument, ports: NativeConversionPorts) {
     return list.map((reply, position) => ({ key: JSON.stringify([comment.id, reply.id]), comment: String(comment.id), rank: nativeInitialRank(position), entries: fileEntries(reply, ["id"]) }));
   });
   return {
-    meta: namedEntries(source, META_FIELDS, [...COLLECTIONS, "title"]), title: wellFormed(source.title),
+    meta: metaEntries(source), title: wellFormed(source.title),
     creation: [creation, { at, by }] as const, beats,
     people: records(bags(source.people)), tags: records(tags), shots: records(bags(source.brollShots)),
     comments: comments.map(comment => ({ id: String(comment.id), key: String(comment.id), entries: fileEntries(comment, ["id", "replies"]) })), replies

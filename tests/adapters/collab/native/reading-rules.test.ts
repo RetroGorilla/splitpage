@@ -1,4 +1,4 @@
-﻿import assert from "node:assert/strict";
+import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import * as Y from "yjs";
 import { dom } from "../../../../src/test/_dom.mjs";
@@ -478,11 +478,14 @@ test("joined fields show the highest status and both galleries, with diagnostics
     assert.ok(upper && lower);
     a.doc.transact(() => {
       upper.set("status", JSON.stringify("ready"));
-      upper.set("extra", JSON.stringify({ imageRef: left, imageName: "Upper" }));
+      upper.set('f:"imageRef"', JSON.stringify(left));
+      upper.set('f:"imageName"', JSON.stringify("Upper"));
     });
     b.doc.transact(() => {
       lower.set("status", JSON.stringify("todo"));
-      lower.set("extra", JSON.stringify({ imageRef: right, imageName: "Lower", note: "lower note" }));
+      lower.set('f:"imageRef"', JSON.stringify(right));
+      lower.set('f:"imageName"', JSON.stringify("Lower"));
+      lower.set('f:"note"', JSON.stringify("lower note"));
       lower.set("joined", { into: "A", glue: " " });
     });
     settle(a, b, net, ["A=a b"]);
@@ -506,7 +509,11 @@ test("joined fields show the highest status and both galleries, with diagnostics
         ]);
       }
     } finally { late.doc.destroy(); }
-    lower.set("extra", JSON.stringify({ imageRef: left, imageName: "Different name" }));
+    b.doc.transact(() => {
+      lower.set('f:"imageRef"', JSON.stringify(left));
+      lower.set('f:"imageName"', JSON.stringify("Different name"));
+      lower.delete('f:"note"');
+    });
     settle(a, b, net, ["A=a b"]);
     const duplicate = joinedScript(a, 902);
     try {
