@@ -16,7 +16,7 @@ import { recordCommandRun } from "../../application/commands/shared-records.ts";
 import type { RecordCommandRun, SharedRecordBuild } from "../../application/commands/shared-records.ts";
 import { createTypedDrafts, heldWrite, isHeld, typedOrphansHtml } from "../common/typed-drafts.ts";
 import type { TypedDraft, TypedDrafts, TypedSave, TypedWrite } from "../common/typed-drafts.ts";
-import { brollRecord as shotIn, personById as personIn, personNamed } from "../../core/production/records.ts";
+import { brollRecord as shotIn, PERSON_NAME_MAX, personById as personIn, personNamed } from "../../core/production/records.ts";
 
 import type { BrollPanelEventsPorts, BrollPanelPorts, BrollPanelState } from "./ports.ts";
 import type { BrollPorts } from "./mount.ts";
@@ -57,6 +57,16 @@ function editShots(build: SharedRecordBuild, quiet = false) {
   return recordCommandRun((ports as PanelPortUse).edits, quiet ? { ports: shared.ports, refused: () => {} } : shared, build);
 }
 
+function sharedRegistryLife() {
+  const shared = (ports as PanelPortUse).shared;
+  return shared.native?.() ?? shared.ports();
+}
+
+function setShots(ids: readonly string[], fields: ShotFields, owner?: OwnerChoice, quiet = false): RecordCommandRun {
+  const p = ports as PanelPortUse;
+  return p.shared.native?.()?.setShots(ids, fields, owner)
+    ?? editShots(shared => setShotsCommand(ids, fields, owner, p.ids, shared), quiet);
+}
 
 const BROLL_BOXES = ["broll-notes-input", "broll-ref-input", "broll-loc-input", "broll-rename-input", "broll-prop-input",
   "broll-person-input", "broll-bulk-input", "broll-add-input"];
@@ -82,7 +92,7 @@ function unsavedLabel(draft: TypedDraft): string {
 }
 
 function goneDraft(draft: TypedDraft): void {
-  if (!(ports as PanelPortUse).shared.ports()) return;
+  if (!sharedRegistryLife()) return;
   (ports as PanelPortUse).notices.show(unsavedLabel(draft) + ". The text is kept at the top of the b-roll list.", "warn");
 }
 
@@ -635,7 +645,7 @@ function fieldSave(id: string, field: "notes" | "audioRef" | "location"): TypedS
     const next = field === "location" ? cappedText(text, 80) : cappedLongText(plainText(text), BROLL_TEXT_MAX);
     if (rec[field] === next) return "saved";
     const change: ShotFields = { [field]: next };
-    return heldWrite(editShots(shared => setShotsCommand([id], change, undefined, undefined, shared), quiet));
+    return heldWrite(setShots([id], change, undefined, quiet));
   };
 }
 
@@ -654,7 +664,7 @@ let drawingPanel = 0;
 let typedLife: { readonly ports: BrollPanelPorts | null; readonly shared: object; readonly epoch: number } | null = null;
 
 function sameSharedLife(): boolean {
-  const shared = (ports as PanelPortUse).shared.ports(), epoch = shared ? (ports as PanelPortUse).lifetime.epoch() : 0;
+  const shared = sharedRegistryLife(), epoch = shared ? (ports as PanelPortUse).lifetime.epoch() : 0;
   const same = shared !== null && typedLife !== null && typedLife.ports === ports && typedLife.shared === shared && typedLife.epoch === epoch;
   typedLife = shared ? { ports, shared, epoch } : null;
   if (!same) typed().clear();
@@ -675,7 +685,7 @@ function reviseBox(box: PanelInput): void {
 }
 
 function keepingFocus(container: HTMLElement, draw: () => void) {
-  const keeping = sameSharedLife(), shared = (ports as PanelPortUse).shared.ports() !== null;
+  const keeping = sameSharedLife(), shared = sharedRegistryLife() !== null;
   const active = document.activeElement as PanelInput | null;
   if (shared && !keeping) for (const box of container.querySelectorAll<PanelInput>('input[type="text"], textarea:not([readonly])')) box.value = box.defaultValue;
   if (keeping) for (const box of container.querySelectorAll<PanelInput>('input[type="text"], textarea:not([readonly])')) reviseBox(box);
@@ -798,7 +808,7 @@ function personById(id: unknown) {
 
 function writeRecord(id: string | null, fields: ShotFields) {
   if (!brollRecord(id)) return false;
-  return !editShots(shared => setShotsCommand([(id as string)], fields, undefined, undefined, shared)).held;
+  return !setShots([(id as string)], fields).held;
 }
 
 function updateRecord(id: string | null, fields: ShotFields) {
@@ -820,7 +830,7 @@ function bulkUpdate(fields: ShotFields, describe: (n: number) => string, owner?:
     const rec = brollRecord(id);
     return rec && Object.keys(fields).some(function (k) { return (rec as NonNullable<ReturnType<typeof brollRecord>>)[k] !== fields[k]; });
   }).length;
-  const run = n ? editShots(shared => setShotsCommand(ids, fields, owner, (ports as PanelPortUse).ids, shared), quiet) : { changed: false, held: false };
+  const run = n ? setShots(ids, fields, owner, quiet) : { changed: false, held: false };
   if (run.held) return run;
   closing();
   if (!quiet) renderBrollViews();
@@ -866,20 +876,21 @@ function bulkAssignNewPerson(name: string, closing: () => void, quiet = false): 
     const rec = brollRecord(sid);
     return rec && (!known || rec.owner !== known.id);
   }).length;
-  const run = editShots(shared => setShotsCommand(ids, {}, { name: name }, (ports as PanelPortUse).ids, shared), quiet);
+  const run = setShots(ids, {}, { name }, quiet);
   if (run.held) return run;
   closing();
   if (!quiet) renderBrollViews();
   if (!run.changed) return run;
   const who = (ports as PanelPortUse).document.read(function (doc) { return personNamed(doc, name); });
-  (ports as PanelPortUse).notices.show("Assigned " + shotsWord(n) + " to " + (who ? who.name : "them") + ".", "ok");
+  const assigned = who?.name ?? ((ports as PanelPortUse).shared.native?.() ? cappedText(name, PERSON_NAME_MAX) : "them");
+  (ports as PanelPortUse).notices.show("Assigned " + shotsWord(n) + " to " + assigned + ".", "ok");
   return run;
 }
 
 function bulkSave(kind: string): TypedSave {
   return (text, quiet) => {
     const closing = () => { if (bulkInput === kind) bulkInput = null; };
-    if (!(ports as PanelPortUse).shared.ports()) closing();
+    if (!sharedRegistryLife()) closing();
     if (!selectedIds((ports as PanelPortUse).records.brollEntries()).length) {
       closing();
       if (!quiet) renderBrollViews();
@@ -932,9 +943,11 @@ function addSave(text: string, quiet: boolean): TypedWrite {
   const name = cappedText(text, BROLL_NAME_MAX);
   if (!name) return "saved";
   let wrote: TypedWrite = "saved";
-  const rec = newBrollRecord({ name: name, origin: "list" }, { ...shotEditPorts, edit: build => { wrote = heldWrite(editShots(build, quiet)); return !isHeld(wrote); } });
+  const native = (ports as PanelPortUse).shared.native?.()?.addShot(name);
+  if (native) wrote = heldWrite(native.run);
+  const rec = native ?? newBrollRecord({ name: name, origin: "list" }, { ...shotEditPorts, edit: build => { wrote = heldWrite(editShots(build, quiet)); return !isHeld(wrote); } });
   if (isHeld(wrote)) return wrote;
-  if (!rec) return "saved";
+  if (!rec?.id) return "saved";
   const input = document.getElementById("broll-add-input") as HTMLInputElement | null;
   if (input && input.value === text) input.value = "";
   openId = rec.id;
@@ -961,7 +974,8 @@ function propSave(id: string): TypedSave {
   return (text, quiet) => {
     if (!plainText(text).trim()) return "saved";
     if (!brollRecord(id)) return "gone";
-    return heldWrite(editShots(shared => addShotPropCommand(id, text, shared), quiet));
+    return heldWrite((ports as PanelPortUse).shared.native?.()?.addShotProp(id, text)
+      ?? editShots(shared => addShotPropCommand(id, text, shared), quiet));
   };
 }
 
@@ -969,7 +983,7 @@ function commitPropInput(input: PanelInput) {
   const id = input.getAttribute("data-id") as string;
   const blank = !plainText(input.value).trim();
   const text = input.value;
-  if (!(ports as PanelPortUse).shared.ports()) input.value = "";
+  if (!sharedRegistryLife()) input.value = "";
   if (isHeld(typed().submit("broll-prop-input", id, text, propSave(id)))) return;
   const selector = '.broll-prop-input[data-id="' + cssAttr(id) + '"]';
   input.value = "";
@@ -980,7 +994,7 @@ function commitPropInput(input: PanelInput) {
 }
 
 function commitLocation(input: PanelInput) {
-  if (!(ports as PanelPortUse).shared.ports()) editingLocFor = null;
+  if (!sharedRegistryLife()) editingLocFor = null;
   if (isHeld(submitField(input))) return;
   editingLocFor = null;
   renderBrollViews();
@@ -999,7 +1013,7 @@ function renameSave(id: string): TypedSave {
 }
 
 function renameShot(id: string | null, box: PanelInput | null) {
-  if (!(ports as PanelPortUse).shared.ports()) renamingId = null;
+  if (!sharedRegistryLife()) renamingId = null;
   (ports as PanelPortUse).undo.breakCoalescing();
   const wrote = box && id !== null ? typed().submit("broll-rename-input", id, box.value, renameSave(id)) : "saved";
   if (!isHeld(wrote)) renamingId = null;
@@ -1012,7 +1026,7 @@ function renameShot(id: string | null, box: PanelInput | null) {
 function personSave(id: string): TypedSave {
   return (text, quiet) => {
     if (!brollRecord(id)) return plainText(text).trim() ? "gone" : "saved";
-    const run = editShots(shared => setShotsCommand([id], {}, { name: text }, (ports as PanelPortUse).ids, shared), quiet);
+    const run = setShots([id], {}, { name: text }, quiet);
     if (run.held) return heldWrite(run);
     if (addingPersonFor === id) addingPersonFor = null;
     return "saved";
@@ -1028,7 +1042,8 @@ function cancelRename(id: string | null) {
 function deleteShot(id: string | null) {
   const e = entryById(id);
   if (!e) return;
-  if (editShots(shared => deleteShotCommand((id as string), shared)).held) return;
+  const removed = (ports as PanelPortUse).shared.native?.()?.removeShot(e.id) ?? editShots(shared => deleteShotCommand(e.id, shared));
+  if (removed.held) return;
   if (openId === id) openId = null;
   menuFor = null;
   Reflect.deleteProperty(selection, (id as string));
@@ -1068,7 +1083,7 @@ function onBrollClick(e: PanelEvent & Partial<MouseEvent>, root: HTMLElement, ex
     const rec = brollRecord(id);
     if (!rec) return;
     const raising = !rec.reshoot;
-    if (!(ports as PanelPortUse).shared.ports()) openId = id;
+    if (!sharedRegistryLife()) openId = id;
     if (!writeRecord(id, { reshoot: raising })) return;
     openId = id;
     renderBrollViews();
@@ -1122,7 +1137,9 @@ function onBrollClick(e: PanelEvent & Partial<MouseEvent>, root: HTMLElement, ex
     const ref = root.querySelector<HTMLInputElement>('.broll-ref-input[data-id="' + cssAttr(id) + '"]');
     if (ref) ref.focus();
   } else if (action === "broll-prop-remove") {
-    if (!removeBrollProp((id as string), (btn.getAttribute("data-ref") as string), shotEditPorts)) return;
+    const ref = btn.getAttribute("data-ref") as string;
+    const native = (ports as PanelPortUse).shared.native?.()?.removeShotProp(id as string, ref);
+    if (native ? native.held : !removeBrollProp(id as string, ref, shotEditPorts)) return;
     renderBrollViews();
   } else if (action === "broll-person-new") {
     addingPersonFor = id;
@@ -1131,7 +1148,7 @@ function onBrollClick(e: PanelEvent & Partial<MouseEvent>, root: HTMLElement, ex
     if (pi) pi.focus();
   } else if (action === "broll-person-save") {
     const nameBox = root.querySelector<HTMLInputElement>('.broll-person-input[data-id="' + cssAttr(id) + '"]');
-    if (!(ports as PanelPortUse).shared.ports()) addingPersonFor = null;
+    if (!sharedRegistryLife()) addingPersonFor = null;
     (ports as PanelPortUse).undo.breakCoalescing();
     if (isHeld(typed().submit("broll-person-input", id as string, nameBox ? nameBox.value : "", personSave(id as string)))) return;
     addingPersonFor = null;
@@ -1212,7 +1229,7 @@ function onBrollKeydown(e: PanelEvent, root: HTMLElement) {
   const t = e.target as PanelInput;
   const onPage = root.id === "broll-page";
   if (e.key === "Escape") {
-    const shared = (ports as PanelPortUse).shared.ports() !== null;
+    const shared = sharedRegistryLife() !== null;
     if (shared) drawingPanel++;
     try {
       if (shared && recordField(t)) submitEscapeField(t);
@@ -1267,7 +1284,7 @@ function onBrollKeydown(e: PanelEvent, root: HTMLElement) {
 
 function onBrollInput(e: PanelEvent & Partial<Pick<InputEvent, "inputType">>) {
   const box = e.target as HTMLTextAreaElement;
-  if ((ports as PanelPortUse).shared.ports() && sameSharedLife()) reviseBox(box);
+  if (sharedRegistryLife() && sameSharedLife()) reviseBox(box);
   if (box.tagName === "TEXTAREA" && box.classList.contains("ev-field")) fitTextarea(box);
   if (box.classList && box.classList.contains("broll-prop-input") &&
       (e.inputType === "insertReplacementText" || e.inputType === undefined)) {

@@ -81,7 +81,11 @@ export function mountPanelListenersFeature(): void {
     onSessionChange(statsFollowChange),
     onSessionChange(refreshAnnotator),
     onSessionChange(({ changes }) => {
-      if (nativeEditorActive() && changes.docFields.includes("people") && !changes.docFields.includes("productionTags")) refreshTagViews();
+      if (!nativeEditorActive()) return;
+      const { docFields } = changes;
+      const people = docFields.includes("people"), tags = docFields.includes("productionTags"), shots = docFields.includes("brollShots");
+      if ((people || shots) && !tags) refreshTagViews();
+      if (people || tags || shots) runBrollRefresh();
     }),
     onRefresh((jobs) => {
       if (!documentReader.current()) return;

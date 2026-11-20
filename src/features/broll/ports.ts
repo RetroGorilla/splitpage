@@ -13,7 +13,7 @@ import type { ProductionIndexOwner } from "../../core/production/index.ts";
 import type { CellEditing } from "../../application/editing/cell-editing.ts";
 import type { PaintGuard } from "../../application/editing/paint-guard.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
-import type { RecordCommandRun, SharedRecordCommands } from "../../application/commands/shared-records.ts";
+import type { EditorRegistryCommands, RecordCommandRun } from "../../application/commands/shared-records.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { CommonDocumentSession } from "../../application/session/document-session.ts";
 import type { TextServices } from "../../application/text/services.ts";
@@ -37,7 +37,7 @@ interface BrollAnchors {
 export interface BrollRecordsPorts {
   readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
   readonly edits: Pick<DocumentEdits, "run" | "edit" | "stamps" | "text">;
-  readonly shared: SharedRecordCommands;
+  readonly shared: EditorRegistryCommands;
   readonly cells: Pick<CellEditing<Element>, "edit">;
   readonly paint: Pick<PaintGuard, "whileShown">;
   readonly text: Pick<TextServices<HTMLElement>, "cellOf" | "inertBody" | "sanitizeHtml" | "htmlToPlainText" | "productionReaders">;
@@ -73,7 +73,7 @@ export interface BrollPanelPorts {
   readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
   readonly lifetime: Pick<CommonDocumentSession, "epoch">;
   readonly edits: Pick<DocumentEdits, "edit" | "run">;
-  readonly shared: SharedRecordCommands;
+  readonly shared: EditorRegistryCommands;
   readonly text: Pick<TextServices<HTMLElement>, "productionReaders">;
   readonly ids: IdSource;
   readonly production: Pick<ProductionIndexOwner, "entries">;

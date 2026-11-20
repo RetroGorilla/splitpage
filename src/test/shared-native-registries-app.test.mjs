@@ -6,6 +6,8 @@ import { adoptReplacement } from "../bootstrap/wiring/session-owner.ts";
 import { addPersonForTag, applyGearQuickAdd, armDeleteTag, armPersonDelete, openGearPanel, openProductionPanel, saveTagRename, setTagNotes, setTagStatus } from "../features/tags/panels.ts";
 import { findOrAddPerson, registerProductionTag } from "../features/tags/production-tags.ts";
 import { cellSelection, setCellSelection } from "../features/common/cell-selection.ts";
+import { openBrollPanel } from "../features/broll/panel.ts";
+import { notices } from "../bootstrap/wiring/ports/effects.ts";
 
 window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};
@@ -44,6 +46,15 @@ function production(group = "cat") {
 function tagCard(key) {
   return $(`#production-list .tag-entity[data-key="${key}"]`);
 }
+
+const shot = (doc, id) => doc.brollShots.find(entry => entry.id === id);
+const shotRow = id => $(`#broll-list .broll-row[data-id="${id}"]`);
+const shotCard = id => $(`#broll-list .broll-card[data-id="${id}"]`);
+function shotButton(id, action) {
+  const selector = `[data-action="broll-${action}"]`;
+  return shotRow(id).querySelector(selector) ?? shotCard(id)?.querySelector(selector);
+}
+const shotBox = (id, box) => shotCard(id).querySelector(`.broll-${box}-input`);
 
 test("creating a person flushes pending typing and each registry action has its own undo step", async t => {
   await enter(t);
@@ -198,4 +209,121 @@ test("racing person removal and assignment agree on empty owners and restore the
   await Promise.resolve();
   copies(doc => tags(doc).map(entry => entry.owner), [person, person]);
   assert.ok(remove());
+});
+
+test("a native shot can be added, edited, assigned, unpropped, deleted and restored with undo", async t => {
+  await enter(t);
+  openBrollPanel();
+  const add = $("#broll-add-input");
+  add.value = "  Wide  ";
+  key(add, "Enter");
+  await Promise.resolve();
+  const { id, name } = hook.read().app.brollShots[0];
+  assert.equal(name, "Wide");
+  assert.ok(shotRow(id).classList.contains("is-open"));
+  assert.equal(add.value, "");
+  shotButton(id, "status-toggle").click();
+  await Promise.resolve();
+  assert.equal(shotButton(id, "status-toggle").getAttribute("aria-checked"), "true");
+  copies(doc => shot(doc, id).status, "shot");
+  shotButton(id, "reshoot-toggle").click();
+  await Promise.resolve();
+  copies(doc => shot(doc, id).reshoot, true);
+  const notes = shotBox(id, "notes");
+  notes.focus();
+  notes.value = "Second take";
+  notes.blur();
+  await Promise.resolve();
+  copies(doc => shot(doc, id).notes, "Second take");
+  shotButton(id, "person-new").click();
+  shotBox(id, "person").value = "  Cam  ";
+  shotButton(id, "person-save").click();
+  await Promise.resolve();
+  copies(doc => doc.people.find(p => p.id === shot(doc, id).owner)?.name, "Cam");
+  shotBox(id, "prop").value = "  Lens  ";
+  key(shotBox(id, "prop"), "Enter");
+  await Promise.resolve();
+  copies(doc => shot(doc, id).props.map(prop => prop.name), ["Lens"]);
+  shotButton(id, "prop-remove").click();
+  await Promise.resolve();
+  copies(doc => shot(doc, id).props, []);
+  shotButton(id, "menu").click();
+  shotButton(id, "delete").click();
+  await Promise.resolve();
+  copies(doc => doc.brollShots, []);
+  assert.equal(shotRow(id), null);
+  key($('#rows .cell-editable[data-field="audioText"]'), "z", true);
+  await Promise.resolve();
+  copies(doc => shot(doc, id).name, name);
+  assert.ok(shotRow(id));
+});
+
+test("a removed keyed shot is projected again, and renaming its visual line stays refused", async t => {
+  await enter(t, { rows: [{ id: "r1", audioText: "Hello",
+    visualText: '<span class="broll-key" data-broll-id="bs1" contenteditable="false">B-roll:</span> Wide' }] });
+  const show = t.mock.method(notices, "show", () => {});
+  openBrollPanel();
+  assert.match(shotRow("bs1").textContent, /Wide/);
+  if (!shotCard("bs1")) shotButton("bs1", "expand").click();
+  shotButton("bs1", "menu").click();
+  shotButton("bs1", "rename").click();
+  const rename = shotBox("bs1", "rename");
+  rename.value = "Close-up";
+  key(rename, "Enter");
+  await Promise.resolve();
+  assert.equal(shotBox("bs1", "rename").value, "Close-up");
+  copies(doc => shot(doc, "bs1").name, "Wide");
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), [["This is not available in a shared session yet.", "warn"]]);
+  shotButton("bs1", "rename-cancel").click();
+  shotButton("bs1", "status-toggle").click();
+  await Promise.resolve();
+  copies(doc => shot(doc, "bs1").status, "shot");
+  assert.equal(hook.nativePeer.registry({ kind: "remove", collection: "shots", ids: ["bs1"] }).kind, "written");
+  await Promise.resolve();
+  copies(doc => [shot(doc, "bs1").name, shot(doc, "bs1").status], ["Wide", "unshot"]);
+  assert.equal(shotButton("bs1", "status-toggle").getAttribute("aria-checked"), "false");
+});
+
+test("racing prop additions keep one list and a peer redraw keeps the editor's shot notes draft", async t => {
+  await enter(t, { brollShots: [{ id: "bs1", name: "Wide", origin: "list" }] });
+  openBrollPanel();
+  if (!shotCard("bs1")) shotButton("bs1", "expand").click();
+  hook.nativePeer.hold();
+  const prop = shotBox("bs1", "prop");
+  prop.value = "Lens";
+  key(prop, "Enter");
+  const notes = shotBox("bs1", "notes");
+  notes.focus();
+  notes.value = "A shot draft";
+  notes.setSelectionRange(1, 4);
+  assert.equal(hook.nativePeer.registry({ kind: "addProp", id: "bs1", prop: "Tripod" }).kind, "written");
+  hook.nativePeer.deliver();
+  await Promise.resolve();
+  const props = shot(hook.read().app, "bs1").props.map(prop => prop.name);
+  assert.equal(props.length, 1);
+  assert.ok(["Lens", "Tripod"].includes(props[0]));
+  copies(doc => shot(doc, "bs1").props.map(prop => prop.name), props);
+  copies(doc => tags(doc).map(entry => entry.name).sort(), ["Lens", "Tripod"]);
+  assert.match(shotCard("bs1").textContent, new RegExp(props[0]));
+  const retained = shotBox("bs1", "notes");
+  assert.equal(retained.value, "A shot draft");
+  assert.equal(retained, document.activeElement);
+  assert.deepEqual([retained.selectionStart, retained.selectionEnd], [1, 4]);
+  copies(doc => shot(doc, "bs1").notes, "");
+});
+
+test("a stale tag edit refuses instead of creating a duplicate of the old tag name", async t => {
+  await enter(t);
+  production();
+  registerProductionTag("prop", "Lens");
+  await Promise.resolve();
+  const id = tag(hook.read().app, "Lens").id;
+  const show = t.mock.method(notices, "show", () => {});
+  assert.equal(hook.nativePeer.registry({ kind: "set", collection: "tags", ids: [id], fields: { name: "Wide" } }).kind, "written");
+  assert.ok(tagCard("prop lens"));
+  assert.deepEqual(addPersonForTag("prop lens", "Cam"), { changed: false, held: true });
+  await Promise.resolve();
+  copies(doc => tags(doc).map(entry => [entry.name, entry.owner]), [["Wide", ""]]);
+  copies(doc => doc.people, []);
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), [["This is not available in a shared session yet.", "warn"]]);
 });

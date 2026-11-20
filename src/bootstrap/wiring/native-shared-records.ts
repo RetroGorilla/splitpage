@@ -12,6 +12,7 @@ import { cappedName, cappedText, plainText } from "../../core/document/text-poli
 import { PERSON_NAME_MAX, personNamed } from "../../core/production/records.ts";
 import { isBlankTagName } from "../../core/production/tags.ts";
 import { normalizeTagName, registryKey } from "../../core/document/tags.ts";
+import { BROLL_PROP_NAME_MAX } from "../../core/document/broll.ts";
 import type { NativeRegistryChange } from "../../adapters/collab/native/registry-commands.ts";
 import type { DocumentComment, DocumentReply, DocumentRow } from "../../core/document/validated.ts";
 import type { RowStatusId } from "../../core/document/timing.ts";
@@ -67,9 +68,12 @@ export function createNativeEditorRecords(
   }
 
   const commands = native.commands;
+  function writeRegistry(write: () => NativeRecordOutcome): RecordCommandRun {
+    return run("edit", write, undefined, false, settle);
+  }
+
   function changeRegistry(change: NativeRegistryChange, checked?: () => boolean): RecordCommandRun {
-    return run("edit", () => checked && !checked() ? { kind: "refused", reason: "missing" }
-      : commands.changeRegistry(change), undefined, false, settle);
+    return writeRegistry(() => checked && !checked() ? { kind: "refused", reason: "missing" } : commands.changeRegistry(change));
   }
 
   const registry: RegistryEditor = {
@@ -113,7 +117,29 @@ export function createNativeEditorRecords(
         if (name && !names.has(key)) names.set(key, name);
       }
       return changeRegistry({ kind: "gear", names: [...names.values()] });
-    }
+    },
+    addShot: name => {
+      let id = "";
+      const result = writeRegistry(() => {
+        const outcome = commands.changeRegistry({ kind: "create", collection: "shots", fields: { name, origin: "list" } });
+        if ("created" in outcome) id = outcome.created;
+        return outcome;
+      });
+      return { run: result, id };
+    },
+    setShots: (ids, fields, owner) => {
+      const ownerName = owner && "name" in owner ? cappedText(owner.name, PERSON_NAME_MAX) : undefined;
+      if (ownerName === "") return NOTHING_RAN;
+      return changeRegistry({ kind: "set", collection: "shots", ids,
+        fields: owner && "id" in owner ? { ...fields, owner: owner.id } : fields,
+        ...(ownerName === undefined ? {} : { ownerName }) });
+    },
+    removeShot: id => changeRegistry({ kind: "remove", collection: "shots", ids: [id] }),
+    addShotProp: (id, raw) => {
+      const prop = cappedText(raw, BROLL_PROP_NAME_MAX);
+      return prop ? changeRegistry({ kind: "addProp", id, prop }) : NOTHING_RAN;
+    },
+    removeShotProp: (id, prop) => changeRegistry({ kind: "removeProp", id, prop })
   };
   function gallery(rowId: string, message: string, edit: GalleryEdit, append?: readonly string[]): RecordCommandRun {
     return run("edit", () => {
