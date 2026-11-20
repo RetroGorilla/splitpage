@@ -26,7 +26,7 @@ function random(seed: number): () => number {
 
 type Write = "Text.insertEmbed" | "Text.delete" | "Map.set" | "Map.delete";
 interface Call { readonly command: number; readonly slot: number; readonly write: Write }
-interface Options { readonly immediate?: boolean; readonly mute?: Call; readonly calls?: Call[] }
+interface Options { readonly immediate?: boolean; readonly mute?: Call; readonly calls?: Call[]; readonly spoil?: boolean }
 
 class LocalCheck extends Error {}
 
@@ -134,7 +134,7 @@ function history(seed: number, options: Options = {}): Counts {
     } else if (roll < 0.66) {
       const offset = Math.floor(chance() * (row.narration.length + 1));
       act = () => { const anchored = anchorNativeText(actor, { beat: row.id, cell: "narration" }, offset); return anchored.kind === "anchored" ? splitNativeRow(actor, anchored.range) : anchored; };
-      const outcome = run(command, act, options);
+      const outcome = run(command, actor, act, options);
       const created = outcome.created ?? "";
       if (outcome.kind === "written") { assert.ok(!records.has(created) && /^r[0-9a-z]+-[0-9a-z]+$/.test(created), created); records.add(created); }
       const cut = splitCut(row, offset);
@@ -160,7 +160,7 @@ function history(seed: number, options: Options = {}): Counts {
       want = before.filter(entry => !chosen.has(entry.id));
       act = () => removeNativeRows(actor, [...chosen]);
     }
-    const outcome = run(command, act, options);
+    const outcome = run(command, actor, act, options);
     leftovers.push(...check(seed, command, actor, { want, wantStored, kind: outcome.kind, expected }, options, counts));
   }
   net.settle(); net.settle();
@@ -168,7 +168,7 @@ function history(seed: number, options: Options = {}): Counts {
   const [first] = all;
   assert.ok(first);
   const shownRows = new Set(view(first).filter(entry => !entry.heading).map(entry => entry.id));
-  const shownLetters = view(first).flatMap(entry => [...entry.narration]), stored = storedLetters(first);
+  const shownLetters = first.reader.rows().flatMap(row => [...row.narration.map(run => run.text).join("")]), stored = storedLetters(first);
   for (const value of letters) {
     counts.letters++;
     const times = shownLetters.filter(ch => ch === value).length, kept = stored.includes(value);
@@ -200,9 +200,20 @@ function history(seed: number, options: Options = {}): Counts {
   return counts;
 }
 
-function run(command: number, act: () => { kind: string; created?: string }, options: Options): { kind: string; created?: string } {
-  const restore = intercept(command, options);
-  try { return act(); } finally { restore(); }
+// why: a command that refuses or reports no change must leave the full encoded update as it was, not only the reading
+function run(command: number, actor: NativeScript, act: () => { kind: string; created?: string }, options: Options): { kind: string; created?: string } {
+  const before = Y.encodeStateAsUpdate(actor.doc), restore = intercept(command, options);
+  let outcome: { kind: string; created?: string };
+  try { outcome = act(); } finally { restore(); }
+  if (options.spoil && outcome.kind === "refused") actor.doc.transact(() => { actor.roots.beats.get("R1")?.set("spoiled", command); }, actor.origin);
+  if (outcome.kind !== "written" && options.immediate !== false && !sameBytes(before, Y.encodeStateAsUpdate(actor.doc))) {
+    throw new LocalCheck(`command ${command}: ${outcome.kind} but the stored update changed`);
+  }
+  return outcome;
+}
+
+function sameBytes(left: Uint8Array, right: Uint8Array): boolean {
+  return left.length === right.length && left.every((value, index) => value === right[index]);
 }
 
 interface Expectation { readonly want: Entry[]; readonly wantStored: readonly string[]; readonly kind: string; readonly expected: string }
@@ -268,4 +279,10 @@ test("control: with the local check off, every letter a muted deletion leaves be
   }
   t.diagnostic(`${muted} deletions muted, ${possible} left letters the settled count reported`);
   assert.ok(muted > 10 && possible > 5, JSON.stringify({ muted, possible }));
+});
+
+test("control: a write slipped into any refusal fails the local check at that command", () => {
+  for (let seed = 1; seed <= CONTROL_SEEDS; seed++) {
+    assert.throws(() => history(seed, { spoil: true }), (error: unknown) => error instanceof LocalCheck && /refused but the stored update changed/.test(error.message), `seed ${seed}`);
+  }
 });

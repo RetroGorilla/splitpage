@@ -125,16 +125,21 @@ const emptyRun = (): Run => ({ compared: 0, changed: 0, joinedMarkers: 0, format
 type Formatting = "none" | "mixed" | "only" | "rows" | "rows-only";
 
 function rowOnce(script: NativeScript, pick: <T>(list: readonly T[]) => T, chance: () => number, run: Run): void {
-  const entries = readNativeOnce(script.roots, reader => reader.outline());
-  const rows = entries.flatMap(entry => entry.kind === "heading" ? [] : [entry.id]), beat = pick(rows.length ? rows : BEATS), roll = chance();
+  const flat = readNativeOnce(script.roots, reader => reader.outline().flatMap((entry): readonly (string | null)[] => {
+    if (entry.kind === "heading") return [null];
+    const members = reader.row(entry.id)?.members ?? [];
+    return members.length ? members : [entry.id];
+  }));
+  const rows = flat.filter((id): id is string => id !== null), beat = pick(rows.length ? rows : BEATS), roll = chance();
+  const member = readNativeOnce(script.roots, reader => reader.outline().every(entry => entry.id !== beat));
+  const before = Y.encodeStateAsUpdate(script.doc);
   let outcome: { readonly kind: string; readonly reason?: string }, command: string;
   if (roll < 0.4) {
     const anchored = anchorNativeText(script, { beat, cell: "narration" }, Math.floor(chance() * 4));
     outcome = anchored.kind === "anchored" ? splitNativeRow(script, anchored.range) : anchored;
     command = "split";
   } else if (roll < 0.6) {
-    const at = entries.findIndex(entry => entry.kind === "row" && entry.id === beat);
-    outcome = joinNativeRow(script, beat, entries[at - 1]?.id ?? pick(BEATS), pick([" ", ""]));
+    outcome = joinNativeRow(script, beat, flat[flat.indexOf(beat) - 1] ?? pick(BEATS), pick([" ", ""]));
     command = "join";
   } else if (roll < 0.7) {
     outcome = unjoinNativeRow(script, beat);
@@ -146,6 +151,12 @@ function rowOnce(script: NativeScript, pick: <T>(list: readonly T[]) => T, chanc
   const kind = command + " " + (outcome.kind === "refused" ? "refused " + String(outcome.reason) : outcome.kind);
   run.outcomes.set(kind, (run.outcomes.get(kind) ?? 0) + 1);
   if (outcome.kind === "written") run.formatted++;
+  else assert.deepEqual(Y.encodeStateAsUpdate(script.doc), before, kind);
+  if (member && outcome.kind === "written") run.outcomes.set("member written", (run.outcomes.get("member written") ?? 0) + 1);
+  if (command === "join" && outcome.kind === "written") {
+    const size = readNativeOnce(script.roots, reader => Math.max(...reader.rows().map(row => row.members.length)));
+    if (size > 2) run.outcomes.set("group of three or more", (run.outcomes.get("group of three or more") ?? 0) + 1);
+  }
 }
 
 function formatOnce(script: NativeScript, pick: <T>(list: readonly T[]) => T, chance: () => number, run: Run): void {
@@ -157,10 +168,12 @@ function formatOnce(script: NativeScript, pick: <T>(list: readonly T[]) => T, ch
     { kind: "plain", mark: pick(["b", "i", "u", "s", "hl", "cue"] as const), on }, { kind: "comment", id: pick(["c1", "c2"]), on },
     { kind: "link", href: on ? pick(["https://a.example/", "https://b.example/"]) : null }, { kind: "tag", id: pick(["t:prop:one", "t:prop:two"]), on }
   ]);
+  const before = Y.encodeStateAsUpdate(script.doc);
   const outcome = anchored.kind === "anchored" ? formatNativeText(script, anchored.range, change) : anchored;
   const kind = outcome.kind === "refused" ? "refused " + outcome.reason : outcome.kind;
   run.outcomes.set(kind, (run.outcomes.get(kind) ?? 0) + 1);
   if (outcome.kind === "written") run.formatted++;
+  else assert.deepEqual(Y.encodeStateAsUpdate(script.doc), before, kind);
 }
 
 type WarmReader = (script: NativeScript) => NativeScriptReader;
@@ -301,6 +314,7 @@ test("generated split, join, unjoin and removal among the structural changes: a 
   for (let seed = 1; seed <= SEEDS; seed++) runSeed(seed, run, undefined, "rows");
   t.diagnostic(JSON.stringify({ compared: run.compared, changed: run.changed, written: run.formatted, outcomes: Object.fromEntries(run.outcomes) }));
   for (const command of ["split", "join", "unjoin", "remove"]) assert.ok((run.outcomes.get(command + " written") ?? 0) > 5, command);
+  assert.ok((run.outcomes.get("member written") ?? 0) > 5 && (run.outcomes.get("group of three or more") ?? 0) > 0, JSON.stringify(Object.fromEntries(run.outcomes)));
   assert.ok(run.formatted > SEEDS * STEPS * 0.05, String(run.formatted));
   assert.ok(run.compared > SEEDS * STEPS * 0.3 && run.changed > run.compared * 0.3, JSON.stringify({ compared: run.compared, changed: run.changed }));
 });

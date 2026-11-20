@@ -165,19 +165,54 @@ function doubled({ net, a, b, undoA, undoB }: World): void {
   assert.equal(a.reader.narrationSpans("B").length, 2);
 }
 
-test("E9 and section 2: join, unjoin and removal work on a row whose boundary is stored twice, on what the row shows", () => {
-  assert.deepEqual(settled(world => { doubled(world); join(world.a, "B", "A", " "); }), ["A: abc defdef / 1<br>2", "C: ghi / 3", ...TAIL]);
-  assert.deepEqual(settled(world => { doubled(world); join(world.a, "B", "A", " "); world.net.settle(); unjoin(world.b, "B"); }), ["A: abc / 1", "B: defdef / 2", "C: ghi / 3", ...TAIL]);
-  assert.deepEqual(settled(world => { doubled(world); join(world.a, "C", "B", ""); }), ["A: abc / 1", "B: defdefghi / 2<br>3", ...TAIL]);
+// why: a history's reading and every copy's stored narration, with minted ids written as N, after the runs settle
+function settledWithStored(history: (world: World) => void): { readonly reading: string[]; readonly stored: string } {
+  const copies: NativeScript[][] = [];
+  const reading = settled(world => { copies.push([world.a, world.b]); history(world); });
+  const stored = copies.flat().map(copy => storedOf(copy).replace(/\br[0-9a-z]+-[0-9a-z]+\b/g, "N"));
+  for (const value of stored) assert.equal(value, stored[0]);
+  return { reading, stored: stored[0] ?? "" };
+}
+
+test("E9 and section 2: join, unjoin, split and removal work on a row whose boundary is stored twice, on what the row shows", () => {
+  const prefix = "[A]abc[B][B]defdef[C]ghi[D]jkl";
+  assert.deepEqual(settledWithStored(world => { doubled(world); join(world.a, "B", "A", " "); }), { reading: ["A: abc defdef / 1<br>2", "C: ghi / 3", ...TAIL], stored: prefix + " | [#H][E]pqr" });
+  assert.deepEqual(settledWithStored(world => { doubled(world); join(world.a, "B", "A", " "); world.net.settle(); unjoin(world.b, "B"); }), { reading: ["A: abc / 1", "B: defdef / 2", "C: ghi / 3", ...TAIL], stored: prefix + " | [#H][E]pqr" });
+  assert.deepEqual(settledWithStored(world => { doubled(world); join(world.a, "C", "B", ""); }), { reading: ["A: abc / 1", "B: defdefghi / 2<br>3", ...TAIL], stored: prefix + " | [#H][E]pqr" });
   for (const at of [1, 4]) {
-    assert.deepEqual(settled(world => { doubled(world); split(world.a, "B", at); }), ["A: abc / 1", "B:  / 2", "N: defdef / ", "C: ghi / 3", ...TAIL], `at ${at}`);
+    assert.deepEqual(settledWithStored(world => { doubled(world); split(world.a, "B", at); }), {
+      reading: ["A: abc / 1", "B:  / 2", "N: defdef / ", "C: ghi / 3", ...TAIL], stored: "[A]abc[B][N][B]defdef[C]ghi[D]jkl | [#H][E]pqr"
+    }, `at ${at}`);
   }
-  const copies: NativeScript[] = [];
-  assert.deepEqual(settled(world => { doubled(world); copies.push(world.a); remove(world.a, "B"); }), ["A: abc / 1", "C: ghi / 3", ...TAIL]);
-  for (const copy of copies) {
-    assert.equal(storedOf(copy).includes("[B]"), false, storedOf(copy));
-    assert.equal(storedOf(copy).includes("def"), false, storedOf(copy));
-  }
+  assert.deepEqual(settledWithStored(world => { doubled(world); remove(world.a, "B"); }), { reading: ["A: abc / 1", "C: ghi / 3", ...TAIL], stored: "[A]abc[C]ghi[D]jkl | [#H][E]pqr" });
+});
+
+test("decision 7 with own text and recovered text before it: a caret before splits at the own start, inside splits there", () => {
+  const before = (at: number) => settledWithStored(({ net, a, b }) => {
+    remove(a, "A"); typeIn(b, narration("A"), 1, "X"); net.settle();
+    assert.equal(storedOf(a).startsWith("X[B]def[C]"), true, storedOf(a));
+    assert.equal(rowsOf(a)[0], "B: Xdef");
+    split(a, "B", at);
+  });
+  assert.deepEqual(before(0), { reading: ["B: X / 2", "N: def / ", "C: ghi / 3", ...TAIL], stored: "X[B][N]def[C]ghi[D]jkl | [#H][E]pqr" });
+  assert.deepEqual(before(1), before(0));
+  assert.deepEqual(before(2), { reading: ["B: Xd / 2", "N: ef / ", "C: ghi / 3", ...TAIL], stored: "X[B]d[N]ef[C]ghi[D]jkl | [#H][E]pqr" });
+  assert.deepEqual(before(4), { reading: ["B: Xdef / 2", "N:  / ", "C: ghi / 3", ...TAIL], stored: "X[B]def[N][C]ghi[D]jkl | [#H][E]pqr" });
+});
+
+test("decision 7 with own text and recovered text after it: a caret inside splits there, after splits at the own end", () => {
+  const after = (at: number) => settledWithStored(({ net, a, b, undoA, undoB }) => {
+    const hidden = split(a, "B", 1); net.settle();
+    remove(b, hidden); net.settle(); press(undoA, a); net.settle(); press(undoB, b); net.settle();
+    assert.equal(storedOf(a).startsWith(`[A]abc[B]d[${hidden}]ef[C]`), true, storedOf(a));
+    assert.equal(rowsOf(a)[1], "B: def");
+    split(a, "B", at);
+  });
+  const hidden = ["problem missing-beat-record beats/N", "problem missing-visual visuals/N"];
+  assert.deepEqual(after(0), { reading: ["A: abc / 1", "B:  / 2", "N: def / ", "C: ghi / 3", ...TAIL, ...hidden], stored: "[A]abc[B][N]d[N]ef[C]ghi[D]jkl | [#H][E]pqr" });
+  assert.deepEqual(after(1), { reading: ["A: abc / 1", "B: d / 2", "N: ef / ", "C: ghi / 3", ...TAIL, ...hidden], stored: "[A]abc[B]d[N][N]ef[C]ghi[D]jkl | [#H][E]pqr" });
+  assert.deepEqual(after(2), after(1));
+  assert.deepEqual(after(3), after(1));
 });
 
 test("removal also takes a repeat of the row's own boundary that holds no text, so the row does not come back", () => {

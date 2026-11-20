@@ -132,15 +132,15 @@ export function splitNativeRow(script: NativeScript, at: NativeTextRange): Nativ
     if (!(parent instanceof Y.Map)) return;
     const at = splitPoint(script, checked.target.beat, live.text, live.from);
     if (!at) { outcome = refused("range"); return; }
-    const rank: unknown = parent.get("rank"), created = mintedId(script.doc);
-    if (rank !== undefined && (typeof rank !== "string" || !nativeWellFormed(rank))) { outcome = refused("stored"); return; }
+    const ranked = parent.has("rank"), rank: unknown = parent.get("rank"), created = mintedId(script.doc);
+    if (ranked && (typeof rank !== "string" || !nativeWellFormed(rank))) { outcome = refused("stored"); return; }
     if (roots.beats.has(created) || roots.visuals.has(created) || script.reader.hasBeatMarker(created)) { outcome = refused("taken"); return; }
     // why: given the formatting in force at its place, the boundary writes no formatting change of its own that a
     // later undo of that formatting could leave behind
     at.text.insertEmbed(at.index, { b: created }, at.index > 0 ? attributesBefore(at.text, at.index) : {});
     const record = new Y.Map<unknown>();
     roots.beats.set(created, record);
-    if (rank !== undefined) record.set("rank", rank);
+    if (ranked) record.set("rank", rank);
     roots.visuals.set(created, new Y.Text());
     outcome = Object.freeze({ kind: "written", created });
   }, script.origin);

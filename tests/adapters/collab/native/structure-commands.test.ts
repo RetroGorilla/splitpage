@@ -129,6 +129,18 @@ test("a split copies no rank from a rankless parent and refuses a rank another c
   }
 });
 
+test("a split refuses a rank key that is present with an undefined value, as a peer receives it, writing nothing", () => {
+  const { net, all: [a, b] } = copiesOf(structureScript({ A: "abc", B: "def" }));
+  assert.ok(a && b);
+  a.doc.transact(() => { a.roots.beats.get("B")?.set("rank", undefined); });
+  net.settle();
+  const record = b.roots.beats.get("B");
+  assert.deepEqual([record?.has("rank"), record?.get("rank")], [true, undefined]);
+  const before = stateOf(b);
+  assert.deepEqual(splitNativeRow(b, caret(b, "B", 1)), { kind: "refused", reason: "stored" });
+  assert.deepEqual(stateOf(b), before);
+});
+
 test("a split refuses an empty target id as missing and a malformed one as a bad range, writing nothing", () => {
   const copy = one({ A: "abc" }), at = caret(copy, "A", 1), before = stateOf(copy);
   for (const [beat, reason] of [["", "missing"], ["\ud800", "range"]] as const) {
@@ -151,6 +163,63 @@ test("a split refuses an id already taken by a record, a visual cell or a stored
     const before = stateOf(copy);
     assert.deepEqual(splitNativeRow(copy, caret(copy, "A", 1)), { kind: "refused", reason: "taken" }, root);
     assert.deepEqual(stateOf(copy), before);
+  }
+});
+
+test("a split refuses an id held by a boundary in another ordered segment, an unordered segment or a segment head, parsing nothing more", () => {
+  for (const place of ["ordered", "unordered", "head"] as const) {
+    const { net, all: [a, b] } = copiesOf(structureScript({ A: "abc" }));
+    assert.ok(a && b);
+    const id = `r2-${(Y.decodeStateVector(Y.encodeStateVector(a.doc)).get(a.doc.clientID) ?? 0).toString(36)}`;
+    b.doc.transact(() => {
+      const segment = new Y.Map<unknown>(), text = new Y.Text();
+      b.roots.segments.set("x", segment);
+      if (place === "head") segment.set("head", { b: id });
+      segment.set("text", text);
+      if (place !== "head") text.insertEmbed(0, { b: id }, {});
+      if (place !== "unordered") b.roots.order.push(["x"]);
+    }, b.origin);
+    net.settle();
+    a.reader.refresh();
+    const parses = a.reader.counts().parses, before = stateOf(a);
+    assert.deepEqual(splitNativeRow(a, caret(a, "A", 1)), { kind: "refused", reason: "taken" }, place);
+    assert.equal(a.reader.counts().parses - parses, 0, place);
+    assert.deepEqual(stateOf(a), before, place);
+  }
+});
+
+test("join names the beat directly above as the reader reads it: the last member of the row above, never across a heading", () => {
+  const { net, all: [a, b] } = copiesOf(structureScript({ A: "a", B: "b", C: "c", D: "d", E: "e" }, {}, [{ id: "H", name: "Scene", before: "E" }]));
+  assert.ok(a && b);
+  join(a, "B", "A");
+  const before = stateOf(a);
+  assert.deepEqual(joinNativeRow(a, "C", "A", " "), { kind: "refused", reason: "above" });
+  assert.deepEqual(stateOf(a), before);
+  join(a, "C", "B");
+  assert.deepEqual(a.reader.row("A")?.members, ["A", "B", "C"]);
+  assert.deepEqual(joinNativeRow(a, "D", "B", " "), { kind: "refused", reason: "above" });
+  join(a, "D", "C");
+  const held = stateOf(a);
+  assert.deepEqual([joinNativeRow(a, "E", "D", " "), joinNativeRow(a, "E", "A", " ")], [{ kind: "refused", reason: "above" }, { kind: "refused", reason: "above" }]);
+  assert.deepEqual(stateOf(a), held);
+  net.settle();
+  assert.deepEqual(net.agree(), ["A: a b c d / ", "# Scene", "E: e / "]);
+});
+
+test("join after a peer removed the head, the middle or the tail of a row of three takes the beat now directly above", () => {
+  for (const [victim, into, wrong, reason, reading] of [
+    ["A", "C", "B", "above", ["B: b c d / "]], ["B", "C", "B", "missing", ["A: a / ", "C: c d / "]], ["C", "B", "C", "missing", ["A: a b d / "]]
+  ] as const) {
+    const { net, all: [a, b] } = copiesOf(structureScript({ A: "a", B: "b", C: "c", D: "d" }));
+    assert.ok(a && b);
+    join(a, "B", "A"); join(a, "C", "B"); net.settle();
+    remove(b, victim); net.settle();
+    const before = stateOf(a);
+    assert.deepEqual(joinNativeRow(a, "D", wrong, " "), { kind: "refused", reason }, victim);
+    assert.deepEqual(stateOf(a), before, victim);
+    join(a, "D", into);
+    net.settle();
+    assert.deepEqual(net.agree().filter(line => !line.startsWith("problem")), reading, victim);
   }
 });
 
@@ -309,18 +378,25 @@ test("a caller getter that closes the script makes the command refuse as closed,
 });
 
 test("a caller getter that runs its own removal: that removal is its own command, and the outer one judges the document as it now is", () => {
-  const throwing = one({ A: "abc", B: "def", C: "ghi" }), list = ["A"];
-  Object.defineProperty(list, 0, { get: () => { assert.equal(removeNativeRows(throwing, ["C"]).kind, "written"); throw new Error("read"); }, enumerable: true });
-  let transactions = 0;
-  throwing.doc.on("afterTransaction", () => { transactions++; });
-  assert.deepEqual(removeNativeRows(throwing, list), { kind: "refused", reason: "missing" });
-  throwing.reader.refresh();
-  assert.equal(transactions, 1);
-  assert.deepEqual(rowsOf(throwing), ["A: abc", "B: def"]);
-  assert.equal(storedOf(throwing), "[A]abc[B]def");
-  const returning = one({ A: "abc", B: "def", C: "ghi" }), again = ["C", "B"];
-  Object.defineProperty(again, 0, { get: () => { assert.equal(removeNativeRows(returning, ["C"]).kind, "written"); return "C"; }, enumerable: true });
-  assert.deepEqual(removeNativeRows(returning, again), { kind: "refused", reason: "missing" });
-  returning.reader.refresh();
-  assert.deepEqual(rowsOf(returning), ["A: abc", "B: def"]);
+  for (const ending of ["throws", "returns"] as const) {
+    const copy = one({ A: "abc", B: "def", C: "ghi" }), list = ending === "throws" ? ["A"] : ["C", "B"];
+    let writes = 0, inner: ReturnType<typeof stateOf> | null = null;
+    Object.defineProperty(list, 0, {
+      get: () => {
+        assert.equal(removeNativeRows(copy, ["C"]).kind, "written");
+        inner = stateOf(copy);
+        if (ending === "throws") throw new Error("read");
+        return "C";
+      },
+      enumerable: true
+    });
+    copy.doc.on("update", () => { writes++; });
+    assert.deepEqual(removeNativeRows(copy, list), { kind: "refused", reason: "missing" }, ending);
+    copy.reader.refresh();
+    assert.equal(writes, 1, ending);
+    assert.ok(inner);
+    assert.deepEqual(stateOf(copy), inner, ending);
+    assert.deepEqual(rowsOf(copy), ["A: abc", "B: def"], ending);
+    assert.equal(storedOf(copy), "[A]abc[B]def", ending);
+  }
 });
