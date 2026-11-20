@@ -38,6 +38,7 @@ export interface SharedSessionPorts {
   readonly timing?: RefreshTiming | undefined;
   readonly after?: SessionCounters | undefined;
   readonly refused?: ((reason: string) => void) | undefined;
+  readonly unsupportedCommands?: string;
 }
 
 export type SharedAdmissionRefusal = Extract<CommandOutcome, { readonly kind: "rejected" | "failed" }>;
@@ -253,6 +254,7 @@ export function createSharedSession(ports: SharedSessionPorts): SharedDocumentSe
   }
 
   function decide(command: Command): CommandOutcome {
+    if (ports.unsupportedCommands) return { kind: "rejected", reason: ports.unsupportedCommands };
     const doc = document;
     if (!doc) return { kind: "rejected", reason: NO_DOCUMENT };
     if (command.needs === "edit") {

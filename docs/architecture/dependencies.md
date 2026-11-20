@@ -42,6 +42,7 @@ resolved edge (static imports, re-exports, literal `require`, literal dynamic
 | `tests` | `src/test/`, `tests/`, `*.test.*` | anything |
 | `tools` | `tools/` | anything |
 | `prototypes` | `prototypes/` (tests included) | itself, core, `shared`; nothing outside this layer may import it |
+| `collab-server` | `collab-server/` | itself, Node and service packages, including Yjs. Only tests and tools may import it |
 | `server`, `desktop` | `server/`, `desktop/` | anything except tests |
 | `src-unknown` | any other `src/` folder, or a file directly under `src/` | anything, but each file is an `unknown-layer` violation |
 
@@ -52,7 +53,8 @@ shared code, but may not import application owners, features, adapters or toolin
 Imports of `yjs`, `lib0` and `isomorphic.js`, including types and subpaths, are restricted to
 `src/adapters/collab/` and tests (`collab-import`). The isolated prototypes
 retain their own Yjs dependency. This restriction also applies to bootstrap,
-other adapters, tools, desktop and server code. Bootstrap may import the
+other adapters, tools, desktop and static server code. The separate collaboration
+server may import Yjs to check the encoded size at admission. Bootstrap may import the
 collaboration adapter, which owns the runtime package imports.
 
 A script under `src/` outside the folders above is an `unknown-layer`

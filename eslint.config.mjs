@@ -11,6 +11,7 @@ const commentFree = [
   "src/features/**",
   "src/bootstrap/**",
   "src/legacy/**",
+  "collab-server/**",
   "tests/**",
   "prototypes/**"
 ];
@@ -154,7 +155,7 @@ export default [
     files: typescriptFiles,
     languageOptions: {
       parserOptions: {
-        project: ["./tsconfig.core.json", "./tsconfig.web.json", "./tsconfig.test.json", "./tsconfig.desktop.json", "./prototypes/collab/tsconfig.json"],
+        project: ["./tsconfig.core.json", "./tsconfig.web.json", "./tsconfig.test.json", "./tsconfig.desktop.json", "./prototypes/collab/tsconfig.json", "./collab-server/tsconfig.json"],
         tsconfigRootDir: import.meta.dirname
       }
     },

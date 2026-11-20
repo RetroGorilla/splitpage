@@ -11,8 +11,120 @@ pictures and screen design are out of scope.
 ## Build status
 
 Slices 1 to 6 are on `main`. The native shared-document command layer and undo are built.
-The app has no native wiring yet. Slices 7a and 7h are merged. This PR builds 7c, the relay connection. The old adapter stays untouched until slice 8.
+Slices 7a, 7c and 7h are merged. The native editor entry and Split narration typing are on `main`. This PR builds 7d, the relay server and its storage. The old adapter stays untouched until slice 8.
 Slice 7f adds the browser local store with transaction receipts, an update log and atomic checkpoints.
+
+## Server-stop results and backup runbook
+
+Two product copies received the edit before each stop. A fresh copy then joined a restarted server. Each row was run
+twice, with both original copies returning and with every copy that held the edit closed before restart.
+
+| Stop | Point | Edit on disk at restart | Fresh copy if original copies return | Fresh copy if all original copies are gone |
+| --- | --- | --- | --- | --- |
+| Clean | Before store starts | Yes | Has edit | Has edit |
+| Clean | Store hook held before the SQLite write | Yes | Has edit | Has edit |
+| Clean | After SQLite commits | Yes | Has edit | Has edit |
+| Kill | Before store starts | No | Recovers edit | Edit lost |
+| Kill | Store hook held before the SQLite write | No | Recovers edit | Edit lost |
+| Kill | After SQLite commits | Yes | Has edit | Has edit |
+
+The writer's pending count went from 0 to 1 on editing, back to 0 when the server applied the edit, and stayed at
+0 through the stop and disconnection. It went from 1 back to 0 during the reconnect handshake. Clearing the offline
+notice journal on that first zero would leave no entry for the later loss. A returning copy restored the missing
+work to SQLite in 2 of 2 cases. With every copy gone, that work was lost in both cases.
+
+With default settings, a kill can lose edits still waiting for SQLite to commit. A quiet edit waits about 2 seconds
+before the store starts. With repeated edits, the 10-second threshold is checked when an edit arrives, so the last
+timer can run up to 2 more seconds. Allow roughly the last 12 seconds of edits plus encoding and write time on a
+healthy host. A stalled write or event loop can extend that window. The tests used the stock debounce with short
+settings to reach the store, a longer debounce to stop before it, and a gate in the test process to hold the store
+hook. They leave a mid-transaction kill and power loss unmeasured. On 2026-11-20 the owner reviewed these
+results and kept stock snapshots for the first version.
+
+The service lives in `collab-server/`. It uses the stock Hocuspocus Database extension and Node 24.22.1's SQLite
+module (stability 1.2, release candidate). The Node module supplies the online backup API and avoids native add-on
+installation. See the [Node SQLite API](https://nodejs.org/download/release/v24.22.1/docs/api/sqlite.html).
+
+### Backup runbook
+
+**Start the relay.** From the repository root on the Docker host, replace the placeholder pool directory, editor
+origin and token. Use a directory on the direct local pool. Keep the environment file in host secret storage,
+with access limited to the operator. The example exposes the relay only on loopback for the intended tunnel or
+proxy. Set CPU and memory limits for the host. One relay process can own the volume at a time.
+
+```sh
+set -eu
+docker build -t splitpage-relay collab-server
+sudo install -d -m 0700 -o 1000 -g 1000 /REPLACE_WITH_DIRECT_POOL_PATH/splitpage
+docker volume create --driver local --opt type=none --opt o=bind --opt device=/REPLACE_WITH_DIRECT_POOL_PATH/splitpage splitpage-relay-data
+
+umask 077
+config_dir="$HOME/.config/splitpage-relay"
+mkdir -p "$config_dir"
+cat > "$config_dir/relay.env" <<'EOF'
+SPLITPAGE_DATA_DIR=/data
+SPLITPAGE_PORT=8080
+SPLITPAGE_ALLOWED_ORIGINS=https://REPLACE_WITH_EDITOR_HOST,splitpage://app
+SPLITPAGE_ACCESS_TOKEN=REPLACE_WITH_ACCESS_TOKEN
+SPLITPAGE_STORE_DEBOUNCE_MS=2000
+SPLITPAGE_STORE_MAX_DEBOUNCE_MS=10000
+SPLITPAGE_BACKUP_KEEP=7
+EOF
+
+docker run -d --name splitpage-relay --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m --stop-timeout 20 --cpus 2 --memory 2g --publish 127.0.0.1:8080:8080 --env-file "$config_dir/relay.env" --mount type=volume,source=splitpage-relay-data,target=/data splitpage-relay
+docker logs splitpage-relay
+```
+
+**Back up daily and copy off-machine.** Save this as `relay-backup.sh`, replace the remote account, host and
+archive directory, and run `sh relay-backup.sh` once. Use an account with scheduled access to Docker and
+non-interactive SSH access to the archive. The script copies the exact file reported after verification.
+
+```sh
+set -eu
+output=$(docker exec splitpage-relay node backup-command.ts)
+case "$output" in
+  "Verified relay backup relay-"*.sqlite.) ;;
+  *) printf '%s\n' "Backup did not report a verified file." >&2; exit 1 ;;
+esac
+name=${output#Verified relay backup }
+name=${name%.}
+staging=$(mktemp -d)
+trap 'rm -f "$staging/$name"; rmdir "$staging"' EXIT
+docker cp "splitpage-relay:/data/backups/$name" "$staging/$name"
+scp -B "$staging/$name" REPLACE_WITH_ARCHIVE_USER@REPLACE_WITH_ARCHIVE_HOST:/REPLACE_WITH_ARCHIVE_DIRECTORY/
+```
+
+Run `crontab -e` and add the line below with the real script path. Set up an alert for failed jobs and check the
+copied file after the first scheduled run. A successful copy every day limits backup age to about 24 hours,
+plus edits still waiting to reach SQLite when the backup began.
+
+```cron
+15 2 * * * /bin/sh /REPLACE_WITH_SCRIPT_PATH/relay-backup.sh
+```
+
+**Restore in isolation before anyone else uses the relay.** With old clients disconnected, fetch one verified
+backup from the archive. Use a fresh volume, a separate token in a copy of `relay.env` named
+`relay-restore.env`, and keep the restore port out of the public proxy. The helper checks that the volume is
+empty before creating `relay.sqlite`. If it exits with an error, choose a new volume before continuing.
+
+```sh
+set -eu
+umask 077
+config_dir="$HOME/.config/splitpage-relay"
+cp "$config_dir/relay.env" "$config_dir/relay-restore.env"
+"${EDITOR:-vi}" "$config_dir/relay-restore.env"
+backup_name=REPLACE_WITH_VERIFIED_BACKUP_FILENAME
+scp -B "REPLACE_WITH_ARCHIVE_USER@REPLACE_WITH_ARCHIVE_HOST:/REPLACE_WITH_ARCHIVE_DIRECTORY/$backup_name" "$backup_name"
+restore_volume="splitpage-relay-restore-$(date -u +%Y%m%dT%H%M%SZ)"
+if docker volume inspect "$restore_volume" >/dev/null 2>&1; then echo "Choose a new restore volume name." >&2; exit 1; fi
+docker volume create "$restore_volume"
+docker run --rm -i --read-only --mount "type=volume,source=$restore_volume,target=/data" --entrypoint sh splitpage-relay -ec 'contents=$(ls -A /data); test -z "$contents" || { echo "Restore volume is not empty." >&2; exit 1; }; set -C; cat > /data/relay.sqlite' < "$backup_name"
+docker run -d --name splitpage-relay-restore --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m --stop-timeout 20 --cpus 2 --memory 2g --publish 127.0.0.1:8081:8080 --env-file "$config_dir/relay-restore.env" --mount "type=volume,source=$restore_volume,target=/data" splitpage-relay
+docker logs splitpage-relay-restore
+```
+
+Open the recovered scripts with fresh copies. Check that they match the backup and that changes made after it
+are absent. Decide how to recover those changes before allowing old copies to reconnect.
 
 ## Decisions made
 
@@ -38,7 +150,7 @@ Decided by the owner: rows 1 to 13 on 2026-11-18; row 4's new form and rows 14 t
 | 16 | A first load keeps the stock 30 s wait, with the script sizes that fit at each speed, a limit on restarts, and a clear message when a script is too large for the line | Worked out from E13: about 3.5 MB loads at 1 Mbit/s, 7 MB at 2, 14 MB at 4. A larger script gets the message instead of restarting forever | Owner, E13 |
 | 17 | The offline notice flags a production tag lost through someone's unseen delete and undo | The person returning is told; one who stayed online is not | Owner, E12, E16 |
 | 18 | A marker whose record or visual cell is missing is not a row: its narration reads into the row above, and nothing is written (rule (g), E17's option R) | Section 10 | Owner, E17 |
-| 19 | The first version uses stock snapshot storage, the whole state rewritten 2 to 10 s after an edit: a departure from `docs/COLLABORATION-PLAN.md`. Tests stop the server inside that window, show what is lost and whether reconnecting copies restore it, and decide whether the plan's update journal and durable receipts come before others use it | A server stop can lose the last seconds of edits on the server; that reconnecting copies re-send them is an untested assumption | Owner, E13 |
+| 19 | On 2026-11-20 the owner reviewed the [six-row stop table](#server-stop-results-and-backup-runbook) and kept stock snapshot storage for the first version. The update journal and durability receipts are deferred. With default settings about 12 seconds of edits can be waiting on a healthy host, plus encoding and commit time | Clean stops kept the edit in 6 of 6 runs. Returning copies restored uncommitted edits in 2 of 2 kill cases. The edits were lost in both cases where every copy was gone. The first version makes no "saved to server" claim | Owner, E13, slice 7d |
 
 **The guide for same-spot, same-moment conflicts** (owner): it is enough if they merge without losing data about
 nine times in ten; a guide, not a hard rule, and stricter where a defect must never happen (section 6).
@@ -189,6 +301,11 @@ At 15 MB a keystroke took 0.201 ms (E8); a first download at 1 to 4 Mbit/s never
 Kept records add about 100 bytes per removed row, 160 to 174 for edited ones (E14). Detail:
 [appendix J](#j-relay-size-and-the-reconnect-wrapper).
 
+The server checks the encoded size when a copy joins. At 15 MB and above, the new connection is read-only.
+A connection already admitted as writable keeps that access if the script crosses 15 MB. The clients refuse
+additions at 15 MB, with a 105% ceiling (#1667), and the server still caps each WebSocket payload at
+16,000,000 bytes. The admission tests pin both outcomes.
+
 ## 9. Offline notice
 
 On reconnecting, a copy compares its own state with the merged result, per beat, and lists beats it changed that
@@ -269,7 +386,7 @@ questions. Earlier rounds: [appendix K](#k-earlier-rounds).
 **(h) Open for slice 7.**
 
 - Pinned. Refused carets and selections, including root-named relative positions, leave `doc.share` and the encoded state unchanged. [Text command tests](../../tests/adapters/collab/native/text-commands.test.ts). [Slice 3a PR, Deferred](https://github.com/RetroGorilla/splitpage/pull/1654).
-- Open for slice 7. The 15 MB encoded size refusal is absent from individual native commands. Not pinned. [Slice 5 PR](https://github.com/RetroGorilla/splitpage/pull/1658), [appendix O](#o-acceptance-cases-from-the-outside-review).
+- The session warns at a measured 12 MB and refuses local additions at a measured 15 MB. It measures at open and after enough Yjs update bytes accumulate to cover half the distance to the next line, with a minimum step of 64 KiB. Near a line, the measurement tolerance is in update bytes. One large edit can jump several lines. The published state can lag behind the exact size by more than a step because Yjs can split retained items or hold pending peer updates without emitting an update until they integrate. The session publishes one size event with the latest measured state after the transaction when the published state changes. Removals and undo/redo still work below the measured ceiling of 105% of the limit. At the ceiling every local write is refused, and reading, export and close remain available. Peer updates still apply. After a deletion while warning or full, a recovery measure can run before the growth step is reached, at least two seconds after the last measure. An arriving update or an attempted addition at full checks for recovery. One timer checks again when due if the copy stays idle. Closing cancels the timer. Deleting does not free space on your own copy while undo retains the text. Reopening may reclaim that space, and removed rows and comments keep their records. Export is the way out. [Session size tests](../../tests/adapters/collab/native/session-size.test.ts).
 - Pinned. Removing a comment leaves its inline mark in `document()`, matching core reload, which keeps orphan comment marks. [Record command tests](../../tests/adapters/collab/native/record-commands.test.ts). [Slice 5 PR](https://github.com/RetroGorilla/splitpage/pull/1658).
 - Author-only editing compares names. The session supplies the actor. [Record command tests](../../tests/adapters/collab/native/record-commands.test.ts) pin the equal-name edit. [Session tests](../../tests/adapters/collab/native/session.test.ts) pin actor selection for comment and reply bodies. [Slice 5 PR](https://github.com/RetroGorilla/splitpage/pull/1658).
 - Pinned. `document()` returns a snapshot frozen at every depth, and with several headings stacked above one row only the heading directly above it appears in `sections` while `problems()` reports each omitted heading. [Reader tests](../../tests/adapters/collab/native/reader.test.ts), [record command tests](../../tests/adapters/collab/native/record-commands.test.ts). [Slice 3b PR](https://github.com/RetroGorilla/splitpage/pull/1653), [native reader](../../src/adapters/collab/native/reader.ts).
@@ -341,7 +458,7 @@ The owner chose option A on 2026-11-20.
 
 ### Server storage and saved status
 
-The older plan's [Server storage](../COLLABORATION-PLAN.md#server-storage) and [Durability receipts](../COLLABORATION-PLAN.md#durability-receipts) require a committed update journal before a durable receipt. Its update supersedes that first-version choice. This note's [decision 19](#decisions-made) starts with stock snapshots written 2 to 10 s after an edit. [Appendix O](#o-acceptance-cases-from-the-outside-review) calls for server-stop tests before deciding whether the journal and receipts should come first.
+The older plan's [Server storage](../COLLABORATION-PLAN.md#server-storage) and [Durability receipts](../COLLABORATION-PLAN.md#durability-receipts) require a committed update journal before a durable receipt. Its update supersedes that first-version choice. After reviewing the [server-stop results](#server-stop-results-and-backup-runbook), the owner confirmed [decision 19](#decisions-made) on 2026-11-20. The first version uses stock snapshots and makes no "saved to server" claim.
 
 On `main`, the native layer has no server store or saved-status integration.
 
@@ -530,14 +647,14 @@ Each is the design's default unless the owner objects.
 | What a removed row leaves in the stored script | Kept for the script's life; no clean-up in the first version (E14 lists what one would need) | Its visual text, fields, rank and tags stay readable to anyone holding the script, in every later copy; its narration does not |
 | A segment's first row lost in a remove, undo and redo race | As built (E15, E16); rule (g) does not change it, since the record is not what is missing (E17) | The row's narration joins the start of the next row (5 of 5 deliveries); its visual text and fields stay stored, not shown. The inherited recovery list showed a non-empty visual as unplaced (E16); the product reader leaves kept records out (section 7) |
 | Formatting that differs by delivery order | Accept: library behaviour (E11) | A mark's exact edge can differ; copies agree once everything is delivered |
-| What happens at 15 MB | Refuse the edit with a message and an export; warn from 12 MB | A warning, then a refusal with a way out |
+| What happens at 15 MB | Warn at a measured 12 MB and refuse additions at a measured 15 MB with a message and an export. Recheck growth near each line after at least 64 KiB of update bytes. After a deletion while warning or full, timed recovery can measure sooner, two seconds after the last measure. Large edits, retained items and pending peer updates can carry the exact size beyond that tolerance. Refuse every local write at the measured 105% ceiling. | Deleting does not free space on your own copy until the script is reopened, and kept records still take space. Export is the way out. |
 | Two crossing tags | The second shows on its letters outside the first (E6) | Part of the second tag looks absent |
 | What counts as pending work for the notice | The person's own journal (E12); no client can observe a "last state both had" moment (E13). Under decision 19 an entry is cleared by the server's built-in "applied" status, which means applied in memory only, and not reliably: it is also sent when applying threw or the update waits on missing dependencies (plan, "Durability receipts"). An edit lost by a server stop after that status leaves no entry, so the notice cannot list it. Only a journal commit in `beforeSync`, as the plan requires, would make the status mean stored | Fewer false cards for someone who was idle. With kept records: journal 46 false banners of 325 and 26 misses of 238; ideal base 64 and 25 of 238; both miss 16 of 30 generated split-and-move losses; counting an edit stored on a hidden row as kept, false banners rise to 87 and 103 (E16) |
 | Words already shown in the row above when a beat is put back | As built: both show (E12) | The words appear twice; the person deletes one. After a double delete and double undo, a third copy |
 | Two people putting the same beat back | Two rows (E12) | Both rows show; someone deletes one |
 | "Undo merge" | Hidden; ordinary undo takes back a put-back (E12) | No "Undo merge" button in shared mode |
 | The first upload of a large script | Accept the built-in server's ceiling. Measured with both Hocuspocus timers raised to 180 s, not decision 16's stock settings: largest single uploads about 7.15 MB at 1 Mbit/s and 14 MB at 2; the full 15 MB script passed at 4 (E13). Under stock timers, a 5 MB offline return at 1 Mbit/s reached the server at 41.8 s; the provider then forced a disconnect at 66.1 s, and on the next connection the pending count reached zero at 67.2 s, the re-sent reply being 2 bytes because the server already had the work (E13). The documented `handleConnection` route on a host-owned listener has no such sweep, but the host then owns connection lifetime and heartbeat | Sharing a large script over a slow upload fails, and the host retries on a faster link |
-| Backups of scripts stored on the server | Not designed; proposed with slice 7 | Nothing, unless the server's store is lost |
+| Backups of scripts stored on the server | Verified daily SQLite snapshots copied off-machine. Restore drill before anyone else uses the relay | If the server's store is lost, scripts return as of the last verified backup. Changes since then are absent from the restored store |
 | Undo passing over spent steps | Library behaviour (16 in 600, E11) | A press occasionally undoes something older |
 | A person who stays online while a beat they edited is removed | Not told; no online signal is used. With kept records the beat-map signal fell from 131 to 12 banners of 325, all from undone creations, and the row-reading observer misses 92 of 192 losses (E16) | The row disappears with no message; their edits return only if the remover undoes. A tag lost that way is not flagged for them (decision 17) |
 | Hidden edits on a removed row | No route to them other than the remover's undo (E16 did not measure one) | Status, fields and visual text on a row that stays removed are stored but not reachable |
@@ -712,9 +829,9 @@ Requirements from the outside review of this note, added to the build order (sec
   limit conflicts, never discarding an update while claiming synchronization succeeded, preserving recoverable data,
   and a test where individually valid edits merge past the limit ("Validation and resource limits"). That gap is
   open.
-- **Server stops** (decision 19): stop the server inside the 2 to 10 s store window; show what is lost and whether
-  reconnecting copies restore it. The plan's receipt checker and kill-before-and-after-receipt tests apply only if
-  these tests call for the update journal.
+- **Server stops** (decision 19): the [six-row stop table](#server-stop-results-and-backup-runbook) covers clean
+  and killed stops before, during and after the store. The plan's receipt checker and kill-before-and-after-receipt
+  tests are deferred with the update journal.
 - **Stale targets in the editor** (E1's four commit outcomes: written, unchanged, moved to the beat's live cell, or
   handed to a recovery list): IME composition and plain buffered typing, in narration and in visual cells, with the
   target removed, replaced, restored, or hidden under rule (g). Each ends as a visible write or a recovery entry,

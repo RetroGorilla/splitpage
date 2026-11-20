@@ -13,6 +13,7 @@ export interface NativeScript {
   readonly closed: () => boolean;
   readonly close: () => void;
   readonly guardSharedCallback: (call: () => void) => void;
+  readonly sizeRefusal?: (adds?: boolean) => "full" | null;
 }
 
 interface PressObservation { readonly origin: object; changed: boolean }
@@ -69,6 +70,21 @@ export function observeNativePress<T>(script: NativeScript, origin: object, run:
 
 export function transactNativeCommand<T>(script: NativeScript, run: () => T, origin: unknown = script.origin): T {
   return withNativeCommand(script, () => script.doc.transact(run, origin));
+}
+
+export function transactPreparedNativeCommand<Input, Result>(
+  script: NativeScript,
+  prepare: () => Input,
+  write: (input: Input) => Result,
+  refuse: (reason: "full") => Result,
+  adds?: (input: Input) => boolean
+): Result {
+  const admit = script.sizeRefusal;
+  if (!admit) return transactNativeCommand(script, () => write(prepare()));
+  return withNativeCommand(script, () => {
+    const input = prepare(), reason = admit(adds?.(input));
+    return reason ? refuse(reason) : script.doc.transact(() => write(input), script.origin);
+  });
 }
 
 export function throwNativeFailures(script: NativeScript): void {
