@@ -12,6 +12,7 @@ export interface NativeScript {
   readonly busy: () => boolean;
   readonly closed: () => boolean;
   readonly close: () => void;
+  readonly guardSharedCallback: (call: () => void) => void;
 }
 
 interface PressObservation { readonly origin: object; changed: boolean }
@@ -93,7 +94,11 @@ export function openNativeScript(doc: Y.Doc): NativeScript {
   };
   state.handles.add(close);
   if (state.destroyed) close();
-  return Object.freeze({ doc, roots, reader, origin: Object.freeze({ script: doc.guid }), busy: () => state.commanding || (state.open && !state.destroyed), closed: () => closed, close });
+  return Object.freeze({
+    doc, roots, reader, origin: Object.freeze({ script: doc.guid }),
+    busy: () => state.commanding || (state.open && !state.destroyed), closed: () => closed, close,
+    guardSharedCallback: (call: () => void) => guardSharedCallback(state, call)
+  });
 }
 
 export function closeNativeScript(script: NativeScript): void {

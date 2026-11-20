@@ -45,8 +45,10 @@ function openSessionScript(source: NativeSessionSource, updated: () => void) {
     if (source.kind === "state") Y.applyUpdate(doc, source.state);
     if (source.kind === "document") convertToNativeScript(script, source.document, source.conversion);
     const undo = openNativeUndo(script);
-    doc.on("update", updated);
-    return { script, undo };
+    const { guardSharedCallback } = script;
+    const publishUpdate = () => guardSharedCallback(updated);
+    doc.on("update", publishUpdate);
+    return { script, undo, publishUpdate };
   } catch (error) {
     doc.destroy();
     throw error;
@@ -59,13 +61,13 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
   let active = false, scheduled = false, publishing = false, changed = false;
   let closing: CloseReason | null = null;
   let typing: { readonly target: NativeTextTarget; readonly endsInSpace: boolean } | null = null;
-  const { script, undo } = openSessionScript(source, updated), doc = script.doc;
+  const { script, undo, publishUpdate } = openSessionScript(source, updated), doc = script.doc;
 
   function schedule(): void {
     if (scheduled) return;
-    scheduled = true;
     // why: only after the stack unwinds can a busy flag distinguish interrupted cleanup from an active transaction
     queueMicrotask(publish);
+    scheduled = true;
   }
 
   function updated(): void {
@@ -94,7 +96,7 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
 
   function finishClose(reason: CloseReason): void {
     const state = Y.encodeStateAsUpdate(doc);
-    doc.off("update", updated);
+    doc.off("update", publishUpdate);
     undo.destroy();
     script.close();
     try { doc.destroy(); } catch {

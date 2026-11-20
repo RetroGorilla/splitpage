@@ -731,3 +731,20 @@ for (const seed of [2, 19, 73, 108]) {
     unchanged(late, late.commands.undo, UNCHANGED);
   });
 }
+
+test("an update scheduling failure leaves cleanup complete and is reported before the next write", async t => {
+  const session = fromDocument(), changes: NativeSessionChange[] = [];
+  t.after(session.close);
+  session.subscribe(change => changes.push(change));
+  const failure = new Error("scheduling failed");
+  const schedule = t.mock.method(globalThis, "queueMicrotask", () => { throw failure; });
+  type(session, 0, "x");
+  schedule.mock.restore();
+  const before = session.encodeState();
+  assert.throws(() => session.commands.setField(status, "ready"), failure);
+  assert.deepEqual(session.encodeState(), before);
+  type(session, 1, "y");
+  await Promise.resolve();
+  assert.deepEqual(changes, [{ kind: "changed" }]);
+  assert.equal(session.document().rows[0]?.audioText, "xya");
+});
