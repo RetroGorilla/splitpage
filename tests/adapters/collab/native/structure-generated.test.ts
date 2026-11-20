@@ -69,7 +69,7 @@ function storedLetters(script: NativeScript): string[] {
 
 interface Counts {
   commands: number; written: number; unchanged: number; refused: number;
-  letters: number; shown: number; twice: number; unplaced: number; deleted: number; notDeleted: number; lost: number;
+  letters: number; shown: number; twice: number; storedTwice: number; unplaced: number; deleted: number; notDeleted: number; lost: number;
   records: number; shownRows: number; keptRows: number; vanished: number; missingParts: number;
   visualLetters: number; visualStored: number; visualOnHidden: number; joinsOnHidden: number; mutedExpected: number;
 }
@@ -78,7 +78,7 @@ function history(seed: number, options: Options = {}): Counts {
   const chance = random(seed), pick = <T>(list: readonly T[]): T => list[Math.floor(chance() * list.length)] as T;
   const { net, all } = copiesOf(structureScript(ROWS, VISUALS, [{ id: "H", name: "Scene", before: "R4" }]), [2, 3, 4]);
   const counts: Counts = {
-    commands: 0, written: 0, unchanged: 0, refused: 0, letters: 0, shown: 0, twice: 0, unplaced: 0, deleted: 0, notDeleted: 0, lost: 0,
+    commands: 0, written: 0, unchanged: 0, refused: 0, letters: 0, shown: 0, twice: 0, storedTwice: 0, unplaced: 0, deleted: 0, notDeleted: 0, lost: 0,
     records: 0, shownRows: 0, keptRows: 0, vanished: 0, missingParts: 0, visualLetters: 0, visualStored: 0, visualOnHidden: 0, joinsOnHidden: 0, mutedExpected: 0
   };
   const letters = new Set(Object.values(ROWS).join("")), visualLetters = new Set<string>(), deletions = new Map<string, number[]>();
@@ -148,6 +148,7 @@ function history(seed: number, options: Options = {}): Counts {
     const times = shownLetters.filter(ch => ch === value).length, kept = stored.includes(value);
     const by = deletions.get(value) ?? [];
     if (times > 1) counts.twice++;
+    if (stored.filter(ch => ch === value).length > 1) counts.storedTwice++;
     if (leftovers.includes(value) && by.every(command => command === options.mute?.command)) counts.mutedExpected++;
     if (kept && by.length) counts.notDeleted++;
     else if (times) counts.shown++;
@@ -199,7 +200,7 @@ test("generated row commands on three copies: every command checks locally, copi
   const totals: Record<string, number> = {};
   for (let seed = 1; seed <= SEEDS; seed++) for (const [key, value] of Object.entries(history(seed))) totals[key] = (totals[key] ?? 0) + value;
   t.diagnostic(JSON.stringify(totals));
-  assert.deepEqual([totals.twice, totals.notDeleted, totals.lost, totals.vanished, totals.missingParts], [0, 0, 0, 0, 0], JSON.stringify(totals));
+  assert.deepEqual([totals.twice, totals.storedTwice, totals.notDeleted, totals.lost, totals.vanished, totals.missingParts], [0, 0, 0, 0, 0, 0], JSON.stringify(totals));
   const total = (key: string): number => totals[key] ?? 0;
   assert.equal(total("shown") + total("unplaced") + total("deleted"), total("letters"));
   assert.equal(total("shownRows") + total("keptRows"), total("records"));

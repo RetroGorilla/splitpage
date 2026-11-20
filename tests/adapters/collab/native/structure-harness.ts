@@ -80,6 +80,7 @@ export function storedOf(script: NativeScript): string {
   }).join("")).join(" | ");
 }
 
-export function stateOf(script: NativeScript): Uint8Array {
-  return Y.encodeStateVector(script.doc);
+// why: the full update as well as the state vector, since a write that only deletes leaves the vector unchanged
+export function stateOf(script: NativeScript): { readonly vector: Uint8Array; readonly update: Uint8Array } {
+  return { vector: Y.encodeStateVector(script.doc), update: Y.encodeStateAsUpdate(script.doc) };
 }

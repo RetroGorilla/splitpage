@@ -121,19 +121,31 @@ test("a split copies no rank from a rankless parent and refuses a rank another c
   const created = split(copy, "B", 1);
   assert.deepEqual(copy.roots.beats.get(created)?.toJSON(), {});
   assert.deepEqual(rowsOf(copy), ["A: abc", "B: d", `${created}: ef`]);
-  copy.doc.transact(() => { copy.roots.beats.get("A")?.set("rank", "a\ud800"); });
-  const before = stateOf(copy);
-  assert.deepEqual(splitNativeRow(copy, caret(copy, "A", 1)), { kind: "refused", reason: "stored" });
+  for (const rank of ["a\ud800", 7, { a: 1 }, null]) {
+    copy.doc.transact(() => { copy.roots.beats.get("A")?.set("rank", rank); });
+    const before = stateOf(copy);
+    assert.deepEqual(splitNativeRow(copy, caret(copy, "A", 1)), { kind: "refused", reason: "stored" }, JSON.stringify(rank));
+    assert.deepEqual(stateOf(copy), before);
+  }
+});
+
+test("a split refuses an empty or malformed target id as missing, writing nothing", () => {
+  const copy = one({ A: "abc" }), at = caret(copy, "A", 1), before = stateOf(copy);
+  for (const beat of ["", "\ud800"]) {
+    assert.deepEqual(splitNativeRow(copy, { ...at, target: { beat, cell: "narration" } }), { kind: "refused", reason: "missing" }, JSON.stringify(beat));
+  }
   assert.deepEqual(stateOf(copy), before);
 });
 
-test("a split refuses an id already taken by a record or visual cell, writing nothing", () => {
-  const copy = one({ A: "abc" });
-  const clock = Y.decodeStateVector(Y.encodeStateVector(copy.doc)).get(copy.doc.clientID) ?? 0;
-  copy.doc.transact(() => { copy.roots.visuals.set(`r2-${(clock + 1).toString(36)}`, new Y.Text()); }, "remote");
-  const before = stateOf(copy);
-  assert.deepEqual(splitNativeRow(copy, caret(copy, "A", 1)), { kind: "refused", reason: "taken" });
-  assert.deepEqual(stateOf(copy), before);
+test("a split refuses an id already taken by a record or by a visual cell, writing nothing", () => {
+  for (const root of ["beats", "visuals"] as const) {
+    const copy = one({ A: "abc" });
+    const clock = Y.decodeStateVector(Y.encodeStateVector(copy.doc)).get(copy.doc.clientID) ?? 0, id = `r2-${(clock + 1).toString(36)}`;
+    copy.doc.transact(() => { if (root === "beats") copy.roots.beats.set(id, new Y.Map()); else copy.roots.visuals.set(id, new Y.Text()); }, "remote");
+    const before = stateOf(copy);
+    assert.deepEqual(splitNativeRow(copy, caret(copy, "A", 1)), { kind: "refused", reason: "taken" }, root);
+    assert.deepEqual(stateOf(copy), before);
+  }
 });
 
 test("the split boundary carries the formatting in force at its place, so the split writes no formatting change", () => {
@@ -170,6 +182,22 @@ test("an unjoin and a join made at once on two copies: the join stays, as Yjs ke
     net.settle();
     assert.deepEqual(a.roots.beats.get("B")?.get("joined"), { into: "A", glue: "" });
     net.agree();
+  }
+});
+
+test("an unjoin and a rejoin with the same glue made at once: the rejoin is unchanged and writes nothing, so the unjoin wins", () => {
+  for (const clients of [[2, 3], [3, 2]]) {
+    const { net, all: [a, b] } = copiesOf(structureScript({ A: "abc", B: "def" }), clients);
+    assert.ok(a && b);
+    join(a, "B", "A", " ");
+    net.settle();
+    const before = stateOf(b);
+    unjoin(a, "B");
+    assert.deepEqual(joinNativeRow(b, "B", "A", " "), { kind: "unchanged" });
+    assert.deepEqual(stateOf(b), before);
+    net.settle();
+    assert.equal(a.roots.beats.get("B")?.has("joined"), false);
+    assert.deepEqual(net.agree(), ["A: abc / ", "B: def / "]);
   }
 });
 
@@ -226,11 +254,12 @@ test("removal refuses the whole command, writing nothing, when any row is missin
 });
 
 test("every row command refuses inside another open transaction, and on a closed script, writing nothing", () => {
-  const copy = one({ A: "abc", B: "def" }), at = caret(copy, "B", 1), outcomes: string[] = [];
+  const copy = one({ A: "abc", B: "def" }), at = caret(copy, "B", 1), outcomes: unknown[] = [], open = stateOf(copy);
   copy.doc.transact(() => {
-    outcomes.push(splitNativeRow(copy, at).kind, joinNativeRow(copy, "B", "A", " ").kind, unjoinNativeRow(copy, "B").kind, removeNativeRows(copy, ["B"]).kind);
+    outcomes.push(splitNativeRow(copy, at), joinNativeRow(copy, "B", "A", " "), unjoinNativeRow(copy, "B"), removeNativeRows(copy, ["B"]));
   });
-  assert.deepEqual(outcomes, ["refused", "refused", "refused", "refused"]);
+  assert.deepEqual(outcomes, Array(4).fill({ kind: "refused", reason: "busy" }));
+  assert.deepEqual(stateOf(copy), open);
   assert.deepEqual([splitNativeRow(copy, at), joinNativeRow(copy, "B", "A", " ")].map(outcome => outcome.kind === "refused" ? outcome.reason : outcome.kind), ["written", "written"]);
   copy.reader.refresh();
   closeNativeScript(copy);
@@ -245,4 +274,45 @@ test("removal reads the caller's list once: an id it throws on reading refuses b
   Object.defineProperty(list, 1, { get: () => { throw new Error("read"); }, enumerable: true });
   assert.deepEqual(removeNativeRows(copy, list), { kind: "refused", reason: "missing" });
   assert.deepEqual(stateOf(copy), before);
+});
+
+test("removal copies the caller's list by index: its own iterator never runs, so a row not in the list is never removed", () => {
+  const copy = one({ A: "abc", B: "def" }), before = stateOf(copy);
+  const ids = ["A", "Q"];
+  ids[Symbol.iterator] = function* (): Generator<string> { yield "B"; };
+  assert.deepEqual(removeNativeRows(copy, ids), { kind: "refused", reason: "missing" });
+  assert.deepEqual(stateOf(copy), before);
+  const alone = ["B"];
+  alone[Symbol.iterator] = function* (): Generator<string> { yield "A"; };
+  assert.deepEqual(removeNativeRows(copy, alone), { kind: "written" });
+  copy.reader.refresh();
+  assert.deepEqual(rowsOf(copy), ["A: abc"]);
+});
+
+test("a caller getter that closes the script makes the command refuse as closed, writing nothing, for removal and split", () => {
+  const removal = one({ A: "abc", B: "def" }), list = ["B"], before = stateOf(removal);
+  Object.defineProperty(list, 0, { get: () => { closeNativeScript(removal); return "A"; }, enumerable: true });
+  assert.deepEqual(removeNativeRows(removal, list), { kind: "refused", reason: "closed" });
+  assert.deepEqual(stateOf(removal), before);
+  const splitting = one({ A: "abc" }), at = caret(splitting, "A", 1), held = stateOf(splitting);
+  const range = { from: at.from, to: at.to, get target() { closeNativeScript(splitting); return at.target; } };
+  assert.deepEqual(splitNativeRow(splitting, range), { kind: "refused", reason: "closed" });
+  assert.deepEqual(stateOf(splitting), held);
+});
+
+test("a caller getter that runs its own removal: that removal is its own command, and the outer one judges the document as it now is", () => {
+  const throwing = one({ A: "abc", B: "def", C: "ghi" }), list = ["A"];
+  Object.defineProperty(list, 0, { get: () => { assert.equal(removeNativeRows(throwing, ["C"]).kind, "written"); throw new Error("read"); }, enumerable: true });
+  let transactions = 0;
+  throwing.doc.on("afterTransaction", () => { transactions++; });
+  assert.deepEqual(removeNativeRows(throwing, list), { kind: "refused", reason: "missing" });
+  throwing.reader.refresh();
+  assert.equal(transactions, 1);
+  assert.deepEqual(rowsOf(throwing), ["A: abc", "B: def"]);
+  assert.equal(storedOf(throwing), "[A]abc[B]def");
+  const returning = one({ A: "abc", B: "def", C: "ghi" }), again = ["C", "B"];
+  Object.defineProperty(again, 0, { get: () => { assert.equal(removeNativeRows(returning, ["C"]).kind, "written"); return "C"; }, enumerable: true });
+  assert.deepEqual(removeNativeRows(returning, again), { kind: "refused", reason: "missing" });
+  returning.reader.refresh();
+  assert.deepEqual(rowsOf(returning), ["A: abc", "B: def"]);
 });

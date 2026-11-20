@@ -6,7 +6,7 @@ import { formatNativeText } from "../../../../src/adapters/collab/native/format-
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import { joinNativeRow, removeNativeRows, splitNativeRow, unjoinNativeRow } from "../../../../src/adapters/collab/native/structure-commands.ts";
 import { anchorNativeText, replaceNativeText, typeNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
-import type { NativeTextTarget } from "../../../../src/adapters/collab/native/text-commands.ts";
+import type { NativeTextRange, NativeTextTarget } from "../../../../src/adapters/collab/native/text-commands.ts";
 import type { Delivery, ScriptNet } from "./helpers.ts";
 import { caret, copiesOf, join, press, remove, rowsOf, split, stateOf, storedOf, structureScript } from "./structure-harness.ts";
 
@@ -165,10 +165,19 @@ test("E14: a join or unjoin made unseen on a removed row is stored in its kept r
 });
 
 test("E11: a row removed while another copy types in it, then two same-moment splits at the next row's start, store the letter once", () => {
+  const copies: NativeScript[] = [];
   const readings = runs(({ net, a, b }) => {
+    copies.push(a);
     remove(a, "A"); typeIn(b, narration("A"), 1, "Ψ"); net.settle();
     split(a, "B", 0); split(b, "B", 0);
   });
+  for (const copy of copies) {
+    const head = copy.roots.segments.get("b:A")?.get("text");
+    assert.ok(head instanceof Y.Text);
+    assert.equal(head.toString().charAt(0), "Ψ");
+    assert.match(storedOf(copy), /^Ψ\[/);
+    assert.equal(storedOf(copy).split("Ψ").length - 1, 1, storedOf(copy));
+  }
   for (const reading of readings) {
     assert.equal(reading.join(" ").split("Ψ").length - 1, 0, "the letter reads only as unplaced text before slice 3b's rule (a)");
     assert.ok(reading.includes("unplaced b:A no-head 1"), reading.join(" | "));
@@ -178,9 +187,10 @@ test("E11: a row removed while another copy types in it, then two same-moment sp
 
 // why: design section 10 and appendix N: Alice splits B at its start, Bob removes the new row, Alice undoes her split
 // and Bob undoes his removal, which brings back N's boundary and narration without its record or visual cell
-function fourSteps(world: World): string {
+function fourSteps(world: World, whileLive?: (created: string) => void): string {
   const { net, a, b, undoA, undoB } = world;
   const created = split(a, "B", 0);
+  whileLive?.(created);
   net.settle();
   remove(b, created); net.settle();
   press(undoA, a); net.settle();
@@ -200,20 +210,36 @@ test("E17's command table on the four-step state: every command aimed at the hid
   for (const clients of CLIENTS) {
     const { net, all: [a, b], undo: [undoA, undoB] } = copiesOf(BASE, clients);
     assert.ok(a && b && undoA && undoB);
-    const stale = { split: caret(a, "B", 1), text: anchorNativeText(a, narration("B"), 1, 2) };
-    assert.ok(stale.text.kind === "anchored");
-    const n = fourSteps({ net, a, b, undoA, undoB });
+    const inB = { caret: caret(a, "B", 1), range: anchorNativeText(a, narration("B"), 1, 2) };
+    assert.ok(inB.range.kind === "anchored");
+    let inN: { caret: NativeTextRange; range: NativeTextRange } | null = null;
+    const n = fourSteps({ net, a, b, undoA, undoB }, created => {
+      const range = anchorNativeText(a, narration(created), 0, 2);
+      assert.ok(range.kind === "anchored");
+      inN = { caret: caret(a, created, 1), range: range.range };
+    });
+    const live = inN as { caret: NativeTextRange; range: NativeTextRange } | null;
+    assert.ok(live);
     assert.match(storedOf(a), new RegExp(`^\\[A\\]abc\\[B\\]\\[${n}\\]def\\[C\\]`));
     const before = stateOf(a), aimed: Record<string, unknown> = {
-      "split N": splitNativeRow(a, stale.split), "anchor in N": anchorNativeText(a, narration(n), 0).kind, "anchor in N's visual": anchorNativeText(a, visual(n), 0).kind,
-      "type in N with a stale range": replaceNativeText(a, stale.text.range, [{ text: "x", marks: {} }]).kind,
-      "bold N with a stale range": formatNativeText(a, stale.text.range, { kind: "plain", mark: "b", on: true }),
+      "split with a caret anchored in B before the steps": splitNativeRow(a, inB.caret),
+      "split with a caret anchored in N while it was live": splitNativeRow(a, live.caret),
+      "anchor in N": anchorNativeText(a, narration(n), 0).kind, "anchor in N's visual": anchorNativeText(a, visual(n), 0).kind,
+      "type with a range anchored in B before the steps": replaceNativeText(a, inB.range.range, [{ text: "x", marks: {} }]).kind,
+      "type with a range anchored in N while it was live": replaceNativeText(a, live.range, [{ text: "x", marks: {} }]).kind,
+      "bold with a range anchored in B before the steps": formatNativeText(a, inB.range.range, { kind: "plain", mark: "b", on: true }),
+      "bold with a range anchored in N while it was live": formatNativeText(a, live.range, { kind: "plain", mark: "b", on: true }),
       "join N up to B": joinNativeRow(a, n, "B", " "), "join C up to N": joinNativeRow(a, "C", n, " "), "unjoin N": unjoinNativeRow(a, n), "remove N": removeNativeRows(a, [n]),
       "remove B and N": removeNativeRows(a, ["B", n])
     };
     assert.deepEqual(aimed, {
-      "split N": { kind: "refused", reason: "range" }, "anchor in N": "refused", "anchor in N's visual": "refused", "type in N with a stale range": "recovery",
-      "bold N with a stale range": { kind: "refused", reason: "range" }, "join N up to B": { kind: "refused", reason: "missing" }, "join C up to N": { kind: "refused", reason: "missing" },
+      "split with a caret anchored in B before the steps": { kind: "refused", reason: "range" },
+      "split with a caret anchored in N while it was live": { kind: "refused", reason: "missing" },
+      "anchor in N": "refused", "anchor in N's visual": "refused",
+      "type with a range anchored in B before the steps": "recovery", "type with a range anchored in N while it was live": "recovery",
+      "bold with a range anchored in B before the steps": { kind: "refused", reason: "range" },
+      "bold with a range anchored in N while it was live": { kind: "refused", reason: "missing" },
+      "join N up to B": { kind: "refused", reason: "missing" }, "join C up to N": { kind: "refused", reason: "missing" },
       "unjoin N": { kind: "refused", reason: "missing" }, "remove N": { kind: "refused", reason: "missing" }, "remove B and N": { kind: "refused", reason: "missing" }
     }, `clients ${clients.join(",")}`);
     assert.deepEqual(stateOf(a), before);
