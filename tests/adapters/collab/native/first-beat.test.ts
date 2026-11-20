@@ -1,6 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import * as Y from "yjs";
+import { declareNativeRoots } from "../../../../src/adapters/collab/native/roots.ts";
 import { openNativeSession } from "../../../../src/adapters/collab/native/session.ts";
+import type { NativeUndoSelectionInput } from "../../../../src/adapters/collab/native/text-commands.ts";
 import { compoundSeed, settleCompound } from "./compound-harness.ts";
 import { noticeCopy, noticeDeliver, noticeRange } from "./notice-harness.ts";
 
@@ -14,6 +17,10 @@ test("first beat without narration uses one update and one undo step", t => {
     assert.deepEqual(commands.createFirstBeat(invalid as string), { kind: "refused", reason: "text" });
     assert.deepEqual(copy.encodeState(), before);
   }
+  const oddSelection = { get anchor() { copy.close(); return undefined; }, head: undefined };
+  assert.deepEqual(commands.createFirstBeat.withSelection(oddSelection as unknown as NativeUndoSelectionInput).result,
+    { kind: "refused", reason: "range" });
+  assert.deepEqual(copy.encodeState(), before);
   const first = commands.createFirstBeat();
   assert.equal(first.kind, "written");
   assert.equal(updates, 1);
@@ -33,10 +40,15 @@ test("first beat adopts rule (b) narration without moving the stored letters", t
   assert.equal(writer.commands.removeRows(["A"]).kind, "written");
   assert.equal(peer.commands.typeText(noticeRange(peer, "A", "narration", 1), "stray", {}).kind, "written");
   settleCompound(writer, peer, ["stray"]);
+  const roots = declareNativeRoots(writer.ydoc), segment = roots.order.get(0);
+  const original = roots.segments.get(segment)?.get("text");
+  assert.ok(original instanceof Y.Text);
   const first = writer.commands.createFirstBeat("new");
   assert.equal(first.kind, "written");
   settleCompound(peer, writer, ["straynew"]);
   assert.equal(writer.document().rows[0]?.id, first.created);
+  assert.equal(roots.segments.get(segment)?.get("text"), original);
+  assert.equal(original.toString(), "stray");
   assert.equal(writer.commands.undo().kind, "written");
   settleCompound(writer, peer, ["stray"]);
   assert.equal(writer.commands.redo().kind, "written");

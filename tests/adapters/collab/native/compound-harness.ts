@@ -2,7 +2,8 @@ import assert from "node:assert/strict";
 import * as Y from "yjs";
 import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
 import { convertedScript } from "./helpers.ts";
-import { noticeCopy, noticeDeliver } from "./notice-harness.ts";
+import { noticeDeliver } from "./notice-harness.ts";
+import type { noticeCopy } from "./notice-harness.ts";
 import { structureScript } from "./structure-harness.ts";
 
 type Copy = ReturnType<typeof noticeCopy>;

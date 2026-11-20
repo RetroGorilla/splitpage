@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { openNativeSession } from "../../../../src/adapters/collab/native/session.ts";
 import type { NativeTextRange } from "../../../../src/adapters/collab/native/text-commands.ts";
 import { compoundSeed, settleCompound } from "./compound-harness.ts";
 import { noticeCopy, noticeDeliver, noticeRange } from "./notice-harness.ts";
@@ -71,6 +72,18 @@ test("a selection proxy that closes the session leaves the serialized state alon
   t.after(copy.close);
   const closing = new Proxy(valid, { ownKeys(target) { copy.close(); return Reflect.ownKeys(target); } });
   assert.deepEqual(copy.commands.deleteAndSplit(closing), { kind: "refused", reason: "closed" });
+  assert.deepEqual(copy.encodeState(), state);
+});
+
+test("a full session refuses the entire delete and split before a transaction starts", t => {
+  const copy = openNativeSession({ kind: "state", state: compound }, { actor: "writer", sanitize: String, sizeLimit: compound.length });
+  t.after(copy.close);
+  assert.equal(copy.size, "full");
+  const selection = at(copy, 1, 4), state = copy.encodeState();
+  let transactions = 0;
+  copy.ydoc.on("beforeTransaction", () => { transactions++; });
+  assert.deepEqual(copy.commands.deleteAndSplit(selection), { kind: "refused", reason: "full" });
+  assert.equal(transactions, 0);
   assert.deepEqual(copy.encodeState(), state);
 });
 

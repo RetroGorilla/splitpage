@@ -23,7 +23,7 @@ import type { NativeScript } from "./script.ts";
 import { createNativeSizeTracker, resolveNativeSizeOptions } from "./size.ts";
 import type { NativeSessionSize, NativeSizeOptions } from "./size.ts";
 import { deleteAndSplitNativeRow, joinNativeRow, removeNativeRows, splitNativeRow, unjoinNativeRow } from "./structure-commands.ts";
-import { anchorNativeText, deleteNativeText, replaceNativeText, resolveNativeTextPoint, typeNativeText } from "./text-commands.ts";
+import { anchorNativeText, deleteNativeText, replaceAllNativeText, replaceNativeText, resolveNativeTextPoint, typeNativeText } from "./text-commands.ts";
 import type { NativeEditStamp, NativeTextPlacement, NativeTextRange, NativeTextTarget, NativeUndoSelectionInput } from "./text-commands.ts";
 import { openNativeUndo } from "./undo-commands.ts";
 import type { NativeUndoOutcome } from "./undo-commands.ts";
@@ -245,9 +245,9 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
   }
 
   function bindCompound<Args extends unknown[], Result extends { readonly created?: string; readonly kind: string }>(
-    command: (script: NativeScript, ...args: Args) => Result | typeof COMPOUND_RANGE_REFUSAL, journalMode: "edit" | "split" = "edit"
+    command: (script: NativeScript, ...args: Args) => Result, journalMode: "edit" | "split" = "edit"
   ) {
-    return bind(command, compoundWriting, true, journalMode, () => COMPOUND_RANGE_REFUSAL);
+    return bind<Args, Result | typeof COMPOUND_RANGE_REFUSAL>(command, compoundWriting, true, journalMode, () => COMPOUND_RANGE_REFUSAL);
   }
 
   function press(direction: "undo" | "redo"): NativeUndoOutcome {
@@ -273,6 +273,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
       }, undo.typingRecorder, placement), writing, false),
     replaceText: bind((script: NativeScript, range: NativeTextRange, runs: readonly Run[], stamp?: NativeEditStamp, placement?: NativeTextPlacement) =>
       replaceNativeText(script, range, runs, stamp, undefined, undefined, undefined, placement), writing),
+    replaceAll: bindCompound(replaceAllNativeText),
     deleteText: bind(deleteNativeText, writing),
     formatText: bind(formatNativeText, adding),
     splitRow: bind(splitNativeRow, adding, true, "split"),
