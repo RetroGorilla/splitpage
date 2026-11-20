@@ -192,6 +192,7 @@ Each command is one transaction.
 | Bold and other plain kinds | `format` with the plain key, `true` or `null` |
 | Tag, untag | A fresh application key; untag sets `null` on the keys seen. No re-keying |
 | Split | Boundary, record copying the parent's rank, visual cell. Never narration |
+| Create first beat | Reuse put-back to write a fresh segment, beat record, rank and cells if no beat is shown. Rule (b) letters stay in their original segments and the reader assigns them to the new beat |
 | Join, unjoin | Set or delete `joined` on the lower beat |
 | Remove beats | The observed text with its boundary (or `head`); the records, visual cells and segment stay |
 | Create, rename, remove heading | Boundary or segment, record, rank, name cell; rename edits the name cell; remove sets `removed` |
@@ -642,6 +643,7 @@ E11, 600 generated histories, names in cells, unless marked:
 | Two people edit the gallery of the same beat at once | One writer's whole gallery survives and stays intact on core reload, even when the writers edited different gallery fields |
 | Someone restores a registry entry before receiving another person's removal | The entry disappears again when the unseen removal arrives. Restoring it again brings back its fields |
 | Two people change one registry value at the same moment and the winner undoes | The value falls back to its default until someone sets it again. Rankless entries appear first in ID order and a move gives them a rank |
+| Two people create the first beat at the same moment | Both beats and their text stay. The tied ranks follow stored order, and any rule (b) letters are assigned by the reader |
 
 Also, with no text lost: plain bold in E4's 60 two-copy trials, 72 letters missing bold at merge and 34 left bold
 after an undo; text composed beside a deleted letter landing across a same-moment insertion, 25 of 20,000 (E1); two

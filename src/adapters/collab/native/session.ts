@@ -11,7 +11,7 @@ import { convertToNativeScript } from "./convert.ts";
 import type { NativeConversionPorts } from "./convert.ts";
 import { formatNativeText } from "./format-commands.ts";
 import { createNativeHeading, removeNativeHeading, renameNativeHeading, restoreNativeHeading } from "./heading-commands.ts";
-import { putBackNativeBeat } from "./insert-commands.ts";
+import { createFirstNativeBeat, putBackNativeBeat } from "./insert-commands.ts";
 import { compareNativeOfflineNotice } from "./offline-notice.ts";
 import { openNativePendingEdits } from "./pending-edits.ts";
 import type { NativePendingEditsData } from "./pending-edits.ts";
@@ -252,6 +252,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
   }
 
   const commands = Object.freeze({
+    createFirstBeat: bind(createFirstNativeBeat, adding),
     anchorText: bindCommand(anchorNativeText, script, false, "none").run,
     typeText: bind((script: NativeScript, range: NativeTextRange, text: string, marks: Marks, stamp?: NativeEditStamp, placement?: NativeTextPlacement) =>
       typeNativeText(script, range, text, marks, stamp, target => {
