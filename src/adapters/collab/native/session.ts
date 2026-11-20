@@ -23,7 +23,7 @@ import { createNativeSizeTracker, resolveNativeSizeOptions } from "./size.ts";
 import type { NativeSessionSize, NativeSizeOptions } from "./size.ts";
 import { joinNativeRow, removeNativeRows, splitNativeRow, unjoinNativeRow } from "./structure-commands.ts";
 import { anchorNativeText, deleteNativeText, replaceNativeText, typeNativeText } from "./text-commands.ts";
-import type { NativeEditStamp, NativeTextRange, NativeTextTarget } from "./text-commands.ts";
+import type { NativeEditStamp, NativeTextRange, NativeTextTarget, NativeUndoSelectionInput } from "./text-commands.ts";
 import { openNativeUndo } from "./undo-commands.ts";
 import type { NativeUndoOutcome } from "./undo-commands.ts";
 import { NATIVE_FORMAT_VERSION } from "./roots.ts";
@@ -181,11 +181,17 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     return size.atCeiling ? "full" : null;
   }
 
-  function bind<Args extends unknown[], Result extends { readonly kind: string; readonly created?: string }>(
-    command: (script: NativeScript, ...args: Args) => Result, commandScript: NativeScript, separate = true,
-    journalMode: "none" | "edit" | "split" = "edit"
+  function endTypingGroup(): void {
+    if (refusal()) return;
+    typing = null;
+    undo.stopCapturing();
+  }
+
+  function bindCommand<Args extends unknown[], Result extends { readonly created?: string; readonly kind: string }>(
+    command: (script: NativeScript, ...args: Args) => Result, commandScript: NativeScript, separate: boolean,
+    journalMode: "none" | "edit" | "split"
   ) {
-    return (...args: Args): Result => {
+    function run(args: Args, capture?: (write: (prepareWrite: () => void) => Result) => Result): Result {
       const reason = refusal();
       if (reason) {
         // why: reentry during argument copying must keep each command's own refusal shape
@@ -197,11 +203,38 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
           undo.stopCapturing();
         }
         if (journalMode !== "none") journal?.sync();
-        const result = command(commandScript, ...args);
+        const result = capture ? capture(prepareWrite => command({ ...commandScript, prepareWrite }, ...args))
+          : command(commandScript, ...args);
         if (journalMode !== "none") journal?.sync(result.created ? { created: result.created, split: journalMode === "split" } : {});
         return result;
       });
+    }
+    return {
+      run: (...args: Args) => run(args),
+      withSelection(before: NativeUndoSelectionInput | null, ...args: Args) {
+        let finish: ((after?: NativeUndoSelectionInput | null) => void) | undefined;
+        const result = run(args, write => {
+          const recorded = undo.captureSelection(before, write);
+          finish = recorded.recordAfter;
+          return recorded.result;
+        });
+        return Object.freeze({
+          result,
+          recordAfter(after?: NativeUndoSelectionInput | null): void {
+            const record = finish;
+            if (record && !refusal()) perform(() => record(after));
+          }
+        });
+      }
     };
+  }
+
+  function bind<Args extends unknown[], Result extends { readonly created?: string; readonly kind: string }>(
+    command: (script: NativeScript, ...args: Args) => Result, commandScript: NativeScript, separate = true,
+    journalMode: "edit" | "split" = "edit"
+  ) {
+    const { run, withSelection } = bindCommand(command, commandScript, separate, journalMode);
+    return Object.freeze(Object.assign(run, { withSelection }));
   }
 
   function press(direction: "undo" | "redo"): NativeUndoOutcome {
@@ -217,13 +250,13 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
   }
 
   const commands = Object.freeze({
-    anchorText: bind(anchorNativeText, script, false, "none"),
+    anchorText: bindCommand(anchorNativeText, script, false, "none").run,
     typeText: bind((script: NativeScript, range: NativeTextRange, text: string, marks: Marks, stamp?: NativeEditStamp) =>
       typeNativeText(script, range, text, marks, stamp, target => {
         const previous = typing?.target.beat === target.beat && typing.target.cell === target.cell ? typing : null;
         if (!previous || !continuesSharedTypingWord(previous.endsInSpace, text)) undo.stopCapturing();
         typing = { target, endsInSpace: text ? /\s$/.test(text) : previous?.endsInSpace ?? false };
-      }), writing, false),
+      }, undo.typingRecorder), writing, false),
     replaceText: bind((script: NativeScript, range: NativeTextRange, runs: readonly Run[], stamp?: NativeEditStamp) =>
       replaceNativeText(script, range, runs, stamp), writing),
     deleteText: bind(deleteNativeText, writing),
@@ -252,6 +285,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
 
   return Object.freeze({
     commands,
+    endTypingGroup,
     // why: peers apply updates directly between commands. Applying one from a transaction listener is unsupported
     // because Yjs can fold it into local undo
     ydoc: doc,

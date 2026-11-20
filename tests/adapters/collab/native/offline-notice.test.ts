@@ -52,6 +52,31 @@ test("only local written commands enter the journal and only a returning copy ge
   }
 });
 
+test("a command with selection is journaled once and recording the after selection does not write", () => {
+  const writer = noticeCopy(noticeSeed(base), 2, true);
+  try {
+    const journal = writer.pendingEdits;
+    assert.ok(journal);
+    const before = noticeRange(writer, "B", "narration", 1);
+    const step = writer.commands.typeText.withSelection(before, before, "x", {});
+    assert.equal(step.result.kind, "written");
+    const data = journal.data(), bytes = writer.encodeState();
+    assert.equal(data.through, 1);
+    assert.deepEqual(data.entries.map(entry => [entry.id, entry.first, entry.last, entry.after && text(entry.after)]),
+      [["B", 1, 1, "dxef"]]);
+
+    step.recordAfter(noticeRange(writer, "B", "narration", 0));
+    assert.deepEqual(journal.data(), data);
+    assert.deepEqual(writer.encodeState(), bytes);
+    assert.equal(writer.commands.undo().kind, "written");
+    const redo = writer.commands.redo();
+    assert.equal(redo.kind, "written");
+    const point = { target: before.target, offset: 0 };
+    assert.deepEqual(redo.selection, { anchor: point, head: point });
+    assert.equal(journal.data().through, 3);
+  } finally { writer.close(); }
+});
+
 test("a full session refuses a field write and put-back without changing its bytes or journal", () => {
   const state = noticeSeed(base);
   const copy = openNativeSession({ kind: "state", state }, {
@@ -574,8 +599,11 @@ test("a restored creation stays pending past a receipt through its undo", () => 
     assert.ok(journal);
     const removed = journal.data().entries[0]?.before;
     assert.ok(removed);
-    const result = writer.commands.putBack({ ...removed, placement: { scene: null, left: null, right: null, sceneOrder: ["A"] } });
+    const { result, recordAfter } = writer.commands.putBack.withSelection(null,
+      { ...removed, placement: { scene: null, left: null, right: null, sceneOrder: ["A"] } });
     assert.equal(result.kind, "written");
+    assert.equal(journal.data().entries.find(entry => entry.id === result.created)?.created, 2);
+    recordAfter(noticeRange(writer, result.created, "narration", 0));
     assert.equal(writer.commands.undo().kind, "written");
     const throughUndo = journal.confirmationPoint();
     assert.equal(writer.commands.redo().kind, "written");
