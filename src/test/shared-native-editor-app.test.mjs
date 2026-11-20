@@ -913,6 +913,250 @@ test("Split reconciles browser input, refuses visual background drop, and restor
   assert.equal(beforeInput(cell("audioText"), "insertText", "x"), false);
 });
 
+for (const [name, peerEnd, to, direction, expected] of [
+  ["Backspace", 3, 4, "Backward", "Helo"],
+  ["Delete", 3, 4, "Forward", "Helo"],
+  ["replacement", 3, 4, null, "HeQlo"],
+  ["Backspace across both deleted letters", 4, 5, "Backward", "Heo"],
+  ["Backspace across one of two deleted letters", 4, 4, "Backward", "Heo"]
+]) test("a deleted end still includes pending text in " + name, async t => {
+  const show = await enter(t), target = cell("audioText");
+  target.focus();
+  setCellSelection(target, 2);
+  assert.equal(beforeInput(target, "insertText", "x"), true);
+  assert.equal(hook.nativePeer.delete("r1", 2, peerEnd).kind, "written");
+  await Promise.resolve();
+  assert.equal(target.textContent, "Hexllo");
+  if (direction) assert.equal(deleteRange(target, 2, to, direction), true);
+  else {
+    setCellSelection(target, 2, to);
+    assert.equal(beforeInput(target, "insertText", "Q"), true);
+  }
+  await flushed();
+  assert.equal(text(), expected);
+  assert.equal(hook.read().peer.rows[0].audioText, expected);
+  assert.equal(cell("audioText").textContent, expected);
+  assert.equal(show.mock.callCount(), 0);
+});
+
+test("the timer leaves a selection made after a pending key alone", async t => {
+  const { target } = await openDirect(t);
+  assert.equal(beforeInput(target, "insertText", "x"), true);
+  target.dispatchEvent(new window.KeyboardEvent("keydown", { bubbles: true, key: "a", ctrlKey: true }));
+  setCellSelection(target, 0, 15);
+  await flushed();
+  assert.equal(text(), "Capturedx words");
+  assert.deepEqual(cellSelection(target), { from: 0, to: 15 });
+});
+
+test("a deletion can cross the caret of an empty draft after a peer edit", async t => {
+  const show = await enter(t), target = cell("audioText");
+  target.focus();
+  setCellSelection(target, 2);
+  assert.equal(beforeInput(target, "insertText", "x"), true);
+  assert.equal(deleteRange(target, 2, 3), true);
+  assert.equal(hook.nativePeer.type("r1", 0, "P").kind, "written");
+  assert.equal(deleteRange(target, 2, 3, "Forward"), true);
+  await flushed();
+  assert.equal(text(), "PHelo");
+  assert.equal(hook.read().peer.rows[0].audioText, "PHelo");
+  assert.equal(show.mock.callCount(), 0);
+});
+
+test("a second cell whose paint changed during flush keeps the new key on its old preview", async t => {
+  const show = await enter(t, [{ id: "r1", audioText: "Hello" }, { id: "r2", audioText: "World" }]);
+  const first = cell("audioText"), selectSecond = () => document.querySelector('#rows .cell-editable[data-id="r2"][data-field="audioText"]');
+  first.focus();
+  setCellSelection(first, 2);
+  assert.equal(beforeInput(first, "insertText", "x"), true);
+  assert.equal(hook.nativePeer.type("r2", 0, "P").kind, "written");
+  const second = selectSecond();
+  setCellSelection(second, 2);
+  assert.equal(beforeInput(second, "insertText", "Z"), true);
+  await flushed();
+  assert.equal(selectSecond().textContent, "WoZrld");
+  for (const copy of [hook.read().app, hook.read().peer]) assert.deepEqual(copy.rows.map(row => row.audioText), ["Hexllo", "PWorld"]);
+  assert.equal(show.mock.callCount(), 1);
+  assert.deepEqual(hook.leave(), { ok: false, reason: "native-selection-stale" });
+});
+
+function inputProbe(t, options = {}) {
+  const doc = migrateRows({ title: "Native script", rows: [{ id: "r1", audioText: "Hello" }, { id: "r2", audioText: "World" }] });
+  adoptReplacement(doc);
+  const native = openNativeSession({ kind: "state", state: nativeBytes(doc) }, { actor: "Writer", sanitize: sanitizeHtml });
+  t.after(native.close);
+  const target = cell("audioText"), refuse = t.mock.fn(), order = [];
+  const resolve = t.mock.fn(options.resolve ?? native.narrationOffset);
+  const write = t.mock.fn(options.write ?? native.commands.typeText);
+  let paint;
+  const input = mountNativeSharedInput({
+    native: {
+      ...native, narrationOffset: resolve,
+      trackNarrationPaint: beat => {
+        const tracked = native.trackNarrationPaint(beat);
+        return { ...tracked, dispose: () => { order.push("dispose"); tracked.dispose(); } };
+      },
+      commands: { ...native.commands, typeText: (...args) => { order.push("write"); return write(...args); } }
+    },
+    report: assert.fail, editAttribution: () => ({ by: "Writer", at: "now" }),
+    publish: () => { options.publish?.(); paint(); },
+    session: { admit: () => null, refuse, subscribe: run => { paint = run; return () => {}; } }
+  });
+  t.after(() => { if (!options.manualDispose) input.dispose(); target.textContent = "Hello"; });
+  target.focus();
+  setCellSelection(target, 2);
+  return { input, native, target, refuse, resolve, write, order };
+}
+
+test("an inverted rebased range stops with the deletion preview visible", t => {
+  const { input, native, target, refuse } = inputProbe(t, { resolve: (_beat, _point, assoc) => assoc === -1 ? 1 : 4 });
+  assert.equal(beforeInput(target, "insertText", "x"), true);
+  assert.equal(deleteRange(target, 4, 5, "Forward"), true);
+  assert.equal(target.textContent, "Hexlo");
+  assert.equal(input.finish(), "native-selection-stale");
+  assert.equal(native.narrationHtml("r1"), "Hexllo");
+  assert.deepEqual(refuse.mock.calls.map(call => call.arguments), [["native-selection-stale"]]);
+});
+
+for (const beat of ["r1", "r2"]) test("a cell removed during flush refuses the next edit in " + beat, t => {
+  const query = () => document.querySelector('#rows .cell-editable[data-id="' + beat + '"][data-field="audioText"]');
+  const { target, native, refuse } = inputProbe(t, { publish: () => query().closest(".row").remove() });
+  assert.equal(beforeInput(target, "insertText", "x"), true);
+  if (beat === "r1") assert.equal(deleteRange(target, 3, 4), true);
+  else {
+    const second = query();
+    setCellSelection(second, 2);
+    assert.equal(beforeInput(second, "insertText", "Z"), true);
+  }
+  assert.equal(query(), null);
+  assert.equal(native.narrationHtml("r1"), "Hexllo");
+  assert.equal(native.narrationHtml("r2"), "World");
+  assert.deepEqual(refuse.mock.calls.map(call => call.arguments), [["native-selection-stale"]]);
+});
+
+test("a written result without a caret leaves selection and avoids resolving a position", t => {
+  const { input, target, resolve } = inputProbe(t, { write: () => ({ kind: "written" }) });
+  assert.equal(beforeInput(target, "insertText", "x"), true);
+  assert.equal(input.finish(), null);
+  assert.equal(resolve.mock.callCount(), 0);
+  assert.deepEqual(cellSelection(target), { from: 3, to: 3 });
+});
+
+test("a finish releases the paint tracker before the write", t => {
+  const { input, target, order } = inputProbe(t);
+  assert.equal(beforeInput(target, "insertText", "x"), true);
+  assert.equal(input.finish(), null);
+  assert.deepEqual(order, ["dispose", "write"]);
+});
+
+test("stopping a draft releases the paint tracker and clears its scheduled flush", t => {
+  const { input, target, order } = inputProbe(t);
+  const schedule = t.mock.method(globalThis, "setTimeout"), cancel = t.mock.method(globalThis, "clearTimeout");
+  assert.equal(beforeInput(target, "insertText", "x"), true);
+  const timer = schedule.mock.calls.find(call => call.arguments[1] === 32)?.result;
+  assert.ok(timer);
+  input.stop();
+  assert.deepEqual(order, ["dispose"]);
+  assert.ok(cancel.mock.calls.some(call => call.arguments[0] === timer));
+});
+
+test("disposing a native binding removes its lifetime listeners and pending work", t => {
+  const addWindow = t.mock.method(window, "addEventListener"), removeWindow = t.mock.method(window, "removeEventListener");
+  const addDocument = t.mock.method(document, "addEventListener"), removeDocument = t.mock.method(document, "removeEventListener");
+  const { input, target, order } = inputProbe(t, { manualDispose: true });
+  const schedule = t.mock.method(globalThis, "setTimeout"), cancel = t.mock.method(globalThis, "clearTimeout");
+  assert.equal(beforeInput(target, "insertText", "x"), true);
+  const timer = schedule.mock.calls.find(call => call.arguments[1] === 32)?.result;
+  assert.ok(timer);
+  input.dispose();
+  assert.deepEqual(order, ["dispose"]);
+  assert.ok(cancel.mock.calls.some(call => call.arguments[0] === timer));
+  for (const [name, add, remove] of [
+    ["beforeunload", addWindow, removeWindow], ["pagehide", addWindow, removeWindow], ["visibilitychange", addDocument, removeDocument]
+  ]) {
+    const listener = add.mock.calls.find(call => call.arguments[0] === name)?.arguments[1];
+    assert.ok(listener);
+    assert.ok(remove.mock.calls.some(call => call.arguments[0] === name && call.arguments[1] === listener), name);
+  }
+});
+
+test("deleting buffered letters counts toward the synchronous cap", t => {
+  const { target, write, native } = inputProbe(t);
+  for (let i = 0; i < 128; i++) {
+    assert.equal(beforeInput(target, "insertText", "x"), true);
+    assert.equal(deleteRange(target, 2, 3), true);
+  }
+  assert.equal(write.mock.callCount(), 1);
+  assert.equal(write.mock.calls[0].arguments[1], "");
+  assert.equal(native.narrationHtml("r1"), "Hello");
+});
+
+test("a draft beginning with a 256-unit selection flushes immediately", async t => {
+  const initial = "a".repeat(256) + "b";
+  await enter(t, [{ id: "r1", audioText: initial }]);
+  const target = cell("audioText");
+  target.focus();
+  setCellSelection(target, 0, 256);
+  assert.equal(beforeInput(target, "insertText", "x"), true);
+  assert.equal(text(), "xb");
+  await Promise.resolve();
+  assert.equal(hook.read().peer.rows[0].audioText, "xb");
+});
+
+test("focusout alone settles composition and the next composition starts with an empty candidate", async t => {
+  await enter(t);
+  let target = cell("audioText");
+  target.focus();
+  setCellSelection(target, 2);
+  assert.equal(compose(target, "start", ""), false);
+  assert.equal(compose(target, "update", "K"), false);
+  target.blur();
+  await Promise.resolve();
+  assert.equal(text(), "HeKllo");
+  target = cell("audioText");
+  target.focus();
+  setCellSelection(target, 3);
+  assert.equal(compose(target, "start", ""), false);
+  target.blur();
+  await Promise.resolve();
+  assert.equal(text(), "HeKllo");
+  await Promise.resolve();
+  assert.equal(hook.read().peer.rows[0].audioText, "HeKllo");
+});
+
+test("failed composition recovery stops before blur can touch the editor", async t => {
+  const { native, target, refused } = await openDirect(t);
+  assert.equal(compose(target, "start", ""), false);
+  assert.equal(compose(target, "update", "e"), false);
+  const preview = target.firstChild;
+  preview.insertData(8, "e");
+  const at = native.commands.anchorText({ beat: "R1", cell: "narration" }, 0);
+  native.ydoc.once("afterTransactionCleanup", () => { throw new Error("interrupted cleanup"); });
+  assert.throws(() => native.commands.typeText(at.range, "P", {}), /interrupted cleanup/);
+  await Promise.resolve();
+  assert.deepEqual(refused.mock.calls.map(call => call.arguments), [["native-input-pending"]]);
+  target.blur();
+  await Promise.resolve();
+  assert.equal(target.firstChild, preview);
+  assert.equal(target.textContent, "Capturede words");
+  assert.equal(sharedSession(), true);
+});
+
+test("failed close cannot replay a draft after unexpected browser input", async t => {
+  const show = t.mock.method(notices, "show", () => {});
+  const { native, target } = await openDirect(t);
+  assert.equal(beforeInput(target, "insertText", "!"), true);
+  target.firstChild.insertData(9, "?");
+  target.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: "?" }));
+  const at = native.commands.anchorText({ beat: "R1", cell: "narration" }, 0);
+  native.ydoc.once("afterTransactionCleanup", () => { throw new Error("interrupted cleanup"); });
+  assert.throws(() => native.commands.typeText(at.range, "P", {}), /interrupted cleanup/);
+  await Promise.resolve();
+  assert.equal(target.textContent, "Captured!? words");
+  assert.equal(sharedSession(), true);
+  assert.match(String(show.mock.calls[0]?.arguments[0]), /Unsent writing is still in the editor/);
+});
+
 test("gallery add, remove, reorder and annotation refuse before writing", async t => {
   const show = await enter(t), before = hook.read();
   handleImageFile("r1", new window.File(["picture"], "picture.png", { type: "image/png" }));

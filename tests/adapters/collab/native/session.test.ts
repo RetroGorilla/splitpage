@@ -93,6 +93,48 @@ test("a relative narration caret resolves in its visible joined row after a peer
   assert.equal(author.narrationOffset("B", start), null);
 });
 
+test("the narration resolver refuses other Yjs associations", t => {
+  const session = fromDocument();
+  t.after(session.close);
+  const point = anchor(session, 0).from;
+  assert.equal(session.narrationOffset("A", { from: { ...point, assoc: 1 } }, 1 as 0), null);
+});
+
+test("placement ignores fractional indices and clamps an oversized index to the end of the inserted text", t => {
+  const session = fromDocument({ A: "Hello", B: "b", C: "c" });
+  t.after(session.close);
+  const result = session.commands.typeText(anchor(session, 2), "xy", {}, undefined, [0.5, 20]);
+  assert.equal(session.narrationHtml("A"), "Hexyllo");
+  assert.ok(result.kind === "written" && result.selection);
+  assert.equal(result.selection[0], null);
+  const end = result.selection[1];
+  assert.ok(end);
+  assert.equal(session.narrationOffset("A", { from: end }, -1), 4);
+});
+
+test("a failed paint capture does not interrupt a transaction and is reported before the next command", t => {
+  const session = fromDocument(), target = anchor(session, 0), error = new Error("capture failed");
+  t.after(session.close);
+  const keep = session.trackNarrationPaint("A");
+  const next = session.trackNarrationPaint("B");
+  t.after(() => { keep.dispose(); next.dispose(); });
+  const readPaint = NativeScriptReader.prototype.narrationPaint;
+  const capture = t.mock.method(NativeScriptReader.prototype, "narrationPaint", function (this: NativeScriptReader, row: string, retain: boolean) {
+    if (row === "A") throw error;
+    return readPaint.call(this, row, retain);
+  });
+  const map = session.ydoc.getMap("capture-test");
+  assert.doesNotThrow(() => { map.set("peer", "written"); });
+  assert.equal(map.get("peer"), "written");
+  assert.deepEqual(capture.mock.calls.map(call => call.arguments), [["A", true], ["B", true]]);
+  keep.dispose();
+  next.dispose();
+  assert.throws(() => session.commands.typeText(target, "x", {}), error);
+  assert.equal(session.narrationHtml("A"), "a");
+  type(session, 0, "x");
+  assert.equal(session.narrationHtml("A"), "xa");
+});
+
 test("the guarded narration resolver refuses a root-named caller position without creating a root", t => {
   const session = fromDocument(), caret = anchor(session, 0), bytes = session.encodeState();
   t.after(session.close);

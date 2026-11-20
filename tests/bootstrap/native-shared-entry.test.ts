@@ -16,6 +16,21 @@ import { applyNativePeerUpdate } from "../../src/adapters/collab/native/peer-upd
 before(bootEntrySwitchFixture);
 after(stopEntrySwitchFixture);
 
+test("native hydration consumes the revision already included in its first paint", async t => {
+  const { ports } = entrySwitchFixture(), doc = currentDocument();
+  assert.ok(doc);
+  const { native, backend } = openNativeEditor(ports, doc, () => false);
+  t.after(() => { backend.dispose(step => { step(); return true; }); });
+  const at = native.commands.anchorText({ beat: "R1", cell: "narration" }, 8);
+  assert.ok(at.kind === "anchored");
+  assert.equal(native.commands.typeText(at.range, "!", {}).kind, "written");
+  backend.start();
+  assert.equal(backend.replica.revision(), 1);
+  await Promise.resolve();
+  assert.equal(backend.replica.revision(), 1);
+  assert.equal(native.narrationHtml("R1"), "Captured! words");
+});
+
 async function nativeEntry(fixture: ReturnType<typeof entrySwitchFixture>) {
   const opened: { value?: ReturnType<typeof openNativeEditor> } = {};
   const result = await enterSharedSession(fixture.ports, (doc, failed) => {
