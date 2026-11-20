@@ -3,10 +3,14 @@ import { spawnSync } from "node:child_process";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import * as Y from "yjs";
+import { createNativeHeading, renameNativeHeading } from "../../../../src/adapters/collab/native/heading-commands.ts";
 import { NativeScriptReader } from "../../../../src/adapters/collab/native/reader.ts";
+import { setNativeField } from "../../../../src/adapters/collab/native/record-commands.ts";
+import { openNativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import { openNativeSession } from "../../../../src/adapters/collab/native/session.ts";
 import type { NativeSessionOptions, NativeSessionSource } from "../../../../src/adapters/collab/native/session.ts";
 import type { NativeSizeOptions } from "../../../../src/adapters/collab/native/size.ts";
+import { replaceNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
 import { createRichText } from "../../../../src/adapters/richtext/richtext.ts";
 import type { Run } from "../../../../src/core/text/runs.ts";
 import { cells } from "./helpers.ts";
@@ -74,6 +78,26 @@ function withEncoderSpy(script: string, args: readonly string[] = []): string {
   `, ...args], { cwd: fileURLToPath(new URL("../../../../", import.meta.url)), encoding: "utf8", windowsHide: true });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   return result.stdout.trim();
+}
+
+function recoveryClock() {
+  let now = 0;
+  const pending = new Map<() => void, number>();
+  return {
+    now: () => now,
+    pending,
+    scheduleRecovery(run: () => void, delay: number) {
+      pending.set(run, now + delay);
+      return () => { pending.delete(run); };
+    },
+    advance(to: number, runTimers = true) {
+      now = to;
+      if (runTimers) for (const [run, due] of [...pending]) {
+        if (due > now || !pending.delete(run)) continue;
+        run();
+      }
+    }
+  };
 }
 
 test("default limits are 12 MB warning, 15 MB refusal and 105% ceiling", t => {
@@ -207,6 +231,37 @@ test("the recheck floor throttles growth near a line and growth stops triggering
   `);
 });
 
+test("the default recheck step measures at exactly 64 KiB of update bytes", () => {
+  withEncoderSpy(`
+    function packet(size) {
+      const doc = new actual.Doc();
+      doc.clientID = 1;
+      const padding = 64000;
+      const probe = doc.getText("probe");
+      probe.insert(0, "x".repeat(padding));
+      const encoded = actual.encodeStateAsUpdate(doc);
+      doc.destroy();
+      const writer = new actual.Doc();
+      writer.clientID = 1;
+      writer.getText("probe").insert(0, "x".repeat(padding + size - encoded.byteLength));
+      const update = actual.encodeStateAsUpdate(writer);
+      writer.destroy();
+      assert.equal(update.byteLength, size);
+      return update;
+    }
+    const options = { sizeWarning: 3, sizeLimit: 1000000, now: () => 0 };
+    const below = open({ kind: "empty" }, options);
+    const at = open({ kind: "empty" }, options);
+    const start = encodes;
+    actual.applyUpdate(below.ydoc, packet(65535));
+    assert.equal(encodes, start);
+    actual.applyUpdate(at.ydoc, packet(65536));
+    assert.equal(encodes, start + 1);
+    below.close();
+    at.close();
+  `);
+});
+
 test("a retained middle deletion can grow encoded state by more bytes than its update", async t => {
   const seed = fromRows({ A: "a".repeat(800) });
   const state = bytes(seed), warning = state.byteLength + 1, step = 16;
@@ -282,8 +337,6 @@ test("every adding command refuses in its own shape without transactions or byte
   assertUnwritten(session, () => c.setCommentBody({ comment: second.created }, "edited"), full);
   assertUnwritten(session, () => c.resolveComment({ comment: second.created }, { by: "Alice", at: AT }), full);
   assertUnwritten(session, () => c.reopenComment({ comment: first.created }), full);
-  const invalidRuns = "" as unknown as readonly Run[];
-  assertUnwritten(session, () => c.replaceText(range, invalidRuns), { kind: "recovery", reason: "full", runs: invalidRuns });
   assertUnwritten(session, () => c.typeText(range, 0 as unknown as string, {}), { kind: "recovery", reason: "full", runs: [] });
   assertUnwritten(session, () => c.renameHeading(name, 0 as unknown as string), full);
 });
@@ -293,18 +346,67 @@ test("a replace run length getter can only reenter as busy, even when the outer 
   const session = fromState(state, { sizeLimit: state.byteLength });
   t.after(() => { seed.close(); session.close(); });
   const range = anchor(session, 0, 1);
-  let inner: unknown;
+  const direct = openNativeScript(session.ydoc);
+  t.after(direct.close);
+  let inner: unknown, throughDirect: unknown;
   const runs = new Proxy([{ text: "x", marks: {} }], {
     get(target, property, receiver): unknown {
-      if (property === "length") inner = session.commands.setField(beatField("A", "status"), "ready");
+      if (property === "length") {
+        inner = session.commands.setField(beatField("A", "status"), "ready");
+        throughDirect = setNativeField(direct, beatField("A", "note"), "nested");
+      }
       return Reflect.get(target, property, receiver);
     }
   });
   assertUnwritten(session, () => {
     const result = session.commands.replaceText(range, runs);
     assert.deepEqual(inner, { kind: "refused", reason: "busy" });
+    assert.deepEqual(throughDirect, { kind: "refused", reason: "busy" });
     return result;
   }, { kind: "recovery", reason: "full", runs });
+});
+
+test("direct replace, create and rename hold the document guard while copying their arguments", t => {
+  const session = fromRows({ A: "alpha" });
+  const caret = anchor(session, 0);
+  assert.equal(session.commands.createHeading(caret, "H1", "Scene").kind, "written");
+  const name = anchor(session, 0, 1, "H1", "name");
+  const direct = openNativeScript(session.ydoc), another = openNativeScript(session.ydoc);
+  t.after(() => { another.close(); direct.close(); session.close(); });
+  const nested: unknown[] = [], order: string[] = [];
+  const reenter = () => {
+    order.push("getter");
+    nested.push(setNativeField(another, beatField("A", "note"), "nested"));
+  };
+  session.ydoc.on("beforeTransaction", () => { order.push("transaction"); });
+  const runs = new Proxy([{ text: "", marks: {} }], {
+    get(target, property, receiver): unknown {
+      if (property === "length") reenter();
+      return Reflect.get(target, property, receiver);
+    }
+  });
+  assertUnwritten(session, () => replaceNativeText(direct, caret, runs), { kind: "unchanged" }, true);
+  assertUnwritten(session, () => createNativeHeading(direct, {
+    ...caret, get target() { reenter(); return caret.target; }
+  }, "H1", "Scene"), { kind: "refused", reason: "missing" }, true);
+  assertUnwritten(session, () => renameNativeHeading(direct, {
+    ...name, get target() { reenter(); return name.target; }
+  }, "S"), { kind: "unchanged" }, true);
+  assert.equal(order[0], "transaction");
+  assert(nested.length >= 3);
+  for (const result of nested) assert.deepEqual(result, { kind: "refused", reason: "busy" });
+});
+
+test("non-iterable replacement input throws without changing encoded state", t => {
+  const seed = fromRows({ A: "alpha" }), state = bytes(seed);
+  const full = fromState(state, { sizeLimit: state.byteLength });
+  const nonIterable = { 0: { text: "x", marks: {} }, length: 1 } as unknown as readonly Run[];
+  t.after(() => { full.close(); seed.close(); });
+  for (const session of [seed, full]) {
+    const before = bytes(session);
+    assert.throws(() => session.commands.replaceText(anchor(session, 0), nonIterable), TypeError);
+    assert.deepEqual(bytes(session), before);
+  }
 });
 
 test("removals, zero-text runs, undo, redo and export work at full below the ceiling", t => {
@@ -509,10 +611,108 @@ test("20 peer deletes inside two seconds trigger at most one recovery encode", t
   t.diagnostic(counts);
 });
 
+test("sparse peer growth at warning never encodes, then one deletion enables one recovery encode", () => {
+  withEncoderSpy(`
+    let now = 0, armed = 0, canceled = 0;
+    const writer = new actual.Doc();
+    const text = writer.getText("probe");
+    text.insert(0, "x".repeat(256));
+    const state = actual.encodeStateAsUpdate(writer);
+    const reader = open({ kind: "state", state }, {
+      sizeWarning: state.byteLength, now: () => now,
+      scheduleRecovery: () => { armed++; return () => { canceled++; }; }
+    });
+    assert.equal(reader.size, "warning");
+    writer.on("update", update => actual.applyUpdate(reader.ydoc, update));
+    const start = encodes;
+    for (let i = 0; i < 20; i++) {
+      now += 2100;
+      text.insert(text.length, "y");
+    }
+    assert.equal(encodes, start);
+    assert.equal(armed, 0);
+    text.delete(0, 1);
+    assert.equal(encodes, start + 1);
+    now += 1999;
+    text.delete(0, 1);
+    assert.equal(encodes, start + 1);
+    assert.equal(armed, 1);
+    for (let i = 0; i < 20; i++) {
+      now += 2100;
+      text.insert(text.length, "y");
+    }
+    assert.equal(encodes, start + 2);
+    assert.equal(armed, 1);
+    assert.equal(canceled, 1);
+    reader.close();
+    writer.destroy();
+  `);
+});
+
+for (const startingSize of ["warning", "full"] as const) {
+  test(`one timer publishes idle recovery from ${startingSize} after a peer deletion`, async t => {
+    const seed = fromRows({ A: "a" }), state = bytes(seed), base = state.byteLength;
+    const clock = recoveryClock();
+    const writer = fromState(state);
+    const reader = fromState(state, {
+      ...clock, sizeWarning: base + 200, sizeLimit: base + (startingSize === "full" ? 500 : 2000),
+      sizeMinimumStep: 64, sizeCeilingRatio: 4
+    });
+    t.after(() => { reader.close(); writer.close(); seed.close(); });
+    writer.ydoc.on("update", update => Y.applyUpdate(reader.ydoc, update));
+    const events: string[] = [];
+    reader.subscribe(event => { events.push(event.kind === "size" ? event.state : event.kind); });
+    assert.equal(writer.commands.typeText(anchor(writer, 1), "x".repeat(600), {}).kind, "written");
+    await Promise.resolve();
+    assert.deepEqual(events, ["changed", startingSize]);
+    clock.advance(1999);
+    assert.equal(writer.commands.deleteText(anchor(writer, 1, 301)).kind, "written");
+    assert.equal(writer.commands.deleteText(anchor(writer, 1, 301)).kind, "written");
+    await Promise.resolve();
+    assert(bytes(reader).byteLength < reader.sizeLimits.warning);
+    assert.deepEqual(events, ["changed", startingSize, "changed"]);
+    assert.deepEqual([...clock.pending.values()], [2000]);
+    clock.advance(2000, false);
+    if (startingSize === "warning") {
+      const at = anchor(reader, 0);
+      assertUnwritten(reader, () => reader.commands.formatText(at, { kind: "plain", mark: "b", on: true }),
+        { kind: "unchanged" }, true);
+      await Promise.resolve();
+      assert.equal(reader.size, "warning");
+      assert.deepEqual([...clock.pending.values()], [2000]);
+    }
+    clock.advance(2000);
+    await Promise.resolve();
+    assert.equal(reader.size, "ok");
+    assert.deepEqual(events, ["changed", startingSize, "changed", "ok"]);
+    assert.equal(clock.pending.size, 0);
+  });
+}
+
+test("closing clears the pending recovery timer", async t => {
+  const seed = fromRows({ A: "a".repeat(800) }), state = bytes(seed);
+  const clock = recoveryClock();
+  const writer = fromState(state), reader = fromState(state, { ...clock, sizeWarning: state.byteLength });
+  t.after(() => { writer.close(); seed.close(); reader.close(); });
+  writer.ydoc.on("update", update => Y.applyUpdate(reader.ydoc, update));
+  const events: string[] = [];
+  reader.subscribe(event => { events.push(event.kind); });
+  clock.advance(1999);
+  assert.equal(writer.commands.deleteText(anchor(writer, 0, 800)).kind, "written");
+  assert.deepEqual([...clock.pending.values()], [2000]);
+  reader.close();
+  await Promise.resolve();
+  assert.deepEqual(events, ["changed", "closed"]);
+  assert.equal(clock.pending.size, 0);
+  clock.advance(2000);
+  await Promise.resolve();
+  assert.deepEqual(events, ["changed", "closed"]);
+});
+
 test("peer removals recover to warning then ok while the removing copy stays full until reopened from its bytes", async t => {
   const seed = fromRows({ A: "a", B: "b" }), state = bytes(seed), base = state.byteLength;
-  let now = 0;
-  const options = { sizeWarning: base + 300, sizeLimit: base + 900, sizeMinimumStep: 64, sizeCeilingRatio: 3, now: () => now };
+  const clock = recoveryClock();
+  const options = { ...clock, sizeWarning: base + 300, sizeLimit: base + 900, sizeMinimumStep: 64, sizeCeilingRatio: 3 };
   const writer = fromState(state, options), reader = fromState(state, options);
   t.after(() => { seed.close(); writer.close(); reader.close(); });
   const events: string[] = [];
@@ -525,12 +725,13 @@ test("peer removals recover to warning then ok while the removing copy stays ful
   assert.equal(writer.size, "full");
   assert.equal(reader.size, "full");
 
-  now = 1999;
+  clock.advance(1999);
   assert.equal(writer.commands.deleteText(anchor(writer, 1, 601)).kind, "written");
   Y.applyUpdate(reader.ydoc, bytes(writer));
+  await Promise.resolve();
   assert(bytes(reader).byteLength < options.sizeLimit);
   assertUnwritten(reader, () => reader.commands.setField(beatField("A", "status"), "ready"), full);
-  now = 2000;
+  clock.advance(2000, false);
   assertUnwritten(reader, () => reader.commands.formatText(anchor(reader, 0), { kind: "plain", mark: "b", on: true }),
     { kind: "unchanged" }, true);
   await Promise.resolve();
@@ -538,7 +739,7 @@ test("peer removals recover to warning then ok while the removing copy stays ful
   assert.equal(reader.size, "warning");
   assert.equal(writer.size, "full");
 
-  now = 4000;
+  clock.advance(4000, false);
   assert.equal(writer.commands.deleteText(anchor(writer, 1, 601, "B")).kind, "written");
   Y.applyUpdate(reader.ydoc, bytes(writer));
   assert(bytes(reader).byteLength < options.sizeWarning);

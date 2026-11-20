@@ -45,17 +45,19 @@ type ChangeListener = (change: NativeSessionChange) => void;
 function openSessionScript(
   source: NativeSessionSource,
   sizeOptions: ReturnType<typeof resolveNativeSizeOptions>,
-  updated: (update: Uint8Array) => void,
+  updated: (update: Uint8Array, transaction: Y.Transaction) => void,
+  publishRecovery: () => void,
   sizeRefusal: NonNullable<NativeScript["sizeRefusal"]>
 ) {
   const doc = new Y.Doc(), script = openNativeScript(doc);
   try {
     if (source.kind === "state") Y.applyUpdate(doc, source.state);
     if (source.kind === "document") convertToNativeScript(script, source.document, source.conversion);
-    const size = createNativeSizeTracker(doc, sizeOptions);
+    const size = createNativeSizeTracker(doc, sizeOptions, publishRecovery);
     const undo = openNativeUndo({ ...script, sizeRefusal });
     const { guardSharedCallback } = script;
-    const publishUpdate = (update: Uint8Array) => guardSharedCallback(() => updated(update));
+    const publishUpdate = (update: Uint8Array, _origin: unknown, _doc: Y.Doc, transaction: Y.Transaction) =>
+      guardSharedCallback(() => updated(update, transaction));
     doc.on("update", publishUpdate);
     return { script, size, undo, publishUpdate };
   } catch (error) {
@@ -72,7 +74,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
   let active = false, scheduled = false, publishing = false, changed = false;
   let closing: CloseReason | null = null;
   let typing: { readonly target: NativeTextTarget; readonly endsInSpace: boolean } | null = null;
-  const { script, size, undo, publishUpdate } = openSessionScript(source, sizeOptions, updated, sizeRefusal), doc = script.doc;
+  const { script, size, undo, publishUpdate } = openSessionScript(source, sizeOptions, updated, schedule, sizeRefusal), doc = script.doc;
   let reportedSize: NativeSessionSize = size.state;
   const writing = { ...script, sizeRefusal };
   const adding = { ...script, sizeRefusal: () => sizeRefusal(true) };
@@ -84,9 +86,9 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     scheduled = true;
   }
 
-  function updated(update: Uint8Array): void {
+  function updated(update: Uint8Array, transaction: Y.Transaction): void {
     changed = true;
-    size.recordUpdate(update.byteLength);
+    size.recordUpdate(update.byteLength, transaction.deleteSet.clients.size > 0);
     schedule();
   }
 
@@ -108,8 +110,8 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
       reportedSize = size.state;
       emit(listeners, { kind: "size", state: reportedSize });
     }
+    if (script.busy()) requestClose("failed");
     publishing = false;
-    if (script.busy()) closing = "failed";
     if (closing && !scheduled) finishClose(closing);
   }
 
@@ -135,6 +137,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
 
   function requestClose(reason: CloseReason): void {
     closing = reason;
+    size.stopRecovery();
     if (!publishing) schedule();
   }
 
@@ -148,9 +151,8 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
 
   function sizeRefusal(adds = false): "full" | null {
     if (adds && size.state === "full") {
-      size.checkRecovery();
+      if (size.checkRecovery()) schedule();
       if (size.state === "full") return "full";
-      schedule();
     }
     return size.atCeiling ? "full" : null;
   }

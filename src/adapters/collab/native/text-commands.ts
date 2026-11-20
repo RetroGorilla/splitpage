@@ -4,7 +4,7 @@ import type { Marks, Run } from "../../../core/text/runs.ts";
 import { nativeCellView, nativeLeftAt, nativeStoredOffset, prepareNativeRuns, writeNativeRuns } from "./inline.ts";
 import type { NativeDeltaItem } from "./inline.ts";
 import { nativeSegmentSpans } from "./reader.ts";
-import { throwNativeFailures, transactNativeCommand } from "./script.ts";
+import { throwNativeFailures, transactPreparedNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { encodeNativeValue, nativeWellFormed } from "./values.ts";
 
@@ -275,11 +275,9 @@ export function replaceNativeText(script: NativeScript, range: NativeTextRange, 
   beforeWrite?: (target: NativeTextTarget) => void, adds?: boolean): NativeCommitOutcome {
   const unavailable = nativeAvailability(script);
   if (unavailable) return refuse(unavailable, runs);
-  const prepared = Array.isArray(runs) ? prepareNativeRuns(runs) : null;
-  const encoded = encodedStamp(stamp), checked = nativeRangeSnapshot(range);
-  const sizeRefusal = script.sizeRefusal?.(adds ?? prepared?.length !== 0);
-  if (sizeRefusal) return refuse(sizeRefusal, runs);
-  return transactNativeCommand(script, () => {
+  return transactPreparedNativeCommand(script, () => ({
+    prepared: prepareNativeRuns(runs), encoded: encodedStamp(stamp), checked: nativeRangeSnapshot(range)
+  }), ({ prepared, encoded, checked }) => {
     if (!prepared || encoded === null) return refuse("text", runs);
     if (!checked || checked.target.cell === "name") return refuse("range", runs);
     const live = nativeLiveRange(script, checked);
@@ -295,7 +293,7 @@ export function replaceNativeText(script: NativeScript, range: NativeTextRange, 
     }
     if (encoded && updateStamp) script.roots.edited.set(checked.target.beat, encoded);
     return WRITTEN;
-  });
+  }, reason => refuse(reason, runs), ({ prepared }) => adds ?? prepared?.length !== 0);
 }
 
 export function typeNativeText(script: NativeScript, range: NativeTextRange, text: string, marks: Marks, stamp?: NativeEditStamp,
