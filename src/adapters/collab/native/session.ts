@@ -11,7 +11,11 @@ import { convertToNativeScript } from "./convert.ts";
 import type { NativeConversionPorts } from "./convert.ts";
 import { formatNativeText } from "./format-commands.ts";
 import { createNativeHeading, removeNativeHeading, renameNativeHeading, restoreNativeHeading } from "./heading-commands.ts";
+import { putBackNativeBeat } from "./insert-commands.ts";
 import { moveNativeBlocks } from "./move-commands.ts";
+import { compareNativeOfflineNotice } from "./offline-notice.ts";
+import { openNativePendingEdits } from "./pending-edits.ts";
+import type { NativePendingEditsData } from "./pending-edits.ts";
 import { clearNativeField, setNativeField } from "./record-commands.ts";
 import { openNativeScript } from "./script.ts";
 import type { NativeScript } from "./script.ts";
@@ -29,6 +33,7 @@ export type NativeSessionSource =
 export interface NativeSessionOptions {
   readonly actor: string;
   readonly sanitize: MigratePorts["sanitize"];
+  readonly noticeJournal?: true | NativePendingEditsData;
 }
 
 type CloseReason = "requested" | "failed";
@@ -39,29 +44,30 @@ export type NativeSessionChange =
 
 type ChangeListener = (change: NativeSessionChange) => void;
 
-function openSessionScript(source: NativeSessionSource, updated: () => void) {
+function openSessionScript(source: NativeSessionSource, updated: () => void, saved?: NativeSessionOptions["noticeJournal"]) {
   const doc = new Y.Doc(), script = openNativeScript(doc);
   try {
     if (source.kind === "state") Y.applyUpdate(doc, source.state);
     if (source.kind === "document") convertToNativeScript(script, source.document, source.conversion);
+    const journal = saved ? openNativePendingEdits(script.reader, saved === true ? undefined : saved) : null;
     const undo = openNativeUndo(script);
     const { guardSharedCallback } = script;
     const publishUpdate = () => guardSharedCallback(updated);
     doc.on("update", publishUpdate);
-    return { script, undo, publishUpdate };
+    return { script, undo, publishUpdate, journal };
   } catch (error) {
     doc.destroy();
     throw error;
   }
 }
 
-export function openNativeSession(source: NativeSessionSource, { actor, sanitize }: NativeSessionOptions) {
+export function openNativeSession(source: NativeSessionSource, { actor, sanitize, noticeJournal }: NativeSessionOptions) {
   const listeners = new Set<ChangeListener>();
   const body = { sanitize };
   let active = false, scheduled = false, publishing = false, changed = false;
   let closing: CloseReason | null = null;
   let typing: { readonly target: NativeTextTarget; readonly endsInSpace: boolean } | null = null;
-  const { script, undo, publishUpdate } = openSessionScript(source, updated), doc = script.doc;
+  const { script, undo, publishUpdate, journal } = openSessionScript(source, updated, noticeJournal), doc = script.doc;
 
   function schedule(): void {
     if (scheduled) return;
@@ -127,7 +133,9 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
     return "busy";
   }
 
-  function bind<Args extends unknown[], Result>(command: (script: NativeScript, ...args: Args) => Result, separate = true) {
+  function bind<Args extends unknown[], Result extends { readonly kind: string; readonly created?: string }>(
+    command: (script: NativeScript, ...args: Args) => Result, separate = true, journalMode: "none" | "edit" | "split" = "edit"
+  ) {
     return (...args: Args): Result => {
       const reason = refusal();
       if (reason) {
@@ -139,7 +147,12 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
           typing = null;
           undo.stopCapturing();
         }
-        return command(script, ...args);
+        if (journalMode !== "none") journal?.sync();
+        const result = command(script, ...args);
+        if (journalMode !== "none" && result.kind === "written") {
+          journal?.sync(result.created ? { created: result.created, split: journalMode === "split" } : {});
+        }
+        return result;
       });
     };
   }
@@ -149,12 +162,15 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
     if (reason) return { kind: "refused", reason };
     return perform(() => {
       typing = null;
-      return undo[direction]();
+      journal?.sync();
+      const result = undo[direction]();
+      if (result.kind === "written") journal?.sync({ undo: direction === "undo" });
+      return result;
     });
   }
 
   const commands = Object.freeze({
-    anchorText: bind(anchorNativeText, false),
+    anchorText: bind(anchorNativeText, false, "none"),
     typeText: bind((script, range: NativeTextRange, text: string, marks: Marks, stamp?: NativeEditStamp) =>
       typeNativeText(script, range, text, marks, stamp, target => {
         const previous = typing?.target.beat === target.beat && typing.target.cell === target.cell ? typing : null;
@@ -165,7 +181,8 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
       replaceNativeText(script, ...args)),
     deleteText: bind(deleteNativeText),
     formatText: bind(formatNativeText),
-    splitRow: bind(splitNativeRow),
+    splitRow: bind(splitNativeRow, true, "split"),
+    putBack: bind(putBackNativeBeat),
     joinRow: bind(joinNativeRow),
     unjoinRow: bind(unjoinNativeRow),
     removeRows: bind(removeNativeRows),
@@ -199,6 +216,9 @@ export function openNativeSession(source: NativeSessionSource, { actor, sanitize
     },
     document: () => script.reader.document(),
     encodeState: () => Y.encodeStateAsUpdate(doc),
+    pendingEdits: journal && Object.freeze({ data: journal.data, clearThrough: journal.clearThrough }),
+    offlineNotice: (connection: "returning" | "online") =>
+      connection === "returning" && journal ? compareNativeOfflineNotice(journal.data(), script.reader) : [],
     subscribe(listener: ChangeListener): () => void {
       if (closing) return () => undefined;
       listeners.add(listener);

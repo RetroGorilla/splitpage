@@ -12,6 +12,7 @@ pictures and screen design are out of scope.
 
 Slices 1 to 6 are on `main`. The native shared-document command layer and undo are built.
 The app has no native wiring yet. Slices 7a and 7h are merged. This PR builds 7c, the relay connection. The old adapter stays untouched until slice 8.
+This PR builds slice 7e's offline-notice journal, comparison and put-back command.
 
 ## Decisions made
 
@@ -195,6 +196,7 @@ someone else changed or removed. "Put it back" makes a fresh beat from what the 
 
 - **Counts** (E16, kept records, 85 named and 240 generated histories), with the person's own journal of pending
   edits: 46 false banners of 325, 26 misses of 238 losses (appendix I).
+- **Product counts** ([7e replay](../../tests/adapters/collab/native/offline-notice-e16.test.ts)) found 47 false banners of 325 and 26 misses of 238 losses. The tag sweep lost 6 of 28 unseen tags and flagged all 6.
 - **Seen and unseen** edits to visual text, visual tags, status and fields still leave identical evidence (4 of 4
   pairs, E16), hence decision 12's possible clash.
 - **Tags** (decision 17): E16's sweep lost 6 of 28 unseen tags and flagged all 6.

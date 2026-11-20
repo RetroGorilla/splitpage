@@ -1,0 +1,89 @@
+import * as Y from "yjs";
+import { nativeBeatEntries } from "./convert.ts";
+import { prepareNativeRuns, writeNativeRuns } from "./inline.ts";
+import type { NativeSavedBeat } from "./pending-edits.ts";
+import { nativeRankBetween, NativeRankError } from "./rank.ts";
+import type { NativeRankedBlock } from "./reader.ts";
+import { copyRecordValue } from "./record-values.ts";
+import { transactNativeCommand } from "./script.ts";
+import type { NativeScript } from "./script.ts";
+import { nativeAvailability } from "./text-commands.ts";
+import type { NativeRefusal } from "./text-commands.ts";
+import { mintNativeId, nativeWellFormed, recordBag } from "./values.ts";
+
+export type NativePutBackBeat = Pick<NativeSavedBeat, "id" | "placement" | "narration" | "visual" | "fields">;
+
+export type NativePutBackOutcome =
+  | { readonly kind: "written"; readonly created: string }
+  | { readonly kind: "refused"; readonly reason: NativeRefusal | "stored" | "taken" };
+
+function refused(reason: Extract<NativePutBackOutcome, { kind: "refused" }>["reason"]): NativePutBackOutcome {
+  return Object.freeze({ kind: "refused", reason });
+}
+
+function prepare(saved: NativePutBackBeat) {
+  try {
+    const { id, placement, narration, visual, fields } = saved;
+    const { scene, sceneOrder } = placement;
+    const old = copyRecordValue(sceneOrder), record = copyRecordValue(fields);
+    if (!nativeWellFormed(id) || !id || (scene !== null && !nativeWellFormed(scene)) ||
+      !Array.isArray(old) || !(old as unknown[]).every(nativeWellFormed) || !old.includes(id) || !recordBag(record)) return null;
+    const audio = prepareNativeRuns(structuredClone(narration)), picture = prepareNativeRuns(structuredClone(visual));
+    if (!audio || !picture) return null;
+    Reflect.deleteProperty(record, "rank");
+    Reflect.deleteProperty(record, "joined");
+    return { id, scene, old: old as string[], audio, picture, entries: nativeBeatEntries(record) };
+  } catch { return null; }
+}
+
+function gap(order: readonly NativeRankedBlock[], saved: NonNullable<ReturnType<typeof prepare>>): string {
+  const heading = order.findIndex(block => block.kind === "heading" && block.id === saved.scene);
+  const start = heading + 1, next = order.findIndex((block, index) => index >= start && block.kind === "heading");
+  const stop = next === -1 ? order.length : next;
+  const neighbourhood = new Map(order.slice(start, stop).map((block, index) => [block.id, start + index]));
+  const oldAt = saved.old.indexOf(saved.id), sameScene = saved.scene === null || heading !== -1;
+  const left = sameScene ? saved.old.slice(0, oldAt).findLast(id => neighbourhood.has(id)) : undefined;
+  const right = sameScene ? saved.old.slice(oldAt + 1).find(id => neighbourhood.has(id)) : undefined;
+  const leftAt = left === undefined ? undefined : neighbourhood.get(left), rightAt = right === undefined ? undefined : neighbourhood.get(right);
+  let at = leftAt === undefined ? (rightAt ?? stop) : leftAt + 1;
+  const overlaps = (index: number) => {
+    const previous = order[index - 1], following = order[index];
+    return previous && following && (previous.rank === following.rank || previous.head !== null && previous.head === following.head);
+  };
+  if (leftAt === undefined && rightAt !== undefined) {
+    while (at > start && order[at]?.head !== null && order[at]?.head === order[at - 1]?.head) at--;
+  }
+  while (at < stop && (overlaps(at) || order[at]?.rank === "" && order[at]?.bound === null)) at++;
+  while (at > start && overlaps(at)) at--;
+  const lower = order[at - 1], upper = order[at];
+  return nativeRankBetween(lower?.rank === "" && lower.bound === null ? null : lower?.rank ?? null, upper?.rank ?? null);
+}
+
+export function putBackNativeBeat(script: NativeScript, saved: NativePutBackBeat | null): NativePutBackOutcome {
+  const unavailable = nativeAvailability(script);
+  if (unavailable) return refused(unavailable);
+  if (!saved) return refused("missing");
+  return transactNativeCommand(script, () => {
+    const plan = prepare(saved);
+    if (!plan) return refused("text");
+    const { doc, roots, reader } = script;
+    const created = mintNativeId(doc, "r"), key = "b:" + created;
+    if (created === plan.id || roots.beats.has(created) || roots.visuals.has(created) || roots.segments.has(key) ||
+      roots.order.toArray().includes(key) || reader.hasBeatMarker(created)) return refused("taken");
+    let rank: string;
+    try { rank = gap(reader.rankedOrder(), plan); }
+    catch (error) { if (error instanceof NativeRankError) return refused("stored"); throw error; }
+    const segment = new Y.Map<unknown>(), record = new Y.Map<unknown>(), audio = new Y.Text(), visual = new Y.Text();
+    roots.segments.set(key, segment);
+    segment.set("head", { b: created });
+    segment.set("text", audio);
+    writeNativeRuns(doc, audio, 0, plan.audio, null);
+    roots.order.push([key]);
+    roots.beats.set(created, record);
+    record.set("rank", rank);
+    for (const [field, value] of plan.entries) record.set(field, value);
+    roots.visuals.set(created, visual);
+    writeNativeRuns(doc, visual, 0, plan.picture, null);
+    return Object.freeze({ kind: "written", created });
+  });
+}
