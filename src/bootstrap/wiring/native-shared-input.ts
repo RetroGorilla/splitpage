@@ -48,6 +48,8 @@ interface Draft {
   readonly cell: Element;
   readonly surface: NarrationSurface;
   readonly range: NativeTextRange | null;
+  readonly caretEnd: "from" | "to" | null;
+  readonly before: NativeTextRange | null;
   readonly after: NativeTextRange | null;
   endsGroup: boolean;
   readonly selection: CellRange;
@@ -152,11 +154,11 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     return reason;
   }
 
-  function begin(cell: Element, selection: CellRange, composing: boolean, text: string): Draft {
+  function begin(cell: Element, selection: CellRange, composing: boolean, text: string, caretEnd: Draft["caretEnd"] = null): Draft {
     const beat = cell.getAttribute("data-id") ?? "";
     return { beat, cell, surface: narrationSurfaceOf(cell), selection, composing, composition: composing, text,
-      units: Math.max(text.length, selection.to - selection.from), previewCaret: selection.from + text.length, range: null, after: null,
-      endsGroup: false, paint: null, html: cell.innerHTML };
+      units: Math.max(text.length, selection.to - selection.from), previewCaret: selection.from + text.length, range: null, caretEnd,
+      before: null, after: null, endsGroup: false, paint: null, html: cell.innerHTML };
   }
 
   function anchor(next: Draft): Draft | string {
@@ -172,7 +174,9 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const anchored = native.commands.anchorText(target, from.offset, to.offset);
     if (anchored.kind === "refused") return anchored.reason;
     const end = next.composition || selection.from !== selection.to ? native.commands.anchorText(target, to.offset) : null;
-    return { ...next, range: anchored.range, after: end?.kind === "anchored" ? end.range : null, paint: native.trackNarrationPaint(beat) };
+    const after = end?.kind === "anchored" ? end.range : null, { range } = anchored;
+    const before = next.caretEnd === "to" ? after : next.caretEnd === "from" ? { target: range.target, from: range.from, to: range.from } : range;
+    return { ...next, range, before, after, paint: native.trackNarrationPaint(beat) };
   }
 
   function admissionRefusal(): string | null {
@@ -190,9 +194,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (!text) return target.commands.deleteText(range, attribution, places);
       return target.commands.replaceText(range, [{ text, marks: {} }], attribution, places);
     }
-    const step = typing ? target.commands.typeText.withSelection(range, range, text, {}, attribution, places)
-      : !text ? target.commands.deleteText.withSelection(range, range, attribution, places)
-      : target.commands.replaceText.withSelection(range, range, [{ text, marks: {} }], attribution, places);
+    const { before } = buffered;
+    const step = typing ? target.commands.typeText.withSelection(before, range, text, {}, attribution, places)
+      : !text ? target.commands.deleteText.withSelection(before, range, attribution, places)
+      : target.commands.replaceText.withSelection(before, range, [{ text, marks: {} }], attribution, places);
     if (step.result.kind === "written") step.recordAfter(typing ? undefined : buffered.after);
     return step.result;
   }
@@ -299,8 +304,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const deletion = /^delete(Content|Word|SoftLine|HardLine)(Backward|Forward)$/.test(input.inputType);
     const text = input.data ?? "";
     if (input.isComposing || !(deletion || input.inputType === "insertText" && text)) { session.refuse(UNSUPPORTED); return; }
-    const refusal = admissionRefusal();
-    if (refusal) { session.refuse(refusal); return; }
+    const refusal = admissionRefusal();    if (refusal) { session.refuse(refusal); return; }
     const selection = inputRange(input, cell);
     if (!selection || deletion && selection.from === selection.to) { session.refuse(deletion ? UNSUPPORTED : STALE); return; }
     const buffered = draft;
@@ -311,13 +315,14 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       return;
     }
     if (touchesProtectedText(cell, selection)) { session.refuse(UNSUPPORTED); return; }
+    const shown = deletion ? cellSelection(cell) : null;
+    const caretEnd = shown && shown.from === shown.to ? input.inputType.endsWith("Backward") ? "to" : "from" : null;
     const current = flushForInput(cell, selection);
     if (!current) return;
-    const next = begin(current.cell, current.selection, false, text);
+    const next = begin(current.cell, current.selection, false, text, caretEnd);
     let anchored: Draft | string;
     try { anchored = current.stale ? STALE : anchor(next); }
-    catch (error) { report(error); anchored = PENDING; }
-    draft = typeof anchored === "string" ? next : anchored;
+    catch (error) { report(error); anchored = PENDING; }    draft = typeof anchored === "string" ? next : anchored;
     preview(current.cell, current.selection, text);
     if (typeof anchored === "string") { stop(anchored); return; }
     if (atBatchBoundary(anchored)) finish();

@@ -33,8 +33,7 @@ export function nativeUndoRoute({ native, admission, input, publish }: NativeUnd
     if (refused) return { outcome: { ok: false, reason: refused.reason } };
     const held = input()?.beforePress() ?? null;
     if (held) return { outcome: { ok: false, reason: held } };
-    const result = native.commands[direction]();
-    if (result.kind === "refused") return { outcome: { ok: false, reason: result.reason } };
+    const result = native.commands[direction]();    if (result.kind === "refused") return { outcome: { ok: false, reason: result.reason } };
     if (result.kind === "unchanged") return { outcome: NOTHING };
     publish();
     const outcome: SharedUndoOutcome = { ok: true, effective: true, label: direction, selection: null };
