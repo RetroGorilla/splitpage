@@ -5,9 +5,11 @@ import { dom } from "../../../../src/test/_dom.mjs";
 import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
 import type { ValidatedDocument } from "../../../../src/core/document/validated.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
+import { createNativeHeading } from "../../../../src/adapters/collab/native/heading-commands.ts";
 import { clearNativeField, setNativeField } from "../../../../src/adapters/collab/native/record-commands.ts";
+import { joinNativeRow, removeNativeRows } from "../../../../src/adapters/collab/native/structure-commands.ts";
 import { anchorNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
-import { convertedScript, edit, freshlyShown, shown } from "./helpers.ts";
+import { ScriptNet, convertedScript, edit, freshlyShown, joinedScript, shown } from "./helpers.ts";
 
 after(() => { dom.window.close(); });
 
@@ -234,4 +236,117 @@ test("finding 8: returned rows, outline and document are frozen", () => {
   assert.throws(() => { (copy.rows[0]?.nested as { v: number }).v = 2; }, TypeError);
   assert.throws(() => { (copy.people[0]?.nested as { v: number }).v = 2; }, TypeError);
   assert.deepEqual([script.reader.document().rows[0]?.nested, script.reader.document().people[0]?.nested, script.reader.row("R1")?.fields.nested], [{ v: 1 }, { v: 1 }, { v: 1 }]);
+});
+
+test("document() is frozen at every depth across meta, rows, joined galleries, sections and collections", () => {
+  const image = { sha256: "a".repeat(64), width: 10, height: 20, mime: "image/png" };
+  const otherImage = { ...image, sha256: "b".repeat(64) };
+  const thirdImage = { ...image, sha256: "c".repeat(64) };
+  const annotation = { imageRef: otherImage, marks: [{ kind: "pen", color: "#111111", width: 0.02, points: [0, 0.5, 1, 0.5] }] };
+  const source = small({ R1: "one", R2: "two", R3: "three" }, {
+    metaExtra: { flags: [{ on: true }] },
+    sections: [{ id: "h1", name: "Opening", firstSceneId: "R1", meta: { color: ["blue"] } }],
+    comments: [{
+      id: "c1", rowId: "R1", field: "audioText", anchorId: "c1", author: "Alice", body: "check",
+      createdAt: "2026-11-19T00:00:00.000Z", quotedText: "one", kind: "anchor", resolved: false,
+      extra: { list: [1] },
+      replies: [{ id: "rp1", author: "Bob", body: "done", createdAt: "2026-11-19T00:01:00.000Z", extra: { ok: true } }]
+    }],
+    people: [{ id: "p1", name: "Alice", details: { roles: ["host"] } }],
+    productionTags: [{ id: "t:prop:lamp", cat: "prop", name: "lamp", status: "todo", owner: "p1", notes: "", meta: { count: [2] } }],
+    brollShots: [{ id: "bs1", name: "Wide", props: ["t:prop:lamp"], meta: { lenses: ["24mm"] } }]
+  });
+  Object.assign(source.rows[0] as Record<string, unknown>, {
+    imageRef: image, imageName: "Primary", imageAnnotation: annotation,
+    imageLinks: [{ href: "https://example.test/one", poster: true }],
+    moreImages: [{ imageRef: thirdImage, name: "Extra", links: [{ href: "https://example.test/two", poster: true }] }],
+    custom: { nested: [{ leaf: "x" }] }
+  });
+  Object.assign(source.rows[1] as Record<string, unknown>, { imageRef: image });
+  Object.assign(source.rows[2] as Record<string, unknown>, {
+    imageLinks: [{ href: "https://example.test/joined", poster: true }]
+  });
+  const script = convertedScript(source);
+  try {
+    assert.deepEqual(joinNativeRow(script, "R3", "R2", " "), { kind: "written" });
+    const snapshot = script.reader.document();
+    const visited = new Set<object>();
+    const walk = (value: unknown, path: string): void => {
+      if (value === null || typeof value !== "object" || visited.has(value)) return;
+      visited.add(value);
+      assert.ok(Object.isFrozen(value), `expected frozen at ${path}`);
+      for (const key of Reflect.ownKeys(value)) walk((value as Record<PropertyKey, unknown>)[key], `${path}.${String(key)}`);
+    };
+    walk(snapshot, "document");
+    assert.ok(visited.size >= 40, `expected deep traversal, visited ${visited.size}`);
+    assert.ok(Array.isArray(snapshot.sections) && snapshot.sections.length === 1);
+    assert.ok(snapshot.comments[0]?.replies?.length === 1);
+    assert.ok(Array.isArray(snapshot.rows[0]?.moreImages));
+    assert.ok(Array.isArray(snapshot.rows[1]?.moreImages));
+    assert.ok(Array.isArray(snapshot.brollShots[0]?.props));
+  } finally { script.doc.destroy(); }
+});
+
+test("stacked headings above one row save only the heading directly above it and report each omitted heading", () => {
+  const script = convertedScript(small(
+    { R1: "a", R2: "b", R3: "c", R4: "d" },
+    { sections: [
+      { id: "h1", name: "One", firstSceneId: "R1" },
+      { id: "h2", name: "Two", firstSceneId: "R2" },
+      { id: "h3", name: "Three", firstSceneId: "R3" },
+      { id: "h4", name: "Four", firstSceneId: "R4" }
+    ] }
+  ));
+  try {
+    assert.deepEqual(removeNativeRows(script, ["R1", "R2"]), { kind: "written" });
+    assert.deepEqual(script.reader.outline().map(entry => `${entry.kind}:${entry.id}`), [
+      "heading:h1", "heading:h2", "heading:h3", "row:R3", "heading:h4", "row:R4"
+    ]);
+    const exported = script.reader.document();
+    assert.deepEqual(exported.sections, [
+      { id: "h3", name: "Three", firstSceneId: "R3" },
+      { id: "h4", name: "Four", firstSceneId: "R4" }
+    ]);
+    assert.deepEqual(problemKinds(script), ["heading-without-row headings/h1", "heading-without-row headings/h2"]);
+    assert.deepEqual(migrateRows(structuredClone(exported)).sections, exported.sections);
+    assert.deepEqual(shown(script), freshlyShown(script));
+  } finally { script.doc.destroy(); }
+
+  const seed = convertedScript(small({ R1: "alpha" }), 1);
+  const left = joinedScript(seed, 2), right = joinedScript(seed, 3);
+  seed.doc.destroy();
+  const net = new ScriptNet([left, right]);
+  try {
+    const leftCaret = anchorNativeText(left, { beat: "R1", cell: "narration" }, 0);
+    const rightCaret = anchorNativeText(right, { beat: "R1", cell: "narration" }, 0);
+    assert.ok(leftCaret.kind === "anchored" && rightCaret.kind === "anchored");
+    assert.deepEqual(createNativeHeading(left, leftCaret.range, "h-left", "Left"), { kind: "written" });
+    assert.deepEqual(createNativeHeading(right, rightCaret.range, "h-right", "Right"), { kind: "written" });
+    net.settle();
+    net.agree();
+    const order = left.roots.order.toArray();
+    assert.deepEqual(order, ["h:h-left", "h:h-right", "b:R1"]);
+    const leftRank = left.roots.headings.get("h-left")?.get("rank");
+    const rightRank = left.roots.headings.get("h-right")?.get("rank");
+    const rowRank = left.roots.beats.get("R1")?.get("rank");
+    assert.ok(typeof leftRank === "string" && typeof rightRank === "string" && typeof rowRank === "string");
+    assert.equal(leftRank, rightRank);
+    assert.ok(leftRank < rowRank);
+    const created = [
+      { id: "h-left", name: "Left", rank: leftRank, storedAt: order.indexOf("h:h-left") },
+      { id: "h-right", name: "Right", rank: rightRank, storedAt: order.indexOf("h:h-right") }
+    ].sort((a, b) => a.rank < b.rank ? -1 : a.rank > b.rank ? 1 : a.storedAt - b.storedAt);
+    assert.deepEqual(created.map(entry => entry.id), ["h-left", "h-right"]);
+    const [omitted, nearest] = created;
+    assert.ok(omitted && nearest);
+    for (const copy of [left, right]) {
+      assert.deepEqual(copy.reader.outline(), [
+        { kind: "heading", id: "h-left", name: "Left" },
+        { kind: "heading", id: "h-right", name: "Right" },
+        { kind: "row", id: "R1" }
+      ]);
+      assert.deepEqual(copy.reader.document().sections, [{ id: nearest.id, name: nearest.name, firstSceneId: "R1" }]);
+      assert.deepEqual(problemKinds(copy), [`heading-without-row headings/${omitted.id}`]);
+    }
+  } finally { left.doc.destroy(); right.doc.destroy(); }
 });

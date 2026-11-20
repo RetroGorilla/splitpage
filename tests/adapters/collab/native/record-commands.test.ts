@@ -606,3 +606,34 @@ test("gallery validation sees a peer's image clear that arrives at transaction e
   assert.equal(writer.reader.row("A")?.fields.imageName, undefined);
   for (const script of [writer, peer]) script.doc.destroy();
 });
+
+test("removing a comment keeps its inline mark in document(), matching what core reload keeps", () => {
+  const { scripts: [script] } = recordCopies([5]);
+  assert.ok(script);
+  try {
+    assert.deepEqual(edit(script, { beat: "A", cell: "narration" }, 0, 5, [{ text: "alpha", marks: { cmt: ["thread"] } }]), WRITTEN);
+    assert.deepEqual(edit(script, { beat: "B", cell: "visual" }, 0, 0, [{ text: "note", marks: { cmt: ["vis-anchor"] } }]), WRITTEN);
+    const second = expectedMint(script, "c");
+    assert.deepEqual(createNativeComment(script, { ...commentInput("vis-anchor", "kept"), rowId: "B", field: "visualText" }), { ...WRITTEN, created: second });
+    assert.deepEqual(removeNativeComment(script, COMMENT), WRITTEN);
+    const withSibling = script.reader.document();
+    assert.deepEqual(withSibling.comments.map(comment => comment.id), [second]);
+    assert.equal(withSibling.rows[0]?.audioText, '<span class="cmt-anchor" data-cmt="thread">alpha</span>');
+    assert.equal(withSibling.rows[1]?.visualText, '<span class="cmt-anchor" data-cmt="vis-anchor">note</span>');
+    const reloadedWithSibling = migrateRows(structuredClone(withSibling));
+    assert.deepEqual(reloadedWithSibling, withSibling);
+    assert.equal(reloadedWithSibling.rows[0]?.audioText, '<span class="cmt-anchor" data-cmt="thread">alpha</span>');
+
+    assert.deepEqual(removeNativeComment(script, { comment: second }), WRITTEN);
+    const withoutComments = script.reader.document();
+    assert.deepEqual(withoutComments.comments, []);
+    assert.equal(withoutComments.rows[0]?.audioText, '<span class="cmt-anchor" data-cmt="thread">alpha</span>');
+    assert.equal(withoutComments.rows[1]?.visualText, '<span class="cmt-anchor" data-cmt="vis-anchor">note</span>');
+    const reloadedEmpty = migrateRows(structuredClone(withoutComments));
+    assert.deepEqual(reloadedEmpty, withoutComments);
+    const reimported = convertedScript(reloadedEmpty, 20);
+    try {
+      assert.deepEqual(reimported.reader.document(), withoutComments);
+    } finally { reimported.doc.destroy(); }
+  } finally { script.doc.destroy(); }
+});

@@ -27,7 +27,7 @@ export interface NativeTextRange {
 
 interface PlainId { readonly client: number; readonly clock: number }
 
-interface PlainPosition { readonly type: PlainId | null; readonly tname: string | null; readonly item: PlainId | null; readonly assoc: number }
+interface PlainPosition { readonly type: PlainId; readonly tname: null; readonly item: PlainId | null; readonly assoc: number }
 
 export interface NativeRangeData {
   readonly target: NativeTextTarget;
@@ -182,16 +182,14 @@ function plainId(value: unknown, read: IdsRead): PlainId | null | undefined {
   return id;
 }
 
-// why: each field is read once into plain data and checked before Yjs sees it; a fractional or negative clock, or
-// an association other than the anchor's, reached Yjs and corrupted the cell
+// why: each field is read once into plain data before Yjs sees it; every native text cell is nested, so a root-named
+// position cannot match one and would make Yjs create an unknown root in doc.share when resolved
 function plainPosition(value: unknown, assoc: number, read: IdsRead): PlainPosition | null {
   if (!value || typeof value !== "object") return null;
   const source = value as Readonly<Record<string, unknown>>, type = plainId(source.type, read), item = plainId(source.item, read);
   const tname = source.tname, association = source.assoc;
-  if (type === undefined || item === undefined || association !== assoc || (tname !== null && tname !== undefined && typeof tname !== "string")) return null;
-  const name = typeof tname === "string" ? tname : null;
-  if ((type === null) === (name === null)) return null;
-  return Object.freeze({ type, tname: name, item, assoc });
+  if (!type || item === undefined || association !== assoc || (tname !== null && tname !== undefined)) return null;
+  return Object.freeze({ type, tname: null, item, assoc });
 }
 
 const NO_SEEN: ReadonlyMap<number, number> = new Map();

@@ -6,8 +6,9 @@ import {
 } from "../../../../src/adapters/collab/native/comment-commands.ts";
 import { moveNativeBlocks } from "../../../../src/adapters/collab/native/move-commands.ts";
 import { clearNativeField, setNativeField } from "../../../../src/adapters/collab/native/record-commands.ts";
-import { joinNativeRow, removeNativeRows } from "../../../../src/adapters/collab/native/structure-commands.ts";
+import { joinNativeRow, removeNativeRows, unjoinNativeRow } from "../../../../src/adapters/collab/native/structure-commands.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
+import { convertedScript } from "./helpers.ts";
 import type { Delivery } from "./helpers.ts";
 import {
   AUTHOR, COMMENT, IMAGE, REPLY, RESOLUTION, beatField, commentInput, createNativeComment, createNativeReply, expectedMint,
@@ -262,23 +263,46 @@ function checkDroppedSecondaryLink(script: NativeScript): void {
   const document = script.reader.document(), row = document.rows[0];
   assert.ok(row);
   assert.deepEqual(row.imageRef, IMAGE);
-  assert.deepEqual(row.moreImages, [{ links: HREF_ONLY }]);
-  const expected = { ...row };
-  delete expected.moreImages;
-  assert.deepEqual(migrateRows(structuredClone(document)).rows[0], expected);
+  assert.equal(Object.hasOwn(row, "moreImages"), false);
+  assert.equal(script.reader.row("A")?.fields.moreImages, undefined);
+  assert.deepEqual(script.reader.problems(), [{ kind: "joined-field-not-shown", where: "beats/B/image" }]);
+  const reloaded = migrateRows(structuredClone(document));
+  assert.deepEqual(reloaded.rows[0], row);
+  const reimported = convertedScript(reloaded, 20);
+  try {
+    assert.deepEqual(reimported.reader.document().rows[0], row);
+  } finally { reimported.doc.destroy(); }
 }
 
-test("a write followed by a join exposes an href-only secondary link that reload drops", () => {
+test("a write followed by a join omits an href-only secondary link to match core reload", () => {
   const { scripts: [script] } = recordCopies([5]);
   assert.ok(script);
   assert.deepEqual(setNativeField(script, beatField("A", "imageRef"), IMAGE), WRITTEN);
   assert.deepEqual(setNativeField(script, beatField("B", "imageLinks"), HREF_ONLY), WRITTEN);
   assert.deepEqual(joinNativeRow(script, "B", "A", " "), WRITTEN);
   checkDroppedSecondaryLink(script);
+  assert.deepEqual(unjoinNativeRow(script, "B"), WRITTEN);
+  assert.deepEqual(script.reader.row("B")?.fields.imageLinks, HREF_ONLY);
+  assert.deepEqual(script.reader.problems(), []);
   script.doc.destroy();
 });
 
-test("concurrent head image and member link writes can create an href-only secondary that reload drops", () => {
+test("as built: renaming the head image on a joined row refuses when a member holds a hidden href-only link", () => {
+  const { scripts: [script] } = recordCopies([5]);
+  assert.ok(script);
+  try {
+    assert.deepEqual(setNativeField(script, beatField("A", "imageRef"), IMAGE), WRITTEN);
+    assert.deepEqual(setNativeField(script, beatField("B", "imageLinks"), HREF_ONLY), WRITTEN);
+    assert.deepEqual(joinNativeRow(script, "B", "A", " "), WRITTEN);
+    assert.equal(script.reader.row("A")?.fields.moreImages, undefined);
+    assert.equal(Object.hasOwn(script.reader.document().rows[0] ?? {}, "moreImages"), false);
+    unchangedRecord(script, () => setNativeField(script, beatField("A", "imageName"), "Primary"), "value");
+    assert.equal(script.reader.row("A")?.fields.imageName, undefined);
+    assert.equal(script.reader.document().rows[0]?.imageName, undefined);
+  } finally { script.doc.destroy(); }
+});
+
+test("concurrent head image and member link writes omit an href-only secondary to match core reload", () => {
   races((left, right, settle) => {
     assert.deepEqual(joinNativeRow(left, "B", "A", " "), WRITTEN);
     settle(script => assert.deepEqual(script.reader.row("A")?.members, ["A", "B"]));
@@ -289,6 +313,83 @@ test("concurrent head image and member link writes can create an href-only secon
     unchangedRecord(right, () => setNativeField(right, image, IMAGE), "value");
     settle(checkDroppedSecondaryLink);
   });
+});
+
+test("joined row galleries round-trip through core reload across links, attachments, posters and empty galleries", () => {
+  const attachment = { name: "notes.pdf", size: 123 };
+  const cases: readonly {
+    readonly name: string;
+    readonly setup: (script: NativeScript) => void;
+    readonly expected: Readonly<Record<string, unknown>>;
+    readonly problems: readonly { readonly kind: string; readonly where: string }[];
+  }[] = [
+    {
+      name: "href-only secondary dropped",
+      setup: script => {
+        assert.deepEqual(setNativeField(script, beatField("A", "imageRef"), IMAGE), WRITTEN);
+        assert.deepEqual(setNativeField(script, beatField("B", "imageLinks"), HREF_ONLY), WRITTEN);
+      },
+      expected: { imageRef: IMAGE },
+      problems: [{ kind: "joined-field-not-shown", where: "beats/B/image" }]
+    },
+    {
+      name: "member file attachment folded into primary imageLinks",
+      setup: script => {
+        assert.deepEqual(setNativeField(script, beatField("A", "imageRef"), IMAGE), WRITTEN);
+        assert.deepEqual(setNativeField(script, beatField("B", "imageLinks"), [attachment]), WRITTEN);
+      },
+      expected: { imageRef: IMAGE, imageLinks: [attachment] },
+      problems: []
+    },
+    {
+      name: "member poster kept in moreImages",
+      setup: script => {
+        assert.deepEqual(setNativeField(script, beatField("A", "imageRef"), IMAGE), WRITTEN);
+        assert.deepEqual(setNativeField(script, beatField("B", "imageLinks"), [POSTER]), WRITTEN);
+      },
+      expected: { imageRef: IMAGE, moreImages: [{ links: [POSTER] }] },
+      problems: []
+    },
+    {
+      name: "duplicate member poster collapsed into primary",
+      setup: script => {
+        assert.deepEqual(setNativeField(script, beatField("A", "imageLinks"), [POSTER]), WRITTEN);
+        assert.deepEqual(setNativeField(script, beatField("B", "imageLinks"), [POSTER]), WRITTEN);
+      },
+      expected: { imageRef: null, imageLinks: [POSTER] },
+      problems: []
+    },
+    {
+      name: "joined members without stored gallery keys still expose imageRef: null",
+      setup: script => {
+        script.roots.beats.get("A")?.delete("gallery");
+        script.roots.beats.get("B")?.delete("gallery");
+      },
+      expected: { imageRef: null },
+      problems: []
+    }
+  ];
+  const galleryKeys = ["imageRef", "imageName", "imageAnnotation", "imageLinks", "moreImages"] as const;
+  const pickGallery = (row: Readonly<Record<string, unknown>>): Record<string, unknown> =>
+    Object.fromEntries(galleryKeys.filter(key => Object.hasOwn(row, key)).map(key => [key, row[key]]));
+  for (const item of cases) {
+    const { scripts: [script] } = recordCopies([5]);
+    assert.ok(script);
+    try {
+      item.setup(script);
+      assert.deepEqual(joinNativeRow(script, "B", "A", " "), WRITTEN, item.name);
+      const document = script.reader.document(), row = document.rows[0];
+      assert.ok(row, item.name);
+      assert.deepEqual(pickGallery(row), item.expected, item.name);
+      assert.deepEqual(script.reader.problems(), item.problems, item.name);
+      const reloaded = migrateRows(structuredClone(document));
+      assert.deepEqual(reloaded.rows[0], row, item.name + ": core reload");
+      const reimported = convertedScript(reloaded, 20);
+      try {
+        assert.deepEqual(reimported.reader.document().rows[0], row, item.name + ": reimport");
+      } finally { reimported.doc.destroy(); }
+    } finally { script.doc.destroy(); }
+  }
 });
 
 test("concurrent picture additions to one beat keep one whole picture list in both client orders", () => {
