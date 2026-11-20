@@ -142,7 +142,7 @@ for (const [name, kind] of Object.entries(views)) {
       assert.deepEqual(kind.at(view), ["r1", caret, caret], key + " " + JSON.stringify(extra));
       await Promise.resolve();
       assert.equal(peer(), expected);
-      assert.equal(kind.host("r1").textContent.replace(/​/g, ""), expected);
+      assert.equal(kind.host("r1").textContent.replace(/\u200b/g, ""), expected);
     }
     assert.equal(show.mock.callCount(), 0);
   });
@@ -291,7 +291,7 @@ for (const [name, kind] of Object.entries(views)) {
     assert.equal(show.mock.callCount(), 2);
     assert.deepEqual(show.mock.calls.at(-1).arguments, UNAVAILABLE);
     assert.equal(app(), "Helloab");
-    assert.equal(kind.host("r1").textContent.replace(/​/g, ""), "Hexlloab");
+    assert.equal(kind.host("r1").textContent.replace(/\u200b/g, ""), "Hexlloab");
   });
 
   test(name + ": a one-second pause between typed letters ends the undo step", async t => {
@@ -381,7 +381,7 @@ for (const [name, kind] of Object.entries(views)) {
     await flushed();
     assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
     assert.equal(app(), "Hello");
-    assert.equal(kind.host("r1").textContent.replace(/​/g, ""), "Hello");
+    assert.equal(kind.host("r1").textContent.replace(/\u200b/g, ""), "Hello");
     assert.equal(press(kind.surface(), "z"), true);
     assert.equal(app(), "Hello");
   });
@@ -395,7 +395,7 @@ test("Writer: a burst of 200 keys reaches both copies whole with the caret after
   await flushed();
   const expected = "Hello" + keys.join("");
   assert.equal(app(), expected);
-  assert.equal(beat().textContent.replace(/​/g, ""), expected);
+  assert.equal(beat().textContent.replace(/\u200b/g, ""), expected);
   assert.deepEqual(view.at(), ["r1", 205, 205]);
   await Promise.resolve();
   assert.equal(peer(), expected);
@@ -410,7 +410,7 @@ test("Writer: a peer edit in the same beat while letters are buffered keeps both
   typeKeys(root(), "c");
   await flushed();
   assert.equal(app(), "YHelloabc");
-  assert.equal(beat().textContent.replace(/​/g, ""), "YHelloabc");
+  assert.equal(beat().textContent.replace(/\u200b/g, ""), "YHelloabc");
   assert.deepEqual(view.at(), ["r1", 9, 9]);
   await Promise.resolve();
   assert.equal(peer(), "YHelloabc");
@@ -458,7 +458,7 @@ for (const [situation, place, act] of outOfScope) {
     await flushed();
     assert.deepEqual(show.mock.calls.slice(before).map(call => call.arguments), [UNAVAILABLE]);
     assert.deepEqual([app(0), app(1)], ["Hello!", "World"]);
-    assert.deepEqual([beat("r1").textContent, beat("r2").textContent].map(text => text.replace(/​/g, "")), ["Hello!", "World"]);
+    assert.deepEqual([beat("r1").textContent, beat("r2").textContent].map(text => text.replace(/\u200b/g, "")), ["Hello!", "World"]);
     await Promise.resolve();
     assert.deepEqual([peer(0), peer(1)], ["Hello!", "World"]);
   });

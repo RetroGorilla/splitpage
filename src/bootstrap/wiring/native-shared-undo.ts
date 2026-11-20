@@ -31,8 +31,8 @@ export function nativeUndoRoute({ native, admission, input, publish }: NativeUnd
     const refused = admission.admit();
     if (refused?.kind === "failed") throw refused.error;
     if (refused) return { outcome: { ok: false, reason: refused.reason } };
-    const held = input()?.beforePress() ?? null;
-    if (held) return { outcome: { ok: false, reason: held } };
+    const unsent = input()?.beforePress() ?? null;
+    if (unsent) return { outcome: { ok: false, reason: unsent } };
     const result = native.commands[direction]();    if (result.kind === "refused") return { outcome: { ok: false, reason: result.reason } };
     if (result.kind === "unchanged") return { outcome: NOTHING };
     publish();
