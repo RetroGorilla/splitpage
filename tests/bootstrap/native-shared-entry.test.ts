@@ -137,6 +137,44 @@ test("record outcomes retain refusals and mark only written results as changed",
   assert.deepEqual(refused.mock.calls.at(-1)?.arguments, ["closed"]);
 });
 
+test("a missing admission owner or closed native gallery refuses without reading or planning the edit", async t => {
+  const fixture = entrySwitchFixture();
+  t.after(() => { if (sharedSession()) leaveRunningSharedSession(); });
+  const native = await nativeEntry(fixture);
+  const show = t.mock.method(notices, "show", () => {});
+  const read = t.mock.fn(native.document), edit = t.mock.fn(() => true);
+  const missing = createNativeEditorRecords({ ...native, document: read }, () => null, "Editor", () => 0, fixture.ports.report);
+  assert.deepEqual(missing.gallery("R1", "Edit gallery", edit), { changed: false, held: true });
+  assert.deepEqual(show.mock.calls[0]?.arguments, ["This is not available in a shared session yet.", "warn"]);
+  const closed = openNativeSession({ kind: "state", state: native.encodeState() }, { actor: "Editor", sanitize: sanitizeHtml });
+  closed.close();
+  const closedRead = t.mock.fn(closed.document), refused = t.mock.fn((reason: string) => ({ kind: "rejected" as const, reason }));
+  const ended = createNativeEditorRecords({ ...closed, document: closedRead }, () => ({
+    admit: () => null, refuse: refused
+  }), "Editor", () => 0, fixture.ports.report);
+  assert.deepEqual(ended.gallery("R1", "Edit gallery", edit), { changed: false, held: true });
+  assert.deepEqual(refused.mock.calls[0]?.arguments, ["closed"]);
+  assert.equal(read.mock.callCount(), 0);
+  assert.equal(closedRead.mock.callCount(), 0);
+  assert.equal(edit.mock.callCount(), 0);
+  assert.deepEqual(fixture.errors, []);
+});
+
+test("leaving removes the native comment, paste and drop capture listeners", async t => {
+  const fixture = entrySwitchFixture();
+  t.after(() => { if (sharedSession()) leaveRunningSharedSession(); });
+  const added = t.mock.method(window, "addEventListener"), removed = t.mock.method(window, "removeEventListener");
+  await nativeEntry(fixture);
+  const events = added.mock.calls.map(call => call.arguments).filter(([type, callback, capture]) =>
+    capture === true && typeof callback === "function"
+    && (type === "click" && callback.name === "comment" || (type === "paste" || type === "drop") && callback.name === "pictures"));
+  assert.deepEqual(events.map(([type]) => type), ["click", "paste", "drop"]);
+  assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+  for (const [type, callback, capture] of events) {
+    assert.ok(removed.mock.calls.some(({ arguments: args }) => args[0] === type && args[1] === callback && args[2] === capture), type);
+  }
+});
+
 test("permissions, held admissions and admission failures stop a native command before it writes", async t => {
   const fixture = entrySwitchFixture();
   t.after(() => { if (sharedSession()) leaveRunningSharedSession(); });

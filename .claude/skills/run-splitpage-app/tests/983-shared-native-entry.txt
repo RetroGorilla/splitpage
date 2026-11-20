@@ -124,4 +124,18 @@ jsclick [data-action="comment-menu"]
 jsclick [data-action="delete-comment"]
 jsclick [data-action="delete-comment"]
 wait !document.querySelector('.comment-card') && S.read().peer.comments.length === 0
+eval S.nativePeer.step('undo')
+wait document.querySelector('.comment-body')?.textContent === 'Updated comment'
+jsclick [data-action="edit-comment-body"]:not([data-reply])
+eval window.editBox=document.querySelector('.comment-body-editor');editBox.textContent='Unposted body edit';editBox.dispatchEvent(new InputEvent('input',{bubbles:true}));S.nativePeer.removeComment(S.read().peer.comments[0].id)
+wait !document.querySelector('.comment-body-editor') && Array.from(document.querySelectorAll('.typed-unsaved-text')).some(box=>box.value==='Unposted body edit')
+eval Q('visualText').focus();getSelection().setBaseAndExtent(Q('visualText').firstChild,0,Q('visualText').firstChild,3);true
+jsclick #rows .row[data-id="r1"] .visual-cell button[data-cmd="comment"]
+expect !document.getElementById('comment-modal').hidden
+eval S.nativePeer.removeBeat('r1')
+wait S.read().app.rows.every(row=>row.id!=='r1')
+eval document.getElementById('comment-body-editable').textContent='Unposted comment';true
+jsclick #comment-post
+wait Array.from(document.querySelectorAll('.typed-unsaved-text')).some(box=>box.value==='Unposted comment')
+expect S.read().app.comments.length === 0 && S.read().peer.comments.length === 0
 eval S.leave()

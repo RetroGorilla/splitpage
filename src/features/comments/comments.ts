@@ -240,6 +240,7 @@ export function captureCommentComposer() {
 export function resetCommentBindings() {
   drafts?.clear();
   draftLife = null;
+  bodyEdit = null;
   bindingsVersion++;
   composerVersion++;
   commentTimers.forEach(function (timer) { clearTimeout(timer); });

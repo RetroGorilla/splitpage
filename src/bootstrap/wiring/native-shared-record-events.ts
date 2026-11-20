@@ -7,7 +7,6 @@ import { notices } from "./ports/effects.ts";
 import { ids } from "./ports/identity.ts";
 
 function hasCaption(html: string): boolean {
-  if (!html) return false;
   const template = document.createElement("template");
   template.innerHTML = html;
   return !!template.content.textContent?.trim();
@@ -44,8 +43,9 @@ export function mountNativeRecordEvents(records: NativeEditorRecords): () => voi
     const visual = event.target instanceof Element && event.target.closest("#rows .visual-cell");
     if (!visual) return;
     const data = "clipboardData" in event ? event.clipboardData : event.dataTransfer;
-    const files = Array.from(data?.files ?? []);
-    if (!data || !files.length || files.some(file => !file.type.startsWith("image/"))) return;
+    if (!data) return;
+    const files = Array.from(data.files ?? []);
+    if (!files.length || files.some(file => !file.type.startsWith("image/"))) return;
     if (data.getData("text/plain") || hasCaption(data.getData("text/html"))) return;
     const rowId = visual.querySelector(".cell-editable")?.getAttribute("data-id");
     if (!rowId) return;
