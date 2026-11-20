@@ -31,10 +31,10 @@ test("a stored session requires its own opener and a plain session connects with
   const options = {
     url: kit.url, name: "relay-script", token: "test-token", sessionOptions: STORE_OPTIONS, onEvent: () => undefined
   };
-  assert.throws(() => openNativeRelay(replica.session, options), /requires its store's reopen function/);
+  assert.throws(() => openNativeRelay(replica.session, options).close(), /requires its store's reopen function/);
   assert.throws(() => openNativeRelay(replica.session, {
     ...options, reopen: async () => replica.session
-  }), /requires its store's reopen function/);
+  }).close(), /requires its store's reopen function/);
   const plain = kit.copy();
   await kit.signals.until(() => plain.relay.status().firstSyncDone || undefined);
   assert.equal(plain.relay.session(), plain.session);
