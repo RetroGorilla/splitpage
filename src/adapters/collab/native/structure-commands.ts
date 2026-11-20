@@ -5,7 +5,7 @@ import { nativeSegmentSpans } from "./reader.ts";
 import type { NativeScript } from "./script.ts";
 import { nativeAvailability, nativeLiveRange, nativeRangeSnapshot } from "./text-commands.ts";
 import type { NativeRefusal, NativeTextRange } from "./text-commands.ts";
-import { nativeWellFormed } from "./values.ts";
+import { mintNativeId, nativeWellFormed } from "./values.ts";
 
 export type NativeRowRefusal = NativeRefusal | "taken" | "above" | "stored";
 
@@ -83,16 +83,6 @@ function shownRow(script: NativeScript, beat: string): ShownRow | null {
   return { record, cuts, heads };
 }
 
-function clockOf(doc: Y.Doc): number {
-  return Y.decodeStateVector(Y.encodeStateVector(doc)).get(doc.clientID) ?? 0;
-}
-
-// why: a new row's id is its writer's client id and clock, which Yjs keeps unique per copy, so two copies splitting
-// at once never name the same row
-function mintedId(doc: Y.Doc): string {
-  return "r" + doc.clientID.toString(36) + "-" + clockOf(doc).toString(36);
-}
-
 function attributesBefore(text: Y.Text, index: number): Record<string, true> {
   let offset = 0;
   for (const item of text.toDelta() as NativeDeltaItem[]) {
@@ -132,7 +122,7 @@ export function splitNativeRow(script: NativeScript, at: NativeTextRange): Nativ
     if (!(parent instanceof Y.Map)) return;
     const at = splitPoint(script, checked.target.beat, live.text, live.from);
     if (!at) { outcome = refused("range"); return; }
-    const ranked = parent.has("rank"), rank: unknown = parent.get("rank"), created = mintedId(script.doc);
+    const ranked = parent.has("rank"), rank: unknown = parent.get("rank"), created = mintNativeId(script.doc, "r");
     if (ranked && (typeof rank !== "string" || !nativeWellFormed(rank))) { outcome = refused("stored"); return; }
     if (roots.beats.has(created) || roots.visuals.has(created) || script.reader.hasBeatMarker(created)) { outcome = refused("taken"); return; }
     // why: given the formatting in force at its place, the boundary writes no formatting change of its own that a

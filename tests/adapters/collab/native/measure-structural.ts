@@ -3,6 +3,7 @@ import * as Y from "yjs";
 import { dom } from "../../../../src/test/_dom.mjs";
 import { readNativeOnce } from "../../../../src/adapters/collab/native/reader.ts";
 import type { NativeScriptReader } from "../../../../src/adapters/collab/native/reader.ts";
+import { setNativeField } from "../../../../src/adapters/collab/native/record-commands.ts";
 import { largeState, loadedCopy, moveUpdate, splitUpdate } from "./structural.ts";
 
 const LIMIT_MS = 8;
@@ -24,7 +25,7 @@ function timeRows(reader: NativeScriptReader): number {
   return performance.now() - start;
 }
 
-function sampleSplit(state: Uint8Array, update: Uint8Array): { incremental: number; parses: number; full: number } {
+function sampleUpdate(state: Uint8Array, update: Uint8Array): { incremental: number; parses: number; full: number } {
   const copy = loadedCopy(state, 2), before = copy.reader.counts();
   const start = performance.now();
   Y.applyUpdate(copy.doc, update, "remote");
@@ -36,22 +37,32 @@ function sampleSplit(state: Uint8Array, update: Uint8Array): { incremental: numb
   return { incremental, parses, full };
 }
 
+function fieldUpdate(state: Uint8Array): Uint8Array {
+  const writer = loadedCopy(state, 77), before = Y.encodeStateVector(writer.doc);
+  const outcome = setNativeField(writer, { kind: "beat", id: "B451", field: "status" }, "shot");
+  if (outcome.kind !== "written") throw new Error("The status write did not commit");
+  const update = Y.encodeStateAsUpdate(writer.doc, before);
+  writer.close();
+  return update;
+}
+
 const state = largeState(), lines: string[] = [], failures: string[] = [];
 lines.push(`Node ${process.version} ${process.arch}. ${rounds} rounds of ${samples} samples, the first ${warmup} of each round untimed.`);
-lines.push("Each sample: a warm copy of the 900-beat script receives one structural update from another copy; the time covers applying the update,");
+lines.push("Each sample: a warm copy of the 900-beat script receives one update from another copy; the time covers applying the update,");
 lines.push("the reader's refresh and reading every changed row. Cells: median of the per-round medians [smallest-largest].", "");
 lines.push(`| Case | Median ms | p95 ms | Segments reparsed | Full rebuild ms | Limit ${LIMIT_MS} ms |`, "| --- | --- | --- | --- | --- | --- |");
 const cases: readonly { readonly name: string; readonly update: Uint8Array; readonly expectedParses: number }[] = [
   { name: "Split inside a segment", update: splitUpdate(state, "B451", 60).update, expectedParses: 1 },
   { name: "Split at a segment's start", update: splitUpdate(state, "B480", 0).update, expectedParses: 1 },
-  { name: "Move one row across scenes", update: moveUpdate(state, [{ kind: "beat", id: "B451" }], { kind: "beat", id: "B10" }), expectedParses: 0 }
+  { name: "Move one row across scenes", update: moveUpdate(state, [{ kind: "beat", id: "B451" }], { kind: "beat", id: "B10" }), expectedParses: 0 },
+  { name: "Write one beat's status", update: fieldUpdate(state), expectedParses: 0 }
 ];
 for (const { name, update, expectedParses } of cases) {
   const medians: number[] = [], tails: number[] = [], fulls: number[] = [], parses = new Set<number>();
   for (let round = 0; round < rounds; round++) {
     const timed: number[] = [], full: number[] = [];
     for (let n = 0; n < samples; n++) {
-      const sample = sampleSplit(state, update);
+      const sample = sampleUpdate(state, update);
       parses.add(sample.parses);
       if (n >= warmup) { timed.push(sample.incremental); full.push(sample.full); }
     }
