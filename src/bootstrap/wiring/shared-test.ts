@@ -185,7 +185,13 @@ function startSharedTestHook(): () => void {
     leave,
     timing: (on: boolean) => { timingMarks.marksOn = on === true; },
     peer: sharedTestPeerHook(() => peer),
-    nativePeer: { type: (beat: string, offset: number, text: string) => nativePeer?.type(beat, offset, text) },
+    nativePeer: {
+      type: (beat: string, offset: number, text: string) => nativePeer?.type(beat, offset, text),
+      field: (...args: Parameters<NonNullable<typeof nativePeer>["field"]>) => nativePeer?.field(...args),
+      hold: () => nativePeer?.hold(),
+      deliver: () => nativePeer?.deliver(),
+      step: (direction: "undo" | "redo") => nativePeer?.step(direction)
+    },
     read: () => ({ app: documentReader.read(doc => doc ? JSON.parse(JSON.stringify(doc)) as unknown : null), peer: peer?.read() ?? nativePeer?.read() ?? null }),
     recovery: () => {
       const parts = sharedSessionParts();

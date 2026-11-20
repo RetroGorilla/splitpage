@@ -13,6 +13,8 @@ pictures and screen design are out of scope.
 Slices 1 to 6 are on `main`. The native shared-document command layer and undo are built.
 Slices 7a, 7c and 7h are merged. The native editor entry and Split narration typing are on `main`. This PR builds 7d, the relay server and its storage. The old adapter stays untouched until slice 8.
 
+This PR builds slice 7b-6a: beat status and duration, picture gallery edits, and comment threads in the native editor.
+
 ## Server-stop results and backup runbook
 
 Two product copies received the edit before each stop. A fresh copy then joined a restarted server. Each row was run

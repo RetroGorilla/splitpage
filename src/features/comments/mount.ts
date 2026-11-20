@@ -28,6 +28,7 @@ export interface CommentsPorts {
   readonly composeDraft: (box: HTMLElement, composing: boolean) => void;
   readonly pasteDraft: (box: HTMLElement, html: string, text: string, fromPaste: boolean) => void;
   readonly toggleResolve: (id: string | null) => void;
+  readonly editBody?: (target: Element) => boolean;
   readonly filter: (value: string | null) => void;
   readonly toggleReply: (id: string | null) => void;
   readonly postReply: (id: string | null) => void;
@@ -174,6 +175,7 @@ export function mountComments(mount: { window: Window; ports: CommentsPorts }): 
     click(event): boolean {
       if (!life.active()) return false;
       const target = event.target as HTMLElement;
+      if (ports.editBody?.(target)) return true;
       const resolve = target.closest('[data-action="toggle-resolve"]');
       if (resolve) { ports.toggleResolve(resolve.getAttribute("data-id")); return true; }
       const filter = target.closest("#comments-filter-seg [data-filter]");
@@ -198,7 +200,7 @@ export function mountComments(mount: { window: Window; ports: CommentsPorts }): 
       if (!life.active()) return false;
       const target = event.target as HTMLElement;
       const card = target.closest(".comment-card.is-jumpable");
-      if (card && !target.closest(".reply-composer") && !target.closest("a") && win.getSelection()?.isCollapsed) {
+      if (card && !target.closest(".reply-composer, .comment-body-editor") && !target.closest("a") && win.getSelection()?.isCollapsed) {
         ports.jump(card.getAttribute("data-id"));
         return true;
       }

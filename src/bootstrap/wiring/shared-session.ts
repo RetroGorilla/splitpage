@@ -19,6 +19,7 @@ import { routeSharedUndo, undoOwner } from "./undo.ts";
 import { sharedAuthorPort } from "./ports/shared-author.ts";
 import type { SharedAuthorPort } from "./ports/shared-author.ts";
 import { sharedUndoOwner } from "./ports/shared-undo.ts";
+import type { NativeEditorRecords } from "./native-shared-records.ts";
 
 export interface SharedSessionParts {
   readonly handle: SharedDocumentHandle;
@@ -101,6 +102,7 @@ export interface SharedEditorBackend {
   readonly live: (on: boolean) => void;
   readonly dispose: (attempt: (step: () => void) => boolean) => void;
   readonly unsupportedCommands?: string;
+  readonly nativeRecords?: NativeEditorRecords;
 }
 
 type OpenBackend = (hydration: ValidatedDocument, failedClose: () => boolean) => SharedEditorBackend;
@@ -109,6 +111,10 @@ let running: Running | null = null;
 
 export function sharedSessionParts(): SharedSessionParts | null {
   return running?.backend.parts ?? null;
+}
+
+export function nativeEditorRecords() {
+  return running?.backend.nativeRecords ?? null;
 }
 
 export function nativeEditorActive(): boolean {

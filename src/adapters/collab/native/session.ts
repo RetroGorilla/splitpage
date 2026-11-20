@@ -219,7 +219,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     removeHeading: bind(removeNativeHeading, writing),
     restoreHeading: bind(restoreNativeHeading, adding),
     moveBlocks: bind(moveNativeBlocks, adding),
-    setField: bind(setNativeField, adding),
+    setField: bind(setNativeField, writing),
     clearField: bind(clearNativeField, writing),
     createComment: bind((script, comment: NativeNewComment) => createNativeComment(script, comment, body), adding),
     createReply: bind((script, comment: string, reply: NativeNewReply) => createNativeReply(script, comment, reply, body), adding),

@@ -5,6 +5,9 @@ import { nativeLiveBeatRecord } from "./record-commands.ts";
 import { copyArgument, nativeRecordId, plainRecordArgument, RECORD_UNCHANGED, RECORD_WRITTEN, refuseRecord, transactRecord, writeRecordFields } from "./record-values.ts";
 import type { NativeRecordOutcome } from "./record-values.ts";
 import type { NativeScript } from "./script.ts";
+import { planNativeCommentMark } from "./format-commands.ts";
+import { nativeRangeSnapshot } from "./text-commands.ts";
+import type { NativeTextRange } from "./text-commands.ts";
 import { decodeNativeValue, encodeNativeValue, mintNativeId, nativeFieldKey, nativeWellFormed } from "./values.ts";
 
 export interface NativeCommentTarget {
@@ -23,6 +26,7 @@ export interface NativeNewComment extends NativeNewReply {
   readonly rowId: string | null;
   readonly anchorId: string | null;
   readonly quotedText: string;
+  readonly range?: NativeTextRange;
 }
 
 export interface NativeCommentResolution {
@@ -95,10 +99,10 @@ function replyKey(comment: string, reply: string): string {
 
 export function createNativeComment(script: NativeScript, comment: NativeNewComment, ports: NativeCommentBodyPorts): NativeThreadCreation {
   return transactRecord(script, () => copyBodyArguments(() => {
-    const base = fieldsOf(comment), { field, rowId, anchorId, quotedText } = comment;
-    return { ...base, field, rowId, anchorId, quotedText };
+    const base = fieldsOf(comment), { field, rowId, anchorId, quotedText, range } = comment;
+    return { ...base, field, rowId, anchorId, quotedText, selection: range === undefined ? undefined : nativeRangeSnapshot(range) };
   }, ports), ({ input, sanitize }) => {
-    const id = mintNativeId(script.doc, "c"), { field, rowId, anchorId, quotedText, ...base } = input;
+    const id = mintNativeId(script.doc, "c"), { field, rowId, anchorId, quotedText, selection, ...base } = input;
     if (!validNew(input) || !keptBody(base.body, sanitize) || !nativeWellFormed(quotedText) || plainText(quotedText) !== quotedText) return refuseRecord("value");
     if (field === "title") {
       if (rowId !== null || anchorId !== null || !(script.roots.meta.get("title") instanceof Y.Text)) return refuseRecord("missing");
@@ -108,10 +112,17 @@ export function createNativeComment(script: NativeScript, comment: NativeNewComm
       const anchor = script.reader.commentAnchor(anchorId);
       if (anchor && (anchor.rowId !== rowId || anchor.field !== field)) return refuseRecord("anchor");
     }
-    return insertRecord(script.roots.comments, id, {
-      ...base, field, rowId, anchorId, quotedText, kind: "anchor", assignee: "", updatedAt: base.createdAt,
+    const cell = field === "audioText" ? "narration" : field === "visualText" ? "visual" : null;
+    const mark = selection && selection.target.beat === rowId && selection.target.cell === cell
+      ? planNativeCommentMark(script, selection, id) : null;
+    if (selection !== undefined && !mark) return refuseRecord("anchor");
+    const refused = insertRecord(script.roots.comments, id, {
+      ...base, field, rowId, anchorId: mark ? id : anchorId, quotedText, kind: "anchor", assignee: "", updatedAt: base.createdAt,
       resolved: false, resolvedAt: null, resolvedBy: null
-    }) ?? Object.freeze({ kind: "written", created: id });
+    });
+    if (refused) return refused;
+    mark?.();
+    return Object.freeze({ kind: "written", created: id });
   });
 }
 

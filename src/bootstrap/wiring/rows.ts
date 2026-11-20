@@ -5,7 +5,8 @@ import { notices as portNotices } from "./ports/effects.ts";
 import { text as portText } from "./ports/text.ts";
 import { ownership as portOwnership } from "./ports/saving.ts";
 import { pictures as portPictures } from "./ports/pictures.ts";
-import { refuseNativeEditorCommand, sharedStructureCommands } from "./ports/shared-commands.ts";
+import { sharedStructureCommands } from "./ports/shared-commands.ts";
+import { nativeEditorRecords } from "./shared-session.ts";
 import { placeCaretAtTextOffset } from "../../features/common/caret.ts";
 import { cellSelection, setCellSelection } from "../../features/common/cell-selection.ts";
 import type { PastePlace, BeatMedia, BeatMediaPorts, BeatPorts, Beats } from "../../features/rows/ports.ts";
@@ -122,7 +123,8 @@ export function showPictureNotAdded(): void {
 }
 
 export function handleImageFile(rowId: string, file: File, slot?: number): void {
-  if (refuseNativeEditorCommand()) return;
+  const native = nativeEditorRecords();
+  if (native) { void native.addPictures(rowId, [file], slot); return; }
   media.owner()?.addPicture(rowId, file, slot);
 }
 

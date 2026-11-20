@@ -32,7 +32,10 @@ jsclick .add-row-btn
 expect warn() && JSON.stringify(S.read()) === window.before
 eval clear()
 jsclick #rows .row[data-id="r1"] [data-action="cycle-status"]
-expect warn() && JSON.stringify(S.read()) === window.before
+wait S.read().app.rows[0].status === 'ready' && S.read().peer.rows[0].status === 'ready'
+expect /ready/i.test(document.querySelector('#rows .row[data-id="r1"] [data-action="cycle-status"]').title)
+eval S.nativePeer.step('undo')
+wait JSON.stringify(S.read()) === window.before
 eval clear();window.composed=new CompositionEvent('compositionstart',{bubbles:true,cancelable:true});Q('audioText').dispatchEvent(window.composed);true
 expect window.composed.defaultPrevented && warn() && JSON.stringify(S.read()) === window.before
 eval clear();document.getElementById('doc-title').focus();true
@@ -58,3 +61,67 @@ expect window.legacy.kind === 'applied' && S.nativePeer.type('r1',0,'native') ==
 wait text() === 'LYHexllo'
 eval S.leave()
 expect Q('audioText').textContent === 'LYHexllo'
+eval S.enter({backend:'native'})
+eval window.row = copy => S.read()[copy].rows[0]; window.both = test => test(row('app')) && test(row('peer')); window.readTime = () => document.querySelector('.row-read[data-id="r1"]'); true
+jsclick .row-read[data-id="r1"]
+type 83
+key Enter
+wait both(r => r.lengthSeconds === 83) && readTime().textContent === '1:23'
+jsclick .row-read[data-id="r1"]
+key Backspace
+key Enter
+wait both(r => r.lengthSeconds === undefined) && !readTime().classList.contains('is-set')
+eval window.pngFile = (color,name) => {const canvas=document.createElement('canvas'); canvas.width=12;canvas.height=12;const ctx=canvas.getContext('2d');ctx.fillStyle=color;ctx.fillRect(0,0,12,12);return new File([Uint8Array.from(atob(canvas.toDataURL().split(',')[1]), c => c.charCodeAt(0))],name,{type:'image/png'})}; window.transfer = file => {const data=new DataTransfer();data.items.add(file);return data}; window.photos = r => [r.imageName,...(r.moreImages || []).map(p => p.name)].filter(Boolean).join(','); window.tile = () => document.querySelector('#rows .row[data-id="r1"] .scene-gallery-tile'); true
+eval Q('visualText').dispatchEvent(new ClipboardEvent('paste',{clipboardData:transfer(pngFile('red','Red.png')),bubbles:true,cancelable:true}))
+wait both(r => photos(r) === 'Red.png') && tile()?.querySelector('img')?.naturalWidth === 12
+eval window.fileInput=document.getElementById('file-input');fileInput.click=()=>{};document.querySelector('#rows .row[data-id="r1"] [data-action="image-replace"]').click();fileInput.files=transfer(pngFile('green','Green.png')).files;fileInput.dispatchEvent(new Event('change'));true
+wait both(r => photos(r) === 'Green.png') && /Green.png/.test(tile().getAttribute('aria-label'))
+eval Q('visualText').closest('.visual-cell').dispatchEvent(new DragEvent('drop',{dataTransfer:transfer(pngFile('blue','Blue.png')),bubbles:true,cancelable:true}))
+wait both(r => photos(r) === 'Green.png,Blue.png') && document.querySelectorAll('#rows .row[data-id="r1"] .scene-gallery-tile').length === 2
+jsclick #rows .row[data-id="r1"] .scene-gallery-tile:not(.is-cover)
+jsclick #gallery-modal [data-gact="cover"]
+wait both(r => photos(r) === 'Blue.png,Green.png') && /Blue.png/.test(tile().getAttribute('aria-label'))
+jsclick #gallery-modal [data-gact="remove"]
+wait both(r => photos(r) === 'Green.png') && /Green.png/.test(tile().getAttribute('aria-label'))
+jsclick #gallery-modal [data-gact="annotate"]
+wait window.__annotateTest.state()?.ready
+eval window.point = (x,y) => {const r=document.getElementById('annotate-frame').getBoundingClientRect();return {x:Math.round(r.left+x*r.width),y:Math.round(r.top+y*r.height)}};true
+mouse down point(0.2,0.3)
+mouse move point(0.4,0.5)
+mouse up point(0.6,0.7)
+wait window.__annotateTest.state().marks.length === 1
+jsclick #annotate-done
+wait both(r => r.imageAnnotation?.marks.length === 1) && document.getElementById('annotate-modal').hidden
+jsclick #gallery-modal [data-gact="unannotate"]
+wait both(r => r.imageAnnotation === undefined) && /Green.png/.test(tile().getAttribute('aria-label'))
+key Escape
+jsclick #btn-comments
+jsclick #comments-filter-seg [data-filter="all"]
+eval Q('audioText').focus();getSelection().setBaseAndExtent(Q('audioText').firstChild,0,Q('audioText').firstChild,3);true
+jsclick #rows .row[data-id="r1"] .audio-cell button[data-cmd="comment"]
+expect !document.getElementById('comment-modal').hidden && S.read().app.comments.length === 0
+eval document.getElementById('comment-body-editable').textContent='Check this';true
+jsclick #comment-post
+wait document.querySelector('.comment-body')?.textContent === 'Check this' && Q('audioText').querySelector('.cmt-anchor')
+expect S.read().peer.comments[0].body === 'Check this' && S.read().peer.rows[0].audioText.includes('cmt-anchor')
+jsclick [data-action="toggle-reply"]
+eval document.querySelector('.reply-composer .cell-editable').textContent='A reply';true
+jsclick .reply-post
+wait document.querySelector('.reply-body')?.textContent === 'A reply' && S.read().peer.comments[0].replies[0].body === 'A reply'
+jsclick [data-action="edit-comment-body"]:not([data-reply])
+eval document.querySelector('.comment-body-editor').textContent='Updated comment';true
+jsclick [data-action="save-comment-body"]
+wait document.querySelector('.comment-body')?.textContent === 'Updated comment' && S.read().peer.comments[0].body === 'Updated comment'
+jsclick [data-action="edit-comment-body"][data-reply]
+eval document.querySelector('.comment-body-editor').textContent='Updated reply';true
+jsclick [data-action="save-comment-body"]
+wait document.querySelector('.reply-body')?.textContent === 'Updated reply' && S.read().peer.comments[0].replies[0].body === 'Updated reply'
+jsclick [data-action="toggle-resolve"]
+wait document.querySelector('.comment-card.is-resolved') && S.read().peer.comments[0].resolved
+jsclick [data-action="toggle-resolve"]
+wait !document.querySelector('.comment-card.is-resolved') && S.read().peer.comments[0].resolved === false
+jsclick [data-action="comment-menu"]
+jsclick [data-action="delete-comment"]
+jsclick [data-action="delete-comment"]
+wait !document.querySelector('.comment-card') && S.read().peer.comments.length === 0
+eval S.leave()
