@@ -2,9 +2,11 @@ import assert from "node:assert/strict";
 import test, { type TestContext } from "node:test";
 import * as Y from "yjs";
 import { openNativeSession } from "../../../../src/adapters/collab/native/session.ts";
+import { openNativeUndo } from "../../../../src/adapters/collab/native/undo-commands.ts";
+import { anchorNativeText, typeNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
 import type { NativeTextTarget } from "../../../../src/adapters/collab/native/text-commands.ts";
 import type { NativeUndoOutcome } from "../../../../src/adapters/collab/native/undo-commands.ts";
-import { cells } from "./helpers.ts";
+import { cells, convertedScript } from "./helpers.ts";
 import { AT, beatField } from "./record-harness.ts";
 import { structureScript } from "./structure-harness.ts";
 
@@ -15,8 +17,8 @@ const target = (beat: string, cell: NativeTextTarget["cell"] = "narration"): Nat
 const aText = target("A"), bText = target("B"), bVisual = target("B", "visual"), heading = target("H", "name");
 const status = beatField("A", "status");
 
-function copies(t: TestContext, otherClient = 3): [Session, Session] {
-  const seed = openNativeSession({ kind: "document", document: doc, conversion: { cells, creation: "seed", at: AT, by: "Writer" } }, options);
+function copies(t: TestContext, otherClient = 3, document = doc): [Session, Session] {
+  const seed = openNativeSession({ kind: "document", document, conversion: { cells, creation: "seed", at: AT, by: "Writer" } }, options);
   const state = { kind: "state", state: seed.encodeState() } as const;
   seed.close();
   const a = openNativeSession(state, options), b = openNativeSession(state, options);
@@ -235,6 +237,95 @@ test("selection snapshots reject a forged root name and ignore caller mutation a
   assert.deepEqual(s.encodeState(), control.encodeState());
 });
 
+test("before and after selection getters run inside admission and a refused recorder reads nothing", t => {
+  const [s] = copies(t);
+  const at = anchor(s, aText, 1);
+  const nested: NativeUndoOutcome[] = [];
+  const range = { ...at, get from() { nested.push(s.commands.undo()); return at.from; } };
+  const step = s.commands.setField.withSelection(range, status, "ready");
+  written(step.result);
+  assert.deepEqual(nested, [{ kind: "refused", reason: "busy" }]);
+  const before = s.encodeState();
+  const refused = s.commands.setField.withSelection(at, status, "invalid");
+  assert.deepEqual(refused.result, { kind: "refused", reason: "value" });
+  refused.recordAfter(range);
+  assert.equal(nested.length, 1);
+  step.recordAfter(range);
+  assert.deepEqual(nested, Array(2).fill({ kind: "refused", reason: "busy" }));
+  assert.deepEqual(s.encodeState(), before);
+  selection(s.commands.undo(), aText, 1);
+  selection(s.commands.redo(), aText, 1);
+});
+
+test("an unannotated write adds no selection metadata to its Yjs stack item", t => {
+  const [s] = copies(t);
+  const emitted = t.mock.method(Y.UndoManager.prototype, "emit");
+  type(s, aText, 1, "x");
+  assert.equal(emitted.mock.callCount(), 1);
+  const call = emitted.mock.calls[0];
+  assert(call);
+  const [name, [event]] = call.arguments;
+  assert.equal(name, "stack-item-added");
+  assert.equal((event as { stackItem: { meta: Map<unknown, unknown> } }).stackItem.meta.size, 0);
+});
+
+test("the stored positions copy caller-supplied nested IDs", t => {
+  const [s] = copies(t);
+  const at = anchor(s, aText, 1);
+  const mutable = Y.createRelativePositionFromJSON(JSON.parse(JSON.stringify(at.from)) as object);
+  const range = { target: aText, from: mutable, to: mutable };
+  const step = s.commands.setField.withSelection(range, status, "ready");
+  written(step.result);
+  step.recordAfter(range);
+  assert(mutable.item);
+  mutable.item.clock++;
+  selection(s.commands.undo(), aText, 1);
+  selection(s.commands.redo(), aText, 1);
+});
+
+test("an unknown relative item has no selection and a known item from the wrong beat cannot stand in for it", t => {
+  const [s] = copies(t);
+  const at = anchor(s, aText, 1);
+  const unknown = Y.createRelativePositionFromJSON({ ...at.from, item: { client: 99, clock: 0 } });
+  const wrong = { ...anchor(s, bText, 1), target: aText };
+  const step = s.commands.setField.withSelection(wrong, status, "ready");
+  written(step.result);
+  step.recordAfter({ target: aText, from: unknown, to: unknown });
+  selection(s.commands.undo());
+  selection(s.commands.redo());
+});
+
+test("destroying the binding retires its pending after recorder", t => {
+  const script = convertedScript(doc, 1), undo = openNativeUndo(script);
+  t.after(() => script.doc.destroy());
+  const anchored = anchorNativeText(script, aText, 1);
+  assert.equal(anchored.kind, "anchored");
+  const { range } = anchored;
+  const step = undo.captureSelection(range, () => typeNativeText(script, range, "x", {}));
+  written(step.result);
+  undo.destroy();
+  let reads = 0;
+  step.recordAfter({ ...range, get from() { reads++; return range.from; } });
+  assert.equal(reads, 0);
+});
+
+test("typing can record its own relative caret even when a peer edit arrives before the recorder runs", t => {
+  const [a, b] = copies(t);
+  const at = anchor(a, aText, 1);
+  const first = a.commands.typeText.withSelection(at, at, "x", {});
+  written(first.result);
+  first.recordAfter();
+  const next = anchor(a, aText, 2);
+  const last = a.commands.typeText.withSelection(next, next, "y", {});
+  written(last.result);
+  type(b, aText, 0, "pq");
+  send(b, a);
+  last.recordAfter();
+  selection(a.commands.undo(), aText, 3);
+  selection(a.commands.redo(), aText, 5);
+  assert.equal(a.document().rows[0]?.audioText, "pqaxybc");
+});
+
 test("peers keep separate undo and selections while a local caret shifts with a peer's prefix", t => {
   const [a, b] = copies(t);
   recordType(a, aText, 1, 1, "x");
@@ -293,6 +384,59 @@ for (const [field, before, after, text] of [
   });
 }
 
+test("a caret replayed into a joined narration row can be anchored again", t => {
+  const [a, b] = copies(t);
+  statusWithSelection(a, bText, 1);
+  written(b.commands.joinRow("B", "A", "--"));
+  send(b, a);
+  for (const press of [a.commands.undo, a.commands.redo]) {
+    const result = written(press());
+    assert.deepEqual(result.selection, { target: aText, from: 6, to: 6 });
+    const { target, from, to } = result.selection;
+    anchor(a, target, from, to);
+  }
+  assert.equal(a.document().rows[0]?.audioText, "abc--defg");
+});
+
+for (const [cell, from, to] of [["narration", 2, 6], ["narration", 3, 3], ["narration", 5, 5], ["visual", 1, 4]] as const) {
+  test(`a joined ${cell} selection at ${from}–${to} captures both displayed sides`, t => {
+    const [a, b] = copies(t);
+    written(b.commands.joinRow("B", "A", "--"));
+    send(b, a);
+    const field = target("A", cell);
+    statusWithSelection(a, field, from, to);
+    selection(a.commands.undo(), field, from, to);
+    selection(a.commands.redo(), field, from, to);
+    if (cell === "narration") {
+      assert.equal(a.commands.anchorText(field, 4).kind, "refused");
+      assert.equal(a.narrationCaret("A", 4), null);
+    }
+  });
+}
+
+test("selection replay identifies a later Y.Text segment even when an earlier segment has the same offsets", t => {
+  const document = structureScript({ A: "abc", B: "def" }, {}, [
+    { id: "H1", name: "First", before: "A" }, { id: "H2", name: "Second", before: "B" }
+  ]);
+  const [a] = copies(t, 3, document);
+  assert.notDeepEqual(anchor(a, aText, 1).from.type, anchor(a, bText, 1).from.type);
+  statusWithSelection(a, bText, 1);
+  selection(a.commands.undo(), bText, 1);
+  selection(a.commands.redo(), bText, 1);
+});
+
+test("undo of a hidden record still restores the caret from the row where the step was made", t => {
+  const [a, b] = copies(t);
+  const step = a.commands.setField.withSelection(anchor(a, aText, 1), beatField("B", "status"), "ready");
+  written(step.result);
+  written(b.commands.removeRows(["B"]));
+  send(b, a);
+  const shown = a.document(), before = a.encodeState();
+  selection(a.commands.undo(), aText, 1);
+  assert.deepEqual(a.document(), shown);
+  assert.notDeepEqual(a.encodeState(), before);
+});
+
 test("a split can record a different surface after the write using the minted beat ID", t => {
   const [s] = copies(t);
   const at = anchor(s, bText, 2);
@@ -341,6 +485,18 @@ test("a deleted anchor cannot move a caret into a different row at the gap", t =
   selection(a.commands.redo());
 });
 
+test("a deleted range end cannot follow a split into a joined member", t => {
+  const [a, b] = copies(t);
+  statusWithSelection(a, aText, 0, 3);
+  const created = written(b.commands.splitRow(anchor(b, aText, 1))).created;
+  written(b.commands.deleteText(anchor(b, target(created), 1, 2)));
+  written(b.commands.joinRow(created, "A", "--"));
+  send(b, a);
+  assert.equal(a.document().rows[0]?.audioText, "a--b");
+  selection(a.commands.undo());
+  selection(a.commands.redo());
+});
+
 test("a joined member with an empty visual cell has no visible cell span to restore", t => {
   const [a, b] = copies(t);
   statusWithSelection(a, target("C", "visual"), 0);
@@ -349,6 +505,16 @@ test("a joined member with an empty visual cell has no visible cell span to rest
   assert.equal(a.document().rows[1]?.visualText, "345");
   selection(a.commands.undo());
   selection(a.commands.redo());
+});
+
+test("an entirely empty joined visual row anchors its head at offset zero", t => {
+  const [a, b] = copies(t, 3, structureScript({ A: "abc", B: "def" }));
+  written(b.commands.joinRow("B", "A", ""));
+  send(b, a);
+  const visual = target("A", "visual");
+  statusWithSelection(a, visual, 0);
+  selection(a.commands.undo(), visual, 0);
+  selection(a.commands.redo(), visual, 0);
 });
 
 test("moving a beat follows its ID and keeps its offset", t => {

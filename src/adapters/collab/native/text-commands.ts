@@ -42,6 +42,24 @@ export interface NativeRangeData {
   readonly seen: ReadonlyMap<number, number>;
 }
 
+interface UndoEndpoint {
+  readonly position: PlainPosition;
+  readonly beat: string;
+}
+
+interface SelectedUnits {
+  readonly client: number;
+  readonly from: number;
+  readonly until: number;
+}
+
+export interface NativeUndoAnchor {
+  readonly cell: NativeTextTarget["cell"];
+  readonly first: UndoEndpoint;
+  readonly last: UndoEndpoint | null;
+  readonly units: readonly SelectedUnits[];
+}
+
 export type NativeRefusal = "missing" | "range" | "text" | "busy" | "closed" | "full";
 
 export type NativeAnchoring =
@@ -54,6 +72,7 @@ export type NativeCommitOutcome =
   | { readonly kind: "recovery"; readonly reason: NativeRefusal; readonly runs: readonly Run[] };
 
 interface LiveCell {
+  readonly beat: string;
   readonly text: Y.Text;
   readonly start: number;
   readonly end: number;
@@ -64,6 +83,7 @@ const WRITTEN: NativeCommitOutcome = Object.freeze({ kind: "written" });
 const UNCHANGED: NativeCommitOutcome = Object.freeze({ kind: "unchanged" });
 
 export interface NativeLivePiece {
+  readonly beat: string;
   readonly text: Y.Text;
   readonly start: number;
   readonly items: readonly NativeDeltaItem[];
@@ -88,14 +108,14 @@ function liveCells(script: NativeScript, target: NativeTextTarget): LiveCell[] {
     const cell = script.roots.names.get(target.beat);
     if (!(cell instanceof Y.Text) || !script.reader.headingBoundary(target.beat, false)) return [];
     const name = cell.toString();
-    return name.length === cell.length ? [{ text: cell, start: 0, end: cell.length, items: [{ insert: name }] }] : [];
+    return name.length === cell.length ? [{ beat: target.beat, text: cell, start: 0, end: cell.length, items: [{ insert: name }] }] : [];
   }
   const places = script.reader.narrationSpans(target.beat);
   if (!places.length) return [];
   if (target.cell === "visual") {
     const visual = script.roots.visuals.get(target.beat);
     return script.reader.beatBoundary(target.beat) && visual instanceof Y.Text
-      ? [{ text: visual, start: 0, end: visual.length, items: visual.toDelta() as NativeDeltaItem[] }] : [];
+      ? [{ beat: target.beat, text: visual, start: 0, end: visual.length, items: visual.toDelta() as NativeDeltaItem[] }] : [];
   }
   const segments = new Map<string, { text: Y.Text; spans: NonNullable<ReturnType<typeof nativeSegmentSpans>> }>();
   const cells: LiveCell[] = [], own = script.reader.beatBoundary(target.beat);
@@ -110,7 +130,7 @@ function liveCells(script: NativeScript, target: NativeTextTarget): LiveCell[] {
     const span = segment.spans[place.span];
     if (!span) return [];
     if (span.start === span.end && place !== own) continue;
-    cells.push({ text: segment.text, start: span.start, end: span.end, items: span.items });
+    cells.push({ beat: target.beat, text: segment.text, start: span.start, end: span.end, items: span.items });
   }
   return cells;
 }
@@ -122,12 +142,19 @@ function readTarget(target: NativeTextTarget): NativeTextTarget | null {
   } catch { return null; }
 }
 
-function shownPosition(cells: readonly LiveCell[], offset: number, name: boolean): { text: Y.Text; index: number } | null {
-  for (const cell of cells) {
+const anchorSources = new WeakMap<Y.Doc, object>();
+const authoredEndpoints = new WeakMap<NativeTextRange, {
+  readonly source: object; readonly first: UndoEndpoint; readonly last: UndoEndpoint | null;
+}>();
+
+function shownPosition(cells: readonly LiveCell[], gaps: readonly number[], offset: number, name: boolean) {
+  for (const [index, cell] of cells.entries()) {
+    offset -= gaps[index] ?? 0;
+    if (offset < 0) return null;
     const view = name ? null : nativeCellView(cell.items), size = view?.length ?? cell.end - cell.start;
     if (offset > size) { offset -= size; continue; }
     if (splitsPair(view?.text ?? storedText(cell.items), offset)) return null;
-    return { text: cell.text, index: cell.start + (view ? nativeStoredOffset(view, offset) : offset) };
+    return { beat: cell.beat, text: cell.text, index: cell.start + (view ? nativeStoredOffset(view, offset) : offset) };
   }
   return null;
 }
@@ -145,17 +172,31 @@ export function anchorNativeText(script: NativeScript, target: NativeTextTarget,
   if (unavailable) return { kind: "refused", reason: unavailable };
   const checked = readTarget(target);
   if (!checked) return { kind: "refused", reason: "range" };
-  const cells = liveCells(script, checked);
+  const { cells, gaps } = anchoringCells(script, checked);
   if (!cells.length) return { kind: "refused", reason: "missing" };
   if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < from) return { kind: "refused", reason: "range" };
-  const first = shownPosition(cells, from, checked.cell === "name"), last = from === to ? first : shownPosition(cells, to, checked.cell === "name");
-  if (!first || !last) return { kind: "refused", reason: "range" };
-  const start = Y.createRelativePositionFromTypeIndex(first.text, first.index, 0);
-  if (from === to) return { kind: "anchored", range: Object.freeze({ target: checked, from: start, to: start }) };
-  const end = Y.createRelativePositionFromTypeIndex(last.text, last.index, -1);
+  const first = shownPosition(cells, gaps, from, checked.cell === "name");
+  const last = from === to ? null : shownPosition(cells, gaps, to, checked.cell === "name");
+  if (!first || (from !== to && !last)) return { kind: "refused", reason: "range" };
+  const start = undoEndpoint(first, 0), end = last && undoEndpoint(last, -1);
+  const positions = { target: checked, from: start.position, to: end?.position ?? start.position };
   // why: only a selection can lose both ends to a peer, so only a selection keeps what its copy had seen
-  const seen = Object.freeze([...Y.decodeStateVector(Y.encodeStateVector(script.doc))].map(pair => Object.freeze(pair)));
-  return { kind: "anchored", range: Object.freeze({ target: checked, from: start, to: end, seen }) };
+  const range = Object.freeze(end
+    ? { ...positions, seen: Object.freeze([...Y.decodeStateVector(Y.encodeStateVector(script.doc))].map(pair => Object.freeze(pair))) }
+    : positions);
+  const source = anchorSources.get(script.doc) ?? {};
+  anchorSources.set(script.doc, source);
+  authoredEndpoints.set(range, { source, first: start, last: end });
+  return { kind: "anchored", range };
+}
+
+function undoEndpoint(point: { readonly beat: string; readonly text: Y.Text; readonly index: number }, assoc: number): UndoEndpoint {
+  const { beat, text, index } = point;
+  const { type, item } = Y.createRelativePositionFromTypeIndex(text, index, assoc) as PlainPosition;
+  return { beat, position: Object.freeze({
+    type: Object.freeze({ client: type.client, clock: type.clock }),
+    item: item && Object.freeze({ client: item.client, clock: item.clock }), tname: null, assoc
+  }) };
 }
 
 function refuse(reason: NativeRefusal, runs: readonly Run[]): NativeCommitOutcome {
@@ -231,6 +272,8 @@ function unitGone(position: PlainPosition, doc: Y.Doc): boolean {
 // command checked
 export function nativeRangeSnapshot(range: NativeTextRange): NativeRangeData | null {
   try {
+    const authored = authoredEndpoints.get(range);
+    if (authored && !authored.last) return { target: range.target, from: authored.first.position, to: null, seen: NO_SEEN };
     const target: unknown = range.target, from: unknown = range.from, to: unknown = range.to, seen = to === from ? NO_SEEN : seenOf(range.seen);
     if (!target || typeof target !== "object" || !seen) return null;
     const checked = readTarget(target as NativeTextTarget);
@@ -258,42 +301,46 @@ export function nativeLiveRange(script: NativeScript, range: NativeRangeData): N
   if (!cells.length) return "missing";
   const from = resolve(range.from, script.doc), to = range.to ? resolve(range.to, script.doc) : from;
   if (!from || !to) return "range";
-  return liveRangeOf(cells, range, from, to, script.doc);
+  const live = liveRangeOf(cells, from, to);
+  if (typeof live === "string") return live;
+  return collapseIfSpent(script.doc, live, range.from, range.to,
+    piece => heldAlive(piece.text, piece.from, piece.until, range.seen));
 }
 
-function liveRangeOf(cells: readonly LiveCell[], range: NativeRangeData, from: Y.AbsolutePosition, to: Y.AbsolutePosition,
-  doc: Y.Doc): NativeLiveRange | "range" {
+function containsAt(cell: LiveCell, at: Y.AbsolutePosition): boolean {
+  return at.type === cell.text && at.index >= cell.start && at.index <= cell.end;
+}
+
+function liveRangeOf(cells: readonly LiveCell[], from: Y.AbsolutePosition, to: Y.AbsolutePosition): NativeLiveRange | "range" {
   const contains = (cell: LiveCell, at: Y.AbsolutePosition): boolean =>
-    at.type === cell.text && at.index >= cell.start && at.index <= cell.end && !splitsPair(storedText(cell.items), at.index - cell.start);
+    containsAt(cell, at) && !splitsPair(storedText(cell.items), at.index - cell.start);
   const first = cells.findIndex(cell => contains(cell, from)), last = cells.findIndex(cell => contains(cell, to));
   if (first < 0 || last < first || (first === last && to.index < from.index)) return "range";
-  let pieces = cells.slice(first, last + 1).map((cell, index) => ({
-    text: cell.text, start: cell.start, items: cell.items,
+  const pieces = cells.slice(first, last + 1).map((cell, index) => ({
+    beat: cell.beat, text: cell.text, start: cell.start, items: cell.items,
     from: index === 0 ? from.index : cell.start, until: index === last - first ? to.index : cell.end
   }));
-  if (range.to && unitGone(range.from, doc) && unitGone(range.to, doc)
-    && !pieces.some(piece => heldAlive(piece.text, piece.from, piece.until, range.seen))) {
-    const firstPiece = pieces[0];
-    if (firstPiece) pieces = [{ ...firstPiece, until: firstPiece.from }];
-  }
   const primary = pieces[0];
   return primary ? { ...primary, pieces } : "range";
 }
 
-function undoOwnerOf(script: NativeScript, range: NativeRangeData, at: Y.AbsolutePosition, position: PlainPosition): string | null {
-  const { beat, cell } = range.target;
+function collapseIfSpent(doc: Y.Doc, live: NativeLiveRange, from: PlainPosition, to: PlainPosition | null,
+  surviving: (piece: NativeLivePiece) => boolean): NativeLiveRange {
+  if (!to || !unitGone(from, doc) || !unitGone(to, doc) || live.pieces.some(surviving)) return live;
+  const first = live.pieces[0] ?? live;
+  const caret = { ...first, until: first.from };
+  return { ...caret, pieces: [caret] };
+}
+
+function undoOwnerOf(script: NativeScript, cell: NativeTextTarget["cell"], at: Y.AbsolutePosition, endpoint: UndoEndpoint): string | null {
+  const { beat, position } = endpoint;
   if (cell !== "narration") return beat;
   const owner = script.reader.narrationOwner(at.type, at.index, position.assoc);
   // why: only a surviving unit inside the new span establishes that the caret followed its text into another row
   return owner && (owner.beat === beat || (owner.inside && !unitGone(position, script.doc))) ? owner.beat : null;
 }
 
-function undoCells(script: NativeScript, cell: NativeTextTarget["cell"], first: string, last: string) {
-  if (cell === "name") return {
-    row: first, cells: script.reader.showsHeading(first) ? liveCells(script, { beat: first, cell }) : [], gaps: []
-  };
-  const members = script.reader.rowMembers(first), row = members[0]?.id;
-  if (row === undefined || !members.some(member => member.id === last)) return null;
+function rowCells(script: NativeScript, cell: NativeTextTarget["cell"], members: ReturnType<NativeScript["reader"]["rowMembers"]>) {
   const cells: LiveCell[] = [], gaps: number[] = [];
   let hasItems = false;
   for (const { id, glue } of members) {
@@ -303,28 +350,90 @@ function undoCells(script: NativeScript, cell: NativeTextTarget["cell"], first: 
     cells.push(...own);
     hasItems ||= hasOwnItems;
   }
-  return { row, cells, gaps };
+  const head = members[0];
+  if (!cells.length && head) cells.push(...liveCells(script, { beat: head.id, cell }));
+  return { cells, gaps };
 }
 
-export function resolveNativeUndoSelection(script: NativeScript, range: NativeRangeData): NativeUndoSelection | null {
-  const { cell } = range.target;
-  const from = resolve(range.from, script.doc), to = range.to ? resolve(range.to, script.doc) : from;
+function anchoringCells(script: NativeScript, target: NativeTextTarget) {
+  if (target.cell !== "name") {
+    const members = script.reader.rowMembers(target.beat, true);
+    if (members.length) return rowCells(script, target.cell, members);
+  }
+  return { cells: liveCells(script, target), gaps: [] };
+}
+
+function* selectedUnits(piece: NativeLivePiece): Iterable<SelectedUnits> {
+  let offset = 0;
+  for (const item of Y.getTypeChildren(piece.text)) {
+    if (item.deleted || !item.countable) continue;
+    const end = offset + item.length;
+    if (end > piece.from && offset < piece.until) {
+      yield { client: item.id.client, from: item.id.clock + Math.max(0, piece.from - offset),
+        until: item.id.clock + Math.min(item.length, piece.until - offset) };
+    }
+    if (end >= piece.until) break;
+    offset = end;
+  }
+}
+
+function originalUnits(live: NativeLiveRange, seen: ReadonlyMap<number, number>): SelectedUnits[] {
+  return live.pieces.flatMap(piece => Array.from(selectedUnits(piece)).flatMap(unit => {
+    const until = Math.min(unit.until, seen.get(unit.client) ?? 0);
+    return unit.from < until ? [{ ...unit, until }] : [];
+  }));
+}
+
+function undoLayout(script: NativeScript, cell: NativeTextTarget["cell"], beat: string) {
+  if (cell === "name") return {
+    row: beat, cells: script.reader.showsHeading(beat) ? liveCells(script, { beat, cell }) : [], gaps: []
+  };
+  const members = script.reader.rowMembers(beat);
+  return { row: members[0]?.id ?? beat, ...rowCells(script, cell, members) };
+}
+
+export function snapshotNativeUndoAnchor(script: NativeScript, range: NativeTextRange): NativeUndoAnchor | null {
+  const authored = authoredEndpoints.get(range);
+  const origin = authored && authored.source === anchorSources.get(script.doc) ? authored : null;
+  if (origin && !origin.last) return { cell: range.target.cell, first: origin.first, last: null, units: [] };
+  const data = nativeRangeSnapshot(range);
+  if (!data) return null;
+  const { cell } = data.target;
+  const from = resolve(data.from, script.doc), to = data.to ? resolve(data.to, script.doc) : from;
+  const endpoints = origin && { cell, first: origin.first, last: origin.last, units: [] };
+  if (!from || !to) return endpoints;
+  const cells = origin ? undoLayout(script, cell, undoOwnerOf(script, cell, from, origin.first) ?? origin.first.beat).cells
+    : liveCells(script, data.target);
+  const live = liveRangeOf(cells, from, to);
+  if (typeof live === "string") return endpoints;
+  return {
+    cell, first: origin?.first ?? { beat: live.beat, position: data.from },
+    last: data.to && (origin?.last ?? { beat: live.pieces.at(-1)?.beat ?? live.beat, position: data.to }),
+    units: data.to ? originalUnits(live, data.seen) : []
+  };
+}
+
+export function resolveNativeUndoSelection(script: NativeScript, range: NativeUndoAnchor): NativeUndoSelection | null {
+  const { cell, first, last } = range;
+  const from = resolve(first.position, script.doc), to = last ? resolve(last.position, script.doc) : from;
   if (!from || !to) return null;
-  const first = undoOwnerOf(script, range, from, range.from);
-  const last = range.to ? undoOwnerOf(script, range, to, range.to) : first;
-  if (first === null || last === null) return null;
-  const shown = undoCells(script, cell, first, last);
-  if (!shown) return null;
-  const live = liveRangeOf(shown.cells, range, from, to, script.doc);
+  const owner = undoOwnerOf(script, cell, from, first);
+  const endOwner = last ? undoOwnerOf(script, cell, to, last) : owner;
+  if (owner === null || endOwner === null) return null;
+  const shown = undoLayout(script, cell, owner);
+  const live = liveRangeOf(shown.cells, from, to);
   if (typeof live === "string") return null;
-  const end = live.pieces.at(-1) ?? live;
+  const settled = collapseIfSpent(script.doc, live, first.position, last?.position ?? null, piece =>
+    Array.from(selectedUnits(piece)).some(unit => range.units.some(original =>
+      unit.client === original.client && unit.from < original.until && unit.until > original.from)));
+  const end = settled.pieces.at(-1) ?? settled;
   let offset = 0, startOffset: number | undefined;
   for (const [index, part] of shown.cells.entries()) {
     offset += shown.gaps[index] ?? 0;
     const view = cell === "name" ? null : nativeCellView(part.items);
     const shownAt = (stored: number): number =>
       offset + (view ? view.ends.filter(unitEnd => unitEnd <= stored - part.start).length : stored - part.start);
-    if (part.text === live.text && part.start === live.start) startOffset = shownAt(live.from);
+    if (part.text === settled.text && part.start === settled.start) startOffset = shownAt(settled.from);
     if (startOffset !== undefined && part.text === end.text && part.start === end.start) {
       return Object.freeze({ target: Object.freeze({ beat: shown.row, cell }), from: startOffset, to: shownAt(end.until) });
     }
@@ -336,7 +445,7 @@ export function resolveNativeUndoSelection(script: NativeScript, range: NativeRa
 // why: a command called while another transaction is open refuses, since that transaction's changes are not yet
 // observed
 export function replaceNativeText(script: NativeScript, range: NativeTextRange, runs: readonly Run[], stamp?: NativeEditStamp,
-  beforeWrite?: (target: NativeTextTarget) => void, adds?: boolean): NativeCommitOutcome {
+  beforeWrite?: (target: NativeTextTarget) => void, adds?: boolean, afterWrite?: (anchor: NativeUndoAnchor) => void): NativeCommitOutcome {
   const unavailable = nativeAvailability(script);
   if (unavailable) return refuse(unavailable, runs);
   return transactPreparedNativeCommand(script, () => ({
@@ -356,13 +465,17 @@ export function replaceNativeText(script: NativeScript, range: NativeTextRange, 
       if (piece.until > piece.from) piece.text.delete(piece.from + shift, piece.until - piece.from);
     }
     if (encoded && updateStamp) script.roots.edited.set(checked.target.beat, encoded);
+    if (afterWrite) {
+      const first = undoEndpoint({ beat: live.beat, text: live.text, index: end }, 0);
+      afterWrite({ cell: checked.target.cell, first, last: null, units: [] });
+    }
     return WRITTEN;
   }, reason => refuse(reason, runs), ({ prepared }) => adds ?? prepared?.length !== 0);
 }
 
 export function typeNativeText(script: NativeScript, range: NativeTextRange, text: string, marks: Marks, stamp?: NativeEditStamp,
-  beforeWrite?: (target: NativeTextTarget) => void): NativeCommitOutcome {
-  return replaceNativeText(script, range, text ? [{ text, marks }] : [], stamp, beforeWrite, text !== "");
+  beforeWrite?: (target: NativeTextTarget) => void, afterWrite?: (anchor: NativeUndoAnchor) => void): NativeCommitOutcome {
+  return replaceNativeText(script, range, text ? [{ text, marks }] : [], stamp, beforeWrite, text !== "", afterWrite);
 }
 
 export function deleteNativeText(script: NativeScript, range: NativeTextRange, stamp?: NativeEditStamp): NativeCommitOutcome {

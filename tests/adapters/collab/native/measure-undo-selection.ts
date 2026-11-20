@@ -4,7 +4,9 @@ import { serialize } from "node:v8";
 import * as Y from "yjs";
 import { dom } from "../../../../src/test/_dom.mjs";
 import { openNativeSession } from "../../../../src/adapters/collab/native/session.ts";
-import { nativeRangeSnapshot } from "../../../../src/adapters/collab/native/text-commands.ts";
+import { openNativeScript } from "../../../../src/adapters/collab/native/script.ts";
+import { snapshotNativeUndoAnchor } from "../../../../src/adapters/collab/native/text-commands.ts";
+import { beatField } from "./record-harness.ts";
 import { largeState } from "./structural.ts";
 
 type Session = ReturnType<typeof openNativeSession>;
@@ -12,8 +14,8 @@ const state = largeState();
 const field = { beat: "B451", cell: "narration" } as const;
 const letters = 1_000, rounds = 5;
 
-function open(): Session {
-  const copy = openNativeSession({ kind: "state", state }, { actor: "Writer", sanitize: html => String(html ?? "") });
+function open(bytes = state): Session {
+  const copy = openNativeSession({ kind: "state", state: bytes }, { actor: "Writer", sanitize: html => String(html ?? "") });
   copy.ydoc.clientID = 0xf1234567;
   copy.document();
   return copy;
@@ -39,7 +41,7 @@ function typing(withSelection: boolean): number {
       const before = anchor(copy, from);
       if (withSelection) {
         const step = copy.commands.typeText.withSelection(before, before, "x", {});
-        step.recordAfter(anchor(copy, from + 1));
+        step.recordAfter();
         assert.equal(step.result.kind, "written");
       } else {
         assert.equal(copy.commands.typeText(before, "x", {}).kind, "written");
@@ -53,44 +55,111 @@ function typing(withSelection: boolean): number {
   }
 }
 
-function anchorCost(copy: Session, to: number) {
+function anchorCost(copy: Session, script: ReturnType<typeof openNativeScript>, to: number) {
   const samples: number[] = [];
   for (let index = 0; index < letters; index++) {
     const start = performance.now();
-    assert(nativeRangeSnapshot(anchor(copy, 60, to)));
+    assert(snapshotNativeUndoAnchor(script, anchor(copy, 60, to)));
     samples.push(performance.now() - start);
   }
   return median(samples);
 }
 
-typing(false);
-typing(true);
-await Promise.resolve();
-const plain: number[] = [], selected: number[] = [], caret: number[] = [], range: number[] = [];
-const copy = open();
-try {
-  assert.equal(copy.commands.typeText(anchor(copy, 60), "x", {}).kind, "written");
-  for (let round = 0; round < rounds; round++) {
-    for (const selectedFirst of round % 2 === 0 ? [false, true] : [true, false]) {
-      (selectedFirst ? selected : plain).push(typing(selectedFirst));
+async function measureTyping() {
+  typing(false);
+  typing(true);
+  await Promise.resolve();
+  const plain: number[] = [], selected: number[] = [], caret: number[] = [], range: number[] = [];
+  const copy = open(), script = openNativeScript(copy.ydoc);
+  try {
+    assert.equal(copy.commands.typeText(anchor(copy, 60), "x", {}).kind, "written");
+    for (let round = 0; round < rounds; round++) {
+      for (const selectedFirst of round % 2 === 0 ? [false, true] : [true, false]) {
+        (selectedFirst ? selected : plain).push(typing(selectedFirst));
+        await Promise.resolve();
+      }
+      caret.push(anchorCost(copy, script, 60));
+      range.push(anchorCost(copy, script, 68));
+    }
+    const print = (values: readonly number[]): string =>
+      `${median(values).toFixed(4)} [${Math.min(...values).toFixed(4)}-${Math.max(...values).toFixed(4)}]`;
+    console.log(`Node ${process.version} ${process.arch}. ${rounds} rounds of ${letters} keys on 900 beats, median ms [round min-max].`);
+    console.log(`Typing without selection: ${print(plain)}. With before and after carets: ${print(selected)}. Delta: ${(median(selected) - median(plain)).toFixed(4)} ms.`);
+    for (const [label, to, samples] of [["Caret", 60, caret], ["Range", 68, range]] as const) {
+      const anchored = anchor(copy, 60, to), stored = snapshotNativeUndoAnchor(script, anchored);
+      const positions = Y.encodeRelativePosition(anchored.from).length
+        + (anchored.from === anchored.to ? 0 : Y.encodeRelativePosition(anchored.to).length);
+      console.log(`${label} anchor + snapshot: ${print(samples)} ms. One anchor: ${positions} position bytes, ${serialize(stored).length} V8 snapshot bytes including target and selected units.`);
+    }
+  } finally {
+    script.close();
+    copy.close();
+    await Promise.resolve();
+  }
+}
+
+function withWriters(writers: number): Uint8Array {
+  const doc = new Y.Doc();
+  try {
+    Y.applyUpdate(doc, state);
+    for (let writer = 1; writer < writers; writer++) {
+      doc.clientID = 0xf0000000 + writer;
+      doc.getMap("meta").set("measurement", writer);
+    }
+    assert.equal(Y.decodeStateVector(Y.encodeStateVector(doc)).size, writers);
+    return Y.encodeStateAsUpdate(doc);
+  } finally {
+    doc.destroy();
+  }
+}
+
+async function retainedHeap(bytes: Uint8Array, selected: boolean, gc: () => void): Promise<number> {
+  const copy = open(bytes), status = beatField(field.beat, "status");
+  try {
+    gc();
+    const start = process.memoryUsage().heapUsed;
+    for (let i = 0; i < 10_000; i++) {
+      const value = i % 2 ? "ready" : "shot";
+      if (selected) {
+        const step = copy.commands.setField.withSelection(anchor(copy, 60, 68), status, value);
+        assert.equal(step.result.kind, "written");
+        step.recordAfter(anchor(copy, 60, 68));
+      } else assert.equal(copy.commands.setField(status, value).kind, "written");
+    }
+    await Promise.resolve();
+    gc();
+    return process.memoryUsage().heapUsed - start;
+  } finally {
+    copy.close();
+    await Promise.resolve();
+  }
+}
+
+async function measureMemory() {
+  const gc = globalThis.gc;
+  assert(gc, "Run with --expose-gc for the retained heap measurement.");
+  for (const writers of [2, 1002]) {
+    const copy = open(withWriters(writers)), script = openNativeScript(copy.ydoc);
+    try {
+      const range = anchor(copy, 60, 68);
+      const stored = snapshotNativeUndoAnchor(script, range);
+      assert(stored);
+      assert(!("seen" in stored));
+      console.log(`${writers} writers: 0 retained state-vector bytes, ${serialize(stored).length} V8 snapshot bytes for one range.`);
+    } finally {
+      script.close();
+      copy.close();
       await Promise.resolve();
     }
-    caret.push(anchorCost(copy, 60));
-    range.push(anchorCost(copy, 68));
   }
-  const print = (values: readonly number[]): string =>
-    `${median(values).toFixed(4)} [${Math.min(...values).toFixed(4)}-${Math.max(...values).toFixed(4)}]`;
-  console.log(`Node ${process.version} ${process.arch}. ${rounds} rounds of ${letters} keys on 900 beats, median ms [round min-max].`);
-  console.log(`Typing without selection: ${print(plain)}. With before and after carets: ${print(selected)}.`);
-  for (const [label, to, samples] of [["Caret", 60, caret], ["Range", 68, range]] as const) {
-    const anchored = anchor(copy, 60, to), stored = nativeRangeSnapshot(anchored);
-    const positions = Y.encodeRelativePosition(anchored.from).length
-      + (anchored.from === anchored.to ? 0 : Y.encodeRelativePosition(anchored.to).length);
-    const vector = anchored.seen ? Y.encodeStateVector(new Map(anchored.seen)).length : 0;
-    console.log(`${label} anchor + snapshot: ${print(samples)} ms. One anchor: ${positions} position bytes, ${vector} vector bytes, ${serialize(stored).length} V8 snapshot bytes including target.`);
-  }
+  const bytes = withWriters(102);
+  const plain = await retainedHeap(bytes, false, gc), selected = await retainedHeap(bytes, true, gc);
+  console.log(`10,000 steps with 102 writers: ${(selected / 1e6).toFixed(2)} MB heap with two ranges per step, ${(plain / 1e6).toFixed(2)} MB without selection, ${((selected - plain) / 1e6).toFixed(2)} MB difference.`);
+}
+
+try {
+  if (process.argv.includes("--memory")) await measureMemory();
+  else await measureTyping();
 } finally {
-  copy.close();
-  await Promise.resolve();
   dom.window.close();
 }

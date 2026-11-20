@@ -764,15 +764,18 @@ export class NativeScriptReader {
     return null;
   }
 
-  rowMembers(beat: string): readonly Readonly<RowMember>[] {
+  rowMembers(beat: string, joinedHeadOnly = false): readonly Readonly<RowMember>[] {
     this.sync();
-    return Object.freeze((this.groups.get(this.groupHeads.get(beat) ?? "") ?? []).map(member => Object.freeze({ ...member })));
+    const head = this.groupHeads.get(beat);
+    const members = head === undefined ? undefined : this.groups.get(head);
+    if (!members || (joinedHeadOnly && (head !== beat || members.length < 2))) return [];
+    return Object.freeze(members.map(member => Object.freeze({ ...member })));
   }
 
   showsHeading(heading: string): boolean {
     this.sync();
-    const index = this.outlineEntries.findIndex(entry => entry.kind === "heading" && entry.id === heading);
-    return index >= 0 && this.outlineEntries[index + 1]?.kind === "row";
+    return this.outlineEntries.some((entry, index) =>
+      entry.kind === "heading" && entry.id === heading && this.outlineEntries[index + 1]?.kind === "row");
   }
 
   previewJoinedGallery(beat: string, gallery: Readonly<Record<string, unknown>>): Record<string, unknown> | null {

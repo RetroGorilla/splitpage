@@ -453,7 +453,10 @@ test("100 undo and redo cycles stop growing at the ceiling and each refused pres
   const session = fromState(state, { sizeLimit: limit, sizeCeilingRatio: ceilingRatio, sizeMinimumStep: step });
   t.after(() => { seed.close(); session.close(); });
   const c = session.commands;
-  assert.equal(c.typeText(anchor(session, 1), "a".repeat(1000), {}).kind, "written");
+  const beforeTyping = anchor(session, 1);
+  const typed = c.typeText.withSelection(beforeTyping, beforeTyping, "a".repeat(1000), {});
+  assert.equal(typed.result.kind, "written");
+  typed.recordAfter();
   await Promise.resolve();
   assert.equal(session.size, "full");
   let refused = 0, largestPress = 0;
@@ -467,6 +470,8 @@ test("100 undo and redo cycles stop growing at the ceiling and each refused pres
       refused++;
     } else {
       assert.equal(outcome.kind, "written");
+      const at = press === c.undo ? 1 : 1001;
+      assert.deepEqual(outcome.selection, { target: { beat: "A", cell: "narration" }, from: at, to: at });
       assert.equal(refused, 0);
       largestPress = Math.max(largestPress, after.byteLength - before.byteLength);
     }

@@ -196,7 +196,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     return {
       run: (...args: Args) => run(args),
       withSelection(before: NativeTextRange | null, ...args: Args) {
-        let finish: ((after: NativeTextRange | null) => void) | undefined;
+        let finish: ((after?: NativeTextRange | null) => void) | undefined;
         const result = run(args, write => {
           const recorded = undo.captureSelection(before, write);
           finish = recorded.recordAfter;
@@ -204,7 +204,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
         });
         return Object.freeze({
           result,
-          recordAfter(after: NativeTextRange | null): void {
+          recordAfter(after?: NativeTextRange | null): void {
             const record = finish;
             if (record && !refusal()) perform(() => record(after));
           }
@@ -236,7 +236,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
         const previous = typing?.target.beat === target.beat && typing.target.cell === target.cell ? typing : null;
         if (!previous || !continuesSharedTypingWord(previous.endsInSpace, text)) undo.stopCapturing();
         typing = { target, endsInSpace: text ? /\s$/.test(text) : previous?.endsInSpace ?? false };
-      }), writing, false),
+      }, undo.typingRecorder), writing, false),
     replaceText: bind((script: NativeScript, range: NativeTextRange, runs: readonly Run[], stamp?: NativeEditStamp) =>
       replaceNativeText(script, range, runs, stamp), writing),
     deleteText: bind(deleteNativeText, writing),
