@@ -11,6 +11,10 @@ import { convertToNativeScript } from "./convert.ts";
 import type { NativeConversionPorts } from "./convert.ts";
 import { formatNativeText } from "./format-commands.ts";
 import { createNativeHeading, removeNativeHeading, renameNativeHeading, restoreNativeHeading } from "./heading-commands.ts";
+import { putBackNativeBeat } from "./insert-commands.ts";
+import { compareNativeOfflineNotice } from "./offline-notice.ts";
+import { openNativePendingEdits } from "./pending-edits.ts";
+import type { NativePendingEditsData } from "./pending-edits.ts";
 import { moveNativeBlocks } from "./move-commands.ts";
 import { clearNativeField, setNativeField } from "./record-commands.ts";
 import { beforeNativeWrite, openNativeScript } from "./script.ts";
@@ -32,6 +36,7 @@ export type NativeSessionSource =
 export interface NativeSessionOptions extends NativeSizeOptions {
   readonly actor: string;
   readonly sanitize: MigratePorts["sanitize"];
+  readonly noticeJournal?: true | NativePendingEditsData;
 }
 
 type CloseReason = "requested" | "failed";
@@ -60,19 +65,24 @@ function openSessionScript(
   sizeOptions: ReturnType<typeof resolveNativeSizeOptions>,
   updated: (update: Uint8Array, transaction: Y.Transaction) => void,
   publishRecovery: () => void,
-  sizeRefusal: NonNullable<NativeScript["sizeRefusal"]>
+  sizeRefusal: NonNullable<NativeScript["sizeRefusal"]>,
+  saved?: NativeSessionOptions["noticeJournal"]
 ) {
   const doc = new Y.Doc(), script = openNativeScript(doc);
   try {
     if (source.kind === "state") Y.applyUpdate(doc, source.state);
     if (source.kind === "document") convertToNativeScript(script, source.document, source.conversion);
+    const journal = saved ? openNativePendingEdits(script.reader, saved === true ? undefined : saved) : null;
     const size = createNativeSizeTracker(doc, sizeOptions, publishRecovery);
     const undo = openNativeUndo({ ...script, sizeRefusal });
     const { guardSharedCallback } = script;
     const publishUpdate = (update: Uint8Array, _origin: unknown, _doc: Y.Doc, transaction: Y.Transaction) =>
-      guardSharedCallback(() => updated(update, transaction));
+      guardSharedCallback(() => {
+        if (!transaction.local) journal?.peer();
+        updated(update, transaction);
+      });
     doc.on("update", publishUpdate);
-    return { script, size, undo, publishUpdate };
+    return { script, size, undo, publishUpdate, journal };
   } catch (error) {
     doc.destroy();
     throw error;
@@ -87,7 +97,8 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
   let active = false, scheduled = false, publishing = false, changed = false, holds = 0;
   let closing: CloseReason | null = null, revision = 0;
   let typing: { readonly target: NativeTextTarget; readonly endsInSpace: boolean } | null = null;
-  const { script, size, undo, publishUpdate } = openSessionScript(source, sizeOptions, updated, schedule, sizeRefusal), doc = script.doc;
+  const { script, size, undo, publishUpdate, journal } = openSessionScript(source, sizeOptions, updated, schedule, sizeRefusal, options.noticeJournal);
+  const doc = script.doc;
   let reportedSize: NativeSessionSize = size.state;
   const writing = { ...script, sizeRefusal };
   const adding = { ...script, sizeRefusal: () => sizeRefusal(true) };
@@ -177,8 +188,9 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     undo.stopCapturing();
   }
 
-  function bindCommand<Args extends unknown[], Result>(
-    command: (script: NativeScript, ...args: Args) => Result, commandScript: NativeScript, separate: boolean
+  function bindCommand<Args extends unknown[], Result extends { readonly created?: string; readonly kind: string }>(
+    command: (script: NativeScript, ...args: Args) => Result, commandScript: NativeScript, separate: boolean,
+    journalMode: "none" | "edit" | "split"
   ) {
     function run(args: Args, capture?: (write: (prepareWrite: () => void) => Result) => Result): Result {
       const reason = refusal();
@@ -191,7 +203,11 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
           typing = null;
           undo.stopCapturing();
         }
-        return capture ? capture(prepareWrite => command({ ...commandScript, prepareWrite }, ...args)) : command(commandScript, ...args);
+        if (journalMode !== "none") journal?.sync();
+        const result = capture ? capture(prepareWrite => command({ ...commandScript, prepareWrite }, ...args))
+          : command(commandScript, ...args);
+        if (journalMode !== "none") journal?.sync(result.created ? { created: result.created, split: journalMode === "split" } : {});
+        return result;
       });
     }
     return {
@@ -214,10 +230,11 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     };
   }
 
-  function bind<Args extends unknown[], Result>(
-    command: (script: NativeScript, ...args: Args) => Result, commandScript: NativeScript, separate = true
+  function bind<Args extends unknown[], Result extends { readonly created?: string; readonly kind: string }>(
+    command: (script: NativeScript, ...args: Args) => Result, commandScript: NativeScript, separate = true,
+    journalMode: "edit" | "split" = "edit"
   ) {
-    const { run, withSelection } = bindCommand(command, commandScript, separate);
+    const { run, withSelection } = bindCommand(command, commandScript, separate, journalMode);
     return Object.freeze(Object.assign(run, { withSelection }));
   }
 
@@ -226,12 +243,15 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     if (reason) return { kind: "refused", reason };
     return perform(() => {
       typing = null;
-      return undo[direction]();
+      journal?.sync();
+      const result = undo[direction]();
+      journal?.sync({ press: direction });
+      return result;
     });
   }
 
   const commands = Object.freeze({
-    anchorText: bindCommand(anchorNativeText, script, false).run,
+    anchorText: bindCommand(anchorNativeText, script, false, "none").run,
     typeText: bind((script: NativeScript, range: NativeTextRange, text: string, marks: Marks, stamp?: NativeEditStamp, placement?: NativeTextPlacement) =>
       typeNativeText(script, range, text, marks, stamp, target => {
         const previous = typing?.target.beat === target.beat && typing.target.cell === target.cell ? typing : null;
@@ -242,7 +262,8 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
       replaceNativeText(script, range, runs, stamp, undefined, undefined, undefined, placement), writing),
     deleteText: bind(deleteNativeText, writing),
     formatText: bind(formatNativeText, adding),
-    splitRow: bind(splitNativeRow, adding),
+    splitRow: bind(splitNativeRow, adding, true, "split"),
+    putBack: bind(putBackNativeBeat, adding),
     joinRow: bind(joinNativeRow, adding),
     unjoinRow: bind(unjoinNativeRow, writing),
     removeRows: bind(removeNativeRows, writing),
@@ -309,6 +330,11 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     },
     acceptsPeerUpdate: () => refusal() === null,
     encodeState: () => Y.encodeStateAsUpdate(doc),
+    pendingEdits: journal && Object.freeze({
+      data: journal.data, confirmationPoint: journal.confirmationPoint, clearThrough: journal.clearThrough
+    }),
+    offlineNotice: (connection: "returning" | "online") =>
+      connection === "returning" && journal ? compareNativeOfflineNotice(journal.pending(), script.reader) : [],
     subscribe(listener: ChangeListener): () => void {
       if (closing) return () => undefined;
       listeners.add(listener);

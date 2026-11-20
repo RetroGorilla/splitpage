@@ -33,6 +33,15 @@ export interface NativeReadChanges {
   readonly outline: boolean;
 }
 
+export interface NativeReadBeat {
+  readonly id: string;
+  readonly row: string;
+  readonly narration: readonly Run[];
+  readonly visual: readonly Run[];
+  readonly fields: Readonly<Record<string, unknown>>;
+  readonly joined: Readonly<{ into: string; glue: string }> | null;
+}
+
 export type NativeUnplacedReason = "no-order";
 
 export interface NativeUnplacedSpan {
@@ -281,6 +290,8 @@ export class NativeScriptReader {
   private stray: string | null = null;
   private readonly pendingRows = new Set<string>();
   private readonly pendingGone = new Set<string>();
+  private noticeBeats: Set<string> | null = null;
+  private noticeLayout = false;
   private readonly pendingHeadings = new Set<string>();
   private pendingOutline = false;
   private readonly detach: (() => void)[] = [];
@@ -347,6 +358,15 @@ export class NativeScriptReader {
     return changes;
   }
 
+  refreshNotice(): { beats: readonly string[]; layout: boolean } {
+    this.noticeBeats ??= new Set();
+    this.refresh();
+    const changes = { beats: [...this.noticeBeats], layout: this.noticeLayout };
+    this.noticeBeats.clear();
+    this.noticeLayout = false;
+    return changes;
+  }
+
   private sync(): void {
     if (this.closed) throw new Error("The script reader is closed");
     if (!this.structural && !this.dirtySegments.size && !this.dirtyBeats.size && !this.dirtyHeadings.size) return;
@@ -354,6 +374,7 @@ export class NativeScriptReader {
     if (this.structural) this.restructure();
     const dirtyRows = new Set<string>();
     for (const beat of this.dirtyBeats) {
+      this.noticeBeats?.add(beat);
       const head = this.groupHeads.get(beat);
       if (head !== undefined) dirtyRows.add(head);
     }
@@ -548,6 +569,10 @@ export class NativeScriptReader {
         this.dirtyBeats.add(id);
       }
     }
+    if (this.noticeBeats) {
+      this.noticeLayout = true;
+      for (const [id, head] of this.groupHeads) if (heads.get(id) !== head) this.noticeBeats.add(id);
+    }
     this.groups = groups;
     this.groupHeads = heads;
     this.removedHeadings = stored.flatMap(block => block.kind === "h" && !block.shown
@@ -660,7 +685,7 @@ export class NativeScriptReader {
     for (const member of group) {
       const refs = this.narration.get(member.id) ?? EMPTY_SPANS;
       this.builtNarration.set(member.id, this.narrationContent(refs));
-      const items = refs.length === 1 && refs[0] ? this.spanAt(refs[0])?.items ?? [] : refs.flatMap(ref => this.spanAt(ref)?.items ?? []);
+      const items = this.narrationItems(refs);
       if (member.glue && audio.length && items.length) audio.push({ insert: member.glue });
       for (const item of items) audio.push(item);
       const cell = this.roots.visuals.get(member.id);
@@ -673,6 +698,24 @@ export class NativeScriptReader {
       id, members: Object.freeze(id === this.stray ? [] : group.map(member => member.id)),
       narration: frozenRuns(narration), visual: frozenRuns(visualRuns), audioText: toHtml(narration), visualText: toHtml(visualRuns),
       fields: deepFrozen(this.rowFields(id, null))
+    });
+  }
+
+  private narrationItems(refs: readonly NativeSpanPlace[]): readonly NativeDeltaItem[] {
+    return refs.length === 1 && refs[0] ? this.spanAt(refs[0])?.items ?? [] : refs.flatMap(ref => this.spanAt(ref)?.items ?? []);
+  }
+
+  noticeBeat(id: string): NativeReadBeat | null {
+    this.sync();
+    const row = this.groupHeads.get(id), cell = this.roots.visuals.get(id);
+    if (row === undefined || id === this.stray) return null;
+    const single = this.groups.get(row)?.length === 1 ? this.rowCache.get(row) : undefined;
+    return Object.freeze({
+      id, row,
+      narration: single?.narration ?? frozenRuns(nativeRunsOf(this.narrationItems(this.narration.get(id) ?? EMPTY_SPANS))),
+      visual: single?.visual ?? frozenRuns(nativeRunsOf((cell?.toDelta() ?? []) as NativeDeltaItem[])),
+      fields: single?.fields ?? deepFrozen(this.beatFields(id, null)),
+      joined: deepFrozen(joinOf(this.roots.beats.get(id)))
     });
   }
 
