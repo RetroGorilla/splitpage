@@ -113,7 +113,7 @@ export function projectNativeRegistries(document: DocumentShape, roots: NativeRo
   const shotsRemoved = hasRemoved(roots.shots) || document.brollShots.some(shot => !shot.name);
   const seededShots = new Set<string>();
   document.people = document.people.filter(person => !!person.name);
-  document.brollShots = document.brollShots.flatMap(shot => shot.name ? [newBrollShot(shot.id, shot)] : []);
+  document.brollShots = document.brollShots.flatMap(shot => shot.name ? [{ ...newBrollShot(shot.id, {}), ...shot }] : []);
   if (hasRemoved(roots.people)) document.people = repairNames(document.people, PERSON_NAME_MAX, normalizeTagName);
   if (tagsRemoved) {
     const named = document.productionTags.filter((tag): tag is DocumentTag => !!tag?.name);

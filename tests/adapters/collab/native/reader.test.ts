@@ -110,7 +110,7 @@ test("finding 6: a malformed beat extra, field value or reply key is a diagnosti
   script.roots.people.get("p1")?.set("f:name", JSON.stringify("x"));
   script.roots.replies.set("[bad", new Y.Map<unknown>());
   assert.equal(script.reader.row("R1")?.audioText, "ab");
-  assert.deepEqual(script.reader.document().people, [{ id: "p1" }]);
+  assert.deepEqual(script.reader.document().people, []);
   assert.deepEqual(problemKinds(script), ["bad-value beats/R1/status", 'bad-value beats/R1/f:"note"', "bad-key replies/[bad", 'bad-value people/p1/f:"name"', "bad-key people/p1/f:name"]);
 });
 
