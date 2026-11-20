@@ -77,6 +77,11 @@ export function throwNativeFailures(script: NativeScript): void {
   if (failures.length) throw new AggregateError(failures, "Callbacks of the shared script failed");
 }
 
+export function nativeCallbackGuard(doc: Y.Doc): NativeScript["guardSharedCallback"] {
+  const state = documentState(doc);
+  return call => guardSharedCallback(state, call);
+}
+
 export function openNativeScript(doc: Y.Doc): NativeScript {
   const state = documentState(doc), roots = declareNativeRoots(doc);
   const watch: NativeWatch = (type, listener) => {

@@ -12,7 +12,7 @@ pictures and screen design are out of scope.
 
 Slices 1 to 6 are on `main`. The native shared-document command layer and undo are built.
 The app has no native wiring yet. Slices 7a and 7h are merged. This PR builds 7c, the relay connection. The old adapter stays untouched until slice 8.
-Slice 7f, the browser local store, is built in this PR.
+Slice 7f adds the browser local store with transaction receipts, an update log and atomic checkpoints.
 
 ## Decisions made
 
@@ -303,6 +303,8 @@ On `main`, the native layer has no persistent client store wired into the app.
 - **B.** Stage the local store separately. Until it is available, a person can keep editing in a loaded offline session and cannot rely on reopening unsynced work after a restart.
 
 The owner chose option A on 2026-11-20.
+
+On 2026-11-20 the owner chose an appending store owned by Splitpage, using standard Yjs updates and checkpoints.
 
 ### Undo across a restart
 

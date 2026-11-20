@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
-import { IDBFactory } from "fake-indexeddb";
+import "fake-indexeddb/auto";
+import { IDBFactory, IDBKeyRange } from "fake-indexeddb";
 import * as Y from "yjs";
 import { createBrowserNativeLocalStore } from "../../../../src/adapters/collab/native/browser-local-store.ts";
 import type { NativeLocalStoreOpen } from "../../../../src/adapters/collab/native/local-store.ts";
@@ -8,10 +9,13 @@ import { cells } from "./helpers.ts";
 import { idbResult } from "./indexeddb-fixture.ts";
 import { structureScript } from "./structure-harness.ts";
 
-export const DB_NAME = "splitpage-native-replicas";
+globalThis.IDBKeyRange = IDBKeyRange;
+
+export const DB_NAME = "splitpage-native-replica-log";
 export const REPLICAS = "replicas";
 export const STORE_OPTIONS = { actor: "Editor", sanitize: String };
 export const STORED = { kind: "stored" };
+export const stored = (generation: number) => ({ kind: "stored", generation });
 export type OpenReplica = Extract<NativeLocalStoreOpen, { kind: "opened" }>;
 export type StoreSession = OpenReplica["session"];
 
@@ -39,10 +43,25 @@ export function typeAt(session: StoreSession, offset: number, text: string, beat
 }
 
 export async function storedBytes(factory: IDBFactory, name: string): Promise<Uint8Array | undefined> {
+  const entries = await storedEntries(factory, name);
+  if (entries.length === 0) return;
+  const doc = new Y.Doc();
+  try {
+    doc.transact(() => { for (const entry of entries) Y.applyUpdate(doc, entry.bytes); });
+    return Y.encodeStateAsUpdate(doc);
+  } finally { doc.destroy(); }
+}
+
+export interface TestReplicaEntry {
+  readonly generation: number;
+  readonly bytes: Uint8Array;
+  readonly checkpoint: boolean;
+}
+
+export async function storedEntries(factory: IDBFactory, name: string): Promise<TestReplicaEntry[]> {
   const connection = await idbResult(factory.open(DB_NAME));
   try {
-    const value: unknown = await idbResult(connection.transaction(REPLICAS).objectStore(REPLICAS).get(name));
-    assert.ok(value === undefined || value instanceof Uint8Array);
-    return value;
+    const range = IDBKeyRange.bound([name, 0], [name, Number.MAX_SAFE_INTEGER]);
+    return await idbResult(connection.transaction(REPLICAS).objectStore(REPLICAS).getAll(range)) as TestReplicaEntry[];
   } finally { connection.close(); }
 }

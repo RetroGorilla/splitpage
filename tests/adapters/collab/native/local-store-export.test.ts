@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createBrowserNativeLocalStore } from "../../../../src/adapters/collab/native/browser-local-store.ts";
 import { bootApp, closeApp } from "../../../../src/test/_app-boot.mjs";
-import { STORED, STORE_OPTIONS, seedReplica, storedBytes } from "./local-store-fixture.ts";
+import { stored, STORE_OPTIONS, seedReplica, storedBytes } from "./local-store-fixture.ts";
 
 async function exportAppData() {
   const hook = (window as unknown as { __appDataTest: { build: () => Promise<Record<string, unknown>> } }).__appDataTest;
@@ -33,7 +33,7 @@ test("existing app-data export leaves native replicas outside its bundle", { tim
   assert.equal(replica.kind, "opened");
   try {
     seedReplica(replica.session, { A: "Offline narration" });
-    assert.deepEqual(await replica.flush(), STORED);
+    assert.deepEqual(await replica.flush(), stored(1));
     assert.deepEqual(await exportAppData(), before);
     assert.deepEqual(await storedBytes(factory, name), replica.session.encodeState());
   } finally { replica.session.close(); await replica.closed; }
