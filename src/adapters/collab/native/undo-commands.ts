@@ -83,7 +83,7 @@ export function openNativeUndo(script: NativeScript) {
   }
 
   function press(direction: "undo" | "redo"): NativeUndoOutcome {
-    const unavailable = nativeAvailability(script) ?? (disposed ? "closed" : null);
+    const unavailable = nativeAvailability(script) ?? (disposed ? "closed" : script.sizeRefusal?.());
     if (unavailable) return Object.freeze({ kind: "refused", reason: unavailable });
     pending = null;
     manager.stopCapturing();

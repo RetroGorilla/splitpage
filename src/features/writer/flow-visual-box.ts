@@ -261,12 +261,12 @@ function standaloneVisualBox(ports: FlowVisualBoxPorts) {
     }
   }
 
-  function refreshUnbuffered(): void {
+  function refreshUnbuffered(restore = false): void {
     if (!ports.current()) { close(false); note.hidden = true; return; }
     if (target?.head.kind === "beat" && !rowOf(target.head.rowId)) close(false);
     if (target?.head.kind === "beat" && !first && !composing && !dirty && !saving) {
       const row = rowOf(target.head.rowId);
-      if (row && (row.visualText ?? "") !== shownHtml) {
+      if (row && (restore || (row.visualText ?? "") !== shownHtml)) {
         shownHtml = row.visualText ?? "";
         const kept = doc.activeElement === cell ? cellSelection(cell) : null;
         const restore = ports.beforeWrite?.(cell);
@@ -302,7 +302,10 @@ function standaloneVisualBox(ports: FlowVisualBoxPorts) {
   }
 
   const repaint = ports.repaint;
-  const refresh = repaint ? () => { repaint(refreshUnbuffered); } : refreshUnbuffered;
+  const refresh = (restore = false): void => {
+    if (repaint) repaint(() => refreshUnbuffered(restore)); else refreshUnbuffered(restore);
+  };
+  const refreshOnEvent = (): void => { refresh(); };
 
   function onInput(event: Event): void {
     if (rejected()) return;
@@ -385,9 +388,9 @@ function standaloneVisualBox(ports: FlowVisualBoxPorts) {
     [cell, "compositionstart", onCompositionStart], [cell, "compositionend", onCompositionEnd],
     [cell, "paste", onPaste as EventListener], [cell, "drop", onDrop],
     [button, "mousedown", keepSelection], [button, "click", onButton], [note, "mousedown", keepSelection], [note, "click", onNote],
-    [closeButton, "click", onClose], [doc, "mousedown", outside], [window, "resize", refresh]
+    [closeButton, "click", onClose], [doc, "mousedown", outside], [window, "resize", refreshOnEvent]
   ];
-  if (parent) listeners.push([parent, "scroll", refresh]);
+  if (parent) listeners.push([parent, "scroll", refreshOnEvent]);
   const listen = ports.listen;
   const listening = listen ? listeners.map(([element, event, handler]): [EventTarget, string, EventListener] => [element, event, listen(handler)]) : listeners;
   listening.forEach(([element, event, handler]) => element.addEventListener(event, handler));

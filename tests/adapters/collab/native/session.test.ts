@@ -68,6 +68,14 @@ function captureMicrotasks(t: TestContext): VoidFunction[] {
   return tasks;
 }
 
+test("checking healthy peer delivery schedules no session work", t => {
+  const session = fromDocument();
+  t.after(session.close);
+  const enqueue = t.mock.method(globalThis, "queueMicrotask");
+  assert.equal(session.checkPeerDelivery(), true);
+  assert.equal(enqueue.mock.callCount(), 0);
+});
+
 test("empty, converted and encoded opens use a fresh undo binding", t => {
   const empty = open({ kind: "empty" }), author = fromDocument();
   t.after(() => { empty.close(); author.close(); });
