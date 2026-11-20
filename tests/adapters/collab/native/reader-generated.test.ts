@@ -8,6 +8,7 @@ import type { NativeMarkChange } from "../../../../src/adapters/collab/native/fo
 import { createNativeHeading, removeNativeHeading, renameNativeHeading, restoreNativeHeading } from "../../../../src/adapters/collab/native/heading-commands.ts";
 import { NativeScriptReader, readNativeOnce } from "../../../../src/adapters/collab/native/reader.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
+import { joinNativeRow, removeNativeRows, splitNativeRow, unjoinNativeRow } from "../../../../src/adapters/collab/native/structure-commands.ts";
 import { anchorNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
 import type { NativeTextTarget } from "../../../../src/adapters/collab/native/text-commands.ts";
 import { convertedScript, edit, joinedScript, shown } from "./helpers.ts";
@@ -121,7 +122,42 @@ interface Run {
 
 const emptyRun = (): Run => ({ compared: 0, changed: 0, joinedMarkers: 0, formatted: 0, reasons: new Set(), problems: new Set(), outcomes: new Map() });
 
-type Formatting = "none" | "mixed" | "only";
+type Formatting = "none" | "mixed" | "only" | "rows" | "rows-only";
+
+function rowOnce(script: NativeScript, pick: <T>(list: readonly T[]) => T, chance: () => number, run: Run): void {
+  const flat = readNativeOnce(script.roots, reader => reader.outline().flatMap((entry): readonly (string | null)[] => {
+    if (entry.kind === "heading") return [null];
+    const members = reader.row(entry.id)?.members ?? [];
+    return members.length ? members : [entry.id];
+  }));
+  const rows = flat.filter((id): id is string => id !== null), beat = pick(rows.length ? rows : BEATS), roll = chance();
+  const member = readNativeOnce(script.roots, reader => reader.outline().every(entry => entry.id !== beat));
+  const before = Y.encodeStateAsUpdate(script.doc);
+  let outcome: { readonly kind: string; readonly reason?: string }, command: string;
+  if (roll < 0.4) {
+    const anchored = anchorNativeText(script, { beat, cell: "narration" }, Math.floor(chance() * 4));
+    outcome = anchored.kind === "anchored" ? splitNativeRow(script, anchored.range) : anchored;
+    command = "split";
+  } else if (roll < 0.6) {
+    outcome = joinNativeRow(script, beat, flat[flat.indexOf(beat) - 1] ?? pick(BEATS), pick([" ", ""]));
+    command = "join";
+  } else if (roll < 0.7) {
+    outcome = unjoinNativeRow(script, beat);
+    command = "unjoin";
+  } else {
+    outcome = removeNativeRows(script, chance() < 0.3 ? [beat, pick(rows.length ? rows : BEATS)] : [beat]);
+    command = "remove";
+  }
+  const kind = command + " " + (outcome.kind === "refused" ? "refused " + String(outcome.reason) : outcome.kind);
+  run.outcomes.set(kind, (run.outcomes.get(kind) ?? 0) + 1);
+  if (outcome.kind === "written") run.formatted++;
+  else assert.deepEqual(Y.encodeStateAsUpdate(script.doc), before, kind);
+  if (member && outcome.kind === "written") run.outcomes.set("member written", (run.outcomes.get("member written") ?? 0) + 1);
+  if (command === "join" && outcome.kind === "written") {
+    const size = readNativeOnce(script.roots, reader => Math.max(...reader.rows().map(row => row.members.length)));
+    if (size > 2) run.outcomes.set("group of three or more", (run.outcomes.get("group of three or more") ?? 0) + 1);
+  }
+}
 
 function formatOnce(script: NativeScript, pick: <T>(list: readonly T[]) => T, chance: () => number, run: Run): void {
   const rows = readNativeOnce(script.roots, reader => reader.outline().flatMap(entry => entry.kind === "heading" ? [] : [entry.id]));
@@ -132,10 +168,12 @@ function formatOnce(script: NativeScript, pick: <T>(list: readonly T[]) => T, ch
     { kind: "plain", mark: pick(["b", "i", "u", "s", "hl", "cue"] as const), on }, { kind: "comment", id: pick(["c1", "c2"]), on },
     { kind: "link", href: on ? pick(["https://a.example/", "https://b.example/"]) : null }, { kind: "tag", id: pick(["t:prop:one", "t:prop:two"]), on }
   ]);
+  const before = Y.encodeStateAsUpdate(script.doc);
   const outcome = anchored.kind === "anchored" ? formatNativeText(script, anchored.range, change) : anchored;
   const kind = outcome.kind === "refused" ? "refused " + outcome.reason : outcome.kind;
   run.outcomes.set(kind, (run.outcomes.get(kind) ?? 0) + 1);
   if (outcome.kind === "written") run.formatted++;
+  else assert.deepEqual(Y.encodeStateAsUpdate(script.doc), before, kind);
 }
 
 type WarmReader = (script: NativeScript) => NativeScriptReader;
@@ -204,11 +242,12 @@ function compareStructuralCommands(script: NativeScript, reader: NativeScriptRea
 function runSeed(seed: number, run: Run, warmOf: WarmReader = script => script.reader, formatting: Formatting = "none"): void {
   const chance = random(seed), pick = <T>(list: readonly T[]): T => list[Math.floor(chance() * list.length)] as T;
   const script = start(), ops = operations(script, pick, chance), reader = warmOf(script);
-  if (formatting !== "only") compareStructuralCommands(script, reader, seed);
+  if (formatting !== "only" && formatting !== "rows-only") compareStructuralCommands(script, reader, seed);
   let previous = freshly(script);
   for (let step = 0; step < STEPS; step++) {
     const roll = chance();
     if (formatting === "only" || (formatting === "mixed" && roll < 0.4)) formatOnce(script, pick, chance, run);
+    else if (formatting === "rows-only" || (formatting === "rows" && roll < 0.4)) rowOnce(script, pick, chance, run);
     else if (roll < 0.15) {
       const beat = pick(BEATS), cell = chance() < 0.7 ? "narration" as const : "visual" as const;
       edit(script, { beat, cell }, 0, Math.floor(chance() * 2), [{ text: "e", marks: {} }]);
@@ -266,6 +305,28 @@ test("control: with formatting commands alone, the comparison catches a warm rea
     runSeed(seed, run, undefined, "only");
     assert.ok(run.formatted > 20, String(run.formatted));
     assert.throws(() => { runSeed(seed, emptyRun(), blind, "only"); }, new RegExp(`seed ${seed}, `));
+  }
+  for (const reader of readers) reader.close();
+});
+
+test("generated split, join, unjoin and removal among the structural changes: a warm reader reads what a fresh reader reads", t => {
+  const run = emptyRun();
+  for (let seed = 1; seed <= SEEDS; seed++) runSeed(seed, run, undefined, "rows");
+  t.diagnostic(JSON.stringify({ compared: run.compared, changed: run.changed, written: run.formatted, outcomes: Object.fromEntries(run.outcomes) }));
+  for (const command of ["split", "join", "unjoin", "remove"]) assert.ok((run.outcomes.get(command + " written") ?? 0) > 5, command);
+  assert.ok((run.outcomes.get("member written") ?? 0) > 5 && (run.outcomes.get("group of three or more") ?? 0) > 0, JSON.stringify(Object.fromEntries(run.outcomes)));
+  assert.ok(run.formatted > SEEDS * STEPS * 0.05, String(run.formatted));
+  assert.ok(run.compared > SEEDS * STEPS * 0.3 && run.changed > run.compared * 0.3, JSON.stringify({ compared: run.compared, changed: run.changed }));
+});
+
+test("control: with row commands alone, the comparison catches a warm reader whose invalidation is switched off", () => {
+  const readers: NativeScriptReader[] = [];
+  const blind: WarmReader = script => { const reader = new NativeScriptReader(script.roots, () => () => undefined); readers.push(reader); return reader; };
+  for (let seed = 1; seed <= 3; seed++) {
+    const run = emptyRun();
+    runSeed(seed, run, undefined, "rows-only");
+    assert.ok(run.formatted > 10, String(run.formatted));
+    assert.throws(() => { runSeed(seed, emptyRun(), blind, "rows-only"); }, new RegExp(`seed ${seed}, (step \\d+|end)`));
   }
   for (const reader of readers) reader.close();
 });

@@ -693,8 +693,15 @@ export class NativeScriptReader {
   }
 
   hasHeadingMarker(id: string): boolean {
+    return this.hasMarker("h:" + id);
+  }
+
+  hasBeatMarker(id: string): boolean {
+    return this.hasMarker("b:" + id);
+  }
+
+  private hasMarker(key: string): boolean {
     this.sync();
-    const key = "h:" + id;
     for (const { spans } of this.parsed.values()) if (spans.some(span => span.key === key)) return true;
     return false;
   }
