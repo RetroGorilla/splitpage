@@ -18,7 +18,10 @@ export type NativeFieldTarget = {
   readonly kind: "beat" | "heading";
   readonly id: string;
   readonly field: string;
-  readonly allJoined?: boolean;
+} | {
+  readonly kind: "editor-beat";
+  readonly id: string;
+  readonly field: "status" | "lengthSeconds";
 } | { readonly kind: "gallery"; readonly id: string };
 
 function beatValue(field: string, value: unknown): boolean {
@@ -69,7 +72,7 @@ function addsGalleryContent(script: NativeScript, id: string, after: unknown): b
 
 function replaceGallery(script: NativeScript, id: string, value: unknown): NativeRecordOutcome {
   const record = nativeLiveBeatRecord(script, id);
-  if (!record) return refuseRecord("missing");
+  if (!record || !script.reader.row(id)) return refuseRecord("missing");
   const before = storedGallery(record);
   if (!before) return refuseRecord("stored");
   if (!recordBag(value) || Object.keys(value).some(key => !NATIVE_GALLERY_FIELDS.has(key))) return refuseRecord("value");
@@ -98,26 +101,28 @@ function changeField(script: NativeScript, target: NativeFieldTarget, value: unk
     const copiedTarget = copyArgument(() => {
       if (!plainRecordArgument(target)) return null;
       const { kind, id } = target;
-      return { kind, id, field: kind === "gallery" ? "" : target.field, allJoined: kind !== "gallery" && target.allJoined === true };
+      return { kind, id, field: kind === "gallery" ? "" : target.field };
     });
     const copiedValue = copyArgument(() => clear ? undefined : copyRecordValue(value));
     return copiedTarget?.value && copiedValue ? { value: { ...copiedTarget.value, copied: copiedValue.value } } : null;
-  }, ({ kind, id, field, allJoined, copied }) => {
+  }, ({ kind, id, field, copied }) => {
     if (kind === "gallery") return clear ? refuseRecord("value") : replaceGallery(script, id, copied);
-    if ((kind !== "beat" && kind !== "heading") || !nativeRecordId(id)) return refuseRecord("missing");
+    if ((kind !== "beat" && kind !== "editor-beat" && kind !== "heading") || !nativeRecordId(id)) return refuseRecord("missing");
     if (kind === "heading") return refuseRecord("value");
     const record = nativeLiveBeatRecord(script, id);
     if (!record) return refuseRecord("missing");
     if (!nativeWellFormed(field) || !field || isReservedBeatField(field)) return refuseRecord("value");
     if (!clear && !beatValue(field, copied)) return refuseRecord("value");
     if (field === "visualImage") return refuseRecord("value");
-    if (field === "status" && allJoined && !clear) {
+    if (kind === "editor-beat") {
       const row = script.reader.row(id);
       if (!row) return refuseRecord("missing");
-      const targets = row.members.map(member => nativeLiveBeatRecord(script, member));
-      if (!targets.every(target => target !== null)) return refuseRecord("missing");
-      const results = targets.map(target => writeRecordFields(target, { status: copied }));
-      return results.some(result => result.kind === "written") ? RECORD_WRITTEN : RECORD_UNCHANGED;
+      if (field === "status" && !clear) {
+        const targets = row.members.map(member => nativeLiveBeatRecord(script, member));
+        if (!targets.every(target => target !== null)) return refuseRecord("missing");
+        const results = targets.map(target => writeRecordFields(target, { status: copied }));
+        return results.some(result => result.kind === "written") ? RECORD_WRITTEN : RECORD_UNCHANGED;
+      }
     }
     if (NATIVE_GALLERY_FIELDS.has(field)) return changeGallery(script, id, record, field, copied, clear);
     const named = isNativeBeatField(field), key = named ? field : nativeFieldKey(field);

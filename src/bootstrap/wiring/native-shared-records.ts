@@ -3,6 +3,7 @@ import type { NativeRecordOutcome } from "../../adapters/collab/native/record-va
 import type { NativeTextRange } from "../../adapters/collab/native/text-commands.ts";
 import { nativeGalleryOf, sameNativeValue } from "../../adapters/collab/native/values.ts";
 import type { GalleryEdit } from "../../application/commands/gallery.ts";
+import type { CommentRecordWriter } from "../../application/commands/comments.ts";
 import type { RecordCommandRun } from "../../application/commands/shared-records.ts";
 import { NOTHING_RAN, RECORD_CHANGED, RECORD_REFUSED } from "../../application/commands/shared-records.ts";
 import type { ReportPort } from "../../application/session/ports.ts";
@@ -73,23 +74,30 @@ export function createNativeEditorRecords(
     if (!shown) { refuse("missing", session()); return; }
     try {
       const urls = await Promise.all(files.map(file => compressImageFile(file, 1000, 0.78)));
-      const latest = documentReader.current()?.rows.find(row => row.id === rowId);
-      if (!session() || !latest || slot !== undefined && !sameNativeValue(nativeGalleryOf(shown), nativeGalleryOf(latest))) {
-        notices.show("The picture finished loading after the script changed, so it was not added.", "warn");
-        return;
-      }
       const refs = urls.map((url, index) => {
         const ref = pictures.internDataUrl(url);
         if (!ref) throw new Error("not a picture the registry takes");
         return { ref, name: files[index]?.name };
       });
+      // why: a transaction can leave a committed reference even when cleanup fails before it reports success
+      const shas = refs.map(({ ref }) => ref.sha256);
+      const missing = await pictures.persist(shas);
+      if (missing.length || shas.some(sha => !pictures.isDurable(sha))) {
+        notices.show("Could not store the picture, so it was not added.", "warn");
+        return;
+      }
+      const latest = documentReader.current()?.rows.find(row => row.id === rowId);
+      if (!session() || !latest || slot !== undefined && !sameNativeValue(nativeGalleryOf(shown), nativeGalleryOf(latest))) {
+        notices.show("The picture finished loading after the script changed, so it was not added.", "warn");
+        return;
+      }
       const number = documentReader.numbering().beats[rowId]?.full ?? "";
       const message = (refs.length === 1 ? "Picture" : "Pictures") + (slot === undefined ? " added to" : " replaced in") + " beat " + number;
-      if (gallery(rowId, message, row => {
+      gallery(rowId, message, row => {
         if (slot !== undefined && refs[0]) return replaceGalleryPicture(row, slot, refs[0].ref, refs[0].name);
         for (const { ref, name } of refs) addGalleryPicture(row, ref, name);
         return true;
-      }).changed) pictures.persist(refs.map(({ ref }) => ref.sha256));
+      });
     } catch {
       notices.show("Could not use that image.", "error");
     }
@@ -97,7 +105,7 @@ export function createNativeEditorRecords(
 
   return {
     beatField: (rowId: string, field: "status" | "lengthSeconds", value: RowStatusId | number | null) => run("edit", () => {
-      const target = { kind: "beat" as const, id: rowId, field, allJoined: field === "status" };
+      const target = { kind: "editor-beat" as const, id: rowId, field };
       return value === null ? commands.clearField(target) : commands.setField(target, value);
     }),
     gallery,
@@ -131,7 +139,7 @@ export function createNativeEditorRecords(
         ? commands.resolveComment({ comment: id }, { by: actor, at: new Date(now()).toISOString() })
         : commands.reopenComment({ comment: id })),
       remove: (id: string) => run("edit", () => commands.removeComment({ comment: id }))
-    }
+    } satisfies CommentRecordWriter
   };
 }
 

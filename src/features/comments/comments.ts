@@ -480,12 +480,12 @@ function editComments(build: (shared?: SharedCommentPorts) => Command, quiet = f
   return recordCommandRun((ports as CommentsRuntimePorts).edits, quiet ? { ports: shared.ports, refused: () => {} } : shared, build);
 }
 
-const COMMENT_BOXES = ["comment-body-editable", "reply-composer"];
+const COMMENT_BOXES = ["comment-body-editable", "reply-composer", "comment-body-editor"];
 
 let drafts: TypedDrafts | null = null;
 let draftLife: { readonly shared: object; readonly epoch: number } | null = null;
 let commentRows: Record<string, string> = {};
-let bodyEdit: { id: string; reply: string | undefined; html: string } | null = null;
+let bodyEdit: { id: string; reply: string | undefined; original: string; html: string } | null = null;
 
 function nativeComments() { return ports?.nativeComments?.() ?? null; }
 
@@ -502,6 +502,7 @@ function plainOf(html: string): string {
 }
 
 function unsavedCommentLabel(draft: TypedDraft): string {
+  if (draft.box === "comment-body-editor") return "The comment was removed, so your edit was not saved";
   if (draft.box === "reply-composer") {
     const comment = (ports as CommentsRuntimePorts).document.current()?.comments.find(comment => comment.id === draft.record);
     if (comment) return comment.author + ": unsaved reply";
@@ -674,7 +675,12 @@ export function postComment() {
   const pending = pendingComment;
   sameCommentLife();
   const wrote = typed().submit("comment-body-editable", pending.id, bodyHtml, commentSave(pending, author));
-  if (wrote === "gone") closeCommentComposer(!!nativeComments());
+  if (wrote === "gone") {
+    const native = nativeComments();
+    native?.cancel(pending.id);
+    closeCommentComposer();
+    if (native) renderComments();
+  }
 }
 
 function commentSave(pending: PendingCommentContext, author: string): TypedSave {
@@ -930,7 +936,7 @@ export function editCommentBody(target: Element): boolean {
     const comment = ports?.document.current()?.comments.find(item => item.id === id);
     const entry = reply === undefined ? comment : comment?.replies?.find(item => item.id === reply);
     if (!id || entry?.author !== native.author || typeof entry.body !== "string") return true;
-    bodyEdit = { id, reply, html: entry.body };
+    bodyEdit = { id, reply, original: entry.body, html: entry.body };
   } else if (button.dataset.action === "save-comment-body" && bodyEdit) {
     const box = button.parentElement?.querySelector<HTMLElement>(".comment-body-editor");
     if (!box || !ports) return true;
@@ -1143,7 +1149,8 @@ function conflictCardHtml(c: CommentRenderRecord) {
           '<div class="conflict-body">' + (c.emptyValue ? "<em>(you had cleared this)</em>" : conflictBodyHtml(c)) + '</div>', false) +
       '</ol>' +
       '<div class="comment-actions comment-foot">' +
-        '<button type="button" class="btn-outline" data-action="restore-conflict" data-id="' + c.id + '">Use my version</button>' +
+        '<button type="button" class="btn-outline" data-action="restore-conflict" data-id="' + c.id + '"' +
+          (nativeComments() ? ' disabled' : '') + '>Use my version</button>' +
         '<button type="button" class="btn-outline" data-action="toggle-resolve" data-id="' + c.id + '">' +
           (c.resolved ? "Unresolve" : "Keep theirs") + '</button>' +
         commentMoreHtml(c) +
@@ -1188,10 +1195,21 @@ export function captureReplyDrafts() {
 
 const COMMENTS_HINT_HTML = '<p class="comments-hint">To start a thread, select words in the script and choose Comment.</p>';
 
+function keepRemovedBodyEdit(comments: readonly CommentRenderRecord[]): void {
+  if (!bodyEdit) return;
+  const editing = bodyEdit, thread = comments.find(comment => comment.id === editing.id);
+  if (thread && (editing.reply === undefined || thread.replies.some(reply => reply.id === editing.reply))) return;
+  bodyEdit = null;
+  if (editing.html !== editing.original) {
+    typed().submit("comment-body-editor", JSON.stringify([editing.id, editing.reply]), editing.html, () => "gone");
+  }
+}
+
 export function renderComments() {
   if (drafts && sameCommentLife()) { reviseCommentDrafts(); captureReplyDrafts(); }
   const doc = (ports as CommentsRuntimePorts).document.current() as CommentsReadDocument | null;
   if (!doc) return;
+  keepRemovedBodyEdit(doc.comments);
   const listEl = (document.getElementById("comments-list") as HTMLElement);
   if (!listEl) return;
   renderCommentFilterBar();

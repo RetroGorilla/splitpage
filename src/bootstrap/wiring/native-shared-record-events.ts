@@ -6,6 +6,13 @@ import { documentReader } from "./ports/document.ts";
 import { notices } from "./ports/effects.ts";
 import { ids } from "./ports/identity.ts";
 
+function hasCaption(html: string): boolean {
+  if (!html) return false;
+  const template = document.createElement("template");
+  template.innerHTML = html;
+  return !!template.content.textContent?.trim();
+}
+
 export function mountNativeRecordEvents(records: NativeEditorRecords): () => void {
   function comment(event: MouseEvent): void {
     const button = event.target instanceof Element && event.target.closest('#rows .mini-toolbar button[data-cmd="comment"]');
@@ -31,11 +38,15 @@ export function mountNativeRecordEvents(records: NativeEditorRecords): () => voi
   }
 
   function pictures(event: ClipboardEvent | DragEvent): void {
+    if (event.type === "drop") {
+      document.querySelectorAll("#rows .visual-cell.drag-over").forEach(cell => cell.classList.remove("drag-over"));
+    }
     const visual = event.target instanceof Element && event.target.closest("#rows .visual-cell");
     if (!visual) return;
     const data = "clipboardData" in event ? event.clipboardData : event.dataTransfer;
     const files = Array.from(data?.files ?? []);
-    if (!files.length || files.some(file => !file.type.startsWith("image/")) || data?.getData("text/plain")) return;
+    if (!data || !files.length || files.some(file => !file.type.startsWith("image/"))) return;
+    if (data.getData("text/plain") || hasCaption(data.getData("text/html"))) return;
     const rowId = visual.querySelector(".cell-editable")?.getAttribute("data-id");
     if (!rowId) return;
     event.preventDefault();
