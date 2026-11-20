@@ -41,7 +41,7 @@ export function normalizeScenes(value: unknown): DocumentScene[] | undefined {
     if (!id || !name || !firstSceneId || ids.has(id) || anchors.has(firstSceneId)) continue;
     ids.add(id);
     anchors.add(firstSceneId);
-    out.push({ id, name, firstSceneId });
+    out.push({ ...item, id, name, firstSceneId });
   }
   return out.length ? out : undefined;
 }

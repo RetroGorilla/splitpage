@@ -12,7 +12,7 @@ import { anchorNativeText } from "../../../../src/adapters/collab/native/text-co
 import { edit } from "./helpers.ts";
 import type { Delivery } from "./helpers.ts";
 import {
-  AUTHOR, COMMENT, REPLY, beatField, beatStep, checkRecordStep, fileKey, freshRecordRead, fullUpdate, headingStep, recordCopies,
+  AUTHOR, COMMENT, IMAGE, REPLY, beatField, beatStep, checkRecordStep, fileKey, freshRecordRead, fullUpdate, headingStep, recordCopies,
   recordRead, recordSnapshot, recordUndo, replyId, threadSteps, unchangedRecord
 } from "./record-harness.ts";
 import type { RecordStep } from "./record-harness.ts";
@@ -22,6 +22,7 @@ const SEEDS = 24;
 const WRITTEN = { kind: "written" };
 type Write = "set" | "delete";
 interface CapturedWrite {
+  readonly client: number;
   readonly state: Uint8Array;
   readonly step: RecordStep;
   readonly slot: number;
@@ -70,6 +71,7 @@ function bodyStep(which: "comment" | "reply", body: string): RecordStep {
       assert.ok(entry && stored);
       entry.body = body;
       (stored as Record<string, unknown>)[fileKey("body")] = JSON.stringify(body);
+      return undefined;
     }
   };
 }
@@ -81,7 +83,14 @@ function history(seed: number, writes?: CapturedWrite[]): Record<string, number>
   const run = (actor: NativeScript, step: RecordStep): void => {
     if (writes) {
       const state = fullUpdate(actor);
-      interceptWrites((slot, method, key) => { writes.push({ state, step, slot, method, key }); return false; }, () => checkRecordStep(actor, step));
+      const start = writes.length;
+      interceptWrites((slot, method, key) => {
+        writes.push({ client: actor.doc.clientID, state, step, slot, method, key });
+        return false;
+      }, () => checkRecordStep(actor, step));
+      const expected = step.name === "create comment" ? 15 : step.name === "create reply" ? 6 :
+        /^(resolve|reopen) /.test(step.name) ? 3 : 1;
+      assert.equal(writes.length - start, expected, step.name + " must write every key in its expected snapshot diff");
     } else checkRecordStep(actor, step);
     count(step.name);
   };
@@ -89,30 +98,34 @@ function history(seed: number, writes?: CapturedWrite[]): Record<string, number>
   assert.ok(delivery);
   const [first, second, third] = scripts;
   assert.ok(first && second && third);
-  const undo = scripts.map(recordUndo), writtenLengths: number[] = [], writtenNotes: string[] = [], retained: string[] = [], removed: string[] = [];
+  const undo = scripts.map(recordUndo), retained: { comment: string; reply: string }[] = [], removed: typeof retained = [];
+  let winningLength = 0, winningNote = "";
+  const winner = Math.max(...scripts.map(script => script.doc.clientID));
   let splitId = "", splitOffset = 0, typed = "";
+  function reversible(actor: NativeScript, manager: Y.UndoManager, step: RecordStep): void {
+    const before = recordSnapshot(actor), beforeRead = recordRead(actor);
+    run(actor, step);
+    const after = recordSnapshot(actor), afterRead = recordRead(actor);
+    assert.ok(manager.undo(), step.name);
+    assert.deepEqual(recordSnapshot(actor), before);
+    assert.deepEqual(recordRead(actor), beforeRead);
+    count("undo " + step.name);
+    assert.ok(manager.redo(), step.name);
+    assert.deepEqual(recordSnapshot(actor), after);
+    assert.deepEqual(recordRead(actor), afterRead);
+    count("redo " + step.name);
+  }
   try {
     for (const [index, actor] of scripts.entries()) {
       const manager = undo[index];
       assert.ok(manager);
       const length = 1 + next() % 200, note = "note " + actor.doc.clientID, suffix = seed + "-" + actor.doc.clientID;
-      const surviving = "kept-" + suffix, temporary = "temporary-" + suffix;
-      writtenLengths.push(length);
-      writtenNotes.push(note);
+      const surviving = { comment: "", reply: "" }, temporary = { comment: "", reply: "" };
+      if (actor.doc.clientID === winner) { winningLength = length; winningNote = note; }
       retained.push(surviving);
       removed.push(temporary);
       const paragraph = beatStep("paragraphStart", true, "E");
-      const before = recordSnapshot(actor), beforeRead = recordRead(actor);
-      run(actor, paragraph);
-      const after = recordSnapshot(actor), afterRead = recordRead(actor);
-      assert.ok(manager.undo());
-      assert.deepEqual(recordSnapshot(actor), before);
-      assert.deepEqual(recordRead(actor), beforeRead);
-      count("undo");
-      assert.ok(manager.redo());
-      assert.deepEqual(recordSnapshot(actor), after);
-      assert.deepEqual(recordRead(actor), afterRead);
-      count("redo");
+      reversible(actor, manager, paragraph);
       unchangedRecord(actor, () => setNativeField(actor, beatField("E", "paragraphStart"), true));
       count("unchanged");
       run(actor, beatStep("paragraphStart", undefined, "E"));
@@ -121,11 +134,15 @@ function history(seed: number, writes?: CapturedWrite[]): Record<string, number>
         [beatStep("lengthSeconds", length)],
         [headingStep(note + " draft"), headingStep(undefined), headingStep(note)],
         [bodyStep("comment", "comment " + suffix), bodyStep("reply", "reply " + suffix)],
-        threadSteps(temporary, "000012V", "temporary edit " + suffix),
-        [beatStep("status", "ready", "B")]
+        threadSteps("temporary-" + suffix, "000012V", "temporary edit " + suffix, temporary),
+        [beatStep("status", "ready", "B")],
+        [beatStep("extra", { note: "extra " + actor.doc.clientID }), beatStep("imageRef", IMAGE)]
       ];
-      for (const group of shuffled(groups, next)) for (const step of group) run(actor, step);
-      for (const step of threadSteps(surviving, "000012V").slice(0, 2)) run(actor, step);
+      for (const group of shuffled(groups, next)) for (const step of group) {
+        if (["set beat status", "set beat imageRef", "remove comment"].includes(step.name)) reversible(actor, manager, step);
+        else run(actor, step);
+      }
+      for (const step of threadSteps("kept-" + suffix, "000012V", "unused", surviving).slice(0, 2)) run(actor, step);
       unchangedRecord(actor, () => setNativeCommentBody(actor, COMMENT, "Bob", "foreign"), "author");
       count("refused");
       unchangedRecord(actor, () => clearNativeField(actor, beatField("missing", "status")), "missing");
@@ -159,7 +176,6 @@ function history(seed: number, writes?: CapturedWrite[]): Record<string, number>
         count("move");
         assert.deepEqual(createNativeHeading(actor, caret(actor, "C", 0), "new-heading", "Temporary"), WRITTEN);
         const name = anchorNativeText(actor, { beat: "new-heading", cell: "name" }, 0, 9);
-        assert.equal(name.kind, "anchored");
         assert.ok(name.kind === "anchored");
         count("heading create");
         assert.deepEqual(renameNativeHeading(actor, name.range, "Renamed"), WRITTEN);
@@ -171,6 +187,15 @@ function history(seed: number, writes?: CapturedWrite[]): Record<string, number>
       }
     }
     net.settle(delivery);
+    const across = { comment: "", reply: "" };
+    removed.push(across);
+    const acrossSteps = threadSteps("cross-device", "00001YV", "across devices", across, "Carol");
+    for (const [index, step] of acrossSteps.entries()) {
+      const actor = scripts[(index + seed) % scripts.length];
+      assert.ok(actor);
+      run(actor, step);
+      net.settle(delivery);
+    }
     for (const actor of scripts) {
       assert.deepEqual(recordSnapshot(actor), recordSnapshot(first));
       assert.deepEqual(recordRead(actor), recordRead(first));
@@ -186,24 +211,30 @@ function history(seed: number, writes?: CapturedWrite[]): Record<string, number>
       assert.equal(actor.reader.rows()[0]?.id, "E");
       const letters = actor.reader.row("F")?.audioText ?? "";
       assert.equal(letters.replace(typed, ""), "foxtrot");
-      assert.ok(writtenLengths.includes(Number(actor.reader.row("A")?.fields.lengthSeconds)));
-      assert.ok(writtenNotes.some(note => actor.roots.headings.get("H")?.get(fileKey("note")) === JSON.stringify(note)));
+      assert.equal(letters.split(typed).length, 2);
+      assert.equal(actor.reader.row("A")?.fields.lengthSeconds, winningLength);
+      assert.equal(actor.roots.headings.get("H")?.get(fileKey("note")), JSON.stringify(winningNote));
+      assert.equal(actor.reader.row("A")?.fields.note, "extra " + winner);
+      assert.deepEqual(actor.reader.row("A")?.fields.imageRef, IMAGE);
       const comments = actor.reader.document().comments;
-      assert.deepEqual(comments.map(comment => comment.id).sort(), ["thread", ...retained].sort());
+      assert.deepEqual(comments.map(comment => comment.id).sort(), ["thread", ...retained.map(ids => ids.comment)].sort());
       for (const comment of comments) {
         if (comment.id === "thread") {
           assert.equal(comment.body, "comment " + seed + "-15");
           assert.equal(comment.replies?.[0]?.body, "reply " + seed + "-15");
         } else {
           assert.equal(comment.body, "original");
-          assert.deepEqual(comment.replies?.map(reply => [reply.id, reply.body]), [["new-reply", "reply"]]);
+          const entry = retained.find(ids => ids.comment === comment.id);
+          assert.ok(entry);
+          assert.deepEqual(comment.replies?.map(reply => [reply.id, reply.body]), [[entry.reply, "reply"]]);
         }
       }
-      assert.deepEqual([...actor.roots.comments.keys()].sort(), ["thread", ...retained, ...removed].sort());
-      assert.deepEqual([...actor.roots.replies.keys()].sort(), [replyId(REPLY.comment, REPLY.reply), ...[...retained, ...removed].map(id => replyId(id, "new-reply"))].sort());
-      for (const id of removed) {
-        assert.equal(actor.roots.comments.get(id)?.get("removed"), true);
-        assert.equal(actor.roots.replies.get(replyId(id, "new-reply"))?.get("removed"), true);
+      const issued = [...retained, ...removed];
+      assert.deepEqual([...actor.roots.comments.keys()].sort(), ["thread", ...issued.map(ids => ids.comment)].sort());
+      assert.deepEqual([...actor.roots.replies.keys()].sort(), [replyId(REPLY.comment, REPLY.reply), ...issued.map(ids => replyId(ids.comment, ids.reply))].sort());
+      for (const ids of removed) {
+        assert.equal(actor.roots.comments.get(ids.comment)?.get("removed"), true);
+        assert.equal(actor.roots.replies.get(replyId(ids.comment, ids.reply))?.get("removed"), true);
       }
     }
     return counts;
@@ -215,25 +246,36 @@ test("generated three-copy histories check commands locally and account for sett
   for (let seed = 1; seed <= SEEDS; seed++) {
     for (const [kind, count] of Object.entries(history(seed))) totals[kind] = (totals[kind] ?? 0) + count;
   }
-  const floors = {
-    "set beat lengthSeconds": 60, "set beat status": 60, "set beat paragraphStart": 60, "clear beat paragraphStart": 60,
-    "set heading": 120, "clear heading": 60, "concurrent comment body": 60, "concurrent reply body": 60,
-    "create comment": 120, "create reply": 120, "body comment": 60, "body reply": 60, "resolve comment": 60, "resolve reply": 60,
-    "reopen comment": 60, "reopen reply": 60, "remove comment": 60, "remove reply": 60, undo: 60, redo: 60, unchanged: 60, refused: 120,
-    type: 20, split: 20, join: 20, unjoin: 20, remove: 20, move: 20, "heading create": 20, "heading rename": 20, "heading remove": 20
-  };
+  const schedules = [
+    { perHistory: 3, reason: "each of the three writers runs this once", kinds: [
+      "set beat lengthSeconds", "set beat status", "set beat paragraphStart", "clear beat paragraphStart", "set beat extra",
+      "set beat imageRef", "clear heading", "concurrent comment body", "concurrent reply body", "unchanged",
+      ...["set beat paragraphStart", "set beat status", "set beat imageRef", "remove comment"].flatMap(kind => ["undo " + kind, "redo " + kind])
+    ] },
+    { perHistory: 6, reason: "each of the three writers runs this twice", kinds: ["set heading", "refused"] },
+    { perHistory: 7, reason: "each writer starts two threads and the cross-device trace starts one", kinds: ["create comment", "create reply"] },
+    { perHistory: 4, reason: "each writer runs this on a temporary thread and the cross-device trace runs it once", kinds: [
+      "body comment", "body reply", "resolve comment", "resolve reply", "reopen comment", "reopen reply", "remove comment", "remove reply"
+    ] },
+    { perHistory: 1, reason: "one chosen writer runs the structural trace", kinds: [
+      "type", "split", "join", "unjoin", "remove", "move", "heading create", "heading rename", "heading remove"
+    ] }
+  ];
   t.diagnostic(JSON.stringify(totals));
-  for (const [kind, floor] of Object.entries(floors)) assert.ok((totals[kind] ?? 0) >= floor, kind);
-  assert.deepEqual(Object.keys(totals).sort(), Object.keys(floors).sort());
+  for (const { perHistory, reason, kinds } of schedules) for (const kind of kinds) {
+    assert.equal(totals[kind], SEEDS * perHistory, kind + ": " + reason);
+  }
+  assert.deepEqual(Object.keys(totals).sort(), schedules.flatMap(group => group.kinds).sort());
 });
 
 test("control: muting each individual record write in a generated history fails at its command", t => {
   const writes: CapturedWrite[] = [];
   history(3, writes);
   const methods = new Set<string>();
-  for (const { state, step, slot, method, key } of writes) {
+  for (const { client, state, step, slot, method, key } of writes) {
     const doc = new Y.Doc(), actor = openNativeScript(doc);
     Y.applyUpdate(doc, state);
+    doc.clientID = client;
     let reached = false;
     try {
       assert.throws(() => interceptWrites((at, operation, field) => {
@@ -247,7 +289,6 @@ test("control: muting each individual record write in a generated history fails 
     methods.add(method);
   }
   assert.deepEqual([...methods].sort(), ["delete", "set"]);
-  assert.ok(writes.length >= 120);
   t.diagnostic(writes.length + " individual writes muted and caught at their commands");
 });
 

@@ -3,7 +3,7 @@ import { normalizeDocId } from "../../shared/doc-id-policy.ts";
 import { BROLL_STATUS_IDS, BROLL_TEXT_MAX, brollStatusId, normalizeBrollProps } from "./document/broll.ts";
 import { SCHEMA_VERSION, STATE_FIELDS } from "./document/fields.ts";
 import type { StateField } from "./document/fields.ts";
-import { migrateGallery } from "./document/gallery.ts";
+import { normalizeRowGallery } from "./document/gallery.ts";
 import type { GalleryRow } from "./document/gallery.ts";
 import { TITLE_MAX } from "./document/file-title.ts";
 import { deriveDocId, docIdEmbeddedIn } from "./document/ids.ts";
@@ -23,7 +23,6 @@ import {
   legacyMdToHtml,
   plainName,
   plainText,
-  safeImageSrc,
   settledNames,
   storedImageHtml,
   textOf,
@@ -235,11 +234,7 @@ export function migrateRows(input: unknown, ports: MigratePorts): ValidatedDocum
     if (r.paragraphStart !== true) delete r.paragraphStart;
     r.visualText = sanitize(legacy ? legacyMdToHtml(r.visualText || "") : textOf(r.visualText || ""));
     r.audioText = sanitize(legacy ? legacyMdToHtml(r.audioText || "") : textOf(r.audioText || ""));
-    const legacyImage = safeImageSrc(r.visualImage);
-    const interned = legacyImage ? ports.images.fromDataUrl(legacyImage) : null;
-    r.imageRef = interned || normalizeImageRef(r.imageRef) || null;
-    delete r.visualImage;
-    migrateGallery(r as GalleryRow, ports.images);
+    normalizeRowGallery(r as GalleryRow, ports.images);
     if (!r.updatedAt) r.updatedAt = "";
     r.updatedBy = r.updatedBy ? plainName(r.updatedBy) : null;
     MEDIA_FIELDS.forEach(function (field) {

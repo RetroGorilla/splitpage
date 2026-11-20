@@ -22,6 +22,11 @@ export const beatField = (id: string, field: string): NativeFieldTarget => ({ ki
 export const headingField = (field: string): NativeFieldTarget => ({ kind: "heading", id: "H", field });
 export const fileKey = (field: string): string => "f:" + JSON.stringify(field);
 export const replyId = (comment: string, reply: string): string => JSON.stringify([comment, reply]);
+export function expectedMint(script: NativeScript, prefix: string): string {
+  const client = script.doc.clientID;
+  const clock = Y.decodeStateVector(Y.encodeStateVector(script.doc)).get(client) ?? 0;
+  return prefix + client.toString(36) + "-" + clock.toString(36);
+}
 export const replyInput = (id: string, body = "reply") => ({ id, author: AUTHOR, body, createdAt: AT });
 export const commentInput = (id: string, body = "original") => ({
   ...replyInput(id, body), field: "audioText" as const, rowId: "A", anchorId: id, quotedText: "alpha"
@@ -87,7 +92,7 @@ type Fields = Record<string, unknown>;
 export interface RecordStep {
   readonly name: string;
   readonly run: (script: NativeScript) => NativeRecordOutcome;
-  readonly expect: (snapshot: RecordSnapshot, read: Read) => void;
+  readonly expect: (snapshot: RecordSnapshot, read: Read, writer: NativeScript) => string | undefined;
 }
 
 function filePatch(record: Fields, patch: Fields): void {
@@ -132,6 +137,7 @@ export function beatStep(field: string, value: unknown, id = "A"): RecordStep {
         } else if (clear) Reflect.deleteProperty(view, field);
         else view[field] = value;
       }
+      return undefined;
     }
   };
 }
@@ -147,72 +153,86 @@ export function headingStep(value: string | undefined): RecordStep {
       assert.ok(section);
       if (value === undefined) { Reflect.deleteProperty(record, fileKey("note")); delete section.note; }
       else { filePatch(record, { note: value }); section.note = value; }
+      return undefined;
     }
   };
 }
 
-export function threadSteps(id: string, rank: string, body = "new body"): RecordStep[] {
-  const target = { comment: id }, reply = { ...target, reply: "new-reply" }, key = replyId(id, reply.reply);
-  const comment = commentInput(id), newReply = replyInput(reply.reply);
+export function threadSteps(anchor: string, rank: string, body = "new body", ids = { comment: "", reply: "" }, replyAuthor = AUTHOR): RecordStep[] {
+  const target = () => ({ comment: ids.comment }), reply = () => ({ ...target(), reply: ids.reply });
+  const key = () => replyId(ids.comment, ids.reply);
+  const comment = commentInput(anchor), newReply = { ...replyInput("unused"), author: replyAuthor };
   const commentFields = {
     author: comment.author, body: comment.body, createdAt: AT, updatedAt: AT, field: comment.field, rowId: comment.rowId,
     anchorId: comment.anchorId, quotedText: comment.quotedText, kind: "anchor", assignee: "", resolved: false, resolvedBy: null, resolvedAt: null
   };
   const replyFields = { author: newReply.author, body: newReply.body, createdAt: AT };
   const find = (read: Read) => {
-    const found = read.document.comments.find(record => record.id === id);
+    const found = read.document.comments.find(record => record.id === ids.comment);
     assert.ok(found);
     return found;
   };
   const patchStep = (onReply: boolean, name: string, run: RecordStep["run"], patch: Fields): RecordStep => ({
     name: name + (onReply ? " reply" : " comment"), run,
     expect(snapshot, read) {
-      filePatch(item(snapshot, onReply ? "replies" : "comments", onReply ? key : id), patch);
-      const parent = find(read), entry = onReply ? parent.replies?.find(record => record.id === reply.reply) : parent;
+      filePatch(item(snapshot, onReply ? "replies" : "comments", onReply ? key() : ids.comment), patch);
+      const parent = find(read), entry = onReply ? parent.replies?.find(record => record.id === ids.reply) : parent;
       assert.ok(entry);
       Object.assign(entry, patch);
+      return undefined;
     }
   });
   return [
     {
       name: "create comment", run: script => createNativeComment(script, comment),
-      expect(snapshot, read) {
+      expect(snapshot, read, writer) {
+        const id = expectedMint(writer, "c");
+        ids.comment = id;
         const record = { rank };
         filePatch(record, commentFields);
         collection(snapshot, "comments")[id] = record;
         read.document.comments.push({ ...commentFields, id, replies: [] });
+        return id;
       }
     },
     {
-      name: "create reply", run: script => createNativeReply(script, id, newReply),
-      expect(snapshot, read) {
-        const record = { rank: "V00000V", commentId: id };
+      name: "create reply", run: script => createNativeReply(script, ids.comment, newReply),
+      expect(snapshot, read, writer) {
+        const id = expectedMint(writer, "rp");
+        ids.reply = id;
+        const record = { rank: "V00000V", commentId: ids.comment };
         filePatch(record, replyFields);
-        collection(snapshot, "replies")[key] = record;
+        collection(snapshot, "replies")[key()] = record;
         const replies = find(read).replies;
         assert.ok(replies);
-        replies.push({ ...replyFields, id: reply.reply });
+        replies.push({ ...replyFields, id });
+        return id;
       }
     },
     ...[false, true].flatMap(onReply => {
       const subject = onReply ? reply : target;
       return [
-        patchStep(onReply, "body", script => setNativeCommentBody(script, subject, AUTHOR, body), { body }),
-        patchStep(onReply, "resolve", script => resolveNativeComment(script, subject, RESOLUTION), {
+        patchStep(onReply, "body", script => setNativeCommentBody(script, subject(), onReply ? replyAuthor : AUTHOR, body), { body }),
+        patchStep(onReply, "resolve", script => resolveNativeComment(script, subject(), RESOLUTION), {
           resolved: true, resolvedBy: RESOLUTION.by, resolvedAt: AT
         }),
-        patchStep(onReply, "reopen", script => reopenNativeComment(script, subject), { resolved: false, resolvedBy: null, resolvedAt: null })
+        patchStep(onReply, "reopen", script => reopenNativeComment(script, subject()), { resolved: false, resolvedBy: null, resolvedAt: null })
       ];
     }),
     {
-      name: "remove reply", run: script => removeNativeComment(script, reply),
-      expect(snapshot, read) { item(snapshot, "replies", key).removed = true; find(read).replies = []; }
+      name: "remove reply", run: script => removeNativeComment(script, reply()),
+      expect(snapshot, read) {
+        item(snapshot, "replies", key()).removed = true;
+        find(read).replies = [];
+        return undefined;
+      }
     },
     {
-      name: "remove comment", run: script => removeNativeComment(script, target),
+      name: "remove comment", run: script => removeNativeComment(script, target()),
       expect(snapshot, read) {
-        item(snapshot, "comments", id).removed = true;
-        read.document.comments = read.document.comments.filter(record => record.id !== id);
+        item(snapshot, "comments", ids.comment).removed = true;
+        read.document.comments = read.document.comments.filter(record => record.id !== ids.comment);
+        return undefined;
       }
     }
   ];
@@ -220,8 +240,8 @@ export function threadSteps(id: string, rank: string, body = "new body"): Record
 
 export function checkRecordStep(script: NativeScript, step: RecordStep, run = () => step.run(script)): void {
   const snapshot = recordSnapshot(script), read = structuredClone(recordRead(script));
-  step.expect(snapshot, read);
-  assert.deepEqual(run(), { kind: "written" }, step.name + ": outcome");
+  const created = step.expect(snapshot, read, script);
+  assert.deepEqual(run(), { kind: "written", ...created ? { created } : {} }, step.name + ": outcome");
   assert.deepEqual(recordSnapshot(script), snapshot, step.name + ": stored snapshot");
   assert.deepEqual(recordRead(script), read, step.name + ": projected document");
 }

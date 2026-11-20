@@ -1,3 +1,11 @@
+import * as Y from "yjs";
+
+// why: the client id and clock distinguish records minted by copies that have not received each other's updates
+export function mintNativeId(doc: Y.Doc, prefix: string): string {
+  const clock = Y.decodeStateVector(Y.encodeStateVector(doc)).get(doc.clientID) ?? 0;
+  return prefix + doc.clientID.toString(36) + "-" + clock.toString(36);
+}
+
 export const NATIVE_FIELD_PREFIX = "f:";
 
 export function encodeNativeValue(value: unknown): string {

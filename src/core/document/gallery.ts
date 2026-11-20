@@ -411,6 +411,13 @@ export function migrateGallery(r: GalleryRow, images: ImageSource): void {
   if (more.length) r.moreImages = more; else delete r.moreImages;
 }
 
+export function normalizeRowGallery(row: GalleryRow, images: ImageSource): void {
+  const legacy = safeImageSrc(row.visualImage);
+  row.imageRef = (legacy ? images.fromDataUrl(legacy) : null) || normalizeImageRef(row.imageRef) || null;
+  delete row.visualImage;
+  migrateGallery(row, images);
+}
+
 export function rowSlots(row: unknown): Slot[] {
   const out: Slot[] = [];
   if (!row || typeof row !== "object") return out;

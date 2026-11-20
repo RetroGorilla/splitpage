@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import {
-  createNativeReply, removeNativeComment, resolveNativeComment, setNativeCommentBody
+  createNativeComment, createNativeReply, removeNativeComment, resolveNativeComment, setNativeCommentBody
 } from "../../../../src/adapters/collab/native/comment-commands.ts";
 import { moveNativeBlocks } from "../../../../src/adapters/collab/native/move-commands.ts";
 import { setNativeField } from "../../../../src/adapters/collab/native/record-commands.ts";
@@ -9,7 +9,8 @@ import { joinNativeRow, removeNativeRows } from "../../../../src/adapters/collab
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import type { Delivery } from "./helpers.ts";
 import {
-  AUTHOR, COMMENT, REPLY, RESOLUTION, beatField, freshRecordRead, recordCopies, recordRead, recordSnapshot, recordUndo, replyId, replyInput, unchangedRecord
+  AUTHOR, COMMENT, IMAGE, REPLY, RESOLUTION, beatField, commentInput, expectedMint, freshRecordRead, recordCopies,
+  recordRead, recordSnapshot, recordUndo, replyId, replyInput, unchangedRecord
 } from "./record-harness.ts";
 import { split } from "./structure-harness.ts";
 
@@ -107,20 +108,60 @@ test("removing a comment hides a concurrent resolution and reply until removal i
   races((left, right, settle) => {
     const undo = recordUndo(right);
     assert.deepEqual(resolveNativeComment(left, COMMENT, RESOLUTION), WRITTEN);
-    assert.deepEqual(createNativeReply(left, COMMENT.comment, replyInput("unseen")), WRITTEN);
+    const reply = expectedMint(left, "rp");
+    assert.deepEqual(createNativeReply(left, COMMENT.comment, replyInput("unseen")), { ...WRITTEN, created: reply });
     assert.deepEqual(removeNativeComment(right, COMMENT), WRITTEN);
     settle(script => {
       assert.deepEqual(script.reader.document().comments, []);
       assert.equal(script.roots.comments.get(COMMENT.comment)?.get("removed"), true);
-      assert.ok(script.roots.replies.has(replyId(COMMENT.comment, "unseen")));
-      unchangedRecord(script, () => removeNativeComment(script, { ...COMMENT, reply: "unseen" }), "missing");
+      assert.ok(script.roots.replies.has(replyId(COMMENT.comment, reply)));
+      unchangedRecord(script, () => removeNativeComment(script, { ...COMMENT, reply }), "missing");
     });
     assert.ok(undo.undo());
     settle(script => {
       const [comment] = script.reader.document().comments;
       assert.equal(comment?.resolved, true);
       assert.equal(comment.resolvedBy, RESOLUTION.by);
-      assert.deepEqual(comment?.replies?.map(reply => reply.id), ["answer", "unseen"]);
+      assert.deepEqual(comment?.replies?.map(item => item.id), ["answer", reply]);
+    });
+  });
+});
+
+test("concurrent creations mint distinct comments and replies stay under the intended parent", () => {
+  races((left, right, settle) => {
+    const expected = [left, right].map((script, index) => {
+      const id = expectedMint(script, "c"), body = "thread " + index;
+      assert.deepEqual(createNativeComment(script, commentInput("same", body)), { ...WRITTEN, created: id });
+      const reply = expectedMint(script, "rp"), answer = "answer " + index;
+      assert.deepEqual(createNativeReply(script, id, replyInput("same", answer)), { ...WRITTEN, created: reply });
+      return { id, body, reply, answer };
+    });
+    assert.notEqual(expected[0]?.id, expected[1]?.id);
+    assert.notEqual(expected[0]?.reply, expected[1]?.reply);
+    settle(script => {
+      const comments = script.reader.document().comments;
+      assert.equal(comments.length, 3);
+      for (const { id, body, reply, answer } of expected) {
+        const record = comments.find(comment => comment.id === id);
+        assert.equal(record?.body, body);
+        assert.deepEqual(record?.replies?.map(item => [item.id, item.body]), [[reply, answer]]);
+      }
+    });
+  });
+});
+
+test("as built: concurrent picture additions to one beat keep one whole extra in both client orders", () => {
+  races((left, right, settle) => {
+    const leftImage = { ...IMAGE, sha256: "b".repeat(64) }, rightImage = { ...IMAGE, sha256: "c".repeat(64) };
+    assert.deepEqual(setNativeField(left, beatField("A", "imageRef"), IMAGE), WRITTEN);
+    settle(script => assert.deepEqual(script.reader.row("A")?.fields.imageRef, IMAGE));
+    for (const [script, image] of [[left, leftImage], [right, rightImage]] as const) {
+      assert.deepEqual(setNativeField(script, beatField("A", "moreImages"), [{ imageRef: image }]), WRITTEN);
+    }
+    const winner = left.doc.clientID > right.doc.clientID ? leftImage : rightImage;
+    settle(script => {
+      assert.deepEqual(script.reader.row("A")?.fields.imageRef, IMAGE);
+      assert.deepEqual(script.reader.row("A")?.fields.moreImages, [{ imageRef: winner }]);
     });
   });
 });
