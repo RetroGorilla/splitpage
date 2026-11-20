@@ -518,7 +518,7 @@ for (const [name, kind] of Object.entries(fixtureViews)) {
     assert.equal(press(kind.surface(), "z"), true);
     assert.equal(native.revision(), revision);
     assert.equal(native.narrationHtml("R1"), "Captured words");
-    assert.equal(kind.host().textContent.replace(/​/g, ""), "Captured! words");
+    assert.equal(kind.host().textContent.replace(/\u200b/g, ""), "Captured! words");
     assert.deepEqual(refused.mock.calls.map(call => call.arguments), []);
   });
 
@@ -532,7 +532,7 @@ for (const [name, kind] of Object.entries(fixtureViews)) {
     assert.equal(press(kind.surface(), "z", { isComposing: true }), true);
     press(document.body, "z");
     assert.deepEqual(refused.mock.calls.map(call => call.arguments), [["native-input-pending"]]);
-    assert.equal(kind.host().textContent.replace(/​/g, ""), "Captured words");
+    assert.equal(kind.host().textContent.replace(/\u200b/g, ""), "Captured words");
   });
 }
 const outOfScope = [
