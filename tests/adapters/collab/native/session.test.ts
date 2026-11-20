@@ -93,6 +93,27 @@ test("a relative narration caret resolves in its visible joined row after a peer
   assert.equal(author.narrationOffset("B", start), null);
 });
 
+test("the guarded narration resolver refuses a root-named caller position without creating a root", t => {
+  const session = fromDocument(), caret = anchor(session, 0), bytes = session.encodeState();
+  t.after(session.close);
+  const reads = t.mock.fn(() => {
+    assert.deepEqual(session.commands.typeText(caret, "x", {}), {
+      kind: "recovery", reason: "busy", runs: [{ text: "x", marks: {} }]
+    });
+    return { item: null, type: null, tname: "unexpected-caret-root", assoc: 0 };
+  });
+  const roots = [...session.ydoc.share.keys()];
+  assert.equal(session.narrationOffset("A", { get from() { return reads(); } }), null);
+  assert.equal(reads.mock.callCount(), 1);
+  assert.deepEqual([...session.ydoc.share.keys()], roots);
+  assert.deepEqual(session.encodeState(), bytes);
+  const release = session.holdIngress();
+  try {
+    assert.equal(session.narrationOffset("A", { get from() { return reads(); } }), null);
+    assert.equal(reads.mock.callCount(), 1);
+  } finally { release(); }
+});
+
 test("empty, converted and encoded opens use a fresh undo binding", t => {
   const empty = open({ kind: "empty" }), author = fromDocument();
   t.after(() => { empty.close(); author.close(); });

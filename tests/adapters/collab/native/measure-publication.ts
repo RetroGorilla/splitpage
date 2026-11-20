@@ -49,14 +49,17 @@ async function measure(before: boolean, batch: number): Promise<void> {
       if (!target) throw new Error("Expected visible caret");
       const at = native.commands.anchorText({ beat: target.beat, cell: "narration" }, target.offset);
       if (at.kind !== "anchored") throw new Error(at.reason);
+      const paint = before ? null : native.trackNarrationPaint(beat);
       for (let key = 0; key < batch; key++) keys += "x";
-      const result = native.commands.typeText(at.range, keys, {}, { by: "Writer", at: new Date(sample * 1000).toISOString() });
+      paint?.dispose();
+      const result = native.commands.typeText(at.range, keys, {}, { by: "Writer", at: new Date(sample * 1000).toISOString() }, before ? undefined : [null, null]);
       const written = performance.now();
       let caret = 0;
       if (before) await Promise.resolve();
       else {
         publish();
-        const started = performance.now(), placed = native.narrationOffset(beat, at.range);
+        assert.ok(result.kind === "written" && result.caret);
+        const started = performance.now(), placed = native.narrationOffset(beat, { from: result.caret }, -1);
         caret = performance.now() - started;
         assert.equal(placed, offset + batch);
         await Promise.resolve();
