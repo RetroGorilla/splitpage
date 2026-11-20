@@ -2,6 +2,7 @@ import { cleanMarks, tagNameOf, withTagStack } from "../../../core/text/runs.ts"
 import type { Marks } from "../../../core/text/runs.ts";
 import { nativeMarkName, nativeRangeUnits, nativeTagKey } from "./inline.ts";
 import type { NativeRangeUnits } from "./inline.ts";
+import { transactNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { nativeAvailability, nativeLiveRange, nativeRangeSnapshot } from "./text-commands.ts";
 import type { NativeRefusal, NativeTextRange } from "./text-commands.ts";
@@ -104,7 +105,7 @@ function writesFor(script: NativeScript, change: CheckedChange, units: NativeRan
 export function formatNativeText(script: NativeScript, range: NativeTextRange, change: NativeMarkChange): NativeFormatOutcome {
   const unavailable = nativeAvailability(script);
   if (unavailable) return refused(unavailable);
-  return script.doc.transact(() => {
+  return transactNativeCommand(script, () => {
     const checked = checkedChange(change), snapshot = nativeRangeSnapshot(range);
     if (!checked) return refused("mark");
     if (!snapshot || snapshot.target.cell === "name") return refused("range");
@@ -123,5 +124,5 @@ export function formatNativeText(script: NativeScript, range: NativeTextRange, c
       outcome = WRITTEN;
     }
     return outcome;
-  }, script.origin);
+  });
 }

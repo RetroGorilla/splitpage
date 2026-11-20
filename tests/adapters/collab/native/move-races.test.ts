@@ -1,9 +1,10 @@
-import assert from "node:assert/strict";
+﻿import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { dom } from "../../../../src/test/_dom.mjs";
 import { createNativeHeading, removeNativeHeading } from "../../../../src/adapters/collab/native/heading-commands.ts";
 import { moveNativeBlocks } from "../../../../src/adapters/collab/native/move-commands.ts";
 import type { NativeMoveBlock } from "../../../../src/adapters/collab/native/move-commands.ts";
+import { setNativeField } from "../../../../src/adapters/collab/native/record-commands.ts";
 import { nativeSegmentSpans } from "../../../../src/adapters/collab/native/reader.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import { anchorNativeText, typeNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
@@ -13,7 +14,7 @@ import { caret, copiesOf, join, press, remove, rowsOf, split, stateOf, storedOf,
 after(() => { dom.window.close(); });
 
 const CLIENTS: readonly (readonly number[])[] = [[2, 3], [3, 2]];
-const ORDERS: readonly Delivery[] = ["forward", "reverse", "twice"];
+const ORDERS: readonly Delivery[] = ["forward", "reverse", "twice", "shuffled", "state"];
 const beat = (id: string): NativeMoveBlock => ({ kind: "beat", id });
 const heading = (id: string): NativeMoveBlock => ({ kind: "heading", id });
 
@@ -155,6 +156,16 @@ test("decision 15 (E15 history 4): three same-moment moves of one row and winner
     assert.equal(a.roots.beats.get("B")?.has("rank"), false);
     assert.deepEqual(outlineIds(a), ["A", "B", "C", "D"]);
     net.agree();
+    const otherLoser = winner === 0 ? [c, undoC] as const : [a, undoA] as const;
+    for (const [copy, history] of [[b, undoB], otherLoser] as const) {
+      const before = stateOf(copy);
+      assert.equal(history.undo(), null);
+      assert.deepEqual(stateOf(copy), before);
+      assert.equal(history.undoStack.length, 0);
+      net.settle(order);
+      assert.deepEqual(outlineIds(a), ["A", "B", "C", "D"]);
+      net.agree();
+    }
     undoA.destroy(); undoB.destroy(); undoC.destroy();
     a.close(); b.close(); c.close();
   }
@@ -382,4 +393,279 @@ test("gate 7 (slice 3 carried): no sequence of native commands including moves, 
   }
   undoA.destroy(); undoB.destroy(); undoC.destroy();
   a.close(); b.close(); c.close();
+});
+test("decision 15 (E15 histories 2, 3 and 20): the loser passes a spent move; the winner can redo", () => {
+  const source = structureScript({ A: "a", B: "b", Z: "z" }, {}, [{ id: "H", name: "H", before: "Z" }]);
+  for (const order of ORDERS) for (const first of ["loser", "winner"] as const) {
+    const { net, all: [a, b], undo: [alice, bob] } = copiesOf(source);
+    assert.ok(a && b && alice && bob);
+    try {
+      move(a, [beat("A")], beat("Z"));
+      net.settle(order);
+      move(a, [beat("B")], beat("Z"));
+      move(b, [beat("B")], beat("A"));
+      net.settle(order);
+      assert.deepEqual(outlineIds(a), ["#H", "B", "A", "Z"]);
+      press(first === "loser" ? alice : bob, first === "loser" ? a : b);
+      net.settle(order);
+      assert.deepEqual(outlineIds(a), first === "loser" ? ["A", "#H", "B", "Z"] : ["#H", "A", "B", "Z"]);
+      assert.equal(a.roots.beats.get("B")?.has("rank"), first === "loser");
+      if (first === "loser") {
+        remove(a, "A");
+        net.settle(order);
+        assert.deepEqual(outlineIds(a), ["#H", "B", "Z"]);
+      } else {
+        press(bob, b, true);
+        net.settle(order);
+        assert.deepEqual(outlineIds(a), ["#H", "B", "A", "Z"]);
+      }
+      net.agree();
+    } finally { a.doc.destroy(); b.doc.destroy(); }
+  }
+});
+
+test("decision 15 (E15 histories 6 and 21): undo leaves a later seen move of the same beat or its run", () => {
+  for (const order of ORDERS) for (const asRun of [false, true]) {
+    const { net, all: [a, b], undo: [alice] } = copiesOf(structureScript({ A: "a", B: "b", C: "c", D: "d" }));
+    assert.ok(a && b && alice);
+    try {
+      move(a, [beat("B")], beat("D"));
+      net.settle(order);
+      assert.deepEqual(outlineIds(a), ["A", "C", "B", "D"]);
+      move(b, asRun ? [beat("C"), beat("B")] : [beat("B")], null);
+      net.settle(order);
+      const expected = asRun ? ["A", "D", "C", "B"] : ["A", "C", "D", "B"];
+      const before = stateOf(a);
+      assert.equal(alice.undo(), null);
+      assert.deepEqual(stateOf(a), before);
+      assert.deepEqual(outlineIds(a), expected);
+      net.agree();
+    } finally { a.doc.destroy(); b.doc.destroy(); }
+  }
+});
+
+test("decision 15 (E15 histories 12, 17 and 18): kept records survive a double cut, double undo and one redo", () => {
+  for (const order of ORDERS) {
+    const { net, all: [a, b], undo: [alice, bob] } = copiesOf(structureScript({ A: "a", B: "b", C: "c" }));
+    assert.ok(a && b && alice && bob);
+    try {
+      remove(a, "B");
+      remove(b, "B");
+      press(alice, a);
+      press(bob, b);
+      press(bob, b, true);
+      net.settle(order);
+      assert.deepEqual(outlineIds(a), ["A", "B", "C"]);
+      for (const copy of [a, b]) {
+        assert.ok(copy.roots.beats.has("B") && copy.roots.visuals.has("B"));
+        assert.equal(copy.reader.row("B")?.audioText, "b");
+      }
+      move(a, [beat("C")], beat("A"));
+      net.settle(order);
+      assert.deepEqual(outlineIds(a), ["C", "A", "B"]);
+      assert.deepEqual(createNativeHeading(a, caret(a, "B", 0), "H", "H"), { kind: "written" });
+      net.settle(order);
+      assert.deepEqual(outlineIds(a), ["C", "A", "#H", "B"]);
+      net.agree();
+    } finally { a.doc.destroy(); b.doc.destroy(); }
+  }
+});
+test("decision 15 (E15 history 5): a cut and undo preserves a concurrent move and the stored record", () => {
+  const source = structureScript({ A: "a", B: "b", Z: "z" }, {}, [{ id: "H", name: "H", before: "Z" }]);
+  for (const order of ORDERS) {
+    const { net, all: [a, b], undo: [alice] } = copiesOf(source);
+    assert.ok(a && b && alice);
+    try {
+      move(a, [beat("A")], beat("Z"));
+      remove(a, "B");
+      move(b, [beat("B")], beat("Z"));
+      net.settle(order);
+      assert.deepEqual(outlineIds(a), ["#H", "A", "Z"]);
+      press(alice, a);
+      net.settle(order);
+      assert.deepEqual(outlineIds(a), ["#H", "A", "B", "Z"]);
+      remove(a, "A");
+      net.settle(order);
+      assert.deepEqual(outlineIds(a), ["#H", "B", "Z"]);
+      net.agree();
+    } finally { a.doc.destroy(); b.doc.destroy(); }
+  }
+});
+
+test("decision 15 (E15 history 7): undo of a move puts the first half back beside the concurrently split-off half", () => {
+  for (const order of ORDERS) {
+    const { net, all: [a, b], undo: [alice] } = copiesOf(structureScript({ A: "a", B: "b", C: "c", D: "d" }));
+    assert.ok(a && b && alice);
+    try {
+      move(a, [beat("B")], null);
+      const n = split(b, "B", 0);
+      net.settle(order);
+      assert.deepEqual(outlineIds(a), ["A", n, "C", "D", "B"]);
+      press(alice, a);
+      net.settle(order);
+      assert.deepEqual(outlineIds(a), ["A", "B", n, "C", "D"]);
+      assert.equal(a.reader.row(n)?.audioText, "b");
+      net.agree();
+    } finally { a.doc.destroy(); b.doc.destroy(); }
+  }
+});
+
+test("decision 15 (E15 history 11): undo of the winning move leaves the rank absent even with an older move", () => {
+  for (const order of ORDERS) {
+    const { net, all: [a, b], undo: [, bob] } = copiesOf(structureScript({ A: "a", B: "b", C: "c", D: "d" }));
+    assert.ok(a && b && bob);
+    try {
+      move(a, [beat("B")], null);
+      net.settle(order);
+      assert.deepEqual(outlineIds(a), ["A", "C", "D", "B"]);
+      move(a, [beat("B")], beat("D"));
+      move(b, [beat("B")], beat("A"));
+      net.settle(order);
+      assert.deepEqual(outlineIds(a), ["B", "A", "C", "D"]);
+      press(bob, b);
+      net.settle(order);
+      assert.equal(a.roots.beats.get("B")?.has("rank"), false);
+      assert.deepEqual(outlineIds(a), ["A", "B", "C", "D"]);
+      net.agree();
+    } finally { a.doc.destroy(); b.doc.destroy(); }
+  }
+});
+test("decision 15 (E15 history 8): undo of a beat move and of a concurrent heading move", () => {
+  const source = structureScript({ A: "a", B: "b", C: "c", D: "d", E: "e", F: "f" }, {}, [
+    { id: "H", name: "H", before: "E" }, { id: "I", name: "I", before: "F" }
+  ]);
+  for (const order of ORDERS) {
+    const { net, all: [a, b], undo: [alice, bob] } = copiesOf(source);
+    assert.ok(a && b && alice && bob);
+    try {
+      move(a, [heading("H"), beat("E")], null);
+      move(b, [beat("B")], beat("E"));
+      net.settle(order);
+      assert.deepEqual(outlineIds(a), ["A", "C", "D", "B", "#I", "F", "#H", "E"]);
+      press(bob, b);
+      net.settle(order);
+      assert.deepEqual(outlineIds(a), ["A", "B", "C", "D", "#I", "F", "#H", "E"]);
+      press(alice, a);
+      net.settle(order);
+      assert.deepEqual(outlineIds(a), ["A", "B", "C", "D", "#H", "E", "#I", "F"]);
+      net.agree();
+    } finally { a.doc.destroy(); b.doc.destroy(); }
+  }
+});
+
+test("decision 15 (E15 history 10): three writers and a blocked redo of a heading move", () => {
+  const source = structureScript({ A: "a", B: "b", C: "c" }, {}, [
+    { id: "H", name: "H", before: "B" }, { id: "I", name: "I", before: "C" }
+  ]);
+  for (const order of ORDERS) {
+    const { net, all: [a, b, c], undo: [alice, bob, carol] } = copiesOf(source, [2, 3, 4]);
+    assert.ok(a && b && c && alice && bob && carol);
+    try {
+      move(a, [heading("H")], beat("A"));
+      move(b, [heading("H")], beat("A"));
+      net.deliver(a, b, order);
+      press(bob, b);
+      press(alice, a);
+      net.deliver(a, c, order);
+      move(c, [heading("H")], null);
+      press(bob, b, true);
+      press(carol, c);
+      net.deliver(b, c, order);
+      const before = stateOf(c);
+      assert.equal(carol.redo(), null);
+      assert.deepEqual(stateOf(c), before);
+      net.settle(order);
+      assert.deepEqual(outlineIds(a), ["#H", "A", "B", "#I", "C"]);
+      net.agree();
+    } finally { a.doc.destroy(); b.doc.destroy(); c.doc.destroy(); }
+  }
+});
+
+test("decision 15 (E15 history 16): undo removes the rank pin and the split-off follows its narration neighbour", () => {
+  for (const order of ORDERS) {
+    const { net, all: [a, b], undo: [alice, bob] } = copiesOf(structureScript({ A: "a", B: "b", C: "c", D: "d", X: "x" }));
+    assert.ok(a && b && alice && bob);
+    try {
+      move(a, [beat("B")], beat("D"));
+      move(b, [beat("B")], beat("X"));
+      net.settle(order);
+      press(bob, b);
+      net.settle(order);
+      assert.equal(a.roots.beats.get("B")?.has("rank"), false);
+      const n = split(a, "B", 0);
+      net.settle(order);
+      move(a, [beat("D")], beat(n));
+      net.settle(order);
+      assert.deepEqual(outlineIds(a), ["A", "B", "D", n, "C", "X"]);
+      move(b, [beat("X")], beat(n));
+      net.settle(order);
+      assert.deepEqual(outlineIds(a), ["A", "B", "D", "X", n, "C"]);
+      press(alice, a);
+      net.settle(order);
+      assert.equal(a.roots.beats.get(n)?.has("rank"), false);
+      assert.deepEqual(outlineIds(a), ["A", "B", n, "X", "C", "D"]);
+      net.agree();
+    } finally { a.doc.destroy(); b.doc.destroy(); }
+  }
+});
+
+test("decision 15 (E15 histories 13 and 19): kept records and rankless placement after a double removal", () => {
+  const source = structureScript({ A: "a", B: "b", C: "c", Z: "z" }, {}, [{ id: "H", name: "H", before: "C" }]);
+  for (const order of ORDERS) for (const rankless of [false, true]) {
+    const { net, all: [a, b], undo: [alice, bob] } = copiesOf(source);
+    assert.ok(a && b && alice && bob);
+    try {
+      move(a, [beat("A")], beat("C"));
+      net.settle(order);
+      const cut = rankless ? "Z" : "B";
+      if (rankless) {
+        move(a, [beat("B")], beat("C"));
+        move(b, [beat("B")], beat("A"));
+        net.settle(order);
+        press(bob, b);
+        net.settle(order);
+        assert.deepEqual(outlineIds(a), ["#H", "A", "B", "C", "Z"]);
+        assert.equal(a.roots.beats.get("B")?.has("rank"), false);
+      }
+      remove(a, cut);
+      remove(b, cut);
+      press(alice, a);
+      press(bob, b);
+      press(bob, b, true);
+      net.settle(order);
+      assert.ok(a.roots.beats.has(cut) && a.roots.visuals.has(cut));
+      assert.equal(a.reader.row(cut)?.audioText, cut.toLowerCase());
+      remove(a, "A");
+      net.settle(order);
+      assert.deepEqual(outlineIds(a), ["B", "#H", "C", "Z"]);
+      net.agree();
+    } finally { a.doc.destroy(); b.doc.destroy(); }
+  }
+});
+test("decision 15 (E15 history 14 adapted): a split-off row can move before a restored row with kept containers", () => {
+  for (const order of ORDERS) {
+    const { net, all: [a, b], undo: [alice, bob] } = copiesOf(structureScript({ A: "a", B: "b" }));
+    assert.ok(a && b && alice && bob);
+    try {
+      remove(a, "B");
+      remove(b, "B");
+      press(alice, a);
+      press(bob, b);
+      press(bob, b, true);
+      net.settle(order);
+      assert.deepEqual(outlineIds(a), ["A", "B"]);
+      const n = split(a, "B", 1);
+      assert.equal(typeNativeText(a, caret(a, n, 0), "n", {}).kind, "written");
+      assert.equal(setNativeField(a, { kind: "beat", id: n, field: "status" }, "ready").kind, "written");
+      move(a, [beat(n)], beat("B"));
+      net.settle(order);
+      assert.deepEqual(outlineIds(a), ["A", n, "B"]);
+      assert.equal(a.reader.row("B")?.audioText, "b");
+      for (const copy of [a, b]) {
+        assert.equal(copy.reader.row(n)?.audioText, "n");
+        assert.equal(copy.reader.row(n)?.fields.status, "ready");
+      }
+      net.agree();
+    } finally { a.doc.destroy(); b.doc.destroy(); }
+  }
 });

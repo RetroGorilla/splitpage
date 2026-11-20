@@ -8,6 +8,8 @@ import { joinNativeRow, removeNativeRows, splitNativeRow, unjoinNativeRow } from
 import { anchorNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
 import type { NativeTextRange } from "../../../../src/adapters/collab/native/text-commands.ts";
 import { ScriptNet, convertedScript, joinedScript } from "./helpers.ts";
+import { testNativeUndo } from "./undo-harness.ts";
+import type { TestNativeUndo } from "./undo-harness.ts";
 
 export interface Section { readonly id: string; readonly name: string; readonly before: string }
 
@@ -20,13 +22,9 @@ export function structureScript(rows: Record<string, string>, visuals: Record<st
   });
 }
 
-// why: section 4: one undo manager per person over every root a command writes, tracking only that person's commands
-export function undoOf(script: NativeScript): Y.UndoManager {
-  const roots = script.roots;
-  return new Y.UndoManager([roots.segments, roots.order, roots.beats, roots.visuals, roots.headings, roots.names], { trackedOrigins: new Set([script.origin]), captureTimeout: 0 });
-}
+export function undoOf(script: NativeScript): TestNativeUndo { return testNativeUndo(script); }
 
-export interface Copies { readonly net: ScriptNet; readonly all: NativeScript[]; readonly undo: Y.UndoManager[] }
+export interface Copies { readonly net: ScriptNet; readonly all: NativeScript[]; readonly undo: TestNativeUndo[] }
 
 export function copiesOf(source: ValidatedDocument, clients: readonly number[] = [2, 3]): Copies {
   const seed = convertedScript(source, 1), all = clients.map(client => joinedScript(seed, client));
@@ -62,7 +60,7 @@ export function unjoin(script: NativeScript, beat: string): void {
   script.reader.refresh();
 }
 
-export function press(undo: Y.UndoManager, script: NativeScript, redo = false): void {
+export function press(undo: TestNativeUndo, script: NativeScript, redo = false): void {
   assert.ok(redo ? undo.redo() : undo.undo(), redo ? "nothing to redo" : "nothing to undo");
   script.reader.refresh();
 }

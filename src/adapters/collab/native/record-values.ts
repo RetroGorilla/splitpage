@@ -1,5 +1,6 @@
 ﻿import type * as Y from "yjs";
 import { cleanId } from "../../../core/document/text-policy.ts";
+import { transactNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { nativeAvailability } from "./text-commands.ts";
 import type { NativeRefusal } from "./text-commands.ts";
@@ -27,10 +28,10 @@ export function transactRecord<T, R extends NativeRecordOutcome>(script: NativeS
   const input = copy(), unavailable = nativeAvailability(script);
   if (unavailable) return refuseRecord(unavailable);
   if (!input) return refuseRecord("value");
-  return script.doc.transact(() => {
+  return transactNativeCommand(script, () => {
     if (script.closed() || script.reader.isClosed()) return refuseRecord("closed");
     return write(input.value);
-  }, script.origin);
+  });
 }
 
 export function recordBag(value: unknown): value is Record<string, unknown> {

@@ -2,7 +2,9 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { isDeepStrictEqual } from "node:util";
 import * as Y from "yjs";
-import { createNativeHeading, removeNativeHeading, renameNativeHeading } from "../../../../src/adapters/collab/native/heading-commands.ts";
+import { formatNativeText } from "../../../../src/adapters/collab/native/format-commands.ts";
+import type { NativeMarkChange } from "../../../../src/adapters/collab/native/format-commands.ts";
+import { createNativeHeading, removeNativeHeading, renameNativeHeading, restoreNativeHeading } from "../../../../src/adapters/collab/native/heading-commands.ts";
 import { moveNativeBlocks } from "../../../../src/adapters/collab/native/move-commands.ts";
 import { clearNativeField, setNativeField } from "../../../../src/adapters/collab/native/record-commands.ts";
 import { openNativeScript } from "../../../../src/adapters/collab/native/script.ts";
@@ -17,6 +19,7 @@ import {
 } from "./record-harness.ts";
 import type { RecordStep } from "./record-harness.ts";
 import { caret, split } from "./structure-harness.ts";
+import type { TestNativeUndo } from "./undo-harness.ts";
 
 const SEEDS = 24;
 const WRITTEN = { kind: "written" };
@@ -96,7 +99,7 @@ function generatedBody(kind: string, suffix: string): string {
   return kind + " &amp; &lt; <strong>" + suffix + "</strong>\nline";
 }
 
-function history(seed: number, writes?: CapturedWrite[]): Record<string, number> {
+function history(seed: number, writes?: CapturedWrite[], muteUndo = false, extendFormat: "format on" | "tag off" | null = null): Record<string, number> {
   const next = random(seed), { scripts, net } = recordCopies(shuffled([4, 9, 15], next));
   const counts: Record<string, number> = {};
   const count = (kind: string): void => { counts[kind] = (counts[kind] ?? 0) + 1; };
@@ -122,18 +125,22 @@ function history(seed: number, writes?: CapturedWrite[]): Record<string, number>
   let winningLength = 0;
   const winner = Math.max(...scripts.map(script => script.doc.clientID));
   let splitId = "", splitOffset = 0, typed = "";
-  function reversible(actor: NativeScript, manager: Y.UndoManager, step: RecordStep): void {
+  function reversibleChange(actor: NativeScript, manager: TestNativeUndo, name: string, command: () => void, checkRedo?: () => void): void {
     const before = recordSnapshot(actor), beforeRead = recordRead(actor);
-    run(actor, step);
+    command();
     const after = recordSnapshot(actor), afterRead = recordRead(actor);
-    assert.ok(manager.undo(), step.name);
-    assert.deepEqual(recordSnapshot(actor), before);
-    assert.deepEqual(recordRead(actor), beforeRead);
-    count("undo " + step.name);
-    assert.ok(manager.redo(), step.name);
-    assert.deepEqual(recordSnapshot(actor), after);
-    assert.deepEqual(recordRead(actor), afterRead);
-    count("redo " + step.name);
+    if (!muteUndo) assert.ok(manager.undo(), name);
+    assert.deepEqual(recordSnapshot(actor), before, name + ": undo snapshot");
+    assert.deepEqual(recordRead(actor), beforeRead, name + ": undo reading");
+    count("undo " + name);
+    assert.ok(manager.redo(), name);
+    checkRedo?.();
+    assert.deepEqual(recordSnapshot(actor), after, name + ": redo snapshot");
+    assert.deepEqual(recordRead(actor), afterRead, name + ": redo reading");
+    count("redo " + name);
+  }
+  function reversible(actor: NativeScript, manager: TestNativeUndo, step: RecordStep): void {
+    reversibleChange(actor, manager, step.name, () => run(actor, step));
   }
   try {
     for (const [index, actor] of scripts.entries()) {
@@ -148,7 +155,7 @@ function history(seed: number, writes?: CapturedWrite[]): Record<string, number>
       reversible(actor, manager, paragraph);
       unchangedRecord(actor, () => setNativeField(actor, beatField("E", "paragraphStart"), true));
       count("unchanged");
-      run(actor, beatStep("paragraphStart", undefined, "E"));
+      reversible(actor, manager, beatStep("paragraphStart", undefined, "E"));
 
       const groups = [
         [beatStep("lengthSeconds", length)],
@@ -158,10 +165,9 @@ function history(seed: number, writes?: CapturedWrite[]): Record<string, number>
         [beatStep("extra", { note: "extra " + actor.doc.clientID }), beatStep("imageRef", IMAGE)]
       ];
       for (const group of shuffled(groups, next)) for (const step of group) {
-        if (["set beat status", "set beat imageRef", "remove comment"].includes(step.name)) reversible(actor, manager, step);
-        else run(actor, step);
+        reversible(actor, manager, step);
       }
-      for (const step of threadSteps("kept-" + suffix, "000012V", "unused", surviving).slice(0, 2)) run(actor, step);
+      for (const step of threadSteps("kept-" + suffix, "000012V", "unused", surviving).slice(0, 2)) reversible(actor, manager, step);
       unchangedRecord(actor, () => setNativeCommentBody(actor, COMMENT, "Bob", "foreign"), "author");
       count("refused");
       unchangedRecord(actor, () => setNativeCommentBody(actor, COMMENT, AUTHOR, "a & b <b>bold</b>\u0000"), "value");
@@ -176,39 +182,112 @@ function history(seed: number, writes?: CapturedWrite[]): Record<string, number>
       if (index === seed % 3) {
         typed = String.fromCodePoint(0x4e00 + seed);
         const offset = next() % 5;
-        assert.deepEqual(edit(actor, { beat: "F", cell: "narration" }, offset, offset, [{ text: typed, marks: {} }]), WRITTEN);
-        assert.equal(actor.reader.row("F")?.audioText, "foxtrot".slice(0, offset) + typed + "foxtrot".slice(offset));
-        count("type");
+        reversibleChange(actor, manager, "type", () => {
+          assert.deepEqual(edit(actor, { beat: "F", cell: "narration" }, offset, offset, [{ text: typed, marks: {} }]), WRITTEN);
+          assert.equal(actor.reader.row("F")?.audioText, "foxtrot".slice(0, offset) + typed + "foxtrot".slice(offset));
+          count("type");
+        });
         splitOffset = 1 + next() % 4;
-        splitId = split(actor, "D", splitOffset);
-        assert.equal(actor.reader.row("D")?.audioText, "delta".slice(0, splitOffset));
-        assert.equal(actor.reader.row(splitId)?.audioText, "delta".slice(splitOffset));
-        assert.ok(actor.roots.beats.has(splitId) && actor.roots.visuals.has(splitId));
-        count("split");
-        assert.deepEqual(joinNativeRow(actor, "B", "A", " "), WRITTEN);
-        assert.deepEqual(actor.reader.row("A")?.members, ["A", "B"]);
-        assert.equal(actor.reader.row("A")?.fields.status, "ready");
-        count("join");
-        assert.deepEqual(unjoinNativeRow(actor, "B"), WRITTEN);
-        assert.equal(actor.reader.row("B")?.audioText, "bravo");
-        count("unjoin");
-        assert.deepEqual(removeNativeRows(actor, ["B"]), WRITTEN);
-        assert.equal(actor.reader.row("B"), null);
-        assert.equal(actor.roots.beats.get("B")?.get("status"), '"ready"');
-        count("remove");
-        assert.deepEqual(moveNativeBlocks(actor, [{ kind: "beat", id: "E" }], { kind: "beat", id: "A" }), WRITTEN);
-        assert.equal(actor.reader.rows()[0]?.id, "E");
-        count("move");
-        assert.deepEqual(createNativeHeading(actor, caret(actor, "C", 0), "new-heading", "Temporary"), WRITTEN);
+        reversibleChange(actor, manager, "split", () => {
+          splitId = split(actor, "D", splitOffset);
+          assert.equal(actor.reader.row("D")?.audioText, "delta".slice(0, splitOffset));
+          assert.equal(actor.reader.row(splitId)?.audioText, "delta".slice(splitOffset));
+          assert.ok(actor.roots.beats.has(splitId) && actor.roots.visuals.has(splitId));
+          count("split");
+        });
+        reversibleChange(actor, manager, "join", () => {
+          assert.deepEqual(joinNativeRow(actor, "B", "A", " "), WRITTEN);
+          assert.deepEqual(actor.reader.row("A")?.members, ["A", "B"]);
+          assert.equal(actor.reader.row("A")?.fields.status, "ready");
+          count("join");
+        });
+        reversibleChange(actor, manager, "unjoin", () => {
+          assert.deepEqual(unjoinNativeRow(actor, "B"), WRITTEN);
+          assert.equal(actor.reader.row("B")?.audioText, "bravo");
+          count("unjoin");
+        });
+        reversibleChange(actor, manager, "remove", () => {
+          assert.deepEqual(removeNativeRows(actor, ["B"]), WRITTEN);
+          assert.equal(actor.reader.row("B"), null);
+          assert.equal(actor.roots.beats.get("B")?.get("status"), '"ready"');
+          count("remove");
+        });
+        reversibleChange(actor, manager, "move", () => {
+          assert.deepEqual(moveNativeBlocks(actor, [{ kind: "beat", id: "E" }], { kind: "beat", id: "A" }), WRITTEN);
+          assert.equal(actor.reader.rows()[0]?.id, "E");
+          count("move");
+        });
+        reversibleChange(actor, manager, "heading create", () => {
+          assert.deepEqual(createNativeHeading(actor, caret(actor, "C", 0), "new-heading", "Temporary"), WRITTEN);
+          count("heading create");
+        });
         const name = anchorNativeText(actor, { beat: "new-heading", cell: "name" }, 0, 9);
         assert.ok(name.kind === "anchored");
-        count("heading create");
-        assert.deepEqual(renameNativeHeading(actor, name.range, "Renamed"), WRITTEN);
-        assert.deepEqual(actor.reader.outline().find(entry => entry.id === "new-heading"), { id: "new-heading", kind: "heading", name: "Renamed" });
-        count("heading rename");
+        reversibleChange(actor, manager, "heading rename", () => {
+          assert.deepEqual(renameNativeHeading(actor, name.range, "Renamed"), WRITTEN);
+          assert.deepEqual(actor.reader.outline().find(entry => entry.id === "new-heading"), { id: "new-heading", kind: "heading", name: "Renamed" });
+          count("heading rename");
+        });
+        reversibleChange(actor, manager, "heading remove", () => {
+          assert.deepEqual(removeNativeHeading(actor, "new-heading"), WRITTEN);
+          assert.ok(!actor.reader.outline().some(entry => entry.id === "new-heading"));
+          count("heading remove");
+        });
+        reversibleChange(actor, manager, "heading restore", () => {
+          assert.deepEqual(restoreNativeHeading(actor, "new-heading"), WRITTEN);
+          assert.ok(actor.reader.outline().some(entry => entry.id === "new-heading"));
+          count("heading restore");
+        });
         assert.deepEqual(removeNativeHeading(actor, "new-heading"), WRITTEN);
-        assert.ok(!actor.reader.outline().some(entry => entry.id === "new-heading"));
-        count("heading remove");
+        const marks: readonly { name: string; change: NativeMarkChange; shown: object }[] = [
+          { name: "format on", change: { kind: "plain", mark: "b", on: true }, shown: { b: true } },
+          { name: "format off", change: { kind: "plain", mark: "b", on: false }, shown: {} },
+          { name: "tag on", change: { kind: "tag", id: "t:prop:lamp", on: true }, shown: { tag: "t:prop:lamp" } },
+          { name: "tag off", change: { kind: "tag", id: "t:prop:lamp", on: false }, shown: {} },
+          { name: "comment mark on", change: { kind: "comment", id: "thread", on: true }, shown: { cmt: ["thread"] } },
+          { name: "comment mark off", change: { kind: "comment", id: "thread", on: false }, shown: {} },
+          { name: "link on", change: { kind: "link", href: "https://example.com/" }, shown: { href: "https://example.com/" } },
+          { name: "link off", change: { kind: "link", href: null }, shown: {} }
+        ];
+        const tagNeighbour = (on: boolean) => {
+          const neighbour = anchorNativeText(actor, { beat: "F", cell: "narration" }, 1, 2);
+          assert.equal(neighbour.kind, "anchored");
+          assert.deepEqual(formatNativeText(actor, neighbour.range, { kind: "tag", id: "t:prop:lamp", on }), WRITTEN);
+        };
+        for (const { name: kind, change, shown } of marks) {
+          if (kind === "tag off") tagNeighbour(true);
+          const row = actor.reader.row("F");
+          assert.ok(row);
+          const letters = (runs: typeof row.narration) => runs.flatMap(run => [...run.text].map(char => ({ char, marks: run.marks })));
+          const before = letters(row.narration), from = 0, to = 1;
+          const expected = before.map((letter, index) => index >= from && index < to ? { char: letter.char, marks: shown } : letter);
+          const checkCell = () => {
+            const read = actor.reader.row("F");
+            assert.ok(read);
+            assert.deepEqual(letters(read.narration), expected, kind + ": requested cell");
+          };
+          reversibleChange(actor, manager, kind, () => {
+            const range = anchorNativeText(actor, { beat: "F", cell: "narration" }, from, extendFormat === kind ? to + 1 : to);
+            assert.equal(range.kind, "anchored");
+            assert.deepEqual(formatNativeText(actor, range.range, change), WRITTEN);
+            checkCell();
+            count(kind);
+          }, checkCell);
+          if (kind === "tag off") tagNeighbour(false);
+        }
+        reversibleChange(actor, manager, "visual type", () => {
+          assert.deepEqual(edit(actor, { beat: "F", cell: "visual" }, 0, 0, [{ text: typed, marks: {} }]), WRITTEN);
+          assert.equal(actor.roots.visuals.get("F")?.toString(), typed);
+          count("visual type");
+        });
+        reversibleChange(actor, manager, "delete", () => {
+          const visual = actor.roots.visuals.get("F");
+          assert.ok(visual?.length);
+          const before = visual.toString();
+          assert.deepEqual(edit(actor, { beat: "F", cell: "visual" }, 0, 1, []), WRITTEN);
+          assert.equal(visual.toString(), before.slice(1));
+          count("delete");
+        });
       }
     }
     net.settle(delivery);
@@ -218,7 +297,9 @@ function history(seed: number, writes?: CapturedWrite[]): Record<string, number>
     for (const [index, step] of acrossSteps.entries()) {
       const actor = scripts[(index + seed) % scripts.length];
       assert.ok(actor);
-      run(actor, step);
+      const manager = undo[(index + seed) % scripts.length];
+      assert.ok(manager);
+      reversible(actor, manager, step);
       net.settle(delivery);
     }
     for (const actor of scripts) {
@@ -275,7 +356,7 @@ test("generated three-copy histories check commands locally and account for sett
     { perHistory: 3, reason: "each of the three writers runs this once", kinds: [
       "set beat lengthSeconds", "set beat status", "set beat paragraphStart", "clear beat paragraphStart", "set beat extra",
       "set beat imageRef", "refused heading set", "refused heading clear", "refused malformed body", "concurrent comment body", "concurrent reply body", "unchanged",
-      ...["set beat paragraphStart", "set beat status", "set beat imageRef", "remove comment"].flatMap(kind => ["undo " + kind, "redo " + kind])
+
     ] },
     { perHistory: 6, reason: "each of the three writers runs this twice", kinds: ["refused"] },
     { perHistory: 7, reason: "each writer starts two threads and the cross-device trace starts one", kinds: ["create comment", "create reply"] },
@@ -283,14 +364,31 @@ test("generated three-copy histories check commands locally and account for sett
       "body comment", "body reply", "resolve comment", "resolve reply", "reopen comment", "reopen reply", "remove comment", "remove reply"
     ] },
     { perHistory: 1, reason: "one chosen writer runs the structural trace", kinds: [
-      "type", "split", "join", "unjoin", "remove", "move", "heading create", "heading rename", "heading remove"
+      "type", "split", "join", "unjoin", "remove", "move", "heading create", "heading rename", "heading remove", "heading restore", "format on", "format off", "tag on", "tag off",
+      "comment mark on", "comment mark off", "link on", "link off", "visual type", "delete"
     ] }
   ];
   t.diagnostic(JSON.stringify(totals));
+  const irreversible = new Set(["refused", "refused heading set", "refused heading clear", "refused malformed body", "unchanged"]);
   for (const { perHistory, reason, kinds } of schedules) for (const kind of kinds) {
     assert.equal(totals[kind], SEEDS * perHistory, kind + ": " + reason);
+    if (!irreversible.has(kind)) for (const direction of ["undo", "redo"]) {
+      assert.equal(totals[direction + " " + kind], SEEDS * perHistory, direction + " " + kind);
+    }
   }
-  assert.deepEqual(Object.keys(totals).sort(), schedules.flatMap(group => group.kinds).sort());
+  assert.deepEqual(Object.keys(totals).sort(), schedules.flatMap(group => group.kinds.flatMap(kind => irreversible.has(kind) ? [kind] : [kind, "undo " + kind, "redo " + kind])).sort());
+});
+
+test("control: extending bold one letter fails the whole-cell oracle", () => {
+  assert.throws(() => history(3, undefined, false, "format on"), /format on: requested cell/);
+});
+
+test("control: extending untag one letter clears a tagged neighbour and fails the oracle", () => {
+  assert.throws(() => history(3, undefined, false, "tag off"), /tag off: requested cell/);
+});
+
+test("control: a no-op undo fails the stored snapshot check", () => {
+  assert.throws(() => history(3, undefined, true), /undo snapshot/);
 });
 
 test("control: muting each individual record write in a generated history fails at its command", t => {

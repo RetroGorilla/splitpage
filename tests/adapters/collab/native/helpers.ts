@@ -13,7 +13,7 @@ import type { NativeScript } from "../../../../src/adapters/collab/native/script
 import { anchorNativeText, replaceNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
 import type { NativeCommitOutcome, NativeEditStamp, NativeTextTarget } from "../../../../src/adapters/collab/native/text-commands.ts";
 
-export type Delivery = "forward" | "reverse" | "twice";
+export type Delivery = "forward" | "reverse" | "twice" | "shuffled" | "state";
 
 export const fixtures = (JSON.parse(readFileSync(new URL("../../../collab/fixtures/projection-reference.json", import.meta.url), "utf8")) as {
   fixtures: { name: string; document: DocumentShape }[];
@@ -62,6 +62,20 @@ export function freshlyShown(script: NativeScript): string[] {
   return readNativeOnce(script.roots, reader => shown(script, reader));
 }
 
+export function arrangePackets(packets: readonly Uint8Array[], order: Delivery, seed: number): Uint8Array[] {
+  if (order === "reverse") return packets.toReversed();
+  if (order === "twice") return [...packets, ...packets];
+  const result = [...packets];
+  if (order === "shuffled") for (let at = result.length - 1; at > 0; at--) {
+    seed = (Math.imul(seed, 1664525) + 1013904223) >>> 0;
+    const swap = seed % (at + 1), one = result[at], other = result[swap];
+    assert.ok(one && other);
+    result[at] = other;
+    result[swap] = one;
+  }
+  return result;
+}
+
 export class ScriptNet {
   private readonly logs = new Map<NativeScript, Uint8Array[]>();
   private readonly read = new Map<string, number>();
@@ -79,7 +93,8 @@ export class ScriptNet {
   deliver(from: NativeScript, to: NativeScript, order: Delivery = "forward"): void {
     const key = `${from.doc.clientID}>${to.doc.clientID}`, log = this.logs.get(from) ?? [], updates = log.slice(this.read.get(key) ?? 0);
     this.read.set(key, log.length);
-    const sequence = order === "reverse" ? [...updates].reverse() : order === "twice" ? [...updates, ...updates] : updates;
+    const sequence = order === "state" ? [Y.encodeStateAsUpdate(from.doc, Y.encodeStateVector(to.doc))]
+      : arrangePackets(updates, order, from.doc.clientID + to.doc.clientID + log.length);
     for (const update of sequence) Y.applyUpdate(to.doc, update, "remote");
     to.reader.refresh();
   }

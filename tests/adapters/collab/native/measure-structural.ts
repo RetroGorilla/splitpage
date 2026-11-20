@@ -4,6 +4,8 @@ import { dom } from "../../../../src/test/_dom.mjs";
 import { readNativeOnce } from "../../../../src/adapters/collab/native/reader.ts";
 import type { NativeScriptReader } from "../../../../src/adapters/collab/native/reader.ts";
 import { setNativeField } from "../../../../src/adapters/collab/native/record-commands.ts";
+import { openNativeUndo } from "../../../../src/adapters/collab/native/undo-commands.ts";
+import { split } from "./structure-harness.ts";
 import { largeState, loadedCopy, moveUpdate, splitUpdate } from "./structural.ts";
 
 const LIMIT_MS = 8;
@@ -46,23 +48,45 @@ function fieldUpdate(state: Uint8Array): Uint8Array {
   return update;
 }
 
+function creationPresses(state: Uint8Array, beat: string, offset: number) {
+  const writer = loadedCopy(state, 77), history = openNativeUndo(writer);
+  try {
+    split(writer, beat, offset);
+    function sample(direction: "undo" | "redo") {
+      const before = Y.encodeStateAsUpdate(writer.doc), vector = Y.encodeStateVector(writer.doc);
+      if (history[direction]().kind !== "written") throw new Error("Creation press made no change");
+      return { state: before, update: Y.encodeStateAsUpdate(writer.doc, vector), expectedParses: 1 };
+    }
+    return [sample("undo"), sample("redo")] as const;
+  } finally {
+    history.destroy();
+    writer.doc.destroy();
+  }
+}
+
 const state = largeState(), lines: string[] = [], failures: string[] = [];
 lines.push(`Node ${process.version} ${process.arch}. ${rounds} rounds of ${samples} samples, the first ${warmup} of each round untimed.`);
 lines.push("Each sample: a warm copy of the 900-beat script receives one update from another copy; the time covers applying the update,");
 lines.push("the reader's refresh and reading every changed row. Cells: median of the per-round medians [smallest-largest].", "");
 lines.push(`| Case | Median ms | p95 ms | Segments reparsed | Full rebuild ms | Limit ${LIMIT_MS} ms |`, "| --- | --- | --- | --- | --- | --- |");
-const cases: readonly { readonly name: string; readonly update: Uint8Array; readonly expectedParses: number }[] = [
+const [undoInside, redoInside] = creationPresses(state, "B451", 60);
+const [undoStart, redoStart] = creationPresses(state, "B480", 0);
+const cases: readonly { readonly name: string; readonly state?: Uint8Array; readonly update: Uint8Array; readonly expectedParses: number }[] = [
   { name: "Split inside a segment", update: splitUpdate(state, "B451", 60).update, expectedParses: 1 },
   { name: "Split at a segment's start", update: splitUpdate(state, "B480", 0).update, expectedParses: 1 },
+  { name: "Creation undo inside a segment", ...undoInside },
+  { name: "Creation redo inside a segment", ...redoInside },
+  { name: "Creation undo at a segment's start", ...undoStart },
+  { name: "Creation redo at a segment's start", ...redoStart },
   { name: "Move one row across scenes", update: moveUpdate(state, [{ kind: "beat", id: "B451" }], { kind: "beat", id: "B10" }), expectedParses: 0 },
   { name: "Write one beat's status", update: fieldUpdate(state), expectedParses: 0 }
 ];
-for (const { name, update, expectedParses } of cases) {
+for (const { name, state: before = state, update, expectedParses } of cases) {
   const medians: number[] = [], tails: number[] = [], fulls: number[] = [], parses = new Set<number>();
   for (let round = 0; round < rounds; round++) {
     const timed: number[] = [], full: number[] = [];
     for (let n = 0; n < samples; n++) {
-      const sample = sampleUpdate(state, update);
+      const sample = sampleUpdate(before, update);
       parses.add(sample.parses);
       if (n >= warmup) { timed.push(sample.incremental); full.push(sample.full); }
     }

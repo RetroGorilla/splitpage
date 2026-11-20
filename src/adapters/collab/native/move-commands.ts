@@ -1,6 +1,7 @@
 import * as Y from "yjs";
 import { NativeRankError, isValidNativeRank, nativeRankBetween } from "./rank.ts";
 import type { NativeRankedBlock } from "./reader.ts";
+import { transactNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { nativeAvailability } from "./text-commands.ts";
 import { nativeWellFormed } from "./values.ts";
@@ -158,7 +159,7 @@ export function moveNativeBlocks(script: NativeScript, blocks: readonly NativeMo
   const copiedDrop = validateDrop(rawDrop);
   if (!copiedDrop) return refused("drop");
   let outcome: NativeMoveOutcome = refused("missing");
-  script.doc.transact(() => {
+  transactNativeCommand(script, () => {
     if (script.closed() || script.reader.isClosed()) { outcome = refused("closed"); return; }
     const order = script.reader.rankedOrder(), byKey = new Map<string, NativeRankedBlock>(), membersByHead = new Map<string, NativeRankedBlock[]>();
     for (const entry of order) {
@@ -286,6 +287,6 @@ export function moveNativeBlocks(script: NativeScript, blocks: readonly NativeMo
       if (!record.has("rank") || record.get("rank") !== rank) record.set("rank", rank);
     }
     outcome = WRITTEN;
-  }, script.origin);
+  });
   return outcome;
 }

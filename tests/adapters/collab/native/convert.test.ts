@@ -10,6 +10,8 @@ import type { NativeDeltaItem } from "../../../../src/adapters/collab/native/inl
 import { nativeSegmentSpans } from "../../../../src/adapters/collab/native/reader.ts";
 import { openNativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
+import { removeNativeRows } from "../../../../src/adapters/collab/native/structure-commands.ts";
+import { openNativeUndo } from "../../../../src/adapters/collab/native/undo-commands.ts";
 import { cells, convertedScript, fixture, fixtures, freshlyShown, joinedScript, shown } from "./helpers.ts";
 
 after(() => { dom.window.close(); });
@@ -307,4 +309,26 @@ test("round 3, fix 3: a conversion started while another one prepares cannot wri
     convertToNativeScript(second, source, { ...ports, cells: html => { if (!wrote) { wrote = true; other.getMap("meta").set("format", 1); } return cells(html); } });
   }, /empty/);
   assert.deepEqual([second.roots.order.toArray(), second.roots.beats.size], [[], 0]);
+});
+
+test("initial conversion refuses a press and an edit from a pre-registered beforeAllTransactions listener", () => {
+  const doc = new Y.Doc();
+  let called = 0, armed = false;
+  doc.on("beforeAllTransactions", () => {
+    if (!armed) return;
+    const before = Y.encodeStateAsUpdate(doc);
+    assert.deepEqual(history.undo(), { kind: "refused", reason: "busy" });
+    assert.deepEqual(removeNativeRows(script, ["A"]), { kind: "refused", reason: "busy" });
+    assert.deepEqual(Y.encodeStateAsUpdate(doc), before);
+    called++;
+  });
+  const script = openNativeScript(doc), history = openNativeUndo(script);
+  try {
+    armed = true;
+    convertToNativeScript(script, fixture("migrate-golden.json/scenarios/media in cells/output"), ports);
+    armed = false;
+    assert.equal(called, 1);
+    assert.ok(script.reader.rows().length);
+    assert.deepEqual(history.undo(), { kind: "unchanged" });
+  } finally { history.destroy(); doc.destroy(); }
 });
