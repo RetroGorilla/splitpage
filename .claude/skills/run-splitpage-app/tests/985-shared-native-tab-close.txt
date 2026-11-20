@@ -1,0 +1,12 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval localStorage.removeItem('nativeTabClose');localStorage.removeItem('nativeTabClosePeer');window.nativeTab=window.open(location.href,'_blank');!!nativeTab
+wait nativeTab.__sharedTest && nativeTab.document.querySelectorAll('#rows .row').length > 0
+eval (async function(){var w=nativeTab;await w.__splitpageFormats.openFile(new w.File([JSON.stringify({schema:2,title:'Native close',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello'}],comments:[]})],'native-close.splitpage'));return true})()
+wait nativeTab.__splitpageFormats.state().title === 'Native close'
+eval nativeTab.__sharedTest.enter({backend:'native'})
+expect nativeTab.__sharedTest.read().app.rows[0].audioText === 'Hello'
+eval (function(){var w=nativeTab;var cell=w.document.querySelector('#rows .cell-editable[data-id="r1"][data-field="audioText"]');cell.focus();w.getSelection().setBaseAndExtent(cell.firstChild,2,cell.firstChild,2);w.addEventListener('beforeunload',function(e){localStorage.setItem('nativeTabClose',JSON.stringify({prevented:e.defaultPrevented,shown:cell.textContent,app:w.__sharedTest.read().app.rows[0].audioText}))});w.addEventListener('pagehide',()=>localStorage.setItem('nativeTabClosePeer',w.__sharedTest.read().peer.rows[0].audioText));cell.dispatchEvent(new w.InputEvent('beforeinput',{bubbles:true,cancelable:true,inputType:'insertText',data:'x'}));w.close();return true})()
+wait nativeTab.closed
+expect localStorage.getItem('nativeTabClose') === JSON.stringify({prevented:false,shown:'Hexllo',app:'Hexllo'})
+expect localStorage.getItem('nativeTabClosePeer') === 'Hexllo'

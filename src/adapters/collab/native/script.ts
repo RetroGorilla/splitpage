@@ -19,7 +19,15 @@ export interface NativeScript {
 
 interface PressObservation { readonly origin: object; changed: boolean }
 
-interface DocumentState { press: PressObservation | null; open: boolean; commanding: boolean; destroyed: boolean; readonly handles: Set<() => void>; readonly failures: unknown[] }
+interface DocumentState {
+  press: PressObservation | null;
+  open: boolean;
+  commanding: boolean;
+  destroyed: boolean;
+  readonly handles: Set<() => void>;
+  readonly beforeWrite: Set<() => void>;
+  readonly failures: unknown[];
+}
 
 const DOCUMENTS = new WeakMap<Y.Doc, DocumentState>();
 
@@ -36,9 +44,12 @@ function guardSharedCallback(state: DocumentState, call: () => void): void {
 function documentState(doc: Y.Doc): DocumentState {
   const known = DOCUMENTS.get(doc);
   if (known) return known;
-  const state: DocumentState = { press: null, open: false, commanding: false, destroyed: false, handles: new Set(), failures: [] };
+  const state: DocumentState = { press: null, open: false, commanding: false, destroyed: false, handles: new Set(), beforeWrite: new Set(), failures: [] };
   DOCUMENTS.set(doc, state);
-  doc.on("beforeAllTransactions", () => guardSharedCallback(state, () => { state.open = true; }));
+  doc.on("beforeAllTransactions", () => guardSharedCallback(state, () => {
+    state.open = true;
+    for (const capture of state.beforeWrite) guardSharedCallback(state, capture);
+  }));
   doc.on("afterAllTransactions", (_, transactions) => guardSharedCallback(state, () => {
     const press = state.press;
     // why: the completed transaction carries the same clock and deletion changes Yjs uses to emit an update
@@ -58,6 +69,12 @@ export function withNativeCommand<T>(script: NativeScript, run: () => T): T {
   const state = documentState(script.doc);
   state.commanding = true;
   try { return run(); } finally { state.commanding = false; }
+}
+
+export function beforeNativeWrite(script: NativeScript, capture: () => void): () => void {
+  const { beforeWrite } = documentState(script.doc);
+  beforeWrite.add(capture);
+  return () => { beforeWrite.delete(capture); };
 }
 
 export function observeNativePress<T>(script: NativeScript, origin: object, run: () => T): { result: T; changed: boolean } {

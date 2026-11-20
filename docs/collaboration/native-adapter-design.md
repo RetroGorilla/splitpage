@@ -11,8 +11,9 @@ pictures and screen design are out of scope.
 ## Build status
 
 Slices 1 to 6 are on `main`. The native shared-document command layer and undo are built.
-Slices 7a, 7c and 7h are merged. The native editor entry and Split narration typing are on `main`. This PR builds 7d, the relay server and its storage. The old adapter stays untouched until slice 8.
-This PR adds native undo selection replay and typing group boundaries for focus changes.
+Slices 7a, 7c and 7h are merged. The native editor entry and Split narration typing are on `main`. PR #1673 builds 7d, the relay server and its storage. The old adapter stays untouched until slice 8.
+PR #1671 adds native undo selection replay and typing group boundaries for focus changes.
+Slice 7b-2 in PR #1675 adds buffered Split-view narration typing, composition, relative caret placement, and handling of native commit outcomes.
 
 ## Server-stop results and backup runbook
 
