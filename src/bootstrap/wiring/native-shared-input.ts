@@ -304,7 +304,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const deletion = /^delete(Content|Word|SoftLine|HardLine)(Backward|Forward)$/.test(input.inputType);
     const text = input.data ?? "";
     if (input.isComposing || !(deletion || input.inputType === "insertText" && text)) { session.refuse(UNSUPPORTED); return; }
-    const refusal = admissionRefusal();    if (refusal) { session.refuse(refusal); return; }
+    const refusal = admissionRefusal();
+    if (refusal) { session.refuse(refusal); return; }
     const selection = inputRange(input, cell);
     if (!selection || deletion && selection.from === selection.to) { session.refuse(deletion ? UNSUPPORTED : STALE); return; }
     const buffered = draft;
@@ -322,7 +323,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const next = begin(current.cell, current.selection, false, text, caretEnd);
     let anchored: Draft | string;
     try { anchored = current.stale ? STALE : anchor(next); }
-    catch (error) { report(error); anchored = PENDING; }    draft = typeof anchored === "string" ? next : anchored;
+    catch (error) { report(error); anchored = PENDING; }
+    draft = typeof anchored === "string" ? next : anchored;
     preview(current.cell, current.selection, text);
     if (typeof anchored === "string") { stop(anchored); return; }
     if (atBatchBoundary(anchored)) finish();
@@ -492,10 +494,9 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   }
 
   function beforePress(): string | null {
-    const reason = draft?.composing ? PENDING : stopped;
-    if (!reason) return finish();
-    session.refuse(reason);
-    return reason;
+    if (!draft?.composing) return finish();
+    session.refuse(PENDING);
+    return PENDING;
   }
 
   const pageHide = (): void => { finish(); };

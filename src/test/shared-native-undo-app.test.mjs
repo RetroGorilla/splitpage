@@ -12,6 +12,7 @@ import { scriptCellOf, sanitizeHtml } from "../bootstrap/richtext.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { forceLeaveSharedSession } from "../bootstrap/wiring/shared-session.ts";
 import { breakUndoGroup } from "../bootstrap/wiring/undo.ts";
+import { mountNativeSharedInput } from "../bootstrap/wiring/native-shared-input.ts";
 import { createSessionCapabilities } from "../application/session/capabilities.ts";
 
 window.Element.prototype.scrollBy = () => {};
@@ -278,7 +279,7 @@ for (const [name, kind] of Object.entries(views)) {
     assert.equal(app(), "Helloabc");
   });
 
-  test(name + ": a press after the buffer stopped on a stale paint is refused and keeps the unsent letter on screen", async t => {
+  test(name + ": a press after the buffer stopped on a stale paint writes nothing, adds no notice and keeps the unsent letter on screen", async t => {
     const show = await enter(t), view = kind.open(t);
     kind.caret(view, "r1", 5);
     typeKeys(kind.surface(), "ab");
@@ -286,10 +287,10 @@ for (const [name, kind] of Object.entries(views)) {
     assert.equal(hook.nativePeer.type("r1", 0, "Y").kind, "written");
     kind.caret(view, "r1", 2);
     assert.equal(beforeInput(kind.surface(), "insertText", "x"), true);
-    assert.equal(show.mock.callCount(), 1);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
     assert.equal(press(kind.surface(), "z"), true);
-    assert.equal(show.mock.callCount(), 2);
-    assert.deepEqual(show.mock.calls.at(-1).arguments, UNAVAILABLE);
+    assert.equal(press(kind.surface(), "z"), true);
+    assert.equal(show.mock.callCount(), 1);
     assert.equal(app(), "Helloab");
     assert.equal(kind.host("r1").textContent.replace(/\u200b/g, ""), "Hexlloab");
   });
@@ -431,7 +432,45 @@ test("Writer: buffered letters are sent when focus leaves the page text or the p
   assert.equal(app(), "Helloabc");
 });
 
+test("a buffered write records its after-selection only when the session wrote it", t => {
+  const doc = migrateRows({ title: "Native script", rows: [{ id: "r1", audioText: "Hello" }] });
+  adoptReplacement(doc);
+  const native = openNativeSession({ kind: "state", state: nativeBytes(doc) }, { actor: "Writer", sanitize: sanitizeHtml });
+  t.after(native.close);
+  const recorded = t.mock.fn(), results = [{ kind: "unchanged" }, { kind: "written" }];
+  const typeText = Object.assign(() => assert.fail("a write without a recorded selection"),
+    { withSelection: () => ({ result: results.shift(), recordAfter: recorded }) });
+  const input = mountNativeSharedInput({
+    native: { ...native, commands: { ...native.commands, typeText } }, report: assert.fail,
+    editAttribution: () => ({ by: "Writer", at: "now" }), session: { admit: () => null, refuse: t.mock.fn(), subscribe: () => () => {} }
+  });
+  t.after(() => { input.dispose(); cell().textContent = "Hello"; });
+  cell().focus();
+  setCellSelection(cell(), 2);
+  assert.equal(beforeInput(cell(), "insertText", "x"), true);
+  assert.equal(input.finish(), null);
+  assert.equal(recorded.mock.callCount(), 0);
+  setCellSelection(cell(), 2);
+  assert.equal(beforeInput(cell(), "insertText", "y"), true);
+  assert.equal(input.finish(), null);
+  assert.equal(recorded.mock.callCount(), 1);
+});
+
 const twoBeats = [{ id: "r1", audioText: "Hello" }, { id: "r2", audioText: "World" }];
+
+test("Writer: moving between beats shows no notice, and a beat sync that changes the text is still refused", async t => {
+  const show = await enter(t, twoBeats), view = writer(t);
+  view.caret("r1", 2);
+  view.caret("r2", 3);
+  view.caret("r1", 1);
+  assert.equal(show.mock.callCount(), 0);
+  beat("r1").textContent = "Changed";
+  view.caret("r2", 1);
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+  assert.deepEqual([app(0), app(1)], ["Hello", "World"]);
+  await Promise.resolve();
+  assert.deepEqual([peer(0), peer(1)], ["Hello", "World"]);
+});
 const outOfScope = [
   ["typing over a selection across two beats", view => {
     view.flow.place({ anchor: { kind: "beat", rowId: "r1", offset: 2 }, head: { kind: "beat", rowId: "r2", offset: 2 } });

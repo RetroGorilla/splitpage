@@ -366,7 +366,7 @@ const undoRoutes = owned<ReturnType<typeof mountUndoRoutes>>();
 const undoRoutePorts: { -readonly [K in keyof UndoRoutePorts]: UndoRoutePorts[K] } = {
   replay: function (dir) {
     const shared = sharedUndoRoute();
-    if (shared?.replay) { shared.replay(dir, message => { showToast(message, "warn"); }); return; }
+    if (shared?.replay) { shared.replay(dir); return; }
     if (shared) { replaySharedStep(shared, dir); return; }
     if (dir === "redo") undoOwner().redo(); else undoOwner().undo();
   },

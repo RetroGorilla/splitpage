@@ -305,6 +305,23 @@ test("a native press refused by admission, the typing buffer or the session writ
   assert.equal(input.endGroup.mock.callCount(), 1);
 });
 
+test("a native press whose admission fails throws that error before flushing or stepping", async t => {
+  const { ports } = entrySwitchFixture(), doc = currentDocument();
+  assert.ok(doc);
+  const { native, backend } = openNativeEditor(ports, doc, () => false);
+  t.after(() => { backend.dispose(step => { step(); return true; }); });
+  const at = native.commands.anchorText({ beat: "R1", cell: "narration" }, 8);
+  if (at.kind !== "anchored") throw new Error(at.reason);
+  assert.equal(native.commands.typeText(at.range, "!", {}).kind, "written");
+  const failure = new Error("admission failed"), publish = t.mock.fn();
+  const input = { beforePress: t.mock.fn(() => null), show: t.mock.fn(), endGroup: t.mock.fn() };
+  const route = nativeUndoRoute({ native, admission: { admit: () => ({ kind: "failed", error: failure }) }, input: () => input, publish });
+  assert.throws(() => route.actions.undo(), failure);
+  assert.equal(input.beforePress.mock.callCount(), 0);
+  assert.equal(publish.mock.callCount(), 0);
+  assert.equal(native.narrationHtml("R1"), "Captured! words");
+});
+
 test("the release hook bundle omits the native editor entry and test peer", async () => {
   const result = await build({
     entryPoints: ["src/bootstrap/wiring/shared-test.ts"], absWorkingDir: fileURLToPath(new URL("../../", import.meta.url)),
