@@ -25,14 +25,14 @@ Each superseded place below also carries a one-line pointer under its heading.
 | Section 5, *Schema decision gate* | 1, 15 | The owner chose the schema. Its accepted losses are in note section 5 and appendix M |
 | Section 6, *Structural conflicts and recovery* | 4 | A removed row keeps its record and visual cell, hidden. Edits to a removed row come back only through undo. The recovery list skips removed rows |
 | Section 8, *Server storage* | 19 | Snapshot storage, as above |
-| Section 8, *Durability receipts* | 19 | Not in the first version. Slice 7's server-stop tests decide whether they come first |
+| Section 8, *Durability receipts* | 19 | The owner reviewed the server-stop results on 2026-11-20 and deferred the update journal and durability receipts beyond the first version |
 | Section 8, *User-visible status*, "Your changes saved to server" | 19 | Not shown. The first version has no durability receipt |
 | Section 10, *Backups and restore* | 2 | Not designed yet. Proposed with slice 7 |
 | Section 11, *Implementation stages* | Note section 11 | The build order is the note's eight slices |
 | Section 13, *Acceptance evidence* | 11, 19; note appendix O | Slice gates replace the feasibility traces. The 2 MiB fixture gives way to the 15 MB limit. Receipt traces wait for decision 19 |
 | Section 14, receipt invariants | 19 | Written with receipts, not now |
 
-Decision 19 in short: the first version uses stock snapshot storage, a departure from the plan's update journal and durable receipts. Slice 7's server-stop tests decide whether those come before others use the layer. Until they do, the first version makes no receipt-based "saved to server" claim.
+Decision 19 in short: on 2026-11-20 the owner reviewed the server-stop results and kept stock snapshot storage for the first version. The update journal and durability receipts are deferred. The first version makes no "saved to server" claim.
 
 ## 1 Purpose and decisions
 
@@ -326,7 +326,7 @@ Configure and verify SQLite durability explicitly. WAL with `synchronous=FULL` i
 
 ### Durability receipts
 
-> Superseded on 2026-11-19: not in the first version. Slice 7's server-stop tests decide whether they come first (decision 19).
+> Superseded for the first version. The owner reviewed the server-stop results on 2026-11-20 and deferred the update journal and durability receipts (decision 19).
 
 Use the provider's supported ordered message path. Do not introduce a second document synchronization protocol.
 
