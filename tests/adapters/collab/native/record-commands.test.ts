@@ -11,7 +11,7 @@ import { clearNativeField, setNativeField } from "../../../../src/adapters/colla
 import { joinNativeRow, removeNativeRows, unjoinNativeRow } from "../../../../src/adapters/collab/native/structure-commands.ts";
 import {
   AT, AUTHOR, COMMENT, IMAGE, REPLY, RESOLUTION, beatField, beatStep, checkRecordStep, commentInput, fullUpdate, headingField,
-  expectedMint, headingStep, recordCopies, recordRead, recordSnapshot, replyId, replyInput, threadSteps, unchangedRecord
+  expectedMint, recordCopies, recordRead, recordSnapshot, replyId, replyInput, threadSteps, unchangedRecord
 } from "./record-harness.ts";
 import type { RecordStep, RecordTestRead } from "./record-harness.ts";
 
@@ -32,7 +32,7 @@ test("every record and thread command changes precisely its stored keys and its 
     beatStep("imageRef", IMAGE),
     ...Object.entries(fields).flatMap(([field, value]) => [beatStep(field, value), beatStep(field, undefined)]),
     beatStep("imageRef", IMAGE), beatStep("imageRef", undefined),
-    headingStep("heading field"), headingStep(undefined), ...threadSteps("new-thread", "000012V")
+    ...threadSteps("new-thread", "000012V")
   ];
   for (const step of steps) {
     const expectedStored = recordSnapshot(receiver), expectedRead: RecordTestRead = structuredClone(recordRead(receiver));
@@ -63,7 +63,6 @@ test("equal values and absent clears emit no update, including reordered objects
   assert.deepEqual(setNativeField(script, target, { a: 1, b: [2, { c: true, d: null }] }), WRITTEN);
   unchangedRecord(script, () => setNativeField(script, target, { b: [2, { d: null, c: true }], a: 1 }));
   unchangedRecord(script, () => clearNativeField(script, beatField("A", "absent")));
-  unchangedRecord(script, () => clearNativeField(script, headingField("absent")));
   unchangedRecord(script, () => setNativeField(script, beatField("A", "status"), "todo"));
   unchangedRecord(script, () => setNativeCommentBody(script, COMMENT, AUTHOR, "original"));
   unchangedRecord(script, () => setNativeCommentBody(script, REPLY, AUTHOR, "reply"));
@@ -94,7 +93,10 @@ test("malformed values, reserved fields and stale rows or headings refuse withou
   for (const field of ["rank", "joined", "id", "audioText", "visualText", "updatedAt", "updatedBy"]) {
     unchangedRecord(script, () => clearNativeField(script, beatField("A", field)), "value");
   }
-  for (const field of ["rank", "removed", "id", "name", "firstSceneId"]) unchangedRecord(script, () => clearNativeField(script, headingField(field)), "value");
+  for (const field of ["rank", "removed", "id", "name", "firstSceneId", "note"]) {
+    unchangedRecord(script, () => setNativeField(script, headingField(field), "value"), "value");
+    unchangedRecord(script, () => clearNativeField(script, headingField(field)), "value");
+  }
   assert.deepEqual(removeNativeRows(script, ["B"]), WRITTEN);
   script.roots.beats.delete("C");
   script.roots.visuals.delete("D");
@@ -103,7 +105,7 @@ test("malformed values, reserved fields and stale rows or headings refuse withou
     unchangedRecord(script, () => clearNativeField(script, beatField(id, "status")), "missing");
   }
   assert.deepEqual(removeNativeHeading(script, "H"), WRITTEN);
-  unchangedRecord(script, () => setNativeField(script, headingField("note"), "hidden"), "missing");
+  unchangedRecord(script, () => setNativeField(script, headingField("note"), "hidden"), "value");
   script.doc.destroy();
 });
 
@@ -244,7 +246,7 @@ test("record targeting rejects invalid kinds, nonplain targets and identities th
   assert.ok(script);
   const field = headingField("note"), array = Object.assign([], field), callable = Object.assign(() => null, field);
   for (const invalid of [array, callable]) unchangedRecord(script, () => setNativeField(script, invalid, "value"), "value");
-  const badKind = { ...field, kind: "other" } as unknown as typeof field;
+  const badKind = { ...beatField("A", "note"), kind: "other" } as unknown as typeof field;
   unchangedRecord(script, () => setNativeField(script, badKind, "value"), "missing");
   script.roots.comments.set(" thread ", new Y.Map());
   script.roots.replies.set(replyId("thread", " answer "), new Y.Map([["commentId", "thread"]]));
@@ -274,8 +276,8 @@ test("the depth and expanded size bounds refuse plain file values before encodin
   let deep: unknown = "leaf", wide: unknown = "leaf";
   for (let index = 0; index < 4800; index++) deep = [deep];
   for (let index = 0; index < 24; index++) wide = [wide, wide];
-  unchangedRecord(script, () => setNativeField(script, headingField("note"), deep), "value");
-  unchangedRecord(script, () => setNativeField(script, headingField("note"), wide), "value");
+  unchangedRecord(script, () => setNativeField(script, beatField("A", "note"), deep), "value");
+  unchangedRecord(script, () => setNativeField(script, beatField("A", "note"), wide), "value");
   script.doc.destroy();
 });
 

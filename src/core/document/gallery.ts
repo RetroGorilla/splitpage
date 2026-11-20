@@ -412,8 +412,9 @@ export function migrateGallery(r: GalleryRow, images: ImageSource): void {
 }
 
 export function normalizeRowGallery(row: GalleryRow, images: ImageSource): void {
-  const legacy = safeImageSrc(row.visualImage);
-  row.imageRef = (legacy ? images.fromDataUrl(legacy) : null) || normalizeImageRef(row.imageRef) || null;
+  const legacyImage = safeImageSrc(row.visualImage);
+  const interned = legacyImage ? images.fromDataUrl(legacyImage) : null;
+  row.imageRef = interned || normalizeImageRef(row.imageRef) || null;
   delete row.visualImage;
   migrateGallery(row, images);
 }

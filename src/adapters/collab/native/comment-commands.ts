@@ -1,7 +1,7 @@
 import * as Y from "yjs";
 import { cappedText, plainName, plainText } from "../../../core/document/text-policy.ts";
 import { isValidNativeRank, nativeRankBetween } from "./rank.ts";
-import { nativeLiveRecord } from "./record-commands.ts";
+import { nativeLiveBeatRecord } from "./record-commands.ts";
 import { copyArgument, nativeRecordId, plainRecordArgument, RECORD_UNCHANGED, RECORD_WRITTEN, refuseRecord, transactRecord, writeRecordFields } from "./record-values.ts";
 import type { NativeRecordOutcome } from "./record-values.ts";
 import type { NativeScript } from "./script.ts";
@@ -91,7 +91,7 @@ export function createNativeComment(script: NativeScript, comment: NativeNewComm
       if (rowId !== null || anchorId !== null || !(script.roots.meta.get("title") instanceof Y.Text)) return refuseRecord("missing");
     } else {
       if (field !== "audioText" && field !== "visualText" && field !== "visualImage") return refuseRecord("value");
-      if (!nativeRecordId(rowId) || !nativeRecordId(anchorId) || !nativeLiveRecord(script, "beat", rowId)) return refuseRecord("missing");
+      if (!nativeRecordId(rowId) || !nativeRecordId(anchorId) || !nativeLiveBeatRecord(script, rowId)) return refuseRecord("missing");
     }
     return insertRecord(script.roots.comments, id, {
       ...base, field, rowId, anchorId, quotedText, kind: "anchor", assignee: "", updatedAt: base.createdAt,

@@ -12,7 +12,7 @@ import { anchorNativeText } from "../../../../src/adapters/collab/native/text-co
 import { edit } from "./helpers.ts";
 import type { Delivery } from "./helpers.ts";
 import {
-  AUTHOR, COMMENT, IMAGE, REPLY, beatField, beatStep, checkRecordStep, fileKey, freshRecordRead, fullUpdate, headingStep, recordCopies,
+  AUTHOR, COMMENT, IMAGE, REPLY, beatField, beatStep, checkRecordStep, fileKey, freshRecordRead, fullUpdate, headingField, recordCopies,
   recordRead, recordSnapshot, recordUndo, replyId, threadSteps, unchangedRecord
 } from "./record-harness.ts";
 import type { RecordStep } from "./record-harness.ts";
@@ -99,7 +99,7 @@ function history(seed: number, writes?: CapturedWrite[]): Record<string, number>
   const [first, second, third] = scripts;
   assert.ok(first && second && third);
   const undo = scripts.map(recordUndo), retained: { comment: string; reply: string }[] = [], removed: typeof retained = [];
-  let winningLength = 0, winningNote = "";
+  let winningLength = 0;
   const winner = Math.max(...scripts.map(script => script.doc.clientID));
   let splitId = "", splitOffset = 0, typed = "";
   function reversible(actor: NativeScript, manager: Y.UndoManager, step: RecordStep): void {
@@ -119,9 +119,9 @@ function history(seed: number, writes?: CapturedWrite[]): Record<string, number>
     for (const [index, actor] of scripts.entries()) {
       const manager = undo[index];
       assert.ok(manager);
-      const length = 1 + next() % 200, note = "note " + actor.doc.clientID, suffix = seed + "-" + actor.doc.clientID;
+      const length = 1 + next() % 200, suffix = seed + "-" + actor.doc.clientID;
       const surviving = { comment: "", reply: "" }, temporary = { comment: "", reply: "" };
-      if (actor.doc.clientID === winner) { winningLength = length; winningNote = note; }
+      if (actor.doc.clientID === winner) winningLength = length;
       retained.push(surviving);
       removed.push(temporary);
       const paragraph = beatStep("paragraphStart", true, "E");
@@ -132,7 +132,6 @@ function history(seed: number, writes?: CapturedWrite[]): Record<string, number>
 
       const groups = [
         [beatStep("lengthSeconds", length)],
-        [headingStep(note + " draft"), headingStep(undefined), headingStep(note)],
         [bodyStep("comment", "comment " + suffix), bodyStep("reply", "reply " + suffix)],
         threadSteps("temporary-" + suffix, "000012V", "temporary edit " + suffix, temporary),
         [beatStep("status", "ready", "B")],
@@ -147,6 +146,10 @@ function history(seed: number, writes?: CapturedWrite[]): Record<string, number>
       count("refused");
       unchangedRecord(actor, () => clearNativeField(actor, beatField("missing", "status")), "missing");
       count("refused");
+      unchangedRecord(actor, () => setNativeField(actor, headingField("note"), "unsupported"), "value");
+      count("refused heading set");
+      unchangedRecord(actor, () => clearNativeField(actor, headingField("note")), "value");
+      count("refused heading clear");
 
       if (index === seed % 3) {
         typed = String.fromCodePoint(0x4e00 + seed);
@@ -213,7 +216,7 @@ function history(seed: number, writes?: CapturedWrite[]): Record<string, number>
       assert.equal(letters.replace(typed, ""), "foxtrot");
       assert.equal(letters.split(typed).length, 2);
       assert.equal(actor.reader.row("A")?.fields.lengthSeconds, winningLength);
-      assert.equal(actor.roots.headings.get("H")?.get(fileKey("note")), JSON.stringify(winningNote));
+      assert.equal(actor.roots.headings.get("H")?.has(fileKey("note")), false);
       assert.equal(actor.reader.row("A")?.fields.note, "extra " + winner);
       assert.deepEqual(actor.reader.row("A")?.fields.imageRef, IMAGE);
       const comments = actor.reader.document().comments;
@@ -249,10 +252,10 @@ test("generated three-copy histories check commands locally and account for sett
   const schedules = [
     { perHistory: 3, reason: "each of the three writers runs this once", kinds: [
       "set beat lengthSeconds", "set beat status", "set beat paragraphStart", "clear beat paragraphStart", "set beat extra",
-      "set beat imageRef", "clear heading", "concurrent comment body", "concurrent reply body", "unchanged",
+      "set beat imageRef", "refused heading set", "refused heading clear", "concurrent comment body", "concurrent reply body", "unchanged",
       ...["set beat paragraphStart", "set beat status", "set beat imageRef", "remove comment"].flatMap(kind => ["undo " + kind, "redo " + kind])
     ] },
-    { perHistory: 6, reason: "each of the three writers runs this twice", kinds: ["set heading", "refused"] },
+    { perHistory: 6, reason: "each of the three writers runs this twice", kinds: ["refused"] },
     { perHistory: 7, reason: "each writer starts two threads and the cross-device trace starts one", kinds: ["create comment", "create reply"] },
     { perHistory: 4, reason: "each writer runs this on a temporary thread and the cross-device trace runs it once", kinds: [
       "body comment", "body reply", "resolve comment", "resolve reply", "reopen comment", "reopen reply", "remove comment", "remove reply"

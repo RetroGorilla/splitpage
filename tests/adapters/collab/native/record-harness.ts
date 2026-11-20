@@ -142,22 +142,6 @@ export function beatStep(field: string, value: unknown, id = "A"): RecordStep {
   };
 }
 
-export function headingStep(value: string | undefined): RecordStep {
-  const target = headingField("note");
-  return {
-    name: value === undefined ? "clear heading" : "set heading",
-    run: script => value === undefined ? clearNativeField(script, target) : setNativeField(script, target, value),
-    expect(snapshot, read) {
-      const record = item(snapshot, "headings", "H");
-      const section = (read.document.sections as Fields[]).find(section => section.id === "H");
-      assert.ok(section);
-      if (value === undefined) { Reflect.deleteProperty(record, fileKey("note")); delete section.note; }
-      else { filePatch(record, { note: value }); section.note = value; }
-      return undefined;
-    }
-  };
-}
-
 export function threadSteps(anchor: string, rank: string, body = "new body", ids = { comment: "", reply: "" }, replyAuthor = AUTHOR): RecordStep[] {
   const target = () => ({ comment: ids.comment }), reply = () => ({ ...target(), reply: ids.reply });
   const key = () => replyId(ids.comment, ids.reply);

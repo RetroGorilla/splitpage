@@ -8,7 +8,7 @@ import {
 } from "./record-values.ts";
 import type { NativeRecordOutcome } from "./record-values.ts";
 import type { NativeScript } from "./script.ts";
-import { decodeNativeValue, nativeFieldKey, nativeWellFormed } from "./values.ts";
+import { decodeNativeValue, nativeWellFormed } from "./values.ts";
 
 export interface NativeFieldTarget {
   readonly kind: "beat" | "heading";
@@ -18,7 +18,6 @@ export interface NativeFieldTarget {
 
 const BEAT_FIELDS = new Set(["status", "lengthSeconds", "paragraphStart", "extra"]);
 const BEAT_RESERVED = new Set(["id", "audioText", "visualText", "rank", "joined", "updatedBy", "updatedAt"]);
-const HEADING_RESERVED = new Set(["id", "name", "firstSceneId", "rank", "removed"]);
 const NO_IMAGES = { known: () => null, fromDataUrl: () => null };
 
 function beatValue(field: string, value: unknown): boolean {
@@ -37,13 +36,12 @@ function keptExtras(value: Record<string, unknown>): boolean {
   return sameNativeValue(supplied, normalized);
 }
 
-export function nativeLiveRecord(script: NativeScript, kind: NativeFieldTarget["kind"], id: string): Y.Map<unknown> | null {
-  const { roots, reader } = script, beat = kind === "beat";
-  const record = (beat ? roots.beats : roots.headings).get(id);
-  if (!(record instanceof Y.Map) || !((beat ? roots.visuals : roots.names).get(id) instanceof Y.Text)) return null;
-  const place = beat ? reader.beatBoundary(id) : reader.headingBoundary(id, false);
+export function nativeLiveBeatRecord(script: NativeScript, id: string): Y.Map<unknown> | null {
+  const { roots, reader } = script, record = roots.beats.get(id);
+  if (!(record instanceof Y.Map) || !(roots.visuals.get(id) instanceof Y.Text)) return null;
+  const place = reader.beatBoundary(id);
   if (!place || !roots.order.toArray().includes(place.segment)) return null;
-  const marker = (beat ? "b:" : "h:") + id;
+  const marker = "b:" + id;
   return nativeSegmentSpans(roots.segments.get(place.segment))?.some(span => span.key === marker) ? record : null;
 }
 
@@ -58,16 +56,16 @@ function changeField(script: NativeScript, target: NativeFieldTarget, value: unk
     return copiedTarget?.value && copiedValue ? { value: { ...copiedTarget.value, copied: copiedValue.value } } : null;
   }, ({ kind, id, field, copied }) => {
     if ((kind !== "beat" && kind !== "heading") || !nativeRecordId(id)) return refuseRecord("missing");
-    const record = nativeLiveRecord(script, kind, id);
+    if (kind === "heading") return refuseRecord("value");
+    const record = nativeLiveBeatRecord(script, id);
     if (!record) return refuseRecord("missing");
-    const beat = kind === "beat";
-    if (!nativeWellFormed(field) || !field || (beat ? BEAT_RESERVED : HEADING_RESERVED).has(field)) return refuseRecord("value");
-    if (!clear && beat && !beatValue(field, copied)) return refuseRecord("value");
-    if (beat && field === "extra" && !clear) {
+    if (!nativeWellFormed(field) || !field || BEAT_RESERVED.has(field)) return refuseRecord("value");
+    if (!clear && !beatValue(field, copied)) return refuseRecord("value");
+    if (field === "extra" && !clear) {
       if (!recordBag(copied) || Object.keys(copied).some(key => BEAT_RESERVED.has(key) || key !== "extra" && BEAT_FIELDS.has(key)) ||
           !keptExtras(copied)) return refuseRecord("value");
     }
-    if (beat && !BEAT_FIELDS.has(field)) {
+    if (!BEAT_FIELDS.has(field)) {
       const stored = record.has("extra") ? decodeNativeValue(record.get("extra"))?.value : {};
       if (!recordBag(stored)) return refuseRecord("stored");
       if (clear && !Object.hasOwn(stored, field)) return RECORD_UNCHANGED;
@@ -79,10 +77,9 @@ function changeField(script: NativeScript, target: NativeFieldTarget, value: unk
       if (!keptExtras(extra.value)) return refuseRecord("value");
       return writeRecordFields(record, { extra: extra.value });
     }
-    const key = beat ? field : nativeFieldKey(field);
-    if (!clear) return writeRecordFields(record, { [key]: copied });
-    if (!record.has(key)) return RECORD_UNCHANGED;
-    record.delete(key);
+    if (!clear) return writeRecordFields(record, { [field]: copied });
+    if (!record.has(field)) return RECORD_UNCHANGED;
+    record.delete(field);
     return RECORD_WRITTEN;
   });
 }
