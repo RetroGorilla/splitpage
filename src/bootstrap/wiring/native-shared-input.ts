@@ -48,6 +48,7 @@ interface Draft {
   readonly paint: TrackedPaint | null;
   text: string;
   units: number;
+  previewCaret: number;
 }
 
 function insideDraft(draft: Draft, cell: Element, { from, to }: CellRange): boolean {
@@ -58,6 +59,7 @@ function reviseDraft(draft: Draft, selection: CellRange, text: string): void {
   const from = selection.from - draft.selection.from, to = selection.to - draft.selection.from;
   draft.text = draft.text.slice(0, from) + text + draft.text.slice(to);
   draft.units += Math.max(text.length, to - from);
+  draft.previewCaret = selection.from + text.length;
 }
 
 function inputRange(input: InputEvent, cell: Element): CellRange | null {
@@ -145,7 +147,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, repor
   function begin(cell: Element, selection: CellRange, composing: boolean, text: string): Draft {
     const beat = cell.getAttribute("data-id") ?? "";
     return { beat, cell, selection, composing, composition: composing, text, units: Math.max(text.length, selection.to - selection.from),
-      range: null, paint: null, html: cell.innerHTML };
+      previewCaret: selection.from + text.length, range: null, paint: null, html: cell.innerHTML };
   }
 
   function anchor(next: Draft): Draft | string {
@@ -177,7 +179,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, repor
     return target.commands.replaceText(range, [{ text, marks: {} }], attribution, places);
   }
 
-  function finish(selection?: SelectionCapture): string | null {
+  function finish(selection?: SelectionCapture, moveCaret = true): string | null {
     clearTimeout(timer);
     timer = undefined;
     const buffered = draft;
@@ -200,7 +202,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, repor
       draft = null;
       if (result.kind === "unchanged") restore(buffered);
       if (result.kind === "written") {
-        if (result.caret) placement = { buffered, caret: result.caret };
+        if (moveCaret && result.caret) placement = { buffered, caret: result.caret };
         if (selection && result.selection) selection.inserted = result.selection;
       }
       publish(buffered);
@@ -217,10 +219,15 @@ export function mountNativeSharedInput({ native, session, editAttribution, repor
 
   function acrossDraft(buffered: Draft, selection: CellRange) {
     const { from, to } = buffered.selection, end = from + buffered.text.length;
-    const endpoint = (offset: number, assoc: 0 | -1): { point: RelativePoint | null; index: number | null } => {
-      if (offset >= from && offset <= end && (buffered.text.length || from !== to)) return { point: null, index: offset - from };
+    const endpoint = (offset: number, assoc: 0 | -1) => {
+      if (offset >= from && offset <= end && (buffered.text.length || from !== to)) {
+        return { point: null, index: offset - from, bound: false };
+      }
       const original = offset > end ? offset - end + to : offset;
-      return { point: buffered.paint?.point(original, assoc) ?? null, index: null };
+      const bound = buffered.text.length > 0 && (assoc === 0
+        ? offset < from && selection.to >= from
+        : offset > end && selection.from <= end);
+      return { point: buffered.paint?.point(original, assoc) ?? null, index: bound ? (assoc === 0 ? 0 : buffered.text.length) : null, bound };
     };
     return [endpoint(selection.from, 0), endpoint(selection.to, -1)] as const;
   }
@@ -246,9 +253,17 @@ export function mountNativeSharedInput({ native, session, editAttribution, repor
     if (finish(capture)) return null;
     const fresh = narrationCell(buffered.beat);
     if (!fresh) { session.refuse(STALE); return null; }
-    const first = start.point ?? capture.inserted?.[0], last = end.point ?? capture.inserted?.[1];
-    const from = first && native.narrationOffset(buffered.beat, { from: first });
-    const to = last && native.narrationOffset(buffered.beat, { from: last }, -1);
+    const offset = (endpoint: typeof start, inserted: RelativePoint | null | undefined, assoc: 0 | -1) => {
+      const resolve = (point: RelativePoint) => native.narrationOffset(buffered.beat, { from: point }, assoc);
+      if (!endpoint.bound) {
+        const point = endpoint.point ?? inserted;
+        return point ? resolve(point) : null;
+      }
+      const original = endpoint.point && resolve(endpoint.point), edge = inserted && resolve(inserted);
+      if (original == null || edge == null) return null;
+      return assoc === 0 ? Math.min(original, edge) : Math.max(original, edge);
+    };
+    const from = offset(start, capture.inserted?.[0], 0), to = offset(end, capture.inserted?.[1], -1);
     if (from != null && to != null && from <= to) return { cell: fresh, selection: { from, to } };
     fresh.innerHTML = oldHtml;
     return { cell: fresh, selection, stale: true };
@@ -284,7 +299,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, repor
     preview(current.cell, current.selection, text);
     if (typeof anchored === "string") { stop(anchored); return; }
     if (atBatchBoundary(anchored)) finish();
-    else timer = setTimeout(finish, BATCH_MS);
+    else timer = setTimeout(() => {
+      const shown = cellSelection(anchored.cell);
+      finish(undefined, shown?.from === anchored.previewCaret && shown.to === anchored.previewCaret || !anchored.cell.isConnected);
+    }, BATCH_MS);
   }
 
   function composition(event: CompositionEvent, cell: Element): void {
