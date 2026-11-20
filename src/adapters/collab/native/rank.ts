@@ -7,8 +7,12 @@ const INITIAL_OPEN_RANK = "V00000V";
 // why: a rank ending in "0" has no string between it and itself + "0", so valid ranks end in 1-9, A-Z or a-z
 const RANK_PATTERN = /^[0-9A-Za-z]*[1-9A-Za-z]$/;
 
+export function nativeValidRank(value: unknown): value is string {
+  return typeof value === "string" && RANK_PATTERN.test(value);
+}
+
 function assertRank(value: string, label: string): void {
-  if (typeof value !== "string" || !RANK_PATTERN.test(value)) {
+  if (!nativeValidRank(value)) {
     throw new RangeError(`Invalid ${label} rank: expected base-62 digits not ending in "0"`);
   }
 }

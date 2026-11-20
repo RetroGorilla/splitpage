@@ -633,6 +633,11 @@ export class NativeScriptReader {
     return this.places.get(beat) ?? null;
   }
 
+  blocksForMove(): readonly { readonly id: string; readonly kind: "b" | "h"; readonly rank: string; readonly bound: string | null }[] {
+    this.sync();
+    return this.rankedBlocks.map(({ block: { id, kind }, rank, bound }) => ({ id, kind, rank, bound }));
+  }
+
   ranksAboveBeat(beat: string): { readonly before: string | null; readonly after: string | null } | null {
     this.sync();
     if (this.groupHeads.get(beat) !== beat) return null;

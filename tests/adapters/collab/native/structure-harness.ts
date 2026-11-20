@@ -71,6 +71,10 @@ export function rowsOf(script: NativeScript): string[] {
   return script.reader.rows().map(row => `${row.id}: ${row.narration.map(run => run.atom ? "￼" : run.text).join("")}`);
 }
 
+export function blockOrder(script: NativeScript): string[] {
+  return script.reader.outline().flatMap(entry => entry.kind === "heading" ? ["#" + entry.id] : script.reader.row(entry.id)?.members ?? []);
+}
+
 // why: the stored narration in reading order, `[id]` for a beat boundary and `[#id]` for a heading's, so a test sees
 // text the reader leaves unplaced and boundaries without a record
 export function storedOf(script: NativeScript): string {
