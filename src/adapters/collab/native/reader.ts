@@ -4,7 +4,7 @@ import { projectSharedJoinedFields } from "../../../core/collab/projection/joins
 import type { DocumentShape } from "../../../core/document/validated.ts";
 import { toHtml } from "../../../core/text/html.ts";
 import type { Run } from "../../../core/text/runs.ts";
-import { nativeBlockOf, nativeCellView, nativeItemLength, nativeRunsOf, nativeUnitCounts } from "./inline.ts";
+import { nativeBlockOf, nativeCellView, nativeItemLength, nativeRunsOf, nativeStoredOffset, nativeUnitCounts } from "./inline.ts";
 import type { NativeDeltaItem } from "./inline.ts";
 import { compareNativeRankedIds } from "./rank.ts";
 import { projectNativeRegistries } from "./registry-projection.ts";
@@ -687,23 +687,76 @@ export class NativeScriptReader {
     return this.rowCache.get(id) ?? null;
   }
 
-  narrationCaret(row: string, offset: number): { readonly beat: string; readonly offset: number } | null {
+  narrationCaret(row: string, offset: number, right = false): { readonly beat: string; readonly offset: number } | null {
     this.sync();
     if (row === this.stray || !Number.isInteger(offset)) return null;
     const members = this.groups.get(row) ?? [];
-    let length = 0, hasItems = false;
+    let length = 0, hasItems = false, seam: { beat: string; offset: number } | null = null;
     for (const { id, glue } of members) {
       const spans = this.narration.get(id) ?? EMPTY_SPANS;
       const items = spans.flatMap(span => this.spanAt(span)?.items ?? []);
       if (hasItems && items.length) length += glue.length;
-      if (offset < length) return null;
+      if (offset < length) return seam;
       const width = nativeCellView(items).length;
-      if (width && offset <= length + width) return { beat: id, offset: offset - length };
+      if (width && offset <= length + width) {
+        const point = { beat: id, offset: offset - length };
+        if (!right || offset < length + width) return point;
+        seam = point;
+      }
       length += width;
       hasItems ||= items.length > 0;
     }
     const first = members[0];
-    return first && !length && offset === 0 ? { beat: first.id, offset: 0 } : null;
+    return seam ?? (first && !length && offset === 0 ? { beat: first.id, offset: 0 } : null);
+  }
+
+  private narrationSpansOnScreen(row: string) {
+    this.sync();
+    let length = 0, hasItems = false;
+    const shown: { text: Y.Text; start: number; end: number; offset: number; view: ReturnType<typeof nativeCellView> }[] = [];
+    for (const { id, glue } of this.groups.get(row) ?? []) {
+      const spans = (this.narration.get(id) ?? EMPTY_SPANS).flatMap(ref => {
+        const span = this.spanAt(ref), segment = this.roots.segments.get(ref.segment);
+        return span ? [{ span, text: segment?.get("text") }] : [];
+      });
+      const hasMember = spans.some(({ span }) => span.items.length > 0);
+      if (hasItems && hasMember) length += glue.length;
+      for (const { span, text } of spans) {
+        const view = nativeCellView(span.items);
+        if (text instanceof Y.Text) shown.push({ text, start: span.start, end: span.end, offset: length, view });
+        length += view.length;
+      }
+      hasItems ||= hasMember;
+    }
+    return shown;
+  }
+
+  narrationOffset(row: string, position: Y.AbsolutePosition): number | null {
+    for (const { text, start, end, offset, view } of this.narrationSpansOnScreen(row)) {
+      if (text === position.type && position.index >= start && position.index <= end) {
+        return offset + view.ends.filter(unit => unit <= position.index - start).length;
+      }
+    }
+    return null;
+  }
+
+  narrationPaint(row: string, retain: boolean) {
+    const shown = this.narrationSpansOnScreen(row), visible = shown.filter(part => part.view.length);
+    const spans = visible.length ? visible : shown.slice(0, 1);
+    const reverse = spans.toReversed();
+    const point = (part: (typeof spans)[number], offset: number, assoc: 0 | -1) =>
+      Y.createRelativePositionFromTypeIndex(part.text, part.start + nativeStoredOffset(part.view, offset - part.offset), assoc);
+    const at = (offset: number, assoc: 0 | -1): Y.RelativePosition | null => {
+      const span = (assoc === 0 ? reverse : spans).find(part => offset >= part.offset && offset <= part.offset + part.view.length);
+      return span ? point(span, offset, assoc) : null;
+    };
+    if (!retain) return at;
+    const starts = new Map<number, Y.RelativePosition | null>(), ends = new Map<number, Y.RelativePosition | null>();
+    for (const span of spans) for (let unit = span.offset; unit <= span.offset + span.view.length; unit++) {
+      starts.set(unit, point(span, unit, 0));
+      if (!ends.has(unit)) ends.set(unit, point(span, unit, -1));
+    }
+    return (offset: number, assoc: 0 | -1) => (assoc === 0 ? starts : ends).get(offset) ?? null;
   }
 
   rows(): readonly NativeReadRow[] {
