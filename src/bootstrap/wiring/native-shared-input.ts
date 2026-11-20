@@ -6,13 +6,14 @@ import { cssAttr } from "../../features/common/dom.ts";
 import { domToPos } from "../../features/common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../../features/common/cell-selection.ts";
 import { paintedFromRow, renderRow } from "../../features/rows/render.ts";
-import { currentDocument, editAllowed } from "./session-owner.ts";
+import { documentReader } from "./ports/document.ts";
+import { editAllowed } from "./session-owner.ts";
 import { writerControls } from "./writer.ts";
 
 interface NativeInputPorts {
   readonly native: ReturnType<typeof openNativeSession>;
   readonly session: Pick<SharedDocumentSession, "admit" | "refuse" | "subscribe">;
-  readonly stamp: () => NativeEditStamp;
+  readonly editAttribution: () => NativeEditStamp;
   readonly report: ReportPort;
 }
 
@@ -37,7 +38,7 @@ function editingKey(key: KeyboardEvent): boolean {
     || key.altKey && (key.key === "ArrowUp" || key.key === "ArrowDown");
 }
 
-export function mountNativeSharedInput({ native, session, stamp, report }: NativeInputPorts): () => void {
+export function mountNativeSharedInput({ native, session, editAttribution, report }: NativeInputPorts): () => void {
   let placement: { readonly beat: string; readonly offset: number; readonly cell: Element } | null = null;
   const stopPaint = session.subscribe(() => {
     writerControls()?.renderWriter();
@@ -61,7 +62,7 @@ export function mountNativeSharedInput({ native, session, stamp, report }: Nativ
     if (admission) { session.refuse(admission.reason); return; }
     if (!editAllowed()) { session.refuse(UNSUPPORTED); return; }
     const beat = cell.getAttribute("data-id") ?? "", offset = caret(input, cell);
-    const shown = currentDocument()?.rows.find(row => row.id === beat);
+    const shown = documentReader.current()?.rows.find(row => row.id === beat);
     const latest = native.document().rows.find(row => row.id === beat);
     if (offset === null || !shown || !latest || shown.audioText !== latest.audioText || !paintedFromRow(cell, "audioText", shown)) {
       session.refuse(STALE);
@@ -71,7 +72,7 @@ export function mountNativeSharedInput({ native, session, stamp, report }: Nativ
     if (!target) { session.refuse(STALE); return; }
     const anchored = native.commands.anchorText({ beat: target.beat, cell: "narration" }, target.offset);
     if (anchored.kind === "refused") { session.refuse(anchored.reason); return; }
-    const result = native.commands.typeText(anchored.range, input.data, {}, stamp());
+    const result = native.commands.typeText(anchored.range, input.data, {}, editAttribution());
     if (result.kind === "written") placement = { beat, offset: offset + input.data.length, cell };
     if (result.kind === "recovery") session.refuse(result.reason);
   }
@@ -88,10 +89,10 @@ export function mountNativeSharedInput({ native, session, stamp, report }: Nativ
     try {
       if (event.type === "beforeinput" && cell && event.cancelable) { write(event as InputEvent, cell); return; }
       if (event.type === "input" && cell) {
-        if (cell instanceof HTMLInputElement) cell.value = currentDocument()?.title ?? "";
+        if (cell instanceof HTMLInputElement) cell.value = documentReader.current()?.title ?? "";
         else if (cell.closest("#rows")) {
           const id = cell.getAttribute("data-id");
-          const row = currentDocument()?.rows.find(candidate => candidate.id === id);
+          const row = documentReader.current()?.rows.find(candidate => candidate.id === id);
           if (row) {
             const field = cell.getAttribute("data-field");
             if (field === "audioText" || field === "visualText") cell.innerHTML = row[field] ?? "";

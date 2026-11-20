@@ -17,6 +17,7 @@ export interface SharedGalleryPorts {
 }
 
 export interface SharedGalleryCommands {
+  readonly refuseUnsupported?: () => boolean;
   readonly ports: () => SharedGalleryPorts | null;
   readonly refused: (outcome: CommandOutcome) => void;
   readonly done: (message: string) => void;

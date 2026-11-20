@@ -280,7 +280,7 @@ for (const [guard, expected] of [
   t.after(mountNativeSharedInput({
     native: { ...native, narrationCaret: guard === "missing caret target" ? () => null : native.narrationCaret,
       commands: { ...native.commands, anchorText: anchor, typeText: write } },
-    stamp: () => ({ by: "Writer", at: "now" }), report,
+    editAttribution: () => ({ by: "Writer", at: "now" }), report,
     session: { admit: () => guard === "admission failure" ? { kind: "failed", error } : null, refuse, subscribe: () => () => {} }
   }));
   const target = cell("audioText");

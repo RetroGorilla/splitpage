@@ -104,7 +104,7 @@ import { compressImageFile, videoFirstFrame } from "../../features/rows/beat-med
 import { videoFiles } from "./video-files.ts";
 import { desktopVideo } from "./desktop-video.ts";
 import { externalLinks } from "./ports/desktop.ts";
-import { refuseNativeEditorCommand, sharedGalleryCommands } from "./ports/shared-commands.ts";
+import { sharedGalleryCommands } from "./ports/shared-commands.ts";
 import { IS_MAC } from "../../features/common/key-chips.ts";
 import {
   acceptTagGhost,
@@ -339,9 +339,7 @@ export function mountCellEditingFeature(): { readonly dispose: () => void } {
       announce: announceGalleryEdit,
       gallery: sharedGalleryCommands
     });
-    return { dispose: installCellEditing({ ...editing, editGallery: (...args) => {
-      return refuseNativeEditorCommand() ? { changed: false, held: true } : editing.editGallery(...args);
-    } }) };
+    return { dispose: installCellEditing(editing) };
   }, () => [() => connectWriter((control) => {
     scheduleWriterStats = control?.scheduleWriterStats ?? inactiveWriter;
     const step = control?.writerUndoStep;

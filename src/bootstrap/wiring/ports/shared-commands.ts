@@ -167,6 +167,7 @@ export const sharedRecordCommands: SharedRecordCommands = {
 };
 
 export const sharedGalleryCommands: SharedGalleryCommands = {
+  refuseUnsupported: refuseNativeEditorCommand,
   ports: () => {
     const parts = sharedSessionParts();
     return parts ? sharedGalleryPorts(source(parts)) : null;

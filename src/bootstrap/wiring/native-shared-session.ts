@@ -65,7 +65,11 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
   const backend: SharedEditorBackend = {
     replica: publication.replica, parts: null, unsupportedCommands: UNSUPPORTED,
     undo: () => ({ actions: { undo: unavailable, redo: unavailable }, breakGroup: () => {}, replayed: () => null }),
-    bind: session => { stopInput ??= mountNativeSharedInput({ native, session, stamp: () => ({ at: new Date(ports.now()).toISOString(), by: actor }), report: ports.report }); },
+    bind: session => {
+      stopInput ??= mountNativeSharedInput({
+        native, session, editAttribution: () => ({ at: new Date(ports.now()).toISOString(), by: actor }), report: ports.report
+      });
+    },
     unbind: () => { stopInput?.(); stopInput = null; },
     settle: () => null,
     start: () => {

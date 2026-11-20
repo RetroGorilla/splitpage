@@ -194,7 +194,7 @@ test("a native input binding unsubscribes its paint listener when torn down", as
   t.after(() => { if (sharedSession()) leaveRunningSharedSession(); });
   const stopPaint = t.mock.fn();
   const unbind = mountNativeSharedInput({
-    native, report: fixture.ports.report, stamp: () => ({ at: "now", by: "Writer" }),
+    native, report: fixture.ports.report, editAttribution: () => ({ at: "now", by: "Writer" }),
     session: { admit: () => null, refuse: reason => ({ kind: "rejected", reason }), subscribe: () => stopPaint }
   });
   unbind();
