@@ -10,6 +10,7 @@ import type { NativeScript } from "../../../../src/adapters/collab/native/script
 import { anchorNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
 import { convertedScript, edit, joinedScript, ScriptNet } from "./helpers.ts";
 import type { Delivery } from "./helpers.ts";
+import { testNativeUndo } from "./undo-harness.ts";
 
 after(() => { dom.window.close(); });
 
@@ -143,7 +144,7 @@ for (const item of [
 
 test("(c) E11 and E14 double cut and double undo keeps two letters and one boundary owner", () => {
   const a = script("ABC"), b = joinedScript(a, 200), net = new ScriptNet([a, b]);
-  const undo = [a, b].map(copy => new Y.UndoManager([...copy.roots.segments.values()].map(textOf), { trackedOrigins: new Set([copy.origin]), captureTimeout: 0 }));
+  const undo = [a, b].map(copy => testNativeUndo(copy));
   try {
     for (const copy of [a, b]) { check(copy); cut(copy, ["B"]); check(copy); }
     settle(a, b, net, ["A=a", "C=c"]);
@@ -155,7 +156,7 @@ test("(c) E11 and E14 double cut and double undo keeps two letters and one bound
 
 test("(d) E9 a join to a cut beat stops counting and counts again when the cut is undone", () => {
   const a = script("ABC"), b = joinedScript(a, 200), net = new ScriptNet([a, b]);
-  const undo = new Y.UndoManager(textOf(segment(a, "b:A")), { trackedOrigins: new Set([a.origin]) });
+  const undo = testNativeUndo(a);
   try {
     for (const copy of [a, b]) check(copy);
     cut(a, ["B"]);
@@ -179,7 +180,7 @@ test("(e) E14 the winning move's undo leaves no rank and the beat follows its na
   a.doc.clientID = 101;
   const record = b.roots.beats.get("B");
   assert.ok(record);
-  const undo = new Y.UndoManager(record, { trackedOrigins: new Set([b.origin]) });
+  const undo = testNativeUndo(b);
   try {
     for (const copy of [a, b]) check(copy);
     a.roots.beats.get("B")?.set("rank", "");
@@ -236,8 +237,8 @@ function e17(mode: Schedule, missing: "record" | "visual" | "both", base: number
   const scope: (Y.Text | Y.Map<Y.Map<unknown>> | Y.Map<Y.Text>)[] = [text];
   if (missing !== "visual") scope.push(a.roots.beats);
   if (missing !== "record") scope.push(a.roots.visuals);
-  const undoA = new Y.UndoManager(scope, { trackedOrigins: new Set([a.origin]), captureTimeout: 0 });
-  const undoB = new Y.UndoManager([segment(b, "b:A"), textOf(segment(b, "b:A"))], { trackedOrigins: new Set([b.origin]), captureTimeout: 0 });
+  const undoA = missing === "both" ? testNativeUndo(a) : new Y.UndoManager(scope, { trackedOrigins: new Set([a.origin]), captureTimeout: 0 });
+  const undoB = testNativeUndo(b);
   const updatesA: Uint8Array[] = [], updatesB: Uint8Array[] = [];
   const capture = (list: Uint8Array[]) => (update: Uint8Array, origin: unknown): void => { if (origin !== "remote") list.push(update); };
   a.doc.on("update", capture(updatesA)); b.doc.on("update", capture(updatesB));
@@ -530,7 +531,7 @@ test("a heading can be removed and restored when the winning concurrent rank is 
   genesis.doc.destroy();
   const left = a.roots.headings.get("H"), right = b.roots.headings.get("H");
   assert.ok(left && right);
-  const undo = new Y.UndoManager(right, { trackedOrigins: new Set([b.origin]) });
+  const undo = testNativeUndo(b);
   try {
     for (const copy of [a, b]) check(copy);
     left.set("rank", "1");

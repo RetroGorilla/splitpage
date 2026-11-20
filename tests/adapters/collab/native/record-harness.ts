@@ -13,6 +13,8 @@ import type { NativeRecordOutcome } from "../../../../src/adapters/collab/native
 import { openNativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import { convertedScript, joinedScript, ScriptNet } from "./helpers.ts";
+import { testNativeUndo } from "./undo-harness.ts";
+import type { TestNativeUndo } from "./undo-harness.ts";
 
 export const AT = "2026-11-19T01:02:03.000Z";
 export const AUTHOR = "Alice";
@@ -81,11 +83,7 @@ export function unchangedRecord(script: NativeScript, run: () => NativeRecordOut
   assert.deepEqual(fullUpdate(script), before);
 }
 
-export function recordUndo(script: NativeScript): Y.UndoManager {
-  const roots = script.roots;
-  return new Y.UndoManager([roots.order, roots.segments, roots.beats, roots.visuals, roots.headings, roots.names, roots.comments, roots.replies, roots.edited],
-    { captureTimeout: 0, trackedOrigins: new Set([script.origin]) });
-}
+export function recordUndo(script: NativeScript): TestNativeUndo { return testNativeUndo(script); }
 
 export function freshRecordRead(script: NativeScript) {
   const doc = new Y.Doc(), handle = openNativeScript(doc);

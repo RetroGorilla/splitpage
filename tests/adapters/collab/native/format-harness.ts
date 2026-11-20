@@ -9,9 +9,11 @@ import type { NativeScript } from "../../../../src/adapters/collab/native/script
 import { anchorNativeText, replaceNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
 import type { NativeTextTarget } from "../../../../src/adapters/collab/native/text-commands.ts";
 import { convertedScript, shown } from "./helpers.ts";
+import { testNativeUndo } from "./undo-harness.ts";
+import type { TestNativeUndo } from "./undo-harness.ts";
 
 export interface RaceChar { readonly ch: string; readonly names: readonly string[] }
-export type RaceStackItem = Y.UndoManager["undoStack"][number];
+export type RaceStackItem = TestNativeUndo["undoStack"][number];
 
 const SUFFIX = "\u001f";
 
@@ -52,7 +54,7 @@ export function firstDifference(expected: readonly RaceChar[], actual: readonly 
 
 export interface RaceWriter {
   readonly script: NativeScript;
-  readonly undo: Y.UndoManager;
+  readonly undo: TestNativeUndo;
 }
 
 export function cellOf(writer: RaceWriter, cell: NativeTextTarget): Y.Text {
@@ -70,7 +72,7 @@ function writerOf(script: NativeScript): RaceWriter {
   const roots = script.roots;
   // why: an editor binding reads every text change's delta, the condition E4 and E6 measured under
   for (const root of [roots.segments, roots.visuals]) root.observeDeep(events => { for (const event of events) if (event instanceof Y.YTextEvent) void event.delta; });
-  return { script, undo: new Y.UndoManager([roots.segments, roots.visuals], { trackedOrigins: new Set([script.origin]), captureTimeout: 0 }) };
+  return { script, undo: testNativeUndo(script) };
 }
 
 export function joined(state: Uint8Array, client: number): RaceWriter {

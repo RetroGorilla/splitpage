@@ -9,6 +9,7 @@ import { anchorNativeText, replaceNativeText, typeNativeText } from "../../../..
 import type { NativeTextRange, NativeTextTarget } from "../../../../src/adapters/collab/native/text-commands.ts";
 import type { Delivery, ScriptNet } from "./helpers.ts";
 import { caret, copiesOf, join, press, remove, rowsOf, split, stateOf, storedOf, structureScript, unjoin } from "./structure-harness.ts";
+import type { TestNativeUndo } from "./undo-harness.ts";
 
 after(() => { dom.window.close(); });
 
@@ -20,7 +21,7 @@ const ORDERS: readonly Delivery[] = ["forward", "reverse", "twice"];
 const CLIENTS: readonly (readonly number[])[] = [[2, 3], [3, 2]];
 const TAG = "t:prop:lamp";
 
-interface World { readonly net: ScriptNet; readonly a: NativeScript; readonly b: NativeScript; readonly undoA: Y.UndoManager; readonly undoB: Y.UndoManager }
+interface World { readonly net: ScriptNet; readonly a: NativeScript; readonly b: NativeScript; readonly undoA: TestNativeUndo; readonly undoB: TestNativeUndo }
 
 // why: every history runs in both client orders and three deliveries; each run must end with every copy, a fresh
 // reader and a late joiner reading alike, and the history's own reading is compared across runs
@@ -256,19 +257,24 @@ test("E11: a row removed while another copy types in it, then two same-moment sp
 
 // why: design section 10 and appendix N: Alice splits B at its start, Bob removes the new row, Alice undoes her split
 // and Bob undoes his removal, which brings back N's boundary and narration without its record or visual cell
-function fourSteps(world: World, whileLive?: (created: string) => void): string {
+function fourSteps(world: World, whileLive?: (created: string) => void, beforeBobUndo?: () => void): string {
   const { net, a, b, undoA, undoB } = world;
   const created = split(a, "B", 0);
   whileLive?.(created);
   net.settle();
   remove(b, created); net.settle();
   press(undoA, a); net.settle();
+  beforeBobUndo?.();
   press(undoB, b); net.settle();
   return created;
 }
 
 test("E17's four steps: the row's boundary returns without its record, and rule (g) shows its narration in B", () => {
-  const readings = runs(world => { fourSteps(world); });
+  const readings = runs(world => {
+    fourSteps(world, undefined, () => {
+      assert.deepEqual(world.net.agree(), ["A: abc / 1", "B:  / 2", "C: ghi / 3", ...TAIL]);
+    });
+  });
   for (const reading of readings) {
     assert.deepEqual(reading, ["A: abc / 1", "B: def / 2", "C: ghi / 3", ...TAIL, "problem missing-beat-record beats/N", "problem missing-visual visuals/N"]);
   }
@@ -349,4 +355,29 @@ test("undo of a split takes back its boundary, record and cell; redo brings them
   net.settle();
   assert.deepEqual(net.agree(), ["A: abc / 1", "B: d / 2", `${created}: ef / `, ...TAIL]);
   assert.equal(b.roots.visuals.get("C")?.toString(), "3");
+});
+
+test("E16: double cut and undo of a segment head, then one redo, leaves narration editable in the next row", () => {
+  for (const order of ORDERS) {
+    const { net, all: [a, b], undo: [alice, bob] } = copiesOf(structureScript({ A: "a", B: "b" }, { A: "seen" }));
+    assert.ok(a && b && alice && bob);
+    try {
+      remove(a, "A");
+      remove(b, "A");
+      press(alice, a);
+      press(bob, b);
+      press(bob, b, true);
+      net.settle(order);
+      for (const copy of [a, b]) {
+        assert.deepEqual(rowsOf(copy), ["B: ab"]);
+        assert.equal(copy.roots.visuals.get("A")?.toString(), "seen");
+        assert.ok(copy.roots.beats.has("A"));
+        assert.deepEqual(copy.reader.recovery(), []);
+      }
+      typeIn(a, { beat: "B", cell: "narration" }, 1, "x");
+      net.settle(order);
+      assert.deepEqual(rowsOf(b), ["B: axb"]);
+      net.agree();
+    } finally { a.doc.destroy(); b.doc.destroy(); }
+  }
 });

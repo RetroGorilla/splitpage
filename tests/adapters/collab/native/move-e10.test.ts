@@ -13,6 +13,7 @@ import { anchorNativeText, typeNativeText } from "../../../../src/adapters/colla
 import { ScriptNet, joinedScript } from "./helpers.ts";
 import type { Delivery } from "./helpers.ts";
 import { caret, join, press, remove, split, undoOf } from "./structure-harness.ts";
+import type { TestNativeUndo } from "./undo-harness.ts";
 
 after(() => { dom.window.close(); });
 
@@ -26,8 +27,8 @@ interface E10World {
   readonly net: ScriptNet;
   readonly a: NativeScript;
   readonly b: NativeScript;
-  readonly undoA: Y.UndoManager;
-  readonly undoB: Y.UndoManager;
+  readonly undoA: TestNativeUndo;
+  readonly undoB: TestNativeUndo;
   readonly order: Delivery;
   readonly aWins: boolean;
 }
@@ -84,7 +85,7 @@ function seedE10(): Uint8Array {
 
 const E10_BYTES = seedE10();
 
-function openCopies(clients: readonly number[]): { net: ScriptNet; all: NativeScript[]; undo: Y.UndoManager[] } {
+function openCopies(clients: readonly number[]): { net: ScriptNet; all: NativeScript[]; undo: TestNativeUndo[] } {
   const seed = openNativeScript(new Y.Doc());
   Y.applyUpdate(seed.doc, E10_BYTES, "remote");
   const all = clients.map(client => joinedScript(seed, client));
