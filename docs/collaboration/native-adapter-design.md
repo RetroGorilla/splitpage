@@ -12,6 +12,7 @@ pictures and screen design are out of scope.
 
 Slices 1 to 6 are on `main`. The native shared-document command layer and undo are built.
 The app has no native wiring yet. Slices 7a and 7h are merged. This PR builds 7c, the relay connection. The old adapter stays untouched until slice 8.
+Slice 7f, the browser local store, is built in this PR.
 
 ## Decisions made
 
