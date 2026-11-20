@@ -13,6 +13,11 @@ export function isValidNativeRank(value: unknown): value is string {
   return typeof value === "string" && RANK_PATTERN.test(value);
 }
 
+export function compareNativeRankedIds(left: string, leftRank: string | null, right: string, rightRank: string | null): number {
+  const a = leftRank ?? "", b = rightRank ?? "";
+  return a < b ? -1 : a > b ? 1 : left < right ? -1 : left > right ? 1 : 0;
+}
+
 function assertRank(value: string, label: string): void {
   if (!isValidNativeRank(value)) {
     throw new NativeRankError(`Invalid ${label} rank: expected base-62 digits not ending in "0"`);
