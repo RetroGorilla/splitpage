@@ -137,11 +137,17 @@ test("a split refuses an empty target id as missing and a malformed one as a bad
   assert.deepEqual(stateOf(copy), before);
 });
 
-test("a split refuses an id already taken by a record or by a visual cell, writing nothing", () => {
-  for (const root of ["beats", "visuals"] as const) {
+test("a split refuses an id already taken by a record, a visual cell or a stored boundary, writing nothing", () => {
+  for (const root of ["beats", "visuals", "boundary"] as const) {
     const copy = one({ A: "abc" });
     const clock = Y.decodeStateVector(Y.encodeStateVector(copy.doc)).get(copy.doc.clientID) ?? 0, id = `r2-${(clock + 1).toString(36)}`;
-    copy.doc.transact(() => { if (root === "beats") copy.roots.beats.set(id, new Y.Map()); else copy.roots.visuals.set(id, new Y.Text()); }, "remote");
+    copy.doc.transact(() => {
+      if (root === "beats") copy.roots.beats.set(id, new Y.Map());
+      else if (root === "visuals") copy.roots.visuals.set(id, new Y.Text());
+      else (copy.roots.segments.get("b:A")?.get("text") as Y.Text).insertEmbed(4, { b: id }, {});
+    }, "remote");
+    copy.reader.refresh();
+    if (root === "boundary") assert.equal(storedOf(copy), `[A]abc[${id}]`);
     const before = stateOf(copy);
     assert.deepEqual(splitNativeRow(copy, caret(copy, "A", 1)), { kind: "refused", reason: "taken" }, root);
     assert.deepEqual(stateOf(copy), before);
