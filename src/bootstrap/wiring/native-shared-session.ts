@@ -5,6 +5,7 @@ import { enterSharedDocument } from "../../core/migrate.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { scriptCellOf, sanitizeHtml } from "../richtext.ts";
 import { keepNativeFieldPaint, mountNativeSharedInput } from "./native-shared-input.ts";
+import { nativeUndoRoute } from "./native-shared-undo.ts";
 import { notices } from "./ports/effects.ts";
 import type { SharedEditorBackend, SharedSwitchPorts } from "./shared-session.ts";
 
@@ -91,13 +92,12 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
     const recovered = openNativeSession({ kind: "state", state: terminal }, options);
     try { return enterSharedDocument(recovered.document()); } finally { recovered.close(); }
   };
-  const unavailable = () => ({ ok: false, reason: UNSUPPORTED, skipped: true } as const);
   const backend: SharedEditorBackend = {
     replica: publication.replica, parts: null, unsupportedCommands: UNSUPPORTED,
-    undo: () => ({ actions: { undo: unavailable, redo: unavailable }, breakGroup: () => {}, replayed: () => null }),
+    undo: admission => nativeUndoRoute({ native, admission, input: () => input, publish: () => { publish(); } }),
     bind: session => {
       input ??= mountNativeSharedInput({
-        native, session, editAttribution: () => ({ at: new Date(ports.now()).toISOString(), by: actor }), report: ports.report, publish
+        native, session, editAttribution: () => ({ at: new Date(ports.now()).toISOString(), by: actor }), now: ports.now, report: ports.report, publish
       });
     },
     unbind: () => { input?.dispose(); input = null; },
