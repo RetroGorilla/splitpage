@@ -12,7 +12,7 @@ export const NATIVE_GALLERY_KEY = "gallery";
 export const NATIVE_GALLERY_FIELDS = new Set(["imageRef", "imageName", "imageAnnotation", "imageLinks", "moreImages"]);
 const NAMED_BEAT_FIELDS = new Set<string>(NATIVE_BEAT_FIELDS);
 const RESERVED_BEAT_FIELDS = new Set(["id", "audioText", "visualText", "rank", "joined", "updatedBy", "updatedAt"]);
-const MAX_STORED_DEPTH = 1024;
+export const NATIVE_STORED_VALUE_DEPTH = 1024;
 
 export function isNativeBeatField(name: string): boolean {
   return NAMED_BEAT_FIELDS.has(name);
@@ -36,7 +36,7 @@ export function nativeGalleryOf(fields: Readonly<Record<string, unknown>>): Reco
 export function encodeNativeValue(value: unknown): string {
   const text = JSON.stringify(value) as string | undefined;
   if (text === undefined) throw new TypeError("A file value has no JSON form");
-  if (text.length > MAX_STORED_DEPTH * 2 && !decodeNativeValue(text)) throw new RangeError("A file value is too deeply nested");
+  if (text.length > NATIVE_STORED_VALUE_DEPTH * 2 && !decodeNativeValue(text)) throw new RangeError("A file value is too deeply nested");
   return text;
 }
 
@@ -50,7 +50,7 @@ export function decodeNativeValue(stored: unknown): { readonly value: unknown } 
 
 function readableDepth(value: unknown, depth: number): boolean {
   if (value === null || typeof value !== "object") return true;
-  if (depth >= MAX_STORED_DEPTH) return false;
+  if (depth >= NATIVE_STORED_VALUE_DEPTH) return false;
   for (const child of Object.values(value) as unknown[]) if (!readableDepth(child, depth + 1)) return false;
   return true;
 }

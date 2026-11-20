@@ -5,7 +5,8 @@ import { prepareNativeRuns, writeNativeRuns } from "./inline.ts";
 import type { NativeSavedBeat } from "./pending-edits.ts";
 import { nativeRankBetween, NativeRankError } from "./rank.ts";
 import type { NativeRankedBlock } from "./reader.ts";
-import { transactNativeCommand } from "./script.ts";
+import { copyRecordValue } from "./record-values.ts";
+import { transactPreparedNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { nativeAvailability } from "./text-commands.ts";
 import type { NativeRefusal } from "./text-commands.ts";
@@ -26,7 +27,7 @@ function prepare(saved: NativePutBackBeat) {
     const { id, placement, narration, visual, fields } = saved;
     const { scene, sceneOrder } = placement;
     if (!Array.isArray(sceneOrder)) return null;
-    const old = Array.from(structuredClone(sceneOrder) as readonly unknown[]), record = structuredClone(fields);
+    const old = Array.from(structuredClone(sceneOrder) as readonly unknown[]), record = copyRecordValue(fields, true);
     if (!id || (scene !== null && !nativeWellFormed(scene)) ||
       !old.every(nativeWellFormed) || !old.includes(id) || !recordBag(record)) return null;
     const audio = prepareNativeRuns(structuredClone(narration)), picture = prepareNativeRuns(structuredClone(visual));
@@ -67,8 +68,7 @@ export function putBackNativeBeat(script: NativeScript, saved: NativePutBackBeat
   const unavailable = nativeAvailability(script);
   if (unavailable) return refused(unavailable);
   if (!saved) return refused("missing");
-  return transactNativeCommand(script, () => {
-    const plan = prepare(saved);
+  return transactPreparedNativeCommand(script, () => prepare(saved), plan => {
     if (!plan) return refused("text");
     const { doc, roots, reader } = script;
     const created = mintNativeId(doc, "r"), key = "b:" + created;
@@ -89,5 +89,5 @@ export function putBackNativeBeat(script: NativeScript, saved: NativePutBackBeat
     roots.visuals.set(created, visual);
     writeNativeRuns(doc, visual, 0, plan.picture, null);
     return Object.freeze({ kind: "written", created });
-  });
+  }, refused);
 }

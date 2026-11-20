@@ -23,6 +23,7 @@ import { presence } from "./ports/desktop-presence.ts";
 import { currentHome, locationStarted } from "./location-owner.ts";
 import { place } from "./ports/location.ts";
 import { capabilities as portCapabilities } from "./ports/capabilities.ts";
+import { refuseNativeEditorCommand } from "./ports/shared-commands.ts";
 
 const gallery = owned<GalleryMount>();
 
@@ -35,7 +36,8 @@ export function mountGalleryFeature(): GalleryMount {
       ownership: portOwnership,
       cells: { editGallery: (...a) => cellEditing().editGallery(...a) }
     };
-    return mountGallery(ports);
+    const mounted = mountGallery(ports);
+    return { ...mounted, openAnnotator: (rowId, slot) => !refuseNativeEditorCommand() && mounted.openAnnotator(rowId, slot) };
   });
 }
 

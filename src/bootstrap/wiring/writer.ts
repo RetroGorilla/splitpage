@@ -29,7 +29,8 @@ import { paintGuard, sceneView, undoGuard } from "./editor-owners.ts";
 import { screenIsStale } from "../../features/rows/render.ts";
 import { breakUndoGroup, undoOwner } from "./undo.ts";
 import { initializeFlowParagraphs } from "../../application/commands/flow.ts";
-import { sessionStamps, standaloneSession } from "./session-owner.ts";
+import { sessionStamps, sharedSession, standaloneSession } from "./session-owner.ts";
+import { nativeEditorActive } from "./shared-session.ts";
 import { writerFlowCommands } from "./ports/writer-flow.ts";
 import { writerVisualBuffer } from "./ports/writer-visual-buffer.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
@@ -114,7 +115,7 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
         create: (root, selectionMoved, undoStep) => {
           const openedDocument = documentReader.current() as unknown as FlowDoc;
           // why: rule 78: opening the Writer in a shared session writes no paragraphs
-          if (!shared) {
+          if (!shared && !sharedSession()) {
             undoOwner().flush();
             const initialized = standaloneSession().amend(initializeFlowParagraphs(flowPorts, edits.allowed, starts => { undoOwner().settleAfterApply(starts); }));
             if (initialized.kind === "failed") throw initialized.error;
@@ -137,6 +138,7 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
               updateTagGhost(cell);
             },
             visualLeave: shared ? shared.leftVisual : cell => {
+              if (nativeEditorActive()) return;
               currentWhoList()?.cancel();
               if (currentPlainTags()?.isOpen(cell)) currentPlainTags()?.close();
               cell.innerHTML = text.sanitizeHtml(cell.innerHTML);
@@ -225,6 +227,7 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
               else dismissedGhost = null;
             },
             leaveBeat: beat => {
+              if (nativeEditorActive()) return;
               if (paintGuard().painting() || undoGuard().applying() || screenIsStale()) return;
               const clean = text.sanitizeHtml(beat.innerHTML);
               if (clean !== text.storedHtmlFromDom(beat.innerHTML)) beat.innerHTML = clean;
