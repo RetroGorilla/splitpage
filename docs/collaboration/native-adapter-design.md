@@ -11,7 +11,58 @@ pictures and screen design are out of scope.
 ## Build status
 
 Slices 1 to 6 are on `main`. The native shared-document command layer and undo are built.
-The app has no native wiring yet. Slices 7a and 7h are merged. This PR builds 7c, the relay connection. The old adapter stays untouched until slice 8.
+The app has no native wiring yet. Slices 7a, 7c and 7h are merged. This PR builds 7d, the relay server and its storage. The old adapter stays untouched until slice 8.
+
+## Server-stop results and backup runbook
+
+Two product copies received the edit before each stop. A fresh copy then joined a restarted server. Each row was run
+twice, with both original copies returning and with every copy that held the edit closed before restart.
+
+| Stop | Point | Edit on disk at restart | Fresh copy if original copies return | Fresh copy if all original copies are gone |
+| --- | --- | --- | --- | --- |
+| Clean | Before store starts | Yes | Has edit | Has edit |
+| Clean | Store hook held before the SQLite write | Yes | Has edit | Has edit |
+| Clean | After SQLite commits | Yes | Has edit | Has edit |
+| Kill | Before store starts | No | Recovers edit | Edit lost |
+| Kill | Store hook held before the SQLite write | No | Recovers edit | Edit lost |
+| Kill | After SQLite commits | Yes | Has edit | Has edit |
+
+The writer's pending count went from 0 to 1 on editing, back to 0 when the server applied the edit, and stayed at
+0 through the stop and disconnection. It went from 1 back to 0 during the reconnect handshake. Clearing the offline
+notice journal on that first zero would leave no entry for the later loss. A returning copy restored the missing
+work to SQLite in 2 of 2 cases. With every copy gone, that work was lost in both cases.
+
+With default settings, a kill can lose edits still waiting for SQLite to commit. A quiet edit waits about 2 seconds
+before the store starts. With repeated edits, the 10-second threshold is checked when an edit arrives, so the last
+timer can run up to 2 more seconds. Allow roughly the last 12 seconds of edits plus encoding and write time on a
+healthy host. A stalled write or event loop can extend that window. The tests used the stock debounce with short
+settings to reach the store, a longer debounce to stop before it, and a gate in the test process to hold the store
+hook. They did not simulate a mid-transaction kill or power loss. Keeping snapshots for other users remains the
+owner's decision.
+
+The service lives in `collab-server/`. It uses the stock Hocuspocus Database extension and Node 24.22.1's SQLite
+module (stability 1.2, release candidate). The Node module supplies the online backup API and avoids native add-on
+installation. See the [Node SQLite API](https://nodejs.org/download/release/v24.22.1/docs/api/sqlite.html).
+
+### Backup runbook
+
+1. Build with `docker build -t splitpage-relay collab-server`. On the host, use one persistent data volume on the
+   direct local pool, a read-only root filesystem, and bounded temporary space. For example, start the image with
+   `--read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m` and mount the volume at `/data` with write access for the
+   image's non-root user. Apply host resource limits and restrict ingress to the intended tunnel or proxy.
+2. Set `SPLITPAGE_DATA_DIR` and `SPLITPAGE_PORT` (image defaults `/data` and `8080`),
+   `SPLITPAGE_ALLOWED_ORIGINS` (comma-separated browser/app origins), and `SPLITPAGE_ACCESS_TOKEN` from host
+   secret storage. The debounce settings in milliseconds are `SPLITPAGE_STORE_DEBOUNCE_MS` and
+   `SPLITPAGE_STORE_MAX_DEBOUNCE_MS`. Backup retention is `SPLITPAGE_BACKUP_KEEP` (default seven).
+3. Schedule one `docker exec splitpage-relay node backup-command.ts` daily. It snapshots the live SQLite database
+   with SQLite's online backup API, checks integrity, and compares the bytes for every stored script before
+   publishing a dated file in `backups/` under the data directory. Copy the reported file off-machine and alert
+   if either step fails. One successful copy a day limits backup age to about 24 hours, plus any edits still
+   waiting to reach SQLite when the backup began.
+4. Before anyone else uses the relay, repeat the automated drill on the host in isolation. With the old clients
+   disconnected and public access disabled, put a verified copy in a fresh data volume as `relay.sqlite`. Start
+   the service on it and open the scripts with fresh copies. Check that the scripts match the backup and are
+   missing edits made after it. Decide how to recover those edits before allowing old copies to reconnect.
 
 ## Decisions made
 
@@ -534,7 +585,7 @@ Each is the design's default unless the owner objects.
 | Two people putting the same beat back | Two rows (E12) | Both rows show; someone deletes one |
 | "Undo merge" | Hidden; ordinary undo takes back a put-back (E12) | No "Undo merge" button in shared mode |
 | The first upload of a large script | Accept the built-in server's ceiling. Measured with both Hocuspocus timers raised to 180 s, not decision 16's stock settings: largest single uploads about 7.15 MB at 1 Mbit/s and 14 MB at 2; the full 15 MB script passed at 4 (E13). Under stock timers, a 5 MB offline return at 1 Mbit/s reached the server at 41.8 s; the provider then forced a disconnect at 66.1 s, and on the next connection the pending count reached zero at 67.2 s, the re-sent reply being 2 bytes because the server already had the work (E13). The documented `handleConnection` route on a host-owned listener has no such sweep, but the host then owns connection lifetime and heartbeat | Sharing a large script over a slow upload fails, and the host retries on a faster link |
-| Backups of scripts stored on the server | Not designed; proposed with slice 7 | Nothing, unless the server's store is lost |
+| Backups of scripts stored on the server | Verified daily SQLite snapshots copied off-machine. Restore drill before anyone else uses the relay | If the server's store is lost, scripts return as of the last verified backup. Changes since then are absent from the restored store |
 | Undo passing over spent steps | Library behaviour (16 in 600, E11) | A press occasionally undoes something older |
 | A person who stays online while a beat they edited is removed | Not told; no online signal is used. With kept records the beat-map signal fell from 131 to 12 banners of 325, all from undone creations, and the row-reading observer misses 92 of 192 losses (E16) | The row disappears with no message; their edits return only if the remover undoes. A tag lost that way is not flagged for them (decision 17) |
 | Hidden edits on a removed row | No route to them other than the remover's undo (E16 did not measure one) | Status, fields and visual text on a row that stays removed are stored but not reachable |
