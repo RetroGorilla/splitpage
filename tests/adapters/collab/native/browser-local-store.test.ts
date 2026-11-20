@@ -51,8 +51,8 @@ test("A gets its commit receipt even with B queued, and aborting B reopens at A"
   seedReplica(session);
   assert.deepEqual(await replica.flush(), stored(1));
   const seen: NativeLocalStoreReceipt[] = [];
-  replica.subscribe(result => { seen.push(result); });
   replica.subscribe(() => { throw new Error("subscriber failed"); });
+  replica.subscribe(result => { seen.push(result); });
   const requestSucceeded = eventResult<undefined>(), add = IDBObjectStore.prototype.add;
   const observe = t.mock.method(IDBObjectStore.prototype, "add", function (this: IDBObjectStore, value: unknown) {
     observe.mock.restore();
@@ -470,10 +470,17 @@ test("a directly blocked upgrade releases the lock and a refused upgrade cannot 
   const { factory, store } = fixture(), original = factory.open.bind(factory);
   const blocker = await idbResult(original(DB_NAME, 1));
   t.after(() => blocker.close());
-  const request = original(DB_NAME, 2);
+  t.mock.timers.enable({ apis: ["setTimeout"] });
+  const issued = eventResult<IDBOpenDBRequest>();
+  const mock = t.mock.method(factory, "open", (name: string) => {
+    const request = original(name, 2);
+    issued.resolve(request);
+    return request;
+  });
+  const opening = store.open("blocked", STORE_OPTIONS);
+  const request = await issued.promise;
   const done = assert.rejects(idbResult(request), { name: "AbortError" });
-  const mock = t.mock.method(factory, "open", () => request);
-  assert.deepEqual(await store.open("blocked", STORE_OPTIONS), { kind: "failed", reason: "blocked" });
+  assert.deepEqual(await opening, { kind: "failed", reason: "blocked" });
   blocker.close();
   await done;
   mock.mock.restore();
