@@ -764,11 +764,11 @@ export class NativeScriptReader {
     return null;
   }
 
-  rowMembers(beat: string, joinedHeadOnly = false): readonly Readonly<RowMember>[] {
+  rowMembers(beat: string): readonly Readonly<RowMember>[] {
     this.sync();
     const head = this.groupHeads.get(beat);
     const members = head === undefined ? undefined : this.groups.get(head);
-    if (!members || (joinedHeadOnly && (head !== beat || members.length < 2))) return [];
+    if (!members) return [];
     return Object.freeze(members.map(member => Object.freeze({ ...member })));
   }
 

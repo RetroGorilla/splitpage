@@ -471,7 +471,8 @@ test("100 undo and redo cycles stop growing at the ceiling and each refused pres
     } else {
       assert.equal(outcome.kind, "written");
       const at = press === c.undo ? 1 : 1001;
-      assert.deepEqual(outcome.selection, { target: { beat: "A", cell: "narration" }, from: at, to: at });
+      const point = { target: { beat: "A", cell: "narration" }, offset: at };
+      assert.deepEqual(outcome.selection, { anchor: point, head: point });
       assert.equal(refused, 0);
       largestPress = Math.max(largestPress, after.byteLength - before.byteLength);
     }
@@ -489,6 +490,29 @@ test("100 undo and redo cycles stop growing at the ceiling and each refused pres
   }
   assert.equal(session.document().rows.length, 1);
   assert.deepEqual(session.encodeState(), bytes(session));
+});
+
+test("a full write reads neither selection and cannot write through a second handle", t => {
+  const seed = fromRows({ A: "abc" }), state = bytes(seed);
+  const session = fromState(state, { sizeLimit: state.byteLength }), direct = openNativeScript(session.ydoc);
+  t.after(() => { direct.close(); session.close(); seed.close(); });
+  const at = anchor(session, 1);
+  let reads = 0;
+  const selection = { ...at, get from() {
+    reads++;
+    setNativeField(direct, beatField("A", "note"), "nested");
+    return at.from;
+  } };
+  const runs = [{ text: "x", marks: {} }];
+  const typed = session.commands.typeText.withSelection(selection, at, "x", {});
+  assert.deepEqual(typed.result, { kind: "recovery", reason: "full", runs });
+  typed.recordAfter(selection);
+  const field = session.commands.setField.withSelection(selection, beatField("A", "status"), "ready");
+  assert.deepEqual(field.result, full);
+  field.recordAfter(selection);
+  assert.equal(reads, 0);
+  assert.deepEqual(session.commands.undo(), { kind: "unchanged" });
+  assert.deepEqual(bytes(session), state);
 });
 
 test("busy, queued callback errors and both closed states take precedence over full", async t => {

@@ -1,15 +1,19 @@
 import * as Y from "yjs";
-import { observeNativePress } from "./script.ts";
+import { observeNativePress, withNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { nativeAvailability, resolveNativeUndoSelection, snapshotNativeUndoAnchor } from "./text-commands.ts";
-import type { NativeRefusal, NativeTextRange, NativeUndoAnchor, NativeUndoSelection } from "./text-commands.ts";
+import type { NativeRefusal, NativeUndoAnchor, NativeUndoSelection, NativeUndoSelectionInput } from "./text-commands.ts";
 
 type NativeUndoItem = NonNullable<ReturnType<Y.UndoManager["undo"]>>;
 interface RecordedSelection {
   readonly before: NativeUndoAnchor | null;
   after: NativeUndoAnchor | null;
 }
-interface SelectionCapture { readonly before: NativeUndoAnchor | null; typedCaret: NativeUndoAnchor | null }
+interface SelectionCapture {
+  before: NativeUndoAnchor | null;
+  typedCaret: NativeUndoAnchor | null;
+  readonly recordTypedCaret: (anchor: NativeUndoAnchor) => void;
+}
 
 export type NativeUndoOutcome =
   | { readonly kind: "written"; readonly entry: number | null; readonly selection?: NativeUndoSelection }
@@ -51,22 +55,24 @@ export function openNativeUndo(script: NativeScript) {
     record(stackItem, null, prior);
   });
 
-  function recordTypedCaret(anchor: NativeUndoAnchor): void {
-    if (capture) capture.typedCaret = anchor;
-  }
-
-  function captureSelection<T>(before: NativeTextRange | null, write: () => T) {
-    const ticket: SelectionCapture = { before: before && snapshotNativeUndoAnchor(script, before), typedCaret: null };
+  function captureSelection<T>(before: NativeUndoSelectionInput | null, write: (prepareWrite: () => void) => T) {
+    const ticket: SelectionCapture = {
+      before: null, typedCaret: null,
+      recordTypedCaret(anchor) { ticket.typedCaret = anchor; }
+    };
     capture = ticket;
     try {
-      const result = write();
+      const result = write(() => {
+        ticket.before = before && snapshotNativeUndoAnchor(script, before);
+      });
       return {
         result,
-        recordAfter(after?: NativeTextRange | null): void {
+        recordAfter(after?: NativeUndoSelectionInput | null): void {
           if (pending?.capture !== ticket) return;
           const { selection } = pending;
           pending = null;
-          selection.after = after === undefined ? ticket.typedCaret : after && snapshotNativeUndoAnchor(script, after);
+          selection.after = after === undefined ? ticket.typedCaret
+            : after && withNativeCommand(script, () => snapshotNativeUndoAnchor(script, after));
         }
       };
     } finally { capture = null; }
@@ -89,7 +95,7 @@ export function openNativeUndo(script: NativeScript) {
     const { result: item, changed } = observeNativePress(script, manager, () => manager[direction]());
     if (!changed) return UNCHANGED;
     const recorded = item && selectionOf(item);
-    if (recorded && inverses.length > depth) inverses.at(-1)?.meta.set(selectionKey, recorded);
+    if (recorded) inverses[depth]?.meta.set(selectionKey, recorded);
     const replay = direction === "undo" ? recorded?.before : recorded?.after;
     const selection = replay && resolveNativeUndoSelection(script, replay);
     return Object.freeze({ kind: "written", entry: item ? entryOf(item) : null, ...(selection ? { selection } : {}) });
@@ -99,7 +105,7 @@ export function openNativeUndo(script: NativeScript) {
     undo: () => press("undo"),
     redo: () => press("redo"),
     captureSelection,
-    get typingRecorder() { return capture ? recordTypedCaret : undefined; },
+    get typingRecorder() { return capture?.recordTypedCaret; },
     stopCapturing: () => manager.stopCapturing(),
     get undoStack() { return Object.freeze(manager.undoStack.map(entryOf)); },
     get redoStack() { return Object.freeze(manager.redoStack.map(entryOf)); },

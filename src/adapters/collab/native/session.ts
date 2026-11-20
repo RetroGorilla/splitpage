@@ -19,7 +19,7 @@ import { createNativeSizeTracker, resolveNativeSizeOptions } from "./size.ts";
 import type { NativeSessionSize, NativeSizeOptions } from "./size.ts";
 import { joinNativeRow, removeNativeRows, splitNativeRow, unjoinNativeRow } from "./structure-commands.ts";
 import { anchorNativeText, deleteNativeText, replaceNativeText, typeNativeText } from "./text-commands.ts";
-import type { NativeEditStamp, NativeTextRange, NativeTextTarget } from "./text-commands.ts";
+import type { NativeEditStamp, NativeTextRange, NativeTextTarget, NativeUndoSelectionInput } from "./text-commands.ts";
 import { openNativeUndo } from "./undo-commands.ts";
 import type { NativeUndoOutcome } from "./undo-commands.ts";
 import { NATIVE_FORMAT_VERSION } from "./roots.ts";
@@ -179,7 +179,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
   function bindCommand<Args extends unknown[], Result>(
     command: (script: NativeScript, ...args: Args) => Result, commandScript: NativeScript, separate: boolean
   ) {
-    function run(args: Args, capture?: (write: () => Result) => Result): Result {
+    function run(args: Args, capture?: (write: (prepareWrite: () => void) => Result) => Result): Result {
       const reason = refusal();
       if (reason) {
         // why: reentry during argument copying must keep each command's own refusal shape
@@ -190,13 +190,13 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
           typing = null;
           undo.stopCapturing();
         }
-        return capture ? capture(() => command(commandScript, ...args)) : command(commandScript, ...args);
+        return capture ? capture(prepareWrite => command({ ...commandScript, prepareWrite }, ...args)) : command(commandScript, ...args);
       });
     }
     return {
       run: (...args: Args) => run(args),
-      withSelection(before: NativeTextRange | null, ...args: Args) {
-        let finish: ((after?: NativeTextRange | null) => void) | undefined;
+      withSelection(before: NativeUndoSelectionInput | null, ...args: Args) {
+        let finish: ((after?: NativeUndoSelectionInput | null) => void) | undefined;
         const result = run(args, write => {
           const recorded = undo.captureSelection(before, write);
           finish = recorded.recordAfter;
@@ -204,7 +204,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
         });
         return Object.freeze({
           result,
-          recordAfter(after?: NativeTextRange | null): void {
+          recordAfter(after?: NativeUndoSelectionInput | null): void {
             const record = finish;
             if (record && !refusal()) perform(() => record(after));
           }

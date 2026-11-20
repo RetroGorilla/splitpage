@@ -4,7 +4,9 @@ import * as Y from "yjs";
 import { openNativeSession } from "../../../../src/adapters/collab/native/session.ts";
 import { openNativeUndo } from "../../../../src/adapters/collab/native/undo-commands.ts";
 import { anchorNativeText, typeNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
-import type { NativeTextTarget } from "../../../../src/adapters/collab/native/text-commands.ts";
+import type { NativeTextTarget, NativeUndoPoint } from "../../../../src/adapters/collab/native/text-commands.ts";
+import { openNativeScript } from "../../../../src/adapters/collab/native/script.ts";
+import { setNativeField } from "../../../../src/adapters/collab/native/record-commands.ts";
 import type { NativeUndoOutcome } from "../../../../src/adapters/collab/native/undo-commands.ts";
 import { cells, convertedScript } from "./helpers.ts";
 import { AT, beatField } from "./record-harness.ts";
@@ -39,10 +41,11 @@ function written<T extends { kind: string }>(result: T): Extract<T, { kind: "wri
   return result as Extract<T, { kind: "written" }>;
 }
 
-function selection(outcome: NativeUndoOutcome, field?: NativeTextTarget, from?: number, to = from): void {
+function selection(outcome: NativeUndoOutcome, field?: NativeTextTarget, from?: number, to = from,
+  endField = field): void {
   const step = written(outcome);
   assert.equal(typeof step.entry, "number");
-  assert.deepEqual(step.selection, field ? { target: field, from, to } : undefined);
+  assert.deepEqual(step.selection, field ? { anchor: { target: field, offset: from }, head: { target: endField, offset: to } } : undefined);
 }
 
 function noChange(session: Session, press: () => NativeUndoOutcome, expected: NativeUndoOutcome = { kind: "unchanged" }): void {
@@ -100,6 +103,26 @@ test("a group can start or end with an unannotated write", t => {
   selection(s.commands.undo(), aText, 2);
   written(s.commands.setField(status, "ready"));
   selection(s.commands.undo());
+});
+
+test("a press with no captured inverse leaves an earlier inverse selection alone", t => {
+  const [s] = copies(t);
+  statusWithSelection(s, aText, 1);
+  const at = anchor(s, bText, 2);
+  const later = s.commands.setField.withSelection(at, beatField("B", "status"), "ready");
+  written(later.result);
+  later.recordAfter(at);
+  selection(s.commands.undo(), bText, 2);
+
+  const undo = Y.UndoManager.prototype.undo;
+  t.mock.method(Y.UndoManager.prototype, "undo", function (this: Y.UndoManager) {
+    const capture = this.captureTransaction;
+    this.captureTransaction = transaction => transaction.origin !== this && capture(transaction);
+    try { return undo.call(this); } finally { this.captureTransaction = capture; }
+  });
+  selection(s.commands.undo(), aText, 1);
+  selection(s.commands.redo(), bText, 2);
+  assert.equal(s.document().rows[1]?.status, "ready");
 });
 
 test("a focus boundary ends capture immediately, clears typing, and leaves empty boundaries and word grouping alone", t => {
@@ -208,6 +231,9 @@ test("a busy boundary and refused presses leave the pending selection and encode
 
 test("selections never enter the encoded document through a write, undo, or redo", t => {
   const [a, b] = copies(t, 2);
+  const left: Uint8Array[] = [], right: Uint8Array[] = [];
+  a.ydoc.on("update", update => left.push(update));
+  b.ydoc.on("update", update => right.push(update));
   recordType(a, aText, 0, 2, "x");
   written(b.commands.typeText(anchor(b, aText, 0, 2), "x", {}));
   assert.deepEqual(a.encodeState(), b.encodeState());
@@ -217,6 +243,8 @@ test("selections never enter the encoded document through a write, undo, or redo
   selection(a.commands.redo(), aText, 1);
   selection(b.commands.redo());
   assert.deepEqual(a.encodeState(), b.encodeState());
+  assert.equal(left.length, 3);
+  assert.deepEqual(left, right);
 });
 
 test("selection snapshots reject a forged root name and ignore caller mutation after capture", t => {
@@ -239,19 +267,25 @@ test("selection snapshots reject a forged root name and ignore caller mutation a
 
 test("before and after selection getters run inside admission and a refused recorder reads nothing", t => {
   const [s] = copies(t);
+  const direct = openNativeScript(s.ydoc);
+  t.after(() => direct.close());
   const at = anchor(s, aText, 1);
-  const nested: NativeUndoOutcome[] = [];
-  const range = { ...at, get from() { nested.push(s.commands.undo()); return at.from; } };
+  const nested: unknown[] = [];
+  const range = { ...at, get from() {
+    nested.push(s.commands.undo());
+    nested.push(setNativeField(direct, beatField("A", "note"), "nested"));
+    return at.from;
+  } };
   const step = s.commands.setField.withSelection(range, status, "ready");
   written(step.result);
-  assert.deepEqual(nested, [{ kind: "refused", reason: "busy" }]);
+  assert.deepEqual(nested, Array(2).fill({ kind: "refused", reason: "busy" }));
   const before = s.encodeState();
   const refused = s.commands.setField.withSelection(at, status, "invalid");
   assert.deepEqual(refused.result, { kind: "refused", reason: "value" });
   refused.recordAfter(range);
-  assert.equal(nested.length, 1);
+  assert.equal(nested.length, 2);
   step.recordAfter(range);
-  assert.deepEqual(nested, Array(2).fill({ kind: "refused", reason: "busy" }));
+  assert.deepEqual(nested, Array(4).fill({ kind: "refused", reason: "busy" }));
   assert.deepEqual(s.encodeState(), before);
   selection(s.commands.undo(), aText, 1);
   selection(s.commands.redo(), aText, 1);
@@ -301,7 +335,12 @@ test("destroying the binding retires its pending after recorder", t => {
   const anchored = anchorNativeText(script, aText, 1);
   assert.equal(anchored.kind, "anchored");
   const { range } = anchored;
-  const step = undo.captureSelection(range, () => typeNativeText(script, range, "x", {}));
+  assert.equal(undo.typingRecorder, undefined);
+  const step = undo.captureSelection(range, prepareWrite => {
+    assert.equal(typeof undo.typingRecorder, "function");
+    return typeNativeText({ ...script, prepareWrite }, range, "x", {}, undefined, undefined, undo.typingRecorder);
+  });
+  assert.equal(undo.typingRecorder, undefined);
   written(step.result);
   undo.destroy();
   let reads = 0;
@@ -324,6 +363,26 @@ test("typing can record its own relative caret even when a peer edit arrives bef
   selection(a.commands.undo(), aText, 3);
   selection(a.commands.redo(), aText, 5);
   assert.equal(a.document().rows[0]?.audioText, "pqaxybc");
+});
+
+for (const [joined, field, offset, marks] of [
+  [false, aText, 1, { b: true }], [false, aText, 3, { i: true }],
+  [true, aText, 3, { b: true }], [true, bText, 0, { i: true }]
+] as const) test(`typed caret follows peer prefixes at ${joined ? "joined" : "formatted"} ${field.beat}:${offset}`, t => {
+  const [a, b] = copies(t, 3, structureScript({ A: "a<b>b</b>c", B: "defg" }));
+  if (joined) {
+    written(a.commands.joinRow("B", "A", "--"));
+    send(a, b);
+  }
+  const at = anchor(a, field, offset);
+  const step = a.commands.typeText.withSelection(at, at, "x", marks);
+  written(step.result);
+  type(b, aText, 0, "pq");
+  send(b, a);
+  step.recordAfter();
+  const shifted = offset + (field.beat === "A" ? 2 : 0);
+  selection(a.commands.undo(), field, shifted);
+  selection(a.commands.redo(), field, shifted + 1);
 });
 
 test("peers keep separate undo and selections while a local caret shifts with a peer's prefix", t => {
@@ -355,7 +414,7 @@ test("deleting the caret's neighbour leaves the caret at the gap in the same cel
   assert.equal(a.document().rows[1]?.audioText, "g");
 });
 
-test("deleting a range's two endpoints keeps surviving interior text and collapses when none survives", t => {
+test("deleted range endpoints keep their Yjs gaps, including peer replacement text between them", t => {
   const [a, b] = copies(t);
   statusWithSelection(a, bText, 0, 4);
   written(b.commands.deleteText(anchor(b, bText, 3, 4)));
@@ -365,54 +424,108 @@ test("deleting a range's two endpoints keeps surviving interior text and collaps
   selection(a.commands.redo(), bText, 0, 2);
   written(b.commands.replaceText(anchor(b, bText, 0, 2), [{ text: "pq", marks: {} }]));
   send(b, a);
-  selection(a.commands.undo(), bText, 0);
+  selection(a.commands.undo(), bText, 0, 2);
+  selection(a.commands.redo(), bText, 0, 2);
   assert.equal(a.document().rows[1]?.audioText, "pq");
 });
 
-for (const [field, before, after, text] of [
-  [bText, 1, 6, "abc--defg"],
-  [bVisual, 1, 4, "12<br>345"]
+test("two endpoints at the same Yjs gap replay as one caret", t => {
+  const [a, b] = copies(t);
+  statusWithSelection(a, bText, 1, 3);
+  written(b.commands.deleteText(anchor(b, bText, 1, 3)));
+  send(b, a);
+  for (const press of [a.commands.undo, a.commands.redo]) {
+    const result = written(press()).selection;
+    assert.deepEqual(result, { anchor: { target: bText, offset: 1 }, head: { target: bText, offset: 1 } });
+    assert.equal(result.anchor, result.head);
+  }
+  assert.equal(a.document().rows[1]?.audioText, "dg");
+});
+
+for (const [field, offset, text] of [
+  [bText, 1, "abc--defg"],
+  [bVisual, 1, "12<br>345"]
 ] as const) {
-  test(`joining a beat projects its ${field.cell} range into the displayed row after the join separator`, t => {
+  test(`joining a beat keeps the selection in its own ${field.cell} cell`, t => {
     const [a, b] = copies(t);
-    statusWithSelection(a, field, before, before + 1);
+    statusWithSelection(a, field, offset, offset + 1);
     written(b.commands.joinRow("B", "A", "--"));
     send(b, a);
     assert.equal(a.document().rows[0]?.[field.cell === "visual" ? "visualText" : "audioText"], text);
-    selection(a.commands.undo(), target("A", field.cell), after, after + 1);
-    selection(a.commands.redo(), target("A", field.cell), after, after + 1);
+    selection(a.commands.undo(), field, offset, offset + 1);
+    selection(a.commands.redo(), field, offset, offset + 1);
   });
 }
 
-test("a caret replayed into a joined narration row can be anchored again", t => {
+test("a caret replayed at the right join edge can type directly into its member", t => {
   const [a, b] = copies(t);
-  statusWithSelection(a, bText, 1);
+  statusWithSelection(a, bText, 0);
   written(b.commands.joinRow("B", "A", "--"));
   send(b, a);
+  assert.equal(a.document().rows[0]?.audioText, "abc--defg");
+  assert.equal(a.narrationCaret("A", 4), null);
+  assert.deepEqual(a.narrationCaret("A", 5), { beat: "B", offset: 0 });
+  let caret;
   for (const press of [a.commands.undo, a.commands.redo]) {
     const result = written(press());
-    assert.deepEqual(result.selection, { target: aText, from: 6, to: 6 });
-    const { target, from, to } = result.selection;
-    anchor(a, target, from, to);
+    assert.deepEqual(result.selection, {
+      anchor: { target: bText, offset: 0 }, head: { target: bText, offset: 0 }
+    });
+    caret = anchor(a, result.selection.anchor.target, result.selection.anchor.offset);
   }
-  assert.equal(a.document().rows[0]?.audioText, "abc--defg");
+  assert(caret);
+  written(a.commands.typeText(caret, "x", {}));
+  assert.equal(a.document().rows[0]?.audioText, "abc--xdefg");
 });
 
-for (const [cell, from, to] of [["narration", 2, 6], ["narration", 3, 3], ["narration", 5, 5], ["visual", 1, 4]] as const) {
-  test(`a joined ${cell} selection at ${from}–${to} captures both displayed sides`, t => {
-    const [a, b] = copies(t);
-    written(b.commands.joinRow("B", "A", "--"));
-    send(b, a);
-    const field = target("A", cell);
-    statusWithSelection(a, field, from, to);
-    selection(a.commands.undo(), field, from, to);
-    selection(a.commands.redo(), field, from, to);
-    if (cell === "narration") {
-      assert.equal(a.commands.anchorText(field, 4).kind, "refused");
-      assert.equal(a.narrationCaret("A", 4), null);
+test("generated joined rows round-trip all shown member endpoints through both presses and edit commands", async () => {
+  let replayed = 0;
+  for (const n of [2, 3, 4]) for (let mask = 0; mask < 2 ** n; mask++) for (const glue of ["", " ", "--"]) {
+    const ids = [..."ABCD"].slice(0, n);
+    const rows = Object.fromEntries(ids.map((id, i) => [id, mask & (1 << i) ? id.repeat(2) : ""]));
+    const document = structureScript(rows, rows);
+    const s = openNativeSession({ kind: "document", document, conversion: { cells, creation: "seed", at: AT, by: "Writer" } }, options);
+    try {
+      for (const [index, id] of ids.entries()) {
+        const previous = ids[index - 1];
+        if (previous) written(s.commands.joinRow(id, previous, glue));
+      }
+      assert.equal(s.document().rows.length, 1);
+      for (const cell of ["narration", "visual"] as const) {
+        const points: NativeUndoPoint[] = [];
+        for (const [index, beat] of ids.entries()) {
+          const length = rows[beat]?.length ?? 0;
+          if (!length && (mask || index)) continue;
+          for (let offset = 0; offset <= length; offset++) points.push({ target: { beat, cell }, offset });
+        }
+        const at = (point: NativeUndoPoint) => anchor(s, point.target, point.offset);
+        for (const from of points) for (const to of points) {
+          const chosen = { anchor: at(from), head: at(to) };
+          const value = s.document().rows[0]?.status === "ready" ? "shot" : "ready";
+          const step = s.commands.setField.withSelection(chosen, status, value);
+          written(step.result);
+          step.recordAfter(chosen);
+          for (const press of [s.commands.undo, s.commands.redo]) {
+            const actual = written(press()).selection;
+            assert.deepEqual(actual, { anchor: from, head: to });
+            for (const point of [actual.anchor, actual.head]) {
+              assert.deepEqual(s.commands.typeText(at(point), "", {}), { kind: "unchanged" });
+            }
+            if (from.target.beat === to.target.beat) {
+              const range = anchor(s, from.target, Math.min(from.offset, to.offset), Math.max(from.offset, to.offset));
+              assert.deepEqual(s.commands.formatText(range, { kind: "plain", mark: "b", on: false }), { kind: "unchanged" });
+            }
+            replayed++;
+          }
+        }
+      }
+    } finally {
+      s.close();
+      await Promise.resolve();
     }
-  });
-}
+  }
+  assert.equal(replayed, 11916);
+});
 
 test("selection replay identifies a later Y.Text segment even when an earlier segment has the same offsets", t => {
   const document = structureScript({ A: "abc", B: "def" }, {}, [
@@ -423,6 +536,17 @@ test("selection replay identifies a later Y.Text segment even when an earlier se
   statusWithSelection(a, bText, 1);
   selection(a.commands.undo(), bText, 1);
   selection(a.commands.redo(), bText, 1);
+});
+
+test("only the document that authored a caret can follow its split ownership before capture", t => {
+  const [a, b] = copies(t);
+  const foreign = anchor(a, aText, 2), local = anchor(b, aText, 2);
+  const created = written(b.commands.splitRow(anchor(b, aText, 1))).created;
+  const step = b.commands.setField.withSelection(foreign, status, "ready");
+  written(step.result);
+  step.recordAfter(local);
+  selection(b.commands.undo());
+  selection(b.commands.redo(), target(created), 1);
 });
 
 test("undo of a hidden record still restores the caret from the row where the step was made", t => {
@@ -449,7 +573,7 @@ test("a split can record a different surface after the write using the minted be
   assert.equal(s.document().rows.find(row => row.id === created)?.audioText, "fg");
 });
 
-test("a peer split carries a caret with its surviving text but a range across distinct rows has no surface", t => {
+test("a peer split carries surviving endpoints independently into distinct rows", t => {
   const [a, b] = copies(t);
   statusWithSelection(a, bText, 3);
   const spanning = a.commands.setField.withSelection(anchor(a, bText, 1, 4), status, "shot");
@@ -457,11 +581,11 @@ test("a peer split carries a caret with its surviving text but a range across di
   spanning.recordAfter(anchor(a, bText, 1, 4));
   const created = written(b.commands.splitRow(anchor(b, bText, 2))).created;
   send(b, a);
-  selection(a.commands.undo());
+  selection(a.commands.undo(), bText, 1, 2, target(created));
   selection(a.commands.undo(), target(created), 1);
   assert.equal(a.document().rows.find(row => row.id === created)?.audioText, "fg");
   selection(a.commands.redo(), target(created), 1);
-  selection(a.commands.redo());
+  selection(a.commands.redo(), bText, 1, 2, target(created));
 });
 
 test("a split at the end cannot move a caret into an empty beat using the next boundary alone", t => {
@@ -497,6 +621,17 @@ test("a deleted range end cannot follow a split into a joined member", t => {
   selection(a.commands.redo());
 });
 
+test("a deleted range anchor cannot follow a split even while the head survives", t => {
+  const [a, b] = copies(t);
+  statusWithSelection(a, aText, 1, 3);
+  const created = written(b.commands.splitRow(anchor(b, aText, 1))).created;
+  written(b.commands.deleteText(anchor(b, target(created), 0, 1)));
+  send(b, a);
+  assert.equal(a.document().rows.find(row => row.id === created)?.audioText, "c");
+  selection(a.commands.undo());
+  selection(a.commands.redo());
+});
+
 test("a joined member with an empty visual cell has no visible cell span to restore", t => {
   const [a, b] = copies(t);
   statusWithSelection(a, target("C", "visual"), 0);
@@ -517,7 +652,7 @@ test("an entirely empty joined visual row anchors its head at offset zero", t =>
   selection(a.commands.redo(), visual, 0);
 });
 
-test("a captured range has no selection when only its second Yjs type disappears", t => {
+for (const disappeared of ["anchor", "head"] as const) test(`a range omits selection when its ${disappeared} Yjs type disappears`, t => {
   const [a, b] = copies(t);
   const created = written(b.commands.splitRow(anchor(b, aText, 1))).created;
   type(b, target(created, "visual"), 0, "x");
@@ -525,10 +660,33 @@ test("a captured range has no selection when only its second Yjs type disappears
   send(b, a);
   const visual = target("A", "visual");
   assert.equal(a.document().rows[0]?.visualText, "12<br>x");
-  statusWithSelection(a, visual, 1, 4);
+  const stable = anchor(a, visual, 1), removed = anchor(a, target(created, "visual"), 0);
+  const pair = disappeared === "anchor" ? { anchor: removed, head: stable } : { anchor: stable, head: removed };
+  const step = a.commands.setField.withSelection(pair, status, "ready");
+  written(step.result);
+  step.recordAfter(pair);
   for (let i = 0; i < 3; i++) written(b.commands.undo());
   send(b, a);
   assert.equal(a.document().rows[0]?.visualText, "12");
+  selection(a.commands.undo());
+  selection(a.commands.redo());
+});
+
+test("a range has no selection when the peer's missing segment invalidates its narration anchor", t => {
+  const [a, b] = copies(t, 3, structureScript({ A: "abc", B: "def" }, {}, [
+    { id: "H1", name: "First", before: "A" }, { id: "H2", name: "Second", before: "B" }
+  ]));
+  const peer = openNativeScript(b.ydoc);
+  t.after(() => peer.close());
+  const pair = { anchor: anchor(a, aText, 1), head: anchor(a, bText, 1) };
+  const step = a.commands.setField.withSelection(pair, beatField("B", "status"), "ready");
+  written(step.result);
+  step.recordAfter(pair);
+  const segment = peer.reader.beatBoundary("A")?.segment;
+  assert(segment);
+  b.ydoc.transact(() => peer.roots.segments.delete(segment), "peer");
+  send(b, a);
+  assert.deepEqual(a.document().rows.map(row => row.id), ["B"]);
   selection(a.commands.undo());
   selection(a.commands.redo());
 });
