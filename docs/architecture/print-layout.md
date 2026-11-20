@@ -464,7 +464,11 @@ node tests/adapters/formats/fixtures/inspect-script-print.mjs <list-inspection-o
 The suite runner's `--port-base` is an offset: HTTP starts at `18100 + offset`,
 and CDP at `19300 + offset`. The standalone inspector asks for a free CDP port
 by default (`PRINT_CDP_PORT` overrides it); browser discovery is described above.
-Check free RAM before each browser run; keep at least 4 GB available.
+Check free RAM before running browser suites and account for the number of
+lanes. The two printed-PDF unit tests each require 2048 MiB of free RAM at
+startup. That floor leaves 525 MiB above the largest focused process-tree
+working set sampled on Windows with Edge. See the
+[measurement summary](testing.md#what-to-run-for-which-change).
 
 The fixture suite has its own suite directory; normal app suites need no
 generated fixtures. Suite `382-script-print.txt` checks the rich, long and empty pages,
