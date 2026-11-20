@@ -29,7 +29,8 @@ export function registryReload(document: DocumentShape): ValidatedDocument {
 export function registryCopies(
   run: (left: NativeScript, right: NativeScript, settle: () => void) => void,
   prepare: (seed: NativeScript) => void = () => undefined,
-  document = registrySource()
+  document = registrySource(),
+  undo = false
 ): void {
   for (const reverse of [false, true]) {
     const seed = convertedScript(document);
@@ -44,7 +45,11 @@ export function registryCopies(
           const result = left.reader.document();
           assert.deepEqual(right.reader.document(), result);
           assert.deepEqual(replay.reader.document(), result);
-          assert.deepEqual(Y.encodeStateAsUpdate(right.doc), Y.encodeStateAsUpdate(left.doc));
+          if (undo) {
+            // why: local undo retains deleted values; the snapshot still compares clocks and deletion sets
+            const state = Y.encodeSnapshot(Y.snapshot(left.doc));
+            for (const copy of [right, replay]) assert.deepEqual(Y.encodeSnapshot(Y.snapshot(copy.doc)), state);
+          } else assert.deepEqual(Y.encodeStateAsUpdate(right.doc), Y.encodeStateAsUpdate(left.doc));
           assert.deepEqual(result, registryReload(result));
           readLeft = Y.encodeStateVector(left.doc);
           readRight = Y.encodeStateVector(right.doc);
@@ -52,6 +57,10 @@ export function registryCopies(
       } finally { for (const copy of [left, right, replay]) copy.doc.destroy(); }
     } finally { seed.doc.destroy(); }
   }
+}
+
+export function registryUndoCopies(run: Parameters<typeof registryCopies>[0]): void {
+  registryCopies(run, undefined, undefined, true);
 }
 
 export function registrySession(document = registrySource()) {

@@ -272,7 +272,7 @@ const FIELDS: readonly Site[] = [
 ];
 
 const RECORDS: readonly Site[] = [
-  ["adapters/collab/native/registry-projection.ts#projectNativeRegistries", "brollShots 1, people 1, productionTags 2", "stored-read", "tag-from-text", "shot-from-line"],
+  ["adapters/collab/native/registry-projection.ts#projectNativeRegistries", "brollShots 2, people 2, productionTags 3", "stored-read", "tag-from-text", "shot-from-line"],
   ["adapters/collab/native/registry-projection.ts#propNormalizer", "productionTags 1", "stored-read"],
   ["adapters/collab/project.ts#assembleSharedDocument", "comments 1", "anchor-repair"],
   ["adapters/collab/project.ts#assembleSharedDocumentFields", "brollShots 1, comments 1, people 1, productionTags 1", "stored-read"],

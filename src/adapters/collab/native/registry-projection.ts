@@ -4,14 +4,16 @@ import { noFreeze } from "../../../core/document/freeze.ts";
 import { ensureTagIds, isTagId, normalizeTagName, registryKey, TAG_STATUS_IDS } from "../../../core/document/tags.ts";
 import { hasLoneSurrogate, plainText, settledNames } from "../../../core/document/text-policy.ts";
 import type { DocumentShape, DocumentTag } from "../../../core/document/validated.ts";
-import { applyBrollRecords, planBrollRecordsInState } from "../../../core/production/broll.ts";
+import { applyBrollRecords, brollInCell, planBrollRecordsInState } from "../../../core/production/broll.ts";
 import type { FieldHtml } from "../../../core/production/ports.ts";
 import { createProductionReaders } from "../../../core/production/readers.ts";
 import { PERSON_NAME_MAX } from "../../../core/production/records.ts";
 import { missingRegistryTags } from "../../../core/production/tags.ts";
 import { toPlainText } from "../../../core/text/projections.ts";
+import { tagIds } from "../../../core/text/runs.ts";
 import type { Run } from "../../../core/text/runs.ts";
 import type { NativeRoots } from "./roots.ts";
+import { sameNativeValue } from "./values.ts";
 
 interface RegistryCellRow {
   readonly id: string;
@@ -19,6 +21,12 @@ interface RegistryCellRow {
   readonly visualText: string;
   readonly narration: readonly Run[];
   readonly visual: readonly Run[];
+}
+
+export interface NativeRegistryRowInputs {
+  readonly tags: boolean;
+  readonly shots: boolean;
+  readonly seededShots: ReadonlySet<string>;
 }
 
 function production(rows: readonly RegistryCellRow[]) {
@@ -29,6 +37,24 @@ function production(rows: readonly RegistryCellRow[]) {
   }
   const cellOf = (html: FieldHtml): readonly Run[] => cells.get(html ?? "") ?? [];
   return { readers: createProductionReaders(cellOf, noFreeze), plainTextOf: (html: FieldHtml) => toPlainText(cellOf(html)) };
+}
+
+function tagsInCellChanged(previousHtml: string, html: string, previous: readonly Run[], runs: readonly Run[]): boolean {
+  if (previousHtml === html) return false;
+  const hasTags = (cell: readonly Run[]) => cell.some(({ marks }) => marks.tag || marks.innerTags?.length || marks.cue);
+  if (!hasTags(previous) && !hasTags(runs)) return false;
+  const readers = createProductionReaders(value => value === previousHtml ? previous : runs, noFreeze);
+  const names = (value: string) => readers.tagsInField(value).map(({ catId, name }) => [catId, name]);
+  return !sameNativeValue(names(previousHtml), names(html)) || !sameNativeValue(tagIds(previous), tagIds(runs));
+}
+
+export function nativeRegistryRowChanged(inputs: NativeRegistryRowInputs, previous: RegistryCellRow, row: RegistryCellRow): boolean {
+  if (inputs.shots) {
+    if (previous.visualText !== row.visualText && (brollInCell(previous.visual).length || brollInCell(row.visual).length)) return true;
+    if (previous.audioText !== row.audioText && row.visual.some(run => run.atom === "broll" && inputs.seededShots.has(run.id))) return true;
+  }
+  return inputs.tags && (tagsInCellChanged(previous.audioText, row.audioText, previous.narration, row.narration)
+    || tagsInCellChanged(previous.visualText, row.visualText, previous.visual, row.visual));
 }
 
 export function nativeTagNamesInRows(rows: readonly RegistryCellRow[]): ReadonlySet<string> {
@@ -82,14 +108,17 @@ function propNormalizer(tags: DocumentShape["productionTags"]) {
   };
 }
 
-export function projectNativeRegistries(document: DocumentShape, roots: NativeRoots, rows: () => readonly RegistryCellRow[]): void {
+export function projectNativeRegistries(document: DocumentShape, roots: NativeRoots, rows: () => readonly RegistryCellRow[]): NativeRegistryRowInputs {
   const tagsRemoved = hasRemoved(roots.tags) || document.productionTags.some(tag => tag && !tag.name);
   const shotsRemoved = hasRemoved(roots.shots) || document.brollShots.some(shot => !shot.name);
+  const seededShots = new Set<string>();
   document.people = document.people.filter(person => !!person.name);
-  document.productionTags = document.productionTags.flatMap(tag => tag?.name ? [{ owner: "", notes: "", status: TAG_STATUS_IDS[0], ...tag }] : []);
   document.brollShots = document.brollShots.flatMap(shot => shot.name ? [newBrollShot(shot.id, shot)] : []);
   if (hasRemoved(roots.people)) document.people = repairNames(document.people, PERSON_NAME_MAX, normalizeTagName);
-  if (tagsRemoved) document.productionTags = repairNames(document.productionTags.filter(tag => !!tag), 80, (name, tag) => registryKey(tag.cat, name));
+  if (tagsRemoved) {
+    const named = document.productionTags.filter((tag): tag is DocumentTag => !!tag?.name);
+    document.productionTags = repairNames(named, 80, (name, tag) => registryKey(tag.cat, name));
+  }
   if (shotsRemoved) document.brollShots = repairNames(document.brollShots, BROLL_NAME_MAX, normalizeTagName);
   if (tagsRemoved || shotsRemoved) {
     const visible = rows();
@@ -99,13 +128,20 @@ export function projectNativeRegistries(document: DocumentShape, roots: NativeRo
       ensureTagIds(document.productionTags);
     }
     // why: a surviving keyed line seeds its default shot on core reload; unkeyed lines have their own command path
-    if (shotsRemoved) applyBrollRecords(document.brollShots, nativeShotLinePlan(document, visible));
+    if (shotsRemoved) {
+      const plan = nativeShotLinePlan(document, visible);
+      for (const shot of plan.create) seededShots.add(shot.id);
+      applyBrollRecords(document.brollShots, plan);
+    }
   }
   const people = new Set(document.people.map(person => person.id));
   for (const record of [...document.productionTags, ...document.brollShots]) {
     if (record?.owner && !people.has(record.owner)) record.owner = "";
   }
-  if (!document.brollShots.some(shot => shot.props?.length)) return;
-  const normalize = propNormalizer(document.productionTags);
-  for (const shot of document.brollShots) if (shot.props?.length) shot.props = normalize(shot.props);
+  if (document.brollShots.some(shot => shot.props?.length)) {
+    const normalize = propNormalizer(document.productionTags);
+    for (const shot of document.brollShots) if (shot.props?.length) shot.props = normalize(shot.props);
+  }
+  document.productionTags = document.productionTags.flatMap(tag => tag?.name ? [{ owner: "", notes: "", status: TAG_STATUS_IDS[0], ...tag }] : []);
+  return { tags: tagsRemoved, shots: shotsRemoved, seededShots };
 }

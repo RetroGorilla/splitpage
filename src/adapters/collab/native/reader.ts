@@ -7,7 +7,8 @@ import type { Run } from "../../../core/text/runs.ts";
 import { nativeBlockOf, nativeCellView, nativeItemLength, nativeRunsOf, nativeStoredOffset, nativeUnitCounts } from "./inline.ts";
 import type { NativeDeltaItem } from "./inline.ts";
 import { compareNativeRankedIds } from "./rank.ts";
-import { projectNativeRegistries } from "./registry-projection.ts";
+import { nativeRegistryRowChanged, projectNativeRegistries } from "./registry-projection.ts";
+import type { NativeRegistryRowInputs } from "./registry-projection.ts";
 import type { NativeRoots } from "./roots.ts";
 import {
   NATIVE_BEAT_FIELDS, NATIVE_FIELD_PREFIX, NATIVE_GALLERY_FIELDS, NATIVE_GALLERY_KEY, decodeNativeValue, deepFrozen,
@@ -93,6 +94,7 @@ interface RankedBlock { readonly block: StoredBlock; readonly rank: string; read
 type DeepListener = (events: Y.YEvent<Y.AbstractType<unknown>>[]) => void;
 export type NativeWatch = <Event>(type: Y.AbstractType<Event>, listener: DeepListener) => () => void;
 type Problems = NativeReaderProblem[] | null;
+type Registries = Pick<DocumentShape, "people" | "productionTags" | "brollShots">;
 
 const META_FIELDS = ["docId", "schema", "wordsPerMinute", "targetSeconds"];
 const PRIMARY_GALLERY_FIELDS = { imageRef: "imageRef", imageName: "name", imageAnnotation: "annotation", imageLinks: "links" };
@@ -224,6 +226,11 @@ function byRank(map: Y.Map<Y.Map<unknown>>): [string, Y.Map<unknown>][] {
   return entries.sort(([leftId, left], [rightId, right]) => compareNativeRankedIds(leftId, rankOf(left), rightId, rankOf(right)));
 }
 
+function visibleRecords(root: Y.Map<Y.Map<unknown>>, name: string, problems: Problems): Record<string, unknown>[] {
+  return byRank(root).filter(([, record]) => record.get("removed") !== true)
+    .map(([id, record]) => ({ ...fileFields(record, name + "/" + id, problems), id }));
+}
+
 // why: a run's shape is known, so it is frozen field by field instead of by a walk over every value
 function frozenRuns(runs: Run[]): readonly Run[] {
   for (const run of runs) {
@@ -267,6 +274,7 @@ export class NativeScriptReader {
   private headingPlaces = new Map<string, NativeSpanPlace>();
   private candidates: UnplacedRef[] = [];
   private readonly rowCache = new Map<string, NativeReadRow>();
+  private registryCache: { readonly records: Registries; readonly inputs: NativeRegistryRowInputs } | null = null;
   private readonly anchorsByRow = new Map<string, Set<string>>();
   private readonly rowsByAnchor = new Map<string, Map<string, CommentCell>>();
   private narration = new Map<string, readonly NativeSpanPlace[]>();
@@ -323,6 +331,7 @@ export class NativeScriptReader {
       }
     });
     observe(roots.edited, events => { for (const event of events) for (const key of event.keys.keys()) this.dirtyBeats.add(key); });
+    for (const root of [roots.people, roots.tags, roots.shots]) observe(root, () => { this.registryCache = null; });
   }
 
   close(): void {
@@ -352,7 +361,10 @@ export class NativeScriptReader {
     if (this.closed) throw new Error("The script reader is closed");
     if (!this.structural && !this.dirtySegments.size && !this.dirtyBeats.size && !this.dirtyHeadings.size) return;
     this.reparse();
-    if (this.structural) this.restructure();
+    if (this.structural) {
+      if (this.registryCache?.inputs.tags || this.registryCache?.inputs.shots) this.registryCache = null;
+      this.restructure();
+    }
     const dirtyRows = new Set<string>();
     for (const beat of this.dirtyBeats) {
       const head = this.groupHeads.get(beat);
@@ -360,6 +372,7 @@ export class NativeScriptReader {
     }
     for (const id of dirtyRows) {
       const previous = this.rowCache.get(id), row = this.buildRow(id);
+      if (this.registryCache && previous && nativeRegistryRowChanged(this.registryCache.inputs, previous, row)) this.registryCache = null;
       this.rowCache.set(id, row);
       if (!previous || row.audioText !== previous.audioText || row.visualText !== previous.visualText) this.indexCommentAnchors(row);
       if (!previous || JSON.stringify(previous) !== JSON.stringify(row)) {
@@ -979,6 +992,7 @@ export class NativeScriptReader {
     entries.forEach((entry, index) => { if (entry.kind === "heading" && entries[index + 1]?.kind !== "row") problems.push({ kind: "heading-without-row", where: "headings/" + entry.id }); });
     for (const span of this.unplaced()) problems.push({ kind: "no-order", where: "segments/" + span.segment });
     this.collect(problems);
+    this.storedRegistries(problems);
     return deepFrozen(problems);
   }
 
@@ -990,7 +1004,7 @@ export class NativeScriptReader {
     if (counts.unshown) problems.push({ kind: "unshown-marks", where });
   }
 
-  private collect(problems: Problems): Pick<DocumentShape, "title" | "docId" | "rev" | "schema" | "comments" | "people" | "productionTags" | "brollShots"> & Record<string, unknown> {
+  private collect(problems: Problems): Pick<DocumentShape, "title" | "docId" | "rev" | "schema" | "comments"> & Record<string, unknown> {
     const meta = this.roots.meta, title = meta.get("title");
     const fields = metaFields(meta, problems);
     const replies = new Map<string, Record<string, unknown>[]>();
@@ -1005,19 +1019,21 @@ export class NativeScriptReader {
       list.push({ ...fileFields(record, "replies/" + key, problems), id: ids[1] });
       replies.set(ids[0], list);
     }
-    const records = (root: Y.Map<Y.Map<unknown>>, name: string): Record<string, unknown>[] =>
-      byRank(root).filter(([, record]) => record.get("removed") !== true)
-        .map(([id, record]) => ({ ...fileFields(record, name + "/" + id, problems), id }));
     return {
       ...fields,
       title: title instanceof Y.Text ? title.toString() : "",
       docId: typeof fields.docId === "string" ? fields.docId : "",
       rev: typeof fields.rev === "number" ? fields.rev : 0,
       schema: typeof fields.schema === "number" ? fields.schema : 0,
-      comments: records(this.roots.comments, "comments").map(comment => ({ ...comment, replies: replies.get(String(comment.id)) ?? [] })) as DocumentShape["comments"],
-      people: records(this.roots.people, "people") as DocumentShape["people"],
-      productionTags: records(this.roots.tags, "tags") as DocumentShape["productionTags"],
-      brollShots: records(this.roots.shots, "shots") as DocumentShape["brollShots"]
+      comments: visibleRecords(this.roots.comments, "comments", problems).map(comment => ({ ...comment, replies: replies.get(String(comment.id)) ?? [] })) as DocumentShape["comments"]
+    };
+  }
+
+  private storedRegistries(problems: Problems): Registries {
+    return {
+      people: visibleRecords(this.roots.people, "people", problems) as DocumentShape["people"],
+      productionTags: visibleRecords(this.roots.tags, "tags", problems) as DocumentShape["productionTags"],
+      brollShots: visibleRecords(this.roots.shots, "shots", problems) as DocumentShape["brollShots"]
     };
   }
 
@@ -1034,8 +1050,12 @@ export class NativeScriptReader {
       return [{ ...record instanceof Y.Map ? fileFields(record, "headings/" + entry.id, null) : {}, id: entry.id, name: entry.name, firstSceneId: next.id }];
     });
     const document = { ...this.collect(null), rows, ...sections.length ? { sections } : {} };
-    projectNativeRegistries(document, this.roots, () => this.rows());
-    return deepFrozen(document);
+    if (this.registryCache) return deepFrozen({ ...document, ...this.registryCache.records });
+    const snapshot = { ...document, ...this.storedRegistries(null) };
+    const inputs = projectNativeRegistries(snapshot, this.roots, () => this.rows());
+    const { people, productionTags, brollShots } = snapshot;
+    this.registryCache = { inputs, records: deepFrozen({ people, productionTags, brollShots }) };
+    return deepFrozen(snapshot);
   }
 }
 

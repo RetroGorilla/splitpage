@@ -9,7 +9,7 @@ import { transactNativeCommand } from "../../../../src/adapters/collab/native/sc
 import { projectNativeRegistries } from "../../../../src/adapters/collab/native/registry-projection.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import { encodeNativeValue, mintNativeId, nativeFieldKey } from "../../../../src/adapters/collab/native/values.ts";
-import { convertedScript, joinedScript } from "./helpers.ts";
+import { cells, convertedScript, edit, joinedScript } from "./helpers.ts";
 
 function registries(count: number) {
   const productionTags = Array.from({ length: count }, (_, index) => ({ id: `t_p${index}`, cat: "prop", name: `Prop ${index}` }));
@@ -49,22 +49,6 @@ test("the snapshot prop lookup preserves the first named tag and exact ID lookup
   } finally { script.doc.destroy(); }
 });
 
-if (process.env.SPLITPAGE_REGISTRY_BENCHMARK === "1") test("measure a warm 900-beat registry snapshot", () => {
-  const script = convertedScript(migrateRows({ ...source(), ...registries(200),
-    rows: Array.from({ length: 900 }, (_, index) => ({ id: `r${index}`, audioText: "Narration for this beat", visualText: "A wide shot" })) }));
-  try {
-    for (let i = 0; i < 20; i++) script.reader.document();
-    const samples = Array.from({ length: 60 }, () => {
-      const start = performance.now();
-      const snapshot = script.reader.document();
-      const elapsed = performance.now() - start;
-      assert.equal(snapshot.rows.length, 900);
-      return elapsed;
-    }).sort((a, b) => a - b);
-    console.log(`900 beats, 200 tags and 200 shots: median ${samples[30]?.toFixed(3)} ms, p95 ${samples[56]?.toFixed(3)} ms`);
-  } finally { script.doc.destroy(); }
-});
-
 function source(): ValidatedDocument {
   return migrateRows({
     schema: 2, docId: "registry-shape", title: "Registry shape", rows: [], comments: [],
@@ -77,6 +61,45 @@ function source(): ValidatedDocument {
     brollShots: [{ id: "bs1", name: "Wide", origin: "list", props: [{ id: "t_lamp", name: "Lamp" }] }]
   });
 }
+
+test("narration typing reuses registry projections, even after a removal", () => {
+  const script = convertedScript(migrateRows({ ...source(), rows: [{ id: "r1", audioText: "Narration" }] }));
+  try {
+    for (const removed of [false, true]) {
+      if (removed) script.roots.tags.get("t_case")?.set("removed", true);
+      const before = script.reader.document();
+      assert.equal(before.productionTags.some(tag => tag?.id === "t_case"), !removed);
+      assert.equal(edit(script, { beat: "r1", cell: "narration" }, 0, 1, cells(removed ? "N" : "n")).kind, "written");
+      const after = script.reader.document();
+      assert.notEqual(after.rows[0]?.audioText, before.rows[0]?.audioText);
+      assert.equal(after.people, before.people);
+      assert.equal(after.productionTags, before.productionTags);
+      assert.equal(after.brollShots, before.brollShots);
+    }
+  } finally { script.doc.destroy(); }
+});
+
+test("a removed registry follows new inline tags and narration on a surviving keyed shot", () => {
+  const initial = migrateRows({ ...source(), rows: [{ id: "r1", audioText: "Narration",
+    visualText: '<span class="broll-key" data-broll-id="bs1">B-roll:</span> Wide' }] });
+  const script = convertedScript(initial);
+  try {
+    script.roots.tags.get("t_case")?.set("removed", true);
+    const before = script.reader.document();
+    assert.equal(before.productionTags.some(tag => tag?.name === "Case"), false);
+    assert.equal(edit(script, { beat: "r1", cell: "narration" }, 0, 9,
+      cells('<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Case">New narration</span>')).kind, "written");
+    assert.equal(script.reader.document().productionTags.some(tag => tag?.name === "Case"), true);
+    script.roots.shots.get("bs1")?.set("removed", true);
+    assert.equal(script.reader.document().brollShots[0]?.audioRef, "New narration");
+    assert.equal(edit(script, { beat: "r1", cell: "narration" }, 0, 1, cells("n")).kind, "written");
+    const updated = script.reader.document();
+    assert.equal(updated.brollShots[0]?.audioRef, "new narration");
+    const reloaded = migrateRows(structuredClone(updated));
+    assert.deepEqual(updated.productionTags, reloaded.productionTags);
+    assert.deepEqual(updated.brollShots, reloaded.brollShots);
+  } finally { script.doc.destroy(); }
+});
 
 function withCopies(document: ValidatedDocument, run: (left: NativeScript, right: NativeScript, settle: () => void) => void): void {
   for (const reverse of [false, true]) {

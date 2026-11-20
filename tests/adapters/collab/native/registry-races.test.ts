@@ -7,7 +7,7 @@ import type { NativeScript } from "../../../../src/adapters/collab/native/script
 import { openNativeUndo } from "../../../../src/adapters/collab/native/undo-commands.ts";
 import { decodeNativeValue, encodeNativeValue, mintNativeId, mintNativeTagId, nativeFieldKey } from "../../../../src/adapters/collab/native/values.ts";
 import type { DocumentShape } from "../../../../src/core/document/validated.ts";
-import { registryCopies, registrySource } from "./registry-harness.ts";
+import { registryCopies, registrySource, registryUndoCopies } from "./registry-harness.ts";
 
 type Registry = Extract<NativeRegistryChange, { kind: "create" }>["collection"];
 type Fields = Readonly<Record<string, unknown>>;
@@ -394,7 +394,7 @@ test("a move race and the winner's undo leave a usable rankless list in each reg
     ["people", "p1", "p2", "p3", { name: "New person" }, "p"],
     ["tags", "t_lamp", "t_rope", "t_case", { name: "New tag", cat: "gear" }, "t_"],
     ["shots", "bs1", "bs2", "bs3", { name: "New shot" }, "bs"]
-  ] as const) registryCopies((left, right, settle) => {
+  ] as const) registryUndoCopies((left, right, settle) => {
     const undo = openNativeUndo(right), move = { kind: "move", collection, id: first, before: null } as const;
     try {
       const original = read(left, collection).map(entry => entry?.id);
@@ -421,7 +421,7 @@ test("a move race and the winner's undo leave a usable rankless list in each reg
 });
 
 test("a move before a rankless anchor keeps the visible order", () => {
-  registryCopies((left, right, settle) => {
+  registryUndoCopies((left, right, settle) => {
     const undo = openNativeUndo(right), move = { kind: "move", collection: "people", id: "p1", before: null } as const;
     try {
       for (const script of [left, right]) write(script, move);
@@ -437,7 +437,7 @@ test("a move before a rankless anchor keeps the visible order", () => {
 });
 
 test("a name race and undo hide the nameless person like reload and still allow restore and rename", () => {
-  registryCopies((left, right, settle) => {
+  registryUndoCopies((left, right, settle) => {
     const undo = openNativeUndo(right);
     try {
       write(left, set("people", "p1", { name: "First name" }));
@@ -463,7 +463,7 @@ test("a name race and undo hide the nameless person like reload and still allow 
 });
 
 test("a prop array race and undo default to empty and still accept prop commands", () => {
-  registryCopies((left, right, settle) => {
+  registryUndoCopies((left, right, settle) => {
     const undo = openNativeUndo(right);
     try {
       write(left, { kind: "addProp", id: "bs1", prop: "Rope" });
@@ -488,7 +488,7 @@ test("a tag status race and undo default to needed for both status cycle command
   for (const cycle of [
     { kind: "cycleTagStatus", ids: ["t_lamp"] },
     { kind: "updateTags", tags: [{ cat: "prop", name: "Lamp" }], fields: {}, cycle: true }
-  ] as const) registryCopies((left, right, settle) => {
+  ] as const) registryUndoCopies((left, right, settle) => {
     const undo = openNativeUndo(right);
     try {
       write(left, set("tags", "t_lamp", { status: "sourcing" }));
