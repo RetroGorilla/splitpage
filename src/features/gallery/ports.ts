@@ -17,10 +17,14 @@ import type { ImageRef } from "../../core/document/ports.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
 import type { CapabilityPort } from "../../application/session/ports.ts";
 
+interface GalleryPictureStore extends Pick<PictureStore, "intern"> {
+  readonly store: (picture: ImageRef) => ImageRef | Promise<ImageRef | null>;
+}
+
 export interface GalleryPorts {
   readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
   readonly notices: Pick<NoticePort, "show">;
-  readonly pictures: Pick<PictureStore, "ensureBytes" | "urlFor" | "intern" | "persist">;
+  readonly pictures: GalleryPictureStore & Pick<PictureStore, "ensureBytes" | "urlFor">;
   readonly ownership: Operations;
   readonly cells: Pick<CellEditing<Element>, "editGallery">;
 }
@@ -110,7 +114,7 @@ export interface VideoBundleMount {
 
 export interface GalleryVideoPorts {
   readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
-  readonly pictures: Pick<PictureStore, "intern" | "persist">;
+  readonly pictures: GalleryPictureStore;
   readonly ownership: Operations;
   readonly undo: UndoFold;
   readonly thumbnailsAllowed: () => boolean;

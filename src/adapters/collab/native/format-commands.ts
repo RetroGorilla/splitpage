@@ -5,7 +5,7 @@ import type { NativeRangeUnits } from "./inline.ts";
 import { transactPreparedNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { nativeAvailability, nativeLiveRange, nativeRangeSnapshot } from "./text-commands.ts";
-import type { NativeRefusal, NativeTextRange } from "./text-commands.ts";
+import type { NativeLiveRange, NativeRefusal, NativeTextRange } from "./text-commands.ts";
 import { nativeWellFormed } from "./values.ts";
 
 export type NativePlainMark = "b" | "i" | "u" | "s" | "hl" | "dir" | "cue";
@@ -102,6 +102,29 @@ function writesFor(script: NativeScript, change: CheckedChange, units: NativeRan
   return units.shownKeys.has(change.key) ? { clear: { [change.key]: null }, set: null } : null;
 }
 
+function planMark(script: NativeScript, live: NativeLiveRange, checked: CheckedChange): (() => NativeFormatOutcome) | null {
+  const planned = live.pieces.flatMap(piece => {
+    const units = nativeRangeUnits(piece.items, piece.from - piece.start, piece.until - piece.start, checked.on ? checked.key : null, checked.carry);
+    const writes = writesFor(script, checked, units);
+    return writes && piece.until > piece.from ? [{ piece, units, writes }] : [];
+  });
+  if (!planned.length) return null;
+  return () => {
+    for (const { piece, units, writes } of planned) {
+      if (Object.keys(writes.clear).length) piece.text.format(piece.from, piece.until - piece.from, writes.clear);
+      // why: a mark goes only on units whose kind can carry it
+      if (writes.set) for (const [start, end] of units.stretches) piece.text.format(piece.start + start, end - start, writes.set);
+    }
+    return WRITTEN;
+  };
+}
+
+export function planNativeCommentMark(script: NativeScript, snapshot: NonNullable<ReturnType<typeof nativeRangeSnapshot>>, id: string) {
+  const checked = commentChange(id, true), live = nativeLiveRange(script, snapshot);
+  if (!checked || typeof live === "string") return null;
+  return planMark(script, live, checked);
+}
+
 export function formatNativeText(script: NativeScript, range: NativeTextRange, change: NativeMarkChange): NativeFormatOutcome {
   const unavailable = nativeAvailability(script);
   if (unavailable) return refused(unavailable);
@@ -112,18 +135,6 @@ export function formatNativeText(script: NativeScript, range: NativeTextRange, c
     if (!snapshot || snapshot.target.cell === "name") return refused("range");
     const live = nativeLiveRange(script, snapshot);
     if (typeof live === "string") return refused(live);
-    let outcome = UNCHANGED;
-    const planned = live.pieces.map(piece => {
-      const units = nativeRangeUnits(piece.items, piece.from - piece.start, piece.until - piece.start, checked.on ? checked.key : null, checked.carry);
-      return { piece, units, writes: writesFor(script, checked, units) };
-    });
-    for (const { piece, units, writes } of planned) {
-      if (!writes || piece.until <= piece.from) continue;
-      if (Object.keys(writes.clear).length) piece.text.format(piece.from, piece.until - piece.from, writes.clear);
-      // why: a mark goes only on units whose kind can carry it
-      if (writes.set) for (const [start, end] of units.stretches) piece.text.format(piece.start + start, end - start, writes.set);
-      outcome = WRITTEN;
-    }
-    return outcome;
+    return planMark(script, live, checked)?.() ?? UNCHANGED;
   }, refused);
 }

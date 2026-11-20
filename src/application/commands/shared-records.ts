@@ -24,6 +24,8 @@ export interface RecordCommandRun {
 }
 
 export const NOTHING_RAN: RecordCommandRun = Object.freeze({ changed: false, held: false });
+export const RECORD_REFUSED: RecordCommandRun = Object.freeze({ changed: false, held: true });
+export const RECORD_CHANGED: RecordCommandRun = Object.freeze({ changed: true, held: false });
 
 export function recordCommandRun<Ports>(edits: Pick<DocumentEdits, "edit" | "run">, records: SharedRecordCommands<Ports>, build: (shared?: Ports) => Command): RecordCommandRun {
   const shared = records.ports();

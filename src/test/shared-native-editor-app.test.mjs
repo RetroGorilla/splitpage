@@ -13,9 +13,12 @@ import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { cellEditing } from "../bootstrap/wiring/editor-owners.ts";
 import { createSessionCapabilities } from "../application/session/capabilities.ts";
 import { handleImageFile, removeImage } from "../bootstrap/wiring/rows.ts";
-import { actions } from "../bootstrap/wiring/ports/actions.ts";
 import { mountNativeSharedInput } from "../bootstrap/wiring/native-shared-input.ts";
-import { enterSharedSession, forceLeaveSharedSession } from "../bootstrap/wiring/shared-session.ts";
+import { setBeatLength } from "../features/rows/read-time.ts";
+import { setBeatFilmed } from "../bootstrap/wiring/beat-status.ts";
+import { openCommentsPanel } from "../features/comments/comments.ts";
+import { addGalleryPicture, moveGallerySlot, replaceGalleryPicture } from "../core/document/gallery.ts";
+import { enterSharedSession, forceLeaveSharedSession, nativeEditorRecords } from "../bootstrap/wiring/shared-session.ts";
 import { openNativeEditor } from "../bootstrap/wiring/native-shared-session.ts";
 import { entrySwitchFixture } from "../../tests/bootstrap/shared-entry-switch-support.ts";
 import { setTimeout as delay } from "node:timers/promises";
@@ -1161,16 +1164,187 @@ test("failed close cannot replay a draft after unexpected browser input", async 
   assert.match(String(show.mock.calls[0]?.arguments[0]), /Unsent writing is still in the editor/);
 });
 
-test("gallery add, remove, reorder and annotation refuse before writing", async t => {
+async function step(perform, project, see, expected) {
+  const before = project(hook.read().app);
+  perform();
+  await Promise.resolve();
+  const after = () => {
+    const { app, peer } = hook.read();
+    assert.deepEqual(project(app), expected);
+    assert.deepEqual(project(peer), expected);
+    assert.equal(see(), true);
+  };
+  after();
+  assert.equal(hook.nativePeer.step("undo").kind, "written");
+  await Promise.resolve();
+  assert.deepEqual(project(hook.read().app), before);
+  assert.deepEqual(project(hook.read().peer), before);
+  assert.equal(hook.nativePeer.step("redo").kind, "written");
+  await Promise.resolve();
+  after();
+}
+
+test("status and duration controls publish and undo one action at a time", async t => {
+  await enter(t);
+  const status = doc => doc.rows[0].status;
+  const statusButton = () => document.querySelector('#rows [data-action="cycle-status"][data-id="r1"]');
+  await step(() => statusButton().click(), status, () => /ready/i.test(statusButton().title), "ready");
+  await step(() => setBeatFilmed("r1", true), status, () => /shot|filmed/i.test(statusButton().title), "shot");
+  await step(() => setBeatFilmed("r1", false), status, () => /to do/i.test(statusButton().title), "todo");
+  const duration = doc => doc.rows[0].lengthSeconds;
+  const read = () => document.querySelector('#rows .row-read[data-id="r1"]');
+  await step(() => assert.equal(setBeatLength("r1", 83), true), duration, () => read().classList.contains("is-set"), 83);
+  await step(() => assert.equal(setBeatLength("r1", null), true), duration, () => !read().classList.contains("is-set"), undefined);
+});
+
+test("simultaneous field edits preserve different keys and converge on one value for the same key", async t => {
+  await enter(t);
+  const row = () => hook.read();
+  const status = { kind: "beat", id: "r1", field: "status" };
+  hook.nativePeer.hold();
+  setBeatLength("r1", 64);
+  await Promise.resolve();
+  assert.equal(hook.nativePeer.field(status, "shot").kind, "written");
+  hook.nativePeer.deliver();
+  await Promise.resolve();
+  for (const copy of [row().app, row().peer]) {
+    assert.equal(copy.rows[0].lengthSeconds, 64);
+    assert.equal(copy.rows[0].status, "shot");
+  }
+  hook.nativePeer.hold();
+  setBeatFilmed("r1", false);
+  await Promise.resolve();
+  assert.equal(hook.nativePeer.field(status, "ready").kind, "written");
+  hook.nativePeer.deliver();
+  await Promise.resolve();
+  assert.ok(["todo", "ready"].includes(row().app.rows[0].status));
+  assert.equal(row().app.rows[0].status, row().peer.rows[0].status);
+});
+
+test("gallery add, remove, reorder and annotation refuse to write to a missing beat", async t => {
   const show = await enter(t), before = hook.read();
-  handleImageFile("r1", new window.File(["picture"], "picture.png", { type: "image/png" }));
-  removeImage("r1", 0);
-  actions.invoke("annotate-picture", "button", { rowId: "r1", slot: 0 });
+  handleImageFile("gone", new window.File(["picture"], "picture.png", { type: "image/png" }));
+  removeImage("gone", 0);
   const change = t.mock.fn(() => { throw new Error("gallery plan ran"); });
   for (const route of ["Reorder pictures", "Annotate picture"]) {
-    assert.deepEqual(cellEditing().editGallery("r1", route, change), { changed: false, held: true });
+    assert.deepEqual(cellEditing().editGallery("gone", route, change), { changed: false, held: true });
   }
   assert.equal(change.mock.callCount(), 0);
-  assert.equal(show.mock.callCount(), 5);
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), Array.from({ length: 4 }, () => ["That beat no longer exists.", "warn"]));
   assert.deepEqual(hook.read(), before);
+});
+
+test("gallery edits replace one value and publish to the screen and peer", async t => {
+  await enter(t);
+  const refs = ["a", "b", "c"].map(letter => ({ sha256: letter.repeat(64), width: 1, height: 1, mime: "image/png" }));
+  const gallery = doc => [doc.rows[0].imageRef, ...(doc.rows[0].moreImages ?? []).map(item => item.imageRef)].filter(Boolean).map(ref => ref.sha256);
+  const count = n => () => document.querySelectorAll('#rows .row[data-id="r1"] .scene-gallery-tile').length === n;
+  const edit = change => () => assert.deepEqual(cellEditing().editGallery("r1", "Gallery edited", change), { changed: true, held: false });
+  await step(edit(row => { addGalleryPicture(row, refs[0], "First"); return true; }), gallery, count(1), ["a".repeat(64)]);
+  await step(edit(row => { addGalleryPicture(row, refs[1], "Second"); return true; }), gallery, count(2), ["a".repeat(64), "b".repeat(64)]);
+  await step(edit(row => replaceGalleryPicture(row, 1, refs[2], "Third")), gallery, count(2), ["a".repeat(64), "c".repeat(64)]);
+  await step(edit(row => moveGallerySlot(row, 1, 0)), gallery, count(2), ["c".repeat(64), "a".repeat(64)]);
+  await step(() => removeImage("r1", 0), gallery, count(1), ["a".repeat(64)]);
+});
+
+test("gallery actions refuse a stale slot before calling its edit", async t => {
+  const ref = sha => ({ sha256: sha.repeat(64), width: 1, height: 1, mime: "image/png" });
+  const show = await enter(t, [{ id: "r1", audioText: "Hello", imageRef: ref("a") }]);
+  assert.equal(hook.nativePeer.field({ kind: "gallery", id: "r1" }, { imageRef: ref("b") }).kind, "written");
+  const edit = t.mock.fn(() => true);
+  assert.deepEqual(cellEditing().editGallery("r1", "Remove cover", edit), { changed: false, held: true });
+  assert.equal(edit.mock.callCount(), 0);
+  assert.equal(show.mock.callCount(), 1);
+  await Promise.resolve();
+  assert.equal(hook.read().app.rows[0].imageRef.sha256, "b".repeat(64));
+});
+
+test("removing a picture from a joined projection refuses where the child still owns it", async t => {
+  const ref = sha => ({ sha256: sha.repeat(64), width: 1, height: 1, mime: "image/png" });
+  const doc = migrateRows({ title: "Joined pictures", rows: [
+    { id: "r1", audioText: "One", imageRef: ref("a") }, { id: "r2", audioText: "Two", imageRef: ref("b") }
+  ] });
+  adoptReplacement(doc);
+  const show = t.mock.method(notices, "show", () => {});
+  assert.deepEqual(await hook.enterFrom(nativeBytes(doc, " "), { backend: "native" }), { ok: true });
+  t.after(() => { if (sharedSession()) hook.leave(); });
+  const before = hook.read();
+  assert.equal(before.app.rows[0].moreImages[0].imageRef.sha256, "b".repeat(64));
+  removeImage("r1", 1);
+  await Promise.resolve();
+  assert.deepEqual(hook.read(), before);
+  assert.equal(show.mock.callCount(), 1);
+  assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
+});
+
+test("a comment and its anchor, a reply, each body edit, resolve, reopen and remove each undo as one action", async t => {
+  await enter(t);
+  openCommentsPanel();
+  const select = selector => document.querySelector(selector);
+  select('#comments-filter-seg [data-filter="all"]').click();
+  const target = cell("audioText"), toolbar = target.closest(".field-wrap");
+  target.focus();
+  setCellSelection(target, 0, 5);
+  toolbar.querySelector('[data-cmd="comment"]').click();
+  assert.equal(select("#comment-modal").hidden, false);
+  select("#comment-body-editable").textContent = "A first comment";
+  const project = doc => ({
+    comments: doc.comments.map(item => [item.body, item.resolved, item.replies.map(reply => reply.body)]),
+    anchors: /cmt-anchor/.test(doc.rows[0].audioText)
+  });
+  const expected = (body, resolved, replies, anchors = true) => ({ comments: body ? [[body, resolved, replies]] : [], anchors });
+  await step(() => select("#comment-post").click(), project, () =>
+    select(".comment-body")?.textContent === "A first comment" && cell("audioText").querySelector(".cmt-anchor") !== null,
+  expected("A first comment", false, []));
+  select('[data-action="toggle-reply"]').click();
+  select(".reply-composer .cell-editable").textContent = "A reply";
+  await step(() => select(".reply-post").click(), project, () => select(".reply-body")?.textContent === "A reply",
+    expected("A first comment", false, ["A reply"]));
+  const editBody = (selector, body) => () => {
+    select(selector).click();
+    select(".comment-body-editor").textContent = body;
+    select('[data-action="save-comment-body"]').click();
+  };
+  await step(editBody('[data-action="edit-comment-body"]:not([data-reply])', "Edited comment"), project,
+    () => select(".comment-body")?.textContent === "Edited comment", expected("Edited comment", false, ["A reply"]));
+  await step(editBody('[data-action="edit-comment-body"][data-reply]', "Edited reply"), project,
+    () => select(".reply-body")?.textContent === "Edited reply", expected("Edited comment", false, ["Edited reply"]));
+  const toggle = () => select('[data-action="toggle-resolve"]').click();
+  await step(toggle, project, () => select(".comment-resolved-note") !== null, expected("Edited comment", true, ["Edited reply"]));
+  await step(toggle, project, () => select(".comment-resolved-note") === null, expected("Edited comment", false, ["Edited reply"]));
+  await step(() => {
+    select('[data-action="comment-menu"]').click();
+    select('[data-action="delete-comment"]').click();
+    select('[data-action="delete-comment"]').click();
+  }, project, () => select(".comment-card") === null, expected(null, false, []));
+});
+
+test("cancel discards a provisional selection and a non-author cannot edit a comment body", async t => {
+  const doc = migrateRows({ title: "Existing thread", rows: [{ id: "r1", audioText: "Hello" }],
+    comments: [{ id: "c1", rowId: "r1", field: "audioText", author: "Another editor", body: "Original", replies: [] }] });
+  adoptReplacement(doc);
+  const show = t.mock.method(notices, "show", () => {});
+  assert.deepEqual(await hook.enter({ backend: "native" }), { ok: true });
+  t.after(() => { if (sharedSession()) hook.leave(); });
+  const target = cell("audioText");
+  target.focus();
+  setCellSelection(target, 0, 5);
+  target.closest(".field-wrap").querySelector('[data-cmd="comment"]').click();
+  assert.equal(document.getElementById("comment-modal").hidden, false);
+  document.getElementById("comment-cancel").click();
+  assert.equal(document.getElementById("comment-modal").hidden, true);
+  assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
+  assert.equal(text(), "Hello");
+  openCommentsPanel();
+  assert.equal(document.querySelector('[data-action="edit-comment-body"]'), null);
+  const comments = nativeEditorRecords().comments;
+  assert.deepEqual(comments.body("c1", undefined, "Attempt"), { changed: false, held: true });
+  assert.equal(hook.read().app.comments[0].body, "Original");
+  assert.equal(show.mock.callCount(), 1);
+  assert.equal(comments.resolve("c1", true).changed, true);
+  await Promise.resolve();
+  assert.equal(hook.read().peer.comments[0].resolved, true);
+  assert.equal(comments.remove("c1").changed, true);
+  await Promise.resolve();
+  assert.equal(hook.read().peer.comments.length, 0);
 });

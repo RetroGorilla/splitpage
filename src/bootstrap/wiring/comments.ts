@@ -22,6 +22,7 @@ import { owned } from "../../features/routing/owned.ts";
 import { writerControls } from "./writer.ts";
 import { runFromButton } from "./ports/actions.ts";
 import { sharedCommentCommands } from "./ports/shared-commands.ts";
+import { nativeEditorRecords } from "./shared-session.ts";
 import { mountComments } from "../../features/comments/mount.ts";
 import { internDataUrl, persist } from "../../adapters/storage/02c-blobs.ts";
 import { storedImageHtml } from "../../core/document/text-policy.ts";
@@ -44,6 +45,7 @@ import {
   captureCommentComposer,
   closeCommentComposer,
   dismissUnsavedComment,
+  editCommentBody,
   jumpToAnchor,
   limitAuthorNameField,
   postComment,
@@ -91,6 +93,7 @@ export function mountCommentsFeature(): ReturnType<typeof mountComments> {
       composeDraft: noteDraftComposition,
       pasteDraft: pasteIntoDraft,
       toggleResolve: toggleResolve,
+      editBody: editCommentBody,
       filter: setCommentFilterMode,
       toggleReply: toggleReplyComposer,
       postReply: postReply,
@@ -159,7 +162,8 @@ export function mountCommentsLogicFeature(): ReturnType<typeof mountCommentState
       shots: shotHiding,
       pictures: portPictures,
       clearDraftUndo: resetDraftHistory,
-      shared: sharedCommentCommands
+      shared: sharedCommentCommands,
+      nativeComments: () => nativeEditorRecords()?.comments ?? null
     };
     return mountCommentState(ports);
   });

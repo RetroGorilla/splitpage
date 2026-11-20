@@ -10,6 +10,17 @@ import type { Command, CommandRefusal, DocumentView, Plan } from "../session/doc
 import type { Clock, StampPorts } from "../session/ports.ts";
 import { applyRewrites, realRewrites, rewriteChanges, withFields } from "./document-edit.ts";
 import type { CellRewrite, RewritePlanner } from "./document-edit.ts";
+import type { RecordCommandRun } from "./shared-records.ts";
+
+export interface CommentRecordWriter {
+  readonly author: string;
+  readonly add: (comment: DocumentComment) => RecordCommandRun;
+  readonly cancel: (id: string) => void;
+  readonly reply: (id: string, reply: DocumentReply) => RecordCommandRun;
+  readonly body: (id: string, reply: string | undefined, html: string) => RecordCommandRun;
+  readonly resolve: (id: string, resolved: boolean) => RecordCommandRun;
+  readonly remove: (id: string) => RecordCommandRun;
+}
 
 export type ConflictValue =
   | { readonly kind: "title"; readonly title: string }

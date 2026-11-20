@@ -176,6 +176,10 @@
       "kind": "bookkeeping",
       "count": 1
     },
+    "bootstrap/wiring/native-shared-records.ts#run:capabilities[permission]": {
+      "kind": "bookkeeping",
+      "count": 1
+    },
     "bootstrap/wiring/ports/capabilities.ts#autosave:currentCapabilities().autosave": {
       "kind": "bookkeeping",
       "count": 1
@@ -424,6 +428,10 @@
     },
     "bootstrap/wiring/merge-review.ts#mergeReviewPorts:[entryCapability]entryCapabilities": {
       "kind": "entry",
+      "count": 1
+    },
+    "bootstrap/wiring/native-shared-records.ts#run:capabilities": {
+      "kind": "bookkeeping",
       "count": 1
     },
     "bootstrap/wiring/ports/capabilities.ts#module:capabilities": {

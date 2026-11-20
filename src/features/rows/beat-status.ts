@@ -6,7 +6,7 @@ import type { TextServices } from "../../application/text/services.ts";
 import type { SessionChange } from "../../application/session/change-set.ts";
 import type { SharedValueCommands } from "../../application/commands/shared-values.ts";
 import { beatStatus, beatStatusCommand, setBeatFilmedCommand, shotGrace } from "../../application/commands/beat-status.ts";
-import { targetLengthOf } from "../../core/document/timing.ts";
+import { nextRowStatus, targetLengthOf } from "../../core/document/timing.ts";
 import { formatDuration, rowSeconds, targetClock, totalSeconds } from "../../core/production/timing.ts";
 
 interface BeatStatusPorts {
@@ -87,15 +87,13 @@ export function createBeatStatus(ports: BeatStatusPorts): BeatStatus {
   return {
     setFilmed: function (rowId, filmed) {
       const before = ports.document.read(beatStatus(rowId)), shared = ports.shared.ports();
+      const status = filmed ? "shot" : "todo", native = ports.shared.beatField?.(rowId, "status", status);
+      if (native) { if (native.changed) updateGrace(rowId, before, status); return; }
       const outcome = ports.edits.run(shared ? setBeatFilmedCommand(rowId, filmed, ports.edits.stamps, shared) : setBeatFilmedCommand(rowId, filmed, ports.edits.stamps));
       if (outcome.kind === "failed") throw outcome.error;
       if (shared && outcome.kind === "rejected") ports.shared.refused(outcome);
       if (outcome.kind !== "applied" && outcome.kind !== "committed") return;
-      if (ports.hideShot()) {
-        const grace = shotGrace(before, ports.document.read(beatStatus(rowId)));
-        if (grace === "arm") ports.shots.armGrace(rowId);
-        else if (grace === "clear") ports.shots.clearGrace(rowId);
-      }
+      updateGrace(rowId, before, ports.document.read(beatStatus(rowId)));
     },
     updateScriptStats,
     statsFollowChange: function (change) {
@@ -111,15 +109,20 @@ export function createBeatStatus(ports: BeatStatusPorts): BeatStatus {
     },
     cycleRowStatus: function (rowId) {
       const before = ports.document.read(beatStatus(rowId)), shared = ports.shared.ports();
+      const status = nextRowStatus(before), native = ports.shared.beatField?.(rowId, "status", status);
+      if (native) { if (native.changed) updateGrace(rowId, before, status); return; }
       const outcome: CommandOutcome = ports.edits.run(shared ? beatStatusCommand(rowId, ports.edits.stamps, shared) : beatStatusCommand(rowId, ports.edits.stamps));
       if (outcome.kind === "failed") throw outcome.error;
       if (shared && outcome.kind === "rejected") ports.shared.refused(outcome);
       if (outcome.kind !== "applied" && outcome.kind !== "committed") return;
-      if (ports.hideShot()) {
-        const grace = shotGrace(before, ports.document.read(beatStatus(rowId)));
-        if (grace === "arm") ports.shots.armGrace(rowId);
-        else if (grace === "clear") ports.shots.clearGrace(rowId);
-      }
+      updateGrace(rowId, before, ports.document.read(beatStatus(rowId)));
     }
   };
+
+  function updateGrace(rowId: string, before: unknown, after: unknown): void {
+    if (!ports.hideShot()) return;
+    const grace = shotGrace(before, after);
+    if (grace === "arm") ports.shots.armGrace(rowId);
+    else if (grace === "clear") ports.shots.clearGrace(rowId);
+  }
 }

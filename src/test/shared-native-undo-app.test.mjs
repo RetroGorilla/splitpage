@@ -334,6 +334,32 @@ for (const [name, kind] of Object.entries(views)) {
     });
   }
 
+  test(name + ": the keys undo and redo a status change and a posted comment one at a time and leave the caret alone", async t => {
+    const show = await enter(t);
+    const status = doc => doc.rows[0].status, comments = doc => doc.comments.map(item => item.body);
+    const anchored = doc => /cmt-anchor/.test(doc.rows[0].audioText);
+    document.querySelector('#rows [data-action="cycle-status"][data-id="r1"]').click();
+    await Promise.resolve();
+    cell().focus();
+    setCellSelection(cell(), 0, 5);
+    cell().closest(".field-wrap").querySelector('[data-cmd="comment"]').click();
+    document.getElementById("comment-body-editable").textContent = "Check this";
+    document.getElementById("comment-post").click();
+    await Promise.resolve();
+    const both = () => { const { app: mine, peer: theirs } = hook.read(); return [mine, theirs]; };
+    for (const copy of both()) assert.deepEqual([status(copy), comments(copy), anchored(copy)], ["ready", ["Check this"], true]);
+    const view = kind.open(t);
+    kind.caret(view, "r1", 3);
+    const steps = [["z", "ready", [], false], ["z", "todo", [], false], ["y", "ready", [], false], ["y", "ready", ["Check this"], true]];
+    for (const [key, expectedStatus, expectedComments, expectedAnchor] of steps) {
+      assert.equal(press(kind.surface(), key), true);
+      await Promise.resolve();
+      for (const copy of both()) assert.deepEqual([status(copy), comments(copy), anchored(copy)], [expectedStatus, expectedComments, expectedAnchor], key);
+      assert.deepEqual(kind.at(view), ["r1", 3, 3], key);
+    }
+    assert.equal(show.mock.calls.filter(call => call.arguments[1] === "warn").length, 0);
+  });
+
   test(name + ": the browser's own history input steps the session like the keys", async t => {
     const show = await enter(t), view = kind.open(t);
     kind.caret(view, "r1", 5);

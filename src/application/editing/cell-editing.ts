@@ -159,7 +159,8 @@ export function createCellEditing<E, Html = never>(ports: CellEditingPorts<E, Ht
   }
 
   function editGallery(rowId: string, message: string, change: GalleryEdit): RecordCommandRun {
-    if (ports.gallery.refuseUnsupported?.()) return { changed: false, held: true };
+    const native = ports.gallery.editNative?.(rowId, message, change);
+    if (native) return native;
     if (rowIndexOf(ports.document(), rowId) === -1) return { changed: false, held: false };
     const shared = ports.gallery.ports();
     if (shared) {

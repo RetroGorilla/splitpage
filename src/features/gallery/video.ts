@@ -100,8 +100,7 @@ export function startGalleryVideo(ports: GalleryVideoPorts): GalleryVideoMount {
       const bytes = res.bytes instanceof Uint8Array ? res.bytes : new Uint8Array(res.bytes);
       return (v.host === "youtube" ? trimLetterbox(bytes, res.mime || "image/jpeg") : Promise.resolve(bytes)).then(function (b) {
         const rec = ports.pictures.intern(b) || ports.pictures.intern(bytes);
-        if (rec) ports.pictures.persist([rec.sha256]);
-        return rec || null;
+        return rec ? ports.pictures.store(rec) : null;
       });
     }).then(null, function () { return null; });
   }
