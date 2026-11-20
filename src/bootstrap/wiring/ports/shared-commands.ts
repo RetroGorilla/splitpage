@@ -10,7 +10,7 @@ import type { SharedValueCommands } from "../../../application/commands/shared-v
 import type { CommandOutcome } from "../../../application/session/document-session.ts";
 import type { UndoControl } from "../../../application/editing/undo-control.ts";
 import { sessionStamps, sessionTextPorts } from "../session-owner.ts";
-import { nativeEditorActive, sharedSessionParts } from "../shared-session.ts";
+import { nativeEditorRecords, sharedSessionParts } from "../shared-session.ts";
 import type { SharedSessionParts } from "../shared-session.ts";
 import { sharedUndoRoute, stepSharedUndo, undoOwner } from "../undo.ts";
 import { notices } from "./effects.ts";
@@ -25,11 +25,6 @@ declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 const refuse = sharedCommandRefusalNotice(notices);
 
-export function refuseNativeEditorCommand(): boolean {
-  if (!nativeEditorActive()) return false;
-  refuse("not shared");
-  return true;
-}
 const SELECTION_SPANS = "split-selection-spans-beats", SELECTION_GONE = "split-selection-gone";
 
 function refused(outcome: CommandOutcome): void {
@@ -145,6 +140,7 @@ function source(parts: SharedSessionParts) {
 }
 
 export const sharedValueCommands: SharedValueCommands = {
+  beatField: (...args) => nativeEditorRecords()?.beatField(...args) ?? null,
   ports: () => {
     const parts = sharedSessionParts();
     return parts ? sharedValuePorts(source(parts))() : null;
@@ -167,7 +163,7 @@ export const sharedRecordCommands: SharedRecordCommands = {
 };
 
 export const sharedGalleryCommands: SharedGalleryCommands = {
-  refuseUnsupported: refuseNativeEditorCommand,
+  editNative: (...args) => nativeEditorRecords()?.gallery(...args) ?? null,
   ports: () => {
     const parts = sharedSessionParts();
     return parts ? sharedGalleryPorts(source(parts)) : null;

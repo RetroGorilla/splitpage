@@ -17,6 +17,8 @@ Slice 7b-2 in PR #1675 adds buffered Split-view narration typing, composition, r
 PR #1669 builds slice 7e's offline-notice journal, comparison and put-back command.
 Slice 7f in PR #1668 adds the browser local store with transaction receipts, an update log and atomic checkpoints.
 
+This PR builds slice 7b-6a: beat status and duration, picture gallery edits, and comment threads in the native editor.
+
 ## Server-stop results and backup runbook
 
 Two product copies received the edit before each stop. A fresh copy then joined a restarted server. Each row was run

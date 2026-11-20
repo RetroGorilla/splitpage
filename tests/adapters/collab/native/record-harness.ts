@@ -28,7 +28,7 @@ export const createNativeComment = (script: NativeScript, input: NativeNewCommen
 export const createNativeReply = (script: NativeScript, comment: string, input: NativeNewReply) => createReply(script, comment, input, BODY_PORTS);
 export const setNativeCommentBody = (script: NativeScript, target: NativeCommentTarget, actor: string, body: string) => setBody(script, target, actor, body, BODY_PORTS);
 
-export const beatField = (id: string, field: string): NativeFieldTarget => ({ kind: "beat", id, field });
+export const beatField = (id: string, field: string) => ({ kind: "beat", id, field }) as const;
 export const headingField = (field: string): NativeFieldTarget => ({ kind: "heading", id: "H", field });
 export const fileKey = (field: string): string => "f:" + JSON.stringify(field);
 export const replyId = (comment: string, reply: string): string => JSON.stringify([comment, reply]);

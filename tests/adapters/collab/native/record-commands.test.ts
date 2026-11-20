@@ -15,8 +15,78 @@ import {
   threadSteps, unchangedRecord
 } from "./record-harness.ts";
 import type { RecordStep, RecordTestRead } from "./record-harness.ts";
+import { anchorNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
 
 const WRITTEN = { kind: "written" };
+
+test("an editor status updates the joined members and refuses a duration, status or gallery write aimed at a hidden member", () => {
+  const { scripts: [script] } = recordCopies([7]);
+  assert.ok(script);
+  try {
+    assert.deepEqual(setNativeField(script, beatField("B", "status"), "shot"), WRITTEN);
+    assert.deepEqual(setNativeField(script, beatField("B", "lengthSeconds"), 42), WRITTEN);
+    assert.deepEqual(joinNativeRow(script, "B", "A", " "), WRITTEN);
+    const duration = { kind: "editor-beat", id: "B", field: "lengthSeconds" } as const;
+    unchangedRecord(script, () => setNativeField(script, duration, 19), "missing");
+    unchangedRecord(script, () => clearNativeField(script, duration), "missing");
+    unchangedRecord(script, () => setNativeField(script, { kind: "editor-beat", id: "B", field: "status" }, "ready"), "missing");
+    unchangedRecord(script, () => setNativeField(script, { kind: "gallery", id: "B" }, { imageRef: IMAGE }), "missing");
+    assert.deepEqual(setNativeField(script, { kind: "editor-beat", id: "A", field: "status" }, "ready"), WRITTEN);
+    assert.equal(script.reader.row("A")?.fields.status, "ready");
+    assert.deepEqual(unjoinNativeRow(script, "B"), WRITTEN);
+    assert.equal(script.reader.row("B")?.fields.status, "ready");
+    assert.equal(script.reader.row("B")?.fields.lengthSeconds, 42);
+  } finally { script.doc.destroy(); }
+});
+
+test("whole gallery writes refuse noncanonical inputs and corrupt stored values, and leave equal values alone", () => {
+  const { scripts: [script] } = recordCopies([7]);
+  assert.ok(script);
+  try {
+    const target = { kind: "gallery", id: "A" } as const;
+    assert.deepEqual(setNativeField(script, target, { imageRef: IMAGE }), WRITTEN);
+    unchangedRecord(script, () => setNativeField(script, target, { imageRef: IMAGE }));
+    unchangedRecord(script, () => setNativeField(script, target, { imageRef: null, imageName: "No picture" }), "value");
+    const record = script.roots.beats.get("A");
+    assert.ok(record);
+    record.set("gallery", "not JSON");
+    unchangedRecord(script, () => setNativeField(script, target, { imageRef: IMAGE }), "stored");
+  } finally { script.doc.destroy(); }
+});
+
+for (const stage of ["before", "after"]) test(`whole gallery checks the joined projection ${stage} an edit independently`, () => {
+  const { scripts: [script] } = recordCopies([7]);
+  assert.ok(script);
+  try {
+    const other = stage === "before" ? { ...IMAGE, sha256: "b".repeat(64) } : IMAGE;
+    assert.deepEqual(setNativeField(script, beatField("A", "imageRef"), IMAGE), WRITTEN);
+    assert.deepEqual(setNativeField(script, beatField("B", "imageRef"), other), WRITTEN);
+    assert.deepEqual(joinNativeRow(script, "B", "A", " "), WRITTEN);
+    const before = { imageRef: IMAGE };
+    const after = stage === "before" ? { imageRef: IMAGE, moreImages: [{ imageRef: other }] } : { imageRef: null };
+    if (stage === "before") {
+      assert.notDeepEqual(script.reader.previewJoinedGallery("A", before), before);
+      assert.deepEqual(script.reader.previewJoinedGallery("A", after), after);
+    } else {
+      assert.deepEqual(script.reader.previewJoinedGallery("A", before), before);
+      assert.notDeepEqual(script.reader.previewJoinedGallery("A", after), after);
+    }
+    unchangedRecord(script, () => setNativeField(script, { kind: "gallery", id: "A" }, after), "value");
+  } finally { script.doc.destroy(); }
+});
+
+test("a comment range must name the same beat and cell as the comment", () => {
+  const { scripts: [script] } = recordCopies([7]);
+  assert.ok(script);
+  try {
+    const anchored = anchorNativeText(script, { beat: "A", cell: "narration" }, 0, 3);
+    assert.equal(anchored.kind, "anchored");
+    for (const target of [{ rowId: "B", field: "audioText" }, { rowId: "A", field: "visualText" }] as const) {
+      const input = { ...commentInput("fresh"), ...target, range: anchored.range };
+      unchangedRecord(script, () => createNativeComment(script, input), "anchor");
+    }
+  } finally { script.doc.destroy(); }
+});
 
 test("every record and thread command changes precisely its stored keys and its projection on writer and receiver", () => {
   const { scripts: [writer, receiver], net } = recordCopies();

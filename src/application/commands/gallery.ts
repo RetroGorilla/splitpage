@@ -6,6 +6,7 @@ import { changeSet } from "../session/change-set.ts";
 import type { ChangeSet } from "../session/change-set.ts";
 import type { Command, CommandOutcome, DeepReadonly, Plan } from "../session/document-session.ts";
 import type { StampPorts } from "../session/ports.ts";
+import type { RecordCommandRun } from "./shared-records.ts";
 
 export type GalleryEdit = (row: DocumentRow) => unknown;
 
@@ -17,7 +18,7 @@ export interface SharedGalleryPorts {
 }
 
 export interface SharedGalleryCommands {
-  readonly refuseUnsupported?: () => boolean;
+  readonly editNative?: (rowId: string, message: string, edit: GalleryEdit) => RecordCommandRun | null;
   readonly ports: () => SharedGalleryPorts | null;
   readonly refused: (outcome: CommandOutcome) => void;
   readonly done: (message: string) => void;

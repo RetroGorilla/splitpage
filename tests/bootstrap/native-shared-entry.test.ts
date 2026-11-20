@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { test, before, after } from "node:test";
 import { openNativeEditor } from "../../src/bootstrap/wiring/native-shared-session.ts";
 import { currentDocument, onDocumentReplaced, onSessionChange, runCommand, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
-import { enterSharedSession, leaveRunningSharedSession, sharedSessionParts } from "../../src/bootstrap/wiring/shared-session.ts";
+import { enterSharedSession, leaveRunningSharedSession, nativeEditorRecords, sharedSessionParts } from "../../src/bootstrap/wiring/shared-session.ts";
 import { bootEntrySwitchFixture, entrySwitchFixture, stopEntrySwitchFixture } from "./shared-entry-switch-support.ts";
 import { notices } from "../../src/bootstrap/wiring/ports/effects.ts";
 import { sharedUndoRoute, stepSharedUndo } from "../../src/bootstrap/wiring/undo.ts";
@@ -12,6 +12,10 @@ import { createNativeTestPeer } from "../../src/bootstrap/wiring/shared-native-t
 import { mountNativeSharedInput } from "../../src/bootstrap/wiring/native-shared-input.ts";
 import { Doc } from "yjs";
 import { applyNativePeerUpdate } from "../../src/adapters/collab/native/peer-update.ts";
+import { createNativeEditorRecords } from "../../src/bootstrap/wiring/native-shared-records.ts";
+import { openNativeSession } from "../../src/adapters/collab/native/session.ts";
+import { sanitizeHtml } from "../../src/bootstrap/richtext.ts";
+import { addGalleryPicture, removeGallerySlot } from "../../src/core/document/gallery.ts";
 
 before(bootEntrySwitchFixture);
 after(stopEntrySwitchFixture);
@@ -98,6 +102,145 @@ test("failed close lands the committed bytes when no changed event was emitted",
   assert.equal(currentDocument()?.rows[0]?.audioText, "!Captured words");
   assert.equal(native.ydoc.isDestroyed, true);
   assert.match(String(notice.mock.calls[0]?.arguments[0]), /shared session stopped/);
+});
+
+test("a field interrupted after writing is recovered from the failed close bytes", async t => {
+  const fixture = entrySwitchFixture();
+  t.after(() => { if (sharedSession()) leaveRunningSharedSession(); });
+  const notice = t.mock.method(notices, "show", () => {});
+  const native = await nativeEntry({ ...fixture, ports: { ...fixture.ports, commandRefused: () => {} } });
+  const failure = new Error("interrupted field cleanup");
+  native.ydoc.once("afterTransactionCleanup", () => { throw failure; });
+  assert.deepEqual(nativeEditorRecords()?.beatField("R1", "lengthSeconds", 31), { changed: false, held: true });
+  await Promise.resolve();
+  assert.equal(sharedSession(), false);
+  assert.equal(currentDocument()?.rows[0]?.lengthSeconds, 31);
+  assert.deepEqual(fixture.errors, [failure]);
+  assert.match(String(notice.mock.calls.at(-1)?.arguments[0]), /shared session stopped/);
+});
+
+test("record outcomes retain refusals and mark only written results as changed", async t => {
+  const fixture = entrySwitchFixture();
+  t.after(() => { if (sharedSession()) leaveRunningSharedSession(); });
+  const native = await nativeEntry(fixture);
+  const refused = t.mock.fn(), show = t.mock.method(notices, "show", () => {});
+  const admission = { admit: () => null, refuse: (reason: string) => {
+    refused(reason);
+    return { kind: "rejected" as const, reason };
+  } };
+  for (const reason of ["missing", "range", "value", "taken", "author", "stored", "anchor", "text", "busy", "closed", "future"]) {
+    const command = t.mock.fn(() => ({ kind: "refused" as const, reason: reason as "busy" }));
+    const setField = Object.assign(command, { withSelection: native.commands.setField.withSelection });
+    const records = createNativeEditorRecords({ ...native, commands: { ...native.commands, setField } },
+      () => admission, "Editor", () => 0, fixture.ports.report);
+    assert.deepEqual(records.beatField("R1", "lengthSeconds", 42), { changed: false, held: true });
+    assert.equal(command.mock.callCount(), 1);
+    if (reason === "missing") assert.deepEqual(show.mock.calls.at(-1)?.arguments, ["That beat no longer exists.", "warn"]);
+    else assert.deepEqual(refused.mock.calls.at(-1)?.arguments, [reason]);
+  }
+  const records = createNativeEditorRecords(native, () => admission, "Editor", () => 0, fixture.ports.report);
+  assert.deepEqual(records.beatField("R1", "lengthSeconds", 42), { changed: true, held: false });
+  assert.deepEqual(records.beatField("R1", "lengthSeconds", 42), { changed: false, held: false });
+  assert.equal(refused.mock.callCount(), 10);
+  assert.equal(show.mock.callCount(), 1);
+  const release = native.holdIngress();
+  assert.deepEqual(records.beatField("R1", "lengthSeconds", 40), { changed: false, held: true });
+  assert.deepEqual(refused.mock.calls.at(-1)?.arguments, ["busy"]);
+  release();
+  const closed = openNativeSession({ kind: "state", state: native.encodeState() }, { actor: "Editor", sanitize: sanitizeHtml });
+  closed.close();
+  const ended = createNativeEditorRecords(closed, () => admission, "Editor", () => 0, fixture.ports.report);
+  assert.deepEqual(ended.beatField("R1", "lengthSeconds", 40), { changed: false, held: true });
+  assert.deepEqual(refused.mock.calls.at(-1)?.arguments, ["closed"]);
+});
+
+test("a missing admission owner or closed native gallery refuses without reading or planning the edit", async t => {
+  const fixture = entrySwitchFixture();
+  t.after(() => { if (sharedSession()) leaveRunningSharedSession(); });
+  const native = await nativeEntry(fixture);
+  const show = t.mock.method(notices, "show", () => {});
+  const read = t.mock.fn(native.document), edit = t.mock.fn(() => true);
+  const missing = createNativeEditorRecords({ ...native, document: read }, () => null, "Editor", () => 0, fixture.ports.report);
+  assert.deepEqual(missing.gallery("R1", "Edit gallery", edit), { changed: false, held: true });
+  assert.deepEqual(show.mock.calls[0]?.arguments, ["This is not available in a shared session yet.", "warn"]);
+  const closed = openNativeSession({ kind: "state", state: native.encodeState() }, { actor: "Editor", sanitize: sanitizeHtml });
+  closed.close();
+  const closedRead = t.mock.fn(closed.document), refused = t.mock.fn((reason: string) => ({ kind: "rejected" as const, reason }));
+  const ended = createNativeEditorRecords({ ...closed, document: closedRead }, () => ({
+    admit: () => null, refuse: refused
+  }), "Editor", () => 0, fixture.ports.report);
+  assert.deepEqual(ended.gallery("R1", "Edit gallery", edit), { changed: false, held: true });
+  assert.deepEqual(refused.mock.calls[0]?.arguments, ["closed"]);
+  assert.equal(read.mock.callCount(), 0);
+  assert.equal(closedRead.mock.callCount(), 0);
+  assert.equal(edit.mock.callCount(), 0);
+  assert.deepEqual(fixture.errors, []);
+});
+
+test("leaving removes the native comment, paste and drop capture listeners", async t => {
+  const fixture = entrySwitchFixture();
+  t.after(() => { if (sharedSession()) leaveRunningSharedSession(); });
+  const added = t.mock.method(window, "addEventListener"), removed = t.mock.method(window, "removeEventListener");
+  await nativeEntry(fixture);
+  const events = added.mock.calls.map(call => call.arguments).filter(([type, callback, capture]) =>
+    capture === true && typeof callback === "function"
+    && (type === "click" && callback.name === "comment" || (type === "paste" || type === "drop") && callback.name === "pictures"));
+  assert.deepEqual(events.map(([type]) => type), ["click", "paste", "drop"]);
+  assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+  for (const [type, callback, capture] of events) {
+    assert.ok(removed.mock.calls.some(({ arguments: args }) => args[0] === type && args[1] === callback && args[2] === capture), type);
+  }
+});
+
+test("permissions, held admissions and admission failures stop a native command before it writes", async t => {
+  const fixture = entrySwitchFixture();
+  t.after(() => { if (sharedSession()) leaveRunningSharedSession(); });
+  const native = await nativeEntry({ ...fixture, ports: { ...fixture.ports, common: {
+    edit: () => ({ allowed: false, reason: "locked" }), comment: () => ({ allowed: false, reason: "no comments" })
+  } } });
+  const command = t.mock.fn(native.commands.setField), observed = t.mock.fn((reason: string) => reason);
+  const error = new Error("admission failed");
+  const refusals = [null, { kind: "rejected", reason: "already told", notified: true }, { kind: "failed", error }] as const;
+  for (const refusal of refusals) {
+    const records = createNativeEditorRecords({ ...native, commands: { ...native.commands, setField: command } },
+      () => ({ admit: () => refusal, refuse: reason => { observed(reason); return { kind: "rejected", reason }; } }),
+      "Editor", () => 0, fixture.ports.report);
+    assert.deepEqual(records.beatField("R1", "lengthSeconds", 42), { changed: false, held: true });
+    if (!refusal) assert.deepEqual(records.comments.reply("missing", { id: "reply" }), { changed: false, held: true });
+  }
+  assert.equal(command.mock.callCount(), 0);
+  assert.deepEqual(observed.mock.calls.map(call => call.arguments), [["locked"], ["no comments"], ["failed"]]);
+  assert.deepEqual(fixture.errors, [error]);
+});
+
+test("a full script refuses additions with a notice but still takes gallery removals and field clears", async t => {
+  const fixture = entrySwitchFixture();
+  t.after(() => { if (sharedSession()) leaveRunningSharedSession(); });
+  const native = await nativeEntry(fixture);
+  const ref = { sha256: "a".repeat(64), width: 1, height: 1, mime: "image/png" };
+  const records = nativeEditorRecords();
+  assert.ok(records);
+  assert.equal(records.beatField("R1", "lengthSeconds", 22).changed, true);
+  assert.equal(records.gallery("R1", "Added", row => { addGalleryPicture(row, ref, "Picture"); return true; }).changed, true);
+  await Promise.resolve();
+  const state = native.encodeState(), limited = openNativeSession({ kind: "state", state }, {
+    actor: "Editor", sanitize: sanitizeHtml, sizeLimit: Math.floor(state.byteLength * 0.8), sizeCeilingRatio: 2
+  });
+  t.after(limited.close);
+  assert.equal(limited.size, "full");
+  const show = t.mock.method(notices, "show", () => {});
+  const edits = createNativeEditorRecords(limited, () => ({
+    admit: () => null, refuse: reason => ({ kind: "rejected", reason })
+  }), "Editor", () => 0, fixture.ports.report);
+  assert.deepEqual(edits.beatField("R1", "lengthSeconds", 42), { changed: false, held: true });
+  assert.deepEqual(edits.gallery("R1", "Added", row => { addGalleryPicture(row, { ...ref, sha256: "b".repeat(64) }, "Another"); return true; }),
+    { changed: false, held: true });
+  const fullNotice = ["This shared script is full. Export a copy to keep working.", "warn"];
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), [fullNotice, fullNotice]);
+  assert.equal(edits.gallery("R1", "Removed", row => removeGallerySlot(row, 0)).changed, true);
+  assert.equal(edits.beatField("R1", "lengthSeconds", null).changed, true);
+  assert.equal(limited.document().rows[0]?.imageRef, null);
+  assert.equal(limited.document().rows[0]?.lengthSeconds, undefined);
 });
 
 test("the native command guard refuses before planning and calls the refusal port once", async t => {
@@ -214,6 +357,27 @@ test("a native input binding unsubscribes its paint listener when torn down", as
   });
   unbind.dispose();
   assert.equal(stopPaint.mock.callCount(), 1);
+});
+
+test("native unbind unsubscribes the duration repaint separately from editor input", async t => {
+  const fixture = entrySwitchFixture();
+  t.after(() => { if (sharedSession()) leaveRunningSharedSession(); });
+  const stopDuration = t.mock.fn(), stopInput = t.mock.fn();
+  const subscribed = t.mock.fn();
+  assert.deepEqual(await enterSharedSession(fixture.ports, (doc, failed) => {
+    const { backend } = openNativeEditor(fixture.ports, doc, failed);
+    return { ...backend, bind: session => backend.bind({
+      ...session, subscribe: listener => {
+        subscribed(listener);
+        if (subscribed.mock.callCount() === 1) return stopDuration;
+        return stopInput;
+      }
+    }) };
+  }), { ok: true });
+  assert.equal(subscribed.mock.callCount(), 2);
+  assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+  assert.equal(stopInput.mock.callCount(), 1);
+  assert.equal(stopDuration.mock.callCount(), 1);
 });
 
 test("leaving unsubscribes the bridge before the queued update and closes the native adapter", async () => {

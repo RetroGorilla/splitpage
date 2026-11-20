@@ -23,7 +23,19 @@ import { presence } from "./ports/desktop-presence.ts";
 import { currentHome, locationStarted } from "./location-owner.ts";
 import { place } from "./ports/location.ts";
 import { capabilities as portCapabilities } from "./ports/capabilities.ts";
-import { refuseNativeEditorCommand } from "./ports/shared-commands.ts";
+import { nativeEditorRecords } from "./shared-session.ts";
+
+const galleryPictures: GalleryPorts["pictures"] = {
+  ensureBytes: portPictures.ensureBytes,
+  urlFor: portPictures.urlFor,
+  intern: portPictures.intern,
+  store: picture => {
+    const native = nativeEditorRecords();
+    if (native) return native.storePicture(picture);
+    void portPictures.persist([picture.sha256]);
+    return picture;
+  }
+};
 
 const gallery = owned<GalleryMount>();
 
@@ -32,12 +44,11 @@ export function mountGalleryFeature(): GalleryMount {
     const ports: GalleryPorts = {
       document: portDocument,
       notices: portNotices,
-      pictures: portPictures,
+      pictures: galleryPictures,
       ownership: portOwnership,
       cells: { editGallery: (...a) => cellEditing().editGallery(...a) }
     };
-    const mounted = mountGallery(ports);
-    return { ...mounted, openAnnotator: (rowId, slot) => !refuseNativeEditorCommand() && mounted.openAnnotator(rowId, slot) };
+    return mountGallery(ports);
   });
 }
 
@@ -83,7 +94,7 @@ export function mountGalleryVideoFeature(): GalleryVideoMount {
   return video.replace(() => {
     const ports: GalleryVideoPorts = {
       document: portDocument,
-      pictures: portPictures,
+      pictures: galleryPictures,
       ownership: portOwnership,
       undo: { fold: (entry, touches, change) => undoOwner().foldIntoEdit(entry, touches, change) },
       thumbnailsAllowed: () => preferences().videoThumbs(),

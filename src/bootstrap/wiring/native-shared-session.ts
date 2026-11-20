@@ -4,8 +4,12 @@ import { WHOLE_PROJECTION } from "../../application/session/shared-session.ts";
 import { enterSharedDocument } from "../../core/migrate.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { scriptCellOf, sanitizeHtml } from "../richtext.ts";
+import { paintRowTimes } from "../../features/rows/render.ts";
 import { keepNativeFieldPaint, mountNativeSharedInput } from "./native-shared-input.ts";
+import { createNativeEditorRecords } from "./native-shared-records.ts";
+import { mountNativeRecordEvents } from "./native-shared-record-events.ts";
 import { notices } from "./ports/effects.ts";
+import { currentRowsRender } from "./render.ts";
 import type { SharedEditorBackend, SharedSwitchPorts } from "./shared-session.ts";
 
 const UNSUPPORTED = "native-command-unavailable";
@@ -42,6 +46,9 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
   } catch (error) { native.close(); throw error; }
   const publication = nativePublication();
   let input: ReturnType<typeof mountNativeSharedInput> | null = null, terminal: Uint8Array | null = null;
+  let commandSession: Parameters<SharedEditorBackend["bind"]>[0] | null = null;
+  let stopRecords: (() => void) | null = null;
+  const records = createNativeEditorRecords(native, () => commandSession, actor, ports.now, ports.report);
   let initial: ValidatedDocument | null = null;
   let published = native.revision();
   function publish(buffered?: Parameters<typeof keepNativeFieldPaint>[0]): void {
@@ -94,13 +101,28 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
   const unavailable = () => ({ ok: false, reason: UNSUPPORTED, skipped: true } as const);
   const backend: SharedEditorBackend = {
     replica: publication.replica, parts: null, unsupportedCommands: UNSUPPORTED,
+    nativeRecords: records,
     undo: () => ({ actions: { undo: unavailable, redo: unavailable }, breakGroup: () => {}, replayed: () => null }),
     bind: session => {
+      commandSession = session;
+      if (!stopRecords) {
+        const stopEvents = mountNativeRecordEvents(records);
+        const stopTimes = session.subscribe(change => {
+          if (currentRowsRender() && change.changes.cells.some(({ field }) => field === "lengthSeconds")) paintRowTimes();
+        });
+        stopRecords = () => { stopEvents(); stopTimes(); };
+      }
       input ??= mountNativeSharedInput({
         native, session, editAttribution: () => ({ at: new Date(ports.now()).toISOString(), by: actor }), report: ports.report, publish
       });
     },
-    unbind: () => { input?.dispose(); input = null; },
+    unbind: () => {
+      commandSession = null;
+      stopRecords?.();
+      stopRecords = null;
+      input?.dispose();
+      input = null;
+    },
     settle: () => input?.finish() ?? null,
     start: () => {
       initial = enterSharedDocument(native.document());
