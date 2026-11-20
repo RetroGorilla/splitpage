@@ -179,24 +179,23 @@ function attachWrites(
   }
 
   async function drain(): Promise<NativeLocalStoreReceipt> {
-    try {
-      for (let entry = pending[0]; entry && !stopped(); entry = pending[0]) {
-        try { await write(database, entry); }
-        catch (error) {
-          const result = { ...failure(error), generation: entry.generation, committed };
-          publish(result);
-          return result;
-        }
-        pending.shift();
-        committed = entry.generation;
-        if (entry.checkpoint) checkpoint = committed;
-        publish({ kind: "stored", generation: committed });
+    for (let entry = pending[0]; entry && !stopped(); entry = pending[0]) {
+      try { await write(database, entry); }
+      catch (error) {
+        const result = { ...failure(error), generation: entry.generation, committed };
+        // why: a failure listener can call flush to retry once the failed transaction has settled
+        active = undefined;
+        publish(result);
+        return result;
       }
-      scheduleCompaction();
-      return current();
-    } finally {
-      active = undefined;
+      pending.shift();
+      committed = entry.generation;
+      if (entry.checkpoint) checkpoint = committed;
+      publish({ kind: "stored", generation: committed });
     }
+    active = undefined;
+    scheduleCompaction();
+    return current();
   }
 
   function flush(): Promise<NativeLocalStoreReceipt> {

@@ -132,6 +132,20 @@ test("an error on the request is reported when the abort has no transaction erro
   assert.equal(result.reason, "quota");
 });
 
+test("a receipt listener can retry the failed generation immediately", bounded, async t => {
+  const { store } = fixture(), replica = await open(t, store, "listener-retry");
+  const retried = eventResult<NativeLocalStoreReceipt>();
+  const unsubscribe = replica.subscribe(receipt => {
+    if (receipt.kind === "failed") {
+      unsubscribe();
+      void replica.flush().then(retried.resolve);
+    }
+  });
+  failNextIdbWrite(t, "add", "abort");
+  seedReplica(replica.session);
+  assert.deepEqual(await retried.promise, stored(1));
+});
+
 test("a failed generation is published even when a later generation is already queued", bounded, async t => {
   const { store } = fixture(), replica = await open(t, store, "superseded"), { session } = replica;
   seedReplica(session);
