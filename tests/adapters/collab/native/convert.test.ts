@@ -160,7 +160,7 @@ function base(extra: Record<string, unknown> = {}, rows: Record<string, unknown>
   return migrateRows({ schema: 2, title: "T", docId: "d", rev: 0, rows, comments: [], people: [], productionTags: [], brollShots: [], ...extra });
 }
 
-test("finding 2: extensions keep non-reserved fields and cannot supply a beat's rank or join", () => {
+test("finding 2: extension values keep every key on every copy, adapter fields cannot collide with file fields", () => {
   const payloads = [JSON.parse('{"__proto__":{"payload":42}}') as unknown, { constructor: 42 }, { toString: "x", hasOwnProperty: 1 }];
   const people = [
     { id: "p1", name: "One", payload: payloads[0] }, { id: "p2", name: "Two", payload: payloads[1], rank: "mine", extra: "opaque" },
@@ -172,14 +172,35 @@ test("finding 2: extensions keep non-reserved fields and cannot supply a beat's 
     const read = copy.reader.document();
     assert.deepEqual(read.people, source.people);
     assert.deepEqual(Object.keys(read.people[0]?.payload as object), ["__proto__"]);
-    assert.deepEqual(read.rows[0], { id: "R1", status: "todo", audioText: "a", visualText: "", imageRef: null,
-      updatedAt: "", updatedBy: null, extra: "row extra", nested: { constructor: 1 } });
+    assert.deepEqual(read.rows[0], { ...source.rows[0], audioText: "a" });
     assert.deepEqual(copy.reader.problems(), []);
   }
   assert.equal(script.roots.beats.get("R1")?.get("joined"), undefined);
   assert.deepEqual(script.roots.beats.get("R1")?.toJSON(), {
-    rank: "00000WV", status: '"todo"', gallery: '{"imageRef":null}', 'f:"extra"': '"row extra"', 'f:"nested"': '{"constructor":1}'
+    rank: "00000WV", status: '"todo"', gallery: '{"imageRef":null}', 'f:"extra"': '"row extra"', 'f:"nested"': '{"constructor":1}',
+    'f:"rank"': '"row rank"', 'f:"joined"': '{"into":"R0","glue":" "}'
   });
+});
+
+test("conversion omits undefined gallery members and a gallery with no members", () => {
+  const source = base({}, [{ id: "R1", audioText: "" }, { id: "R2", audioText: "" }]);
+  Object.assign(source.rows[0] ?? {}, { imageName: undefined });
+  Reflect.deleteProperty(source.rows[1] ?? {}, "imageRef");
+  Object.assign(source.rows[1] ?? {}, { imageName: undefined });
+  const script = convertedScript(source);
+  assert.equal(script.roots.beats.get("R1")?.get("gallery"), '{"imageRef":null}');
+  assert.equal(script.roots.beats.get("R2")?.has("gallery"), false);
+  script.doc.destroy();
+});
+
+test("conversion refuses an extra too deeply nested for the reader before writing", () => {
+  let nested: unknown = 0;
+  for (let depth = 0; depth < 1_500; depth++) nested = [nested];
+  const source = base(), doc = new Y.Doc(), script = openNativeScript(doc);
+  Object.assign(source.rows[0] ?? {}, { nested });
+  assert.throws(() => convertToNativeScript(script, source, ports), /too deeply nested/);
+  assert.equal(Y.encodeStateVector(doc).length, 1);
+  doc.destroy();
 });
 
 test("beat extras serialize in raw name order, omitting an own undefined field", () => {

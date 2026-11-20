@@ -471,7 +471,7 @@ test("plain Yjs undo of the winning concurrent rank erases the key", () => {
 
 test("joined fields show the highest status and both galleries, with diagnostics for fields that have no place", () => {
   const a = script("AB"), b = joinedScript(a, 200), net = new ScriptNet([a, b]);
-  const left = { sha256: "a".repeat(64), mime: "image/png" }, right = { sha256: "b".repeat(64), mime: "image/png" };
+  const left = { sha256: "a".repeat(64), mime: "image/png", width: 10, height: 20 }, right = { ...left, sha256: "b".repeat(64) };
   try {
     for (const copy of [a, b]) check(copy);
     const upper = a.roots.beats.get("A"), lower = b.roots.beats.get("B");

@@ -4,7 +4,7 @@ import { transactNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { nativeAvailability } from "./text-commands.ts";
 import type { NativeRefusal } from "./text-commands.ts";
-import { decodeNativeValue, encodeNativeValue, nativeWellFormed } from "./values.ts";
+import { decodeNativeValue, encodeNativeValue, nativeWellFormed, recordBag, sameNativeValue } from "./values.ts";
 
 type RecordRefusal = NativeRefusal | "value" | "taken" | "author" | "stored" | "anchor";
 
@@ -32,10 +32,6 @@ export function transactRecord<T, R extends NativeRecordOutcome>(script: NativeS
     if (script.closed() || script.reader.isClosed()) return refuseRecord("closed");
     return write(input.value);
   });
-}
-
-export function recordBag(value: unknown): value is Record<string, unknown> {
-  return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
 export function plainRecordArgument(value: unknown): boolean {
@@ -101,14 +97,6 @@ export function copyRecordValue(value: unknown): unknown {
   }
   check(copied, 0);
   return copied;
-}
-
-export function sameNativeValue(left: unknown, right: unknown): boolean {
-  if (left === right) return true;
-  if (Array.isArray(left)) return Array.isArray(right) && left.length === right.length && left.every((item, index) => sameNativeValue(item, right[index]));
-  if (!recordBag(left) || !recordBag(right)) return false;
-  const keys = Object.keys(left);
-  return keys.length === Object.keys(right).length && keys.every(key => Object.hasOwn(right, key) && sameNativeValue(left[key], right[key]));
 }
 
 export function writeRecordFields(record: Y.Map<unknown>, fields: Readonly<Record<string, unknown>>): NativeRecordOutcome {

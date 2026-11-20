@@ -234,6 +234,63 @@ for (const { name, initial, left: leftEdit, right: rightEdit } of GALLERY_RACES)
   });
 }
 
+test("gallery race winner's undo leaves the whole key absent and redo restores its exact value", () => {
+  races((left, right, settle) => {
+    const winner = left.doc.clientID > right.doc.clientID ? left : right;
+    left.roots.beats.get("A")?.delete("gallery");
+    settle(script => assert.equal(script.roots.beats.get("A")?.has("gallery"), false));
+    const history = recordUndo(winner);
+    assert.deepEqual(setNativeField(left, beatField("A", "imageRef"), IMAGE), WRITTEN);
+    assert.deepEqual(setNativeField(right, beatField("A", "imageRef"), OTHER_IMAGE), WRITTEN);
+    const stored = winner.roots.beats.get("A")?.get("gallery");
+    assert.equal(typeof stored, "string");
+    settle(script => assert.equal(script.roots.beats.get("A")?.get("gallery"), stored));
+    assert.ok(history.undo());
+    settle(script => {
+      assert.equal(script.roots.beats.get("A")?.has("gallery"), false);
+      assert.equal(script.reader.document().rows[0]?.imageRef, undefined);
+      assert.equal(migrateRows(structuredClone(script.reader.document())).rows[0]?.imageRef, null);
+    });
+    assert.ok(history.redo());
+    settle(script => assert.equal(script.roots.beats.get("A")?.get("gallery"), stored));
+  });
+});
+
+const HREF_ONLY = [{ href: "https://example.test/video" }];
+
+function checkDroppedSecondaryLink(script: NativeScript): void {
+  const document = script.reader.document(), row = document.rows[0];
+  assert.ok(row);
+  assert.deepEqual(row.imageRef, IMAGE);
+  assert.deepEqual(row.moreImages, [{ links: HREF_ONLY }]);
+  const expected = { ...row };
+  delete expected.moreImages;
+  assert.deepEqual(migrateRows(structuredClone(document)).rows[0], expected);
+}
+
+test("a write followed by a join exposes an href-only secondary link that reload drops", () => {
+  const { scripts: [script] } = recordCopies([5]);
+  assert.ok(script);
+  assert.deepEqual(setNativeField(script, beatField("A", "imageRef"), IMAGE), WRITTEN);
+  assert.deepEqual(setNativeField(script, beatField("B", "imageLinks"), HREF_ONLY), WRITTEN);
+  assert.deepEqual(joinNativeRow(script, "B", "A", " "), WRITTEN);
+  checkDroppedSecondaryLink(script);
+  script.doc.destroy();
+});
+
+test("concurrent head image and member link writes can create an href-only secondary that reload drops", () => {
+  races((left, right, settle) => {
+    assert.deepEqual(joinNativeRow(left, "B", "A", " "), WRITTEN);
+    settle(script => assert.deepEqual(script.reader.row("A")?.members, ["A", "B"]));
+    const image = beatField("A", "imageRef");
+    assert.deepEqual(setNativeField(left, image, IMAGE), WRITTEN);
+    assert.deepEqual(setNativeField(right, beatField("B", "imageLinks"), HREF_ONLY), WRITTEN);
+    assert.deepEqual(right.reader.row("A")?.fields.imageLinks, HREF_ONLY);
+    unchangedRecord(right, () => setNativeField(right, image, IMAGE), "value");
+    settle(checkDroppedSecondaryLink);
+  });
+});
+
 test("concurrent picture additions to one beat keep one whole picture list in both client orders", () => {
   races((left, right, settle) => {
     const leftImage = { ...IMAGE, sha256: "b".repeat(64) }, rightImage = { ...IMAGE, sha256: "c".repeat(64) };

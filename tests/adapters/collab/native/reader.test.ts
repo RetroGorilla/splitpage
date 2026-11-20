@@ -88,7 +88,7 @@ test("only canonical ordinary beat keys are shown, and raw aliases never shadow 
   const target = { kind: "beat", id: "R1" } as const;
   const invalid = new Map([
     ['f:"status"', '"shot"'], ['f:"note" ', '"alias"'], ["extra", '{"note":"old storage"}'],
-    ['f:"rank"', '"fake rank"'], ['f:"imageRef"', '"fake image"']
+    ["f:17", '"non-string name"'], ['f:"imageRef"', '"fake image"'], ['f:"visualImage"', '"legacy image"']
   ]);
   for (const [key, value] of invalid) record.set(key, value);
   assert.deepEqual(problemKinds(script).sort(), [...invalid.keys()].map(key => "bad-key beats/R1/" + key).sort());
@@ -102,8 +102,54 @@ test("only canonical ordinary beat keys are shown, and raw aliases never shadow 
   assert.equal(Object.hasOwn(row, "note"), false);
   assert.equal(Object.hasOwn(row, "extra"), false);
   assert.equal(Object.hasOwn(row, "rank"), false);
+  assert.equal(Object.hasOwn(row, "visualImage"), false);
   assert.equal(row.imageRef, null);
   assert.deepEqual(problemKinds(script).sort(), [...invalid.keys()].map(key => "bad-key beats/R1/" + key).sort());
+  script.doc.destroy();
+});
+
+test("malformed galleries and deeply nested fields are omitted and diagnosed, including on an unplaced beat", () => {
+  const script = convertedScript(small({ R1: "ab" })), record = script.roots.beats.get("R1");
+  assert.ok(record);
+  const deep = "[".repeat(12_000) + "0" + "]".repeat(12_000);
+  script.roots.beats.set("orphan", new Y.Map([["gallery", "{bad"]]));
+  record.set('f:"payload"', deep);
+  for (const raw of ["{bad", "[]", "null", '{"imageRef":null,"unknown":1}', '{"imageRef":17}', '{"imageName":"Frame"}', deep]) {
+    record.set("gallery", raw);
+    const row = script.reader.document().rows[0];
+    assert.ok(row);
+    assert.equal(Object.hasOwn(row, "imageRef"), false);
+    assert.equal(Object.hasOwn(row, "imageName"), false);
+    assert.equal(Object.hasOwn(row, "payload"), false);
+    assert.deepEqual(problemKinds(script).sort(), [
+      'bad-value beats/R1/f:"payload"', "bad-value beats/R1/gallery", "bad-value beats/orphan/gallery"
+    ]);
+    assert.deepEqual(setNativeField(script, { kind: "beat", id: "R1", field: "note" }, raw.length), { kind: "written" });
+    assert.equal(script.reader.document().rows[0]?.note, raw.length);
+  }
+  script.doc.destroy();
+});
+
+test("metadata with wrong scalar types falls back to the document defaults", () => {
+  const script = convertedScript(small({ R1: "ab" }));
+  script.roots.meta.set("docId", "17");
+  script.roots.meta.set("schema", '"two"');
+  script.roots.meta.set("extra", '{"rev":false}');
+  const { docId, schema, rev } = script.reader.document();
+  assert.deepEqual({ docId, schema, rev }, { docId: "", schema: 0, rev: 0 });
+  script.doc.destroy();
+});
+
+test("the reader builds a visual cell with 140,001 speaker embeds", () => {
+  const script = convertedScript(small({ R1: "ab" })), visual = script.roots.visuals.get("R1");
+  assert.ok(visual);
+  const count = 140_001;
+  visual.applyDelta(Array.from({ length: count }, () => ({ insert: { w: "Speaker" } })));
+  const row = script.reader.row("R1");
+  assert.ok(row);
+  assert.equal(row.visual.length, count);
+  assert.ok(row.visual.every(run => run.atom === "who" && run.name === "Speaker"));
+  assert.equal(script.reader.document().rows[0]?.visualText, row.visualText);
   script.doc.destroy();
 });
 

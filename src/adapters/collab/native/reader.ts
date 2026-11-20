@@ -1,4 +1,5 @@
 import * as Y from "yjs";
+import { readNativeGallery } from "./gallery.ts";
 import { projectSharedJoinedFields } from "../../../core/collab/projection/joins.ts";
 import type { DocumentShape } from "../../../core/document/validated.ts";
 import { toHtml } from "../../../core/text/html.ts";
@@ -155,20 +156,13 @@ function decoded(record: Y.Map<unknown>, key: string, where: string, problems: P
 function beatExtraEntries(record: Y.Map<unknown>, where: string, problems: Problems,
   gallery?: Readonly<Record<string, unknown>>): [string, unknown][] {
   const entries: [string, unknown][] = [];
-  function appendGallery(fields: Readonly<Record<string, unknown>>): void {
-    for (const [name, value] of Object.entries(fields)) {
-      if (NATIVE_GALLERY_FIELDS.has(name)) entries.push([name, value]);
-      else problems?.push({ kind: "bad-key", where: where + "/" + NATIVE_GALLERY_KEY + "/" + name });
-    }
-  }
-  if (gallery) appendGallery(gallery);
+  if (gallery) for (const entry of Object.entries(gallery)) entries.push(entry);
   record.forEach((stored, key) => {
     if (key === "rank" || key === "joined" || isNativeBeatField(key)) return;
     if (key === NATIVE_GALLERY_KEY) {
       if (gallery) return;
-      if (stored === '{"imageRef":null}') { entries.push(["imageRef", null]); return; }
-      const value = decodeNativeValue(stored)?.value;
-      if (fieldBag(value)) appendGallery(value);
+      const value = readNativeGallery(stored);
+      if (value) for (const entry of Object.entries(value)) entries.push(entry);
       else problems?.push({ kind: "bad-value", where: where + "/" + key });
       return;
     }
@@ -455,7 +449,8 @@ export class NativeScriptReader {
         }
         blocks.push(previous);
       });
-      (firstBeat?.spans ?? previousBeat?.spans ?? top).push(...leading);
+      const destination = firstBeat?.spans ?? previousBeat?.spans ?? top;
+      for (const span of leading) destination.push(span);
       previousBeat = lastBeat;
     }
     const below: (StoredBlock | undefined)[] = [];
@@ -464,13 +459,14 @@ export class NativeScriptReader {
       below[at] = nextBeat;
       if (blocks[at]?.kind === "b") nextBeat = blocks[at];
     }
-    if (nextBeat) nextBeat.spans.push(...top);
+    if (nextBeat) for (const span of top) nextBeat.spans.push(span);
     previousBeat = undefined;
     for (const [at, block] of blocks.entries()) {
       if (block.kind === "b") { previousBeat = block; continue; }
       const next = blocks[at + 1];
       const owner = next?.kind === "b" ? next : previousBeat ?? below[at];
-      (owner?.spans ?? top).push(...block.spans);
+      const destination = owner?.spans ?? top;
+      for (const span of block.spans) destination.push(span);
     }
     return { seen, blocks, places, top, problems, headingPlaces, positions };
   }
@@ -663,11 +659,11 @@ export class NativeScriptReader {
       this.builtNarration.set(member.id, this.narrationContent(refs));
       const items = refs.length === 1 && refs[0] ? this.spanAt(refs[0])?.items ?? [] : refs.flatMap(ref => this.spanAt(ref)?.items ?? []);
       if (member.glue && audio.length && items.length) audio.push({ insert: member.glue });
-      audio.push(...items);
+      for (const item of items) audio.push(item);
       const cell = this.roots.visuals.get(member.id);
       const delta = (cell instanceof Y.Text ? cell.toDelta() : []) as NativeDeltaItem[];
       if (visual.length && delta.length) visual.push({ insert: "\n" });
-      visual.push(...delta);
+      for (const item of delta) visual.push(item);
     }
     const narration = nativeRunsOf(audio), visualRuns = nativeRunsOf(visual);
     return Object.freeze({

@@ -362,7 +362,46 @@ test("the core gallery rules refuse excess links, duplicate pictures and legacy 
   assert.deepEqual(setNativeField(script, beatField("A", "imageRef"), IMAGE), WRITTEN);
   unchangedRecord(script, () => setNativeField(script, beatField("A", "moreImages"), [{ imageRef: IMAGE }, { imageRef: IMAGE }]), "value");
   unchangedRecord(script, () => setNativeField(script, beatField("A", "visualImage"), 42), "value");
+  unchangedRecord(script, () => clearNativeField(script, beatField("A", "visualImage")), "value");
   script.doc.destroy();
+});
+
+test("a gallery write replaces malformed stored values with a valid gallery", () => {
+  const { scripts: [script] } = recordCopies([5]);
+  assert.ok(script);
+  const record = script.roots.beats.get("A");
+  assert.ok(record);
+  for (const raw of ["{bad", "[]", "null", '{"imageRef":null,"unknown":1}', '{"imageRef":17}', '{"imageName":"Orphan"}']) {
+    record.set("gallery", raw);
+    assert.deepEqual(setNativeField(script, beatField("A", "imageRef"), IMAGE), WRITTEN);
+    assert.deepEqual(JSON.parse(String(record.get("gallery"))), { imageRef: IMAGE });
+    assert.deepEqual(script.reader.row("A")?.fields.imageRef, IMAGE);
+    assert.equal(script.reader.problems().some(problem => problem.where === "beats/A/gallery"), false);
+  }
+  script.doc.destroy();
+});
+
+test("conversion and commands encode the same gallery, and undo and redo restore its exact strings", () => {
+  const primary = { mime: IMAGE.mime, height: IMAGE.height, sha256: IMAGE.sha256, width: IMAGE.width };
+  const secondary = { ...primary, sha256: "b".repeat(64) };
+  const imported = convertedScript(migrateRows({ schema: 2, rows: [{
+    id: "A", imageName: "Frame", moreImages: [{ name: "Other", imageRef: secondary }], imageRef: primary
+  }] }));
+  const { scripts: [writer] } = recordCopies([5]);
+  assert.ok(writer);
+  const gallery = () => writer.roots.beats.get("A")?.get("gallery");
+  const undo = recordUndo(writer);
+  for (const [field, value] of [["imageRef", primary], ["moreImages", [{ name: "Other", imageRef: secondary }]], ["imageName", "Frame"]] as const) {
+    const before = gallery();
+    assert.deepEqual(setNativeField(writer, beatField("A", field), value), WRITTEN);
+    const after = gallery();
+    assert.ok(undo.undo());
+    assert.equal(gallery(), before);
+    assert.ok(undo.redo());
+    assert.equal(gallery(), after);
+  }
+  assert.equal(gallery(), imported.roots.beats.get("A")?.get("gallery"));
+  for (const script of [writer, imported]) script.doc.destroy();
 });
 
 test("a joined beat refuses an href-only link that would disappear from the projected row on reload", () => {
@@ -438,7 +477,6 @@ test("malformed stored extras and removed or mismatched reply records refuse", (
   unchangedRecord(script, () => setNativeField(script, beatField("A", "note"), "value"), "stored");
   record.delete(fileKey("note"));
   record.set("gallery", "{bad");
-  unchangedRecord(script, () => setNativeField(script, beatField("A", "imageRef"), IMAGE), "stored");
   assert.deepEqual(setNativeField(script, beatField("A", "note"), "value"), WRITTEN);
   assert.equal(script.reader.row("A")?.fields.note, "value");
   assert.equal(record.get("gallery"), "{bad");
@@ -449,6 +487,15 @@ test("malformed stored extras and removed or mismatched reply records refuse", (
   reply.set("commentId", COMMENT.comment);
   assert.deepEqual(removeNativeComment(script, REPLY), WRITTEN);
   unchangedRecord(script, () => setNativeCommentBody(script, REPLY, AUTHOR, "hidden"), "missing");
+  script.doc.destroy();
+});
+
+test("closing only the reader at transaction entry refuses an unwritten record command", () => {
+  const { scripts: [script] } = recordCopies([5]);
+  assert.ok(script);
+  script.doc.once("beforeTransaction", () => script.reader.close());
+  unchangedRecord(script, () => setNativeField(script, beatField("A", "note"), "value"), "closed");
+  assert.equal(script.closed(), false);
   script.doc.destroy();
 });
 
