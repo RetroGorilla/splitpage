@@ -1,10 +1,12 @@
-import { beatPos, caretAt } from "../../core/flow/flow.ts";
+import { beatPos, caretAt, headingPos } from "../../core/flow/flow.ts";
 import type { FlowPos } from "../../core/flow/flow.ts";
+import type { openNativeSession } from "../../adapters/collab/native/session.ts";
 import { editorKeys } from "../../core/text/selection.ts";
 import { cssAttr } from "../../features/common/dom.ts";
 import { domKeys, domToPos, posToDom } from "../../features/common/cell-dom.ts";
 import { paintedFromRow } from "../../features/rows/render.ts";
 import { fromHtml } from "../richtext.ts";
+import { documentReader } from "./ports/document.ts";
 import { writerControls } from "./writer.ts";
 
 type ShownRow = Parameters<typeof paintedFromRow>[2];
@@ -99,10 +101,48 @@ function endOf(cell: Element): number {
   return domToPos(cell, cell, cell.childNodes.length) ?? 0;
 }
 
-function writerPointExists(point: FlowPos): boolean {
-  const cell = point.kind === "beat" ? writerNarration.cell(point.rowId)
+const WRITER_FLOW = "#writer-doc :is(.wr-beat[data-id], .wr-heading[data-scene])";
+type SwitchNative = Pick<ReturnType<typeof openNativeSession>, "readBeat" | "commands" | "narrationCaret" | "narrationOffset">;
+
+interface SwitchPoint {
+  readonly cell: Element;
+  readonly offset: number;
+}
+
+function sameKeys(a: readonly string[], b: readonly string[]): boolean {
+  return a.length === b.length && a.every((key, index) => key === b[index]);
+}
+
+function forward(anchor: SwitchPoint, head: SwitchPoint): boolean {
+  return anchor.cell === head.cell ? anchor.offset <= head.offset
+    : !!(anchor.cell.compareDocumentPosition(head.cell) & Node.DOCUMENT_POSITION_FOLLOWING);
+}
+
+function selectedKeys(selector: string, anchor: SwitchPoint, head: SwitchPoint): string[] {
+  if (anchor.cell === head.cell) {
+    return domKeys(anchor.cell).slice(Math.min(anchor.offset, head.offset), Math.max(anchor.offset, head.offset));
+  }
+  const cells = Array.from(document.querySelectorAll(selector));
+  const a = cells.indexOf(anchor.cell), h = cells.indexOf(head.cell);
+  const [start, end] = a < h ? [anchor, head] : [head, anchor];
+  return [domKeys(start.cell).slice(start.offset),
+    ...cells.slice(Math.min(a, h) + 1, Math.max(a, h)).map(domKeys),
+    domKeys(end.cell).slice(0, end.offset)].flat();
+}
+
+function writerCell(point: FlowPos): Element | null {
+  return point.kind === "beat" ? writerNarration.cell(point.rowId)
     : document.querySelector(WRITER + ' .wr-heading[data-scene="' + cssAttr(point.sceneId) + '"]');
-  return !!cell && point.offset <= endOf(cell);
+}
+
+function writerPoint(point: FlowPos): SwitchPoint | null {
+  const cell = writerCell(point);
+  return cell ? { cell, offset: point.offset } : null;
+}
+
+function flowPoint({ cell, offset }: SwitchPoint): FlowPos {
+  const heading = cell.getAttribute("data-scene");
+  return heading ? headingPos(heading, offset) : beatPos(cell.getAttribute("data-id") ?? "", offset);
 }
 
 function placeWriterEnd(): void {
@@ -115,51 +155,93 @@ function placeWriterEnd(): void {
   }
 }
 
-function cellPoint(selector: string, node: Node | null, offset: number) {
+function cellPoint(selector: string, node: Node | null, offset: number): SwitchPoint | null {
   const element = node instanceof Element ? node : node?.parentElement;
-  const cell = element?.closest(selector), id = cell?.getAttribute("data-id");
-  if (!cell || !node || !id) return null;
+  const cell = element?.closest(selector);
+  if (!cell || !node) return null;
   const at = domToPos(cell, node, offset);
-  return at === null ? null : { id, offset: at };
+  return at === null ? null : { cell, offset: at };
 }
 
-export function captureNativeSwitchSelection(): (() => void) | null {
+function nativeNarrationPoint(native: SwitchNative, id: string, keys: readonly string[], offset: number, right: boolean,
+  surface: NativeTextSurface): SwitchPoint | null {
+  const beat = native.readBeat(id);
+  if (!beat || !sameKeys(keys, editorKeys(beat.narration))) return null;
+  const cell = surface.cell(beat.row);
+  if (!cell) return null;
+  const shown = domKeys(cell);
+  if (beat.row === id && sameKeys(keys, shown)) return { cell, offset };
+  const start = native.commands.anchorText({ beat: id, cell: "narration" }, 0);
+  const at = start.kind === "anchored" ? native.narrationOffset(beat.row, start.range) : null;
+  if (at === null || !sameKeys(keys, shown.slice(at, at + keys.length))) return null;
+  const resolved = native.narrationCaret(beat.row, at + offset, right);
+  return resolved?.beat === id && resolved.offset === offset ? { cell, offset: at + offset } : null;
+}
+
+export function captureNativeSwitchSelection(native: SwitchNative) {
   const active = document.activeElement;
   const selection = document.getSelection();
-  if (active?.matches(WRITER)) {
-    const range = writerControls()?.writerFlowControl()?.selection();
-    return () => {
-      if (range && writerPointExists(range.anchor) && writerPointExists(range.head)) {
-        writerControls()?.writerFlowControl()?.place(range);
-      } else placeWriterEnd();
-    };
-  }
-  if (!active) return null;
-  const selector = [SPLIT, SPLIT_VISUAL, WRITER_VISUAL].find(candidate => active.matches(candidate));
+  if (!active || !selection?.rangeCount || !selection.anchorNode || !selection.focusNode) return null;
+  const writer = active.matches(WRITER);
+  const selector = writer ? WRITER_FLOW : [SPLIT, SPLIT_VISUAL, WRITER_VISUAL].find(candidate => active.matches(candidate));
+  if (!selector) return null;
+  const range = writer && active.contains(selection.anchorNode) && active.contains(selection.focusNode)
+    ? writerControls()?.writerFlowControl()?.selection() : null;
+  const anchor = range ? writerPoint(range.anchor) : cellPoint(selector, selection.anchorNode, selection.anchorOffset);
+  const head = range ? writerPoint(range.head) : cellPoint(selector, selection.focusNode, selection.focusOffset);
+  if (!anchor || !head) return null;
+  const aKeys = domKeys(anchor.cell), hKeys = anchor.cell === head.cell ? aKeys : domKeys(head.cell);
+  if (anchor.offset > aKeys.length || head.offset > hKeys.length) return null;
+  const keys = selectedKeys(selector, anchor, head);
+  const direction = forward(anchor, head);
+  const collapsed = selection.isCollapsed;
+  const surface = writer ? writerNarration : selector === SPLIT ? splitNarration : visualTextSurface;
   const focused = active.getAttribute("data-id");
-  if (!selector || !focused) return null;
-  const anchor = cellPoint(selector, selection?.anchorNode ?? null, selection?.anchorOffset ?? 0);
-  const head = cellPoint(selector, selection?.focusNode ?? null, selection?.focusOffset ?? 0);
-  const surface = selector === SPLIT ? splitNarration : visualTextSurface;
-  return () => {
-    if (selector === WRITER_VISUAL && head && !surface.cell(head.id)) {
-      writerControls()?.writerFlowControl()?.openVisual(head.id);
+  const ownsFocus = (): boolean => {
+    const now = document.activeElement;
+    return now === active || now === document.body || (!active.isConnected &&
+      (!!now && now === (focused ? surface.cell(focused) : null) || selector === WRITER_VISUAL && !!now?.matches(WRITER)));
+  };
+  const resolve = (point: SwitchPoint, source: readonly string[], shared: boolean, right: boolean): SwitchPoint | null => {
+    const pos = flowPoint(point);
+    if (shared && (writer || selector === SPLIT) && pos.kind === "beat") {
+      return nativeNarrationPoint(native, pos.rowId, source, pos.offset, right, surface);
     }
-    const from = anchor && surface.cell(anchor.id), to = head && surface.cell(head.id);
-    if (anchor && head && from && to && anchor.offset <= endOf(from) && head.offset <= endOf(to)) {
-      if (from === to) surface.place(to, head.id, anchor.offset, head.offset, false);
-      else {
-        const a = posToDom(from, anchor.offset), h = posToDom(to, head.offset);
-        (surface.cell(focused) ?? from).focus({ preventScroll: true });
-        document.getSelection()?.setBaseAndExtent(a.node, a.offset, h.node, h.offset);
-      }
-      return;
-    }
-    if (selector === WRITER_VISUAL) { placeWriterEnd(); return; }
+    const cell = writer ? writerCell(pos) : surface.cell(point.cell.getAttribute("data-id") ?? "");
+    return cell && sameKeys(source, domKeys(cell)) ? { cell, offset: point.offset } : null;
+  };
+  const fallback = (): void => {
+    if (writer || selector === WRITER_VISUAL) { placeWriterEnd(); return; }
     const first = document.querySelector<HTMLElement>(selector);
     if (first) {
       const end = endOf(first);
       surface.place(first, first.dataset.id ?? "", end, end, false);
     } else document.querySelector<HTMLElement>(".add-row-btn")?.focus({ preventScroll: true });
   };
+  const restore = (shared: boolean): void => {
+    if (!ownsFocus()) return;
+    if (selector === WRITER_VISUAL && focused && !surface.cell(focused)) {
+      const row = documentReader.current()?.rows.find(row => row.id === focused);
+      if (row && sameKeys(aKeys, editorKeys(fromHtml(row.visualText ?? "", MEDIA)))) {
+        writerControls()?.writerFlowControl()?.openVisual(focused);
+      }
+    }
+    const from = resolve(anchor, aKeys, shared, !collapsed && direction);
+    const to = resolve(head, hKeys, shared, !collapsed && !direction);
+    if (!from || !to || direction !== forward(from, to) || !sameKeys(keys, selectedKeys(selector, from, to))) {
+      fallback();
+      return;
+    }
+    if (writer) {
+      writerControls()?.writerFlowControl()?.place({ anchor: flowPoint(from), head: flowPoint(to) });
+    } else if (from.cell === to.cell && to.cell instanceof HTMLElement) {
+      surface.place(to.cell, to.cell.dataset.id ?? "", from.offset, to.offset, false);
+    } else {
+      const a = posToDom(from.cell, from.offset), h = posToDom(to.cell, to.offset);
+      const cell = (focused && surface.cell(focused)) || from.cell;
+      if (cell instanceof HTMLElement) cell.focus({ preventScroll: true });
+      document.getSelection()?.setBaseAndExtent(a.node, a.offset, h.node, h.offset);
+    }
+  };
+  return { ownsFocus, restore };
 }

@@ -13,7 +13,7 @@ import { createSharedSession } from "../../application/session/shared-session.ts
 import type { DocumentOpeningActivity } from "../../application/transitions/ports.ts";
 import type { ReplicaPort, SharedDocumentSession, SharedSessionPorts } from "../../application/session/shared-session.ts";
 import type { ValidatedDocument } from "../../core/document/validated.ts";
-import { adoptReplacement, adoptShared, collectReplacementErrors, currentDocument, holdMergeBase, holdSessionCommands, landStandalone, mergeBase, sessionEntryRefusal, sharedSession } from "./session-owner.ts";
+import { adoptReplacement, adoptShared, collectReplacementErrors, currentDocument, holdMergeBase, holdSessionCommands, landStandalone, mergeBase, sessionEntryRefusal, sessionStarted, sharedRecoverySession, sharedSession } from "./session-owner.ts";
 import type { OwnerSwap } from "./session-owner.ts";
 import type { SharedUndoRoute } from "./undo.ts";
 import { routeSharedUndo, undoOwner } from "./undo.ts";
@@ -102,7 +102,7 @@ export interface SharedEditorBackend {
   readonly bind: (session: SharedDocumentSession) => void;
   readonly unbind: () => void;
   readonly settle: () => string | null;
-  readonly captureSelection?: () => (() => void) | null;
+  readonly captureSelection?: () => { readonly ownsFocus: () => boolean; readonly restore: (shared: boolean) => void } | null;
   readonly abandon?: () => void;
   readonly drop?: () => void;
   readonly start: () => void;
@@ -160,6 +160,12 @@ class Faults {
   report(ports: SharedSwitchPorts): void {
     for (const error of this.errors) { try { ports.report(error); } catch { break; } }
   }
+}
+
+function captureSelection(backend: SharedEditorBackend, faults: Faults) {
+  const captured: { selection?: ReturnType<NonNullable<SharedEditorBackend["captureSelection"]>> } = {};
+  faults.attempt(() => { captured.selection = backend.captureSelection?.() ?? null; });
+  return captured.selection ?? null;
 }
 
 // why: a destroy listener that throws stops Yjs before it drops its observers; a second attempt finishes the job
@@ -268,8 +274,8 @@ async function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { reado
     bound: false, detaching: false };
   // why: an adoption microtask can interrupt a native transaction and queue another microtask with its terminal bytes
   const entrySettled = backend.failedEntry ? new Promise<void>(resolve => { setTimeout(resolve, 0); }) : null;
-  let restoreSelection: (() => void) | null = null;
-  faults.attempt(() => { restoreSelection = backend.captureSelection?.() ?? null; });
+  const selection = captureSelection(backend, faults);
+  const sourceDocument = currentDocument();
   try {
     const admission = { admit: () => made.session ? made.session.admit() : { kind: "rejected" as const, reason: SHARED_SWITCHING } };
     // why: replacement listeners may already see the shared owner, so Ctrl+Z must reach its undo owner first
@@ -298,7 +304,6 @@ async function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { reado
     // why: detaching runs once everything else has landed; a rollback that reaches it puts back what it changed
     made.detaching = true;
     ports.detach();
-    if (restoreSelection) faults.attempt(restoreSelection);
     if (entrySettled) {
       await entrySettled;
       if (failedDuringEntry) throw new Error("The native session closed during entry");
@@ -307,6 +312,7 @@ async function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { reado
     undoOwner().adopt(null);
   } catch (error) {
     if (entrySettled && !failedDuringEntry) await entrySettled;
+    const restoreSelection = made.swap && selection?.ownsFocus() && sharedRecoverySession() === made.session;
     faults.errors.unshift(error);
     running = null;
     // why: a shared callback whose timer cannot be cancelled must still not act once the session is gone
@@ -318,17 +324,21 @@ async function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { reado
     faults.attempt(() => { undoOwner().track(); });
     if (made.stopRoute) faults.attempt(made.stopRoute);
     faults.attempt(() => { holdMergeBase(base); });
-    let recovered = false;
+    let recovered = false, rollbackDocument = sourceDocument;
     if (failedDuringEntry) faults.attempt(() => {
       const snapshot = backend.failedEntry?.();
       if (!snapshot) return;
       const landed = ports.migrate({ ...copyOf(snapshot), docId: ports.docId() });
       collectReplacementErrors(faults.errors, () => adoptReplacement(landed, ports.standalone));
+      const current = currentDocument();
+      rollbackDocument = current?.docId === landed.docId ? current : null;
       recovered = true;
       ports.left?.(true);
     });
     if (!recovered && made.detaching && ports.reattach) faults.attempt(ports.reattach);
-    if (made.swap && restoreSelection) faults.attempt(restoreSelection);
+    if (restoreSelection && rollbackDocument && sessionStarted() && !sharedSession() && currentDocument() === rollbackDocument) {
+      faults.attempt(() => { selection?.restore(false); });
+    }
     backend.dispose(step => faults.attempt(step));
     releaseCommands();
     return failed(ports, faults, SHARED_ENTER_FAILED);
@@ -339,6 +349,9 @@ async function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { reado
   releaseCommands();
   if (backend.failedEntry) prepared.releaseEntries();
   entering = false;
+  if (running?.backend === backend && sharedRecoverySession() === made.session) {
+    faults.attempt(() => { selection?.restore(true); });
+  }
   faults.report(ports);
   return { ok: true };
 }
@@ -367,8 +380,7 @@ function leaveAvailableSession(ports: SharedSwitchPorts): SharedSwitchOutcome {
   let holding: string | null = null;
   if (!faults.attempt(() => { holding = now.backend.settle(); })) return failed(ports, faults, SHARED_LEAVE_FAILED);
   if (holding) return { ok: false, reason: holding };
-  let restoreSelection: (() => void) | null = null;
-  faults.attempt(() => { restoreSelection = now.backend.captureSelection?.() ?? null; });
+  const selection = captureSelection(now.backend, faults);
   const holds: { session: (() => void) | null; commands: (() => void) | null } = { session: null, commands: null };
   let resumeIngress: (() => void) | undefined;
   const keep = (error: unknown): SharedSwitchOutcome => {
@@ -399,16 +411,24 @@ function leaveAvailableSession(ports: SharedSwitchPorts): SharedSwitchOutcome {
   let same = false;
   faults.attempt(() => { same = sameDocument(landed); });
   if (!same) {
+    const restoreSelection = selection?.ownsFocus();
     faults.attempt(() => { collectReplacementErrors(faults.errors, swap.restore); });
-    return keep(new Error("The standalone copy did not land as captured"));
+    const outcome = keep(new Error("The standalone copy did not land as captured"));
+    if (restoreSelection && sharedRecoverySession() === now.session) {
+      faults.attempt(() => { selection?.restore(true); });
+    }
+    return outcome;
   }
+  const landedDocument = currentDocument();
   running = null;
   now.end();
   faults.attempt(() => { swap.commit(); });
   faults.attempt(now.stopRoute);
   now.backend.dispose(step => faults.attempt(step));
   holds.commands();
-  if (restoreSelection) faults.attempt(restoreSelection);
+  if (selection && landedDocument && sessionStarted() && !sharedSession() && currentDocument() === landedDocument) {
+    faults.attempt(() => { selection.restore(false); });
+  }
   const left = ports.left;
   if (left) faults.attempt(() => { left(true); });
   faults.report(ports);
