@@ -135,6 +135,29 @@ test("conversion and whole-list set keep valid props with different IDs and a sh
   }, undefined, source(ropes));
 });
 
+test("keeping a projected prop in a whole-list set preserves a concurrent removal of its stored key", () => {
+  const lantern = { id: "", name: "Lantern" }, rope = { id: "t_rope", name: "Rope" };
+  let projectedId: string;
+  registryCopies((left, right, settle) => {
+    const projected = { ...lantern, id: projectedId };
+    assert.deepEqual(read(left), [projected]);
+    assert.deepEqual(read(right), [projected]);
+    write(left, { kind: "removeProp", id: "shot", prop: projected.id });
+    write(right, { kind: "set", collection: "shots", ids: ["shot"], fields: { props: [projected, rope] } });
+    assert.deepEqual(read(right), [projected, rope]);
+    assert.equal(propsOf(right).has(projected.id), false);
+    settle();
+    assert.deepEqual(read(left), [rope]);
+    assert.deepEqual(read(right), [rope]);
+    assert.equal(propsOf(right).get('n:"lantern"')?.get("removed"), true);
+  }, seed => {
+    const result = changeNativeRegistry(seed, { kind: "create", collection: "tags", fields: { name: lantern.name, cat: "prop" } });
+    assert.equal(result.kind, "written");
+    assert.ok("created" in result);
+    projectedId = result.created;
+  }, source([lantern]));
+});
+
 test("a shot without a prop map reads empty and its next prop edit starts empty", () => {
   const initial = initialProps(3);
   registryCopies((left, right, settle) => {

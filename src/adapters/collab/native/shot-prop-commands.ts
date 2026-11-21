@@ -62,7 +62,7 @@ export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape
 
   function replace(writes: Write[], props: readonly BrollProp[]): void {
     const desired = props.map(prop => {
-      const key = nativeShotPropKey(prop);
+      const key = byRef.get(brollPropKey(prop.id, prop.name))?.key ?? nativeShotPropKey(prop);
       return { prop, key, entry: byKey.get(key) };
     });
     const kept = new Set(desired.map(entry => entry.key));
