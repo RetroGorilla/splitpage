@@ -338,15 +338,20 @@ for (const view of ["Writer", "Split"]) {
   for (const glue of [false, true]) test(`${view}: refusing deletion ${glue ? "of synthetic join space" : "across joined members"} keeps the editor usable`, async t => {
     const rows = glue ? [["r1", "a "], ["r2", " b"]] : [["r1", "abcd"], ["r2", "ef"]];
     const [from, to] = glue ? [2, 3] : [2, 6];
-    const joined = source(t, rows);
-    written(joined.commands.joinRow("r2", "r1", " "));
-    await enter(t, rows, joined.encodeState());
+    await enter(t, rows);
+    written(hook.nativePeer.join("r2", "r1"));
+    await Promise.resolve();
     const show = t.mock.method(notices, "show", () => {});
     if (view === "Writer") writer.openWriter();
     const surface = view === "Writer" ? root() : cell();
+    const editable = view === "Writer" ? beat("r1") : cell();
+    const historyTarget = view === "Writer" ? editable : document.body;
+    const committed = hook.read().app;
     place(view, from, to);
     const range = document.getSelection().getRangeAt(0).cloneRange();
-    assert.equal(input(surface, "deleteContentBackward", null, range), true);
+    press(surface, "Backspace");
+    assert.equal(input(editable, "deleteContentBackward", null, range), true);
+    surface.dispatchEvent(new window.KeyboardEvent("keyup", { key: "Backspace", bubbles: true }));
     const original = rows.map(([, text]) => text).join(" ");
     const shown = () => (view === "Writer" ? beat("r1") : cell()).textContent.replaceAll("\u00a0", " ");
     await agreed([["r1", original]]);
@@ -354,9 +359,12 @@ for (const view of ["Writer", "Split"]) {
     assert.deepEqual(show.mock.calls.map(call => call.arguments), refused);
     assert.equal(shown(), original);
     assert.deepEqual(selection(view), expectedSelection(view, from, to));
-    assert.equal(press(surface, "z", { ctrlKey: true }), true);
-    assert.deepEqual(selection(view), expectedSelection(view, from, to));
-    assert.equal(shown(), original);
+    for (const key of glue ? ["z", "y"] : ["z", "y", "z"]) {
+      assert.equal(press(historyTarget, key, { ctrlKey: true }), true);
+      assert.deepEqual(selection(view), expectedSelection(view, from, to));
+      assert.equal(shown(), original);
+      assert.deepEqual(hook.read(), { app: committed, peer: committed });
+    }
     place(view, from);
     assert.equal(input(surface, "insertText", "X"), true);
     window.dispatchEvent(new window.Event("pagehide"));
@@ -364,7 +372,11 @@ for (const view of ["Writer", "Split"]) {
     await agreed([["r1", entered]]);
     assert.equal(shown(), entered);
     assert.deepEqual(show.mock.calls.map(call => call.arguments), refused);
+    const edited = hook.read().app;
     leave([["r1", entered]]);
+    const landed = hook.read().app;
+    assert.notEqual(landed.docId, edited.docId);
+    assert.deepEqual(landed, { ...edited, docId: landed.docId });
   });
 
   for (const pageHistory of view === "Split" ? [false, true] : [false]) {

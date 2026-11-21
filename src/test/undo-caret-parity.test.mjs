@@ -3,6 +3,8 @@ import assert from "node:assert/strict";
 import { rows, checkCaret, peer, runShared } from "./_undo-caret-parity.mjs";
 
 const mapped = new Set([
+  "delete across a join",
+  "delete a join's glue",
   "typing then two forward Deletes",
   "change in the middle",
   "Enter in the middle of a row",
