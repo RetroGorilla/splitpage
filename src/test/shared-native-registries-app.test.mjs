@@ -250,6 +250,52 @@ test("racing renames agree and the focused notes draft follows the tag ID", asyn
   assert.deepEqual([next.selectionStart, next.selectionEnd], [2, 5]);
 });
 
+test("a native tag notes draft survives input replacement and a second peer rename without its old input", async t => {
+  await enter(t, { productionTags: [{ cat: "prop", name: "Lens" }] });
+  production();
+  const id = tag(hook.read().app, "Lens").id;
+  tagCard("prop lens").querySelector("[data-action=tag-expand]").click();
+  const original = tagCard("prop lens").querySelector(".tag-notes-input");
+  original.focus();
+  original.value = "Draft for this record";
+  original.setSelectionRange(2, 7);
+  assert.equal(hook.nativePeer.registry({ kind: "set", collection: "tags", ids: [id], fields: { name: "Wide" } }).kind, "written");
+  await Promise.resolve();
+  const replacement = tagCard("prop wide").querySelector(".tag-notes-input");
+  assert.ok(replacement);
+  assert.notEqual(replacement, original);
+  assert.equal(document.activeElement, replacement);
+  assert.equal(replacement.value, original.value);
+  assert.deepEqual([replacement.selectionStart, replacement.selectionEnd], [2, 7]);
+  replacement.remove();
+  assert.equal(document.querySelector(".tag-notes-input"), null);
+  assert.equal(hook.nativePeer.registry({ kind: "set", collection: "tags", ids: [id], fields: { name: "Very Wide" } }).kind, "written");
+  await Promise.resolve();
+  const restored = tagCard("prop very wide").querySelector(".tag-notes-input");
+  assert.ok(restored);
+  assert.equal(restored.getAttribute("data-registry-id"), id);
+  assert.equal(restored.value, original.value);
+  copies(doc => tag(doc, "Very Wide").notes, "");
+});
+
+test("concurrent same-name tag creation keeps both records and shows one production card", async t => {
+  await enter(t);
+  production();
+  hook.nativePeer.hold();
+  assert.equal(registerProductionTag("prop", "Lens"), true);
+  await Promise.resolve();
+  const local = tag(hook.read().app, "Lens").id;
+  const remote = hook.nativePeer.registry({ kind: "create", collection: "tags", fields: { cat: "prop", name: "Lens" } });
+  assert.equal(remote.kind, "written");
+  assert.notEqual(remote.created, local);
+  hook.nativePeer.deliver();
+  await Promise.resolve();
+  copies(doc => tags(doc).map(({ cat, id, name }) => [id, cat, name]).sort(), [
+    [local, "prop", "Lens"], [remote.created, "prop", "Lens"]
+  ].sort());
+  assert.equal(document.querySelectorAll('#production-list .tag-entity[data-key="prop lens"]').length, 1);
+});
+
 test("racing person removal and assignment agree on empty owners and restore the kept assignment", async t => {
   await enter(t);
   const person = findOrAddPerson("Cam");
@@ -275,6 +321,18 @@ test("racing person removal and assignment agree on empty owners and restore the
   await Promise.resolve();
   copies(doc => tags(doc).map(entry => entry.owner), [person, person]);
   assert.ok(remove());
+});
+
+test("a people-only peer write redraws the production crew list", async t => {
+  await enter(t, { people: [{ id: "p1", name: "Cam" }], productionTags: [{ cat: "prop", name: "Lens" }] });
+  production("person");
+  assert.match($("#production-list").textContent, /Cam/);
+  const original = tags(hook.read().app);
+  assert.equal(hook.nativePeer.registry({ kind: "set", collection: "people", ids: ["p1"], fields: { name: "Camera Crew" } }).kind, "written");
+  await Promise.resolve();
+  copies(tags, original);
+  copies(doc => doc.people.map(person => person.name), ["Camera Crew"]);
+  assert.match($("#production-list .tag-person-name").textContent, /^Camera Crew$/);
 });
 
 test("a native shot can be added, edited, assigned, unpropped, deleted and restored with undo", async t => {
@@ -378,6 +436,29 @@ test("racing prop additions keep one list and a peer redraw keeps the editor's s
   copies(doc => shot(doc, "bs1").notes, "");
 });
 
+test("shot-only peer redraws replace the notes input and retain its unsaved draft", async t => {
+  await enter(t, { brollShots: [{ id: "bs1", name: "Wide", origin: "list" }] });
+  openBrollPanel();
+  if (!shotCard("bs1")) shotButton("bs1", "expand").click();
+  $("#broll-add-input").focus();
+  const original = shotBox("bs1", "notes");
+  original.value = "Keep the wide take";
+  assert.notEqual(document.activeElement, original);
+  assert.equal(hook.nativePeer.registry({ kind: "set", collection: "shots", ids: ["bs1"], fields: { status: "shot" } }).kind, "written");
+  await Promise.resolve();
+  assert.equal(shotButton("bs1", "status-toggle").getAttribute("aria-checked"), "true");
+  const replacement = shotBox("bs1", "notes");
+  assert.notEqual(replacement, original);
+  assert.equal(replacement.value, original.value);
+  replacement.remove();
+  assert.equal(shotBox("bs1", "notes"), null);
+  assert.equal(hook.nativePeer.registry({ kind: "set", collection: "shots", ids: ["bs1"], fields: { status: "unshot" } }).kind, "written");
+  await Promise.resolve();
+  assert.equal(shotButton("bs1", "status-toggle").getAttribute("aria-checked"), "false");
+  assert.equal(shotBox("bs1", "notes").value, original.value);
+  copies(doc => [shot(doc, "bs1").status, shot(doc, "bs1").notes, tags(doc).length], ["unshot", "", 0]);
+});
+
 test("a stale tag edit refuses instead of creating a duplicate of the old tag name", async t => {
   await enter(t);
   production();
@@ -415,7 +496,8 @@ test("refused native shot and tag owner changes restore the published selection 
   copies(doc => shot(doc, "bs1").owner, "");
 
   production();
-  tagCard("prop lens").querySelector("[data-action=tag-expand]").click();
+  const card = tagCard("prop lens");
+  if (!card.querySelector(".tag-owner-select")) card.querySelector("[data-action=tag-expand]").click();
   const select = tagCard("prop lens").querySelector(".tag-owner-select");
   select.focus();
   const narration = $('#rows .cell-editable[data-field="audioText"]');
