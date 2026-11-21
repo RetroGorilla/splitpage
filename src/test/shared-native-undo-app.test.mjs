@@ -650,6 +650,9 @@ for (const [name, kind] of Object.entries(views)) {
     await expectText(["a mug of tea", "Xone cup"]);
     assert.equal(press(document.body, "z"), true);
     await expectText(["a cup of tea", "Xone cup"]);
+    writerControls().closeWriter();
+    assert.deepEqual(hook.leave(), { ok: true });
+    assert.deepEqual(read(), ["a cup of tea", "Xone cup"]);
   });
 
   test(name + ": Replace all retains an intact captured pair after a peer shifts adjacent matches", async t => {
