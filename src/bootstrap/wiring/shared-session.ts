@@ -102,7 +102,7 @@ export interface SharedEditorBackend {
   readonly bind: (session: SharedDocumentSession) => void;
   readonly unbind: () => void;
   readonly settle: () => string | null;
-  readonly captureSelection?: () => { readonly ownsFocus: () => boolean; readonly restore: (shared: boolean) => void } | null;
+  readonly captureSelection?: (entering: boolean) => { readonly dispose: () => void; readonly restore: () => void } | null;
   readonly abandon?: () => void;
   readonly drop?: () => void;
   readonly start: () => void;
@@ -162,9 +162,9 @@ class Faults {
   }
 }
 
-function captureSelection(backend: SharedEditorBackend, faults: Faults) {
+function captureSelection(backend: SharedEditorBackend, faults: Faults, entering: boolean) {
   const captured: { selection?: ReturnType<NonNullable<SharedEditorBackend["captureSelection"]>> } = {};
-  faults.attempt(() => { captured.selection = backend.captureSelection?.() ?? null; });
+  faults.attempt(() => { captured.selection = backend.captureSelection?.(entering) ?? null; });
   return captured.selection ?? null;
 }
 
@@ -260,7 +260,7 @@ async function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { reado
     backend = open(hydration, () => {
       if (entering) { failedDuringEntry = true; return false; }
       if (running?.backend !== backend) return false;
-      const result = leaveSharedSession(ports);
+      const result = leaveSharedSession(ports, false);
       if (!result.ok) ports.report(new Error(`The failed shared session could not land: ${result.reason}`));
       return true;
     });
@@ -274,8 +274,7 @@ async function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { reado
     bound: false, detaching: false };
   // why: an adoption microtask can interrupt a native transaction and queue another microtask with its terminal bytes
   const entrySettled = backend.failedEntry ? new Promise<void>(resolve => { setTimeout(resolve, 0); }) : null;
-  const selection = captureSelection(backend, faults);
-  const sourceDocument = currentDocument();
+  const selection = captureSelection(backend, faults, true);
   try {
     const admission = { admit: () => made.session ? made.session.admit() : { kind: "rejected" as const, reason: SHARED_SWITCHING } };
     // why: replacement listeners may already see the shared owner, so Ctrl+Z must reach its undo owner first
@@ -312,7 +311,7 @@ async function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { reado
     undoOwner().adopt(null);
   } catch (error) {
     if (entrySettled && !failedDuringEntry) await entrySettled;
-    const restoreSelection = made.swap && selection?.ownsFocus() && sharedRecoverySession() === made.session;
+    if (selection) faults.attempt(selection.dispose);
     faults.errors.unshift(error);
     running = null;
     // why: a shared callback whose timer cannot be cancelled must still not act once the session is gone
@@ -324,21 +323,16 @@ async function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { reado
     faults.attempt(() => { undoOwner().track(); });
     if (made.stopRoute) faults.attempt(made.stopRoute);
     faults.attempt(() => { holdMergeBase(base); });
-    let recovered = false, rollbackDocument = sourceDocument;
+    let recovered = false;
     if (failedDuringEntry) faults.attempt(() => {
       const snapshot = backend.failedEntry?.();
       if (!snapshot) return;
       const landed = ports.migrate({ ...copyOf(snapshot), docId: ports.docId() });
       collectReplacementErrors(faults.errors, () => adoptReplacement(landed, ports.standalone));
-      const current = currentDocument();
-      rollbackDocument = current?.docId === landed.docId ? current : null;
       recovered = true;
       ports.left?.(true);
     });
     if (!recovered && made.detaching && ports.reattach) faults.attempt(ports.reattach);
-    if (restoreSelection && rollbackDocument && sessionStarted() && !sharedSession() && currentDocument() === rollbackDocument) {
-      faults.attempt(() => { selection?.restore(false); });
-    }
     backend.dispose(step => faults.attempt(step));
     releaseCommands();
     return failed(ports, faults, SHARED_ENTER_FAILED);
@@ -349,8 +343,9 @@ async function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { reado
   releaseCommands();
   if (backend.failedEntry) prepared.releaseEntries();
   entering = false;
-  if (running?.backend === backend && sharedRecoverySession() === made.session) {
-    faults.attempt(() => { selection?.restore(true); });
+  if (selection) {
+    faults.attempt(selection.dispose);
+    if (running?.backend === backend && sharedRecoverySession() === made.session) faults.attempt(selection.restore);
   }
   faults.report(ports);
   return { ok: true };
@@ -365,14 +360,14 @@ export function leaveRunningSharedSession(): SharedSwitchOutcome {
   return running ? leaveSharedSession(running.ports) : { ok: false, reason: SHARED_NOT_RUNNING };
 }
 
-export function leaveSharedSession(ports: SharedSwitchPorts): SharedSwitchOutcome {
+export function leaveSharedSession(ports: SharedSwitchPorts, preserveSelection = true): SharedSwitchOutcome {
   const holdReason = sessionEntryRefusal();
   if (holdReason) return { ok: false, reason: holdReason };
   const release = holdSessionCommands(SHARED_SWITCHING, "entries");
-  try { return leaveAvailableSession(ports); } finally { release(); }
+  try { return leaveAvailableSession(ports, preserveSelection); } finally { release(); }
 }
 
-function leaveAvailableSession(ports: SharedSwitchPorts): SharedSwitchOutcome {
+function leaveAvailableSession(ports: SharedSwitchPorts, preserveSelection: boolean): SharedSwitchOutcome {
   const now = running;
   if (!now) return { ok: false, reason: SHARED_NOT_RUNNING };
   ports = now.ports;
@@ -380,10 +375,11 @@ function leaveAvailableSession(ports: SharedSwitchPorts): SharedSwitchOutcome {
   let holding: string | null = null;
   if (!faults.attempt(() => { holding = now.backend.settle(); })) return failed(ports, faults, SHARED_LEAVE_FAILED);
   if (holding) return { ok: false, reason: holding };
-  const selection = captureSelection(now.backend, faults);
+  const selection = preserveSelection ? captureSelection(now.backend, faults, false) : null;
   const holds: { session: (() => void) | null; commands: (() => void) | null } = { session: null, commands: null };
   let resumeIngress: (() => void) | undefined;
   const keep = (error: unknown): SharedSwitchOutcome => {
+    if (selection) faults.attempt(selection.dispose);
     faults.errors.unshift(error);
     now.backend.live(true);
     faults.attempt(() => { now.backend.bind(now.session); });
@@ -411,13 +407,8 @@ function leaveAvailableSession(ports: SharedSwitchPorts): SharedSwitchOutcome {
   let same = false;
   faults.attempt(() => { same = sameDocument(landed); });
   if (!same) {
-    const restoreSelection = selection?.ownsFocus();
     faults.attempt(() => { collectReplacementErrors(faults.errors, swap.restore); });
-    const outcome = keep(new Error("The standalone copy did not land as captured"));
-    if (restoreSelection && sharedRecoverySession() === now.session) {
-      faults.attempt(() => { selection?.restore(true); });
-    }
-    return outcome;
+    return keep(new Error("The standalone copy did not land as captured"));
   }
   const landedDocument = currentDocument();
   running = null;
@@ -426,8 +417,9 @@ function leaveAvailableSession(ports: SharedSwitchPorts): SharedSwitchOutcome {
   faults.attempt(now.stopRoute);
   now.backend.dispose(step => faults.attempt(step));
   holds.commands();
-  if (selection && landedDocument && sessionStarted() && !sharedSession() && currentDocument() === landedDocument) {
-    faults.attempt(() => { selection.restore(false); });
+  if (selection) {
+    faults.attempt(selection.dispose);
+    if (landedDocument && sessionStarted() && !sharedSession() && currentDocument() === landedDocument) faults.attempt(selection.restore);
   }
   const left = ports.left;
   if (left) faults.attempt(() => { left(true); });
@@ -454,12 +446,12 @@ function dropRunning(now: Running, reason: string): void {
 export function forceLeaveSharedSession(): SharedSwitchOutcome {
   const now = running;
   if (!now) return { ok: false, reason: SHARED_NOT_RUNNING };
-  const first = leaveSharedSession(now.ports);
+  const first = leaveSharedSession(now.ports, false);
   if (first.ok || running !== now) return first;
   const faults = new Faults();
   faults.attempt(() => { now.backend.abandon?.(); });
   faults.report(now.ports);
-  const second = leaveSharedSession(now.ports);
+  const second = leaveSharedSession(now.ports, false);
   if (second.ok || running !== now) return second;
   dropRunning(now, second.reason);
   return second;

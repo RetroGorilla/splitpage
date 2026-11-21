@@ -20,6 +20,7 @@ import { confirmSavedNow, noteSaveChange, unsavedChanges } from "./save-owners.t
 import { currentHome, documentLocation, setHome } from "./location-owner.ts";
 import { openNativeEditor } from "./native-shared-session.ts";
 import { createNativeTestPeer } from "./shared-native-test-peer.ts";
+import { stopNativeCaretWait } from "./native-switch-caret.ts";
 
 declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
@@ -175,6 +176,7 @@ function startSharedTestHook(): () => void {
   exposeTestHook("__sharedTest", () => hook, release => { withdraw = release; });
   return () => {
     live = false;
+    stopNativeCaretWait();
     try { forceLeaveSharedSession(); } finally {
       document.removeEventListener("compositionstart", composition, true);
       document.removeEventListener("compositionend", composition, true);

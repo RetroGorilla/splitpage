@@ -25,8 +25,8 @@ which still run through direct old wiring or the isolated legacy test fixture. T
 remain for the rest of [slice 8](#11-build-order). There is no release entry for shared mode.
 
 A successful native switch restores a Writer or Split selection only when focus stayed in that editor and the
-touched beats, joined narration members and headings keep their identities, order and text. If a captured range
-cannot be restored, the editor has no caret and typing waits until the person places one.
+touched beats, joined narration members and headings keep their identities, order and text. If a captured
+selection cannot be restored, there is no caret and typing waits until the person places one.
 
 ## Known differences from standalone editing
 

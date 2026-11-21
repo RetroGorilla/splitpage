@@ -343,6 +343,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     resolveTextSelection: (range: NativeTextRange) => { const anchor = snapshotNativeUndoAnchor(script, range); return anchor && resolveNativeUndoSelection(script, anchor); },
     narrationCaret: (row: string, offset: number, right?: boolean) => script.reader.narrationCaret(row, offset, right),
     readBeat: (beat: string) => script.reader.noticeBeat(beat),
+    readRow: (row: string) => script.reader.row(row),
     narrationHtml: (row: string) => script.reader.row(row)?.audioText,
     narrationOffset: (row: string, range: Pick<NativeTextRange, "from">, assoc: 0 | -1 = 0) => {
       if (refusal()) return null;

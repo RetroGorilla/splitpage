@@ -1,18 +1,21 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { bootApp, closeApp } from "./_app-boot.mjs";
+import { NativeScriptReader } from "../adapters/collab/native/reader.ts";
 import { openNativeSession } from "../adapters/collab/native/session.ts";
 import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { sanitizeHtml, scriptCellOf } from "../bootstrap/richtext.ts";
 import { draftsTesting } from "../bootstrap/wiring/drafts.ts";
+import { openNativeEditor } from "../bootstrap/wiring/native-shared-session.ts";
 import { flushDraftNow } from "../bootstrap/wiring/recovery-owners.ts";
 import { adoptReplacement, onSessionChange, sharedSession } from "../bootstrap/wiring/session-owner.ts";
-import { forceLeaveSharedSession } from "../bootstrap/wiring/shared-session.ts";
+import { enterSharedSession, forceLeaveSharedSession, leaveRunningSharedSession } from "../bootstrap/wiring/shared-session.ts";
 import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { beatPos, headingPos } from "../core/flow/flow.ts";
 import { domToPos, posToDom, readSelection } from "../features/common/cell-dom.ts";
+import { entrySwitchFixture } from "../../tests/bootstrap/shared-entry-switch-support.ts";
 
 window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};
@@ -72,8 +75,19 @@ function typeNative(text) {
   assert.equal(input.defaultPrevented, true);
 }
 
-function stored(beats, change = () => {}) {
-  const document = project(beats);
+function checkUnplaced(writer, id = "r1") {
+  const before = hook.read().app.rows;
+  const cell = writer ? writerRoot() : narration(false, id);
+  cell.focus();
+  assert.equal(document.activeElement, cell);
+  assert.equal(document.getSelection().rangeCount, 0);
+  typeNative("!");
+  assert.equal(document.getSelection().rangeCount, 0);
+  assert.deepEqual(hook.read().app.rows, before);
+}
+
+function stored(beats, change = () => {}, sections = []) {
+  const document = project(beats, sections);
   const native = openNativeSession({ kind: "document", document, conversion: {
     cells: scriptCellOf, creation: document.docId, at: "2026-11-20", by: "Editor"
   } }, { actor: "Editor", sanitize: sanitizeHtml });
@@ -118,11 +132,10 @@ for (const writer of [true, false]) {
     place(writer, beatPos("r1", 0), beatPos("r1", 5));
     const changed = [{ ...rows[0], audioText: "New Hello there" }, rows[1]];
     assert.deepEqual(await hook.enterFrom(stored(changed)), success);
-    const end = beatPos("r1", changed[0].audioText.length);
-    check(writer, end, end);
-    typeNative("!");
+    checkUnplaced(writer);
     assert.deepEqual(hook.leave(), success);
-    assert.equal(hook.read().app.rows[0].audioText, "New Hello there!");
+    checkUnplaced(writer);
+    assert.equal(hook.read().app.rows[0].audioText, "New Hello there");
   });
 
   test(`${surface} does not select newly inserted text between unchanged endpoints`, async t => {
@@ -130,8 +143,37 @@ for (const writer of [true, false]) {
     place(writer, beatPos("r1", 6), beatPos("r2", 5));
     const changed = [rows[0], { id: "inserted", audioText: "Added beat" }, rows[1]];
     assert.deepEqual(await hook.enterFrom(stored(changed)), success);
-    const end = beatPos("r1", rows[0].audioText.length);
-    check(writer, end, end);
+    checkUnplaced(writer);
+  });
+
+  test(`${surface} never types over a replacement beat with identical narration`, async t => {
+    const middle = { id: "original", audioText: "Identical narration", visualText: "Original Visual" };
+    const replacement = { ...middle, id: "replacement", visualText: "Replacement Visual" };
+    start(t, writer, project([rows[0], middle, rows[1]]));
+    place(writer, beatPos("r2", 5), beatPos("r1", 6));
+    assert.deepEqual(await hook.enterFrom(stored([rows[0], replacement, rows[1]])), success);
+    checkUnplaced(writer);
+    assert.deepEqual(hook.leave(), success);
+    checkUnplaced(writer);
+    assert.deepEqual(hook.read().app.rows.map(row => [row.id, row.visualText]),
+      [["r1", "Look again"], ["replacement", "Replacement Visual"], ["r2", ""]]);
+  });
+
+  test(`${surface} rejects changed Visual text in an interior beat`, async t => {
+    const middle = { id: "middle", audioText: "Unchanged narration", visualText: "Original Visual" };
+    start(t, writer, project([rows[0], middle, rows[1]]));
+    place(writer, beatPos("r1", 3), beatPos("r2", 4));
+    const changed = [rows[0], { ...middle, visualText: "Updated Visual" }, rows[1]];
+    assert.deepEqual(await hook.enterFrom(stored(changed)), success);
+    checkUnplaced(writer);
+  });
+
+  test(`${surface} rejects a changed heading identity inside the range even when its name matches`, async t => {
+    const heading = { id: "old-heading", name: "Same name", firstSceneId: "r2" };
+    start(t, writer, project(rows, [heading]));
+    place(writer, beatPos("r1", 3), beatPos("r2", 4));
+    assert.deepEqual(await hook.enterFrom(stored(rows, undefined, [{ ...heading, id: "new-heading" }])), success);
+    checkUnplaced(writer);
   });
 
   test(`${surface} maps a joined member's range to the assembled row`, async t => {
@@ -146,13 +188,20 @@ for (const writer of [true, false]) {
     assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["Unrelated first beat", "Hello there ! again"]);
   });
 
+  test(`${surface} leaves a range unplaced when joining inserts text between its members`, async t => {
+    start(t, writer);
+    place(writer, beatPos("r1", 8), beatPos("r2", 4));
+    const bytes = stored(rows, native => assert.equal(native.commands.joinRow("r2", "r1", " ").kind, "written"));
+    assert.deepEqual(await hook.enterFrom(bytes), success);
+    checkUnplaced(writer);
+  });
+
   test(`${surface} does not accept identical paint when the original beat is now split across members`, async t => {
     start(t, writer, project([{ ...rows[0], audioText: "Hello there World again" }]));
     place(writer, beatPos("r1", 12), beatPos("r1", 17));
     const bytes = stored(rows, native => assert.equal(native.commands.joinRow("r2", "r1", " ").kind, "written"));
     assert.deepEqual(await hook.enterFrom(bytes), success);
-    const end = beatPos("r1", 23);
-    check(writer, end, end);
+    checkUnplaced(writer);
   });
 
   test(`${surface} keeps a directed Visual range on entry and leave`, async t => {
@@ -174,25 +223,27 @@ for (const writer of [true, false]) {
     verify();
   });
 
-  test(`${surface} places the caret at the end of the first beat when the selected beat is absent`, async t => {
+  test(`${surface} leaves the caret unplaced when the selected beat is absent`, async t => {
     start(t, writer);
     place(writer, beatPos("r1", 2), beatPos("r1", 5));
     assert.deepEqual(await hook.enterFrom(stored([rows[1]])), success);
-    const end = beatPos("r2", rows[1].audioText.length);
-    check(writer, end, end);
+    checkUnplaced(writer, "r2");
+    const target = writer ? writerRoot() : narration(false, "r2");
+    target.dispatchEvent(new window.Event("pointerdown", { bubbles: true }));
+    const point = beatPos("r2", 5);
+    place(writer, point, point);
     typeNative("!");
     assert.deepEqual(hook.leave(), success);
-    assert.equal(hook.read().app.rows[0].audioText, "World again!");
+    assert.equal(hook.read().app.rows[0].audioText, "World! again");
   });
 
-  test(`${surface} restores focus when a peer removes the selected beat just before leave`, async t => {
+  test(`${surface} leaves the caret unplaced when a peer removes the selected beat just before leave`, async t => {
     start(t, writer);
     assert.deepEqual(await hook.enter(), success);
     place(writer, beatPos("r1", 2), beatPos("r2", 5));
     assert.equal(hook.nativePeer.removeBeat("r1").kind, "written");
     assert.deepEqual(hook.leave(), success);
-    const end = beatPos("r2", rows[1].audioText.length);
-    check(writer, end, end);
+    checkUnplaced(writer, "r2");
   });
 
   test(`${surface} flushes pending standalone typing on entry and keeps the caret after it`, async t => {
@@ -245,6 +296,18 @@ test("Writer keeps a directed heading-name range on entry and leave", async t =>
   assert.deepEqual(flow().selection(), range);
 });
 
+test("Writer does not reopen Visual to place a range when its beat changed", async t => {
+  start(t, true);
+  flow().openVisual("r1");
+  const cell = document.querySelector(".wr-flow-visual-text");
+  const startPoint = posToDom(cell, 1), endPoint = posToDom(cell, 5);
+  document.getSelection().setBaseAndExtent(startPoint.node, startPoint.offset, endPoint.node, endPoint.offset);
+  const changed = [{ ...rows[0], audioText: "Changed narration" }, rows[1]];
+  assert.deepEqual(await hook.enterFrom(stored(changed)), success);
+  assert.equal(document.querySelector(".wr-flow-visual-box").hidden, true);
+  checkUnplaced(true);
+});
+
 test("Split leaves the focused second beat alone when there is no source range", async t => {
   start(t, false);
   const cell = narration(false, "r2");
@@ -260,7 +323,7 @@ test("Split leaves the focused second beat alone when there is no source range",
 
 for (const [name, id, container] of [
   ["title", "doc-title"], ["Find", "find-input", "findbar"],
-  ["panel input", "gear-quickadd-input", "gear-panel"], ["dialog", "comment-name", "comment-modal"]
+  ["panel input", "broll-add-input", "broll-panel"], ["dialog", "comment-name", "comment-modal"]
 ]) {
   test(`the ${name} keeps focus if activated during entry and at leave`, async t => {
     start(t, false);
@@ -272,18 +335,38 @@ for (const [name, id, container] of [
       t.after(() => { surface.hidden = true; });
     }
     const stop = onSessionChange(change => {
-      if (change.kind === "adopt" && sharedSession()) queueMicrotask(() => target.focus());
+      if (change.kind === "adopt" && sharedSession()) queueMicrotask(() => {
+        target.focus();
+        target.value = "Field selection";
+        target.setSelectionRange(1, 5, "backward");
+      });
     });
     t.after(stop);
+    const verify = () => {
+      assert.equal(document.activeElement, target);
+      assert.deepEqual([target.selectionStart, target.selectionEnd, target.selectionDirection], [1, 5, "backward"]);
+    };
     assert.deepEqual(await hook.enter(), success);
-    assert.equal(document.activeElement, target);
+    verify();
     assert.deepEqual(hook.leave(), success);
-    assert.equal(document.activeElement, target);
+    verify();
   });
 }
 
+test("focus moving to the title and then to the page does not restore Writer's selection", async t => {
+  start(t, true);
+  place(true, beatPos("r1", 2), beatPos("r1", 5));
+  const title = document.getElementById("writer-title");
+  t.after(onSessionChange(change => {
+    if (change.kind === "adopt" && sharedSession()) queueMicrotask(() => { title.focus(); title.blur(); });
+  }));
+  assert.deepEqual(await hook.enter(), success);
+  assert.equal(document.activeElement, document.body);
+  checkUnplaced(true);
+});
+
 for (const moveFocus of [true, false]) {
-  test(moveFocus ? "rollback leaves focus in the title after a move during entry" : "rollback restores the range in Writer", async t => {
+  test(moveFocus ? "rollback leaves focus in the title after a move during entry" : "rollback does not replay the Writer range", async t => {
     start(t, !moveFocus);
     const anchor = beatPos("r1", 2), head = beatPos("r1", 5);
     place(!moveFocus, anchor, head);
@@ -297,6 +380,86 @@ for (const moveFocus of [true, false]) {
     adopt.mock.restore();
     assert.equal(sharedSession(), false);
     if (moveFocus) assert.equal(document.activeElement, title);
-    else check(true, anchor, head);
+    else assert.notDeepEqual(flow().selection(), { anchor, head });
+  });
+}
+
+for (const when of ["refused entry", "rolled back entry", "failed leave", "forced leave", "failed native close"]) {
+  test(`${when} never restores selection or reads it after destruction`, async t => {
+    const fixture = entrySwitchFixture(), dispose = t.mock.fn();
+    let arm = false, leaving = false, serial = 0, native, reader, identifyReader = false;
+    const afterClose = [];
+    const restore = t.mock.fn(() => { if (native.ydoc.isDestroyed) afterClose.push("restore"); });
+    const snapshot = { restore, dispose, get ownsFocus() { throw new Error("A failed switch checked focus"); } };
+    for (const key of ["noticeBeat", "row"]) {
+      const read = NativeScriptReader.prototype[key];
+      t.mock.method(NativeScriptReader.prototype, key, function (...args) {
+        if (identifyReader) reader = this;
+        if (this === reader && native.ydoc.isDestroyed) afterClose.push(key);
+        return read.apply(this, args);
+      });
+    }
+    const ports = {
+      ...fixture.ports,
+      refusal: () => when === "refused entry" ? "test-refusal" : null,
+      detach: () => { if (when === "rolled back entry") throw new Error("Entry rollback"); },
+      migrate: raw => {
+        const doc = fixture.ports.migrate(raw);
+        if (arm) Object.defineProperty(doc, "toJSON", { value: () => ++serial });
+        return doc;
+      }
+    };
+    start(t, true);
+    place(true, beatPos("r1", 5), beatPos("r1", 2));
+    const captured = t.mock.fn(entering => {
+      if (native.ydoc.isDestroyed) afterClose.push("capture");
+      return entering ? null : snapshot;
+    });
+    const entering = await enterSharedSession(ports, (doc, failedClose) => {
+      const joined = when === "failed leave"
+        ? stored(rows, copy => assert.equal(copy.commands.joinRow("r2", "r1", " ").kind, "written")) : undefined;
+      const opened = openNativeEditor(ports, doc, failedClose, joined);
+      native = opened.native;
+      return { ...opened.backend, captureSelection: direction => {
+        if (!leaving && when === "rolled back entry") return snapshot;
+        return captured(direction);
+      } };
+    });
+    if (when === "refused entry" || when === "rolled back entry") {
+      assert.equal(entering.ok, false);
+      assert.equal(captured.mock.callCount(), 0);
+      assert.equal(dispose.mock.callCount(), when === "rolled back entry" ? 1 : 0);
+    } else {
+      assert.deepEqual(entering, success);
+      identifyReader = true;
+      assert.equal(native.readRow("r1")?.id, "r1");
+      identifyReader = false;
+      leaving = true;
+      if (when === "failed native close") {
+        arm = true;
+        const caret = native.commands.anchorText({ beat: "r1", cell: "narration" }, 0);
+        assert.equal(caret.kind, "anchored");
+        native.ydoc.once("afterTransactionCleanup", () => { throw new Error("Interrupted cleanup"); });
+        assert.throws(() => native.commands.typeText(caret.range, "!", {}), /Interrupted cleanup/);
+        await Promise.resolve();
+        assert.equal(native.ydoc.isDestroyed, true);
+        assert.equal(sharedSession(), true);
+      } else if (when === "forced leave") {
+        assert.deepEqual(forceLeaveSharedSession(), success);
+        await Promise.resolve();
+        assert.equal(native.ydoc.isDestroyed, true);
+      } else {
+        place(true, beatPos("r1", 17), beatPos("r1", 12));
+        arm = true;
+        assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: "leave-failed" });
+        assert.equal(sharedSession(), true);
+        assert.ok(fixture.errors.some(error => error.message === "The standalone copy did not land as captured"));
+      }
+      assert.equal(captured.mock.callCount(), when === "failed leave" ? 2 : 1);
+      assert.equal(dispose.mock.callCount(), when === "failed leave" ? 1 : 0);
+    }
+    arm = false;
+    assert.equal(restore.mock.callCount(), 0);
+    assert.deepEqual(afterClose, []);
   });
 }

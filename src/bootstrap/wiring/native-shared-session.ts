@@ -135,7 +135,8 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
       input = null;
     },
     settle: () => input?.finish() ?? null,
-    captureSelection: () => captureNativeSwitchSelection(native),
+    captureSelection: entering => native.isClosingOrClosed() ? null
+      : captureNativeSwitchSelection(native, entering, () => !native.isClosingOrClosed() && published === native.revision()),
     abandon: () => { input?.abandonComposition(); },
     start: () => {
       initial = enterSharedDocument(native.document());

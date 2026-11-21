@@ -1,5 +1,5 @@
-import { beatPos, caretAt, headingPos } from "../../core/flow/flow.ts";
-import type { FlowPos } from "../../core/flow/flow.ts";
+import { beatPos, flowOf, headingPos } from "../../core/flow/flow.ts";
+import type { FlowPos, FlowRow } from "../../core/flow/flow.ts";
 import type { openNativeSession } from "../../adapters/collab/native/session.ts";
 import { editorKeys } from "../../core/text/selection.ts";
 import { cssAttr } from "../../features/common/dom.ts";
@@ -7,6 +7,7 @@ import { domKeys, domToPos, posToDom } from "../../features/common/cell-dom.ts";
 import { paintedFromRow } from "../../features/rows/render.ts";
 import { fromHtml } from "../richtext.ts";
 import { documentReader } from "./ports/document.ts";
+import { waitForNativeCaret } from "./native-switch-caret.ts";
 import { writerControls } from "./writer.ts";
 
 type ShownRow = Parameters<typeof paintedFromRow>[2];
@@ -97,16 +98,19 @@ export const visualTextSurface: NativeTextSurface = Object.freeze({
   }
 });
 
-function endOf(cell: Element): number {
-  return domToPos(cell, cell, cell.childNodes.length) ?? 0;
-}
-
 const WRITER_FLOW = "#writer-doc :is(.wr-beat[data-id], .wr-heading[data-scene])";
-type SwitchNative = Pick<ReturnType<typeof openNativeSession>, "readBeat" | "commands" | "narrationCaret" | "narrationOffset">;
+type SwitchNative = Pick<ReturnType<typeof openNativeSession>, "readBeat" | "readRow" | "commands" | "narrationCaret" | "narrationOffset">;
 
 interface SwitchPoint {
   readonly cell: Element;
   readonly offset: number;
+}
+
+interface SwitchUnit {
+  readonly id: string;
+  readonly keys: readonly string[];
+  readonly otherField?: readonly string[];
+  readonly glue?: string;
 }
 
 function sameKeys(a: readonly string[], b: readonly string[]): boolean {
@@ -118,16 +122,50 @@ function forward(anchor: SwitchPoint, head: SwitchPoint): boolean {
     : !!(anchor.cell.compareDocumentPosition(head.cell) & Node.DOCUMENT_POSITION_FOLLOWING);
 }
 
-function selectedKeys(selector: string, anchor: SwitchPoint, head: SwitchPoint): string[] {
-  if (anchor.cell === head.cell) {
-    return domKeys(anchor.cell).slice(Math.min(anchor.offset, head.offset), Math.max(anchor.offset, head.offset));
+function unitId(cell: Element): string {
+  const scene = cell.getAttribute("data-scene");
+  return scene === null ? "beat:" + cell.getAttribute("data-id") : "heading:" + scene;
+}
+
+function outlineWindow(anchorId: string, headId: string, narration: boolean, native?: SwitchNative): SwitchUnit[] {
+  const doc = documentReader.current();
+  if (!doc) return [];
+  const outline = flowOf(doc).flatMap<{ id: string; heading: string } | { id: string; row: FlowRow }>(block =>
+    block.kind === "heading" ? [{ id: "heading:" + block.scene.id, heading: block.scene.name }]
+      : block.beats.map(row => ({ id: "beat:" + row.id, row })));
+  const a = outline.findIndex(unit => unit.id === anchorId), h = outline.findIndex(unit => unit.id === headId);
+  if (a < 0 || h < 0) return [];
+  const units: SwitchUnit[] = [];
+  for (const unit of outline.slice(Math.min(a, h), Math.max(a, h) + 1)) {
+    if ("heading" in unit) units.push({ id: unit.id, keys: unit.heading.split("") });
+    else if (!native) {
+      const audio = editorKeys(fromHtml(unit.row.audioText ?? "", MEDIA));
+      const visual = editorKeys(fromHtml(unit.row.visualText ?? "", MEDIA));
+      units.push({ id: unit.id, keys: narration ? audio : visual, otherField: narration ? visual : audio });
+    }
+    else {
+      const members = native.readRow(unit.row.id)?.members;
+      if (!members?.length) return [];
+      for (const id of members) {
+        const beat = native.readBeat(id);
+        if (!beat) return [];
+        const audio = editorKeys(beat.narration), visual = editorKeys(beat.visual);
+        const glue = id === unit.row.id ? "" : narration ? beat.joined?.glue ?? "" : "\n";
+        units.push({ id: "beat:" + id, keys: narration ? audio : visual, otherField: narration ? visual : audio, glue });
+      }
+    }
   }
-  const cells = Array.from(document.querySelectorAll(selector));
-  const a = cells.indexOf(anchor.cell), h = cells.indexOf(head.cell);
-  const [start, end] = a < h ? [anchor, head] : [head, anchor];
-  return [domKeys(start.cell).slice(start.offset),
-    ...cells.slice(Math.min(a, h) + 1, Math.max(a, h)).map(domKeys),
-    domKeys(end.cell).slice(0, end.offset)].flat();
+  return units;
+}
+
+function matchesUnits(source: readonly SwitchUnit[], destination: readonly SwitchUnit[]): boolean {
+  const first = destination.findIndex(unit => unit.id === source[0]?.id);
+  const last = destination.findIndex(unit => unit.id === source.at(-1)?.id);
+  return first >= 0 && last - first + 1 === source.length && source.every((unit, index) => {
+    const other = destination[first + index];
+    return other?.id === unit.id && sameKeys(unit.keys, other.keys) && sameKeys(unit.otherField ?? [], other.otherField ?? [])
+      && (index === 0 || (unit.glue ?? "") === (other.glue ?? ""));
+  });
 }
 
 function writerCell(point: FlowPos): Element | null {
@@ -143,16 +181,6 @@ function writerPoint(point: FlowPos): SwitchPoint | null {
 function flowPoint({ cell, offset }: SwitchPoint): FlowPos {
   const heading = cell.getAttribute("data-scene");
   return heading ? headingPos(heading, offset) : beatPos(cell.getAttribute("data-id") ?? "", offset);
-}
-
-function placeWriterEnd(): void {
-  const root = document.querySelector<HTMLElement>(WRITER), first = root?.querySelector(".wr-beat[data-id]");
-  const beat = first?.getAttribute("data-id");
-  if (first && beat) writerControls()?.writerFlowControl()?.place(caretAt(beatPos(beat, endOf(first))));
-  else if (root) {
-    root.focus({ preventScroll: true });
-    document.getSelection()?.collapse(root, root.childNodes.length);
-  }
 }
 
 function cellPoint(selector: string, node: Node | null, offset: number): SwitchPoint | null {
@@ -178,60 +206,66 @@ function nativeNarrationPoint(native: SwitchNative, id: string, keys: readonly s
   return resolved?.beat === id && resolved.offset === offset ? { cell, offset: at + offset } : null;
 }
 
-export function captureNativeSwitchSelection(native: SwitchNative) {
+export function captureNativeSwitchSelection(native: SwitchNative, entering: boolean, paintIsCurrent: () => boolean) {
   const active = document.activeElement;
   const selection = document.getSelection();
-  if (!active || !selection?.rangeCount || !selection.anchorNode || !selection.focusNode) return null;
+  if (!active) return null;
   const writer = active.matches(WRITER);
   const selector = writer ? WRITER_FLOW : [SPLIT, SPLIT_VISUAL, WRITER_VISUAL].find(candidate => active.matches(candidate));
   if (!selector) return null;
+  if (!selection?.rangeCount || !selection.anchorNode || !selection.focusNode) return null;
   const range = writer && active.contains(selection.anchorNode) && active.contains(selection.focusNode)
     ? writerControls()?.writerFlowControl()?.selection() : null;
   const anchor = range ? writerPoint(range.anchor) : cellPoint(selector, selection.anchorNode, selection.anchorOffset);
   const head = range ? writerPoint(range.head) : cellPoint(selector, selection.focusNode, selection.focusOffset);
   if (!anchor || !head) return null;
-  const aKeys = domKeys(anchor.cell), hKeys = anchor.cell === head.cell ? aKeys : domKeys(head.cell);
+  const aKeys = domKeys(anchor.cell), hKeys = domKeys(head.cell);
   if (anchor.offset > aKeys.length || head.offset > hKeys.length) return null;
-  const keys = selectedKeys(selector, anchor, head);
+  const narration = writer || selector === SPLIT;
+  const aId = unitId(anchor.cell), hId = unitId(head.cell);
+  const source = outlineWindow(aId, hId, narration);
+  const confirmed = !entering && paintIsCurrent() ? outlineWindow(aId, hId, narration, native) : [];
+  const sourceMatchesPaint = source.length > 0 && sameKeys(source.find(unit => unit.id === aId)?.keys ?? [], aKeys)
+    && sameKeys(source.find(unit => unit.id === hId)?.keys ?? [], hKeys)
+    && (entering || confirmed.length === source.length && matchesUnits(source, confirmed));
   const direction = forward(anchor, head);
   const collapsed = selection.isCollapsed;
   const surface = writer ? writerNarration : selector === SPLIT ? splitNarration : visualTextSurface;
   const focused = active.getAttribute("data-id");
-  const ownsFocus = (): boolean => {
-    const now = document.activeElement;
-    return now === active || now === document.body || (!active.isConnected &&
-      (!!now && now === (focused ? surface.cell(focused) : null) || selector === WRITER_VISUAL && !!now?.matches(WRITER)));
+  const withinEditor = (target: EventTarget | null): boolean => {
+    if (!(target instanceof Element)) return false;
+    return target === active || !!target.closest(writer || selector === WRITER_VISUAL ? WRITER + ", " + WRITER_VISUAL
+      : SPLIT + ", " + SPLIT_VISUAL);
   };
-  const resolve = (point: SwitchPoint, source: readonly string[], shared: boolean, right: boolean): SwitchPoint | null => {
+  let leftEditor = false;
+  const focus = (event: Event): void => { if (!withinEditor(event.target)) leftEditor = true; };
+  document.addEventListener("focusin", focus, true);
+  const dispose = (): void => { document.removeEventListener("focusin", focus, true); };
+  const resolve = (point: SwitchPoint, sourceKeys: readonly string[], right: boolean): SwitchPoint | null => {
     const pos = flowPoint(point);
-    if (shared && (writer || selector === SPLIT) && pos.kind === "beat") {
-      return nativeNarrationPoint(native, pos.rowId, source, pos.offset, right, surface);
+    if (entering && narration && pos.kind === "beat") {
+      return nativeNarrationPoint(native, pos.rowId, sourceKeys, pos.offset, right, surface);
     }
     const cell = writer ? writerCell(pos) : surface.cell(point.cell.getAttribute("data-id") ?? "");
-    return cell && sameKeys(source, domKeys(cell)) ? { cell, offset: point.offset } : null;
+    return cell && sameKeys(sourceKeys, domKeys(cell)) ? { cell, offset: point.offset } : null;
   };
-  const fallback = (): void => {
-    if (writer || selector === WRITER_VISUAL) { placeWriterEnd(); return; }
-    const first = document.querySelector<HTMLElement>(selector);
-    if (first) {
-      const end = endOf(first);
-      surface.place(first, first.dataset.id ?? "", end, end, false);
-    } else document.querySelector<HTMLElement>(".add-row-btn")?.focus({ preventScroll: true });
-  };
-  const restore = (shared: boolean): void => {
-    if (!ownsFocus()) return;
-    if (selector === WRITER_VISUAL && focused && !surface.cell(focused)) {
+  const restore = (): boolean => {
+    if (leftEditor || !sourceMatchesPaint || entering && !paintIsCurrent()
+      || document.activeElement !== document.body && !withinEditor(document.activeElement)) return false;
+    const destinationNative = entering ? native : undefined;
+    const focusedVisual = selector === WRITER_VISUAL && focused ? surface.cell(focused) : null;
+    if (selector === WRITER_VISUAL && focused && (!focusedVisual || focusedVisual.closest("[hidden], [inert]"))) {
       const row = documentReader.current()?.rows.find(row => row.id === focused);
-      if (row && sameKeys(aKeys, editorKeys(fromHtml(row.visualText ?? "", MEDIA)))) {
-        writerControls()?.writerFlowControl()?.openVisual(focused);
-      }
+      if (!row || !sameKeys(aKeys, editorKeys(fromHtml(row.visualText ?? "", MEDIA)))
+        || entering && native.readRow(focused)?.members.length !== 1
+        || !matchesUnits(source, outlineWindow(aId, hId, narration, destinationNative))) return false;
+      writerControls()?.writerFlowControl()?.openVisual(focused);
     }
-    const from = resolve(anchor, aKeys, shared, !collapsed && direction);
-    const to = resolve(head, hKeys, shared, !collapsed && !direction);
-    if (!from || !to || direction !== forward(from, to) || !sameKeys(keys, selectedKeys(selector, from, to))) {
-      fallback();
-      return;
-    }
+    const from = resolve(anchor, aKeys, !collapsed && direction), to = resolve(head, hKeys, !collapsed && !direction);
+    if (!from || !to || direction !== forward(from, to)
+      || from.cell.closest("[hidden], [inert]") || to.cell.closest("[hidden], [inert]")) return false;
+    const destination = outlineWindow(unitId(from.cell), unitId(to.cell), narration, destinationNative);
+    if (!matchesUnits(source, destination)) return false;
     if (writer) {
       writerControls()?.writerFlowControl()?.place({ anchor: flowPoint(from), head: flowPoint(to) });
     } else if (from.cell === to.cell && to.cell instanceof HTMLElement) {
@@ -242,6 +276,7 @@ export function captureNativeSwitchSelection(native: SwitchNative) {
       if (cell instanceof HTMLElement) cell.focus({ preventScroll: true });
       document.getSelection()?.setBaseAndExtent(a.node, a.offset, h.node, h.offset);
     }
+    return true;
   };
-  return { ownsFocus, restore };
+  return { dispose, restore: () => { if (!restore()) waitForNativeCaret(); } };
 }

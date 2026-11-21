@@ -34,3 +34,16 @@ press z
 wait S.read().app.rows[0].audioText === 'Hellozxy there' && S.read().peer.rows[0].audioText === 'Hellozxy there'
 eval S.leave()
 expect splitIs(['r1',6],['r1',6])
+click #btn-write
+eval S.enter()
+eval writerAt(['r1',2],['r2',2]);S.nativePeer.removeBeat('r1');S.leave()
+expect W.selection() === null
+eval document.getElementById('writer-doc').focus();true
+wait W.selection() === null && getSelection().rangeCount === 0
+press q
+expect F.state().rows.length === 1 && F.state().rows[0].audioText === 'World again'
+wait W.selection() === null && getSelection().rangeCount === 0
+click #writer-doc .wr-beat[data-id="r2"]
+wait W.selection()?.head.rowId === 'r2'
+press q
+wait F.state().rows[0].audioText.includes('q')
