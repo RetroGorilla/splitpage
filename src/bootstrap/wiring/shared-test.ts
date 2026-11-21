@@ -192,6 +192,7 @@ function startSharedTestHook(): () => void {
       removeBeat: (id: string) => nativePeer?.removeBeat(id),
       removeComment: (id: string) => nativePeer?.removeComment(id),
       registry: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["registry"]>) => nativePeer?.registry(...args),
+      format: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["format"]>) => nativePeer?.format(...args),
       hold: () => nativePeer?.hold(),
       deliver: () => nativePeer?.deliver(),
       step: (direction: "undo" | "redo") => nativePeer?.step(direction),

@@ -854,28 +854,41 @@ function renderProductionList(entries?: readonly PresentedProductionEntry[]) {
   }
 
   if (group === "prep") {
+    const p = ports as TagPanelPorts;
+    const native = p.shared.native?.();
+    if (native) {
+      const box = listEl.querySelector(".prep-notes .tag-notes-input");
+      const id = box?.getAttribute("data-registry-id");
+      const item = id ? entries.find(entry => entry.id === id) : undefined;
+      const prep = p.view.prep(), context = prep.current().notes;
+      if (item && context !== null) {
+        const moved = renamedNotes(context, box?.getAttribute("data-key") ?? null, item.key);
+        if (moved !== null && moved !== context) prep.renameNotes(context, moved);
+      }
+    }
     const rename = listEl.querySelector<HTMLInputElement>(".tag-rename-input");
-    const keepRename = rename && rename.getAttribute("data-key") === (ports as TagPanelPorts).view.tagRenamingKey();
+    const keepRename = rename && rename.getAttribute("data-key") === p.view.tagRenamingKey();
     const active = document.activeElement;
     const focused = active && listEl.contains(active) ? active as HTMLElement : null;
-    const matchRecord = focused && isPrepTextField(focused) && (ports as TagPanelPorts).shared.native?.();
+    const focusedText = focused && isPrepTextField(focused) ? focused : null;
+    const matchRecord = native && focusedText !== null;
     const identity = focused ? {
       prep: focused.getAttribute("data-prep"), id: focused.getAttribute("data-id"),
       key: focused.getAttribute("data-key"), row: focused.getAttribute("data-row"),
-      className: focused.className, value: isPrepTextField(focused) ? focused.value : null,
+      className: focused.className, value: focusedText && (!native || unsavedTyping(focusedText)) ? focusedText.value : null,
       record: matchRecord ? focused.getAttribute("data-registry-id") : null,
       context: focused.closest(".prep-resource")?.getAttribute("data-prep-context") ?? null,
-      start: isPrepTextField(focused) ? focused.selectionStart : null,
-      end: isPrepTextField(focused) ? focused.selectionEnd : null,
-      direction: isPrepTextField(focused) ? focused.selectionDirection : null
+      start: focusedText?.selectionStart ?? null, end: focusedText?.selectionEnd ?? null,
+      direction: focusedText?.selectionDirection ?? null
     } : null;
     const scroll = listEl.scrollTop;
-    const html = renderProductionOutline(ports as TagPanelPorts, entries, (item, id) =>
-      tagEntityDetailHtml(item, (ports as TagPanelPorts).view.tagRenamingKey() === item.key, false, id, true));
+    const html = renderProductionOutline(p, entries, (item, id) =>
+      tagEntityDetailHtml(item, p.view.tagRenamingKey() === item.key, false, id, true));
     if (listEl.innerHTML === html) return;
     listEl.innerHTML = html;
     const replacement = listEl.querySelector<HTMLInputElement>(".tag-rename-input");
     if (keepRename && replacement && replacement.getAttribute("data-registry-id") === rename.getAttribute("data-registry-id") &&
+      (!native || replacement.getAttribute("data-key") === rename.getAttribute("data-key")) &&
       replacement.getAttribute("data-document-epoch") === rename.getAttribute("data-document-epoch")) replacement.replaceWith(rename);
     if (identity) {
       const next = Array.from(listEl.querySelectorAll<HTMLElement>("button, select, input, textarea, a")).find(el =>
@@ -884,8 +897,8 @@ function renderProductionList(entries?: readonly PresentedProductionEntry[]) {
         (el.closest(".prep-resource")?.getAttribute("data-prep-context") ?? null) === identity.context &&
         el.getAttribute("data-id") === identity.id && el.getAttribute("data-key") === identity.key && el.getAttribute("data-row") === identity.row);
       if (next) {
-        if ((isPrepTextField(next)) && identity.value !== null) {
-          next.value = identity.value;
+        if (isPrepTextField(next)) {
+          if (identity.value !== null) next.value = identity.value;
           if (identity.start !== null && identity.end !== null) next.setSelectionRange(identity.start, identity.end, identity.direction ?? undefined);
         }
         if (next.matches(":disabled")) next.closest(".prep-resource")?.querySelector<HTMLSelectElement>(".prep-status-select")?.focus({ preventScroll: true });
@@ -1315,8 +1328,9 @@ function statusSet(key: string | null, statusId: string | null): RecordCommandRu
 export function setTagOwner(key: string | null, personId: string) {
   const item = findTagByKey(key);
   if (!item) return;
+  const native = (ports as TagPanelPorts).shared.native?.();
   if (updateTags([item], { owner: { id: personId } }).held) {
-    if ((ports as TagPanelPorts).shared.native?.()) {
+    if (native) {
       const owner = findTagByKey(key)?.owner ?? "";
       for (const select of document.querySelectorAll<HTMLSelectElement>('.tag-owner-select[data-key="' + cssAttr(key) + '"]')) {
         select.value = owner;
@@ -1324,7 +1338,7 @@ export function setTagOwner(key: string | null, personId: string) {
     }
     return;
   }
-  renderProduction();
+  if (!native) renderProduction();
 }
 
 function notesSave(key: string, record: string): TypedSave {

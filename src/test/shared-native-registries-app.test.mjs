@@ -9,6 +9,7 @@ import { findOrAddPerson, registerProductionTag } from "../features/tags/product
 import { cellSelection, setCellSelection } from "../features/common/cell-selection.ts";
 import { openBrollPanel } from "../features/broll/panel.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
+import { namedTagId } from "../core/text/runs.ts";
 
 window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};
@@ -221,6 +222,57 @@ test("Scene prep keeps a removed tag's draft away from its same-name replacement
   replacement.blur();
   await Promise.resolve();
   copies(doc => tag(doc, "Mug").notes, "");
+});
+
+async function openPrepNotes(t) {
+  await enter(t, { rows: [{ id: "r1", audioText: "Hello",
+    visualText: '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Mug" contenteditable="false">Mug</span>' }],
+  productionTags: [{ cat: "prop", name: "Mug", notes: "Original" }] });
+  production("prep");
+  $('.prep-resource-name [data-prep="notes"]').click();
+  return $(".prep-notes .tag-notes-input");
+}
+
+test("a clean focused Scene prep textarea takes a peer's notes without writing the old value back", async t => {
+  const original = await openPrepNotes(t);
+  assert.equal(original.value, "Original");
+  original.focus();
+  const id = original.getAttribute("data-registry-id");
+  assert.equal(hook.nativePeer.registry({ kind: "set", collection: "tags", ids: [id], fields: { notes: "Peer edit" } }).kind, "written");
+  await Promise.resolve();
+  const replacement = $(".prep-notes .tag-notes-input");
+  assert.notEqual(replacement, original);
+  assert.equal(document.activeElement, replacement);
+  const shown = replacement.value;
+  replacement.blur();
+  await Promise.resolve();
+  copies(doc => tag(doc, "Mug").notes, "Peer edit");
+  assert.equal(shown, "Peer edit");
+});
+
+test("a peer rename with its mark rewrite keeps the Scene prep draft open on the same record", async t => {
+  const original = await openPrepNotes(t);
+  const id = original.getAttribute("data-registry-id");
+  original.focus();
+  original.value = "Keep this draft";
+  original.setSelectionRange(2, 7, "backward");
+  const target = { beat: "r1", cell: "visual" };
+  hook.nativePeer.hold();
+  assert.equal(hook.nativePeer.format(target, 0, 3, { kind: "tag", id: namedTagId("prop", "Mug"), on: false }).kind, "written");
+  assert.equal(hook.nativePeer.registry({ kind: "set", collection: "tags", ids: [id], fields: { name: "Cup" } }).kind, "written");
+  assert.equal(hook.nativePeer.format(target, 0, 3, { kind: "tag", id: namedTagId("prop", "Cup"), on: true }).kind, "written");
+  hook.nativePeer.deliver();
+  await Promise.resolve();
+  copies(doc => tags(doc).map(({ id, name, notes }) => [id, name, notes]), [[id, "Cup", "Original"]]);
+  assert.match(hook.read().app.rows[0].visualText, /data-tag-name="Cup"/);
+  const replacement = $(".prep-notes .tag-notes-input");
+  assert.ok(replacement);
+  assert.notEqual(replacement, original);
+  assert.equal(replacement.getAttribute("data-registry-id"), id);
+  assert.equal(replacement.getAttribute("data-key"), "prop cup");
+  assert.equal(document.activeElement, replacement);
+  assert.equal(replacement.value, "Keep this draft");
+  assert.deepEqual([replacement.selectionStart, replacement.selectionEnd, replacement.selectionDirection], [2, 7, "backward"]);
 });
 
 test("racing renames agree and the focused notes draft follows the tag ID", async t => {
@@ -475,26 +527,33 @@ test("a stale tag edit refuses instead of creating a duplicate of the old tag na
   assert.deepEqual(show.mock.calls.map(call => call.arguments), [["This is not available in a shared session yet.", "warn"]]);
 });
 
-test("refused native shot and tag owner changes restore the published selection and keep focus", async t => {
+function assertRefusedOwnerChoice(select) {
+  select.focus();
+  select.value = "p1";
+  assert.equal(select.value, "p1");
+  select.dispatchEvent(new window.Event("change", { bubbles: true }));
+  assert.equal(select.value, "");
+  assert.equal(select.isConnected, true);
+  assert.equal(document.activeElement, select);
+}
+
+test("a refused native shot owner change restores the published selection and keeps focus", async t => {
   await enter(t, { rows: [{ id: "r1", audioText: "Hello",
     visualText: '<span class="broll-key" data-broll-id="bs1" contenteditable="false">B-roll:</span> Wide' }],
-  people: [{ id: "p1", name: "Cam" }], productionTags: [{ cat: "prop", name: "Lens" }] });
+  people: [{ id: "p1", name: "Cam" }] });
   const show = t.mock.method(notices, "show", () => {});
-  function chooseOwner(select) {
-    select.focus();
-    select.value = "p1";
-    assert.equal(select.value, "p1");
-    select.dispatchEvent(new window.Event("change", { bubbles: true }));
-    assert.equal(select.value, "");
-    assert.equal(document.activeElement, select);
-  }
   openBrollPanel();
   if (!shotCard("bs1")) shotButton("bs1", "expand").click();
   assert.equal(hook.nativePeer.registry({ kind: "remove", collection: "shots", ids: ["bs1"] }).kind, "written");
   await Promise.resolve();
-  chooseOwner(shotCard("bs1").querySelector(".broll-owner-select"));
+  assertRefusedOwnerChoice(shotCard("bs1").querySelector(".broll-owner-select"));
   copies(doc => shot(doc, "bs1").owner, "");
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), [["This is not available in a shared session yet.", "warn"]]);
+});
 
+test("a refused native production owner change restores the published selection and keeps focus", async t => {
+  await enter(t, { people: [{ id: "p1", name: "Cam" }], productionTags: [{ cat: "prop", name: "Lens" }] });
+  const show = t.mock.method(notices, "show", () => {});
   production();
   const card = tagCard("prop lens");
   if (!card.querySelector(".tag-owner-select")) card.querySelector("[data-action=tag-expand]").click();
@@ -504,10 +563,41 @@ test("refused native shot and tag owner changes restore the published selection 
   setCellSelection(narration, 2);
   narration.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true, cancelable: true }));
   try {
-    chooseOwner(select);
+    assertRefusedOwnerChoice(select);
     copies(doc => tag(doc, "Lens").owner, "");
   } finally {
     narration.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true }));
   }
-  assert.deepEqual(show.mock.calls.map(call => call.arguments), Array(2).fill(["This is not available in a shared session yet.", "warn"]));
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), [["This is not available in a shared session yet.", "warn"]]);
+});
+
+for (const panel of ["production", "b-roll"]) test(`an accepted native ${panel} owner choice stays visible until publication`, async t => {
+  await enter(t, { people: [{ id: "p1", name: "Cam" }], productionTags: [{ cat: "prop", name: "Lens" }],
+    brollShots: [{ id: "bs1", name: "Wide", origin: "list" }] });
+  const isTag = panel === "production";
+  if (isTag) {
+    production();
+    const card = tagCard("prop lens");
+    if (!card.querySelector(".tag-owner-select")) card.querySelector("[data-action=tag-expand]").click();
+  } else {
+    openBrollPanel();
+    if (!shotCard("bs1")) shotButton("bs1", "expand").click();
+  }
+  const select = () => isTag ? tagCard("prop lens").querySelector(".tag-owner-select")
+    : shotCard("bs1").querySelector(".broll-owner-select");
+  const original = select();
+  original.focus();
+  assert.equal(original.value, "");
+  const owner = doc => (isTag ? tag(doc, "Lens") : shot(doc, "bs1")).owner;
+  assert.equal(hook.nativePeer.registry({ kind: "set", collection: isTag ? "tags" : "shots",
+    ids: [isTag ? tag(hook.read().app, "Lens").id : "bs1"], fields: { notes: "Peer edit" } }).kind, "written");
+  original.value = "p1";
+  original.dispatchEvent(new window.Event("change", { bubbles: true }));
+  assert.equal(select().value, "p1");
+  assert.equal(select(), original);
+  assert.equal(document.activeElement, original);
+  assert.equal(owner(hook.read().app), "");
+  await Promise.resolve();
+  copies(owner, "p1");
+  assert.equal(select().value, "p1");
 });
