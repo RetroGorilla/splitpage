@@ -193,7 +193,7 @@ Each command is one transaction.
 | Bold and other plain kinds | `format` with the plain key, `true` or `null` |
 | Tag, untag | A fresh application key; untag sets `null` on the keys seen. No re-keying |
 | Split | Boundary, record copying the parent's rank, visual cell. Never narration |
-| Delete and split | Delete a narration selection in one beat, then split at the resulting caret. Resolve the selection and validate the split before either write |
+| Delete and split | Delete a narration selection in one beat, then split at the resulting caret. Resolve the selection and validate the split before either write. A peer-erased selection changes nothing |
 | Create first beat | Reuse put-back to write a fresh segment, beat record, rank and cells if no beat is shown. Rule (b) letters stay in their original segments and the reader assigns them to the new beat |
 | Join, unjoin | Set or delete `joined` on the lower beat |
 | Remove beats | The observed text with its boundary (or `head`); the records, visual cells and segment stay |

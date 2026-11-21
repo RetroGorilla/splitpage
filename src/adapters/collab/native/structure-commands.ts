@@ -34,7 +34,7 @@ interface ShownRow {
 interface Cut { readonly text: Y.Text; readonly from: number; readonly to: number }
 
 const WRITTEN: NativeRowOutcome = Object.freeze({ kind: "written" });
-const UNCHANGED: NativeRowOutcome = Object.freeze({ kind: "unchanged" });
+const UNCHANGED = Object.freeze({ kind: "unchanged" } as const);
 const JOINED = "joined";
 
 function refused(reason: NativeRowRefusal): { readonly kind: "refused"; readonly reason: NativeRowRefusal } {
@@ -148,7 +148,7 @@ function writeSplit(script: NativeScript, beat: string, live: NativeLiveRange, d
   return Object.freeze({ kind: "written", created });
 }
 
-export function deleteAndSplitNativeRow(script: NativeScript, selection: NativeTextRange): NativeSplitOutcome {
+export function deleteAndSplitNativeRow(script: NativeScript, selection: NativeTextRange): NativeSplitOutcome | typeof UNCHANGED {
   const unavailable = nativeAvailability(script);
   if (unavailable) return refused(unavailable);
   return transactPreparedNativeCommand(script,
@@ -157,7 +157,9 @@ export function deleteAndSplitNativeRow(script: NativeScript, selection: NativeT
       if (!checked?.to || checked.target.cell !== "narration") return refused("range");
       if (!beatId(checked.target.beat)) return refused("missing");
       const live = nativeLiveRange(script, checked);
-      return typeof live === "string" ? refused(live) : writeSplit(script, checked.target.beat, live, true);
+      if (typeof live === "string") return refused(live);
+      if (!live.pieces.some(piece => piece.until > piece.from)) return UNCHANGED;
+      return writeSplit(script, checked.target.beat, live, true);
     }, refused, () => true);
 }
 

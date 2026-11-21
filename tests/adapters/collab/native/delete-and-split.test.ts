@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import * as Y from "yjs";
 import { openNativeSession } from "../../../../src/adapters/collab/native/session.ts";
 import type { NativeTextRange } from "../../../../src/adapters/collab/native/text-commands.ts";
 import { compoundSeed, settleCompound } from "./compound-harness.ts";
@@ -73,6 +74,26 @@ test("a selection proxy that closes the session leaves the serialized state alon
   const closing = new Proxy(valid, { ownKeys(target) { copy.close(); return Reflect.ownKeys(target); } });
   assert.deepEqual(copy.commands.deleteAndSplit(closing), { kind: "refused", reason: "closed" });
   assert.deepEqual(copy.encodeState(), state);
+});
+
+test("delete and split leaves a peer-erased selection unchanged in both delivery orders", t => {
+  for (const reverse of [false, true]) {
+    const writer = noticeCopy(compound, 2), peer = noticeCopy(compound, 3);
+    t.after(() => { writer.close(); peer.close(); });
+    const original = at(writer, 1, 4), updates: Uint8Array[] = [];
+    peer.ydoc.on("update", (update: Uint8Array) => updates.push(update));
+    assert.equal(peer.commands.deleteText(at(peer, 1, 4)).kind, "written");
+    assert.equal(peer.commands.typeText(noticeRange(peer, "B", "narration", 4), "!", {}).kind, "written");
+    assert.equal(updates.length, 2);
+    for (const update of reverse ? updates.toReversed() : updates) Y.applyUpdate(writer.ydoc, update, "peer");
+    const state = writer.encodeState();
+    const unchanged = writer.commands.deleteText(original);
+    assert.deepEqual(unchanged, { kind: "unchanged" });
+    assert.deepEqual(writer.commands.deleteAndSplit(original), unchanged);
+    assert.deepEqual(writer.encodeState(), state);
+    assert.deepEqual(writer.commands.undo(), { kind: "unchanged" });
+    settleCompound(writer, peer, ["aef", "next!"]);
+  }
 });
 
 test("a full session refuses the entire delete and split before a transaction starts", t => {
