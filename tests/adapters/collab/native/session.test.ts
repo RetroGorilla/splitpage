@@ -668,7 +668,8 @@ test("local update subscriptions preserve Yjs bytes and isolate subscriber fault
   const peer = open({ kind: "state", state: session.encodeState() }, "Peer");
   t.after(session.close);
   t.after(peer.close);
-  const source = t.mock.fn(), received = t.mock.fn();
+  const source = t.mock.fn<(bytes: Uint8Array) => void>();
+  const received = t.mock.fn<(bytes: Uint8Array) => void>();
   session.ydoc.on("update", source);
   const stopFault = session.subscribeLocalUpdates(bytes => {
     bytes.fill(0);
