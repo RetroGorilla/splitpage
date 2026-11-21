@@ -392,6 +392,31 @@ test("concurrent reorders preserve different ranks and the winner's undo follows
   }, undefined, source(initial), true);
 });
 
+test("the losing move's undo and redo leave the winning rank in place", () => {
+  const initial = initialProps(4), moving = "t_seed2";
+  registryCopies((left, right, settle) => {
+    const undo = openNativeUndo(left);
+    const ids = (copy: NativeScript) => read(copy)?.map(prop => prop?.id);
+    const winning = ["t_seed1", "t_seed3", "t_seed4", moving];
+    try {
+      write(left, { kind: "moveProp", id: "shot", prop: moving, before: "t_seed4" });
+      write(right, { kind: "moveProp", id: "shot", prop: moving, before: null });
+      assert.deepEqual(ids(left), ["t_seed1", "t_seed3", moving, "t_seed4"]);
+      settle();
+      assert.deepEqual(ids(left), winning);
+      const rank = propsOf(right).get(moving)?.get("rank"), before = Y.encodeStateAsUpdate(left.doc);
+      assert.equal(typeof rank, "string");
+      for (const press of [undo.undo, undo.redo]) {
+        assert.deepEqual(press(), { kind: "unchanged" });
+        assert.deepEqual(Y.encodeStateAsUpdate(left.doc), before);
+        settle();
+        assert.equal(propsOf(right).get(moving)?.get("rank"), rank);
+        assert.deepEqual(ids(right), winning);
+      }
+    } finally { undo.destroy(); }
+  }, undefined, source(initial), true);
+});
+
 test("concurrent adds at the cap keep the hidden entry through undo, redo and removal", () => {
   const initial = initialProps(BROLL_PROPS_MAX - 1);
   const rope = { id: "t_rope", name: "Rope" }, box = { id: "t_case", name: "Case" };

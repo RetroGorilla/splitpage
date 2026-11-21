@@ -200,7 +200,7 @@ Each command is one transaction.
 | Create person, production tag or shot | One record map keyed by minted ID, its field keys and its rank. Tag IDs encode the writer and clock in the core's tag ID form |
 | Edit registry fields, cycle tag status, quick-add gear | Changed field keys only. A new owner or tag gets a new record. Quick add marks only omitted orphaned gear removed |
 | Move, remove, restore registry entries | Move writes a rank and re-ranks the right side of a tie at the drop. Remove sets `removed` and restore clears it. The reader keeps comment assignee names, clears missing owners and derives tags and shots from surviving labels and keyed lines as on reload |
-| Add, remove or reorder shot props | Add writes the prop's own entry and may create its tag in the same transaction. A name already shown is a no-op. Remove sets `removed` on a valid entry. Reorder writes its rank. A whole-list set updates changed fields and removes every omitted entry, including overflow. A set or remove can repair damaged entries |
+| Add, remove or reorder shot props | Targeted commands require a stored prop map. Add writes the prop's entry and may create its tag in the same transaction. A name already shown is a no-op. Remove sets `removed` on a valid entry. Reorder writes its rank. A whole-list set keeps retained props on the keys they were read from and removes omitted entries, including overflow. It can replace a damaged prop map |
 
 **Check before writing** (decision 15). Every command finds each part it will touch by id: its rows' records,
 cells and boundaries, and the ranks of neighbours a move will write. If one is missing, it refuses without writing.
@@ -275,7 +275,8 @@ kept records (E16). Plain Yjs causes both: an undo the tagger had not seen resto
 **5c. Shot props.** The earlier candidate exposed 41 props in two of 144 histories and core reload kept 40. The keyed
 reader now caps the projection before reload. All 144 command histories keep the projected document through reload.
 Stock Yjs still picks one writer when both add the same existing tag ID or move the same entry. Undo of the winning
-add clears that entry. Undo of the winning move can leave a rankless entry, which reads before ranked entries.
+add clears that entry. Undo of the winning move can clear the rank so the prop reads before ranked entries. Redo
+restores the winning rank. The losing writer's undo and redo leave the winning rank in place after both updates arrive.
 If undo clears the fallback name of a prop with an orphaned tag ID, that prop is hidden. A targeted drop that would
 require rewriting a peer's tied rank is refused. [Shape and undo tests](../../tests/adapters/collab/native/prop-shape.test.ts),
 [command races](../../tests/adapters/collab/native/registry-races.test.ts).
@@ -632,10 +633,13 @@ E5's checks are the template.
 | `shots` | The shot's file fields and a nested `props` map. Each key is the tag ID, or `n:` followed by the JSON-encoded normalized name. Its record holds the encoded name, rank and optional `removed` mark |
 | `edited` | Per beat, `{by, at}` of the last typing |
 
-Props read in rank order, with equal ranks ordered by key. The core prop normalizer defines the projection, including
-the 40-prop cap. Other active entries stay stored and count toward the add limit. A shot without a prop map reads
-as empty. The reader reports damaged entries individually and keeps the readable entries. Removing a damaged entry
-deletes its key. A validated whole-list set replaces damaged entries requested by key and deletes omitted damaged entries.
+Conversion and creation store the prop map in the same transaction as the shot, even when it has no props.
+Props read in rank order, with equal ranks ordered by key. The core normalizer defines the projection, including
+the 40-prop cap. Other active entries stay stored and count toward the add limit. A missing or invalid map reads
+as empty and produces one problem for the shot's props. The old array form was never released. An explicit whole-list
+set can replace it with a map containing the requested props. Within a valid map, the reader reports damaged entries
+individually and keeps readable entries. A whole-list set replaces damaged requested keys and deletes omitted ones.
+A targeted removal of a damaged entry deletes its key.
 
 ### H. Outcomes that lose nothing
 
@@ -657,6 +661,8 @@ E11, 600 generated histories, names in cells, unless marked:
 | Two people add different props or move different props on one shot | Both entries survive. Equal ranks sort by key and undo on one copy leaves the other copy's edit |
 | Two people add the same normalized prop name under different tag IDs | Both show in rank and key order when within the cap, as on core reload. Undo removes the acting copy's addition and redo brings it back |
 | One person removes a prop while another edits it | The removed prop stays hidden. Undo of the removal restores it with the concurrent edit |
+| One person removes a prop while another keeps it in a whole-list set | The removal still applies, even when the prop's displayed tag ID differs from its stored name key |
+| Two people move the same prop and the losing writer undoes after both updates arrive | Undo and redo leave the winning order in place |
 | Two people add different props to a shot with 39 props | Both stay stored and 40 show. Removing a visible prop reveals the overflow entry. Core reload preserves the projection |
 
 Also, with no text lost: plain bold in E4's 60 two-copy trials, 72 letters missing bold at merge and 34 left bold
