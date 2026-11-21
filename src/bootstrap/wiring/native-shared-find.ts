@@ -18,7 +18,7 @@ interface NativeFindPorts {
   readonly native: ReturnType<typeof openNativeSession>;
   readonly session: () => SharedDocumentSession | null;
   readonly input: () => ReturnType<typeof mountNativeSharedInput> | null;
-  readonly stamp: () => NativeEditStamp;
+  readonly editAttribution: () => NativeEditStamp;
   readonly publish: () => void;
   readonly report: ReportPort;
 }
@@ -45,7 +45,7 @@ function cellText(doc: ReturnType<NativeFindPorts["native"]["document"]> | NonNu
   return cell === "visual" ? row?.visualText : row?.audioText;
 }
 
-export function createNativeEditorFind({ native, session, input, stamp, publish, report }: NativeFindPorts): FindNativeAccess {
+export function createNativeEditorFind({ native, session, input, editAttribution, publish, report }: NativeFindPorts): FindNativeAccess {
   return {
     cells: scriptCellOf,
     capture(matches, needle, matchCase) {
@@ -131,7 +131,7 @@ export function createNativeEditorFind({ native, session, input, stamp, publish,
             const next = replaceText(source.cell, start, end, text);
             length = cellLength(next) - cellLength(deleteRange(source.cell, start, end));
             const insert = sliceCell(next, start, start + length);
-            step = native.commands.replaceText.withSelection(range, range, insert, stamp());
+            step = native.commands.replaceText.withSelection(range, range, insert, editAttribution());
           }
           if (step.result.kind === "refused" || step.result.kind === "recovery") { owner.refuse(step.result.reason); return null; }
           if (step.result.kind === "unchanged") return 0;

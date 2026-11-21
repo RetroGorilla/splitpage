@@ -48,7 +48,7 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
     if (stored && !native.isStoredScript()) throw new Error("The stored state does not hold a well-formed native script");
   } catch (error) { native.close(); throw error; }
   const publication = nativePublication();
-  const stamp = () => ({ at: new Date(ports.now()).toISOString(), by: actor });
+  const editAttribution = () => ({ at: new Date(ports.now()).toISOString(), by: actor });
   let input: ReturnType<typeof mountNativeSharedInput> | null = null, terminal: Uint8Array | null = null;
   let commandSession: Parameters<SharedEditorBackend["bind"]>[0] | null = null;
   let stopRecords: (() => void) | null = null;
@@ -106,7 +106,7 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
   const backend: SharedEditorBackend = {
     replica: publication.replica, parts: null, unsupportedCommands: UNSUPPORTED,
     nativeRecords: records,
-    nativeFind: createNativeEditorFind({ native, session: () => commandSession, input: () => input, stamp, publish, report: ports.report }),
+    nativeFind: createNativeEditorFind({ native, session: () => commandSession, input: () => input, editAttribution, publish, report: ports.report }),
     structure: createNativeEditorStructure({ native, session: () => commandSession, input: () => input, publish, report: ports.report }),
     undo: admission => nativeUndoRoute({ native, admission, input: () => input, publish: () => { publish(); } }),
     bind: session => {
@@ -119,7 +119,7 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
         stopRecords = () => { stopEvents(); stopTimes(); };
       }
       input ??= mountNativeSharedInput({
-        native, session, editAttribution: stamp, now: ports.now, report: ports.report, publish
+        native, session, editAttribution, now: ports.now, report: ports.report, publish
       });
     },
     unbind: () => {
