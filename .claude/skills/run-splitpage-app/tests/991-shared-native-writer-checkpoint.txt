@@ -5,18 +5,21 @@ wait F.state().title === 'Native Writer checkpoint'
 click #btn-write
 wait window.__writerFlowTest.on()
 eval window.W=window.__writerFlowTest;window.writer=()=>document.getElementById('writer-doc');window.at=offset=>{const p={kind:'beat',rowId:'r1',offset};W.place({anchor:p,head:p});return true};window.caret=offset=>{const s=W.selection(),dom=getSelection();return document.activeElement===writer()&&dom.isCollapsed&&writer().contains(dom.focusNode)&&[s?.anchor,s?.head].every(p=>p?.rowId==='r1'&&p.offset===offset)};true
-eval window.paint=(first,second)=>{const beats=[...writer().querySelectorAll('.wr-beat')];return W.on()&&beats.length===2&&beats.every((beat,i)=>beat.dataset.id===['r1','r2'][i]&&beat.textContent.replace(/^\u200b/,'')===[first,second][i]&&beat.checkVisibility()&&beat.getBoundingClientRect().width>0)};window.rows=(doc,first,second)=>doc.rows.length===2&&doc.rows.every((row,i)=>row.id===['r1','r2'][i]&&row.audioText===[first,second][i]);window.same=()=>JSON.stringify(S.read().app)===JSON.stringify(S.read().peer);window.both=(first,second)=>rows(S.read().app,first,second)&&same()&&paint(first,second);at(5)
+eval window.paint=(first,second)=>{const beats=[...writer().querySelectorAll('.wr-beat')];return W.on()&&beats.length===2&&beats.every((beat,i)=>beat.dataset.id===['r1','r2'][i]&&beat.textContent===[first,'\u200b'+second][i]&&beat.checkVisibility()&&beat.getBoundingClientRect().width>0)};window.rows=(doc,first,second)=>doc.rows.length===2&&doc.rows.every((row,i)=>row.id===['r1','r2'][i]&&row.audioText===[first,second][i]);window.same=()=>JSON.stringify(S.read().app)===JSON.stringify(S.read().peer);window.both=(first,second)=>rows(S.read().app,first,second)&&same()&&paint(first,second);at(5)
 expect caret(5) && paint('Hello','World')
 eval window.originalId=F.state().docId;S.enter()
 expect caret(5) && both('Hello','World')
-eval S.nativePeer.hold();true
+eval S.nativePeer.hold('updates');true
 press x
 wait rows(S.read().app,'Hellox','World')
 expect caret(6) && paint('Hellox','World') && rows(S.read().peer,'Hello','World')
 eval window.prefix=S.nativePeer.type('r1',0,'Y');window.suffix=S.nativePeer.type('r2',5,'!');true
 expect prefix.kind==='written' && suffix.kind==='written'
 expect rows(S.read().peer,'YHello','World!') && rows(S.read().app,'Hellox','World') && paint('Hellox','World')
-eval S.nativePeer.deliver();true
+eval window.queued=S.nativePeer.queuedUpdates();true
+expect queued.length===3 && queued.map(packet=>packet.to).join(',')==='peer,app,app' && queued.every(packet=>packet.bytes.length>0)
+eval window.replayed=S.nativePeer.release('reverse');true
+expect JSON.stringify(replayed)===JSON.stringify(queued.slice().reverse()) && S.nativePeer.queuedUpdates().length===0
 wait both('YHellox','World!')
 eval at(0)
 expect caret(0)
@@ -26,16 +29,16 @@ expect caret(6)
 key ctrl+shift KeyZ
 wait both('YHellox','World!')
 expect caret(7)
-eval S.nativePeer.hold();true
+eval S.nativePeer.hold('updates');true
 press q
 wait rows(S.read().app,'YHelloxq','World!')
 expect caret(8) && paint('YHelloxq','World!') && rows(S.read().peer,'YHellox','World!')
 eval window.last=S.nativePeer.type('r2',6,'Z');true
 expect last.kind==='written' && rows(S.read().peer,'YHellox','World!Z') && rows(S.read().app,'YHelloxq','World!')
-eval S.nativePeer.deliver();true
-wait both('YHelloxq','World!Z')
-expect caret(8)
-eval S.nativePeer.deliver();true
+eval window.queued=S.nativePeer.queuedUpdates();true
+expect queued.length===2 && queued.map(packet=>packet.to).join(',')==='peer,app' && queued.every(packet=>packet.bytes.length>0)
+eval window.replayed=S.nativePeer.release('duplicate');true
+expect JSON.stringify(replayed)===JSON.stringify(queued.flatMap(packet=>[packet,packet])) && S.nativePeer.queuedUpdates().length===0
 wait both('YHelloxq','World!Z')
 expect caret(8)
 eval window.projection=S.read().app;window.left=S.leave();true

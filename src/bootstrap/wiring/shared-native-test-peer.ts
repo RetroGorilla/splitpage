@@ -7,9 +7,21 @@ import type { NativeMarkChange } from "../../adapters/collab/native/format-comma
 import type { NativeTextTarget } from "../../adapters/collab/native/text-commands.ts";
 import type { NativeMoveBlock } from "../../adapters/collab/native/move-commands.ts";
 
+type Packet = { to: "app" | "peer"; bytes: Uint8Array };
+
 export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>) {
   const peer = openNativeSession({ kind: "state", state: app.encodeState() }, { actor: "Peer", sanitize: sanitizeHtml });
   let paused = false;
+  let capturing = false;
+  const packets: Packet[] = [];
+  const capture = (to: Packet["to"]) =>
+    (bytes: Uint8Array, _origin: unknown, _doc: unknown, transaction: { readonly local: boolean }) => {
+      if (capturing && transaction.local) packets.push({ to, bytes: bytes.slice() });
+    };
+  const fromApp = capture("peer");
+  const fromPeer = capture("app");
+  app.ydoc.on("update", fromApp);
+  peer.ydoc.on("update", fromPeer);
   const stop = app.subscribe(event => {
     if (event.kind === "changed" && !paused) applyNativePeerUpdate(peer, app.encodeState());
   });
@@ -26,8 +38,31 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>) 
   }
   return {
     read: peer.document,
-    hold: () => { paused = true; },
+    hold: (mode?: "updates") => {
+      paused = true;
+      capturing = mode === "updates";
+      packets.length = 0;
+    },
+    queuedUpdates: () => packets.map(({ to, bytes }) => ({ to, bytes: Array.from(bytes) })),
+    release: (order: "reverse" | "duplicate") => {
+      capturing = false;
+      const queued = packets.splice(0);
+      const replay = order === "reverse" ? queued.reverse() : queued.flatMap(packet => [packet, packet]);
+      const applied = [];
+      try {
+        for (const { to, bytes } of replay) {
+          if (applyNativePeerUpdate(to === "app" ? app : peer, bytes)) {
+            applied.push({ to, bytes: Array.from(bytes) });
+          }
+        }
+        return applied;
+      } finally {
+        paused = false;
+      }
+    },
     deliver: () => {
+      capturing = false;
+      packets.length = 0;
       paused = false;
       const bytes = app.encodeState();
       applyNativePeerUpdate(app, peer.encodeState());
@@ -51,6 +86,12 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>) 
     step: (direction: "undo" | "redo") => app.commands[direction](),
     type: (beat: string, offset: number, text: string) => edit(beat, offset, offset, text),
     delete: (beat: string, from: number, to: number) => edit(beat, from, to),
-    dispose: () => { stop(); peer.close(); }
+    dispose: () => {
+      stop();
+      app.ydoc.off("update", fromApp);
+      peer.ydoc.off("update", fromPeer);
+      packets.length = 0;
+      peer.close();
+    }
   };
 }

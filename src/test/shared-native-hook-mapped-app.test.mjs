@@ -18,6 +18,7 @@ import { enterSharedSession, forceLeaveSharedSession, leaveRunningSharedSession 
 import { openNativeEditor } from "../bootstrap/wiring/native-shared-session.ts";
 import { openNativeSession } from "../adapters/collab/native/session.ts";
 import { applyNativePeerUpdate } from "../adapters/collab/native/peer-update.ts";
+import { createNativeTestPeer } from "../bootstrap/wiring/shared-native-test-peer.ts";
 import { sanitizeHtml } from "../bootstrap/richtext.ts";
 import { entrySwitchFixture } from "../../tests/bootstrap/shared-entry-switch-support.ts";
 import { setCellSelection } from "../features/common/cell-selection.ts";
@@ -190,6 +191,38 @@ test("native Writer paints reversed and duplicate peer updates and lands a fresh
   assert.deepEqual(landedContent, sharedContent);
   assert.deepEqual(rows(currentDocument()), [["r1", "YHello?!", "Look"], ["r2", "World!", ""]]);
   assert.equal(app.acceptsPeerUpdate(), false);
+});
+
+test("native test peer replays captured packets without forwarding remote updates", async t => {
+  const app = await enterNative(t);
+  const local = stream(app), received = [];
+  const receive = (bytes, _origin, _doc, transaction) => {
+    if (!transaction.local) received.push(Array.from(bytes));
+  };
+  app.ydoc.on("update", receive);
+  const peer = createNativeTestPeer(app);
+  try {
+    peer.hold("updates");
+    assert.equal(type(app, "r1", 5, "x").kind, "written");
+    assert.equal(peer.type("r2", 5, "!").kind, "written");
+    assert.deepEqual(received, []);
+    const queued = peer.queuedUpdates();
+    assert.equal(queued.length, 2);
+    assert.deepEqual(queued[0], { to: "peer", bytes: Array.from(local[0]) });
+    assert.equal(queued[1].to, "app");
+    assert.deepEqual(peer.release("duplicate"), [queued[0], queued[0], queued[1], queued[1]]);
+    assert.deepEqual(received, [queued[1].bytes]);
+    assert.deepEqual(peer.queuedUpdates(), []);
+    assert.deepEqual(snapshot(app.document()), snapshot(peer.read()));
+    peer.hold("updates");
+    assert.equal(type(app, "r1", 6, "q").kind, "written");
+    assert.equal(peer.queuedUpdates().length, 1);
+  } finally {
+    peer.dispose();
+    app.ydoc.off("update", receive);
+  }
+  assert.equal(type(app, "r1", 7, "z").kind, "written");
+  assert.deepEqual(peer.queuedUpdates(), []);
 });
 
 test("leaving the native hook withdraws its peer and keeps the peer edit", async t => {
