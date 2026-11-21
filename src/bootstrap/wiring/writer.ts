@@ -256,7 +256,7 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
             const binding = bindNativeWriterPaint(root);
             if (!binding) return flow;
             nativePaint = binding;
-            return { ...flow, finish: () => {
+            return { ...flow, settle: () => binding.settle() && flow.settle?.() !== false, finish: () => {
               binding.finish();
               return flow.finish();
             }, dispose: () => {

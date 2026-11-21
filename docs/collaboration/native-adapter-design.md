@@ -942,8 +942,10 @@ Requirements from the outside review of this note, added to the build order (sec
 - **Server stops** (decision 19): the [six-row stop table](#server-stop-results-and-backup-runbook) covers clean
   and killed stops before, during and after the store. The plan's receipt checker and kill-before-and-after-receipt
   tests are deferred with the update journal.
-- **Stale targets in the editor** (E1's four commit outcomes: written, unchanged, moved to the beat's live cell, or
-  handed to a recovery list): IME composition and plain buffered typing, in narration and in visual cells, with the
-  target removed, replaced, restored, or hidden under rule (g). The [editor tests](../../src/test/shared-native-editor-app.test.mjs)
-  cover buffered and composed input, stale paint and stopped drafts. The full target-state matrix, including
-  starting composition in N and committing after N is hidden, remains open.
+- **Stale targets in the editor.** The [stale-target tests](../../src/test/shared-native-stale-target-app.test.mjs)
+  cover buffered narration and narration and Visual composition in Split and Writer after a peer removes, replaces,
+  restores, or hides the target. They start composition in a visible N and commit after the four-step history hides
+  N under rule (g). A restored beat accepts the text in its live cell. A missing target leaves the shared state
+  untouched by the draft, keeps the preview visible, and stops input with a refusal. Writer close preserves a
+  stopped draft on screen. Plain Visual typing settles in the input event, and the tests cover stale paint across
+  the same four peer changes. The target-state matrix is covered for the input routes that can remain pending.
