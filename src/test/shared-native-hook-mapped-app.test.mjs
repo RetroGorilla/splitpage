@@ -120,7 +120,7 @@ function replica(t, source) {
 
 function stream(native) {
   const updates = [];
-  native.ydoc.on("update", (bytes, _origin, _doc, transaction) => { if (transaction.local) updates.push(bytes); });
+  native.subscribeLocalUpdates(bytes => updates.push(bytes));
   return updates;
 }
 
@@ -197,12 +197,8 @@ test("native test peer applies every original packet to its destination in exact
   const app = await enterNative(t);
   const peerDoc = openNativeSession({ kind: "state", state: app.encodeState() }, { actor: "Peer", sanitize: sanitizeHtml });
   const originals = [];
-  const observe = target => (bytes, _origin, _doc, transaction) => {
-    if (transaction.local) originals.push({ target, bytes: bytes.slice() });
-  };
-  const fromApp = observe(peerDoc), fromPeer = observe(app);
-  app.ydoc.on("update", fromApp);
-  peerDoc.ydoc.on("update", fromPeer);
+  const fromApp = app.subscribeLocalUpdates(bytes => originals.push({ target: peerDoc, bytes }));
+  const fromPeer = peerDoc.subscribeLocalUpdates(bytes => originals.push({ target: app, bytes }));
   const deliveries = [];
   const peer = createNativeTestPeer(app, {
     peer: peerDoc,
@@ -251,19 +247,24 @@ test("native test peer applies every original packet to its destination in exact
       assert.deepEqual(delivery.bytes, originals[1].bytes);
     }
     assert.equal(type(app, "r1", 0, "z").kind, "written");
+    assert.equal(peer.type("r2", 0, "Q").kind, "written");
     assert.equal(deliveries.length, 2);
+    peer.drain("forward", "app");
+    assert.equal(deliveries.length, 3);
+    assert.equal(deliveries[2].target, app);
+    assert.deepEqual(deliveries[2].bytes, originals[3].bytes);
     peer.drain("forward");
-    assert.equal(deliveries.length, 4);
+    assert.equal(deliveries.length, 5);
     for (const [index, original] of [originals[0], originals[2]].entries()) {
-      assert.equal(deliveries[index + 2].target, peerDoc);
-      assert.deepEqual(deliveries[index + 2].bytes, original.bytes);
+      assert.equal(deliveries[index + 3].target, peerDoc);
+      assert.deepEqual(deliveries[index + 3].bytes, original.bytes);
     }
     assert.deepEqual(snapshot(app.document()), snapshot(peer.read()));
     assert.equal(type(app, "r1", 0, "w").kind, "written");
     assert.equal(peer.queuedUpdates().length, 1);
   } finally {
-    app.ydoc.off("update", fromApp);
-    peerDoc.ydoc.off("update", fromPeer);
+    fromApp();
+    fromPeer();
     peer.dispose();
   }
   assert.equal(type(app, "r1", 0, "v").kind, "written");

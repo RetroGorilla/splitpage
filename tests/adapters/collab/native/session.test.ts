@@ -663,6 +663,43 @@ test("a subscriber closing on changed and the other subscribers all receive clos
   assert.deepEqual(changes, ["first:changed", "second:xa", "first:closed", "second:closed"]);
 });
 
+test("local update subscriptions preserve Yjs bytes and isolate subscriber faults", async t => {
+  const session = fromDocument();
+  const peer = open({ kind: "state", state: session.encodeState() }, "Peer");
+  t.after(session.close);
+  t.after(peer.close);
+  const source = t.mock.fn<(bytes: Uint8Array) => void>();
+  const received = t.mock.fn<(bytes: Uint8Array) => void>();
+  session.ydoc.on("update", source);
+  const stopFault = session.subscribeLocalUpdates(bytes => {
+    bytes.fill(0);
+    throw new Error("local update subscriber");
+  });
+  const stop = session.subscribeLocalUpdates(received);
+  const unexpected = t.mock.fn();
+  peer.subscribeLocalUpdates(unexpected);
+  type(session, 0, "x");
+  type(session, 1, "y");
+  assert.equal(received.mock.callCount(), 2);
+  assert.equal(source.mock.callCount(), 2);
+  for (const [index, call] of received.mock.calls.entries()) {
+    const bytes = call.arguments[0];
+    assert.deepEqual(bytes, source.mock.calls[index]?.arguments[0]);
+    Y.applyUpdate(peer.ydoc, bytes);
+  }
+  assert.equal(unexpected.mock.callCount(), 0);
+  assert.deepEqual(peer.document(), session.document());
+  stop();
+  stopFault();
+  type(session, 2, "z");
+  assert.equal(received.mock.callCount(), 2);
+  session.subscribeLocalUpdates(received);
+  session.close();
+  await Promise.resolve();
+  session.ydoc.getText("retired").insert(0, "ignored");
+  assert.equal(received.mock.callCount(), 2);
+});
+
 test("closing releases subscriber references after delivering closed", async t => {
   const session = fromDocument();
   t.after(session.close);
