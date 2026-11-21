@@ -1,24 +1,11 @@
-export const COLLAB_ORACLE_COPIES = Object.freeze([
-  { copy: "tests/collab/oracles/oracles.ts", original: "prototypes/collab/test/oracles.ts", omitted: [], only: null, aliases: {} },
-  {
-    copy: "tests/collab/oracles/buffer-oracles.ts", original: "prototypes/collab/test/buffer-oracles.ts", omitted: [], only: null, aliases: {},
-    decided: [
-      { name: "rule 160: T01 undo caret", declaration: "bufferOracles", within: "  T01: {", from: "carets: { A: { beat: \"R1\", offset: 1, selection: { beat: \"R1\", from: 1, to: 4 } } }", to: "carets: { A: { beat: \"R1\", offset: 4 } }" },
-      { name: "rule 160: T01 composition undo caret", declaration: "bufferOracles", within: "  \"T01 composition\": {", from: "carets: { A: { beat: \"R1\", offset: 1, selection: { beat: \"R1\", from: 1, to: 4 } } }", to: "carets: { A: { beat: \"R1\", offset: 4 } }" },
-      { name: "rule 160: T03 replace undo caret", declaration: "bufferOracles", within: "  \"T03 replace\": {", from: "carets: { A: { beat: \"R1\", offset: 4, selection: { beat: \"R1\", from: 4, to: 7 } } }", to: "carets: { A: { beat: \"R1\", offset: 7 } }" }
-    ]
-  },
-  { copy: "tests/collab/oracles/buffer-replacements.ts", original: "prototypes/collab/test/buffer-replacements.ts", omitted: [], only: null, aliases: {} },
-  { copy: "tests/collab/oracles/structure-oracles.ts", original: "prototypes/collab/test/structure-oracles.ts", omitted: [], only: null, aliases: {} },
-  { copy: "tests/collab/oracles/marks/oracles.ts", original: "prototypes/collab/test/marks/oracles.ts", omitted: [], only: null, aliases: {} },
-  { copy: "tests/collab/oracles/undo-records/oracles.ts", original: "prototypes/collab/test/undo-records/oracles.ts", omitted: [], only: null, aliases: {} },
-  {
-    copy: "tests/collab/oracles/split-stale/lifecycle-expectations.ts", original: "prototypes/collab/test/split-stale/lifecycle-expectations.ts",
-    omitted: ["assertStaleCounters"], only: null, aliases: { stalePhaseExpectations: "phases" }
-  },
-  {
-    copy: "tests/collab/oracles/split-reconcile/lifecycle-expectations.ts", original: "prototypes/collab/test/split-reconcile/lifecycle-expectations.ts",
-    omitted: ["assertSplitCaseCounters", "assertAllSplitCounters"], only: null, aliases: {}
-  },
-  { copy: "tests/collab/oracles/seed-beat.ts", original: "prototypes/collab/src/schema.ts", omitted: [], only: ["SeedBeat"], aliases: {} }
-]);
+export const COLLAB_ORACLE_COPIES = Object.freeze({
+  "tests/collab/oracles/oracles.ts": "c4fffe0b1eac0c03c75efde8c14c17aa5c8dc26ff938aea20ef286a34bbe81ca",
+  "tests/collab/oracles/buffer-oracles.ts": "6da27952e71e851bb4b9ff4e583638783116b628d24d38d963391e2a85b8e471",
+  "tests/collab/oracles/buffer-replacements.ts": "664e0779c9c31100bf281fe2a40c3bdbb85180e60e07435d7f5b2afe051262ec",
+  "tests/collab/oracles/structure-oracles.ts": "21a6eb70469d09f00bfb1ee1b79aa3777569d2dda1aab9b9bd661f2f397a3e7b",
+  "tests/collab/oracles/marks/oracles.ts": "e98911f938fede79a2677221eda80db02c41dccb2f409a65b552b76fb803cd51",
+  "tests/collab/oracles/undo-records/oracles.ts": "642a0d9c797ff65a73035446cc06b5aae8604584dcd950ef5b632b917bbf59f2",
+  "tests/collab/oracles/split-stale/lifecycle-expectations.ts": "a2b7555bb0e4044eb0403c139b1942a2f850f9ac678732407fe4c00d0a2a2a78",
+  "tests/collab/oracles/split-reconcile/lifecycle-expectations.ts": "f3309e528322276b4dcd88857865585ef8bcf1fb16aeb9743575c5c7ff15368a",
+  "tests/collab/oracles/seed-beat.ts": "7a82bf0e4c572673c1ff3e8159b1c26257e80b187e97394a8a86d3d84d88caa7",
+});

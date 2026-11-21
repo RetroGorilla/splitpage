@@ -9,7 +9,7 @@ import { withRefTrees } from "./ref-trees.mjs";
 
 export const PRODUCER = "tools/export-ab-produce.mjs";
 export const PRODUCER_FILES = [PRODUCER, "tools/export-ab-environment.mjs"];
-export const CANONICAL_DOCUMENTS = "prototypes/collab/test/proj";
+export const CANONICAL_DOCUMENTS = "tests/collab/fixtures/projection";
 
 export const FORMATS = [
   { id: "splitpage-save", label: ".splitpage (save)" },

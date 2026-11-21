@@ -60,15 +60,17 @@ for (const files of [["README.md"], ["tests/application/session.test.ts"], ["src
 }
 eq("a smoke change that is not prose runs the smoke although app checks skip it", [needsAppChecks(["desktop/test/smoke.mjs"]), needsDesktopChecks(["desktop/test/smoke.mjs"])], [false, true]);
 
-for (const path of ["package.json", "package-lock.json", "tsconfig.json", "src/probe.ts", "test/convergence.test.ts", "histories/trace.json", "README.md"]) {
+for (const path of ["package.json", "package-lock.json", "tsconfig.json", "src/probe.ts", "test/convergence.test.ts", "test/oracles.ts", "histories/trace.json", "README.md"]) {
   const files = [`prototypes/collab/${path}`];
   eq(`prototype-only ${path} runs required checks and prototype tests`, [needsChecks(files), needsCollabChecks(files)], [true, true]);
   eq(`prototype-only ${path} does not need app or desktop browser checks`, [needsAppChecks(files), needsDesktopChecks(files)], [false, false]);
   eq(`prototype-only ${path} skips all root test shards`, needsRootTests(files), false);
 }
 eq("prototype changes plus unrelated prose still skip root tests", needsRootTests(["prototypes/collab/README.md", "docs/ROADMAP.md"]), false);
-eq("a prototype oracle copied into tests/collab runs the root tests that pin the copy", needsRootTests(["prototypes/collab/test/oracles.ts"]), true);
-eq("and still needs no app or desktop browser checks", [needsAppChecks(["prototypes/collab/test/oracles.ts"]), needsDesktopChecks(["prototypes/collab/test/oracles.ts"])], [false, false]);
+eq("a prototype oracle change skips the old adapter tests", needsOldAdapterTests(["prototypes/collab/test/oracles.ts"]), false);
+eq("a main-tree oracle change runs both root matrices", [
+  needsRootTests(["tests/collab/oracles/oracles.ts"]), needsOldAdapterTests(["tests/collab/oracles/oracles.ts"])
+], [true, true]);
 for (const files of [null, [], ["src/bootstrap/main.ts"], ["tests/application/session.test.ts"], ["desktop/test/smoke.mjs"], ["tools/ci-changes.mjs"], [".github/workflows/ci.yml"], ["package.json"], ["unknown/new.file"]]) {
   eq(`existing root test requirements remain for ${JSON.stringify(files)}`, needsRootTests(files), true);
 }
@@ -78,6 +80,10 @@ for (const path of ["src/bootstrap/main.ts", "tools/dep-report.mjs", ".github/wo
   eq(`mixed prototype and ${path} changes run every check`, [needsChecks(files), needsRootTests(files), needsCollabChecks(files), needsAppChecks(files), needsDesktopChecks(files)], [true, true, true, true, true]);
 }
 for (const files of [null, [], [".github/workflows/ci.yml"]]) eq("unknown diffs and workflow changes run prototype tests", needsCollabChecks(files), true);
+for (const path of ["tests/collab/fixtures/projection-reference.json", "tests/collab/fixtures/projection/supplement.splitpage", "tests/collab/fixtures/projection/experiment-reference.json"]) {
+  eq(`shared projection fixture ${path} runs both the root and prototype tests`, [needsRootTests([path]), needsCollabChecks([path]), needsAppChecks([path])], [true, true, false]);
+}
+eq("unrelated main-tree fixtures skip prototype tests", needsCollabChecks(["tests/collab/fixtures/buffer.json"]), false);
 eq("app-only changes do not run prototype tests", needsCollabChecks(["src/bootstrap/main.ts"]), false);
 eq("a mixed change still runs every affected check", [needsChecks(["prototypes/collab/src/probe.ts", "src/bootstrap/main.ts"]), needsCollabChecks(["prototypes/collab/src/probe.ts", "src/bootstrap/main.ts"]), needsDesktopChecks(["prototypes/collab/src/probe.ts", "src/bootstrap/main.ts"])], [true, true, true]);
 
@@ -91,7 +97,7 @@ for (const files of [
   ["src/application/session/shared-session.ts"], ["src/bootstrap/wiring/ports/shared-buffer.ts"],
   ["tests/adapters/collab/guarded-subscriptions.test.ts"], ["tests/collab/undo/model.ts"],
   ["tools/run-tests.mjs"], [".github/workflows/ci.yml"], [".github/actions/root-test-setup/action.yml"],
-  ["package.json"], ["package-lock.json"], ["prototypes/collab/test/oracles.ts"],
+  ["package.json"], ["package-lock.json"],
   ["tests/features/writer/removed-old-test.test.ts"]
 ]) eq(`old-adapter checks run for ${JSON.stringify(files)}`, needsOldAdapterTests(files), true);
 eq("real old-adapter support triggers the filter", needsOldAdapterTests(["tests/core/migrate-ports.ts"]), true);

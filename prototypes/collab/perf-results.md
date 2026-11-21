@@ -2,7 +2,7 @@
 
 The initial PR contained deterministic structural evidence only; its earlier game-session timing attempts remain void. The guarded timed follow-up below was run only after the coordinator authorized it and after the initial PR opened. A game was running during the accepted set; each run's recorded RAM and background CPU is disclosed below. No schema is selected.
 
-Current reviewed source SHA-256: **22cf6e1e7f1a69e00a5ce7edbff43bfca4f170bea933dc20e7a6b0de67413e5a**. The source-hash list covers every src/perf TypeScript module, every src/proj module, schema/model/structure/status helpers and the prototype lockfile. setup.json fixes Node v24.22.1, Yjs 13.6.33, five alternating paired runs, three warm-up operations per case and eleven samples per run. The recorded timed source is identified separately below; the source audit distinguishes that implementation from declared post-timing changes.
+Current reviewed source SHA-256: **567761f4e3d9a042bfef131aa3052af0fc4c1f5f9de45c2a7e86711c99d30f98**. The source-hash list covers every src/perf TypeScript module, every src/proj module, schema/model/structure/status helpers and the prototype lockfile. setup.json fixes Node v24.22.1, Yjs 13.6.33, five alternating paired runs, three warm-up operations per case and eleven samples per run. The recorded timed source is identified separately below; the source audit distinguishes that implementation from declared post-timing changes.
 
 ## What is implemented
 

@@ -5,7 +5,8 @@ import { fileURLToPath } from "node:url";
 import { isMain } from "./main-module.mjs";
 
 const REPO = fileURLToPath(new URL("../", import.meta.url));
-export const projectionManifestPath = join(REPO, "prototypes/collab/test/proj/app-reference.json");
+const PROJECTION_FIXTURES = "tests/collab/fixtures/projection";
+export const projectionManifestPath = join(REPO, "tests/collab/fixtures/projection-reference.json");
 
 function digest(text) {
   return { bytes: Buffer.byteLength(text), sha256: createHash("sha256").update(text).digest("hex") };
@@ -21,7 +22,7 @@ export function projectionReferenceInputs() {
   const result = [];
   const add = (source, selection = [], document = null) => {
     const bytes = document ? JSON.stringify(document, null, 2) : readFileSync(join(REPO, source), "utf8");
-    result.push({ name: selection.length ? source.split("/").at(-1) + "/" + selection.join("/") : source.startsWith("src/test/fixtures/") || source.startsWith("prototypes/") ? source.split("/").at(-1) : source, source, selection, bytes });
+    result.push({ name: selection.length ? source.split("/").at(-1) + "/" + selection.join("/") : source.endsWith(".splitpage") ? source.split("/").at(-1) : source, source, selection, bytes });
   };
   for (const name of readdirSync(join(REPO, "src/test/fixtures")).filter(name => name.endsWith(".splitpage")).sort()) add(`src/test/fixtures/${name}`);
   add("src/seed-state.json");
@@ -30,7 +31,7 @@ export function projectionReferenceInputs() {
     const source = `src/test/fixtures/golden/${name}`;
     for (const entry of documents(JSON.parse(readFileSync(join(REPO, source), "utf8")))) add(source, entry.selection, entry.document);
   }
-  for (const name of readdirSync(join(REPO, "prototypes/collab/test/proj")).filter(name => name.endsWith(".splitpage")).sort()) add(`prototypes/collab/test/proj/${name}`);
+  for (const name of readdirSync(join(REPO, PROJECTION_FIXTURES)).filter(name => name.endsWith(".splitpage")).sort()) add(`${PROJECTION_FIXTURES}/${name}`);
   return result;
 }
 

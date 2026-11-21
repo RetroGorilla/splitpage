@@ -1,9 +1,15 @@
 {
   "baseHead": "8efcff798f7d92ab890207d414ec2f416b69f695",
   "retainedRows": "All retained browser and timing observations predate reader-order and record validation; no browsers or timings run.",
+  "fixtureRelocation": {
+    "pullRequest": "https://github.com/RetroGorilla/splitpage/pull/1696",
+    "change": "Read the same projection corpus from the shared fixture directory.",
+    "previousDependencySha256": "22cf6e1e7f1a69e00a5ce7edbff43bfca4f170bea933dc20e7a6b0de67413e5a",
+    "previousReferenceSha256": "d8882497b4ba8daf45ace65e0e102b63855ca92a45182fe3bc8458ba040c017b"
+  },
   "dependencies": {
     "before": "3ef67a25a054d08783995254774aac057143b98805fa0bf9832f2019ba27659f",
-    "after": "22cf6e1e7f1a69e00a5ce7edbff43bfca4f170bea933dc20e7a6b0de67413e5a"
+    "after": "567761f4e3d9a042bfef131aa3052af0fc4c1f5f9de45c2a7e86711c99d30f98"
   },
   "counts": {
     "before": "c23d8b8d53f2a26c23fd7c709c53d45614c31390b89fed0829983e11d9ed31e2",
@@ -157,7 +163,7 @@
     {
       "path": "src/proj/reference.ts",
       "before": "9e5849e8538df8fd2cfd123fa020b1a2c0f9f7380121949fe764a19ebb4a57ce",
-      "after": "d8882497b4ba8daf45ace65e0e102b63855ca92a45182fe3bc8458ba040c017b",
+      "after": "cca0d26e3d9dbdefbae8c9a8535d9e10c7570e1a4887557b692ff8a7b22a5704",
       "original": "import { readFileSync } from \"node:fs\";\nimport { fileURLToPath } from \"node:url\";\nimport { createHash } from \"node:crypto\";\nimport { bag, copy, records } from \"./value.ts\";\nimport type { ProjectionBag } from \"./value.ts\";\n\nexport const projectionRepo = fileURLToPath(new URL(\"../../../../\", import.meta.url));\n\nexport interface ProjectionReference {\n  name: string;\n  source: string;\n  selection: string[];\n  original: { bytes: number; sha256: string };\n  document: ProjectionBag;\n  appSaved: { bytes: number; sha256: string; full?: string };\n  stableAppSave?: boolean;\n  resaved?: string;\n}\n\nexport function projectionReferences(file = \"app-reference.json\"): ProjectionReference[] {\n  const manifest = JSON.parse(readFileSync(new URL(`../../test/proj/${file}`, import.meta.url), \"utf8\")) as { version: number; fixtures: ProjectionReference[] };\n  if (manifest.version !== 1) throw new Error(\"Unsupported projection reference manifest\");\n  return manifest.fixtures;\n}\n\nexport function assertProjectionInput(reference: ProjectionReference | undefined, document: ProjectionBag): asserts reference is ProjectionReference {\n  if (!reference) throw new Error(\"Missing projection experiment reference\");\n  const text = JSON.stringify(document, null, 2);\n  if (reference.original.bytes !== Buffer.byteLength(text) || reference.original.sha256 !== createHash(\"sha256\").update(text).digest(\"hex\")) {\n    throw new Error(`Stale experiment input: ${reference.name}`);\n  }\n}\n\nexport function serializeProjection(document: ProjectionBag): string {\n  const result = copy(document);\n  for (const row of records(result.rows)) {\n    if (Object.hasOwn(row, \"imageRef\") && row.imageRef === null) {\n      delete row.imageRef;\n      row.visualImage = null;\n    }\n  }\n  return JSON.stringify(bag(result), null, 2);\n}\n"
     },
     {
