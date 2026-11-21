@@ -27,6 +27,7 @@ export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape
   const shown = shownNativeShotPropEntries(resolved);
   const active = entries.filter(entry => !entry.removed);
   const byKey = new Map(entries.map(entry => [entry.key, entry]));
+  const resolvedByKey = new Map(resolved.map(entry => [entry.key, entry.prop]));
   const byRef = new Map(shown.map(entry => [brollPropKey(entry.prop.id, entry.prop.name), entry]));
 
   function plan(writes: Write[], changes: readonly PropWrite[]): void {
@@ -62,45 +63,40 @@ export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape
     return null;
   }
 
-  function replace(writes: Write[], props: readonly BrollProp[]): boolean {
+  function replace(writes: Write[], props: readonly BrollProp[]): void {
     const desired = props.map(prop => {
-      const shown = byRef.get(brollPropKey(prop.id, prop.name));
-      return { prop, shown, entry: shown ? byKey.get(shown.key) : byKey.get(nativeShotPropKey(prop)) };
+      const key = nativeShotPropKey(prop);
+      return { prop, key, entry: byKey.get(key), projected: resolvedByKey.get(key) };
     });
-    const keys = desired.map(({ prop, entry }) => entry?.key ?? nativeShotPropKey(prop));
-    const kept = new Set(keys);
-    const omitted = shown.filter(entry => !kept.has(entry.key));
-    const additions = desired.filter(({ entry }) => !entry || entry.removed).length;
-    if (additions && active.length - omitted.length + additions > BROLL_PROPS_MAX) return false;
+    const kept = new Set(desired.map(entry => entry.key));
+    const omitted = active.filter(entry => !kept.has(entry.key));
     const changes: PropWrite[] = omitted.map(({ key }) => map => { propRecord(map, key).set("removed", true); });
     const positions = new Map(active.map((entry, at) => [entry.key, at]));
-    const anchor = rankAnchors(keys.map(key => positions.get(key) ?? -1));
+    const anchor = rankAnchors(desired.map(({ key }) => positions.get(key) ?? -1));
     let left: Drop | undefined;
-    for (const [at, { prop, shown, entry }] of desired.entries()) {
-      const key = keys[at] as string;
+    for (const [at, { prop, key, projected, entry }] of desired.entries()) {
       if (anchor.has(at) && entry) {
         left = entry;
-        if ((shown?.prop.name ?? entry.prop.name) !== prop.name) changes.push(map => { propRecord(map, key).set("name", encodeNativeValue(prop.name)); });
+        if ((projected?.name ?? entry.prop.name) !== prop.name) changes.push(map => { propRecord(map, key).set("name", encodeNativeValue(prop.name)); });
         continue;
       }
-      let rightAt = keys.findIndex((_, next) => next > at && anchor.has(next));
+      let rightAt = desired.findIndex((_, next) => next > at && anchor.has(next));
       let right = desired[rightAt]?.entry;
       let placement = dropRank(key, left, right);
       while (!placement && right) {
         anchor.delete(rightAt);
-        rightAt = keys.findIndex((_, next) => next > at && anchor.has(next));
+        rightAt = desired.findIndex((_, next) => next > at && anchor.has(next));
         right = desired[rightAt]?.entry;
         placement = dropRank(key, left, right);
       }
       const rank = entry && after(entry, left) && (!right || after(right, entry)) ? entry.rank : placement?.rank ?? null;
-      changes.push(putProp(key, shown?.prop.name === prop.name && entry ? entry.prop : prop, rank, entry));
+      changes.push(putProp(key, projected?.name === prop.name && entry ? entry.prop : prop, rank, entry));
       left = { key, rank };
     }
     plan(writes, changes);
-    return true;
   }
 
-  return { activeCount: active.length, hasName: (name: string) => resolved.some(({ prop }) => normalizeTagName(prop.name) === name),
+  return { activeCount: active.length, hasName: (name: string) => shown.some(({ prop }) => normalizeTagName(prop.name) === name),
     add, remove, move, replace };
 }
 

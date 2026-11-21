@@ -380,7 +380,7 @@ test("readding a displayed prop is a no-op across projected tags and same-name t
       const before = Y.encodeStateAsUpdate(copy.doc);
       assert.deepEqual(changeNativeRegistry(copy, change), { kind: "unchanged" });
       assert.deepEqual(Y.encodeStateAsUpdate(copy.doc), before);
-      assert.equal(copy.reader.document().brollShots[0]?.props?.filter(prop => prop?.name === "Umbrella").length, 1);
+      assert.equal(copy.reader.document().brollShots[0]?.props?.filter(prop => prop?.name === "Umbrella").length, 2);
     }
   });
 });

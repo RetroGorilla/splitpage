@@ -124,7 +124,18 @@ test("the generated prop oracle rejects a command reporting success without chan
   }, undefined, source(initial));
 });
 
-test("same-name additions keep both keys and undo reveals the next ranked entry", () => {
+test("conversion and whole-list set keep valid props with different IDs and a shared normalized name", () => {
+  const ropes = [{ id: "t_rope1", name: "Rope" }, { id: "t_rope2", name: "rope" }];
+  registryCopies((left, right, settle) => {
+    assert.deepEqual(read(left), ropes);
+    assert.deepEqual(read(right), ropes);
+    write(left, { kind: "set", collection: "shots", ids: ["shot"], fields: { props: ropes.toReversed() } });
+    settle();
+    assert.deepEqual(read(right), ropes.toReversed());
+  }, undefined, source(ropes));
+});
+
+test("same-name additions keep and show both IDs through undo, redo and whole-list clear", () => {
   const initial = initialProps(3);
   registryCopies((left, right, settle) => {
     const one = { id: mintNativeTagId(left.doc), name: "Umbrella" }, two = { id: mintNativeTagId(right.doc), name: "umbrella" };
@@ -138,15 +149,19 @@ test("same-name additions keep both keys and undo reveals the next ranked entry"
       }
       settle();
       assert.ok(propsOf(left).has(one.id) && propsOf(left).has(two.id));
-      assert.deepEqual(read(left), [...initial, winner]);
+      assert.deepEqual(read(left), [...initial, winner, other]);
       assert.equal(undo.undo().kind, "written");
       assert.deepEqual(read(actor), [...initial, other]);
       settle();
       assert.deepEqual(read(left), [...initial, other]);
       assert.equal(undo.redo().kind, "written");
-      assert.deepEqual(read(actor), [...initial, winner]);
+      assert.deepEqual(read(actor), [...initial, winner, other]);
       settle();
-      assert.deepEqual(read(left), [...initial, winner]);
+      assert.deepEqual(read(left), [...initial, winner, other]);
+      write(left, { kind: "set", collection: "shots", ids: ["shot"], fields: { props: [] } });
+      settle();
+      assert.deepEqual(read(right), []);
+      assert.ok([...propsOf(right).values()].every(record => record.get("removed") === true));
     } finally { undo.destroy(); }
   }, undefined, source(initial), true);
 });

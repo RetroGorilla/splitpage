@@ -1,5 +1,5 @@
 import * as Y from "yjs";
-import { BROLL_NAME_MAX, BROLL_PROP_NAME_MAX, newBrollShot, normalizeBrollProps, resolveBrollProps } from "../../../core/document/broll.ts";
+import { BROLL_NAME_MAX, BROLL_PROP_NAME_MAX, newBrollShot, normalizeBrollProps } from "../../../core/document/broll.ts";
 import { noFreeze } from "../../../core/document/freeze.ts";
 import { ensureTagIds, isTagId, normalizeTagName, registryKey, TAG_STATUS_IDS } from "../../../core/document/tags.ts";
 import { hasLoneSurrogate, plainText, settledNames } from "../../../core/document/text-policy.ts";
@@ -13,7 +13,6 @@ import { toPlainText } from "../../../core/text/projections.ts";
 import { tagIds } from "../../../core/text/runs.ts";
 import type { Run } from "../../../core/text/runs.ts";
 import type { NativeRoots } from "./roots.ts";
-import { resolveNativeShotPropEntries, shownNativeShotPropEntries } from "./shot-props.ts";
 import type { NativeShotPropEntry } from "./shot-props.ts";
 import { sameNativeValue } from "./values.ts";
 
@@ -145,10 +144,8 @@ export function projectNativeRegistries(document: DocumentShape, roots: NativeRo
     const relevantTags = propNormalizer(document.productionTags);
     for (const shot of document.brollShots) {
       const entries = shotProps?.get(shot.id);
-      if (entries?.length) {
-        const resolved = resolveNativeShotPropEntries(entries, props => resolveBrollProps(props, relevantTags(props)));
-        shot.props = shownNativeShotPropEntries(resolved).map(entry => entry.prop);
-      } else if (shot.props?.length) shot.props = normalizeBrollProps(shot.props, relevantTags(shot.props));
+      const props = entries ? entries.filter(entry => !entry.removed).map(entry => entry.prop) : shot.props;
+      if (props?.length) shot.props = normalizeBrollProps(props, relevantTags(props));
     }
   }
   document.productionTags = document.productionTags.flatMap(tag => tag?.name ? [{ owner: "", notes: "", status: TAG_STATUS_IDS[0], ...tag }] : []);

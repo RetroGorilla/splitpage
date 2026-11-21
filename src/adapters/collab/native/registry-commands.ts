@@ -241,7 +241,7 @@ function set(script: NativeScript, collection: Collection, ids: readonly string[
     if (props !== undefined) {
       const list = prepareNativeShotProps(map, document.productionTags);
       if (!list) return refuseRecord("stored");
-      if (!list.replace(writes, props as BrollProp[])) return refuseRecord("value");
+      list.replace(writes, props as BrollProp[]);
     }
   }
   return finish(writes);
@@ -344,9 +344,9 @@ function changeProp(script: NativeScript, id: string, prop: string, kind: "addPr
   const props = prepareNativeShotProps(shot, document.productionTags);
   if (!props) return refuseRecord("stored");
   if (kind === "addProp") {
-    if (props.activeCount >= BROLL_PROPS_MAX) return refuseRecord("value");
     const name = normalizeTagName(prop);
     if (props.hasName(name)) return RECORD_UNCHANGED;
+    if (props.activeCount >= BROLL_PROPS_MAX) return refuseRecord("value");
     if (prop !== prop.trim()) return refuseRecord("value");
     const projected = projectedTagIds(script, document);
     const tag = document.productionTags.find(entry => entry?.cat === "prop" && entry.id && !projected.has(entry.id) && normalizeTagName(entry.name) === name);

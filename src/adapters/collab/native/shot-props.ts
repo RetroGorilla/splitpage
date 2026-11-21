@@ -65,12 +65,11 @@ export function resolveNativeShotPropEntries(entries: readonly NativeShotPropEnt
 }
 
 export function shownNativeShotPropEntries<T extends { readonly prop: BrollProp }>(entries: readonly T[]): T[] {
-  const names = new Set<string>(), keys = new Set<string>(), shown: T[] = [];
+  const keys = new Set<string>(), shown: T[] = [];
   for (const entry of entries) {
     if (shown.length === BROLL_PROPS_MAX) break;
-    const { id, name } = entry.prop, normalized = normalizeTagName(name), key = brollPropKey(id, name);
-    if (names.has(normalized) || keys.has(key)) continue;
-    names.add(normalized);
+    const { id, name } = entry.prop, key = brollPropKey(id, name);
+    if (keys.has(key)) continue;
     keys.add(key);
     shown.push(entry);
   }
