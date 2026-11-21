@@ -106,6 +106,7 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
     replica: publication.replica, parts: null, unsupportedCommands: UNSUPPORTED,
     nativeRecords: records,
     hasWriterPreview: beat => input?.hasWriterPreview(beat) ?? false,
+    bindWriterPaint: root => input?.bindWriterPaint(root),
     structure: createNativeEditorStructure({ native, session: () => commandSession, input: () => input, publish, report: ports.report }),
     undo: admission => nativeUndoRoute({ native, admission, input: () => input, publish: () => { publish(); } }),
     bind: session => {

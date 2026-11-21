@@ -30,7 +30,7 @@ import { screenIsStale } from "../../features/rows/render.ts";
 import { breakUndoGroup, undoOwner } from "./undo.ts";
 import { initializeFlowParagraphs } from "../../application/commands/flow.ts";
 import { sessionStamps, sharedSession, standaloneSession } from "./session-owner.ts";
-import { hasNativeWriterPreview, nativeEditorActive } from "./shared-session.ts";
+import { bindNativeWriterPaint, hasNativeWriterPreview, nativeEditorActive } from "./shared-session.ts";
 import { writerFlowCommands } from "./ports/writer-flow.ts";
 import { writerVisualBuffer } from "./ports/writer-visual-buffer.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
@@ -250,7 +250,15 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
             newCommentId: () => randomIds.id("c"),
             openComment: at => { actions.invoke("comment-on-selection", "button", at); }
           });
-          if (!shared) return flow;
+          if (!shared) {
+            const stopPaint = bindNativeWriterPaint(root);
+            if (!stopPaint) return flow;
+            return { ...flow, dispose: () => {
+              if (flow.dispose() === false) return false;
+              stopPaint();
+              return true;
+            } };
+          }
           const handle = shared.handle();
           return handle ? mountWriterEmptyScript(flow, root, { handle, session: shared.lifetime, author: shared.author,
             writer: shared.writer, stamps: sessionStamps, report: shared.text.bufferedText.report,

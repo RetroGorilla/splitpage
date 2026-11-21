@@ -8,6 +8,7 @@ import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { cellSelection, setCellSelection } from "../features/common/cell-selection.ts";
 import { domToPos, posToDom, readSelection } from "../features/common/cell-dom.ts";
 import { openNativeSession } from "../adapters/collab/native/session.ts";
+import { NativeScriptReader } from "../adapters/collab/native/reader.ts";
 import { scriptCellOf, sanitizeHtml } from "../bootstrap/richtext.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { enterSharedSession, forceLeaveSharedSession } from "../bootstrap/wiring/shared-session.ts";
@@ -395,6 +396,51 @@ test("Writer: a cross-beat move with untracked peer paint leaves the selection a
   assert.deepEqual([app(0), app(1), peer(0), peer(1)], ["Hello", "aaaaa", "Hello", "aaaaaa"]);
   assert.equal(beat("r1").textContent.replace(/\u200b/g, ""), "HXello");
   assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+});
+
+function selectAcrossWriter(view) {
+  view.flow.place({ anchor: { kind: "beat", rowId: "r1", offset: 2 }, head: { kind: "beat", rowId: "r2", offset: 2 } });
+  document.dispatchEvent(new window.Event("selectionchange"));
+}
+
+test("Writer: a cross-beat selection without a draft retains no narration paint", async t => {
+  await enter(t, threeBeats());
+  const view = writer(t), paint = t.mock.method(NativeScriptReader.prototype, "narrationPaint");
+  selectAcrossWriter(view);
+  assert.equal(hook.nativePeer.type("r3", 0, "x").kind, "written");
+  assert.deepEqual(paint.mock.calls.filter(call => call.arguments[1]).map(call => call.arguments[0]), []);
+  await Promise.resolve();
+  assert.equal(press(root(), "ArrowDown", { altKey: true, ctrlKey: false }), true);
+  assert.deepEqual(rowOrder(), ["r1", "r3", "r2"]);
+  assert.deepEqual(paint.mock.calls.filter(call => call.arguments[1]).map(call => call.arguments[0]), []);
+});
+
+test("Writer: focusing Close drops the cross-beat paint before the draft settles", async t => {
+  await enter(t, threeBeats());
+  const view = writer(t), paint = t.mock.method(NativeScriptReader.prototype, "narrationPaint");
+  view.caret("r1", 1);
+  typeKeys(root(), "X");
+  selectAcrossWriter(view);
+  const close = document.getElementById("wr-close");
+  close.focus();
+  assert.equal(document.activeElement, close);
+  assert.equal(hook.nativePeer.type("r3", 0, "x").kind, "written");
+  assert.deepEqual(paint.mock.calls.filter(call => call.arguments[1]).map(call => call.arguments[0]), ["r1"]);
+  await Promise.resolve();
+  assert.equal(app(), "HXello");
+});
+
+test("Native Split attaches no move paint listener and Writer removes its listener on close", async t => {
+  const added = t.mock.method(document, "addEventListener"), removed = t.mock.method(document, "removeEventListener");
+  const moveListeners = spy => spy.mock.calls.filter(call => call.arguments[0] === "selectionchange"
+    && call.arguments[1].name === "trackMovePaint").map(call => call.arguments[1]);
+  await enter(t, threeBeats());
+  assert.deepEqual(moveListeners(added), []);
+  writer(t);
+  const [listener] = moveListeners(added);
+  assert.equal(moveListeners(added).length, 1);
+  writerControls().closeWriter();
+  assert.deepEqual(moveListeners(removed), [listener]);
 });
 
 for (const [name, kind] of Object.entries(views)) {

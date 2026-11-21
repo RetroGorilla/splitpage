@@ -150,6 +150,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   let timer: ReturnType<typeof setTimeout> | undefined;
   let placement: { readonly buffered: Draft; readonly caret: RelativePoint } | null = null;
   let lastWrite: number | null = null;
+  let stopWriterPaint: (() => void) | null = null;
   const movePaint = new Map<Element, TrackedPaint>();
   const stopPaint = session.subscribe(() => {
     writerControls()?.renderWriter();
@@ -174,9 +175,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   }
 
   function trackMovePaint(): void {
+    if (draft?.surface !== writerNarration || draft.composing || stopped) { clearMovePaint(); return; }
     const active = document.activeElement;
     const cells = active && writerSelectionCells(active, document.getSelection());
-    if (stopped || !cells || cells.anchor === cells.head) { clearMovePaint(); return; }
+    if (!cells || cells.anchor === cells.head) { clearMovePaint(); return; }
     for (const [cell, paint] of movePaint) {
       if (cell === cells.anchor || cell === cells.head) continue;
       paint.dispose();
@@ -192,6 +194,21 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     }
   }
 
+  function bindWriterPaint(root: HTMLElement): () => void {
+    stopWriterPaint?.();
+    const stop = () => {
+      if (stopWriterPaint !== stop) return;
+      stopWriterPaint = null;
+      root.ownerDocument.removeEventListener("selectionchange", trackMovePaint);
+      root.removeEventListener("focusout", clearMovePaint);
+      clearMovePaint();
+    };
+    stopWriterPaint = stop;
+    root.ownerDocument.addEventListener("selectionchange", trackMovePaint);
+    root.addEventListener("focusout", clearMovePaint);
+    return stop;
+  }
+
   function narrationCell(beat: string, like: Element): HTMLElement | null {
     return narrationSurfaceOf(like).cell(beat);
   }
@@ -200,6 +217,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     clearTimeout(timer);
     timer = undefined;
     draft?.paint?.dispose();
+    clearMovePaint();
     stopped = reason;
     if (!quiet) session.refuse(reason);
     return reason;
@@ -263,6 +281,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (refusal) return stop(refusal, quiet);
     let result;
     buffered.paint?.dispose();
+    clearMovePaint();
     const at = now();
     try {
       if (lastWrite !== null && at - lastWrite >= GROUP_PAUSE_MS) native.endTypingGroup();
@@ -573,6 +592,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       restore(buffered);
       buffered.paint?.dispose();
       draft = null;
+      clearMovePaint();
       publish();
       return;
     }
@@ -778,11 +798,12 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
 
   function acrossMoveSelection({ anchor, head, backward }: Extract<NonNullable<ReturnType<typeof captureMoveSelection>>, { kind: "across" }>) {
     const buffered = draft;
-    trackMovePaint();
+    const current = paintIsCurrent();
     function capture({ cell, offset }: MoveEndpoint, assoc: 0 | -1) {
       const beat = cell.getAttribute("data-id") ?? "";
       if (buffered?.cell === cell) return { beat, offset, preview: draftEndpoint(buffered, offset, assoc, true) };
       if (!shownWriterBeat(cell, beat)) return null;
+      if (current) return { beat, offset };
       const point = movePaint.get(cell)?.point(offset, assoc);
       return point && native.narrationOffset(beat, { from: point }, assoc) !== null ? { beat, point } : null;
     }
@@ -797,7 +818,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       const cell = writerNarration.cell(beat), row = documentReader.read(doc => doc?.rows.find(item => item.id === beat));
       if (!cell || !row || !writerNarration.painted(cell, row) || row.audioText !== html) return null;
       const rebased = preview ? resolveDraftEndpoint(beat, preview, selection.inserted?.[index], assoc)
-        : point.point ? native.narrationOffset(beat, { from: point.point }, assoc) : null;
+        : point.point ? native.narrationOffset(beat, { from: point.point }, assoc) : point.offset ?? null;
       return rebased === null ? null : native.narrationCaret(beat, rebased, assoc === 0);
     }
     return moveSelection(resolve(start, 0, 0), resolve(end, 1, -1), backward);
@@ -833,12 +854,12 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   const stopUnload = guardUnload(window, () => !!finish());
   window.addEventListener("pagehide", pageHide);
   document.addEventListener("visibilitychange", visibility);
-  document.addEventListener("selectionchange", trackMovePaint);
   for (const type of EVENTS) window.addEventListener(type, intercept, true);
   return {
     finish,
     beforePress,
     currentCaret,
+    bindWriterPaint,
     clearMovePaint,
     captureMoveSelection,
     settleMoveSelection,
@@ -857,6 +878,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       const bytes = reopened.encodeState();
       draft.paint?.dispose();
       draft = null;
+      clearMovePaint();
       stopped = null;
       return bytes;
     },
@@ -864,12 +886,11 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       clearTimeout(timer);
       draft?.paint?.dispose();
       draft = null;
-      clearMovePaint();
+      stopWriterPaint?.();
       stopPaint();
       stopUnload();
       window.removeEventListener("pagehide", pageHide);
       document.removeEventListener("visibilitychange", visibility);
-      document.removeEventListener("selectionchange", trackMovePaint);
       for (const type of EVENTS) window.removeEventListener(type, intercept, true);
     }
   };
