@@ -93,7 +93,7 @@ async function enter(t, view, rows) {
 
 const rows = [["r1", "Hello"], ["r2", "World"], ["r3", "Last"]];
 const cases = [
-  ["end of a beat before the removed beat", "r1", 5, "r2", [false]],
+  ["end of a beat before the removed beat", "r1", 5, "r2", [true, false]],
   ["start of a beat after the removed beat", "r2", 0, "r1", [true, false]],
   ["end of the last beat", "r3", 4, "r2", [true, false]],
   ["middle of the beat the peer removes", "r2", 2, "r2", [false]]
@@ -119,11 +119,35 @@ for (const view of ["Writer", "Split"]) {
       await agree(updated.filter(([id]) => id !== removed));
       written(peer.commands.undo());
       send(peer, local);
-      await agree(updated);
+      const restored = beat === "r1" && removalFirst
+        ? [[beat, rows[0][1]], [removed, rows[1][1] + letter], rows[2]]
+        : updated;
+      await agree(restored);
       const other = rows.find(([id]) => id !== beat && id !== removed)[0];
       type(other, 0, "?");
       assert.deepEqual(leaveRunningSharedSession(), { ok: true });
-      assert.deepEqual(shape(currentDocument()), updated.map(([id, value]) => [id, id === other ? "?" + value : value]));
+      assert.deepEqual(shape(currentDocument()), restored.map(([id, value]) => [id, id === other ? "?" + value : value]));
+      assert.deepEqual(show.mock.calls, []);
+    });
+  }
+
+  for (const removalFirst of [true, false]) {
+    test(`${view}: committed concurrent typing follows the reading rules, removal delivered first=${removalFirst}`, async t => {
+      const source = [["r1", "abcdef"], ["r2", "Gone words"], ["r3", "Last"]];
+      const { local, peer, type, agree, show } = await enter(t, view, source);
+      await agree(source);
+      const offset = 4, letter = "x", [id, value] = source[1];
+      type(id, offset, letter);
+      flush();
+      written(peer.commands.removeRows([id]));
+      if (removalFirst) send(peer, local);
+      send(local, peer);
+      if (!removalFirst) send(peer, local);
+      await agree([["r1", source[0][1] + letter], source[2]]);
+      written(peer.commands.undo());
+      send(peer, local);
+      await agree([source[0], [id, value.slice(0, offset) + letter + value.slice(offset)], source[2]]);
+      assert.deepEqual(leaveRunningSharedSession(), { ok: true });
       assert.deepEqual(show.mock.calls, []);
     });
   }
@@ -139,33 +163,34 @@ for (const view of ["Writer", "Split"]) {
       written(peer.commands.removeRows(["r2"]));
       send(peer, local);
       const remaining = source.filter(([id]) => id !== "r2");
+      const withStray = [["r1", source[0][1] + "x"], source[2]];
       agreeReplicas(remaining);
       assert.equal(text(preview), source[1][1] + "x");
       if (leaveFirst) {
         assert.deepEqual(leaveRunningSharedSession(), { ok: true });
-        assert.deepEqual(shape(currentDocument()), remaining);
+        assert.deepEqual(shape(currentDocument()), withStray);
         assert.equal(preview.isConnected, false);
       } else {
         flush();
-        await agree(remaining);
+        send(local, peer);
+        await agree(withStray);
         assert.equal(preview.isConnected, false);
         type("r1", 0, "?");
         flush();
         send(local, peer);
-        const updated = source.map(([id, value]) => [id, id === "r1" ? "?" + value : value]);
-        await agree(updated.filter(([id]) => id !== "r2"));
+        const updated = [["r1", "?" + source[0][1]], ["r2", source[1][1] + "x"], source[2]];
+        await agree([["r1", "?" + withStray[0][1]], source[2]]);
         written(peer.commands.undo());
         send(peer, local);
         await agree(updated);
         assert.deepEqual(leaveRunningSharedSession(), { ok: true });
         assert.deepEqual(shape(currentDocument()), updated);
       }
-      assert.deepEqual(show.mock.calls.map(call => call.arguments),
-        [["Typing was discarded because a peer removed this beat.", "warn"]]);
+      assert.deepEqual(show.mock.calls, []);
     });
   }
 
-  test(`${view}: undo while discarding pending typing keeps the previous edit`, async t => {
+  test(`${view}: undo of pending stray typing keeps the previous edit`, async t => {
     const { local, peer, type, agree, show } = await enter(t, view, rows);
     type("r1", 0, "?");
     flush();
@@ -173,10 +198,26 @@ for (const view of ["Writer", "Split"]) {
     type("r2", 2, "x");
     written(peer.commands.removeRows(["r2"]));
     send(peer, local);
-    assert.equal(sharedUndoRoute().actions.undo().ok, false);
+    assert.equal(sharedUndoRoute().actions.undo().ok, true);
+    send(local, peer);
     await agree([["r1", "?Hello"], rows[2]]);
     assert.deepEqual(leaveRunningSharedSession(), { ok: true });
     assert.deepEqual(shape(currentDocument()), [["r1", "?Hello"], rows[2]]);
+    assert.deepEqual(show.mock.calls, []);
+  });
+
+  test(`${view}: a removed beat and its removed next boundary leave one warning and clear the preview`, async t => {
+    const { local, peer, type, agree, show } = await enter(t, view, rows);
+    const preview = type("r2", 2, "x");
+    written(peer.commands.removeRows(["r2", "r3"]));
+    send(peer, local);
+    flush();
+    await agree([rows[0]]);
+    assert.equal(preview.isConnected, false);
+    written(peer.commands.undo());
+    send(peer, local);
+    await agree(rows);
+    assert.deepEqual(leaveRunningSharedSession(), { ok: true });
     assert.deepEqual(show.mock.calls.map(call => call.arguments),
       [["Typing was discarded because a peer removed this beat.", "warn"]]);
   });

@@ -61,7 +61,7 @@ type TrackedPaint = ReturnType<NativeInputPorts["native"]["trackNarrationPaint"]
 interface SelectionCapture {
   readonly indices: NativeTextPlacement;
   inserted?: readonly [RelativePoint | null, RelativePoint | null];
-  discarded?: true;
+  removed?: "written" | "discarded";
 }
 
 interface MoveEndpoint {
@@ -338,7 +338,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const to = selection.from === selection.to ? from : visual ? { beat, offset: selection.to } : native.narrationCaret(beat, selection.to);
     if (!from || !to || from.beat !== to.beat) return STALE;
     const target = { beat: from.beat, cell: visual ? "visual" : "narration" } as const;
-    const anchored = native.commands.anchorText(target, from.offset, to.offset);
+    const anchored = native.commands.anchorText(target, from.offset, to.offset,
+      !visual && !next.composition && next.text && selection.from === selection.to ? "buffered-typing" : undefined);
     if (anchored.kind === "refused") return anchored.reason;
     const end = next.composition || selection.from !== selection.to ? native.commands.anchorText(target, to.offset) : null;
     const after = end?.kind === "anchored" ? end.range : null, { range } = anchored;
@@ -405,12 +406,15 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
           composition || composed || !text || from !== to || native.hasBeatMarker(range.target.beat)) {
           return stop(result.reason, quiet);
         }
+      }
+      if (result.kind === "recovery" || result.kind === "written" && result.stray) {
+        const removed = result.kind === "recovery" ? "discarded" : "written";
         draft = null;
-        if (selection) selection.discarded = true;
+        if (selection) selection.removed = removed;
         native.endTypingGroup();
         restore(buffered);
         publish();
-        session.refuse(NATIVE_REMOVED_TYPING);
+        if (removed === "discarded") session.refuse(NATIVE_REMOVED_TYPING);
         return null;
       }
       draft = null;
@@ -487,7 +491,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const start = draftEndpoint(buffered, selection.from, 0, selection.to >= buffered.selection.from);
     const end = draftEndpoint(buffered, selection.to, -1, selection.from <= buffered.selection.from + buffered.text.length);
     const capture: SelectionCapture = { indices: [start.index, end.index] };
-    if (finish(capture, moveCaret) || capture.discarded) return null;
+    if (finish(capture, moveCaret) || capture.removed) return null;
     const fresh = buffered.surface.cell(buffered.beat);
     if (!fresh) { session.refuse(STALE); return null; }
     const from = resolveDraftEndpoint(buffered.beat, start, capture.inserted?.[0], 0);
@@ -1275,7 +1279,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (stopped || !draft) return stopped;
     if (!draft.composing) {
       const selection: SelectionCapture = { indices: [null, null] };
-      return finish(selection, true, true) ?? (selection.discarded ? NATIVE_REMOVED_TYPING : null);
+      return finish(selection, true, true) ?? (selection.removed === "discarded" ? NATIVE_REMOVED_TYPING : null);
     }
     refuseCommand(PENDING);
     return PENDING;
@@ -1357,7 +1361,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const selection: SelectionCapture = { indices: [start.preview?.index ?? null, end.preview?.index ?? null] };
     const reason = finish(selection, false);
     if (reason) return { kind: "refused", reason } as const;
-    if (selection.discarded) return { kind: "refused", reason: NATIVE_REMOVED_TYPING } as const;
+    if (selection.removed) return { kind: "refused", reason: selection.removed === "discarded" ? NATIVE_REMOVED_TYPING : "missing" } as const;
     if (!buffered) publish();
     function resolve(point: NonNullable<typeof start>, index: 0 | 1, assoc: 0 | -1) {
       const { beat, preview } = point, html = native.narrationHtml(beat);

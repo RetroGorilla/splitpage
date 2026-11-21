@@ -81,6 +81,8 @@ selection cannot be restored, there is no caret and typing waits until the perso
 | Split composing keys | With a composition open, Enter is canceled without inserting a break or issuing a warning. Synthetic IME-key tests check that Enter, Backspace, Escape and ArrowLeft do not trigger editor shortcuts or disturb the draft selection. | [Native caller tests](../../src/test/shared-native-callers-mapped-app.test.mjs) |
 | Deletion undo | Consecutive same-direction deletions at one caret in one cell can share an undo step within a rolling second. In the Split comparisons, Backspace then Delete, a caret move between deletions, and a selection deletion then Backspace take two native steps each. Backspace, typing, then Delete and deletions around Find Replace take three each. Each sequence takes one step in standalone. | [#1685](https://github.com/RetroGorilla/splitpage/pull/1685) |
 | Typing after a buffered deletion | Typing immediately after a buffered deletion starts its own undo step. | [#1685](https://github.com/RetroGorilla/splitpage/pull/1685) |
+| Buffered typing at the previous beat's end | A co-writer removes the next beat while a character typed at the end of the previous beat is buffered, then undoes the removal after the character is sent. The character survives and stays editable, one beat down on the restored beat. Yjs inserts past deleted items at the resolved position. | [Native app test](../../src/test/shared-native-removed-beat-typing-app.test.mjs), [Y.Text insertion](https://github.com/yjs/yjs/blob/v13.6.33/src/types/YText.js#L195-L265) |
+| Buffered typing in a removed beat | Pending narration appears in a nearby row under the reading rules. The remover's undo can return it at the end of the restored beat because deleting the text collapses its original offsets. If the following boundary is also gone, the editor can discard the pending typing with one warning. | [Native app test](../../src/test/shared-native-removed-beat-typing-app.test.mjs), [reading rules](#3-reading-rules) |
 | Peer insertion during Delete | A peer insertion at offset zero during a forward Delete run can break the run. | [#1685](https://github.com/RetroGorilla/splitpage/pull/1685) |
 | Composition after a buffered deletion | Starting composition before a buffered deletion is sent can use an offset taken before the flush rebases the caret. | [#1685](https://github.com/RetroGorilla/splitpage/pull/1685) |
 | Registry and text rewrites | Renaming a tag used in the script, deleting registry tags that still have inline labels, and removing those labels alone are refused. | [#1670](https://github.com/RetroGorilla/splitpage/pull/1670), [#1681](https://github.com/RetroGorilla/splitpage/pull/1681) |
@@ -293,6 +295,9 @@ A command aimed at a removed or hidden row returns that refusal; it never report
 stale target (E1). On section 10's four-step row 5 of 16 commands wrote and then threw as built, none under rule
 (g); the prototype skips some silently and its join throws (E16, E17). Commands on the row above work on the
 narration it shows. Targeted prop commands reject argument accessors before reading values.
+
+A buffered narration insertion anchored while its beat was live can still write into that segment after removal
+when its captured position identifies the gap. The reader then shows the surviving text under decision 6.
 
 Composition folds in remote changes made meanwhile (E1). The reader writes nothing back. The file is converted
 once, and every copy adopts that conversion (appendix B). Conversion writes each heading's name into its name cell,

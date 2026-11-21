@@ -101,6 +101,41 @@ test("a caret at the start of a beat or the end of the segment stays in that bea
   } finally { undo.destroy(); }
 });
 
+for (const [rows, removed, offset, stillShown, restored] of [
+  [{ R1: "Hello", R2: "World", R3: "Last" }, "R2", 2, ["R1: Hellox / ", "R3: Last / "], ["R1: Hello / ", "R2: Worldx / ", "R3: Last / "]],
+  [{ R1: "Hello", R2: "World" }, "R2", 5, ["R1: Hellox / "], ["R1: Hello / ", "R2: Worldx / "]],
+  [{ R1: "World", R2: "Last" }, "R1", 2, ["R2: xLast / "], ["R1: Worldx / ", "R2: Last / "]],
+  [{ R1: "World" }, "R1", 5, ["~stray: x / "], ["R1: Worldx / "]]
+] as const) test(`buffered narration in a removed beat survives at the shared position of ${Object.keys(rows).join(", ")} / ${removed}`, () => {
+  const { net, all: [a, b] } = copies(script(rows), 2);
+  assert.ok(a && b);
+  const caret = anchorNativeText(a, NARRATION(removed), offset, offset, "buffered-typing");
+  assert.equal(caret.kind, "anchored");
+  const undo = new Y.UndoManager([b.roots.segments], { trackedOrigins: new Set([b.origin]) });
+  try {
+    assert.equal(removeNativeRows(b, [removed]).kind, "written");
+    net.deliver(b, a);
+    assert.equal(typeNativeText(a, caret.range, "x", {}).kind, "written");
+    net.settle();
+    assert.deepEqual(net.agree(), stillShown);
+    assert.ok(undo.undo());
+    net.settle();
+    assert.deepEqual(net.agree(), restored);
+  } finally { undo.destroy(); }
+});
+
+test("buffered narration refuses when two removed beats share the same visible gap", () => {
+  const { net, all: [a, b] } = copies(script({ R1: "Hello", R2: "World", R3: "Last" }), 2);
+  assert.ok(a && b);
+  const caret = anchorNativeText(a, NARRATION("R2"), 2, 2, "buffered-typing");
+  assert.equal(caret.kind, "anchored");
+  assert.equal(removeNativeRows(b, ["R2", "R3"]).kind, "written");
+  net.deliver(b, a);
+  assert.deepEqual(typeNativeText(a, caret.range, "x", {}), { kind: "recovery", reason: "missing", runs: [{ text: "x", marks: {} }] });
+  net.settle();
+  assert.deepEqual(net.agree(), ["R1: Hello / "]);
+});
+
 test("T04: typing, typing at the start and a cut on two copies", () => {
   const { net, all: [a, b] } = copies(script({ R1: "abcd" }));
   assert.ok(a && b);
