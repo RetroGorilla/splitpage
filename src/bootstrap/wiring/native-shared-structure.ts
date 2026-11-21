@@ -5,11 +5,12 @@ import type { CommandOutcome, DocumentStructureIntent } from "../../application/
 import type { ReportPort } from "../../application/session/ports.ts";
 import { changesBetween } from "../../application/session/projection-changes.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
-import { sceneBeforeBeat, sceneFirstBeatId, sceneForBeat, scenesInOrder, storedSceneName } from "../../core/document/scenes.ts";
+import { sceneBeforeBeat, sceneFirstBeatId, scenesInOrder, storedSceneName } from "../../core/document/scenes.ts";
 import type { SceneDocument } from "../../core/document/scenes.ts";
 import { cappedText } from "../../core/document/text-policy.ts";
 import { documentReader } from "./ports/document.ts";
 import { editAllowed, sessionStamps } from "./session-owner.ts";
+import { sameNativeInsertPlacement } from "./native-shared-input.ts";
 import type { mountNativeSharedInput } from "./native-shared-input.ts";
 
 interface NativeStructurePorts {
@@ -23,20 +24,6 @@ interface NativeStructurePorts {
 const UNAVAILABLE = "native-command-unavailable";
 
 type MoveIntent = Extract<DocumentStructureIntent, { kind: "move-beat" | "swap-beats" }>;
-function insertPlacement(doc: SceneDocument, id: string, side: "above" | "below") {
-  const at = doc.rows.findIndex(row => row.id === id);
-  if (at < 0) return null;
-  const scene = sceneForBeat(doc, id)?.id ?? null;
-  const next = doc.rows[at + (side === "above" ? -1 : 1)]?.id;
-  const heading = side === "above" ? sceneBeforeBeat(doc, id) : next ? sceneBeforeBeat(doc, next) : undefined;
-  return { scene, neighbour: heading?.id ?? next ?? null, kind: heading ? "heading" : "beat" };
-}
-
-export function sameNativeInsertPlacement(shown: SceneDocument | null, live: SceneDocument, beat: string, side: "above" | "below"): boolean {
-  const before = shown && insertPlacement(shown, beat, side), after = insertPlacement(live, beat, side);
-  return !!before && !!after && before.scene === after.scene && before.neighbour === after.neighbour && before.kind === after.kind;
-}
-
 function movePlacement(doc: SceneDocument, intent: MoveIntent) {
   const source = doc.rows.findIndex(row => row.id === intent.id);
   if (source < 0) return null;

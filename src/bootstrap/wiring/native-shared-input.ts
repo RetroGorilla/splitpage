@@ -5,7 +5,8 @@ import type { CellRange } from "../../application/editing/cell-editing.ts";
 import type { ReportPort } from "../../application/session/ports.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
 import { addBeatCommand, isBlankBeat, swapBeatsCommand } from "../../application/commands/rows.ts";
-import { sceneBeforeBeat, scenesInOrder, storedSceneName } from "../../core/document/scenes.ts";
+import { sceneBeforeBeat, sceneForBeat, scenesInOrder, storedSceneName } from "../../core/document/scenes.ts";
+import type { SceneDocument } from "../../core/document/scenes.ts";
 import { beatPos, enterAt, HEADING_MARKER, headingPos, startsParagraph } from "../../core/flow/flow.ts";
 import type { FlowDoc, FlowPos, FlowRange } from "../../core/flow/flow.ts";
 import { breakLine, deleteRange, markThroughout, replaceText, sliceCell, typingMarks } from "../../core/text/edits.ts";
@@ -26,7 +27,6 @@ import { notices } from "./ports/effects.ts";
 import { editAllowed, sessionStamps } from "./session-owner.ts";
 import { sharedUndoRoute } from "./undo.ts";
 import { writerControls, writerFlowPorts } from "./writer.ts";
-import { sameNativeInsertPlacement } from "./native-shared-structure.ts";
 
 interface NativeInputPorts {
   readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "resolveTextSelection" | "isClosingOrClosed" | "subscribe">;
@@ -162,6 +162,20 @@ function formattingMark(event: Event, button: Element | null, key: KeyboardEvent
   if (event.type !== "beforeinput" || !event.cancelable || (event as InputEvent).isComposing) return undefined;
   const type = (event as InputEvent).inputType;
   return type.startsWith("format") ? FORMAT_MARKS.get(type.charAt(6).toLowerCase() + type.slice(7)) : undefined;
+}
+
+function insertPlacement(doc: SceneDocument, id: string, side: "above" | "below") {
+  const at = doc.rows.findIndex(row => row.id === id);
+  if (at < 0) return null;
+  const scene = sceneForBeat(doc, id)?.id ?? null;
+  const next = doc.rows[at + (side === "above" ? -1 : 1)]?.id;
+  const heading = side === "above" ? sceneBeforeBeat(doc, id) : next ? sceneBeforeBeat(doc, next) : undefined;
+  return { scene, neighbour: heading?.id ?? next ?? null, kind: heading ? "heading" : "beat" };
+}
+
+export function sameNativeInsertPlacement(shown: SceneDocument | null, live: SceneDocument, beat: string, side: "above" | "below"): boolean {
+  const before = shown && insertPlacement(shown, beat, side), after = insertPlacement(live, beat, side);
+  return !!before && !!after && before.scene === after.scene && before.neighbour === after.neighbour && before.kind === after.kind;
 }
 
 export function mountNativeSharedInput({ native, session, editAttribution, now = Date.now, report, paintIsCurrent = () => false, publish = () => {} }: NativeInputPorts) {
