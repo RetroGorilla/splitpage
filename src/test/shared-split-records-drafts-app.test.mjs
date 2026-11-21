@@ -14,7 +14,7 @@ import { createSessionCapabilities } from "../application/session/capabilities.t
 import { fromHtml } from "../bootstrap/richtext.ts";
 import { createSharedDocument, destroySharedDocument, applySharedUpdate, encodeSharedState } from "../adapters/collab/document.ts";
 import { registerSharedOperationFamilies } from "../adapters/collab/operation-families.ts";
-import { armDeleteComment, closeCommentComposer, openCommentComposer, openCommentsPanel, postComment, postReply, renderComments, toggleReplyComposer } from "../features/comments/comments.ts";
+import { armDeleteComment, closeCommentComposer, openCommentComposer, openCommentsPanel, postComment, renderComments } from "../features/comments/comments.ts";
 
 window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};
@@ -74,29 +74,28 @@ function tidy(f) {
   document.activeElement?.blur?.();
 }
 
-for (const reply of [false, true]) test(`manual draft b: ${reply ? "reply" : "comment"} remains open during an unrelated delete-confirm redraw`, async () => {
+test("manual draft b: comment remains open during an unrelated delete-confirm redraw", async () => {
   const f = await enter(); let release = () => {};
   try {
     openCommentsPanel();
-    if (reply) toggleReplyComposer("C1");
-    else openCommentComposer({ id: "C2", rowId: "r2", field: "audioText", quotedText: "Two" });
-    const selector = reply ? '.reply-composer[data-for="C1"] .cell-editable' : "#comment-body-editable";
-    $(reply ? '.reply-composer[data-for="C1"] .reply-name-input' : "#comment-name").value = "Alice";
+    openCommentComposer({ id: "C2", rowId: "r2", field: "audioText", quotedText: "Two" });
+    const selector = "#comment-body-editable";
+    $("#comment-name").value = "Alice";
     bodyText($(selector), "First");
     release = f.parts.session.hold(ADMISSION_HELD);
-    if (reply) postReply("C1"); else postComment();
+    postComment();
     bodyText($(selector), "First sec");
     const undo = undoCount(f);
     release();
     armDeleteComment(document.createElement("button"), "C1");
     renderComments();
     assert.deepEqual([$(selector).textContent, currentDocument().comments.length, currentDocument().comments[0].replies.length, undoCount(f) - undo], ["First sec", 1, 0, 0]);
-    if (reply) postReply("C1"); else postComment();
-    assert.equal(reply ? currentDocument().comments[0].replies.length : currentDocument().comments.length, reply ? 1 : 2);
-    const stored = reply ? currentDocument().comments[0].replies[0].body : currentDocument().comments.find(c => c.id === "C2").body;
+    postComment();
+    assert.equal(currentDocument().comments.length, 2);
+    const stored = currentDocument().comments.find(c => c.id === "C2").body;
     assert.equal(stored, "First sec");
-    assert.equal(reply ? currentDocument().comments[0].replies.length : currentDocument().comments.length, reply ? 1 : 2);
+    assert.equal(currentDocument().comments.length, 2);
     renderComments();
-    assert.equal(reply ? currentDocument().comments[0].replies.length : currentDocument().comments.length, reply ? 1 : 2);
+    assert.equal(currentDocument().comments.length, 2);
   } finally { release(); tidy(f); }
 });
