@@ -134,6 +134,10 @@ export function deleteRange(cell: CellInput, from: number, to: number): Run[] {
   return implode(chars.slice(0, r.from).concat(chars.slice(r.to)));
 }
 
+export function firstReplacementMarks(first: Pick<Run, "atom" | "marks"> | undefined): Marks | undefined {
+  return first?.atom ? undefined : first?.marks;
+}
+
 export function replaceText(cell: CellInput, from: number, to: number, text: string): Run[] {
   const r = clampRange(cell, from, to);
   from = r.from;
@@ -141,7 +145,7 @@ export function replaceText(cell: CellInput, from: number, to: number, text: str
   if (from === to) return insertText(cell, from, text);
   const chars = explode(cell);
   const first = chars[from] as Char;
-  const marks = first.atom ? typingMarks(cell, from) : first.marks;
+  const marks = firstReplacementMarks(first.atom ?? first) ?? typingMarks(cell, from);
   return insertText(deleteRange(cell, from, to), from, text, marks);
 }
 

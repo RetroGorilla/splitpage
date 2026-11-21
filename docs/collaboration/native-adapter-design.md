@@ -60,7 +60,6 @@ remain for the rest of [slice 8](#11-build-order). There is no release entry for
 | Find across members | A match spanning synthetic join text or another unaddressable range cannot be replaced. | [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
 | Find in Writer headings | A heading match can be replaced singly. A Replace all batch containing a heading match is refused. | [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
 | Find after a peer edit | Replacement requires the original matched characters. A peer's replacement with identical spelling still invalidates the match. Single Replace refuses it and Replace all skips it. | [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
-| Find replacement marks | Replace all inserts unmarked text. For example replacing every `cup` with `mug` in `<em>cupcup</em>` gives `mugmug`. Standalone keeps the emphasis. Single Replace inherits marks in both. | [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
 | Undo selection after a peer change | Undo and redo resolve each saved endpoint against the live members. After a peer split a surviving endpoint can land in the new beat. If either endpoint no longer resolves, the command returns no selection to replay. | [#1671](https://github.com/RetroGorilla/splitpage/pull/1671), [#1677](https://github.com/RetroGorilla/splitpage/pull/1677) |
 | Deletion undo | Consecutive same-direction deletions at one caret in one cell can share an undo step within a rolling second. In the Split comparisons, Backspace then Delete, a caret move between deletions, and a selection deletion then Backspace take two native steps each. Backspace, typing, then Delete and deletions around Find Replace take three each. Each sequence takes one step in standalone. | [#1685](https://github.com/RetroGorilla/splitpage/pull/1685) |
 | Typing after a buffered deletion | Typing immediately after a buffered deletion starts its own undo step. | [#1685](https://github.com/RetroGorilla/splitpage/pull/1685) |
@@ -249,7 +248,7 @@ Each command is one transaction.
 | Command | Writes |
 | --- | --- |
 | Type, paste | `insert` with an explicit attributes object, before any delete |
-| Replace all | Resolve and validate all narration and visual ranges together. In each Yjs text, replace from the highest stored offset down using the single replacement's unmarked insertion, before deleting the matched units |
+| Replace all | Resolve and validate all narration and visual ranges together. In each Yjs text, replace from the highest stored offset down. Like single Replace, each insertion uses the first matched character's marks and explicit Yjs attributes before deleting the matched units |
 | Bold and other plain kinds | `format` with the plain key, `true` or `null` |
 | Tag, untag | A fresh application key; untag sets `null` on the keys seen. No re-keying |
 | Split | Boundary, record copying the parent's rank, visual cell. Never narration |

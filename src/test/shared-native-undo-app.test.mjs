@@ -705,7 +705,7 @@ for (const [name, kind] of Object.entries(views)) {
     assert.equal(app(), "abc X");
   });
 
-  test(name + ": compound Find replacement inserts unmarked text while single Replace inherits marks", async t => {
+  test(name + ": Find Replace and Replace all preserve rendered formatting", async t => {
     for (const native of [false, true]) for (const all of [false, true]) {
       const rows = [{ id: "r1", audioText: "<em>cupcup</em>" }];
       if (native) await enter(t, rows);
@@ -713,7 +713,9 @@ for (const [name, kind] of Object.entries(views)) {
       kind.open(t);
       search(t, "cup", "mug");
       document.getElementById(all ? "find-replace-all" : "find-replace").click();
-      assert.equal(app(), all ? native ? "mugmug" : "<em>mugmug</em>" : "<em>mugcup</em>");
+      const expected = all ? "mugmug" : "mugcup";
+      assert.equal(app(), "<em>" + expected + "</em>");
+      assert.equal(kind.host("r1").querySelector("em")?.textContent, expected);
       document.getElementById("find-close").click();
       writerControls().closeWriter();
       if (native) assert.deepEqual(hook.leave(), { ok: true });
