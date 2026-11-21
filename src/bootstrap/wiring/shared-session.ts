@@ -17,6 +17,7 @@ import { adoptReplacement, adoptShared, collectReplacementErrors, currentDocumen
 import type { OwnerSwap } from "./session-owner.ts";
 import type { SharedUndoRoute } from "./undo.ts";
 import { routeSharedUndo, undoOwner } from "./undo.ts";
+import { documentReader } from "./ports/document.ts";
 import { sharedAuthorPort } from "./ports/shared-author.ts";
 import type { SharedAuthorPort } from "./ports/shared-author.ts";
 import { sharedUndoOwner } from "./ports/shared-undo.ts";
@@ -410,7 +411,7 @@ function leaveAvailableSession(ports: SharedSwitchPorts, preserveSelection: bool
     faults.attempt(() => { collectReplacementErrors(faults.errors, swap.restore); });
     return keep(new Error("The standalone copy did not land as captured"));
   }
-  const landedDocument = currentDocument();
+  const landedDocument = documentReader.current();
   running = null;
   now.end();
   faults.attempt(() => { swap.commit(); });
@@ -419,7 +420,7 @@ function leaveAvailableSession(ports: SharedSwitchPorts, preserveSelection: bool
   holds.commands();
   if (selection) {
     faults.attempt(selection.dispose);
-    if (landedDocument && sessionStarted() && !sharedSession() && currentDocument() === landedDocument) faults.attempt(selection.restore);
+    if (landedDocument && sessionStarted() && !sharedSession() && documentReader.current() === landedDocument) faults.attempt(selection.restore);
   }
   const left = ports.left;
   if (left) faults.attempt(() => { left(true); });
