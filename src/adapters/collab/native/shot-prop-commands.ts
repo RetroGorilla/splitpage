@@ -15,8 +15,9 @@ type Write = () => void;
 type Drop = Pick<NativeShotPropEntry, "key" | "rank">;
 
 export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape["productionTags"]) {
-  const map = shot.get(NATIVE_SHOT_PROPS);
-  if (!(map instanceof Y.Map)) return null;
+  const stored = shot.get(NATIVE_SHOT_PROPS);
+  if (!(stored instanceof Y.Map)) return null;
+  const map: Y.Map<unknown> = stored;
   const bad = new Set<string>();
   const entries = nativeShotPropEntries(map, key => { bad.add(key); });
   const resolved = resolveNativeShotPropEntries(entries, props => resolveBrollProps(props, tags));

@@ -460,7 +460,7 @@ test("a removed keyed shot is projected again, and renaming its visual line stay
   assert.equal(shotButton("bs1", "status-toggle").getAttribute("aria-checked"), "false");
 });
 
-test("racing prop additions keep one list and a peer redraw keeps the editor's shot notes draft", async t => {
+test("racing prop additions keep both props and a peer redraw keeps the editor's shot notes draft", async t => {
   await enter(t, { brollShots: [{ id: "bs1", name: "Wide", origin: "list" }] });
   openBrollPanel();
   if (!shotCard("bs1")) shotButton("bs1", "expand").click();
@@ -476,11 +476,11 @@ test("racing prop additions keep one list and a peer redraw keeps the editor's s
   hook.nativePeer.deliver();
   await Promise.resolve();
   const props = shot(hook.read().app, "bs1").props.map(prop => prop.name);
-  assert.equal(props.length, 1);
-  assert.ok(["Lens", "Tripod"].includes(props[0]));
+  assert.deepEqual(props.toSorted(), ["Lens", "Tripod"]);
   copies(doc => shot(doc, "bs1").props.map(prop => prop.name), props);
   copies(doc => tags(doc).map(entry => entry.name).sort(), ["Lens", "Tripod"]);
-  assert.match(shotCard("bs1").textContent, new RegExp(props[0]));
+  assert.match(shotCard("bs1").textContent, /Lens/);
+  assert.match(shotCard("bs1").textContent, /Tripod/);
   const retained = shotBox("bs1", "notes");
   assert.equal(retained.value, "A shot draft");
   assert.equal(retained, document.activeElement);
