@@ -1,4 +1,5 @@
 import { randomIds } from "../../adapters/identity/ids.ts";
+import type { NativeNarrationSeams } from "../../adapters/collab/native/reader.ts";
 import type { openNativeSession } from "../../adapters/collab/native/session.ts";
 import type { NativeEditStamp, NativeTextPlacement, NativeTextRange, NativeUndoPoint, NativeUndoSelection, NativeUndoSelectionInput } from "../../adapters/collab/native/text-commands.ts";
 import type { CellRange } from "../../application/editing/cell-editing.ts";
@@ -37,6 +38,7 @@ interface NativeInputPorts {
   readonly now?: () => number;
   readonly report: ReportPort;
   readonly paintIsCurrent?: () => boolean;
+  readonly paintedJoinSeams?: (beat: string) => NativeNarrationSeams | null;
   readonly publish?: (buffered?: Pick<Draft, "cell" | "beat" | "field">) => void;
 }
 
@@ -181,12 +183,14 @@ export function sameNativeInsertPlacement(shown: SceneDocument | null, live: Sce
   return !!before && !!after && before.scene === after.scene && before.neighbour === after.neighbour && before.kind === after.kind;
 }
 
-export function mountNativeSharedInput({ native, session, editAttribution, now = Date.now, report, paintIsCurrent = () => false, publish = () => {} }: NativeInputPorts) {
+export function mountNativeSharedInput({ native, session, editAttribution, now = Date.now, report, paintIsCurrent = () => false,
+  paintedJoinSeams = () => null, publish = () => {} }: NativeInputPorts) {
   let draft: Draft | null = null, stopped: string | null = null, uncertain = false;
   let insertMenuSelection: ReturnType<typeof captureInsertMenuSelection> | null = null;
   let lastWriterEnterRefusal: string | null = null;
   let imeTarget: Element | null = null;
   let compositionRefused = false, fullRefused = false;
+  let refusedJoinComposition: (Pick<Draft, "cell" | "selection" | "html"> & { readonly revision: number | null }) | null = null;
   let composingInside: Pick<Draft, "cell" | "selection" | "html"> | null = null;
   let composingText = "";
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -449,6 +453,43 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (document.activeElement === buffered.cell || buffered.cell.closest("#writer-doc") === document.activeElement) {
       setCellSelection(buffered.cell, buffered.selection.from, buffered.selection.to);
     }
+  }
+
+  function joinSeams(cell: Element): NativeNarrationSeams | null {
+    return cell.getAttribute("data-field") === "visualText" ? null : paintedJoinSeams(cell.getAttribute("data-id") ?? "");
+  }
+
+  function crossesJoin(cell: Element, { from, to }: CellRange, seams: NativeNarrationSeams | null): boolean {
+    if (!seams?.length || from === to) return false;
+    const buffered = draft?.cell === cell ? draft : null;
+    if (buffered) {
+      const start = buffered.selection.from, end = start + buffered.text.length;
+      const beforePreview = (offset: number) => offset >= end ? offset + buffered.selection.to - end : Math.min(offset, start);
+      from = beforePreview(from);
+      to = beforePreview(to);
+    }
+    return seams.some(([start, end]) => from < end && to > start);
+  }
+
+  function refuseJoinedEdit(cell: Element): void {
+    if (finish()) return;
+    publish();
+    if (cell.closest("#writer-doc")) writerControls()?.renderWriter();
+    else renderRow(cell.getAttribute("data-id"));
+    session.refuse(UNSUPPORTED);
+  }
+
+  function restoreUnsupportedInput(cell: Element): void {
+    if (cell instanceof HTMLInputElement) cell.value = documentReader.current()?.title ?? "";
+    else if (cell.closest("#rows")) {
+      const id = cell.getAttribute("data-id");
+      const row = documentReader.current()?.rows.find(candidate => candidate.id === id);
+      if (row) {
+        const field = cell.getAttribute("data-field");
+        if (field === "audioText" || field === "visualText") cell.innerHTML = row[field] ?? "";
+        renderRow(id);
+      }
+    } else writerControls()?.restoreWriterPaint();
   }
 
   function draftEndpoint(buffered: Draft, offset: number, assoc: 0 | -1, coversDraftEdge: boolean) {
@@ -932,12 +973,16 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (touchesProtectedText(cell, selection)) { session.refuse(UNSUPPORTED); return; }
     const shown = deletion ? cellSelection(cell) : null;
     const gesture = shown && shown.from === shown.to ? { direction: input.inputType.endsWith("Backward") ? -1 : 1, at: now() } as const : null;
-    const current = flushForInput(cell, selection);
+    const seams = selection.from === selection.to ? null : joinSeams(cell);
+    if (crossesJoin(cell, selection, seams)) { refuseJoinedEdit(cell); return; }
+    const joinedDeletion = deletion && seams !== null;
+    const current = flushForInput(cell, selection, !joinedDeletion);
     if (!current) return;
     const next = begin(current.cell, current.selection, false, text, gesture);
     let anchored: Draft | string;
     try { anchored = current.stale ? STALE : anchor(next); }
     catch (error) { report(error); anchored = PENDING; }
+    if (joinedDeletion && anchored === STALE) { refuseJoinedEdit(current.cell); return; }
     if (anchored === UNSUPPORTED) { session.refuse(anchored); return; }
     draft = typeof anchored === "string" ? next : anchored;
     preview(current.cell, current.selection, text);
@@ -956,6 +1001,12 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       const selection = cellSelection(cell);
       if (!selection || touchesProtectedText(cell, selection)) { session.refuse(STALE); event.preventDefault(); return; }
       if (draft?.composing) { event.preventDefault(); return; }
+      if (selection.from !== selection.to && crossesJoin(cell, selection, joinSeams(cell))) {
+        refusedJoinComposition = { cell, selection, html: cell.innerHTML, revision: !draft && paintIsCurrent() ? native.revision() : null };
+        refuseJoinedEdit(cell);
+        event.preventDefault();
+        return;
+      }
       composingText = "";
       compositionRefused = false;
       if (draft && !draft.deletion && insideDraft(draft, cell, selection)) {
@@ -1030,6 +1081,20 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       : commandInput && (inputType === "insertLineBreak" || inputType === "insertParagraph" && !writer);
     const moving = key && moveDirection(key);
     const splitting = key ? enter && (writer ? !key.altKey && (!key.shiftKey || modified) : key.altKey) : writer && commandInput && inputType === "insertParagraph";
+    if (refusedJoinComposition && cell) {
+      const change = event.type === "input" ? event as InputEvent : input;
+      if (event.type === "compositionupdate" || event.type === "compositionend" || change?.isComposing || change?.inputType?.includes("Composition")) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (event.type === "input") {
+          publish();
+          if (refusedJoinComposition.cell.isConnected && refusedJoinComposition.revision === native.revision()) restore(refusedJoinComposition);
+          else restoreUnsupportedInput(cell);
+        }
+        return;
+      }
+      if (event.type === "compositionstart" || input) refusedJoinComposition = null;
+    }
     if (event.type === "focusout") {
       if (imeTarget === cell) imeTarget = null;
       const next = (event as FocusEvent).relatedTarget;
@@ -1188,18 +1253,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         }
       }
       if (event.type === "beforeinput" && editableText && event.cancelable) { write(event as InputEvent, editableText); return; }
-      if (event.type === "input" && cell) {
-        if (cell instanceof HTMLInputElement) cell.value = documentReader.current()?.title ?? "";
-        else if (cell.closest("#rows")) {
-          const id = cell.getAttribute("data-id");
-          const row = documentReader.current()?.rows.find(candidate => candidate.id === id);
-          if (row) {
-            const field = cell.getAttribute("data-field");
-            if (field === "audioText" || field === "visualText") cell.innerHTML = row[field] ?? "";
-            renderRow(id);
-          }
-        } else writerControls()?.restoreWriterPaint();
-      }
+      if (event.type === "input" && cell) restoreUnsupportedInput(cell);
       session.refuse(UNSUPPORTED);
     } catch (error) {
       report(error);
