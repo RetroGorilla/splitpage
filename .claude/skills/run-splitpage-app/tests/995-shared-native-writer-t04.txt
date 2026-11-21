@@ -1,0 +1,66 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=window.__writerFlowTest;window.P=S.nativePeer;window.writer=()=>document.getElementById('writer-doc');window.openTrace=(title,texts)=>F.openFile(new File([JSON.stringify({schema:2,title,paragraphsDecided:true,rows:texts.map((audioText,i)=>({id:'r'+(i+1),audioText,visualText:''})),comments:[]})],'trace.splitpage'));window.place=(rowId,offset)=>{const p={kind:'beat',rowId,offset};writer().focus();W.place({anchor:p,head:p});return true};window.caret=(rowId,offset)=>{const s=W.selection(),dom=getSelection();return document.activeElement===writer()&&dom.isCollapsed&&writer().contains(dom.focusNode)&&[s?.anchor,s?.head].every(p=>p?.rowId===rowId&&p.offset===offset)};true
+eval window.json=value=>JSON.stringify(value);window.rows=(doc,texts)=>doc.rows.length===texts.length&&doc.rows.every((row,i)=>row.id==='r'+(i+1)&&row.audioText===texts[i]);window.paint=texts=>{const beats=[...writer().querySelectorAll('.wr-beat')];return W.on()&&beats.length===texts.length&&beats.every((beat,i)=>beat.dataset.id==='r'+(i+1)&&beat.textContent===(i?'\u200b':'')+texts[i]&&beat.checkVisibility()&&beat.getBoundingClientRect().width>0)};window.same=()=>json(S.read().app)===json(S.read().peer);window.check=texts=>same()&&rows(S.read().app,texts)&&paint(texts);window.expected=(doc,audioText)=>json(doc)===json({...before,rows:before.rows.map((row,i)=>i===0?{...row,audioText,updatedAt:doc.rows[0].updatedAt,updatedBy:doc.rows[0].updatedBy}:row)});window.replay=(order,to)=>{const pending=P.queuedUpdates(),selected=pending.filter(packet=>!to||packet.to===to);const expected=order==='duplicate'?selected.flatMap(packet=>[packet,packet]):selected;return json(P.drain(order,to))===json(expected)&&json(P.queuedUpdates())===json(pending.filter(packet=>to&&packet.to!==to))};true
+eval openTrace('Native T04 forward',["abcd","ef"])
+wait F.state().title==='Native T04 forward'
+eval if (!W.on()) document.getElementById('btn-write').click();true
+wait W.on()
+eval window.originalId=F.state().docId;S.enter()
+wait check(["abcd","ef"])
+eval window.before=S.read().app;true
+eval P.hold('updates');place('r1',2)
+expect caret('r1',2)
+ime set x
+eval window.written=P.type('r1',0,'Z');true
+expect written.kind==='written'&&P.queuedUpdates().length===1&&P.queuedUpdates()[0].to==='app'
+expect replay('forward','app')
+expect json(S.read().app)===json(before)&&expected(S.read().peer,"Zabcd")&&paint(["abxcd","ef"])&&caret('r1',3)
+ime set xy
+expect json(S.read().app)===json(before)&&expected(S.read().peer,"Zabcd")&&paint(["abxycd","ef"])&&caret('r1',4)
+ime commit xy
+expect P.queuedUpdates().length===1&&P.queuedUpdates()[0].to==='peer'
+expect replay('forward')
+expect check(["Zabxycd","ef"])&&expected(S.read().app,"Zabxycd")&&caret('r1',5)
+expect document.getElementById("shared-recovery-panel")===null&&document.querySelector("#toast-host .toast.warn:not(.is-leaving)")===null
+key ctrl KeyZ
+expect P.queuedUpdates().length===1&&P.queuedUpdates()[0].to==='peer'
+expect replay('forward')
+expect check(["Zabcd","ef"])&&expected(S.read().app,"Zabcd")&&caret('r1',3)
+expect document.getElementById("shared-recovery-panel")===null&&document.querySelector("#toast-host .toast.warn:not(.is-leaving)")===null
+expect json(P.release('forward'))==='[]'
+eval window.projection=S.read().app;window.left=S.leave();true
+expect left.ok&&S.read().peer===null&&F.state().docId!==projection.docId&&F.state().docId!==originalId
+expect json({...F.state(),docId:projection.docId})===json(projection)
+expect paint(["Zabcd","ef"])&&caret('r1',3)
+eval openTrace('Native T04 duplicate',["abcd","ef"])
+wait F.state().title==='Native T04 duplicate'
+eval if (!W.on()) document.getElementById('btn-write').click();true
+wait W.on()
+eval window.originalId=F.state().docId;S.enter()
+wait check(["abcd","ef"])
+eval window.before=S.read().app;true
+eval P.hold('updates');place('r1',2)
+expect caret('r1',2)
+ime set x
+eval window.written=P.type('r1',0,'Z');true
+expect written.kind==='written'&&P.queuedUpdates().length===1&&P.queuedUpdates()[0].to==='app'
+expect replay('duplicate','app')
+expect json(S.read().app)===json(before)&&expected(S.read().peer,"Zabcd")&&paint(["abxcd","ef"])&&caret('r1',3)
+ime set xy
+expect json(S.read().app)===json(before)&&expected(S.read().peer,"Zabcd")&&paint(["abxycd","ef"])&&caret('r1',4)
+ime commit xy
+expect P.queuedUpdates().length===1&&P.queuedUpdates()[0].to==='peer'
+expect replay('duplicate')
+expect check(["Zabxycd","ef"])&&expected(S.read().app,"Zabxycd")&&caret('r1',5)
+expect document.getElementById("shared-recovery-panel")===null&&document.querySelector("#toast-host .toast.warn:not(.is-leaving)")===null
+key ctrl KeyZ
+expect P.queuedUpdates().length===1&&P.queuedUpdates()[0].to==='peer'
+expect replay('duplicate')
+expect check(["Zabcd","ef"])&&expected(S.read().app,"Zabcd")&&caret('r1',3)
+expect document.getElementById("shared-recovery-panel")===null&&document.querySelector("#toast-host .toast.warn:not(.is-leaving)")===null
+expect json(P.release('forward'))==='[]'
+eval window.projection=S.read().app;window.left=S.leave();true
+expect left.ok&&S.read().peer===null&&F.state().docId!==projection.docId&&F.state().docId!==originalId
+expect json({...F.state(),docId:projection.docId})===json(projection)
+expect paint(["Zabcd","ef"])&&caret('r1',3)
