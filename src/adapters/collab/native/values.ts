@@ -68,6 +68,12 @@ export function recordBag(value: unknown): value is Record<string, unknown> {
   return value !== null && typeof value === "object" && !Array.isArray(value);
 }
 
+export function plainRecordArgument(value: unknown): value is Record<string, unknown> {
+  if (!recordBag(value)) return false;
+  const prototype: unknown = Object.getPrototypeOf(value);
+  return prototype === Object.prototype || prototype === null;
+}
+
 export function sameNativeValue(left: unknown, right: unknown): boolean {
   if (left === right) return true;
   if (Array.isArray(left)) return Array.isArray(right) && left.length === right.length && left.every((item, index) => sameNativeValue(item, right[index]));

@@ -64,7 +64,9 @@ test("invalid inputs refuse before writing any valid range", t => {
   const getter = { ...one, get end() { called++; copy.close(); return 4; } };
   const listGetter = [one];
   Object.defineProperty(listGetter, "1", { get() { called++; return range("B", 1, 2); } });
-  for (const ranges of [undefined, null, 1, {}, [one, null], [one, {}], [one, { ...one, row: 3 }],
+  const nonplainList = Object.setPrototypeOf([one], {}), nonplainRange = Object.setPrototypeOf({ ...one }, {});
+  for (const ranges of [undefined, null, 1, {}, nonplainList, [nonplainRange], [one, null], [one, {}],
+    [one, { ...one, extra: 1 }], [one, { ...one, row: 3 }],
     [one, { ...one, cell: "name" }], [one, { ...one, start: undefined }], [one, { ...one, end: undefined }],
     [one, { ...one, start: 1.5 }], [one, range("B", 3, 2)], [one, range("B", -1, 3)],
     [one, range("B", 0, 7)], [one, one], [one, range("A", 2, 5)], [one, getter], listGetter, new Array(2)]) {
@@ -88,33 +90,59 @@ test("invalid inputs refuse before writing any valid range", t => {
   assert.deepEqual(copy.encodeState(), original);
 });
 
-test("replace all refuses a range list that grows or shrinks while being read", t => {
+test("replace all validates the single snapshot when a range list grows or shrinks during its length read", t => {
   const first = range("A", 1, 3), second = range("B", 1, 3);
-  for (const growing of [true, false]) {
+  for (const change of ["grow", "grow with original length", "shrink"] as const) {
     const copy = noticeCopy(seed, 2), state = copy.encodeState();
     t.after(copy.close);
-    const list = growing ? [first] : [first, second];
+    const list = change === "shrink" ? [first, second] : [first];
     let changed = false;
     const changing = new Proxy(list, {
       getOwnPropertyDescriptor(source, key) {
         if (key === "length" && !changed) {
           changed = true;
-          if (growing) {
-            const length = Reflect.getOwnPropertyDescriptor(source, key);
-            source.push(second);
-            return length;
-          }
-          source.length = 0;
+          const original = Reflect.getOwnPropertyDescriptor(source, key);
+          if (change === "shrink") source.length = 0;
+          else source.push(second);
+          if (change === "grow with original length") return original;
         }
         return Reflect.getOwnPropertyDescriptor(source, key);
       }
     });
-    assert.deepEqual(copy.commands.replaceAll(changing, "X"), { kind: "refused", reason: "range" });
+    const result = copy.commands.replaceAll(changing, "X");
     assert.equal(changed, true);
-    assert.deepEqual(copy.encodeState(), state);
-    assert.deepEqual(copy.commands.undo(), { kind: "unchanged" });
+    if (change === "grow with original length") {
+      assert.deepEqual(result, { kind: "written" });
+      assert.deepEqual(copy.document().rows.map(row => row.audioText), ["aXdefghi", "jklmno", "pqrst"]);
+      assert.equal(copy.commands.undo().kind, "written");
+      assert.deepEqual(copy.document().rows.map(row => row.audioText), ["abcdefghi", "jklmno", "pqrst"]);
+    } else {
+      assert.deepEqual(result, { kind: "refused", reason: "range" });
+      assert.deepEqual(copy.encodeState(), state);
+      assert.deepEqual(copy.commands.undo(), { kind: "unchanged" });
+    }
   }
 });
+
+for (const growing of [true, false]) {
+  test(`replace all reads the range-list keys once when another read would ${growing ? "grow" : "shrink"} it`, t => {
+    const copy = noticeCopy(seed, 2), first = range("A", 1, 3), second = range("B", 1, 3);
+    t.after(copy.close);
+    let reads = 0;
+    const list = new Proxy(growing ? [first] : [first, second], {
+      ownKeys(source) {
+        const keys = Reflect.ownKeys(source);
+        if (++reads === 2) {
+          if (growing) source.push(second); else source.pop();
+        }
+        return keys;
+      }
+    });
+    assert.deepEqual(copy.commands.replaceAll(list, "X"), { kind: "written" });
+    assert.equal(reads, 1);
+    assert.deepEqual(copy.document().rows.map(row => row.audioText), ["aXdefghi", growing ? "jklmno" : "jXmno", "pqrst"]);
+  });
+}
 
 test("a batch uses shown offsets inside an assembled cell and refuses a split surrogate", t => {
   const source = compoundSeed({ A: "abc", B: "def", C: "g😀hi" });

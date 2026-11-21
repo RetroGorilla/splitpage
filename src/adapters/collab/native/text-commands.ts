@@ -1,13 +1,13 @@
 import * as Y from "yjs";
 import { OBJ } from "../../../core/text/runs.ts";
 import type { Marks, Run } from "../../../core/text/runs.ts";
-import { copyNativeCompoundInput } from "./compound-input.ts";
+import { copyNativeDenseList } from "./compound-input.ts";
 import { nativeCellView, nativeLeftAt, nativeStoredOffset, prepareNativeRuns, writeNativeRuns } from "./inline.ts";
 import type { NativeCellView, NativeDeltaItem } from "./inline.ts";
 import { nativeSegmentSpans } from "./reader.ts";
 import { throwNativeFailures, transactPreparedNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
-import { encodeNativeValue, nativeWellFormed } from "./values.ts";
+import { encodeNativeValue, nativeWellFormed, plainRecordArgument } from "./values.ts";
 
 export interface NativeTextTarget {
   readonly beat: string;
@@ -465,15 +465,20 @@ function refuseReplaceAll(reason: NativeRefusal): ReplaceAllOutcome {
 }
 
 function readReplaceAllRanges(ranges: readonly NativeReplaceAllRange[]): NativeReplaceAllRange[] | null {
-  const copied = copyNativeCompoundInput(ranges);
-  if (!Array.isArray(copied) || Object.keys(copied).length !== copied.length) return null;
-  for (let index = 0; index < copied.length; index++) {
-    const range = copied[index] as Partial<NativeReplaceAllRange> | null | undefined;
-    if (!range || typeof range !== "object" || Array.isArray(range) || !nativeWellFormed(range.row) || !range.row ||
-      (range.cell !== "narration" && range.cell !== "visual") ||
-      !wholeNumber(range.start) || !wholeNumber(range.end) || range.end < range.start) return null;
-  }
-  return copied as NativeReplaceAllRange[];
+  try {
+    const copied: NativeReplaceAllRange[] = [], seen = new Set<unknown>();
+    for (const range of copyNativeDenseList(ranges)) {
+      if (seen.has(range) || !plainRecordArgument(range)) return null;
+      seen.add(range);
+      const fields = Object.getOwnPropertyDescriptors(range);
+      const row: unknown = fields.row?.value, cell: unknown = fields.cell?.value;
+      const start: unknown = fields.start?.value, end: unknown = fields.end?.value;
+      if (Reflect.ownKeys(fields).length !== 4 || !nativeWellFormed(row) || !row ||
+        (cell !== "narration" && cell !== "visual") || !wholeNumber(start) || !wholeNumber(end) || end < start) return null;
+      copied.push({ row, cell, start, end });
+    }
+    return copied;
+  } catch { return null; }
 }
 
 interface ReplacePiece {
