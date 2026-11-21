@@ -16,14 +16,11 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>, 
   let paused = false;
   let capturing = false;
   const packets: Packet[] = [];
-  const capture = (to: Packet["to"]) =>
-    (bytes: Uint8Array, _origin: unknown, _doc: unknown, transaction: { readonly local: boolean }) => {
-      if (capturing && transaction.local) packets.push({ to, bytes: bytes.slice() });
-    };
-  const fromApp = capture("peer");
-  const fromPeer = capture("app");
-  app.ydoc.on("update", fromApp);
-  peer.ydoc.on("update", fromPeer);
+  const capture = (to: Packet["to"]) => (bytes: Uint8Array) => {
+    if (capturing) packets.push({ to, bytes });
+  };
+  const stopAppUpdates = app.subscribeLocalUpdates(capture("peer"));
+  const stopPeerUpdates = peer.subscribeLocalUpdates(capture("app"));
   const stop = app.subscribe(event => {
     if (event.kind === "changed" && !paused) applyUpdate(peer, app.encodeState());
   });
@@ -90,8 +87,8 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>, 
     delete: (beat: string, from: number, to: number) => edit(beat, from, to),
     dispose: () => {
       stop();
-      app.ydoc.off("update", fromApp);
-      peer.ydoc.off("update", fromPeer);
+      stopAppUpdates();
+      stopPeerUpdates();
       packets.length = 0;
       peer.close();
     }
