@@ -1531,6 +1531,10 @@ for (const [name, kind] of Object.entries(fixtureViews)) {
     assert.equal(native.revision(), revision);
     assert.equal(kind.host().textContent, "Captured words");
     assert.deepEqual(refused.mock.calls.map(call => call.arguments), [["native-input-pending"], ["full"]]);
+    typeKeys(kind.surface(), "  x");
+    assert.equal(native.revision(), revision);
+    assert.equal(kind.host().textContent, "Capt ured words");
+    assert.deepEqual(refused.mock.calls.map(call => call.arguments), [["native-input-pending"], ["full"]]);
   });
 
   test(name + ": closed editor and Find retries stay quiet without reading the native projection", async t => {

@@ -835,7 +835,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     try {
       if (native.isClosingOrClosed()) return;
       if (stopped && (editableText || heading || writer)) {
-        if (narration && !splitting && !joining && !moving && !mark && !line && event.type !== "paste") session.refuse(stopped);
+        if (stopped !== "full" && narration && !splitting && !joining && !moving && !mark && !line && event.type !== "paste") session.refuse(stopped);
         return;
       }
       if (moving) {
