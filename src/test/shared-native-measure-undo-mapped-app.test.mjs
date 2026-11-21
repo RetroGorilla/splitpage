@@ -210,10 +210,10 @@ test("native peer cannot split or insert at a missing beat, or join beyond the l
   assert.deepEqual(peer.commands.joinRow("r1", "r2", " "), { kind: "refused", reason: "above" });
   assert.deepEqual(peer.commands.undo(), { kind: "unchanged" });
   assert.deepEqual(peer.encodeState(), stored);
-  assert.deepEqual(changes, []);
   assert.equal(applyNativePeerUpdate(editor, peer.encodeState()), true);
   await Promise.resolve();
   await agreedWithPeer(editor, peer, seed);
+  assert.deepEqual(changes, []);
   assert.deepEqual(currentDocument(), unchanged);
 });
 
