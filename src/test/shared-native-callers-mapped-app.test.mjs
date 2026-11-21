@@ -770,6 +770,7 @@ for (const order of exchanges) for (const action of ["arm only", "confirm insert
     if (action === "arm only") {
       flush();
       settledAgreement(f, order, [typed, inserted, target, last]);
+      assert.deepEqual(f.notices(), []);
     } else {
       button.click();
       await Promise.resolve();
