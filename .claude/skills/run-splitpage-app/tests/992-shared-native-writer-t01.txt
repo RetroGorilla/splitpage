@@ -1,0 +1,152 @@
+﻿open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=window.__writerFlowTest;window.P=S.nativePeer;window.writer=()=>document.getElementById('writer-doc');window.at=(a,h=a)=>{writer().focus();W.place({anchor:{kind:'beat',rowId:'r1',offset:a},head:{kind:'beat',rowId:'r1',offset:h}});return true};window.sel=(a,h=a)=>{const s=W.selection(),d=getSelection();return document.activeElement===writer()&&writer().contains(d.anchorNode)&&writer().contains(d.focusNode)&&d.isCollapsed===(a===h)&&s?.anchor.rowId==='r1'&&s?.anchor.offset===a&&s?.head.rowId==='r1'&&s?.head.offset===h};true
+eval window.paint=(first)=>{const beats=[...writer().querySelectorAll('.wr-beat')];return W.on()&&beats.length===2&&beats.every((beat,i)=>beat.dataset.id===['r1','r2'][i]&&beat.textContent.replace(/\u200b/g,'')===[first,'ef'][i]&&beat.checkVisibility()&&beat.getBoundingClientRect().width>0)};window.json=value=>JSON.stringify(value,(_,v)=>v&&typeof v==='object'&&!Array.isArray(v)?Object.fromEntries(Object.entries(v).sort(([a],[b])=>a.localeCompare(b))):v);window.copy=(side,value)=>json({...S.read()[side],rows:S.read()[side].rows.map((row,i)=>i===0?{...row,updatedAt:base.rows[0].updatedAt,updatedBy:base.rows[0].updatedBy}:row)})===json({...base,rows:base.rows.map((row,i)=>i===0?{...row,audioText:value}:row)});window.both=value=>copy('app',value)&&copy('peer',value)&&json(S.read().app)===json(S.read().peer)&&paint(value);window.clean=()=>!document.querySelector('#toast-host .toast.warn:not(.is-leaving)');true
+eval F.openFile(new File([JSON.stringify({schema:2,title:'Native T01 forward',paragraphsDecided:true,rows:[{id:'r1',audioText:'abcd',visualText:'Look'},{id:'r2',audioText:'ef',visualText:'Wide'}],comments:[]})],'native-t01.splitpage'))
+wait F.state().title==='Native T01 forward'
+eval if(!W.on())document.getElementById('btn-write').click();true
+wait W.on()
+eval S.enter()
+eval window.base=S.read().app;at(1,3);P.hold('updates');true
+expect both('abcd') && sel(1,3)
+key Backspace
+expect copy('app','abcd') && copy('peer','abcd') && paint('ad') && sel(1)
+wait copy('app','ad') && copy('peer','abcd') && paint('ad') && sel(1)
+eval window.peerWrite=P.type('r1',2,'X');true
+expect peerWrite.kind==='written' && copy('peer','abXcd')
+eval P.deliver();true
+wait both('aXd')
+expect clean() && sel(1)
+eval P.hold('updates');true
+key ctrl KeyZ
+eval P.deliver();true
+wait both('abXcd')
+expect clean() && sel(1,4)
+press q
+wait both('aqd')
+expect clean() && sel(2)
+key ctrl KeyZ
+wait both('abXcd')
+expect clean() && sel(1,4)
+eval window.projection=S.read().app;window.left=S.leave();true
+expect left.ok && S.read().peer===null && F.state().docId!==projection.docId
+expect JSON.stringify({...F.state(),docId:projection.docId})===JSON.stringify(projection)
+eval F.openFile(new File([JSON.stringify({schema:2,title:'Native T01 reverse',paragraphsDecided:true,rows:[{id:'r1',audioText:'abcd',visualText:'Look'},{id:'r2',audioText:'ef',visualText:'Wide'}],comments:[]})],'native-t01.splitpage'))
+wait F.state().title==='Native T01 reverse'
+eval if(!W.on())document.getElementById('btn-write').click();true
+wait W.on()
+eval S.enter()
+eval window.base=S.read().app;at(1,3);P.hold('updates');true
+expect both('abcd') && sel(1,3)
+key Backspace
+expect copy('app','abcd') && copy('peer','abcd') && paint('ad') && sel(1)
+wait copy('app','ad') && copy('peer','abcd') && paint('ad') && sel(1)
+eval window.peerWrite=P.type('r1',2,'X');true
+expect peerWrite.kind==='written' && copy('peer','abXcd')
+eval window.queued=P.queuedUpdates();true
+expect queued.map(p=>p.to).join(',')==='peer,app' && queued.every(p=>p.bytes.length>0)
+eval window.replayed=P.release('reverse');true
+expect JSON.stringify(replayed)===JSON.stringify(queued.slice().reverse()) && P.queuedUpdates().length===0
+wait both('aXd')
+expect clean() && sel(1)
+eval P.hold('updates');true
+key ctrl KeyZ
+eval window.queued=P.queuedUpdates();true
+expect queued.map(p=>p.to).join(',')==='peer' && queued.every(p=>p.bytes.length>0)
+eval window.replayed=P.release('reverse');true
+expect JSON.stringify(replayed)===JSON.stringify(queued.slice().reverse()) && P.queuedUpdates().length===0
+wait both('abXcd')
+expect clean() && sel(1,4)
+eval window.projection=S.read().app;window.left=S.leave();true
+expect left.ok && S.read().peer===null && F.state().docId!==projection.docId
+expect JSON.stringify({...F.state(),docId:projection.docId})===JSON.stringify(projection)
+eval F.openFile(new File([JSON.stringify({schema:2,title:'Native T01 duplicate',paragraphsDecided:true,rows:[{id:'r1',audioText:'abcd',visualText:'Look'},{id:'r2',audioText:'ef',visualText:'Wide'}],comments:[]})],'native-t01.splitpage'))
+wait F.state().title==='Native T01 duplicate'
+eval if(!W.on())document.getElementById('btn-write').click();true
+wait W.on()
+eval S.enter()
+eval window.base=S.read().app;at(1,3);P.hold('updates');true
+expect both('abcd') && sel(1,3)
+key Backspace
+expect copy('app','abcd') && copy('peer','abcd') && paint('ad') && sel(1)
+wait copy('app','ad') && copy('peer','abcd') && paint('ad') && sel(1)
+eval window.peerWrite=P.type('r1',2,'X');true
+expect peerWrite.kind==='written' && copy('peer','abXcd')
+eval window.queued=P.queuedUpdates();true
+expect queued.map(p=>p.to).join(',')==='peer,app' && queued.every(p=>p.bytes.length>0)
+eval window.replayed=P.release('duplicate');true
+expect JSON.stringify(replayed)===JSON.stringify(queued.flatMap(p=>[p,p])) && P.queuedUpdates().length===0
+wait both('aXd')
+expect clean() && sel(1)
+eval P.hold('updates');true
+key ctrl KeyZ
+eval window.queued=P.queuedUpdates();true
+expect queued.map(p=>p.to).join(',')==='peer' && queued.every(p=>p.bytes.length>0)
+eval window.replayed=P.release('duplicate');true
+expect JSON.stringify(replayed)===JSON.stringify(queued.flatMap(p=>[p,p])) && P.queuedUpdates().length===0
+wait both('abXcd')
+expect clean() && sel(1,4)
+eval window.projection=S.read().app;window.left=S.leave();true
+expect left.ok && S.read().peer===null && F.state().docId!==projection.docId
+expect JSON.stringify({...F.state(),docId:projection.docId})===JSON.stringify(projection)
+eval F.openFile(new File([JSON.stringify({schema:2,title:'Native T01 IME forward',paragraphsDecided:true,rows:[{id:'r1',audioText:'abcd',visualText:'Look'},{id:'r2',audioText:'ef',visualText:'Wide'}],comments:[]})],'native-t01.splitpage'))
+wait F.state().title==='Native T01 IME forward'
+eval if(!W.on())document.getElementById('btn-write').click();true
+wait W.on()
+eval S.enter()
+eval window.base=S.read().app;at(1,3);P.hold('updates');true
+expect both('abcd') && sel(1,3)
+ime set β
+expect copy('app','abcd') && copy('peer','abcd') && paint('aβd')
+eval window.peerWrite=P.type('r1',2,'X');true
+expect peerWrite.kind==='written' && copy('peer','abXcd')
+eval P.deliver();true
+expect copy('app','abcd') && copy('peer','abXcd') && paint('aβd')
+eval P.hold('updates');true
+ime commit β
+eval P.deliver();true
+wait both('aβd')
+expect clean() && sel(2)
+eval P.hold('updates');true
+key ctrl KeyZ
+eval P.deliver();true
+wait both('abXcd')
+expect clean() && sel(1,4)
+eval window.projection=S.read().app;window.left=S.leave();true
+expect left.ok && S.read().peer===null && F.state().docId!==projection.docId
+expect JSON.stringify({...F.state(),docId:projection.docId})===JSON.stringify(projection)
+eval F.openFile(new File([JSON.stringify({schema:2,title:'Native T01 IME duplicate',paragraphsDecided:true,rows:[{id:'r1',audioText:'abcd',visualText:'Look'},{id:'r2',audioText:'ef',visualText:'Wide'}],comments:[]})],'native-t01.splitpage'))
+wait F.state().title==='Native T01 IME duplicate'
+eval if(!W.on())document.getElementById('btn-write').click();true
+wait W.on()
+eval S.enter()
+eval window.base=S.read().app;at(1,3);P.hold('updates');true
+expect both('abcd') && sel(1,3)
+ime set β
+expect copy('app','abcd') && copy('peer','abcd') && paint('aβd')
+eval window.peerWrite=P.type('r1',2,'X');true
+expect peerWrite.kind==='written' && copy('peer','abXcd')
+eval window.queued=P.queuedUpdates();true
+expect queued.map(p=>p.to).join(',')==='app' && queued.every(p=>p.bytes.length>0)
+eval window.replayed=P.release('duplicate');true
+expect JSON.stringify(replayed)===JSON.stringify(queued.flatMap(p=>[p,p])) && P.queuedUpdates().length===0
+expect copy('app','abcd') && copy('peer','abXcd') && paint('aβd')
+eval P.hold('updates');true
+ime commit β
+eval window.queued=P.queuedUpdates();true
+expect queued.map(p=>p.to).join(',')==='peer' && queued.every(p=>p.bytes.length>0)
+eval window.replayed=P.release('duplicate');true
+expect JSON.stringify(replayed)===JSON.stringify(queued.flatMap(p=>[p,p])) && P.queuedUpdates().length===0
+wait both('aβd')
+expect clean() && sel(2)
+eval P.hold('updates');true
+key ctrl KeyZ
+eval window.queued=P.queuedUpdates();true
+expect queued.map(p=>p.to).join(',')==='peer' && queued.every(p=>p.bytes.length>0)
+eval window.replayed=P.release('duplicate');true
+expect JSON.stringify(replayed)===JSON.stringify(queued.flatMap(p=>[p,p])) && P.queuedUpdates().length===0
+wait both('abXcd')
+expect clean() && sel(1,4)
+eval window.projection=S.read().app;window.left=S.leave();true
+expect left.ok && S.read().peer===null && F.state().docId!==projection.docId
+expect JSON.stringify({...F.state(),docId:projection.docId})===JSON.stringify(projection)
