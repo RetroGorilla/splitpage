@@ -28,3 +28,40 @@ key ctrl KeyY
 wait both('Hlo')
 expect caret(1)
 eval S.leave()
+click #wr-close
+eval window.loadText=(title,audioText)=>F.openFile(new File([JSON.stringify({schema:2,title,paragraphsDecided:true,rows:[{id:'r1',audioText}]})],'native-deletion-runs.splitpage'));loadText('Formatted deletion run','<strong>ab</strong><em>cd</em>efg')
+wait F.state().title === 'Formatted deletion run'
+eval S.enter({backend:'native'})
+eval window.splitBlurs=0;window.addEventListener('focusout',event=>{if(event.target.matches('#rows .cell-editable[data-id="r1"][data-field="audioText"]'))splitBlurs++},true);cell().focus();getSelection().collapse(cell().lastChild,2);true
+key Backspace
+key Backspace
+key Backspace
+key Backspace
+key Backspace
+wait both('<strong>a</strong>g')
+expect splitBlurs > 0
+key ctrl KeyZ
+wait both('<strong>ab</strong><em>cd</em>efg')
+expect document.activeElement === cell() && getSelection().isCollapsed && getSelection().focusNode === cell().lastChild && getSelection().focusOffset === 2
+key ctrl KeyY
+wait both('<strong>a</strong>g')
+eval S.leave()
+eval loadText('Peer deletion run','abcdef')
+wait F.state().title === 'Peer deletion run'
+eval S.enter({backend:'native'})
+eval cell().focus();getSelection().collapse(cell().firstChild,3);true
+key Backspace
+wait both('abdef')
+eval splitBlurs=0;true
+eval S.nativePeer.type('r1',0,'Y')
+wait both('Yabdef') && cell().textContent === 'Yabdef'
+expect splitBlurs > 0
+key Backspace
+wait both('Yadef')
+key ctrl KeyZ
+wait both('Yabcdef')
+expect document.activeElement === cell() && getSelection().isCollapsed && getSelection().focusOffset === 4
+key ctrl KeyY
+wait both('Yadef')
+expect document.activeElement === cell() && getSelection().isCollapsed && getSelection().focusOffset === 2
+eval S.leave()
