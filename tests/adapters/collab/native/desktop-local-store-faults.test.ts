@@ -17,9 +17,10 @@ function commands(t: TestContext) {
   typeAt(session, 0, "A");
   const throughA = session.encodeState();
   typeAt(session, 1, "B");
-  const [a, b] = frames;
-  assert.ok(a && b);
-  return { initial, a, b, throughA };
+  typeAt(session, 2, "C");
+  const [a, b, c] = frames;
+  assert.ok(a && b && c);
+  return { initial, a, b, c, throughA };
 }
 
 async function claim(invoke: NativeReplicaInvoke, name: string) {
@@ -121,30 +122,49 @@ for (const file of ["checkpoint.new", "updates.new"]) {
   }
 }
 
-if (process.platform !== "win32") {
-  for (const file of ["checkpoint.new", "updates.new"]) {
-    test(`a failed directory flush after ${file} rename preserves acknowledged edits`, async t => {
-      const fixture = await desktopFixture(t), updates = commands(t), name = "directory-sync";
-      const writer = await claim(fixture.first.invoke, name);
-      assert.deepEqual(await writer.write(1, updates.initial, true), STORED);
-      assert.deepEqual(await writer.write(2, updates.a), STORED);
-      assert.deepEqual(await writer.write(3, updates.b), STORED);
-      let reached = false;
-      fixture.intercept(`${file}:rename`, async perform => {
-        await perform();
-        const directory = createHash("sha256").update(name).digest("hex");
-        fixture.intercept(`${directory}:sync`, async () => {
-          reached = true;
-          throw new Error("injected directory sync failure");
-        });
+for (const file of ["checkpoint.new", "updates.new"]) {
+  test(`a failed directory flush after ${file} rename preserves acknowledged edits`, async t => {
+    const fixture = await desktopFixture(t), updates = commands(t), name = "directory-sync";
+    const writer = await claim(fixture.first.invoke, name);
+    assert.deepEqual(await writer.write(1, updates.initial, true), STORED);
+    assert.deepEqual(await writer.write(2, updates.a), STORED);
+    assert.deepEqual(await writer.write(3, updates.b), STORED);
+    let reached = false;
+    fixture.intercept(`${file}:rename`, async perform => {
+      await perform();
+      const directory = createHash("sha256").update(name).digest("hex");
+      fixture.intercept(`${directory}:dir-sync`, async () => {
+        reached = true;
+        throw new Error("injected directory sync failure");
       });
-      assert.deepEqual(await writer.write(2, updates.throughA, true), { kind: "failed", reason: "io" });
-      assert.equal(reached, true);
-      assert.deepEqual(await writer.close(), STORED);
-      await expectCopy(fixture, name, 3, "ABstart");
     });
-  }
+    assert.deepEqual(await writer.write(2, updates.throughA, true), { kind: "failed", reason: "io" });
+    assert.equal(reached, true);
+    assert.deepEqual(await writer.close(), STORED);
+    await expectCopy(fixture, name, 3, "ABstart");
+  });
 }
+
+test("an append waits for a failed rotation directory sync even when the rotated log has a tail", async t => {
+  const fixture = await desktopFixture(t), updates = commands(t), name = "rotation-retry";
+  const writer = await claim(fixture.first.invoke, name);
+  assert.deepEqual(await writer.write(1, updates.initial, true), STORED);
+  assert.deepEqual(await writer.write(2, updates.a), STORED);
+  assert.deepEqual(await writer.write(3, updates.b), STORED);
+  const sync = createHash("sha256").update(name).digest("hex") + ":dir-sync";
+  const fail = async () => { throw new Error("injected directory sync failure"); };
+  fixture.intercept("updates.new:rename", async perform => {
+    await perform();
+    fixture.intercept(sync, fail);
+  });
+  const failure = { kind: "failed", reason: "io" };
+  assert.deepEqual(await writer.write(2, updates.throughA, true), failure);
+  fixture.intercept(sync, fail);
+  assert.deepEqual(await writer.write(4, updates.c), failure);
+  assert.deepEqual(await writer.write(4, updates.c), STORED);
+  assert.deepEqual(await writer.close(), STORED);
+  await expectCopy(fixture, name, 4, "ABCstart");
+});
 
 for (const form of ["short header", "short payload"] as const) {
   test(`a torn tail with a ${form} is discarded and the next append survives`, async t => {

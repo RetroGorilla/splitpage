@@ -58,7 +58,12 @@ export async function desktopFixture(t: TestContext, durableAppends = true) {
       });
       return handle;
     },
-    rename: (from, to) => step(`${basename(String(from))}:rename`, () => disk.rename(from, to))
+    rename: (from, to) => step(`${basename(String(from))}:rename`, () => disk.rename(from, to)),
+    syncDirectory: dir => step(`${basename(dir)}:dir-sync`, async () => {
+      if (process.platform === "win32") return;
+      const handle = await disk.open(dir, "r");
+      try { await handle.sync(); } finally { await handle.close(); }
+    })
   };
   const main = replicasAt(directory, fileSystem);
   const first = main.window(), second = main.window();

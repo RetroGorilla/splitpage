@@ -11,7 +11,9 @@ const { createHash }: typeof NodeCrypto = require("node:crypto");
 const { join }: typeof NodePath = require("node:path");
 const { crc32 }: typeof NodeZlib = require("node:zlib");
 
-type NativeReplicaFileSystem = Pick<typeof fs, "mkdir" | "open" | "readFile" | "rename" | "rm">;
+type NativeReplicaFileSystem = Pick<typeof fs, "mkdir" | "open" | "readFile" | "rename" | "rm"> & {
+  readonly syncDirectory: (dir: string) => Promise<void>;
+};
 const MAX_REPLICA_UPDATE_BYTES = 32_000_000;
 const HEADER_FIELDS_BYTES = 12;
 const HEADER_BYTES = 20;
@@ -56,16 +58,18 @@ async function useFile<T>(handle: NodeFs.FileHandle, run: () => Promise<T>): Pro
   finally { await handle.close(); }
 }
 
-function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSystem = fs) {
+async function syncDirectory(dir: string): Promise<void> {
+  // why: Windows does not support opening a directory with Node's file-open flags
+  if (process.platform === "win32") return;
+  const handle = await fs.open(dir, "r");
+  await useFile(handle, () => handle.sync());
+}
+
+const systemDisk: NativeReplicaFileSystem = { ...fs, syncDirectory };
+
+function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSystem = systemDisk) {
   const root = join(userData, "native-replicas");
   const directory = (name: string) => join(root, createHash("sha256").update(name).digest("hex"));
-
-  async function syncDirectory(dir: string): Promise<void> {
-    // why: Windows does not support opening a directory with Node's file-open flags
-    if (process.platform === "win32") return;
-    const handle = await disk.open(dir, "r");
-    await useFile(handle, () => handle.sync());
-  }
 
   async function read(file: string): Promise<Buffer | null> {
     try { return await disk.readFile(file); }
@@ -108,12 +112,13 @@ function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSyste
     }
     let repair = length !== contents.length;
     let initialized = false;
+    let logEntryNeedsSync = true;
 
     async function initialize(): Promise<void> {
       if (initialized) return;
       await disk.mkdir(dir, { recursive: true });
-      await syncDirectory(userData);
-      await syncDirectory(root);
+      await disk.syncDirectory(userData);
+      await disk.syncDirectory(root);
       initialized = true;
     }
 
@@ -127,6 +132,12 @@ function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSyste
       repair = false;
     }
 
+    async function syncLogEntry(): Promise<void> {
+      if (!logEntryNeedsSync) return;
+      await disk.syncDirectory(dir);
+      logEntryNeedsSync = false;
+    }
+
     if (repair) await repairLog();
 
     async function append(entry: NativeReplicaEntry): Promise<void> {
@@ -138,7 +149,7 @@ function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSyste
         await useFile(handle, async () => {
           await handle.writeFile(record);
           await handle.sync();
-          if (length === 0) await syncDirectory(dir);
+          await syncLogEntry();
         });
       } catch (error) {
         await repairLog().catch(() => {});
@@ -152,14 +163,15 @@ function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSyste
     async function compact(entry: NativeReplicaEntry): Promise<void> {
       // why: the original log must cover the checkpoint until its rename is durable
       await replace(snapshot, pack(entry));
-      await syncDirectory(dir);
+      await disk.syncDirectory(dir);
       checkpoint = entry;
       tail = tail.filter(item => item.generation > entry.generation);
       const keep = Buffer.concat(tail.map(pack));
       await replace(log, keep);
       length = keep.byteLength;
       repair = false;
-      await syncDirectory(dir);
+      logEntryNeedsSync = true;
+      await syncLogEntry();
     }
 
     return {
@@ -184,7 +196,7 @@ function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSyste
     await disk.rm(discarded, { recursive: true, force: true });
     try { await disk.rename(dir, discarded); }
     catch (error) { if (missing(error)) return; throw error; }
-    await syncDirectory(root);
+    await disk.syncDirectory(root);
     await disk.rm(discarded, { recursive: true, force: true });
   }
 
