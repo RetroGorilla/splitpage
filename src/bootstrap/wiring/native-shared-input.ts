@@ -270,6 +270,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     window.addEventListener("mouseup", up);
     return {
       headingCandidate: (beat: string) => headingCandidates.has(beat),
+      settle: () => !draft?.cell.closest("#writer") || !finish(),
       finish: () => { if (!finish(undefined, true, true)) leaveHeadingLine(true); },
       dispose: stop
     };
