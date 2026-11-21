@@ -10,7 +10,7 @@ import { compareNativeRankedIds } from "./rank.ts";
 import { nativeRegistryRowChanged, projectNativeRegistries } from "./registry-projection.ts";
 import type { NativeRegistryRowInputs } from "./registry-projection.ts";
 import type { NativeRoots } from "./roots.ts";
-import { NATIVE_SHOT_PROPS, nativeShotPropEntries } from "./shot-props.ts";
+import { NATIVE_SHOT_PROPS, OBSOLETE_SHOT_PROPS, nativeShotPropEntries } from "./shot-props.ts";
 import {
   NATIVE_BEAT_FIELDS, NATIVE_FIELD_PREFIX, NATIVE_GALLERY_FIELDS, NATIVE_GALLERY_KEY, decodeNativeValue, deepFrozen,
   isNativeBeatExtra, isNativeBeatField, nativeFieldKey, nativeFieldName, nativeGalleryOf, sameNativeValue
@@ -246,7 +246,7 @@ function visibleRecords(root: Y.Map<Y.Map<unknown>>, name: string, problems: Pro
         const map = record.get(NATIVE_SHOT_PROPS);
         const entries = map instanceof Y.Map ? nativeShotPropEntries(map, problems
           ? key => { problems.push({ kind: "bad-value", where: where + "/" + NATIVE_SHOT_PROPS + "/" + key }); } : undefined) : null;
-        if (!entries && record.has(NATIVE_SHOT_PROPS)) problems?.push({ kind: "bad-value", where: where + "/" + NATIVE_SHOT_PROPS });
+        if (problems && (!entries || record.has(OBSOLETE_SHOT_PROPS))) problems.push({ kind: "bad-value", where: where + "/" + NATIVE_SHOT_PROPS });
         return { ...fields, id, props: entries?.filter(entry => !entry.removed).map(entry => entry.prop) ?? [] };
       }
       return { ...fileFields(record, where, problems), id };

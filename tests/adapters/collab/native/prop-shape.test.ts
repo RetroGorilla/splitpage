@@ -215,6 +215,28 @@ test("converted and created shots share an empty map before concurrent first add
   }
 });
 
+test("a whole-list set repairs a reported array prop value without adopting its contents", () => {
+  const initial = initialProps(3), replacement = [{ id: "t_rope", name: "Rope" }];
+  for (const field of [nativeFieldKey("props"), NATIVE_SHOT_PROPS]) registryCopies((left, right, settle) => {
+    for (const copy of [left, right]) {
+      assert.deepEqual(read(copy), []);
+      assert.deepEqual(copy.reader.problems(), [{ kind: "bad-value", where: "shots/shot/props" }]);
+    }
+    write(left, { kind: "set", collection: "shots", ids: ["shot"], fields: { props: replacement } });
+    settle();
+    for (const copy of [left, right]) {
+      assert.deepEqual(read(copy), replacement);
+      assert.deepEqual(copy.reader.problems(), []);
+      assert.deepEqual([...propsOf(copy).keys()], ["t_rope"]);
+    }
+  }, seed => {
+    const shot = seed.roots.shots.get("shot");
+    assert.ok(shot);
+    shot.delete(NATIVE_SHOT_PROPS);
+    shot.set(field, field === NATIVE_SHOT_PROPS ? initial : encodeNativeValue(initial));
+  }, source(initial));
+});
+
 test("damaged prop entries are reported individually and can be replaced or removed on a peer", () => {
   const initial = initialProps(3), broken = initial[1];
   assert.ok(broken);

@@ -3,9 +3,10 @@ import { BROLL_PROPS_MAX, brollPropKey } from "../../../core/document/broll.ts";
 import type { BrollProp } from "../../../core/document/broll.ts";
 import { isTagId, normalizeTagName } from "../../../core/document/tags.ts";
 import { compareNativeRankedIds, isValidNativeRank, nativeRankBetween } from "./rank.ts";
-import { decodeNativeValue, encodeNativeValue } from "./values.ts";
+import { decodeNativeValue, encodeNativeValue, nativeFieldKey } from "./values.ts";
 
 export const NATIVE_SHOT_PROPS = "props";
+export const OBSOLETE_SHOT_PROPS = nativeFieldKey(NATIVE_SHOT_PROPS);
 
 export interface NativeShotPropEntry {
   readonly key: string;

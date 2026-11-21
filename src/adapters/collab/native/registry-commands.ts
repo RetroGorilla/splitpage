@@ -12,7 +12,7 @@ import { nativeShotLinePlan, nativeTagNamesInRows } from "./registry-projection.
 import { transactPreparedNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { prepareNativeShotProps } from "./shot-prop-commands.ts";
-import { NATIVE_SHOT_PROPS, newNativeShotProps } from "./shot-props.ts";
+import { NATIVE_SHOT_PROPS, OBSOLETE_SHOT_PROPS, newNativeShotProps } from "./shot-props.ts";
 import { nativeWriteAvailability } from "./text-commands.ts";
 import { decodeNativeValue, encodeNativeValue, mintNativeId, mintNativeTagId, nativeFieldKey, recordBag, sameNativeValue } from "./values.ts";
 
@@ -240,8 +240,10 @@ function set(script: NativeScript, collection: Collection, ids: readonly string[
     if (!planFields(writes, map, cycle ? { status: nextTagStatus(before) } : ordinary)) return refuseRecord("stored");
     if (props !== undefined) {
       const list = prepareNativeShotProps(map, document.productionTags);
-      if (!list) return refuseRecord("stored");
-      list.replace(writes, props as BrollProp[]);
+      const requested = props as BrollProp[];
+      if (list) list.replace(writes, requested);
+      else writes.push(() => { map.set(NATIVE_SHOT_PROPS, newNativeShotProps(requested)); });
+      if (map.has(OBSOLETE_SHOT_PROPS)) writes.push(() => { map.delete(OBSOLETE_SHOT_PROPS); });
     }
   }
   return finish(writes);
