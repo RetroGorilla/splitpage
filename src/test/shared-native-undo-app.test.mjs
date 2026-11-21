@@ -409,6 +409,22 @@ for (const [name, kind] of Object.entries(views)) {
     assert.equal(show.mock.callCount(), 3);
   });
 
+  test(name + ": recognised structure keys cancel the browser default during composition", async t => {
+    const show = await enter(t, twoBeats), view = kind.open(t);
+    kind.caret(view, "r1", 5);
+    assert.equal(compose(kind.surface(), "start", ""), false);
+    const before = hook.read();
+    for (const signal of [{ isComposing: true }, { keyCode: 229 }]) {
+      assert.equal(press(kind.surface(), "Enter", { ctrlKey: false, ...signal }), true);
+      assert.equal(press(kind.surface(), "Delete", { ctrlKey: false, ...signal }), true);
+      assert.equal(press(kind.surface(), "ArrowDown", { altKey: true, ctrlKey: false, ...signal }), true);
+    }
+    assert.deepEqual(hook.read(), before);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), Array.from({ length: 6 }, () => UNAVAILABLE));
+    compose(kind.surface(), "end", "X");
+    assert.equal(app(), "HelloX");
+  });
+
   test(name + ": Enter refuses stale narration and leaves the peer edit intact", async t => {
     const show = await enter(t), view = kind.open(t);
     kind.caret(view, "r1", 2);

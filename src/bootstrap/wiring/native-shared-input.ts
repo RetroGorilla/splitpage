@@ -577,9 +577,9 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         event.stopImmediatePropagation();
         return;
       }
-      if ((narration || heading) && (draft?.composing || key.isComposing || key.keyCode === 229)) {
+      if ((narration || heading || cell?.id === "writer-doc") && (draft?.composing || key.isComposing || key.keyCode === 229)) {
         event.stopImmediatePropagation();
-        if (undoGesture(key) || (splitKey(key) || joining || removeHeading || moveDirection(key)) && !key.isComposing && key.keyCode !== 229) {
+        if (undoGesture(key) || splitKey(key) || joining || removeHeading || moveDirection(key)) {
           event.preventDefault();
           if (!stopped) session.refuse(PENDING);
         }
