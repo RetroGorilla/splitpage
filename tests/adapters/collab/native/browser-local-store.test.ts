@@ -6,6 +6,8 @@ import type { IDBFactory } from "fake-indexeddb";
 import * as Y from "yjs";
 import { createBrowserNativeLocalStore } from "../../../../src/adapters/collab/native/browser-local-store.ts";
 import type { NativeLocalStore, NativeLocalStoreReceipt } from "../../../../src/adapters/collab/native/local-store.ts";
+import { applyNativePeerUpdate } from "../../../../src/adapters/collab/native/peer-update.ts";
+import { openNativeSession } from "../../../../src/adapters/collab/native/session.ts";
 import { eventResult, failNextIdbWrite, idbDone, idbResult } from "./indexeddb-fixture.ts";
 import { DB_NAME, REPLICAS, STORED, STORE_OPTIONS, fixture, seedReplica, stored, storedBytes, storedEntries, typeAt, type OpenReplica } from "./local-store-fixture.ts";
 
@@ -232,6 +234,39 @@ test("failed session close checkpoints a private copy of the terminal bytes even
   assert.deepEqual(entries.map(entry => [entry.generation, entry.checkpoint, entry.bytes]), [[2, true, bytes]]);
   const reopened = await open(t, store, "failed-session");
   assert.equal(reopened.session.document().rows[0]?.audioText, "kept start");
+});
+
+test("a recovery checkpoint reopens with the local edit and a peer update waiting for its prerequisite", bounded, async t => {
+  const { factory, store } = fixture(), replica = await open(t, store, "waiting-peer"), { session } = replica;
+  const initial = "start", local = "local ", prerequisite = "?", later = "!";
+  seedReplica(session, { A: initial });
+  assert.deepEqual(await replica.flush(), stored(1));
+
+  const peer = openNativeSession({ kind: "state", state: session.encodeState() }, STORE_OPTIONS);
+  t.after(peer.close);
+  const base = Y.encodeStateVector(peer.ydoc);
+  typeAt(peer, initial.length, prerequisite);
+  const missing = Y.encodeStateAsUpdate(peer.ydoc, base);
+  const afterMissing = Y.encodeStateVector(peer.ydoc);
+  typeAt(peer, initial.length + prerequisite.length, later);
+  const waiting = Y.encodeStateAsUpdate(peer.ydoc, afterMissing);
+  assert.equal(applyNativePeerUpdate(session, waiting), true);
+  assert.equal(session.document().rows[0]?.audioText, initial);
+
+  const fault = new Error("interrupted Yjs cleanup");
+  session.ydoc.once("afterTransactionCleanup", () => { throw fault; });
+  assert.throws(() => typeAt(session, 0, local), fault);
+  const receipt = await replica.closed;
+  assert.deepEqual(receipt, { ...stored(2), state: receipt.state });
+  assert.deepEqual((await storedEntries(factory, "waiting-peer")).map(entry => [entry.generation, entry.checkpoint, entry.bytes]),
+    [[2, true, receipt.state]]);
+
+  const reopened = await open(t, store, "waiting-peer");
+  assert.equal(reopened.restored, true);
+  assert.equal(reopened.session.document().rows[0]?.audioText, local + initial);
+  assert.equal(applyNativePeerUpdate(reopened.session, missing), true);
+  assert.equal(reopened.session.document().rows[0]?.audioText, local + initial + prerequisite + later);
+  assert.deepEqual(await reopened.flush(), stored(3));
 });
 
 test("checkpoint and range delete commit atomically, and only one compaction can be scheduled", bounded, async t => {
