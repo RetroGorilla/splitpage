@@ -8,6 +8,7 @@ import { paintRowTimes } from "../../features/rows/render.ts";
 import { keepNativeFieldPaint, mountNativeSharedInput } from "./native-shared-input.ts";
 import { createNativeEditorRecords } from "./native-shared-records.ts";
 import { mountNativeRecordEvents } from "./native-shared-record-events.ts";
+import { nativeUndoRoute } from "./native-shared-undo.ts";
 import { notices } from "./ports/effects.ts";
 import { currentRowsRender } from "./render.ts";
 import type { SharedEditorBackend, SharedSwitchPorts } from "./shared-session.ts";
@@ -98,11 +99,10 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
     const recovered = openNativeSession({ kind: "state", state: terminal }, options);
     try { return enterSharedDocument(recovered.document()); } finally { recovered.close(); }
   };
-  const unavailable = () => ({ ok: false, reason: UNSUPPORTED, skipped: true } as const);
   const backend: SharedEditorBackend = {
     replica: publication.replica, parts: null, unsupportedCommands: UNSUPPORTED,
     nativeRecords: records,
-    undo: () => ({ actions: { undo: unavailable, redo: unavailable }, breakGroup: () => {}, replayed: () => null }),
+    undo: admission => nativeUndoRoute({ native, admission, input: () => input, publish: () => { publish(); } }),
     bind: session => {
       commandSession = session;
       if (!stopRecords) {
@@ -113,7 +113,7 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
         stopRecords = () => { stopEvents(); stopTimes(); };
       }
       input ??= mountNativeSharedInput({
-        native, session, editAttribution: () => ({ at: new Date(ports.now()).toISOString(), by: actor }), report: ports.report, publish
+        native, session, editAttribution: () => ({ at: new Date(ports.now()).toISOString(), by: actor }), now: ports.now, report: ports.report, publish
       });
     },
     unbind: () => {
