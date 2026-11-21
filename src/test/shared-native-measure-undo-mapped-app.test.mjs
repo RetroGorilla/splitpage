@@ -1,6 +1,5 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
-import { setTimeout as delay } from "node:timers/promises";
 import { encodeStateAsUpdate, encodeStateVector } from "yjs";
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import { adoptReplacement, currentDocument, onSessionChange, sharedSession } from "../bootstrap/wiring/session-owner.ts";
@@ -618,8 +617,8 @@ for (const view of ["Split", "Writer"]) {
     setCellSelection(target, 0);
     for (const letter of "B-roll: ") assert.equal(input(target, "insertText", letter), true);
     assert.equal(target.textContent, "B-roll: Close up");
-    await delay(65);
     assert.equal(hook.read().app.rows[0].visualText, "B-roll: Close up");
+    await Promise.resolve();
     assert.equal(hook.read().peer.rows[0].visualText, "B-roll: Close up");
     if (view === "Writer") {
       press(target, "Escape");
