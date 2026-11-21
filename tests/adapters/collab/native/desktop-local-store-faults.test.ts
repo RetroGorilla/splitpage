@@ -146,7 +146,7 @@ if (process.platform !== "win32") {
   }
 }
 
-for (const form of ["short header", "short payload", "bad checksum"] as const) {
+for (const form of ["short header", "short payload"] as const) {
   test(`a torn tail with a ${form} is discarded and the next append survives`, async t => {
     const fixture = await desktopFixture(t), updates = commands(t), name = "torn";
     const file = logAt(fixture.directory, name);
@@ -159,8 +159,7 @@ for (const form of ["short header", "short payload", "bad checksum"] as const) {
     const log = await readFile(file);
     const last = log.subarray(prefix.byteLength);
     assert.ok(last.length > updates.b.length);
-    if (form === "bad checksum") last[last.length - 1] = (last.at(-1) ?? 0) ^ 1;
-    const torn = form === "short header" ? last.subarray(0, 3) : form === "short payload" ? last.subarray(0, last.length - 1) : last;
+    const torn = form === "short header" ? last.subarray(0, 3) : last.subarray(0, last.length - 1);
     await writeFile(file, Buffer.concat([prefix, torn]));
     const reopened = await fixture.restart().store.open(name, STORE_OPTIONS);
     assert.equal(reopened.kind, "opened");
@@ -175,14 +174,25 @@ for (const form of ["short header", "short payload", "bad checksum"] as const) {
   });
 }
 
-test("a checksum failure before the last record refuses the replica", async t => {
-  const fixture = await desktopFixture(t), updates = commands(t), name = "damaged";
-  const writer = await claim(fixture.first.invoke, name);
-  assert.deepEqual(await writer.write(1, updates.initial), STORED);
-  assert.deepEqual(await writer.write(2, updates.a), STORED);
-  assert.deepEqual(await writer.close(), STORED);
-  const file = logAt(fixture.directory, name), log = await readFile(file);
-  log[20] = (log[20] ?? 0) ^ 1;
-  await writeFile(file, log);
-  assert.deepEqual(await fixture.restart().store.open(name, STORE_OPTIONS), { kind: "failed", reason: "io" });
-});
+for (const fault of ["middle length", "middle payload", "final payload"] as const) {
+  test(`a corrupt ${fault} refuses open and preserves every record on disk`, async t => {
+    const fixture = await desktopFixture(t), updates = commands(t), name = "damaged";
+    const file = logAt(fixture.directory, name);
+    const writer = await claim(fixture.first.invoke, name);
+    assert.deepEqual(await writer.write(1, updates.initial), STORED);
+    const first = await readFile(file);
+    assert.deepEqual(await writer.write(2, updates.a), STORED);
+    const second = await readFile(file);
+    assert.deepEqual(await writer.write(3, updates.b), STORED);
+    assert.deepEqual(await writer.close(), STORED);
+    const intact = await readFile(file), damaged = Buffer.from(intact);
+    const offset = fault === "middle length" ? first.length + 3 : fault === "middle payload" ? second.length - 1 : intact.length - 1;
+    damaged.writeUInt8(damaged.readUInt8(offset) ^ 1, offset);
+    await writeFile(file, damaged);
+    try {
+      assert.deepEqual(await fixture.restart().store.open(name, STORE_OPTIONS), { kind: "failed", reason: "io" });
+      assert.deepEqual(await readFile(file), damaged);
+    } finally { await writeFile(file, intact); }
+    await expectCopy(fixture, name, 3, "ABstart");
+  });
+}

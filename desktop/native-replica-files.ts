@@ -13,37 +13,38 @@ const { crc32 }: typeof NodeZlib = require("node:zlib");
 
 type NativeReplicaFileSystem = Pick<typeof fs, "mkdir" | "open" | "readFile" | "rename" | "rm">;
 const MAX_REPLICA_UPDATE_BYTES = 32_000_000;
-const HEADER_BYTES = 16;
+const HEADER_FIELDS_BYTES = 12;
+const HEADER_BYTES = 20;
 const EMPTY = Buffer.alloc(0);
-
-function checksum(record: Buffer): number {
-  return crc32(record.subarray(HEADER_BYTES), crc32(record.subarray(0, 12)));
-}
 
 function pack({ generation, bytes }: NativeReplicaEntry): Buffer {
   const record = Buffer.allocUnsafe(HEADER_BYTES + bytes.byteLength);
   record.writeUInt32LE(bytes.byteLength, 0);
   record.writeBigUInt64LE(BigInt(generation), 4);
+  record.writeUInt32LE(crc32(record.subarray(0, HEADER_FIELDS_BYTES)), HEADER_FIELDS_BYTES);
+  record.writeUInt32LE(crc32(bytes), HEADER_FIELDS_BYTES + 4);
   record.set(bytes, HEADER_BYTES);
-  record.writeUInt32LE(checksum(record), 12);
   return record;
 }
 
 function unpack(file: Buffer, offset: number, checkpoint: boolean): NativeReplicaEntry | undefined {
   if (file.length - offset < HEADER_BYTES) return;
-  const length = file.readUInt32LE(offset);
-  const end = offset + HEADER_BYTES + length;
-  if (end > file.length) return;
-  const record = file.subarray(offset, end);
-  if (checksum(record) !== record.readUInt32LE(12)) {
-    if (end === file.length) return;
-    throw new Error("Invalid native replica record checksum");
+  const header = file.subarray(offset, offset + HEADER_BYTES);
+  if (crc32(header.subarray(0, HEADER_FIELDS_BYTES)) !== header.readUInt32LE(HEADER_FIELDS_BYTES)) {
+    throw new Error("Invalid native replica record header checksum");
   }
-  const generation = Number(record.readBigUInt64LE(4));
+  const length = header.readUInt32LE(0);
+  const generation = Number(header.readBigUInt64LE(4));
   if (!Number.isSafeInteger(generation) || generation < 1 || length < 1 || length > MAX_REPLICA_UPDATE_BYTES) {
     throw new Error("Invalid native replica record");
   }
-  return { generation, checkpoint, bytes: new Uint8Array(record.subarray(HEADER_BYTES)) };
+  const end = offset + HEADER_BYTES + length;
+  if (end > file.length) return;
+  const payload = file.subarray(offset + HEADER_BYTES, end);
+  if (crc32(payload) !== header.readUInt32LE(HEADER_FIELDS_BYTES + 4)) {
+    throw new Error("Invalid native replica record payload checksum");
+  }
+  return { generation, checkpoint, bytes: new Uint8Array(payload) };
 }
 
 function missing(error: unknown): boolean {
