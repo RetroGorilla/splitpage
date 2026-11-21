@@ -21,11 +21,12 @@ export function copyNativeDenseList(input: unknown): unknown[] {
   return result;
 }
 
-export function copyNativeCompoundInput(value: unknown): unknown {
+export function copyNativeCompoundInput(value: unknown, retain?: (input: object) => boolean): unknown {
   const copies = new WeakMap<object, object>();
   function copy(input: unknown): unknown {
     if (input === undefined || typeof input === "function") throw new TypeError("Invalid command field");
     if (input === null || typeof input !== "object") return input;
+    if (retain?.(input)) return input;
     const known = copies.get(input);
     if (known) return known;
     if (Array.isArray(input)) {

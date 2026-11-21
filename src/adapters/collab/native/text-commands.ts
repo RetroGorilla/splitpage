@@ -1,7 +1,7 @@
 import * as Y from "yjs";
 import { OBJ } from "../../../core/text/runs.ts";
 import type { Marks, Run } from "../../../core/text/runs.ts";
-import { copyNativeDenseList } from "./compound-input.ts";
+import { copyNativeCompoundInput, copyNativeDenseList } from "./compound-input.ts";
 import { nativeCellView, nativeLeftAt, nativeStoredOffset, prepareNativeRuns, writeNativeRuns } from "./inline.ts";
 import type { NativeCellView, NativeDeltaItem } from "./inline.ts";
 import { nativeSegmentSpans } from "./reader.ts";
@@ -354,10 +354,16 @@ function snapshotUndoRange(script: NativeScript, range: NativeTextRange): Native
   return { anchor, head: first === last ? anchor : { target, position: last } };
 }
 
-export function snapshotNativeUndoAnchor(script: NativeScript, input: NativeUndoSelectionInput): NativeUndoAnchor | null {
+export function snapshotNativeUndoAnchor(script: NativeScript, input: NativeUndoSelectionInput, strict = false): NativeUndoAnchor | null {
   try {
-    if (!("anchor" in input)) return snapshotUndoRange(script, input);
-    const anchor = snapshotUndoRange(script, input.anchor), head = snapshotUndoRange(script, input.head);
+    const authored = strict ? authoredRanges.get(script.doc) : undefined;
+    // why: a locally authored anchor can follow surviving letters out of the beat named in its original range
+    const selection = strict
+      ? copyNativeCompoundInput(input, range => authored?.has(range as NativeTextRange) ?? false) as NativeUndoSelectionInput | undefined
+      : input;
+    if (!selection) return null;
+    if (!("anchor" in selection)) return snapshotUndoRange(script, selection);
+    const anchor = snapshotUndoRange(script, selection.anchor), head = snapshotUndoRange(script, selection.head);
     if (!anchor || !head || anchor.anchor !== anchor.head || head.anchor !== head.head) return null;
     return { anchor: anchor.anchor, head: head.head };
   } catch { return null; }

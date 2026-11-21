@@ -1,5 +1,4 @@
 import * as Y from "yjs";
-import { copyNativeCompoundInput } from "./compound-input.ts";
 import { observeNativePress, withNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { nativeAvailability, resolveNativeUndoSelection, snapshotNativeUndoAnchor } from "./text-commands.ts";
@@ -64,9 +63,8 @@ export function openNativeUndo(script: NativeScript) {
     capture = ticket;
     try {
       const result = write(() => {
-        const input = strict ? copyNativeCompoundInput(before) as NativeUndoSelectionInput | null | undefined : before;
-        ticket.before = input ? snapshotNativeUndoAnchor(script, input) : null;
-        return input === null || ticket.before !== null;
+        ticket.before = before ? snapshotNativeUndoAnchor(script, before, strict) : null;
+        return before === null || ticket.before !== null;
       });
       return {
         result,
@@ -74,10 +72,8 @@ export function openNativeUndo(script: NativeScript) {
           if (pending?.capture !== ticket) return;
           const { selection } = pending;
           pending = null;
-          selection.after = after === undefined ? ticket.typedCaret : after && withNativeCommand(script, () => {
-            const input = strict ? copyNativeCompoundInput(after) as NativeUndoSelectionInput | undefined : after;
-            return input ? snapshotNativeUndoAnchor(script, input) : null;
-          });
+          selection.after = after === undefined ? ticket.typedCaret
+            : after && withNativeCommand(script, () => snapshotNativeUndoAnchor(script, after, strict));
         }
       };
     } finally { capture = null; }
