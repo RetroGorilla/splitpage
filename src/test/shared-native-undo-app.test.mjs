@@ -6,7 +6,7 @@ import { adoptReplacement, liveSession, sharedSession } from "../bootstrap/wirin
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { cellSelection, setCellSelection } from "../features/common/cell-selection.ts";
-import { posToDom, readSelection } from "../features/common/cell-dom.ts";
+import { domToPos, posToDom, readSelection } from "../features/common/cell-dom.ts";
 import { openNativeSession } from "../adapters/collab/native/session.ts";
 import { scriptCellOf, sanitizeHtml } from "../bootstrap/richtext.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
@@ -280,21 +280,63 @@ for (const [route, move] of [
   assert.deepEqual(hook.read().peer, hook.read().app);
 });
 
-for (const backend of ["standalone", "native"]) {
-  test("Writer: Alt+Down with a cross-beat selection in " + backend, async t => {
-    let show;
-    if (backend === "native") show = await enter(t, threeBeats());
-    else adoptReplacement(migrateRows({ schema: 2, title: "Standalone script", rows: threeBeats() }));
-    const view = writer(t);
-    const range = { anchor: { kind: "beat", rowId: "r1", offset: 1 }, head: { kind: "beat", rowId: "r2", offset: 2 } };
-    view.flow.place(range);
-    assert.equal(press(root(), "ArrowDown", { altKey: true, ctrlKey: false }), true);
-    assert.deepEqual(rowOrder(), backend === "native" ? ["r1", "r2", "r3"] : ["r1", "r3", "r2"]);
-    assert.deepEqual(view.flow.selection(), range);
-    if (show) {
-      assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+test("Writer: Alt+Down with a cross-beat selection in standalone", t => {
+  adoptReplacement(migrateRows({ schema: 2, title: "Standalone script", rows: threeBeats() }));
+  const view = writer(t);
+  const range = { anchor: { kind: "beat", rowId: "r1", offset: 1 }, head: { kind: "beat", rowId: "r2", offset: 2 } };
+  view.flow.place(range);
+  assert.equal(press(root(), "ArrowDown", { altKey: true, ctrlKey: false }), true);
+  assert.deepEqual(rowOrder(), ["r1", "r3", "r2"]);
+  assert.deepEqual(view.flow.selection(), range);
+});
+
+for (const [key, anchor, head, moved] of [
+  ["ArrowDown", "r1", "r2", ["r1", "r3", "r2"]],
+  ["ArrowUp", "r2", "r1", ["r1", "r3", "r2"]]
+]) {
+  test("Writer: Alt+" + key + " moves the head's beat and replays both ends through peer typing and history", async t => {
+    const rows = threeBeats();
+    if (key === "ArrowUp") rows.unshift(rows.pop());
+    const show = await enter(t, rows), view = writer(t);
+    const original = rows.map(row => row.id);
+    let repaints = 0;
+    t.after(liveSession().subscribe(change => {
+      if (change.changes.rowsMoved) {
+        repaints++;
+        document.getSelection().removeAllRanges();
+      }
+    }));
+    const place = (a, h) => {
+      const from = posToDom(beat(anchor), a), to = posToDom(beat(head), h);
+      document.getSelection().setBaseAndExtent(from.node, from.offset, to.node, to.offset);
+    };
+    const check = async (order, a, h, count) => {
+      assert.deepEqual(rowOrder(), order);
+      assert.equal(repaints, count);
+      assert.equal(document.activeElement, root());
+      const selection = document.getSelection();
+      assert.equal(selection.rangeCount, 1);
+      assert.equal(domToPos(beat(anchor), selection.anchorNode, selection.anchorOffset), a);
+      assert.equal(domToPos(beat(head), selection.focusNode, selection.focusOffset), h);
+      await Promise.resolve();
       assert.deepEqual(hook.read().peer, hook.read().app);
-    }
+    };
+    view.caret(anchor, 1);
+    typeKeys(root(), "X");
+    place(2, 2);
+    assert.equal(hook.nativePeer.type(anchor, 0, "!").kind, "written");
+    assert.equal(hook.nativePeer.type(head, 0, "?").kind, "written");
+    assert.equal(press(root(), key, { altKey: true, ctrlKey: false }), true);
+    await check(moved, 3, 3, 1);
+    assert.equal(hook.nativePeer.type(head, 0, "+").kind, "written");
+    await Promise.resolve();
+    view.caret("r3", 1);
+    assert.equal(press(root(), "z"), true);
+    await check(original, 3, 4, 2);
+    view.caret("r3", 1);
+    assert.equal(press(root(), "y"), true);
+    await check(moved, 3, 4, 3);
+    assert.equal(show.mock.callCount(), 0);
   });
 }
 
