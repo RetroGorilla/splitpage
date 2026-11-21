@@ -1,11 +1,12 @@
 import type { openNativeSession } from "../../adapters/collab/native/session.ts";
 import type { NativeMoveBlock } from "../../adapters/collab/native/move-commands.ts";
 import type { NativeUndoSelectionInput } from "../../adapters/collab/native/text-commands.ts";
-import type { CommandOutcome, DocumentStructureIntent, DocumentView } from "../../application/session/document-session.ts";
+import type { CommandOutcome, DocumentStructureIntent } from "../../application/session/document-session.ts";
 import type { ReportPort } from "../../application/session/ports.ts";
 import { changesBetween } from "../../application/session/projection-changes.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
 import { sceneBeforeBeat, sceneFirstBeatId, scenesInOrder, storedSceneName } from "../../core/document/scenes.ts";
+import type { SceneDocument } from "../../core/document/scenes.ts";
 import { cappedText } from "../../core/document/text-policy.ts";
 import { documentReader } from "./ports/document.ts";
 import { editAllowed } from "./session-owner.ts";
@@ -23,7 +24,7 @@ const UNAVAILABLE = "native-command-unavailable";
 
 type MoveIntent = Extract<DocumentStructureIntent, { kind: "move-beat" | "swap-beats" }>;
 
-function movePlacement(doc: Pick<DocumentView, "rows" | "sections">, intent: MoveIntent) {
+function movePlacement(doc: SceneDocument, intent: MoveIntent) {
   const source = doc.rows.findIndex(row => row.id === intent.id);
   if (source < 0) return null;
   const target = intent.kind === "move-beat" ? intent.target : doc.rows[source + intent.direction]?.id;

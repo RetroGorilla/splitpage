@@ -556,6 +556,9 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const heading = headingAt(cell ?? null);
     const removeHeading = heading && joinDirection(event, heading) === -1;
     const joining = narration && joinDirection(event, narration);
+    const key = event.type === "keydown" ? event as KeyboardEvent : null;
+    const moving = key && moveDirection(key);
+    const splitting = key ? splitKey(key) : event.type === "beforeinput" && event.cancelable && (event as InputEvent).inputType === "insertParagraph";
     if (event.type === "focusout") {
       const buffered = draft;
       if (buffered && cell && (buffered.cell === cell || cell.contains(buffered.cell))) {
@@ -570,8 +573,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (event.type === "click") {
       if (!target?.closest("#rows .mini-toolbar button[data-cmd], #writer .wr-fmt[data-cmd]")) return;
     } else if (!cell && !(event.type === "drop" && target?.closest("#rows .visual-cell"))) return;
-    if (event.type === "keydown") {
-      const key = event as KeyboardEvent;
+    if (key) {
       if (key.key === "Enter" && key.altKey && cell?.id === "writer-doc") {
         event.preventDefault();
         event.stopImmediatePropagation();
@@ -579,7 +581,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       }
       if ((narration || heading || cell?.id === "writer-doc") && (draft?.composing || key.isComposing || key.keyCode === 229)) {
         event.stopImmediatePropagation();
-        if (undoGesture(key) || splitKey(key) || joining || removeHeading || moveDirection(key)) {
+        if (undoGesture(key) || splitting || joining || removeHeading || moving) {
           event.preventDefault();
           if (!stopped) session.refuse(PENDING);
         }
@@ -622,12 +624,12 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     event.preventDefault();
     event.stopImmediatePropagation();
     try {
+      if (stopped && (narration || heading || cell?.id === "writer-doc") && (splitting || joining || moving || removeHeading)) return;
       if (narration && stopped) { session.refuse(stopped); return; }
-      const move = event.type === "keydown" && moveDirection(event as KeyboardEvent);
-      if (move && narration) {
+      if (moving && narration) {
         const id = narration.getAttribute("data-id");
         if (id) {
-          const outcome = session.run(swapBeatsCommand(id, move));
+          const outcome = session.run(swapBeatsCommand(id, moving));
           if (outcome.kind === "failed") report(outcome.error);
         }
         return;
@@ -637,8 +639,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         headingInput(event, heading, !!removeHeading);
         return;
       }
-      if (narration && (event.type === "keydown" && splitKey(event as KeyboardEvent)
-        || event.type === "beforeinput" && event.cancelable && (event as InputEvent).inputType === "insertParagraph")) {
+      if (narration && splitting) {
         split(narration);
         return;
       }

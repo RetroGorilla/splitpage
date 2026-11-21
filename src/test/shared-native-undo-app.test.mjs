@@ -436,6 +436,21 @@ for (const [name, kind] of Object.entries(views)) {
     assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
   });
 
+  test(name + ": Enter after a stale typing stop is consumed silently", async t => {
+    const show = await enter(t), view = kind.open(t);
+    kind.caret(view, "r1", 2);
+    assert.equal(hook.nativePeer.type("r1", 0, "Y").kind, "written");
+    typeKeys(kind.surface(), "x");
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+    assert.equal(press(kind.surface(), "Enter", { ctrlKey: false }), true);
+    assert.equal(press(kind.surface(), "Enter", { ctrlKey: false }), true);
+    assert.equal(beforeInput(kind.surface(), "insertParagraph", null), true);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+    assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["Hello"]);
+    assert.equal(kind.host("r1").textContent.replace(/\u200b/g, ""), "Hexllo");
+    assert.equal(peer(), "YHello");
+  });
+
   for (const peerSplits of [true, false]) {
     test(name + ": Enter converges with a simultaneous peer " + (peerSplits ? "split" : "insertion"), async t => {
       const show = await enter(t), view = kind.open(t);
