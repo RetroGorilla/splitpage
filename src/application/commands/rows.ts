@@ -59,7 +59,10 @@ export function addBeatCommand(neighbour: string | null, createdId: string, port
             status: "todo", updatedAt: ports.clock.nowIso(), updatedBy: ports.editor.name()
           };
           if (neighbour === null) live.rows.push(created);
-          else live.rows.splice(liveIndex(live.rows, neighbour, "given an adjacent beat") + (side === "below" ? 1 : 0), 0, created);
+          else {
+            const at = liveIndex(live.rows, neighbour, "given a scene " + side + " it");
+            live.rows.splice(at + (side === "below" ? 1 : 0), 0, created);
+          }
           if (heading) writeScenes(live, scenesInOrder(live)?.map(scene => scene.id === heading.id ? withSceneFirstBeat(scene, createdId) : scene));
         }
       };
