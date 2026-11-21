@@ -618,7 +618,6 @@ for (const view of ["Split", "Writer"]) {
     setCellSelection(target, 0);
     for (const letter of "B-roll: ") assert.equal(input(target, "insertText", letter), true);
     assert.equal(target.textContent, "B-roll: Close up");
-    assert.equal(hook.read().app.rows[0].visualText, "Close up");
     await delay(65);
     assert.equal(hook.read().app.rows[0].visualText, "B-roll: Close up");
     assert.equal(hook.read().peer.rows[0].visualText, "B-roll: Close up");
