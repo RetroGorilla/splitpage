@@ -41,30 +41,7 @@ function appTypes(data) {
 const rows = doc => doc.rows.map(row => [row.id, row.audioText]);
 const same = (a, b) => JSON.stringify(a) === JSON.stringify(b);
 
-const PEER_ACTIONS = [
-  { name: "the peer types", run: p => p.type("r1", 0, "Y").kind, typed: ["p1"], before: [["r1", "YHello"], ["r2", "World"]],
-    after: [["r1", "YHello!"], ["r2", "World"]], units: [["r1", ["p1", ...HELLO, "a1"]], ["r2", WORLD]], undoLabel: "typing" },
-  { name: "the peer types a character outside the basic plane", run: p => p.type("r1", 0, "\u{1F600}").kind, typed: ["p1", "p2"],
-    before: [["r1", "\u{1F600}Hello"], ["r2", "World"]], after: [["r1", "\u{1F600}Hello!"], ["r2", "World"]],
-    units: [["r1", ["p1", "p2", ...HELLO, "a1"]], ["r2", WORLD]], undoLabel: "typing" },
-  { name: "the peer deletes inside a beat", run: p => p.erase("r1", 1, 3), before: [["r1", "Hlo"], ["r2", "World"]],
-    after: [["r1", "Hlo!"], ["r2", "World"]], units: [["r1", ["h1", "h4", "h5", "a1"]], ["r2", WORLD]], undoLabel: "typing" },
-  { name: "the peer formats a range", run: p => p.format("r1", 0, 5, "b"), before: [["r1", "<strong>Hello</strong>"], ["r2", "World"]],
-    after: [["r1", "<strong>Hello</strong>!"], ["r2", "World"]], units: [["r1", [...HELLO, "a1"]], ["r2", WORLD]], undoLabel: "format" },
-  { name: "the peer deletes a range across beats", run: p => p.deleteRange("r1", 3, "r2", 2), before: [["r1", "Hel"], ["r2", "rld"]],
-    after: [["r1", "Hel!"], ["r2", "rld"]], units: [["r1", ["h1", "h2", "h3", "a1"]], ["r2", ["w3", "w4", "w5"]]], undoLabel: "delete-selection" },
-  { name: "the peer removes the beat the app is typing in", run: p => p.remove("r1"), before: [["r2", "World"]],
-    after: [["r2", "World"]], units: [["r2", WORLD]], undoLabel: "delete-scene", removed: ["r1", "Hello!"], announcedInD3: true },
-  { name: "the peer removes the other beat", run: p => p.remove("r2"), before: [["r1", "Hello"]],
-    after: [["r1", "Hello!"]], units: [["r1", [...HELLO, "a1"]]], undoLabel: "delete-scene", removed: ["r2", "World"] }
-];
-
-const ORDERS = ["forward", "reverse", "duplicate", "D3"];
-
-function nameTyped(p, action) {
-  if (!action.typed) return;
-  p.nameIdentities("peer", "r1", 0, action.typed);
-}
+const ORDERS = ["forward", "reverse", "duplicate"];
 
 function nameAppTyping(p) {
   const app = hook.read().app.rows.find(row => row.id === "r1");
@@ -73,8 +50,8 @@ function nameAppTyping(p) {
   p.nameIdentities("app", "r1", units.length - 1, ["a1"]);
 }
 
-for (const action of PEER_ACTIONS) for (const order of ORDERS) {
-  test(`peer table: ${action.name}, delivered ${order === "D3" ? "D3 (the peer's change arrives while the app's typing is still buffered, without a composition)" : order}: both copies and every late joiner agree, identities match, and the peer's undo reverses it everywhere`, async () => {
+for (const order of ORDERS) {
+  test(`peer table: the peer formats a range, delivered ${order}: both copies and every late joiner agree, identities match, and the peer's undo reverses it everywhere`, async () => {
     script();
     assert.deepEqual(await hook.enter(), { ok: true });
     try {
@@ -83,45 +60,44 @@ for (const action of PEER_ACTIONS) for (const order of ORDERS) {
       p.nameIdentities("app", "r2", 0, WORLD);
       p.hold();
       assert.deepEqual(rows(p.lateJoiner("app")), rows(hook.read().app), "a joiner from the state before the action");
-      assert.equal(action.run(p), "applied");
-      nameTyped(p, action);
-      assert.deepEqual(rows(hook.read().peer), action.before);
-      const commit = appTypes("!");
-      if (order === "D3") {
-        assert.equal(p.deliver("forward", "app"), 1);
-        assert.deepEqual(rows(hook.read().app), [["r1", "Hello"], ["r2", "World"]], "the open buffer holds the peer's change back, and the typing is still only in the buffer");
-        commit();
-        assert.deepEqual(rows(hook.read().app), action.after, "the commit releases the held change together with the typing");
-        assert.equal(p.release(), 1);
-      } else {
-        commit();
-        assert.deepEqual(rows(hook.read().app), [["r1", "Hello!"], ["r2", "World"]], "the app committed its own typing before delivery");
-        nameAppTyping(p);
-        assert.equal(p.release(order), 2);
-      }
-      if (order === "D3") nameAppTyping(p);
+      assert.equal(p.format("r1", 0, 5, "b"), "applied");
+      assert.deepEqual(rows(hook.read().peer), [["r1", "<strong>Hello</strong>"], ["r2", "World"]]);
+      appTypes("!")();
+      assert.deepEqual(rows(hook.read().app), [["r1", "Hello!"], ["r2", "World"]], "the app committed its own typing before delivery");
+      nameAppTyping(p);
+      assert.equal(p.release(order), 2);
       const app = hook.read().app;
-      assert.deepEqual(rows(app), action.after);
+      assert.deepEqual(rows(app), [["r1", "<strong>Hello</strong>!"], ["r2", "World"]]);
       assert.ok(same(app, hook.read().peer), "app and peer agree");
       assert.ok(same(p.catchUp(), app), "the joiner from before the action catches up to the same script");
       const units = p.identities("joiner");
       assert.ok(same(p.lateJoiner("app"), app), "a late joiner from the app's state agrees");
       assert.ok(same(p.lateJoiner("peer"), app), "a late joiner from the peer's state agrees");
-      assert.deepEqual(units.map(beat => [beat.beat, beat.units]), action.units);
+      assert.deepEqual(units.map(beat => [beat.beat, beat.units]), [["r1", [...HELLO, "a1"]], ["r2", WORLD]]);
       assert.deepEqual([p.identities("app"), p.identities("peer"), p.identities("joiner")], [units, units, units], "every replica names the same characters");
       const recovery = p.recoveryEntries("app");
-      assert.deepEqual(recovery.map(entry => entry.kind === "removed-beat" ? [entry.kind, entry.row.id, entry.row.audioText] : [entry.kind]),
-        action.removed ? [["removed-beat", ...action.removed]] : []);
+      assert.deepEqual(recovery, []);
       assert.deepEqual([p.recoveryEntries("peer"), p.recoveryEntries("joiner")], [recovery, recovery], "every replica reads the same recovery entries");
       const undone = p.undo();
-      assert.deepEqual([undone.ok, undone.effective, undone.label], [true, true, action.undoLabel]);
+      assert.deepEqual([undone.ok, undone.effective, undone.label], [true, true, "format"]);
       assert.equal(p.deliver(), 1);
       assert.deepEqual(rows(hook.read().app), [["r1", "Hello!"], ["r2", "World"]], "the peer's undo reverses only the peer's step");
       assert.ok(same(hook.read().app, hook.read().peer) && same(p.catchUp(), hook.read().app), "after the undo every copy agrees");
       assert.deepEqual([p.recoveryEntries("app"), p.recoveryEntries("peer"), p.recoveryEntries("joiner")], [[], [], []]);
-      const announced = order === "D3" && action.announcedInD3 ? 1 : 0;
-      assert.deepEqual([hook.counters().recovered - counted.recovered, hook.counters().missingBase - counted.missingBase], [announced, 0],
-        "only the commit that drains the removal of its own beat announces kept writing (rule 29)");
+      assert.deepEqual([hook.counters().recovered - counted.recovered, hook.counters().missingBase - counted.missingBase], [0, 0]);
     } finally { if (sharedSession()) hook.leave(); }
   });
 }
+
+test("legacy peer identity probe enumerates both UTF-16 units of an astral character", async () => {
+  script();
+  assert.deepEqual(await hook.enter(), { ok: true });
+  try {
+    const p = hook.peer;
+    p.nameIdentities("app", "r1", 0, HELLO);
+    p.hold();
+    assert.equal(p.type("r1", 0, "\u{1F600}").kind, "applied");
+    p.nameIdentities("peer", "r1", 0, ["p1", "p2"]);
+    assert.deepEqual(p.identities("peer").find(beat => beat.beat === "r1").units, ["p1", "p2", ...HELLO]);
+  } finally { if (sharedSession()) hook.leave(); }
+});

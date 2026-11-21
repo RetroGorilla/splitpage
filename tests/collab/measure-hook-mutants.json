@@ -1,6 +1,6 @@
 {
   "tests": [
-    "src/test/shared-hook-measure-app.test.mjs",
+    "src/test/shared-native-entry-gap-app.test.mjs",
     "src/test/shared-native-measure-undo-mapped-app.test.mjs",
     "tests/adapters/collab/timing-marks.test.ts",
     "tests/bootstrap/shared-test-release.test.ts",
@@ -101,24 +101,24 @@
     },
     {
       "label": "entering from a stored state enters the open script instead",
-      "file": "tests/collab/legacy-app/shared-test.ts",
+      "file": "src/bootstrap/wiring/shared-test.ts",
       "find": "enter(sharedTestBytes(state))",
       "replace": "enter()",
-      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+      "tests": ["src/test/shared-native-measure-undo-mapped-app.test.mjs"]
     },
     {
       "label": "an incomplete stored state is accepted",
-      "file": "src/adapters/collab/hydrate.ts",
-      "find": "  if (state.doc.store.pendingStructs || state.doc.store.pendingDs) throw new Error(\"The stored shared state is incomplete\");\n",
+      "file": "src/adapters/collab/native/session.ts",
+      "find": "  if (!Y.snapshotContainsUpdate(Y.snapshot(doc), bytes)) {\n    throw new Error(\"The stored state is missing a Yjs update\");\n  }\n",
       "replace": "",
-      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+      "tests": ["src/test/shared-native-entry-gap-app.test.mjs"]
     },
     {
       "label": "a stored state without a script is entered",
-      "file": "src/adapters/collab/hydrate.ts",
-      "find": "  if (typeof projected.docId !== \"string\" || !projected.docId) throw new Error(\"The stored shared state holds no script\");\n",
+      "file": "src/bootstrap/wiring/native-shared-session.ts",
+      "find": "    if (stored && !native.isStoredScript()) throw new Error(\"The stored state does not hold a well-formed native script\");\n",
       "replace": "",
-      "tests": ["src/test/shared-hook-measure-app.test.mjs"]
+      "tests": ["src/test/shared-native-measure-undo-mapped-app.test.mjs"]
     },
     {
       "label": "native peer delivery drops the held update",
