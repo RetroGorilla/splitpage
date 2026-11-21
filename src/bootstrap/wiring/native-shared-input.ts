@@ -54,7 +54,6 @@ interface Draft {
   readonly cell: Element;
   readonly surface: NarrationSurface;
   readonly range: NativeTextRange | null;
-  readonly caretEnd: "from" | "to" | null;
   readonly deletion: { readonly direction: -1 | 1; readonly at: number } | null;
   readonly before: NativeTextRange | null;
   readonly after: NativeTextRange | null;
@@ -170,11 +169,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     return reason;
   }
 
-  function begin(cell: Element, selection: CellRange, composing: boolean, text: string, caretEnd: Draft["caretEnd"] = null): Draft {
+  function begin(cell: Element, selection: CellRange, composing: boolean, text: string, deletion: Draft["deletion"] = null): Draft {
     const beat = cell.getAttribute("data-id") ?? "";
     return { beat, cell, surface: narrationSurfaceOf(cell), selection, composing, composition: composing, text,
-      units: Math.max(text.length, selection.to - selection.from), previewCaret: selection.from + text.length, range: null, caretEnd,
-      deletion: caretEnd && { direction: caretEnd === "to" ? -1 : 1, at: now() },
+      units: Math.max(text.length, selection.to - selection.from), previewCaret: selection.from + text.length, range: null, deletion,
       before: null, after: null, endsGroup: false, paint: null, html: cell.innerHTML };
   }
 
@@ -192,7 +190,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (anchored.kind === "refused") return anchored.reason;
     const end = next.composition || selection.from !== selection.to ? native.commands.anchorText(target, to.offset) : null;
     const after = end?.kind === "anchored" ? end.range : null, { range } = anchored;
-    const before = next.caretEnd === "to" ? after : next.caretEnd === "from" ? { target: range.target, from: range.from, to: range.from } : range;
+    const before = next.deletion?.direction === -1 ? after
+      : next.deletion?.direction === 1 ? { target: range.target, from: range.from, to: range.from } : range;
     return { ...next, range, before, after, paint: native.trackNarrationPaint(beat) };
   }
 
@@ -482,10 +481,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     }
     if (touchesProtectedText(cell, selection)) { session.refuse(UNSUPPORTED); return; }
     const shown = deletion ? cellSelection(cell) : null;
-    const caretEnd = shown && shown.from === shown.to ? input.inputType.endsWith("Backward") ? "to" : "from" : null;
+    const gesture = shown && shown.from === shown.to ? { direction: input.inputType.endsWith("Backward") ? -1 : 1, at: now() } as const : null;
     const current = flushForInput(cell, selection);
     if (!current) return;
-    const next = begin(current.cell, current.selection, false, text, caretEnd);
+    const next = begin(current.cell, current.selection, false, text, gesture);
     let anchored: Draft | string;
     try { anchored = current.stale ? STALE : anchor(next); }
     catch (error) { report(error); anchored = PENDING; }

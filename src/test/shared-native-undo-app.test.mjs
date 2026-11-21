@@ -133,6 +133,14 @@ const views = {
   }
 };
 
+async function replayDeletion(kind, view, key, text, caret) {
+  assert.equal(press(kind.surface(), key), true);
+  assert.equal(app(), text);
+  assert.deepEqual(kind.at(view), ["r1", caret, caret]);
+  await Promise.resolve();
+  assert.equal(peer(), text);
+}
+
 test("Split: removing a beat with a simultaneous peer insertion preserves the peer letters and undoes the removal", async t => {
   const show = await enter(t, twoBeats);
   const remove = () => document.querySelector('#rows .row[data-id="r1"] [data-action="delete-row"]').click();
@@ -623,12 +631,31 @@ for (const [name, kind] of Object.entries(views)) {
     assert.equal(show.mock.callCount(), 0);
   });
 
-  test(name + ": Backspace and Delete inside one beat are undone one press each with the caret where each key was pressed", async t => {
+  for (const [key, direction, start, first, second, remaining, end] of [
+    ["Backspace", "Backward", 4, 3, 2, "Heo", 2],
+    ["Delete", "Forward", 1, 1, 1, "Hlo", 1]
+  ]) {
+    test(name + ": held " + key + " is one undo step and replays the run's endpoint carets", async t => {
+      const show = await enter(t), view = kind.open(t);
+      kind.caret(view, "r1", start);
+      for (const [index, from] of [first, second].entries()) {
+        assert.equal(press(kind.surface(), key, { ctrlKey: false, repeat: index > 0 }), false);
+        assert.equal(deleteIn(kind.surface(), kind.host("r1"), from, from + 1, direction), true);
+      }
+      await flushed();
+      assert.equal(app(), remaining);
+      assert.deepEqual(kind.at(view), ["r1", end, end]);
+      await replayDeletion(kind, view, "z", "Hello", start);
+      await replayDeletion(kind, view, "y", remaining, end);
+      assert.equal(show.mock.callCount(), 0);
+    });
+  }
+
+  test(name + ": switching from Backspace to Delete starts a new undo step", async t => {
     const show = await enter(t), view = kind.open(t);
     kind.caret(view, "r1", 3);
     assert.equal(deleteIn(kind.surface(), kind.host("r1"), 2, 3), true);
     await flushed();
-    kind.caret(view, "r1", 2);
     assert.equal(deleteIn(kind.surface(), kind.host("r1"), 2, 3, "Forward"), true);
     await flushed();
     assert.equal(app(), "Heo");
@@ -643,6 +670,74 @@ for (const [name, kind] of Object.entries(views)) {
     assert.deepEqual(kind.at(view), ["r1", 2, 2]);
     await Promise.resolve();
     assert.equal(peer(), "Helo");
+    assert.equal(show.mock.callCount(), 0);
+  });
+
+  test(name + ": a letter typed immediately after a deletion run has its own undo step", async t => {
+    const show = await enter(t), view = kind.open(t);
+    kind.caret(view, "r1", 4);
+    assert.equal(deleteIn(kind.surface(), kind.host("r1"), 3, 4), true);
+    assert.equal(deleteIn(kind.surface(), kind.host("r1"), 2, 3), true);
+    typeKeys(kind.surface(), "x");
+    await flushed();
+    assert.equal(app(), "Hexo");
+    await replayDeletion(kind, view, "z", "Heo", 2);
+    await replayDeletion(kind, view, "z", "Hello", 4);
+    await replayDeletion(kind, view, "y", "Heo", 2);
+    await replayDeletion(kind, view, "y", "Hexo", 3);
+    assert.equal(show.mock.callCount(), 0);
+  });
+
+  test(name + ": a one-second pause between deletions starts a new undo step", async t => {
+    t.mock.timers.enable({ apis: ["Date"], now: 1_000_000 });
+    const show = await enter(t), view = kind.open(t);
+    kind.caret(view, "r1", 4);
+    assert.equal(deleteIn(kind.surface(), kind.host("r1"), 3, 4), true);
+    await flushed();
+    t.mock.timers.tick(999);
+    assert.equal(deleteIn(kind.surface(), kind.host("r1"), 2, 3), true);
+    await flushed();
+    t.mock.timers.tick(1000);
+    assert.equal(deleteIn(kind.surface(), kind.host("r1"), 1, 2), true);
+    await flushed();
+    assert.equal(app(), "Ho");
+    await replayDeletion(kind, view, "z", "Heo", 2);
+    await replayDeletion(kind, view, "z", "Hello", 4);
+    await replayDeletion(kind, view, "y", "Heo", 2);
+    await replayDeletion(kind, view, "y", "Ho", 1);
+    assert.equal(show.mock.callCount(), 0);
+  });
+
+  test(name + ": moving the caret away and back ends a deletion run", async t => {
+    const show = await enter(t), view = kind.open(t);
+    kind.caret(view, "r1", 4);
+    assert.equal(deleteIn(kind.surface(), kind.host("r1"), 3, 4), true);
+    await flushed();
+    press(kind.surface(), "ArrowLeft", { ctrlKey: false });
+    kind.caret(view, "r1", 2);
+    press(kind.surface(), "ArrowRight", { ctrlKey: false });
+    kind.caret(view, "r1", 3);
+    assert.equal(deleteIn(kind.surface(), kind.host("r1"), 2, 3), true);
+    await flushed();
+    assert.equal(app(), "Heo");
+    await replayDeletion(kind, view, "z", "Helo", 3);
+    await replayDeletion(kind, view, "z", "Hello", 4);
+    assert.equal(show.mock.callCount(), 0);
+  });
+
+  test(name + ": undo and redo of a deletion run keep a peer edit made between deletions", async t => {
+    const show = await enter(t), view = kind.open(t);
+    kind.caret(view, "r1", 4);
+    assert.equal(deleteIn(kind.surface(), kind.host("r1"), 3, 4), true);
+    await flushed();
+    assert.equal(hook.nativePeer.type("r1", 0, "Y").kind, "written");
+    await Promise.resolve();
+    assert.equal(app(), "YHelo");
+    assert.equal(deleteIn(kind.surface(), kind.host("r1"), 3, 4), true);
+    await flushed();
+    assert.equal(app(), "YHeo");
+    await replayDeletion(kind, view, "z", "YHello", 5);
+    await replayDeletion(kind, view, "y", "YHeo", 3);
     assert.equal(show.mock.callCount(), 0);
   });
 
