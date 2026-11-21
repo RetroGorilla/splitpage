@@ -26,11 +26,22 @@ const cell = id => document.querySelector('#rows .cell-editable[data-id="' + id 
 const snapshot = doc => JSON.parse(JSON.stringify(doc));
 const replica = source => openNativeSession({ kind: "state", state: source.encodeState() }, { actor: "Reader", sanitize: sanitizeHtml });
 const deliver = (target, source) => assert.equal(applyNativePeerUpdate(target, source.encodeState()), true);
-const warning = ["This is not available in a shared session yet.", "warn"];
+const warning = "This is not available in a shared session yet.";
+const toastHost = () => document.getElementById("toast-host");
+const warnings = () => [...toastHost().querySelectorAll(".toast.warn")].map(toast => toast.firstChild.textContent);
 
-function press(key, modifiers) {
+function scriptContent(doc) {
+  const copy = structuredClone(doc);
+  for (const row of copy.rows) {
+    delete row.updatedAt;
+    delete row.updatedBy;
+  }
+  return copy;
+}
+
+function press(key, modifiers, target = document.activeElement) {
   const event = new window.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...modifiers });
-  document.activeElement.dispatchEvent(event);
+  target.dispatchEvent(event);
   assert.equal(event.defaultPrevented, true);
 }
 
@@ -62,7 +73,7 @@ for (const { label, offset, narration } of scenarios) for (const order of ["loca
       ], sections: [{ id: "s1", name: "Scene", firstSceneId: "r3" }]
     }));
     const baseline = listeners();
-    const show = t.mock.method(notices, "show", () => {});
+    toastHost().replaceChildren();
     let native;
     assert.deepEqual(await enterSharedSession(ports, (doc, failed) => {
       const opened = openNativeEditor(ports, doc, failed);
@@ -115,9 +126,9 @@ for (const { label, offset, narration } of scenarios) for (const order of ["loca
     const agree = expected => {
       exchange();
       const actual = snapshot(currentDocument());
-      const script = doc => ({ ...doc, rows: doc.rows.map(({ updatedAt, updatedBy, ...row }) => row) });
-      assert.deepEqual(script(actual), script(expected));
+      assert.deepEqual(scriptContent(actual), scriptContent(expected));
       assert.deepEqual(snapshot(peer.document()), actual);
+      assert.deepEqual(warnings(), []);
       const fresh = replica(native);
       try { assert.deepEqual(snapshot(fresh.document()), actual); }
       finally { fresh.close(); }
@@ -125,12 +136,17 @@ for (const { label, offset, narration } of scenarios) for (const order of ["loca
     const accepted = caller === "Alt+Enter" && offset === 7;
     if (caller === "beat paste") {
       paste(payload);
+      assert.deepEqual(warnings(), [warning]);
+      toastHost().replaceChildren();
       assert.deepEqual(snapshot(currentDocument()), before);
       assert.equal(host.textContent, "aXbcdefgh");
+      assert.equal(document.activeElement, host);
       assert.deepEqual(cellSelection(host), { from: 6, to: 8 });
       window.dispatchEvent(new window.Event("pagehide"));
     } else {
       press("Enter", caller === "Alt+Enter" ? { altKey: true } : { ctrlKey: true });
+      assert.deepEqual(warnings(), accepted ? [] : [warning]);
+      toastHost().replaceChildren();
     }
 
     let final = typed;
@@ -138,24 +154,26 @@ for (const { label, offset, narration } of scenarios) for (const order of ["loca
       final = structuredClone(typed);
       const created = currentDocument().rows[2];
       assert.ok(created && !typed.rows.some(row => row.id === created.id));
+      assert.equal(document.activeElement, cell(created.id));
+      assert.deepEqual(cellSelection(cell(created.id)), { from: 0, to: 0 });
       final.rows[1].audioText = "aXbcde";
       final.rows.splice(2, 0, { ...peerOnly.rows[2], id: created.id, audioText: "" });
     }
     agree(final);
+    const history = (direction, expected) => {
+      press("z", { ctrlKey: true, shiftKey: direction === "redo" }, cell("r3"));
+      agree(expected);
+    };
+    history("redo", final);
     if (accepted) {
-      press("z", { ctrlKey: true });
-      agree(typed);
+      history("undo", typed);
     }
-    press("z", { ctrlKey: true });
-    agree(peerOnly);
-    press("z", { ctrlKey: true });
-    agree(peerOnly);
-    press("z", { ctrlKey: true, shiftKey: true });
-    agree(typed);
+    history("undo", peerOnly);
+    history("undo", peerOnly);
+    history("redo", typed);
     if (accepted) {
-      press("z", { ctrlKey: true, shiftKey: true });
-      agree(final);
+      history("redo", final);
     }
-    assert.deepEqual(show.mock.calls.map(call => call.arguments), accepted ? [] : [warning]);
+    history("redo", final);
   });
 }
