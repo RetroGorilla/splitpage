@@ -12,6 +12,7 @@ import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { sharedCommandRefusalNotice } from "../bootstrap/wiring/ports/shared-command-notices.ts";
 import { adoptReplacement, currentDocument, sharedSession } from "../bootstrap/wiring/session-owner.ts";
 import { enterSharedSession, forceLeaveSharedSession, leaveRunningSharedSession } from "../bootstrap/wiring/shared-session.ts";
+import { currentWhoList } from "../bootstrap/wiring/who-list.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { cellSelection, setCellSelection } from "../features/common/cell-selection.ts";
 import { BEATS_MIME, buildBeatPayload } from "../features/clipboard/beat-clip.ts";
@@ -111,9 +112,9 @@ function selectionSnapshot(node) {
   return [node.innerHTML, document.activeElement, anchorNode, anchorOffset, focusNode, focusOffset];
 }
 
-async function enter(t, { rows = source, view = "Split" } = {}) {
+async function enter(t, { rows = source, people = [], view = "Split" } = {}) {
   const fixture = entrySwitchFixture();
-  const doc = migrateRows({ schema: 2, title: "Shared callers", paragraphsDecided: true, rows });
+  const doc = migrateRows({ schema: 2, title: "Shared callers", paragraphsDecided: true, people, rows });
   adoptReplacement(doc);
   const show = t.mock.method(notices, "show", () => {});
   const ports = { ...fixture.ports, commandRefused: sharedCommandRefusalNotice(notices) };
@@ -530,6 +531,38 @@ test("Writer: leaving Visual by Escape, Close or view switch keeps B-roll text w
   land(f, ["abcdef", "Other", "Third"]);
   assert.deepEqual(app().rows.map(row => row.visualText), ["B-roll: Close up", "B-roll: Mug", "B-roll: Pour"]);
 });
+
+for (const order of orders) {
+  test(`Split Visual: Tab refuses a person suggestion once, ${order}`, async t => {
+    const f = await enter(t, {
+      rows: [{ ...source[0], visualText: "@Presenter" }, ...source.slice(1)],
+      people: [{ id: "p1", name: "Presenter" }]
+    });
+    const updates = packets(f.peer, () => {
+      edit(f.peer, "r2", 0, 0, "P");
+      edit(f.peer, "r2", 1, 1, "Q");
+    });
+    assert.equal(updates.length, 2);
+    delivery(f.native, order, ...updates);
+    await Promise.resolve();
+    assert.deepEqual(f.native.document(), f.peer.document());
+    assert.deepEqual(app(), f.peer.document());
+    const node = f.place("r1", 1, 1, "visualText");
+    const who = currentWhoList();
+    t.after(() => who.cancel());
+    who.maybeOpen({ inputType: "insertText", data: "@" }, node);
+    assert.equal(who.isOpen(node), true);
+    assert.equal(document.querySelector("#who-list .who-option").textContent, "Presenter");
+    assert.equal(text(node), "@Presenter");
+    caret(f, "r1", 1, 1, "visualText");
+    const before = selectionSnapshot(node), bytes = f.native.encodeState(), projected = JSON.stringify(app());
+    assert.equal(key(node, "Tab"), true);
+    assert.deepEqual(selectionSnapshot(node), before);
+    assert.deepEqual(f.native.encodeState(), bytes);
+    assert.equal(JSON.stringify(app()), projected);
+    assert.deepEqual(f.notices(), [warning]);
+  });
+}
 
 function transfer(target, type, types) {
   const event = new window.Event(type, { bubbles: true, cancelable: true });

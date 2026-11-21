@@ -27,6 +27,7 @@ import { notices } from "./ports/effects.ts";
 import { editAllowed, sessionStamps } from "./session-owner.ts";
 import { sharedUndoRoute } from "./undo.ts";
 import { writerControls, writerFlowPorts } from "./writer.ts";
+import { currentWhoList } from "./who-list.ts";
 
 interface NativeInputPorts {
   readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "resolveTextSelection" | "isClosingOrClosed" | "subscribe" | "revision">;
@@ -1062,6 +1063,11 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         return;
       }
       if (undoing && cell?.matches(UNDO_SURFACES)) return;
+      if (key.key === "Tab" && visual?.closest("#rows")
+        && currentWhoList()?.keydown(key, visual, () => refuseCommand(UNSUPPORTED))) {
+        event.stopImmediatePropagation();
+        return;
+      }
       if (!editingKey(key) && !joining && !removeHeading) {
         if (key.key.startsWith("Arrow") || key.key === "Home" || key.key === "End" || key.key === "Tab") {
           finish();
