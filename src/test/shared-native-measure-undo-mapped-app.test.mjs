@@ -2,6 +2,8 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { encodeStateAsUpdate, encodeStateVector } from "yjs";
 import { bootApp, closeApp } from "./_app-boot.mjs";
+import { trackGlobalListeners } from "./_global-listener-inventory.mjs";
+import { sharedUndoRoute, undoOwner } from "../bootstrap/wiring/undo.ts";
 import { adoptReplacement, currentDocument, onSessionChange, sharedSession } from "../bootstrap/wiring/session-owner.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { sanitizeHtml, scriptCellOf } from "../bootstrap/richtext.ts";
@@ -21,6 +23,7 @@ import { render, renderRow } from "../features/rows/render.ts";
 window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};
 localStorage.setItem("splitpage-onboarding", JSON.stringify({ v: 1, done: true, skipped: true }));
+const listenerCounts = trackGlobalListeners();
 await bootApp();
 after(closeApp);
 
@@ -338,15 +341,20 @@ for (const view of ["Writer", "Split"]) {
   for (const glue of [false, true]) test(`${view}: refusing deletion ${glue ? "of synthetic join space" : "across joined members"} keeps the editor usable`, async t => {
     const rows = glue ? [["r1", "a "], ["r2", " b"]] : [["r1", "abcd"], ["r2", "ef"]];
     const [from, to] = glue ? [2, 3] : [2, 6];
-    const joined = source(t, rows);
-    written(joined.commands.joinRow("r2", "r1", " "));
-    await enter(t, rows, joined.encodeState());
+    await enter(t, rows);
+    written(hook.nativePeer.join("r2", "r1"));
+    await Promise.resolve();
     const show = t.mock.method(notices, "show", () => {});
     if (view === "Writer") writer.openWriter();
     const surface = view === "Writer" ? root() : cell();
+    const editable = view === "Writer" ? beat("r1") : cell();
+    const historyTarget = view === "Writer" ? editable : document.body;
+    const committed = hook.read().app;
     place(view, from, to);
     const range = document.getSelection().getRangeAt(0).cloneRange();
-    assert.equal(input(surface, "deleteContentBackward", null, range), true);
+    press(surface, "Backspace");
+    assert.equal(input(editable, "deleteContentBackward", null, range), true);
+    surface.dispatchEvent(new window.KeyboardEvent("keyup", { key: "Backspace", bubbles: true }));
     const original = rows.map(([, text]) => text).join(" ");
     const shown = () => (view === "Writer" ? beat("r1") : cell()).textContent.replaceAll("\u00a0", " ");
     await agreed([["r1", original]]);
@@ -354,9 +362,12 @@ for (const view of ["Writer", "Split"]) {
     assert.deepEqual(show.mock.calls.map(call => call.arguments), refused);
     assert.equal(shown(), original);
     assert.deepEqual(selection(view), expectedSelection(view, from, to));
-    assert.equal(press(surface, "z", { ctrlKey: true }), true);
-    assert.deepEqual(selection(view), expectedSelection(view, from, to));
-    assert.equal(shown(), original);
+    for (const key of glue ? ["z", "y"] : ["z", "y", "z"]) {
+      assert.equal(press(historyTarget, key, { ctrlKey: true }), true);
+      assert.deepEqual(selection(view), expectedSelection(view, from, to));
+      assert.equal(shown(), original);
+      assert.deepEqual(hook.read(), { app: committed, peer: committed });
+    }
     place(view, from);
     assert.equal(input(surface, "insertText", "X"), true);
     window.dispatchEvent(new window.Event("pagehide"));
@@ -364,7 +375,11 @@ for (const view of ["Writer", "Split"]) {
     await agreed([["r1", entered]]);
     assert.equal(shown(), entered);
     assert.deepEqual(show.mock.calls.map(call => call.arguments), refused);
+    const edited = hook.read().app;
     leave([["r1", entered]]);
+    const landed = hook.read().app;
+    assert.notEqual(landed.docId, edited.docId);
+    assert.deepEqual(landed, { ...edited, docId: landed.docId });
   });
 
   for (const pageHistory of view === "Split" ? [false, true] : [false]) {
@@ -650,8 +665,9 @@ test("native stored entry refuses empty, partial, truncated or unreadable bytes"
   type(native, "r1", 5, "?");
   type(native, "r1", 6, "!");
   const stored = native.encodeState();
-  const rows = [["local", "Still open"]];
-  adoptReplacement(docOf(rows));
+  adoptReplacement(docOf([["local", "Still open", "Open visual"], ["local2", "Still here"]]));
+  const before = hook.read(), listeners = listenerCounts();
+  const history = undoOwner().sizes();
   t.mock.method(console, "error", () => {});
   for (const [name, bytes] of [
     ["empty", new Uint8Array([0, 0])],
@@ -663,9 +679,66 @@ test("native stored entry refuses empty, partial, truncated or unreadable bytes"
     if (result.ok) assert.deepEqual(hook.leave(), { ok: true });
     assert.deepEqual(result, { ok: false, reason: "enter-failed" }, name);
     assert.equal(sharedSession(), false);
-    assert.deepEqual(snapshot(hook.read().app), rows);
-    assert.equal(hook.read().peer, null);
+    assert.deepEqual(hook.leave(), { ok: false, reason: "not-shared" }, name);
+    assert.deepEqual(hook.read(), before, name);
+    assert.deepEqual(listenerCounts(), listeners, name);
+    assert.deepEqual(undoOwner().sizes(), history, name);
+    assert.equal(sharedUndoRoute(), null, name);
   }
+});
+
+test("native stored entry with Writer open loads the edited snapshot and lands a fresh copy", async t => {
+  const native = source(t, [["r1", "Hello", "Desk"], ["r2", "World", "Window"]]);
+  type(native, "r1", 5, "?");
+  type(native, "r1", 6, "!");
+  const end = native.commands.anchorText({ beat: "r1", cell: "narration" }, 6, 7);
+  assert.equal(end.kind, "anchored");
+  written(native.commands.deleteText(end.range));
+  written(native.commands.removeRows(["r2"]));
+  const stored = native.encodeState();
+  const expected = native.document();
+  assert.deepEqual(snapshot(expected), [["r1", "Hello?"]]);
+
+  writer.closeWriter();
+  adoptReplacement(docOf([["local", "Still open", "Open visual"], ["local2", "Still here"]]));
+  writer.openWriter();
+  assert.equal(beat("local").textContent, "Still open");
+  const sourceId = currentDocument().docId, listeners = listenerCounts();
+  t.after(() => {
+    if (sharedSession()) assert.deepEqual(hook.leave(), { ok: true });
+    writer.closeWriter();
+  });
+  assert.deepEqual(await hook.enterFrom(btoa(String.fromCharCode(...stored))), { ok: true });
+  assert.equal(sharedSession(), true);
+  assert.deepEqual(hook.read(), { app: expected, peer: expected });
+  assert.equal(beat("local"), null);
+  assert.equal(beat("r1").textContent, "Hello?");
+  assert.equal(appActions.has("recovery"), false);
+  assert.equal(document.getElementById("shared-recovery-panel"), null);
+  const undo = sharedUndoRoute().actions;
+  assert.deepEqual(undo.undo(), { ok: false, empty: true });
+  assert.deepEqual(undo.redo(), { ok: false, empty: true });
+  assert.deepEqual(hook.read(), { app: expected, peer: expected });
+
+  hook.nativePeer.hold();
+  written(hook.nativePeer.type("r1", 0, "N"));
+  assert.deepEqual(hook.read().app, expected);
+  hook.nativePeer.deliver();
+  await agreed([["r1", "NHello?"]]);
+  assert.equal(beat("r1").textContent, "NHello?");
+  const changed = hook.read().app;
+  const reopened = openCopy(t, stored);
+  assert.deepEqual(reopened.document(), expected);
+  type(reopened, "r1", 0, "N");
+  assert.deepEqual(changed, reopened.document());
+  assert.deepEqual(hook.leave(), { ok: true });
+  assert.equal(sharedSession(), false);
+  const landed = hook.read();
+  assert.notEqual(landed.app.docId, expected.docId);
+  assert.notEqual(landed.app.docId, sourceId);
+  assert.deepEqual(landed, { app: { ...changed, docId: landed.app.docId }, peer: null });
+  assert.equal(beat("r1").textContent, "NHello?");
+  assert.deepEqual(listenerCounts(), listeners);
 });
 
 test("Split: a peer prefix leaves the captured Find match replaceable on the first click", async t => {
