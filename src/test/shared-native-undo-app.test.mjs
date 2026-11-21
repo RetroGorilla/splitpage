@@ -6,7 +6,7 @@ import { adoptReplacement, liveSession, sharedSession } from "../bootstrap/wirin
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { cellSelection, setCellSelection } from "../features/common/cell-selection.ts";
-import { posToDom } from "../features/common/cell-dom.ts";
+import { posToDom, readSelection } from "../features/common/cell-dom.ts";
 import { openNativeSession } from "../adapters/collab/native/session.ts";
 import { scriptCellOf, sanitizeHtml } from "../bootstrap/richtext.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
@@ -224,7 +224,25 @@ test("Writer: a stale heading cannot supply the range for a rename", async t => 
 });
 
 const threeBeats = () => [...twoBeats, { id: "r3", audioText: "Again" }];
+const fourBeats = () => [...threeBeats(), { id: "r4", audioText: "Last" }];
 const rowOrder = () => hook.read().app.rows.map(row => row.id);
+
+async function keepAdjacentAfterPeerMove(t, open, move) {
+  const show = await enter(t, fourBeats()), view = open(t);
+  assert.equal(hook.nativePeer.moveBeat("r3", null).kind, "written");
+  assert.deepEqual(rowOrder(), ["r1", "r2", "r3", "r4"]);
+  move(view);
+  await Promise.resolve();
+  assert.deepEqual(rowOrder(), ["r2", "r1", "r4", "r3"]);
+  assert.deepEqual(hook.read().peer, hook.read().app);
+  assert.equal(show.mock.callCount(), 0);
+}
+
+test("Split: the move-down menu accepts the same neighbour after an unseen peer move", t => {
+  return keepAdjacentAfterPeerMove(t, views.Split.open, () => {
+    document.querySelector('#rows [data-action="move-down"][data-id="r1"]').click();
+  });
+});
 
 test("Split: move-down and a row drag use native history", async t => {
   const show = await enter(t, threeBeats());
@@ -262,6 +280,24 @@ for (const [route, move] of [
   assert.deepEqual(hook.read().peer, hook.read().app);
 });
 
+for (const backend of ["standalone", "native"]) {
+  test("Writer: Alt+Down with a cross-beat selection in " + backend, async t => {
+    let show;
+    if (backend === "native") show = await enter(t, threeBeats());
+    else adoptReplacement(migrateRows({ schema: 2, title: "Standalone script", rows: threeBeats() }));
+    const view = writer(t);
+    const range = { anchor: { kind: "beat", rowId: "r1", offset: 1 }, head: { kind: "beat", rowId: "r2", offset: 2 } };
+    view.flow.place(range);
+    assert.equal(press(root(), "ArrowDown", { altKey: true, ctrlKey: false }), true);
+    assert.deepEqual(rowOrder(), backend === "native" ? ["r1", "r2", "r3"] : ["r1", "r3", "r2"]);
+    assert.deepEqual(view.flow.selection(), range);
+    if (show) {
+      assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+      assert.deepEqual(hook.read().peer, hook.read().app);
+    }
+  });
+}
+
 for (const [name, kind] of Object.entries(views)) {
   test(name + ": Alt+Enter splits only in Split", async t => {
     const show = await enter(t), view = kind.open(t);
@@ -285,6 +321,13 @@ for (const [name, kind] of Object.entries(views)) {
     assert.deepEqual(hook.read().peer, hook.read().app);
   });
 
+  test(name + ": Alt+Down accepts the same neighbour after an unseen peer move", t => {
+    return keepAdjacentAfterPeerMove(t, kind.open, view => {
+      kind.caret(view, "r1", 2);
+      assert.equal(press(kind.surface(), "ArrowDown", { altKey: true, ctrlKey: false }), true);
+    });
+  });
+
   test(name + ": Alt+Down restores both selection ends after a repaint, undo and redo", async t => {
     const show = await enter(t, threeBeats()), view = kind.open(t);
     let repaints = 0;
@@ -299,6 +342,8 @@ for (const [name, kind] of Object.entries(views)) {
     assert.equal(press(kind.surface(), "ArrowDown", { altKey: true, ctrlKey: false }), true);
     assert.deepEqual(rowOrder(), ["r2", "r1", "r3"]);
     assert.equal(repaints, 1);
+    const live = readSelection(kind.host("r1"), document.getSelection());
+    assert.deepEqual(live && [live.anchor, live.head], [1, 4]);
     assert.deepEqual(kind.at(view), ["r1", 1, 4]);
     kind.caret(view, "r2", 2);
     assert.equal(press(document.activeElement, "z"), true);

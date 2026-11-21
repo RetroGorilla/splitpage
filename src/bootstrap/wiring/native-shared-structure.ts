@@ -104,8 +104,9 @@ export function createNativeEditorStructure({ native, session, input, publish, r
         case "move-beat":
         case "swap-beats": {
           const live = movePlacement(before, intent);
-          if (!shown || !live || shown.target !== live.target || shown.previous !== live.previous
-            || shown.drop?.kind !== live.drop?.kind || shown.drop?.id !== live.drop?.id) return owner.refuse(UNAVAILABLE);
+          if (!shown || !live || shown.target !== live.target) return owner.refuse(UNAVAILABLE);
+          if (intent.kind === "move-beat" && (shown.previous !== live.previous
+            || shown.drop?.kind !== live.drop?.kind || shown.drop?.id !== live.drop?.id)) return owner.refuse(UNAVAILABLE);
           if (!shown.target) return { kind: "noop" };
           after ??= anchor(intent.id, 0);
           step = native.commands.moveBlocks.withSelection(after, [{ kind: "beat", id: intent.id }], live.drop);
