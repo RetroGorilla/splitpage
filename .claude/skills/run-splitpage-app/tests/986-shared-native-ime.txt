@@ -12,8 +12,16 @@ eval S.nativePeer.type('r1',0,'P')
 expect C('r1').textContent === 'Heかなllo' && S.read().peer.rows[0].audioText === 'PHello'
 ime commit かな
 expect C('r1').textContent === 'PHeかなllo' && S.read().app.rows[0].audioText === 'PHeかなllo' && S.read().peer.rows[0].audioText === 'PHeかなllo' && getSelection().focusOffset === 5
+key ctrl KeyZ
+wait S.read().app.rows[0].audioText === 'PHello' && S.read().peer.rows[0].audioText === 'PHello' && C('r1').textContent === 'PHello'
+expect document.activeElement === C('r1') && getSelection().focusOffset === 3
+key ctrl KeyY
+wait S.read().app.rows[0].audioText === 'PHeかなllo' && S.read().peer.rows[0].audioText === 'PHeかなllo' && C('r1').textContent === 'PHeかなllo'
+expect document.activeElement === C('r1') && getSelection().focusOffset === 5
 ime set ab
 expect C('r1').textContent === 'PHeかなabllo'
+key ctrl KeyZ
+expect document.querySelector('#toast-host .toast.warn:not(.is-leaving)') !== null && S.read().app.rows[0].audioText === 'PHeかなllo' && S.read().peer.rows[0].audioText === 'PHeかなllo'
 ime cancel
 expect C('r1').textContent === 'PHeかなllo' && S.read().peer.rows[0].audioText === 'PHeかなllo'
 ime set x

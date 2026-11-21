@@ -34,7 +34,9 @@ import { nativeEditorActive } from "./shared-session.ts";
 import { writerFlowCommands } from "./ports/writer-flow.ts";
 import { writerVisualBuffer } from "./ports/writer-visual-buffer.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
-import type { PaintedTextSource } from "../../application/editing/ports.ts";
+import type { PaintedTextSource, WholeFieldTextCommit } from "../../application/editing/ports.ts";
+import type { CommandOutcome } from "../../application/session/document-session.ts";
+import { toHtml } from "../../core/text/html.ts";
 import type { BufferedFieldPorts } from "../../application/editing/buffered-field.ts";
 import type { SharedDocumentHandle } from "../../adapters/collab/types.ts";
 import { mountWriterEmptyScript } from "./writer-empty-script.ts";
@@ -50,6 +52,15 @@ import { migrateRows } from "../document-ports.ts";
 
 const MEDIA_CELL = Object.freeze({ media: true });
 const flowCells = new Map<string, Run[]>();
+const UNCHANGED: CommandOutcome = Object.freeze({ kind: "noop" });
+
+// why: the native session refuses every command before planning, so an unchanged beat sync must not reach it
+const writerFieldText: WholeFieldTextCommit = Object.freeze({
+  commit: (rowId: string, field: string, runs: readonly Run[]): CommandOutcome => {
+    const row = nativeEditorActive() ? documentReader.current()?.rows.find(candidate => candidate.id === rowId) : undefined;
+    return row?.[field] === toHtml(runs) ? UNCHANGED : wholeFieldText.commit(rowId, field, runs);
+  }
+});
 
 // why: screen positions count pictures and video cards, so this reader keeps them; a paint asks once per beat
 function flowCell(html: string | null | undefined): Run[] {
@@ -181,7 +192,7 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
             decode: flowCell,
             storedHtml: text.storedHtmlFromDom,
             run: edits.run,
-            wholeFieldText,
+            wholeFieldText: writerFieldText,
             moveBeat: swapBeatsCommand,
             shown: edit => paintGuard().whileShown(edit),
             editingBlocked: () => paintGuard().painting() || undoGuard().applying() || screenIsStale(),
