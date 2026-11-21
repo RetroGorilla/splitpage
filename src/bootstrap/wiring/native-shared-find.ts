@@ -69,7 +69,8 @@ export function createNativeEditorFind({ native, session, input, editAttribution
         if (!from || !to) return null;
         if (from.beat !== to.beat) return "unsupported";
         const anchor = native.commands.anchorText({ ...target, beat: from.beat }, from.offset, to.offset);
-        return anchor.kind === "anchored" ? { target, range: anchor.range, text: text.slice(start, end) } : null;
+        if (anchor.kind === "anchored") return { target, range: anchor.range, text: text.slice(start, end) };
+        return target.cell === "visual" && anchor.reason === "range" ? "unsupported" : null;
       });
       return (index, text) => {
         const owner = session(), typing = input();

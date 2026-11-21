@@ -314,6 +314,22 @@ for (const [name, kind] of Object.entries(views)) {
     assert.equal(show.mock.callCount(), 0);
   });
 
+  test(name + ": joined Visual text refuses a write aimed at an unaddressable member", async t => {
+    const show = await enter(t, [{ id: "r1", audioText: "One" }, { id: "r2", audioText: "Two", visualText: "Look" }], joined);
+    const view = kind.open(t);
+    if (name === "Writer") view.flow.openVisual("r1");
+    const visual = document.querySelector(name === "Writer" ? ".wr-flow-visual-text"
+      : '#rows .cell-editable[data-id="r1"][data-field="visualText"]');
+    visual.focus();
+    setCellSelection(visual, 0);
+    const before = hook.read();
+    typeKeys(visual, "x");
+    assert.equal(visual.textContent, "Look");
+    assert.deepEqual(hook.read(), before);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+    assert.deepEqual(hook.leave(), { ok: true });
+  });
+
   for (const line of [false, true]) test(name + ": " + (line ? "Shift+Enter" : "plain paste") + " replaces a selection after buffered typing", async t => {
     const show = await enter(t, [{ id: "r1", audioText: "Hello" }, { id: "r2", audioText: "World" }]);
     const view = kind.open(t);

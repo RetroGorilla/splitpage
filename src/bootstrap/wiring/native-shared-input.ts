@@ -180,6 +180,12 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     return narrationSurfaceOf(like).cell(beat);
   }
 
+  function visualIsAddressable(beat: string, html: string | undefined): boolean {
+    if (html === undefined) return false;
+    const end = native.commands.anchorText({ beat, cell: "visual" }, cellLength(scriptCellOf(html)));
+    return end.kind === "anchored";
+  }
+
   function stop(reason: string, quiet = false): string {
     clearTimeout(timer);
     timer = undefined;
@@ -208,6 +214,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (!shown || !next.surface.painted(cell, shown) || shown[field] !== live) {
       return STALE;
     }
+    if (visual && !visualIsAddressable(beat, live)) return UNSUPPORTED;
     const from = visual ? { beat, offset: selection.from } : native.narrationCaret(beat, selection.from, selection.from !== selection.to);
     const to = selection.from === selection.to ? from : visual ? { beat, offset: selection.to } : native.narrationCaret(beat, selection.to);
     if (!from || !to || from.beat !== to.beat) return STALE;
@@ -374,6 +381,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       session.refuse(STALE);
       return null;
     }
+    if (visual && !visualIsAddressable(beat, html)) { session.refuse(UNSUPPORTED); return null; }
     const { from: offset, to } = current.selection;
     const at = (at: number, right = false) => visual ? { beat, offset: at } : native.narrationCaret(beat, at, right);
     const anchor = (point: { beat: string; offset: number }) => {
@@ -582,6 +590,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     let anchored: Draft | string;
     try { anchored = current.stale ? STALE : anchor(next); }
     catch (error) { report(error); anchored = PENDING; }
+    if (anchored === UNSUPPORTED) { session.refuse(anchored); return; }
     draft = typeof anchored === "string" ? next : anchored;
     preview(current.cell, current.selection, text);
     if (typeof anchored === "string") { stop(anchored); return; }
