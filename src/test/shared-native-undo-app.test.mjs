@@ -313,6 +313,17 @@ for (const [name, kind] of Object.entries(views)) {
     assert.equal(show.mock.callCount(), 3);
   });
 
+  test(name + ": Enter refuses stale narration and leaves the peer edit intact", async t => {
+    const show = await enter(t), view = kind.open(t);
+    kind.caret(view, "r1", 2);
+    assert.equal(hook.nativePeer.type("r1", 0, "Y").kind, "written");
+    assert.equal(press(kind.surface(), "Enter", { ctrlKey: false }), true);
+    await Promise.resolve();
+    assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["YHello"]);
+    assert.deepEqual(hook.read().peer, hook.read().app);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+  });
+
   for (const peerSplits of [true, false]) {
     test(name + ": Enter converges with a simultaneous peer " + (peerSplits ? "split" : "insertion"), async t => {
       const show = await enter(t), view = kind.open(t);

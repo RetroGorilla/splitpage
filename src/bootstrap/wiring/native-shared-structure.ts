@@ -5,8 +5,8 @@ import type { CommandOutcome, DocumentStructureIntent } from "../../application/
 import type { ReportPort } from "../../application/session/ports.ts";
 import { changesBetween } from "../../application/session/projection-changes.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
-import { sceneBeforeBeat, sceneFirstBeatId } from "../../core/document/scenes.ts";
-import type { ValidatedDocument } from "../../core/document/validated.ts";
+import { sceneBeforeBeat, sceneFirstBeatId, scenesInOrder, storedSceneName } from "../../core/document/scenes.ts";
+import type { DocumentShape } from "../../core/document/validated.ts";
 import { cappedText } from "../../core/document/text-policy.ts";
 import { editAllowed } from "./session-owner.ts";
 import type { mountNativeSharedInput } from "./native-shared-input.ts";
@@ -21,7 +21,7 @@ interface NativeStructurePorts {
 
 const UNAVAILABLE = "native-command-unavailable";
 
-function moveDrop(doc: ValidatedDocument, source: string, target: string, after: boolean, insideScene: boolean): NativeMoveBlock | null {
+function moveDrop(doc: DocumentShape, source: string, target: string, after: boolean, insideScene: boolean): NativeMoveBlock | null {
   const rows = doc.rows.filter(row => row.id !== source);
   const at = rows.findIndex(row => row.id === target);
   const next = rows[at + (after ? 1 : 0)];
@@ -72,7 +72,7 @@ export function createNativeEditorStructure({ native, session, input, publish, r
         }
         case "rename-heading":
         case "remove-heading": {
-          const scene = before.sections?.find(item => item.id === intent.id);
+          const scene = scenesInOrder(before)?.find(item => item.id === intent.id);
           if (!scene) return owner.refuse("missing");
           after ??= anchor(sceneFirstBeatId(scene), 0);
           if (intent.kind === "remove-heading") {
@@ -80,7 +80,8 @@ export function createNativeEditorStructure({ native, session, input, publish, r
           } else {
             const name = cappedText(intent.name, 200);
             if (!name) return { kind: "noop" };
-            const range = native.commands.anchorText({ beat: intent.id, cell: "name" }, 0, scene.name.length);
+            const length = (storedSceneName(before, intent.id) ?? scene.name).length;
+            const range = native.commands.anchorText({ beat: intent.id, cell: "name" }, 0, length);
             if (range.kind === "refused") return owner.refuse(range.reason);
             step = native.commands.renameHeading.withSelection(after, range.range, name);
           }

@@ -408,7 +408,7 @@ test("a native input binding unsubscribes its paint listener when torn down", as
   const stopPaint = t.mock.fn();
   const unbind = mountNativeSharedInput({
     native, report: fixture.ports.report, editAttribution: () => ({ at: "now", by: "Writer" }),
-    session: { admit: () => null, refuse: reason => ({ kind: "rejected", reason }), subscribe: () => stopPaint }
+    session: { admit: () => null, refuse: reason => ({ kind: "rejected", reason }), run: () => ({ kind: "noop" }), subscribe: () => stopPaint }
   });
   unbind.dispose();
   assert.equal(stopPaint.mock.callCount(), 1);

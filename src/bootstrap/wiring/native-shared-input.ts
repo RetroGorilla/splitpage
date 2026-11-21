@@ -4,7 +4,7 @@ import type { CellRange } from "../../application/editing/cell-editing.ts";
 import type { ReportPort } from "../../application/session/ports.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
 import { isBlankBeat, swapBeatsCommand } from "../../application/commands/rows.ts";
-import { sceneBeforeBeat } from "../../core/document/scenes.ts";
+import { sceneBeforeBeat, scenesInOrder, storedSceneName } from "../../core/document/scenes.ts";
 import { headingPos } from "../../core/flow/flow.ts";
 import { cellLength, projection } from "../../core/text/runs.ts";
 import { domToPos, posToDom } from "../../features/common/cell-dom.ts";
@@ -274,7 +274,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     return [endpoint(selection.from, 0), endpoint(selection.to, -1)] as const;
   }
 
-  function flushForInput(cell: Element, selection: CellRange): { cell: Element; selection: CellRange; stale?: true } | null {
+  function flushForInput(cell: Element, selection: CellRange, keepPreview = true): { cell: Element; selection: CellRange; stale?: true } | null {
     const buffered = draft;
     if (!buffered) return { cell, selection };
     const oldHtml = cell.innerHTML;
@@ -287,7 +287,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       const fresh = narrationCell(beat, cell);
       if (!fresh) { session.refuse(STALE); return null; }
       if (original === shown()) return { cell: fresh, selection };
-      fresh.innerHTML = oldHtml;
+      if (keepPreview) fresh.innerHTML = oldHtml;
       return { cell: fresh, selection, stale: true };
     }
     const [start, end] = acrossDraft(buffered, selection);
@@ -307,7 +307,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     };
     const from = offset(start, capture.inserted?.[0], 0), to = offset(end, capture.inserted?.[1], -1);
     if (from != null && to != null && from <= to) return { cell: fresh, selection: { from, to } };
-    fresh.innerHTML = oldHtml;
+    if (keepPreview) fresh.innerHTML = oldHtml;
     return { cell: fresh, selection, stale: true };
   }
 
@@ -326,7 +326,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (refusal) { session.refuse(refusal); return null; }
     const selection = cellSelection(cell);
     if (!selection || selection.from !== selection.to) { session.refuse(UNSUPPORTED); return null; }
-    const current = flushForInput(cell, selection);
+    const current = flushForInput(cell, selection, false);
     if (!current) return null;
     const beat = current.cell.getAttribute("data-id") ?? "";
     const row = documentReader.read(doc => doc?.rows.find(item => item.id === beat));
@@ -421,9 +421,12 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (refusal) { session.refuse(refusal); return; }
     if (beforePress()) return;
     const id = heading.getAttribute("data-scene") ?? "";
-    const doc = native.document(), scene = doc.sections?.find(item => item.id === id);
+    const doc = native.document(), scene = scenesInOrder(doc)?.find(item => item.id === id), previousName = storedSceneName(doc, id);
     const selection = cellSelection(heading);
-    if (!scene || !selection || !heading.isConnected || heading.textContent !== scene.name) { session.refuse(STALE); return; }
+    if (!scene || !selection || !heading.isConnected || previousName === null || heading.textContent !== previousName) {
+      session.refuse(STALE);
+      return;
+    }
     const target = { beat: id, cell: "name" } as const;
     const before = native.commands.anchorText(target, selection.from, selection.to);
     if (before.kind === "refused") { session.refuse(before.reason); return; }
@@ -445,7 +448,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const range = inputRange(input, heading);
     const text = input.inputType === "insertText" ? input.data : /^delete(?:Content|Word)(?:Backward|Forward)$/.test(input.inputType) ? "" : null;
     if (!range || text === null || input.isComposing || /[\r\n]/.test(text)) { session.refuse(UNSUPPORTED); return; }
-    const name = scene.name.slice(0, range.from) + text + scene.name.slice(range.to);
+    const name = previousName.slice(0, range.from) + text + previousName.slice(range.to);
     if (!name.trim() || [...name].length > 200) { session.refuse(UNSUPPORTED); return; }
     const edit = native.commands.anchorText(target, range.from, range.to);
     if (edit.kind === "refused") { session.refuse(edit.reason); return; }
