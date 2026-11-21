@@ -420,7 +420,7 @@ for (const [name, kind] of Object.entries(views)) {
       assert.equal(press(kind.surface(), "ArrowDown", { altKey: true, ctrlKey: false, ...signal }), true);
     }
     assert.deepEqual(hook.read(), before);
-    assert.deepEqual(show.mock.calls.map(call => call.arguments), Array.from({ length: 6 }, () => UNAVAILABLE));
+    assert.equal(show.mock.callCount(), 0);
     compose(kind.surface(), "end", "X");
     assert.equal(app(), "HelloX");
   });

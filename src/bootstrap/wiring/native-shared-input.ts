@@ -579,15 +579,16 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         event.stopImmediatePropagation();
         return;
       }
-      if ((narration || heading || cell?.id === "writer-doc") && (draft?.composing || key.isComposing || key.keyCode === 229)) {
+      const imeKey = key.isComposing || key.keyCode === 229, undoing = undoGesture(key);
+      if ((narration || heading || cell?.id === "writer-doc") && (draft?.composing || imeKey)) {
         event.stopImmediatePropagation();
-        if (undoGesture(key) || splitting || joining || removeHeading || moving) {
+        if (undoing || draft?.composing && (splitting || joining || removeHeading || moving)) {
           event.preventDefault();
-          if (!stopped) session.refuse(PENDING);
+          if (!stopped && (undoing || !imeKey)) session.refuse(PENDING);
         }
         return;
       }
-      if (undoGesture(key) && cell?.matches(UNDO_SURFACES)) return;
+      if (undoing && cell?.matches(UNDO_SURFACES)) return;
       if (!editingKey(key) && !joining && !removeHeading) {
         if (key.key.startsWith("Arrow") || key.key === "Home" || key.key === "End" || key.key === "Tab") finish();
         return;
