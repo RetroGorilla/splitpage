@@ -1,8 +1,10 @@
 import assert from "node:assert/strict";
 import { test, before, after } from "node:test";
 import { openNativeEditor } from "../../src/bootstrap/wiring/native-shared-session.ts";
-import { currentDocument, onDocumentReplaced, onSessionChange, runCommand, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
-import { enterSharedSession, leaveRunningSharedSession, nativeEditorRecords, sharedSessionParts } from "../../src/bootstrap/wiring/shared-session.ts";
+import { adoptReplacement, currentDocument, liveSession, mergeBase, onDocumentReplaced, onRefresh, onSessionChange, runCommand, sessionEntryRefusal, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
+import { enterSharedSession, forceLeaveSharedSession, leaveRunningSharedSession, leaveSharedSession,
+  nativeEditorActive, nativeEditorRecords, sharedSessionParts } from "../../src/bootstrap/wiring/shared-session.ts";
+import type { SharedEditorBackend, SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
 import { bootEntrySwitchFixture, entrySwitchFixture, stopEntrySwitchFixture } from "./shared-entry-switch-support.ts";
 import { notices } from "../../src/bootstrap/wiring/ports/effects.ts";
 import { sharedUndoRoute, stepSharedUndo } from "../../src/bootstrap/wiring/undo.ts";
@@ -17,6 +19,7 @@ import { createNativeEditorRecords } from "../../src/bootstrap/wiring/native-sha
 import { openNativeSession } from "../../src/adapters/collab/native/session.ts";
 import { sanitizeHtml } from "../../src/bootstrap/richtext.ts";
 import { addGalleryPicture, removeGallerySlot } from "../../src/core/document/gallery.ts";
+import { fakeClock } from "../application/session-fakes.ts";
 
 before(bootEntrySwitchFixture);
 after(stopEntrySwitchFixture);
@@ -451,5 +454,236 @@ test("leaving unsubscribes the bridge before the queued update and closes the na
   assert.deepEqual(leaveRunningSharedSession(), { ok: true });
   await Promise.resolve();
   assert.equal(backend.replica.revision(), revision);
+  assert.equal(native.ydoc.isDestroyed, true);
+});
+
+test("nested native switches cannot replace the entry or leave hold", async t => {
+  const fixture = entrySwitchFixture();
+  t.after(() => { if (nativeEditorActive()) forceLeaveSharedSession(); });
+  const before = currentDocument(), nested: Promise<unknown>[] = [], leaving: unknown[] = [];
+  const foreign: SharedSwitchPorts = { ...fixture.ports, migrate: () => assert.fail("foreign migration"), docId: () => assert.fail("foreign identity") };
+  const ports = { ...fixture.ports, settle: () => {
+    nested.push(enterSharedSession(foreign, () => assert.fail("nested open")));
+    assert.equal(sessionEntryRefusal(), "session-switching");
+    assert.equal(currentDocument(), before);
+  }, left: t.mock.fn((landed: boolean) => landed) };
+  const result = await enterSharedSession(ports, (doc, failed) => {
+    const { backend } = openNativeEditor(ports, doc, failed);
+    return { ...backend, unbind: () => {
+      leaving.push(leaveSharedSession(foreign));
+      assert.equal(sessionEntryRefusal(), "session-switching");
+      backend.unbind();
+    } };
+  });
+  assert.deepEqual(result, { ok: true });
+  assert.deepEqual(await Promise.all(nested), [{ ok: false, reason: "session-switching" }]);
+  assert.deepEqual(leaveSharedSession(foreign), { ok: true });
+  assert.deepEqual(leaving, [{ ok: false, reason: "session-switching" }]);
+  assert.equal(sessionEntryRefusal(), null);
+  assert.equal(sharedSession(), false);
+  assert.equal(sharedUndoRoute(), null);
+  assert.equal(currentDocument()?.rows[0]?.audioText, "Captured words");
+  assert.notEqual(currentDocument()?.docId, before?.docId);
+  assert.deepEqual(ports.left.mock.calls.map(call => call.arguments), [[true]]);
+  assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: "not-shared" });
+});
+
+for (const step of ["refusal", "settle", "prepare", "docId", "migrate", "bind", "start", "detach"] as const) {
+  test(`native entry rolls back or refuses before opening when ${step} throws, then retries`, async t => {
+    const fixture = entrySwitchFixture(), before = currentDocument(), revision = liveSession().epoch(), base = mergeBase();
+    t.after(() => { if (nativeEditorActive()) forceLeaveSharedSession(); });
+    const failure = new Error(step), callback = new Error("shared replacement listener");
+    const fail = () => { throw failure; };
+    const reattach = t.mock.fn();
+    const ports = { ...fixture.ports, ...(step === "bind" || step === "start" ? {} : { [step]: fail }), reattach };
+    const opened: ReturnType<typeof openNativeEditor>[] = [];
+    const removed = t.mock.fn();
+    const listen = onDocumentReplaced(() => { if (sharedSession()) throw callback; });
+    try {
+      assert.deepEqual(await enterSharedSession(ports, (doc, failed) => {
+        const editor = openNativeEditor(ports, doc, failed);
+        opened.push(editor);
+        editor.native.ydoc.on("destroy", removed);
+        const { backend } = editor;
+        if (step === "bind") return { ...backend, bind: session => { backend.bind(session); fail(); } };
+        if (step === "start") return { ...backend, start: () => { backend.start(); fail(); } };
+        return backend;
+      }), { ok: false, reason: "enter-failed" });
+    } finally { listen(); }
+    assert.deepEqual([currentDocument(), liveSession().epoch(), mergeBase(), sharedSession(), nativeEditorActive(), sharedUndoRoute()],
+      [before, revision, base, false, false, null]);
+    assert.equal(currentDocument(), before);
+    assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: "not-shared" });
+    assert.equal(reattach.mock.callCount(), step === "detach" ? 1 : 0);
+    const openedBackend = step === "bind" || step === "start" || step === "detach";
+    assert.equal(opened.length, openedBackend ? 1 : 0);
+    assert.deepEqual(fixture.errors, openedBackend ? [failure, callback] : [failure]);
+    assert.equal(removed.mock.callCount(), opened.length);
+    if (openedBackend) assert.equal(opened[0]?.native.ydoc.isDestroyed, true);
+    const retry = await nativeEntry(fixture);
+    assert.notEqual(retry, opened[0]?.native);
+    assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+  });
+}
+
+for (const step of ["settle", "unbind", "docId", "migrate", "landing"] as const) {
+  test(`native leave retries after ${step} throws and lands edits received after the refusal`, async t => {
+    const fixture = entrySwitchFixture();
+    t.after(() => { if (nativeEditorActive()) forceLeaveSharedSession(); });
+    const failure = new Error(step), restoring = new Error("restoring binding");
+    const left = t.mock.fn((landed: boolean) => landed);
+    let armed = false, retryBinding = false;
+    const trip = (at: typeof step) => { if (armed && step === at) { armed = false; throw failure; } };
+    const ports = {
+      ...fixture.ports, left,
+      docId: () => { trip("docId"); return fixture.ports.docId(); },
+      migrate: (raw: unknown) => { trip("migrate"); return fixture.ports.migrate(raw); }
+    };
+    const opened: ReturnType<typeof openNativeEditor>[] = [];
+    assert.deepEqual(await enterSharedSession(ports, (doc, failed) => {
+      const editor = openNativeEditor(ports, doc, failed);
+      opened.push(editor);
+      const { backend } = editor;
+      return {
+        ...backend,
+        settle: () => { trip("settle"); return backend.settle(); },
+        unbind: () => { backend.unbind(); trip("unbind"); },
+        bind: session => {
+          backend.bind(session);
+          if (step === "unbind" && retryBinding) throw restoring;
+        },
+        landing: () => { trip("landing"); return backend.landing(); }
+      };
+    }), { ok: true });
+    const native = opened[0]?.native;
+    assert.ok(native);
+    const destroyed = t.mock.fn();
+    native.ydoc.on("destroy", destroyed);
+    const peer = createNativeTestPeer(native);
+    t.after(peer.dispose);
+    assert.equal(peer.type("R1", 0, "Kept ").kind, "written");
+    await Promise.resolve();
+    const before = currentDocument(), route = sharedUndoRoute(), epoch = liveSession().epoch();
+    armed = true;
+    retryBinding = true;
+    assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: "leave-failed" });
+    assert.equal(currentDocument(), before);
+    assert.equal(sharedUndoRoute(), route);
+    assert.deepEqual([sharedSession(), liveSession().epoch(), native.ydoc.isDestroyed, left.mock.callCount()], [true, epoch, false, 0]);
+    assert.deepEqual(fixture.errors, step === "unbind" ? [failure, restoring] : [failure]);
+    retryBinding = false;
+    assert.equal(peer.type("R1", 5, "Again ").kind, "written");
+    assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+    assert.deepEqual([currentDocument()?.rows[0]?.audioText, sharedSession(), nativeEditorActive(), sharedUndoRoute()],
+      ["Kept Again Captured words", false, false, null]);
+    assert.notEqual(currentDocument()?.docId, before?.docId);
+    assert.deepEqual(left.mock.calls.map(call => call.arguments), [[true]]);
+    await Promise.resolve();
+    assert.equal(destroyed.mock.callCount(), 1);
+    assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: "not-shared" });
+  });
+}
+
+for (const blocked of [false, true]) test(`native forced leave releases the owner route and backend once, blocked=${blocked}`, async t => {
+  const fixture = entrySwitchFixture(), left = t.mock.fn((landed: boolean) => landed);
+  const ports = { ...fixture.ports, left };
+  const steps: string[] = [];
+  const opened: ReturnType<typeof openNativeEditor>[] = [];
+  t.after(() => { if (nativeEditorActive()) forceLeaveSharedSession(); });
+  assert.deepEqual(await enterSharedSession(ports, (doc, failed) => {
+    const editor = openNativeEditor(ports, doc, failed);
+    opened.push(editor);
+    const { backend } = editor;
+    return {
+      ...backend,
+      settle: () => { steps.push("settle"); return blocked ? "test-buffer-stuck" : backend.settle(); },
+      unbind: () => { steps.push("unbind"); backend.unbind(); },
+      abandon: () => { steps.push("abandon"); },
+      drop: () => { steps.push("drop"); },
+      dispose: attempt => { steps.push("dispose"); backend.dispose(attempt); }
+    } satisfies SharedEditorBackend;
+  }), { ok: true });
+  const native = opened[0]?.native;
+  assert.ok(native);
+  const destroyed = t.mock.fn(), peer = createNativeTestPeer(native);
+  t.after(peer.dispose);
+  native.ydoc.on("destroy", destroyed);
+  assert.equal(peer.type("R1", 0, "Delivered ").kind, "written");
+  await Promise.resolve();
+  peer.hold();
+  assert.equal(peer.type("R1", 0, "Held ").kind, "written");
+  const before = currentDocument();
+  assert.deepEqual(forceLeaveSharedSession(), blocked ? { ok: false, reason: "test-buffer-stuck" } : { ok: true });
+  assert.deepEqual(steps, blocked ? ["settle", "abandon", "settle", "drop", "unbind", "dispose"] : ["settle", "unbind", "dispose"]);
+  assert.deepEqual([nativeEditorActive(), sharedUndoRoute(), sharedSession()], [false, null, blocked]);
+  assert.deepEqual(left.mock.calls.map(call => call.arguments), [[!blocked]]);
+  assert.equal(currentDocument()?.rows[0]?.audioText, "Delivered Captured words");
+  if (blocked) {
+    assert.equal(currentDocument(), before);
+    assert.match(String(fixture.errors[0]), /ended without landing a standalone copy: test-buffer-stuck/);
+    adoptReplacement(fixture.ports.migrate(structuredClone(before)), fixture.ports.standalone);
+  } else {
+    assert.notEqual(currentDocument()?.docId, before?.docId);
+    assert.deepEqual(fixture.errors, []);
+  }
+  await Promise.resolve();
+  assert.equal(destroyed.mock.callCount(), 1);
+  assert.deepEqual(forceLeaveSharedSession(), { ok: false, reason: "not-shared" });
+  assert.equal(left.mock.callCount(), 1);
+});
+
+test("native entry prepares after settlement and before rechecking refusal", async t => {
+  const fixture = entrySwitchFixture(), original = currentDocument(), order: string[] = [];
+  t.after(() => { if (nativeEditorActive()) forceLeaveSharedSession(); });
+  let refusal: string | null = null;
+  const ports = {
+    ...fixture.ports, refusal: () => { order.push("refusal"); return refusal; },
+    settle: () => {
+      order.push("settle");
+      queueMicrotask(() => { order.push("settled"); });
+    },
+    prepare: async () => { order.push("prepare"); refusal = "opening-after-settlement"; return null; }
+  };
+  const open = t.mock.fn(() => assert.fail("a refused entry opened the adapter"));
+  const entering = enterSharedSession(ports, open);
+  assert.deepEqual(order, ["refusal", "settle"]);
+  assert.deepEqual(await entering, { ok: false, reason: "opening-after-settlement" });
+  assert.deepEqual(order, ["refusal", "settle", "settled", "prepare", "refusal"]);
+  assert.equal(open.mock.callCount(), 0);
+  assert.equal(currentDocument(), original);
+  const native = await nativeEntry(fixture);
+  assert.equal(native.document().rows[0]?.audioText, "Captured words");
+  assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+});
+
+test("native adoption and leave callbacks report errors without undoing the landed owners", async t => {
+  const fixture = entrySwitchFixture(), before = currentDocument();
+  t.after(() => { if (nativeEditorActive()) forceLeaveSharedSession(); });
+  const entering = new Error("shared replacement callback"), leaving = new Error("standalone replacement callback");
+  let landed: unknown;
+  const left = t.mock.fn((ok: boolean) => { landed = [ok, currentDocument()?.rows[0]?.audioText, sharedSession(), sharedUndoRoute()]; });
+  const clock = fakeClock(), stopping = new Error("refresh timer could not stop");
+  const fixtureWithClock = { ...fixture, ports: { ...fixture.ports, left, timers: { ...clock, stop: () => { throw stopping; } } } };
+  const release = onDocumentReplaced(() => { throw sharedSession() ? entering : leaving; });
+  t.after(release);
+  const native = await nativeEntry(fixtureWithClock);
+  assert.deepEqual(fixture.errors, [entering]);
+  assert.notEqual(currentDocument(), before);
+  assert.equal(nativeEditorActive(), true);
+  const peer = createNativeTestPeer(native);
+  t.after(peer.dispose);
+  assert.equal(peer.type("R1", 0, "Live ").kind, "written");
+  const heard = t.mock.fn();
+  t.after(onRefresh(heard));
+  liveSession().refresh("probe");
+  assert.equal(clock.armed(), 1);
+  assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+  assert.deepEqual(landed, [true, "Live Captured words", false, null]);
+  assert.deepEqual(fixture.errors, [entering, leaving, stopping]);
+  assert.equal(left.mock.callCount(), 1);
+  assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: "not-shared" });
+  clock.advance(5000);
+  assert.equal(heard.mock.callCount(), 0);
+  await Promise.resolve();
   assert.equal(native.ydoc.isDestroyed, true);
 });

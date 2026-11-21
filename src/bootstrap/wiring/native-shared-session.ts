@@ -134,6 +134,7 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
       input = null;
     },
     settle: () => input?.finish() ?? null,
+    abandon: () => { input?.abandonComposition(); },
     start: () => {
       initial = enterSharedDocument(native.document());
       published = native.revision();
