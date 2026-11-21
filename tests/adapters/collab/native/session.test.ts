@@ -121,6 +121,53 @@ for (const tail of ["", "Body"]) test("two peers finalizing the same Markdown he
   }
 });
 
+for (const [name, insertion, title, narrationAfter] of [
+  ["different title cutoffs", "", "SceneBody", ""],
+  ["an unseen insertion in one title", "PEER", "ScePEERne", "Body"]
+] as const) {
+  test("competing Markdown conversions converge with one visible title and one stored title after " + name, t => {
+    const seed = fromDocument({ A: "# SceneBody" });
+    t.after(seed.close);
+    const vector = Y.encodeStateVector(seed.ydoc);
+    const usedIds = Y.decodeStateVector(vector);
+    const [left, right] = [1, 2, 3].filter(id => !usedIds.has(id));
+    assert.ok(left && right);
+    const state = { kind: "state", state: seed.encodeState() } as const;
+    for (const [first, second] of [[left, right], [right, left]]) {
+      assert.ok(first && second);
+      const a = open(state), b = open(state);
+      t.after(a.close);
+      t.after(b.close);
+      a.ydoc.clientID = first;
+      b.ydoc.clientID = second;
+      if (insertion) type(b, 5, insertion);
+      assert.equal(a.commands.finalizeHeading("A", 7, true).kind, "written");
+      assert.equal(b.commands.finalizeHeading("A", 11, true).kind, "written");
+      const fromA = Y.encodeStateAsUpdate(a.ydoc, vector), fromB = Y.encodeStateAsUpdate(b.ydoc, vector);
+      Y.applyUpdate(a.ydoc, fromB);
+      Y.applyUpdate(b.ydoc, fromA);
+      const expectedVisible = first < second ? title : "Scene";
+      const expectedHidden = first < second ? "Scene" : title;
+      const inspect = (copy: Session) => {
+        const doc = copy.document(), scenes = scenesInOrder(doc);
+        const stored = [...copy.ydoc.getMap<Y.Text>("names")];
+        assert.deepEqual(scenes?.map(scene => scene.name), [expectedVisible]);
+        assert.deepEqual(doc.rows.map(row => row.audioText ?? ""), [narrationAfter]);
+        assert.deepEqual(stored.filter(([id]) => id !== scenes?.[0]?.id).map(([, name]) => name.toString()), [expectedHidden]);
+        return { doc, stored: stored.map(([id, name]) => [id, name.toString()]).sort() };
+      };
+      const expected = inspect(a);
+      assert.deepEqual(inspect(b), expected);
+      for (const order of [[fromA, fromB], [fromB, fromA]]) {
+        const copy = open(state);
+        t.after(copy.close);
+        for (const update of order) Y.applyUpdate(copy.ydoc, update);
+        assert.deepEqual(inspect(copy), expected);
+      }
+    }
+  });
+}
+
 test("a relative narration caret resolves in its visible joined row after a peer edit", t => {
   const author = fromDocument({ A: "ab", B: "cd", C: "ef" });
   t.after(author.close);

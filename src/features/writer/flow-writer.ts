@@ -81,6 +81,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   const surface = createSurface({
     ...(ports.clipboard ? { clipboard: ports.clipboard } : {}),
     ...(ports.paintedText ? { paintedText: ports.paintedText } : {}),
+    ...(ports.nativeHeadingCandidate ? { nativeHeadingCandidate: ports.nativeHeadingCandidate } : {}),
     ...(ports.bufferedText ? { bufferedText: ports.bufferedText } : {}),
     root,
     lifetime: ports.lifetime,

@@ -2,7 +2,7 @@ import * as Y from "yjs";
 import { gallerySize } from "../../../core/document/gallery.ts";
 import { sceneBeforeBeat } from "../../../core/document/scenes.ts";
 import { HEADING_MARKER, SCENE_NAME_MAX, startsParagraph } from "../../../core/flow/flow.ts";
-import { headingLine } from "../../../core/flow/heading-line.ts";
+import { headingLine } from "../../../core/text/edits.ts";
 import { cellLength, projection } from "../../../core/text/runs.ts";
 import { copyNativeCompoundInput } from "./compound-input.ts";
 import { prepareNativeHeading, writeNativeHeading } from "./heading-commands.ts";
@@ -298,7 +298,7 @@ type NativeMarkdownHeadingOutcome =
   | { readonly kind: "written"; readonly beat: string; readonly offset: number; readonly consumed: number;
       readonly heading?: string; readonly notice?: string }
   | { readonly kind: "unchanged" }
-  | { readonly kind: "refused"; readonly reason: NativeRowRefusal | "rank" };
+  | { readonly kind: "refused"; readonly reason: NativeRowRefusal | "rank" | "joined" };
 
 export function finalizeNativeHeading(script: NativeScript, beat: string, offset: number, enter: boolean): NativeMarkdownHeadingOutcome {
   const unavailable = nativeAvailability(script);
@@ -308,7 +308,8 @@ export function finalizeNativeHeading(script: NativeScript, beat: string, offset
     if (!shown) return refused("missing");
     const snapshot = reader.document(), index = snapshot.rows.findIndex(row => row.id === beat);
     if (!startsParagraph(snapshot, index) || !projection(shown.narration).startsWith(HEADING_MARKER)) return UNCHANGED;
-    if (shown.members.length !== 1 || !Number.isInteger(offset) || offset < 0 || offset > cellLength(shown.narration)) return refused("range");
+    if (shown.members.length !== 1) return { kind: "refused", reason: "joined" };
+    if (!Number.isInteger(offset) || offset < 0 || offset > cellLength(shown.narration)) return refused("range");
     const follower = snapshot.rows[index + 1], runOn = !!follower && !startsParagraph(snapshot, index + 1);
     const { name, restStart, notice } = headingLine(shown.narration, HEADING_MARKER, SCENE_NAME_MAX, enter ? offset : null, runOn);
     const length = cellLength(shown.narration), count = restStart ?? HEADING_MARKER.length;
