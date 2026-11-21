@@ -345,6 +345,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     readBeat: (beat: string) => script.reader.noticeBeat(beat),
     readRow: (row: string) => script.reader.row(row),
     narrationHtml: (row: string) => script.reader.row(row)?.audioText,
+    hasBeatMarker: (beat: string) => script.reader.hasBeatMarker(beat),
     narrationOffset: (row: string, range: Pick<NativeTextRange, "from">, assoc: 0 | -1 = 0) => {
       if (refusal()) return null;
       return perform(() => {

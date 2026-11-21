@@ -70,7 +70,7 @@ export type NativeAnchoring =
   | { readonly kind: "refused"; readonly reason: NativeRefusal };
 
 export type NativeCommitOutcome =
-  | { readonly kind: "written"; readonly caret?: Y.RelativePosition; readonly selection?: readonly [Y.RelativePosition | null, Y.RelativePosition | null] }
+  | { readonly kind: "written"; readonly stray?: true; readonly caret?: Y.RelativePosition; readonly selection?: readonly [Y.RelativePosition | null, Y.RelativePosition | null] }
   | { readonly kind: "unchanged" }
   | { readonly kind: "recovery"; readonly reason: NativeRefusal; readonly runs: readonly Run[] };
 
@@ -147,6 +147,7 @@ function readTarget(target: NativeTextTarget): NativeTextTarget | null {
 }
 
 const authoredRanges = new WeakMap<Y.Doc, WeakMap<NativeTextRange, NativeUndoAnchor>>();
+const pendingBeatEnds = new WeakMap<NativeTextRange, PlainPosition | null>();
 
 function shownPosition(cells: readonly LiveCell[], offset: number, name: boolean, views?: Map<LiveCell, NativeCellView>) {
   for (const [part, cell] of cells.entries()) {
@@ -175,7 +176,8 @@ function splitsPair(text: string, at: number): boolean {
   return at > 0 && at < text.length && /[\ud800-\udbff]/.test(text.charAt(at - 1)) && /[\udc00-\udfff]/.test(text.charAt(at));
 }
 
-export function anchorNativeText(script: NativeScript, target: NativeTextTarget, from: number, to = from): NativeAnchoring {
+export function anchorNativeText(script: NativeScript, target: NativeTextTarget, from: number, to = from,
+  purpose?: "buffered-typing"): NativeAnchoring {
   const unavailable = nativeAvailability(script);
   if (unavailable) return { kind: "refused", reason: unavailable };
   const checked = readTarget(target);
@@ -195,6 +197,13 @@ export function anchorNativeText(script: NativeScript, target: NativeTextTarget,
   let authored = authoredRanges.get(script.doc);
   if (!authored) { authored = new WeakMap(); authoredRanges.set(script.doc, authored); }
   authored.set(range, { anchor, head });
+  if (purpose === "buffered-typing" && checked.cell === "narration" && from === to && cells.length === 1) {
+    const { text, cell, index } = first;
+    // why: a terminal caret needs a left anchor so it cannot follow a later append to the segment
+    const beatEnd = cell.end === text.length ? index === cell.end ? undoEndpoint(checked, text, cell.end, -1).position : null
+      : index === cell.end ? anchor.position : undoEndpoint(checked, text, cell.end, 0).position;
+    pendingBeatEnds.set(range, beatEnd);
+  }
   return { kind: "anchored", range };
 }
 
@@ -436,11 +445,25 @@ export function deleteNativePieces(live: NativeLiveRange, added = 0): void {
   }
 }
 
+function removedTypingRange(script: NativeScript, range: NativeRangeData, source: NativeTextRange): NativeLiveRange | null {
+  const beatEnd = pendingBeatEnds.get(source);
+  if (beatEnd === undefined || !authoredRanges.get(script.doc)?.has(source)) return null;
+  const { beat } = range.target;
+  if (!(script.roots.beats.get(beat) instanceof Y.Map) || !(script.roots.visuals.get(beat) instanceof Y.Text) ||
+    script.reader.hasBeatMarker(beat)) return null;
+  // why: when the following boundary is also gone, Y.Text inserts after both deleted beats at the shared index
+  if (beatEnd?.assoc === 0 && unitGone(beatEnd, script.doc)) return null;
+  const at = resolve(!range.from.item && beatEnd ? beatEnd : range.from, script.doc);
+  if (!(at?.type instanceof Y.Text)) return null;
+  const piece = { text: at.type, start: at.index, from: at.index, until: at.index, items: [] };
+  return { ...piece, pieces: [piece] };
+}
+
 // why: a command called while another transaction is open refuses, since that transaction's changes are not yet
 // observed
 export function replaceNativeText(script: NativeScript, range: NativeTextRange, runs: readonly Run[], stamp?: NativeEditStamp,
   beforeWrite?: (target: NativeTextTarget, live: NativeLiveRange) => void, adds?: boolean, afterWrite?: (anchor: NativeUndoAnchor) => void,
-  placement?: NativeTextPlacement): NativeCommitOutcome {
+  placement?: NativeTextPlacement, typing = false): NativeCommitOutcome {
   const unavailable = nativeAvailability(script);
   if (unavailable) return refuse(unavailable, runs);
   return transactPreparedNativeCommand(script, () => ({
@@ -448,7 +471,9 @@ export function replaceNativeText(script: NativeScript, range: NativeTextRange, 
   }), ({ prepared, encoded, checked, points }) => {
     if (!prepared || encoded === null) return refuse("text", runs);
     if (!checked || checked.target.cell === "name") return refuse("range", runs);
-    const live = nativeLiveRange(script, checked);
+    const addressed = nativeLiveRange(script, checked);
+    const stray = addressed === "missing" && typing && prepared.length ? removedTypingRange(script, checked, range) : null;
+    const live = stray ?? addressed;
     if (typeof live === "string") return refuse(live, runs);
     if (!prepared.length && !live.pieces.some(piece => piece.until > piece.from)) return UNCHANGED;
     const updateStamp = encoded && script.reader.beatBoundary(checked.target.beat) && !sameStamp(script.roots.edited.get(checked.target.beat), encoded);
@@ -458,9 +483,10 @@ export function replaceNativeText(script: NativeScript, range: NativeTextRange, 
     deleteNativePieces(live, added);
     if (encoded && updateStamp) script.roots.edited.set(checked.target.beat, encoded);
     if (afterWrite) {
-      const anchor = undoEndpoint(checked.target, live.text, end, 0);
+      const anchor = undoEndpoint(checked.target, live.text, end, stray ? -1 : 0);
       afterWrite({ anchor, head: anchor });
     }
+    if (stray) return { kind: "written", stray: true };
     if (!points) return WRITTEN;
     const caret = Y.createRelativePositionFromTypeIndex(live.text, end, -1);
     const at = (offset: number | null, assoc: 0 | -1) => offset === null ? null
@@ -478,7 +504,7 @@ function capturePlacement(placement: NativeTextPlacement | undefined): NativeTex
 export function typeNativeText(script: NativeScript, range: NativeTextRange, text: string, marks: Marks, stamp?: NativeEditStamp,
   beforeWrite?: (target: NativeTextTarget) => void, afterWrite?: (anchor: NativeUndoAnchor) => void,
   placement?: NativeTextPlacement): NativeCommitOutcome {
-  return replaceNativeText(script, range, text ? [{ text, marks }] : [], stamp, beforeWrite, text !== "", afterWrite, placement);
+  return replaceNativeText(script, range, text ? [{ text, marks }] : [], stamp, beforeWrite, text !== "", afterWrite, placement, true);
 }
 
 export function deleteNativeText(script: NativeScript, range: NativeTextRange, stamp?: NativeEditStamp, placement?: NativeTextPlacement): NativeCommitOutcome {
