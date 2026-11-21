@@ -66,7 +66,7 @@ import { mountDocumentChromeFeature, stopDocumentChromeFeature } from "./wiring/
 import { mountPanelListenersFeature, stopPanelListenersFeature } from "./wiring/panels.ts";
 import { mountSidePanelsFeature, stopSidePanelsFeature } from "./wiring/side-panels.ts";
 import { mountSharedSessionFeature, stopSharedSessionFeature } from "./wiring/shared-test.ts";
-import { mountWriterRuntimeFeature, stopWriterRuntimeFeature, writerControls } from "./wiring/writer.ts";
+import { setWriterDocumentObservers } from "./wiring/writer.ts";
 
 let running: (() => void) | null = null;
 
@@ -75,7 +75,6 @@ function view(key: string, mount: () => unknown): [() => unknown, () => void] {
 }
 
 let appearanceMountedEarly = false;
-let reopenWriter = false;
 
 function stopAppearance(): void {
   stopViewFeature("mountAppearance");
@@ -104,11 +103,7 @@ export function startApp(wiring: Wiring, onFail?: (error: unknown) => void): () 
     appearanceMountedEarly = false;
     if (appearance) stops.push(stopAppearance);
     stops.push(startActions(wiring.actions, wiring.keyTarget));
-    const startup = beginStartup(startupPorts(() => {
-      if (!reopenWriter) return;
-      writerControls()?.openWriter();
-      reopenWriter = false;
-    }));
+    const startup = beginStartup(startupPorts());
     stops.push(startup.dispose);
     run([mountCellEditingFeature, stopCellEditingFeature]);
     run([mountPreferenceWatchFeature, stopPreferenceWatchFeature]);
@@ -163,10 +158,7 @@ export function startApp(wiring: Wiring, onFail?: (error: unknown) => void): () 
     overlay.mountWriterBar();
     run(view("mountWriterClose", mountWriterCloseFeature));
     overlay.mountWriterFocus();
-    run([() => writerControls() ?? mountWriterRuntimeFeature(), () => {
-      reopenWriter ||= !!writerControls()?.writerFlowControl();
-      if (!stopWriterRuntimeFeature()) throw new Error("The Writer could not finish");
-    }]);
+    run([() => setWriterDocumentObservers(true), () => setWriterDocumentObservers(false)]);
     // why: the shared session hook stops first, so it leaves the session while the owners it lands on are still running
     run([mountSharedSessionFeature, stopSharedSessionFeature]);
     startup.finish();

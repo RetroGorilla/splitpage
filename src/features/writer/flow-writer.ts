@@ -278,7 +278,8 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   const observer = new MutationObserver(() => {
     if (dialogs.every(dialog => dialog.hidden) && root.isConnected && isCurrent()) surface.focusBack();
   });
-  dialogs.forEach(dialog => observer.observe(dialog, { attributes: true, attributeFilter: ["hidden"] }));
+  const observeDialogs = () => dialogs.forEach(dialog => observer.observe(dialog, { attributes: true, attributeFilter: ["hidden"] }));
+  observeDialogs();
 
   const writer: FlowWriter = {
     openVisual: (rowId, highlight) => {
@@ -351,6 +352,11 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     },
     place: (range, scroll) => { surface.place(range, scroll); },
     check: surface.domCheck,
+    setDocumentObservers: active => {
+      if (active) observeDialogs();
+      else observer.disconnect();
+      surface.setSelectionListener(active);
+    },
     dispose: () => {
       if (visual?.settle && !visual.settle()) return false;
       if (surface.settle && !surface.settle()) return false;

@@ -116,9 +116,12 @@ test("stopping Writer disconnects main-editor stats and undo, and remount reconn
   }
 });
 
-test("app stop with a pending standalone Writer modal change releases the Writer runtime", async t => {
+test("app stop with a pending standalone Writer modal change disconnects its document observers", async t => {
   adoptReplacement(migrateRows({ title: "Writer shutdown", rows: [{ id: "r1", audioText: "Hello" }] }));
-  writerControls().openWriter();
+  const writer = writerControls();
+  writer.openWriter();
+  const flow = writer.writerFlowControl();
+  assert.ok(flow);
   const errors = [];
   const capture = event => { errors.push(event.error); event.preventDefault(); };
   window.addEventListener("error", capture);
@@ -130,5 +133,6 @@ test("app stop with a pending standalone Writer modal change releases the Writer
   await Promise.resolve();
   document.dispatchEvent(new window.Event("selectionchange"));
   assert.deepEqual(errors, []);
-  assert.equal(writerControls(), null);
+  assert.equal(writerControls(), writer);
+  assert.equal(writer.writerFlowControl(), flow);
 });

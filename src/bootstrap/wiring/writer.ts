@@ -312,6 +312,10 @@ export function stopWriterRuntimeFeature(): boolean {
 }
 export const writerControls = writer.owner;
 
+export function setWriterDocumentObservers(active: boolean): void {
+  writerControls()?.writerFlowControl()?.setDocumentObservers(active);
+}
+
 export function writerActions() {
   return definitions(writer.owner, { screen });
 }

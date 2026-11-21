@@ -27,7 +27,7 @@ import { notifyDesktopDocumentState } from "./desktop-owners.ts";
 import { presence } from "./ports/desktop-presence.ts";
 import { applyTakenDraft, draftTaker } from "./drafts.ts";
 
-export function startupPorts(restoreWriter: () => void): StartupPorts<unknown, ValidatedDocument, ValidatedDocument | null, MergedStates> {
+export function startupPorts(): StartupPorts<unknown, ValidatedDocument, ValidatedDocument | null, MergedStates> {
   return {
     desktop: presence.running(),
     draft: {
@@ -54,7 +54,7 @@ export function startupPorts(restoreWriter: () => void): StartupPorts<unknown, V
         if (!render) throw new Error("Rows rendering is not started yet");
         return render.renderFirstDraw();
       },
-      refreshChrome: [updateAutoSaveMenu, updateHideShotSwitch, updateSaveStatus, restoreWriter],
+      refreshChrome: [updateAutoSaveMenu, updateHideShotSwitch, updateSaveStatus],
       reportRecovery: function (report) { reportMerge(report, { kind: "recovery" }); },
       toastLastEditor: toastLastEditor,
       resumeLastProject: (...args: Parameters<ReturnType<typeof localFilesOwner>["tryResumeLastProject"]>) => localFilesOwner().tryResumeLastProject(...args),
