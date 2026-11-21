@@ -4,7 +4,7 @@ eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=wi
 wait F.state().title === 'T01 forward'
 click #btn-write
 wait W.on()
-eval S.enter()
+eval S.enter({backend:'legacy'})
 wait S.read().peer !== null
 eval S.peer.hold();document.getElementById('writer-doc').focus();W.place(at('r1',1,3));true
 key Backspace
@@ -32,7 +32,7 @@ eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=wi
 wait F.state().title === 'T01 reverse'
 eval if (!W.on()) document.getElementById('btn-write').click(); true
 wait W.on()
-eval S.enter()
+eval S.enter({backend:'legacy'})
 wait S.read().peer !== null
 eval S.peer.hold();document.getElementById('writer-doc').focus();W.place(at('r1',1,3));true
 key Backspace
@@ -60,7 +60,7 @@ eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=wi
 wait F.state().title === 'T01 duplicate'
 eval if (!W.on()) document.getElementById('btn-write').click(); true
 wait W.on()
-eval S.enter()
+eval S.enter({backend:'legacy'})
 wait S.read().peer !== null
 eval S.peer.hold();document.getElementById('writer-doc').focus();W.place(at('r1',1,3));true
 key Backspace
@@ -88,7 +88,7 @@ eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=wi
 wait F.state().title === 'T01 composed forward'
 eval if (!W.on()) document.getElementById('btn-write').click(); true
 wait W.on()
-eval S.enter()
+eval S.enter({backend:'legacy'})
 wait S.read().peer !== null
 eval S.peer.hold();document.getElementById('writer-doc').focus();W.place(at('r1',1,3));true
 ime set β
@@ -118,7 +118,7 @@ eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=wi
 wait F.state().title === 'T01 composed duplicate'
 eval if (!W.on()) document.getElementById('btn-write').click(); true
 wait W.on()
-eval S.enter()
+eval S.enter({backend:'legacy'})
 wait S.read().peer !== null
 eval S.peer.hold();document.getElementById('writer-doc').focus();W.place(at('r1',1,3));true
 ime set β

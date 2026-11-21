@@ -32,6 +32,7 @@ export interface SharedSessionParts {
 
 interface NativeWriterPaintBinding {
   readonly headingCandidate: (beat: string) => boolean;
+  readonly settle: () => boolean;
   readonly finish: () => void;
   readonly dispose: () => void;
 }

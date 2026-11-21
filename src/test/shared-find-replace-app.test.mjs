@@ -36,7 +36,7 @@ test("in the real app, Split Replace and Replace all run as shared commands that
   adoptReplacement(migrateRows({ title: "Shared find", rows: [{ id: "r1", audioText: "a cup of tea", visualText: "", status: "todo" },
     { id: "r2", audioText: "one cup", visualText: "", status: "todo" }] }));
   undoOwner().flush();
-  assert.deepEqual(await hook.enter(), { ok: true });
+  assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
   try {
     appActions.invoke("find", "command-menu");
     search("cup", "mug");
@@ -68,7 +68,7 @@ test("in the real app, a Replace whose line the other copy changed after the sea
   writerControls().closeWriter();
   adoptReplacement(migrateRows({ title: "Shared find", rows: [{ id: "r1", audioText: "a cup of tea", visualText: "", status: "todo" }] }));
   undoOwner().flush();
-  assert.deepEqual(await hook.enter(), { ok: true });
+  assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
   try {
     appActions.invoke("find", "command-menu");
     search("cup", "mug");

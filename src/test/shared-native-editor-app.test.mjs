@@ -18,7 +18,7 @@ import { setBeatLength } from "../features/rows/read-time.ts";
 import { setBeatFilmed } from "../bootstrap/wiring/beat-status.ts";
 import { openCommentsPanel } from "../features/comments/comments.ts";
 import { addGalleryPicture, moveGallerySlot, replaceGalleryPicture } from "../core/document/gallery.ts";
-import { enterSharedSession, forceLeaveSharedSession, nativeEditorRecords } from "../bootstrap/wiring/shared-session.ts";
+import { enterSharedSession, forceLeaveSharedSession, nativeEditorActive, nativeEditorRecords } from "../bootstrap/wiring/shared-session.ts";
 import { openNativeEditor } from "../bootstrap/wiring/native-shared-session.ts";
 import { entrySwitchFixture } from "../../tests/bootstrap/shared-entry-switch-support.ts";
 import { setTimeout as delay } from "node:timers/promises";
@@ -164,6 +164,17 @@ function nativeBytes(doc, join, change, command = () => {}) {
   } finally { native.close(); }
 }
 
+for (const [method, open] of [["enter", () => hook.enter()], ["enterFrom", doc => hook.enterFrom(nativeBytes(doc))]]) {
+  test(`the shared test hook's ${method} defaults to the native backend`, async t => {
+    const doc = migrateRows({ title: "Default backend", rows: [{ id: "r1", audioText: "Hello" }] });
+    adoptReplacement(doc);
+    t.after(cleanSession);
+    assert.deepEqual(await open(doc), { ok: true });
+    assert.equal(nativeEditorActive(), true);
+    assert.equal(hook.read().peer.rows[0].audioText, "Hello");
+  });
+}
+
 for (const [members, offset, beat, at, expected] of [
   [["", "World"], 0, "r2", 0, "XWorld"],
   [["Hello", ""], 5, "r1", 5, "HelloX"],
@@ -201,7 +212,7 @@ test("cross-format stored entry refuses in both directions and retains the four 
   const old = createSharedDocument();
   try {
     hydrateSharedDocument(old, doc);
-    for (const [bytes, options] of [[encodeSharedState(old), { backend: "native" }], [nativeBytes(doc), undefined]]) {
+    for (const [bytes, options] of [[encodeSharedState(old), { backend: "native" }], [nativeBytes(doc), { backend: "legacy" }]]) {
       assert.deepEqual(await hook.enterFrom(bytes, options), { ok: false, reason: "enter-failed" });
       assert.equal(sharedSession(), false);
       assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["one", "two", "three", "four"]);

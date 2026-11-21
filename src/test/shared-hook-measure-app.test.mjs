@@ -99,7 +99,7 @@ const insideOne = (inner, outers) => outers.some(outer => inside(inner, outer));
 
 async function shared(run, given = ROWS) {
   script(given);
-  assert.deepEqual(await hook.enter(), { ok: true });
+  assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
   try { await run(hook.peer); } finally {
     hook.timing(false);
     performance.clearMarks();
@@ -611,7 +611,7 @@ test("entry from an encoded shared state: the app enters the stored document wit
     ["a truncated state", stored.slice(0, Math.floor(stored.length / 2))], ["unreadable bytes", new Uint8Array([1, 2, 3])]]) {
     script(other);
     const standalone = JSON.stringify(hook.read());
-    assert.deepEqual(await hook.enterFrom(bytes), { ok: false, reason: "enter-failed" }, name);
+    assert.deepEqual(await hook.enterFrom(bytes, { backend: "legacy" }), { ok: false, reason: "enter-failed" }, name);
     assert.equal(sharedSession(), false, name);
     assert.equal(JSON.stringify(hook.read()), standalone, name + " leaves the standalone script unchanged");
     assert.deepEqual(hook.leave(), { ok: false, reason: "not-shared" }, name);
@@ -619,7 +619,7 @@ test("entry from an encoded shared state: the app enters the stored document wit
   script(other);
   let text = "";
   for (const byte of stored) text += String.fromCharCode(byte);
-  assert.deepEqual(await hook.enterFrom(btoa(text)), { ok: true });
+  assert.deepEqual(await hook.enterFrom(btoa(text), { backend: "legacy" }), { ok: true });
   try {
     assert.deepEqual(rows(hook.read().app), expected, "the stored document, not the open standalone script");
     assert.deepEqual(hook.peer.recoveryEntries("app"), recovery, "the stored recovery entry comes with it");
