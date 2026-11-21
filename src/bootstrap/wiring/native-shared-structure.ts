@@ -23,15 +23,18 @@ interface NativeStructurePorts {
 const UNAVAILABLE = "native-command-unavailable";
 
 type MoveIntent = Extract<DocumentStructureIntent, { kind: "move-beat" | "swap-beats" }>;
-type InsertIntent = Extract<DocumentStructureIntent, { kind: "insert-beat" }>;
-
-function insertPlacement(doc: SceneDocument, { id }: InsertIntent) {
+function insertPlacement(doc: SceneDocument, id: string, side: "above" | "below") {
   const at = doc.rows.findIndex(row => row.id === id);
   if (at < 0) return null;
   const scene = sceneForBeat(doc, id)?.id ?? null;
-  const next = doc.rows[at + 1]?.id;
-  const heading = next ? sceneBeforeBeat(doc, next) : undefined;
+  const next = doc.rows[at + (side === "above" ? -1 : 1)]?.id;
+  const heading = side === "above" ? sceneBeforeBeat(doc, id) : next ? sceneBeforeBeat(doc, next) : undefined;
   return { scene, neighbour: heading?.id ?? next ?? null, kind: heading ? "heading" : "beat" };
+}
+
+export function sameNativeInsertPlacement(shown: SceneDocument | null, live: SceneDocument, beat: string, side: "above" | "below"): boolean {
+  const before = shown && insertPlacement(shown, beat, side), after = insertPlacement(live, beat, side);
+  return !!before && !!after && before.scene === after.scene && before.neighbour === after.neighbour && before.kind === after.kind;
 }
 
 function movePlacement(doc: SceneDocument, intent: MoveIntent) {
@@ -62,7 +65,7 @@ export function createNativeEditorStructure({ native, session, input, publish, r
       const moving = intent.kind === "move-beat" || intent.kind === "swap-beats";
       const inserting = intent.kind === "insert-beat";
       const shown = moving ? documentReader.read(doc => doc && movePlacement(doc, intent)) : null;
-      const shownInsert = inserting ? documentReader.read(doc => doc && insertPlacement(doc, intent)) : null;
+      const shownInsert = inserting ? documentReader.current() : null;
       const menu = inserting && !intent.focus ? typing.takeInsertMenuSelection() : null;
       const captured = moving || inserting ? menu?.narration ?? typing.captureMoveSelection() : null;
       const admission = owner.admit();
@@ -79,9 +82,7 @@ export function createNativeEditorStructure({ native, session, input, publish, r
       let step;
       switch (intent.kind) {
         case "insert-beat": {
-          const live = insertPlacement(before, intent);
-          if (!shownInsert || !live || shownInsert.scene !== live.scene || shownInsert.neighbour !== live.neighbour
-            || shownInsert.kind !== live.kind) return owner.refuse(UNAVAILABLE);
+          if (!sameNativeInsertPlacement(shownInsert, before, intent.id, "below")) return owner.refuse(UNAVAILABLE);
           const selection = menu?.visual ?? (intent.focus === "visual" ? typing.visualSelection(intent.id) : after);
           after = selection ?? anchor(intent.id, 0, intent.focus);
           step = native.commands.insertAdjacentBeat.withSelection(after, intent.id, "below",

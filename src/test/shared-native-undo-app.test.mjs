@@ -20,6 +20,7 @@ import { breakUndoGroup } from "../bootstrap/wiring/undo.ts";
 import { mountNativeSharedInput } from "../bootstrap/wiring/native-shared-input.ts";
 import { createSessionCapabilities } from "../application/session/capabilities.ts";
 import { appActions } from "../bootstrap/wiring/ports/actions.ts";
+import { documentReader } from "../bootstrap/wiring/ports/document.ts";
 
 window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};
@@ -691,7 +692,7 @@ test("Writer: a stale heading cannot supply the range for a rename", async t => 
   assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
 });
 
-for (const [name, kind] of Object.entries(views)) {
+for (const [name, kind] of Object.entries({ Split: views.Split })) {
   test(name + ": the visual-cell insert shortcut lands in the new visual and replays its selection", async t => {
     const show = await enter(t), view = kind.open(t);
     const selector = name === "Writer" ? ".wr-flow-visual-text" : "#rows .cell-editable";
@@ -938,50 +939,153 @@ test("Native Split attaches no move paint listener and Writer removes its listen
   assert.deepEqual(moveListeners(removed), [listener]);
 });
 
-for (const [name, kind] of Object.entries(views)) {
-  for (const [side, id, index] of [["above", "r2", 1], ["below", "r3", 3]]) {
-    test(name + ": Add " + side + " inserts at a scene edge and replays both DOM selections", async t => {
-      const show = await enter(t, fourBeats(), undefined, [
-        { id: "s1", name: "First", firstSceneId: "r2" }, { id: "s2", name: "Second", firstSceneId: "r4" }
-      ]);
-      const view = kind.open(t), before = rowOrder();
-      kind.caret(view, id, 1, 3);
-      assert.equal(press(kind.surface(id), "Enter", { shiftKey: side === "above" }), true);
-      const created = rowOrder()[index];
-      assert.ok(!before.includes(created));
-      assert.deepEqual(rowOrder(), before.toSpliced(index, 0, created));
-      assert.equal(hook.read().app.sections[0].firstSceneId, side === "above" ? created : "r2");
-      assert.equal(hook.read().app.sections[1].firstSceneId, "r4");
-      assert.equal(kind.host(created).textContent.replace(/\u200b/g, ""), "");
-      assert.deepEqual(kind.at(view, created), [created, 0, 0]);
-      assert.equal(press(kind.surface(created), "z"), true);
-      assert.deepEqual(rowOrder(), before);
-      assert.deepEqual(kind.at(view, id), [id, 1, 3]);
-      assert.equal(press(kind.surface(id), "y"), true);
-      assert.deepEqual(rowOrder(), before.toSpliced(index, 0, created));
-      assert.deepEqual(kind.at(view, created), [created, 0, 0]);
-      await Promise.resolve();
-      assert.deepEqual(hook.read().peer, hook.read().app);
-      assert.equal(show.mock.callCount(), 0);
-    });
-  }
+function insertSnapshot(doc, original, selection) {
+  const key = id => original.includes(id) ? id : "blank";
+  return {
+    rows: doc.rows.map(row => [key(row.id), row.audioText, row.visualText, row.status, !!row.paragraphStart]),
+    sections: doc.sections?.map(scene => [scene.id, key(scene.firstSceneId)]),
+    selection: selection && [key(selection[0]), selection[1], selection[2]]
+  };
+}
 
-  test(name + ": Add Below flushes buffered typing with a peer edit and gives insertion a separate undo step", async t => {
+const sceneEdges = [{ id: "s1", name: "First", firstSceneId: "r2" }, { id: "s2", name: "Second", firstSceneId: "r4" }];
+
+for (const [name, id, offset, keys, index, stays] of [
+  ["Split", "r3", 2, {}, 3, false],
+  ["Split", "r3", 2, { ctrlKey: false, metaKey: true, shiftKey: true }, 3, false],
+  ["Writer", "r2", 0, { ctrlKey: false }, 1, true],
+  ["Writer", "r2", 0, {}, 1, true],
+  ["Writer", "r3", 5, { ctrlKey: false, metaKey: true, shiftKey: true }, 3, false],
+  ["Writer", "r3", 0, {}, 3, false]
+]) {
+  const visualOnly = name === "Writer" && id === "r3" && offset === 0;
+  test(name + ": Enter insertion matches standalone " + id + " at " + offset + " " + JSON.stringify(keys), async t => {
+    const rows = fourBeats();
+    rows[1].paragraphStart = true;
+    if (visualOnly) { rows[2].audioText = ""; rows[2].visualText = "Look"; }
+    const original = rows.map(row => row.id), kind = views[name];
+    adoptReplacement(migrateRows({ title: "Standalone script", rows, sections: sceneEdges, paragraphsDecided: true }));
+    const local = kind.open(t);
+    kind.caret(local, id, offset);
+    assert.equal(press(kind.surface(id), "Enter", keys), true);
+    const expected = insertSnapshot(documentReader.current(), original, kind.at(local, documentReader.current().rows[stays ? index + 1 : index].id));
+    assert.equal(expected.rows[index][0], "blank");
+    if (name === "Writer") writerControls().closeWriter();
+    const show = await enter(t, rows, undefined, sceneEdges), view = kind.open(t);
+    kind.caret(view, id, offset);
+    const before = insertSnapshot(hook.read().app, original, kind.at(view, id));
+    assert.equal(press(kind.surface(id), "Enter", keys), true);
+    const created = rowOrder()[index], landing = stays ? id : created;
+    assert.deepEqual(insertSnapshot(hook.read().app, original, kind.at(view, landing)), expected);
+    assert.equal(press(kind.surface(landing), "z"), true);
+    assert.deepEqual(insertSnapshot(hook.read().app, original, kind.at(view, id)), before);
+    assert.equal(press(kind.surface(id), "y"), true);
+    assert.deepEqual(insertSnapshot(hook.read().app, original, kind.at(view, landing)), expected);
+    await Promise.resolve();
+    assert.deepEqual(hook.read().peer, hook.read().app);
+    assert.equal(show.mock.callCount(), 0);
+  });
+}
+
+test("Split: Insert beat preserves the selection held before the row menu took focus", async t => {
+  const kind = views.Split, original = ["r1", "r2"];
+  const menu = () => document.querySelector('#rows .row-more[data-id="r1"]');
+  const choose = () => {
+    if (menu().getAttribute("aria-expanded") !== "true") menu().click();
+    const insert = document.querySelector('#rows .row-menu:not([hidden]) [data-action="insert-below"][data-id="r1"]');
+    assert.equal(insert.textContent.trim(), "Insert beat");
+    insert.click();
+  };
+  adoptReplacement(migrateRows({ title: "Standalone script", rows: twoBeats }));
+  kind.caret(null, "r1", 1, 3);
+  choose();
+  const expected = insertSnapshot(documentReader.current(), original, null);
+  const show = await enter(t, twoBeats);
+  kind.caret(null, "r1", 1, 3);
+  menu().dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true }));
+  menu().focus();
+  choose();
+  assert.deepEqual(insertSnapshot(hook.read().app, original, null), expected);
+  assert.deepEqual(kind.at(null), ["r1", 1, 3]);
+  assert.equal(press(cell(), "z"), true);
+  assert.deepEqual(rowOrder(), original);
+  assert.deepEqual(kind.at(null), ["r1", 1, 3]);
+  assert.equal(document.getSelection().toString(), "el");
+  assert.equal(press(cell(), "y"), true);
+  assert.deepEqual(kind.at(null), ["r1", 1, 3]);
+  assert.deepEqual(insertSnapshot(hook.read().app, original, null), expected);
+  assert.equal(show.mock.callCount(), 0);
+});
+
+for (const atTop of [false, true]) {
+  test("Writer: Enter at a heading start " + (atTop ? "refuses without a preceding beat" : "matches standalone before a later heading"), async t => {
+    const rows = atTop ? [{ id: "r1", audioText: "Hello" }] : twoBeats;
+    const sections = [{ id: "s1", name: "Scene", firstSceneId: atTop ? "r1" : "r2" }];
+    const original = rows.map(row => row.id), point = { kind: "heading", sceneId: "s1", offset: 0 };
+    adoptReplacement(migrateRows({ title: "Standalone heading", rows, sections, paragraphsDecided: true }));
+    const local = writer(t);
+    local.flow.place({ anchor: point, head: point });
+    assert.equal(press(root(), "Enter", { ctrlKey: false }), true);
+    const expected = insertSnapshot(documentReader.current(), original, local.at());
+    assert.equal(expected.rows[atTop ? 0 : 1][0], "blank");
+    assert.equal(expected.sections[0][1], sections[0].firstSceneId);
+    writerControls().closeWriter();
+    const show = await enter(t, rows, undefined, sections), view = writer(t);
+    view.flow.place({ anchor: point, head: point });
+    assert.equal(press(root(), "Enter", { ctrlKey: false }), true);
+    if (atTop) {
+      assert.deepEqual(rowOrder(), original);
+      assert.deepEqual(view.flow.selection().head, point);
+      assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+    } else {
+      assert.deepEqual(insertSnapshot(hook.read().app, original, view.at()), expected);
+      assert.equal(press(root(), "z"), true);
+      assert.deepEqual(rowOrder(), original);
+      assert.deepEqual(view.flow.selection().head, point);
+      assert.equal(press(root(), "y"), true);
+      assert.deepEqual(insertSnapshot(hook.read().app, original, view.at()), expected);
+      assert.equal(show.mock.callCount(), 0);
+    }
+  });
+}
+
+for (const [from, to] of [[0, 2], [3, 5]]) {
+  test("Writer: selection deletion and adjacent blank insertion refuse as one unsupported edit " + from, async t => {
+    adoptReplacement(migrateRows({ title: "Standalone selection", rows: twoBeats, paragraphsDecided: true }));
+    const local = writer(t);
+    local.caret("r1", from, to);
+    assert.equal(press(root(), "Enter", { ctrlKey: false }), true);
+    const expected = documentReader.current().rows;
+    assert.deepEqual(expected.map(row => row.audioText), from === 0 ? ["", "llo", "World"] : ["Hel", "", "World"]);
+    writerControls().closeWriter();
+    const show = await enter(t, twoBeats), view = writer(t);
+    view.caret("r1", from, to);
+    assert.equal(press(root(), "Enter", { ctrlKey: false }), true);
+    assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["Hello", "World"]);
+    assert.deepEqual(view.at(), ["r1", from, to]);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+  });
+}
+
+for (const [name, kind] of Object.entries(views)) {
+  test(name + ": insertion flushes buffered typing with a peer edit and gives insertion a separate undo step", async t => {
     const show = await enter(t, twoBeats), view = kind.open(t);
-    kind.caret(view, "r1", 2);
+    const writerEnd = name === "Writer", offset = writerEnd ? 5 : 2;
+    kind.caret(view, "r1", offset);
     typeKeys(kind.surface(), "X");
     assert.equal(app(), "Hello");
     assert.equal(hook.nativePeer.type("r1", 0, "P").kind, "written");
     assert.equal(press(kind.surface(), "Enter"), true);
-    assert.equal(app(), "PHeXllo");
+    const text = writerEnd ? "PHelloX" : "PHeXllo";
+    assert.equal(app(), text);
     const created = rowOrder()[1];
     assert.deepEqual(rowOrder(), ["r1", created, "r2"]);
     assert.notEqual(created, "r2");
     assert.deepEqual(kind.at(view, created), [created, 0, 0]);
     assert.equal(press(kind.surface(created), "z"), true);
     assert.deepEqual(rowOrder(), ["r1", "r2"]);
-    assert.equal(app(), "PHeXllo");
-    assert.deepEqual(kind.at(view, "r1"), ["r1", 4, 4]);
+    assert.equal(app(), text);
+    assert.deepEqual(kind.at(view, "r1"), ["r1", offset + 2, offset + 2]);
     assert.equal(press(kind.surface(), "z"), true);
     assert.equal(app(), "PHello");
     await Promise.resolve();
@@ -990,9 +1094,9 @@ for (const [name, kind] of Object.entries(views)) {
   });
 
   for (const remove of [false, true]) {
-    test(name + ": Add Below refuses when a peer " + (remove ? "removed the shown anchor" : "changed the shown neighbour"), async t => {
+    test(name + ": insertion refuses when a peer " + (remove ? "removed the shown anchor" : "changed the shown neighbour"), async t => {
       const show = await enter(t, threeBeats()), view = kind.open(t);
-      kind.caret(view, "r1", 2);
+      kind.caret(view, "r1", 5);
       const peerEdit = remove ? hook.nativePeer.removeBeat("r1") : hook.nativePeer.moveBeat("r2", null);
       assert.equal(peerEdit.kind, "written");
       assert.deepEqual(rowOrder(), ["r1", "r2", "r3"]);
@@ -1004,7 +1108,7 @@ for (const [name, kind] of Object.entries(views)) {
     });
   }
 
-  test(name + ": Add Above and Add Below cancel during an open composition", async t => {
+  test(name + ": insertion shortcuts cancel during an open composition", async t => {
     const show = await enter(t, twoBeats), view = kind.open(t);
     kind.caret(view, "r1", 2);
     assert.equal(compose(kind.surface(), "start", ""), false);
@@ -1643,7 +1747,7 @@ const fixtureViews = {
 };
 
 for (const [name, kind] of Object.entries(fixtureViews)) {
-  test(name + ": Add Above and Add Below stay quiet after native typing stops", async t => {
+  test(name + ": insertion shortcuts stay quiet after native typing stops", async t => {
     const { native, refused } = await openFixture(t), view = kind.open(t);
     kind.caret(view, 8);
     assert.equal(compose(kind.surface(), "start", ""), false);

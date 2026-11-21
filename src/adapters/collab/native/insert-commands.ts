@@ -10,7 +10,7 @@ import { transactPreparedNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { encodeNativeEditStamp, nativeAvailability } from "./text-commands.ts";
 import type { NativeEditStamp, NativeRefusal } from "./text-commands.ts";
-import { mintNativeId, nativeWellFormed, recordBag } from "./values.ts";
+import { decodeNativeValue, mintNativeId, nativeWellFormed, recordBag } from "./values.ts";
 
 export type NativePutBackBeat = Pick<NativeSavedBeat, "id" | "placement" | "narration" | "visual" | "fields">;
 
@@ -94,8 +94,8 @@ function insertBeat(script: NativeScript, plan: Pick<InsertPlan, "id" | "audio" 
   return Object.freeze({ kind: "written", created });
 }
 
-function blankBeat(audio: InsertPlan["audio"] = []) {
-  return { id: null, audio, picture: [], entries: nativeBeatEntries({ status: "todo", lengthSeconds: normalizeBeatLength(undefined) }) };
+function blankBeat(audio: InsertPlan["audio"] = [], paragraphStart?: true) {
+  return { id: null, audio, picture: [], entries: nativeBeatEntries({ status: "todo", lengthSeconds: normalizeBeatLength(undefined), paragraphStart }) };
 }
 
 function adjacentPlacement(script: NativeScript, order: readonly NativeRankedBlock[], at: number) {
@@ -132,7 +132,8 @@ function adjacentPlacement(script: NativeScript, order: readonly NativeRankedBlo
   return { rank, writes };
 }
 
-export function insertNativeBeatAdjacent(script: NativeScript, beat: string, side: "above" | "below", stamp?: NativeEditStamp): NativePutBackOutcome {
+export function insertNativeBeatAdjacent(script: NativeScript, beat: string, side: "above" | "below", stamp?: NativeEditStamp,
+  transferParagraphStart = false): NativePutBackOutcome {
   const unavailable = nativeAvailability(script);
   if (unavailable) return refused(unavailable);
   if (!beat || !nativeWellFormed(beat) || side !== "above" && side !== "below") return refused("missing");
@@ -145,7 +146,11 @@ export function insertNativeBeatAdjacent(script: NativeScript, beat: string, sid
     if (side === "below") {
       do insertAt++; while (order[insertAt]?.head === beat);
     }
-    return insertBeat(script, blankBeat(), () => adjacentPlacement(script, order, insertAt), encoded);
+    const record = script.roots.beats.get(beat);
+    const paragraphStart = side === "above" && transferParagraphStart && decodeNativeValue(record?.get("paragraphStart"))?.value === true;
+    const outcome = insertBeat(script, blankBeat([], paragraphStart ? true : undefined), () => adjacentPlacement(script, order, insertAt), encoded);
+    if (outcome.kind === "written" && paragraphStart) record?.delete("paragraphStart");
+    return outcome;
   }, refused, () => true, true);
 }
 
