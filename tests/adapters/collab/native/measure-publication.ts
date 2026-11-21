@@ -15,7 +15,7 @@ import { largeState, LARGE_BEATS } from "./structural.ts";
 const beat = "B451", warmup = 50, count = 1000;
 const allowed = () => ({ allowed: true as const }), noop = () => {};
 
-async function measure(before: boolean, batch: number): Promise<void> {
+async function measure(before: boolean, batch: number, recorded = false): Promise<void> {
   const native = openNativeSession({ kind: "state", state: largeState() }, { actor: "Writer", sanitize: sanitizeHtml });
   const publication = nativePublication();
   const app = createSharedSession({
@@ -53,7 +53,13 @@ async function measure(before: boolean, batch: number): Promise<void> {
       const paint = before ? null : native.trackNarrationPaint(beat);
       for (let key = 0; key < batch; key++) keys += "x";
       paint?.dispose();
-      const result = native.commands.typeText(at.range, keys, {}, { by: "Writer", at: new Date(sample * 1000).toISOString() }, before ? undefined : [null, null]);
+      const stamp = { by: "Writer", at: new Date(sample * 1000).toISOString() };
+      let result;
+      if (recorded) {
+        const step = native.commands.typeText.withSelection(at.range, at.range, keys, {}, stamp, [null, null]);
+        step.recordAfter();
+        result = step.result;
+      } else result = native.commands.typeText(at.range, keys, {}, stamp, before ? undefined : [null, null]);
       const written = performance.now();
       let caret = 0;
       if (before) await Promise.resolve();
@@ -80,7 +86,7 @@ async function measure(before: boolean, batch: number): Promise<void> {
         '{"rowId":"B451","field":"audioText"}', '{"rowId":"B451","field":"updatedAt"}'
       ]));
     }
-    console.log(`${before ? "Before" : "Buffered"}, ${batch} key(s) per write, ${count} keys after ${warmup} warm-up keys.`);
+    console.log(`${before ? "Before" : "Buffered"}${recorded ? " with recorded selections" : ""}, ${batch} key(s) per write, ${count} keys after ${warmup} warm-up keys.`);
     for (const [label, values] of Object.entries(times)) {
       assert.equal(values.length, count / batch);
       values.sort((a, b) => a - b);
@@ -94,12 +100,14 @@ async function measure(before: boolean, batch: number): Promise<void> {
   }
 }
 
-const modes = { before: [true, 1], isolated: [false, 1], burst: [false, 10] } as const;
+const modes = {
+  before: [true, 1, false], isolated: [false, 1, false], burst: [false, 10, false], "isolated-recorded": [false, 1, true], "burst-recorded": [false, 10, true]
+} as const;
 const mode = process.argv[2];
 if (mode) {
   assert.ok(Object.hasOwn(modes, mode), "Unknown publication measurement mode");
-  const [before, batch] = modes[mode as keyof typeof modes];
-  await measure(before, batch);
+  const [before, batch, recorded] = modes[mode as keyof typeof modes];
+  await measure(before, batch, recorded);
 } else {
   console.log(`Node ${process.version} ${process.arch}, ${LARGE_BEATS} beats. DOM paint and buffer wait excluded.`);
   for (const name of Object.keys(modes)) {

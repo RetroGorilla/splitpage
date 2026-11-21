@@ -25,10 +25,14 @@ wait text() === 'Hello'
 expect !warn() && S.read().peer.rows[0].audioText === 'Hello'
 press x
 wait text() === 'Hexllo'
-eval window.before=JSON.stringify(S.read());true
 eval clear()
 key ctrl KeyZ
-expect warn() && JSON.stringify(S.read()) === window.before
+wait text() === 'Hello' && S.read().peer.rows[0].audioText === 'Hello' && Q('audioText').textContent === 'Hello'
+expect !warn() && document.activeElement === Q('audioText') && getSelection().focusOffset === 2
+key ctrl KeyY
+wait text() === 'Hexllo' && S.read().peer.rows[0].audioText === 'Hexllo' && Q('audioText').textContent === 'Hexllo'
+expect !warn() && document.activeElement === Q('audioText') && getSelection().focusOffset === 3
+eval window.before=JSON.stringify(S.read());true
 eval clear()
 jsclick #rows .row[data-id="r1"] .audio-cell button[data-cmd="bold"]
 expect warn() && JSON.stringify(S.read()) === window.before
@@ -39,6 +43,12 @@ eval clear()
 jsclick #rows .row[data-id="r1"] [data-action="cycle-status"]
 wait S.read().app.rows[0].status === 'ready' && S.read().peer.rows[0].status === 'ready'
 expect /ready/i.test(document.querySelector('#rows .row[data-id="r1"] [data-action="cycle-status"]').title)
+eval at('audioText',4)
+key ctrl KeyZ
+wait JSON.stringify(S.read()) === window.before
+expect !warn() && document.activeElement === Q('audioText') && getSelection().focusOffset === 4
+key ctrl KeyY
+wait S.read().app.rows[0].status === 'ready' && S.read().peer.rows[0].status === 'ready'
 eval S.nativePeer.step('undo')
 wait JSON.stringify(S.read()) === window.before
 eval clear();at('audioText',3);window.composed=new CompositionEvent('compositionstart',{bubbles:true,cancelable:true});Q('audioText').dispatchEvent(window.composed);true
@@ -50,9 +60,28 @@ expect warn() && document.getElementById('doc-title').value === 'Native editor' 
 click #btn-write
 eval window.writerText=function(){return document.querySelector('#writer-doc .wr-beat[data-id="r1"]')?.textContent.replace(/\u200b/g,'')};true
 wait writerText() === 'Hexllo'
-eval clear();document.getElementById('writer-doc').focus();true
+eval window.W=window.__writerFlowTest;window.wat=function(id,o){W.place({anchor:{kind:'beat',rowId:id,offset:o},head:{kind:'beat',rowId:id,offset:o}});return true};window.wsel=function(){var s=W.selection();return s?s.head.rowId+':'+s.anchor.offset+':'+s.head.offset:''};window.wdoc=function(){return document.getElementById('writer-doc')};true
+eval wdoc().focus();wat('r1',6);clear()
 press q
-expect warn() && writerText() === 'Hexllo' && JSON.stringify(S.read()) === window.before
+press w
+wait text() === 'Hexlloqw' && S.read().peer.rows[0].audioText === 'Hexlloqw' && writerText() === 'Hexlloqw'
+expect !warn() && wsel() === 'r1:8:8'
+key ctrl KeyZ
+wait text() === 'Hexllo' && S.read().peer.rows[0].audioText === 'Hexllo' && writerText() === 'Hexllo'
+expect !warn() && document.activeElement === wdoc() && wsel() === 'r1:6:6'
+key ctrl KeyY
+wait text() === 'Hexlloqw' && writerText() === 'Hexlloqw'
+expect !warn() && wsel() === 'r1:8:8'
+key ctrl KeyZ
+wait text() === 'Hexllo' && writerText() === 'Hexllo'
+eval wat('r1',6);clear();window.wkeys='abcdefghij'.repeat(20);for(const key of wkeys)wdoc().dispatchEvent(new InputEvent('beforeinput',{bubbles:true,cancelable:true,inputType:'insertText',data:key}));true
+wait text() === 'Hexllo'+wkeys && S.read().peer.rows[0].audioText === text() && writerText() === text()
+expect !warn() && wsel() === 'r1:206:206'
+key ctrl KeyZ
+wait text() === 'Hexllo' && S.read().peer.rows[0].audioText === 'Hexllo' && writerText() === 'Hexllo'
+eval wat('r1',2);clear()
+key Enter
+expect warn() && writerText() === 'Hexllo' && text() === 'Hexllo' && S.read().peer.rows[0].audioText === 'Hexllo'
 eval window.peerEdit=S.nativePeer.type('r1',0,'Y');true
 expect window.peerEdit.kind === 'written'
 wait writerText() === 'YHexllo'

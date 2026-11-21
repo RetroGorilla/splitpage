@@ -19,6 +19,7 @@ export interface SharedUndoRoute {
   readonly actions: SharedUndoActions;
   readonly breakGroup: SharedUndo["breakGroup"];
   readonly replayed: () => SharedUndoRecord | null;
+  readonly replay?: (direction: UndoDirection) => void;
 }
 
 let sharedRoute: SharedUndoRoute | null = null;

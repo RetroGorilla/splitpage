@@ -10,6 +10,7 @@ import { build } from "esbuild";
 import { fileURLToPath } from "node:url";
 import { createNativeTestPeer } from "../../src/bootstrap/wiring/shared-native-test-peer.ts";
 import { mountNativeSharedInput } from "../../src/bootstrap/wiring/native-shared-input.ts";
+import { nativeUndoRoute } from "../../src/bootstrap/wiring/native-shared-undo.ts";
 import { Doc } from "yjs";
 import { applyNativePeerUpdate } from "../../src/adapters/collab/native/peer-update.ts";
 import { createNativeEditorRecords } from "../../src/bootstrap/wiring/native-shared-records.ts";
@@ -255,16 +256,70 @@ test("the native command guard refuses before planning and calls the refusal por
   assert.equal(notify.mock.callCount(), 1);
 });
 
-test("native undo and redo reach the shared notice route without creating a replay", async t => {
+test("native undo and redo step the session history through the shared route and publish at once", async t => {
   const fixture = entrySwitchFixture();
   t.after(() => { if (sharedSession()) leaveRunningSharedSession(); });
   const native = await nativeEntry(fixture), beforeUndo = native.encodeState(), warn = t.mock.fn();
   const route = sharedUndoRoute();
   assert.ok(route);
-  assert.deepEqual(stepSharedUndo(route, "undo", warn), { ok: false, reason: "native-command-unavailable", skipped: true });
-  assert.deepEqual(stepSharedUndo(route, "redo", warn), { ok: false, reason: "native-command-unavailable", skipped: true });
-  assert.equal(warn.mock.callCount(), 2);
+  assert.deepEqual(stepSharedUndo(route, "undo", warn), { ok: false, empty: true });
+  assert.deepEqual(stepSharedUndo(route, "redo", warn), { ok: false, empty: true });
   assert.deepEqual(native.encodeState(), beforeUndo);
+  const at = native.commands.anchorText({ beat: "R1", cell: "narration" }, 8);
+  if (at.kind !== "anchored") throw new Error(at.reason);
+  assert.equal(native.commands.typeText(at.range, "!", {}).kind, "written");
+  assert.deepEqual(stepSharedUndo(route, "undo", warn), { ok: true, effective: true, label: "undo", selection: null });
+  assert.equal(currentDocument()?.rows[0]?.audioText, "Captured words");
+  assert.deepEqual(stepSharedUndo(route, "redo", warn), { ok: true, effective: true, label: "redo", selection: null });
+  assert.equal(currentDocument()?.rows[0]?.audioText, "Captured! words");
+  assert.equal(warn.mock.callCount(), 0);
+});
+
+test("a native press refused by admission, the typing buffer or the session writes nothing and keeps its step", async t => {
+  const { ports } = entrySwitchFixture(), doc = currentDocument();
+  assert.ok(doc);
+  const { native, backend } = openNativeEditor(ports, doc, () => false);
+  t.after(() => { backend.dispose(step => { step(); return true; }); });
+  const at = native.commands.anchorText({ beat: "R1", cell: "narration" }, 8);
+  if (at.kind !== "anchored") throw new Error(at.reason);
+  assert.equal(native.commands.typeText(at.range, "!", {}).kind, "written");
+  let admission: { kind: "rejected"; reason: string } | null = { kind: "rejected", reason: "held-for-test" }, held: string | null = "buffer";
+  const publish = t.mock.fn(), pressed = t.mock.fn(() => held);
+  const input = { beforePress: pressed, show: t.mock.fn(), endGroup: t.mock.fn() };
+  const route = nativeUndoRoute({ native, admission: { admit: () => admission }, input: () => input, publish });
+  const typed = native.encodeState();
+  assert.deepEqual(route.actions.undo(), { ok: false, reason: "held-for-test" });
+  assert.equal(pressed.mock.callCount(), 0);
+  admission = null;
+  assert.deepEqual(route.actions.undo(), { ok: false, reason: "buffer" });
+  held = null;
+  const release = native.holdIngress();
+  assert.deepEqual(route.actions.undo(), { ok: false, reason: "busy" });
+  release();
+  assert.deepEqual(native.encodeState(), typed);
+  assert.equal(publish.mock.callCount(), 0);
+  assert.deepEqual(route.actions.undo(), { ok: true, effective: true, label: "undo", selection: null });
+  assert.equal(publish.mock.callCount(), 1);
+  assert.equal(native.narrationHtml("R1"), "Captured words");
+  route.breakGroup();
+  assert.equal(input.endGroup.mock.callCount(), 1);
+});
+
+test("a native press whose admission fails throws that error before flushing or stepping", async t => {
+  const { ports } = entrySwitchFixture(), doc = currentDocument();
+  assert.ok(doc);
+  const { native, backend } = openNativeEditor(ports, doc, () => false);
+  t.after(() => { backend.dispose(step => { step(); return true; }); });
+  const at = native.commands.anchorText({ beat: "R1", cell: "narration" }, 8);
+  if (at.kind !== "anchored") throw new Error(at.reason);
+  assert.equal(native.commands.typeText(at.range, "!", {}).kind, "written");
+  const failure = new Error("admission failed"), publish = t.mock.fn();
+  const input = { beforePress: t.mock.fn(() => null), show: t.mock.fn(), endGroup: t.mock.fn() };
+  const route = nativeUndoRoute({ native, admission: { admit: () => ({ kind: "failed", error: failure }) }, input: () => input, publish });
+  assert.throws(() => route.actions.undo(), failure);
+  assert.equal(input.beforePress.mock.callCount(), 0);
+  assert.equal(publish.mock.callCount(), 0);
+  assert.equal(native.narrationHtml("R1"), "Captured! words");
 });
 
 test("the release hook bundle omits the native editor entry and test peer", async () => {
