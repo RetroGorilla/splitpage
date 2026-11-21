@@ -4,7 +4,8 @@ import type { NativeTextRange } from "../../adapters/collab/native/text-commands
 import { nativeGalleryOf, sameNativeValue } from "../../adapters/collab/native/values.ts";
 import type { GalleryEdit } from "../../application/commands/gallery.ts";
 import type { CommentRecordWriter } from "../../application/commands/comments.ts";
-import type { RecordCommandRun, RegistryEditor } from "../../application/commands/shared-records.ts";
+import type { RegistryEditor } from "../../application/commands/registry-editor.ts";
+import type { RecordCommandRun } from "../../application/commands/shared-records.ts";
 import { NOTHING_RAN, RECORD_CHANGED, RECORD_REFUSED } from "../../application/commands/shared-records.ts";
 import type { ReportPort } from "../../application/session/ports.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
@@ -76,13 +77,23 @@ export function createNativeEditorRecords(
     return writeRegistry(() => checked && !checked() ? { kind: "refused", reason: "missing" } : commands.changeRegistry(change));
   }
 
+  function createRegistry(change: Extract<NativeRegistryChange, { kind: "create" }>, existing?: () => string) {
+    let id = "";
+    const result = writeRegistry(() => {
+      const outcome = commands.changeRegistry(change);
+      if ("created" in outcome) id = outcome.created;
+      else if (outcome.kind === "unchanged" && existing) id = existing();
+      return outcome;
+    });
+    return { run: result, id };
+  }
+
   const registry: RegistryEditor = {
     addPerson: raw => {
       const name = cappedText(raw, PERSON_NAME_MAX);
       if (!name) return { run: NOTHING_RAN, id: "" };
-      const result = changeRegistry({ kind: "create", collection: "people", fields: { name } });
-      const id = !result.held && !native.isClosingOrClosed() ? personNamed(native.document(), name)?.id ?? "" : "";
-      return { run: result, id };
+      return createRegistry({ kind: "create", collection: "people", fields: { name } },
+        () => personNamed(native.document(), name)?.id ?? "");
     },
     removePerson: id => changeRegistry({ kind: "remove", collection: "people", ids: [id] }),
     registerTag: (cat, raw) => {
@@ -118,15 +129,7 @@ export function createNativeEditorRecords(
       }
       return changeRegistry({ kind: "gear", names: [...names.values()] });
     },
-    addShot: name => {
-      let id = "";
-      const result = writeRegistry(() => {
-        const outcome = commands.changeRegistry({ kind: "create", collection: "shots", fields: { name, origin: "list" } });
-        if ("created" in outcome) id = outcome.created;
-        return outcome;
-      });
-      return { run: result, id };
-    },
+    addShot: name => createRegistry({ kind: "create", collection: "shots", fields: { name, origin: "list" } }),
     setShots: (ids, fields, owner) => {
       const ownerName = owner && "name" in owner ? cappedText(owner.name, PERSON_NAME_MAX) : undefined;
       if (ownerName === "") return NOTHING_RAN;

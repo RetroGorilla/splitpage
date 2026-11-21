@@ -1,5 +1,5 @@
 import type { CommonDocumentSession, StandaloneDocumentSession } from "../../application/session/document-session.ts";
-import type { EditorRegistryCommands } from "../../application/commands/shared-records.ts";
+import type { EditorRegistryCommands } from "../../application/commands/registry-editor.ts";
 import type { FocusMemory } from "../../application/editing/focus-memory.ts";
 import type { ViewFlags } from "../../application/preferences/view-flags.ts";
 import type { PersonColorLookup } from "../../core/document/person-colors.ts";

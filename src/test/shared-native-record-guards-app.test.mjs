@@ -19,6 +19,9 @@ import { createHeldFetch, createHeldImageDecode } from "./_m4-matrix.mjs";
 import { rowSlots } from "../core/document/gallery.ts";
 import { closeAnnotator, openAnnotator } from "../features/gallery/annotate.ts";
 import { closeGalleryOverlay, openGalleryOverlay } from "../features/gallery/overlay.ts";
+import { createNativeEditorRecords } from "../bootstrap/wiring/native-shared-records.ts";
+import { openNativeSession } from "../adapters/collab/native/session.ts";
+import { sanitizeHtml } from "../bootstrap/richtext.ts";
 
 window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};
@@ -537,4 +540,52 @@ test("saving an empty body edit keeps the editor open and leaves the saved body 
   assert.equal(hook.read().app.comments[0].body, "Original");
   assert.equal(hook.read().peer.comments[0].body, "Original");
   assert.deepEqual(show.mock.calls.map(call => call.arguments), [["Write a comment before posting.", "warn"]]);
+});
+
+test("registry commands wait for active composition and leave its draft in the editor", async t => {
+  const show = await enter(t);
+  const target = cell("audioText");
+  target.focus();
+  setCellSelection(target, 2);
+  target.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true, cancelable: true }));
+  target.dispatchEvent(new window.CompositionEvent("compositionupdate", { bubbles: true, data: "x" }));
+  const registry = nativeEditorRecords().registry;
+  assert.deepEqual(registry.addPerson("Cam"), { run: { changed: false, held: true }, id: "" });
+  assert.deepEqual(hook.read().app.people, []);
+  assert.deepEqual(hook.read().peer.people, []);
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), [[unsupported, "warn"]]);
+  target.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "x" }));
+  await Promise.resolve();
+  assert.equal(hook.read().app.rows[0].audioText, "Hexllo");
+  assert.equal(registry.addPerson("Cam").run.changed, true);
+});
+
+test("a registry command at the size limit uses the shared full notice and writes nothing", async t => {
+  const { fixture, native } = await enterWithNative(t);
+  const state = native.encodeState();
+  const limited = openNativeSession({ kind: "state", state }, {
+    actor: "Editor", sanitize: sanitizeHtml, sizeLimit: Math.floor(state.byteLength * 0.8), sizeCeilingRatio: 2
+  });
+  t.after(limited.close);
+  assert.equal(limited.size, "full");
+  const show = t.mock.method(notices, "show", () => {});
+  const refuse = t.mock.fn(reason => ({ kind: "rejected", reason }));
+  const records = createNativeEditorRecords(limited, () => ({ admit: () => null, refuse }), "Editor", () => 0, fixture.ports.report);
+  assert.deepEqual(records.registry.addShot("Wide"), { run: { changed: false, held: true }, id: "" });
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), [["This shared script is full. Export a copy to keep working.", "warn"]]);
+  assert.equal(refuse.mock.callCount(), 0);
+  assert.deepEqual(limited.encodeState(), state);
+});
+
+test("an interrupted registry write lands the committed bytes in the recovered copy", async t => {
+  const { fixture, native } = await enterWithNative(t);
+  const show = t.mock.method(notices, "show", () => {});
+  const failure = new Error("interrupted registry cleanup");
+  native.ydoc.once("afterTransactionCleanup", () => { throw failure; });
+  assert.deepEqual(nativeEditorRecords().registry.addShot("Wide"), { run: { changed: false, held: true }, id: "" });
+  await Promise.resolve();
+  assert.equal(sharedSession(), false);
+  assert.deepEqual(currentDocument().brollShots.map(shot => shot.name), ["Wide"]);
+  assert.deepEqual(fixture.errors, [failure]);
+  assert.match(String(show.mock.calls.at(-1)?.arguments[0]), /shared session stopped/);
 });

@@ -3,7 +3,8 @@ import { after, test } from "node:test";
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { adoptReplacement } from "../bootstrap/wiring/session-owner.ts";
-import { addPersonForTag, applyGearQuickAdd, armDeleteTag, armPersonDelete, openGearPanel, openProductionPanel, saveTagRename, setTagNotes, setTagStatus } from "../features/tags/panels.ts";
+import { addPersonForTag, applyGearQuickAdd, armDeleteTag, armPersonDelete, bulkDeleteSelected, openGearPanel,
+  openProductionPanel, saveTagRename, setTagNotes, setTagStatus, toggleCardSelection } from "../features/tags/panels.ts";
 import { findOrAddPerson, registerProductionTag } from "../features/tags/production-tags.ts";
 import { cellSelection, setCellSelection } from "../features/common/cell-selection.ts";
 import { openBrollPanel } from "../features/broll/panel.ts";
@@ -139,6 +140,14 @@ test("a tag derived from cell markup reaches the panel and takes registry edits"
   setTagNotes("prop mug", "Handle with care");
   await Promise.resolve();
   copies(doc => tag(doc, "Mug").notes, "Handle with care");
+  const show = t.mock.method(notices, "show", () => {});
+  const before = hook.read();
+  assert.equal(saveTagRename("prop mug", "Cup"), "prop mug");
+  toggleCardSelection("prop mug");
+  bulkDeleteSelected();
+  await Promise.resolve();
+  assert.deepEqual(hook.read(), before);
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), Array(2).fill(["This is not available in a shared session yet.", "warn"]));
 });
 
 test("gear quick add replaces omitted orphaned gear in one step", async t => {
