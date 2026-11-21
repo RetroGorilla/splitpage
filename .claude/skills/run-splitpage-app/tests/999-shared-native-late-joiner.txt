@@ -1,0 +1,74 @@
+﻿open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.P=S.nativePeer;F.openFile(new File([JSON.stringify({schema:2,title:'Native late joiner',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello',visualText:'Look'},{id:'r2',audioText:'Gone words',visualText:''},{id:'r3',audioText:'Keep',visualText:''}],comments:[]})],'joiner.splitpage'))
+wait F.state().title==='Native late joiner'
+eval window.json=value=>JSON.stringify(value);window.Q=(id,f)=>document.querySelector('#rows .cell-editable[data-id="'+id+'"][data-field="'+f+'"]');window.T=(id,f)=>{const c=Q(id,f);return c&&c.checkVisibility()&&c.getBoundingClientRect().width>0?c.textContent.replace(/\u200b/g,'').replace(/\u00a0/g,' '):null};window.same=()=>json(S.read().app)===json(S.read().peer);window.clean=()=>document.getElementById('shared-recovery-panel')===null&&document.querySelector('#toast-host .toast.warn:not(.is-leaving)')===null;true
+eval window.at=(id,f,o)=>{const c=Q(id,f);c.focus();const w=document.createTreeWalker(c,4);let n,k=o;while((n=w.nextNode())){if(k<=n.data.length){getSelection().setBaseAndExtent(n,k,n,k);return true}k-=n.data.length}getSelection().setBaseAndExtent(c,c.childNodes.length,c,c.childNodes.length);return true};window.caret=(id,f,o)=>{const c=Q(id,f),s=getSelection();if(!c||document.activeElement!==c||!s.rangeCount||!s.isCollapsed||!c.contains(s.anchorNode)||!c.contains(s.focusNode))return false;const r=document.createRange();r.setStart(c,0);r.setEnd(s.focusNode,s.focusOffset);return r.toString().replace(/\u200b/g,'').length===o};true
+eval window.shape=(doc,rows)=>doc!==null&&json(doc.rows.map(r=>[r.id,r.audioText,r.visualText]))===json(rows);window.paint=rows=>rows.every(([id,a,v])=>T(id,'audioText')===a&&T(id,'visualText')===v)&&document.querySelectorAll('#rows .cell-editable[data-field="audioText"]').length===rows.length;window.check=rows=>same()&&shape(S.read().app,rows)&&paint(rows);window.beforeCut=(a,v,b='Keep',c='Gone words')=>[['r1',a,v],['r2',c,''],['r3',b,'']];window.afterCut=(b='Keep',v='BLook')=>[['r1','Hello?x',v],['r3',b,'']];window.fresh=()=>['app','peer'].every(side=>json(P.freshSnapshot(side))===json(S.read().app));window.three=()=>same()&&json(P.readLateReader())===json(S.read().app);true
+eval window.originalId=F.state().docId;S.enter()
+wait check(beforeCut('Hello','Look'))
+eval at('r1','audioText',5)
+press !
+wait check(beforeCut('Hello!','Look'))
+expect caret('r1','audioText',6)
+eval window.visual=P.type('r1',0,'B','visualText');window.narration=P.type('r3',0,'P');true
+expect visual.kind==='written'&&narration.kind==='written'
+wait check(beforeCut('Hello!','BLook','PKeep'))
+expect caret('r1','audioText',6)
+eval window.undone=P.undoPeer();true
+expect undone.kind==='written'
+wait check(beforeCut('Hello!','BLook'))
+expect caret('r1','audioText',6)
+key ctrl KeyZ
+wait check(beforeCut('Hello','BLook'))
+expect caret('r1','audioText',5)
+press ?
+wait check(beforeCut('Hello?','BLook'))
+expect caret('r1','audioText',6)
+eval P.hold('updates');at('r2','audioText',10)
+press x
+wait shape(S.read().app,beforeCut('Hello?','BLook','Keep','Gone wordsx'))
+expect paint(beforeCut('Hello?','BLook','Keep','Gone wordsx'))&&caret('r2','audioText',11)
+eval window.removed=P.removeBeat('r2');window.pending=P.queuedUpdates();true
+expect removed.kind==='written'&&json(pending.map(p=>p.to))==='["peer","app"]'&&pending.every(p=>p.bytes.length>0)
+expect json(P.release('reverse'))===json(pending.slice().reverse())&&P.queuedUpdates().length===0
+wait check(afterCut())
+expect clean()&&P.readLateReader()===null&&fresh()
+eval window.snapshot=S.read().app;true
+expect json(P.seedReader())===json(snapshot)&&three()
+eval window.snapshot=S.read().app;window.change=P.typeReader('r3',4,'!');window.pending=P.queuedReaderUpdates();true
+expect change.kind==='written'&&pending.length===1&&pending[0].length>0&&shape(P.readLateReader(),afterCut('Keep!'))
+expect json(S.read().app)===json(snapshot)&&json(S.read().peer)===json(snapshot)&&paint(afterCut())
+expect json(P.deliverReaderUpdates())===json(['app','peer'].map(to=>({to,bytes:pending[0]})))&&P.queuedReaderUpdates().length===0
+wait check(afterCut('Keep!'))
+expect three()&&clean()
+eval window.snapshot=S.read().app;window.change=P.typeReader('r1',5,'s','visualText');window.pending=P.queuedReaderUpdates();true
+expect change.kind==='written'&&pending.length===1&&pending[0].length>0&&shape(P.readLateReader(),afterCut('Keep!','BLooks'))
+expect json(S.read().app)===json(snapshot)&&json(S.read().peer)===json(snapshot)&&paint(afterCut('Keep!'))
+expect json(P.deliverReaderUpdates())===json(['app','peer'].map(to=>({to,bytes:pending[0]})))&&P.queuedReaderUpdates().length===0
+wait check(afterCut('Keep!','BLooks'))
+expect three()&&clean()
+eval window.snapshot=S.read().app;window.change=P.undoReader();window.pending=P.queuedReaderUpdates();true
+expect change.kind==='written'&&pending.length===1&&pending[0].length>0&&shape(P.readLateReader(),afterCut('Keep!'))
+expect json(S.read().app)===json(snapshot)&&json(S.read().peer)===json(snapshot)&&paint(afterCut('Keep!','BLooks'))
+expect json(P.deliverReaderUpdates())===json(['app','peer'].map(to=>({to,bytes:pending[0]})))&&P.queuedReaderUpdates().length===0
+wait check(afterCut('Keep!'))
+expect three()&&clean()
+eval window.snapshot=S.read().app;window.change=P.undoReader();window.pending=P.queuedReaderUpdates();true
+expect change.kind==='written'&&pending.length===1&&pending[0].length>0&&shape(P.readLateReader(),afterCut())
+expect json(S.read().app)===json(snapshot)&&json(S.read().peer)===json(snapshot)&&paint(afterCut('Keep!'))
+expect json(P.deliverReaderUpdates())===json(['app','peer'].map(to=>({to,bytes:pending[0]})))&&P.queuedReaderUpdates().length===0
+wait check(afterCut())
+expect three()&&clean()
+eval window.snapshot=S.read().app;window.empty=P.undoReader();true
+expect empty.kind==='unchanged'&&P.queuedReaderUpdates().length===0&&json(P.deliverReaderUpdates())==='[]'
+expect three()&&json(S.read().app)===json(snapshot)&&paint(afterCut())
+eval window.snapshot=S.read().app;at('r3','audioText',4)
+press .
+wait check(afterCut('Keep.'))
+expect caret('r3','audioText',5)&&json(P.readLateReader())===json(snapshot)&&fresh()
+expect P.deliverToReader('app')&&three()&&clean()&&P.queuedReaderUpdates().length===0
+eval window.projection=S.read().app;window.left=S.leave();true
+expect left.ok&&S.read().peer===null&&P.readLateReader()===null&&P.freshSnapshot('app')===null&&P.freshSnapshot('peer')===null&&P.deliverToReader('app')===false&&P.typeReader('r3',4,'!')===null&&P.undoReader()===null&&P.queuedReaderUpdates().length===0&&P.deliverReaderUpdates().length===0
+expect F.state().docId!==projection.docId&&F.state().docId!==originalId&&json({...F.state(),docId:projection.docId})===json(projection)
+expect paint(afterCut('Keep.'))&&document.getElementById('shared-recovery-panel')===null

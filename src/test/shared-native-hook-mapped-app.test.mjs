@@ -158,14 +158,16 @@ function assertCopies(expected, ...copies) {
   for (const copy of copies) assert.deepEqual(rows(copy.document()), expected);
 }
 
-test("native test peer closes its owned late reader and peer on disposal", async t => {
+test("native test peer delivers the standing writer's original packets and closes both owned sessions", async t => {
   const app = await enterNative(t);
   const peer = replica(t, app);
   let reader;
+  const applied = [];
   const testPeer = createNativeTestPeer(app, {
     peer,
     applyUpdate: (target, bytes) => {
-      reader = target;
+      if (target !== app && target !== peer) reader = target;
+      applied.push({ target, bytes: Array.from(bytes) });
       return applyNativePeerUpdate(target, bytes);
     }
   });
@@ -173,6 +175,30 @@ test("native test peer closes its owned late reader and peer on disposal", async
     assert.deepEqual(snapshot(testPeer.seedReader()), snapshot(app.document()));
     assert.equal(testPeer.deliverToReader("app"), true);
     assert.equal(reader.acceptsPeerUpdate(), true);
+    const updates = stream(reader);
+    const before = snapshot(app.document());
+    applied.length = 0;
+    assert.equal(testPeer.typeReader("r1", 0, "!").kind, "written");
+    assert.deepEqual(snapshot(app.document()), before);
+    assert.deepEqual(snapshot(peer.document()), before);
+    assert.deepEqual(testPeer.queuedReaderUpdates(), updates.map(bytes => Array.from(bytes)));
+    assert.equal(updates.length, 1);
+    const bytes = Array.from(updates[0]);
+    assert.deepEqual(testPeer.deliverReaderUpdates(), [{ to: "app", bytes }, { to: "peer", bytes }]);
+    assert.deepEqual(applied, [{ target: app, bytes }, { target: peer, bytes }]);
+    assert.deepEqual(testPeer.queuedUpdates(), []);
+    assert.deepEqual(testPeer.queuedReaderUpdates(), []);
+    assert.deepEqual(snapshot(app.document()), snapshot(reader.document()));
+    assert.deepEqual(snapshot(peer.document()), snapshot(reader.document()));
+    testPeer.hold("updates");
+    assert.equal(testPeer.undoReader().kind, "written");
+    assert.equal(testPeer.queuedReaderUpdates().length, 1);
+    assert.equal(testPeer.deliverReaderUpdates().length, 2);
+    assert.equal(testPeer.typeReader("r1", 0, "!").kind, "written");
+    assert.equal(testPeer.queuedReaderUpdates().length, 1);
+    assert.equal(type(app, "r1", 0, "?").kind, "written");
+    assert.deepEqual(testPeer.queuedUpdates().map(packet => packet.to), ["peer"]);
+    assert.deepEqual(snapshot(peer.document()).rows, before.rows);
   } finally {
     testPeer.dispose();
   }
@@ -180,6 +206,10 @@ test("native test peer closes its owned late reader and peer on disposal", async
   assert.equal(peer.acceptsPeerUpdate(), false);
   assert.equal(testPeer.readLateReader(), null);
   assert.equal(testPeer.deliverToReader("app"), false);
+  assert.equal(testPeer.typeReader("r1", 0, "!"), null);
+  assert.equal(testPeer.undoReader(), undefined);
+  assert.deepEqual(testPeer.queuedReaderUpdates(), []);
+  assert.deepEqual(testPeer.deliverReaderUpdates(), []);
   assert.equal(app.acceptsPeerUpdate(), true);
 });
 

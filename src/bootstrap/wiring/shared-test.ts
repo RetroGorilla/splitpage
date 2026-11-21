@@ -167,6 +167,11 @@ function startSharedTestHook(): () => void {
       undoPeer: () => nativePeer?.undoPeer(),
       seedReader: () => nativePeer?.seedReader(),
       readLateReader: () => nativePeer?.readLateReader() ?? null,
+      typeReader: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["typeReader"]>) =>
+        nativePeer?.typeReader(...args) ?? null,
+      undoReader: () => nativePeer?.undoReader() ?? null,
+      queuedReaderUpdates: () => nativePeer?.queuedReaderUpdates() ?? [],
+      deliverReaderUpdates: () => nativePeer?.deliverReaderUpdates() ?? [],
       deliverToReader: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["deliverToReader"]>) =>
         nativePeer?.deliverToReader(...args) ?? false,
       freshSnapshot: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["freshSnapshot"]>) =>
