@@ -24,6 +24,10 @@ native session. The [slice 8 app test mapping](slice-8-test-mapping.md) records 
 which still run through direct old wiring or the isolated legacy test fixture. The old adapter and its dedicated tests
 remain for the rest of [slice 8](#11-build-order). There is no release entry for shared mode.
 
+A successful native switch restores a Writer or Split selection only when focus stayed in that editor and the
+touched beats, joined narration members and headings keep their identities, order and text. If a captured
+selection cannot be restored, there is no caret and typing waits until the person places one.
+
 ## Known differences from standalone editing
 
 | Area | What a person sees in the native shared editor | Source |
