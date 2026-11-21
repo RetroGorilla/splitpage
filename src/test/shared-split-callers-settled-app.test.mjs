@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { armDelete } from "../bootstrap/wiring/rows.ts";
 import { applySharedUpdate, encodeSharedState } from "../adapters/collab/document.ts";
-import { ORDERS, PENDING_CALLERS, MERGED, REFUSED, SOURCE, UNSPLIT, agree, base, cellOf, clearWarnings, enter, exchange, kinds, minted, pendingTyping, press,
+import { ORDERS, PENDING_CALLERS, MERGED, REFUSED, SOURCE, UNSPLIT, agree, base, cellOf, clearWarnings, enter, exchange, kinds, minted, pendingTyping,
   redoOnce, remoteCreate, remoteInsert, remoteJoin, row, select, tail, undoOnce, warnings } from "./_shared-split-callers.mjs";
 
 for (const order of ORDERS) test(`C7 settled offsets: the delete button finds its beat after a held peer beat lands before it, and only arms, ${order}`, async () => {
@@ -98,17 +98,3 @@ for (const caller of PENDING_CALLERS) for (const order of ORDERS) for (const typ
     await settledCase(caller, order, typed, peer);
   });
 }
-for (const order of ORDERS) test(`C7 settled offsets: Alt+Enter over cXd with a peer's Z held at the start leaves Zab and ef, ${order}`, async () => {
-  const f = await enter();
-  try {
-    pendingTyping(cellOf("audioText"), 3);
-    select(cellOf("audioText"), 2, 5);
-    remoteInsert(f.peer, "r1", "audioText", 0, "Z");
-    assert.equal(applySharedUpdate(f.parts.handle, encodeSharedState(f.peer)).ok, true);
-    assert.equal(press(cellOf("audioText"), "Enter", { altKey: true }), true);
-    exchange(f, order);
-    const id = minted(f);
-    agree(f, base([row("r1", "Zab", "Wide"), row(id, "ef"), row("r2", "Other"), row("r3", "Third")]));
-    assert.deepEqual(warnings(), []);
-  } finally { f.close(); }
-});

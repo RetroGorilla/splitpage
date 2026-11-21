@@ -236,15 +236,39 @@ test("native test peer applies every original packet to its destination in exact
       assert.deepEqual(peer.queuedUpdates(), []);
       assert.deepEqual(snapshot(app.document()), snapshot(peer.read()));
     }
+    originals.length = 0;
+    deliveries.length = 0;
     peer.hold("updates");
     assert.equal(type(app, "r1", 0, "q").kind, "written");
+    assert.equal(peer.type("r2", 0, "P").kind, "written");
+    peer.drain("duplicate", "app");
+    assert.equal(deliveries.length, 2);
+    for (const delivery of deliveries) {
+      assert.equal(delivery.target, app);
+      assert.deepEqual(delivery.bytes, originals[1].bytes);
+    }
+    assert.equal(type(app, "r1", 0, "z").kind, "written");
+    assert.equal(peer.type("r2", 0, "Q").kind, "written");
+    assert.equal(deliveries.length, 2);
+    peer.drain("forward", "app");
+    assert.equal(deliveries.length, 3);
+    assert.equal(deliveries[2].target, app);
+    assert.deepEqual(deliveries[2].bytes, originals[3].bytes);
+    peer.drain("forward");
+    assert.equal(deliveries.length, 5);
+    for (const [index, original] of [originals[0], originals[2]].entries()) {
+      assert.equal(deliveries[index + 3].target, peerDoc);
+      assert.deepEqual(deliveries[index + 3].bytes, original.bytes);
+    }
+    assert.deepEqual(snapshot(app.document()), snapshot(peer.read()));
+    assert.equal(type(app, "r1", 0, "w").kind, "written");
     assert.equal(peer.queuedUpdates().length, 1);
   } finally {
     fromApp();
     fromPeer();
     peer.dispose();
   }
-  assert.equal(type(app, "r1", 0, "z").kind, "written");
+  assert.equal(type(app, "r1", 0, "v").kind, "written");
   assert.deepEqual(peer.queuedUpdates(), []);
 });
 
