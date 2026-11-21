@@ -1,0 +1,102 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.P=S.nativePeer;F.openFile(new File([JSON.stringify({schema:2,title:'Shared Split typing',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello',visualText:'Look'},{id:'r2',audioText:'World',visualText:'Wide'}],comments:[]})],'split-typing.splitpage'))
+wait F.state().title === 'Shared Split typing'
+eval window.json=value=>JSON.stringify(value);window.Q=(id,f)=>document.querySelector('#rows .cell-editable[data-id="'+id+'"][data-field="'+f+'"]');window.T=(id,f)=>{const c=Q(id,f);return c&&c.checkVisibility()&&c.getBoundingClientRect().width>0?c.textContent.replace(/\u200b/g,'').replace(/\u00a0/g,' '):null};window.same=()=>json(S.read().app)===json(S.read().peer);window.clean=()=>document.getElementById('shared-recovery-panel')===null&&document.querySelector('#toast-host .toast.warn:not(.is-leaving)')===null;true
+eval window.at=(id,f,o)=>{const c=Q(id,f);c.focus();const w=document.createTreeWalker(c,4);let n,k=o;while((n=w.nextNode())){if(k<=n.data.length){getSelection().setBaseAndExtent(n,k,n,k);return true}k-=n.data.length}getSelection().setBaseAndExtent(c,c.childNodes.length,c,c.childNodes.length);return true};window.caret=(id,f,o)=>{const c=Q(id,f),s=getSelection();if(!c||document.activeElement!==c||!s.rangeCount||!s.isCollapsed||!c.contains(s.anchorNode)||!c.contains(s.focusNode))return false;const r=document.createRange();r.setStart(c,0);r.setEnd(s.focusNode,s.focusOffset);return r.toString().replace(/\u200b/g,'').length===o};true
+eval window.copy=(side,a1,v1,a2,v2)=>{const doc=S.read()[side];return doc!==null&&json({...doc,rows:doc.rows.map((row,i)=>({...row,updatedAt:base.rows[i].updatedAt,updatedBy:base.rows[i].updatedBy}))})===json({...base,rows:[{...base.rows[0],audioText:a1,visualText:v1},{...base.rows[1],audioText:a2,visualText:v2}]})};window.paint=(a1,v1,a2,v2)=>!window.__writerFlowTest.on()&&T('r1','audioText')===a1&&T('r1','visualText')===v1&&T('r2','audioText')===a2&&T('r2','visualText')===v2;window.both=(a1,v1,a2,v2)=>same()&&copy('app',a1,v1,a2,v2)&&paint(a1,v1,a2,v2);true
+expect !window.__writerFlowTest.on() && Q('r1','audioText') !== null
+eval window.originalId=F.state().docId;S.enter()
+wait S.read().peer !== null
+eval window.base=S.read().app;true
+expect base.docId !== originalId && both('Hello','Look','World','Wide') && clean()
+eval P.hold('updates');at('r1','audioText',5)
+press x
+wait copy('app','Hellox','Look','World','Wide')
+expect copy('peer','Hello','Look','World','Wide') && paint('Hellox','Look','World','Wide') && caret('r1','audioText',6)
+eval window.typed=P.type('r1',0,'Y');true
+expect typed.kind === 'written' && copy('peer','YHello','Look','World','Wide') && copy('app','Hellox','Look','World','Wide')
+eval window.queued=P.queuedUpdates();true
+expect queued.length === 2 && queued.map(p=>p.to).join(',') === 'peer,app' && queued.every(p=>p.bytes.length > 0)
+eval window.replayed=P.release('forward');true
+expect json(replayed) === json(queued) && P.queuedUpdates().length === 0
+wait both('YHellox','Look','World','Wide')
+expect caret('r1','audioText',7) && clean()
+sleep 1100
+press z
+wait both('YHelloxz','Look','World','Wide')
+expect caret('r1','audioText',8) && clean()
+key ctrl KeyZ
+wait both('YHellox','Look','World','Wide')
+expect caret('r1','audioText',7) && clean()
+key ctrl KeyZ
+wait both('YHello','Look','World','Wide')
+expect caret('r1','audioText',6) && clean()
+eval P.hold('updates');true
+key ctrl KeyZ
+expect P.queuedUpdates().length === 0 && json(P.release('forward')) === '[]'
+expect both('YHello','Look','World','Wide') && caret('r1','audioText',6) && clean()
+key ctrl+shift KeyZ
+wait both('YHellox','Look','World','Wide')
+expect caret('r1','audioText',7) && clean()
+eval P.hold('updates');at('r1','visualText',4)
+press s
+wait copy('app','YHellox','Looks','World','Wide')
+expect copy('peer','YHellox','Look','World','Wide') && paint('YHellox','Looks','World','Wide') && caret('r1','visualText',5)
+eval window.typed=P.type('r1',0,'B','visualText');true
+expect typed.kind === 'written' && copy('peer','YHellox','BLook','World','Wide') && copy('app','YHellox','Looks','World','Wide')
+eval window.queued=P.queuedUpdates();true
+expect queued.length === 2 && queued.map(p=>p.to).join(',') === 'peer,app' && queued.every(p=>p.bytes.length > 0)
+eval window.replayed=P.release('reverse');true
+expect json(replayed) === json(queued.slice().reverse()) && P.queuedUpdates().length === 0
+wait both('YHellox','BLooks','World','Wide')
+expect caret('r1','visualText',6) && clean()
+sleep 1100
+press !
+wait both('YHellox','BLooks!','World','Wide')
+expect caret('r1','visualText',7) && clean()
+key ctrl KeyZ
+wait both('YHellox','BLooks','World','Wide')
+expect caret('r1','visualText',6) && clean()
+key ctrl KeyZ
+wait both('YHellox','BLook','World','Wide')
+expect caret('r1','visualText',5) && clean()
+eval P.hold('updates');at('r2','audioText',5)
+press a
+wait copy('app','YHellox','BLook','Worlda','Wide')
+expect copy('peer','YHellox','BLook','World','Wide') && paint('YHellox','BLook','Worlda','Wide') && caret('r2','audioText',6)
+eval window.typed=P.type('r2',2,'Q');true
+expect typed.kind === 'written' && copy('peer','YHellox','BLook','WoQrld','Wide') && copy('app','YHellox','BLook','Worlda','Wide')
+eval window.queued=P.queuedUpdates();true
+expect queued.length === 2 && queued.map(p=>p.to).join(',') === 'peer,app' && queued.every(p=>p.bytes.length > 0)
+eval window.replayed=P.release('duplicate');true
+expect json(replayed) === json(queued.flatMap(p=>[p,p])) && replayed.length === 2 * queued.length && P.queuedUpdates().length === 0
+wait both('YHellox','BLook','WoQrlda','Wide')
+expect caret('r2','audioText',7) && clean()
+key ctrl KeyZ
+wait both('YHellox','BLook','WoQrld','Wide')
+expect caret('r2','audioText',6) && clean()
+eval window.beforeCompose=S.read().app;P.hold('updates');at('r2','visualText',4)
+expect caret('r2','visualText',4)
+ime set k
+expect json(S.read().app) === json(beforeCompose) && paint('YHellox','BLook','WoQrld','Widek') && caret('r2','visualText',5)
+eval window.typed=P.type('r2',0,'Z','visualText');window.queued=P.queuedUpdates();true
+expect typed.kind === 'written' && queued.length === 1 && queued[0].to === 'app' && queued[0].bytes.length > 0
+eval window.delivered=P.drain('forward','app');true
+expect json(delivered) === json(queued) && P.queuedUpdates().length === 0
+expect copy('peer','YHellox','BLook','WoQrld','ZWide') && json(S.read().app) === json(beforeCompose) && paint('YHellox','BLook','WoQrld','Widek') && caret('r2','visualText',5)
+ime commit k
+eval window.queued=P.queuedUpdates();true
+expect queued.length === 1 && queued[0].to === 'peer' && queued[0].bytes.length > 0
+expect copy('app','YHellox','BLook','WoQrld','ZWidek') && paint('YHellox','BLook','WoQrld','ZWidek') && caret('r2','visualText',6)
+eval window.replayed=P.release('forward');true
+expect json(replayed) === json(queued) && P.queuedUpdates().length === 0
+wait both('YHellox','BLook','WoQrld','ZWidek')
+expect caret('r2','visualText',6) && clean()
+key ctrl KeyZ
+wait both('YHellox','BLook','WoQrld','ZWide')
+expect caret('r2','visualText',5) && clean()
+eval window.projection=S.read().app;window.left=S.leave();true
+expect left.ok && S.read().peer === null && F.state().docId !== projection.docId && F.state().docId !== originalId
+expect json({...F.state(),docId:projection.docId}) === json(projection)
+expect paint('YHellox','BLook','WoQrld','ZWide') && caret('r2','visualText',5) && clean()

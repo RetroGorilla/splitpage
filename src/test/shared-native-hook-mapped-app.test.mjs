@@ -297,6 +297,52 @@ test("native test peer applies every original packet to its destination in exact
   assert.deepEqual(peer.queuedUpdates(), []);
 });
 
+test("native test peer types and deletes in visualText with exact held replay and hook forwarding", async t => {
+  const app = await enterNative(t);
+  const peerDoc = openNativeSession({ kind: "state", state: app.encodeState() }, { actor: "Peer", sanitize: sanitizeHtml });
+  const originals = [];
+  const fromPeer = peerDoc.subscribeLocalUpdates(bytes => originals.push(bytes));
+  const deliveries = [];
+  const peer = createNativeTestPeer(app, {
+    peer: peerDoc,
+    applyUpdate(target, bytes) {
+      deliveries.push({ target, bytes: bytes.slice() });
+      return applyNativePeerUpdate(target, bytes);
+    }
+  });
+  try {
+    peer.hold("updates");
+    assert.equal(peer.type("r1", 0, "B", "visualText").kind, "written");
+    assert.equal(peer.delete("r1", 4, 5, "visualText").kind, "written");
+    assert.equal(deliveries.length, 0);
+    assert.equal(originals.length, 2);
+    assert.deepEqual(rows(app.document()), initial);
+    assert.deepEqual(rows(peer.read()), [["r1", "Hello", "BLoo"], ["r2", "World", ""]]);
+    const replayed = peer.drain("forward", "app");
+    assert.deepEqual(replayed, originals.map(bytes => ({ to: "app", bytes: Array.from(bytes) })));
+    assert.equal(deliveries.length, 2);
+    originals.forEach((bytes, index) => {
+      assert.equal(deliveries[index].target, app);
+      assert.deepEqual(deliveries[index].bytes, bytes);
+    });
+    assert.deepEqual(peer.release("forward"), []);
+    assert.deepEqual(rows(app.document()), [["r1", "Hello", "BLoo"], ["r2", "World", ""]]);
+    assert.deepEqual(snapshot(app.document()), snapshot(peer.read()));
+  } finally {
+    fromPeer();
+    peer.dispose();
+  }
+  assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+  await enterHook(t, script);
+  const active = hook();
+  assert.equal(active.nativePeer.type("r1", 0, "B", "visualText").kind, "written");
+  assert.equal(active.nativePeer.delete("r1", 4, 5, "visualText").kind, "written");
+  await tick();
+  assert.deepEqual(rows(active.read().app), [["r1", "Hello", "BLoo"], ["r2", "World", ""]]);
+  assert.deepEqual(active.read().app, snapshot(active.read().peer));
+  assert.deepEqual(active.leave(), { ok: true });
+});
+
 test("leaving the native hook withdraws its peer and keeps the peer edit", async t => {
   await enterHook(t, script, true);
   const active = hook();

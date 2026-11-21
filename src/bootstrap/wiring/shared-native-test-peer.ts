@@ -33,9 +33,9 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>, 
     if (result.kind === "written" && !paused) applyUpdate(app, peer.encodeState());
     return result;
   }
-  function edit(beat: string, from: number, to: number, text?: string) {
+  function edit(beat: string, from: number, to: number, text?: string, field: "audioText" | "visualText" = "audioText") {
     if (!app.acceptsPeerUpdate()) return { kind: "refused", reason: "closed" } as const;
-    const anchored = peer.commands.anchorText({ beat, cell: "narration" }, from, to);
+    const anchored = peer.commands.anchorText({ beat, cell: field === "visualText" ? "visual" : "narration" }, from, to);
     if (anchored.kind !== "anchored") return anchored;
     const result = text === undefined ? peer.commands.deleteText(anchored.range) : peer.commands.typeText(anchored.range, text, {});
     return forward(result);
@@ -112,8 +112,8 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>, 
     moveBeat: (id: string, drop: NativeMoveBlock | null) => forward(peer.commands.moveBlocks([{ kind: "beat", id }], drop)),
     removeComment: (id: string) => forward(peer.commands.removeComment({ comment: id })),
     step: (direction: "undo" | "redo") => app.commands[direction](),
-    type: (beat: string, offset: number, text: string) => edit(beat, offset, offset, text),
-    delete: (beat: string, from: number, to: number) => edit(beat, from, to),
+    type: (beat: string, offset: number, text: string, field?: "audioText" | "visualText") => edit(beat, offset, offset, text, field),
+    delete: (beat: string, from: number, to: number, field?: "audioText" | "visualText") => edit(beat, from, to, undefined, field),
     dispose: () => {
       stop();
       stopAppUpdates();
