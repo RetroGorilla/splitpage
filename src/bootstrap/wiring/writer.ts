@@ -134,7 +134,9 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
             if (initialized.kind === "failed") throw initialized.error;
           }
           let dismissedGhost: typeof tagGhost = null;
+          let nativePaint: ReturnType<typeof bindNativeWriterPaint>;
           const flow = createFlowWriter({
+            ...(nativeEditorActive() ? { nativeHeadingCandidate: (beat: string) => nativePaint?.headingCandidate(beat) ?? false } : {}),
             ...(shared && commands ? { paintedText: shared.text.paintedText, bufferedText: shared.text.bufferedText, commands: commands.commands,
               visualBuffer: writerVisualBuffer(shared.text, { document: () => documentReader.current(), lifetime: shared.lifetime, decode: flowCell,
                 storedHtml: text.storedHtmlFromDom, shown: edit => paintGuard().whileShown(edit) }) } : {}),
@@ -251,11 +253,15 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
             openComment: at => { actions.invoke("comment-on-selection", "button", at); }
           });
           if (!shared) {
-            const stopPaint = bindNativeWriterPaint(root);
-            if (!stopPaint) return flow;
-            return { ...flow, dispose: () => {
+            const binding = bindNativeWriterPaint(root);
+            if (!binding) return flow;
+            nativePaint = binding;
+            return { ...flow, finish: () => {
+              binding.finish();
+              return flow.finish();
+            }, dispose: () => {
               if (flow.dispose() === false) return false;
-              stopPaint();
+              binding.dispose();
               return true;
             } };
           }

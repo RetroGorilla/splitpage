@@ -38,6 +38,7 @@ export interface SurfacePorts {
     readonly paste: (range: FlowRange, data: Pick<DataTransfer, "getData">) => FlowOutcome | undefined;
   };
   readonly paintedText?: PaintedTextSource;
+  readonly nativeHeadingCandidate?: (beat: string) => boolean;
   readonly bufferedText?: BufferedFieldPorts;
   readonly lifetime: Pick<CommonDocumentSession, "epoch">;
   readonly heldSelection: Pick<EditorSelection<object, unknown, unknown>, "rememberFlow" | "resolveFlow" | "forget">;
@@ -213,7 +214,8 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     el.classList.toggle("is-blank", !text && !visual);
     el.classList.toggle("is-filmed", row.status === "shot");
     el.classList.toggle("no-gap", noGap);
-    el.classList.toggle("is-pending-heading", headingCandidates.has(row.id) && isPendingHeading(ports.doc(), row.id, ports.flow));
+    el.classList.toggle("is-pending-heading", (headingCandidates.has(row.id) || ports.nativeHeadingCandidate?.(row.id) === true)
+      && isPendingHeading(ports.doc(), row.id, ports.flow));
     if (el.getAttribute("data-num") !== label) el.setAttribute("data-num", label);
     if (!text && visual) {
       const note = ports.plainVisual(row) + (hasSetLength(row) ? " · " + formatDuration(row.lengthSeconds) : "");
