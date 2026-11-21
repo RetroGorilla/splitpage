@@ -2,15 +2,15 @@ import { cappedText } from "../../core/document/text-policy.ts";
 import { newScene, sceneFirstBeatId, sceneGroups, scenesInOrder, writeScenes } from "../../core/document/scenes.ts";
 import type { DocumentScene } from "../../core/document/scenes.ts";
 import { changeSet } from "../session/change-set.ts";
-import type { Command, DocumentView, Plan } from "../session/document-session.ts";
+import type { Command, DocumentStructureIntent, DocumentView, Plan } from "../session/document-session.ts";
 import { CELL_TEXT_DERIVES } from "./cell-text.ts";
 import { flowIdentity } from "../../core/flow/operations.ts";
 import { sharedParagraphFlags, sharedStructureList, sharedStructureTrace } from "./shared-structure.ts";
 import type { SharedStructurePorts } from "./shared-structure.ts";
 
-function sceneEdit(name: string, update: (doc: DocumentView) => readonly DocumentScene[] | null): Command {
+function sceneEdit(name: string, structure: DocumentStructureIntent, update: (doc: DocumentView) => readonly DocumentScene[] | null): Command {
   return {
-    name, needs: "edit",
+    name, needs: "edit", structure,
     plan(doc): Plan | null {
       const next = update(doc);
       if (next === null || JSON.stringify(next) === JSON.stringify(scenesInOrder(doc) ?? [])) return null;
@@ -23,7 +23,7 @@ function sceneEdit(name: string, update: (doc: DocumentView) => readonly Documen
 }
 
 export function addSceneCommand(firstBeatId: string, id: string, name: string): Command {
-  return sceneEdit("add-section", doc => {
+  return sceneEdit("add-section", { kind: "add-heading", id, beat: firstBeatId, name }, doc => {
     const scenes = scenesInOrder(doc) ?? [];
     const clean = cappedText(name, 200);
     if (!clean || !/^[A-Za-z0-9_-]+$/.test(id) || !doc.rows.some(row => row.id === firstBeatId) ||
@@ -33,7 +33,7 @@ export function addSceneCommand(firstBeatId: string, id: string, name: string): 
 }
 
 export function renameSceneCommand(id: string, name: string): Command {
-  return sceneEdit("rename-section", doc => {
+  return sceneEdit("rename-section", { kind: "rename-heading", id, name }, doc => {
     const clean = cappedText(name, 200);
     if (!clean) return null;
     return (scenesInOrder(doc) ?? []).map(scene => scene.id === id ? { ...scene, name: clean } : scene);
@@ -53,6 +53,7 @@ function sharedHeadingRemoval(doc: DocumentView, scene: DocumentScene, flagged: 
 export function removeSceneCommand(id: string, shared?: SharedStructurePorts): Command {
   return {
     name: "remove-section", needs: "edit",
+    structure: { kind: "remove-heading", id },
     plan(doc): Plan | null {
       const scenes = scenesInOrder(doc);
       const scene = scenes?.find(item => item.id === id);

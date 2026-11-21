@@ -5,6 +5,7 @@ import type { NativeFieldTarget } from "../../adapters/collab/native/record-comm
 import type { NativeRegistryChange } from "../../adapters/collab/native/registry-commands.ts";
 import type { NativeMarkChange } from "../../adapters/collab/native/format-commands.ts";
 import type { NativeTextTarget } from "../../adapters/collab/native/text-commands.ts";
+import type { NativeMoveBlock } from "../../adapters/collab/native/move-commands.ts";
 
 export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>) {
   const peer = openNativeSession({ kind: "state", state: app.encodeState() }, { actor: "Peer", sanitize: sanitizeHtml });
@@ -39,7 +40,12 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>) 
       return anchored.kind === "anchored" ? forward(peer.commands.formatText(anchored.range, change)) : anchored;
     },
     join: (lower: string, upper: string) => forward(peer.commands.joinRow(lower, upper, " ")),
+    split: (beat: string, offset: number) => {
+      const at = peer.commands.anchorText({ beat, cell: "narration" }, offset);
+      return at.kind === "anchored" ? forward(peer.commands.splitRow(at.range)) : at;
+    },
     removeBeat: (id: string) => forward(peer.commands.removeRows([id])),
+    moveBeat: (id: string, drop: NativeMoveBlock | null) => forward(peer.commands.moveBlocks([{ kind: "beat", id }], drop)),
     removeComment: (id: string) => forward(peer.commands.removeComment({ comment: id })),
     step: (direction: "undo" | "redo") => app.commands[direction](),
     type: (beat: string, offset: number, text: string) => edit(beat, offset, offset, text),
