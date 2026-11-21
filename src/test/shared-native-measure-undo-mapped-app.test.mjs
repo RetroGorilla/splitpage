@@ -675,7 +675,7 @@ test("native stored entry refuses empty, partial, truncated or unreadable bytes"
   }
 });
 
-test("native stored entry opens the edited snapshot with fresh undo and lands a fresh copy", async t => {
+test("native stored entry with Writer open loads the edited snapshot and lands a fresh copy", async t => {
   const native = source(t, [["r1", "Hello", "Desk"], ["r2", "World", "Window"]]);
   type(native, "r1", 5, "?");
   type(native, "r1", 6, "!");
@@ -689,11 +689,18 @@ test("native stored entry opens the edited snapshot with fresh undo and lands a 
 
   writer.closeWriter();
   adoptReplacement(docOf([["local", "Still open", "Open visual"], ["local2", "Still here"]]));
+  writer.openWriter();
+  assert.equal(beat("local").textContent, "Still open");
   const sourceId = currentDocument().docId, listeners = listenerCounts();
-  t.after(() => { if (sharedSession()) assert.deepEqual(hook.leave(), { ok: true }); });
+  t.after(() => {
+    if (sharedSession()) assert.deepEqual(hook.leave(), { ok: true });
+    writer.closeWriter();
+  });
   assert.deepEqual(await hook.enterFrom(btoa(String.fromCharCode(...stored))), { ok: true });
   assert.equal(sharedSession(), true);
   assert.deepEqual(hook.read(), { app: expected, peer: expected });
+  assert.equal(beat("local"), null);
+  assert.equal(beat("r1").textContent, "Hello?");
   assert.equal(appActions.has("recovery"), false);
   assert.equal(document.getElementById("shared-recovery-panel"), null);
   const undo = sharedUndoRoute().actions;
@@ -706,6 +713,7 @@ test("native stored entry opens the edited snapshot with fresh undo and lands a 
   assert.deepEqual(hook.read().app, expected);
   hook.nativePeer.deliver();
   await agreed([["r1", "NHello?"]]);
+  assert.equal(beat("r1").textContent, "NHello?");
   const changed = hook.read().app;
   const reopened = openCopy(t, stored);
   assert.deepEqual(reopened.document(), expected);
@@ -717,6 +725,7 @@ test("native stored entry opens the edited snapshot with fresh undo and lands a 
   assert.notEqual(landed.app.docId, expected.docId);
   assert.notEqual(landed.app.docId, sourceId);
   assert.deepEqual(landed, { app: { ...changed, docId: landed.app.docId }, peer: null });
+  assert.equal(beat("r1").textContent, "NHello?");
   assert.deepEqual(listenerCounts(), listeners);
 });
 
