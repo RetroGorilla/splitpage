@@ -19,6 +19,7 @@ import { enterSharedSession, forceLeaveSharedSession, leaveRunningSharedSession 
 import { openNativeEditor } from "../bootstrap/wiring/native-shared-session.ts";
 import { openNativeSession } from "../adapters/collab/native/session.ts";
 import { applyNativePeerUpdate } from "../adapters/collab/native/peer-update.ts";
+import { createNativeTestPeer } from "../bootstrap/wiring/shared-native-test-peer.ts";
 import { sanitizeHtml } from "../bootstrap/richtext.ts";
 import { entrySwitchFixture } from "../../tests/bootstrap/shared-entry-switch-support.ts";
 import { setCellSelection } from "../features/common/cell-selection.ts";
@@ -120,7 +121,7 @@ function replica(t, source) {
 
 function stream(native) {
   const updates = [];
-  native.ydoc.on("update", (bytes, _origin, _doc, transaction) => { if (transaction.local) updates.push(bytes); });
+  native.subscribeLocalUpdates(bytes => updates.push(bytes));
   return updates;
 }
 
@@ -191,6 +192,60 @@ test("native Writer paints reversed and duplicate peer updates and lands a fresh
   assert.deepEqual(landedContent, sharedContent);
   assert.deepEqual(rows(currentDocument()), [["r1", "YHello?!", "Look"], ["r2", "World!", ""]]);
   assert.equal(app.acceptsPeerUpdate(), false);
+});
+
+test("native test peer applies every original packet to its destination in exact replay order", async t => {
+  const app = await enterNative(t);
+  const peerDoc = openNativeSession({ kind: "state", state: app.encodeState() }, { actor: "Peer", sanitize: sanitizeHtml });
+  const originals = [];
+  const fromApp = app.subscribeLocalUpdates(bytes => originals.push({ target: peerDoc, bytes }));
+  const fromPeer = peerDoc.subscribeLocalUpdates(bytes => originals.push({ target: app, bytes }));
+  const deliveries = [];
+  const peer = createNativeTestPeer(app, {
+    peer: peerDoc,
+    applyUpdate(target, bytes) {
+      deliveries.push({ target, bytes: bytes.slice() });
+      return applyNativePeerUpdate(target, bytes);
+    }
+  });
+  try {
+    for (const order of ["reverse", "duplicate"]) {
+      originals.length = 0;
+      deliveries.length = 0;
+      peer.hold("updates");
+      assert.equal(type(app, "r1", 0, "x").kind, "written");
+      assert.equal(peer.type("r1", 0, "Y").kind, "written");
+      assert.equal(peer.type("r2", 0, "!").kind, "written");
+      assert.equal(deliveries.length, 0, `${order}: no apply while held`);
+      assert.equal(originals.length, 3);
+      assert.equal(originals[0].target, peerDoc);
+      assert.equal(originals[1].target, app);
+      assert.equal(originals[2].target, app);
+      const expected = order === "reverse"
+        ? originals.slice().reverse()
+        : originals.flatMap(packet => [packet, packet]);
+      const receipt = peer.release(order);
+      assert.deepEqual(receipt, expected.map(({ target, bytes }) => ({
+        to: target === app ? "app" : "peer", bytes: Array.from(bytes)
+      })), `${order}: receipt`);
+      assert.equal(deliveries.length, expected.length, `${order}: apply count`);
+      expected.forEach(({ target, bytes }, index) => {
+        assert.equal(deliveries[index].target, target, `${order}: apply ${index} target`);
+        assert.deepEqual(deliveries[index].bytes, bytes, `${order}: apply ${index} bytes`);
+      });
+      assert.deepEqual(peer.queuedUpdates(), []);
+      assert.deepEqual(snapshot(app.document()), snapshot(peer.read()));
+    }
+    peer.hold("updates");
+    assert.equal(type(app, "r1", 0, "q").kind, "written");
+    assert.equal(peer.queuedUpdates().length, 1);
+  } finally {
+    fromApp();
+    fromPeer();
+    peer.dispose();
+  }
+  assert.equal(type(app, "r1", 0, "z").kind, "written");
+  assert.deepEqual(peer.queuedUpdates(), []);
 });
 
 test("leaving the native hook withdraws its peer and keeps the peer edit", async t => {

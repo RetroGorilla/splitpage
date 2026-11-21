@@ -110,6 +110,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
   const sizeOptions = resolveNativeSizeOptions(options);
   const { actor, sanitize } = options;
   const listeners = new Set<ChangeListener>();
+  const localUpdates = new Set<(update: Uint8Array) => void>();
   const body = { sanitize };
   let active = false, scheduled = false, publishing = false, changed = false, holds = 0;
   let closing: CloseReason | null = null, revision = 0;
@@ -133,6 +134,11 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     changed = true;
     size.recordUpdate(update.byteLength, transaction.deleteSet.clients.size > 0);
     schedule();
+    if (transaction.local && localUpdates.size) {
+      for (const listener of [...localUpdates]) {
+        try { listener(update.slice()); } catch { continue; }
+      }
+    }
   }
 
   function emit(subscribers: ReadonlySet<ChangeListener>, change: NativeSessionChange): void {
@@ -168,6 +174,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     }
     emit(listeners, { kind: "closed", reason, state });
     listeners.clear();
+    localUpdates.clear();
   }
 
   function perform<T>(run: () => T): T {
@@ -392,6 +399,11 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
       if (closing) return () => undefined;
       listeners.add(listener);
       return () => { listeners.delete(listener); };
+    },
+    subscribeLocalUpdates(listener: (update: Uint8Array) => void): () => void {
+      if (closing) return () => undefined;
+      localUpdates.add(listener);
+      return () => { localUpdates.delete(listener); };
     },
     close(): void {
       if (closing) return;
