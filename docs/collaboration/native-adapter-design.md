@@ -249,7 +249,7 @@ Each command is one transaction.
 | Command | Writes |
 | --- | --- |
 | Type, paste | `insert` with an explicit attributes object, before any delete |
-| Replace all | Resolve and validate all narration and visual ranges together. In each Yjs text, replace from the highest stored offset down. Like single Replace, each insertion uses the first matched character's marks and explicit Yjs attributes before deleting the matched units |
+| Replace all | Resolve and validate all narration and visual ranges together. In each Yjs text, replace from the highest stored offset down. Like single Replace, each insertion uses the first matched character's marks, normalizes audio cues through core, and writes explicit Yjs attributes before deleting the matched units |
 | Bold and other plain kinds | `format` with the plain key, `true` or `null` |
 | Tag, untag | A fresh application key; untag sets `null` on the keys seen. No re-keying |
 | Split | Boundary, record copying the parent's rank, visual cell. Never narration |

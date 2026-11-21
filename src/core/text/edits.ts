@@ -149,6 +149,12 @@ export function replaceText(cell: CellInput, from: number, to: number, text: str
   return insertText(deleteRange(cell, from, to), from, text, marks);
 }
 
+export function replacementInsert(cell: CellInput, from: number, to: number, text: string) {
+  const next = replaceText(cell, from, to, text);
+  const length = cellLength(next) - cellLength(deleteRange(cell, from, to));
+  return { runs: sliceCell(next, from, from + length), length };
+}
+
 export function replaceWithTag(cell: CellInput, from: number, to: number, text: string, id: string): EditedCell {
   const r = clampRange(cell, from, to);
   const selected = sliceCell(cell, r.from, r.to);

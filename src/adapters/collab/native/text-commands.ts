@@ -1,6 +1,6 @@
 import * as Y from "yjs";
-import { firstReplacementMarks } from "../../../core/text/edits.ts";
-import { OBJ } from "../../../core/text/runs.ts";
+import { firstReplacementMarks, replacementInsert } from "../../../core/text/edits.ts";
+import { isCueRun, OBJ } from "../../../core/text/runs.ts";
 import type { Marks, Run } from "../../../core/text/runs.ts";
 import { copyNativeCompoundInput, copyNativeDenseList } from "./compound-input.ts";
 import { nativeCellView, nativeLeftAt, nativeStoredOffset, nativeTextAllowed, prepareNativeRuns, writeNativeRuns } from "./inline.ts";
@@ -528,30 +528,50 @@ interface ReplacementRunEnd {
   readonly end: number;
 }
 
+interface ReplaceCell {
+  readonly cells: LiveCell[];
+  readonly cueSource: readonly Run[] | null;
+}
+
 function planReplaceAll(script: NativeScript, ranges: readonly NativeReplaceAllRange[], replacement: string) {
   const plans = new Map<Y.Text, ReplacePiece[]>(), segments: ParsedTextSegments = new Map();
-  const cellsOf = { narration: new Map<string, LiveCell[]>(), visual: new Map<string, LiveCell[]>() };
+  const cellsOf = { narration: new Map<string, ReplaceCell>(), visual: new Map<string, ReplaceCell>() };
   const views = new Map<LiveCell, NativeCellView>(), runEnds = new Map<NativeCellView, ReplacementRunEnd[]>();
   for (const { row, cell, start, end } of ranges) {
     const cache = cellsOf[cell];
-    let cells = cache.get(row);
-    if (!cells) {
-      cells = liveCells(script, { beat: row, cell }, segments);
+    let source = cache.get(row);
+    if (!source) {
+      const cells = liveCells(script, { beat: row, cell }, segments);
       if (!cells.length) return "missing";
-      cache.set(row, cells);
+      const cellViews = cells.map(cell => {
+        const view = nativeCellView(cell.items);
+        views.set(cell, view);
+        return view;
+      });
+      const cueSource = replacement && cellViews.some(view => view.runs.some(isCueRun))
+        ? cellViews.flatMap(view => view.runs) : null;
+      source = { cells, cueSource };
+      cache.set(row, source);
     }
+    const { cells, cueSource } = source;
     const first = shownPosition(cells, start, false, views);
     const last = start === end ? first : shownPosition(cells, end, false, views);
     if (!first?.view || !last) return "range";
     const view = first.view;
     let runs: readonly NativePreparedRun[] = [];
     if (replacement) {
-      const startsHere = first.offset < view.length;
-      const startingView = startsHere ? view : cells.slice(first.part + 1, last.part + 1)
-        .map(cell => views.get(cell)).find(cell => cell && cell.length > 0);
-      const firstRun = start === end || !startingView ? undefined
-        : replacementRunAt(startingView, startsHere ? first.offset : 0, runEnds);
-      const prepared = prepareNativeRuns([{ text: replacement, marks: firstReplacementMarks(firstRun) ?? {} }]);
+      let insert: readonly Run[];
+      if (cueSource && start < end) {
+        insert = replacementInsert(cueSource, start, end, replacement).runs;
+      } else {
+        const startsHere = first.offset < view.length;
+        const startingView = startsHere ? view : cells.slice(first.part + 1, last.part + 1)
+          .map(cell => views.get(cell)).find(cell => cell && cell.length > 0);
+        const firstRun = start === end || !startingView ? undefined
+          : replacementRunAt(startingView, startsHere ? first.offset : 0, runEnds);
+        insert = [{ text: replacement, marks: firstReplacementMarks(firstRun) ?? {} }];
+      }
+      const prepared = prepareNativeRuns(insert);
       if (!prepared) return "text";
       runs = prepared;
     }

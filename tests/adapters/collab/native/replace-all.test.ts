@@ -1,9 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import * as Y from "yjs";
-import { deleteRange, replaceText, sliceCell } from "../../../../src/core/text/edits.ts";
-import { cellLength } from "../../../../src/core/text/runs.ts";
+import { replacementInsert } from "../../../../src/core/text/edits.ts";
+import { withoutCues } from "../../../../src/core/text/cues.ts";
+import { projection } from "../../../../src/core/text/runs.ts";
 import { scriptCellOf } from "../../../../src/bootstrap/richtext.ts";
+import { nativeSegmentSpans } from "../../../../src/adapters/collab/native/reader.ts";
+import { declareNativeRoots } from "../../../../src/adapters/collab/native/roots.ts";
 import type { NativeReplaceAllRange, NativeUndoSelectionInput } from "../../../../src/adapters/collab/native/text-commands.ts";
 import { compoundSeed, settleCompound } from "./compound-harness.ts";
 import { noticeCopy, noticeDeliver, noticeRange } from "./notice-harness.ts";
@@ -17,10 +20,15 @@ function single(copy: Copy, hit: NativeReplaceAllRange, text: string): void {
   const { row, cell, start, end } = hit;
   const current = copy.document().rows.find(item => item.id === row);
   const source = scriptCellOf(cell === "visual" ? current?.visualText : current?.audioText);
-  const next = replaceText(source, start, end, text);
-  const length = cellLength(next) - cellLength(deleteRange(source, start, end));
   assert.equal(copy.commands.replaceText(noticeRange(copy, row, cell, start, end),
-    sliceCell(next, start, start + length)).kind, "written");
+    replacementInsert(source, start, end, text).runs).kind, "written");
+}
+
+function narrationItems(copy: Copy, row: string) {
+  const { order, segments } = declareNativeRoots(copy.ydoc);
+  const span = order.toArray().flatMap(key => nativeSegmentSpans(segments.get(key)) ?? []).find(span => span.key === "b:" + row);
+  assert.ok(span);
+  return span.items;
 }
 
 test("replace all handles unsorted ranges, adjacent matches and separate cells in one transaction and undo step", t => {
@@ -88,6 +96,41 @@ test("replacement keeps the marks of each match's first character, as single Fin
   assert.deepEqual(batch.commands.undo(), { kind: "unchanged" });
   assert.equal(batch.commands.redo().kind, "written");
   settleCompound(batch, peer, expected);
+  assert.deepEqual(batch.document(), manual.document());
+});
+
+test("replacing a whole cue with non-cue text cannot hide a later replacement from the prompter", t => {
+  const source = compoundSeed({ A: '<span class="audio-cue">SFX: cup</span>' });
+  const batch = noticeCopy(source, 2), manual = noticeCopy(source, 2);
+  t.after(() => { batch.close(); manual.close(); });
+  const spoken = (copy: Copy) => projection(withoutCues(scriptCellOf(copy.document().rows[0]?.audioText)));
+  assert.equal(spoken(batch), "");
+  const first = range("A", 0, 8), second = range("A", 0, 1);
+  assert.equal(batch.commands.replaceAll([first], ": mug").kind, "written");
+  single(manual, first, ": mug");
+  const afterFirst = narrationItems(batch, "A");
+  assert.equal(spoken(batch), ": mug");
+  assert.equal(batch.commands.replaceAll([second], "SFX:").kind, "written");
+  single(manual, second, "SFX:");
+  assert.deepEqual(
+    { spoken: spoken(batch), afterFirst, afterSecond: narrationItems(batch, "A") },
+    { spoken: "SFX: mug", afterFirst: [{ insert: ": mug" }], afterSecond: [{ insert: "SFX: mug" }] }
+  );
+  assert.deepEqual(narrationItems(batch, "A"), narrationItems(manual, "A"));
+});
+
+test("replace all writes the same cue attributes as single Replace for whole lines and fragments", t => {
+  const source = compoundSeed({
+    A: '<span class="audio-cue">SFX: cup</span><br>Say cup',
+    B: '<span class="audio-cue">SFX: bell</span>'
+  });
+  const batch = noticeCopy(source, 2), manual = noticeCopy(source, 2);
+  t.after(() => { batch.close(); manual.close(); });
+  const hits = [range("A", 13, 16), range("A", 5, 8), range("B", 0, 9)];
+  assert.equal(batch.commands.replaceAll(hits, "Music: mug").kind, "written");
+  for (const hit of hits) single(manual, hit, "Music: mug");
+  for (const row of ["A", "B"]) assert.deepEqual(narrationItems(batch, row), narrationItems(manual, row));
+  assert.deepEqual(narrationItems(batch, "B"), [{ insert: "Music: mug", attributes: { cue: true } }]);
   assert.deepEqual(batch.document(), manual.document());
 });
 
