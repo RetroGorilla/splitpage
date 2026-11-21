@@ -6,7 +6,7 @@ import { test } from "node:test";
 import ts from "typescript";
 import { REPO } from "./source-scan.mjs";
 import { COLLAB_ORACLE_COPIES } from "./collab-oracle-copies.mjs";
-import { needsOldAdapterTests, needsRootTests } from "./ci-changes.mjs";
+import { needsChecks, needsOldAdapterTests } from "./ci-changes.mjs";
 
 function oracleDigest(text, path) {
   const source = ts.createSourceFile(path, text.replace(/\r\n/g, "\n"), ts.ScriptTarget.Latest);
@@ -31,7 +31,7 @@ test("every oracle is pinned and its changes trigger both root test matrices", (
   const files = filesUnder("tests/collab/oracles");
   assert.deepEqual(files, Object.keys(COLLAB_ORACLE_COPIES).sort());
   for (const file of files) {
-    assert.equal(needsRootTests([file]), true, file);
+    assert.equal(needsChecks([file]), true, file);
     assert.equal(needsOldAdapterTests([file]), true, file);
   }
 });

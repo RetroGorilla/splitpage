@@ -167,7 +167,7 @@ beyond Stage 1 on purpose (assumed rule 24 on issue #1414):
 - **Stage 1**: both prototype copies keep P, under forward, duplicate and
   reverse delivery. Alice's undo removes only what her copy held, and Bob's
   tag arrives afterwards as a new one.
-  `prototypes/collab/test/undo-records/identical-tag-late.test.ts` records
+  [`prototypes/collab/test/undo-records/identical-tag-late.test.ts`](https://github.com/RetroGorilla/splitpage/blob/5b9b2b141/prototypes/collab/test/undo-records/identical-tag-late.test.ts) records
   this in "identical tag, Alice undoes before Bob's tag arrives: both prototype
   copies keep the tag", and the opposite order of events beside it.
 - **The model**: no copy shows P, and Bob's undo is used up.

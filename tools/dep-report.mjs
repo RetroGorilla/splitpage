@@ -12,7 +12,7 @@ const RESOLVE_SUFFIXES = ["", ".ts", ".js", ".mjs", ".cjs", ".mts", ".cts", ".js
 const BUILTINS = new Set(builtinModules.flatMap((m) => [m, m.replace(/^node:/, "")]));
 
 export const MIGRATED_LAYERS = ["core", "application", "adapters", "features", "bootstrap"];
-const NON_PRODUCTION = ["tests", "tools", "other", "prototypes"];
+const NON_PRODUCTION = ["tests", "tools", "other"];
 
 const CORE_DEPENDENCIES = {
   "core/document": ["core/document"],
@@ -61,7 +61,6 @@ const BINDING_KINDS = new Set([
 
 export function layerOf(path) {
   if (path.startsWith("collab-server/")) return "collab-server";
-  if (path.startsWith("prototypes/")) return "prototypes";
   if (path.startsWith("src/test/") || path.startsWith("tests/") || /\.test\.[cm]?[jt]s$/.test(path)) return "tests";
   const core = /^src\/core\/([^/]+)\//.exec(path);
   if (core) return CORE_DEPENDENCIES[`core/${core[1]}`] ? `core/${core[1]}` : "core";
@@ -92,8 +91,6 @@ function isCore(layer) {
 
 export function layerAllows(source, target) {
   if (source === target) return true;
-  if (target === "prototypes") return false;
-  if (source === "prototypes") return isCore(target) || target === "shared";
   if (source === "collab-server") return target === "collab-server";
   if (target === "collab-server") return source === "tests" || source === "tools";
   if (target === "tests") return ["tools", "other"].includes(source);
@@ -652,10 +649,10 @@ export function findViolations(modules) {
         if (!layerAllows(m.layer, targetLayer)) add("layer", m.path, e.target, e.line, `${m.layer} may not import ${targetLayer}`);
       } else if (e.kind === "builtin" || e.kind === "package") {
         if (!platformImportAllowed(m.layer)) add("platform-import", m.path, e.target, e.line, `${m.layer} may not import ${e.target}`);
-        if (["package:yjs", "package:lib0", "package:isomorphic.js"].includes(e.target) && !["tests", "prototypes"].includes(m.layer) && !m.path.startsWith("src/adapters/collab/") && !(m.layer === "collab-server" && e.target === "package:yjs")) {
+        if (["package:yjs", "package:lib0", "package:isomorphic.js"].includes(e.target) && m.layer !== "tests" && !m.path.startsWith("src/adapters/collab/") && !(m.layer === "collab-server" && e.target === "package:yjs")) {
           add("collab-import", m.path, e.target, e.line, "Collaboration runtime packages belong in their adapter, server or test layer");
         }
-        if (e.target === "package:@hocuspocus/provider" && !["tests", "prototypes"].includes(m.layer) && !m.path.startsWith("src/adapters/collab/native/")) {
+        if (e.target === "package:@hocuspocus/provider" && m.layer !== "tests" && !m.path.startsWith("src/adapters/collab/native/")) {
           add("collab-import", m.path, e.target, e.line, "The relay provider belongs in src/adapters/collab/native/ or tests");
         }
       } else if (e.kind === "missing") {
