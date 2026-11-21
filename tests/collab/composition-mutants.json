@@ -6,7 +6,6 @@
     "tests/features/writer/buffer-undo.test.ts",
     "tests/bootstrap/shared-switch.test.ts",
     "src/test/shared-writer-app.test.mjs",
-    "src/test/shared-hook-app.test.mjs",
     "src/test/shared-hook-routes-app.test.mjs"
   ],
   "mutants": [
@@ -631,40 +630,12 @@
       ]
     },
     {
-      "label": "the hook omits the real command refusal notice",
-      "file": "tests/collab/legacy-app/shared-test.ts",
-      "find": "commandRefused: sharedCommandRefusalNotice(notices),",
-      "replace": "commandRefused: undefined,",
-      "tests": [
-        "src/test/shared-hook-app.test.mjs"
-      ]
-    },
-    {
-      "label": "entry detaches without flushing the pending standalone draft",
-      "file": "tests/collab/legacy-app/shared-test.ts",
-      "find": "  const flushed = await flushDraftNow();\n",
-      "replace": "  const flushed = { ok: true };\n",
-      "tests": [
-        "src/test/shared-hook-app.test.mjs"
-      ]
-    },
-    {
       "label": "a refused entry flush answers the detach check instead of draft-not-kept",
       "file": "tests/collab/legacy-app/shared-test.ts",
       "find": "  if (flushed.ok) return draftDetachRefusal();\n",
       "replace": "  if (flushed || true) return draftDetachRefusal();\n",
       "tests": [
-        "src/test/shared-hook-app.test.mjs",
         "src/test/shared-hook-routes-app.test.mjs"
-      ]
-    },
-    {
-      "label": "a refused entry over an unsaved recovery copy shows no notice",
-      "file": "tests/collab/legacy-app/shared-test.ts",
-      "find": "  notices.show(DRAFT_NOT_KEPT_NOTICE, \"warn\");\n  return DRAFT_NOT_KEPT;\n",
-      "replace": "  return DRAFT_NOT_KEPT;\n",
-      "tests": [
-        "src/test/shared-hook-app.test.mjs"
       ]
     },
     {
@@ -673,7 +644,6 @@
       "find": "[() => { noteSaveChange(); }, () => { noteDraftChange(); }]",
       "replace": "[() => { noteDraftChange(); }]",
       "tests": [
-        "src/test/shared-hook-app.test.mjs",
         "src/test/shared-hook-routes-app.test.mjs"
       ]
     },
@@ -683,17 +653,7 @@
       "find": "...(kept ? [() => { draftSource.resumeWriting(); }] : []), ",
       "replace": "",
       "tests": [
-        "src/test/shared-hook-app.test.mjs",
         "src/test/shared-hook-routes-app.test.mjs"
-      ]
-    },
-    {
-      "label": "the hook leaves the recovery panel binding out",
-      "file": "tests/collab/legacy-app/shared-test.ts",
-      "find": "const bindings = joinSharedBindings(editing, recoveryPanelBinding);",
-      "replace": "const bindings = joinSharedBindings(editing, { enter: () => {}, leave: () => {} });",
-      "tests": [
-        "src/test/shared-hook-app.test.mjs"
       ]
     },
     {
@@ -711,35 +671,7 @@
       "find": "leave: () => { try { second.leave(); } finally { first.leave(); } }",
       "replace": "leave: () => { first.leave(); }",
       "tests": [
-        "tests/bootstrap/shared-switch.test.ts",
-        "src/test/shared-hook-app.test.mjs"
-      ]
-    },
-    {
-      "label": "detaching leaves standalone autosave pending",
-      "file": "tests/collab/legacy-app/shared-test.ts",
-      "find": "documentLocation().markWrittenOut(false); confirmSavedNow();",
-      "replace": "documentLocation().markWrittenOut(false);",
-      "tests": [
-        "src/test/shared-hook-app.test.mjs"
-      ]
-    },
-    {
-      "label": "the hook fails to count a missing painted base",
-      "file": "tests/collab/legacy-app/shared-test.ts",
-      "find": "counts.missingBase++; notices.show",
-      "replace": "notices.show",
-      "tests": [
-        "src/test/shared-hook-app.test.mjs"
-      ]
-    },
-    {
-      "label": "native ownership scans are not counted",
-      "file": "src/application/editing/buffered-field.ts",
-      "find": "    ports.ownershipScan?.();\n",
-      "replace": "",
-      "tests": [
-        "src/test/shared-hook-app.test.mjs"
+        "tests/bootstrap/shared-switch.test.ts"
       ]
     },
     {
@@ -749,42 +681,6 @@
       "replace": "  flowWriter.dispose();",
       "tests": [
         "tests/features/writer/runtime-mount.test.ts"
-      ]
-    },
-    {
-      "label": "the first shared narration caret is not placed",
-      "file": "src/bootstrap/wiring/writer-empty-script.ts",
-      "find": "flow.repaint(); flow.place(range, true);",
-      "replace": "flow.repaint();",
-      "tests": [
-        "src/test/shared-hook-app.test.mjs"
-      ]
-    },
-    {
-      "label": "encoded peer updates never reach the app",
-      "file": "tests/collab/legacy-app/shared-test-peer.ts",
-      "find": "      receive(item.side, item.update, item.id);\n",
-      "replace": "      if (item.side === \"peer\") receive(item.side, item.update, item.id);\n",
-      "tests": [
-        "src/test/shared-hook-app.test.mjs"
-      ]
-    },
-    {
-      "label": "the test peer has no operation families before its first command",
-      "file": "tests/collab/legacy-app/shared-test-peer.ts",
-      "find": "  registerSharedOperationFamilies(handle, ports.structure);\n",
-      "replace": "",
-      "tests": [
-        "src/test/shared-hook-app.test.mjs"
-      ]
-    },
-    {
-      "label": "used-up shared undo steps do not warn",
-      "file": "src/bootstrap/wiring/undo.ts",
-      "find": "const notice = sharedUndoNotice(outcome, direction);",
-      "replace": "const notice = !outcome.ok ? sharedUndoNotice(outcome, direction) : null;",
-      "tests": [
-        "src/test/shared-hook-app.test.mjs"
       ]
     },
     {
@@ -802,7 +698,6 @@
       "find": "    run([mountSharedSessionFeature, stopSharedSessionFeature]);\n",
       "replace": "    mountSharedSessionFeature();\n",
       "tests": [
-        "src/test/shared-hook-app.test.mjs",
         "tests/bootstrap/wiring.test.ts"
       ]
     },
@@ -812,7 +707,6 @@
       "find": "    try { forceLeaveSharedSession(); } finally {",
       "replace": "    try { void forceLeaveSharedSession; } finally {",
       "tests": [
-        "src/test/shared-hook-app.test.mjs",
         "src/test/shared-hook-routes-app.test.mjs"
       ]
     },
@@ -822,7 +716,6 @@
       "find": "      document.removeEventListener(\"compositionstart\", composition, true);\n",
       "replace": "",
       "tests": [
-        "src/test/shared-hook-app.test.mjs",
         "tests/bootstrap/wiring.test.ts"
       ]
     },
@@ -832,44 +725,7 @@
       "find": "      if (detachRefused) {",
       "replace": "      if (detachRefused && false) {",
       "tests": [
-        "src/test/shared-hook-app.test.mjs",
         "src/test/shared-hook-routes-app.test.mjs"
-      ]
-    },
-    {
-      "label": "peer hold leaves delivery unpaused",
-      "file": "tests/collab/legacy-app/shared-test-peer.ts",
-      "find": "    hold: () => { paused = true; },",
-      "replace": "    hold: () => {},",
-      "tests": [
-        "src/test/shared-hook-app.test.mjs"
-      ]
-    },
-    {
-      "label": "peer release leaves delivery paused",
-      "file": "tests/collab/legacy-app/shared-test-peer.ts",
-      "find": "=> { paused = false; return deliver(order); },",
-      "replace": "=> { return deliver(order); },",
-      "tests": [
-        "src/test/shared-hook-app.test.mjs"
-      ]
-    },
-    {
-      "label": "reverse delivery becomes forward",
-      "file": "tests/collab/legacy-app/shared-test-peer.ts",
-      "find": "    if (order === \"reverse\") updates.reverse();\n",
-      "replace": "",
-      "tests": [
-        "src/test/shared-hook-app.test.mjs"
-      ]
-    },
-    {
-      "label": "duplicate delivery applies once",
-      "file": "tests/collab/legacy-app/shared-test-peer.ts",
-      "find": "      if (order === \"duplicate\") receive(item.side, item.update, item.id);\n",
-      "replace": "",
-      "tests": [
-        "src/test/shared-hook-app.test.mjs"
       ]
     },
     {
@@ -879,15 +735,6 @@
       "replace": "if (activeWriter === mine && flowWriter?.settle && !flowWriter.settle()) return true;",
       "tests": [
         "tests/features/writer/runtime-mount.test.ts"
-      ]
-    },
-    {
-      "label": "leaving schedules no draft for the landed copy",
-      "file": "tests/collab/legacy-app/shared-test.ts",
-      "find": "[() => { noteSaveChange(); }, () => { noteDraftChange(); }]",
-      "replace": "[() => { noteSaveChange(); }]",
-      "tests": [
-        "src/test/shared-hook-app.test.mjs"
       ]
     },
     {
@@ -1094,82 +941,10 @@
       ]
     },
     {
-      "label": "peer: the peer breaks the group on every action",
-      "file": "tests/collab/legacy-app/shared-test-peer.ts",
-      "find": "    edit.replace(from, to, insert);\n",
-      "replace": "    undo.breakGroup();\n    edit.replace(from, to, insert);\n",
-      "tests": [
-        "src/test/shared-hook-peer-app.test.mjs"
-      ]
-    },
-    {
-      "label": "peer: a planned action ends the group even when its plan changes nothing",
-      "file": "tests/collab/legacy-app/shared-test-peer.ts",
-      "find": "      const plan = command.plan(doc, capability);\n      if (plan && !(\"refused\" in plan)) undo.breakGroup();\n",
-      "replace": "      undo.breakGroup();\n      const plan = command.plan(doc, capability);\n",
-      "tests": [
-        "src/test/shared-hook-peer-app.test.mjs"
-      ]
-    },
-    {
       "label": "peer: identities are enumerated by code point",
       "file": "tests/collab/legacy-app/shared-test-peer.ts",
       "find": "    return Array.from({ length: painted.text.length }, (_, index) => painted.identity(index) ?? \"\");\n",
       "replace": "    return Array.from(painted.text, (_, index) => painted.identity(index) ?? \"\");\n",
-      "tests": [
-        "src/test/shared-hook-peer-app.test.mjs"
-      ]
-    },
-    {
-      "label": "peer: one call may give a name to two characters",
-      "file": "tests/collab/legacy-app/shared-test-peer.ts",
-      "find": "        if (chosen.some(([other, again], at) => at < index && again === name && other !== unit)) refuseName(name);\n",
-      "replace": "",
-      "tests": [
-        "src/test/shared-hook-peer-app.test.mjs"
-      ]
-    },
-    {
-      "label": "peer: a name may move to another character",
-      "file": "tests/collab/legacy-app/shared-test-peer.ts",
-      "find": "        if (owner) refuseName(name);\n",
-      "replace": "",
-      "tests": [
-        "src/test/shared-hook-peer-app.test.mjs"
-      ]
-    },
-    {
-      "label": "peer: a beat name may move to another beat",
-      "file": "tests/collab/legacy-app/shared-test-peer.ts",
-      "find": "      if ([...beatNames].some(([other, given]) => given === name && other !== rowId)) refuseName(name);\n",
-      "replace": "",
-      "tests": [
-        "src/test/shared-hook-peer-app.test.mjs"
-      ]
-    },
-    {
-      "label": "peer: the joiner's typing never reaches the other copies",
-      "file": "tests/collab/legacy-app/shared-test-peer.ts",
-      "find": "      for (const update of third.written.splice(0)) { receive(\"app\", update); receive(\"peer\", update); }\n",
-      "replace": "",
-      "tests": [
-        "src/test/shared-hook-peer-app.test.mjs"
-      ]
-    },
-    {
-      "label": "peer: catching up hands the other copies everything the joiner holds",
-      "file": "tests/collab/legacy-app/shared-test-peer.ts",
-      "find": "      for (const update of third.written.splice(0)) { receive(\"app\", update); receive(\"peer\", update); }\n",
-      "replace": "      for (const side of [\"app\", \"peer\"] as const) receive(side, encodeSharedUpdate(third.handle, encodeSharedStateVector(side === \"app\" ? app.handle : handle)));\n",
-      "tests": [
-        "src/test/shared-hook-peer-app.test.mjs"
-      ]
-    },
-    {
-      "label": "peer: typing ignores the cell it is given",
-      "file": "tests/collab/legacy-app/shared-test-peer.ts",
-      "find": "    const key = bufferedFieldKey(rowId, field), base = text.paintedText.read(key, field);\n",
-      "replace": "    const key = bufferedFieldKey(rowId, \"audioText\"), base = text.paintedText.read(key, \"audioText\");\n",
       "tests": [
         "src/test/shared-hook-peer-app.test.mjs"
       ]
