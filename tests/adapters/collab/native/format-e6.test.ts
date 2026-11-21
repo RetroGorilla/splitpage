@@ -44,8 +44,8 @@ const RACES: TagRace[] = [
   { label: "B sees T, then applies T again", b: add(2, 6), seen: true }
 ];
 
-// why: the per-application column of prototypes/collab/src/format-keys/E6-RESULT.md; its two seen split rows used
-// tail re-keying, which design decision 3 does not carry, so they are checked against its standard-write runs
+// why: prototypes/collab/src/format-keys/E6-RESULT.md (removed; see commit 5b9b2b141), per-application column.
+// The two seen splits used tail re-keying, omitted by design decision 3, so use its standard-write runs.
 const E6_PER_APPLICATION: Readonly<Record<string, string>> = {
   "B adds T · Separated": "0 · = · r · 1 · –",
   "B removes T · Separated": "0 · = · r · 1 · –",
@@ -75,8 +75,8 @@ const STANDARD_SPLITS: Readonly<Record<string, string>> = {
 interface Effect { readonly edit: TagEdit; readonly letters: string[]; readonly seen: readonly number[]; readonly left?: string | undefined; readonly right?: string | undefined }
 interface Press { readonly target: number; readonly redo: boolean }
 
-// why: after prototypes/collab/src/format-keys/tag-model.ts, the per-action reading: the expected tags come from the
-// commands issued, the commands each writer had seen and the presses, never from a copy's state
+// why: the per-action model in prototypes/collab/src/format-keys/tag-model.ts (removed; see commit 5b9b2b141)
+// derives expected tags from issued and observed commands and presses, independently of a copy's state.
 class CommandModel {
   private readonly effects: Effect[] = [];
 
@@ -168,7 +168,8 @@ interface Frame {
   misses: number; extras: number; altMisses: number; altExtras: number; lost: string; leftover: string; orderChanges: number;
 }
 
-// why: after prototypes/collab/test/format-keys/tag-races.test.ts, on the adapter's own commands and standard writes
+// why: after prototypes/collab/test/format-keys/tag-races.test.ts (removed; see commit 5b9b2b141),
+// using the adapter's own commands and standard writes.
 function measure(race: TagRace, low: boolean, checks: Checks = {}) {
   const model = new CommandModel(), active = new Set<number>(), presses: Press[] = [], frames: Frame[] = [], updates: number[] = [], steps: string[] = [];
   let command = 0, disagreements = 0;

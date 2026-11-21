@@ -1,5 +1,5 @@
-// why: literal copy of prototypes/collab/test/structure-oracles.ts; Stage 0 rows per export are in ../fixtures.ts.
-// tools/test-collab-oracle-copies.mjs pins it; candidate A entries stay because the record is one literal.
+// why: literal copy of prototypes/collab/test/structure-oracles.ts (removed; see commit 5b9b2b141).
+// One digest pins the record including candidate A entries. Stage 0 rows per export are in ../fixtures.ts.
 import type { ScriptOracle } from "../checker.ts";
 
 export const beatOracles: Record<string, ScriptOracle> = {

@@ -68,17 +68,7 @@ check("tools may import tests", layerAllows("tools", "tests"));
 check("the collaboration service has its own layer", layerOf("collab-server/main.ts") === "collab-server");
 check("the collaboration service cannot import the app", !layerAllows("collab-server", "adapters"));
 check("the app cannot import the collaboration service", !layerAllows("bootstrap", "collab-server"));
-check("the collaboration service cannot import prototypes", !layerAllows("collab-server", "prototypes"));
 check("tests can import the collaboration service", layerAllows("tests", "collab-server"));
-
-for (const path of ["prototypes/collab/src/probe.ts", "prototypes/collab/test/probe.test.ts", "prototypes/other/probe.ts"]) {
-  eq("prototype paths keep their layer even for tests", layerOf(path), "prototypes");
-}
-for (const source of ["core/document", "core/text", "core", "application", "adapters", "features/rows", "bootstrap", "starters", "src-unknown", "shared", "server", "desktop", "tests", "tools", "other"]) {
-  check(`${source} cannot import prototypes`, !layerAllows(source, "prototypes"));
-  check(`prototype imports of ${source} are limited to core and shared`, layerAllows("prototypes", source) === (source.startsWith("core") || source === "shared"));
-}
-check("prototypes can import their own code", layerAllows("prototypes", "prototypes"));
 
 for (const packageName of ["yjs", "lib0", "isomorphic.js"]) {
   for (const specifier of [packageName, `${packageName}/deep/probe.js`]) {
@@ -91,7 +81,7 @@ for (const packageName of ["yjs", "lib0", "isomorphic.js"]) {
       `const runtime = require("${specifier}");`,
       `type RuntimeType = import("${specifier}").RuntimeType;`
     ]) {
-      for (const source of ["src/adapters/collab/roots.ts", "src/adapters/collab/nested/probe.ts", "tests/adapters/collab/roots.test.ts", "src/core/probe.test.ts", "prototypes/collab/src/probe.ts"]) {
+      for (const source of ["src/adapters/collab/roots.ts", "src/adapters/collab/nested/probe.ts", "tests/adapters/collab/roots.test.ts", "src/core/probe.test.ts"]) {
         eq(`${source} permits ${statement}`, findViolations(graph({ [source]: statement })), []);
       }
       for (const source of ["src/core/probe.ts", "src/application/probe.ts", "src/features/writer/probe.ts", "shared/probe.ts", "src/bootstrap/probe.ts", "src/adapters/files/probe.ts", "src/adapters/collab-other/probe.ts", "tools/probe.mjs", "server/probe.mjs", "desktop/probe.ts"]) {
@@ -108,30 +98,12 @@ eq("bootstrap may import the collaboration adapter while direct runtime package 
 })), []);
 
 const providerImport = 'import "@hocuspocus/provider";';
-for (const source of ["src/adapters/collab/native/relay.ts", "tests/adapters/collab/native/relay.test.ts", "prototypes/collab/src/probe.ts"]) {
+for (const source of ["src/adapters/collab/native/relay.ts", "tests/adapters/collab/native/relay.test.ts"]) {
   eq(`${source} permits the relay provider`, findViolations(graph({ [source]: providerImport })), []);
 }
 for (const source of ["src/adapters/collab/probe.ts", "src/adapters/collab/native-other/probe.ts", "src/bootstrap/probe.ts", "server/probe.ts"]) {
   eq(`${source} rejects the relay provider`, findViolations(graph({ [source]: providerImport })).map(({ rule }) => rule), ["collab-import"]);
 }
-
-for (const source of ["src/bootstrap/probe.ts", "desktop/probe.ts", "server/probe.ts", "shared/probe.ts", "src/test/probe.test.mjs", "desktop/test/probe.test.mjs"]) {
-  for (const target of ["prototypes/collab/src/probe.ts", "prototypes/collab/test/probe.test.ts"]) {
-    const prefix = "../".repeat(source.split("/").length - 1);
-    const violations = findViolations(graph({
-      [source]: `import "${prefix}${target}";\n`,
-      [target]: "export const value = 1;\n"
-    }));
-    eq(`${source} importing ${target} fails the real dependency graph`, violations.map(({ rule }) => rule), ["layer"]);
-  }
-}
-
-eq("prototype tests can read core and shared but not application owners", findViolations(graph({
-  "prototypes/collab/test/probe.test.ts": 'import "../../../src/core/document/probe.ts";\nimport "../../../shared/probe.ts";\nimport "../../../src/application/probe.ts";\n',
-  "src/core/document/probe.ts": "export const coreValue = 1;\n",
-  "shared/probe.ts": "export const sharedValue = 1;\n",
-  "src/application/probe.ts": "export const ownerValue = 1;\n"
-})).map(({ rule, target }) => ({ rule, target })), [{ rule: "layer", target: "src/application/probe.ts" }]);
 
 eq("reintroducing the retired folder fails the unknown-layer and import rules", findViolations(graph({
   "src/contracts/dto.ts": "export type Dto = { id: string };\n",
@@ -795,13 +767,12 @@ function runIn(repo, mode) {
 try {
   const bridge = repoWith({
     "src/bootstrap/main.ts": 'import "./eslint.config.mjs";\n',
-    "src/bootstrap/eslint.config.mjs": 'import { Doc } from "../../prototypes/collab/src/bridge.ts";\nexport { Doc };\n',
-    "prototypes/collab/src/bridge.ts": 'export { Doc } from "yjs";\n'
+    "src/bootstrap/eslint.config.mjs": 'export { Doc } from "yjs";\n'
   });
   const bridged = runIn(bridge, "check");
   eq("an app-reachable config-named bridge to Yjs fails the dependency gate", bridged.code, 1);
-  check("the gate names the bridge's prototype import", bridged.err.includes("layer: src/bootstrap/eslint.config.mjs:1 -> prototypes/collab/src/bridge.ts"), bridged.err);
-  for (const root of ["src/bootstrap", "desktop", "server", "shared", "prototypes/collab/src"]) {
+  check("the gate names the bridge's Yjs import", bridged.err.includes("collab-import: src/bootstrap/eslint.config.mjs:1 -> package:yjs"), bridged.err);
+  for (const root of ["src/bootstrap", "desktop", "server", "shared"]) {
     for (const name of ["eslint.config.js", "eslint.config.mjs", "eslint.config.cjs", "vitest.config.js", "vitest.config.mjs", "vitest.config.cjs"]) {
       eq(`${root}/${name} is analyzed as source`, isAnalyzed(`${root}/${name}`), true);
     }

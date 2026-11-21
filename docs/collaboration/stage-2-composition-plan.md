@@ -542,7 +542,7 @@ standalone app is untouched by C1 to C10.
 - **Stage 1 timing rerun.** The 1a decision owes one rerun of the stale rows
   (lifetime structure, component and `withIdentity`; editing, status, comment,
   burst, split and join; reader, export, load and heap) on the merged code. The
-  Node rows rerun from `prototypes/collab/` on the base; the browser rows need
+  Node rows rerun from `prototypes/collab/` on the base (the prototype code lives at commit `5b9b2b141`); the browser rows need
   C10.
 - **Mutants.** The four deliberate defects of the Stage 2 exit (lost mark,
   duplicated identity, omitted field, stale base) run once through the composed

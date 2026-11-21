@@ -17,8 +17,8 @@ export type RaceStackItem = TestNativeUndo["undoStack"][number];
 
 const SUFFIX = "\u001f";
 
-// why: written apart from the adapter's reader, after prototypes/collab/src/format-keys/model.ts, so the counts
-// do not lean on the code they count
+// why: after prototypes/collab/src/format-keys/model.ts (removed; see commit 5b9b2b141), so the counts are
+// independent of the adapter's reader.
 export function visibleName(key: string): string {
   const at = key.indexOf(SUFFIX);
   return at < 0 ? key : key.slice(0, at);

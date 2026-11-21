@@ -1,5 +1,5 @@
-// why: literal copy of prototypes/collab/test/marks/oracles.ts; Stage 0 rows per export are in ../../fixtures.ts.
-// tools/test-collab-oracle-copies.mjs pins it to the original, so expected results change only by product decision.
+// why: literal copy of prototypes/collab/test/marks/oracles.ts (removed; see commit 5b9b2b141).
+// The digest pins expected results. Stage 0 rows per export are in ../../fixtures.ts.
 import type { ScriptOracle } from "../../checker.ts";
 
 export const markOracles: Record<string, ScriptOracle> = {
