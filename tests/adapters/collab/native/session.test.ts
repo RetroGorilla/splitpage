@@ -760,6 +760,69 @@ test("typing groups by word and cell, and an empty redo ends the group", async t
   unchanged(session, session.commands.undo, UNCHANGED);
 });
 
+for (const direction of [-1, 1] as const) {
+  test(`a ${direction === -1 ? "Backspace" : "Delete"} run groups across peer updates and replays its endpoint carets`, t => {
+    const session = fromDocument({ A: "abcdef" });
+    const peer = open({ kind: "state", state: session.encodeState() }, "Bob");
+    t.after(session.close);
+    t.after(peer.close);
+    const erase = direction === -1 ? 3 : 2;
+    const remove = (from: number, at: number) => {
+      const before = from + (direction === -1 ? 1 : 0);
+      const step = session.commands.deleteTextInRun.withSelection(anchor(session, before), anchor(session, from, from + 1), direction, at);
+      written(step.result);
+      step.recordAfter(anchor(session, from));
+    };
+    remove(2, 0);
+    type(peer, 0, "X");
+    Y.applyUpdate(session.ydoc, peer.encodeState(), "peer");
+    remove(direction === -1 ? 2 : 3, 999);
+    remove(direction === -1 ? 1 : 3, 1998);
+    const after = direction === -1 ? "Xdef" : "Xabf";
+    assert.equal(session.document().rows[0]?.audioText, after);
+    for (const [press, text, offset] of [["undo", "Xabcdef", erase + 1], ["redo", after, direction === -1 ? 1 : 3]] as const) {
+      const result = session.commands[press]();
+      assert.equal(result.kind, "written");
+      const point = { target: narration, offset };
+      assert.deepEqual(result.selection, { anchor: point, head: point });
+      assert.equal(session.document().rows[0]?.audioText, text);
+      Y.applyUpdate(peer.ydoc, session.encodeState(), "peer");
+      assert.equal(peer.document().rows[0]?.audioText, text);
+    }
+    unchanged(session, session.commands.redo, UNCHANGED);
+  });
+}
+
+const deletionBoundaries: ReadonlyArray<readonly [
+  name: string, intervene: (session: Session) => void, at?: number, direction?: -1 | 1, from?: number,
+  target?: Parameters<typeof anchor>[3]
+]> = [
+  ["a one-second pause", () => {}, 1000],
+  ["a displaced caret", () => {}, 1, 1, 1],
+  ["a change of direction", () => {}, 1, -1, 1],
+  ["a different beat", () => {}, 1, 1, 2, { beat: "B", cell: "narration" }],
+  ["a different cell in the same beat", () => {}, 1, 1, 2, visual],
+  ["a typed letter", session => type(session, 0, "X"), 1, 1, 3],
+  ["a command", session => written(session.commands.setField(status, "ready"))],
+  ["an explicit capture boundary", session => session.endTypingGroup()],
+  ["an empty redo", session => unchanged(session, session.commands.redo, UNCHANGED)]
+];
+
+for (const [boundary, intervene, at = 1, direction = 1, from = 2, target = narration] of deletionBoundaries) {
+  test(`a native deletion run ends at ${boundary}`, t => {
+    const session = fromDocument({ A: "abcdef", B: "ghijkl" });
+    t.after(session.close);
+    if (target === visual) type(session, 0, "uvwxyz", visual);
+    written(session.commands.deleteTextInRun(anchor(session, 2, 3), 1, 0));
+    intervene(session);
+    const before = session.document().rows;
+    written(session.commands.deleteTextInRun(anchor(session, from, from + 1, target), direction, at));
+    assert.notDeepEqual(session.document().rows, before);
+    written(session.commands.undo());
+    assert.deepEqual(session.document().rows, before);
+  });
+}
+
 test("a non-typing edit separates the typing on both sides", t => {
   const session = fromDocument();
   t.after(session.close);

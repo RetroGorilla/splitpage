@@ -1,0 +1,67 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;F.openFile(new File([JSON.stringify({schema:2,title:'Native deletion runs',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello'}]})],'native-deletion-runs.splitpage'))
+wait F.state().title === 'Native deletion runs'
+eval S.enter({backend:'native'})
+eval window.cell=()=>document.querySelector('#rows .cell-editable[data-id="r1"][data-field="audioText"]');window.both=text=>S.read().app.rows[0].audioText===text&&S.read().peer.rows[0].audioText===text;cell().focus();getSelection().collapse(cell().firstChild,4);true
+key Backspace
+key Backspace
+wait both('Heo') && cell().textContent === 'Heo'
+key ctrl KeyZ
+wait both('Hello') && cell().textContent === 'Hello'
+expect getSelection().isCollapsed && getSelection().focusOffset === 4 && document.activeElement === cell()
+key ctrl KeyY
+wait both('Heo') && cell().textContent === 'Heo'
+expect getSelection().isCollapsed && getSelection().focusOffset === 2 && document.activeElement === cell()
+key ctrl KeyZ
+wait both('Hello') && cell().textContent === 'Hello'
+click #btn-write
+wait document.querySelector('#writer-doc .wr-beat[data-id="r1"]')?.textContent.replace(/\u200b/g,'') === 'Hello'
+eval window.W=window.__writerFlowTest;window.mark=offset=>({kind:'beat',rowId:'r1',offset});window.caret=offset=>{const selection=W.selection();return selection?.anchor.rowId==='r1'&&selection?.head.rowId==='r1'&&selection.anchor.offset===offset&&selection.head.offset===offset};document.getElementById('writer-doc').focus();W.place({anchor:mark(1),head:mark(1)});true
+key Delete
+key Delete
+wait both('Hlo')
+key ctrl KeyZ
+wait both('Hello')
+expect caret(1)
+key ctrl KeyY
+wait both('Hlo')
+expect caret(1)
+eval S.leave()
+click #wr-close
+eval window.loadText=(title,audioText)=>F.openFile(new File([JSON.stringify({schema:2,title,paragraphsDecided:true,rows:[{id:'r1',audioText}]})],'native-deletion-runs.splitpage'));loadText('Formatted deletion run','<strong>ab</strong><em>cd</em>efg')
+wait F.state().title === 'Formatted deletion run'
+eval S.enter({backend:'native'})
+eval window.splitBlurs=0;window.addEventListener('focusout',event=>{if(event.target.matches('#rows .cell-editable[data-id="r1"][data-field="audioText"]'))splitBlurs++},true);cell().focus();getSelection().collapse(cell().lastChild,2);true
+key Backspace
+key Backspace
+key Backspace
+key Backspace
+key Backspace
+wait both('<strong>a</strong>g')
+expect splitBlurs > 0
+key ctrl KeyZ
+wait both('<strong>ab</strong><em>cd</em>efg')
+expect document.activeElement === cell() && getSelection().isCollapsed && getSelection().focusNode === cell().lastChild && getSelection().focusOffset === 2
+key ctrl KeyY
+wait both('<strong>a</strong>g')
+eval S.leave()
+eval loadText('Peer deletion run','abcdef')
+wait F.state().title === 'Peer deletion run'
+eval S.enter({backend:'native'})
+eval cell().focus();getSelection().collapse(cell().firstChild,3);true
+key Backspace
+wait both('abdef')
+eval splitBlurs=0;true
+eval S.nativePeer.type('r1',0,'Y')
+wait both('Yabdef') && cell().textContent === 'Yabdef'
+expect splitBlurs > 0
+key Backspace
+wait both('Yadef')
+key ctrl KeyZ
+wait both('Yabcdef')
+expect document.activeElement === cell() && getSelection().isCollapsed && getSelection().focusOffset === 4
+key ctrl KeyY
+wait both('Yadef')
+expect document.activeElement === cell() && getSelection().isCollapsed && getSelection().focusOffset === 2
+eval S.leave()
