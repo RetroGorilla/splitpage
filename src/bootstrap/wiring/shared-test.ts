@@ -163,6 +163,14 @@ function startSharedTestHook(): () => void {
       unjoin: (lower: string) => nativePeer?.unjoin(lower),
       split: (beat: string, offset: number) => nativePeer?.split(beat, offset),
       removeBeat: (id: string) => nativePeer?.removeBeat(id),
+      replaceAll: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["replaceAll"]>) => nativePeer?.replaceAll(...args),
+      undoPeer: () => nativePeer?.undoPeer(),
+      seedReader: () => nativePeer?.seedReader(),
+      readLateReader: () => nativePeer?.readLateReader() ?? null,
+      deliverToReader: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["deliverToReader"]>) =>
+        nativePeer?.deliverToReader(...args) ?? false,
+      freshSnapshot: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["freshSnapshot"]>) =>
+        nativePeer?.freshSnapshot(...args) ?? null,
       moveBeat: (...args: Parameters<NonNullable<typeof nativePeer>["moveBeat"]>) => nativePeer?.moveBeat(...args),
       removeComment: (id: string) => nativePeer?.removeComment(id),
       registry: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["registry"]>) => nativePeer?.registry(...args),
