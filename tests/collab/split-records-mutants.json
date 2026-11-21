@@ -411,7 +411,7 @@
       "file": "src/features/broll/panel.ts",
       "find": "if (kept.ownValue && kept.saved && recordField(again)) again.defaultValue = kept.value;",
       "replace": "if (kept.ownValue && recordField(again)) again.defaultValue = kept.value;",
-      "tests": ["src/test/shared-split-records-drafts-app.test.mjs"]
+      "tests": ["src/test/shared-native-record-drafts-mapped-app.test.mjs"]
     },
     {
       "label": "a b-roll redraw drops the unsaved text of a box that lost focus",
@@ -530,7 +530,7 @@
       "file": "src/features/common/typed-drafts.ts",
       "find": "      return [...orphaned.values(), ...[...held.values()].filter(draft => !rendered(draft))];",
       "replace": "      for (const draft of held.values()) if (!rendered(draft)) held.delete(keyOf(draft.box, draft.record));\n      return [...orphaned.values()];",
-      "tests": ["src/test/shared-split-records-drafts-app.test.mjs"]
+      "tests": ["src/test/shared-native-record-drafts-mapped-app.test.mjs"]
     },
     {
       "label": "a redraw saves a draft",
@@ -544,7 +544,7 @@
       "file": "src/features/tags/panels.ts",
       "find": "  const record = item.id ?? \"\";",
       "replace": "  const record = item.key;",
-      "tests": ["src/test/shared-split-records-drafts-app.test.mjs"]
+      "tests": ["src/test/shared-native-record-drafts-mapped-app.test.mjs"]
     },
     {
       "label": "typing back to the drawn value keeps the draft",
@@ -558,7 +558,7 @@
       "file": "src/features/broll/panel.ts",
       "find": "  if (!isHeld(wrote)) renamingId = null;\n  renderBrollViews();",
       "replace": "  renamingId = null;\n  renderBrollViews();",
-      "tests": ["src/test/shared-split-records-drafts-app.test.mjs"]
+      "tests": ["src/test/shared-native-record-drafts-mapped-app.test.mjs"]
     }
   ]
 }
