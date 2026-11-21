@@ -157,7 +157,7 @@ function startSharedTestHook(): () => void {
     enterFrom: (state: string | Uint8Array | ArrayBuffer) => enter(sharedTestBytes(state)),
     leave,
     nativePeer: {
-      type: (beat: string, offset: number, text: string) => nativePeer?.type(beat, offset, text),
+      type: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["type"]>) => nativePeer?.type(...args),
       field: (...args: Parameters<NonNullable<typeof nativePeer>["field"]>) => nativePeer?.field(...args),
       join: (lower: string, upper: string) => nativePeer?.join(lower, upper),
       unjoin: (lower: string) => nativePeer?.unjoin(lower),
@@ -173,7 +173,7 @@ function startSharedTestHook(): () => void {
       release: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["release"]>) => nativePeer?.release(...args),
       deliver: () => nativePeer?.deliver(),
       step: (direction: "undo" | "redo") => nativePeer?.step(direction),
-      delete: (beat: string, from: number, to: number) => nativePeer?.delete(beat, from, to)
+      delete: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["delete"]>) => nativePeer?.delete(...args)
     },
     read: () => ({ app: documentReader.read(doc => doc ? JSON.parse(JSON.stringify(doc)) as unknown : null), peer: nativePeer?.read() ?? null })
   };
