@@ -186,6 +186,12 @@ function search(t, needle, replacement) {
 
 for (const [name, kind] of Object.entries(views)) {
   test(name + ": control-only paste and typing leave the selection intact", async t => {
+    adoptReplacement(migrateRows({ title: "Inline", rows: [{ id: "r1", audioText: "Hello" }] }));
+    const standalone = kind.open(t);
+    kind.caret(standalone, "r1", 1, 4);
+    assert.equal(pastePlain(kind.surface(), "\u0001"), true);
+    assert.equal(app(), name === "Split" ? "Hello" : "Ho");
+    writerControls().closeWriter();
     const show = await enter(t), view = kind.open(t);
     kind.caret(view, "r1", 1, 4);
     const before = hook.read();
