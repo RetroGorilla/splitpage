@@ -9,6 +9,7 @@ import { adoptReplacement, currentCapabilities, currentDocument, sharedRecoveryS
 import { enterSharedSession, leaveRunningSharedSession } from "../bootstrap/wiring/shared-session.ts";
 import { openNativeEditor } from "../bootstrap/wiring/native-shared-session.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
+import { ids } from "../bootstrap/wiring/ports/identity.ts";
 import { sharedCommandRefusalNotice } from "../bootstrap/wiring/ports/shared-command-notices.ts";
 import { openingStatus } from "../bootstrap/wiring/ports/transitions.ts";
 import { commentRange } from "../core/text/edits.ts";
@@ -476,6 +477,7 @@ for (const reply of [false, true]) for (const order of orders) {
     const selector = reply ? replyBody : commentBody;
     const authorSelector = reply ? '.reply-composer[data-for="thread"] .reply-name-input' : "#comment-name";
     const post = reply ? replyPost : commentPost;
+    const minted = reply ? null : t.mock.method(ids, "id");
     if (reply) click('[data-action="toggle-reply"][data-id="thread"]');
     else {
       const narration = need('#rows .cell-editable[data-id="r2"][data-field="audioText"]');
@@ -483,6 +485,8 @@ for (const reply of [false, true]) for (const order of orders) {
       setCellSelection(narration, commentSelection.from, commentSelection.to);
       narration.closest(".field-wrap").querySelector('[data-cmd="comment"]').click();
     }
+    const draftId = minted ? minted.mock.calls.at(-1)?.result : null;
+    if (!reply) assert.match(draftId, /^c/);
     const baseline = commentState(currentDocument());
     assert.equal(baseline.length, 1);
     assert.equal(baseline[0].id, "thread");
@@ -533,7 +537,8 @@ for (const reply of [false, true]) for (const order of orders) {
       assert.deepEqual(committed.find(entry => entry.id === "thread"), baseline[0]);
       const created = committed.find(entry => entry.id !== "thread");
       assert.ok(created);
-      assert.match(created.id, /^c/);
+      assert.match(created.id, /^c[0-9a-z]+-[0-9a-z]+$/);
+      assert.notEqual(created.id, draftId);
       assert.equal(created.anchorId, created.id);
       assert.equal(created.rowId, "r2");
       assert.equal(created.field, "audioText");
@@ -560,5 +565,6 @@ for (const reply of [false, true]) for (const order of orders) {
     assert.equal(f.local.commands.undo().kind, "unchanged");
     await exchange(f, order);
     copies(f, commentState, baseline);
+    assert.deepEqual(leaveRunningSharedSession(), { ok: true });
   });
 }
