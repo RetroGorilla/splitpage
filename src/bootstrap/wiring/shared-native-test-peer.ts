@@ -8,6 +8,7 @@ import type { NativeTextTarget } from "../../adapters/collab/native/text-command
 import type { NativeMoveBlock } from "../../adapters/collab/native/move-commands.ts";
 
 type Packet = { to: "app" | "peer"; bytes: Uint8Array };
+type ReplayOrder = "forward" | "reverse" | "duplicate";
 
 export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>, {
   peer = openNativeSession({ kind: "state", state: app.encodeState() }, { actor: "Peer", sanitize: sanitizeHtml }),
@@ -38,6 +39,20 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>, 
     const result = text === undefined ? peer.commands.deleteText(anchored.range) : peer.commands.typeText(anchored.range, text, {});
     return forward(result);
   }
+  function drain(order: ReplayOrder, to?: Packet["to"]) {
+    const queued = packets.splice(0);
+    const selected = queued.filter(packet => !to || packet.to === to);
+    if (to) packets.push(...queued.filter(packet => packet.to !== to));
+    const replay = order === "reverse" ? selected.reverse()
+      : order === "duplicate" ? selected.flatMap(packet => [packet, packet]) : selected;
+    const applied = [];
+    for (const { to, bytes } of replay) {
+      if (applyUpdate(to === "app" ? app : peer, bytes)) {
+        applied.push({ to, bytes: Array.from(bytes) });
+      }
+    }
+    return applied;
+  }
   return {
     read: peer.document,
     hold: (mode?: "updates") => {
@@ -46,18 +61,11 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>, 
       packets.length = 0;
     },
     queuedUpdates: () => packets.map(({ to, bytes }) => ({ to, bytes: Array.from(bytes) })),
-    release: (order: "reverse" | "duplicate") => {
+    drain,
+    release: (order: ReplayOrder) => {
       capturing = false;
-      const queued = packets.splice(0);
-      const replay = order === "reverse" ? queued.reverse() : queued.flatMap(packet => [packet, packet]);
-      const applied = [];
       try {
-        for (const { to, bytes } of replay) {
-          if (applyUpdate(to === "app" ? app : peer, bytes)) {
-            applied.push({ to, bytes: Array.from(bytes) });
-          }
-        }
-        return applied;
+        return drain(order);
       } finally {
         paused = false;
       }
