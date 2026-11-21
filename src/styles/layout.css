@@ -199,6 +199,7 @@ body.is-scene-selecting #rows, body.is-scene-selecting #rows * {
 }
 #rows .field-wrap:focus-within > .cell-editable { background: var(--field-hint); box-shadow: inset 2px 0 0 var(--visual); }
 #rows .audio-cell .field-wrap:focus-within > .cell-editable { box-shadow: inset 2px 0 0 var(--audio); }
+body[data-native-caret-unplaced] :is(#writer-doc, #rows .cell-editable, .wr-flow-visual-text) { caret-color: transparent; }
 #rows .cell-editable:empty { outline: 1px dashed var(--border); outline-offset: -1px; }
 #rows .row:focus-within .cell-editable:empty { outline-color: var(--border-strong); }
 #rows .field-wrap:focus-within > .cell-editable:empty { outline-color: transparent; }
