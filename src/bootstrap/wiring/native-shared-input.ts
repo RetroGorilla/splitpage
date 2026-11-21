@@ -1397,6 +1397,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       else native.endTypingGroup();
     },
     buffered: () => draft !== null,
+    abandonComposition: () => { if (draft?.composing && !stopped) endComposition(draft, ""); },
     hasWriterPreview: (beat: string) => draft?.surface === writerNarration && draft.beat === beat,
     stop: () => { if (!stopped) stop(PENDING); },
     recover: (reopened: ReturnType<typeof openNativeSession>): Uint8Array | null => {
