@@ -319,6 +319,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
   return Object.freeze({
     commands,
     endTypingGroup,
+    endDeletionGroup: () => { if (group?.kind === "deletion") endTypingGroup(); },
     // why: peers apply updates directly between commands. Applying one from a transaction listener is unsupported
     // because Yjs can fold it into local undo
     ydoc: doc,

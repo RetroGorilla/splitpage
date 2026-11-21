@@ -27,7 +27,7 @@ import { sharedUndoRoute } from "./undo.ts";
 import { writerControls } from "./writer.ts";
 
 interface NativeInputPorts {
-  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "resolveTextSelection" | "isClosingOrClosed" | "subscribe">;
+  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "resolveTextSelection" | "isClosingOrClosed" | "subscribe">;
   readonly session: Pick<SharedDocumentSession, "admit" | "refuse" | "run" | "subscribe">;
   readonly editAttribution: () => NativeEditStamp;
   readonly now?: () => number;
@@ -840,7 +840,9 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         draft.composing = true;
         return;
       }
-      if (finish() || !cell.isConnected) { session.refuse(STALE); event.preventDefault(); return; }
+      const reason = finish();
+      native.endDeletionGroup();
+      if (reason || !cell.isConnected) { session.refuse(STALE); event.preventDefault(); return; }
       const anchored = anchor(begin(cell, selection, true, ""));
       if (typeof anchored === "string") { session.refuse(anchored); event.preventDefault(); return; }
       draft = anchored;
@@ -906,18 +908,14 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (imeTarget === cell) imeTarget = null;
       const next = (event as FocusEvent).relatedTarget;
       if (writer && next && next !== document.body) leaveHeadingLine(true);
-      const buffered = draft;
-      if (buffered && cell && (buffered.cell === cell || cell.contains(buffered.cell))) {
-        buffered.endsGroup = true;
-        queueMicrotask(() => { if (draft === buffered) settleBlur(buffered); });
-      } else if (cell) native.endTypingGroup();
+      if (cell) leaveTextCell(cell, next);
       return;
     }
     if (event.type === "pointerdown") {
       imeTarget = null;
       if (!draft?.composing && !stopped) {
         finish();
-        native.endTypingGroup();
+        native.endDeletionGroup();
       }
       return;
     }
@@ -950,7 +948,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (!editingKey(key) && !joining && !removeHeading) {
         if (key.key.startsWith("Arrow") || key.key === "Home" || key.key === "End" || key.key === "Tab") {
           finish();
-          native.endTypingGroup();
+          native.endDeletionGroup();
         }
         return;
       }
@@ -1005,7 +1003,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     try {
       if (native.isClosingOrClosed()) return;
       if (stopped && (editableText || heading || writer)) {
-        if (stopped !== "full" && narration && !splitting && !joining && !moving && !mark && !line && event.type !== "paste") session.refuse(stopped);
+        if (stopped !== "full" && narration && !splitting && !joining && !moving && !mark && !line && event.type !== "paste" && !inputType?.startsWith("delete")) session.refuse(stopped);
         return;
       }
       if (moving) {
@@ -1055,6 +1053,25 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       session.refuse(UNSUPPORTED);
     }
   }
+  function leaveTextCell(cell: Element, next: EventTarget | null): void {
+    const buffered = draft && cell.contains(draft.cell) ? draft : null;
+    if (next instanceof Node && cell.contains(next)) return;
+    if (next && next !== document.body) {
+      if (buffered?.deletion) buffered.endsGroup = true;
+      else native.endDeletionGroup();
+      if (buffered) queueMicrotask(() => { if (draft === buffered) settleBlur(buffered); });
+      return;
+    }
+    queueMicrotask(() => {
+      const active = document.activeElement;
+      const beat = cell.getAttribute("data-id");
+      const restored = !cell.isConnected && beat && active?.matches("#rows .cell-editable, .wr-flow-visual-text")
+        && active.getAttribute("data-id") === beat && active.getAttribute("data-field") === cell.getAttribute("data-field");
+      if (buffered && draft === buffered) settleBlur(buffered);
+      if (active !== cell && !restored) native.endDeletionGroup();
+    });
+  }
+
   function settleBlur(buffered: Draft): void {
     if (stopped) return;
     if (buffered.composing) endComposition(buffered, composingText);
