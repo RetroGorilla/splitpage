@@ -123,6 +123,322 @@ function writer(t) {
   };
 }
 
+const markdownEnter = () => press(root(), "Enter", { ctrlKey: false });
+
+function typeMarkdown(text) {
+  for (const key of text) {
+    const input = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: key });
+    Object.defineProperty(input, "getTargetRanges", { value: () => [] });
+    if (!root().dispatchEvent(input)) continue;
+    const selection = document.getSelection(), range = selection.getRangeAt(0);
+    const inserted = document.createTextNode(key);
+    range.deleteContents();
+    range.insertNode(inserted);
+    selection.setBaseAndExtent(inserted, key.length, inserted, key.length);
+    root().dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: key }));
+  }
+}
+
+function markdownSnapshot() {
+  const { rows, sections } = hook.read().app;
+  const selection = document.getSelection();
+  const point = selection.focusNode?.parentElement?.closest(".wr-beat");
+  assert.ok(point && document.activeElement === root());
+  const { anchor, head } = readSelection(point, selection);
+  const original = id => /^r[12]$/.test(id) ? id : "new";
+  return {
+    rows: rows.map(row => [original(row.id), row.audioText ?? "", row.visualText ?? "", row.paragraphStart === true]),
+    headings: (sections ?? []).map(({ name, firstSceneId }) => [name, rows.findIndex(row => row.id === firstSceneId)]),
+    caret: [rows.findIndex(row => row.id === point.dataset.id), { anchor, head }]
+  };
+}
+
+test("Writer: a committed composition arms a Markdown heading in either mode", async t => {
+  const rows = [{ id: "r1", audioText: "Intro", visualText: "Desk" }];
+  for (const native of [false, true]) {
+    if (native) await enter(t, rows);
+    else adoptReplacement(migrateRows({ title: "Markdown", paragraphsDecided: true, rows: structuredClone(rows) }));
+    const view = writer(t);
+    view.caret("r1", 0);
+    compose(root(), "start", "");
+    if (!native) {
+      beat().firstChild.insertData(0, "# ");
+      window.getSelection().collapse(beat().firstChild, 2);
+      beat().dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertCompositionText", data: "# ", isComposing: true }));
+    }
+    assert.equal(beat().classList.contains("is-pending-heading"), false);
+    compose(root(), "end", "# ");
+    assert.equal(beat().classList.contains("is-pending-heading"), true);
+    view.caret("r1", 7);
+    assert.equal(markdownEnter(), true);
+    assert.deepEqual(markdownSnapshot(), {
+      rows: [["r1", "", "Desk", false]], headings: [["Intro", 0]], caret: [0, { anchor: 0, head: 0 }]
+    });
+    if (native) {
+      await Promise.resolve();
+      assert.deepEqual(hook.read().peer, hook.read().app);
+    }
+    writerControls().closeWriter();
+  }
+});
+
+test("Writer: Escape flushes typing and finalizes a pending Markdown heading in either mode", async t => {
+  const rows = [{ id: "r1", audioText: "Intro", visualText: "Desk" }];
+  for (const native of [false, true]) {
+    if (native) await enter(t, rows);
+    else adoptReplacement(migrateRows({ title: "Markdown", paragraphsDecided: true, rows: structuredClone(rows) }));
+    const view = writer(t);
+    view.caret("r1", 0);
+    typeMarkdown("# ");
+    view.caret("r1", 7);
+    typeMarkdown("!");
+    press(root(), "Escape", { ctrlKey: false });
+    assert.equal(writerControls().writerFlowControl(), null);
+    assert.equal(hook.read().app.sections?.[0]?.name, "Intro!");
+    assert.equal(app(), "");
+    if (native) {
+      await Promise.resolve();
+      assert.deepEqual(hook.read().peer, hook.read().app);
+    }
+  }
+});
+
+test("Writer: a Markdown candidate waits for mouseup and is styled and rearmed after undo in either mode", async t => {
+  const rows = [{ id: "r1", audioText: "Intro" }, { id: "r2", audioText: "Body", paragraphStart: true }];
+  for (const native of [false, true]) {
+    if (native) await enter(t, rows);
+    else adoptReplacement(migrateRows({ title: "Markdown", paragraphsDecided: true, rows: structuredClone(rows) }));
+    const view = writer(t);
+    view.caret("r1", 0);
+    typeMarkdown("# ");
+    assert.equal(beat().classList.contains("is-pending-heading"), true);
+    beat().dispatchEvent(new window.MouseEvent("mousedown", { bubbles: true }));
+    view.flow.place({ anchor: { kind: "beat", rowId: "r1", offset: 4 }, head: { kind: "beat", rowId: "r2", offset: 2 } });
+    document.dispatchEvent(new window.Event("selectionchange"));
+    assert.deepEqual(hook.read().app.sections ?? [], []);
+    window.dispatchEvent(new window.MouseEvent("mouseup", { bubbles: true }));
+    assert.equal(hook.read().app.sections?.[0]?.name, "Intro");
+    assert.equal(press(root(), "z"), true);
+    assert.equal(beat().classList.contains("is-pending-heading"), true);
+    view.caret("r1", 7);
+    view.caret("r2", 2);
+    assert.equal(hook.read().app.sections?.[0]?.name, "Intro");
+    assert.deepEqual(view.at(), ["r2", 2, 2]);
+    if (native) {
+      await Promise.resolve();
+      assert.deepEqual(hook.read().peer, hook.read().app);
+    }
+    writerControls().closeWriter();
+  }
+});
+
+test("Writer: a joined Markdown candidate keeps the caret and warns once while unchanged", async t => {
+  const show = await enter(t, [{ id: "r1", audioText: "Intro" }, { id: "r2", audioText: "Body" }], joined);
+  const view = writer(t);
+  view.caret("r1", 0);
+  typeMarkdown("# ");
+  view.caret("r1", 7);
+  for (let retry = 0; retry < 3; retry++) assert.equal(markdownEnter(), true);
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+  assert.equal(app(), "# Intro Body");
+  assert.deepEqual(view.at(), ["r1", 7, 7]);
+  await Promise.resolve();
+  const { app: local, peer: remote } = hook.read();
+  assert.deepEqual(local.sections ?? [], []);
+  assert.deepEqual(remote, local);
+  writerControls().closeWriter();
+  assert.deepEqual(hook.leave(), { ok: true });
+  adoptReplacement(migrateRows({ title: "Markdown", paragraphsDecided: true, rows: [{ id: "r1", audioText: "Intro Body" }] }));
+  const standalone = writer(t);
+  standalone.caret("r1", 0);
+  typeMarkdown("# ");
+  standalone.caret("r1", 7);
+  assert.equal(markdownEnter(), true);
+  assert.equal(hook.read().app.sections?.[0]?.name, "Intro");
+  assert.equal(app(), " Body");
+});
+
+test("Writer: typed Markdown and its conversion take two standalone undos and three native undos", async t => {
+  const rows = [{ id: "r1", audioText: "Body" }];
+  for (const native of [false, true]) {
+    if (native) await enter(t, rows);
+    else adoptReplacement(migrateRows({ title: "Markdown", paragraphsDecided: true, rows: structuredClone(rows) }));
+    writer(t).caret("r1", 0);
+    typeMarkdown("# Intro");
+    assert.equal(markdownEnter(), true);
+    assert.equal(hook.read().app.sections?.[0]?.name, "Intro");
+    for (const narration of native ? ["# IntroBody", "# Body", "Body"] : ["# IntroBody", "Body"]) {
+      assert.equal(press(root(), "z"), true);
+      assert.deepEqual(hook.read().app.sections ?? [], []);
+      assert.equal(app(), narration);
+    }
+    writerControls().closeWriter();
+  }
+});
+
+for (const [name, rows, sections, offset, expected] of [
+  ["first beat with a follower", [{ id: "r1", audioText: "Intro" }, { id: "r2", audioText: "Body", paragraphStart: true }],
+    [], 7, { rows: [["r2", "Body", "", false]], headings: [["Intro", 0]], caret: [0, { anchor: 0, head: 0 }] }],
+  ["only beat", [{ id: "r1", audioText: "Intro" }],
+    [], 7, { rows: [["new", "", "", false]], headings: [["Intro", 0]], caret: [0, { anchor: 0, head: 0 }] }],
+  ["narration after the caret", [{ id: "r1", audioText: "IntroBody" }],
+    [], 7, { rows: [["r1", "Body", "", false]], headings: [["Intro", 0]], caret: [0, { anchor: 0, head: 0 }] }],
+  ["the sole beat of an existing scene", [{ id: "r1", audioText: "Intro" }],
+    [{ id: "s1", name: "Earlier", firstSceneId: "r1" }], 7,
+    { rows: [["new", "", "", false], ["new", "", "", false]], headings: [["Earlier", 0], ["Intro", 1]], caret: [1, { anchor: 0, head: 0 }] }],
+  ["a retained Visual under an existing heading", [{ id: "r1", audioText: "Intro", visualText: "Desk" }],
+    [{ id: "s1", name: "Earlier", firstSceneId: "r1" }], 7,
+    { rows: [["new", "", "", false], ["r1", "", "Desk", false]], headings: [["Earlier", 0], ["Intro", 1]], caret: [1, { anchor: 0, head: 0 }] }]
+]) test("Writer: Markdown heading matches standalone with " + name, async t => {
+  for (const native of [false, true]) {
+    if (native) await enter(t, rows, null, sections);
+    else adoptReplacement(migrateRows({ title: "Markdown", paragraphsDecided: true, rows: structuredClone(rows), sections: structuredClone(sections) }));
+    const view = writer(t);
+    view.caret("r1", 0);
+    typeMarkdown("# ");
+    view.caret("r1", offset);
+    const before = markdownSnapshot();
+    assert.equal(markdownEnter(), true);
+    assert.deepEqual(markdownSnapshot(), expected);
+    assert.equal(press(root(), "z"), true);
+    assert.deepEqual(markdownSnapshot(), before);
+    assert.equal(press(root(), "y"), true);
+    assert.deepEqual(markdownSnapshot(), expected);
+    if (native) {
+      await Promise.resolve();
+      assert.deepEqual(hook.read().peer, hook.read().app);
+    }
+    writerControls().closeWriter();
+  }
+});
+
+for (const [offset, marker] of [[2, "# "], [0, "## "], [0, "### "]]) {
+  test("Writer: " + JSON.stringify(marker) + " at offset " + offset + " stays narration", async t => {
+    const rows = [{ id: "r1", audioText: "Intro" }, { id: "r2", audioText: "Body", paragraphStart: true }];
+    for (const native of [false, true]) {
+      if (native) await enter(t, rows);
+      else adoptReplacement(migrateRows({ title: "Markdown", paragraphsDecided: true, rows: structuredClone(rows) }));
+      const view = writer(t);
+      view.caret("r1", offset);
+      typeMarkdown(marker);
+      view.caret("r2", 0);
+      await flushed();
+      const { rows: shown, headings, caret } = markdownSnapshot();
+      assert.deepEqual(headings, []);
+      assert.equal(shown[0][1], "Intro".slice(0, offset) + marker + "Intro".slice(offset));
+      assert.deepEqual(caret, [1, { anchor: 0, head: 0 }]);
+      if (native) assert.deepEqual(hook.read().peer, hook.read().app);
+      writerControls().closeWriter();
+    }
+  });
+}
+
+test("Writer: leaving a typed Markdown line preserves the receiving caret through history", async t => {
+  const rows = [{ id: "r1", audioText: "Intro" }, { id: "r2", audioText: "Body", paragraphStart: true }];
+  for (const native of [false, true]) {
+    if (native) await enter(t, rows);
+    else adoptReplacement(migrateRows({ title: "Markdown", paragraphsDecided: true, rows: structuredClone(rows) }));
+    const view = writer(t);
+    view.caret("r1", 0);
+    typeMarkdown("# ");
+    view.caret("r2", 2);
+    const landed = markdownSnapshot();
+    assert.deepEqual(landed.headings, [["Intro", 0]]);
+    assert.deepEqual(landed.caret, [0, { anchor: 2, head: 2 }]);
+    assert.equal(press(root(), "z"), true);
+    assert.deepEqual(view.at(), ["r2", 2, 2]);
+    assert.equal(app(), "# Intro");
+    assert.equal(press(root(), "y"), true);
+    assert.deepEqual(markdownSnapshot(), landed);
+    if (native) {
+      await Promise.resolve();
+      assert.deepEqual(hook.read().peer, hook.read().app);
+    }
+    writerControls().closeWriter();
+  }
+});
+
+test("Writer: Enter converts a typed Markdown heading and replays the narration caret", async t => {
+  const show = await enter(t, [{ id: "r1", audioText: "Intro", visualText: "Look" }]);
+  const view = writer(t);
+  view.caret("r1", 0);
+  typeKeys(root(), "# ");
+  view.caret("r1", 7);
+  typeKeys(root(), "!");
+  assert.equal(markdownEnter(), true);
+  assert.deepEqual(hook.read().app.sections.map(({ name, firstSceneId }) => [name, firstSceneId]), [["Intro!", "r1"]]);
+  assert.equal(app(), "");
+  assert.equal(hook.read().app.rows[0].visualText, "Look");
+  assert.deepEqual(view.at(), ["r1", 0, 0]);
+  assert.equal(press(root(), "z"), true);
+  assert.equal(app(), "# Intro!");
+  assert.deepEqual(view.at(), ["r1", 8, 8]);
+  assert.equal(press(root(), "y"), true);
+  assert.equal(app(), "");
+  assert.deepEqual(view.at(), ["r1", 0, 0]);
+  await Promise.resolve();
+  assert.deepEqual(hook.read().peer, hook.read().app);
+  assert.equal(show.mock.callCount(), 0);
+});
+
+test("Writer: Markdown Enter cannot run during composition or after a stale typing stop", async t => {
+  const show = await enter(t, [{ id: "r1", audioText: "Intro" }]);
+  const view = writer(t);
+  view.caret("r1", 0);
+  typeKeys(root(), "# ");
+  await flushed();
+  view.caret("r1", 7);
+  compose(root(), "start", "");
+  assert.equal(markdownEnter(), true);
+  assert.equal(beforeInput(root(), "insertParagraph", null), true);
+  assert.equal(app(), "# Intro");
+  assert.deepEqual(hook.read().app.sections ?? [], []);
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+  assert.deepEqual(hook.read().peer, hook.read().app);
+  compose(root(), "end", "");
+  view.caret("r1", 7);
+  assert.equal(hook.nativePeer.type("r1", 7, "!").kind, "written");
+  assert.equal(markdownEnter(), true);
+  await Promise.resolve();
+  assert.equal(app(), "# Intro!");
+  assert.deepEqual(hook.read().peer, hook.read().app);
+  assert.deepEqual(hook.read().app.sections ?? [], []);
+  beat("r1").textContent = "# Intro!?";
+  view.caret("r1", 8);
+  typeKeys(root(), "x");
+  const noticesBefore = show.mock.callCount();
+  assert.equal(markdownEnter(), true);
+  assert.equal(beforeInput(root(), "insertParagraph", null), true);
+  assert.equal(show.mock.callCount(), noticesBefore);
+  await Promise.resolve();
+  assert.equal(peer(), "# Intro!");
+  assert.deepEqual(hook.read().peer, hook.read().app);
+  assert.deepEqual(hook.read().app.sections ?? [], []);
+});
+
+test("Writer: Markdown Enter rebases buffered typing around a peer edit in the same beat", async t => {
+  const show = await enter(t, [{ id: "r1", audioText: "IntroBody", visualText: "Desk" }]);
+  const view = writer(t);
+  view.caret("r1", 0);
+  typeKeys(root(), "# ");
+  await flushed();
+  view.caret("r1", 7);
+  typeKeys(root(), "!");
+  assert.equal(hook.nativePeer.type("r1", 3, "X").kind, "written");
+  assert.equal(markdownEnter(), true);
+  assert.deepEqual(hook.read().app.sections.map(section => section.name), ["IXntro!"]);
+  assert.equal(app(), "Body");
+  assert.equal(press(root(), "z"), true);
+  assert.equal(app(), "# IXntro!Body");
+  assert.deepEqual(view.at(), ["r1", 9, 9]);
+  assert.equal(press(root(), "y"), true);
+  assert.equal(app(), "Body");
+  assert.deepEqual(view.at(), ["r1", 0, 0]);
+  await Promise.resolve();
+  assert.deepEqual(hook.read().peer, hook.read().app);
+  assert.equal(show.mock.callCount(), 0);
+});
+
 const views = {
   Split: {
     open: () => {},

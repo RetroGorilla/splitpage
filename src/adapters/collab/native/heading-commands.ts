@@ -18,6 +18,44 @@ function refused(reason: NativeRefusal | "rank"): NativeHeadingOutcome {
   return Object.freeze({ kind: "refused", reason });
 }
 
+export function prepareNativeHeading(script: NativeScript, beat: string, id: string, name: string,
+  anchor?: NonNullable<ReturnType<typeof nativeRangeSnapshot>>) {
+  if (!nativeWellFormed(id) || !id) return "missing" as const;
+  if (!nativeWellFormed(name)) return "text" as const;
+  const { roots, reader } = script, key = "h:" + id, order = roots.order.toArray();
+  if (roots.headings.has(id) || roots.names.has(id) || roots.segments.has(key) || order.includes(key) || reader.hasHeadingMarker(id)) return "missing" as const;
+  if (anchor) {
+    const live = nativeLiveRange(script, anchor);
+    if (typeof live === "string") return live;
+  }
+  const gap = reader.ranksAboveBeat(beat);
+  if (!gap) return "missing" as const;
+  let rank: string;
+  try { rank = nativeRankBetween(gap.before, gap.after); }
+  catch (error) { if (error instanceof RangeError) return "rank" as const; throw error; }
+  const placement = reader.headingPlacement(beat, id, rank);
+  if (!placement) return "range" as const;
+  const text = roots.segments.get(placement.segment)?.get("text"), segmentIndex = order.indexOf(placement.segment);
+  if (!(text instanceof Y.Text) || segmentIndex < 0) return "missing" as const;
+  return { id, name, key, rank, gap, at: placement.at, text, segmentIndex };
+}
+
+export function writeNativeHeading(script: NativeScript, plan: Exclude<ReturnType<typeof prepareNativeHeading>, string>): void {
+  const { roots } = script, { id, name, key, rank, at, text, segmentIndex } = plan;
+  const record = new Y.Map<unknown>(), cell = new Y.Text(), marker = { h: id };
+  roots.headings.set(id, record);
+  record.set("rank", rank);
+  roots.names.set(id, cell);
+  if (name) cell.insert(0, name, {});
+  if (at === null) {
+    const heading = new Y.Map<unknown>();
+    roots.segments.set(key, heading);
+    heading.set("head", marker);
+    heading.set("text", new Y.Text());
+    roots.order.insert(segmentIndex, [key]);
+  } else text.insertEmbed(at, marker, {});
+}
+
 export function createNativeHeading(script: NativeScript, at: NativeTextRange, id: string, name: string): NativeHeadingOutcome {
   const unavailable = nativeAvailability(script);
   if (unavailable) return refused(unavailable);
@@ -25,31 +63,9 @@ export function createNativeHeading(script: NativeScript, at: NativeTextRange, i
     if (!checked || checked.target.cell !== "narration" || checked.to) return refused("range");
     if (!nativeWellFormed(id) || !id) return refused("missing");
     if (!nativeWellFormed(name)) return refused("text");
-    const { roots, reader } = script, key = "h:" + id, order = roots.order.toArray();
-    if (roots.headings.has(id) || roots.names.has(id) || roots.segments.has(key) || order.includes(key) || reader.hasHeadingMarker(id)) return refused("missing");
-    const live = nativeLiveRange(script, checked);
-    if (typeof live === "string") return refused(live);
-    const beat = checked.target.beat, gap = reader.ranksAboveBeat(beat);
-    if (!gap) return refused("missing");
-    let rank: string;
-    try { rank = nativeRankBetween(gap.before, gap.after); }
-    catch (error) { if (error instanceof RangeError) return refused("rank"); throw error; }
-    const placement = reader.headingPlacement(beat, id, rank);
-    if (!placement) return refused("range");
-    const text = roots.segments.get(placement.segment)?.get("text"), segmentIndex = order.indexOf(placement.segment);
-    if (!(text instanceof Y.Text) || segmentIndex < 0) return refused("missing");
-    const record = new Y.Map<unknown>(), cell = new Y.Text(), marker = { h: id };
-    roots.headings.set(id, record);
-    record.set("rank", rank);
-    roots.names.set(id, cell);
-    if (name) cell.insert(0, name, {});
-    if (placement.at === null) {
-      const heading = new Y.Map<unknown>();
-      roots.segments.set(key, heading);
-      heading.set("head", marker);
-      heading.set("text", new Y.Text());
-      roots.order.insert(segmentIndex, [key]);
-    } else text.insertEmbed(placement.at, marker, {});
+    const plan = prepareNativeHeading(script, checked.target.beat, id, name, checked);
+    if (typeof plan === "string") return refused(plan);
+    writeNativeHeading(script, plan);
     return WRITTEN;
   }, refused);
 }
