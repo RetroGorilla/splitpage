@@ -78,22 +78,23 @@ for (const side of ["above", "below"] as const) {
   for (const reverse of [false, true]) {
     test(`concurrent ${side} inserts both survive in the same order (reverse delivery: ${reverse})`, t => {
       const writer = noticeCopy(bytes, 2), peer = noticeCopy(bytes, 3);
-      const receivers = [noticeCopy(bytes, 4), noticeCopy(bytes, 5)];
-      t.after(() => { for (const copy of [writer, peer, ...receivers]) copy.close(); });
+      const forward = noticeCopy(bytes, 4), backward = noticeCopy(bytes, 5);
+      const copies = [writer, peer, forward, backward];
+      t.after(() => { for (const copy of copies) copy.close(); });
       const a = writer.commands.insertAdjacentBeat("B", side), b = peer.commands.insertAdjacentBeat("B", side);
       assert.equal(a.kind, "written");
       assert.equal(b.kind, "written");
       const merged = [a.created, b.created];
       assert.equal(new Set(merged).size, 2);
       const [first, second] = reverse ? [peer, writer] : [writer, peer];
-      noticeDeliver(first, receivers[0]!);
-      noticeDeliver(second, receivers[0]!);
-      noticeDeliver(second, receivers[1]!);
-      noticeDeliver(first, receivers[1]!);
-      noticeDeliver(receivers[0]!, first);
-      noticeDeliver(receivers[1]!, second);
-      const final = receivers[0]!.document();
-      for (const copy of [writer, peer, ...receivers]) assert.deepEqual(copy.document(), final);
+      noticeDeliver(first, forward);
+      noticeDeliver(second, forward);
+      noticeDeliver(second, backward);
+      noticeDeliver(first, backward);
+      noticeDeliver(forward, first);
+      noticeDeliver(backward, second);
+      const final = forward.document();
+      for (const copy of copies) assert.deepEqual(copy.document(), final);
       const at = side === "above" ? 1 : 2;
       assert.deepEqual(ids(writer).slice(at, at + 2).sort(), merged.sort());
       assert.deepEqual(ids(writer).filter(id => !merged.includes(id)), ["A", "B", "C", "D"]);
