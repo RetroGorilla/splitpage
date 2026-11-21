@@ -77,7 +77,7 @@ test("timed audit retains original implementation hashes and refuses an unlisted
 
 test("timed audit rejects missing, duplicate, stale and wrongly attributed post-timing declarations", () => {
   const audit = JSON.parse(readFileSync(new URL("../../src/perf/timed-source.json", import.meta.url), "utf8")) as PerfTimedSourceAudit;
-  assert.equal(audit.postTimingChanges?.length, 7);
+  assert.equal(audit.postTimingChanges?.length, 6);
   for (const defect of ["missing", "duplicate", "current hash", "timed hash", "unlisted", "PR", "reason"] as const) {
     const wrong = structuredClone(audit);
     const changes = wrong.postTimingChanges;

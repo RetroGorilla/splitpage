@@ -78,6 +78,13 @@
       "currentSha256": "041a045414afc7d44ad744517af0604f4986a67cbc791a5f72d2f5777a151d46",
       "pullRequest": "https://github.com/RetroGorilla/splitpage/pull/1406",
       "change": "Add stored-run HTML export preserving literal U+200B and stored cue spans."
+    },
+    {
+      "path": "../proj/experiment-inputs.ts",
+      "timedSha256": "87c3ae994a1440c0fc3ff00c4e56b76adcb1672cc5fa8124e509b7838d5d4a4f",
+      "currentSha256": "d069054349b284969c24342a9dd3cdb1f587dd4e6503810c9b90cc2a2efba94e",
+      "pullRequest": "https://github.com/RetroGorilla/splitpage/pull/1696",
+      "change": "Write the experiment inputs to the shared fixture directory."
     }
   ]
 }
