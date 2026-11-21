@@ -112,6 +112,62 @@ async function expectText(editor, text) {
 }
 
 for (const name of ["Writer", "Split"]) {
+  test(name + ": a current deletion inside a joined member remains undoable", async t => {
+    const first = "abcd", second = "ef";
+    const warn = await enterJoined(t, first, second);
+    const editor = openEditor(t, name);
+    const start = first.length + 1, deleted = first + " " + second.slice(1);
+
+    erase(editor, start, start + 1);
+    await delay(55);
+    await expectText(editor, deleted);
+    assert.equal(press(editor, "z", true), true);
+    await expectText(editor, first + " " + second);
+    assert.equal(press(editor, "y", true), true);
+    await expectText(editor, deleted);
+    assert.equal(warn.mock.callCount(), 0);
+    assert.deepEqual(hook.leave(), { ok: true });
+  });
+
+  for (const buffered of [false, true]) {
+    test(name + ": a stale deletion inside a joined member keeps the editor usable " + (buffered ? "with buffered typing" : "after a peer prefix"), async t => {
+      const first = "abcd", second = "ef";
+      const warn = await enterJoined(t, first, second);
+      const editor = openEditor(t, name);
+      const peer = hook.nativePeer;
+      if (buffered) {
+        editor.select(1);
+        type(editor, "X");
+      }
+      peer.hold();
+      const peerEdit = buffered ? peer.unjoin("r2") : peer.type("r1", 0, "P");
+      assert.equal(peerEdit.kind, "written");
+      erase(editor, buffered ? 6 : 1, buffered ? 7 : 2, () => peer.deliver());
+
+      const base = buffered ? [first, second] : ["P" + first + " " + second];
+      const expected = buffered ? [first[0] + "X" + first.slice(1), second] : base;
+      const expectRows = async rows => {
+        await Promise.resolve();
+        for (const copy of [hook.read().app, hook.read().peer]) assert.deepEqual(copy.rows.map(row => row.audioText), rows);
+        assert.equal(shown(editor.cell()), rows[0]);
+      };
+      await expectRows(expected);
+      assert.equal(press(editor, "z", true), true);
+      await expectRows(base);
+      assert.equal(press(editor, "y", true), true);
+      await expectRows(expected);
+      assert.deepEqual(warn.mock.calls.map(call => call.arguments), [["This is not available in a shared session yet.", "warn"]]);
+
+      editor.select(1);
+      type(editor, "!");
+      const entered = [expected[0][0] + "!" + expected[0].slice(1), ...expected.slice(1)];
+      await delay(55);
+      await expectRows(entered);
+      assert.deepEqual(hook.leave(), { ok: true });
+      assert.deepEqual(hook.read().app.rows.map(row => row.audioText), entered);
+    });
+  }
+
   for (const gesture of ["typing", "composition"]) {
     test(name + ": " + gesture + " over a join leaves both copies and the editor usable", async t => {
       const first = "abcd", second = "ef", from = 2, to = 6;

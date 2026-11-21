@@ -128,7 +128,7 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
       input ??= mountNativeSharedInput({
         native, session, editAttribution, now: ports.now, report: ports.report,
         publish, paintIsCurrent: () => published === native.revision(),
-        crossesPaintedSeam: (beat, from, to) => paintedSeams.get(beat)?.some(([start, end]) => from < end && to > start) ?? false
+        paintedJoinSeams: beat => paintedSeams.get(beat) ?? null
       });
     },
     unbind: () => {

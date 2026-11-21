@@ -735,8 +735,7 @@ export class NativeScriptReader {
       if (glue !== undefined) seams.push(Object.freeze([offset, offset + (glue ? width : 0)]));
       offset += width;
     } : undefined);
-    if (seams.length) this.seamsByRow.set(id, Object.freeze(seams));
-    else if (seamItems) this.seamsByRow.delete(id);
+    if (seamItems) this.seamsByRow.set(id, Object.freeze(seams));
     const visualRuns = nativeRunsOf(visual);
     return Object.freeze({
       id, members: Object.freeze(id === this.stray ? [] : group.map(member => member.id)),
