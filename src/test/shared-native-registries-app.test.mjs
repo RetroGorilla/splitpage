@@ -166,6 +166,27 @@ test("gear quick add replaces omitted orphaned gear in one step", async t => {
   copies(doc => tags(doc).map(entry => entry.name), ["Tripod"]);
 });
 
+test("untouched focused gear quick add refreshes across peer additions and saves nothing", async t => {
+  await enter(t, { productionTags: [{ cat: "gear", name: "Tripod" }] });
+  openGearPanel();
+  const box = $("#gear-quickadd-input");
+  box.focus();
+  assert.equal(box.value, "Tripod");
+  assert.equal(hook.nativePeer.registry({ kind: "create", collection: "tags", fields: { cat: "gear", name: "Boom" } }).kind, "written");
+  applyGearQuickAdd();
+  await Promise.resolve();
+  const names = doc => tags(doc).map(entry => entry.name).sort();
+  copies(names, ["Boom", "Tripod"]);
+  assert.match($("#gear-list").textContent, /Boom/);
+  assert.equal(document.activeElement, box);
+  assert.equal(box.value, "Boom\nTripod");
+  assert.equal(box.defaultValue, box.value);
+  applyGearQuickAdd();
+  await Promise.resolve();
+  copies(names, ["Boom", "Tripod"]);
+  assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
+});
+
 test("Scene prep keeps a removed tag's draft away from its same-name replacement", async t => {
   await enter(t, { rows: [{ id: "r1", audioText: "Hello",
     visualText: '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Mug" contenteditable="false">Mug</span>' }],

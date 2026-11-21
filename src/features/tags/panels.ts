@@ -197,7 +197,9 @@ export function renderGearList() {
 
 function fillGearQuickAdd() {
   const box = (document.getElementById("gear-quickadd-input") as HTMLTextAreaElement | null);
-  if (!box || document.activeElement === box) return;
+  if (!box) return;
+  const native = (ports as TagPanelPorts).shared.native?.();
+  if (document.activeElement === box && (!native || box.value !== box.defaultValue)) return;
   const draft = sharedRegistryLife() ? typed().draft("gear-quickadd-input", "") : null;
   if (draft !== null) { box.value = draft; box.setAttribute("data-unsaved", "true"); return; }
   const names = gearEntries().map(function (e) { return e.name; })
@@ -211,18 +213,21 @@ export function applyGearQuickAdd() {
 }
 
 function gearSave(raw: string): TypedWrite {
+  const native = (ports as TagPanelPorts).shared.native?.();
+  const box = document.getElementById("gear-quickadd-input") as HTMLTextAreaElement | null;
+  if (native && box?.defaultValue === raw) return "saved";
   function planned(doc: DocumentView | null) { return (planQuickAdd as PanelQuickAddRead)(doc, (ports as TagPanelPorts).text.productionReaders, raw, currentProductionIndex()); }
   const plan = (ports as TagPanelPorts).document.read(planned);
   const added = plan.added, removed = plan.removed;
 
-  const native = (ports as TagPanelPorts).shared.native?.();
   const run = native?.gear(raw) ?? editRecords(shared => gearQuickAddCommand(planned, shared));
   if (run.held) return heldWrite(run);
-  const box = document.getElementById("gear-quickadd-input") as HTMLTextAreaElement | null;
   if (native && box?.value === raw) box.defaultValue = raw;
   if (!run.changed) { fillGearQuickAdd(); return "saved"; }
-  renderProduction();
-  fillGearQuickAdd();
+  if (!native) {
+    renderProduction();
+    fillGearQuickAdd();
+  }
   const parts = [];
   if (added) parts.push("added " + added);
   if (removed) parts.push("removed " + removed);
