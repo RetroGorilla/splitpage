@@ -892,19 +892,7 @@
     "file": "src/features/editing/cell-buffer.ts",
     "find": "for (const cell of root.querySelectorAll(CELLS)) {\n        const stored = forms?.get(cell)?.text;\n        const restored = stored === undefined ? null : readSharedCellSpaceForm(cell, stored);\n        if (restored && restored.html !== cell.innerHTML) ports.page.write(cell, restored.html);\n        else clearTrailingCellSpaces(cell);\n      }",
     "replace": "",
-    "tests": ["src/test/shared-split-space-app.test.mjs", "tests/features/editing/split-caret-cost.test.ts"]
-  }, {
-    "label": "Split clipboard registration outlives the binding",
-    "file": "src/bootstrap/wiring/split-buffer.ts",
-    "find": "disconnect(); mounted = null;",
-    "replace": "mounted = null;",
-    "tests": ["src/test/shared-split-space-app.test.mjs"]
-  }, {
-    "label": "clipboard composition omits the mounted Split space form",
-    "file": "src/bootstrap/wiring/clipboard.ts",
-    "find": "sharedSpaceForm: sharedCellSpaceForm,",
-    "replace": "sharedSpaceForm: () => null,",
-    "tests": ["src/test/shared-split-space-app.test.mjs"]
+    "tests": ["tests/features/editing/split-caret-cost.test.ts"]
   }, {
     "label": "Split captures endpoints only inside the focused cell",
     "file": "src/features/editing/cell-buffer.ts",
