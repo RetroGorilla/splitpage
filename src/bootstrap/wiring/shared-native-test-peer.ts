@@ -17,6 +17,8 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>, 
   let paused = false;
   let capturing = false;
   let reader: ReturnType<typeof openNativeSession> | null = null;
+  let stopReaderUpdates: (() => void) | undefined;
+  const readerPackets: Uint8Array[] = [];
   const packets: Packet[] = [];
   const replica = (source: "app" | "peer") => source === "app" ? app : peer;
   const openReader = (source: "app" | "peer") =>
@@ -33,12 +35,11 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>, 
     if (result.kind === "written" && !paused) applyUpdate(app, peer.encodeState());
     return result;
   }
-  function edit(beat: string, from: number, to: number, text?: string, field: "audioText" | "visualText" = "audioText") {
+  function edit(target: typeof peer, beat: string, from: number, to: number, text?: string, field: "audioText" | "visualText" = "audioText") {
     if (!app.acceptsPeerUpdate()) return { kind: "refused", reason: "closed" } as const;
-    const anchored = peer.commands.anchorText({ beat, cell: field === "visualText" ? "visual" : "narration" }, from, to);
+    const anchored = target.commands.anchorText({ beat, cell: field === "visualText" ? "visual" : "narration" }, from, to);
     if (anchored.kind !== "anchored") return anchored;
-    const result = text === undefined ? peer.commands.deleteText(anchored.range) : peer.commands.typeText(anchored.range, text, {});
-    return forward(result);
+    return text === undefined ? target.commands.deleteText(anchored.range) : target.commands.typeText(anchored.range, text, {});
   }
   function drain(order: ReplayOrder, to?: Packet["to"]) {
     const queued = packets.splice(0);
@@ -57,10 +58,32 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>, 
   return {
     read: peer.document,
     seedReader: () => {
-      reader ??= openReader("app");
+      if (!reader) {
+        reader = openReader("app");
+        stopReaderUpdates = reader.subscribeLocalUpdates(bytes => readerPackets.push(bytes));
+      }
       return reader.document();
     },
     readLateReader: () => reader?.document() ?? null,
+    typeReader: (beat: string, offset: number, text: string, field?: "audioText" | "visualText") =>
+      reader && edit(reader, beat, offset, offset, text, field),
+    undoReader: () => reader?.commands.undo(),
+    queuedReaderUpdates: () => readerPackets.map(bytes => Array.from(bytes)),
+    deliverReaderUpdates: () => {
+      const wasPaused = paused;
+      paused = true;
+      try {
+        const applied = [];
+        for (const bytes of readerPackets.splice(0)) {
+          for (const to of ["app", "peer"] as const) {
+            if (applyUpdate(replica(to), bytes)) applied.push({ to, bytes: Array.from(bytes) });
+          }
+        }
+        return applied;
+      } finally {
+        paused = wasPaused;
+      }
+    },
     deliverToReader: (source: "app" | "peer") =>
       reader !== null && applyUpdate(reader, replica(source).encodeState()),
     freshSnapshot: (source: "app" | "peer") => {
@@ -112,13 +135,16 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>, 
     moveBeat: (id: string, drop: NativeMoveBlock | null) => forward(peer.commands.moveBlocks([{ kind: "beat", id }], drop)),
     removeComment: (id: string) => forward(peer.commands.removeComment({ comment: id })),
     step: (direction: "undo" | "redo") => app.commands[direction](),
-    type: (beat: string, offset: number, text: string, field?: "audioText" | "visualText") => edit(beat, offset, offset, text, field),
-    delete: (beat: string, from: number, to: number, field?: "audioText" | "visualText") => edit(beat, from, to, undefined, field),
+    type: (beat: string, offset: number, text: string, field?: "audioText" | "visualText") => forward(edit(peer, beat, offset, offset, text, field)),
+    delete: (beat: string, from: number, to: number, field?: "audioText" | "visualText") => forward(edit(peer, beat, from, to, undefined, field)),
     dispose: () => {
       stop();
       stopAppUpdates();
       stopPeerUpdates();
       packets.length = 0;
+      stopReaderUpdates?.();
+      stopReaderUpdates = undefined;
+      readerPackets.length = 0;
       reader?.close();
       reader = null;
       peer.close();

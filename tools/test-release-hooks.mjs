@@ -36,6 +36,10 @@ const HOOK_ONLY = Object.freeze(["idbRecord", "idleFlushes"]);
 
 const SHARED_HOOK_ONLY = Object.freeze([
   "nativePeer",
+  "typeReader",
+  "undoReader",
+  "queuedReaderUpdates",
+  "deliverReaderUpdates",
   "draft-not-kept",
   "The shared session did not start",
   "The draft writer did not detach",
