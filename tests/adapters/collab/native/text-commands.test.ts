@@ -10,7 +10,7 @@ import { formatNativeText } from "../../../../src/adapters/collab/native/format-
 import { createNativeHeading, renameNativeHeading } from "../../../../src/adapters/collab/native/heading-commands.ts";
 import { nativeMarkName } from "../../../../src/adapters/collab/native/inline.ts";
 import { nativeSegmentSpans } from "../../../../src/adapters/collab/native/reader.ts";
-import { splitNativeRow } from "../../../../src/adapters/collab/native/structure-commands.ts";
+import { removeNativeRows, splitNativeRow } from "../../../../src/adapters/collab/native/structure-commands.ts";
 import { anchorNativeText, deleteNativeText, replaceNativeText, typeNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
 import type { NativeTextRange, NativeTextTarget } from "../../../../src/adapters/collab/native/text-commands.ts";
 import { closeNativeScript, openNativeScript } from "../../../../src/adapters/collab/native/script.ts";
@@ -81,6 +81,24 @@ test("T02: typing at both sides of a boundary on two copies", () => {
   type(a, "R1", 3, "c"); type(b, "R1", 3, "Y"); type(a, "R2", 0, "Z");
   net.settle();
   assert.deepEqual(net.agree(), ["R1: XabcY / ", "R2: Zcd / "]);
+});
+
+test("a caret at the start of a beat or the end of the segment stays in that beat after removal and undo", () => {
+  const { net, all: [a, b] } = copies(script({ R1: "Hello", R2: "World", R3: "Last" }), 2);
+  assert.ok(a && b);
+  const start = range(a, NARRATION("R2"), 0), end = range(a, NARRATION("R3"), 4);
+  const undo = new Y.UndoManager(b.roots.segments, { trackedOrigins: new Set([b.origin]) });
+  try {
+    assert.equal(removeNativeRows(b, ["R1"]).kind, "written");
+    net.deliver(b, a);
+    assert.equal(typeNativeText(a, start, "?", {}).kind, "written");
+    assert.equal(typeNativeText(a, end, "!", {}).kind, "written");
+    net.settle();
+    assert.deepEqual(net.agree(), ["R2: ?World / ", "R3: Last! / "]);
+    assert.ok(undo.undo());
+    net.settle();
+    assert.deepEqual(net.agree(), ["R1: Hello / ", "R2: ?World / ", "R3: Last! / "]);
+  } finally { undo.destroy(); }
 });
 
 test("T04: typing, typing at the start and a cut on two copies", () => {

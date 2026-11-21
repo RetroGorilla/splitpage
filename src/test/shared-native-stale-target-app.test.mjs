@@ -6,6 +6,7 @@ import { adoptReplacement, currentDocument, sharedSession } from "../bootstrap/w
 import { createSessionCapabilities } from "../application/session/capabilities.ts";
 import { enterSharedSession, forceLeaveSharedSession, leaveRunningSharedSession } from "../bootstrap/wiring/shared-session.ts";
 import { openNativeEditor } from "../bootstrap/wiring/native-shared-session.ts";
+import { NATIVE_REMOVED_TYPING } from "../bootstrap/wiring/ports/shared-command-notices.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { sanitizeHtml } from "../bootstrap/richtext.ts";
 import { setCellSelection } from "../features/common/cell-selection.ts";
@@ -208,6 +209,15 @@ for (const view of ["Split", "Writer"]) for (const field of ["narration", "visua
           return;
         }
         assert.deepEqual(shape(f.native.document()), peerOnly);
+        if (mode === "buffered typing" && (state === "removed" || state === "replaced")) {
+          assert.deepEqual(shape(currentDocument()), peerOnly);
+          assert.equal(shown.isConnected, false);
+          assert.deepEqual(reasons(f), [NATIVE_REMOVED_TYPING]);
+          assert.deepEqual(f.native.encodeState(), peerState);
+          assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+          assert.deepEqual(shape(currentDocument()), peerOnly);
+          return;
+        }
         assert.deepEqual(shape(currentDocument()), original);
         assert.ok(shown.isConnected);
         assert.equal(text(shown), preview);
@@ -362,17 +372,24 @@ for (const view of ["Split", "Writer"]) for (const field of ["narration", "visua
 }
 
 for (const field of ["narration", "visual"]) {
-  test(`Writer ${field}: close keeps a refused draft visible`, async t => {
+  test(`Writer ${field}: close ${field === "narration" ? "discards typing on a removed beat" : "keeps a refused composition visible"}`, async t => {
     const f = await enter(t, "Writer", field), shown = f.editor();
     if (field === "visual") beginComposition(f.target, "X");
     else assert.equal(input(f.target, "insertText", "X"), true);
     peerChange(t, f, "removed");
     if (field === "visual") composition(f.target, "end", "X");
     writerControls().closeWriter();
-    assert.equal(document.getElementById("writer").hidden, false);
-    assert.ok(shown.isConnected);
-    assert.equal(text(shown), field === "visual" ? "ScXene" : "WoXrld");
-    assert.deepEqual(reasons(f), ["missing"]);
+    if (field === "visual") {
+      assert.equal(document.getElementById("writer").hidden, false);
+      assert.ok(shown.isConnected);
+      assert.equal(text(shown), "ScXene");
+      assert.deepEqual(reasons(f), ["missing"]);
+    } else {
+      assert.equal(document.getElementById("writer").hidden, true);
+      assert.equal(shown.isConnected, false);
+      assert.deepEqual(shape(currentDocument()), shape(f.peer.document()));
+      assert.deepEqual(reasons(f), [NATIVE_REMOVED_TYPING]);
+    }
     assert.deepEqual(f.errors, []);
   });
 }
@@ -416,24 +433,22 @@ for (const view of ["Split", "Writer"]) {
     });
   }
 
-  test(`${view}: a structure press that finds a stale draft refuses before writing`, async t => {
+  test(`${view}: a structure press on a removed beat discards the draft and refuses before writing`, async t => {
     const f = await enter(t, view, "narration"), shown = f.editor();
     assert.equal(input(f.target, "insertText", "X"), true);
     peerChange(t, f, "removed");
     const state = f.native.encodeState();
     const split = () => key(f.target, "Enter", { altKey: view === "Split" });
     assert.equal(split(), true);
-    assert.deepEqual(reasons(f), ["missing"]);
-    assert.equal(split(), true);
-    assert.deepEqual(reasons(f), ["missing"]);
+    assert.deepEqual(reasons(f), [NATIVE_REMOVED_TYPING]);
     assert.deepEqual(f.native.encodeState(), state);
-    assert.equal(text(shown), "WoXrld");
+    assert.equal(shown.isConnected, false);
     if (view === "Writer") {
       writerControls().closeWriter();
-      assert.equal(document.getElementById("writer").hidden, false);
-      assert.equal(text(shown), "WoXrld");
+      assert.equal(document.getElementById("writer").hidden, true);
     }
-    assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: "missing" });
+    assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+    assert.deepEqual(shape(currentDocument()), shape(f.peer.document()));
     assert.deepEqual(f.errors, []);
   });
 

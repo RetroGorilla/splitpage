@@ -5,9 +5,12 @@ import type { BufferedFieldPorts } from "../../../application/editing/buffered-f
 import { SHARED_SESSION_DISABLED } from "../../../application/session/ports.ts";
 import { REWRITE_CELL_CHANGED } from "../../../application/commands/document-edit.ts";
 
+export const NATIVE_REMOVED_TYPING = "native-removed-typing";
+
 export function sharedCommandRefusalNotice(notices: Pick<NoticePort, "show">): NonNullable<SharedSessionPorts["refused"]> {
   return reason => {
-    notices.show(reason === SHARED_SESSION_DISABLED.moves ? reason : reason === REWRITE_CELL_CHANGED ? "This line changed. Try replacing again."
+    notices.show(reason === NATIVE_REMOVED_TYPING ? "Typing was discarded because a peer removed this beat."
+      : reason === SHARED_SESSION_DISABLED.moves ? reason : reason === REWRITE_CELL_CHANGED ? "This line changed. Try replacing again."
       : "This is not available in a shared session yet.", "warn");
   };
 }
