@@ -857,7 +857,7 @@ test("outside a shared session nothing starts a trial replica: received updates 
     };
     assert.deepEqual(callers("startSharedTrialReplica"), []);
     assert.deepEqual(callers("acquireSharedTrialReplica"), ["src/adapters/collab/replica.ts"]);
-    assert.deepEqual(callers("createSharedReplica"), ["src/bootstrap/wiring/shared-session.ts", "src/bootstrap/wiring/shared-test-peer.ts"]);
+    assert.deepEqual(callers("createSharedReplica"), ["src/bootstrap/wiring/shared-session.ts"]);
     destroySharedDocument(sender);
   } finally { destroySharedDocument(handle); }
 });
