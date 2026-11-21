@@ -572,6 +572,11 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     } else if (!cell && !(event.type === "drop" && target?.closest("#rows .visual-cell"))) return;
     if (event.type === "keydown") {
       const key = event as KeyboardEvent;
+      if (key.key === "Enter" && key.altKey && cell?.id === "writer-doc") {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        return;
+      }
       if ((narration || heading) && (draft?.composing || key.isComposing || key.keyCode === 229)) {
         event.stopImmediatePropagation();
         if (undoGesture(key) || (splitKey(key) || joining || removeHeading || moveDirection(key)) && !key.isComposing && key.keyCode !== 229) {

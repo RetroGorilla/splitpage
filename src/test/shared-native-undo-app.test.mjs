@@ -210,6 +210,19 @@ test("Writer: renaming and removing a heading replay the heading caret", async t
   assert.equal(show.mock.callCount(), 0);
 });
 
+test("Writer: a stale heading cannot supply the range for a rename", async t => {
+  const show = await enter(t, twoBeats, undefined, [{ id: "section", name: "Scene", firstSceneId: "r2" }]);
+  const view = writer(t);
+  const heading = root().querySelector(".wr-heading");
+  heading.textContent = "Stale";
+  const at = { kind: "heading", sceneId: "section", offset: 2 };
+  view.flow.place({ anchor: at, head: at });
+  const before = hook.read();
+  assert.equal(beforeInput(root(), "insertText", "X"), true);
+  assert.deepEqual(hook.read(), before);
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+});
+
 const threeBeats = () => [...twoBeats, { id: "r3", audioText: "Again" }];
 const rowOrder = () => hook.read().app.rows.map(row => row.id);
 
@@ -250,6 +263,16 @@ for (const [route, move] of [
 });
 
 for (const [name, kind] of Object.entries(views)) {
+  test(name + ": Alt+Enter splits only in Split", async t => {
+    const show = await enter(t), view = kind.open(t);
+    kind.caret(view, "r1", 2);
+    assert.equal(press(kind.surface(), "Enter", { altKey: true, ctrlKey: false }), true);
+    assert.deepEqual(hook.read().app.rows.map(row => row.audioText), name === "Split" ? ["He", "llo"] : ["Hello"]);
+    await Promise.resolve();
+    assert.deepEqual(hook.read().app, hook.read().peer);
+    assert.equal(show.mock.callCount(), 0);
+  });
+
   test(name + ": Alt+Down refuses when an unseen peer move changed the adjacent beat", async t => {
     const show = await enter(t, threeBeats()), view = kind.open(t);
     kind.caret(view, "r1", 2);
