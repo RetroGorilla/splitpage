@@ -394,7 +394,7 @@ test("native narration replacement cannot edit a protected production tag", asyn
   assert.equal(show.mock.callCount(), 2);
 });
 
-test("a selection across joined members stays visible as a refused edit", async t => {
+test("typing across joined members keeps the committed text visible and permits Leave", async t => {
   const doc = migrateRows({ title: "Join", rows: [{ id: "r1", audioText: "Hello" }, { id: "r2", audioText: "World" }] });
   adoptReplacement(doc);
   const show = t.mock.method(notices, "show", () => {});
@@ -405,11 +405,11 @@ test("a selection across joined members stays visible as a refused edit", async 
   setCellSelection(target, 4, 7);
   assert.equal(beforeInput(target, "insertText", "X"), true);
   await flushed();
-  assert.equal(target.textContent, "HellXorld");
+  assert.equal(target.textContent, "Hello World");
   assert.equal(text(), "Hello World");
   assert.equal(hook.read().peer.rows[0].audioText, "Hello World");
   assert.equal(show.mock.callCount(), 1);
-  assert.deepEqual(hook.leave(), { ok: false, reason: "native-selection-stale" });
+  assert.deepEqual(hook.leave(), { ok: true });
 });
 
 test("typing then deleting the buffered letter is unchanged and publishes no edit", async t => {

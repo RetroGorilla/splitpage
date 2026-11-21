@@ -332,7 +332,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     },
     get size(): NativeSessionSize { return reportedSize; },
     sizeLimits: sizeOptions.limits,
-    document: () => script.reader.document(),
+    document: (joinedNarration?: Parameters<typeof script.reader.document>[0]) => script.reader.document(joinedNarration),
     revision: () => revision,
     captureTextIdentity: (range: NativeTextRange) => {
       if (refusal()) return null;

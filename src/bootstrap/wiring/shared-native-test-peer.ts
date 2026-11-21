@@ -40,6 +40,7 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>) 
       return anchored.kind === "anchored" ? forward(peer.commands.formatText(anchored.range, change)) : anchored;
     },
     join: (lower: string, upper: string) => forward(peer.commands.joinRow(lower, upper, " ")),
+    unjoin: (lower: string) => forward(peer.commands.unjoinRow(lower)),
     split: (beat: string, offset: number) => {
       const at = peer.commands.anchorText({ beat, cell: "narration" }, offset);
       return at.kind === "anchored" ? forward(peer.commands.splitRow(at.range)) : at;

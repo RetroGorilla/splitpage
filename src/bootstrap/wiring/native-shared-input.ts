@@ -29,12 +29,13 @@ import { sharedUndoRoute } from "./undo.ts";
 import { writerControls, writerFlowPorts } from "./writer.ts";
 
 interface NativeInputPorts {
-  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "readRow" | "trackNarrationPaint" | "resolveTextSelection" | "isClosingOrClosed" | "subscribe" | "revision">;
+  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "resolveTextSelection" | "isClosingOrClosed" | "subscribe" | "revision">;
   readonly session: Pick<SharedDocumentSession, "admit" | "refuse" | "run" | "subscribe">;
   readonly editAttribution: () => NativeEditStamp;
   readonly now?: () => number;
   readonly report: ReportPort;
   readonly paintIsCurrent?: () => boolean;
+  readonly crossesPaintedSeam?: (beat: string, from: number, to: number) => boolean;
   readonly publish?: (buffered?: Pick<Draft, "cell" | "beat" | "field">) => void;
 }
 
@@ -178,12 +179,14 @@ export function sameNativeInsertPlacement(shown: SceneDocument | null, live: Sce
   return !!before && !!after && before.scene === after.scene && before.neighbour === after.neighbour && before.kind === after.kind;
 }
 
-export function mountNativeSharedInput({ native, session, editAttribution, now = Date.now, report, paintIsCurrent = () => false, publish = () => {} }: NativeInputPorts) {
+export function mountNativeSharedInput({ native, session, editAttribution, now = Date.now, report, paintIsCurrent = () => false,
+  crossesPaintedSeam = () => false, publish = () => {} }: NativeInputPorts) {
   let draft: Draft | null = null, stopped: string | null = null, uncertain = false;
   let insertMenuSelection: ReturnType<typeof captureInsertMenuSelection> | null = null;
   let lastWriterEnterRefusal: string | null = null;
   let imeTarget: Element | null = null;
   let compositionRefused = false, fullRefused = false;
+  let refusedJoinComposition: (Pick<Draft, "cell" | "selection" | "html"> & { readonly revision: number | null }) | null = null;
   let composingInside: Pick<Draft, "cell" | "selection" | "html"> | null = null;
   let composingText = "";
   let timer: ReturnType<typeof setTimeout> | undefined;
@@ -323,7 +326,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       before: null, after: null, endsGroup: false, paint: null, html: cell.innerHTML, marks };
   }
 
-  function anchor(next: Draft, joinedDeletion = false): Draft | string {
+  function anchor(next: Draft): Draft | string {
     const { beat, cell, selection, field } = next;
     const shown = documentReader.read(doc => doc?.rows.find(row => row.id === beat));
     const visual = field === "visualText";
@@ -334,7 +337,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (visual && !visualIsAddressable(beat, live)) return UNSUPPORTED;
     const from = visual ? { beat, offset: selection.from } : native.narrationCaret(beat, selection.from, selection.from !== selection.to);
     const to = selection.from === selection.to ? from : visual ? { beat, offset: selection.to } : native.narrationCaret(beat, selection.to);
-    if (!from || !to || from.beat !== to.beat || joinedDeletion && from.offset === to.offset) return STALE;
+    if (!from || !to || from.beat !== to.beat) return STALE;
     const target = { beat: from.beat, cell: visual ? "visual" : "narration" } as const;
     const anchored = native.commands.anchorText(target, from.offset, to.offset);
     if (anchored.kind === "refused") return anchored.reason;
@@ -429,6 +432,39 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (document.activeElement === buffered.cell || buffered.cell.closest("#writer-doc") === document.activeElement) {
       setCellSelection(buffered.cell, buffered.selection.from, buffered.selection.to);
     }
+  }
+
+  function crossesJoin(cell: Element, { from, to }: CellRange): boolean {
+    if (from === to || cell.getAttribute("data-field") === "visualText") return false;
+    const buffered = draft?.cell === cell ? draft : null;
+    if (buffered) {
+      const start = buffered.selection.from, end = start + buffered.text.length;
+      const beforePreview = (offset: number) => offset >= end ? offset + buffered.selection.to - end : Math.min(offset, start);
+      from = beforePreview(from);
+      to = beforePreview(to);
+    }
+    return crossesPaintedSeam(cell.getAttribute("data-id") ?? "", from, to);
+  }
+
+  function refuseJoinedEdit(cell: Element): void {
+    if (finish()) return;
+    publish();
+    if (cell.closest("#writer-doc")) writerControls()?.renderWriter();
+    else renderRow(cell.getAttribute("data-id"));
+    session.refuse(UNSUPPORTED);
+  }
+
+  function restoreUnsupportedInput(cell: Element): void {
+    if (cell instanceof HTMLInputElement) cell.value = documentReader.current()?.title ?? "";
+    else if (cell.closest("#rows")) {
+      const id = cell.getAttribute("data-id");
+      const row = documentReader.current()?.rows.find(candidate => candidate.id === id);
+      if (row) {
+        const field = cell.getAttribute("data-field");
+        if (field === "audioText" || field === "visualText") cell.innerHTML = row[field] ?? "";
+        renderRow(id);
+      }
+    } else writerControls()?.restoreWriterPaint();
   }
 
   function draftEndpoint(buffered: Draft, offset: number, assoc: 0 | -1, coversDraftEdge: boolean) {
@@ -912,21 +948,13 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (touchesProtectedText(cell, selection)) { session.refuse(UNSUPPORTED); return; }
     const shown = deletion ? cellSelection(cell) : null;
     const gesture = shown && shown.from === shown.to ? { direction: input.inputType.endsWith("Backward") ? -1 : 1, at: now() } as const : null;
-    const joinedDeletion = deletion && !visualTextSurface.cellAt(cell)
-      && (native.readRow(cell.getAttribute("data-id") ?? "")?.members.length ?? 0) > 1;
-    const current = flushForInput(cell, selection, !joinedDeletion);
+    if (crossesJoin(cell, selection)) { refuseJoinedEdit(cell); return; }
+    const current = flushForInput(cell, selection);
     if (!current) return;
     const next = begin(current.cell, current.selection, false, text, gesture);
     let anchored: Draft | string;
-    try { anchored = current.stale ? STALE : anchor(next, joinedDeletion); }
+    try { anchored = current.stale ? STALE : anchor(next); }
     catch (error) { report(error); anchored = PENDING; }
-    if (joinedDeletion && anchored === STALE) {
-      publish();
-      if (next.surface === writerNarration) writerControls()?.renderWriter();
-      else renderRow(next.beat);
-      session.refuse(UNSUPPORTED);
-      return;
-    }
     if (anchored === UNSUPPORTED) { session.refuse(anchored); return; }
     draft = typeof anchored === "string" ? next : anchored;
     preview(current.cell, current.selection, text);
@@ -945,6 +973,12 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       const selection = cellSelection(cell);
       if (!selection || touchesProtectedText(cell, selection)) { session.refuse(STALE); event.preventDefault(); return; }
       if (draft?.composing) { event.preventDefault(); return; }
+      if (crossesJoin(cell, selection)) {
+        refusedJoinComposition = { cell, selection, html: cell.innerHTML, revision: !draft && paintIsCurrent() ? native.revision() : null };
+        refuseJoinedEdit(cell);
+        event.preventDefault();
+        return;
+      }
       composingText = "";
       compositionRefused = false;
       if (draft && !draft.deletion && insideDraft(draft, cell, selection)) {
@@ -1019,6 +1053,20 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       : commandInput && (inputType === "insertLineBreak" || inputType === "insertParagraph" && !writer);
     const moving = key && moveDirection(key);
     const splitting = key ? enter && (writer ? !key.altKey && (!key.shiftKey || modified) : key.altKey) : writer && commandInput && inputType === "insertParagraph";
+    if (refusedJoinComposition && cell) {
+      const change = event.type === "input" ? event as InputEvent : input;
+      if (event.type === "compositionupdate" || event.type === "compositionend" || change?.isComposing || change?.inputType?.includes("Composition")) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (event.type === "input") {
+          publish();
+          if (refusedJoinComposition.cell.isConnected && refusedJoinComposition.revision === native.revision()) restore(refusedJoinComposition);
+          else restoreUnsupportedInput(cell);
+        }
+        return;
+      }
+      if (event.type === "compositionstart" || input) refusedJoinComposition = null;
+    }
     if (event.type === "focusout") {
       if (imeTarget === cell) imeTarget = null;
       const next = (event as FocusEvent).relatedTarget;
@@ -1172,18 +1220,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         }
       }
       if (event.type === "beforeinput" && editableText && event.cancelable) { write(event as InputEvent, editableText); return; }
-      if (event.type === "input" && cell) {
-        if (cell instanceof HTMLInputElement) cell.value = documentReader.current()?.title ?? "";
-        else if (cell.closest("#rows")) {
-          const id = cell.getAttribute("data-id");
-          const row = documentReader.current()?.rows.find(candidate => candidate.id === id);
-          if (row) {
-            const field = cell.getAttribute("data-field");
-            if (field === "audioText" || field === "visualText") cell.innerHTML = row[field] ?? "";
-            renderRow(id);
-          }
-        } else writerControls()?.restoreWriterPaint();
-      }
+      if (event.type === "input" && cell) restoreUnsupportedInput(cell);
       session.refuse(UNSUPPORTED);
     } catch (error) {
       report(error);

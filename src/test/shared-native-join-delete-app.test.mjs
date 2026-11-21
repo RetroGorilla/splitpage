@@ -112,6 +112,46 @@ async function expectText(editor, text) {
 }
 
 for (const name of ["Writer", "Split"]) {
+  for (const gesture of ["typing", "composition"]) {
+    test(name + ": " + gesture + " over a join leaves both copies and the editor usable", async t => {
+      const first = "abcd", second = "ef", from = 2, to = 6;
+      const warn = await enterJoined(t, first, second);
+      const editor = openEditor(t, name);
+      const joined = first + " " + second;
+      editor.select(from, to);
+
+      if (gesture === "typing") type(editor, "X");
+      else {
+        const target = editor.surface();
+        for (const [phase, data] of [["start", ""], ["update", "X"], ["end", "X"]]) {
+          target.dispatchEvent(new window.CompositionEvent("composition" + phase, { data, bubbles: true, cancelable: true }));
+          if (phase === "update") {
+            target.dispatchEvent(new window.InputEvent("beforeinput", {
+              inputType: "insertCompositionText", data, isComposing: true, bubbles: true
+            }));
+            const text = editor.cell().firstChild;
+            text.replaceData(from, to - from, data);
+            document.getSelection().collapse(text, from + data.length);
+            target.dispatchEvent(new window.InputEvent("input", {
+              inputType: "insertCompositionText", data, isComposing: true, bubbles: true
+            }));
+          }
+        }
+      }
+      assert.equal(press(editor, "z", true), true);
+      await expectText(editor, joined);
+      assert.deepEqual(editor.selection(), [from, to]);
+      assert.deepEqual(warn.mock.calls.map(call => call.arguments), [["This is not available in a shared session yet.", "warn"]]);
+      editor.select(from);
+      type(editor, "!");
+      const entered = first.slice(0, from) + "!" + first.slice(from) + " " + second;
+      await delay(55);
+      await expectText(editor, entered);
+      assert.deepEqual(hook.leave(), { ok: true });
+      assert.deepEqual(hook.read().app.rows.map(row => row.audioText), [entered]);
+    });
+  }
+
   for (const [description, first, second, from, to] of [
     ["Delete across a join", "abcd", "ef", 2, 6],
     ["Delete synthetic join space", "a ", " b", 2, 3]
@@ -165,6 +205,29 @@ for (const name of ["Writer", "Split"]) {
       assert.deepEqual(warn.mock.calls.map(call => call.arguments), [["This is not available in a shared session yet.", "warn"]]);
       assert.deepEqual(hook.leave(), { ok: true });
       assert.deepEqual(hook.read().app.rows.map(row => row.audioText), [text]);
+    });
+
+    test(name + ": refusing a joined deletion preserves a peer unjoin delivered " + (peerFirst ? "before" : "after") + " the edit", async t => {
+      const first = "abcd", second = "ef", from = 2, to = 6;
+      const warn = await enterJoined(t, first, second);
+      const editor = openEditor(t, name);
+      const peer = hook.nativePeer;
+      const unjoin = () => assert.equal(peer.unjoin("r2").kind, "written");
+
+      erase(editor, from, to, peerFirst ? unjoin : undefined);
+      if (!peerFirst) unjoin();
+      assert.equal(press(editor, "z", true), true);
+      await Promise.resolve();
+      for (const copy of [hook.read().app, hook.read().peer]) assert.deepEqual(copy.rows.map(row => row.audioText), [first, second]);
+      assert.equal(shown(editor.cell()), first);
+      assert.deepEqual(warn.mock.calls.map(call => call.arguments), [["This is not available in a shared session yet.", "warn"]]);
+      editor.select(from);
+      type(editor, "!");
+      const entered = first.slice(0, from) + "!" + first.slice(from);
+      await delay(55);
+      for (const copy of [hook.read().app, hook.read().peer]) assert.deepEqual(copy.rows.map(row => row.audioText), [entered, second]);
+      assert.deepEqual(hook.leave(), { ok: true });
+      assert.deepEqual(hook.read().app.rows.map(row => row.audioText), [entered, second]);
     });
   }
 }

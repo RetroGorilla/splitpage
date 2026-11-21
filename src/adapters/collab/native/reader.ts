@@ -17,6 +17,7 @@ import {
 } from "./values.ts";
 
 type CommentCell = "visualText" | "audioText";
+export type NativeNarrationSeams = readonly (readonly [start: number, end: number])[];
 
 export type NativeOutlineEntry = { readonly kind: "heading"; readonly id: string; readonly name: string } | { readonly kind: "row"; readonly id: string };
 
@@ -296,6 +297,7 @@ export class NativeScriptReader {
   private headingPlaces = new Map<string, NativeSpanPlace>();
   private candidates: UnplacedRef[] = [];
   private readonly rowCache = new Map<string, NativeReadRow>();
+  private readonly seamsByRow = new Map<string, NativeNarrationSeams>();
   private registryCache: { readonly records: Registries; readonly inputs: NativeRegistryRowInputs } | null = null;
   private readonly anchorsByRow = new Map<string, Set<string>>();
   private readonly rowsByAnchor = new Map<string, Map<string, CommentCell>>();
@@ -589,9 +591,11 @@ export class NativeScriptReader {
       if (groups.has(id)) continue;
       this.dropCommentAnchors(id);
       this.rowCache.delete(id); this.pendingRows.delete(id); this.pendingGone.add(id);
+      this.seamsByRow.delete(id);
     }
     for (const [id, group] of groups) {
       const before = this.groups.get(id);
+      if (group.length === 1 && before && before.length > 1) this.seamsByRow.delete(id);
       if (group.length !== before?.length || group.some((member, index) => member.id !== before[index]?.id || member.glue !== before[index]?.glue)) {
         this.dirtyBeats.add(id);
       }
@@ -709,18 +713,31 @@ export class NativeScriptReader {
   private buildRow(id: string): NativeReadRow {
     this.rowsBuilt++;
     const group = this.groups.get(id) ?? [], audio: NativeDeltaItem[] = [], visual: NativeDeltaItem[] = [];
+    const seamItems = group.length > 1 ? new Map<number, boolean>() : null;
     for (const member of group) {
       const refs = this.narration.get(member.id) ?? EMPTY_SPANS;
       this.builtNarration.set(member.id, this.narrationContent(refs));
       const items = this.narrationItems(refs);
-      if (member.glue && audio.length && items.length) audio.push({ insert: member.glue });
+      if (audio.length && items.length) {
+        seamItems?.set(audio.length, !!member.glue);
+        if (member.glue) audio.push({ insert: member.glue });
+      }
       for (const item of items) audio.push(item);
       const cell = this.roots.visuals.get(member.id);
       const delta = (cell instanceof Y.Text ? cell.toDelta() : []) as NativeDeltaItem[];
       if (visual.length && delta.length) visual.push({ insert: "\n" });
       for (const item of delta) visual.push(item);
     }
-    const narration = nativeRunsOf(audio), visualRuns = nativeRunsOf(visual);
+    const seams: (readonly [number, number])[] = [];
+    let offset = 0;
+    const narration = nativeRunsOf(audio, seamItems?.size ? (index, width) => {
+      const glue = seamItems.get(index);
+      if (glue !== undefined) seams.push(Object.freeze([offset, offset + (glue ? width : 0)]));
+      offset += width;
+    } : undefined);
+    if (seams.length) this.seamsByRow.set(id, Object.freeze(seams));
+    else if (seamItems) this.seamsByRow.delete(id);
+    const visualRuns = nativeRunsOf(visual);
     return Object.freeze({
       id, members: Object.freeze(id === this.stray ? [] : group.map(member => member.id)),
       narration: frozenRuns(narration), visual: frozenRuns(visualRuns), audioText: toHtml(narration), visualText: toHtml(visualRuns),
@@ -1094,8 +1111,9 @@ export class NativeScriptReader {
   }
 
   // why: the file holds one heading per row, so only a heading directly above a row is saved; problems() lists the rest
-  document(): DocumentShape {
+  document(joinedNarration?: (seams: ReadonlyMap<string, NativeNarrationSeams>) => void): DocumentShape {
     const entries = this.outline();
+    joinedNarration?.(new Map(this.seamsByRow));
     const rows = entries.flatMap(entry => {
       const row = entry.kind === "row" ? this.rowCache.get(entry.id) : undefined;
       return row ? [{ id: row.id, ...row.fields, visualText: row.visualText, audioText: row.audioText }] : [];

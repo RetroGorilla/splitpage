@@ -1,4 +1,5 @@
 import { openNativeSession } from "../../adapters/collab/native/session.ts";
+import type { NativeNarrationSeams } from "../../adapters/collab/native/reader.ts";
 import type { ReplicaOrigin, ReplicaPort } from "../../application/session/shared-session.ts";
 import { WHOLE_PROJECTION } from "../../application/session/shared-session.ts";
 import { enterSharedDocument } from "../../core/migrate.ts";
@@ -57,10 +58,12 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
     () => input?.finish(undefined, false, true) ?? null);
   let initial: ValidatedDocument | null = null;
   let published = native.revision();
+  let paintedSeams: ReadonlyMap<string, NativeNarrationSeams> = new Map();
+  const readPaint = () => native.document(seams => { paintedSeams = seams; });
   function publish(buffered?: Parameters<typeof keepNativeFieldPaint>[0]): void {
     const revision = native.revision();
     if (published === revision) return;
-    const snapshot = native.document();
+    const snapshot = readPaint();
     if (buffered) keepNativeFieldPaint(buffered, snapshot.rows.find(row => row.id === buffered.beat));
     input?.clearMovePaint();
     published = revision;
@@ -124,7 +127,8 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
       }
       input ??= mountNativeSharedInput({
         native, session, editAttribution, now: ports.now, report: ports.report,
-        publish, paintIsCurrent: () => published === native.revision()
+        publish, paintIsCurrent: () => published === native.revision(),
+        crossesPaintedSeam: (beat, from, to) => paintedSeams.get(beat)?.some(([start, end]) => from < end && to > start) ?? false
       });
     },
     unbind: () => {
@@ -139,7 +143,7 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
       : captureNativeSwitchSelection(native, entering, () => !native.isClosingOrClosed() && published === native.revision()),
     abandon: () => { input?.abandonComposition(); },
     start: () => {
-      initial = enterSharedDocument(native.document());
+      initial = enterSharedDocument(readPaint());
       published = native.revision();
       publication.publish(initial, "hydration");
     },
