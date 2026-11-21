@@ -8,6 +8,7 @@ import type { SharedDocumentSession } from "../../application/session/shared-ses
 import { sceneBeforeBeat, sceneFirstBeatId, scenesInOrder, storedSceneName } from "../../core/document/scenes.ts";
 import type { DocumentShape } from "../../core/document/validated.ts";
 import { cappedText } from "../../core/document/text-policy.ts";
+import { documentReader } from "./ports/document.ts";
 import { editAllowed } from "./session-owner.ts";
 import type { mountNativeSharedInput } from "./native-shared-input.ts";
 
@@ -21,13 +22,21 @@ interface NativeStructurePorts {
 
 const UNAVAILABLE = "native-command-unavailable";
 
-function moveDrop(doc: DocumentShape, source: string, target: string, after: boolean, insideScene: boolean): NativeMoveBlock | null {
-  const rows = doc.rows.filter(row => row.id !== source);
+type MoveIntent = Extract<DocumentStructureIntent, { kind: "move-beat" | "swap-beats" }>;
+
+function movePlacement(doc: DocumentShape, intent: MoveIntent) {
+  const source = doc.rows.findIndex(row => row.id === intent.id);
+  if (source < 0) return null;
+  const target = intent.kind === "move-beat" ? intent.target : doc.rows[source + intent.direction]?.id;
+  if (!target || target === intent.id) return { target: null, previous: null, drop: null };
+  const rows = doc.rows.filter(row => row.id !== intent.id);
   const at = rows.findIndex(row => row.id === target);
-  const next = rows[at + (after ? 1 : 0)];
-  if (!next) return null;
-  const heading = insideScene && !after ? undefined : sceneBeforeBeat(doc, next.id);
-  return heading ? { kind: "heading", id: heading.id } : { kind: "beat", id: next.id };
+  if (at < 0) return null;
+  const after = intent.kind === "move-beat" ? intent.after : intent.direction > 0;
+  const index = at + (after ? 1 : 0), next = rows[index];
+  const heading = next && !(intent.kind === "move-beat" && intent.intoScene && !after) ? sceneBeforeBeat(doc, next.id) : undefined;
+  const drop: NativeMoveBlock | null = heading ? { kind: "heading", id: heading.id } : next ? { kind: "beat", id: next.id } : null;
+  return { target, previous: rows[index - 1]?.id ?? null, drop };
 }
 
 export function createNativeEditorStructure({ native, session, input, publish, report }: NativeStructurePorts) {
@@ -40,6 +49,8 @@ export function createNativeEditorStructure({ native, session, input, publish, r
     const owner = session(), typing = input();
     if (!owner || !typing) return { kind: "rejected", reason: "closed" };
     try {
+      const shown = intent.kind === "move-beat" || intent.kind === "swap-beats"
+        ? documentReader.read(doc => doc && movePlacement(doc, intent)) : null;
       const admission = owner.admit();
       if (admission?.kind === "failed") throw admission.error;
       if (admission) return admission.notified ? admission : owner.refuse(admission.reason);
@@ -89,15 +100,12 @@ export function createNativeEditorStructure({ native, session, input, publish, r
         }
         case "move-beat":
         case "swap-beats": {
-          const at = before.rows.findIndex(row => row.id === intent.id);
-          if (at < 0) return owner.refuse("missing");
-          const target = intent.kind === "move-beat" ? intent.target : before.rows[at + intent.direction]?.id;
-          if (!target || target === intent.id) return { kind: "noop" };
-          if (!before.rows.some(row => row.id === target)) return owner.refuse("missing");
-          const afterTarget = intent.kind === "move-beat" ? intent.after : intent.direction > 0;
-          const drop = moveDrop(before, intent.id, target, afterTarget, intent.kind === "move-beat" && !!intent.intoScene);
+          const live = movePlacement(before, intent);
+          if (!shown || !live || shown.target !== live.target || shown.previous !== live.previous
+            || shown.drop?.kind !== live.drop?.kind || shown.drop?.id !== live.drop?.id) return owner.refuse(UNAVAILABLE);
+          if (!shown.target) return { kind: "noop" };
           after ??= anchor(intent.id, 0);
-          step = native.commands.moveBlocks.withSelection(after, [{ kind: "beat", id: intent.id }], drop);
+          step = native.commands.moveBlocks.withSelection(after, [{ kind: "beat", id: intent.id }], live.drop);
           restore = true;
           break;
         }

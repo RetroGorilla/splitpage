@@ -217,12 +217,7 @@ test("Split: move-down and a row drag use native history", async t => {
   const show = await enter(t, threeBeats());
   document.querySelector('#rows [data-action="move-down"][data-id="r1"]').click();
   assert.deepEqual(rowOrder(), ["r2", "r1", "r3"]);
-  const row = id => document.querySelector('#rows .row[data-id="' + id + '"]');
-  const drag = (target, type, clientY = 0) => target.dispatchEvent(new window.MouseEvent(type, { bubbles: true, cancelable: true, clientY }));
-  row("r2").setAttribute("draggable", "true");
-  drag(row("r2"), "dragstart");
-  drag(cell("r3"), "dragover", 200);
-  drag(cell("r3"), "drop", 200);
+  dragBeat("r2", "r3");
   assert.deepEqual(rowOrder(), ["r1", "r3", "r2"]);
   views.Split.caret(null, "r1", 0);
   assert.equal(press(cell(), "z"), true);
@@ -232,7 +227,41 @@ test("Split: move-down and a row drag use native history", async t => {
   assert.equal(show.mock.callCount(), 0);
 });
 
+function dragBeat(source, destination) {
+  const row = document.querySelector('#rows .row[data-id="' + source + '"]');
+  const drag = (target, type, clientY = 0) => target.dispatchEvent(new window.MouseEvent(type, { bubbles: true, cancelable: true, clientY }));
+  row.setAttribute("draggable", "true");
+  drag(row, "dragstart");
+  drag(cell(destination), "dragover", 200);
+  drag(cell(destination), "drop", 200);
+}
+
+for (const [route, move] of [
+  ["menu move", () => document.querySelector('#rows [data-action="move-down"][data-id="r1"]').click()],
+  ["drag", () => dragBeat("r1", "r2")]
+]) test("Split: a " + route + " refuses an unseen change to its destination", async t => {
+  const show = await enter(t, threeBeats());
+  assert.equal(hook.nativePeer.moveBeat("r2", null).kind, "written");
+  move();
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+  await Promise.resolve();
+  assert.deepEqual(rowOrder(), ["r1", "r3", "r2"]);
+  assert.deepEqual(hook.read().peer, hook.read().app);
+});
+
 for (const [name, kind] of Object.entries(views)) {
+  test(name + ": Alt+Down refuses when an unseen peer move changed the adjacent beat", async t => {
+    const show = await enter(t, threeBeats()), view = kind.open(t);
+    kind.caret(view, "r1", 2);
+    assert.equal(hook.nativePeer.moveBeat("r2", null).kind, "written");
+    assert.deepEqual(rowOrder(), ["r1", "r2", "r3"]);
+    assert.equal(press(kind.surface(), "ArrowDown", { altKey: true, ctrlKey: false }), true);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+    await Promise.resolve();
+    assert.deepEqual(rowOrder(), ["r1", "r3", "r2"]);
+    assert.deepEqual(hook.read().peer, hook.read().app);
+  });
+
   test(name + ": Alt+Arrow moves the beat, replays its caret and converges with a competing move", async t => {
     const show = await enter(t, threeBeats()), view = kind.open(t);
     kind.caret(view, "r2", 2);
