@@ -71,7 +71,7 @@ export interface WhoListPorts {
 export interface WhoListControl {
   readonly maybeOpen: (e: { inputType?: string; data?: string | null }, cellEl: Element) => void;
   readonly refresh: () => void;
-  readonly keydown: (e: KeyboardEvent, cellEl: Element) => boolean;
+  readonly keydown: (e: KeyboardEvent, cellEl: Element, refusePick?: () => void) => boolean;
   readonly cancel: () => void;
   readonly isOpen: (cellEl?: Element | null) => boolean;
   readonly onPicked: (listener: () => void) => () => void;

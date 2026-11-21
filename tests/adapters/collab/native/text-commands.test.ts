@@ -10,7 +10,7 @@ import { formatNativeText } from "../../../../src/adapters/collab/native/format-
 import { createNativeHeading, renameNativeHeading } from "../../../../src/adapters/collab/native/heading-commands.ts";
 import { nativeMarkName } from "../../../../src/adapters/collab/native/inline.ts";
 import { nativeSegmentSpans } from "../../../../src/adapters/collab/native/reader.ts";
-import { splitNativeRow } from "../../../../src/adapters/collab/native/structure-commands.ts";
+import { removeNativeRows, splitNativeRow } from "../../../../src/adapters/collab/native/structure-commands.ts";
 import { anchorNativeText, deleteNativeText, replaceNativeText, typeNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
 import type { NativeTextRange, NativeTextTarget } from "../../../../src/adapters/collab/native/text-commands.ts";
 import { closeNativeScript, openNativeScript } from "../../../../src/adapters/collab/native/script.ts";
@@ -81,6 +81,59 @@ test("T02: typing at both sides of a boundary on two copies", () => {
   type(a, "R1", 3, "c"); type(b, "R1", 3, "Y"); type(a, "R2", 0, "Z");
   net.settle();
   assert.deepEqual(net.agree(), ["R1: XabcY / ", "R2: Zcd / "]);
+});
+
+test("a caret at the start of a beat or the end of the segment stays in that beat after removal and undo", () => {
+  const { net, all: [a, b] } = copies(script({ R1: "Hello", R2: "World", R3: "Last" }), 2);
+  assert.ok(a && b);
+  const start = range(a, NARRATION("R2"), 0), end = range(a, NARRATION("R3"), 4);
+  const undo = new Y.UndoManager(b.roots.segments, { trackedOrigins: new Set([b.origin]) });
+  try {
+    assert.equal(removeNativeRows(b, ["R1"]).kind, "written");
+    net.deliver(b, a);
+    assert.equal(typeNativeText(a, start, "?", {}).kind, "written");
+    assert.equal(typeNativeText(a, end, "!", {}).kind, "written");
+    net.settle();
+    assert.deepEqual(net.agree(), ["R2: ?World / ", "R3: Last! / "]);
+    assert.ok(undo.undo());
+    net.settle();
+    assert.deepEqual(net.agree(), ["R1: Hello / ", "R2: ?World / ", "R3: Last! / "]);
+  } finally { undo.destroy(); }
+});
+
+for (const [rows, removed, offset, stillShown, restored] of [
+  [{ R1: "Hello", R2: "World", R3: "Last" }, "R2", 2, ["R1: Hellox / ", "R3: Last / "], ["R1: Hello / ", "R2: Worldx / ", "R3: Last / "]],
+  [{ R1: "Hello", R2: "World" }, "R2", 5, ["R1: Hellox / "], ["R1: Hello / ", "R2: Worldx / "]],
+  [{ R1: "World", R2: "Last" }, "R1", 2, ["R2: xLast / "], ["R1: Worldx / ", "R2: Last / "]],
+  [{ R1: "World" }, "R1", 5, ["~stray: x / "], ["R1: Worldx / "]]
+] as const) test(`buffered narration in a removed beat survives at the shared position of ${Object.keys(rows).join(", ")} / ${removed}`, () => {
+  const { net, all: [a, b] } = copies(script(rows), 2);
+  assert.ok(a && b);
+  const caret = anchorNativeText(a, NARRATION(removed), offset, offset, "buffered-typing");
+  assert.equal(caret.kind, "anchored");
+  const undo = new Y.UndoManager([b.roots.segments], { trackedOrigins: new Set([b.origin]) });
+  try {
+    assert.equal(removeNativeRows(b, [removed]).kind, "written");
+    net.deliver(b, a);
+    assert.equal(typeNativeText(a, caret.range, "x", {}).kind, "written");
+    net.settle();
+    assert.deepEqual(net.agree(), stillShown);
+    assert.ok(undo.undo());
+    net.settle();
+    assert.deepEqual(net.agree(), restored);
+  } finally { undo.destroy(); }
+});
+
+test("buffered narration refuses when two removed beats share the same visible gap", () => {
+  const { net, all: [a, b] } = copies(script({ R1: "Hello", R2: "World", R3: "Last" }), 2);
+  assert.ok(a && b);
+  const caret = anchorNativeText(a, NARRATION("R2"), 2, 2, "buffered-typing");
+  assert.equal(caret.kind, "anchored");
+  assert.equal(removeNativeRows(b, ["R2", "R3"]).kind, "written");
+  net.deliver(b, a);
+  assert.deepEqual(typeNativeText(a, caret.range, "x", {}), { kind: "recovery", reason: "missing", runs: [{ text: "x", marks: {} }] });
+  net.settle();
+  assert.deepEqual(net.agree(), ["R1: Hello / "]);
 });
 
 test("T04: typing, typing at the start and a cut on two copies", () => {

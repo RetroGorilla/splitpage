@@ -4,6 +4,7 @@ import { REWRITE_CELL_CHANGED } from "../../application/commands/document-edit.t
 import type { ReportPort } from "../../application/session/ports.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
 import { storedSceneName } from "../../core/document/scenes.ts";
+import { brollCellLines } from "../../core/production/broll.ts";
 import { replacementInsert } from "../../core/text/edits.ts";
 import { projection } from "../../core/text/runs.ts";
 import { searchablePieces } from "../../core/text/search.ts";
@@ -27,6 +28,12 @@ const UNAVAILABLE = "native-command-unavailable";
 type MatchRange = { readonly target: NativeTextTarget; readonly start: number; readonly end: number };
 type AnchoredMatch = { readonly target: NativeTextTarget; readonly range: NativeTextRange; readonly text: string; readonly intact: () => boolean };
 type FoundMatch = AnchoredMatch | "unsupported" | null;
+type MatchSource = {
+  text: string;
+  cell: ReturnType<typeof scriptCellOf>;
+  free: ReturnType<typeof searchablePieces>["free"];
+  keyedLines: ReturnType<typeof brollCellLines>;
+};
 
 function matchRange(match: WriterSearchMatch): MatchRange | null {
   if (match.kind === "visual") return { target: { beat: match.rowId, cell: "visual" }, start: match.from, end: match.to };
@@ -92,7 +99,7 @@ export function createNativeEditorFind({ native, session, input, editAttribution
           }
 
           const doc = native.document(), rows = new Map(doc.rows.map(row => [row.id, row]));
-          const read = new Map<string, { text: string; cell: ReturnType<typeof scriptCellOf>; free: ReturnType<typeof searchablePieces>["free"] }>();
+          const read = new Map<string, MatchSource>();
           const valid = hits.flatMap(hit => {
             if (!hit || hit === "unsupported" || !hit.intact()) return [];
             const { range, target } = hit;
@@ -107,13 +114,23 @@ export function createNativeEditorFind({ native, session, input, editAttribution
               const html = cellText(doc, rows, target);
               if (typeof html !== "string") return [];
               const cell = target.cell === "name" ? [] : scriptCellOf(html);
-              source = { text: target.cell === "name" ? html : projection(cell), cell, free: searchablePieces(cell).free };
+              source = {
+                text: target.cell === "name" ? html : projection(cell),
+                cell,
+                free: searchablePieces(cell).free,
+                keyedLines: target.cell === "visual" && cell.some(run => run.atom === "broll")
+                  ? brollCellLines(cell).filter(line => line.items.some(item => item.atom)) : [],
+              };
               read.set(key, source);
             }
             if (source.text.slice(start, end) !== hit.text ||
               target.cell !== "name" && !source.free.some(piece => piece.start <= start && end <= piece.start + piece.text.length)) return [];
             return [{ target, start, end, source, range, selection }];
           });
+          if (valid.some(({ source, start, end }) => source.keyedLines.some(line => start < line.end && end > line.start))) {
+            owner.refuse(UNAVAILABLE);
+            return null;
+          }
           const first = valid[0];
           if (!first) {
             if (index !== null) owner.refuse(REWRITE_CELL_CHANGED);

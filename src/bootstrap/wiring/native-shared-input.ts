@@ -25,12 +25,14 @@ import { rowDrag } from "./editor-owners.ts";
 import type { NativeTextSurface } from "./native-narration-surfaces.ts";
 import { documentReader } from "./ports/document.ts";
 import { notices } from "./ports/effects.ts";
+import { NATIVE_REMOVED_TYPING } from "./ports/shared-command-notices.ts";
 import { editAllowed, sessionStamps } from "./session-owner.ts";
 import { sharedUndoRoute } from "./undo.ts";
 import { writerControls, writerFlowPorts } from "./writer.ts";
+import { currentWhoList } from "./who-list.ts";
 
 interface NativeInputPorts {
-  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "resolveTextSelection" | "isClosingOrClosed" | "subscribe" | "revision">;
+  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "resolveTextSelection" | "isClosingOrClosed" | "subscribe" | "revision" | "hasBeatMarker">;
   readonly session: Pick<SharedDocumentSession, "admit" | "refuse" | "run" | "subscribe">;
   readonly editAttribution: () => NativeEditStamp;
   readonly now?: () => number;
@@ -62,6 +64,7 @@ type TrackedPaint = ReturnType<NativeInputPorts["native"]["trackNarrationPaint"]
 interface SelectionCapture {
   readonly indices: NativeTextPlacement;
   inserted?: readonly [RelativePoint | null, RelativePoint | null];
+  removed?: "written" | "discarded";
 }
 
 interface MoveEndpoint {
@@ -340,7 +343,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const to = selection.from === selection.to ? from : visual ? { beat, offset: selection.to } : native.narrationCaret(beat, selection.to);
     if (!from || !to || from.beat !== to.beat) return STALE;
     const target = { beat: from.beat, cell: visual ? "visual" : "narration" } as const;
-    const anchored = native.commands.anchorText(target, from.offset, to.offset);
+    const anchored = native.commands.anchorText(target, from.offset, to.offset,
+      !visual && !next.composition && next.text && selection.from === selection.to ? "buffered-typing" : undefined);
     if (anchored.kind === "refused") return anchored.reason;
     const end = next.composition || selection.from !== selection.to ? native.commands.anchorText(target, to.offset) : null;
     const after = end?.kind === "anchored" ? end.range : null, { range } = anchored;
@@ -401,7 +405,23 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     }
     try {
       if (!result) return stop(STALE, quiet);
-      if (result.kind === "recovery") return stop(result.reason, quiet);
+      if (result.kind === "recovery") {
+        const { range, selection: { from, to }, text, composition } = buffered;
+        if (result.reason !== "missing" || range?.target.cell !== "narration" ||
+          composition || composed || !text || from !== to || native.hasBeatMarker(range.target.beat)) {
+          return stop(result.reason, quiet);
+        }
+      }
+      if (result.kind === "recovery" || result.kind === "written" && result.stray) {
+        const removed = result.kind === "recovery" ? "discarded" : "written";
+        draft = null;
+        if (selection) selection.removed = removed;
+        native.endTypingGroup();
+        restore(buffered);
+        publish();
+        if (removed === "discarded") session.refuse(NATIVE_REMOVED_TYPING);
+        return null;
+      }
       draft = null;
       if (buffered.endsGroup) native.endTypingGroup();
       if (result.kind === "unchanged") restore(buffered);
@@ -513,7 +533,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const start = draftEndpoint(buffered, selection.from, 0, selection.to >= buffered.selection.from);
     const end = draftEndpoint(buffered, selection.to, -1, selection.from <= buffered.selection.from + buffered.text.length);
     const capture: SelectionCapture = { indices: [start.index, end.index] };
-    if (finish(capture, moveCaret)) return null;
+    if (finish(capture, moveCaret) || capture.removed) return null;
     const fresh = buffered.surface.cell(buffered.beat);
     if (!fresh) { session.refuse(STALE); return null; }
     const from = resolveDraftEndpoint(buffered.beat, start, capture.inserted?.[0], 0);
@@ -1127,6 +1147,11 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         return;
       }
       if (undoing && cell?.matches(UNDO_SURFACES)) return;
+      if (key.key === "Tab" && visual?.closest("#rows")
+        && currentWhoList()?.keydown(key, visual, () => refuseCommand(UNSUPPORTED))) {
+        event.stopImmediatePropagation();
+        return;
+      }
       if (!editingKey(key) && !joining && !removeHeading) {
         if (key.key.startsWith("Arrow") || key.key === "Home" || key.key === "End" || key.key === "Tab") {
           finish();
@@ -1311,7 +1336,11 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
 
   function beforePress(): string | null {
     if (native.isClosingOrClosed()) return "closed";
-    if (stopped || !draft?.composing) return finish(undefined, true, true);
+    if (stopped || !draft) return stopped;
+    if (!draft.composing) {
+      const selection: SelectionCapture = { indices: [null, null] };
+      return finish(selection, true, true) ?? (selection.removed === "discarded" ? NATIVE_REMOVED_TYPING : null);
+    }
     refuseCommand(PENDING);
     return PENDING;
   }
@@ -1392,6 +1421,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const selection: SelectionCapture = { indices: [start.preview?.index ?? null, end.preview?.index ?? null] };
     const reason = finish(selection, false);
     if (reason) return { kind: "refused", reason } as const;
+    if (selection.removed) return { kind: "refused", reason: selection.removed === "discarded" ? NATIVE_REMOVED_TYPING : "missing" } as const;
     if (!buffered) publish();
     function resolve(point: NonNullable<typeof start>, index: 0 | 1, assoc: 0 | -1) {
       const { beat, preview } = point, html = native.narrationHtml(beat);
