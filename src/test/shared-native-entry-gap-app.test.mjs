@@ -2,6 +2,7 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { encodeStateAsUpdate, encodeStateVector, mergeUpdates } from "yjs";
 import { bootApp, closeApp } from "./_app-boot.mjs";
+import { trackGlobalListeners } from "./_global-listener-inventory.mjs";
 import { openNativeSession } from "../adapters/collab/native/session.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { sanitizeHtml, scriptCellOf } from "../bootstrap/richtext.ts";
@@ -14,6 +15,7 @@ import { undoOwner } from "../bootstrap/wiring/undo.ts";
 window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};
 localStorage.setItem("splitpage-onboarding", JSON.stringify({ v: 1, done: true, skipped: true }));
+const listenerCounts = trackGlobalListeners();
 await bootApp();
 after(closeApp);
 
@@ -55,6 +57,7 @@ test("gapped native entry preserves the standalone script, undo, destination and
   assert.equal((await flushDraftNow()).ok, true);
 
   const home = currentHome(), saved = mergeBase(), history = undoOwner().sizes(), before = hook.read();
+  const listeners = listenerCounts();
   assert.equal(home.handle, handle);
   assert.ok(history.undo > 0);
   assert.equal(unsavedChanges(), true);
@@ -62,6 +65,7 @@ test("gapped native entry preserves the standalone script, undo, destination and
   assert.equal(sharedSession(), false);
   assert.deepEqual(hook.leave(), { ok: false, reason: "not-shared" });
   assert.deepEqual(hook.read(), before);
+  assert.deepEqual(listenerCounts(), listeners);
   assert.equal(currentHome(), home);
   assert.equal(mergeBase(), saved);
   assert.equal(documentLocation().writtenOut(), true);
