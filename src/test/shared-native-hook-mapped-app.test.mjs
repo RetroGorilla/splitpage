@@ -557,6 +557,36 @@ for (const [name, elapsed, typing, edited, undos] of [
   check("Hello");
 });
 
+test("native Writer refuses one deletion range from Hello to World", async t => {
+  const standalone = inventory();
+  await enterHook(t, script, true);
+  const active = hook(), before = snapshot(currentDocument());
+  const shown = t.mock.method(notices, "show");
+  const selection = {
+    anchor: { kind: "beat", rowId: "r1", offset: 3 },
+    head: { kind: "beat", rowId: "r2", offset: 2 }
+  };
+  root().focus();
+  writerControls().writerFlowControl().place(selection);
+  document.dispatchEvent(new window.Event("selectionchange"));
+  const range = document.getSelection().getRangeAt(0).cloneRange();
+  for (const direction of ["Backward", "Forward"]) {
+    assert.equal(input(root(), `deleteContent${direction}`, null, range), true);
+    await tick();
+    assert.deepEqual(snapshot(currentDocument()), before);
+    assert.deepEqual(snapshot(active.read().peer), before);
+    assert.deepEqual(writerControls().writerFlowControl().selection(), selection);
+  }
+  const warning = ["This is not available in a shared session yet.", "warn"];
+  assert.deepEqual(shown.mock.calls.map(call => call.arguments), [warning, warning]);
+  assert.equal(active.nativePeer.step("undo").kind, "unchanged");
+  assert.deepEqual(active.leave(), { ok: true });
+  assert.notEqual(currentDocument().docId, before.docId);
+  assert.deepEqual(snapshot(currentDocument()), { ...before, docId: currentDocument().docId });
+  writerControls().closeWriter();
+  assert.deepEqual(inventory(), standalone);
+});
+
 const peerEdits = [
   ["types", peer => type(peer, "r1", 0, "Y"), [["r1", "YHello!", "Look"], ["r2", "World", ""]]],
   ["types astral text", peer => type(peer, "r1", 0, "😀"), [["r1", "😀Hello!", "Look"], ["r2", "World", ""]]],
