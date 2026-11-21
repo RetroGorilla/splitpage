@@ -196,6 +196,27 @@ const refusals = [
     return () => fault.mock.restore();
   }],
   ...["home", "writtenOut"].map(kind => [`${kind} subscriber`, "enter-failed", () => throwOnLocation(kind)]),
+  ["native beforeunload registration", "enter-failed", t => {
+    const add = window.addEventListener, remove = window.removeEventListener;
+    const removed = t.mock.method(window, "removeEventListener");
+    let installed;
+    const fault = t.mock.method(window, "addEventListener", function (type, listener, options) {
+      add.call(this, type, listener, options);
+      if (type === "beforeunload" && listener.name === "onBeforeUnload" && sharedSession()) {
+        installed = listener;
+        throw new Error("native input failed after registering beforeunload");
+      }
+    });
+    return () => {
+      fault.mock.restore();
+      removed.mock.restore();
+      assert.ok(installed);
+      const count = removed.mock.calls.filter(({ arguments: [type, listener] }) =>
+        type === "beforeunload" && listener === installed).length;
+      if (!count) remove.call(window, "beforeunload", installed);
+      assert.equal(count, 1);
+    };
+  }],
   ["native focusout registration", "enter-failed", t => {
     const add = window.addEventListener;
     let installed = false;

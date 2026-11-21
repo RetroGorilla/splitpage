@@ -333,7 +333,12 @@ for (const { name, field, composing, blocked, writer } of stopCases) test(`app s
   if (writer) writerControls().openWriter();
   const listeners = listenerCounts();
   const added = t.mock.method(window, "addEventListener");
-  const removed = t.mock.method(window, "removeEventListener");
+  const removeFromWindow = window.removeEventListener;
+  const teardownFault = new Error("native record teardown failed");
+  const removed = t.mock.method(window, "removeEventListener", function (type, listener, options) {
+    removeFromWindow.call(this, type, listener, options);
+    if (blocked && type === "drop" && listener.name === "pictures" && options === true) throw teardownFault;
+  });
   const removedFromDocument = t.mock.method(document, "removeEventListener");
   const destroyed = t.mock.method(Doc.prototype, "destroy");
   const report = t.mock.method(console, "error", () => {});
@@ -408,8 +413,10 @@ for (const { name, field, composing, blocked, writer } of stopCases) test(`app s
       assert.equal(box.isConnected, false);
       assert.equal(document.querySelectorAll(".wr-flow-visual-box").length, 0);
       assert.deepEqual([atRelease.shared, atRelease.id], [true, sharedId]);
-      assert.deepEqual(report.mock.calls.map(call => String(call.arguments[0])),
-        ["Error: The shared session ended without landing a standalone copy: stop-test-hold"]);
+      const reported = report.mock.calls.map(call => call.arguments[0]);
+      assert.equal(reported.length, 2);
+      assert.equal(String(reported[0]), "Error: The shared session ended without landing a standalone copy: stop-test-hold");
+      assert.equal(reported[1], teardownFault);
     } else {
       assert.deepEqual([atRelease.shared, atRelease.unsaved, atRelease.drafting, atRelease.seq], [false, true, "pending", seq]);
       assert.notEqual(atRelease.id, sharedId);
@@ -423,6 +430,7 @@ for (const { name, field, composing, blocked, writer } of stopCases) test(`app s
     release();
     observe.mock.restore();
     removedFromDocument.mock.restore();
+    removed.mock.restore();
     restoreDesktop();
     startApp(await rewireApp({}));
     await startupReady();

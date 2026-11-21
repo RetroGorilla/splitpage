@@ -121,7 +121,7 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
         const stopTimes = session.subscribe(change => {
           if (currentRowsRender() && change.changes.cells.some(({ field }) => field === "lengthSeconds")) paintRowTimes();
         });
-        stopRecords = () => { stopEvents(); stopTimes(); };
+        stopRecords = () => { try { stopEvents(); } finally { stopTimes(); } };
       }
       input ??= mountNativeSharedInput({
         native, session, editAttribution, now: ports.now, report: ports.report,
@@ -130,10 +130,10 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
     },
     unbind: () => {
       commandSession = null;
-      stopRecords?.();
+      const unmountRecords = stopRecords, unmountInput = input;
       stopRecords = null;
-      input?.dispose();
       input = null;
+      try { unmountRecords?.(); } finally { unmountInput?.dispose(); }
     },
     settle: () => input?.finish() ?? null,
     captureSelection: entering => native.isClosingOrClosed() ? null

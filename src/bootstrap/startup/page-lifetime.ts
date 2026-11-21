@@ -14,8 +14,14 @@ export function guardUnload(win: Window, unsaved: () => boolean): () => void {
     e.preventDefault();
     e.returnValue = "";
   };
-  win.addEventListener("beforeunload", onBeforeUnload);
-  return () => win.removeEventListener("beforeunload", onBeforeUnload);
+  const dispose = (): void => win.removeEventListener("beforeunload", onBeforeUnload);
+  try {
+    win.addEventListener("beforeunload", onBeforeUnload);
+  } catch (error) {
+    dispose();
+    throw error;
+  }
+  return dispose;
 }
 
 export function registerServiceWorker(win: Window, desktop: boolean): () => void {
