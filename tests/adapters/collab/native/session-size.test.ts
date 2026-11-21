@@ -121,6 +121,37 @@ test("default limits are 12 MB warning, 15 MB refusal and 105% ceiling", t => {
   }
 });
 
+test("an admitted large type, first beat or replace all can cross the ceiling and block the next local write", async t => {
+  const empty = fromRows({}), filled = fromRows({ A: "abc", B: "def" }), text = "x".repeat(4_000);
+  t.after(() => { empty.close(); filled.close(); });
+  for (const [seed, write] of [
+    [filled, (session: Session) => session.commands.typeText(anchor(session, 1), text, {})],
+    [empty, (session: Session) => session.commands.createFirstBeat(text)],
+    [filled, (session: Session) => session.commands.replaceAll([
+      { row: "A", cell: "narration", start: 0, end: 2 },
+      { row: "B", cell: "narration", start: 0, end: 2 }
+    ], text)]
+  ] as const) {
+    const state = bytes(seed), limit = state.byteLength + 100;
+    const session = fromState(state, { sizeLimit: limit, sizeMinimumStep: 16 });
+    t.after(session.close);
+    assert.equal(session.size, "ok");
+    assert.equal(write(session).kind, "written");
+    assert(bytes(session).byteLength > limit * 1.05);
+    await Promise.resolve();
+    assert.equal(session.size, "full");
+    const row = session.document().rows[0];
+    assert(row);
+    const range = anchor(session, 0, 1, row.id);
+    assertUnwritten(session, () => session.commands.replaceAll([
+      { row: row.id, cell: "narration", start: 0, end: 1 }
+    ], "y"), full);
+    assertUnwritten(session, () => session.commands.deleteText(range), { kind: "recovery", reason: "full", runs: [] });
+    assertUnwritten(session, session.commands.undo, full);
+    assertUnwritten(session, session.commands.redo, full);
+  }
+});
+
 test("invalid size options reject before the Y.Doc constructor runs", () => {
   withEncoderSpy(`
     for (const sizeLimit of [0, -1, NaN, Infinity]) {
