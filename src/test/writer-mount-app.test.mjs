@@ -8,6 +8,7 @@ localStorage.setItem("splitpage-onboarding", JSON.stringify({ v: 1, done: true, 
 await bootApp();
 
 const { mountWriterRuntimeFeature, stopWriterRuntimeFeature, writerControls } = await import("../bootstrap/wiring/writer.ts");
+const { stopApp } = await import("../bootstrap/app.ts");
 const { adoptReplacement, currentDocument, onRefresh } = await import("../bootstrap/wiring/session-owner.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
@@ -113,4 +114,25 @@ test("stopping Writer disconnects main-editor stats and undo, and remount reconn
     window.removeEventListener("error", capture);
     mountWriterRuntimeFeature();
   }
+});
+
+test("app stop with a pending standalone Writer modal change disconnects its document observers", async t => {
+  adoptReplacement(migrateRows({ title: "Writer shutdown", rows: [{ id: "r1", audioText: "Hello" }] }));
+  const writer = writerControls();
+  writer.openWriter();
+  const flow = writer.writerFlowControl();
+  assert.ok(flow);
+  const errors = [];
+  const capture = event => { errors.push(event.error); event.preventDefault(); };
+  window.addEventListener("error", capture);
+  t.after(() => window.removeEventListener("error", capture));
+  const modal = document.getElementById("tag-modal");
+  modal.hidden = false;
+  modal.hidden = true;
+  stopApp();
+  await Promise.resolve();
+  document.dispatchEvent(new window.Event("selectionchange"));
+  assert.deepEqual(errors, []);
+  assert.equal(writerControls(), writer);
+  assert.equal(writer.writerFlowControl(), flow);
 });
