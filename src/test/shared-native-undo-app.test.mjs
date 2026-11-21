@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { bootApp, closeApp } from "./_app-boot.mjs";
-import { adoptReplacement, sharedSession } from "../bootstrap/wiring/session-owner.ts";
+import { adoptReplacement, liveSession, sharedSession } from "../bootstrap/wiring/session-owner.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { cellSelection, setCellSelection } from "../features/common/cell-selection.ts";
@@ -262,6 +262,48 @@ for (const [name, kind] of Object.entries(views)) {
     assert.deepEqual(hook.read().peer, hook.read().app);
   });
 
+  test(name + ": Alt+Down restores both selection ends after a repaint, undo and redo", async t => {
+    const show = await enter(t, threeBeats()), view = kind.open(t);
+    let repaints = 0;
+    const stop = liveSession().subscribe(change => {
+      if (change.changes.rowsMoved) {
+        repaints++;
+        document.getSelection().removeAllRanges();
+      }
+    });
+    t.after(stop);
+    kind.caret(view, "r1", 1, 4);
+    assert.equal(press(kind.surface(), "ArrowDown", { altKey: true, ctrlKey: false }), true);
+    assert.deepEqual(rowOrder(), ["r2", "r1", "r3"]);
+    assert.equal(repaints, 1);
+    assert.deepEqual(kind.at(view), ["r1", 1, 4]);
+    kind.caret(view, "r2", 2);
+    assert.equal(press(document.activeElement, "z"), true);
+    assert.equal(repaints, 2);
+    assert.deepEqual(kind.at(view), ["r1", 1, 4]);
+    kind.caret(view, "r2", 3);
+    assert.equal(press(document.activeElement, "y"), true);
+    assert.equal(repaints, 3);
+    assert.deepEqual(kind.at(view), ["r1", 1, 4]);
+    assert.equal(show.mock.callCount(), 0);
+  });
+
+  test(name + ": Alt+Down rebases a caret placed before buffered typing", async t => {
+    const show = await enter(t, threeBeats()), view = kind.open(t);
+    kind.caret(view, "r1", 3);
+    typeKeys(kind.surface(), "X");
+    assert.equal(app(), "Hello");
+    kind.caret(view, "r1", 1);
+    assert.equal(press(kind.surface(), "ArrowDown", { altKey: true, ctrlKey: false }), true);
+    assert.deepEqual(rowOrder(), ["r2", "r1", "r3"]);
+    assert.equal(app(1), "HelXlo");
+    assert.deepEqual(kind.at(view), ["r1", 1, 1]);
+    assert.equal(press(kind.surface(), "z"), true);
+    assert.equal(app(), "HelXlo");
+    assert.deepEqual(kind.at(view), ["r1", 1, 1]);
+    assert.equal(show.mock.callCount(), 0);
+  });
+
   test(name + ": Alt+Arrow moves the beat, replays its caret and converges with a competing move", async t => {
     const show = await enter(t, threeBeats()), view = kind.open(t);
     kind.caret(view, "r2", 2);
@@ -296,6 +338,8 @@ for (const [name, kind] of Object.entries(views)) {
     assert.equal(press(document.activeElement, "Backspace", { ctrlKey: false }), true);
     assert.deepEqual(hook.read().app.rows.map(row => row.id), ["r1"]);
     assert.deepEqual(kind.at(view), ["r1", 5, 5]);
+    await Promise.resolve();
+    assert.equal(hook.nativePeer.type("r2", 0, "X").kind, "refused");
     assert.equal(press(kind.surface(), "z"), true);
     assert.deepEqual(hook.read().app.rows.map(row => row.id), ["r1", "r2"]);
     assert.deepEqual(kind.at(view, "r2"), ["r2", 0, 0]);

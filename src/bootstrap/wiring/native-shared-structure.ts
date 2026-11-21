@@ -1,12 +1,11 @@
 import type { openNativeSession } from "../../adapters/collab/native/session.ts";
 import type { NativeMoveBlock } from "../../adapters/collab/native/move-commands.ts";
 import type { NativeUndoSelectionInput } from "../../adapters/collab/native/text-commands.ts";
-import type { CommandOutcome, DocumentStructureIntent } from "../../application/session/document-session.ts";
+import type { CommandOutcome, DocumentStructureIntent, DocumentView } from "../../application/session/document-session.ts";
 import type { ReportPort } from "../../application/session/ports.ts";
 import { changesBetween } from "../../application/session/projection-changes.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
 import { sceneBeforeBeat, sceneFirstBeatId, scenesInOrder, storedSceneName } from "../../core/document/scenes.ts";
-import type { DocumentShape } from "../../core/document/validated.ts";
 import { cappedText } from "../../core/document/text-policy.ts";
 import { documentReader } from "./ports/document.ts";
 import { editAllowed } from "./session-owner.ts";
@@ -24,7 +23,7 @@ const UNAVAILABLE = "native-command-unavailable";
 
 type MoveIntent = Extract<DocumentStructureIntent, { kind: "move-beat" | "swap-beats" }>;
 
-function movePlacement(doc: DocumentShape, intent: MoveIntent) {
+function movePlacement(doc: Pick<DocumentView, "rows" | "sections">, intent: MoveIntent) {
   const source = doc.rows.findIndex(row => row.id === intent.id);
   if (source < 0) return null;
   const target = intent.kind === "move-beat" ? intent.target : doc.rows[source + intent.direction]?.id;
@@ -49,17 +48,20 @@ export function createNativeEditorStructure({ native, session, input, publish, r
     const owner = session(), typing = input();
     if (!owner || !typing) return { kind: "rejected", reason: "closed" };
     try {
-      const shown = intent.kind === "move-beat" || intent.kind === "swap-beats"
-        ? documentReader.read(doc => doc && movePlacement(doc, intent)) : null;
+      const moving = intent.kind === "move-beat" || intent.kind === "swap-beats";
+      const shown = moving ? documentReader.read(doc => doc && movePlacement(doc, intent)) : null;
+      const captured = moving ? typing.captureMoveSelection() : null;
       const admission = owner.admit();
       if (admission?.kind === "failed") throw admission.error;
       if (admission) return admission.notified ? admission : owner.refuse(admission.reason);
       if (!editAllowed()) return owner.refuse(UNAVAILABLE);
-      const pending = typing.beforePress();
+      const movedSelection = captured ? typing.settleMoveSelection(captured) : null;
+      const pending = movedSelection ? movedSelection.kind === "refused" && movedSelection.reason : typing.beforePress();
       if (pending) return { kind: "rejected", reason: pending, notified: true };
       const before = native.document();
-      const current = typing.currentCaret();
-      let after: NativeUndoSelectionInput | null = current?.range ?? null, landing: string | undefined, restore = false;
+      const current = moving ? null : typing.currentCaret();
+      let after: NativeUndoSelectionInput | null = (movedSelection?.kind === "ready" ? movedSelection.range : current?.range) ?? null;
+      let landing: string | undefined;
       let step;
       switch (intent.kind) {
         case "remove-beat": {
@@ -106,7 +108,6 @@ export function createNativeEditorStructure({ native, session, input, publish, r
           if (!shown.target) return { kind: "noop" };
           after ??= anchor(intent.id, 0);
           step = native.commands.moveBlocks.withSelection(after, [{ kind: "beat", id: intent.id }], live.drop);
-          restore = true;
           break;
         }
       }
@@ -118,8 +119,8 @@ export function createNativeEditorStructure({ native, session, input, publish, r
       if (landing) {
         const point = { target: { beat: landing, cell: "narration" as const }, offset: 0 };
         typing.show({ anchor: point, head: point });
-      } else if (restore && current) {
-        typing.show({ anchor: current.point, head: current.point });
+      } else if (movedSelection?.kind === "ready") {
+        typing.show(movedSelection.selection);
       }
       return { kind: "applied", generation: owner.generation(), changes };
     } catch (error) {
