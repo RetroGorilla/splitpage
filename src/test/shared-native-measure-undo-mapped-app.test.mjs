@@ -364,30 +364,33 @@ for (const view of ["Writer", "Split"]) {
     await agreed([["r1", original]]);
   });
 
-  test(`${view}: typing and two forward Deletes undo in separate steps from the editing surface`, async t => {
-    await enter(t, [["r1", "abcd"]]);
-    if (view === "Writer") writer.openWriter();
-    place(view, 1);
-    assert.equal(input(document.activeElement, "insertText", "Z"), true);
-    for (const repeat of [false, true]) {
-      const surface = document.activeElement;
-      const host = view === "Writer" ? beat("r1") : cell();
-      assert.equal(press(surface, "Delete", { repeat }), false);
-      const from = posToDom(host, 2), to = posToDom(host, 3);
-      const range = document.createRange();
-      range.setStart(from.node, from.offset);
-      range.setEnd(to.node, to.offset);
-      assert.equal(input(surface, "deleteContentForward", null, range), true);
-    }
-    window.dispatchEvent(new window.Event("pagehide"));
-    await agreed([["r1", "aZd"]]);
-    for (const [key, text, offset] of [["z", "aZbcd", 2], ["z", "abcd", 1], ["y", "aZbcd", 2], ["y", "aZd", 2]]) {
-      assert.equal(press(document.activeElement, key, { ctrlKey: true }), true);
-      assert.deepEqual(selection(view), expectedSelection(view, offset), key + " " + text);
-      await agreed([["r1", text]]);
-    }
-    leave([["r1", "aZd"]]);
-  });
+  for (const pageHistory of view === "Split" ? [false, true] : [false]) {
+    test(`${view}: typing and two forward Deletes undo in separate steps from ${pageHistory ? "the page" : "the editing surface"}`, async t => {
+      await enter(t, [["r1", "abcd"]]);
+      if (view === "Writer") writer.openWriter();
+      place(view, 1);
+      assert.equal(input(document.activeElement, "insertText", "Z"), true);
+      for (const repeat of [false, true]) {
+        const surface = document.activeElement;
+        const host = view === "Writer" ? beat("r1") : cell();
+        assert.equal(press(surface, "Delete", { repeat }), false);
+        const from = posToDom(host, 2), to = posToDom(host, 3);
+        const range = document.createRange();
+        range.setStart(from.node, from.offset);
+        range.setEnd(to.node, to.offset);
+        assert.equal(input(surface, "deleteContentForward", null, range), true);
+      }
+      window.dispatchEvent(new window.Event("pagehide"));
+      await agreed([["r1", "aZd"]]);
+      for (const [key, text, offset] of [["z", "aZbcd", 2], ["z", "abcd", 1], ["y", "aZbcd", 2], ["y", "aZd", 2]]) {
+        const target = pageHistory ? document.body : view === "Writer" ? beat("r1") : document.activeElement;
+        assert.equal(press(target, key, { ctrlKey: true }), true);
+        assert.deepEqual(selection(view), expectedSelection(view, offset), key + " " + text);
+        await agreed([["r1", text]]);
+      }
+      leave([["r1", "aZd"]]);
+    });
+  }
 
   test(`${view}: replacing bc with Z restores the original selection on each undo`, async t => {
     await enter(t, [["r1", "abcd"]]);
@@ -589,13 +592,16 @@ for (const afterSwitch of [false, true]) {
     const show = t.mock.method(notices, "show", () => {});
     writer.openWriter();
     place("Writer", 2, 2, "r1", "r2");
-    assert.equal(press(root(), "b", { ctrlKey: true }), true);
+    assert.equal(press(beat("r1"), "b", { ctrlKey: true }), true);
     assert.deepEqual(show.mock.calls.map(call => call.arguments), refused);
     assert.deepEqual(selection("Writer"), expectedSelection("Writer", 2, 2, "r1", "r2"));
     await agreed(rows);
-    if (afterSwitch) writer.closeWriter();
+    if (afterSwitch) {
+      writer.closeWriter();
+      assert.deepEqual(selection("Split"), expectedSelection("Split", 2, 2, "r2"));
+    }
     for (const key of ["z", "y", "z"]) {
-      assert.equal(press(afterSwitch ? document.body : root(), key, { ctrlKey: true }), true);
+      assert.equal(press(afterSwitch ? document.body : beat("r1"), key, { ctrlKey: true }), true);
       await agreed(rows);
       if (afterSwitch) assert.deepEqual(selection("Split"), expectedSelection("Split", 2, 2, "r2"));
       else assert.deepEqual(selection("Writer"), expectedSelection("Writer", 2, 2, "r1", "r2"));

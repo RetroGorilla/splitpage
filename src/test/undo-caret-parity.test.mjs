@@ -3,8 +3,10 @@ import assert from "node:assert/strict";
 import { rows, checkCaret, peer, runShared } from "./_undo-caret-parity.mjs";
 
 const mapped = new Set([
+  "typing then two forward Deletes",
   "change in the middle",
   "Enter in the middle of a row",
+  "bold across two rows",
   "undo from the Split cell itself, with the Split binding mounted"
 ]);
 
