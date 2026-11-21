@@ -1315,7 +1315,15 @@ function statusSet(key: string | null, statusId: string | null): RecordCommandRu
 export function setTagOwner(key: string | null, personId: string) {
   const item = findTagByKey(key);
   if (!item) return;
-  if (updateTags([item], { owner: { id: personId } }).held) return;
+  if (updateTags([item], { owner: { id: personId } }).held) {
+    if ((ports as TagPanelPorts).shared.native?.()) {
+      const owner = findTagByKey(key)?.owner ?? "";
+      for (const select of document.querySelectorAll<HTMLSelectElement>('.tag-owner-select[data-key="' + cssAttr(key) + '"]')) {
+        select.value = owner;
+      }
+    }
+    return;
+  }
   renderProduction();
 }
 

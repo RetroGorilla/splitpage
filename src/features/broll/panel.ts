@@ -812,7 +812,9 @@ function writeRecord(id: string | null, fields: ShotFields) {
 }
 
 function updateRecord(id: string | null, fields: ShotFields) {
-  if (writeRecord(id, fields)) renderBrollViews();
+  if (!writeRecord(id, fields)) return false;
+  renderBrollViews();
+  return true;
 }
 
 function toggleBrollShot(id: string | null) {
@@ -1188,7 +1190,10 @@ function onBrollClick(e: PanelEvent & Partial<MouseEvent>, root: HTMLElement, ex
 function onBrollChange(e: PanelEvent) {
   const t = e.target as PanelInput;
   if (t.classList.contains("broll-owner-select")) {
-    updateRecord(t.getAttribute("data-id"), { owner: personById(t.value) ? t.value : "" });
+    const id = t.getAttribute("data-id");
+    if (!updateRecord(id, { owner: personById(t.value) ? t.value : "" }) && (ports as PanelPortUse).shared.native?.()) {
+      t.value = brollRecord(id)?.owner ?? "";
+    }
   } else if (t.id === "broll-bulk-owner") {
     if (t.value === "__new__") { bulkInput = "person"; renderBrollViews(); focusBulkInput(); }
     else if (t.value !== "__none__") bulkAssign(t.value);

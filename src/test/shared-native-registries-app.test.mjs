@@ -382,3 +382,39 @@ test("a stale tag edit refuses instead of creating a duplicate of the old tag na
   copies(doc => doc.people, []);
   assert.deepEqual(show.mock.calls.map(call => call.arguments), [["This is not available in a shared session yet.", "warn"]]);
 });
+
+test("refused native shot and tag owner changes restore the published selection and keep focus", async t => {
+  await enter(t, { rows: [{ id: "r1", audioText: "Hello",
+    visualText: '<span class="broll-key" data-broll-id="bs1" contenteditable="false">B-roll:</span> Wide' }],
+  people: [{ id: "p1", name: "Cam" }], productionTags: [{ cat: "prop", name: "Lens" }] });
+  const show = t.mock.method(notices, "show", () => {});
+  function chooseOwner(select) {
+    select.focus();
+    select.value = "p1";
+    assert.equal(select.value, "p1");
+    select.dispatchEvent(new window.Event("change", { bubbles: true }));
+    assert.equal(select.value, "");
+    assert.equal(document.activeElement, select);
+  }
+  openBrollPanel();
+  if (!shotCard("bs1")) shotButton("bs1", "expand").click();
+  assert.equal(hook.nativePeer.registry({ kind: "remove", collection: "shots", ids: ["bs1"] }).kind, "written");
+  await Promise.resolve();
+  chooseOwner(shotCard("bs1").querySelector(".broll-owner-select"));
+  copies(doc => shot(doc, "bs1").owner, "");
+
+  production();
+  tagCard("prop lens").querySelector("[data-action=tag-expand]").click();
+  const select = tagCard("prop lens").querySelector(".tag-owner-select");
+  select.focus();
+  const narration = $('#rows .cell-editable[data-field="audioText"]');
+  setCellSelection(narration, 2);
+  narration.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true, cancelable: true }));
+  try {
+    chooseOwner(select);
+    copies(doc => tag(doc, "Lens").owner, "");
+  } finally {
+    narration.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true }));
+  }
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), Array(2).fill(["This is not available in a shared session yet.", "warn"]));
+});
