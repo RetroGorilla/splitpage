@@ -125,12 +125,13 @@ export function startWhoList(ports: WhoListPorts): WhoListMount {
     refresh();
   }
 
-  function pick(): boolean {
+  function pick(refusePick?: () => void): boolean {
     const o = open;
     if (!o || !settle(o)) { cancel(); return false; }
     const name = o.items[o.active];
     cancel();
     if (!name) return false;
+    if (refusePick) { refusePick(); return true; }
     const done = ports.cells.edit(o.cellEl, function (cell, sel) {
       if (!sel || sel.from !== sel.to) return null;
       const text = projection(cell);
@@ -142,13 +143,13 @@ export function startWhoList(ports: WhoListPorts): WhoListMount {
     return true;
   }
 
-  function keydown(e: KeyboardEvent, cellEl: Element): boolean {
+  function keydown(e: KeyboardEvent, cellEl: Element, refusePick?: () => void): boolean {
     const o = open;
     if (!o || o.cellEl !== cellEl || e.isComposing) return false;
     const plain = !e.altKey && !e.ctrlKey && !e.metaKey;
     if (e.key === "Escape") { e.preventDefault(); e.stopPropagation(); cancel(); return true; }
     if (!o.items.length || !plain) return false;
-    if ((e.key === "Tab" && !e.shiftKey) || (e.key === "Enter" && !e.shiftKey)) { e.preventDefault(); return pick(); }
+    if ((e.key === "Tab" && !e.shiftKey) || (e.key === "Enter" && !e.shiftKey)) { e.preventDefault(); return pick(refusePick); }
     if (e.key === "ArrowDown" || e.key === "ArrowUp") {
       e.preventDefault();
       const n = o.items.length;
