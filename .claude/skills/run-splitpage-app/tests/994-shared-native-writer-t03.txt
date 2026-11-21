@@ -1,0 +1,88 @@
+﻿open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=window.__writerFlowTest;window.P=S.nativePeer;window.writer=()=>document.getElementById('writer-doc');window.openTrace=(title,texts)=>F.openFile(new File([JSON.stringify({schema:2,title,paragraphsDecided:true,rows:texts.map((audioText,i)=>({id:'r'+(i+1),audioText,visualText:''})),comments:[]})],'trace.splitpage'));window.place=()=>{writer().focus();W.place({anchor:{kind:'beat',rowId:'r1',offset:4},head:{kind:'beat',rowId:'r1',offset:7}});return true};window.selected=(from,to,value='')=>{const s=W.selection(),dom=getSelection(),beat=writer().querySelector('.wr-beat[data-id="r1"]');return document.activeElement===writer()&&beat.contains(dom.anchorNode)&&beat.contains(dom.focusNode)&&dom.isCollapsed===(from===to)&&dom.toString()===value&&s?.anchor?.rowId==='r1'&&s.anchor.offset===from&&s?.head?.rowId==='r1'&&s.head.offset===to};window.caret=(rowId,offset)=>selected(offset,offset);true
+eval window.json=value=>JSON.stringify(value);window.rows=(doc,texts)=>doc.rows.length===texts.length&&doc.rows.every((row,i)=>row.id==='r'+(i+1)&&row.audioText===texts[i]);window.paint=texts=>{const beats=[...writer().querySelectorAll('.wr-beat')];return W.on()&&beats.length===texts.length&&beats.every((beat,i)=>beat.dataset.id==='r'+(i+1)&&beat.textContent===(i?'\u200b':'')+texts[i]&&beat.checkVisibility()&&beat.getBoundingClientRect().width>0)};window.same=()=>json(S.read().app)===json(S.read().peer);window.check=texts=>same()&&rows(S.read().app,texts)&&paint(texts);window.replay=(order,to)=>{const pending=P.queuedUpdates(),selected=pending.filter(packet=>!to||packet.to===to);const expected=order==='duplicate'?selected.flatMap(packet=>[packet,packet]):selected;return json(P.drain(order,to))===json(expected)&&json(P.queuedUpdates())===json(pending.filter(packet=>to&&packet.to!==to))};true
+eval openTrace("Native T03 typing forward",["the the","end"])
+wait F.state().title==="Native T03 typing forward"
+eval if (!W.on()) document.getElementById('btn-write').click();true
+wait W.on()
+eval window.originalId=F.state().docId;S.enter()
+wait check(["the the","end"])
+eval window.before=S.read().app;P.hold("updates");place()
+expect selected(4,7,"the")
+press a
+wait rows(S.read().app,["the a","end"])
+expect paint(["the a","end"])&&caret('r1',5)
+eval window.written=P.type("r1",7,"n");true
+expect written.kind==="written"&&rows(S.read().peer,["the then","end"])
+expect json(P.queuedUpdates().map(packet=>packet.to))===json(["peer","app"])
+expect replay("forward")
+expect check(["the an","end"])&&selected(5,5)
+expect document.getElementById("shared-recovery-panel")===null
+key ctrl KeyZ
+expect P.queuedUpdates().length===1&&P.queuedUpdates()[0].to==="peer"
+expect replay("forward")
+expect check(["the then","end"])&&selected(4,7,"the")
+expect document.getElementById("shared-recovery-panel")===null
+expect json(P.release("forward"))==="[]"
+eval window.projection=S.read().app;window.left=S.leave();true
+expect left.ok&&S.read().peer===null&&F.state().docId!==projection.docId&&F.state().docId!==originalId
+expect json({...F.state(),docId:projection.docId})===json(projection)
+expect paint(["the then","end"])
+eval openTrace("Native T03 typing duplicate",["the the","end"])
+wait F.state().title==="Native T03 typing duplicate"
+eval if (!W.on()) document.getElementById('btn-write').click();true
+wait W.on()
+eval window.originalId=F.state().docId;S.enter()
+wait check(["the the","end"])
+eval window.before=S.read().app;P.hold("updates");place()
+expect selected(4,7,"the")
+press a
+wait rows(S.read().app,["the a","end"])
+expect paint(["the a","end"])&&caret('r1',5)
+eval window.written=P.type("r1",7,"n");true
+expect written.kind==="written"&&rows(S.read().peer,["the then","end"])
+expect json(P.queuedUpdates().map(packet=>packet.to))===json(["peer","app"])
+expect replay("duplicate")
+expect check(["the an","end"])&&selected(5,5)
+expect document.getElementById("shared-recovery-panel")===null
+key ctrl KeyZ
+expect P.queuedUpdates().length===1&&P.queuedUpdates()[0].to==="peer"
+expect replay("duplicate")
+expect check(["the then","end"])&&selected(4,7,"the")
+expect document.getElementById("shared-recovery-panel")===null
+expect json(P.release("forward"))==="[]"
+eval window.projection=S.read().app;window.left=S.leave();true
+expect left.ok&&S.read().peer===null&&F.state().docId!==projection.docId&&F.state().docId!==originalId
+expect json({...F.state(),docId:projection.docId})===json(projection)
+expect paint(["the then","end"])
+eval openTrace("Native T03 composition forward",["the the","end"])
+wait F.state().title==="Native T03 composition forward"
+eval if (!W.on()) document.getElementById('btn-write').click();true
+wait W.on()
+eval window.originalId=F.state().docId;S.enter()
+wait check(["the the","end"])
+eval window.before=S.read().app;P.hold("updates");place()
+expect selected(4,7,"the")
+ime set a
+expect paint(["the a","end"])&&caret('r1',5)
+eval window.written=P.type("r1",7,"n");true
+expect written.kind==="written"&&rows(S.read().peer,["the then","end"])
+expect P.queuedUpdates().length===1&&P.queuedUpdates()[0].to==="app"
+expect replay("forward","app")
+expect json(S.read().app)===json(before)&&rows(S.read().peer,["the then","end"])&&paint(["the a","end"])&&caret('r1',5)
+ime commit a
+expect P.queuedUpdates().length===1&&P.queuedUpdates()[0].to==="peer"
+expect replay("forward")
+expect check(["the an","end"])&&selected(5,5)
+expect document.getElementById("shared-recovery-panel")===null
+key ctrl KeyZ
+expect P.queuedUpdates().length===1&&P.queuedUpdates()[0].to==="peer"
+expect replay("forward")
+expect check(["the then","end"])&&selected(4,7,"the")
+expect document.getElementById("shared-recovery-panel")===null
+expect json(P.release("forward"))==="[]"
+eval window.projection=S.read().app;window.left=S.leave();true
+expect left.ok&&S.read().peer===null&&F.state().docId!==projection.docId&&F.state().docId!==originalId
+expect json({...F.state(),docId:projection.docId})===json(projection)
+expect paint(["the then","end"])
