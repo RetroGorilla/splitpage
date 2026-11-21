@@ -8,7 +8,7 @@ import { AT } from "./record-harness.ts";
 import { structureScript } from "./structure-harness.ts";
 
 const actor = "Editor";
-const options = { actor, sanitize: (html: string) => html };
+const options = { actor, sanitize: (html: unknown) => String(html) };
 const target = { beat: "A", cell: "narration" } as const;
 
 function append(session: ReturnType<typeof openNativeSession>, offset: number, text: string) {
@@ -40,7 +40,9 @@ test("guarded transaction and session listeners deliver complete writes after a 
   await Promise.resolve();
   assert.equal(updates.length, 1);
   assert.deepEqual(publications, [["ax", "b"]]);
-  assert.equal(applyNativePeerUpdate(peer, updates[0]), true);
+  const first = updates[0];
+  assert.ok(first);
+  assert.equal(applyNativePeerUpdate(peer, first), true);
   assert.deepEqual(local.document(), peer.document());
 
   assert.throws(() => append(local, 2, "y"), error => error === failure);
@@ -51,6 +53,8 @@ test("guarded transaction and session listeners deliver complete writes after a 
   await Promise.resolve();
   assert.equal(updates.length, 2);
   assert.deepEqual(publications, [["ax", "b"], ["axy", "b"]]);
-  assert.equal(applyNativePeerUpdate(peer, updates[1]), true);
+  const second = updates[1];
+  assert.ok(second);
+  assert.equal(applyNativePeerUpdate(peer, second), true);
   assert.deepEqual(local.document(), peer.document());
 });
