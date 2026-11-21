@@ -30,7 +30,7 @@ function open(source: NativeSessionSource, actor = "Alice", Parser = DOMParser):
   return openNativeSession(source, { actor, sanitize });
 }
 
-function fromDocument(rows = { A: "a", B: "b", C: "c" }, Parser = DOMParser): Session {
+function fromDocument(rows: Record<string, string> = { A: "a", B: "b", C: "c" }, Parser = DOMParser): Session {
   return open({ kind: "document", document: structureScript(rows), conversion }, "Alice", Parser);
 }
 
@@ -534,7 +534,7 @@ test("all compound writes finish and publish before a close requested at transac
     });
     session.ydoc.once("beforeTransaction", session.close);
     written(run());
-    assert.deepEqual(changes, []);
+    assert.equal(changes.length, 0);
     await Promise.resolve();
     assert.deepEqual(changes.map(change => change.kind), ["changed", "closed"]);
     assert.deepEqual(seen, [expected]);
