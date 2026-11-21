@@ -2,7 +2,7 @@ open
 wait document.querySelectorAll('#rows .row').length > 0
 eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;F.openFile(new File([JSON.stringify({schema:2,title:'Native Find',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello cup cup'},{id:'r2',audioText:'cup'},{id:'r3',audioText:'Other',visualText:'wide view'}]})],'native-find.splitpage'))
 wait F.state().title === 'Native Find'
-eval S.enter({backend:'native'})
+eval S.enter()
 eval window.docRows=()=>S.read().app.rows;window.agree=()=>JSON.stringify(S.read().app)===JSON.stringify(S.read().peer);window.setFind=(needle,value)=>{const field=document.querySelector('#find-input');field.value=needle;field.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#replace-input').value=value;return true};window.match=()=>Array.from(CSS.highlights.get('splitpage-find-match')||[],r=>r.toString()).join('');window.pick=(el,a,b)=>{el.focus();getSelection().setBaseAndExtent(el.firstChild,a,el.firstChild,b);return true};window.cell=(id,field='audioText')=>document.querySelector('#rows .cell-editable[data-id="'+id+'"][data-field="'+field+'"]');pick(cell('r1'),1,3)
 key Enter
 wait docRows()[0].audioText === 'H<br>lo cup cup' && agree()
@@ -57,7 +57,7 @@ press X
 wait F.state().rows[0].audioText === '<strong>HX</strong>o'
 eval inlineFixture()
 wait cell('r1').innerHTML === '<strong>Hel</strong>lo'
-eval S.enter({backend:'native'})
+eval S.enter()
 eval mixed(cell('r1'))
 press X
 wait docRows()[0].audioText === '<strong>HX</strong>o' && agree()
@@ -72,7 +72,7 @@ wait F.state().rows[0].audioText === '<strong>HX</strong>o'
 jsclick #wr-close
 eval inlineFixture()
 wait cell('r1').innerHTML === '<strong>Hel</strong>lo'
-eval S.enter({backend:'native'})
+eval S.enter()
 jsclick #btn-write
 wait beat('r1')?.querySelector('strong')
 eval mixed(beat('r1'),document.querySelector('#writer-doc'))

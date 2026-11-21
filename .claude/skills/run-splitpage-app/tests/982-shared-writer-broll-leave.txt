@@ -1,12 +1,12 @@
 # A B-roll marker typed in the shared Writer's visual is keyed when the box is left, with its shot, on both copies and a late joiner.
 # Undo from the Writer takes the key and shot back on both copies and redo brings back the same key. A view switch keys nothing.
-open
+open /_legacy-shared-tests.html
 wait document.querySelectorAll('#rows .row').length > 0
-eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=window.__writerFlowTest;window.v=function(){return document.querySelector('.wr-flow-visual-text');};window.box=function(){return document.querySelector('.wr-flow-visual-box');};window.keyOf=function(d,i){var m=/data-broll-id="([^"]+)"/.exec(d.rows[i].visualText);return m?m[1]:null;};window.keyed=function(d,i,name){var id=keyOf(d,i);return !!id&&d.rows[i].visualText==='<span class="broll-key" data-broll-id="'+id+'" contenteditable="false">B-roll:</span> '+name&&d.brollShots.some(function(s){return s.id===id&&s.name===name;});};window.same=function(){return JSON.stringify(S.read().app)===JSON.stringify(S.read().peer);};F.openFile(new File([JSON.stringify({'schema':2,'title':'Writer leave','paragraphsDecided':true,'rows':[{'id':'r1','audioText':'Pour the coffee','visualText':''},{'id':'r2','audioText':'Drink it','visualText':''},{'id':'r3','audioText':'Wash up','visualText':''}],'comments':[]})],'trace.splitpage'))
+eval window.F=window.__splitpageFormats;window.S=window.__legacySharedTest;window.W=window.__writerFlowTest;window.v=function(){return document.querySelector('.wr-flow-visual-text');};window.box=function(){return document.querySelector('.wr-flow-visual-box');};window.keyOf=function(d,i){var m=/data-broll-id="([^"]+)"/.exec(d.rows[i].visualText);return m?m[1]:null;};window.keyed=function(d,i,name){var id=keyOf(d,i);return !!id&&d.rows[i].visualText==='<span class="broll-key" data-broll-id="'+id+'" contenteditable="false">B-roll:</span> '+name&&d.brollShots.some(function(s){return s.id===id&&s.name===name;});};window.same=function(){return JSON.stringify(S.read().app)===JSON.stringify(S.read().peer);};F.openFile(new File([JSON.stringify({'schema':2,'title':'Writer leave','paragraphsDecided':true,'rows':[{'id':'r1','audioText':'Pour the coffee','visualText':''},{'id':'r2','audioText':'Drink it','visualText':''},{'id':'r3','audioText':'Wash up','visualText':''}],'comments':[]})],'trace.splitpage'))
 wait F.state().title === 'Writer leave'
 click #btn-write
 wait W.on()
-eval S.enter({backend:'legacy'})
+eval S.enter()
 wait S.read().peer !== null
 # Type the marker in the visual box and leave it with Escape
 eval W.openVisual('r1');true

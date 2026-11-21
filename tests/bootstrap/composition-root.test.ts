@@ -40,9 +40,10 @@ test("src/js is gone, so no legacy initializer or numbered module can come back"
   assert.deepEqual(files.filter((f) => f.startsWith("src/js/")), []);
 });
 
-test("the build bundles the composition root", () => {
+test("the build bundles the composition root and gives the legacy fixture its own test entry", () => {
   const build = readFileSync(join(REPO, "build.mjs"), "utf8");
-  assert.match(build, /entryPoints: \[join\(ROOT, "src", "bootstrap", "main\.ts"\)\]/);
+  assert.match(build, /entryPoints: \[testHooks && legacySharedTests\s+\? join\(ROOT, "tests", "collab", "legacy-app", "browser\.ts"\)\s+: join\(ROOT, "src", "bootstrap", "main\.ts"\)\]/);
+  assert.ok(importsOf("tests/collab/legacy-app/browser.ts").some(({ spec }) => spec === "../../../src/bootstrap/main.ts"));
 });
 
 test("outside src/bootstrap the composition root imports only its frozen set, which may only shrink", () => {

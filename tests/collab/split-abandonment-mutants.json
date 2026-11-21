@@ -74,7 +74,7 @@
     },
     {
       "label": "Hook ordinary abandon forgets Split",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "tests/collab/legacy-app/shared-test.ts",
       "find": "() => { splitting.abandon?.(); }",
       "replace": "() => {}",
       "tests": [

@@ -19,14 +19,14 @@ The native relay has the reconnect wrapper, size admission, SQLite snapshots and
 The session layer has the offline-notice journal and put-back command, and local replica stores with an update
 log, checkpoints and local write receipts in browser IndexedDB and through desktop test IPC
 ([#1668](https://github.com/RetroGorilla/splitpage/pull/1668), [#1679](https://github.com/RetroGorilla/splitpage/pull/1679)).
-These components have their own integration tests. The editor's shared mode is still entered only through
-`__sharedTest`. The hook defaults to the native session and selects the old backend with `{ backend: "legacy" }`.
-Entering and leaving native shared mode carries the focused Writer or Split selection across the repaint.
-The switch checks each endpoint's text and the text between them. It maps a joined narration member into the assembled row.
-If the range cannot be restored, the caret goes to the end of the first visible beat.
-With no visible beat, focus goes to the Writer editor or Split's Add beat button.
-There is no release entry for shared mode. Slice 8 remains the removal of the old adapter and the mapping of its tests in
-[the build order](#11-build-order).
+These components have their own integration tests. The standard shared test hook `__sharedTest` opens only the
+native session. The [slice 8 app test mapping](slice-8-test-mapping.md) records which assertions were replaced and
+which still run through direct old wiring or the isolated legacy test fixture. The old adapter and its dedicated tests
+remain for the rest of [slice 8](#11-build-order). There is no release entry for shared mode.
+
+A successful native switch restores a Writer or Split selection only when focus stayed in that editor and the
+touched beats, joined narration members and headings keep their identities, order and text. If a captured range
+cannot be restored, the editor has no caret and typing waits until the person places one.
 
 ## Known differences from standalone editing
 
@@ -37,6 +37,7 @@ There is no release entry for shared mode. Slice 8 remains the removal of the ol
 | Empty Writer | Writer has no binding for the session's first-beat command. | [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
 | Joined row removal | A joined row keeps its member beats. The row's Remove acts on its visible head. | [#1682](https://github.com/RetroGorilla/splitpage/pull/1682) |
 | Moving past a heading | Scene headings have their own positions in the ranked outline. Moving a beat across a heading can change which beat follows that heading. | [#1682](https://github.com/RetroGorilla/splitpage/pull/1682) |
+| Entering shared mode with Writer open | With the caret at offset 5 in the first beat, Writer stays open and the text stays intact. Focus moves to the page body and the visible caret disappears. Typing immediately inserts nothing. Returning focus to Writer without placing the caret puts it at offset 0 of the first beat, where typing inserts before the existing text. Entry through the old backend kept the caret at offset 5. | [#1694](https://github.com/RetroGorilla/splitpage/pull/1694) |
 | Writer move with stale paint | A cross-beat Alt+Arrow move refuses if a peer edit has invalidated the paint needed to resolve the selection. The selection and buffered typing stay in place. | [#1683](https://github.com/RetroGorilla/splitpage/pull/1683) |
 | Writer heading name | Editing a heading name to empty or whitespace is refused. Standalone Writer can keep an empty heading draft. | [#1682](https://github.com/RetroGorilla/splitpage/pull/1682) |
 | Writer Enter at the first heading | Enter at the start of a heading needs a preceding beat. It is refused when the heading starts the script. | [#1686](https://github.com/RetroGorilla/splitpage/pull/1686) |
@@ -440,7 +441,7 @@ requirements from the outside review.
 | 5 | Records, status, comments | Exact row changes; author-only bodies | Done ([#1658](https://github.com/RetroGorilla/splitpage/pull/1658)) |
 | 6 | Undo | E3, E11, E14 and E16 tests; E15's histories under option A; E17's histories under rule (g); creation undo and redo timing (appendix O); one change per press; E11's full tag recount (845 requested, 800 kept, 40 undone, 5 lost) | Done ([#1659](https://github.com/RetroGorilla/splitpage/pull/1659)) |
 | 7 | Session, editor, relay with the wrapper, server storage, offline notice | E13's pair table; E16's notice counts; every reader agrees on E17's histories; first loads per decision 16; a large offline return under stock timers; two writers past the size limit; server stops per decision 19; stale-target editor cases (appendix O); store and reload | Built on `main` at `2a1cebba1`. Open acceptance cases are in [appendix O](#o-acceptance-cases-from-the-outside-review). |
-| 8 | Delete the old adapter | Every deleted test mapped; `npm run verify` | Pending |
+| 8 | Delete the old adapter | Every deleted test mapped ([app tests](slice-8-test-mapping.md)); `npm run verify` | Native-only hook complete. Adapter removal pending. |
 
 Slice 3 was built as two pull requests: 3a, split, join and removal with
 kept records; 3b, headings and reading rules (a) to (g). The E11 full tag recount moved from slice 2 to slice 6, because
@@ -677,7 +678,7 @@ to R10, R13, R17; Q02, Q04, Q06, Q07. Dropped after E3: U10.
 | Application: `shared-undo.ts`, `replayed-steps.ts` | Shrink to admission and the grouping rule |
 | Tests: `tests/collab/` delivery, agreement, checker, fixtures | Carry over; dropped rules marked |
 | Tests: `tests/adapters/collab/` (173 files), `tests/collab/*-mutants.json` (41 lists) | Deleted once slice 8 maps each behaviour to its replacement |
-| Tests: `src/test/shared-*-app.test.mjs` (41 files) | Kept; outcomes change only for dropped rules |
+| Tests: `src/test/shared-*-app.test.mjs` | Native suites and direct tests with remaining coverage stay. The [app test mapping](slice-8-test-mapping.md) accounts for retired cases. |
 
 ### F. Evidence rule for generated tests
 

@@ -4,14 +4,9 @@ import { startupReady } from "../../application/startup-signal.ts";
 import { migrateRows } from "../document-ports.ts";
 import { fromHtml } from "../richtext.ts";
 import { currentCapabilities, sharedSession } from "./session-owner.ts";
-import { SHARED_ALREADY, SHARED_NOT_RUNNING, SHARED_SWITCHING, enterSharedSession, forceLeaveSharedSession, joinSharedBindings, leaveRunningSharedSession,
-  sharedSessionParts } from "./shared-session.ts";
-import { recoveryPanelBinding } from "./recovery-panel.ts";
-import type { SharedBindings, SharedSwitchOutcome, SharedSwitchPorts } from "./shared-session.ts";
+import { SHARED_ALREADY, SHARED_NOT_RUNNING, SHARED_SWITCHING, enterSharedSession, forceLeaveSharedSession, leaveRunningSharedSession } from "./shared-session.ts";
+import type { SharedSwitchOutcome, SharedSwitchPorts } from "./shared-session.ts";
 import type { Home } from "../../application/location/document-location.ts";
-import { sharedWriterBindings } from "./shared-writer.ts";
-import { sharedSplitBindings } from "./shared-split.ts";
-import { createSharedTestPeer, sharedTestBytes, sharedTestPeerHook } from "./shared-test-peer.ts";
 import { sharedCommandRefusalNotice } from "./ports/shared-command-notices.ts";
 import { notices } from "./ports/effects.ts";
 import { documentReader } from "./ports/document.ts";
@@ -23,13 +18,7 @@ import { draftResume, flushDraftNow, noteDraftChange } from "./recovery-owners.t
 import { draftSource } from "./drafts.ts";
 import { confirmSavedNow, noteSaveChange, unsavedChanges } from "./save-owners.ts";
 import { currentHome, documentLocation, setHome } from "./location-owner.ts";
-import { projectSharedDocumentWithRecovery } from "../../adapters/collab/project.ts";
-import { sharedIntakeStopped } from "../../adapters/collab/ingress.ts";
-import { hydrateSharedDocumentFromState } from "../../adapters/collab/hydrate.ts";
-import type { SharedDocumentHandle } from "../../adapters/collab/types.ts";
-import { timingMarks } from "../../../shared/timing-marks.ts";
 import { openNativeEditor } from "./native-shared-session.ts";
-import { hasNativeFormat } from "../../adapters/collab/native/session.ts";
 import { createNativeTestPeer } from "./shared-native-test-peer.ts";
 
 declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
@@ -77,39 +66,28 @@ function reattachDraft(kept: Detached): void {
     () => { if (kept.unsaved && !unsavedChanges()) noteSaveChange(); }, () => { draftSource.resumeWriting(); }]);
 }
 
+function sharedTestBytes(state: string | Uint8Array | ArrayBuffer): Uint8Array {
+  if (typeof state === "string") return Uint8Array.from(atob(state), character => character.charCodeAt(0));
+  return state instanceof ArrayBuffer ? new Uint8Array(state.slice(0)) : Uint8Array.from(state);
+}
+
 function startSharedTestHook(): () => void {
-  let peer: ReturnType<typeof createSharedTestPeer> | null = null, detached: Detached | null = null;
+  let detached: Detached | null = null;
   let nativePeer: ReturnType<typeof createNativeTestPeer> | null = null;
   let switching = false, composing = false, live = true, detachRefused: string | null = null;
   let withdraw = (): void => {};
-  const counts = { recovered: 0, missingBase: 0, ownershipScans: 0 };
   const report = (error: unknown): void => { console.error(error); };
   const composition = (event: Event): void => { composing = event.type === "compositionstart"; };
   document.addEventListener("compositionstart", composition, true);
   document.addEventListener("compositionend", composition, true);
-  const effects = {
-    recovered: () => { counts.recovered++; notices.show("Your writing was kept in recovery.", "warn"); },
-    missingBase: () => { counts.missingBase++; notices.show("This line changed. Try writing again.", "warn"); },
-    ownershipScan: () => { counts.ownershipScans++; }, report
-  };
-  const writing = sharedWriterBindings(effects), splitting = sharedSplitBindings(effects);
-  const editing: SharedBindings = {
-    enter: parts => { writing.enter(parts); splitting.enter(parts); },
-    settle: () => writing.settle() ?? splitting.settle(),
-    leave: () => { runEvery([splitting.leave, writing.leave]); },
-    abandon: () => { runEvery([() => { writing.abandon?.(); }, () => { splitting.abandon?.(); }]); },
-    drop: () => { runEvery([() => { writing.drop?.(); }, () => { splitting.drop?.(); }]); }
-  };
-  const bindings = joinSharedBindings(editing, recoveryPanelBinding);
   const left = (landed: boolean): void => {
-    const ending = peer, endingNative = nativePeer, kept = detached;
-    peer = null; nativePeer = null; detached = null;
+    const ending = nativePeer, kept = detached;
+    nativePeer = null; detached = null;
     // why: the landed copy has a new docId and was never saved, so it is unsaved (rules 75 and 76)
     const marks = landed && kept ? [() => { noteSaveChange(); }, () => { noteDraftChange(); }] : [];
-    runEvery([() => { ending?.dispose(); }, () => { endingNative?.dispose(); }, ...(kept ? [() => { draftSource.resumeWriting(); }] : []), ...marks]);
+    runEvery([() => { ending?.dispose(); }, ...(kept ? [() => { draftSource.resumeWriting(); }] : []), ...marks]);
   };
-  type EntryOptions = { readonly backend?: "native" | "legacy" };
-  const enter = async (stored?: Uint8Array, options?: EntryOptions): Promise<SharedSwitchOutcome> => {
+  const enter = async (stored?: Uint8Array): Promise<SharedSwitchOutcome> => {
     if (!live) return { ok: false, reason: APP_STOPPED };
     if (switching) return { ok: false, reason: SHARED_SWITCHING };
     if (sharedSession()) return { ok: false, reason: SHARED_ALREADY };
@@ -140,29 +118,23 @@ function startSharedTestHook(): () => void {
           detached = null;
           if (kept) reattachDraft(kept);
         },
-        left, bindings, common, standalone, migrate: migrateRows, docId: mintDocId, editor: getEditorName,
+        left, bindings: { enter: () => {}, settle: () => null, leave: () => {} },
+        common, standalone, migrate: migrateRows, docId: mintDocId, editor: getEditorName,
         structure: { cells: html => fromHtml(html) }, report,
         timers: { now: () => Date.now(), start: (run, ms) => setTimeout(run, ms), stop: timer => { clearTimeout(timer as ReturnType<typeof setTimeout>); } },
         now: () => Date.now(),
-        ...(stored ? { hydrate: (handle: SharedDocumentHandle) => {
-          if (hasNativeFormat(stored)) throw new Error("A native script needs the native backend");
-          hydrateSharedDocumentFromState(handle, stored);
-        } } : {}),
         opening: openingStatus
       };
-      const nativeEntry = options?.backend !== "legacy";
       const opened: { session?: ReturnType<typeof openNativeEditor>["native"] } = {};
-      const result = await enterSharedSession(entering, nativeEntry ? (doc, failedClose) => {
+      const result = await enterSharedSession(entering, (doc, failedClose) => {
         const { backend, native } = openNativeEditor(entering, doc, failedClose, stored);
         opened.session = native;
         return backend;
-      } : undefined);
+      });
       if (result.ok && opened.session && sharedSession()) {
         nativePeer = createNativeTestPeer(opened.session);
         return result;
       }
-      const parts = sharedSessionParts();
-      if (result.ok && parts) { peer = createSharedTestPeer(parts, entering); return result; }
       if (result.ok) return { ok: false, reason: APP_STOPPED };
       if (detachRefused) {
         const reason = detachRefused;
@@ -180,11 +152,9 @@ function startSharedTestHook(): () => void {
     try { return leaveRunningSharedSession(); } finally { switching = false; }
   };
   const hook = {
-    enter: (options?: EntryOptions) => enter(undefined, options),
-    enterFrom: (state: string | Uint8Array | ArrayBuffer, options?: EntryOptions) => enter(sharedTestBytes(state), options),
+    enter: () => enter(),
+    enterFrom: (state: string | Uint8Array | ArrayBuffer) => enter(sharedTestBytes(state)),
     leave,
-    timing: (on: boolean) => { timingMarks.marksOn = on === true; },
-    peer: sharedTestPeerHook(() => peer),
     nativePeer: {
       type: (beat: string, offset: number, text: string) => nativePeer?.type(beat, offset, text),
       field: (...args: Parameters<NonNullable<typeof nativePeer>["field"]>) => nativePeer?.field(...args),
@@ -200,13 +170,7 @@ function startSharedTestHook(): () => void {
       step: (direction: "undo" | "redo") => nativePeer?.step(direction),
       delete: (beat: string, from: number, to: number) => nativePeer?.delete(beat, from, to)
     },
-    read: () => ({ app: documentReader.read(doc => doc ? JSON.parse(JSON.stringify(doc)) as unknown : null), peer: peer?.read() ?? nativePeer?.read() ?? null }),
-    recovery: () => {
-      const parts = sharedSessionParts();
-      return { app: parts ? projectSharedDocumentWithRecovery(parts.handle).recovery : [], peer: peer?.recovery() ?? [] };
-    },
-    counters: () => ({ ...counts, queued: peer?.queued() ?? 0, abandonable: writing.abandonable() + splitting.abandonable() }),
-    intakeStopped: () => { const parts = sharedSessionParts(); return parts ? sharedIntakeStopped(parts.handle) : false; }
+    read: () => ({ app: documentReader.read(doc => doc ? JSON.parse(JSON.stringify(doc)) as unknown : null), peer: nativePeer?.read() ?? null })
   };
   exposeTestHook("__sharedTest", () => hook, release => { withdraw = release; });
   return () => {

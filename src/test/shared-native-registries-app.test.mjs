@@ -22,7 +22,7 @@ const hook = window.__sharedTest;
 async function enter(t, fields = {}) {
   adoptReplacement(migrateRows({ schema: 2, paragraphsDecided: true, title: "Registries",
     rows: [{ id: "r1", audioText: "Hello", visualText: "Look" }], ...fields }));
-  assert.deepEqual(await hook.enter({ backend: "native" }), { ok: true });
+  assert.deepEqual(await hook.enter(), { ok: true });
   t.after(() => assert.deepEqual(hook.leave(), { ok: true }));
 }
 

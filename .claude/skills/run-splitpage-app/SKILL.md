@@ -531,6 +531,10 @@ node tools/run-suites.mjs ../splitpage-runs/autosave '^18[5-7]-'                
 node tools/run-suites.mjs ../splitpage-runs/one --lanes 1 --timeout 900 '^01-core'
 ```
 
+The test build also writes `_legacy-shared-tests.html` for the retained old
+collaboration suites. Those suites open that page explicitly and use
+`__legacySharedTest`. The standard test page uses native-only `__sharedTest`.
+
 Filter by full filename: numeric prefixes can repeat (`280` names two
 suites). Flags `--lanes` (default 6), `--port-base` (offset for a second
 runner on the same machine), `--timeout` (seconds per suite, default 600, at
@@ -631,7 +635,7 @@ buffered pipeline long after the driver has exited, which looks like a hang.
 | `count <sel>` / `text <sel>` / `sel <sel>` | inspect |
 | `shot <name>` | screenshot to `%TEMP%\splitpage-shots\<name>.png` |
 | `logs` | dump collected console output |
-| `trace start <categories>` / `trace stop <file>` | `driver.mjs` only: records a browser trace (`Tracing.start` with the comma-separated categories, events reported back) until `stop`, which writes the events as one JSON array to `<file>`. One trace at a time. `tools/perf-shared.mjs --trace` uses it |
+| `trace start <categories>` / `trace stop <file>` | `driver.mjs` only: records a browser trace (`Tracing.start` with the comma-separated categories, events reported back) until `stop`, which writes the events as one JSON array to `<file>`. One trace at a time. |
 | `sleep <ms>`, `quit` | |
 
 Selectors are CSS, or `text=Exact Label` / `text*=Contains`. Prefer `text*=`

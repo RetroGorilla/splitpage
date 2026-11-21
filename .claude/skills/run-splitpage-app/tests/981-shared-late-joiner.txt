@@ -1,10 +1,10 @@
-open
+open /_legacy-shared-tests.html
 wait document.querySelectorAll('#rows .row').length > 0
-eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;F.openFile(new File([JSON.stringify({schema:2,title:'Shared late joiner',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello',visualText:'Look'},{id:'r2',audioText:'Gone words',visualText:''},{id:'r3',audioText:'Keep',visualText:''}],comments:[]})],'joiner.splitpage'))
+eval window.F=window.__splitpageFormats;window.S=window.__legacySharedTest;F.openFile(new File([JSON.stringify({schema:2,title:'Shared late joiner',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello',visualText:'Look'},{id:'r2',audioText:'Gone words',visualText:''},{id:'r3',audioText:'Keep',visualText:''}],comments:[]})],'joiner.splitpage'))
 wait F.state().title === 'Shared late joiner'
 eval window.Q=function(id,f){return document.querySelector('#rows .cell-editable[data-id="'+id+'"][data-field="'+f+'"]')};window.A=function(id,f){var r=S.read().app.rows.filter(function(x){return x.id===id})[0];return r?r[f]:null};window.T=function(id,f){return Q(id,f).textContent.replace(/​/g,'')};window.ids=function(w){return S.read()[w].rows.map(function(r){return r.id}).join()};window.same=function(){return JSON.stringify(S.read().app)===JSON.stringify(S.read().peer)};true
 eval window.at=function(id,f,o){var c=Q(id,f);c.focus();var w=document.createTreeWalker(c,4),n,k=o;while((n=w.nextNode())){if(k<=n.data.length){getSelection().setBaseAndExtent(n,k,n,k);return true}k-=n.data.length}getSelection().setBaseAndExtent(c,c.childNodes.length,c,c.childNodes.length);return true};window.kept=function(w){var e=S.peer.recoveryEntries(w);return e&&e.length===1&&e[0].kind==='removed-beat'?[e[0].row.id,e[0].row.audioText].join('|'):JSON.stringify(e)};true
-eval S.enter({backend:'legacy'})
+eval S.enter()
 wait S.read().peer !== null
 eval at('r1','audioText',5);true
 press !

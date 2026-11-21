@@ -1,4 +1,4 @@
-import { bootApp, closeApp } from "./_app-boot.mjs";
+import { bootApp, closeApp } from "./_legacy-shared-app-boot.mjs";
 import { after } from "node:test";
 import assert from "node:assert/strict";
 import { adoptReplacement, sharedSession } from "../bootstrap/wiring/session-owner.ts";
@@ -19,7 +19,7 @@ await bootApp();
 useDesktopForTest({ writeDraft: async payload => ({ ok: true, seq: payload.seq }), discardDraft: async () => ({ ok: true }),
   setDocumentState: () => {}, draftRestoreDone: () => {} });
 after(() => { restoreDesktop(); closeApp(); });
-export const hook = window.__sharedTest, calls = [], errors = [], warningCalls = [];
+export const hook = window.__legacySharedTest, calls = [], errors = [], warningCalls = [];
 const notice = notices.show;
 notices.show = (...args) => { warningCalls.push(args); return notice(...args); };
 after(() => { notices.show = notice; });
@@ -58,7 +58,7 @@ export async function enter(order, mention = false) {
       { id: "r2", audioText: "other", visualText: "other" }
     ] }));
   undoOwner().flush(); writerControls().openWriter();
-  assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
+  assert.deepEqual(await hook.enter(), { ok: true });
   writerControls().closeWriter();
   hook.peer.hold(); hook.peer.type("r2", 0, "P"); hook.peer.type("r2", 1, "Q"); hook.peer.release(order);
   assert.deepEqual(hook.read().app.rows.map(row => row.audioText), [mention ? "@Alice" : "abcdef", "PQother"]);
