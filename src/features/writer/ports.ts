@@ -78,7 +78,6 @@ export interface FlowWriterPorts {
   readonly decode: (html: string) => Run[];
   readonly storedHtml: (html: string) => string;
   readonly moveBeat: (rowId: string, direction: -1 | 1) => Command;
-  readonly insertAdjacentBeat?: { readonly available: () => boolean; readonly run: (rowId: string, side: "above" | "below") => void };
   readonly run: CommonDocumentSession["run"];
   readonly shown: <T>(edit: () => T) => T;
   readonly editingBlocked: () => boolean;

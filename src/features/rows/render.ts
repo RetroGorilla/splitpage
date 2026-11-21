@@ -184,7 +184,6 @@ function rowMenuItemHtml(row: Row, action: string, icon: string, label: string, 
 }
 
 function rowGutterHtml(row: Row): string {
-  const insertAbove = ports.insertAboveAvailable?.();
   const st = (rowStatus(row.status) || ROW_STATUSES[0]) as NonNullable<ReturnType<typeof rowStatus>>;
   const beat = ports.document.numbering().beats[row.id];
   const num = beat?.full ?? "";
@@ -206,8 +205,7 @@ function rowGutterHtml(row: Row): string {
           '<div class="row-menu" role="menu" aria-label="Beat ' + num + '" hidden>' +
             rowMenuItemHtml(row, "move-up", "i-arrow-up", "Move up", "Move this beat up (Alt+Up)") +
             rowMenuItemHtml(row, "move-down", "i-arrow-down", "Move down", "Move this beat down (Alt+Down)") +
-            (insertAbove ? rowMenuItemHtml(row, "insert-above", "i-plus", "↑ Insert beat", "↑ Insert beat") : "") +
-            rowMenuItemHtml(row, "insert-below", "i-plus", insertAbove ? "↓ Insert beat" : "Insert beat", "Insert an empty beat below this one") +
+            rowMenuItemHtml(row, "insert-below", "i-plus", "Insert beat", "Insert an empty beat below this one") +
             rowMenuItemHtml(row, "add-section", "i-plus", "Add Scene Header", "Insert a scene header above this beat") +
             rowMenuItemHtml(row, "delete-row", "i-trash", "Delete", "Delete this beat", true) +
           '</div>' +

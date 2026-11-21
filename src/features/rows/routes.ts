@@ -13,7 +13,7 @@ export interface RowRoutePorts {
   readonly scroll: (clientX: number, clientY: number) => void;
   readonly stopScroll: () => void;
   readonly move: (rowId: string, targetId: string, after: boolean) => void;
-  readonly add: (afterId: string | null, side?: "above" | "below") => void;
+  readonly add: (afterId: string | null) => void;
   readonly moveBy: (rowId: string, dir: -1 | 1) => void;
   readonly toggleMenu: (button: Element, focusFirst: boolean) => void;
   readonly armDelete: (button: Element, rowId: string) => void;
@@ -152,8 +152,6 @@ export function mountRowRoutes(mount: RowRoutesMount): RowRoutes {
       if (up) { ports.moveBy(idOf(up), -1); return true; }
       const down = closest(e, '[data-action="move-down"]');
       if (down) { ports.moveBy(idOf(down), 1); return true; }
-      const above = closest(e, '[data-action="insert-above"]');
-      if (above) { ports.add(idOf(above), "above"); return true; }
       const below = closest(e, '[data-action="insert-below"]');
       if (below) { ports.add(idOf(below)); return true; }
       const del = closest(e, '[data-action="delete-row"]');

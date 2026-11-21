@@ -31,7 +31,6 @@ import { breakUndoGroup, undoOwner } from "./undo.ts";
 import { initializeFlowParagraphs } from "../../application/commands/flow.ts";
 import { sessionStamps, sharedSession, standaloneSession } from "./session-owner.ts";
 import { bindNativeWriterPaint, hasNativeWriterPreview, nativeEditorActive } from "./shared-session.ts";
-import { addRow } from "./rows.ts";
 import { writerFlowCommands } from "./ports/writer-flow.ts";
 import { writerVisualBuffer } from "./ports/writer-visual-buffer.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
@@ -197,7 +196,6 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
             run: edits.run,
             wholeFieldText: writerFieldText,
             moveBeat: swapBeatsCommand,
-            insertAdjacentBeat: { available: nativeEditorActive, run: addRow },
             shown: edit => paintGuard().whileShown(edit),
             editingBlocked: () => paintGuard().painting() || undoGuard().applying() || screenIsStale(),
             text: edits.text,

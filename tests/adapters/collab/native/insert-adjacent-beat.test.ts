@@ -5,6 +5,8 @@ import { addBeatCommand } from "../../../../src/application/commands/rows.ts";
 import { createSessionCapabilities } from "../../../../src/application/session/capabilities.ts";
 import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
 import { sceneForBeat } from "../../../../src/core/document/scenes.ts";
+import { beatPos, caretAt, enterAt } from "../../../../src/core/flow/flow.ts";
+import type { FlowDoc } from "../../../../src/core/flow/flow.ts";
 import { declareNativeRoots } from "../../../../src/adapters/collab/native/roots.ts";
 import { nativeRankBetween } from "../../../../src/adapters/collab/native/rank.ts";
 import { convertedScript } from "./helpers.ts";
@@ -55,11 +57,21 @@ for (const [anchor, side, left, right, index] of [
     const after = writer.document();
     assert.equal(sceneForBeat(after, created)?.id, sceneForBeat(before, anchor)?.id);
     const standalone = migrateRows(structuredClone(before));
-    const command = addBeatCommand(anchor, created, { editor: { name: () => stamp.by }, clock: { nowIso: () => stamp.at } }, undefined, { side });
-    const plan = command.plan(standalone, capability);
-    assert.ok(plan && "apply" in plan && plan.apply);
-    plan.apply(standalone);
-    assert.deepEqual(migrateRows(structuredClone(after)), standalone);
+    if (side === "below") {
+      const command = addBeatCommand(anchor, created, { editor: { name: () => stamp.by }, clock: { nowIso: () => stamp.at } });
+      const plan = command.plan(standalone, capability);
+      assert.ok(plan && "apply" in plan && plan.apply);
+      plan.apply(standalone);
+      assert.deepEqual(migrateRows(structuredClone(after)), standalone);
+    } else {
+      const position = caretAt(beatPos(anchor, 0));
+      const plan = enterAt(standalone as unknown as FlowDoc, position, {
+        cells: text => text ? [{ text, marks: {} }] : [], hasVisual: () => false, newId: () => created
+      });
+      assert.ok(plan && "rows" in plan);
+      assert.deepEqual(migrateRows({ ...standalone, rows: plan.rows.map(row => row.id === created
+        ? { ...row, updatedBy: stamp.by, updatedAt: stamp.at } : row), sections: plan.sections }), migrateRows(structuredClone(after)));
+    }
     const point = (beat: string, offset: number) => ({ target: { beat, cell: "narration" }, offset });
     const undone = commands.undo();
     assert.equal(undone.kind, "written");

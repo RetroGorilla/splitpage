@@ -25,12 +25,12 @@ const UNAVAILABLE = "native-command-unavailable";
 type MoveIntent = Extract<DocumentStructureIntent, { kind: "move-beat" | "swap-beats" }>;
 type InsertIntent = Extract<DocumentStructureIntent, { kind: "insert-beat" }>;
 
-function insertPlacement(doc: SceneDocument, { id, side }: InsertIntent) {
+function insertPlacement(doc: SceneDocument, { id }: InsertIntent) {
   const at = doc.rows.findIndex(row => row.id === id);
   if (at < 0) return null;
   const scene = sceneForBeat(doc, id)?.id ?? null;
-  const next = doc.rows[at + (side === "above" ? -1 : 1)]?.id;
-  const heading = side === "above" ? sceneBeforeBeat(doc, id) : next ? sceneBeforeBeat(doc, next) : undefined;
+  const next = doc.rows[at + 1]?.id;
+  const heading = next ? sceneBeforeBeat(doc, next) : undefined;
   return { scene, neighbour: heading?.id ?? next ?? null, kind: heading ? "heading" : "beat" };
 }
 
@@ -63,7 +63,8 @@ export function createNativeEditorStructure({ native, session, input, publish, r
       const inserting = intent.kind === "insert-beat";
       const shown = moving ? documentReader.read(doc => doc && movePlacement(doc, intent)) : null;
       const shownInsert = inserting ? documentReader.read(doc => doc && insertPlacement(doc, intent)) : null;
-      const captured = moving || inserting ? typing.captureMoveSelection() : null;
+      const menu = inserting && !intent.focus ? typing.takeInsertMenuSelection() : null;
+      const captured = moving || inserting ? menu?.narration ?? typing.captureMoveSelection() : null;
       const admission = owner.admit();
       if (admission?.kind === "failed") throw admission.error;
       if (admission) return admission.notified ? admission : owner.refuse(admission.reason);
@@ -81,12 +82,13 @@ export function createNativeEditorStructure({ native, session, input, publish, r
           const live = insertPlacement(before, intent);
           if (!shownInsert || !live || shownInsert.scene !== live.scene || shownInsert.neighbour !== live.neighbour
             || shownInsert.kind !== live.kind) return owner.refuse(UNAVAILABLE);
-          const selection = intent.cell ? typing.visualSelection(intent.id) : after;
-          step = native.commands.insertAdjacentBeat.withSelection(selection ?? anchor(intent.id, 0, intent.cell), intent.id, intent.side,
+          const selection = menu?.visual ?? (intent.focus === "visual" ? typing.visualSelection(intent.id) : after);
+          after = selection ?? anchor(intent.id, 0, intent.focus);
+          step = native.commands.insertAdjacentBeat.withSelection(after, intent.id, "below",
             { by: sessionStamps.editor.name(), at: sessionStamps.clock.nowIso() });
-          if (step.result.kind === "written") {
+          if (step.result.kind === "written" && intent.focus) {
             landing = step.result.created;
-            after = anchor(landing, 0, intent.cell);
+            after = anchor(landing, 0, intent.focus);
           }
           break;
         }
@@ -144,9 +146,13 @@ export function createNativeEditorStructure({ native, session, input, publish, r
       const changes = changesBetween(before, native.document());
       publish();
       if (landing) {
-        const cell = intent.kind === "insert-beat" ? intent.cell ?? "narration" : "narration";
+        const cell = intent.kind === "insert-beat" ? intent.focus ?? "narration" : "narration";
         const point = { target: { beat: landing, cell }, offset: 0 } as const;
         typing.show({ anchor: point, head: point });
+      } else if (inserting && menu?.visual) {
+        const anchor = native.resolveTextSelection(menu.visual.anchor)?.anchor;
+        const head = native.resolveTextSelection(menu.visual.head)?.head;
+        if (anchor && head) typing.show({ anchor, head });
       } else if (movedSelection?.kind === "ready") {
         typing.show(movedSelection.selection);
       }

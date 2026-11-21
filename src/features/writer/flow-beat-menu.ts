@@ -5,7 +5,6 @@ export interface FlowBeatMenuActions {
   readonly joinBack: (rowId: string) => void;
   readonly joinNext: (rowId: string) => void;
   readonly addVisual: (rowId: string) => void;
-  readonly insertAdjacentBeat?: { readonly available: () => boolean; readonly run: (rowId: string, side: "above" | "below") => void };
 }
 
 export function createFlowBeatMenu(root: HTMLElement, actions: FlowBeatMenuActions) {
@@ -35,13 +34,7 @@ export function createFlowBeatMenu(root: HTMLElement, actions: FlowBeatMenuActio
 
   const back = item("back", "Join Back", "Join with the previous beat (Alt+Backspace)", actions.joinBack);
   const next = item("next", "Join Next", "Join with the next beat", actions.joinNext);
-  const insert = actions.insertAdjacentBeat;
-  const adjacent = insert ? [
-    item("insert-above", "↑ Insert beat", "↑ Insert beat", id => insert.run(id, "above")),
-    item("insert-below", "↓ Insert beat", "Insert an empty beat below this one", id => insert.run(id, "below"))
-  ] : [];
-  for (const button of adjacent) button.remove();
-  const visual = item("visual", "Add Visual", "Edit this beat's visual", actions.addVisual);
+  item("visual", "Add Visual", "Edit this beat's visual", actions.addVisual);
   root.parentElement?.appendChild(menu);
 
   function hide(): void {
@@ -86,8 +79,6 @@ export function createFlowBeatMenu(root: HTMLElement, actions: FlowBeatMenuActio
       const can = actions.canJoin(rowId ?? "");
       back.disabled = !can.back;
       next.disabled = !can.next;
-      if (insert?.available()) visual.before(...adjacent);
-      else for (const button of adjacent) button.remove();
       menu.hidden = false;
       menu.style.left = Math.max(0, Math.min(rect.left, window.innerWidth - menu.offsetWidth)) + "px";
       const below = rect.bottom + menu.offsetHeight <= window.innerHeight;

@@ -37,6 +37,7 @@ interface NativeInputPorts {
 
 const EDITABLE = "#rows .cell-editable, #writer-doc, .wr-flow-visual-text, #doc-title, #writer-title";
 const UNDO_SURFACES = "#rows .cell-editable, #writer-doc, .wr-flow-visual-text";
+const ROW_MENU_BUTTON = '#rows [data-action="row-menu"]';
 const HISTORY = /^history(Undo|Redo)$/;
 const FORMAT_MARKS = new Map<string, NativePlainMark>([
   ["bold", "b"], ["italic", "i"], ["underline", "u"], ["strikeThrough", "s"], ["highlight", "hl"], ["direction", "dir"]
@@ -162,6 +163,7 @@ function formattingMark(event: Event, button: Element | null, key: KeyboardEvent
 
 export function mountNativeSharedInput({ native, session, editAttribution, now = Date.now, report, paintIsCurrent = () => false, publish = () => {} }: NativeInputPorts) {
   let draft: Draft | null = null, stopped: string | null = null, uncertain = false;
+  let insertMenuSelection: ReturnType<typeof captureInsertMenuSelection> | null = null;
   let imeTarget: Element | null = null;
   let compositionRefused = false, fullRefused = false;
   let composingInside: Pick<Draft, "cell" | "selection" | "html"> | null = null;
@@ -746,7 +748,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const removeHeading = heading && joinDirection(event, heading) === -1;
     const joining = narration && joinDirection(event, narration);
     const key = event.type === "keydown" ? event as KeyboardEvent : null;
-    const adding = key?.key === "Enter" && (key.ctrlKey || key.metaKey) && !key.altKey;
+    const adding = key?.key === "Enter" && (key.ctrlKey || key.metaKey) && !!editableText?.closest("#rows");
     const mark = formattingMark(event, button, key);
     const input = event.type === "beforeinput" ? event as InputEvent : null;
     const inputType = input?.inputType;
@@ -759,6 +761,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const splitting = key ? enter && (writer ? !key.altKey && !key.shiftKey : key.altKey) : writer && commandInput && inputType === "insertParagraph";
     if (event.type === "focusout") {
       if (imeTarget === cell) imeTarget = null;
+      const next = (event as FocusEvent).relatedTarget;
+      if (cell && next instanceof Element && next.closest(ROW_MENU_BUTTON)) {
+        insertMenuSelection = captureInsertMenuSelection(cell) ?? insertMenuSelection;
+      }
       const buffered = draft;
       if (buffered && cell && (buffered.cell === cell || cell.contains(buffered.cell))) {
         queueMicrotask(() => { if (draft === buffered) settleBlur(buffered); });
@@ -768,9 +774,13 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (event.type === "pointerdown") {
       imeTarget = null;
       if (!draft?.composing && !stopped) finish();
+      if (target?.closest(ROW_MENU_BUTTON)) insertMenuSelection = captureInsertMenuSelection();
+      else if (!target?.closest("#rows .row-menu")) insertMenuSelection = null;
       return;
     }
     if (event.type === "click") {
+      if (target?.closest(ROW_MENU_BUTTON)) insertMenuSelection = captureInsertMenuSelection() ?? insertMenuSelection;
+      else if (!target?.closest("#rows .row-menu")) insertMenuSelection = null;
       if (!button) return;
     } else if (!cell && !(event.type === "drop" && target?.closest("#rows .visual-cell"))) return;
     if (key) {
@@ -857,9 +867,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (adding && editableText) {
         const id = editableText.getAttribute("data-id");
         if (id) {
-          const outcome = session.run(addBeatCommand(id, randomIds.id("r"), sessionStamps, undefined, {
-            side: key.shiftKey ? "above" : "below", ...visual ? { cell: "visual" } : {}
-          }));
+          const command = addBeatCommand(id, randomIds.id("r"), sessionStamps);
+          const outcome = session.run({ ...command, structure: { kind: "insert-beat", id, focus: visual ? "visual" : "narration" } });
           if (outcome.kind === "failed") report(outcome.error);
         }
         return;
@@ -965,8 +974,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     return PENDING;
   }
 
-  function visualSelection(beat: string) {
-    const active = document.activeElement, cell = active && visualTextSurface.cellAt(active);
+  function visualSelection(beat: string, active = document.activeElement) {
+    const cell = active && visualTextSurface.cellAt(active);
     if (cell?.getAttribute("data-id") !== beat) return null;
     const selection = readSelection(cell, document.getSelection());
     if (!selection) return null;
@@ -987,8 +996,20 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     return point && { row, range: caretAnchor(point.beat, point.offset) };
   }
 
-  function captureMoveSelection() {
-    const active = document.activeElement;
+  function captureInsertMenuSelection(active = document.activeElement) {
+    if (!active?.closest("#rows .cell-editable")) return null;
+    const narration = captureMoveSelection(active);
+    const visual = visualSelection(active.getAttribute("data-id") ?? "", active);
+    return narration || visual ? { narration, visual } : null;
+  }
+
+  function takeInsertMenuSelection() {
+    const selection = insertMenuSelection;
+    insertMenuSelection = null;
+    return selection;
+  }
+
+  function captureMoveSelection(active = document.activeElement) {
     if (!active) return null;
     const live = document.getSelection(), cells = writerSelectionCells(active, live);
     if (cells && cells.anchor !== cells.head && live?.anchorNode && live.focusNode) {
@@ -1078,6 +1099,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     refuseCommand,
     currentCaret,
     visualSelection,
+    takeInsertMenuSelection,
     bindWriterPaint,
     clearMovePaint,
     captureMoveSelection,
