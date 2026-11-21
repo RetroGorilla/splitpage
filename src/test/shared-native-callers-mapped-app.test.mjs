@@ -1,7 +1,6 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { trackGlobalListeners } from "./_global-listener-inventory.mjs";
-import { splitRowFieldCore } from "../bootstrap/wiring/rows.ts";
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import { applyNativePeerUpdate } from "../adapters/collab/native/peer-update.ts";
 import { openNativeSession } from "../adapters/collab/native/session.ts";
@@ -115,9 +114,9 @@ function selectionSnapshot(node) {
   return [node.innerHTML, document.activeElement, anchorNode, anchorOffset, focusNode, focusOffset];
 }
 
-async function enter(t, { rows = source, people = [], sections = [], view = "Split" } = {}) {
+async function enter(t, { rows = source, people = [], sections = [], wordsPerMinute, targetSeconds, view = "Split" } = {}) {
   const fixture = entrySwitchFixture();
-  const doc = migrateRows({ schema: 2, title: "Shared callers", paragraphsDecided: true, people, sections, rows });
+  const doc = migrateRows({ schema: 2, title: "Shared callers", paragraphsDecided: true, people, sections, wordsPerMinute, targetSeconds, rows });
   adoptReplacement(doc);
   const show = t.mock.method(notices, "show", () => {});
   const ports = { ...fixture.ports, commandRefused: sharedCommandRefusalNotice(notices) };
@@ -156,7 +155,7 @@ async function enter(t, { rows = source, people = [], sections = [], view = "Spl
   });
   const peer = openCopy(t, native.encodeState());
   if (view === "Writer") writer.openWriter();
-  return { native, peer, cell, place, root, writer, beforeListeners, notices: () => show.mock.calls.map(call => call.arguments) };
+  return { native, peer, cell, place, root, writer, beforeListeners, errors: fixture.errors, notices: () => show.mock.calls.map(call => call.arguments) };
 }
 
 function agree(f, expected) {
@@ -227,9 +226,9 @@ const boundaries = [
 const insertion = { name: "insertion inside cXd", erase: [], peer: "abcZdef", cut: ["ab", "ef"] };
 
 for (const order of ["local-first", "remote-first"]) for (const boundary of [insertion, ...boundaries]) {
-  for (const caller of boundary === insertion ? ["Alt+Enter"] : ["Alt+Enter", "split core", "Ctrl+Enter"]) {
+  for (const caller of boundary === insertion ? ["Alt+Enter"] : ["Alt+Enter", "Ctrl+Enter"]) {
     test(`Split boundary mapping: ${caller}, ${boundary.name}, ${order}`, async t => {
-      const f = await enter(t, { rows: boundaryRows, sections: boundarySections });
+      const f = await enter(t, { rows: boundaryRows, sections: boundarySections, wordsPerMinute: 150, targetSeconds: null });
       const shape = doc => ({
         ...doc,
         rows: doc.rows.map(row => {
@@ -239,7 +238,10 @@ for (const order of ["local-first", "remote-first"]) for (const boundary of [ins
           return fields;
         })
       });
-      const original = shape(app());
+      const initial = structuredClone(app());
+      const original = shape(initial);
+      assert.equal(original.wordsPerMinute, 150);
+      assert.equal(original.targetSeconds ?? null, null);
       assert.deepEqual(original.sections, boundarySections);
       const expected = (audioText, inserted = []) => ({
         ...original, rows: [{ ...original.rows[0], audioText }, ...inserted, ...original.rows.slice(1)]
@@ -252,7 +254,9 @@ for (const order of ["local-first", "remote-first"]) for (const boundary of [ins
           send(f.peer, f.native);
           send(f.native, f.peer);
         }
-        assert.deepEqual(shape(app()), shape(doc));
+        assert.deepEqual(shape(app()), doc);
+        assert.deepEqual(app().rows.slice(-2), initial.rows.slice(-2));
+        assert.deepEqual(f.errors, []);
         assert.deepEqual(f.native.document(), app());
         assert.deepEqual(f.peer.document(), app());
         const reader = openNativeSession({ kind: "state", state: f.native.encodeState() }, { actor: "Reader", sanitize: sanitizeHtml });
@@ -271,27 +275,6 @@ for (const order of ["local-first", "remote-first"]) for (const boundary of [ins
       assert.deepEqual(shape(app()), original);
       assert.equal(text(f.cell()), inside ? "abcXdef" : "abcdefX");
       const blank = caller === "Ctrl+Enter";
-      if (caller === "split core") {
-        const bytes = f.native.encodeState(), selection = selectionSnapshot(f.cell());
-        assert.equal(splitRowFieldCore(f.cell()), null);
-        assert.deepEqual(f.native.encodeState(), bytes);
-        assert.deepEqual(selectionSnapshot(f.cell()), selection);
-        assert.deepEqual(shape(app()), original);
-        assert.equal(text(f.cell()), "abcdefX");
-        assert.deepEqual(f.notices(), [warning]);
-        flush();
-        const typed = expected(boundary.peer + "X");
-        agreeAtStep(typed);
-        history(f.cell("r3"));
-        agreeAtStep(remote);
-        history(f.cell("r3"), true);
-        agreeAtStep(typed);
-        assert.deepEqual(f.notices(), [warning]);
-        land(f, audio(typed));
-        assert.deepEqual(shape(app()), { ...typed, docId: app().docId });
-        assert.deepEqual(listeners(), f.beforeListeners);
-        return;
-      }
       assert.equal(key(f.cell(), "Enter", blank ? { ctrlKey: true } : { altKey: true }), true);
       const id = app().rows[1].id;
       assert.match(id, new RegExp("^r" + f.native.ydoc.clientID.toString(36) + "-[0-9a-z]+$"));
@@ -299,19 +282,22 @@ for (const order of ["local-first", "remote-first"]) for (const boundary of [ins
       const typed = expected(inside ? "abcZXdef" : boundary.peer + "X");
       const [first, second] = blank ? [boundary.peer + "X", ""] : boundary.cut;
       const newRow = migrateRows({ rows: [{ id, audioText: second }] }).rows[0];
-      const split = expected(first, [newRow]);
+      const split = shape(expected(first, [newRow]));
       agreeAtStep(split);
       history(f.cell("r3"));
       agreeAtStep(typed);
       history(f.cell("r3"));
+      agreeAtStep(remote);
+      assert.deepEqual(f.native.commands.undo(), { kind: "unchanged" });
       agreeAtStep(remote);
       history(f.cell("r3"), true);
       agreeAtStep(typed);
       history(f.cell("r3"), true);
       agreeAtStep(split);
       assert.deepEqual(f.notices(), []);
+      const sharedDocument = structuredClone(f.native.document());
       land(f, audio(split));
-      assert.deepEqual(shape(app()), { ...shape(split), docId: app().docId });
+      assert.deepEqual(app(), migrateRows({ ...sharedDocument, docId: app().docId }));
       assert.deepEqual(listeners(), f.beforeListeners);
     });
   }
