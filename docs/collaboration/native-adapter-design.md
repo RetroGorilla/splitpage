@@ -34,7 +34,7 @@ selection cannot be restored, there is no caret and typing waits until the perso
 | --- | --- | --- |
 | Script title | Split and Writer refuse title changes. | [#1665](https://github.com/RetroGorilla/splitpage/pull/1665) |
 | Split add bar | The unanchored add bar refuses to add a beat. | [#1665](https://github.com/RetroGorilla/splitpage/pull/1665), [#1686](https://github.com/RetroGorilla/splitpage/pull/1686) |
-| Empty Writer | Writer has no binding for the session's first-beat command. | [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
+| Empty Writer | Writer has no first-beat input. Legacy shared Writer showed one and discarded its unfinished composition on app stop. Native stop lands the empty script as an unsaved copy and schedules its recovery draft. | [#1684](https://github.com/RetroGorilla/splitpage/pull/1684), [native app stop test](../../src/test/shared-native-routes-lifecycle-app.test.mjs) |
 | Joined row removal | A joined row keeps its member beats. The row's Remove acts on its visible head. | [#1682](https://github.com/RetroGorilla/splitpage/pull/1682) |
 | Split Remove with an unseen peer change | The first click arms Remove while buffered typing and the held peer change can remain out of the projection. Confirmation settles the typing and then removes the intended beat. If a peer join hid that beat, confirmation clears the arm and warns once. | [Native caller tests](../../src/test/shared-native-callers-mapped-app.test.mjs) |
 | Moving past a heading | Scene headings have their own positions in the ranked outline. Moving a beat across a heading can change which beat follows that heading. | [#1682](https://github.com/RetroGorilla/splitpage/pull/1682) |
