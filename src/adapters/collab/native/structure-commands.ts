@@ -153,14 +153,13 @@ export function deleteAndSplitNativeRow(script: NativeScript, selection: NativeT
   if (unavailable) return refused(unavailable);
   return transactPreparedNativeCommand(script,
     () => nativeRangeSnapshot(copyNativeCompoundInput(selection) as NativeTextRange), checked => {
-      if (script.closed() || script.reader.isClosed()) return refused("closed");
       if (!checked?.to || checked.target.cell !== "narration") return refused("range");
       if (!beatId(checked.target.beat)) return refused("missing");
       const live = nativeLiveRange(script, checked);
       if (typeof live === "string") return refused(live);
       if (!live.pieces.some(piece => piece.until > piece.from)) return UNCHANGED;
       return writeSplit(script, checked.target.beat, live, true);
-    }, refused, () => true);
+    }, refused, () => true, true);
 }
 
 function sameJoin(stored: unknown, value: NativeJoinValue): boolean {

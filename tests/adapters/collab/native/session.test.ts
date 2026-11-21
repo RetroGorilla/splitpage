@@ -518,6 +518,32 @@ test("close during a command delivers the committed document before retiring und
   assert.equal(reopened.document().rows[0]?.audioText, "xa");
 });
 
+test("all compound writes finish and publish before a close requested at transaction start", async t => {
+  const first = fromDocument({}), split = fromDocument({ A: "abc" }), replace = fromDocument({ A: "abc" });
+  const selection = anchor(split, 1, 2);
+  for (const [session, run, expected] of [
+    [first, () => first.commands.createFirstBeat("first"), ["first"]],
+    [split, () => split.commands.deleteAndSplit(selection), ["a", "c"]],
+    [replace, () => replace.commands.replaceAll([{ row: "A", cell: "narration", start: 1, end: 2 }], "x"), ["axc"]]
+  ] as const) {
+    t.after(session.close);
+    const changes: NativeSessionChange[] = [], seen: string[][] = [];
+    session.subscribe(change => {
+      changes.push(change);
+      if (change.kind === "changed") seen.push(session.document().rows.map(row => row.audioText ?? ""));
+    });
+    session.ydoc.once("beforeTransaction", session.close);
+    written(run());
+    assert.deepEqual(changes, []);
+    await Promise.resolve();
+    assert.deepEqual(changes.map(change => change.kind), ["changed", "closed"]);
+    assert.deepEqual(seen, [expected]);
+    const reopened = open({ kind: "state", state: closedState(changes, "requested") });
+    t.after(reopened.close);
+    assert.deepEqual(reopened.document().rows.map(row => row.audioText ?? ""), expected);
+  }
+});
+
 test("a subscriber closing on changed and the other subscribers all receive closed", async t => {
   const session = fromDocument(), doc = session.ydoc;
   t.after(session.close);

@@ -520,7 +520,6 @@ export function replaceAllNativeText(script: NativeScript, ranges: readonly Nati
     ranges: readReplaceAllRanges(ranges),
     runs: typeof replacement === "string" ? prepareNativeRuns(replacement ? [{ text: replacement, marks: {} }] : []) : null
   }), ({ ranges, runs }) => {
-    if (script.closed() || script.reader.isClosed()) return refuseReplaceAll("closed");
     if (!runs) return refuseReplaceAll("text");
     if (!ranges) return refuseReplaceAll("range");
     const plans = planReplaceAll(script, ranges, runs.length > 0);
@@ -532,5 +531,5 @@ export function replaceAllNativeText(script: NativeScript, ranges: readonly Nati
       changed ||= end > from || until > from;
     }
     return changed ? WRITTEN : UNCHANGED;
-  }, refuseReplaceAll, ({ ranges, runs }) => !!ranges?.length && !!runs?.length);
+  }, refuseReplaceAll, ({ ranges, runs }) => !!ranges?.length && !!runs?.length, true);
 }
