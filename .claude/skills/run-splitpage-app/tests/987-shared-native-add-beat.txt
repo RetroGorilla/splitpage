@@ -15,8 +15,9 @@ expect splitAt('r2',2) && S.read().app.sections[0].firstSceneId==='r2'
 key ctrl KeyY
 wait order() === 'r1,'+above+',r2,r3,r4' && agree()
 expect splitAt(above,0)
-click #rows .row-more[data-id="r3"]
-click #rows .row-menu:not([hidden]) [data-action="insert-below"][data-id="r3"]
+jsclick #rows .row-more[data-id="r3"]
+expect !!document.querySelector('#rows .row-menu:not([hidden]) [data-action="insert-below"][data-id="r3"]')
+jsclick #rows .row-menu:not([hidden]) [data-action="insert-below"][data-id="r3"]
 wait rows().length === 6 && agree()
 eval window.below=rows()[4].id;true
 expect order() === 'r1,'+above+',r2,r3,'+below+',r4' && S.read().app.sections[1].firstSceneId==='r4' && blank(below) && splitAt(below,0)
