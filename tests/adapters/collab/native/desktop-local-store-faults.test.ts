@@ -166,6 +166,44 @@ test("an append waits for a failed rotation directory sync even when the rotated
   await expectCopy(fixture, name, 4, "ABCstart");
 });
 
+if (process.platform === "win32") {
+  for (const file of ["checkpoint", "updates"]) {
+    for (const point of ["before", "after"]) {
+      test(`Windows ${file} flush failure ${point} sync preserves acknowledged edits`, async t => {
+        const fixture = await desktopFixture(t), updates = commands(t), name = "windows-rename";
+        const filePath = logAt(fixture.directory, name);
+        const writer = await claim(fixture.first.invoke, name);
+        assert.deepEqual(await writer.write(1, updates.initial, true), STORED);
+        assert.deepEqual(await writer.write(2, updates.a), STORED);
+        assert.deepEqual(await writer.write(3, updates.b), STORED);
+        const originalLog = await readFile(filePath);
+        let reached = false;
+        fixture.intercept(`${file}:sync`, async perform => {
+          reached = true;
+          if (point === "after") await perform();
+          throw new Error("injected renamed file sync failure");
+        });
+        assert.deepEqual(await writer.write(2, updates.throughA, true), { kind: "failed", reason: "io" });
+        assert.equal(reached, true);
+        if (file === "checkpoint") assert.deepEqual(await readFile(filePath), originalLog);
+        assert.deepEqual(await writer.close(), STORED);
+        await expectCopy(fixture, name, 3, "ABstart");
+      });
+    }
+  }
+
+  test("Windows acknowledges a newly created log only after its file entry is flushed", async t => {
+    const fixture = await desktopFixture(t), updates = commands(t), name = "windows-create";
+    const writer = await claim(fixture.first.invoke, name);
+    fixture.intercept("updates:sync", async () => { throw new Error("injected new log sync failure"); });
+    assert.deepEqual(await writer.write(1, updates.initial), { kind: "failed", reason: "io" });
+    assert.equal((await readFile(logAt(fixture.directory, name))).length, 0);
+    assert.deepEqual(await writer.write(1, updates.initial), STORED);
+    assert.deepEqual(await writer.close(), STORED);
+    await expectCopy(fixture, name, 1, "start");
+  });
+}
+
 for (const form of ["short header", "short payload"] as const) {
   test(`a torn tail with a ${form} is discarded and the next append survives`, async t => {
     const fixture = await desktopFixture(t), updates = commands(t), name = "torn";

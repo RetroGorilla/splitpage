@@ -86,6 +86,14 @@ function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSyste
     await disk.rename(temp, file);
   }
 
+  async function syncEntry(file: string, dir: string): Promise<void> {
+    if (process.platform === "win32") {
+      const handle = await disk.open(file, "r+");
+      await useFile(handle, () => handle.sync());
+    }
+    await disk.syncDirectory(dir);
+  }
+
   async function open(name: string) {
     const dir = directory(name);
     const snapshot = join(dir, "checkpoint"), log = join(dir, "updates");
@@ -134,7 +142,7 @@ function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSyste
 
     async function syncLogEntry(): Promise<void> {
       if (!logEntryNeedsSync) return;
-      await disk.syncDirectory(dir);
+      await syncEntry(log, dir);
       logEntryNeedsSync = false;
     }
 
@@ -149,8 +157,8 @@ function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSyste
         await useFile(handle, async () => {
           await handle.writeFile(record);
           await handle.sync();
-          await syncLogEntry();
         });
+        await syncLogEntry();
       } catch (error) {
         await repairLog().catch(() => {});
         throw error;
@@ -163,7 +171,7 @@ function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSyste
     async function compact(entry: NativeReplicaEntry): Promise<void> {
       // why: the original log must cover the checkpoint until its rename is durable
       await replace(snapshot, pack(entry));
-      await disk.syncDirectory(dir);
+      await syncEntry(snapshot, dir);
       checkpoint = entry;
       tail = tail.filter(item => item.generation > entry.generation);
       const keep = Buffer.concat(tail.map(pack));
