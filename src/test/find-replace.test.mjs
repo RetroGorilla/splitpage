@@ -152,6 +152,8 @@ test("replace: a cell holding a pasted picture keeps it (the model has no place 
   assert.equal(res.html, sanitizeHtml("hello " + img + " <strong>earth</strong> earth"));
   const res2 = replace(sanitizeHtml(img + "bo<strong>ld</strong>!"), "bold", "X");
   assert.equal(res2.html, sanitizeHtml(img + "X!"));
+  const startsBold = replace(sanitizeHtml(img + " <strong>bo</strong>ld!"), "bold", "X");
+  assert.equal(startsBold.html, sanitizeHtml(img + " X!"));
 });
 
 test("replace: every stored cell, every match, comes out as the model says", () => {

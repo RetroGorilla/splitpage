@@ -1,9 +1,10 @@
 import * as Y from "yjs";
-import { OBJ } from "../../../core/text/runs.ts";
+import { firstReplacementMarks, replacementInsert } from "../../../core/text/edits.ts";
+import { isCueRun, OBJ } from "../../../core/text/runs.ts";
 import type { Marks, Run } from "../../../core/text/runs.ts";
 import { copyNativeCompoundInput, copyNativeDenseList } from "./compound-input.ts";
-import { nativeCellView, nativeLeftAt, nativeStoredOffset, prepareNativeRuns, writeNativeRuns } from "./inline.ts";
-import type { NativeCellView, NativeDeltaItem } from "./inline.ts";
+import { nativeCellView, nativeLeftAt, nativeStoredOffset, nativeTextAllowed, prepareNativeRuns, writeNativeRuns } from "./inline.ts";
+import type { NativeCellView, NativeDeltaItem, NativeLeft, NativePreparedRun } from "./inline.ts";
 import { nativeSegmentSpans } from "./reader.ts";
 import { throwNativeFailures, transactPreparedNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
@@ -154,7 +155,7 @@ function shownPosition(cells: readonly LiveCell[], offset: number, name: boolean
     const size = view?.length ?? cell.end - cell.start;
     if (offset > size) { offset -= size; continue; }
     if (splitsPair(view?.text ?? storedText(cell.items), offset)) return null;
-    return { text: cell.text, index: cell.start + (view ? nativeStoredOffset(view, offset) : offset), part };
+    return { text: cell.text, index: cell.start + (view ? nativeStoredOffset(view, offset) : offset), part, offset, cell, view };
   }
   return null;
 }
@@ -518,27 +519,67 @@ function readReplaceAllRanges(ranges: readonly NativeReplaceAllRange[]): NativeR
 interface ReplacePiece {
   readonly from: number;
   readonly until: number;
-  readonly insert: boolean;
+  readonly runs: readonly NativePreparedRun[];
+  readonly left: NativeLeft | null;
 }
 
-function planReplaceAll(script: NativeScript, ranges: readonly NativeReplaceAllRange[], inserting: boolean) {
+interface ReplacementRunEnd {
+  readonly run: Run;
+  readonly end: number;
+}
+
+interface ReplaceCell {
+  readonly cells: LiveCell[];
+  readonly cueSource: readonly Run[] | null;
+}
+
+function planReplaceAll(script: NativeScript, ranges: readonly NativeReplaceAllRange[], replacement: string) {
   const plans = new Map<Y.Text, ReplacePiece[]>(), segments: ParsedTextSegments = new Map();
-  const cellsOf = { narration: new Map<string, LiveCell[]>(), visual: new Map<string, LiveCell[]>() };
-  const views = new Map<LiveCell, NativeCellView>();
+  const cellsOf = { narration: new Map<string, ReplaceCell>(), visual: new Map<string, ReplaceCell>() };
+  const views = new Map<LiveCell, NativeCellView>(), runEnds = new Map<NativeCellView, ReplacementRunEnd[]>();
   for (const { row, cell, start, end } of ranges) {
     const cache = cellsOf[cell];
-    let cells = cache.get(row);
-    if (!cells) {
-      cells = liveCells(script, { beat: row, cell }, segments);
+    let source = cache.get(row);
+    if (!source) {
+      const cells = liveCells(script, { beat: row, cell }, segments);
       if (!cells.length) return "missing";
-      cache.set(row, cells);
+      const cellViews = cells.map(cell => {
+        const view = nativeCellView(cell.items);
+        views.set(cell, view);
+        return view;
+      });
+      const cueSource = replacement && cellViews.some(view => view.runs.some(isCueRun))
+        ? cellViews.flatMap(view => view.runs) : null;
+      source = { cells, cueSource };
+      cache.set(row, source);
     }
+    const { cells, cueSource } = source;
     const first = shownPosition(cells, start, false, views);
     const last = start === end ? first : shownPosition(cells, end, false, views);
-    if (!first || !last) return "range";
+    if (!first?.view || !last) return "range";
+    const view = first.view;
+    let runs: readonly NativePreparedRun[] = [];
+    if (replacement) {
+      let insert: readonly Run[];
+      if (cueSource && start < end) {
+        insert = replacementInsert(cueSource, start, end, replacement).runs;
+      } else {
+        const startsHere = first.offset < view.length;
+        const startingView = startsHere ? view : cells.slice(first.part + 1, last.part + 1)
+          .map(cell => views.get(cell)).find(cell => cell && cell.length > 0);
+        const firstRun = start === end || !startingView ? undefined
+          : replacementRunAt(startingView, startsHere ? first.offset : 0, runEnds);
+        insert = [{ text: replacement, marks: firstReplacementMarks(firstRun) ?? {} }];
+      }
+      const prepared = prepareNativeRuns(insert);
+      if (!prepared) return "text";
+      runs = prepared;
+    }
     for (const [index, { text, from, until }] of livePieces(cells, first.part, last.part, first.index, last.index).entries()) {
       if (from === until && index > 0) continue;
-      const piece = { from, until, insert: inserting && index === 0 }, list = plans.get(text);
+      const piece = { from, until, runs: index === 0 ? runs : [],
+        left: index === 0 && runs.length ? nativeLeftAt(view, from - first.cell.start) : null };
+      const list = plans.get(text);
       if (list) list.push(piece); else plans.set(text, [piece]);
     }
   }
@@ -552,23 +593,38 @@ function planReplaceAll(script: NativeScript, ranges: readonly NativeReplaceAllR
   return plans;
 }
 
+function replacementRunAt(view: NativeCellView, offset: number, runEnds: Map<NativeCellView, ReplacementRunEnd[]>): Run | undefined {
+  let ends = runEnds.get(view);
+  if (!ends) {
+    let end = 0;
+    ends = view.runs.map(run => ({ run, end: end += run.atom ? 1 : run.text.length }));
+    runEnds.set(view, ends);
+  }
+  let low = 0, high = ends.length;
+  while (low < high) {
+    const middle = (low + high) >> 1;
+    if (offset < (ends[middle]?.end ?? 0)) high = middle; else low = middle + 1;
+  }
+  return ends[low]?.run;
+}
+
 export function replaceAllNativeText(script: NativeScript, ranges: readonly NativeReplaceAllRange[], replacement: string): ReplaceAllOutcome {
   const unavailable = nativeAvailability(script);
   if (unavailable) return refuseReplaceAll(unavailable);
   return transactPreparedNativeCommand(script, () => ({
     ranges: readReplaceAllRanges(ranges),
-    runs: typeof replacement === "string" ? prepareNativeRuns(replacement ? [{ text: replacement, marks: {} }] : []) : null
-  }), ({ ranges, runs }) => {
-    if (!runs) return refuseReplaceAll("text");
+    validText: typeof replacement === "string" && (replacement === "" || nativeTextAllowed(replacement))
+  }), ({ ranges, validText }) => {
+    if (!validText) return refuseReplaceAll("text");
     if (!ranges) return refuseReplaceAll("range");
-    const plans = planReplaceAll(script, ranges, runs.length > 0);
+    const plans = planReplaceAll(script, ranges, replacement);
     if (typeof plans === "string") return refuseReplaceAll(plans);
     let changed = false;
-    for (const [text, pieces] of plans) for (const { from, until, insert } of pieces) {
-      const end = insert ? writeNativeRuns(script.doc, text, from, runs, null) : from;
+    for (const [text, pieces] of plans) for (const { from, until, runs, left } of pieces) {
+      const end = writeNativeRuns(script.doc, text, from, runs, left);
       if (until > from) text.delete(end, until - from);
       changed ||= end > from || until > from;
     }
     return changed ? WRITTEN : UNCHANGED;
-  }, refuseReplaceAll, ({ ranges, runs }) => !!ranges?.length && !!runs?.length, true);
+  }, refuseReplaceAll, ({ ranges, validText }) => !!ranges?.length && validText && !!replacement, true);
 }

@@ -24,6 +24,10 @@ native session. The [slice 8 app test mapping](slice-8-test-mapping.md) records 
 which still run through direct old wiring or the isolated legacy test fixture. The old adapter and its dedicated tests
 remain for the rest of [slice 8](#11-build-order). There is no release entry for shared mode.
 
+A successful native switch restores a Writer or Split selection only when focus stayed in that editor and the
+touched beats, joined narration members and headings keep their identities, order and text. If a captured
+selection cannot be restored, there is no caret and typing waits until the person places one.
+
 ## Known differences from standalone editing
 
 | Area | What a person sees in the native shared editor | Source |
@@ -45,8 +49,6 @@ remain for the rest of [slice 8](#11-build-order). There is no release entry for
 | Writer Markdown in a joined row | Enter on a pending heading leaves the text and caret in place and warns once for the unchanged candidate. | [#1687](https://github.com/RetroGorilla/splitpage/pull/1687) |
 | Concurrent Writer Markdown conversion | Two conversions of the same line can leave two stored headings and one visible title. Text that survives only in the other title is hidden. This can be the suffix after the earlier Enter position, or letters one writer added before converting. | [#1687](https://github.com/RetroGorilla/splitpage/pull/1687) |
 | Cross-beat text | A text edit or format range must address one native cell. Writer edits across beats and narration edits across joined members are refused. A draft that has already been previewed can stay on screen with input stopped, while the shared text remains unchanged. | [#1675](https://github.com/RetroGorilla/splitpage/pull/1675), [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
-| Deleting joined narration | In Writer and Split, deleting across two joined members or deleting their synthetic join space can leave the attempted deletion visible with the caret at its start. The editor warns and stops input. Both copies keep the original text, there is no undo step for the preview, and Leave refuses while it is pending. | [Native app tests](../../src/test/shared-native-measure-undo-mapped-app.test.mjs) |
-| Bold across beats | Writer refuses Ctrl+B on a selection spanning two separate beats. It warns once and leaves the text and selection in place. History has no formatting step to replay in Writer or after switching to Split. | [Native app tests](../../src/test/shared-native-measure-undo-mapped-app.test.mjs) |
 | Joined Visual | A write to assembled Visual text is refused if it cannot be addressed in one native cell. | [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
 | Visual split | The Split Visual split gesture is refused. The anchored shortcut for inserting a blank beat works in Visual. | [#1684](https://github.com/RetroGorilla/splitpage/pull/1684), [#1686](https://github.com/RetroGorilla/splitpage/pull/1686) |
 | Formatting at a caret | A collapsed format toggle is refused. Plain inline formatting can be applied to an addressable selection. | [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
@@ -64,10 +66,9 @@ remain for the rest of [slice 8](#11-build-order). There is no release entry for
 | Find in Writer headings | A heading match can be replaced singly. A Replace all batch containing a heading match is refused. | [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
 | Find after a peer edit | Replacement requires the original matched characters. A peer's replacement with identical spelling still invalidates the match. Single Replace refuses it and Replace all skips it. | [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
 | Find after a peer prefix | If a peer types before a Find match and its letters survive, Split replaces that match on the first click without a warning. Undo keeps the peer's prefix. The old shared editor warned and required a second click. | [Native app tests](../../src/test/shared-native-measure-undo-mapped-app.test.mjs) |
-| Find replacement marks | Replace all inserts unmarked text. For example replacing every `cup` with `mug` in `<em>cupcup</em>` gives `mugmug`. Standalone keeps the emphasis. Single Replace inherits marks in both. | [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
+| Find in a Split cell with inline media | Both native Replace commands use the first matched character's marks. Standalone Split uses a DOM range in a cell with inline media, which can drop bold from a match that starts bold and ends plain. | [Standalone Find tests](../../src/test/find-replace.test.mjs), [native Replace all tests](../../tests/adapters/collab/native/replace-all.test.ts) |
 | Undo selection after a peer change | Undo and redo resolve each saved endpoint against the live members. After a peer split a surviving endpoint can land in the new beat. If either endpoint no longer resolves, the command returns no selection to replay. | [#1671](https://github.com/RetroGorilla/splitpage/pull/1671), [#1677](https://github.com/RetroGorilla/splitpage/pull/1677) |
 | Deletion undo | Consecutive same-direction deletions at one caret in one cell can share an undo step within a rolling second. In the Split comparisons, Backspace then Delete, a caret move between deletions, and a selection deletion then Backspace take two native steps each. Backspace, typing, then Delete and deletions around Find Replace take three each. Each sequence takes one step in standalone. | [#1685](https://github.com/RetroGorilla/splitpage/pull/1685) |
-| Typing before forward Delete | After typing `Z` after `a` in `abcd` and pressing Delete twice, the first undo restores `bc` and puts the caret before `b`. The next undo removes `Z`. Redo puts back `Z` and then deletes `bc`. | [Native app tests](../../src/test/shared-native-measure-undo-mapped-app.test.mjs) |
 | Undo of a text replacement | Replacing selected `bc` in `abcd` with `Z` restores the original `bc` selection on undo, including with Ctrl+Z in the focused Split cell. The old shared editor collapsed the caret at the selection end. Redo places the caret after `Z`. | [Native app tests](../../src/test/shared-native-measure-undo-mapped-app.test.mjs) |
 | Typing after a buffered deletion | Typing immediately after a buffered deletion starts its own undo step. | [#1685](https://github.com/RetroGorilla/splitpage/pull/1685) |
 | Peer insertion during Delete | A peer insertion at offset zero during a forward Delete run can break the run. | [#1685](https://github.com/RetroGorilla/splitpage/pull/1685) |
@@ -256,7 +257,7 @@ Each command is one transaction.
 | Command | Writes |
 | --- | --- |
 | Type, paste | `insert` with an explicit attributes object, before any delete |
-| Replace all | Resolve and validate all narration and visual ranges together. In each Yjs text, replace from the highest stored offset down using the single replacement's unmarked insertion, before deleting the matched units |
+| Replace all | Resolve and validate all narration and visual ranges together. In each Yjs text, replace from the highest stored offset down. Like single Replace, each insertion uses the first matched character's marks, normalizes audio cues through core, and writes explicit Yjs attributes before deleting the matched units |
 | Bold and other plain kinds | `format` with the plain key, `true` or `null` |
 | Tag, untag | A fresh application key; untag sets `null` on the keys seen. No re-keying |
 | Split | Boundary, record copying the parent's rank, visual cell. Never narration |
@@ -284,6 +285,10 @@ once, and every copy adopts that conversion (appendix B). Conversion writes each
 not the segment text: the prototype import does the latter, so its headings read blank (E15).
 
 **Stale selections.** A selection holds Yjs relative positions and, when it is not collapsed, the state its copy had seen; a caret holds no state vector ([format-commands.test.ts](../../tests/adapters/collab/native/format-commands.test.ts), "closing round, item 2"). A selection that still holds a letter of its own covers what a peer typed into it ([format-commands.test.ts](../../tests/adapters/collab/native/format-commands.test.ts), "closing round, item 1, as built"). A selection with no letter of its own left has collapsed, and the command changes nothing, even where a peer typed into it ([text-commands.test.ts](../../tests/adapters/collab/native/text-commands.test.ts), "round 3, item 8"). Owner.
+
+**Concurrent Find formatting.** In the tested Yjs races, replacing `cup` with `mug` while a peer bolds `cup` leaves
+`mug` plain. If the original `cup` was bold and the peer concurrently unbolds it, `mug` also ends up plain.
+Both delivery orders preserve the replacement text and converge ([replace-all.test.ts](../../tests/adapters/collab/native/replace-all.test.ts)).
 
 **Marks on part of a tag.** A link, comment or text direction set or cleared on part of a tag is stored on those letters only. Every copy reads it across the whole tag, the same as core `setMark` reads it in an unshared script ([format-commands.test.ts](../../tests/adapters/collab/native/format-commands.test.ts), "review round 1, pin 6, as built"). Owner.
 
