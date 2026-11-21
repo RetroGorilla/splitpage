@@ -45,13 +45,16 @@ function beatOf(node: Node | null): Element | null {
   return element?.closest(WRITER + " .wr-beat[data-id]") ?? null;
 }
 
+export function writerSelectionCells(target: Element, selection: Selection | null) {
+  if (!target.closest(WRITER) || !selection?.rangeCount) return null;
+  const anchor = beatOf(selection.anchorNode), head = beatOf(selection.focusNode);
+  return anchor && head ? { anchor, head } : null;
+}
+
 export const writerNarration: NarrationSurface = Object.freeze({
   cellAt: (target: Element) => {
-    if (!target.closest(WRITER)) return null;
-    const selection = document.getSelection();
-    if (!selection?.rangeCount) return null;
-    const start = beatOf(selection.anchorNode);
-    return start && start === beatOf(selection.focusNode) ? start : null;
+    const cells = writerSelectionCells(target, document.getSelection());
+    return cells && cells.anchor === cells.head ? cells.head : null;
   },
   cell: (beat: string) => document.querySelector<HTMLElement>(WRITER + ' .wr-beat[data-id="' + cssAttr(beat) + '"]'),
   painted: (cell: Element, row: ShownRow) => cell.getAttribute("data-id") === row.id
