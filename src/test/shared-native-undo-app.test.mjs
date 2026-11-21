@@ -6,8 +6,9 @@ import { adoptReplacement, liveSession, sharedSession } from "../bootstrap/wirin
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { cellSelection, setCellSelection } from "../features/common/cell-selection.ts";
-import { posToDom, readSelection } from "../features/common/cell-dom.ts";
+import { domToPos, posToDom, readSelection } from "../features/common/cell-dom.ts";
 import { openNativeSession } from "../adapters/collab/native/session.ts";
+import { NativeScriptReader } from "../adapters/collab/native/reader.ts";
 import { scriptCellOf, sanitizeHtml } from "../bootstrap/richtext.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { enterSharedSession, forceLeaveSharedSession } from "../bootstrap/wiring/shared-session.ts";
@@ -304,23 +305,167 @@ for (const [route, move] of [
   assert.deepEqual(hook.read().peer, hook.read().app);
 });
 
-for (const backend of ["standalone", "native"]) {
-  test("Writer: Alt+Down with a cross-beat selection in " + backend, async t => {
-    let show;
-    if (backend === "native") show = await enter(t, threeBeats());
-    else adoptReplacement(migrateRows({ schema: 2, title: "Standalone script", rows: threeBeats() }));
-    const view = writer(t);
-    const range = { anchor: { kind: "beat", rowId: "r1", offset: 1 }, head: { kind: "beat", rowId: "r2", offset: 2 } };
-    view.flow.place(range);
-    assert.equal(press(root(), "ArrowDown", { altKey: true, ctrlKey: false }), true);
-    assert.deepEqual(rowOrder(), backend === "native" ? ["r1", "r2", "r3"] : ["r1", "r3", "r2"]);
-    assert.deepEqual(view.flow.selection(), range);
-    if (show) {
-      assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+test("Writer: Alt+Down with a cross-beat selection in standalone", t => {
+  adoptReplacement(migrateRows({ schema: 2, title: "Standalone script", rows: threeBeats() }));
+  const view = writer(t);
+  const range = { anchor: { kind: "beat", rowId: "r1", offset: 1 }, head: { kind: "beat", rowId: "r2", offset: 2 } };
+  view.flow.place(range);
+  assert.equal(press(root(), "ArrowDown", { altKey: true, ctrlKey: false }), true);
+  assert.deepEqual(rowOrder(), ["r1", "r3", "r2"]);
+  assert.deepEqual(view.flow.selection(), range);
+});
+
+for (const [key, anchor, head, moved] of [
+  ["ArrowDown", "r1", "r2", ["r1", "r3", "r2"]],
+  ["ArrowUp", "r2", "r1", ["r1", "r3", "r2"]]
+]) {
+  test("Writer: Alt+" + key + " moves the head's beat and replays both ends through peer typing and history", async t => {
+    const rows = threeBeats();
+    if (key === "ArrowUp") rows.unshift(rows.pop());
+    const show = await enter(t, rows), view = writer(t);
+    const original = rows.map(row => row.id);
+    let repaints = 0;
+    t.after(liveSession().subscribe(change => {
+      if (change.changes.rowsMoved) {
+        repaints++;
+        document.getSelection().removeAllRanges();
+      }
+    }));
+    const place = (a, h) => {
+      const from = posToDom(beat(anchor), a), to = posToDom(beat(head), h);
+      document.getSelection().setBaseAndExtent(from.node, from.offset, to.node, to.offset);
+      document.dispatchEvent(new window.Event("selectionchange"));
+    };
+    const check = async (order, a, h, count) => {
+      assert.deepEqual(rowOrder(), order);
+      assert.equal(repaints, count);
+      assert.equal(document.activeElement, root());
+      const selection = document.getSelection();
+      assert.equal(selection.rangeCount, 1);
+      assert.equal(domToPos(beat(anchor), selection.anchorNode, selection.anchorOffset), a);
+      assert.equal(domToPos(beat(head), selection.focusNode, selection.focusOffset), h);
+      await Promise.resolve();
       assert.deepEqual(hook.read().peer, hook.read().app);
-    }
+    };
+    view.caret(anchor, 1);
+    typeKeys(root(), "X");
+    place(2, 2);
+    assert.equal(hook.nativePeer.type(anchor, 0, "!").kind, "written");
+    assert.equal(hook.nativePeer.type(head, 0, "?").kind, "written");
+    assert.equal(press(root(), key, { altKey: true, ctrlKey: false }), true);
+    await check(moved, 3, 3, 1);
+    assert.equal(hook.nativePeer.type(head, 0, "+").kind, "written");
+    await Promise.resolve();
+    view.caret("r3", 1);
+    assert.equal(press(root(), "z"), true);
+    await check(original, 3, 4, 2);
+    view.caret("r3", 1);
+    assert.equal(press(root(), "y"), true);
+    await check(moved, 3, 4, 3);
+    assert.equal(show.mock.callCount(), 0);
   });
 }
+
+for (const endpoint of ["anchor", "head"]) {
+  test("Writer: a pending peer insertion in repeated text rebases the cross-beat " + endpoint, async t => {
+    const rows = threeBeats();
+    rows[1] = { ...rows[1], audioText: "aaaaa" };
+    const show = await enter(t, rows), view = writer(t);
+    const [anchor, head, moved] = endpoint === "anchor"
+      ? ["r2", "r1", ["r2", "r1", "r3"]]
+      : ["r1", "r2", ["r1", "r3", "r2"]];
+    const check = (order, editedOffset) => {
+      const live = document.getSelection();
+      assert.deepEqual(rowOrder(), order);
+      assert.equal(live.rangeCount, 1);
+      assert.equal(domToPos(beat(anchor), live.anchorNode, live.anchorOffset), endpoint === "anchor" ? editedOffset : 2);
+      assert.equal(domToPos(beat(head), live.focusNode, live.focusOffset), endpoint === "head" ? editedOffset : 2);
+    };
+    view.caret("r1", 1);
+    typeKeys(root(), "X");
+    const from = posToDom(beat(anchor), 2), to = posToDom(beat(head), 2);
+    document.getSelection().setBaseAndExtent(from.node, from.offset, to.node, to.offset);
+    document.dispatchEvent(new window.Event("selectionchange"));
+    assert.equal(hook.nativePeer.type("r2", 0, "a").kind, "written");
+    assert.equal(app(1), "aaaaa");
+    assert.equal(press(root(), "ArrowDown", { altKey: true, ctrlKey: false }), true);
+    check(moved, 3);
+    assert.equal(hook.nativePeer.type("r2", 0, "a").kind, "written");
+    await Promise.resolve();
+    view.caret("r3", 1);
+    assert.equal(press(root(), "z"), true);
+    check(["r1", "r2", "r3"], 4);
+    view.caret("r3", 1);
+    assert.equal(press(root(), "y"), true);
+    check(moved, 4);
+    await Promise.resolve();
+    assert.deepEqual(hook.read().peer, hook.read().app);
+    assert.equal(show.mock.callCount(), 0);
+  });
+}
+
+test("Writer: a cross-beat move with untracked peer paint leaves the selection and draft untouched", async t => {
+  const rows = threeBeats();
+  rows[1] = { ...rows[1], audioText: "aaaaa" };
+  const show = await enter(t, rows), view = writer(t);
+  view.caret("r1", 1);
+  typeKeys(root(), "X");
+  assert.equal(hook.nativePeer.type("r2", 0, "a").kind, "written");
+  const from = posToDom(beat("r1"), 2), to = posToDom(beat("r2"), 2), live = document.getSelection();
+  live.setBaseAndExtent(from.node, from.offset, to.node, to.offset);
+  document.dispatchEvent(new window.Event("selectionchange"));
+  assert.equal(press(root(), "ArrowDown", { altKey: true, ctrlKey: false }), true);
+  assert.deepEqual(rowOrder(), ["r1", "r2", "r3"]);
+  assert.deepEqual([live.anchorNode, live.anchorOffset, live.focusNode, live.focusOffset], [from.node, from.offset, to.node, to.offset]);
+  assert.deepEqual([app(0), app(1), peer(0), peer(1)], ["Hello", "aaaaa", "Hello", "aaaaaa"]);
+  assert.equal(beat("r1").textContent.replace(/\u200b/g, ""), "HXello");
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+});
+
+function selectAcrossWriter(view) {
+  view.flow.place({ anchor: { kind: "beat", rowId: "r1", offset: 2 }, head: { kind: "beat", rowId: "r2", offset: 2 } });
+  document.dispatchEvent(new window.Event("selectionchange"));
+}
+
+test("Writer: a cross-beat selection without a draft retains no narration paint", async t => {
+  await enter(t, threeBeats());
+  const view = writer(t), paint = t.mock.method(NativeScriptReader.prototype, "narrationPaint");
+  selectAcrossWriter(view);
+  assert.equal(hook.nativePeer.type("r3", 0, "x").kind, "written");
+  assert.deepEqual(paint.mock.calls.filter(call => call.arguments[1]).map(call => call.arguments[0]), []);
+  await Promise.resolve();
+  assert.equal(press(root(), "ArrowDown", { altKey: true, ctrlKey: false }), true);
+  assert.deepEqual(rowOrder(), ["r1", "r3", "r2"]);
+  assert.deepEqual(paint.mock.calls.filter(call => call.arguments[1]).map(call => call.arguments[0]), []);
+});
+
+test("Writer: focusing Close drops the cross-beat paint before the draft settles", async t => {
+  await enter(t, threeBeats());
+  const view = writer(t), paint = t.mock.method(NativeScriptReader.prototype, "narrationPaint");
+  view.caret("r1", 1);
+  typeKeys(root(), "X");
+  selectAcrossWriter(view);
+  const close = document.getElementById("wr-close");
+  close.focus();
+  assert.equal(document.activeElement, close);
+  assert.equal(hook.nativePeer.type("r3", 0, "x").kind, "written");
+  assert.deepEqual(paint.mock.calls.filter(call => call.arguments[1]).map(call => call.arguments[0]), ["r1"]);
+  await Promise.resolve();
+  assert.equal(app(), "HXello");
+});
+
+test("Native Split attaches no move paint listener and Writer removes its listener on close", async t => {
+  const added = t.mock.method(document, "addEventListener"), removed = t.mock.method(document, "removeEventListener");
+  const moveListeners = spy => spy.mock.calls.filter(call => call.arguments[0] === "selectionchange"
+    && call.arguments[1].name === "trackMovePaint").map(call => call.arguments[1]);
+  await enter(t, threeBeats());
+  assert.deepEqual(moveListeners(added), []);
+  writer(t);
+  const [listener] = moveListeners(added);
+  assert.equal(moveListeners(added).length, 1);
+  writerControls().closeWriter();
+  assert.deepEqual(moveListeners(removed), [listener]);
+});
 
 for (const [name, kind] of Object.entries(views)) {
   for (const [side, id, index] of [["above", "r2", 1], ["below", "r3", 3]]) {

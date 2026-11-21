@@ -30,7 +30,7 @@ import { screenIsStale } from "../../features/rows/render.ts";
 import { breakUndoGroup, undoOwner } from "./undo.ts";
 import { initializeFlowParagraphs } from "../../application/commands/flow.ts";
 import { sessionStamps, sharedSession, standaloneSession } from "./session-owner.ts";
-import { nativeEditorActive } from "./shared-session.ts";
+import { bindNativeWriterPaint, hasNativeWriterPreview, nativeEditorActive } from "./shared-session.ts";
 import { addRow } from "./rows.ts";
 import { writerFlowCommands } from "./ports/writer-flow.ts";
 import { writerVisualBuffer } from "./ports/writer-visual-buffer.ts";
@@ -58,6 +58,8 @@ const UNCHANGED: CommandOutcome = Object.freeze({ kind: "noop" });
 // why: the native session refuses every command before planning, so an unchanged beat sync must not reach it
 const writerFieldText: WholeFieldTextCommit = Object.freeze({
   commit: (rowId: string, field: string, runs: readonly Run[]): CommandOutcome => {
+    // why: leaving a beat during selection changes can sync its preview while native input still owns the write
+    if (field === "audioText" && hasNativeWriterPreview(rowId)) return UNCHANGED;
     const row = nativeEditorActive() ? documentReader.current()?.rows.find(candidate => candidate.id === rowId) : undefined;
     return row?.[field] === toHtml(runs) ? UNCHANGED : wholeFieldText.commit(rowId, field, runs);
   }
@@ -250,7 +252,15 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
             newCommentId: () => randomIds.id("c"),
             openComment: at => { actions.invoke("comment-on-selection", "button", at); }
           });
-          if (!shared) return flow;
+          if (!shared) {
+            const stopPaint = bindNativeWriterPaint(root);
+            if (!stopPaint) return flow;
+            return { ...flow, dispose: () => {
+              if (flow.dispose() === false) return false;
+              stopPaint();
+              return true;
+            } };
+          }
           const handle = shared.handle();
           return handle ? mountWriterEmptyScript(flow, root, { handle, session: shared.lifetime, author: shared.author,
             writer: shared.writer, stamps: sessionStamps, report: shared.text.bufferedText.report,
