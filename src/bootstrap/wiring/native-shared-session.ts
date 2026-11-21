@@ -7,6 +7,7 @@ import { scriptCellOf, sanitizeHtml } from "../richtext.ts";
 import { paintRowTimes } from "../../features/rows/render.ts";
 import { keepNativeFieldPaint, mountNativeSharedInput } from "./native-shared-input.ts";
 import { createNativeEditorRecords } from "./native-shared-records.ts";
+import { createNativeEditorFind } from "./native-shared-find.ts";
 import { mountNativeRecordEvents } from "./native-shared-record-events.ts";
 import { createNativeEditorStructure } from "./native-shared-structure.ts";
 import { nativeUndoRoute } from "./native-shared-undo.ts";
@@ -47,6 +48,7 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
     if (stored && !native.isStoredScript()) throw new Error("The stored state does not hold a well-formed native script");
   } catch (error) { native.close(); throw error; }
   const publication = nativePublication();
+  const editAttribution = () => ({ at: new Date(ports.now()).toISOString(), by: actor });
   let input: ReturnType<typeof mountNativeSharedInput> | null = null, terminal: Uint8Array | null = null;
   let commandSession: Parameters<SharedEditorBackend["bind"]>[0] | null = null;
   let stopRecords: (() => void) | null = null;
@@ -59,6 +61,7 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
     if (published === revision) return;
     const snapshot = native.document();
     if (buffered) keepNativeFieldPaint(buffered, snapshot.rows.find(row => row.id === buffered.beat));
+    input?.clearMovePaint();
     published = revision;
     publication.publish(snapshot, "remote");
   }
@@ -104,6 +107,9 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
   const backend: SharedEditorBackend = {
     replica: publication.replica, parts: null, unsupportedCommands: UNSUPPORTED,
     nativeRecords: records,
+    nativeFind: createNativeEditorFind({ native, session: () => commandSession, input: () => input, editAttribution, publish, report: ports.report }),
+    hasWriterPreview: beat => input?.hasWriterPreview(beat) ?? false,
+    bindWriterPaint: root => input?.bindWriterPaint(root),
     structure: createNativeEditorStructure({ native, session: () => commandSession, input: () => input, publish, report: ports.report }),
     undo: admission => nativeUndoRoute({ native, admission, input: () => input, publish: () => { publish(); } }),
     bind: session => {
@@ -116,7 +122,8 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
         stopRecords = () => { stopEvents(); stopTimes(); };
       }
       input ??= mountNativeSharedInput({
-        native, session, editAttribution: () => ({ at: new Date(ports.now()).toISOString(), by: actor }), now: ports.now, report: ports.report, publish
+        native, session, editAttribution, now: ports.now, report: ports.report,
+        publish, paintIsCurrent: () => published === native.revision()
       });
     },
     unbind: () => {

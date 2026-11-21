@@ -21,6 +21,7 @@ import { sharedAuthorPort } from "./ports/shared-author.ts";
 import type { SharedAuthorPort } from "./ports/shared-author.ts";
 import { sharedUndoOwner } from "./ports/shared-undo.ts";
 import type { NativeEditorRecords } from "./native-shared-records.ts";
+import type { FindNativeAccess } from "../../features/find/ports.ts";
 
 export interface SharedSessionParts {
   readonly handle: SharedDocumentHandle;
@@ -104,6 +105,9 @@ export interface SharedEditorBackend {
   readonly dispose: (attempt: (step: () => void) => boolean) => void;
   readonly unsupportedCommands?: string;
   readonly nativeRecords?: NativeEditorRecords;
+  readonly nativeFind?: FindNativeAccess;
+  readonly hasWriterPreview?: (beat: string) => boolean;
+  readonly bindWriterPaint?: (root: HTMLElement) => (() => void) | undefined;
   readonly structure?: (intent: DocumentStructureIntent) => CommandOutcome;
 }
 
@@ -119,8 +123,20 @@ export function nativeEditorRecords() {
   return running?.backend.nativeRecords ?? null;
 }
 
+export function nativeEditorFind() {
+  return running?.backend.nativeFind ?? null;
+}
+
 export function nativeEditorActive(): boolean {
   return !!running?.backend.stopIngress;
+}
+
+export function hasNativeWriterPreview(beat: string): boolean {
+  return running?.backend.hasWriterPreview?.(beat) ?? false;
+}
+
+export function bindNativeWriterPaint(root: HTMLElement): (() => void) | undefined {
+  return running?.backend.bindWriterPaint?.(root);
 }
 
 function copyOf(doc: ValidatedDocument): Record<string, unknown> {
