@@ -55,6 +55,7 @@ interface Draft {
   readonly surface: NarrationSurface;
   readonly range: NativeTextRange | null;
   readonly caretEnd: "from" | "to" | null;
+  readonly deletion: { readonly direction: -1 | 1; readonly at: number } | null;
   readonly before: NativeTextRange | null;
   readonly after: NativeTextRange | null;
   endsGroup: boolean;
@@ -173,6 +174,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const beat = cell.getAttribute("data-id") ?? "";
     return { beat, cell, surface: narrationSurfaceOf(cell), selection, composing, composition: composing, text,
       units: Math.max(text.length, selection.to - selection.from), previewCaret: selection.from + text.length, range: null, caretEnd,
+      deletion: caretEnd && { direction: caretEnd === "to" ? -1 : 1, at: now() },
       before: null, after: null, endsGroup: false, paint: null, html: cell.innerHTML };
   }
 
@@ -209,8 +211,9 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (!text) return target.commands.deleteText(range, attribution, places);
       return target.commands.replaceText(range, [{ text, marks: {} }], attribution, places);
     }
-    const { before } = buffered;
+    const { before, deletion } = buffered;
     const step = typing ? target.commands.typeText.withSelection(before, range, text, {}, attribution, places)
+      : deletion ? target.commands.deleteTextInRun.withSelection(before, range, deletion.direction, deletion.at, attribution, places)
       : !text ? target.commands.deleteText.withSelection(before, range, attribution, places)
       : target.commands.replaceText.withSelection(before, range, [{ text, marks: {} }], attribution, places);
     if (step.result.kind === "written") step.recordAfter(typing ? undefined : buffered.after);
@@ -229,7 +232,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     buffered.paint?.dispose();
     const at = now();
     try {
-      if (lastWrite !== null && at - lastWrite >= GROUP_PAUSE_MS) native.endTypingGroup();
+      if (!buffered.deletion && lastWrite !== null && at - lastWrite >= GROUP_PAUSE_MS) native.endTypingGroup();
       result = commit(buffered, native, selection?.indices ?? [null, null], true);
     } catch (error) {
       uncertain = true;
@@ -471,7 +474,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const selection = inputRange(input, cell);
     if (!selection || deletion && selection.from === selection.to) { session.refuse(deletion ? UNSUPPORTED : STALE); return; }
     const buffered = draft;
-    if (buffered && insideDraft(buffered, cell, selection)) {
+    if (buffered && !buffered.deletion && insideDraft(buffered, cell, selection)) {
       reviseDraft(buffered, selection, text);
       preview(cell, selection, text);
       if (atBatchBoundary(buffered)) finish();
@@ -504,7 +507,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (!selection || touchesProtectedText(cell, selection)) { session.refuse(STALE); event.preventDefault(); return; }
       if (draft?.composing) { event.preventDefault(); return; }
       composingText = "";
-      if (draft && insideDraft(draft, cell, selection)) {
+      if (draft && !draft.deletion && insideDraft(draft, cell, selection)) {
         clearTimeout(timer);
         composingInside = { cell, selection, html: cell.innerHTML };
         draft.composing = true;
@@ -562,12 +565,16 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (event.type === "focusout") {
       const buffered = draft;
       if (buffered && cell && (buffered.cell === cell || cell.contains(buffered.cell))) {
+        buffered.endsGroup = true;
         queueMicrotask(() => { if (draft === buffered) settleBlur(buffered); });
-      }
+      } else if (cell) native.endTypingGroup();
       return;
     }
     if (event.type === "pointerdown") {
-      if (!draft?.composing && !stopped) finish();
+      if (!draft?.composing && !stopped) {
+        finish();
+        native.endTypingGroup();
+      }
       return;
     }
     if (event.type === "click") {
@@ -590,7 +597,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       }
       if (undoing && cell?.matches(UNDO_SURFACES)) return;
       if (!editingKey(key) && !joining && !removeHeading) {
-        if (key.key.startsWith("Arrow") || key.key === "Home" || key.key === "End" || key.key === "Tab") finish();
+        if (key.key.startsWith("Arrow") || key.key === "Home" || key.key === "End" || key.key === "Tab") {
+          finish();
+          native.endTypingGroup();
+        }
         return;
       }
     }

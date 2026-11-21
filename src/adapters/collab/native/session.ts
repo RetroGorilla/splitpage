@@ -48,6 +48,12 @@ export type NativeSessionChange =
   | { readonly kind: "closed"; readonly reason: CloseReason; readonly state: Uint8Array };
 
 type ChangeListener = (change: NativeSessionChange) => void;
+
+type CaptureGroup =
+  | { readonly kind: "typing"; readonly target: NativeTextTarget; readonly endsInSpace: boolean }
+  | { readonly kind: "deletion"; readonly target: NativeTextTarget; readonly direction: -1 | 1; readonly at: number; readonly caret: Y.RelativePosition };
+
+const DELETE_PAUSE_MS = 1000;
 const COMPOUND_RANGE_REFUSAL = Object.freeze({ kind: "refused", reason: "range" } as const);
 
 export function hasNativeFormat(bytes: Uint8Array): boolean {
@@ -98,7 +104,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
   const body = { sanitize };
   let active = false, scheduled = false, publishing = false, changed = false, holds = 0;
   let closing: CloseReason | null = null, revision = 0;
-  let typing: { readonly target: NativeTextTarget; readonly endsInSpace: boolean } | null = null;
+  let group: CaptureGroup | null = null;
   const { script, size, undo, publishUpdate, journal } = openSessionScript(source, sizeOptions, updated, schedule, sizeRefusal, options.noticeJournal);
   const doc = script.doc;
   let reportedSize: NativeSessionSize = size.state;
@@ -187,7 +193,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
 
   function endTypingGroup(): void {
     if (refusal()) return;
-    typing = null;
+    group = null;
     undo.stopCapturing();
   }
 
@@ -203,7 +209,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
       }
       return perform(() => {
         if (separate) {
-          typing = null;
+          group = null;
           undo.stopCapturing();
         }
         if (journalMode !== "none") journal?.sync();
@@ -254,7 +260,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     const reason = refusal();
     if (reason) return { kind: "refused", reason };
     return perform(() => {
-      typing = null;
+      group = null;
       journal?.sync();
       const result = undo[direction]();
       journal?.sync({ press: direction });
@@ -267,14 +273,23 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     anchorText: bindCommand(anchorNativeText, script, false, "none").run,
     typeText: bind((script: NativeScript, range: NativeTextRange, text: string, marks: Marks, stamp?: NativeEditStamp, placement?: NativeTextPlacement) =>
       typeNativeText(script, range, text, marks, stamp, target => {
-        const previous = typing?.target.beat === target.beat && typing.target.cell === target.cell ? typing : null;
+        const previous = group?.kind === "typing" && group.target.beat === target.beat && group.target.cell === target.cell ? group : null;
         if (!previous || !continuesSharedTypingWord(previous.endsInSpace, text)) undo.stopCapturing();
-        typing = { target, endsInSpace: text ? /\s$/.test(text) : previous?.endsInSpace ?? false };
+        group = { kind: "typing", target, endsInSpace: text ? /\s$/.test(text) : previous?.endsInSpace ?? false };
       }, undo.typingRecorder, placement), writing, false),
     replaceText: bind((script: NativeScript, range: NativeTextRange, runs: readonly Run[], stamp?: NativeEditStamp, placement?: NativeTextPlacement) =>
       replaceNativeText(script, range, runs, stamp, undefined, undefined, undefined, placement), writing),
     replaceAll: bindCompound(replaceAllNativeText),
     deleteText: bind(deleteNativeText, writing),
+    deleteTextInRun: bind((script: NativeScript, range: NativeTextRange, direction: -1 | 1, at: number,
+      stamp?: NativeEditStamp, placement?: NativeTextPlacement) => replaceNativeText(script, range, [], stamp, (target, live) => {
+      const previous = group?.kind === "deletion" && group.target.beat === target.beat && group.target.cell === target.cell
+        && group.direction === direction && at - group.at < DELETE_PAUSE_MS ? group : null;
+      const caret = previous && Y.createAbsolutePositionFromRelativePosition(previous.caret, doc);
+      const edge = direction === -1 ? live.pieces.at(-1) ?? live : live;
+      if (!caret || caret.type !== edge.text || caret.index !== (direction === -1 ? edge.until : edge.from)) undo.stopCapturing();
+      group = { kind: "deletion", target, direction, at, caret: Y.createRelativePositionFromTypeIndex(live.text, live.from, -1) };
+    }, false, undefined, placement), writing, false),
     formatText: bind(formatNativeText, adding),
     splitRow: bind(splitNativeRow, adding, true, "split"),
     deleteAndSplit: bindCompound(deleteAndSplitNativeRow, "split"),
