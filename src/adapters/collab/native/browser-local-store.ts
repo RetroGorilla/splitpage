@@ -1,28 +1,18 @@
-import * as Y from "yjs";
-import { markNativeStoreSession } from "./local-store.ts";
-import type { NativeLocalStore, NativeLocalStoreClose, NativeLocalStoreFailure, NativeLocalStoreOpen, NativeLocalStoreReceipt } from "./local-store.ts";
-import { nativeCallbackGuard } from "./script.ts";
-import { openNativeSession } from "./session.ts";
-import type { NativeSessionOptions } from "./session.ts";
+import type { NativeReplicaEntry } from "../../../../shared/native-replica.d.ts";
+import { attachNativeLocalStore, nativeLocalStoreFailure } from "./local-store.ts";
+import type { NativeLocalStore, NativeLocalStoreFailure, NativeLocalStoreOpen, NativeReplicaConnection } from "./local-store.ts";
 
 const DATABASE = "splitpage-native-replica-log";
 const REPLICAS = "replicas";
 const OPEN_TIMEOUT_MS = 2000;
-const CHECKPOINT_EVERY = 512;
-const MAX_TAIL = 4 * CHECKPOINT_EVERY;
-type Session = ReturnType<typeof openNativeSession>;
-
 interface BrowserLocalStorePorts {
   readonly indexedDB?: IDBFactory;
   readonly locks?: Pick<LockManager, "request">;
   readonly storage?: Pick<StorageManager, "persist">;
 }
 
-interface ReplicaEntry {
+interface ReplicaEntry extends NativeReplicaEntry {
   readonly name: string;
-  readonly generation: number;
-  readonly bytes: Uint8Array;
-  readonly checkpoint: boolean;
 }
 
 function deferred<T>() {
@@ -30,15 +20,6 @@ function deferred<T>() {
   let reject!: (error: unknown) => void;
   const promise = new Promise<T>((done, fail) => { resolve = done; reject = fail; });
   return { promise, resolve, reject };
-}
-
-function failure(error: unknown): NativeLocalStoreFailure {
-  switch (error instanceof DOMException ? error.name : "") {
-    case "QuotaExceededError": return { kind: "failed", reason: "quota", error };
-    case "InvalidStateError": return { kind: "failed", reason: "closed", error };
-    case "VersionError": return { kind: "failed", reason: "version", error };
-    default: return { kind: "failed", reason: "io", error };
-  }
 }
 
 function acquire(locks: Pick<LockManager, "request">, name: string): Promise<(() => Promise<void>) | null> {
@@ -107,205 +88,22 @@ async function read(database: IDBDatabase, name: string, through?: number): Prom
   return await transact(database, "readonly", store => store.getAll(replicaRange(name, through))) as ReplicaEntry[];
 }
 
-function replicaState(entries: readonly ReplicaEntry[]): Uint8Array {
-  const doc = new Y.Doc();
-  try {
-    doc.transact(() => {
-      for (const entry of entries) {
-        if (!(entry?.bytes instanceof Uint8Array)) throw new TypeError("Invalid replica bytes");
-        Y.applyUpdate(doc, entry.bytes);
-      }
-    });
-    return Y.encodeStateAsUpdate(doc);
-  } finally { doc.destroy(); }
-}
-
 async function requestPersistence(storage: BrowserLocalStorePorts["storage"]): Promise<boolean> {
   try { return await storage?.persist() ?? false; } catch { return false; }
 }
 
-async function attachSession(
-  database: IDBDatabase, name: string, options: NativeSessionOptions,
-  release: () => Promise<void>, storage: BrowserLocalStorePorts["storage"]
-): Promise<NativeLocalStoreOpen> {
-  let stopped: NativeLocalStoreFailure | undefined;
-  const connection: { disconnect?: () => void } = {};
-  function stop(reason: "closed" | "version"): void {
-    stopped = { kind: "failed", reason };
-    database.close();
-    connection.disconnect?.();
-  }
-  database.onversionchange = () => stop("version");
-  database.onclose = () => stop("closed");
-  const entries = await read(database, name).catch(error => {
-    if (!stopped) throw error;
-    return [];
-  });
-  if (stopped) return stopped;
-
-  let session = openNativeSession(entries.length ? { kind: "state", state: replicaState(entries) } : { kind: "empty" }, options);
-  const listeners = new Set<(receipt: NativeLocalStoreReceipt) => void>();
-  const closed = deferred<NativeLocalStoreClose>();
-  let drained = deferred<NativeLocalStoreClose>();
-  let recovering = false, handoff: ReturnType<typeof deferred<Session>> | undefined;
-  let recovery: Uint8Array | undefined;
-  const pending: ReplicaEntry[] = [];
-  const generation = entries.at(-1)?.generation ?? 0;
-  let committed = generation, next = generation;
-  let checkpoint = entries[0]?.checkpoint ? entries[0].generation : 0;
-  let active: Promise<NativeLocalStoreReceipt> | undefined;
-  let compaction: Promise<NativeLocalStoreReceipt | undefined> | undefined;
-  let timer: ReturnType<typeof setTimeout> | undefined;
-
-  function publish(receipt: NativeLocalStoreReceipt): void {
-    for (const listener of [...listeners]) {
-      // why: one subscriber's error must not hide an outcome from the others
-      try { listener(receipt); } catch { continue; }
-    }
-  }
-
-  function current(): NativeLocalStoreReceipt {
-    return stopped ? { ...stopped, generation: next, committed } : { kind: "stored", generation: committed };
-  }
-
-  function cancelTimer(): void { clearTimeout(timer); timer = undefined; }
-
-  function compact(): Promise<NativeLocalStoreReceipt | undefined> {
-    const through = committed;
-    cancelTimer();
-    compaction ??= (async () => {
-      try {
-        // why: the live session may already contain changes beyond the committed generation
-        const entries = await read(database, name, through);
-        const queued = pending.at(-1);
-        if (through < checkpoint || (queued?.checkpoint && through < queued.generation)) return undefined;
-        const bytes = replicaState(entries);
-        await write(database, { name, generation: through, bytes, checkpoint: true });
-        checkpoint = through;
-        return undefined;
-      } catch (error) { return { ...failure(error), generation: through, committed, operation: "compact" } as const; }
-    })().finally(() => { compaction = undefined; });
-    return compaction;
-  }
-
-  function scheduleCompaction(): void {
-    if (timer !== undefined || compaction || committed - checkpoint < CHECKPOINT_EVERY || session.isClosingOrClosed()) return;
-    timer = setTimeout(() => {
-      timer = undefined;
-      if (pending.length || session.isClosingOrClosed()) return;
-      void compact().then(result => { if (result) publish(result); });
-    }, 0);
-  }
-
-  function failedWrite(result: NativeLocalStoreReceipt): NativeLocalStoreReceipt {
-    // why: a failure listener can call flush to retry once the failed transaction has settled
-    active = undefined;
-    publish(result);
-    return result;
-  }
-
-  async function drain(): Promise<NativeLocalStoreReceipt> {
-    while (!stopped) {
-      if (!pending.length && recovery) {
-        pending.push({ name, generation: ++next, bytes: recovery, checkpoint: true });
-        recovery = undefined;
-      }
-      const entry = pending[0];
-      if (!entry) break;
-      if (!entry.checkpoint && committed - checkpoint >= MAX_TAIL) {
-        const failed = await compact();
-        if (failed) return failedWrite(failed);
-        if (stopped) break;
-      }
-      try { await write(database, entry); }
-      catch (error) {
-        return failedWrite({ ...failure(error), generation: entry.generation, committed });
-      }
-      pending.shift();
-      committed = entry.generation;
-      if (entry.checkpoint) checkpoint = committed;
-      publish({ kind: "stored", generation: committed });
-    }
-    active = undefined;
-    scheduleCompaction();
-    return current();
-  }
-
-  function flush(): Promise<NativeLocalStoreReceipt> {
-    active ??= Promise.resolve().then(drain);
-    return active;
-  }
-
-  function saveUpdate(bytes: Uint8Array): void {
-    pending.push({ name, generation: ++next, bytes: new Uint8Array(bytes), checkpoint: false });
-    void flush();
-  }
-
-  async function finish(state: Uint8Array): Promise<void> {
-    const inProgress = active, finished = drained;
-    let result = await flush();
-    if (inProgress && result.kind === "failed") result = await flush();
-    cancelTimer();
-    await compaction;
-    if (stopped) {
-      result = current();
-      publish(result);
-    }
-    const requested = handoff;
-    handoff = undefined;
-    recovering = false;
-    if (requested) {
-      try {
-        if (result.kind === "failed") throw result;
-        session = openNativeSession({ kind: "state", state }, options);
-        drained = deferred<NativeLocalStoreClose>();
-        bind();
-        finished.resolve({ ...result, state });
-        requested.resolve(session);
-        return;
-      } catch (error) { requested.reject(error); }
-    }
-    database.close();
-    await release();
-    listeners.clear();
-    const outcome = { ...result, state };
-    finished.resolve(outcome);
-    closed.resolve(outcome);
-  }
-
-  function bind(): void {
-    markNativeStoreSession(session, reopen);
-    const doc = session.ydoc, guardSharedCallback = nativeCallbackGuard(doc);
-    const updated = (bytes: Uint8Array) => guardSharedCallback(() => saveUpdate(bytes));
-    doc.on("update", updated);
-    session.subscribe(change => {
-      if (change.kind !== "closed") return;
-      const state = new Uint8Array(change.state);
-      doc.off("update", updated);
-      recovering = !stopped && change.reason === "failed";
-      if (recovering) recovery = state;
-      void finish(state);
-    });
-    connection.disconnect = () => { cancelTimer(); doc.off("update", updated); session.close(); };
-  }
-
-  function reopen(failed: Session): Promise<Session> {
-    if (!recovering || failed !== session) return Promise.reject(new Error("The store has no handover for this session."));
-    handoff ??= deferred<Session>();
-    return handoff.promise;
-  }
-
-  bind();
+function connectionFor(
+  database: IDBDatabase, name: string, release: () => Promise<void>, storage: BrowserLocalStorePorts["storage"]
+): NativeReplicaConnection {
   return {
-    kind: "opened", restored: entries.length > 0, generation, get session() { return session; },
-    persistent: requestPersistence(storage),
-    flush: () => session.isClosingOrClosed() ? drained.promise : flush(),
-    reopen,
-    subscribe(listener) {
-      listeners.add(listener);
-      return () => { listeners.delete(listener); };
-    },
-    closed: closed.promise
+    read: through => read(database, name, through),
+    write: async entry => { await write(database, { ...entry, name }); },
+    async release() { database.close(); await release(); },
+    persistent: () => requestPersistence(storage),
+    onStop(stop) {
+      database.onversionchange = () => { database.close(); stop("version"); };
+      database.onclose = () => { database.close(); stop("closed"); };
+    }
   };
 }
 
@@ -331,11 +129,11 @@ export function createBrowserNativeLocalStore(ports: BrowserLocalStorePorts = {
       } finally {
         if (!handedOff) { database?.close(); await release(); }
       }
-    } catch (error) { return failure(error); }
+    } catch (error) { return nativeLocalStoreFailure(error); }
   }
 
   return {
-    open: (name, options) => useDatabase(name, (database, release) => attachSession(database, name, options, release, storage)),
+    open: (name, options) => useDatabase(name, (database, release) => attachNativeLocalStore(connectionFor(database, name, release, storage), options)),
     delete: name => useDatabase(name, async database => {
       await transact(database, "readwrite", store => store.delete(replicaRange(name)));
       return { kind: "stored" } as const;

@@ -6,11 +6,20 @@ import type { IDBFactory } from "fake-indexeddb";
 import * as Y from "yjs";
 import { createBrowserNativeLocalStore } from "../../../../src/adapters/collab/native/browser-local-store.ts";
 import type { NativeLocalStore, NativeLocalStoreReceipt } from "../../../../src/adapters/collab/native/local-store.ts";
-import { applyNativePeerUpdate } from "../../../../src/adapters/collab/native/peer-update.ts";
 import { eventResult, failNextIdbWrite, idbDone, idbResult } from "./indexeddb-fixture.ts";
 import { DB_NAME, REPLICAS, STORED, STORE_OPTIONS, fixture, seedReplica, stored, storedBytes, storedEntries, typeAt, type OpenReplica } from "./local-store-fixture.ts";
 
+import { localStoreContract } from "./local-store-contract.ts";
+
 const bounded = { timeout: 10000 };
+
+localStoreContract("IndexedDB", t => {
+  const { factory, store } = fixture();
+  return {
+    store, other: createBrowserNativeLocalStore({ indexedDB: factory, locks: navigator.locks }),
+    failAppend: reason => failNextIdbWrite(t, "add", reason === "quota" ? "quota" : "abort")
+  };
+});
 
 async function open(t: TestContext, store: NativeLocalStore, name: string) {
   const replica = await store.open(name, STORE_OPTIONS);
@@ -132,20 +141,6 @@ test("an error on the request is reported when the abort has no transaction erro
   const result = await replica.flush();
   assert.equal(result.kind, "failed");
   assert.equal(result.reason, "quota");
-});
-
-test("a receipt listener can retry the failed generation immediately", bounded, async t => {
-  const { store } = fixture(), replica = await open(t, store, "listener-retry");
-  const retried = eventResult<NativeLocalStoreReceipt>();
-  const unsubscribe = replica.subscribe(receipt => {
-    if (receipt.kind === "failed") {
-      unsubscribe();
-      void replica.flush().then(retried.resolve);
-    }
-  });
-  failNextIdbWrite(t, "add", "abort");
-  seedReplica(replica.session);
-  assert.deepEqual(await retried.promise, stored(1));
 });
 
 test("a failed generation is published even when a later generation is already queued", bounded, async t => {
@@ -607,79 +602,6 @@ test("missing storage facilities refuse open and persistence availability is rep
   assert.deepEqual(await denied.flush(), stored(1));
 });
 
-test("a later Yjs listener cannot change the bytes queued for an append", bounded, async t => {
-  const { store } = fixture(), replica = await open(t, store, "update-bytes");
-  seedReplica(replica.session);
-  assert.deepEqual(await replica.flush(), stored(1));
-  replica.session.ydoc.once("update", update => update.fill(255));
-  typeAt(replica.session, 0, "keep ");
-  assert.deepEqual(await replica.flush(), stored(2));
-  replica.session.close();
-  await replica.closed;
-  const after = await open(t, store, "update-bytes");
-  assert.equal(after.session.document().rows[0]?.audioText, "keep start");
-});
-
-test("hydration classifies warning, limit and ceiling before admitting the first command", bounded, async t => {
-  const { store } = fixture(), replica = await open(t, store, "size");
-  seedReplica(replica.session);
-  assert.deepEqual(await replica.flush(), stored(1));
-  const bytes = replica.session.encodeState().byteLength;
-  replica.session.close();
-  await replica.closed;
-  for (const [kind, warning, limit, ratio] of [
-    ["warning", bytes - 1, bytes + 1024, 2],
-    ["full", bytes - 2, bytes - 1, 2],
-    ["ceiling", bytes - 4, bytes - 3, 1.001]
-  ] as const) {
-    const loaded = await store.open("size", { ...STORE_OPTIONS, sizeWarning: warning, sizeLimit: limit, sizeCeilingRatio: ratio });
-    assert.equal(loaded.kind, "opened");
-    try {
-      const { session } = loaded;
-      assert.equal(session.size, kind === "warning" ? "warning" : "full");
-      const at = session.commands.anchorText({ beat: "A", cell: "narration" }, 0);
-      assert.equal(at.kind, "anchored");
-      if (kind === "warning") assert.equal(session.commands.typeText(at.range, "x", {}).kind, "written");
-      else {
-        const before = session.encodeState();
-        assert.deepEqual(session.commands.typeText(at.range, "x", {}), {
-          kind: "recovery", reason: "full", runs: [{ text: "x", marks: {} }]
-        });
-        const cut = session.commands.anchorText({ beat: "A", cell: "narration" }, 0, 1);
-        assert.equal(cut.kind, "anchored");
-        if (kind === "ceiling") {
-          assert.deepEqual(session.commands.deleteText(cut.range), { kind: "recovery", reason: "full", runs: [] });
-          assert.deepEqual(session.encodeState(), before);
-        } else assert.equal(session.commands.deleteText(cut.range).kind, "written");
-      }
-    } finally { loaded.session.close(); await loaded.closed; }
-  }
-});
-
-test("a peer frame waiting for its dependency stays out of the journal until resent and applied", bounded, async t => {
-  const { store } = fixture(), replica = await open(t, store, "peer-pending");
-  seedReplica(replica.session);
-  assert.deepEqual(await replica.flush(), stored(1));
-  const peer = new Y.Doc(), text = peer.getText("peer");
-  t.after(() => peer.destroy());
-  const frames: Uint8Array[] = [];
-  peer.on("update", update => frames.push(update));
-  text.insert(0, "first");
-  text.insert(5, " second");
-  const [first, second] = frames;
-  assert.ok(first && second);
-  assert.equal(applyNativePeerUpdate(replica.session, second), true);
-  assert.deepEqual(await replica.flush(), stored(1));
-  replica.session.close();
-  await replica.closed;
-  const reopened = await open(t, store, "peer-pending");
-  assert.equal(applyNativePeerUpdate(reopened.session, first), true);
-  assert.equal(reopened.session.ydoc.getText("peer").toString(), "first");
-  assert.equal(applyNativePeerUpdate(reopened.session, second), true);
-  assert.equal(reopened.session.ydoc.getText("peer").toString(), "first second");
-  assert.deepEqual(await reopened.flush(), stored(3));
-});
-
 test("the busy append queue checkpoints before its tail can grow past 2048 records", bounded, async t => {
   const { factory, store } = fixture(), replica = await open(t, store, "busy-checkpoint");
   t.mock.timers.enable({ apis: ["setTimeout"] });
@@ -720,20 +642,6 @@ test("the busy append queue checkpoints before its tail can grow past 2048 recor
     t.mock.timers.tick(0);
     await replica.closed;
   }
-});
-
-test("ordinary close cancels its pending checkpoint timer", bounded, async t => {
-  const { store } = fixture(), replica = await open(t, store, "close-cancel");
-  t.mock.timers.enable({ apis: ["setTimeout"] });
-  const scheduled = t.mock.method(globalThis, "setTimeout"), canceled = t.mock.method(globalThis, "clearTimeout");
-  const text = replica.session.ydoc.getText("timer");
-  for (let index = 0; index < 512; index++) text.insert(index, "x");
-  assert.deepEqual(await replica.flush(), stored(512));
-  const timer = scheduled.mock.calls[0]?.result;
-  assert.notEqual(timer, undefined);
-  replica.session.close();
-  assert.equal((await replica.closed).generation, 512);
-  assert.ok(canceled.mock.calls.some(call => call.arguments[0] === timer));
 });
 
 test("the recovery checkpoint can replace a full tail without an intervening compaction read", bounded, async t => {
@@ -892,22 +800,6 @@ test("a scheduled checkpoint rechecks the closing session before it reads the jo
   t.mock.timers.tick(0);
   await replica.closed;
   assert.equal(read.mock.callCount(), 0);
-});
-
-test("receipt publication uses the original listener set for each generation", bounded, async t => {
-  const { store } = fixture(), replica = await open(t, store, "listeners");
-  const late = t.mock.fn<(receipt: NativeLocalStoreReceipt) => void>();
-  const old = t.mock.fn<(receipt: NativeLocalStoreReceipt) => void>();
-  const first = replica.subscribe(() => { first(); remove(); replica.subscribe(late); });
-  const remove = replica.subscribe(old);
-  seedReplica(replica.session);
-  assert.deepEqual(await replica.flush(), stored(1));
-  assert.equal(old.mock.callCount(), 1);
-  assert.equal(late.mock.callCount(), 0);
-  typeAt(replica.session, 0, "next ");
-  assert.deepEqual(await replica.flush(), stored(2));
-  assert.equal(old.mock.callCount(), 1);
-  assert.deepEqual(late.mock.calls.map(call => call.arguments[0]), [stored(2)]);
 });
 
 test("loss during a failed session close forbids the terminal checkpoint", bounded, async t => {

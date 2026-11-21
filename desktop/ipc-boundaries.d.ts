@@ -130,7 +130,7 @@ export interface DesktopTabStripIpcDependencies extends Pick<DesktopMainCommon, 
 }
 
 export interface DesktopTestModeIpcDependencies extends Pick<DesktopMainCommon, "testMode" | "tabOf" | "tabs" | "windowsById" | "requestCloseTab" | "draftStore" | "draftsPreviousSession" | "shellStateForWindow" | "createTab" | "activateTab" | "reorderTab" | "moveTabToWindow"> {
-  app: Pick<App, "quit">;
+  app: Pick<App, "quit" | "getPath">;
   BrowserWindow: Pick<typeof BrowserWindow, "fromWebContents">;
   Menu: Pick<typeof Menu, "getApplicationMenu">;
   chooseDuplicateLoser: typeof chooseDuplicateLoser;
@@ -149,7 +149,7 @@ export interface DesktopPrintIpcDependencies {
 
 export type DesktopRegisterIpcGroup = (wrappers: DesktopIpcWrappers) => void;
 
-export interface DesktopCloseQuitDependencies extends Pick<DesktopMainCommon, "testMode" | "tabs" | "windowsById" | "draftStore" | "activateTab">, Pick<DesktopTestModeIpcDependencies, "app" | "liveWindows"> {
+export interface DesktopCloseQuitDependencies extends Pick<DesktopMainCommon, "testMode" | "tabs" | "windowsById" | "draftStore" | "activateTab">, Pick<DesktopTestModeIpcDependencies, "liveWindows"> {
   app: Pick<App, "on" | "quit">;
   dialog: Pick<DesktopFileIpcDependencies["dialog"], "showMessageBoxSync">;
   tabHasFile: (tab: DesktopMainTab | null | undefined) => boolean;
