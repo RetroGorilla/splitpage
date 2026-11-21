@@ -199,7 +199,7 @@ for (const way of WAYS_OUT) {
       assert.equal(undoOwner().sizes().undo > 0, true);
       await flushDraftNow();
       const listeners = listenerCounts();
-      assert.deepEqual(await hook.enter(), { ok: true });
+      assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
       const session = hook.read().app;
       if (way.rows.length) { hook.peer.type("r1", 0, "Shared "); hook.peer.deliver(); }
       way.arrange?.();
@@ -247,7 +247,7 @@ for (const way of WAYS_OUT) {
         if (!way.completes) assert.deepEqual([next.rows, next.docId], [last, landed.docId]);
       }
       assert.deepEqual(listenerCounts(), listeners);
-      assert.deepEqual(await hook.enter(), { ok: true });
+      assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
       assert.deepEqual(hook.leave(), { ok: true });
       assert.deepEqual(listenerCounts(), listeners);
     } finally {
@@ -266,7 +266,7 @@ test("rule 166: stopping the app when even the forced leave cannot land ends wit
   try {
     script(ROWS);
     const listeners = listenerCounts();
-    assert.deepEqual(await hook.enter(), { ok: true });
+    assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
     hook.peer.type("r1", 0, "Shared "); hook.peer.deliver();
     selectionVisualComposition();
     recoveryPanelBinding.leave = () => { throw new Error("the recovery panel cannot leave"); };
@@ -294,7 +294,7 @@ test("rule 166: stopping the app when even the forced leave cannot land ends wit
     script(ROWS);
     assert.ok(writerControls().writerFlowControl(), "a standalone Writer opens");
     assert.deepEqual(listenerCounts(), listeners);
-    assert.deepEqual(await hook.enter(), { ok: true });
+    assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
     assert.deepEqual(hook.leave(), { ok: true });
   } finally {
     console.error = report; recoveryPanelBinding.leave = leave;
@@ -312,7 +312,7 @@ test("every surface the shared Writer and Split mount registers one abandon step
   draftStore();
   try {
     script(ROWS);
-    assert.deepEqual(await hook.enter(), { ok: true });
+    assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
     assert.equal(hook.counters().abandonable, SHARED_WRITER_SURFACES.length, SHARED_WRITER_SURFACES.join(", "));
     assert.deepEqual(hook.leave(), { ok: true });
     assert.equal(hook.counters().abandonable, 0);
@@ -329,7 +329,7 @@ test("the way out runs every step: a draft resume that throws still disposes the
   let restore = () => {};
   try {
     script(ROWS);
-    assert.deepEqual(await hook.enter(), { ok: true });
+    assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
     hook.peer.type("r1", 0, "Shared "); hook.peer.deliver();
     restore = throwOnce(draftSource, "resumeWriting", "the draft writer could not resume");
     console.error = error => { reported.push(String(error)); };
@@ -428,7 +428,7 @@ for (const failure of FAILURES) {
       const was = standaloneState(), home = currentHome();
       assert.deepEqual([was.undo.undo > 0, home.kind, was.writtenOut, was.unsaved], [true, "file", true, true]);
       console.error = error => { reported.push(String(error)); };
-      try { assert.deepEqual(await hook.enter(), { ok: false, reason: failure.reason }); } finally { console.error = report; }
+      try { assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: false, reason: failure.reason }); } finally { console.error = report; }
       assert.deepEqual(observed, failure.observed ?? []);
       if (failure.reason === "enter-failed") assert.ok(reported.length > 0, "the failure was reported");
       const now = standaloneState();
@@ -441,7 +441,7 @@ for (const failure of FAILURES) {
       assert.equal((await flushDraftNow()).ok, true);
       const next = store.writes.at(-1);
       assert.deepEqual([next.seq, next.rows, next.shared, next.kept], [last.seq + 1, ["Edited after the attempt"], false, true]);
-      assert.deepEqual(await hook.enter(), { ok: true });
+      assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
       assert.deepEqual(hook.leave(), { ok: true });
     } finally {
       console.error = report;

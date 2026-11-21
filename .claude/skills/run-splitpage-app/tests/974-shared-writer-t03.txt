@@ -4,7 +4,7 @@ eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=wi
 wait F.state().title === 'T03 replace forward'
 click #btn-write
 wait W.on()
-eval S.enter()
+eval S.enter({backend:'legacy'})
 wait S.read().peer !== null
 eval S.peer.hold();document.getElementById('writer-doc').focus();W.place(at('r1',4,7));true
 press a
@@ -30,7 +30,7 @@ eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=wi
 wait F.state().title === 'T03 replace duplicate'
 eval if (!W.on()) document.getElementById('btn-write').click(); true
 wait W.on()
-eval S.enter()
+eval S.enter({backend:'legacy'})
 wait S.read().peer !== null
 eval S.peer.hold();document.getElementById('writer-doc').focus();W.place(at('r1',4,7));true
 press a
@@ -56,7 +56,7 @@ eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=wi
 wait F.state().title === 'T03 replace composed'
 eval if (!W.on()) document.getElementById('btn-write').click(); true
 wait W.on()
-eval S.enter()
+eval S.enter({backend:'legacy'})
 wait S.read().peer !== null
 eval S.peer.hold();document.getElementById('writer-doc').focus();W.place(at('r1',4,7));true
 ime set a

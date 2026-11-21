@@ -99,7 +99,7 @@ wait Q('audioText').textContent === 'YHexllo'
 eval window.sharedId=S.read().app.docId;window.left=S.leave();true
 expect window.left.ok === true && S.read().peer === null && S.read().app.docId !== window.sharedId
 expect text() === 'YHexllo' && Q('audioText').textContent === 'YHexllo'
-eval S.enter()
+eval S.enter({backend:'legacy'})
 eval window.legacy=S.peer.type('r1',0,'L');true
 expect window.legacy.kind === 'applied' && S.nativePeer.type('r1',0,'native') === undefined
 wait text() === 'LYHexllo'

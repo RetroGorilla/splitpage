@@ -60,7 +60,7 @@ function script(rows = [{ id: "r1", audioText: "Hello", visualText: "" }]) {
 
 test("the test hook composes the running Writer and exchanges encoded peer updates in reverse and duplicate order", async () => {
   script([{ id: "r1", audioText: "Hello", visualText: "" }, { id: "r2", audioText: "World", visualText: "" }]);
-  assert.deepEqual(await hook.enter(), { ok: true });
+  assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
   try {
     const start = hook.peer.appliedUpdates().length;
     hook.peer.hold();
@@ -102,11 +102,11 @@ test("entry refuses a pending draft restore and a live Writer composition before
   script();
   const before = currentDocument();
   draftResume().setRestorePending(true);
-  try { assert.deepEqual(await hook.enter(), { ok: false, reason: "draft-restore-pending" }); }
+  try { assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: false, reason: "draft-restore-pending" }); }
   finally { draftResume().setRestorePending(false); }
   const root = document.getElementById("writer-doc");
   root.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
-  try { assert.deepEqual(await hook.enter(), { ok: false, reason: "buffer-composition" }); }
+  try { assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: false, reason: "buffer-composition" }); }
   finally { root.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "" })); }
   assert.equal(currentDocument(), before);
   assert.equal(sharedSession(), false);
@@ -114,7 +114,7 @@ test("entry refuses a pending draft restore and a live Writer composition before
 
 test("the running shared session sends a refused command to the real notice port once", async () => {
   script();
-  assert.deepEqual(await hook.enter(), { ok: true });
+  assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
   try {
     const before = document.querySelectorAll("#toast-host .toast.warn").length;
     assert.deepEqual(runCommand({ label: "unsupported", plan: () => ({ refused: "unsupported-checkpoint-command" }) }),
@@ -128,7 +128,7 @@ test("the running shared session sends a refused command to the real notice port
 
 test("native ownership checks count scans and a missing painted base shows a notice and increments the hook counter", async () => {
   script();
-  assert.deepEqual(await hook.enter(), { ok: true });
+  assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
   try {
     const before = hook.counters(), beat = document.querySelector('#writer-doc .wr-beat[data-id="r1"]');
     beat.dataset.id = "missing"; beat.textContent = "Unowned text";
@@ -145,7 +145,7 @@ test("native ownership checks count scans and a missing painted base shows a not
 test("the shared empty Writer keeps an unfinished composition and places the first beat's narration caret", async () => {
   script([]);
   assert.equal(document.querySelector(".empty-script-input"), null);
-  assert.deepEqual(await hook.enter(), { ok: true });
+  assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
   try {
     const input = document.querySelector(".empty-script-input");
     assert.ok(input);
@@ -194,7 +194,7 @@ test("real draft and autosave owners cancel pending source work on detach and pr
     assert.equal(draftsTesting().status().pending, true);
     assert.equal(autoSavePolicy().pending(), true);
     assert.ok(timers.length > 0);
-    assert.deepEqual(await hook.enter(), { ok: true });
+    assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
     assert.equal(currentHome().kind, "none");
     assert.equal(autoSavePolicy().pending(), false);
     assert.ok(timers.every(timer => !timer.active), "source draft and autosave timers are cancelled before shared editing");
@@ -225,7 +225,7 @@ test("a captured real file save may finish after entry without adopting its old 
   const saving = requestSave({ kind: "save" });
   try {
     await target.arrivedAt("close");
-    assert.deepEqual(await hook.enter(), { ok: true });
+    assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
     const shared = hook.read().app;
     target.releaseOp("close");
     assert.deepEqual(await saving, { kind: "obsolete", here: false });
@@ -252,7 +252,7 @@ test("leaving shared mode keeps desktop draft sequence numbers increasing for th
     script();
     currentDocument().rows[0].audioText = "Before sharing"; noteSessionEdit();
     assert.equal((await flushDraftNow()).ok, true);
-    assert.deepEqual(await hook.enter(), { ok: true });
+    assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
     assert.deepEqual(hook.leave(), { ok: true });
     currentDocument().rows[0].audioText = "After sharing"; noteSessionEdit();
     const result = await flushDraftNow();
@@ -282,7 +282,7 @@ test("entering with pending standalone typing writes that typing to the draft st
     currentDocument().rows[0].audioText = "Typed before sharing"; noteSessionEdit(); undoOwner().flush();
     await Promise.resolve();
     assert.equal(draftsTesting().status().pending, true);
-    assert.deepEqual(await hook.enter(), { ok: true });
+    assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
     assert.deepEqual(store.writes.map(write => [write.text, write.shared, write.kept]), [["Typed before sharing", false, true]]);
     assert.deepEqual(store.discards, []);
   } finally {
@@ -299,7 +299,7 @@ test("entering while the draft store refuses writes is refused with a visible no
     const before = currentDocument();
     const toasts = () => Array.from(document.querySelectorAll("#toast-host .toast.warn")).map(toast => toast.textContent);
     const shown = toasts().length;
-    assert.deepEqual(await hook.enter(), { ok: false, reason: "draft-not-kept" });
+    assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: false, reason: "draft-not-kept" });
     assert.equal(sharedSession(), false);
     assert.equal(currentDocument(), before);
     assert.equal(currentDocument().rows[0].audioText, "Typed before sharing");
@@ -307,7 +307,7 @@ test("entering while the draft store refuses writes is refused with a visible no
     assert.ok(store.writes.length > 0);
     assert.ok(store.writes.every(write => !write.kept && !write.shared && write.text === "Typed before sharing"));
     accepting = true;
-    assert.deepEqual(await hook.enter(), { ok: true });
+    assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
     assert.deepEqual([store.writes.at(-1).text, store.writes.at(-1).shared, store.writes.at(-1).kept], ["Typed before sharing", false, true]);
     assert.deepEqual(store.discards, []);
   } finally {
@@ -323,7 +323,7 @@ test("after a shared stretch over a stored draft, the next flush writes the land
     assert.equal((await flushDraftNow()).ok, true);
     const stored = store.writes.at(-1);
     assert.equal(stored.text, "Stored");
-    assert.deepEqual(await hook.enter(), { ok: true });
+    assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
     hook.peer.type("r1", 0, "Shared "); hook.peer.deliver();
     assert.equal(hook.read().app.rows[0].audioText, "Shared Stored");
     assert.deepEqual(hook.leave(), { ok: true });
@@ -344,7 +344,7 @@ test("a final draft detach refusal after a passing preflight rolls entry back, k
   console.error = error => { reported.push(String(error)); };
   notices.show = (message, ...rest) => { shown.push([message, sharedSession()]); return show(message, ...rest); };
   try {
-    assert.deepEqual(await hook.enter(), { ok: false, reason: "draft-pending" });
+    assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: false, reason: "draft-pending" });
   } finally { draftSource.detachSource = detach; console.error = report; notices.show = show; }
   assert.equal(sharedSession(), false);
   assert.equal(JSON.stringify(currentDocument()), before);
@@ -352,7 +352,7 @@ test("a final draft detach refusal after a passing preflight rolls entry back, k
   assert.deepEqual(shown.at(-1), [DRAFT_NOT_KEPT_NOTICE, false]);
   assert.ok(warnings().includes(DRAFT_NOT_KEPT_NOTICE));
   assert.ok(reported.some(text => text.includes("The draft writer did not detach: pending")));
-  assert.deepEqual(await hook.enter(), { ok: true });
+  assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
   assert.deepEqual(hook.leave(), { ok: true });
 });
 
@@ -362,7 +362,7 @@ test("after leaving, the ordinary draft schedule writes the changed landed copy 
     script();
     await flushDraftNow();
     draftsTesting().setTiming({ idle: 5, max: 5 });
-    assert.deepEqual(await hook.enter(), { ok: true });
+    assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
     hook.peer.type("r1", 0, "Shared "); hook.peer.deliver();
     store.writes.length = 0;
     assert.deepEqual(hook.leave(), { ok: true });
@@ -388,7 +388,7 @@ test("leaving while a save from before entry is still writing schedules a draft 
   try {
     await target.arrivedAt("close");
     draftsTesting().setTiming({ idle: 5, max: 5 });
-    assert.deepEqual(await hook.enter(), { ok: true });
+    assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
     hook.peer.type("r1", 0, "Shared "); hook.peer.deliver();
     store.writes.length = 0;
     assert.deepEqual(hook.leave(), { ok: true });
@@ -406,7 +406,7 @@ test("leaving while a save from before entry is still writing schedules a draft 
 test("the composed recovery panel binding offers the Recovery action only while shared, restores and discards a peer's removal, and closes on leave", async () => {
   script([{ id: "r1", audioText: "Hello", visualText: "" }, { id: "r2", audioText: "Removed words", visualText: "" }]);
   assert.equal(appActions.has("recovery"), false);
-  assert.deepEqual(await hook.enter(), { ok: true });
+  assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
   try {
     assert.equal(appActions.has("recovery"), true);
     assert.deepEqual([appActions.view("recovery")?.enabled, appActions.view("recovery")?.visible], [true, true]);
@@ -458,7 +458,7 @@ test("stopping the app in a shared session leaves it and releases the hook and i
   script();
   const standalone = listenerCounts();
   assert.equal(standalone["document compositionstart/C"], 1);
-  assert.deepEqual(await hook.enter(), { ok: true });
+  assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
   hook.peer.type("r1", 0, "Shared "); hook.peer.deliver();
   let sharedAtRelease = null, started = null;
   const remove = document.removeEventListener;
@@ -483,7 +483,7 @@ test("stopping the app in a shared session leaves it and releases the hook and i
   hook = window.__sharedTest;
   assert.deepEqual(listenerCounts(), standalone);
   script();
-  assert.deepEqual(await hook.enter(), { ok: true });
+  assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
   assert.deepEqual(hook.leave(), { ok: true });
   assert.deepEqual(listenerCounts(), standalone);
 });

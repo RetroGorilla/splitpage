@@ -50,7 +50,7 @@ async function nativeEntry(fixture: ReturnType<typeof entrySwitchFixture>) {
   return opened.value.native;
 }
 
-test("preflight refuses before selecting a backend and default entry builds the legacy parts", async t => {
+test("preflight refuses before selecting a backend and entry without a factory builds the legacy parts", async t => {
   const fixture = entrySwitchFixture();
   t.after(fixture.close);
   const open = t.mock.fn(() => { throw new Error("open"); });

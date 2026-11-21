@@ -74,7 +74,7 @@ export const PAGE = `(function () {
       var data = JSON.parse(perf.data);
       perf.data = '';
       perf.fixture = data;
-      var t0 = performance.now(), result = await S.enterFrom(data.state), ms = performance.now() - t0;
+      var t0 = performance.now(), result = await S.enterFrom(data.state, { backend: 'legacy' }), ms = performance.now() - t0;
       need(result.ok, 'entry refused: ' + result.reason);
       var doc = S.read().app;
       need(doc.rows.length === data.rows, 'entered ' + doc.rows.length + ' beats, expected ' + data.rows);

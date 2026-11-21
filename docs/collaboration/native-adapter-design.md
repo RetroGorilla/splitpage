@@ -20,8 +20,8 @@ The session layer has the offline-notice journal and put-back command, and local
 log, checkpoints and local write receipts in browser IndexedDB and through desktop test IPC
 ([#1668](https://github.com/RetroGorilla/splitpage/pull/1668), [#1679](https://github.com/RetroGorilla/splitpage/pull/1679)).
 These components have their own integration tests. The editor's shared mode is still entered only through
-`__sharedTest`. The hook defaults to the old backend and can select the native session. There is no release
-entry for shared mode. Slice 8 remains the removal of the old adapter and the mapping of its tests in
+`__sharedTest`. The hook defaults to the native session and selects the old backend with `{ backend: "legacy" }`.
+There is no release entry for shared mode. Slice 8 remains the removal of the old adapter and the mapping of its tests in
 [the build order](#11-build-order).
 
 ## Known differences from standalone editing

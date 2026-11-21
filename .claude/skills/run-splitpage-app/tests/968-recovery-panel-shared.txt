@@ -9,7 +9,7 @@ type recovery
 expect !document.querySelector('#cmdk [data-cmd="recovery"]')
 key Escape
 wait document.getElementById('cmdk').hidden
-eval S.enter()
+eval S.enter({backend:'legacy'})
 wait S.read().peer !== null
 key ctrl KeyK
 wait !document.getElementById('cmdk').hidden

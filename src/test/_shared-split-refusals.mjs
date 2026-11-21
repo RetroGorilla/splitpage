@@ -58,7 +58,7 @@ export async function enter(order, mention = false) {
       { id: "r2", audioText: "other", visualText: "other" }
     ] }));
   undoOwner().flush(); writerControls().openWriter();
-  assert.deepEqual(await hook.enter(), { ok: true });
+  assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
   writerControls().closeWriter();
   hook.peer.hold(); hook.peer.type("r2", 0, "P"); hook.peer.type("r2", 1, "Q"); hook.peer.release(order);
   assert.deepEqual(hook.read().app.rows.map(row => row.audioText), [mention ? "@Alice" : "abcdef", "PQother"]);
