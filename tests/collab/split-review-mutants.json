@@ -1,12 +1,9 @@
 {
   "tests": [
     "src/test/shared-split-refusals-app.test.mjs",
-    "src/test/shared-split-refusals-drained-app.test.mjs",
-    "src/test/shared-split-refusals-ime-app.test.mjs",
-    "src/test/shared-split-refusals-audio-forward-app.test.mjs",
-    "src/test/shared-split-refusals-audio-reverse-app.test.mjs",
     "src/test/shared-split-refusals-visual-forward-app.test.mjs",
-    "src/test/shared-split-refusals-visual-reverse-app.test.mjs"
+    "src/test/shared-split-refusals-visual-reverse-app.test.mjs",
+    "src/test/shared-native-callers-mapped-app.test.mjs"
   ],
   "mutants": [
     {
@@ -19,12 +16,12 @@
       ]
     },
     {
-      "label": "the IME bypass is removed",
-      "file": "src/bootstrap/wiring/editor.ts",
-      "find": "if (!event.isComposing && event.keyCode !== 229) onRootKeydown(event);",
-      "replace": "onRootKeydown(event);",
+      "label": "key 229 no longer blocks the following paragraph or line break",
+      "file": "src/bootstrap/wiring/native-shared-input.ts",
+      "find": "if (followsImeKey && !draft?.composing && commandInput",
+      "replace": "if (false && followsImeKey && !draft?.composing && commandInput",
       "tests": [
-        "src/test/shared-split-refusals-ime-app.test.mjs"
+        "src/test/shared-native-callers-mapped-app.test.mjs"
       ]
     },
     {
@@ -33,16 +30,16 @@
       "find": "buffer = mountSharedSplitBuffer({ ...shared, refuseNative: refuseSharedSplitNative });",
       "replace": "buffer = mountSharedSplitBuffer(shared);",
       "tests": [
-        "src/test/shared-split-refusals-audio-forward-app.test.mjs"
+        "src/test/shared-split-refusals-visual-forward-app.test.mjs"
       ]
     },
     {
-      "label": "a successful commit's drained removal is not announced",
-      "file": "src/application/editing/buffered-field.ts",
-      "find": "if (outcome.recovered) ports.recovered(held.rowId);",
-      "replace": "",
+      "label": "a drained native removal retains the draft but loses its warning",
+      "file": "src/bootstrap/wiring/native-shared-input.ts",
+      "find": "if (result.kind === \"recovery\") return stop(result.reason, quiet);",
+      "replace": "if (result.kind === \"recovery\") return stop(result.reason, true);",
       "tests": [
-        "src/test/shared-split-refusals-drained-app.test.mjs"
+        "src/test/shared-native-callers-mapped-app.test.mjs"
       ]
     }
   ]
