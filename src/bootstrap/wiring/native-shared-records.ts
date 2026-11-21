@@ -4,11 +4,17 @@ import type { NativeTextRange } from "../../adapters/collab/native/text-commands
 import { nativeGalleryOf, sameNativeValue } from "../../adapters/collab/native/values.ts";
 import type { GalleryEdit } from "../../application/commands/gallery.ts";
 import type { CommentRecordWriter } from "../../application/commands/comments.ts";
+import type { RegistryEditor } from "../../application/commands/registry-editor.ts";
 import type { RecordCommandRun } from "../../application/commands/shared-records.ts";
 import { NOTHING_RAN, RECORD_CHANGED, RECORD_REFUSED } from "../../application/commands/shared-records.ts";
 import type { ReportPort } from "../../application/session/ports.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
-import { plainText } from "../../core/document/text-policy.ts";
+import { cappedName, cappedText, plainText } from "../../core/document/text-policy.ts";
+import { PERSON_NAME_MAX, personNamed } from "../../core/production/records.ts";
+import { isBlankTagName } from "../../core/production/tags.ts";
+import { normalizeTagName, registryKey } from "../../core/document/tags.ts";
+import { BROLL_PROP_NAME_MAX } from "../../core/document/broll.ts";
+import type { NativeRegistryChange } from "../../adapters/collab/native/registry-commands.ts";
 import type { DocumentComment, DocumentReply, DocumentRow } from "../../core/document/validated.ts";
 import type { RowStatusId } from "../../core/document/timing.ts";
 import { addGalleryPicture, replaceGalleryPicture, rowSlots } from "../../core/document/gallery.ts";
@@ -24,7 +30,8 @@ type Admission = Pick<SharedDocumentSession, "admit" | "refuse">;
 const STALE_BEAT = "That beat no longer exists.";
 
 export function createNativeEditorRecords(
-  native: NativeRecordsSession, session: () => Admission | null, actor: string, now: () => number, report: ReportPort
+  native: NativeRecordsSession, session: () => Admission | null, actor: string, now: () => number, report: ReportPort,
+  settle: () => string | null = () => null
 ) {
   const selections = new Map<string, NativeTextRange>();
   const localAppends = new Map<string, { before: ReturnType<typeof nativeGalleryOf>; after: ReturnType<typeof nativeGalleryOf> }>();
@@ -38,7 +45,7 @@ export function createNativeEditorRecords(
   }
 
   function run(
-    permission: "edit" | "comment", write: () => NativeRecordOutcome, done?: string, beat = false
+    permission: "edit" | "comment", write: () => NativeRecordOutcome, done?: string, beat = false, flush?: () => string | null
   ): RecordCommandRun {
     const owner = session();
     if (!owner) return refuse("closed", owner);
@@ -48,6 +55,8 @@ export function createNativeEditorRecords(
       if (admission) return admission.notified ? RECORD_REFUSED : refuse(admission.reason, owner);
       const capability = capabilities[permission]();
       if (!capability.allowed) return refuse(capability.reason, owner);
+      const pending = flush?.();
+      if (pending) return refuse(pending, owner);
       const result = write();
       if (result.kind === "refused") return refuse(result.reason, owner, beat);
       if (result.kind === "unchanged") return NOTHING_RAN;
@@ -60,6 +69,81 @@ export function createNativeEditorRecords(
   }
 
   const commands = native.commands;
+  function writeRegistry(write: () => NativeRecordOutcome): RecordCommandRun {
+    return run("edit", write, undefined, false, settle);
+  }
+
+  function changeRegistry(change: NativeRegistryChange, checked?: () => boolean): RecordCommandRun {
+    return writeRegistry(() => checked && !checked() ? { kind: "refused", reason: "missing" } : commands.changeRegistry(change));
+  }
+
+  function createRegistry(change: Extract<NativeRegistryChange, { kind: "create" }>, existing?: () => string) {
+    let id = "";
+    const result = writeRegistry(() => {
+      const outcome = commands.changeRegistry(change);
+      if ("created" in outcome) id = outcome.created;
+      else if (outcome.kind === "unchanged" && existing) id = existing();
+      return outcome;
+    });
+    return { run: result, id };
+  }
+
+  const registry: RegistryEditor = {
+    addPerson: raw => {
+      const name = cappedText(raw, PERSON_NAME_MAX);
+      if (!name) return { run: NOTHING_RAN, id: "" };
+      return createRegistry({ kind: "create", collection: "people", fields: { name } },
+        () => personNamed(native.document(), name)?.id ?? "");
+    },
+    removePerson: id => changeRegistry({ kind: "remove", collection: "people", ids: [id] }),
+    registerTag: (cat, raw) => {
+      const name = cappedName(String(raw ?? ""), 80);
+      return isBlankTagName(name) ? NOTHING_RAN : changeRegistry({ kind: "create", collection: "tags", fields: { cat, name } });
+    },
+    updateTags: (tags, { owner, notes, status }) => {
+      const ownerName = owner && "name" in owner ? cappedText(owner.name, PERSON_NAME_MAX) : undefined;
+      if (ownerName === "") return NOTHING_RAN;
+      return changeRegistry({
+        kind: "updateTags",
+        tags: tags.map(({ cat, name }) => ({ cat, name })),
+        fields: { ...(owner && "id" in owner ? { owner: owner.id } : {}),
+          ...(notes === undefined ? {} : { notes }), ...(typeof status === "string" ? { status } : {}) },
+        ...(ownerName === undefined ? {} : { ownerName }), ...(typeof status === "object" ? { cycle: true } : {})
+      }, () => {
+        if (native.isClosingOrClosed()) return false;
+        const current = new Map(native.document().productionTags.map(tag => [tag?.id, tag]));
+        return tags.every(({ id, cat, name }) => {
+          if (!id) return true;
+          const tag = current.get(id);
+          return !!tag && registryKey(tag.cat, tag.name) === registryKey(cat, name);
+        });
+      });
+    },
+    renameTag: (id, name) => name ? changeRegistry({ kind: "set", collection: "tags", ids: id ? [id] : [], fields: { name } }, () => !!id) : NOTHING_RAN,
+    removeTags: ids => changeRegistry({ kind: "remove", collection: "tags", ids }),
+    gear: raw => {
+      const names = new Map<string, string>();
+      for (const line of raw.split(/\r\n|\r|\n/)) {
+        const name = cappedText(line, 80), key = normalizeTagName(name);
+        if (name && !names.has(key)) names.set(key, name);
+      }
+      return changeRegistry({ kind: "gear", names: [...names.values()] });
+    },
+    addShot: name => createRegistry({ kind: "create", collection: "shots", fields: { name, origin: "list" } }),
+    setShots: (ids, fields, owner) => {
+      const ownerName = owner && "name" in owner ? cappedText(owner.name, PERSON_NAME_MAX) : undefined;
+      if (ownerName === "") return NOTHING_RAN;
+      return changeRegistry({ kind: "set", collection: "shots", ids,
+        fields: owner && "id" in owner ? { ...fields, owner: owner.id } : fields,
+        ...(ownerName === undefined ? {} : { ownerName }) });
+    },
+    removeShot: id => changeRegistry({ kind: "remove", collection: "shots", ids: [id] }),
+    addShotProp: (id, raw) => {
+      const prop = cappedText(raw, BROLL_PROP_NAME_MAX);
+      return prop ? changeRegistry({ kind: "addProp", id, prop }) : NOTHING_RAN;
+    },
+    removeShotProp: (id, prop) => changeRegistry({ kind: "removeProp", id, prop })
+  };
   function gallery(rowId: string, message: string, edit: GalleryEdit, append?: readonly string[]): RecordCommandRun {
     return run("edit", () => {
       if (native.isClosingOrClosed()) return { kind: "refused", reason: "closed" };
@@ -125,6 +209,7 @@ export function createNativeEditorRecords(
   }
 
   return {
+    registry,
     beatField: (rowId: string, field: "status" | "lengthSeconds", value: RowStatusId | number | null) => run("edit", () => {
       const target = { kind: "editor-beat" as const, id: rowId, field };
       return value === null ? commands.clearField(target) : commands.setField(target, value);

@@ -18,6 +18,7 @@ import { runBrollRefresh } from "../../features/broll/panel.ts";
 import { scheduleBrollRefresh, updateBrollBadge } from "./broll.ts";
 import { captureReplyDrafts, commentsChanged, renderComments } from "../../features/comments/comments.ts";
 import { writerControls } from "./writer.ts";
+import { nativeEditorActive } from "./shared-session.ts";
 
 let stopPanels: (() => void) | null = null;
 
@@ -79,6 +80,13 @@ export function mountPanelListenersFeature(): void {
     onSessionChange(commentsChanged),
     onSessionChange(statsFollowChange),
     onSessionChange(refreshAnnotator),
+    onSessionChange(({ changes }) => {
+      if (!nativeEditorActive()) return;
+      const { docFields } = changes;
+      const people = docFields.includes("people"), tags = docFields.includes("productionTags"), shots = docFields.includes("brollShots");
+      if ((people || shots) && !tags) refreshTagViews();
+      if (people || tags || shots) runBrollRefresh();
+    }),
     onRefresh((jobs) => {
       if (!documentReader.current()) return;
       if (jobs.has("production")) {

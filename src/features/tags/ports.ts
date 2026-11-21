@@ -1,5 +1,5 @@
 import type { CommonDocumentSession, StandaloneDocumentSession } from "../../application/session/document-session.ts";
-import type { SharedRecordCommands } from "../../application/commands/shared-records.ts";
+import type { EditorRegistryCommands } from "../../application/commands/registry-editor.ts";
 import type { FocusMemory } from "../../application/editing/focus-memory.ts";
 import type { ViewFlags } from "../../application/preferences/view-flags.ts";
 import type { PersonColorLookup } from "../../core/document/person-colors.ts";
@@ -92,7 +92,7 @@ export interface TagPanelPorts {
   readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
   readonly lifetime: Pick<CommonDocumentSession, "epoch">;
   readonly edits: Pick<DocumentEdits, "edit" | "run" | "stamps">;
-  readonly shared: SharedRecordCommands;
+  readonly shared: EditorRegistryCommands;
   readonly text: Pick<TextServices<HTMLElement>, "cellOf" | "productionReaders" | "inertBody" | "retagBody" | "sanitizeHtml">;
   readonly production: Pick<ProductionIndexOwner, "entries" | "current">;
   readonly deletion: Pick<DeleteConfirm, "armedId" | "arm" | "disarm">;
@@ -110,7 +110,7 @@ export interface ProductionTagPorts {
   readonly sharedCommands: SharedCommandGuard;
   readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
   readonly edits: Pick<DocumentEdits, "edit" | "run" | "stamps">;
-  readonly shared: SharedRecordCommands;
+  readonly shared: EditorRegistryCommands;
   readonly refresh: { readonly request: CommonDocumentSession["refresh"]; readonly cancel: CommonDocumentSession["cancelRefresh"] };
   readonly stamping: Pick<StandaloneDocumentSession, "stamp">;
   readonly text: Pick<TextServices<HTMLElement>, "cellOf" | "inertBody" | "sanitizeHtml" | "productionReaders">;

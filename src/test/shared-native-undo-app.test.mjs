@@ -2,11 +2,11 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { bootApp, closeApp } from "./_app-boot.mjs";
-import { adoptReplacement, sharedSession } from "../bootstrap/wiring/session-owner.ts";
+import { adoptReplacement, liveSession, sharedSession } from "../bootstrap/wiring/session-owner.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { cellSelection, setCellSelection } from "../features/common/cell-selection.ts";
-import { posToDom } from "../features/common/cell-dom.ts";
+import { posToDom, readSelection } from "../features/common/cell-dom.ts";
 import { openNativeSession } from "../adapters/collab/native/session.ts";
 import { scriptCellOf, sanitizeHtml } from "../bootstrap/richtext.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
@@ -83,8 +83,8 @@ function nativeBytes(doc, command) {
   } finally { native.close(); }
 }
 
-async function enter(t, rows = [{ id: "r1", audioText: "Hello", visualText: "Look" }], command) {
-  const doc = migrateRows({ schema: 2, title: "Native script", rows });
+async function enter(t, rows = [{ id: "r1", audioText: "Hello", visualText: "Look" }], command, sections) {
+  const doc = migrateRows({ schema: 2, title: "Native script", rows, sections });
   adoptReplacement(doc);
   const show = t.mock.method(notices, "show", () => {});
   assert.deepEqual(await (command ? hook.enterFrom(nativeBytes(doc, command), { backend: "native" }) : hook.enter({ backend: "native" })), { ok: true });
@@ -133,7 +133,408 @@ const views = {
   }
 };
 
+test("Split: removing a beat with a simultaneous peer insertion preserves the peer letters and undoes the removal", async t => {
+  const show = await enter(t, twoBeats);
+  const remove = () => document.querySelector('#rows .row[data-id="r1"] [data-action="delete-row"]').click();
+  views.Split.caret(null, "r1", 2);
+  hook.nativePeer.hold();
+  remove();
+  assert.equal(app(), "Hello");
+  remove();
+  assert.deepEqual(hook.read().app.rows.map(row => row.id), ["r2"]);
+  assert.equal(hook.nativePeer.type("r1", 2, "Y").kind, "written");
+  hook.nativePeer.deliver();
+  await Promise.resolve();
+  assert.deepEqual(hook.read().app, hook.read().peer);
+  assert.equal(app(), "YWorld");
+  assert.equal(cell("r2").textContent, "YWorld");
+  assert.equal(press(cell("r2"), "z"), true);
+  assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["HeYllo", "World"]);
+  assert.equal(views.Split.at(null)?.[0], "r1");
+  await Promise.resolve();
+  assert.deepEqual(hook.read().app, hook.read().peer);
+  assert.equal(show.mock.callCount(), 0);
+});
+
+test("Split: scene controls add, rename and remove one heading in three undo steps", async t => {
+  const show = await enter(t, twoBeats);
+  const name = value => {
+    const field = document.querySelector(".section-rename input");
+    field.value = value;
+    field.form.dispatchEvent(new window.Event("submit", { bubbles: true, cancelable: true }));
+  };
+  document.querySelector('#rows [data-action="add-section"][data-id="r2"]').click();
+  name("Scene");
+  const added = hook.read().app.sections[0];
+  assert.equal(added.firstSceneId, "r2");
+  const header = () => document.querySelector('.section-header[data-section-id="' + added.id + '"]');
+  assert.equal(header().querySelector(".section-name").textContent, "Scene");
+  header().querySelector('[data-section-action="rename"]').click();
+  name("Changed");
+  assert.equal(hook.read().app.sections[0].name, "Changed");
+  header().querySelector('[data-section-action="remove"]').click();
+  assert.equal(header(), null);
+  assert.equal(hook.read().app.sections?.length ?? 0, 0);
+  views.Split.caret(null, "r2", 0);
+  assert.equal(press(cell("r2"), "z"), true);
+  assert.equal(hook.read().app.sections[0].name, "Changed");
+  assert.equal(press(cell("r2"), "z"), true);
+  assert.deepEqual(hook.read().app.sections, [added]);
+  assert.equal(press(cell("r2"), "z"), true);
+  assert.equal(hook.read().app.sections?.length ?? 0, 0);
+  await Promise.resolve();
+  assert.deepEqual(hook.read().peer, hook.read().app);
+  assert.equal(show.mock.callCount(), 0);
+});
+
+test("Writer: renaming and removing a heading replay the heading caret", async t => {
+  const show = await enter(t, twoBeats, undefined, [{ id: "section", name: "Scene", firstSceneId: "r2" }]);
+  const view = writer(t), heading = () => root().querySelector(".wr-heading");
+  const at = offset => ({ kind: "heading", sceneId: "section", offset });
+  view.flow.place({ anchor: at(5), head: at(5) });
+  typeKeys(root(), " two");
+  assert.equal(heading().textContent, "Scene two");
+  assert.equal(hook.read().app.sections[0].name, "Scene two");
+  assert.deepEqual(view.flow.selection().head, at(9));
+  view.flow.place({ anchor: at(0), head: at(0) });
+  assert.equal(press(root(), "Backspace", { ctrlKey: false }), true);
+  assert.equal(heading(), null);
+  assert.equal(press(root(), "z"), true);
+  assert.equal(heading().textContent, "Scene two");
+  assert.deepEqual(view.flow.selection().head, at(0));
+  assert.equal(press(root(), "z"), true);
+  assert.equal(heading().textContent, "Scene tw");
+  assert.deepEqual(view.flow.selection().head, at(8));
+  await Promise.resolve();
+  assert.deepEqual(hook.read().peer, hook.read().app);
+  assert.equal(show.mock.callCount(), 0);
+});
+
+test("Writer: a stale heading cannot supply the range for a rename", async t => {
+  const show = await enter(t, twoBeats, undefined, [{ id: "section", name: "Scene", firstSceneId: "r2" }]);
+  const view = writer(t);
+  const heading = root().querySelector(".wr-heading");
+  heading.textContent = "Stale";
+  const at = { kind: "heading", sceneId: "section", offset: 2 };
+  view.flow.place({ anchor: at, head: at });
+  const before = hook.read();
+  assert.equal(beforeInput(root(), "insertText", "X"), true);
+  assert.deepEqual(hook.read(), before);
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+});
+
+const threeBeats = () => [...twoBeats, { id: "r3", audioText: "Again" }];
+const fourBeats = () => [...threeBeats(), { id: "r4", audioText: "Last" }];
+const rowOrder = () => hook.read().app.rows.map(row => row.id);
+
+async function keepAdjacentAfterPeerMove(t, open, move) {
+  const show = await enter(t, fourBeats()), view = open(t);
+  assert.equal(hook.nativePeer.moveBeat("r3", null).kind, "written");
+  assert.deepEqual(rowOrder(), ["r1", "r2", "r3", "r4"]);
+  move(view);
+  await Promise.resolve();
+  assert.deepEqual(rowOrder(), ["r2", "r1", "r4", "r3"]);
+  assert.deepEqual(hook.read().peer, hook.read().app);
+  assert.equal(show.mock.callCount(), 0);
+}
+
+test("Split: the move-down menu accepts the same neighbour after an unseen peer move", t => {
+  return keepAdjacentAfterPeerMove(t, views.Split.open, () => {
+    document.querySelector('#rows [data-action="move-down"][data-id="r1"]').click();
+  });
+});
+
+test("Split: move-down and a row drag use native history", async t => {
+  const show = await enter(t, threeBeats());
+  document.querySelector('#rows [data-action="move-down"][data-id="r1"]').click();
+  assert.deepEqual(rowOrder(), ["r2", "r1", "r3"]);
+  dragBeat("r2", "r3");
+  assert.deepEqual(rowOrder(), ["r1", "r3", "r2"]);
+  views.Split.caret(null, "r1", 0);
+  assert.equal(press(cell(), "z"), true);
+  assert.deepEqual(rowOrder(), ["r2", "r1", "r3"]);
+  assert.equal(press(document.activeElement, "z"), true);
+  assert.deepEqual(rowOrder(), ["r1", "r2", "r3"]);
+  assert.equal(show.mock.callCount(), 0);
+});
+
+function dragBeat(source, destination) {
+  const row = document.querySelector('#rows .row[data-id="' + source + '"]');
+  const drag = (target, type, clientY = 0) => target.dispatchEvent(new window.MouseEvent(type, { bubbles: true, cancelable: true, clientY }));
+  row.setAttribute("draggable", "true");
+  drag(row, "dragstart");
+  drag(cell(destination), "dragover", 200);
+  drag(cell(destination), "drop", 200);
+}
+
+for (const [route, move] of [
+  ["menu move", () => document.querySelector('#rows [data-action="move-down"][data-id="r1"]').click()],
+  ["drag", () => dragBeat("r1", "r2")]
+]) test("Split: a " + route + " refuses an unseen change to its destination", async t => {
+  const show = await enter(t, threeBeats());
+  assert.equal(hook.nativePeer.moveBeat("r2", null).kind, "written");
+  move();
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+  await Promise.resolve();
+  assert.deepEqual(rowOrder(), ["r1", "r3", "r2"]);
+  assert.deepEqual(hook.read().peer, hook.read().app);
+});
+
+for (const backend of ["standalone", "native"]) {
+  test("Writer: Alt+Down with a cross-beat selection in " + backend, async t => {
+    let show;
+    if (backend === "native") show = await enter(t, threeBeats());
+    else adoptReplacement(migrateRows({ schema: 2, title: "Standalone script", rows: threeBeats() }));
+    const view = writer(t);
+    const range = { anchor: { kind: "beat", rowId: "r1", offset: 1 }, head: { kind: "beat", rowId: "r2", offset: 2 } };
+    view.flow.place(range);
+    assert.equal(press(root(), "ArrowDown", { altKey: true, ctrlKey: false }), true);
+    assert.deepEqual(rowOrder(), backend === "native" ? ["r1", "r2", "r3"] : ["r1", "r3", "r2"]);
+    assert.deepEqual(view.flow.selection(), range);
+    if (show) {
+      assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+      assert.deepEqual(hook.read().peer, hook.read().app);
+    }
+  });
+}
+
 for (const [name, kind] of Object.entries(views)) {
+  test(name + ": Alt+Enter splits only in Split", async t => {
+    const show = await enter(t), view = kind.open(t);
+    kind.caret(view, "r1", 2);
+    assert.equal(press(kind.surface(), "Enter", { altKey: true, ctrlKey: false }), true);
+    assert.deepEqual(hook.read().app.rows.map(row => row.audioText), name === "Split" ? ["He", "llo"] : ["Hello"]);
+    await Promise.resolve();
+    assert.deepEqual(hook.read().app, hook.read().peer);
+    assert.equal(show.mock.callCount(), 0);
+  });
+
+  test(name + ": Alt+Down refuses when an unseen peer move changed the adjacent beat", async t => {
+    const show = await enter(t, threeBeats()), view = kind.open(t);
+    kind.caret(view, "r1", 2);
+    assert.equal(hook.nativePeer.moveBeat("r2", null).kind, "written");
+    assert.deepEqual(rowOrder(), ["r1", "r2", "r3"]);
+    assert.equal(press(kind.surface(), "ArrowDown", { altKey: true, ctrlKey: false }), true);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+    await Promise.resolve();
+    assert.deepEqual(rowOrder(), ["r1", "r3", "r2"]);
+    assert.deepEqual(hook.read().peer, hook.read().app);
+  });
+
+  test(name + ": Alt+Down accepts the same neighbour after an unseen peer move", t => {
+    return keepAdjacentAfterPeerMove(t, kind.open, view => {
+      kind.caret(view, "r1", 2);
+      assert.equal(press(kind.surface(), "ArrowDown", { altKey: true, ctrlKey: false }), true);
+    });
+  });
+
+  test(name + ": Alt+Down restores both selection ends after a repaint, undo and redo", async t => {
+    const show = await enter(t, threeBeats()), view = kind.open(t);
+    let repaints = 0;
+    const stop = liveSession().subscribe(change => {
+      if (change.changes.rowsMoved) {
+        repaints++;
+        document.getSelection().removeAllRanges();
+      }
+    });
+    t.after(stop);
+    kind.caret(view, "r1", 1, 4);
+    assert.equal(press(kind.surface(), "ArrowDown", { altKey: true, ctrlKey: false }), true);
+    assert.deepEqual(rowOrder(), ["r2", "r1", "r3"]);
+    assert.equal(repaints, 1);
+    const live = readSelection(kind.host("r1"), document.getSelection());
+    assert.deepEqual(live && [live.anchor, live.head], [1, 4]);
+    assert.deepEqual(kind.at(view), ["r1", 1, 4]);
+    kind.caret(view, "r2", 2);
+    assert.equal(press(document.activeElement, "z"), true);
+    assert.equal(repaints, 2);
+    assert.deepEqual(kind.at(view), ["r1", 1, 4]);
+    kind.caret(view, "r2", 3);
+    assert.equal(press(document.activeElement, "y"), true);
+    assert.equal(repaints, 3);
+    assert.deepEqual(kind.at(view), ["r1", 1, 4]);
+    assert.equal(show.mock.callCount(), 0);
+  });
+
+  test(name + ": Alt+Down rebases a caret placed before buffered typing", async t => {
+    const show = await enter(t, threeBeats()), view = kind.open(t);
+    kind.caret(view, "r1", 3);
+    typeKeys(kind.surface(), "X");
+    assert.equal(app(), "Hello");
+    kind.caret(view, "r1", 1);
+    assert.equal(press(kind.surface(), "ArrowDown", { altKey: true, ctrlKey: false }), true);
+    assert.deepEqual(rowOrder(), ["r2", "r1", "r3"]);
+    assert.equal(app(1), "HelXlo");
+    assert.deepEqual(kind.at(view), ["r1", 1, 1]);
+    assert.equal(press(kind.surface(), "z"), true);
+    assert.equal(app(), "HelXlo");
+    assert.deepEqual(kind.at(view), ["r1", 1, 1]);
+    assert.equal(show.mock.callCount(), 0);
+  });
+
+  test(name + ": Alt+Arrow moves the beat, replays its caret and converges with a competing move", async t => {
+    const show = await enter(t, threeBeats()), view = kind.open(t);
+    kind.caret(view, "r2", 2);
+    const move = key => press(document.activeElement, key, { altKey: true, ctrlKey: false });
+    assert.equal(move("ArrowUp"), true);
+    assert.deepEqual(rowOrder(), ["r2", "r1", "r3"]);
+    assert.deepEqual(kind.at(view, "r2"), ["r2", 2, 2]);
+    assert.equal(press(document.activeElement, "z"), true);
+    assert.deepEqual(rowOrder(), ["r1", "r2", "r3"]);
+    assert.deepEqual(kind.at(view, "r2"), ["r2", 2, 2]);
+    assert.equal(press(document.activeElement, "y"), true);
+    assert.deepEqual(rowOrder(), ["r2", "r1", "r3"]);
+    assert.deepEqual(kind.at(view, "r2"), ["r2", 2, 2]);
+    assert.equal(press(document.activeElement, "z"), true);
+    await Promise.resolve();
+    hook.nativePeer.hold();
+    assert.equal(move("ArrowUp"), true);
+    assert.equal(hook.nativePeer.moveBeat("r2", null).kind, "written");
+    hook.nativePeer.deliver();
+    await Promise.resolve();
+    const order = rowOrder().join(",");
+    assert.ok(order === "r2,r1,r3" || order === "r1,r3,r2", order);
+    assert.deepEqual(hook.read().peer, hook.read().app);
+    const selector = name === "Split" ? "#rows .row" : "#writer-doc .wr-beat";
+    assert.equal([...document.querySelectorAll(selector)].map(el => el.dataset.id).join(","), order);
+    assert.equal(show.mock.callCount(), 0);
+  });
+
+  test(name + ": Backspace removes a blank beat and undo restores it", async t => {
+    const show = await enter(t, [twoBeats[0], { id: "r2", audioText: "" }]), view = kind.open(t);
+    kind.caret(view, "r2", 0);
+    assert.equal(press(document.activeElement, "Backspace", { ctrlKey: false }), true);
+    assert.deepEqual(hook.read().app.rows.map(row => row.id), ["r1"]);
+    assert.deepEqual(kind.at(view), ["r1", 5, 5]);
+    await Promise.resolve();
+    assert.equal(hook.nativePeer.type("r2", 0, "X").kind, "refused");
+    assert.equal(press(kind.surface(), "z"), true);
+    assert.deepEqual(hook.read().app.rows.map(row => row.id), ["r1", "r2"]);
+    assert.deepEqual(kind.at(view, "r2"), ["r2", 0, 0]);
+    assert.equal(press(document.activeElement, "y"), true);
+    assert.deepEqual(kind.at(view), ["r1", 5, 5]);
+    await Promise.resolve();
+    assert.deepEqual(hook.read().peer, hook.read().app);
+    assert.equal(show.mock.callCount(), 0);
+  });
+  test(name + ": Enter flushes typing, splits once and replays both carets", async t => {
+    const show = await enter(t), view = kind.open(t);
+    kind.caret(view, "r1", 2);
+    typeKeys(kind.surface(), "x");
+    assert.equal(app(), "Hello");
+    assert.equal(press(kind.surface(), "Enter", { ctrlKey: false }), true);
+    const { app: local } = hook.read();
+    const created = local.rows[1].id;
+    assert.deepEqual(local.rows.map(row => row.audioText), ["Hex", "llo"]);
+    assert.deepEqual(kind.at(view, created), [created, 0, 0]);
+    assert.equal(kind.host(created).textContent.replace(/\u200b/g, ""), "llo");
+    assert.equal(press(document.activeElement, "z"), true);
+    assert.equal(app(), "Hexllo");
+    assert.deepEqual(kind.at(view), ["r1", 3, 3]);
+    assert.equal(press(kind.surface(), "z"), true);
+    assert.equal(app(), "Hello");
+    assert.equal(press(kind.surface(), "y"), true);
+    assert.equal(press(kind.surface(), "y"), true);
+    assert.deepEqual(kind.at(view, created), [created, 0, 0]);
+    await Promise.resolve();
+    assert.deepEqual(hook.read().peer, hook.read().app);
+    assert.equal(show.mock.callCount(), 0);
+  });
+
+  test(name + ": Enter refuses a selection or an open composition", async t => {
+    const show = await enter(t), view = kind.open(t);
+    kind.caret(view, "r1", 1, 3);
+    assert.equal(press(kind.surface(), "Enter", { ctrlKey: false }), true);
+    kind.caret(view, "r1", 2);
+    compose(kind.surface(), "start", "");
+    assert.equal(press(kind.surface(), "Enter", { ctrlKey: false }), true);
+    assert.equal(beforeInput(kind.surface(), "insertParagraph", null), true);
+    compose(kind.surface(), "end", "");
+    assert.equal(app(), "Hello");
+    assert.equal(show.mock.callCount(), 3);
+  });
+
+  test(name + ": recognised structure keys cancel the browser default during composition", async t => {
+    const show = await enter(t, twoBeats), view = kind.open(t);
+    kind.caret(view, "r1", 5);
+    assert.equal(compose(kind.surface(), "start", ""), false);
+    const before = hook.read();
+    for (const signal of [{ isComposing: true }, { keyCode: 229 }]) {
+      assert.equal(press(kind.surface(), "Enter", { ctrlKey: false, ...signal }), true);
+      assert.equal(press(kind.surface(), "Delete", { ctrlKey: false, ...signal }), true);
+      assert.equal(press(kind.surface(), "ArrowDown", { altKey: true, ctrlKey: false, ...signal }), true);
+    }
+    assert.deepEqual(hook.read(), before);
+    assert.equal(show.mock.callCount(), 0);
+    compose(kind.surface(), "end", "X");
+    assert.equal(app(), "HelloX");
+  });
+
+  test(name + ": Enter refuses stale narration and leaves the peer edit intact", async t => {
+    const show = await enter(t), view = kind.open(t);
+    kind.caret(view, "r1", 2);
+    assert.equal(hook.nativePeer.type("r1", 0, "Y").kind, "written");
+    assert.equal(press(kind.surface(), "Enter", { ctrlKey: false }), true);
+    await Promise.resolve();
+    assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["YHello"]);
+    assert.deepEqual(hook.read().peer, hook.read().app);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+  });
+
+  test(name + ": Enter after a stale typing stop is consumed silently", async t => {
+    const show = await enter(t), view = kind.open(t);
+    kind.caret(view, "r1", 2);
+    assert.equal(hook.nativePeer.type("r1", 0, "Y").kind, "written");
+    typeKeys(kind.surface(), "x");
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+    assert.equal(press(kind.surface(), "Enter", { ctrlKey: false }), true);
+    assert.equal(press(kind.surface(), "Enter", { ctrlKey: false }), true);
+    assert.equal(beforeInput(kind.surface(), "insertParagraph", null), true);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+    assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["Hello"]);
+    assert.equal(kind.host("r1").textContent.replace(/\u200b/g, ""), "Hexllo");
+    assert.equal(peer(), "YHello");
+  });
+
+  for (const peerSplits of [true, false]) {
+    test(name + ": Enter converges with a simultaneous peer " + (peerSplits ? "split" : "insertion"), async t => {
+      const show = await enter(t), view = kind.open(t);
+      hook.nativePeer.hold();
+      kind.caret(view, "r1", 2);
+      assert.equal(press(kind.surface(), "Enter", { ctrlKey: false }), true);
+      const other = peerSplits ? hook.nativePeer.split("r1", 4) : hook.nativePeer.type("r1", 3, "Y");
+      assert.equal(other.kind, "written");
+      hook.nativePeer.deliver();
+      await Promise.resolve();
+      const { app: local, peer: remote } = hook.read();
+      const expected = peerSplits ? ["He", "ll", "o"] : ["He", "lYlo"];
+      assert.deepEqual(remote, local);
+      assert.deepEqual(local.rows.map(row => row.audioText), expected);
+      assert.deepEqual(local.rows.map(row => kind.host(row.id).textContent.replace(/\u200b/g, "")), expected);
+      assert.equal(show.mock.callCount(), 0);
+    });
+  }
+
+  for (const backwards of [true, false]) {
+    test(name + ": " + (backwards ? "Backspace" : "Delete") + " joins beats and replays the seam", async t => {
+      const show = await enter(t, twoBeats), view = kind.open(t);
+      const id = backwards ? "r2" : "r1", offset = backwards ? 0 : 5;
+      kind.caret(view, id, offset);
+      assert.equal(press(document.activeElement, backwards ? "Backspace" : "Delete", { ctrlKey: false }), true);
+      assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["Hello World"]);
+      assert.equal(kind.host("r1").textContent.replace(/\u200b/g, ""), "Hello World");
+      assert.deepEqual(kind.at(view), ["r1", 6, 6]);
+      assert.equal(press(kind.surface(), "z"), true);
+      assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["Hello", "World"]);
+      assert.deepEqual(kind.at(view, id), [id, offset, offset]);
+      assert.equal(press(document.activeElement, "y"), true);
+      assert.deepEqual(kind.at(view), ["r1", 6, 6]);
+      await Promise.resolve();
+      assert.deepEqual(hook.read().peer, hook.read().app);
+      assert.equal(show.mock.callCount(), 0);
+    });
+  }
+
   test(name + ": Ctrl+Z takes back each typed word with the caret where it began, and Ctrl+Y and Ctrl+Shift+Z put them back", async t => {
     const show = await enter(t), view = kind.open(t);
     kind.caret(view, "r1", 5);
@@ -539,9 +940,6 @@ const outOfScope = [
   ["typing over a selection across two beats", view => {
     view.flow.place({ anchor: { kind: "beat", rowId: "r1", offset: 2 }, head: { kind: "beat", rowId: "r2", offset: 2 } });
   }, () => beforeInput(root(), "insertText", "x")],
-  ["Backspace at the start of a beat", view => { view.caret("r2", 0); }, () => beforeInput(root(), "deleteContentBackward", null)],
-  ["Delete at the end of a beat", view => { view.caret("r1", 6); }, () => beforeInput(root(), "deleteContentForward", null)],
-  ["Enter", view => { view.caret("r1", 2); }, () => press(root(), "Enter", { ctrlKey: false })],
   ["Ctrl+B", view => { view.caret("r1", 1, 3); }, () => press(root(), "b")],
   ["a rich paste", view => { view.caret("r1", 2); }, () => {
     const event = new window.Event("paste", { bubbles: true, cancelable: true });
