@@ -456,7 +456,7 @@ questions. Earlier rounds: [appendix K](#k-earlier-rounds).
 
 **(c) Close a script only between commands.** A close from `beforeTransaction` after a press has checked availability still lets the press write. [Undo tests](../../tests/adapters/collab/native/undo-commands.test.ts). A requested close delivers the final `changed` while `document()` can read the committed edit, then delivers `closed` exactly once to each subscriber. A failed close can omit the final `changed` if Yjs emitted no update. The bytes on `closed` are then the caller's source of truth. [Session tests](../../tests/adapters/collab/native/session.test.ts) pin both paths, including throws from subscribers and a destroy listener.
 
-**(d) Deliver each person's undo and redo in order.** A redo that overtakes its undo lets formatting cleanup drop a restored tag on every copy. A closing socket can still report connected, so hold document sends whenever the socket is not open for sending. See [section 8](#8-relay-and-size). Pinned in the [native relay tests](../../tests/adapters/collab/native/relay-order.test.ts). E13 has a library reproduction in [raw tag relay tests](../../prototypes/collab/test/native-undo/raw-tag-relay.test.ts).
+**(d) Deliver each person's undo and redo in order.** A redo that overtakes its undo lets formatting cleanup drop a restored tag on every copy. A closing socket can still report connected, so hold document sends whenever the socket is not open for sending. See [section 8](#8-relay-and-size). Pinned in the [native relay tests](../../tests/adapters/collab/native/relay-order.test.ts). E13 has a library reproduction in [raw tag relay tests](https://github.com/RetroGorilla/splitpage/blob/5b9b2b141/prototypes/collab/test/native-undo/raw-tag-relay.test.ts).
 
 **(e) Supply the real comment body sanitiser.** `NativeCommentBodyPorts.sanitize` runs inside the write transaction before any write. It must leave the document and script lifecycle alone. The command catches a throw and refuses the body. The body check refuses text that would change on reload. [Record command tests](../../tests/adapters/collab/native/record-commands.test.ts) pin refusal of bodies the core changes. [Session tests](../../tests/adapters/collab/native/session.test.ts) pin callback timing and refusal on a throw from the sanitiser itself. Its document and lifecycle restrictions are not pinned. [Slice 5 PR](https://github.com/RetroGorilla/splitpage/pull/1658).
 
@@ -559,28 +559,28 @@ The owner chose option A on 2026-11-20.
 
 ### A. Sources
 
-Result files, under `prototypes/collab/src/`:
+Result files, under [`prototypes/collab/src/`](https://github.com/RetroGorilla/splitpage/tree/5b9b2b141/prototypes/collab/src):
 
 | Name | File |
 | --- | --- |
-| Spike | [`native/REPORT.md`](../../prototypes/collab/src/native/REPORT.md) |
-| E1, composition | [`native-e1/RESULT.md`](../../prototypes/collab/src/native-e1/RESULT.md) |
-| E2, split and join races | [`native/E2-RESULT.md`](../../prototypes/collab/src/native/E2-RESULT.md) |
-| E3 and E3b (its follow-up with the chosen keys), undo | [`native-undo/RESULTS.md`](../../prototypes/collab/src/native-undo/RESULTS.md) |
-| E4, formatting keys | [`format-keys/RESULT.md`](../../prototypes/collab/src/format-keys/RESULT.md) |
-| E5, headings | [`native/E5-RESULT.md`](../../prototypes/collab/src/native/E5-RESULT.md) |
-| E6, production tags | [`format-keys/E6-RESULT.md`](../../prototypes/collab/src/format-keys/E6-RESULT.md) |
-| E7, moves by placement | [`native-moves/RESULT.md`](../../prototypes/collab/src/native-moves/RESULT.md) |
-| E8, size | [`native-size/RESULT.md`](../../prototypes/collab/src/native-size/RESULT.md) |
-| E9, real deletion | [`native-delete/RESULT.md`](../../prototypes/collab/src/native-delete/RESULT.md) |
-| E10, move ranks | [`native-moves/E10-RESULT.md`](../../prototypes/collab/src/native-moves/E10-RESULT.md) |
-| E11, the chosen combination, with its 2026-11-19 correction | [`native-chosen/RESULT.md`](../../prototypes/collab/src/native-chosen/RESULT.md) |
-| E12, the offline notice | [`native-notice/RESULT.md`](../../prototypes/collab/src/native-notice/RESULT.md) |
-| E13, the stock relay | [`native-relay/RESULT.md`](../../prototypes/collab/src/native-relay/RESULT.md) |
-| E14, kept record and visual cell | [`native-kept/RESULT.md`](../../prototypes/collab/src/native-kept/RESULT.md) |
-| E15, a row's place after competing moves and undo | [`native-rank-undo/RESULT.md`](../../prototypes/collab/src/native-rank-undo/RESULT.md) |
-| E16, the recount with kept records | [`native-kept-recount/RESULT.md`](../../prototypes/collab/src/native-kept-recount/RESULT.md) |
-| E17, a shown row always has its record | [`native-row-record/RESULT.md`](../../prototypes/collab/src/native-row-record/RESULT.md) |
+| Spike | [`native/REPORT.md`](https://github.com/RetroGorilla/splitpage/blob/5b9b2b141/prototypes/collab/src/native/REPORT.md) |
+| E1, composition | [`native-e1/RESULT.md`](https://github.com/RetroGorilla/splitpage/blob/5b9b2b141/prototypes/collab/src/native-e1/RESULT.md) |
+| E2, split and join races | [`native/E2-RESULT.md`](https://github.com/RetroGorilla/splitpage/blob/5b9b2b141/prototypes/collab/src/native/E2-RESULT.md) |
+| E3 and E3b (its follow-up with the chosen keys), undo | [`native-undo/RESULTS.md`](https://github.com/RetroGorilla/splitpage/blob/5b9b2b141/prototypes/collab/src/native-undo/RESULTS.md) |
+| E4, formatting keys | [`format-keys/RESULT.md`](https://github.com/RetroGorilla/splitpage/blob/5b9b2b141/prototypes/collab/src/format-keys/RESULT.md) |
+| E5, headings | [`native/E5-RESULT.md`](https://github.com/RetroGorilla/splitpage/blob/5b9b2b141/prototypes/collab/src/native/E5-RESULT.md) |
+| E6, production tags | [`format-keys/E6-RESULT.md`](https://github.com/RetroGorilla/splitpage/blob/5b9b2b141/prototypes/collab/src/format-keys/E6-RESULT.md) |
+| E7, moves by placement | [`native-moves/RESULT.md`](https://github.com/RetroGorilla/splitpage/blob/5b9b2b141/prototypes/collab/src/native-moves/RESULT.md) |
+| E8, size | [`native-size/RESULT.md`](https://github.com/RetroGorilla/splitpage/blob/5b9b2b141/prototypes/collab/src/native-size/RESULT.md) |
+| E9, real deletion | [`native-delete/RESULT.md`](https://github.com/RetroGorilla/splitpage/blob/5b9b2b141/prototypes/collab/src/native-delete/RESULT.md) |
+| E10, move ranks | [`native-moves/E10-RESULT.md`](https://github.com/RetroGorilla/splitpage/blob/5b9b2b141/prototypes/collab/src/native-moves/E10-RESULT.md) |
+| E11, the chosen combination, with its 2026-11-19 correction | [`native-chosen/RESULT.md`](https://github.com/RetroGorilla/splitpage/blob/5b9b2b141/prototypes/collab/src/native-chosen/RESULT.md) |
+| E12, the offline notice | [`native-notice/RESULT.md`](https://github.com/RetroGorilla/splitpage/blob/5b9b2b141/prototypes/collab/src/native-notice/RESULT.md) |
+| E13, the stock relay | [`native-relay/RESULT.md`](https://github.com/RetroGorilla/splitpage/blob/5b9b2b141/prototypes/collab/src/native-relay/RESULT.md) |
+| E14, kept record and visual cell | [`native-kept/RESULT.md`](https://github.com/RetroGorilla/splitpage/blob/5b9b2b141/prototypes/collab/src/native-kept/RESULT.md) |
+| E15, a row's place after competing moves and undo | [`native-rank-undo/RESULT.md`](https://github.com/RetroGorilla/splitpage/blob/5b9b2b141/prototypes/collab/src/native-rank-undo/RESULT.md) |
+| E16, the recount with kept records | [`native-kept-recount/RESULT.md`](https://github.com/RetroGorilla/splitpage/blob/5b9b2b141/prototypes/collab/src/native-kept-recount/RESULT.md) |
+| E17, a shown row always has its record | [`native-row-record/RESULT.md`](https://github.com/RetroGorilla/splitpage/blob/5b9b2b141/prototypes/collab/src/native-row-record/RESULT.md) |
 
 Library sources read: Yjs 13.6.33 `src/utils/UndoManager.js`, `src/types/YText.js`; y-prosemirror 1.3.7
 `sync-plugin.js`, `undo-plugin.js`; y-codemirror.next 0.3.5 `y-sync.js`, `y-undomanager.js`; y-protocols 1.0.6
@@ -590,9 +590,9 @@ document updates and relative positions. Rule ids such as U14 are from
 
 ### B. Checks
 
-`prototypes/collab/test/native-design/native-design.test.mjs`, Yjs 13.6.33, Node 24.22.1; all 19 pass. Run
+[`prototypes/collab/test/native-design/native-design.test.mjs`](https://github.com/RetroGorilla/splitpage/blob/5b9b2b141/prototypes/collab/test/native-design/native-design.test.mjs), Yjs 13.6.33, Node 24.22.1; all 19 pass. Run
 `npm ci --prefix prototypes/collab`, then `node --test test/native-design/native-design.test.mjs` in
-`prototypes/collab`.
+`prototypes/collab`. The prototype code lives at commit `5b9b2b141`.
 
 | Check | Result |
 | --- | --- |
@@ -891,7 +891,7 @@ In all of them, no option lost narration, showed a row twice, left copies disagr
 into that segment's first beat, else the beat before, else the next; after a heading, into the beat after it, the
 name unchanged; with no beat, the narration-only row. **The seam:** B shows its own text, then the hidden text.
 Typing at the seam (the offset where B's own text ends; 0 when B has none) lands before the hidden marker and stays in B on a redo;
-typing inside or after the hidden text moves into N on a redo, and cutting B takes it (E17, pinned by the test "where the seam sits" in `prototypes/collab/test/native-row-record/review.test.ts`). **Refreshing** keeps the parsed narration of unchanged segments and recomputes which rows
+typing inside or after the hidden text moves into N on a redo, and cutting B takes it (E17, pinned by the test "where the seam sits" in [`prototypes/collab/test/native-row-record/review.test.ts`](https://github.com/RetroGorilla/splitpage/blob/5b9b2b141/prototypes/collab/test/native-row-record/review.test.ts)). **Refreshing** keeps the parsed narration of unchanged segments and recomputes which rows
 own the affected text. The marker's own segment alone is too narrow: a hidden marker at a segment's start moves its
 narration to a beat in another segment.
 
