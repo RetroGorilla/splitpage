@@ -2,7 +2,7 @@ open
 wait document.querySelectorAll('#rows .row').length > 0
 eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;F.openFile(new File([JSON.stringify({schema:2,title:'Native deletion runs',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello'}]})],'native-deletion-runs.splitpage'))
 wait F.state().title === 'Native deletion runs'
-eval S.enter({backend:'native'})
+eval S.enter()
 eval window.cell=()=>document.querySelector('#rows .cell-editable[data-id="r1"][data-field="audioText"]');window.both=text=>S.read().app.rows[0].audioText===text&&S.read().peer.rows[0].audioText===text;cell().focus();getSelection().collapse(cell().firstChild,4);true
 key Backspace
 key Backspace
@@ -31,7 +31,7 @@ eval S.leave()
 click #wr-close
 eval window.loadText=(title,audioText)=>F.openFile(new File([JSON.stringify({schema:2,title,paragraphsDecided:true,rows:[{id:'r1',audioText}]})],'native-deletion-runs.splitpage'));loadText('Formatted deletion run','<strong>ab</strong><em>cd</em>efg')
 wait F.state().title === 'Formatted deletion run'
-eval S.enter({backend:'native'})
+eval S.enter()
 eval window.splitBlurs=0;window.addEventListener('focusout',event=>{if(event.target.matches('#rows .cell-editable[data-id="r1"][data-field="audioText"]'))splitBlurs++},true);cell().focus();getSelection().collapse(cell().lastChild,2);true
 key Backspace
 key Backspace
@@ -48,7 +48,7 @@ wait both('<strong>a</strong>g')
 eval S.leave()
 eval loadText('Peer deletion run','abcdef')
 wait F.state().title === 'Peer deletion run'
-eval S.enter({backend:'native'})
+eval S.enter()
 eval cell().focus();getSelection().collapse(cell().firstChild,3);true
 key Backspace
 wait both('abdef')

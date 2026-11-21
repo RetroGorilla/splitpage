@@ -211,16 +211,16 @@ test("shared Writer visual typing undo reopens the visual box and restores its c
   } finally { assert.deepEqual(leaveSharedSession(ports), { ok: true }); }
 });
 
-test("an already open Writer enters shared mode, keeps its caret, types, receives remote text, undoes and leaves", async () => {
+for (const offset of [3, 5]) test(`an already open Writer enters shared mode, keeps its caret at ${offset}, types, receives remote text, undoes and leaves`, async () => {
   writerControls().closeWriter();
   adoptReplacement(migrateRows({ title: "Open Writer", rows: [{ id: "r1", audioText: "Hello", visualText: "", status: "todo" }] }));
   undoOwner().flush();
   writerControls().openWriter();
-  writerControls().writerFlowControl().place(caretAt(beatPos("r1", 3)));
+  writerControls().writerFlowControl().place(caretAt(beatPos("r1", offset)));
   assert.deepEqual(await enterSharedSession(ports), { ok: true });
   assert.equal(document.getElementById("writer").hidden, false);
   assert.equal(beat("r1").textContent, "Hello");
-  assert.deepEqual(writerControls().writerFlowControl().selection(), caretAt(beatPos("r1", 3)));
+  assert.deepEqual(writerControls().writerFlowControl().selection(), caretAt(beatPos("r1", offset)));
   const parts = sharedSessionParts(), other = createSharedDocument();
   try {
     registerSharedOperationFamilies(other, { cells: html => fromHtml(html) });

@@ -53,7 +53,7 @@ async function enter(t, comments = [], rows = [
 ]) {
   adoptReplacement(migrateRows({ title: "Native records", rows, comments }));
   const show = t.mock.method(notices, "show", () => {});
-  assert.deepEqual(await hook.enter({ backend: "native" }), { ok: true });
+  assert.deepEqual(await hook.enter(), { ok: true });
   t.after(() => { if (sharedSession()) hook.leave(); });
   return show;
 }
@@ -125,7 +125,7 @@ test("leaving with buffered narration and a pending picture store keeps the narr
   assert.equal(cell("audioText").textContent, "Hezllo");
   assert.deepEqual(rowSlots(hook.read().app.rows[0]), []);
 
-  assert.deepEqual(await hook.enter({ backend: "native" }), { ok: true });
+  assert.deepEqual(await hook.enter(), { ok: true });
   stored.resolve([]);
   await adding;
   for (const copy of [hook.read().app, hook.read().peer]) {

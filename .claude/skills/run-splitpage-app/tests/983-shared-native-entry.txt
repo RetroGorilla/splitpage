@@ -3,12 +3,12 @@ wait document.querySelectorAll('#rows .row').length > 0
 eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;F.openFile(new File([JSON.stringify({schema:2,title:'Native editor',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello',visualText:'Look'},{id:'r2',audioText:'World',visualText:'Wide'}],comments:[]})],'native-entry.splitpage'))
 wait F.state().title === 'Native editor'
 eval window.Q=function(field){return document.querySelector('#rows .cell-editable[data-id="r1"][data-field="'+field+'"]')};window.at=function(field,offset){var c=Q(field);c.focus();getSelection().setBaseAndExtent(c.firstChild,offset,c.firstChild,offset);return true};window.text=function(){return S.read().app.rows[0].audioText};window.warn=function(){return document.querySelector('#toast-host .toast.warn:not(.is-leaving)')!==null};window.clear=function(){document.querySelectorAll('#toast-host .toast').forEach(function(t){t.dismiss()});return true};window.original=JSON.stringify(S.read().app);true
-eval (async function(){window.bad=await S.enterFrom(new Uint8Array([255]),{backend:'native'});return true})()
+eval (async function(){window.bad=await S.enterFrom(new Uint8Array([255]));return true})()
 expect window.bad.ok === false && window.bad.reason === 'enter-failed'
 expect JSON.stringify(S.read().app) === window.original && S.read().peer === null && Q('audioText').textContent === 'Hello'
-eval S.enter({backend:'native'})
+eval S.enter()
 expect S.read().app.docId !== JSON.parse(window.original).docId && S.read().app.docId === S.read().peer.docId
-expect S.peer.type('r1',0,'legacy') === undefined && Q('audioText').textContent === 'Hello'
+expect S.peer === undefined && Q('audioText').textContent === 'Hello'
 eval at('audioText',2)
 press x
 wait text() === 'Hexllo'
@@ -99,13 +99,14 @@ wait Q('audioText').textContent === 'YHexllo'
 eval window.sharedId=S.read().app.docId;window.left=S.leave();true
 expect window.left.ok === true && S.read().peer === null && S.read().app.docId !== window.sharedId
 expect text() === 'YHexllo' && Q('audioText').textContent === 'YHexllo'
-eval S.enter({backend:'legacy'})
-eval window.legacy=S.peer.type('r1',0,'L');true
-expect window.legacy.kind === 'applied' && S.nativePeer.type('r1',0,'native') === undefined
+eval S.enter()
+eval window.reentered=S.nativePeer.type('r1',0,'L');true
+expect window.reentered.kind === 'written' && S.peer === undefined
 wait text() === 'LYHexllo'
-eval S.leave()
+eval window.reentryId=S.read().app.docId;window.leftAgain=S.leave();true
+expect leftAgain.ok && S.read().peer === null && S.read().app.docId !== reentryId
 expect Q('audioText').textContent === 'LYHexllo'
-eval S.enter({backend:'native'})
+eval S.enter()
 eval at('audioText',2);window.keys='0123456789'.repeat(20);for(const key of keys)Q('audioText').dispatchEvent(new InputEvent('beforeinput',{bubbles:true,cancelable:true,inputType:'insertText',data:key}));true
 wait text() === 'LY'+keys+'Hexllo'
 expect Q('audioText').textContent === 'LY'+keys+'Hexllo' && S.read().peer.rows[0].audioText === 'LY'+keys+'Hexllo' && getSelection().focusOffset === 202

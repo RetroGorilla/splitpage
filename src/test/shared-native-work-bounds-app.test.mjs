@@ -34,7 +34,7 @@ for (const field of ["audioText", "visualText"]) {
     const drag = { data: {}, prevented: false };
     assert.deepEqual(payload(target, "copy"), copy);
     assert.deepEqual(payload(target, "dragstart"), drag);
-    assert.deepEqual(await hook.enter({ backend: "native" }), { ok: true });
+    assert.deepEqual(await hook.enter(), { ok: true });
     t.after(() => { if (sharedSession()) assert.deepEqual(hook.leave(), { ok: true }); });
     assert.deepEqual(payload(cell("r0", field), "copy"), copy);
     assert.deepEqual(payload(cell("r0", field), "dragstart"), drag);
@@ -62,7 +62,7 @@ for (const { size, original, field, offset, label } of [
       id: "r" + index, audioText: "After", visualText: "Look", ...index === 0 && { [field]: original }
     }));
     adoptReplacement(migrateRows({ title: "Typing work", rows: structuredClone(rows) }));
-    assert.deepEqual(await hook.enter({ backend: "native" }), { ok: true });
+    assert.deepEqual(await hook.enter(), { ok: true });
     t.after(() => { if (sharedSession()) assert.deepEqual(hook.leave(), { ok: true }); });
     const target = cell("r0", field);
     assert.equal(target.textContent, original);

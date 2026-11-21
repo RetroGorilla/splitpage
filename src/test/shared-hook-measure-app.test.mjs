@@ -1,4 +1,4 @@
-import { bootApp, closeApp } from "./_app-boot.mjs";
+import { bootApp, closeApp } from "./_legacy-shared-app-boot.mjs";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import * as Y from "yjs";
@@ -15,12 +15,13 @@ const { writerControls } = await import("../bootstrap/wiring/writer.ts");
 const { sharedUndoRoute, stepSharedUndo, undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const { sharedSessionParts } = await import("../bootstrap/wiring/shared-session.ts");
 const { sharedStructurePorts } = await import("../bootstrap/wiring/ports/shared-values.ts");
-const { fromHtml } = await import("../bootstrap/richtext.ts");
+const { fromHtml, sanitizeHtml, scriptCellOf } = await import("../bootstrap/richtext.ts");
+const { openNativeSession } = await import("../adapters/collab/native/session.ts");
 const { addBeatCommand } = await import("../application/commands/rows.ts");
 const { encodeSharedState, encodeSharedStateVector, encodeSharedUpdate } = await import("../adapters/collab/document.ts");
 const { PART_SEAMS, markParts } = await import("../../tests/collab/measure/mark-parts.mjs");
 const { timingMarks } = await import("../../shared/timing-marks.ts");
-const hook = window.__sharedTest;
+const hook = window.__legacySharedTest;
 
 function dispatched(run) {
   if (!timingMarks.marksOn) return run();
@@ -99,7 +100,7 @@ const insideOne = (inner, outers) => outers.some(outer => inside(inner, outer));
 
 async function shared(run, given = ROWS) {
   script(given);
-  assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
+  assert.deepEqual(await hook.enter(), { ok: true });
   try { await run(hook.peer); } finally {
     hook.timing(false);
     performance.clearMarks();
@@ -611,7 +612,7 @@ test("entry from an encoded shared state: the app enters the stored document wit
     ["a truncated state", stored.slice(0, Math.floor(stored.length / 2))], ["unreadable bytes", new Uint8Array([1, 2, 3])]]) {
     script(other);
     const standalone = JSON.stringify(hook.read());
-    assert.deepEqual(await hook.enterFrom(bytes, { backend: "legacy" }), { ok: false, reason: "enter-failed" }, name);
+    assert.deepEqual(await hook.enterFrom(bytes), { ok: false, reason: "enter-failed" }, name);
     assert.equal(sharedSession(), false, name);
     assert.equal(JSON.stringify(hook.read()), standalone, name + " leaves the standalone script unchanged");
     assert.deepEqual(hook.leave(), { ok: false, reason: "not-shared" }, name);
@@ -619,7 +620,7 @@ test("entry from an encoded shared state: the app enters the stored document wit
   script(other);
   let text = "";
   for (const byte of stored) text += String.fromCharCode(byte);
-  assert.deepEqual(await hook.enterFrom(btoa(text), { backend: "legacy" }), { ok: true });
+  assert.deepEqual(await hook.enterFrom(btoa(text)), { ok: true });
   try {
     assert.deepEqual(rows(hook.read().app), expected, "the stored document, not the open standalone script");
     assert.deepEqual(hook.peer.recoveryEntries("app"), recovery, "the stored recovery entry comes with it");
@@ -629,4 +630,19 @@ test("entry from an encoded shared state: the app enters the stored document wit
     assert.equal(hook.peer.deliver(), 1);
     assert.equal(hook.read().app.rows[0].audioText, "NHello?");
   } finally { if (sharedSession()) hook.leave(); }
+});
+
+test("old stored entry refuses a complete native script and retains the four open beats", async () => {
+  const openRows = ["one", "two", "three", "four"].map((audioText, i) => ({ id: "r" + (i + 1), audioText }));
+  script(openRows);
+  const source = migrateRows({ title: "Native four beats", rows: openRows });
+  const native = openNativeSession({ kind: "document", document: source, conversion: {
+    cells: scriptCellOf, creation: source.docId, at: "2026-11-20", by: "Writer"
+  } }, { actor: "Writer", sanitize: sanitizeHtml });
+  try {
+    assert.equal(native.document().rows.length, 4);
+    assert.deepEqual(await hook.enterFrom(native.encodeState()), { ok: false, reason: "enter-failed" });
+    assert.equal(sharedSession(), false);
+    assert.deepEqual(rows(hook.read().app), rows(source));
+  } finally { native.close(); }
 });

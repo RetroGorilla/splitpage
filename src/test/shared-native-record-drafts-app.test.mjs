@@ -50,7 +50,7 @@ function adopt(fields = {}) {
 }
 
 async function start() {
-  assert.deepEqual(await hook.enter({ backend: "native" }), { ok: true });
+  assert.deepEqual(await hook.enter(), { ok: true });
 }
 
 async function enter(t, fields = {}) {

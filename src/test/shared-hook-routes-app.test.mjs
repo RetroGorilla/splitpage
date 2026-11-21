@@ -1,4 +1,4 @@
-import { bootApp, closeApp, rewireApp } from "./_app-boot.mjs";
+import { bootApp, closeApp, rewireApp } from "./_legacy-shared-app-boot.mjs";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 
@@ -46,7 +46,7 @@ const { recoveryPanelBinding } = await import("../bootstrap/wiring/recovery-pane
 const { sharedSessionParts } = await import("../bootstrap/wiring/shared-session.ts");
 const { appActions } = await import("../bootstrap/wiring/ports/actions.ts");
 const { openingStatus } = await import("../bootstrap/wiring/ports/transitions.ts");
-let hook = window.__sharedTest;
+let hook = window.__legacySharedTest;
 
 const ROWS = [{ id: "r1", audioText: "Hello", visualText: "" }];
 
@@ -78,7 +78,7 @@ async function restartApp() {
   restoreDesktop();
   app.startApp(await rewireApp({}));
   await startupReady();
-  hook = window.__sharedTest;
+  hook = window.__legacySharedTest;
 }
 
 const arrival = title => ({ from: { raw: { title, rows: [{ id: "n1", audioText: title + " words" }] } }, destination: { kind: "none" }, reason: "route table" });
@@ -185,8 +185,8 @@ const WAYS_OUT = [
 function landing() {
   const doc = currentDocument();
   return { rows: doc.rows.map(row => row.audioText), docId: doc.docId, unsaved: unsavedChanges(), parts: sharedSessionParts() !== null, shared: sharedSession(),
-    peer: window.__sharedTest?.read().peer ?? null, drafting: draftSource.detachRefusal(), seq: draftsTesting().status().seq, undo: undoOwner().sizes(),
-    title: doc.title, visual: doc.rows.map(row => row.visualText ?? ""), abandonable: window.__sharedTest?.counters().abandonable };
+    peer: window.__legacySharedTest?.read().peer ?? null, drafting: draftSource.detachRefusal(), seq: draftsTesting().status().seq, undo: undoOwner().sizes(),
+    title: doc.title, visual: doc.rows.map(row => row.visualText ?? ""), abandonable: window.__legacySharedTest?.counters().abandonable };
 }
 
 for (const way of WAYS_OUT) {
@@ -199,7 +199,7 @@ for (const way of WAYS_OUT) {
       assert.equal(undoOwner().sizes().undo > 0, true);
       await flushDraftNow();
       const listeners = listenerCounts();
-      assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
+      assert.deepEqual(await hook.enter(), { ok: true });
       const session = hook.read().app;
       if (way.rows.length) { hook.peer.type("r1", 0, "Shared "); hook.peer.deliver(); }
       way.arrange?.();
@@ -233,7 +233,7 @@ for (const way of WAYS_OUT) {
         assert.deepEqual([currentDocument().title, currentDocument().rows.map(row => row.audioText)], ["Before entry", last], "Ctrl+Z does not cross the boundary");
       }
       if (way.stops) {
-        assert.equal(window.__sharedTest, undefined);
+        assert.equal(window.__legacySharedTest, undefined);
         await restartApp();
         draftStore();
         script(way.rows);
@@ -247,13 +247,13 @@ for (const way of WAYS_OUT) {
         if (!way.completes) assert.deepEqual([next.rows, next.docId], [last, landed.docId]);
       }
       assert.deepEqual(listenerCounts(), listeners);
-      assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
+      assert.deepEqual(await hook.enter(), { ok: true });
       assert.deepEqual(hook.leave(), { ok: true });
       assert.deepEqual(listenerCounts(), listeners);
     } finally {
       documentEntry.before = before;
       if (document.removeEventListener !== remove) delete document.removeEventListener;
-      if (!window.__sharedTest) await restartApp();
+      if (!window.__legacySharedTest) await restartApp();
       if (sharedSession()) hook.leave();
       await flushDraftNow();
       restoreDesktop();
@@ -266,7 +266,7 @@ test("rule 166: stopping the app when even the forced leave cannot land ends wit
   try {
     script(ROWS);
     const listeners = listenerCounts();
-    assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
+    assert.deepEqual(await hook.enter(), { ok: true });
     hook.peer.type("r1", 0, "Shared "); hook.peer.deliver();
     selectionVisualComposition();
     recoveryPanelBinding.leave = () => { throw new Error("the recovery panel cannot leave"); };
@@ -285,7 +285,7 @@ test("rule 166: stopping the app when even the forced leave cannot land ends wit
     assert.ok(reported.some(text => text.includes("ended without landing a standalone copy")), reported.join("\n"));
     assert.equal(reported.some(text => text.includes("could not finish")), false, "the Writer tore down whatever its surfaces held:\n" + reported.join("\n"));
     assert.deepEqual(dropped, { selectionVisual: 0, shared: true, writer: true }, "at the drop the shared Writer and its Visual box were replaced by a standalone Writer");
-    assert.deepEqual([sharedSessionParts() === null, window.__sharedTest === undefined, document.querySelectorAll(".wr-flow-visual-box").length],
+    assert.deepEqual([sharedSessionParts() === null, window.__legacySharedTest === undefined, document.querySelectorAll(".wr-flow-visual-box").length],
       [true, true, 0], "no shared parts, no hook and no Visual box left mounted");
     assert.equal(store.writes.some(write => write.shared), false, "nothing from the shared stretch reached the draft store");
     await restartApp();
@@ -294,11 +294,11 @@ test("rule 166: stopping the app when even the forced leave cannot land ends wit
     script(ROWS);
     assert.ok(writerControls().writerFlowControl(), "a standalone Writer opens");
     assert.deepEqual(listenerCounts(), listeners);
-    assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
+    assert.deepEqual(await hook.enter(), { ok: true });
     assert.deepEqual(hook.leave(), { ok: true });
   } finally {
     console.error = report; recoveryPanelBinding.leave = leave;
-    if (!window.__sharedTest) await restartApp();
+    if (!window.__legacySharedTest) await restartApp();
     if (sharedSession()) hook.leave();
     await flushDraftNow();
     restoreDesktop();
@@ -312,7 +312,7 @@ test("every surface the shared Writer and Split mount registers one abandon step
   draftStore();
   try {
     script(ROWS);
-    assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
+    assert.deepEqual(await hook.enter(), { ok: true });
     assert.equal(hook.counters().abandonable, SHARED_WRITER_SURFACES.length, SHARED_WRITER_SURFACES.join(", "));
     assert.deepEqual(hook.leave(), { ok: true });
     assert.equal(hook.counters().abandonable, 0);
@@ -329,7 +329,7 @@ test("the way out runs every step: a draft resume that throws still disposes the
   let restore = () => {};
   try {
     script(ROWS);
-    assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
+    assert.deepEqual(await hook.enter(), { ok: true });
     hook.peer.type("r1", 0, "Shared "); hook.peer.deliver();
     restore = throwOnce(draftSource, "resumeWriting", "the draft writer could not resume");
     console.error = error => { reported.push(String(error)); };
@@ -428,7 +428,7 @@ for (const failure of FAILURES) {
       const was = standaloneState(), home = currentHome();
       assert.deepEqual([was.undo.undo > 0, home.kind, was.writtenOut, was.unsaved], [true, "file", true, true]);
       console.error = error => { reported.push(String(error)); };
-      try { assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: false, reason: failure.reason }); } finally { console.error = report; }
+      try { assert.deepEqual(await hook.enter(), { ok: false, reason: failure.reason }); } finally { console.error = report; }
       assert.deepEqual(observed, failure.observed ?? []);
       if (failure.reason === "enter-failed") assert.ok(reported.length > 0, "the failure was reported");
       const now = standaloneState();
@@ -441,7 +441,7 @@ for (const failure of FAILURES) {
       assert.equal((await flushDraftNow()).ok, true);
       const next = store.writes.at(-1);
       assert.deepEqual([next.seq, next.rows, next.shared, next.kept], [last.seq + 1, ["Edited after the attempt"], false, true]);
-      assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
+      assert.deepEqual(await hook.enter(), { ok: true });
       assert.deepEqual(hook.leave(), { ok: true });
     } finally {
       console.error = report;

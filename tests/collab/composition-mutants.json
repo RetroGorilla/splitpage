@@ -632,7 +632,7 @@
     },
     {
       "label": "the hook omits the real command refusal notice",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "tests/collab/legacy-app/shared-test.ts",
       "find": "commandRefused: sharedCommandRefusalNotice(notices),",
       "replace": "commandRefused: undefined,",
       "tests": [
@@ -641,7 +641,7 @@
     },
     {
       "label": "entry detaches without flushing the pending standalone draft",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "tests/collab/legacy-app/shared-test.ts",
       "find": "  const flushed = await flushDraftNow();\n",
       "replace": "  const flushed = { ok: true };\n",
       "tests": [
@@ -650,7 +650,7 @@
     },
     {
       "label": "a refused entry flush answers the detach check instead of draft-not-kept",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "tests/collab/legacy-app/shared-test.ts",
       "find": "  if (flushed.ok) return draftDetachRefusal();\n",
       "replace": "  if (flushed || true) return draftDetachRefusal();\n",
       "tests": [
@@ -660,7 +660,7 @@
     },
     {
       "label": "a refused entry over an unsaved recovery copy shows no notice",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "tests/collab/legacy-app/shared-test.ts",
       "find": "  notices.show(DRAFT_NOT_KEPT_NOTICE, \"warn\");\n  return DRAFT_NOT_KEPT;\n",
       "replace": "  return DRAFT_NOT_KEPT;\n",
       "tests": [
@@ -669,7 +669,7 @@
     },
     {
       "label": "leaving keeps the landed copy clean, so the next flush discards the stored draft",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "tests/collab/legacy-app/shared-test.ts",
       "find": "[() => { noteSaveChange(); }, () => { noteDraftChange(); }]",
       "replace": "[() => { noteDraftChange(); }]",
       "tests": [
@@ -679,7 +679,7 @@
     },
     {
       "label": "leaving does not resume the draft writer",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "tests/collab/legacy-app/shared-test.ts",
       "find": "...(kept ? [() => { draftSource.resumeWriting(); }] : []), ",
       "replace": "",
       "tests": [
@@ -689,7 +689,7 @@
     },
     {
       "label": "the hook leaves the recovery panel binding out",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "tests/collab/legacy-app/shared-test.ts",
       "find": "const bindings = joinSharedBindings(editing, recoveryPanelBinding);",
       "replace": "const bindings = joinSharedBindings(editing, { enter: () => {}, leave: () => {} });",
       "tests": [
@@ -717,7 +717,7 @@
     },
     {
       "label": "detaching leaves standalone autosave pending",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "tests/collab/legacy-app/shared-test.ts",
       "find": "documentLocation().markWrittenOut(false); confirmSavedNow();",
       "replace": "documentLocation().markWrittenOut(false);",
       "tests": [
@@ -726,7 +726,7 @@
     },
     {
       "label": "the hook fails to count a missing painted base",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "tests/collab/legacy-app/shared-test.ts",
       "find": "counts.missingBase++; notices.show",
       "replace": "notices.show",
       "tests": [
@@ -738,15 +738,6 @@
       "file": "src/application/editing/buffered-field.ts",
       "find": "    ports.ownershipScan?.();\n",
       "replace": "",
-      "tests": [
-        "src/test/shared-hook-app.test.mjs"
-      ]
-    },
-    {
-      "label": "the shared Writer omits its empty-script control",
-      "file": "src/bootstrap/wiring/writer.ts",
-      "find": "if (!shared) return flow;\n          const handle = shared.handle();\n          return handle ? mountWriterEmptyScript(flow, root, { handle, session: shared.lifetime, author: shared.author,\n            writer: shared.writer, stamps: sessionStamps, report: shared.text.bufferedText.report,\n            ...(shared.text.bufferedText.abandonment ? { abandonment: shared.text.bufferedText.abandonment } : {}) }) : flow;",
-      "replace": "return flow;",
       "tests": [
         "src/test/shared-hook-app.test.mjs"
       ]
@@ -771,7 +762,7 @@
     },
     {
       "label": "encoded peer updates never reach the app",
-      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "file": "tests/collab/legacy-app/shared-test-peer.ts",
       "find": "      receive(item.side, item.update, item.id);\n",
       "replace": "      if (item.side === \"peer\") receive(item.side, item.update, item.id);\n",
       "tests": [
@@ -780,7 +771,7 @@
     },
     {
       "label": "the test peer has no operation families before its first command",
-      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "file": "tests/collab/legacy-app/shared-test-peer.ts",
       "find": "  registerSharedOperationFamilies(handle, ports.structure);\n",
       "replace": "",
       "tests": [
@@ -798,7 +789,7 @@
     },
     {
       "label": "the release build keeps the shared hook and its peer",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "tests/collab/legacy-app/shared-test.ts",
       "find": "const startForTest = typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS ? startSharedTestHook : null;",
       "replace": "const startForTest = startSharedTestHook;",
       "tests": [
@@ -817,7 +808,7 @@
     },
     {
       "label": "stopping the app does not leave the shared session",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "tests/collab/legacy-app/shared-test.ts",
       "find": "    try { forceLeaveSharedSession(); } finally {",
       "replace": "    try { void forceLeaveSharedSession; } finally {",
       "tests": [
@@ -827,7 +818,7 @@
     },
     {
       "label": "stopping the app keeps the hook's composition listeners",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "tests/collab/legacy-app/shared-test.ts",
       "find": "      document.removeEventListener(\"compositionstart\", composition, true);\n",
       "replace": "",
       "tests": [
@@ -837,7 +828,7 @@
     },
     {
       "label": "a final draft detach refusal answers enter-failed with no notice",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "tests/collab/legacy-app/shared-test.ts",
       "find": "      if (detachRefused) {",
       "replace": "      if (detachRefused && false) {",
       "tests": [
@@ -847,7 +838,7 @@
     },
     {
       "label": "peer hold leaves delivery unpaused",
-      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "file": "tests/collab/legacy-app/shared-test-peer.ts",
       "find": "    hold: () => { paused = true; },",
       "replace": "    hold: () => {},",
       "tests": [
@@ -856,7 +847,7 @@
     },
     {
       "label": "peer release leaves delivery paused",
-      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "file": "tests/collab/legacy-app/shared-test-peer.ts",
       "find": "=> { paused = false; return deliver(order); },",
       "replace": "=> { return deliver(order); },",
       "tests": [
@@ -865,7 +856,7 @@
     },
     {
       "label": "reverse delivery becomes forward",
-      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "file": "tests/collab/legacy-app/shared-test-peer.ts",
       "find": "    if (order === \"reverse\") updates.reverse();\n",
       "replace": "",
       "tests": [
@@ -874,7 +865,7 @@
     },
     {
       "label": "duplicate delivery applies once",
-      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "file": "tests/collab/legacy-app/shared-test-peer.ts",
       "find": "      if (order === \"duplicate\") receive(item.side, item.update, item.id);\n",
       "replace": "",
       "tests": [
@@ -892,7 +883,7 @@
     },
     {
       "label": "leaving schedules no draft for the landed copy",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "tests/collab/legacy-app/shared-test.ts",
       "find": "[() => { noteSaveChange(); }, () => { noteDraftChange(); }]",
       "replace": "[() => { noteSaveChange(); }]",
       "tests": [
@@ -901,7 +892,7 @@
     },
     {
       "label": "route: the public leave answers ok without leaving",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "tests/collab/legacy-app/shared-test.ts",
       "find": "    try { return leaveRunningSharedSession(); } finally { switching = false; }",
       "replace": "    try { return { ok: true }; } finally { switching = false; }",
       "tests": [
@@ -931,15 +922,6 @@
       "label": "route: a forced leave abandons before trying the ordinary leave",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "  const first = leaveSharedSession(now.ports);\n  if (first.ok || running !== now) return first;\n",
-      "replace": "",
-      "tests": [
-        "src/test/shared-hook-routes-app.test.mjs"
-      ]
-    },
-    {
-      "label": "route: a forced leave never abandons",
-      "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "  faults.attempt(() => { now.ports.bindings.abandon?.(); });\n",
       "replace": "",
       "tests": [
         "src/test/shared-hook-routes-app.test.mjs"
@@ -984,7 +966,7 @@
     },
     {
       "label": "failure: the hook forgets an open composition",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "tests/collab/legacy-app/shared-test.ts",
       "find": "    ?? (composing ? \"buffer-composition\" : null)\n",
       "replace": "",
       "tests": [
@@ -993,7 +975,7 @@
     },
     {
       "label": "failure: the hook forgets a pending draft restore",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "tests/collab/legacy-app/shared-test.ts",
       "find": "\n    ?? (draftResume().restorePending() ? \"draft-restore-pending\" : null);",
       "replace": ";",
       "tests": [
@@ -1002,7 +984,7 @@
     },
     {
       "label": "failure: the hook passes an opening reader that is always idle",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "tests/collab/legacy-app/shared-test.ts",
       "find": "        opening: openingStatus\n",
       "replace": "        opening: { openingPending: () => false }\n",
       "tests": [
@@ -1012,7 +994,7 @@
     {
       "label": "failure: the rollback never reattaches the draft writer",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "    if (made.detaching && ports.reattach) faults.attempt(ports.reattach);\n",
+      "find": "    if (!recovered && made.detaching && ports.reattach) faults.attempt(ports.reattach);\n",
       "replace": "",
       "tests": [
         "src/test/shared-hook-routes-app.test.mjs",
@@ -1021,7 +1003,7 @@
     },
     {
       "label": "failure: reattaching keeps the cleared home",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "tests/collab/legacy-app/shared-test.ts",
       "find": "  runEvery([() => { documentLocation().restoreHome(kept.home); }, ",
       "replace": "  runEvery([",
       "tests": [
@@ -1030,7 +1012,7 @@
     },
     {
       "label": "failure: reattaching keeps the cleared written-out mark",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "tests/collab/legacy-app/shared-test.ts",
       "find": "() => { documentLocation().markWrittenOut(kept.writtenOut); },",
       "replace": "",
       "tests": [
@@ -1039,7 +1021,7 @@
     },
     {
       "label": "failure: reattaching keeps the copy marked saved",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "tests/collab/legacy-app/shared-test.ts",
       "find": "    () => { if (kept.unsaved && !unsavedChanges()) noteSaveChange(); }, ",
       "replace": "    ",
       "tests": [
@@ -1048,7 +1030,7 @@
     },
     {
       "label": "failure: reattaching leaves the draft writer detached",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "tests/collab/legacy-app/shared-test.ts",
       "find": " noteSaveChange(); }, () => { draftSource.resumeWriting(); }]);",
       "replace": " noteSaveChange(); }]);",
       "tests": [
@@ -1057,7 +1039,7 @@
     },
     {
       "label": "failure: reattaching stops at its first exception",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "tests/collab/legacy-app/shared-test.ts",
       "find": "  runEvery([() => { documentLocation().restoreHome(kept.home); }, () => { documentLocation().markWrittenOut(kept.writtenOut); },\n    () => { if (kept.unsaved && !unsavedChanges()) noteSaveChange(); }, () => { draftSource.resumeWriting(); }]);",
       "replace": "  for (const step of [() => { documentLocation().restoreHome(kept.home); }, () => { documentLocation().markWrittenOut(kept.writtenOut); },\n    () => { if (kept.unsaved && !unsavedChanges()) noteSaveChange(); }, () => { draftSource.resumeWriting(); }]) step();",
       "tests": [
@@ -1066,7 +1048,7 @@
     },
     {
       "label": "route: the way out stops at its first exception",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "tests/collab/legacy-app/shared-test.ts",
       "find": "    runEvery([() => { ending?.dispose(); }, ...(kept ? [() => { draftSource.resumeWriting(); }] : []), ...marks]);",
       "replace": "    for (const step of [() => { ending?.dispose(); },...(kept ? [() => { draftSource.resumeWriting(); }] : []), ...marks]) step();",
       "tests": [
@@ -1094,7 +1076,7 @@
     {
       "label": "drop: a dropped session never releases its surfaces",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "  faults.attempt(() => { ports.bindings.drop?.(); });\n",
+      "find": "  faults.attempt(() => { now.backend.drop?.(); });\n",
       "replace": "",
       "tests": [
         "tests/bootstrap/shared-switch.test.ts",
@@ -1113,7 +1095,7 @@
     },
     {
       "label": "peer: the peer breaks the group on every action",
-      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "file": "tests/collab/legacy-app/shared-test-peer.ts",
       "find": "    edit.replace(from, to, insert);\n",
       "replace": "    undo.breakGroup();\n    edit.replace(from, to, insert);\n",
       "tests": [
@@ -1122,7 +1104,7 @@
     },
     {
       "label": "peer: a planned action ends the group even when its plan changes nothing",
-      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "file": "tests/collab/legacy-app/shared-test-peer.ts",
       "find": "      const plan = command.plan(doc, capability);\n      if (plan && !(\"refused\" in plan)) undo.breakGroup();\n",
       "replace": "      undo.breakGroup();\n      const plan = command.plan(doc, capability);\n",
       "tests": [
@@ -1131,7 +1113,7 @@
     },
     {
       "label": "peer: identities are enumerated by code point",
-      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "file": "tests/collab/legacy-app/shared-test-peer.ts",
       "find": "    return Array.from({ length: painted.text.length }, (_, index) => painted.identity(index) ?? \"\");\n",
       "replace": "    return Array.from(painted.text, (_, index) => painted.identity(index) ?? \"\");\n",
       "tests": [
@@ -1140,7 +1122,7 @@
     },
     {
       "label": "peer: one call may give a name to two characters",
-      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "file": "tests/collab/legacy-app/shared-test-peer.ts",
       "find": "        if (chosen.some(([other, again], at) => at < index && again === name && other !== unit)) refuseName(name);\n",
       "replace": "",
       "tests": [
@@ -1149,7 +1131,7 @@
     },
     {
       "label": "peer: a name may move to another character",
-      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "file": "tests/collab/legacy-app/shared-test-peer.ts",
       "find": "        if (owner) refuseName(name);\n",
       "replace": "",
       "tests": [
@@ -1158,7 +1140,7 @@
     },
     {
       "label": "peer: a beat name may move to another beat",
-      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "file": "tests/collab/legacy-app/shared-test-peer.ts",
       "find": "      if ([...beatNames].some(([other, given]) => given === name && other !== rowId)) refuseName(name);\n",
       "replace": "",
       "tests": [
@@ -1167,7 +1149,7 @@
     },
     {
       "label": "peer: the joiner's typing never reaches the other copies",
-      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "file": "tests/collab/legacy-app/shared-test-peer.ts",
       "find": "      for (const update of third.written.splice(0)) { receive(\"app\", update); receive(\"peer\", update); }\n",
       "replace": "",
       "tests": [
@@ -1176,7 +1158,7 @@
     },
     {
       "label": "peer: catching up hands the other copies everything the joiner holds",
-      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "file": "tests/collab/legacy-app/shared-test-peer.ts",
       "find": "      for (const update of third.written.splice(0)) { receive(\"app\", update); receive(\"peer\", update); }\n",
       "replace": "      for (const side of [\"app\", \"peer\"] as const) receive(side, encodeSharedUpdate(third.handle, encodeSharedStateVector(side === \"app\" ? app.handle : handle)));\n",
       "tests": [
@@ -1185,7 +1167,7 @@
     },
     {
       "label": "peer: typing ignores the cell it is given",
-      "file": "src/bootstrap/wiring/shared-test-peer.ts",
+      "file": "tests/collab/legacy-app/shared-test-peer.ts",
       "find": "    const key = bufferedFieldKey(rowId, field), base = text.paintedText.read(key, field);\n",
       "replace": "    const key = bufferedFieldKey(rowId, \"audioText\"), base = text.paintedText.read(key, \"audioText\");\n",
       "tests": [

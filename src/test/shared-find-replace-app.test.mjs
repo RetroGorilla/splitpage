@@ -1,4 +1,4 @@
-import { bootApp, closeApp } from "./_app-boot.mjs";
+import { bootApp, closeApp } from "./_legacy-shared-app-boot.mjs";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 
@@ -13,7 +13,7 @@ const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { writerControls } = await import("../bootstrap/wiring/writer.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
 const { appActions } = await import("../bootstrap/wiring/ports/actions.ts");
-const hook = window.__sharedTest;
+const hook = window.__legacySharedTest;
 
 const audio = () => currentDocument().rows.map(row => row.audioText);
 const peerAudio = () => hook.read().peer.rows.map(row => row.audioText);
@@ -36,7 +36,7 @@ test("in the real app, Split Replace and Replace all run as shared commands that
   adoptReplacement(migrateRows({ title: "Shared find", rows: [{ id: "r1", audioText: "a cup of tea", visualText: "", status: "todo" },
     { id: "r2", audioText: "one cup", visualText: "", status: "todo" }] }));
   undoOwner().flush();
-  assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
+  assert.deepEqual(await hook.enter(), { ok: true });
   try {
     appActions.invoke("find", "command-menu");
     search("cup", "mug");
@@ -68,7 +68,7 @@ test("in the real app, a Replace whose line the other copy changed after the sea
   writerControls().closeWriter();
   adoptReplacement(migrateRows({ title: "Shared find", rows: [{ id: "r1", audioText: "a cup of tea", visualText: "", status: "todo" }] }));
   undoOwner().flush();
-  assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
+  assert.deepEqual(await hook.enter(), { ok: true });
   try {
     appActions.invoke("find", "command-menu");
     search("cup", "mug");
