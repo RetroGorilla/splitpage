@@ -9,8 +9,10 @@ import type { NativeMoveBlock } from "../../adapters/collab/native/move-commands
 
 type Packet = { to: "app" | "peer"; bytes: Uint8Array };
 
-export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>) {
-  const peer = openNativeSession({ kind: "state", state: app.encodeState() }, { actor: "Peer", sanitize: sanitizeHtml });
+export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>, {
+  peer = openNativeSession({ kind: "state", state: app.encodeState() }, { actor: "Peer", sanitize: sanitizeHtml }),
+  applyUpdate = applyNativePeerUpdate
+} = {}) {
   let paused = false;
   let capturing = false;
   const packets: Packet[] = [];
@@ -23,10 +25,10 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>) 
   app.ydoc.on("update", fromApp);
   peer.ydoc.on("update", fromPeer);
   const stop = app.subscribe(event => {
-    if (event.kind === "changed" && !paused) applyNativePeerUpdate(peer, app.encodeState());
+    if (event.kind === "changed" && !paused) applyUpdate(peer, app.encodeState());
   });
   function forward<Result extends { readonly kind: string }>(result: Result): Result {
-    if (result.kind === "written" && !paused) applyNativePeerUpdate(app, peer.encodeState());
+    if (result.kind === "written" && !paused) applyUpdate(app, peer.encodeState());
     return result;
   }
   function edit(beat: string, from: number, to: number, text?: string) {
@@ -51,7 +53,7 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>) 
       const applied = [];
       try {
         for (const { to, bytes } of replay) {
-          if (applyNativePeerUpdate(to === "app" ? app : peer, bytes)) {
+          if (applyUpdate(to === "app" ? app : peer, bytes)) {
             applied.push({ to, bytes: Array.from(bytes) });
           }
         }
@@ -65,8 +67,8 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>) 
       packets.length = 0;
       paused = false;
       const bytes = app.encodeState();
-      applyNativePeerUpdate(app, peer.encodeState());
-      applyNativePeerUpdate(peer, bytes);
+      applyUpdate(app, peer.encodeState());
+      applyUpdate(peer, bytes);
     },
     field: (target: NativeFieldTarget, value: unknown) => forward(peer.commands.setField(target, value)),
     registry: (change: NativeRegistryChange) => forward(peer.commands.changeRegistry(change)),

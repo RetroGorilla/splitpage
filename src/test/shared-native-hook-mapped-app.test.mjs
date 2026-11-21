@@ -193,35 +193,61 @@ test("native Writer paints reversed and duplicate peer updates and lands a fresh
   assert.equal(app.acceptsPeerUpdate(), false);
 });
 
-test("native test peer replays captured packets without forwarding remote updates", async t => {
+test("native test peer applies every original packet to its destination in exact replay order", async t => {
   const app = await enterNative(t);
-  const local = stream(app), received = [];
-  const receive = (bytes, _origin, _doc, transaction) => {
-    if (!transaction.local) received.push(Array.from(bytes));
+  const peerDoc = openNativeSession({ kind: "state", state: app.encodeState() }, { actor: "Peer", sanitize: sanitizeHtml });
+  const originals = [];
+  const observe = target => (bytes, _origin, _doc, transaction) => {
+    if (transaction.local) originals.push({ target, bytes: bytes.slice() });
   };
-  app.ydoc.on("update", receive);
-  const peer = createNativeTestPeer(app);
+  const fromApp = observe(peerDoc), fromPeer = observe(app);
+  app.ydoc.on("update", fromApp);
+  peerDoc.ydoc.on("update", fromPeer);
+  const deliveries = [];
+  const peer = createNativeTestPeer(app, {
+    peer: peerDoc,
+    applyUpdate(target, bytes) {
+      deliveries.push({ target, bytes: bytes.slice() });
+      return applyNativePeerUpdate(target, bytes);
+    }
+  });
   try {
+    for (const order of ["reverse", "duplicate"]) {
+      originals.length = 0;
+      deliveries.length = 0;
+      peer.hold("updates");
+      assert.equal(type(app, "r1", 0, "x").kind, "written");
+      assert.equal(peer.type("r1", 0, "Y").kind, "written");
+      assert.equal(peer.type("r2", 0, "!").kind, "written");
+      assert.equal(deliveries.length, 0, `${order}: no apply while held`);
+      assert.equal(originals.length, 3);
+      assert.equal(originals[0].target, peerDoc);
+      assert.equal(originals[1].target, app);
+      assert.equal(originals[2].target, app);
+      const expected = order === "reverse"
+        ? originals.slice().reverse()
+        : originals.flatMap(packet => [packet, packet]);
+      const receipt = peer.release(order);
+      assert.deepEqual(receipt, expected.map(({ target, bytes }) => ({
+        to: target === app ? "app" : "peer", bytes: Array.from(bytes)
+      })), `${order}: receipt`);
+      assert.equal(deliveries.length, expected.length, `${order}: apply count`);
+      expected.forEach(({ target, bytes }, index) => {
+        assert.equal(deliveries[index].target, target, `${order}: apply ${index} target`);
+        assert.deepEqual(deliveries[index].bytes, bytes, `${order}: apply ${index} bytes`);
+      });
+      assert.deepEqual(peer.queuedUpdates(), []);
+      assert.deepEqual(snapshot(app.document()), snapshot(peer.read()));
+    }
     peer.hold("updates");
-    assert.equal(type(app, "r1", 5, "x").kind, "written");
-    assert.equal(peer.type("r2", 5, "!").kind, "written");
-    assert.deepEqual(received, []);
-    const queued = peer.queuedUpdates();
-    assert.equal(queued.length, 2);
-    assert.deepEqual(queued[0], { to: "peer", bytes: Array.from(local[0]) });
-    assert.equal(queued[1].to, "app");
-    assert.deepEqual(peer.release("duplicate"), [queued[0], queued[0], queued[1], queued[1]]);
-    assert.deepEqual(received, [queued[1].bytes]);
-    assert.deepEqual(peer.queuedUpdates(), []);
-    assert.deepEqual(snapshot(app.document()), snapshot(peer.read()));
-    peer.hold("updates");
-    assert.equal(type(app, "r1", 6, "q").kind, "written");
+    assert.equal(type(app, "r1", 0, "q").kind, "written");
     assert.equal(peer.queuedUpdates().length, 1);
   } finally {
+    app.ydoc.off("update", fromApp);
+    peerDoc.ydoc.off("update", fromPeer);
     peer.dispose();
-    app.ydoc.off("update", receive);
   }
-  assert.equal(type(app, "r1", 7, "z").kind, "written");
+  assert.equal(type(app, "r1", 0, "z").kind, "written");
   assert.deepEqual(peer.queuedUpdates(), []);
 });
 
