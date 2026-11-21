@@ -4,8 +4,9 @@ import * as Y from "yjs";
 import { changeNativeRegistry } from "../../../../src/adapters/collab/native/registry-commands.ts";
 import type { NativeRegistryChange } from "../../../../src/adapters/collab/native/registry-commands.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
+import { newNativeShotProps } from "../../../../src/adapters/collab/native/shot-props.ts";
 import { openNativeUndo } from "../../../../src/adapters/collab/native/undo-commands.ts";
-import { decodeNativeValue, encodeNativeValue, mintNativeId, mintNativeTagId, nativeFieldKey } from "../../../../src/adapters/collab/native/values.ts";
+import { decodeNativeValue, mintNativeId, mintNativeTagId, nativeFieldKey } from "../../../../src/adapters/collab/native/values.ts";
 import type { DocumentShape } from "../../../../src/core/document/validated.ts";
 import { registryCopies, registrySource, registryUndoCopies } from "./registry-harness.ts";
 
@@ -220,8 +221,12 @@ test("each pair of writable registry fields keeps distinct keys and converges on
       write(right, set(collection, id, { [rightField]: b }));
       settle();
       assert.equal(record(left, collection, id)?.id, id);
-      assert.deepEqual(record(left, collection, id)?.[leftField], leftField === rightField ? b : a);
-      assert.deepEqual(record(left, collection, id)?.[rightField], b);
+      if (leftField === "props" && rightField === "props") {
+        assert.deepEqual(record(left, collection, id)?.props, [{ id: "t_case", name: "Case" }, { id: "t_rope", name: "Rope" }]);
+      } else {
+        assert.deepEqual(record(left, collection, id)?.[leftField], leftField === rightField ? b : a);
+        assert.deepEqual(record(left, collection, id)?.[rightField], b);
+      }
     });
   }
 });
@@ -310,15 +315,15 @@ test("a tied drop reranks the right peers and one no-op leaves every byte alone"
   });
 });
 
-test("whole-array prop races converge with the documented add and remove losses", () => {
+test("prop races converge and preserve additions and removals on different entries", () => {
   const add = (prop: string): NativeRegistryChange => ({ kind: "addProp", id: "bs1", prop });
   const remove = (prop: string): NativeRegistryChange => ({ kind: "removeProp", id: "bs1", prop });
   const seed = (script: NativeScript) => write(script, set("shots", "bs1", { props: [{ id: "t_lamp", name: "Lamp" }, { id: "t_rope", name: "Rope" }] }));
   const cases = [
-    [add("Case"), add("New"), ["Lamp", "Rope", "New"]],
+    [add("Case"), add("New"), ["Lamp", "Rope", "New", "Case"]],
     [add("Case"), add("Case"), ["Lamp", "Rope", "Case"]],
-    [remove("t_lamp"), add("Case"), ["Lamp", "Rope", "Case"]],
-    [remove("t_lamp"), remove("t_rope"), ["Lamp"]],
+    [remove("t_lamp"), add("Case"), ["Rope", "Case"]],
+    [remove("t_lamp"), remove("t_rope"), []],
     [remove("t_lamp"), remove("t_lamp"), ["Rope"]]
   ] as const;
   for (const [one, two, names] of cases) registryCopies((left, right, settle) => {
@@ -343,7 +348,11 @@ test("readding a displayed prop is a no-op across projected tags and same-name t
     assert.deepEqual(Y.encodeStateAsUpdate(left.doc), before);
     assert.deepEqual(record(left, "shots", "bs3")?.props, [{ id: projection.id, name: "Lamp" }, { id: "t_case", name: "Case" }]);
     write(left, { kind: "removeProp", id: "bs3", prop: "t_case" });
-    assert.deepEqual(decodeNativeValue(left.roots.shots.get("bs3")?.get(nativeFieldKey("props")))?.value, [{ id: "", name: "Lamp" }]);
+    const props = left.roots.shots.get("bs3")?.get("props");
+    assert.ok(props instanceof Y.Map);
+    assert.equal(decodeNativeValue(props.get('n:"lamp"')?.get("name"))?.value, "Lamp");
+    assert.equal(props.has(projection.id), false);
+    assert.equal(props.get("t_case")?.get("removed"), true);
     write(left, add);
     write(right, set("shots", "bs2", { notes: "Peer note" }));
     settle();
@@ -357,7 +366,11 @@ test("readding a displayed prop is a no-op across projected tags and same-name t
       assert.deepEqual(Y.encodeStateAsUpdate(copy.doc), before);
       assert.deepEqual(record(copy, "shots", "bs2")?.props, [prop]);
     }
-  }, seed => seed.roots.shots.get("bs3")?.set(nativeFieldKey("props"), encodeNativeValue([{ id: "", name: "Lamp" }, { id: "t_case", name: "Case" }])), tagged);
+  }, seed => {
+    const shot = seed.roots.shots.get("bs3");
+    assert.ok(shot);
+    shot.set("props", newNativeShotProps([{ id: "", name: "Lamp" }, { id: "t_case", name: "Case" }]));
+  }, tagged);
   registryCopies((left, right, settle) => {
     const change = { kind: "addProp", id: "bs1", prop: "Umbrella" } as const;
     for (const copy of [left, right]) write(copy, change);
@@ -367,7 +380,7 @@ test("readding a displayed prop is a no-op across projected tags and same-name t
       const before = Y.encodeStateAsUpdate(copy.doc);
       assert.deepEqual(changeNativeRegistry(copy, change), { kind: "unchanged" });
       assert.deepEqual(Y.encodeStateAsUpdate(copy.doc), before);
-      assert.equal(copy.reader.document().brollShots[0]?.props?.filter(prop => prop?.name === "Umbrella").length, 1);
+      assert.equal(copy.reader.document().brollShots[0]?.props?.filter(prop => prop?.name === "Umbrella").length, 2);
     }
   });
 });
@@ -462,24 +475,33 @@ test("a name race and undo hide the nameless person like reload and still allow 
   });
 });
 
-test("a prop array race and undo default to empty and still accept prop commands", () => {
+test("undo of one concurrent prop addition preserves the other addition and the seed", () => {
   registryUndoCopies((left, right, settle) => {
     const undo = openNativeUndo(right);
     try {
       write(left, { kind: "addProp", id: "bs1", prop: "Rope" });
       write(right, { kind: "addProp", id: "bs1", prop: "Case" });
       settle();
-      assert.deepEqual(record(left, "shots", "bs1")?.props, [{ id: "t_lamp", name: "Lamp" }, { id: "t_case", name: "Case" }]);
+      const lamp = { id: "t_lamp", name: "Lamp" }, rope = { id: "t_rope", name: "Rope" }, box = { id: "t_case", name: "Case" };
+      assert.deepEqual(record(left, "shots", "bs1")?.props, [lamp, box, rope]);
       assert.equal(undo.undo().kind, "written");
+      assert.deepEqual(record(right, "shots", "bs1")?.props, [lamp, rope]);
       settle();
       assert.equal(left.roots.shots.get("bs1")?.has(nativeFieldKey("props")), false);
-      assert.deepEqual(record(left, "shots", "bs1")?.props, []);
+      assert.deepEqual(record(left, "shots", "bs1")?.props, [lamp, rope]);
+      assert.equal(undo.redo().kind, "written");
+      assert.deepEqual(record(right, "shots", "bs1")?.props, [lamp, box, rope]);
+      settle();
+      assert.deepEqual(record(left, "shots", "bs1")?.props, [lamp, box, rope]);
+      write(left, { kind: "removeProp", id: "bs1", prop: "t_lamp" });
       const before = Y.encodeStateAsUpdate(left.doc);
       assert.deepEqual(changeNativeRegistry(left, { kind: "removeProp", id: "bs1", prop: "t_lamp" }), { kind: "unchanged" });
       assert.deepEqual(Y.encodeStateAsUpdate(left.doc), before);
-      write(left, { kind: "addProp", id: "bs1", prop: "Rope" });
       settle();
-      assert.deepEqual(record(right, "shots", "bs1")?.props, [{ id: "t_rope", name: "Rope" }]);
+      assert.deepEqual(record(right, "shots", "bs1")?.props, [box, rope]);
+      write(left, { kind: "addProp", id: "bs1", prop: "Lamp" });
+      settle();
+      assert.deepEqual(record(right, "shots", "bs1")?.props, [box, rope, lamp]);
     } finally { undo.destroy(); }
   });
 });

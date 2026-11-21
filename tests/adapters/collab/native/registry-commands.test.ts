@@ -11,7 +11,7 @@ import { BROLL_PROPS_MAX } from "../../../../src/core/document/broll.ts";
 import { isTagId } from "../../../../src/core/document/tags.ts";
 import { mintTagId } from "../../../../src/core/document/tags.ts";
 import { convertedScript } from "./helpers.ts";
-import { registryReload, registrySession, registrySource } from "./registry-harness.ts";
+import { registryCopies, registryReload, registrySession, registrySource } from "./registry-harness.ts";
 
 function unchanged(script: NativeScript, change: NativeRegistryChange, reason?: string): void {
   const state = Y.encodeStateAsUpdate(script.doc);
@@ -139,6 +139,33 @@ test("registry preparation guards both document handles and skips getters when b
   } finally { script.doc.destroy(); session.close(); }
 });
 
+test("prop commands reject accessors before a getter can write to the shot", () => {
+  registryCopies((left, right, settle) => {
+    const props = left.roots.shots.get("bs1")?.get("props");
+    assert.ok(props instanceof Y.Map);
+    const lamp = props.get("t_lamp");
+    assert.ok(lamp instanceof Y.Map);
+    let calls = 0;
+    const getter = () => { calls++; lamp.set("removed", true); return undefined; };
+    const commands = [
+      { kind: "moveProp", id: "bs1", prop: "t_lamp", before: null },
+      { kind: "addProp", id: "bs1", prop: "Rope" },
+      { kind: "removeProp", id: "bs1", prop: "t_lamp" }
+    ] as const;
+    for (const command of commands) {
+      for (const key of Object.keys(command)) {
+        const argument = Object.defineProperty({ ...command }, key, { get: getter });
+        unchanged(left, argument, "value");
+      }
+      const nested = { ...command, extra: [{ get value() { return getter(); } }] };
+      unchanged(left, nested, "value");
+    }
+    assert.equal(calls, 0);
+    settle();
+    for (const copy of [left, right]) assert.deepEqual(copy.reader.document().brollShots[0]?.props, [{ id: "t_lamp", name: "Lamp" }]);
+  });
+});
+
 test("registry operations obey full admission and all refuse at the ceiling", () => {
   const seed = registrySession();
   assert.equal(seed.commands.changeRegistry({ kind: "remove", collection: "tags", ids: ["t_case"] }).kind, "written");
@@ -189,7 +216,11 @@ test("missing and damaged stored inputs refuse a whole registry command", () => 
     person.set("rank", "bad0");
     unchanged(script, { kind: "move", collection: "people", id: "p2", before: "p1" }, "stored");
     unchanged(script, { kind: "create", collection: "people", fields: { name: "New" } }, "stored");
-    shot.set(nativeFieldKey("props"), "not JSON");
+    const props = shot.get("props");
+    assert.ok(props instanceof Y.Map);
+    const lamp = props.get("t_lamp");
+    assert.ok(lamp instanceof Y.Map);
+    lamp.set("name", "not JSON");
     unchanged(script, { kind: "addProp", id: "bs1", prop: "Rope" }, "stored");
     tag.set(nativeFieldKey("status"), encodeNativeValue("unknown"));
     unchanged(script, { kind: "cycleTagStatus", ids: ["t_rope", "t_lamp"] }, "stored");
@@ -248,12 +279,12 @@ test("field guards read names, resolved targets, and touched encodings before co
     tag.delete("removed");
     tag.set(nativeFieldKey("notes"), "bad JSON");
     unchanged(script, bulk, "stored");
-    shot.set(nativeFieldKey("props"), encodeNativeValue({ length: 1, prop: "Lamp" }));
+    shot.set("props", { length: 1, prop: "Lamp" });
     assert.deepEqual(script.reader.document().brollShots[0]?.props, []);
     unchanged(script, { kind: "addProp", id: "bs1", prop: "Rope" }, "stored");
     const clone = shot.clone();
     script.roots.shots.set("", clone);
-    clone.set(nativeFieldKey("props"), encodeNativeValue([]));
+    clone.set("props", new Y.Map());
     unchanged(script, { kind: "addProp", id: "", prop: "Lamp" }, "missing");
   } finally { script.doc.destroy(); }
 });
@@ -414,6 +445,39 @@ test("prop cap refuses an additional prop and a created prop and tag are one wri
     assert.ok(tag && isTagId(tag.id));
     assert.deepEqual(document.brollShots[0]?.props?.at(-1), { id: tag.id, name: tag.name });
     assert.deepEqual(registryReload(document), document);
+  } finally { script.doc.destroy(); }
+});
+
+test("whole-list prop edits and a targeted move only write the entries they change", () => {
+  const lamp = { id: "t_lamp", name: "Lamp" }, rope = { id: "t_rope", name: "Rope" }, box = { id: "t_case", name: "Case" };
+  const script = convertedScript(registrySource({ brollShots: [{ id: "bs1", name: "Wide", props: [lamp, rope, box] }] }));
+  try {
+    const changes: unknown[] = [];
+    script.roots.shots.observeDeep(events => {
+      changes.push(...events.map(event => [event.path, [...event.keys.keys()]]));
+    });
+    const list = (props: readonly unknown[]): NativeRegistryChange => ({ kind: "set", collection: "shots", ids: ["bs1"], fields: { props } });
+    const move = { kind: "moveProp", id: "bs1", prop: lamp.id, before: rope.id } as const;
+    unchanged(script, list([lamp, rope, box]));
+    unchanged(script, move);
+    assert.deepEqual(changes, []);
+    assert.equal(changeNativeRegistry(script, list([rope, box, lamp])).kind, "written");
+    assert.deepEqual(changes.splice(0), [[["bs1", "props", lamp.id], ["rank"]]]);
+    assert.deepEqual(script.reader.document().brollShots[0]?.props, [rope, box, lamp]);
+    assert.equal(changeNativeRegistry(script, move).kind, "written");
+    assert.deepEqual(changes.splice(0), [[["bs1", "props", lamp.id], ["rank"]]]);
+    assert.deepEqual(script.reader.document().brollShots[0]?.props, [lamp, rope, box]);
+    assert.equal(changeNativeRegistry(script, list([lamp, box])).kind, "written");
+    assert.deepEqual(changes.splice(0), [[["bs1", "props", rope.id], ["removed"]]]);
+    assert.deepEqual(script.reader.document().brollShots[0]?.props, [lamp, box]);
+    assert.equal(changeNativeRegistry(script, list([lamp, rope, box])).kind, "written");
+    assert.deepEqual(changes.splice(0), [[["bs1", "props", rope.id], ["removed"]]]);
+    assert.deepEqual(script.reader.document().brollShots[0]?.props, [lamp, rope, box]);
+    const renamed = { ...lamp, name: "Desk lamp" };
+    assert.equal(changeNativeRegistry(script, { kind: "set", collection: "tags", ids: [lamp.id], fields: { name: renamed.name } }).kind, "written");
+    assert.equal(changeNativeRegistry(script, list([renamed, rope, box])).kind, "written");
+    assert.deepEqual(changes.splice(0), [[["bs1", "props", lamp.id], ["name"]]]);
+    unchanged(script, list([renamed, rope, box]));
   } finally { script.doc.destroy(); }
 });
 

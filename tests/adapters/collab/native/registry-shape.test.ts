@@ -5,6 +5,7 @@ import { migrateRows } from "../../../../src/bootstrap/document-ports.ts";
 import { normalizeBrollProps } from "../../../../src/core/document/broll.ts";
 import { addBrollProp, removeBrollProp } from "../../../../src/core/production/records.ts";
 import type { ValidatedDocument } from "../../../../src/core/document/validated.ts";
+import { changeNativeRegistry } from "../../../../src/adapters/collab/native/registry-commands.ts";
 import { transactNativeCommand } from "../../../../src/adapters/collab/native/script.ts";
 import { projectNativeRegistries } from "../../../../src/adapters/collab/native/registry-projection.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
@@ -78,6 +79,27 @@ test("narration typing reuses registry projections, even after a removal", () =>
       assert.equal(after.brollShots, before.brollShots);
     }
   } finally { script.doc.destroy(); }
+});
+
+test("receiving a peer's nested prop edit invalidates the warm registry projection", () => {
+  const initial = migrateRows({ ...source(), brollShots: [{ id: "bs1", name: "Wide", props: [{ id: "t_orphan", name: "Orphan" }] }] });
+  withCopies(initial, (left, right, settle) => {
+    const before = right.reader.document();
+    assert.equal(right.reader.document().brollShots, before.brollShots);
+    const props = left.roots.shots.get("bs1")?.get("props");
+    assert.ok(props instanceof Y.Map);
+    const prop = props.get("t_orphan");
+    assert.ok(prop instanceof Y.Map);
+    prop.set("name", encodeNativeValue("Renamed"));
+    assert.equal(right.reader.document().brollShots, before.brollShots);
+    settle();
+    const after = right.reader.document();
+    assert.notEqual(after.brollShots, before.brollShots);
+    assert.deepEqual(before.brollShots[0]?.props, [{ id: "t_orphan", name: "Orphan" }]);
+    assert.deepEqual(after.brollShots[0]?.props, [{ id: "t_orphan", name: "Renamed" }]);
+    assert.equal(right.reader.document().brollShots, after.brollShots);
+    assert.deepEqual(after, migrateRows(structuredClone(after)));
+  });
 });
 
 test("a removed registry follows new inline tags and narration on a surviving keyed shot", () => {
@@ -170,17 +192,17 @@ function propNames(document: Pick<ValidatedDocument, "brollShots">): (string | u
 
 function editProps(script: NativeScript, edit: PropEdit): (string | undefined)[] {
   const document = migrateRows(structuredClone(script.reader.document()));
-  assert.equal(script.roots.shots.get("bs1")?.get(nativeFieldKey("props")), encodeNativeValue(document.brollShots[0]?.props));
+  assert.ok(script.roots.shots.get("bs1")?.get("props") instanceof Y.Map);
   assert.equal(edit(document), true);
   const props = document.brollShots[0]?.props;
   assert.ok(props);
-  transactNativeCommand(script, () => writeField(script.roots.shots, "bs1", "props", props));
+  assert.equal(changeNativeRegistry(script, { kind: "set", collection: "shots", ids: ["bs1"], fields: { props } }).kind, "written");
   const names = propNames(document);
   assert.deepEqual(propNames(script.reader.document()), names);
   return names;
 }
 
-test("one encoded props array loses an independent addition on the same shot", () => {
+test("concurrent whole-list commands keep both independent prop additions", () => {
   const addRope: PropEdit = document => addBrollProp(document, "bs1", "Rope");
   const addCase: PropEdit = document => addBrollProp(document, "bs1", "Case");
   const combined = source();
@@ -192,11 +214,11 @@ test("one encoded props array loses an independent addition on the same shot", (
     const winner = editProps(right, addCase);
     assert.deepEqual(winner, ["Lamp", "Case"]);
     settle();
-    assert.deepEqual(propNames(left.reader.document()), winner);
+    assert.deepEqual(propNames(left.reader.document()), ["Lamp", "Case", "Rope"]);
   });
 });
 
-test("one encoded props array can overwrite the concurrent removal of a different prop", () => {
+test("concurrent whole-list commands keep an addition and an independent removal", () => {
   const removeLamp: PropEdit = document => removeBrollProp(document, "bs1", "t_lamp");
   const addCase: PropEdit = document => addBrollProp(document, "bs1", "Case");
   const combined = source();
@@ -208,7 +230,7 @@ test("one encoded props array can overwrite the concurrent removal of a differen
     const winner = editProps(right, addCase);
     assert.deepEqual(winner, ["Lamp", "Case"]);
     settle();
-    assert.deepEqual(propNames(left.reader.document()), winner);
+    assert.deepEqual(propNames(left.reader.document()), ["Case"]);
   });
 });
 

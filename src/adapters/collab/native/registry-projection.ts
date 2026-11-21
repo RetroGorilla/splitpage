@@ -104,7 +104,7 @@ function propNormalizer(tags: DocumentShape["productionTags"]) {
       const tag = id ? byId.get(id) : undefined;
       if (tag) relevant.add(tag);
     }
-    return normalizeBrollProps(props, [...relevant].sort((a, b) => (position.get(a) ?? 0) - (position.get(b) ?? 0)));
+    return [...relevant].sort((a, b) => (position.get(a) ?? 0) - (position.get(b) ?? 0));
   };
 }
 
@@ -139,8 +139,10 @@ export function projectNativeRegistries(document: DocumentShape, roots: NativeRo
     if (record?.owner && !people.has(record.owner)) record.owner = "";
   }
   if (document.brollShots.some(shot => shot.props?.length)) {
-    const normalize = propNormalizer(document.productionTags);
-    for (const shot of document.brollShots) if (shot.props?.length) shot.props = normalize(shot.props);
+    const relevantTags = propNormalizer(document.productionTags);
+    for (const shot of document.brollShots) {
+      if (shot.props?.length) shot.props = normalizeBrollProps(shot.props, relevantTags(shot.props));
+    }
   }
   document.productionTags = document.productionTags.flatMap(tag => tag?.name ? [{ owner: "", notes: "", status: TAG_STATUS_IDS[0], ...tag }] : []);
   return { tags: tagsRemoved, shots: shotsRemoved, seededShots };
