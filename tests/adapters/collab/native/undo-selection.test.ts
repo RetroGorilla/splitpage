@@ -565,6 +565,47 @@ test("only the document that authored a caret can follow its split ownership bef
   selection(b.commands.redo(), target(created), 1);
 });
 
+test("replace all captures a caret carried by a peer split like single replacement", t => {
+  for (const directed of [false, true]) for (const batch of [false, true]) {
+    const [writer, peer] = copies(t);
+    const moved = anchor(writer, bText, 3), held = anchor(writer, bText, 1);
+    const before = directed ? { anchor: moved, head: held } : moved;
+    const created = written(peer.commands.splitRow(anchor(peer, bText, 2))).created;
+    send(peer, writer);
+    if (batch) {
+      written(writer.commands.replaceAll.withSelection(before, [{ row: "A", cell: "narration", start: 1, end: 2 }], "x").result);
+    } else {
+      written(writer.commands.replaceText.withSelection(before, anchor(writer, aText, 1, 2), [{ text: "x", marks: {} }]).result);
+    }
+    assert.equal(writer.document().rows.find(row => row.id === "A")?.audioText, "axc");
+    const carried = target(created);
+    selection(writer.commands.undo(), carried, 1, 1, directed ? bText : carried);
+    assert.equal(writer.document().rows.find(row => row.id === "A")?.audioText, "abc");
+  }
+});
+
+test("delete and split replays a recorded caret that follows surviving text like separate delete and split", t => {
+  for (const directed of [false, true]) for (const compound of [false, true]) {
+    const [writer] = copies(t);
+    const selected = anchor(writer, bText, 1, 2);
+    const moved = anchor(writer, bText, 3), held = anchor(writer, aText, 1);
+    const after = directed ? { anchor: moved, head: held } : moved;
+    if (!compound) written(writer.commands.deleteText(selected));
+    const at = compound ? selected : anchor(writer, bText, 1);
+    const step = compound ? writer.commands.deleteAndSplit.withSelection(at, at) : writer.commands.splitRow.withSelection(at, at);
+    const { created } = written(step.result);
+    step.recordAfter(after);
+    selection(writer.commands.undo(), bText, 1, compound ? 2 : 1);
+    if (!compound) {
+      written(writer.commands.undo());
+      written(writer.commands.redo());
+    }
+    const carried = target(created);
+    selection(writer.commands.redo(), carried, 1, 1, directed ? aText : carried);
+    assert.equal(writer.document().rows.find(row => row.id === created)?.audioText, "fg");
+  }
+});
+
 test("undo of a hidden record still restores the caret from the row where the step was made", t => {
   const [a, b] = copies(t);
   const step = a.commands.setField.withSelection(anchor(a, aText, 1), beatField("B", "status"), "ready");

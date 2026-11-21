@@ -81,7 +81,8 @@ const REGISTERED_BEFORE_SPLIT = [
   "splitpage:blob-get invoke", "splitpage:blob-missing invoke", "splitpage:tabstrip-window-id-sync sendSync",
   "splitpage:tabstrip-get-state invoke", "splitpage:tabstrip-new-tab send", "splitpage:tabstrip-activate send",
   "splitpage:tabstrip-close send", "splitpage:tabstrip-reorder send", "splitpage:tabstrip-move-here send",
-  "splitpage:tabstrip-tear-off send", "splitpage:is-test-mode-sync sendSync", "splitpage:test-request-close send",
+  "splitpage:tabstrip-tear-off send", "splitpage:is-test-mode-sync sendSync", "splitpage:test-native-replica invoke",
+  "splitpage:test-request-close send",
   "splitpage:test-request-close-tab send", "splitpage:test-request-quit send", "splitpage:test-draft-status invoke",
   "splitpage:test-crash-renderer send", "splitpage:test-dup-loser invoke", "splitpage:test-shell invoke"
 ];
@@ -261,6 +262,40 @@ test("neither preload can reach the other's channels", () => {
   const strip = PRELOADS.find((p) => p.origin === TABSTRIP_ORIGIN).src;
   for (const c of appOnly) {
     assert.equal(strip.includes(c.name), false, `the strip's preload names ${c.name}`);
+  }
+});
+
+test("the app preload exposes the native replica invoke only in test mode and passes the typed bytes through", async () => {
+  for (const testMode of [false, true]) {
+    let bridge;
+    const invocations = [];
+    const electron = {
+      contextBridge: {
+        exposeInMainWorld(name, value) { assert.equal(name, "splitpageDesktop"); bridge = value; }
+      },
+      ipcRenderer: {
+        on() {},
+        sendSync(channel) {
+          if (channel === "splitpage:ipc-table-sync") return channelsForOrigin(APP_ORIGIN);
+          if (channel === "splitpage:is-test-mode-sync") return testMode;
+          return null;
+        },
+        async invoke(...args) { invocations.push(args); return { kind: "stored" }; }
+      },
+      webUtils: {}
+    };
+    vm.runInNewContext(PRELOADS[0].src, {
+      require(name) { assert.equal(name, "electron"); return electron; },
+      location: { origin: APP_ORIGIN },
+      process: { platform: "win32" }
+    });
+    assert.ok(bridge);
+    assert.equal(Object.hasOwn(bridge, "__testNativeReplica"), testMode);
+    if (testMode) {
+      const request = ["write", "scope/script", "a".repeat(32), 1, false, new Uint8Array([0, 0])];
+      assert.deepEqual(await bridge.__testNativeReplica(request), { kind: "stored" });
+      assert.deepEqual(invocations, [["splitpage:test-native-replica", request]]);
+    }
   }
 });
 

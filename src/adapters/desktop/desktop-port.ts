@@ -127,7 +127,7 @@ export const DESKTOP_PORT_MEMBERS = [
 
 export const UNUSED_DESKTOP_MEMBERS = [
   "__testRequestClose", "__testRequestQuit", "__testRequestCloseTab", "__testShell",
-  "__testDupLoser", "__testDraftStatus", "__testCrashRenderer"
+  "__testDupLoser", "__testDraftStatus", "__testCrashRenderer", "__testNativeReplica"
 ] as const;
 
 let attached: DesktopPort | null = null;

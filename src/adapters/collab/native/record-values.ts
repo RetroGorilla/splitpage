@@ -4,7 +4,7 @@ import { transactNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
 import { nativeAvailability } from "./text-commands.ts";
 import type { NativeRefusal } from "./text-commands.ts";
-import { decodeNativeValue, encodeNativeValue, NATIVE_STORED_VALUE_DEPTH, nativeWellFormed, recordBag, sameNativeValue } from "./values.ts";
+import { decodeNativeValue, encodeNativeValue, NATIVE_STORED_VALUE_DEPTH, nativeWellFormed, plainRecordArgument, recordBag, sameNativeValue } from "./values.ts";
 
 type RecordRefusal = NativeRefusal | "value" | "taken" | "author" | "stored" | "anchor";
 
@@ -34,12 +34,6 @@ export function transactRecord<T, R extends NativeRecordOutcome>(
     if (script.closed() || script.reader.isClosed()) return refuseRecord("closed");
     return write(input.value);
   });
-}
-
-export function plainRecordArgument(value: unknown): boolean {
-  if (!recordBag(value)) return false;
-  const prototype: unknown = Object.getPrototypeOf(value);
-  return prototype === Object.prototype || prototype === null;
 }
 
 export function nativeRecordId(value: unknown): value is string {

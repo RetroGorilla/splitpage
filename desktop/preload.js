@@ -400,6 +400,9 @@ if (location.origin === "splitpage://app") {
   };
 
   if (testMode) {
+    Object.assign(bridge, {
+      __testNativeReplica: (...args                                                 ) => invoke("splitpage:test-native-replica", ...args)
+    });
     bridge.__testRequestClose = () => send("splitpage:test-request-close");
     bridge.__testRequestQuit = () => send("splitpage:test-request-quit");
     bridge.__testRequestCloseTab = () => send("splitpage:test-request-close-tab");
