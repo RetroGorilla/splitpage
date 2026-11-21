@@ -29,15 +29,15 @@ function source(props: readonly BrollProp[]) {
   return registrySource({ brollShots: [{ id: "shot", name: "Wide", origin: "list", props }] });
 }
 
-function propsOf(script: NativeScript): Y.Map<Y.Map<unknown>> {
-  const record = script.roots.shots.get("shot"), map = record?.get(NATIVE_SHOT_PROPS);
+function propsOf(script: NativeScript, id = "shot"): Y.Map<Y.Map<unknown>> {
+  const record = script.roots.shots.get(id), map = record?.get(NATIVE_SHOT_PROPS);
   assert.ok(map instanceof Y.Map);
   assert.equal(record?.has(nativeFieldKey("props")), false);
   return map as Y.Map<Y.Map<unknown>>;
 }
 
-function read(script: NativeScript) {
-  return script.reader.document().brollShots[0]?.props;
+function read(script: NativeScript, id = "shot") {
+  return script.reader.document().brollShots.find(shot => shot.id === id)?.props;
 }
 
 function write(script: NativeScript, operation: NativeRegistryChange): void {
@@ -158,20 +158,61 @@ test("keeping a projected prop in a whole-list set preserves a concurrent remova
   }, source([lantern]));
 });
 
-test("a shot without a prop map reads empty and its next prop edit starts empty", () => {
+test("targeted prop commands leave a shot without a prop map untouched", () => {
   const initial = initialProps(3);
   registryCopies((left, right, settle) => {
-    assert.deepEqual(read(left), []);
-    assert.deepEqual(read(right), []);
-    write(left, { kind: "addProp", id: "shot", prop: "Rope" });
+    for (const [copy, name] of [[left, "Rope"], [right, "Case"]] as const) {
+      const before = Y.encodeStateAsUpdate(copy.doc);
+      assert.deepEqual(read(copy), []);
+      for (const command of [
+        { kind: "addProp", id: "shot", prop: name },
+        { kind: "removeProp", id: "shot", prop: "t_seed1" },
+        { kind: "moveProp", id: "shot", prop: "t_seed1", before: null }
+      ] as const) assert.deepEqual(changeNativeRegistry(copy, command), { kind: "refused", reason: "stored" });
+      assert.deepEqual(Y.encodeStateAsUpdate(copy.doc), before);
+    }
     settle();
-    assert.deepEqual(read(right), [{ id: "t_rope", name: "Rope" }]);
+    assert.deepEqual(read(right), []);
   }, seed => {
     const shot = seed.roots.shots.get("shot");
     assert.ok(shot);
     shot.delete(NATIVE_SHOT_PROPS);
-    shot.set(nativeFieldKey("props"), encodeNativeValue(initial));
   }, source(initial));
+});
+
+test("converted and created shots share an empty map before concurrent first adds", () => {
+  const empty = source([]), rope = { id: "t_rope", name: "Rope" }, box = { id: "t_case", name: "Case" };
+  for (const origin of ["list", "script"] as const) {
+    let created: string;
+    registryCopies((left, right, settle) => {
+      for (const id of ["shot", created]) {
+        assert.equal(propsOf(left, id).size, 0);
+        assert.equal(propsOf(right, id).size, 0);
+        write(left, { kind: "addProp", id, prop: rope.name });
+        write(right, { kind: "addProp", id, prop: box.name });
+      }
+      settle();
+      for (const id of ["shot", created]) {
+        assert.deepEqual(read(left, id), [box, rope]);
+        assert.deepEqual(read(right, id), [box, rope]);
+      }
+    }, seed => {
+      assert.equal(propsOf(seed).size, 0);
+      let transactions = 0;
+      const observe = () => {
+        transactions++;
+        for (const id of seed.roots.shots.keys()) assert.ok(propsOf(seed, id));
+      };
+      seed.roots.shots.observeDeep(observe);
+      try {
+        const result = changeNativeRegistry(seed, { kind: "create", collection: "shots", fields: { name: "Close", origin } });
+        assert.ok("created" in result);
+        created = result.created;
+        assert.equal(propsOf(seed, created).size, 0);
+        assert.equal(transactions, 1);
+      } finally { seed.roots.shots.unobserveDeep(observe); }
+    }, empty);
+  }
 });
 
 test("damaged prop entries are reported individually and can be replaced or removed on a peer", () => {

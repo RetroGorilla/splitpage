@@ -16,9 +16,9 @@ type Drop = Pick<NativeShotPropEntry, "key" | "rank">;
 
 export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape["productionTags"]) {
   const map = shot.get(NATIVE_SHOT_PROPS);
-  if (shot.has(NATIVE_SHOT_PROPS) && !(map instanceof Y.Map)) return null;
+  if (!(map instanceof Y.Map)) return null;
   const bad = new Set<string>();
-  const entries = map instanceof Y.Map ? nativeShotPropEntries(map, key => { bad.add(key); }) : [];
+  const entries = nativeShotPropEntries(map, key => { bad.add(key); });
   const resolved = resolveNativeShotPropEntries(entries, props => resolveBrollProps(props, tags));
   const shown = shownNativeShotPropEntries(resolved);
   const active = entries.filter(entry => !entry.removed);
@@ -28,9 +28,7 @@ export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape
   function plan(writes: Write[], changes: readonly PropWrite[]): void {
     if (changes.length === 0) return;
     writes.push(() => {
-      const props = map instanceof Y.Map ? map : new Y.Map<unknown>();
-      if (!(map instanceof Y.Map)) shot.set(NATIVE_SHOT_PROPS, props);
-      for (const change of changes) change(props);
+      for (const change of changes) change(map);
     });
   }
 

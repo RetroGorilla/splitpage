@@ -116,7 +116,7 @@ function planNew(script: NativeScript, writes: Write[], collection: Collection, 
   if (root.has(id)) return refuseRecord("taken");
   const rank = nativeRankBetween(order.at(-1)?.rank ?? null, null);
   if (collection === "shots") {
-    const { props, ...ordinary } = fields;
+    const { props = [], ...ordinary } = fields;
     append(writes, root, id, ordinary, rank, props as BrollProp[]);
   } else append(writes, root, id, fields, rank);
   return id;
