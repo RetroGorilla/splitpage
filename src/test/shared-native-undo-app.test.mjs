@@ -692,33 +692,37 @@ test("Writer: a stale heading cannot supply the range for a rename", async t => 
   assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
 });
 
-for (const [name, kind] of Object.entries({ Split: views.Split })) {
-  test(name + ": the visual-cell insert shortcut lands in the new visual and replays its selection", async t => {
-    const show = await enter(t), view = kind.open(t);
-    const selector = name === "Writer" ? ".wr-flow-visual-text" : "#rows .cell-editable";
-    if (name === "Writer") view.flow.openVisual("r1");
-    const visual = id => document.querySelector(selector + '[data-id="' + id + '"][data-field="visualText"]');
+test("Split: Visual Ctrl+Enter matches standalone and replays its selection", async t => {
+  const visual = id => document.querySelector('#rows .cell-editable[data-id="' + id + '"][data-field="visualText"]');
+  const insert = () => {
     const prior = visual("r1");
     prior.focus();
     setCellSelection(prior, 1, 3);
     assert.equal(press(prior, "Enter"), true);
-    const [, created] = rowOrder();
-    assert.ok(created);
-    assert.equal(document.activeElement, visual(created));
-    assert.deepEqual(cellSelection(visual(created)), { from: 0, to: 0 });
-    assert.equal(press(visual(created), "z"), true);
-    assert.deepEqual(rowOrder(), ["r1"]);
-    assert.equal(document.activeElement, visual("r1"));
-    assert.deepEqual(cellSelection(visual("r1")), { from: 1, to: 3 });
-    assert.equal(press(visual("r1"), "y"), true);
-    assert.deepEqual(rowOrder(), ["r1", created]);
-    assert.equal(document.activeElement, visual(created));
-    assert.deepEqual(cellSelection(visual(created)), { from: 0, to: 0 });
-    await Promise.resolve();
-    assert.deepEqual(hook.read().peer, hook.read().app);
-    assert.equal(show.mock.callCount(), 0);
-  });
-}
+  };
+  const at = id => {
+    const target = visual(id), selection = cellSelection(target);
+    assert.equal(document.activeElement, target);
+    return [id, selection.from, selection.to];
+  };
+  const original = ["r1"], rows = [{ id: "r1", audioText: "Hello", visualText: "Look" }];
+  adoptReplacement(migrateRows({ title: "Standalone Visual", rows }));
+  insert();
+  const local = documentReader.current();
+  const expected = insertSnapshot(local, original, at(local.rows[1].id));
+  const show = await enter(t, rows);
+  insert();
+  const [, created] = rowOrder();
+  assert.deepEqual(insertSnapshot(hook.read().app, original, at(created)), expected);
+  assert.equal(press(visual(created), "z"), true);
+  assert.deepEqual(rowOrder(), original);
+  assert.deepEqual(at("r1"), ["r1", 1, 3]);
+  assert.equal(press(visual("r1"), "y"), true);
+  assert.deepEqual(insertSnapshot(hook.read().app, original, at(created)), expected);
+  await Promise.resolve();
+  assert.deepEqual(hook.read().peer, hook.read().app);
+  assert.equal(show.mock.callCount(), 0);
+});
 
 const threeBeats = () => [...twoBeats, { id: "r3", audioText: "Again" }];
 const fourBeats = () => [...threeBeats(), { id: "r4", audioText: "Last" }];
