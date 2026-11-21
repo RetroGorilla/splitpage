@@ -205,6 +205,12 @@ export function fakeFindWriter(initial: WriterFindAccess | null = null) {
   return { writer, set: (value: WriterFindAccess | null) => { current = value; } };
 }
 
+export function fakeFindNative(initial: ReturnType<NonNullable<FindPorts["native"]>> = null) {
+  let current = initial;
+  const native: NonNullable<FindPorts["native"]> = () => current;
+  return { native, set: (value: typeof current) => { current = value; } };
+}
+
 export function fakePrompterPorts(initial: DocumentView | null = null) {
   const reader = fakeDocument(initial);
   const notices = fakeNotices();

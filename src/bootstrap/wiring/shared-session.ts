@@ -21,6 +21,7 @@ import { sharedAuthorPort } from "./ports/shared-author.ts";
 import type { SharedAuthorPort } from "./ports/shared-author.ts";
 import { sharedUndoOwner } from "./ports/shared-undo.ts";
 import type { NativeEditorRecords } from "./native-shared-records.ts";
+import type { FindNativeAccess } from "../../features/find/ports.ts";
 
 export interface SharedSessionParts {
   readonly handle: SharedDocumentHandle;
@@ -104,6 +105,7 @@ export interface SharedEditorBackend {
   readonly dispose: (attempt: (step: () => void) => boolean) => void;
   readonly unsupportedCommands?: string;
   readonly nativeRecords?: NativeEditorRecords;
+  readonly nativeFind?: FindNativeAccess;
   readonly structure?: (intent: DocumentStructureIntent) => CommandOutcome;
 }
 
@@ -117,6 +119,10 @@ export function sharedSessionParts(): SharedSessionParts | null {
 
 export function nativeEditorRecords() {
   return running?.backend.nativeRecords ?? null;
+}
+
+export function nativeEditorFind() {
+  return running?.backend.nativeFind ?? null;
 }
 
 export function nativeEditorActive(): boolean {

@@ -102,7 +102,7 @@ test("out-of-scope input stays refused on the native path", async t => {
   assert.equal(beforeInput(target, "deleteContentBackward", null), true);
   visual.focus();
   setCellSelection(visual, 2);
-  assert.equal(beforeInput(visual, "insertText", "x"), true);
+  assert.equal(beforeInput(visual, "insertFromDrop", "x"), true);
   assert.equal(beforeInput(title, "insertText", "x"), true);
   await Promise.resolve();
   assert.deepEqual(hook.read(), before);
@@ -505,7 +505,7 @@ for (const committed of [true, false]) test("composition shields the DOM and " +
     const event = new window.KeyboardEvent("keydown", { bubbles: true, cancelable: true, key, keyCode: 229 });
     assert.equal(target.dispatchEvent(event), true);
   }
-  assert.equal(beforeInput(target, "insertParagraph", null), true);
+  assert.equal(beforeInput(target, "insertParagraph", null, { isComposing: true }), true);
   assert.equal(show.mock.callCount(), 1);
   assert.equal(compose(target, "start", ""), false);
   for (const key of ["Enter", "Backspace", "Escape", "ArrowLeft"]) for (const signal of [{ isComposing: true }, { keyCode: 229 }]) {
