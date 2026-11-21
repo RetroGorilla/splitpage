@@ -29,7 +29,7 @@ import { sharedUndoRoute } from "./undo.ts";
 import { writerControls, writerFlowPorts } from "./writer.ts";
 
 interface NativeInputPorts {
-  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "resolveTextSelection" | "isClosingOrClosed" | "subscribe" | "revision">;
+  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "readRow" | "trackNarrationPaint" | "resolveTextSelection" | "isClosingOrClosed" | "subscribe" | "revision">;
   readonly session: Pick<SharedDocumentSession, "admit" | "refuse" | "run" | "subscribe">;
   readonly editAttribution: () => NativeEditStamp;
   readonly now?: () => number;
@@ -323,7 +323,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       before: null, after: null, endsGroup: false, paint: null, html: cell.innerHTML, marks };
   }
 
-  function anchor(next: Draft): Draft | string {
+  function anchor(next: Draft, joinedDeletion = false): Draft | string {
     const { beat, cell, selection, field } = next;
     const shown = documentReader.read(doc => doc?.rows.find(row => row.id === beat));
     const visual = field === "visualText";
@@ -334,7 +334,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (visual && !visualIsAddressable(beat, live)) return UNSUPPORTED;
     const from = visual ? { beat, offset: selection.from } : native.narrationCaret(beat, selection.from, selection.from !== selection.to);
     const to = selection.from === selection.to ? from : visual ? { beat, offset: selection.to } : native.narrationCaret(beat, selection.to);
-    if (!from || !to || from.beat !== to.beat) return STALE;
+    if (!from || !to || from.beat !== to.beat || joinedDeletion && from.offset === to.offset) return STALE;
     const target = { beat: from.beat, cell: visual ? "visual" : "narration" } as const;
     const anchored = native.commands.anchorText(target, from.offset, to.offset);
     if (anchored.kind === "refused") return anchored.reason;
@@ -912,12 +912,21 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (touchesProtectedText(cell, selection)) { session.refuse(UNSUPPORTED); return; }
     const shown = deletion ? cellSelection(cell) : null;
     const gesture = shown && shown.from === shown.to ? { direction: input.inputType.endsWith("Backward") ? -1 : 1, at: now() } as const : null;
-    const current = flushForInput(cell, selection);
+    const joinedDeletion = deletion && !visualTextSurface.cellAt(cell)
+      && (native.readRow(cell.getAttribute("data-id") ?? "")?.members.length ?? 0) > 1;
+    const current = flushForInput(cell, selection, !joinedDeletion);
     if (!current) return;
     const next = begin(current.cell, current.selection, false, text, gesture);
     let anchored: Draft | string;
-    try { anchored = current.stale ? STALE : anchor(next); }
+    try { anchored = current.stale ? STALE : anchor(next, joinedDeletion); }
     catch (error) { report(error); anchored = PENDING; }
+    if (joinedDeletion && anchored === STALE) {
+      publish();
+      if (next.surface === writerNarration) writerControls()?.renderWriter();
+      else renderRow(next.beat);
+      session.refuse(UNSUPPORTED);
+      return;
+    }
     if (anchored === UNSUPPORTED) { session.refuse(anchored); return; }
     draft = typeof anchored === "string" ? next : anchored;
     preview(current.cell, current.selection, text);
