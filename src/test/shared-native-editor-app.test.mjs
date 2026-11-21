@@ -506,7 +506,7 @@ for (const committed of [true, false]) test("composition shields the DOM and " +
     const event = new window.KeyboardEvent("keydown", { bubbles: true, cancelable: true, key, keyCode: 229 });
     assert.equal(target.dispatchEvent(event), true);
   }
-  assert.equal(beforeInput(target, "insertParagraph", null, { isComposing: true }), true);
+  assert.equal(beforeInput(target, "insertParagraph", null), true);
   assert.equal(show.mock.callCount(), 1);
   assert.equal(compose(target, "start", ""), false);
   for (const key of ["Enter", "Backspace", "Escape", "ArrowLeft"]) for (const signal of [{ isComposing: true }, { keyCode: 229 }]) {
@@ -532,6 +532,16 @@ for (const committed of [true, false]) test("composition shields the DOM and " +
   assert.equal(cell("audioText").textContent, expected);
   if (committed) assert.deepEqual(cellSelection(cell("audioText")), { from: 3, to: 3 });
   assert.equal(seen.mock.callCount(), 1);
+  assert.equal(show.mock.callCount(), 1);
+});
+
+test("a flagged paragraph input with no active IME draft leaves the selection intact", async t => {
+  const show = await enter(t), target = cell("audioText");
+  target.focus();
+  setCellSelection(target, 1, 3);
+  assert.equal(beforeInput(target, "insertParagraph", null, { isComposing: true }), true);
+  assert.equal(text(), "Hello");
+  assert.deepEqual(cellSelection(target), { from: 1, to: 3 });
   assert.equal(show.mock.callCount(), 1);
 });
 

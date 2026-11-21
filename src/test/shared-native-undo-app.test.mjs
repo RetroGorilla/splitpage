@@ -267,6 +267,34 @@ for (const [name, kind] of Object.entries(views)) {
     assert.deepEqual(hook.read().app, hook.read().peer);
   });
 
+  for (const all of [false, true]) test(name + ": Find " + (all ? "Replace all skips" : "Replace refuses") + " identical peer replacement text", async t => {
+    const show = await enter(t, [{ id: "r1", audioText: "abc abc" }]);
+    const view = kind.open(t);
+    kind.caret(view, "r1", 0);
+    const field = search(t, "abc", "X");
+    const peer = hook.nativePeer;
+    peer.hold();
+    assert.equal(peer.type("r1", 1, "abc").kind, "written");
+    assert.equal(peer.delete("r1", 4, 6).kind, "written");
+    assert.equal(peer.delete("r1", 0, 1).kind, "written");
+    peer.deliver();
+    assert.equal(hook.read().peer.rows[0].audioText, "abc abc");
+    document.getElementById(all ? "find-replace-all" : "find-replace").click();
+    await Promise.resolve();
+    assert.equal(app(), all ? "abc X" : "abc abc");
+    assert.deepEqual(hook.read().app, hook.read().peer);
+    if (!all) {
+      assert.deepEqual(show.mock.calls.map(call => call.arguments), [["This line changed. Try replacing again.", "warn"]]);
+      return;
+    }
+    field.blur();
+    assert.equal(press(document.body, "z"), true);
+    assert.equal(app(), "abc abc");
+    assert.deepEqual(kind.at(view), ["r1", 4, 7]);
+    assert.equal(press(document.activeElement, "y"), true);
+    assert.equal(app(), "abc X");
+  });
+
   test(name + ": compound Find replacement inserts unmarked text while single Replace inherits marks", async t => {
     for (const native of [false, true]) for (const all of [false, true]) {
       const rows = [{ id: "r1", audioText: "<em>cupcup</em>" }];

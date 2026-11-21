@@ -25,7 +25,7 @@ interface NativeFindPorts {
 
 const UNAVAILABLE = "native-command-unavailable";
 type MatchRange = { readonly target: NativeTextTarget; readonly start: number; readonly end: number };
-type AnchoredMatch = { readonly target: NativeTextTarget; readonly range: NativeTextRange; readonly text: string };
+type AnchoredMatch = { readonly target: NativeTextTarget; readonly range: NativeTextRange; readonly text: string; readonly intact: () => boolean };
 type FoundMatch = AnchoredMatch | "unsupported" | null;
 
 function matchRange(match: WriterSearchMatch): MatchRange | null {
@@ -70,7 +70,10 @@ export function createNativeEditorFind({ native, session, input, editAttribution
         if (!from || !to) return null;
         if (from.beat !== to.beat) return "unsupported";
         const anchor = native.commands.anchorText({ ...target, beat: from.beat }, from.offset, to.offset);
-        if (anchor.kind === "anchored") return { target, range: anchor.range, text: text.slice(start, end) };
+        if (anchor.kind === "anchored") {
+          const intact = native.captureTextIdentity(anchor.range);
+          return intact && { target, range: anchor.range, text: text.slice(start, end), intact };
+        }
         return target.cell === "visual" && anchor.reason === "range" ? "unsupported" : null;
       });
       return (index, text) => {
@@ -91,7 +94,7 @@ export function createNativeEditorFind({ native, session, input, editAttribution
           const doc = native.document(), rows = new Map(doc.rows.map(row => [row.id, row]));
           const read = new Map<string, { text: string; cell: ReturnType<typeof scriptCellOf>; free: ReturnType<typeof searchablePieces>["free"] }>();
           const valid = hits.flatMap(hit => {
-            if (!hit || hit === "unsupported") return [];
+            if (!hit || hit === "unsupported" || !hit.intact()) return [];
             const { range, target } = hit;
             const selection = native.resolveTextSelection(range);
             if (!selection || selection.anchor.target.beat !== range.target.beat || selection.head.target.beat !== range.target.beat) return [];

@@ -161,6 +161,7 @@ function formattingMark(event: Event, button: Element | null, key: KeyboardEvent
 
 export function mountNativeSharedInput({ native, session, editAttribution, now = Date.now, report, paintIsCurrent = () => false, publish = () => {} }: NativeInputPorts) {
   let draft: Draft | null = null, stopped: string | null = null, uncertain = false;
+  let imeTarget: Element | null = null;
   let compositionRefused = false, fullRefused = false;
   let composingInside: Pick<Draft, "cell" | "selection" | "html"> | null = null;
   let composingText = "";
@@ -755,6 +756,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const moving = key && moveDirection(key);
     const splitting = key ? enter && (writer ? !key.altKey && !key.shiftKey : key.altKey) : writer && commandInput && inputType === "insertParagraph";
     if (event.type === "focusout") {
+      if (imeTarget === cell) imeTarget = null;
       const buffered = draft;
       if (buffered && cell && (buffered.cell === cell || cell.contains(buffered.cell))) {
         queueMicrotask(() => { if (draft === buffered) settleBlur(buffered); });
@@ -762,6 +764,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       return;
     }
     if (event.type === "pointerdown") {
+      imeTarget = null;
       if (!draft?.composing && !stopped) finish();
       return;
     }
@@ -769,12 +772,13 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (!button) return;
     } else if (!cell && !(event.type === "drop" && target?.closest("#rows .visual-cell"))) return;
     if (key) {
+      const imeKey = key.isComposing || key.keyCode === 229, undoing = undoGesture(key);
+      imeTarget = imeKey ? cell : null;
       if (key.key === "Enter" && key.altKey && cell?.id === "writer-doc") {
         event.preventDefault();
         event.stopImmediatePropagation();
         return;
       }
-      const imeKey = key.isComposing || key.keyCode === 229, undoing = undoGesture(key);
       if ((editableText || heading || cell?.id === "writer-doc") && (draft?.composing || imeKey)) {
         event.stopImmediatePropagation();
         if (undoing || draft?.composing && (splitting || joining || removeHeading || moving || mark || line)) {
@@ -792,6 +796,16 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (undoing && cell?.matches(UNDO_SURFACES)) return;
       if (!editingKey(key) && !joining && !removeHeading) {
         if (key.key.startsWith("Arrow") || key.key === "Home" || key.key === "End" || key.key === "Tab") finish();
+        return;
+      }
+    }
+    if (input || event.type.startsWith("composition")) {
+      const followsImeKey = imeTarget !== null && imeTarget === cell;
+      imeTarget = null;
+      if (followsImeKey && !draft?.composing && commandInput && (inputType === "insertParagraph" || inputType === "insertLineBreak")) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (!stopped) refuseCommand(UNSUPPORTED);
         return;
       }
     }

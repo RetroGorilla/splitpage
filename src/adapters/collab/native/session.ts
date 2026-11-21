@@ -23,7 +23,7 @@ import type { NativeScript } from "./script.ts";
 import { createNativeSizeTracker, resolveNativeSizeOptions } from "./size.ts";
 import type { NativeSessionSize, NativeSizeOptions } from "./size.ts";
 import { deleteAndSplitNativeRow, joinNativeRow, removeNativeRows, splitNativeRow, unjoinNativeRow } from "./structure-commands.ts";
-import { anchorNativeText, deleteNativeText, replaceAllNativeText, replaceNativeText, resolveNativeTextPoint, resolveNativeUndoSelection, snapshotNativeUndoAnchor, typeNativeText } from "./text-commands.ts";
+import { anchorNativeText, captureNativeTextIdentity, deleteNativeText, replaceAllNativeText, replaceNativeText, resolveNativeTextPoint, resolveNativeUndoSelection, snapshotNativeUndoAnchor, typeNativeText } from "./text-commands.ts";
 import type { NativeEditStamp, NativeTextPlacement, NativeTextRange, NativeTextTarget, NativeUndoSelectionInput } from "./text-commands.ts";
 import { openNativeUndo } from "./undo-commands.ts";
 import type { NativeUndoOutcome } from "./undo-commands.ts";
@@ -316,6 +316,12 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     sizeLimits: sizeOptions.limits,
     document: () => script.reader.document(),
     revision: () => revision,
+    captureTextIdentity: (range: NativeTextRange) => {
+      if (refusal()) return null;
+      const intact = captureNativeTextIdentity(script, range);
+      const capturedAt = revision;
+      return intact && (() => !refusal() && (capturedAt === revision || intact()));
+    },
     resolveTextSelection: (range: NativeTextRange) => { const anchor = snapshotNativeUndoAnchor(script, range); return anchor && resolveNativeUndoSelection(script, anchor); },
     narrationCaret: (row: string, offset: number, right?: boolean) => script.reader.narrationCaret(row, offset, right),
     narrationHtml: (row: string) => script.reader.row(row)?.audioText,
