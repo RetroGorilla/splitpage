@@ -2,6 +2,9 @@ import { applyNativePeerUpdate } from "../../adapters/collab/native/peer-update.
 import { openNativeSession } from "../../adapters/collab/native/session.ts";
 import { sanitizeHtml } from "../richtext.ts";
 import type { NativeFieldTarget } from "../../adapters/collab/native/record-commands.ts";
+import type { NativeRegistryChange } from "../../adapters/collab/native/registry-commands.ts";
+import type { NativeMarkChange } from "../../adapters/collab/native/format-commands.ts";
+import type { NativeTextTarget } from "../../adapters/collab/native/text-commands.ts";
 import type { NativeMoveBlock } from "../../adapters/collab/native/move-commands.ts";
 
 export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>) {
@@ -31,6 +34,11 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>) 
       applyNativePeerUpdate(peer, bytes);
     },
     field: (target: NativeFieldTarget, value: unknown) => forward(peer.commands.setField(target, value)),
+    registry: (change: NativeRegistryChange) => forward(peer.commands.changeRegistry(change)),
+    format: (target: NativeTextTarget, from: number, to: number, change: NativeMarkChange) => {
+      const anchored = peer.commands.anchorText(target, from, to);
+      return anchored.kind === "anchored" ? forward(peer.commands.formatText(anchored.range, change)) : anchored;
+    },
     join: (lower: string, upper: string) => forward(peer.commands.joinRow(lower, upper, " ")),
     split: (beat: string, offset: number) => {
       const at = peer.commands.anchorText({ beat, cell: "narration" }, offset);
