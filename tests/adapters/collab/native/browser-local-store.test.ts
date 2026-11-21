@@ -17,7 +17,6 @@ localStoreContract("IndexedDB", t => {
   const { factory, store } = fixture();
   return {
     store, other: createBrowserNativeLocalStore({ indexedDB: factory, locks: navigator.locks }),
-    contention: "locked",
     failAppend: reason => failNextIdbWrite(t, "add", reason === "quota" ? "quota" : "abort")
   };
 });

@@ -11,7 +11,7 @@ const filesModule: { createNativeReplicaFiles: typeof createNativeReplicaFiles; 
 
 const SCRIPT_ID = /^[A-Za-z0-9_-]{1,64}(?:\/[A-Za-z0-9_-]{1,64})?(?![\s\S])/;
 const LEASE_ID = /^[a-f0-9]{32}(?![\s\S])/;
-const BLOCKED = { kind: "failed", reason: "blocked" } as const;
+const LOCKED = { kind: "failed", reason: "locked" } as const;
 const CLOSED = { kind: "failed", reason: "closed" } as const;
 const STORED = { kind: "stored" } as const;
 
@@ -69,7 +69,7 @@ function createNativeReplicaIpc(userData: string, disk?: NativeReplicaFileSystem
   }
 
   async function open(name: string, owner: Renderer): Promise<NativeReplicaReply> {
-    if (leases.has(name)) return BLOCKED;
+    if (leases.has(name)) return LOCKED;
     if (owner.isDestroyed()) return CLOSED;
     const id = randomBytes(16).toString("hex");
     const replica = files.open(name);
@@ -100,7 +100,7 @@ function createNativeReplicaIpc(userData: string, disk?: NativeReplicaFileSystem
     const [op, name, id] = request;
     if (op === "open") return open(name, owner);
     if (op === "delete") {
-      if (leases.has(name)) return BLOCKED;
+      if (leases.has(name)) return LOCKED;
       if (owner.isDestroyed()) return CLOSED;
       leases.set(name, null);
       try { await files.remove(name); return STORED; }

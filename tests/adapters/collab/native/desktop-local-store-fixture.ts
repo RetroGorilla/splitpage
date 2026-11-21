@@ -73,7 +73,7 @@ export async function desktopFixture(t: TestContext, durableAppends = true) {
   }
   return {
     directory, main, first, second, phases, intercept,
-    store: first.store, other: second.store, contention: "blocked" as const,
+    store: first.store, other: second.store,
     restart: () => replicasAt(directory).window(),
     failAppend(reason?: "quota") {
       intercept("append:sync", async () => {

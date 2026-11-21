@@ -11,7 +11,7 @@ export interface NativeReplicaEntry {
 }
 
 export type NativeReplicaReply =
-  | { readonly kind: "failed"; readonly reason: "blocked" | "closed" | "quota" | "io" }
+  | { readonly kind: "failed"; readonly reason: "locked" | "closed" | "quota" | "io" }
   | { readonly kind: "opened"; readonly lease: string }
   | { readonly kind: "read"; readonly entries: readonly NativeReplicaEntry[] }
   | { readonly kind: "stored" };

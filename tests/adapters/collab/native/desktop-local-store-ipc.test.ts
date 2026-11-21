@@ -6,7 +6,7 @@ import { desktopFixture } from "./desktop-local-store-fixture.ts";
 import { eventResult } from "./indexeddb-fixture.ts";
 import { STORED } from "./local-store-fixture.ts";
 
-const blocked = { kind: "failed", reason: "blocked" };
+const locked = { kind: "failed", reason: "locked" };
 const closed = { kind: "failed", reason: "closed" };
 const bytes = new Uint8Array([0, 0]);
 
@@ -50,7 +50,7 @@ test("leases belong to the claiming window and expire when a replacement opens",
   const opened = await first.invoke(["open", id]);
   assert.equal(opened.kind, "opened");
   const { lease } = opened;
-  assert.deepEqual(await second.invoke(["open", id]), blocked);
+  assert.deepEqual(await second.invoke(["open", id]), locked);
   assert.deepEqual(await second.invoke(["read", id, lease, null]), closed);
   assert.deepEqual(await second.invoke(["write", id, lease, 1, false, bytes]), closed);
   assert.deepEqual(await second.invoke(["close", id, lease]), closed);
@@ -77,7 +77,7 @@ for (const event of ["destroyed", "render-process-gone"] as const) {
     first.sender.emit(event);
     try {
       await entered.promise;
-      assert.deepEqual(await second.invoke(["open", id]), blocked);
+      assert.deepEqual(await second.invoke(["open", id]), locked);
       assert.deepEqual(await first.invoke(["read", id, opened.lease, null]), closed);
     } finally { finish.resolve(undefined); }
     assert.deepEqual(await writing, STORED);

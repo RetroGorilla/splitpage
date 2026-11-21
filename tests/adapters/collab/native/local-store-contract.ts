@@ -9,11 +9,11 @@ import { STORE_OPTIONS, STORED, seedReplica, stored, typeAt } from "./local-stor
 interface ContractFixture {
   readonly store: NativeLocalStore;
   readonly other: NativeLocalStore;
-  readonly contention: "locked" | "blocked";
   readonly failAppend: (reason?: "quota") => void;
 }
 
 const bounded = { timeout: 10000 };
+const locked = { kind: "failed", reason: "locked" };
 
 async function open(t: TestContext, store: NativeLocalStore, name: string) {
   const replica = await store.open(name, STORE_OPTIONS);
@@ -56,14 +56,14 @@ export function localStoreContract(
   });
 
   test(`${backend}: closing drains and retries an active append before releasing the writer`, bounded, async t => {
-    const { store, other, contention, failAppend } = await create(t);
+    const { store, other, failAppend } = await create(t);
     const replica = await open(t, store, "close-retry-contract");
     const seen: NativeLocalStoreReceipt[] = [];
     replica.subscribe(receipt => { seen.push(receipt); });
     failAppend();
     seedReplica(replica.session);
     replica.session.close();
-    assert.deepEqual(await other.open("close-retry-contract", STORE_OPTIONS), { kind: "failed", reason: contention });
+    assert.deepEqual(await other.open("close-retry-contract", STORE_OPTIONS), locked);
     assert.equal((await replica.closed).kind, "stored");
     assert.equal(seen[0]?.kind, "failed");
     assert.deepEqual(seen.slice(1), [stored(1)]);
@@ -72,11 +72,10 @@ export function localStoreContract(
   });
 
   test(`${backend}: the writer blocks opens and deletes for the same script and releases on close`, bounded, async t => {
-    const { store, other, contention } = await create(t);
+    const { store, other } = await create(t);
     const replica = await open(t, store, "deployment/first");
-    const refused = { kind: "failed", reason: contention };
-    assert.deepEqual(await other.open("deployment/first", STORE_OPTIONS), refused);
-    assert.deepEqual(await other.delete("deployment/first"), refused);
+    assert.deepEqual(await other.open("deployment/first", STORE_OPTIONS), locked);
+    assert.deepEqual(await other.delete("deployment/first"), locked);
     const independent = await open(t, other, "deployment/second");
     seedReplica(replica.session);
     seedReplica(independent.session, { A: "second" });
@@ -93,7 +92,7 @@ export function localStoreContract(
   });
 
   test(`${backend}: a failed session hands over its committed terminal checkpoint under the same writer`, bounded, async t => {
-    const { store, other, contention } = await create(t);
+    const { store, other } = await create(t);
     const replica = await open(t, store, "handover-contract");
     const original = replica.session;
     seedReplica(original);
@@ -107,12 +106,12 @@ export function localStoreContract(
     const fault = new Error("interrupted Yjs cleanup");
     original.ydoc.once("afterTransactionCleanup", () => { throw fault; });
     assert.throws(() => typeAt(original, 0, "kept "), fault);
-    assert.deepEqual(await other.open("handover-contract", STORE_OPTIONS), { kind: "failed", reason: contention });
+    assert.deepEqual(await other.open("handover-contract", STORE_OPTIONS), locked);
     const replacement = await handover.promise;
     assert.equal(replica.session, replacement);
     assert.equal(replacement.document().rows[0]?.audioText, "kept start");
     assert.deepEqual(await replica.flush(), stored(2));
-    assert.deepEqual(await other.open("handover-contract", STORE_OPTIONS), { kind: "failed", reason: contention });
+    assert.deepEqual(await other.open("handover-contract", STORE_OPTIONS), locked);
     assert.deepEqual(replacement.commands.undo(), { kind: "unchanged" });
     typeAt(replacement, 0, "still ");
     replacement.close();
