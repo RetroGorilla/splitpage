@@ -1,5 +1,5 @@
 import { addShotPropCommand } from "../../application/commands/broll-records.ts";
-import { NOTHING_RAN, recordCommandRun } from "../../application/commands/shared-records.ts";
+import { NOTHING_RAN, RECORD_REFUSED, recordCommandRun } from "../../application/commands/shared-records.ts";
 import { cellRuns, cellTextCommand } from "../../application/commands/cell-text.ts";
 import { rewriteCellsCommand } from "../../application/commands/document-edit.ts";
 import type { CellRewrite } from "../../application/commands/document-edit.ts";
@@ -115,7 +115,8 @@ export function createBrollRecords(ports: BrollRecordsPorts): BrollRecordsMount 
     brollEntries,
     scheduleBrollRefresh,
     addBrollProp: function (shotId, rawName) {
-      return recordCommandRun(ports.edits, ports.shared, shared => addShotPropCommand(shotId, rawName, shared));
+      return ports.shared.native?.()?.addShotProp(shotId, rawName)
+        ?? recordCommandRun(ports.edits, ports.shared, shared => addShotPropCommand(shotId, rawName, shared));
     },
     brollShotsByProp: function () {
       const out: Record<string, string[]> = Object.create(null);
@@ -175,6 +176,10 @@ export function createBrollRecords(ports: BrollRecordsPorts): BrollRecordsMount 
       return n;
     },
     renameBrollInScript: function (entry, newName, quiet = false) {
+      if (ports.shared.native?.()) {
+        ports.shared.refused({ kind: "rejected", reason: "not shared" });
+        return RECORD_REFUSED;
+      }
       const planned = ports.document.read(function (doc) { return doc ? brollRenamed(doc, entry, newName) : []; });
       if (!planned.length) return NOTHING_RAN;
       const records = quiet ? { ports: ports.shared.ports, refused: () => {} } : ports.shared;

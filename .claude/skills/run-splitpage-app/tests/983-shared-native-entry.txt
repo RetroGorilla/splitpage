@@ -81,7 +81,10 @@ key ctrl KeyZ
 wait text() === 'Hexllo' && S.read().peer.rows[0].audioText === 'Hexllo' && writerText() === 'Hexllo'
 eval wat('r1',2);clear()
 key Enter
-expect warn() && writerText() === 'Hexllo' && text() === 'Hexllo' && S.read().peer.rows[0].audioText === 'Hexllo'
+wait writerText() === 'He' && text() === 'He' && S.read().peer.rows[0].audioText === 'He'
+expect !warn() && S.read().app.rows[1].audioText === 'xllo' && wsel() === S.read().app.rows[1].id+':0:0'
+key ctrl KeyZ
+wait writerText() === 'Hexllo' && text() === 'Hexllo' && S.read().peer.rows[0].audioText === 'Hexllo'
 eval window.peerEdit=S.nativePeer.type('r1',0,'Y');true
 expect window.peerEdit.kind === 'written'
 wait writerText() === 'YHexllo'

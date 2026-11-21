@@ -6,7 +6,7 @@ import { text as portText } from "./ports/text.ts";
 import { ownership as portOwnership } from "./ports/saving.ts";
 import { pictures as portPictures } from "./ports/pictures.ts";
 import { sharedStructureCommands } from "./ports/shared-commands.ts";
-import { nativeEditorRecords } from "./shared-session.ts";
+import { nativeEditorActive, nativeEditorRecords } from "./shared-session.ts";
 import { placeCaretAtTextOffset } from "../../features/common/caret.ts";
 import { cellSelection, setCellSelection } from "../../features/common/cell-selection.ts";
 import type { PastePlace, BeatMedia, BeatMediaPorts, BeatPorts, Beats } from "../../features/rows/ports.ts";
@@ -27,7 +27,7 @@ export function mountBeatsFeature(): Beats {
       notices: portNotices,
       ids: randomIds,
       text: portText,
-      cells: { sync: (cell) => { cellEditing().sync(cell); } },
+      cells: { sync: (cell) => { if (!nativeEditorActive()) cellEditing().sync(cell); } },
       undo: portUndo,
       selection: { of: cellSelection },
       placeCaret: placeCaretAtTextOffset,

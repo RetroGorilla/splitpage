@@ -1,0 +1,41 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.Q=function(s){return document.querySelector(s)};F.openFile(new File([JSON.stringify({schema:2,title:'Native registries',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello',visualText:'<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Mug" contenteditable="false">Mug</span><br><span class="broll-key" data-broll-id="bs1" contenteditable="false">B-roll:</span> Wide'}],people:[{id:'p1',name:'Cam'}],productionTags:[{id:'t_drone',cat:'gear',name:'Drone'}]})],'registries.splitpage'))
+wait F.state().title === 'Native registries'
+eval S.enter({backend:'native'})
+eval window.same=function(read,want){return [S.read().app,S.read().peer].every(function(doc){return JSON.stringify(read(doc))===JSON.stringify(want)})};window.tag=function(cat,name){return Q('#production-list .tag-entity[data-key="'+cat+' '+name+'"]')};window.shot=function(d){return d.brollShots.find(function(s){return s.id==='bs1'})};window.notes=function(){return Q('.broll-card[data-id="bs1"] .broll-notes-input')};window.cell=function(){return Q('#rows .cell-editable[data-id="r1"][data-field="audioText"]')};Q('#btn-production').click();Q('#production-modes [data-group="cat"]').click()
+expect !!tag('prop','mug') && !!tag('gear','drone')
+eval tag('prop','mug').querySelector('[data-action="tag-status-cycle"]').click()
+wait same(function(d){return d.productionTags.find(function(t){return t.name==='Mug'}).status},'sourcing')
+eval Q('#production-modes [data-group="person"]').click()
+expect !!Q('#production-list [data-action="person-delete"][data-person="p1"]')
+eval Q('#production-list [data-action="person-delete"][data-person="p1"]').click();Q('#production-list [data-action="person-delete"][data-person="p1"]').click()
+wait same(function(d){return d.people},[])
+expect !Q('#production-list [data-action="person-delete"][data-person="p1"]')
+eval cell().focus();getSelection().setBaseAndExtent(cell().firstChild,2,cell().firstChild,2);window.scrollBefore=[window.scrollX,window.scrollY]
+key ctrl KeyZ
+wait same(function(d){return d.people.map(function(p){return p.name})},['Cam'])
+expect Q('#production-list [data-action="person-delete"][data-person="p1"]') && document.activeElement===cell() && getSelection().focusOffset===2 && JSON.stringify([window.scrollX,window.scrollY])===JSON.stringify(scrollBefore)
+eval Q('#btn-gear').click();Q('#gear-quickadd-input').value='Tripod';Q('#gear-quickadd-save').click()
+wait same(function(d){return d.productionTags.filter(function(t){return t.cat==='gear'}).map(function(t){return t.name})},['Tripod'])
+expect Q('#gear-list').textContent.includes('Tripod') && !Q('#gear-list').textContent.includes('Drone')
+eval Q('#btn-broll').click();Q('#broll-list [data-action="broll-expand"][data-id="bs1"]').click()
+expect Q('#broll-list .broll-row[data-id="bs1"]').textContent.includes('Wide') && !!notes()
+eval notes().focus();notes().value='A draft';notes().setSelectionRange(1,4);S.nativePeer.registry({kind:'set',collection:'shots',ids:['bs1'],fields:{status:'shot'}})
+wait Q('#broll-list .broll-check[data-id="bs1"]').getAttribute('aria-checked')==='true'
+expect same(function(d){return [shot(d).name,shot(d).status,shot(d).notes]},['Wide','shot','']) && notes()===document.activeElement && notes().value==='A draft' && notes().selectionStart===1 && notes().selectionEnd===4
+eval notes().blur()
+wait same(function(d){return shot(d).notes},'A draft')
+eval window.prop=function(){return Q('.broll-card[data-id="bs1"] .broll-prop-input')};prop().focus()
+press Lens
+key Enter
+wait same(function(d){return shot(d).props.map(function(p){return p.name})},['Lens'])
+expect Q('.broll-card[data-id="bs1"] [data-action="broll-prop-remove"]') && prop().value===''
+eval cell().focus();getSelection().setBaseAndExtent(cell().firstChild,2,cell().firstChild,2);window.scrollBefore=[window.scrollX,window.scrollY]
+key ctrl KeyZ
+wait same(function(d){return shot(d).props},[])
+expect !Q('.broll-card[data-id="bs1"] [data-action="broll-prop-remove"]') && document.activeElement===cell() && getSelection().focusOffset===2 && JSON.stringify([window.scrollX,window.scrollY])===JSON.stringify(scrollBefore)
+key ctrl KeyY
+wait same(function(d){return shot(d).props.map(function(p){return p.name})},['Lens'])
+expect !!Q('.broll-card[data-id="bs1"] [data-action="broll-prop-remove"]')
+eval S.leave()

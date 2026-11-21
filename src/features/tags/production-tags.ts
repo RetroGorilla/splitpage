@@ -107,6 +107,8 @@ export function collectTagsFromRows(rows: readonly ProductionRow[] | null | unde
 }
 
 export function registerProductionTag(cat: string, name: unknown) {
+  const native = recordEdits?.shared.native?.();
+  if (native) return native.registerTag(cat, name).changed;
   return editRecords(shared => registerTagCommand({ cat: cat, name: String(name == null ? "" : name) }, shared));
 }
 
@@ -115,6 +117,8 @@ export function registryEntryById(id: string) {
 }
 
 export function findOrAddPerson(name: string) {
+  const native = recordEdits?.shared.native?.();
+  if (native) return native.addPerson(name).id;
   editRecords(shared => addPersonCommand(name, (randomIds as NonNullable<typeof randomIds>), shared));
   const person = (readSession as NonNullable<typeof readSession>)(function (doc) { return personNamed(doc, name); });
   return person ? person.id : "";
