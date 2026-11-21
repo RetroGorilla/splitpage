@@ -158,6 +158,31 @@ function assertCopies(expected, ...copies) {
   for (const copy of copies) assert.deepEqual(rows(copy.document()), expected);
 }
 
+test("native test peer closes its owned late reader and peer on disposal", async t => {
+  const app = await enterNative(t);
+  const peer = replica(t, app);
+  let reader;
+  const testPeer = createNativeTestPeer(app, {
+    peer,
+    applyUpdate: (target, bytes) => {
+      reader = target;
+      return applyNativePeerUpdate(target, bytes);
+    }
+  });
+  try {
+    assert.deepEqual(snapshot(testPeer.seedReader()), snapshot(app.document()));
+    assert.equal(testPeer.deliverToReader("app"), true);
+    assert.equal(reader.acceptsPeerUpdate(), true);
+  } finally {
+    testPeer.dispose();
+  }
+  assert.equal(reader.acceptsPeerUpdate(), false);
+  assert.equal(peer.acceptsPeerUpdate(), false);
+  assert.equal(testPeer.readLateReader(), null);
+  assert.equal(testPeer.deliverToReader("app"), false);
+  assert.equal(app.acceptsPeerUpdate(), true);
+});
+
 test("native Writer paints reversed and duplicate peer updates and lands a fresh copy", async t => {
   const app = await enterNative(t, script, true), peer = replica(t, app), updates = stream(peer);
   const sourceId = currentDocument().docId;

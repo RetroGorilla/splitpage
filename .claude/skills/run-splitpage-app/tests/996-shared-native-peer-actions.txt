@@ -1,0 +1,82 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=window.__writerFlowTest;window.P=S.nativePeer;window.openTrace=(title='Native peer actions')=>F.openFile(new File([JSON.stringify({schema:2,title,paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello',visualText:''},{id:'r2',audioText:'World',visualText:''}],comments:[]})],'peer-actions.splitpage'));openTrace()
+wait F.state().title==='Native peer actions'
+click #btn-write
+wait W.on()
+eval window.json=JSON.stringify;window.writer=()=>document.getElementById('writer-doc');window.points=(r1,a,r2,h)=>({anchor:{kind:'beat',rowId:r1,offset:a},head:{kind:'beat',rowId:r2,offset:h}});window.place=(...args)=>{writer().focus();W.place(points(...args));return true};window.selection=(...args)=>document.activeElement===writer()&&writer().contains(getSelection().focusNode)&&getSelection().isCollapsed===(args[0]===args[2]&&args[1]===args[3])&&json(W.selection())===json(points(...args));true
+eval window.rows=(doc,texts)=>doc.rows.length===texts.length&&doc.rows.every((row,i)=>row.id==='r'+(i+1)&&row.audioText===texts[i]&&row.visualText==='');window.paint=texts=>{const beats=[...writer().querySelectorAll('.wr-beat')];return W.on()&&beats.length===texts.length&&beats.every((beat,i)=>beat.dataset.id==='r'+(i+1)&&beat.textContent.replace(/\u200b/g,'')===texts[i]&&beat.checkVisibility()&&beat.getBoundingClientRect().width>0)};window.agree=texts=>json(S.read().app)===json(S.read().peer)&&rows(S.read().app,texts);window.bold=()=>writer().querySelector('.wr-beat[data-id="r1"] strong')?.textContent;window.target={beat:'r1',cell:'narration'};true
+eval window.originalId=F.state().docId;S.enter()
+wait agree(['Hello','World'])&&paint(['Hello','World'])
+eval window.formatted=P.format(target,0,5,{kind:'plain',mark:'b',on:true});true
+expect formatted.kind==='written'&&agree(['<strong>Hello</strong>','World'])&&paint(['Hello','World'])&&bold()==='Hello'
+eval window.erased=P.delete('r1',1,3);true
+expect erased.kind==='written'&&agree(['<strong>Hlo</strong>','World'])&&paint(['Hlo','World'])&&bold()==='Hlo'
+eval window.beforeRefusal=S.read().app;P.hold('updates');place('r1',2,'r2',2)
+expect selection('r1',2,'r2',2)
+key Delete
+expect json(S.read().app)===json(beforeRefusal)&&json(S.read().peer)===json(beforeRefusal)&&P.queuedUpdates().length===0&&paint(['Hlo','World'])
+expect selection('r1',2,'r2',2)&&document.querySelectorAll('#toast-host .toast.warn:not(.is-leaving)').length===1
+eval window.first=P.delete('r1',2,3);window.second=P.delete('r2',0,2);place('r1',3,'r1',3)
+expect first.kind==='written'&&second.kind==='written'&&rows(S.read().peer,['<strong>Hl</strong>','rld'])
+press x
+expect paint(['Hlox','World'])&&selection('r1',4,'r1',4)
+wait P.queuedUpdates().length===3
+eval window.pending=P.queuedUpdates();true
+expect json(pending.map(packet=>packet.to))==='["app","app","peer"]'
+expect json(P.release('reverse'))===json([...pending].reverse())&&P.queuedUpdates().length===0
+expect json(S.read().app)===json(S.read().peer)&&S.read().app.rows.length===2&&S.read().app.rows[1].audioText==='rld'&&paint(['Hlx','rld'])&&selection('r1',3,'r1',3)
+key ctrl KeyZ
+expect agree(['<strong>Hl</strong>','rld'])&&paint(['Hl','rld'])&&selection('r1',2,'r1',2)
+eval window.removed=P.removeBeat('r2');true
+expect removed.kind==='written'&&agree(['<strong>Hl</strong>'])&&paint(['Hl'])&&selection('r1',2,'r1',2)
+expect document.getElementById('shared-recovery-panel')===null
+eval window.projection=S.read().app;window.left=S.leave();true
+expect left.ok&&S.read().peer===null&&F.state().docId!==projection.docId&&F.state().docId!==originalId
+expect json({...F.state(),docId:projection.docId})===json(projection)&&paint(['Hl'])&&selection('r1',2,'r1',2)
+
+
+eval openTrace('Native peer batch and reader')
+wait F.state().title==='Native peer batch and reader'
+eval if (!W.on()) document.getElementById('btn-write').click();true
+wait W.on()
+eval window.originalId=F.state().docId;S.enter()
+wait agree(['Hello','World'])&&paint(['Hello','World'])
+eval window.seed=S.read().app;window.allCopies=()=>{const {app,peer}=S.read();return json(app)===json(peer)&&json(P.readLateReader())===json(app)&&['app','peer'].every(source=>json(P.freshSnapshot(source))===json(app))};true
+expect json(P.seedReader())===json(seed)&&allCopies()
+eval window.formatted=P.format(target,0,5,{kind:'plain',mark:'b',on:true});true
+expect formatted.kind==='written'&&agree(['<strong>Hello</strong>','World'])&&paint(['Hello','World'])&&bold()==='Hello'
+eval window.erased=P.delete('r1',1,3);true
+expect erased.kind==='written'&&agree(['<strong>Hlo</strong>','World'])&&paint(['Hlo','World'])&&bold()==='Hlo'
+eval place('r1',3,'r1',3);window.removed=P.removeBeat('r2');true
+expect removed.kind==='written'&&agree(['<strong>Hlo</strong>'])&&paint(['Hlo'])&&selection('r1',3,'r1',3)
+expect json(P.readLateReader())===json(seed)&&document.getElementById('shared-recovery-panel')===null
+expect P.deliverToReader('app')&&allCopies()
+eval window.afterRemoval=S.read().app;P.hold('updates');window.restored=P.undoPeer();true
+expect restored.kind==='written'&&rows(S.read().peer,['<strong>Hlo</strong>','World'])&&P.queuedUpdates().length===1&&P.queuedUpdates()[0].to==='app'
+eval window.restorePackets=P.queuedUpdates();true
+expect json(P.release('forward'))===json(restorePackets)&&P.queuedUpdates().length===0
+wait agree(['<strong>Hlo</strong>','World'])&&paint(['Hlo','World'])
+expect selection('r1',3,'r1',3)
+expect json(P.readLateReader())===json(afterRemoval)
+expect P.deliverToReader('peer')&&allCopies()&&document.getElementById('shared-recovery-panel')===null
+eval window.beforeBatch=S.read().app;P.hold('updates');window.batch=P.replaceAll([{row:'r1',cell:'narration',start:2,end:3},{row:'r2',cell:'narration',start:0,end:2}],'');true
+expect batch.kind==='written'&&P.queuedUpdates().length===1&&P.queuedUpdates()[0].to==='app'&&rows(S.read().peer,['<strong>Hl</strong>','rld'])
+expect json(S.read().app)===json(beforeBatch)&&json(P.readLateReader())===json(beforeBatch)&&paint(['Hlo','World'])&&selection('r1',3,'r1',3)
+press x
+expect paint(['Hlox','World'])&&selection('r1',4,'r1',4)
+wait P.queuedUpdates().length===2
+eval window.pending=P.queuedUpdates();true
+expect json(pending.map(packet=>packet.to))==='["app","peer"]'&&pending.every(packet=>packet.bytes.length>0)
+expect json(P.release('reverse'))===json([...pending].reverse())&&P.queuedUpdates().length===0
+expect json(S.read().app)===json(S.read().peer)&&S.read().app.rows.length===2&&S.read().app.rows[1].audioText==='rld'&&paint(['Hlx','rld'])&&selection('r1',3,'r1',3)
+expect json(P.readLateReader())===json(beforeBatch)&&P.deliverToReader('peer')&&allCopies()
+eval window.merged=S.read().app;P.hold('updates');window.undone=P.undoPeer();window.undoPackets=P.queuedUpdates();true
+expect undone.kind==='written'&&undoPackets.length===1&&undoPackets[0].to==='app'&&json(S.read().app)===json(merged)
+expect json(P.release('forward'))===json(undoPackets)&&P.queuedUpdates().length===0
+expect json(S.read().app)===json(S.read().peer)&&S.read().app.rows.length===2&&S.read().app.rows[1].audioText==='World'&&paint(['Hlox','World'])&&selection('r1',4,'r1',4)
+expect json(P.readLateReader())===json(merged)&&P.deliverToReader('app')&&allCopies()
+eval window.projection=S.read().app;window.left=S.leave();true
+expect left.ok&&S.read().peer===null&&P.readLateReader()===null&&P.freshSnapshot('app')===null&&P.freshSnapshot('peer')===null&&P.deliverToReader('app')===false
+expect F.state().docId!==projection.docId&&F.state().docId!==originalId&&json({...F.state(),docId:projection.docId})===json(projection)
+expect paint(['Hlox','World'])&&selection('r1',4,'r1',4)
