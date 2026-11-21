@@ -3,7 +3,7 @@ import test, { type TestContext } from "node:test";
 import * as Y from "yjs";
 import { attachNativeLocalStore } from "../../../../src/adapters/collab/native/local-store.ts";
 import { applyNativePeerUpdate } from "../../../../src/adapters/collab/native/peer-update.ts";
-import { openNativeSession } from "../../../../src/adapters/collab/native/session.ts";
+import { hasNativeFormat, openNativeSession } from "../../../../src/adapters/collab/native/session.ts";
 import { cells } from "./helpers.ts";
 import { structureScript } from "./structure-harness.ts";
 
@@ -22,7 +22,7 @@ function seed(t: TestContext): Session {
 }
 
 function open(t: TestContext, state: Uint8Array): Session {
-  const session = openNativeSession({ kind: "state", state }, options);
+  const session = openNativeSession({ kind: "stored-script", state }, options);
   t.after(session.close);
   return session;
 }
@@ -46,8 +46,12 @@ test("stored entry refuses an update missing the same writer's middle edit", t =
   const base = writer.encodeState();
   const middle = append(writer, "?");
   const tail = append(writer, "!");
-  assert.throws(() => open(t, Y.mergeUpdates([base, tail])), refusal);
-  assert.deepEqual(open(t, Y.mergeUpdates([base, tail, middle])).document(), writer.document());
+  const gapped = Y.mergeUpdates([base, tail]);
+  const complete = Y.mergeUpdates([base, tail, middle]);
+  assert.equal(hasNativeFormat(gapped), false);
+  assert.throws(() => open(t, gapped), refusal);
+  assert.equal(hasNativeFormat(complete), true);
+  assert.deepEqual(open(t, complete).document(), writer.document());
 });
 
 test("stored entry refuses a gap for a second writer and accepts both writers with the gap filled", t => {
@@ -85,27 +89,31 @@ test("stored entry refuses a delete set referencing a missing insert", t => {
   assert.deepEqual(open(t, Y.mergeUpdates([base, inserted, deletion])).document(), writer.document());
 });
 
-test("stored replica replay refuses a gap after reading its complete log", async t => {
+test("a reopened replica stays editable until its waiting peer update can integrate", async t => {
   const writer = seed(t);
   const base = writer.encodeState();
-  const middle = append(writer, "?");
-  const tail = append(writer, "!");
+  const peer = open(t, base);
+  const middle = append(peer, "?");
+  const tail = append(peer, "!");
   const entries = [
     { generation: 1, checkpoint: true, bytes: base },
     { generation: 2, checkpoint: false, bytes: tail }
   ];
-  const reopen = () => attachNativeLocalStore({
-    read: async () => entries, write: async () => {}, release: async () => {}, persistent: async () => true
+  const reopened = await attachNativeLocalStore({
+    read: async () => entries, write: async entry => { entries.push(entry); },
+    release: async () => {}, persistent: async () => true
   }, options);
-  await assert.rejects(async () => {
-    const result = await reopen();
-    if (result.kind === "opened") t.after(result.session.close);
-  }, refusal);
-  entries.push({ generation: 3, checkpoint: false, bytes: middle });
-  const reopened = await reopen();
   assert.equal(reopened.kind, "opened");
-  t.after(reopened.session.close);
+  t.after(async () => { reopened.session.close(); await reopened.closed; });
   assert.deepEqual(reopened.session.document(), writer.document());
+  const local = append(reopened.session, " local");
+  assert.equal(applyNativePeerUpdate(writer, local), true);
+  assert.deepEqual(reopened.session.document(), writer.document());
+  assert.deepEqual(await reopened.flush(), { kind: "stored", generation: 3 });
+  assert.equal(applyNativePeerUpdate(reopened.session, middle), true);
+  assert.equal(applyNativePeerUpdate(peer, local), true);
+  assert.deepEqual(reopened.session.document(), peer.document());
+  assert.deepEqual(await reopened.flush(), { kind: "stored", generation: 4 });
 });
 
 test("live peers and in-memory handoffs integrate a waiting edit when its missing update arrives", t => {
@@ -116,7 +124,7 @@ test("live peers and in-memory handoffs integrate a waiting edit when its missin
   const tail = append(writer, "!");
   assert.equal(applyNativePeerUpdate(receiver, tail), true);
   assert.deepEqual(receiver.document(), before);
-  const handoff = openNativeSession({ kind: "live-state", state: receiver.encodeState() }, options);
+  const handoff = openNativeSession({ kind: "state", state: receiver.encodeState() }, options);
   t.after(handoff.close);
   for (const peer of [receiver, handoff]) {
     assert.equal(applyNativePeerUpdate(peer, middle), true);

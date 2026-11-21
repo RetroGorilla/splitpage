@@ -33,7 +33,7 @@ export type NativeSessionSource =
   | { readonly kind: "empty" }
   | { readonly kind: "document"; readonly document: ValidatedDocument; readonly conversion: NativeConversionPorts }
   | { readonly kind: "state"; readonly state: Uint8Array }
-  | { readonly kind: "live-state"; readonly state: Uint8Array };
+  | { readonly kind: "stored-script"; readonly state: Uint8Array };
 
 export interface NativeSessionOptions extends NativeSizeOptions {
   readonly actor: string;
@@ -86,9 +86,8 @@ function openSessionScript(
 ) {
   const doc = new Y.Doc(), script = openNativeScript(doc);
   try {
-    if (source.kind === "state") applyStoredState(doc, source.state);
-    // why: an in-memory handoff can carry peer updates still waiting for dependencies
-    else if (source.kind === "live-state") Y.applyUpdate(doc, source.state);
+    if (source.kind === "stored-script") applyStoredState(doc, source.state);
+    else if (source.kind === "state") Y.applyUpdate(doc, source.state);
     else if (source.kind === "document") convertToNativeScript(script, source.document, source.conversion);
     const journal = saved ? openNativePendingEdits(script.reader, saved === true ? undefined : saved) : null;
     const size = createNativeSizeTracker(doc, sizeOptions, publishRecovery);

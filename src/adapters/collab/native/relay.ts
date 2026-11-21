@@ -100,7 +100,7 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
     if (reopen) {
       updateStatus({ connected: false });
       void reopenStored(current, reopen);
-    } else replace(openNativeSession({ kind: "live-state", state: change.state }, sessionOptions));
+    } else replace(openNativeSession({ kind: "state", state: change.state }, sessionOptions));
   }
 
   async function reopenStored(failed: Session, open: NonNullable<NativeRelayOptions["reopen"]>): Promise<void> {

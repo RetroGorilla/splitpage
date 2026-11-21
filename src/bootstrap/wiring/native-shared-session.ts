@@ -42,7 +42,7 @@ export function nativePublication() {
 export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocument, failedClose: () => boolean, stored?: Uint8Array) {
   const actor = ports.editor(), at = new Date(ports.now()).toISOString();
   const options = { actor, sanitize: sanitizeHtml };
-  const native = openNativeSession(stored ? { kind: "state", state: stored } : {
+  const native = openNativeSession(stored ? { kind: "stored-script", state: stored } : {
     kind: "document", document: source, conversion: { cells: scriptCellOf, creation: source.docId, at, by: actor }
   }, options);
   try {
@@ -80,7 +80,7 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
         if (input?.buffered()) {
           let bytes: Uint8Array | null = null;
           try {
-            const recovered = openNativeSession({ kind: "live-state", state: terminal }, options);
+            const recovered = openNativeSession({ kind: "state", state: terminal }, options);
             try { bytes = input.recover(recovered); } finally { recovered.close(); }
           } catch (error) {
             ports.report(error);
@@ -102,7 +102,7 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
   });
   const landing = (): ValidatedDocument => {
     if (!terminal) return enterSharedDocument(native.document());
-    const recovered = openNativeSession({ kind: "live-state", state: terminal }, options);
+    const recovered = openNativeSession({ kind: "state", state: terminal }, options);
     try { return enterSharedDocument(recovered.document()); } finally { recovered.close(); }
   };
   const backend: SharedEditorBackend = {
