@@ -166,6 +166,31 @@ test("gear quick add replaces omitted orphaned gear in one step", async t => {
   copies(doc => tags(doc).map(entry => entry.name), ["Tripod"]);
 });
 
+test("Scene prep keeps a removed tag's draft away from its same-name replacement", async t => {
+  await enter(t, { rows: [{ id: "r1", audioText: "Hello",
+    visualText: '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Mug" contenteditable="false">Mug</span>' }],
+  productionTags: [{ id: "t_source", cat: "prop", name: "Mug" }] });
+  production("prep");
+  $('.prep-resource-name [data-prep="notes"]').click();
+  const original = $(".prep-notes .tag-notes-input");
+  const id = original.getAttribute("data-registry-id");
+  assert.equal(id, tag(hook.read().app, "Mug").id);
+  original.focus();
+  original.value = "Notes for the removed record";
+  assert.equal(hook.nativePeer.registry({ kind: "remove", collection: "tags", ids: [id] }).kind, "written");
+  await Promise.resolve();
+  const replacement = $(".prep-notes .tag-notes-input");
+  assert.notEqual(replacement, original);
+  assert.notEqual(replacement.getAttribute("data-registry-id"), id);
+  assert.equal(replacement.value, "");
+  assert.notEqual(document.activeElement, replacement);
+  assert.equal($("#production-list .typed-unsaved-text").value, original.value);
+  replacement.focus();
+  replacement.blur();
+  await Promise.resolve();
+  copies(doc => tag(doc, "Mug").notes, "");
+});
+
 test("racing renames agree and the focused notes draft follows the tag ID", async t => {
   await enter(t);
   production();

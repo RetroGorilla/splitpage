@@ -853,10 +853,12 @@ function renderProductionList(entries?: readonly PresentedProductionEntry[]) {
     const keepRename = rename && rename.getAttribute("data-key") === (ports as TagPanelPorts).view.tagRenamingKey();
     const active = document.activeElement;
     const focused = active && listEl.contains(active) ? active as HTMLElement : null;
+    const matchRecord = focused && isPrepTextField(focused) && (ports as TagPanelPorts).shared.native?.();
     const identity = focused ? {
       prep: focused.getAttribute("data-prep"), id: focused.getAttribute("data-id"),
       key: focused.getAttribute("data-key"), row: focused.getAttribute("data-row"),
       className: focused.className, value: isPrepTextField(focused) ? focused.value : null,
+      record: matchRecord ? focused.getAttribute("data-registry-id") : null,
       context: focused.closest(".prep-resource")?.getAttribute("data-prep-context") ?? null,
       start: isPrepTextField(focused) ? focused.selectionStart : null,
       end: isPrepTextField(focused) ? focused.selectionEnd : null,
@@ -873,6 +875,7 @@ function renderProductionList(entries?: readonly PresentedProductionEntry[]) {
     if (identity) {
       const next = Array.from(listEl.querySelectorAll<HTMLElement>("button, select, input, textarea, a")).find(el =>
         el.className === identity.className && el.getAttribute("data-prep") === identity.prep &&
+        (!matchRecord || el.getAttribute("data-registry-id") === identity.record) &&
         (el.closest(".prep-resource")?.getAttribute("data-prep-context") ?? null) === identity.context &&
         el.getAttribute("data-id") === identity.id && el.getAttribute("data-key") === identity.key && el.getAttribute("data-row") === identity.row);
       if (next) {
