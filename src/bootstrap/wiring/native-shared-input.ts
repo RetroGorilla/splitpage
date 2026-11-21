@@ -29,7 +29,7 @@ import { sharedUndoRoute } from "./undo.ts";
 import { writerControls, writerFlowPorts } from "./writer.ts";
 
 interface NativeInputPorts {
-  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "resolveTextSelection" | "isClosingOrClosed" | "subscribe">;
+  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "resolveTextSelection" | "isClosingOrClosed" | "subscribe" | "revision">;
   readonly session: Pick<SharedDocumentSession, "admit" | "refuse" | "run" | "subscribe">;
   readonly editAttribution: () => NativeEditStamp;
   readonly now?: () => number;
@@ -181,6 +181,7 @@ export function sameNativeInsertPlacement(shown: SceneDocument | null, live: Sce
 export function mountNativeSharedInput({ native, session, editAttribution, now = Date.now, report, paintIsCurrent = () => false, publish = () => {} }: NativeInputPorts) {
   let draft: Draft | null = null, stopped: string | null = null, uncertain = false;
   let insertMenuSelection: ReturnType<typeof captureInsertMenuSelection> | null = null;
+  let lastWriterEnterRefusal: string | null = null;
   let imeTarget: Element | null = null;
   let compositionRefused = false, fullRefused = false;
   let composingInside: Pick<Draft, "cell" | "selection" | "html"> | null = null;
@@ -628,6 +629,15 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (fresh) writerNarration.place(fresh, landing, 0, 0, true);
   }
 
+  function refuseWriterEnter(beat: string, from: number, to: number, cell: "narration" | "name"): false {
+    const key = JSON.stringify([native.revision(), cell, beat, from, to]);
+    if (key !== lastWriterEnterRefusal) {
+      lastWriterEnterRefusal = key;
+      refuseCommand(UNSUPPORTED);
+    }
+    return false;
+  }
+
   function writerSplit(caret: NonNullable<ReturnType<typeof structureCaret>>, shown: ReturnType<typeof documentReader.current>): boolean {
     const doc = native.document(), index = doc.rows.findIndex(row => row.id === caret.beat);
     const row = doc.rows[index];
@@ -635,23 +645,22 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const at = (offset: number) => beatPos(caret.beat, offset);
     const plan = enterAt(doc as unknown as FlowDoc, { anchor: at(caret.offset), head: at(caret.endOffset) }, writerFlowPorts);
     if (!plan) return false;
-    if (!("rows" in plan)) { session.refuse(UNSUPPORTED); return false; }
+    const refuse = () => refuseWriterEnter(caret.beat, caret.offset, caret.endOffset, "narration");
+    if (!("rows" in plan)) return refuse();
     if (plan.rows.length === doc.rows.length + 1) {
       const above = plan.rows[index]?.id !== row.id;
       const fresh = plan.rows[index + (above ? 0 : 1)];
       if (fresh?.audioText && !above) return true;
       const side = above ? "above" : "below";
       if (!fresh || caret.range || !sameNativeInsertPlacement(shown, doc, row.id, side)) {
-        session.refuse(UNSUPPORTED);
-        return false;
+        return refuse();
       }
       insertWriterBeat(row.id, side, caret.before, above, fresh.paragraphStart === true);
       return false;
     }
     const planned = plan.rows[index];
     if (caret.range || plan.rows.length !== doc.rows.length || planned?.id !== row.id || planned.paragraphStart !== true) {
-      session.refuse(UNSUPPORTED);
-      return false;
+      return refuse();
     }
     const step = native.commands.setField.withSelection(caret.before, { kind: "beat", id: row.id, field: "paragraphStart" }, true);
     if (step.result.kind === "refused") refuseCommand(step.result.reason);
@@ -825,7 +834,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     }
     const index = doc.rows.findIndex(row => row.id === scene.firstSceneId), previous = doc.rows[index - 1];
     if (selection.from !== 0 || !previous || !sameNativeInsertPlacement(shown, doc, previous.id, "below")) {
-      session.refuse(UNSUPPORTED);
+      refuseWriterEnter(id, selection.from, selection.to, "name");
       return;
     }
     const anchor = native.commands.anchorText({ beat: id, cell: "name" }, 0);
@@ -999,7 +1008,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (cell && next instanceof Element && next.closest(ROW_MENU_BUTTON)) {
         insertMenuSelection = captureInsertMenuSelection(cell) ?? insertMenuSelection;
       }
-      if (writer && next && next !== document.body) leaveHeadingLine(true);
+      if (writer) {
+        lastWriterEnterRefusal = null;
+        if (next && next !== document.body) leaveHeadingLine(true);
+      }
       const buffered = draft;
       if (buffered && cell && (buffered.cell === cell || cell.contains(buffered.cell))) {
         queueMicrotask(() => { if (draft === buffered) settleBlur(buffered); });
@@ -1008,6 +1020,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     }
     if (event.type === "pointerdown") {
       imeTarget = null;
+      lastWriterEnterRefusal = null;
       if (!draft?.composing && !stopped) finish();
       if (target?.closest(ROW_MENU_BUTTON)) insertMenuSelection = captureInsertMenuSelection();
       else if (!target?.closest("#rows .row-menu")) insertMenuSelection = null;

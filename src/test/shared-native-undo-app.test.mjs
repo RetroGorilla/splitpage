@@ -1280,7 +1280,7 @@ for (const [name, id, offset, keys, index, stays] of [
 ]) {
   const visualOnly = name === "Writer" && id === "r3" && offset === 0;
   test(name + ": Enter insertion matches standalone " + id + " at " + offset + " " + JSON.stringify(keys), async t => {
-    const rows = fourBeats();
+    const rows = structuredClone(fourBeats());
     rows[1].paragraphStart = true;
     if (visualOnly) { rows[2].audioText = ""; rows[2].visualText = "Look"; }
     const original = rows.map(row => row.id), kind = views[name];
@@ -1307,27 +1307,35 @@ for (const [name, id, offset, keys, index, stays] of [
   });
 }
 
-test("Split: Insert beat preserves the selection held before the row menu took focus", async t => {
+test("Split: clicking Insert beat keeps menu focus and records the narration selection for undo and redo", async t => {
   const kind = views.Split, original = ["r1", "r2"];
   const menu = () => document.querySelector('#rows .row-more[data-id="r1"]');
+  const mouseClick = button => {
+    button.dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true }));
+    button.focus();
+    button.dispatchEvent(new window.MouseEvent("click", { bubbles: true, detail: 1 }));
+  };
   const choose = () => {
-    if (menu().getAttribute("aria-expanded") !== "true") menu().click();
+    mouseClick(menu());
     const insert = document.querySelector('#rows .row-menu:not([hidden]) [data-action="insert-below"][data-id="r1"]');
     assert.equal(insert.textContent.trim(), "Insert beat");
-    insert.click();
+    mouseClick(insert);
+    assert.equal(document.activeElement, insert);
+    return insert;
   };
   adoptReplacement(migrateRows({ title: "Standalone script", rows: twoBeats }));
   kind.caret(null, "r1", 1, 3);
   choose();
   const expected = insertSnapshot(documentReader.current(), original, null);
+  const selected = document.getSelection().toString();
+  mouseClick(menu());
   const show = await enter(t, twoBeats);
   kind.caret(null, "r1", 1, 3);
-  menu().dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true }));
-  menu().focus();
-  choose();
+  const insert = choose();
   assert.deepEqual(insertSnapshot(hook.read().app, original, null), expected);
-  assert.deepEqual(kind.at(null), ["r1", 1, 3]);
-  assert.equal(press(cell(), "z"), true);
+  assert.equal(document.getSelection().toString(), selected);
+  insert.blur();
+  assert.equal(press(document.body, "z"), true);
   assert.deepEqual(rowOrder(), original);
   assert.deepEqual(kind.at(null), ["r1", 1, 3]);
   assert.equal(document.getSelection().toString(), "el");
@@ -1357,6 +1365,8 @@ for (const atTop of [false, true]) {
       assert.deepEqual(rowOrder(), original);
       assert.deepEqual(view.flow.selection().head, point);
       assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+      assert.equal(press(root(), "Enter", { ctrlKey: false }), true);
+      assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
     } else {
       assert.deepEqual(insertSnapshot(hook.read().app, original, view.at()), expected);
       assert.equal(press(root(), "z"), true);
@@ -1384,6 +1394,44 @@ for (const [from, to] of [[0, 2], [3, 5]]) {
     assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["Hello", "World"]);
     assert.deepEqual(view.at(), ["r1", from, to]);
     assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+    assert.equal(press(root(), "Enter", { ctrlKey: false }), true);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+  });
+}
+
+for (const repeatEnter of [true, false]) {
+  test("Writer: " + (repeatEnter ? "second Enter needs atomic blank removal and paragraph start" : "Enter on Wo needs atomic deletion and paragraph start"), async t => {
+    adoptReplacement(migrateRows({ title: "Standalone paragraph", rows: twoBeats, paragraphsDecided: true }));
+    const local = writer(t);
+    const enterKey = () => assert.equal(press(root(), "Enter", { ctrlKey: false }), true);
+    if (repeatEnter) {
+      local.caret("r1", 5);
+      enterKey();
+      assert.deepEqual(documentReader.current().rows.map(row => row.audioText), ["Hello", "", "World"]);
+    } else local.caret("r2", 0, 2);
+    enterKey();
+    assert.deepEqual(documentReader.current().rows.map(row => [row.id, row.audioText, !!row.paragraphStart]), [
+      ["r1", "Hello", false], ["r2", repeatEnter ? "World" : "rld", true]
+    ]);
+    assert.deepEqual(local.at(), ["r2", 0, 0]);
+    writerControls().closeWriter();
+
+    const show = await enter(t, twoBeats), native = writer(t);
+    if (repeatEnter) {
+      native.caret("r1", 5);
+      enterKey();
+      assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["Hello", "", "World"]);
+      assert.equal(show.mock.callCount(), 0);
+    } else native.caret("r2", 0, 2);
+    const before = hook.read().app, selection = native.at();
+    for (let attempt = 0; attempt < 2; attempt++) {
+      enterKey();
+      await Promise.resolve();
+      assert.deepEqual(hook.read().app, before);
+      assert.deepEqual(hook.read().peer, before);
+      assert.deepEqual(native.at(), selection);
+      assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+    }
   });
 }
 

@@ -137,11 +137,7 @@ export function createNativeEditorStructure({ native, session, input, publish, r
         const cell = intent.kind === "insert-beat" ? intent.focus ?? "narration" : "narration";
         const point = { target: { beat: landing, cell }, offset: 0 } as const;
         typing.show({ anchor: point, head: point });
-      } else if (inserting && menu?.visual) {
-        const anchor = native.resolveTextSelection(menu.visual.anchor)?.anchor;
-        const head = native.resolveTextSelection(menu.visual.head)?.head;
-        if (anchor && head) typing.show({ anchor, head });
-      } else if (movedSelection?.kind === "ready") {
+      } else if (!inserting && movedSelection?.kind === "ready") {
         typing.show(movedSelection.selection);
       }
       return { kind: "applied", generation: owner.generation(), changes };

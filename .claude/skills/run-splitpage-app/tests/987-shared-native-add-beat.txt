@@ -4,12 +4,15 @@ eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=wi
 wait F.state().title === 'Native blank beats'
 eval S.enter({backend:'native'})
 eval window.rows=()=>S.read().app.rows;window.order=()=>rows().map(r=>r.id).join(',');window.agree=()=>JSON.stringify(S.read().app)===JSON.stringify(S.read().peer);window.cell=id=>document.querySelector('#rows .cell-editable[data-id="'+id+'"][data-field="audioText"]');window.at=(id,i)=>{const el=cell(id);el.focus();getSelection().setBaseAndExtent(el.firstChild,i,el.firstChild,i);return true};window.splitAt=(id,i)=>document.activeElement===cell(id)&&cell(id).contains(getSelection().focusNode)&&getSelection().isCollapsed&&getSelection().focusOffset===i;window.blank=id=>rows().some(r=>r.id===id&&r.audioText===''&&r.visualText==='')
-eval at('r1',1);getSelection().setBaseAndExtent(cell('r1').firstChild,1,cell('r1').firstChild,3);window.menu=document.querySelector('#rows .row-more[data-id="r1"]');menu.dispatchEvent(new PointerEvent('pointerdown',{bubbles:true}));menu.focus();true
-jsclick #rows .row-more[data-id="r1"]
+eval at('r1',1);getSelection().setBaseAndExtent(cell('r1').firstChild,1,cell('r1').firstChild,3);true
+click #rows .row-more[data-id="r1"]
 expect document.querySelector('#rows .row-menu:not([hidden]) [data-action="insert-below"]').textContent.trim() === 'Insert beat' && !document.querySelector('#rows [data-action="insert-above"]')
-jsclick #rows .row-menu:not([hidden]) [data-action="insert-below"][data-id="r1"]
+click #rows .row-menu:not([hidden]) [data-action="insert-below"][data-id="r1"]
 wait rows().length === 5 && agree()
-expect blank(rows()[1].id) && document.activeElement === cell('r1') && getSelection().toString() === 'el'
+expect blank(rows()[1].id) && document.activeElement.matches('#rows [data-action="insert-below"][data-id="r1"]') && getSelection().toString() === 'el'
+key KeyE
+expect rows()[0].audioText === 'Hello' && document.activeElement.matches('#rows [data-action="insert-below"][data-id="r1"]') && getSelection().toString() === 'el'
+eval document.activeElement.blur()
 key ctrl KeyZ
 wait order() === 'r1,r2,r3,r4' && agree()
 expect document.activeElement === cell('r1') && getSelection().toString() === 'el'
