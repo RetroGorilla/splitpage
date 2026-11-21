@@ -75,6 +75,7 @@ function view(key: string, mount: () => unknown): [() => unknown, () => void] {
 }
 
 let appearanceMountedEarly = false;
+let reopenWriter = false;
 
 function stopAppearance(): void {
   stopViewFeature("mountAppearance");
@@ -103,7 +104,11 @@ export function startApp(wiring: Wiring, onFail?: (error: unknown) => void): () 
     appearanceMountedEarly = false;
     if (appearance) stops.push(stopAppearance);
     stops.push(startActions(wiring.actions, wiring.keyTarget));
-    const startup = beginStartup(startupPorts());
+    const startup = beginStartup(startupPorts(() => {
+      if (!reopenWriter) return;
+      writerControls()?.openWriter();
+      reopenWriter = false;
+    }));
     stops.push(startup.dispose);
     run([mountCellEditingFeature, stopCellEditingFeature]);
     run([mountPreferenceWatchFeature, stopPreferenceWatchFeature]);
@@ -159,6 +164,7 @@ export function startApp(wiring: Wiring, onFail?: (error: unknown) => void): () 
     run(view("mountWriterClose", mountWriterCloseFeature));
     overlay.mountWriterFocus();
     run([() => writerControls() ?? mountWriterRuntimeFeature(), () => {
+      reopenWriter ||= !!writerControls()?.writerFlowControl();
       if (!stopWriterRuntimeFeature()) throw new Error("The Writer could not finish");
     }]);
     // why: the shared session hook stops first, so it leaves the session while the owners it lands on are still running
