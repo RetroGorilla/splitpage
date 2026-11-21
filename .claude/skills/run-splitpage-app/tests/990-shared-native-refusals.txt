@@ -1,0 +1,148 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.KEY='<span class="broll-key" data-broll-id="S1" contenteditable="false">B-roll:</span>';F.openFile(new File([JSON.stringify({schema:2,title:'Shared refusals',paragraphsDecided:true,people:[{id:'p1',name:'Alice'}],brollShots:[{id:'S1',name:'a cup',status:'unshot',origin:'list'}],rows:[{id:'r1',audioText:'abcdef',visualText:'abcdef'},{id:'r2',audioText:'',visualText:KEY+' a cup'},{id:'r3',audioText:'one',visualText:''},{id:'r4',audioText:'two',visualText:'mug'},{id:'r5',audioText:'green tea',visualText:''}],comments:[]})],'native-refusals.splitpage'))
+wait F.state().title === 'Shared refusals'
+eval window.Q=function(id,f){return document.querySelector('#rows .cell-editable[data-id="'+id+'"][data-field="'+f+'"]')};window.A=function(id,f){var r=S.read().app.rows.filter(function(x){return x.id===id})[0];return r?r[f]:null};window.same=function(){return JSON.stringify(S.read().app)===JSON.stringify(S.read().peer)};true
+eval window.at=function(id,f,o){var c=Q(id,f);c.focus();var w=document.createTreeWalker(c,4),n,k=o;while((n=w.nextNode())){if(k<=n.data.length){getSelection().setBaseAndExtent(n,k,n,k);return true}k-=n.data.length}getSelection().setBaseAndExtent(c,c.childNodes.length,c,c.childNodes.length);return true};window.C=function(id,f){var c=Q(id,f),s=getSelection();if(!s.rangeCount||!c.contains(s.focusNode))return -1;var r=document.createRange();r.setStart(c,0);r.setEnd(s.focusNode,s.focusOffset);return r.toString().replace(/\u200b/g,'').length};true
+eval window.NOT='This is not available in a shared session yet.';window.CHANGED='This line changed. Try replacing again.';window.snap=function(){return JSON.stringify([S.read().app,S.read().peer])};window.clear=function(){document.querySelectorAll('#toast-host .toast').forEach(function(t){t.dismiss()});return true};window.one=function(m){var t=[].slice.call(document.querySelectorAll('#toast-host .toast'));return t.length===1&&t[0].classList.contains('warn')&&t[0].textContent===m};window.noToast=function(){return document.querySelectorAll('#toast-host .toast').length===0};true
+eval window.clip=function(type,cell,plain,html){var d=new DataTransfer();d.setData('text/plain',plain===undefined?'pasted':plain);if(html!==undefined)d.setData('text/html',html);var e=new ClipboardEvent(type,{clipboardData:d,bubbles:true,cancelable:true});cell.dispatchEvent(e);return e.defaultPrevented};window.input=function(type,cell){var e=new InputEvent('beforeinput',{inputType:type,bubbles:true,cancelable:true});cell.dispatchEvent(e);return e.defaultPrevented};true
+eval S.enter()
+wait S.read().peer !== null
+expect !window.__writerFlowTest.on() && Q('r1','audioText').textContent === 'abcdef' && same()
+eval clear();true
+wait noToast()
+eval at('r1','audioText',3);window.before=snap();window.prevented=clip('paste',Q('r1','audioText'),'pasted','<b>pasted</b>');true
+expect window.prevented && one(NOT) && snap() === window.before && Q('r1','audioText').textContent === 'abcdef'
+expect document.activeElement === Q('r1','audioText') && C('r1','audioText') === 3
+eval clear();true
+wait noToast()
+eval window.before=snap();window.prevented=clip('paste',Q('r1','audioText'),'line1\nline2');true
+expect window.prevented && one(NOT) && snap() === window.before && Q('r1','audioText').textContent === 'abcdef'
+expect document.activeElement === Q('r1','audioText') && C('r1','audioText') === 3
+eval clear();true
+wait noToast()
+eval window.before=snap();window.prevented=clip('cut',Q('r1','audioText'));true
+expect window.prevented && one(NOT) && snap() === window.before && Q('r1','audioText').textContent === 'abcdef'
+expect document.activeElement === Q('r1','audioText') && C('r1','audioText') === 3
+eval clear();true
+wait noToast()
+press q
+wait A('r1','audioText') === 'abcqdef' && same()
+expect noToast() && Q('r1','audioText').textContent === 'abcqdef' && document.activeElement === Q('r1','audioText') && C('r1','audioText') === 4
+eval window.prevented=clip('paste',Q('r1','audioText'),'pasted');true
+wait A('r1','audioText') === 'abcqpasteddef' && same()
+expect window.prevented && noToast() && document.activeElement === Q('r1','audioText') && C('r1','audioText') === 10
+key ctrl KeyZ
+wait A('r1','audioText') === 'abcqdef' && same()
+expect noToast() && document.activeElement === Q('r1','audioText') && C('r1','audioText') === 4
+eval at('r1','visualText',3);clear();true
+wait noToast()
+eval window.before=snap();window.prevented=input('formatBold',Q('r1','visualText'));true
+expect window.prevented && one(NOT) && snap() === window.before && Q('r1','visualText').textContent === 'abcdef'
+expect document.activeElement === Q('r1','visualText') && C('r1','visualText') === 3
+press q
+wait A('r1','visualText') === 'abcqdef' && same()
+expect Q('r1','visualText').textContent === 'abcqdef' && document.activeElement === Q('r1','visualText') && C('r1','visualText') === 4
+eval clear();true
+wait noToast()
+eval window.before=snap();true
+key alt Enter
+expect one(NOT) && snap() === window.before && document.querySelectorAll('#rows .row').length === 5
+expect document.activeElement === Q('r1','visualText') && C('r1','visualText') === 4
+eval at('r1','audioText',4);clear();true
+wait noToast()
+key Enter
+wait A('r1','audioText') === 'abcq<br>def' && same()
+expect noToast() && document.querySelectorAll('#rows .row').length === 5 && document.activeElement === Q('r1','audioText')
+press w
+wait A('r1','audioText') === 'abcq<br>wdef' && same()
+key ctrl KeyZ
+wait A('r1','audioText') === 'abcq<br>def' && same()
+key ctrl KeyZ
+wait A('r1','audioText') === 'abcqdef' && same()
+expect document.activeElement === Q('r1','audioText') && C('r1','audioText') === 4
+press w
+wait A('r1','audioText') === 'abcqwdef' && same()
+expect Q('r1','audioText').textContent === 'abcqwdef' && document.activeElement === Q('r1','audioText') && C('r1','audioText') === 5
+eval at('r1','visualText',7);clear();true
+wait noToast()
+eval window.before=snap();true
+key ctrl KeyB
+expect one(NOT) && snap() === window.before && !Q('r1','visualText').querySelector('strong,b')
+expect document.activeElement === Q('r1','visualText') && C('r1','visualText') === 7
+press A
+wait A('r1','visualText') === 'abcqdefA' && same()
+expect Q('r1','visualText').textContent === 'abcqdefA' && document.activeElement === Q('r1','visualText') && C('r1','visualText') === 8
+eval clear();at('r1','audioText',5);true
+wait noToast()
+ime set k
+eval window.before=snap();window.prevented=clip('paste',Q('r1','audioText'),'pasted');true
+expect window.prevented && one(NOT) && snap() === window.before
+ime commit k
+wait A('r1','audioText') === 'abcqwkdef' && same()
+expect Q('r1','audioText').textContent === 'abcqwkdef' && document.activeElement === Q('r1','audioText') && C('r1','audioText') === 6
+click #btn-write
+wait window.__writerFlowTest.on()
+eval document.getElementById('writer-doc').focus();window.__writerFlowTest.place({anchor:{kind:'beat',rowId:'r3',offset:1},head:{kind:'beat',rowId:'r3',offset:1}});clear();true
+wait noToast()
+key alt ArrowUp
+wait S.read().app.rows.map(function(r){return r.id}).join() === 'r1,r3,r2,r4,r5' && same()
+expect noToast() && document.activeElement === document.getElementById('writer-doc') && window.__writerFlowTest.selection().head.rowId === 'r3' && window.__writerFlowTest.selection().head.offset === 1
+press v
+wait A('r3','audioText') === 'ovne' && same()
+expect S.read().app.rows.map(function(r){return r.id}).join() === 'r1,r3,r2,r4,r5' && window.__writerFlowTest.selection().head.rowId === 'r3' && window.__writerFlowTest.selection().head.offset === 2
+click #wr-close
+wait !window.__writerFlowTest.on()
+key ctrl KeyF
+wait !document.querySelector('.findbar').hidden
+eval window.FI=document.getElementById('find-input');window.RI=document.getElementById('replace-input');FI.select();true
+expect document.activeElement === FI
+press cup
+eval RI.focus();true
+press pot
+expect FI.value === 'cup' && RI.value === 'pot' && document.activeElement === RI
+eval clear();true
+wait noToast()
+expect document.getElementById('find-count').textContent === '1 of 1'
+eval window.keyed=function(){var v=Q('r2','visualText');return v.textContent==='B-roll: a cup'&&v.querySelector('.broll-key')?.dataset.brollId==='S1'&&[S.read().app,S.read().peer].every(function(d){return d.rows[2].visualText===KEY+' a cup'&&d.brollShots.some(function(s){return s.id==='S1'&&s.name==='a cup'})})};window.before=snap();true
+jsclick #find-replace
+expect one(NOT) && snap() === window.before && keyed()
+expect document.activeElement === RI && !RI.disabled
+press s
+expect RI.value === 'pots' && snap() === window.before
+eval clear();true
+wait noToast()
+jsclick #find-replace-all
+expect one(NOT) && snap() === window.before && keyed() && document.getElementById('find-count').textContent === '1 of 1'
+expect document.activeElement === RI && !RI.disabled
+key Backspace
+expect RI.value === 'pot'
+eval FI.focus();FI.select();true
+press two
+expect FI.value === 'two' && document.getElementById('find-count').textContent === '1 of 1'
+eval RI.focus();clear();true
+wait noToast()
+eval S.nativePeer.hold();S.nativePeer.type('r4',1,'two');S.nativePeer.delete('r4',4,6);S.nativePeer.delete('r4',0,1);S.nativePeer.deliver();window.before=snap();document.getElementById('find-replace').click();true
+expect one(CHANGED) && snap() === window.before && A('r4','audioText') === 'two'
+expect document.getElementById('find-count').textContent === '1 of 1' && document.activeElement === RI && !RI.disabled
+key Backspace
+press t
+expect RI.value === 'pot' && snap() === window.before
+eval clear();true
+wait noToast()
+jsclick #find-replace
+wait A('r4','audioText') === 'pot' && same()
+expect noToast() && document.activeElement === RI && !RI.disabled && Q('r4','audioText').textContent === 'pot'
+eval FI.focus();FI.select();true
+press tea
+expect FI.value === 'tea' && document.getElementById('find-count').textContent === '1 of 1'
+eval RI.focus();clear();true
+wait noToast()
+eval S.nativePeer.type('r5',0,'X');true
+wait A('r5','audioText') === 'Xgreen tea' && same()
+jsclick #find-replace
+wait A('r5','audioText') === 'Xgreen pot' && same()
+expect noToast() && document.activeElement === RI && !RI.disabled && FI.value === 'tea' && !FI.disabled && Q('r5','audioText').textContent === 'Xgreen pot'
+eval window.sharedId=S.read().app.docId;window.withoutId=function(d){var c=Object.assign({},d);delete c.docId;return JSON.stringify(c)};window.finalDoc=withoutId(S.read().app);window.left=S.leave();true
+expect left.ok === true && S.read().peer === null && S.read().app.docId !== sharedId && withoutId(S.read().app) === finalDoc
+expect Q('r5','audioText').textContent === 'Xgreen pot' && Q('r2','visualText').querySelector('.broll-key')?.dataset.brollId === 'S1'
