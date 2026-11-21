@@ -72,7 +72,7 @@ test("library subscriptions stay inside the shared adapter and every callback is
   assert.deepEqual(violations, []);
   assert.deepEqual([...new Set(found)].sort(), [
     "src/adapters/collab/creation-observation-cache.ts", "src/adapters/collab/creation-record-index.ts", "src/adapters/collab/document.ts", "src/adapters/collab/incremental-project.ts",
-    "src/adapters/collab/native/browser-local-store.ts",
+    "src/adapters/collab/native/local-store.ts",
     "src/adapters/collab/native/script.ts",
     "src/adapters/collab/native/session.ts",
     "src/adapters/collab/shared-join-index.ts", "src/adapters/collab/state.ts", "src/adapters/collab/structure-index.ts",
