@@ -11,7 +11,7 @@ import { BROLL_PROPS_MAX } from "../../../../src/core/document/broll.ts";
 import { isTagId } from "../../../../src/core/document/tags.ts";
 import { mintTagId } from "../../../../src/core/document/tags.ts";
 import { convertedScript } from "./helpers.ts";
-import { registryReload, registrySession, registrySource } from "./registry-harness.ts";
+import { registryCopies, registryReload, registrySession, registrySource } from "./registry-harness.ts";
 
 function unchanged(script: NativeScript, change: NativeRegistryChange, reason?: string): void {
   const state = Y.encodeStateAsUpdate(script.doc);
@@ -137,6 +137,33 @@ test("registry preparation guards both document handles and skips getters when b
     } }).kind, "written");
     assert.equal(reads, 0);
   } finally { script.doc.destroy(); session.close(); }
+});
+
+test("prop commands reject accessors before a getter can write to the shot", () => {
+  registryCopies((left, right, settle) => {
+    const props = left.roots.shots.get("bs1")?.get("props");
+    assert.ok(props instanceof Y.Map);
+    const lamp = props.get("t_lamp");
+    assert.ok(lamp instanceof Y.Map);
+    let calls = 0;
+    const getter = () => { calls++; lamp.set("removed", true); return undefined; };
+    const commands = [
+      { kind: "moveProp", id: "bs1", prop: "t_lamp", before: null },
+      { kind: "addProp", id: "bs1", prop: "Rope" },
+      { kind: "removeProp", id: "bs1", prop: "t_lamp" }
+    ] as const;
+    for (const command of commands) {
+      for (const key of Object.keys(command)) {
+        const argument = Object.defineProperty({ ...command }, key, { get: getter });
+        unchanged(left, argument, "value");
+      }
+      const nested = { ...command, extra: [{ get value() { return getter(); } }] };
+      unchanged(left, nested, "value");
+    }
+    assert.equal(calls, 0);
+    settle();
+    for (const copy of [left, right]) assert.deepEqual(copy.reader.document().brollShots[0]?.props, [{ id: "t_lamp", name: "Lamp" }]);
+  });
 });
 
 test("registry operations obey full admission and all refuse at the ceiling", () => {

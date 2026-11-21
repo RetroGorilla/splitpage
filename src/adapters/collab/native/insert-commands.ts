@@ -27,7 +27,7 @@ function prepare(saved: NativePutBackBeat) {
     const { id, placement, narration, visual, fields } = saved;
     const { scene, sceneOrder } = placement;
     if (!Array.isArray(sceneOrder)) return null;
-    const old = Array.from(structuredClone(sceneOrder) as readonly unknown[]), record = copyRecordValue(fields, true);
+    const old = Array.from(structuredClone(sceneOrder) as readonly unknown[]), record = copyRecordValue(fields, "stored");
     if (!id || (scene !== null && !nativeWellFormed(scene)) ||
       !old.every(nativeWellFormed) || !old.includes(id) || !recordBag(record)) return null;
     const audio = prepareNativeRuns(structuredClone(narration)), picture = prepareNativeRuns(structuredClone(visual));

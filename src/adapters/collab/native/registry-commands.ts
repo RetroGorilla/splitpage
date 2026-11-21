@@ -386,10 +386,21 @@ function gear(script: NativeScript, names: readonly string[]): Result {
   return finish(writes);
 }
 
+function isPropChange(kind: unknown): kind is "addProp" | "removeProp" | "moveProp" {
+  return kind === "addProp" || kind === "removeProp" || kind === "moveProp";
+}
+
+function copyRegistryChange(change: NativeRegistryChange): unknown {
+  if (!recordBag(change)) return undefined;
+  const kind = Object.getOwnPropertyDescriptor(change, "kind");
+  if (!kind || !Object.hasOwn(kind, "value")) return undefined;
+  return copyRecordValue(change, isPropChange(kind.value) ? "data" : "argument");
+}
+
 function applyChange(script: NativeScript, change: Fields): Result {
   const { kind, collection: rawCollection, fields, ownerName, id, before, prop } = change;
   const collection = collectionOf(rawCollection);
-  if (kind === "addProp" || kind === "removeProp" || kind === "moveProp") {
+  if (isPropChange(kind)) {
     if (!nativeRecordId(id)) return refuseRecord("missing");
     if (typeof prop !== "string" || !(kind === "addProp" ? trimmed(prop.trim(), BROLL_PROP_NAME_MAX) : prop.length > 0)) return refuseRecord("value");
     if (kind === "moveProp" && before !== null && (typeof before !== "string" || !before)) return refuseRecord("value");
@@ -417,7 +428,7 @@ function applyChange(script: NativeScript, change: Fields): Result {
 export function changeNativeRegistry(script: NativeScript, change: NativeRegistryChange): Result {
   const unavailable = nativeWriteAvailability(script);
   if (unavailable) return refuseRecord(unavailable);
-  return transactPreparedNativeCommand(script, () => copyArgument(() => copyRecordValue(change))?.value, (input): Result => {
+  return transactPreparedNativeCommand(script, () => copyArgument(() => copyRegistryChange(change))?.value, (input): Result => {
     if (script.closed() || script.reader.isClosed()) return refuseRecord("closed");
     return recordBag(input) ? applyChange(script, input) : refuseRecord("value");
   }, refuseRecord, input => recordBag(input) && input.kind !== "remove" && input.kind !== "restore" && input.kind !== "removeProp");
