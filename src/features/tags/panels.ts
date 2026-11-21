@@ -1436,7 +1436,7 @@ function renameOnce(key: string | null, renamed: string, quiet: boolean): { read
   else if (shared) (ports as TagPanelPorts).view.setTagRenaming(null);
   if (changed) {
     (ports as TagPanelPorts).undo.breakCoalescing();
-    (ports as TagPanelPorts).notices.show("Renamed to " + plainText(renamed).trim(), "ok");
+    (ports as TagPanelPorts).notices.show("Renamed to " + (native ? clean : plainText(renamed).trim()), "ok");
   } else {
     p.view.setTagExpanded(previousExpanded);
     if (notes !== null && movedNotes !== null) prep.renameNotes(movedNotes, notes);

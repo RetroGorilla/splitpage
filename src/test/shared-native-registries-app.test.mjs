@@ -127,6 +127,17 @@ test("native production actions create, cycle, assign, write notes, rename and d
   assert.ok(tagCard("prop wide lens"));
 });
 
+test("the native rename notice uses the name stored after applying the length cap", async t => {
+  await enter(t, { productionTags: [{ cat: "prop", name: "Lens" }] });
+  production();
+  const show = t.mock.method(notices, "show", () => {});
+  const capped = "x".repeat(80);
+  assert.equal(saveTagRename("prop lens", capped + "y"), "prop " + capped);
+  await Promise.resolve();
+  copies(doc => tags(doc).map(entry => entry.name), [capped]);
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), [["Renamed to " + capped, "ok"]]);
+});
+
 test("a tag derived from cell markup reaches the panel and takes registry edits", async t => {
   await enter(t, { rows: [{ id: "r1", audioText: "Hello",
     visualText: 'A <span class="tag-anchor" data-tag-cat="prop" data-tag-name="Mug" contenteditable="false">Mug</span>' }] });
