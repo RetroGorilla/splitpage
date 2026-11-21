@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import * as Y from "yjs";
 import { deleteRange, replaceText, sliceCell } from "../../../../src/core/text/edits.ts";
 import { cellLength } from "../../../../src/core/text/runs.ts";
 import { scriptCellOf } from "../../../../src/bootstrap/richtext.ts";
@@ -193,6 +194,49 @@ test("a batch uses shown offsets inside an assembled cell and refuses a split su
 });
 
 for (const reverse of [false, true]) {
+  for (const on of [true, false]) {
+    test(`replace all and concurrent ${on ? "bold" : "unbold"} converge, ${reverse ? "peer" : "writer"} delivered first`, t => {
+      const source = compoundSeed({ A: on ? "cup <em>cup</em>" : "<strong>cup</strong> <em>cup</em>" });
+      const writer = noticeCopy(source, 2), peer = noticeCopy(source, 3);
+      t.after(() => { writer.close(); peer.close(); });
+      assert.equal(writer.commands.replaceAll([range("A", 0, 3), range("A", 4, 7)], "mug").kind, "written");
+      assert.equal(peer.commands.formatText(noticeRange(peer, "A", "narration", 0, 3),
+        { kind: "plain", mark: "b", on }).kind, "written");
+      const order = reverse ? [peer, writer] as const : [writer, peer] as const;
+      settleCompound(...order, ["mug <em>mug</em>"]);
+    });
+  }
+
+  test(`a peer insertion invalidates only the edited formatted match, ${reverse ? "replacement" : "typing"} delivered first to a third copy`, t => {
+    const source = compoundSeed({ A: "<strong>cup</strong> <em>cup</em>" });
+    const writer = noticeCopy(source, 2), peer = noticeCopy(source, 3), observer = noticeCopy(source, 4);
+    t.after(() => { writer.close(); peer.close(); observer.close(); });
+    const hits = [range("A", 0, 3), range("A", 4, 7)].map(hit => {
+      const anchor = noticeRange(writer, hit.row, hit.cell, hit.start, hit.end);
+      const intact = writer.captureTextIdentity(anchor);
+      assert.ok(intact);
+      return { hit, anchor, intact };
+    });
+    const updates: Uint8Array[] = [];
+    peer.ydoc.once("update", (update: Uint8Array) => updates.push(update));
+    assert.equal(peer.commands.typeText(noticeRange(peer, "A", "narration", 1), "X", { b: true }).kind, "written");
+    noticeDeliver(peer, writer);
+    assert.deepEqual(hits.map(({ intact }) => intact()), [false, true]);
+    const remaining = hits.flatMap(({ hit, anchor, intact }) => {
+      if (!intact()) return [];
+      const selection = writer.resolveTextSelection(anchor);
+      assert.ok(selection);
+      return [{ ...hit, start: selection.anchor.offset, end: selection.head.offset }];
+    });
+    writer.ydoc.once("update", (update: Uint8Array) => updates.push(update));
+    assert.equal(writer.commands.replaceAll(remaining, "mug").kind, "written");
+    assert.equal(updates.length, 2);
+    for (const update of reverse ? updates.toReversed() : updates) Y.applyUpdate(observer.ydoc, update, "peer");
+    const expected = ["<strong>cXup</strong> <em>mug</em>"];
+    settleCompound(writer, peer, expected);
+    assert.deepEqual(observer.document(), writer.document());
+  });
+
   for (const peerEdit of ["type", "remove"] as const) {
     test(`replace all against concurrent ${peerEdit}, ${reverse ? "peer" : "writer"} delivered first`, t => {
       const writer = noticeCopy(seed, 2), peer = noticeCopy(seed, 3);

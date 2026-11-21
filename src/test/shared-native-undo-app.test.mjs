@@ -722,6 +722,29 @@ for (const [name, kind] of Object.entries(views)) {
     }
   });
 
+  test(name + ": Replace all preserves rendered marks after a peer types inside a captured match", async t => {
+    await enter(t, [{ id: "r1", audioText: "<strong>cu</strong>p<em>cup</em> c<strong>up</strong>" }]);
+    const view = kind.open(t);
+    kind.caret(view, "r1", 0);
+    const field = search(t, "cup", "mug");
+    assert.equal(hook.nativePeer.type("r1", 2, "X").kind, "written");
+    document.getElementById("find-replace-all").click();
+    const host = kind.host("r1");
+    assert.equal(host.textContent, "cuXpmug mug");
+    assert.equal(host.querySelector("strong")?.textContent, "cu");
+    assert.equal(host.querySelector("em")?.textContent, "mug");
+    assert.equal(host.querySelectorAll("strong").length, 1);
+    field.blur();
+    assert.equal(press(document.body, "z"), true);
+    assert.equal(kind.host("r1").textContent, "cuXpcup cup");
+    assert.equal(kind.host("r1").querySelector("em")?.textContent, "cup");
+    assert.equal(press(document.activeElement, "y"), true);
+    assert.equal(kind.host("r1").textContent, "cuXpmug mug");
+    assert.equal(kind.host("r1").querySelector("em")?.textContent, "mug");
+    await Promise.resolve();
+    assert.deepEqual(hook.read().app, hook.read().peer);
+  });
+
   test(name + ": Find replaces the displayed match after a peer inserts before it", async t => {
     const show = await enter(t, [{ id: "r1", audioText: "one <strong>cup</strong> and cup" }]);
     const view = kind.open(t);
