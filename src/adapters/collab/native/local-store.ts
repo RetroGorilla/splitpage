@@ -218,7 +218,7 @@ export async function attachNativeLocalStore(
     if (requested) {
       try {
         if (result.kind === "failed") throw result;
-        session = openNativeSession({ kind: "state", state }, options);
+        session = openNativeSession({ kind: "live-state", state }, options);
         drained = deferred<NativeLocalStoreClose>();
         bind();
         finished.resolve({ ...result, state });

@@ -8,7 +8,7 @@ import type { NativeTextTarget } from "../../adapters/collab/native/text-command
 import type { NativeMoveBlock } from "../../adapters/collab/native/move-commands.ts";
 
 export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>) {
-  const peer = openNativeSession({ kind: "state", state: app.encodeState() }, { actor: "Peer", sanitize: sanitizeHtml });
+  const peer = openNativeSession({ kind: "live-state", state: app.encodeState() }, { actor: "Peer", sanitize: sanitizeHtml });
   let paused = false;
   const stop = app.subscribe(event => {
     if (event.kind === "changed" && !paused) applyNativePeerUpdate(peer, app.encodeState());

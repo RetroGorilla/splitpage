@@ -80,7 +80,7 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
         if (input?.buffered()) {
           let bytes: Uint8Array | null = null;
           try {
-            const recovered = openNativeSession({ kind: "state", state: terminal }, options);
+            const recovered = openNativeSession({ kind: "live-state", state: terminal }, options);
             try { bytes = input.recover(recovered); } finally { recovered.close(); }
           } catch (error) {
             ports.report(error);
@@ -102,7 +102,7 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
   });
   const landing = (): ValidatedDocument => {
     if (!terminal) return enterSharedDocument(native.document());
-    const recovered = openNativeSession({ kind: "state", state: terminal }, options);
+    const recovered = openNativeSession({ kind: "live-state", state: terminal }, options);
     try { return enterSharedDocument(recovered.document()); } finally { recovered.close(); }
   };
   const backend: SharedEditorBackend = {

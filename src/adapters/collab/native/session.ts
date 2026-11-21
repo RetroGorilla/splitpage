@@ -32,7 +32,8 @@ import { NATIVE_FORMAT_VERSION } from "./roots.ts";
 export type NativeSessionSource =
   | { readonly kind: "empty" }
   | { readonly kind: "document"; readonly document: ValidatedDocument; readonly conversion: NativeConversionPorts }
-  | { readonly kind: "state"; readonly state: Uint8Array };
+  | { readonly kind: "state"; readonly state: Uint8Array }
+  | { readonly kind: "live-state"; readonly state: Uint8Array };
 
 export interface NativeSessionOptions extends NativeSizeOptions {
   readonly actor: string;
@@ -56,11 +57,18 @@ type CaptureGroup =
 const DELETE_PAUSE_MS = 1000;
 const COMPOUND_RANGE_REFUSAL = Object.freeze({ kind: "refused", reason: "range" } as const);
 
+function applyStoredState(doc: Y.Doc, bytes: Uint8Array): void {
+  Y.applyUpdate(doc, bytes);
+  if (!Y.snapshotContainsUpdate(Y.snapshot(doc), bytes)) {
+    throw new Error("The stored state is missing a Yjs update");
+  }
+}
+
 export function hasNativeFormat(bytes: Uint8Array): boolean {
   const doc = new Y.Doc();
   try {
     const meta = doc.getMap("meta");
-    Y.applyUpdate(doc, bytes);
+    applyStoredState(doc, bytes);
     return typeof meta.get("format") === "number" && meta.get("title") instanceof Y.Text
       && doc.getMap("births").size > 0;
   } catch {
@@ -78,8 +86,10 @@ function openSessionScript(
 ) {
   const doc = new Y.Doc(), script = openNativeScript(doc);
   try {
-    if (source.kind === "state") Y.applyUpdate(doc, source.state);
-    if (source.kind === "document") convertToNativeScript(script, source.document, source.conversion);
+    if (source.kind === "state") applyStoredState(doc, source.state);
+    // why: an in-memory handoff can carry peer updates still waiting for dependencies
+    else if (source.kind === "live-state") Y.applyUpdate(doc, source.state);
+    else if (source.kind === "document") convertToNativeScript(script, source.document, source.conversion);
     const journal = saved ? openNativePendingEdits(script.reader, saved === true ? undefined : saved) : null;
     const size = createNativeSizeTracker(doc, sizeOptions, publishRecovery);
     const undo = openNativeUndo({ ...script, sizeRefusal });
