@@ -38,6 +38,10 @@ const { useDesktopForTest, restoreDesktop } = await import("../adapters/desktop/
 const { unsavedChanges } = await import("../bootstrap/wiring/save-owners.ts");
 const { sharedSessionParts } = await import("../bootstrap/wiring/shared-session.ts");
 const { currentHome, documentLocation, setHome } = await import("../bootstrap/wiring/location-owner.ts");
+const { documentTransitions } = await import("../bootstrap/wiring/transition-owners.ts");
+const { localFilesOwner } = await import("../bootstrap/wiring/local-files.ts");
+const { startNewScript } = await import("../bootstrap/wiring/file-menu-controls.ts");
+const { documentEntry } = await import("../bootstrap/wiring/ports/document-entry.ts");
 const { documentReader } = await import("../bootstrap/wiring/ports/document.ts");
 const { openingStatus } = await import("../bootstrap/wiring/ports/transitions.ts");
 const { recoveryPanelBinding } = await import("../bootstrap/wiring/recovery-panel.ts");
@@ -76,6 +80,8 @@ async function restartApp() {
   hook = window.__legacySharedTest;
 }
 
+const arrival = title => ({ from: { raw: { title, rows: [{ id: "n1", audioText: title + " words" }] } }, destination: { kind: "none" }, reason: "route table" });
+
 function caretAtEnd() {
   const root = document.getElementById("writer-doc"), element = root.querySelector('.wr-beat[data-id="r1"]'), node = element.lastChild;
   root.focus();
@@ -107,7 +113,12 @@ function selectionVisualComposition() {
 }
 
 const WAYS_OUT = [
-  { name: "stopping the app with a pending buffered edit", landed: ["Shared Hello!"], arrange: () => {
+  { name: "the public leave", rows: ROWS, run: () => { assert.deepEqual(hook.leave(), { ok: true }); } },
+  { name: "Open, cancelled at its dialog", rows: ROWS, leaveFirst: true, run: () => localFilesOwner().openLocalFile() },
+  { name: "Open, completed", rows: ROWS, leaveFirst: true, completes: true, run: () => { documentTransitions().open(arrival("Opened")); } },
+  { name: "New, completed", rows: ROWS, leaveFirst: true, completes: true, run: () => { documentTransitions().startNew(arrival("Started")); } },
+  { name: "File New, completed", rows: ROWS, leaveFirst: true, completes: true, run: () => { assert.equal(startNewScript(), true); } },
+  { name: "stopping the app with a pending buffered edit", rows: ROWS, stops: true, landed: ["Shared Hello!"], arrange: () => {
     const { element, node, range } = caretAtEnd();
     const before = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: "!" });
     const target = range.cloneRange();
@@ -117,62 +128,86 @@ const WAYS_OUT = [
     assert.equal(writerControls().writerFlowControl().selection() !== null, true);
     assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["Shared Hello"], "the typed text is still only in the buffer");
   } },
-  { name: "stopping the app during a Writer composition", landed: ["Shared Hello"], arrange: () => {
+  { name: "stopping the app during a Writer composition", rows: ROWS, stops: true, landed: ["Shared Hello"], arrange: () => {
     const { element, node } = caretAtEnd();
     element.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
     node.data += " held";
     element.dispatchEvent(new window.InputEvent("input", { bubbles: true, isComposing: true, data: " held" }));
     assert.equal(writerControls().writerFlowControl().settle(), false);
   } },
-  { name: "stopping the app during a composition in the selection-visual box", landed: ["Shared Hello"], arrange: selectionVisualComposition }
+  { name: "stopping the app during a composition in the selection-visual box", rows: ROWS, stops: true, landed: ["Shared Hello"], arrange: selectionVisualComposition }
 ];
 
 function landing() {
   const doc = currentDocument();
   return { rows: doc.rows.map(row => row.audioText), docId: doc.docId, unsaved: unsavedChanges(), parts: sharedSessionParts() !== null, shared: sharedSession(),
     peer: window.__legacySharedTest?.read().peer ?? null, drafting: draftSource.detachRefusal(), seq: draftsTesting().status().seq, undo: undoOwner().sizes(),
-    title: doc.title, abandonable: window.__legacySharedTest?.counters().abandonable };
+    title: doc.title, visual: doc.rows.map(row => row.visualText ?? ""), abandonable: window.__legacySharedTest?.counters().abandonable };
 }
 
 for (const way of WAYS_OUT) {
   test(`way out: ${way.name} lands the session's last text as an unsaved copy, resumes drafting, disposes the peer, keeps only the inventory listeners, and a later enter succeeds`, async () => {
-    draftStore();
-    const remove = document.removeEventListener;
+    const store = draftStore();
+    const before = documentEntry.before, remove = document.removeEventListener;
     try {
-      script(ROWS);
+      script(way.rows);
       retitle("Before entry");
       assert.equal(undoOwner().sizes().undo > 0, true);
       await flushDraftNow();
       const listeners = listenerCounts();
       assert.deepEqual(await hook.enter(), { ok: true });
       const session = hook.read().app;
-      hook.peer.type("r1", 0, "Shared "); hook.peer.deliver();
-      way.arrange();
-      const floor = draftsTesting().status().seq;
+      if (way.rows.length) { hook.peer.type("r1", 0, "Shared "); hook.peer.deliver(); }
+      way.arrange?.();
+      const last = way.landed ?? hook.read().app.rows.map(row => row.audioText);
+      const floor = draftsTesting().status().seq, mark = store.writes.length;
       let landed = null;
-      let started = null;
-      document.removeEventListener = function (type, listener, options) {
-        if (type === "compositionstart" && options === true) started = listener;
-        else if (type === "compositionend" && options === true && listener === started) landed ??= landing();
-        return remove.call(this, type, listener, options);
-      };
-      try { app.stopApp(); } finally { delete document.removeEventListener; }
+      if (way.leaveFirst) documentEntry.before = () => { const refused = before(); landed ??= landing(); return refused; };
+      if (way.stops) {
+        let started = null;
+        document.removeEventListener = function (type, listener, options) {
+          if (type === "compositionstart" && options === true) started = listener;
+          else if (type === "compositionend" && options === true && listener === started) landed ??= landing();
+          return remove.call(this, type, listener, options);
+        };
+        try { app.stopApp(); } finally { delete document.removeEventListener; }
+      } else {
+        await way.run();
+        if (!way.leaveFirst) landed = landing();
+      }
+      documentEntry.before = before;
       assert.ok(landed, "the way out was observed");
-      assert.deepEqual([landed.rows, landed.unsaved, landed.shared, landed.parts, landed.peer], [way.landed, true, false, false, null]);
+      assert.deepEqual([landed.rows, landed.unsaved, landed.shared, landed.parts, landed.peer], [last, true, false, false, null]);
       assert.equal(landed.abandonable, 0);
+      if (way.visual) assert.deepEqual(landed.visual, way.visual);
       assert.notEqual(landed.docId, session.docId);
       assert.deepEqual([landed.drafting, landed.seq], ["pending", floor], "drafting resumed with the landed copy's draft scheduled and no sequence number used");
       assert.deepEqual([landed.undo, landed.title], [{ undo: 0, redo: 0 }, "Before entry"], "D34: the landed copy starts a fresh undo history");
       assert.equal(sharedSessionParts() === null, true, "no shared parts");
-      assert.equal(window.__legacySharedTest, undefined);
-      await restartApp();
-      draftStore();
-      script(ROWS);
+      if (!way.stops && !way.completes) {
+        undoOwner().undo();
+        assert.deepEqual([currentDocument().title, currentDocument().rows.map(row => row.audioText)], ["Before entry", last], "Ctrl+Z does not cross the boundary");
+      }
+      if (way.stops) {
+        assert.equal(window.__legacySharedTest, undefined);
+        await restartApp();
+        draftStore();
+        script(way.rows);
+      } else {
+        assert.deepEqual(hook.read().peer, null);
+        if (way.completes) edit("Edited after the entry");
+        assert.equal((await flushDraftNow()).ok, true);
+        const next = store.writes[mark];
+        assert.ok(next, "a draft was written after leaving");
+        assert.deepEqual([next.seq, next.shared, next.kept], [floor + 1, false, true]);
+        if (!way.completes) assert.deepEqual([next.rows, next.docId], [last, landed.docId]);
+      }
       assert.deepEqual(listenerCounts(), listeners);
       assert.deepEqual(await hook.enter(), { ok: true });
       assert.deepEqual(hook.leave(), { ok: true });
       assert.deepEqual(listenerCounts(), listeners);
     } finally {
+      documentEntry.before = before;
       if (document.removeEventListener !== remove) delete document.removeEventListener;
       if (!window.__legacySharedTest) await restartApp();
       if (sharedSession()) hook.leave();

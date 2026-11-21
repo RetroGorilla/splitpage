@@ -919,7 +919,7 @@
     {
       "label": "route: a forced leave abandons before trying the ordinary leave",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "  const first = leaveSharedSession(now.ports);\n  if (first.ok || running !== now) return first;\n",
+      "find": "  const first = leaveSharedSession(now.ports, false);\n  if (first.ok || running !== now) return first;\n",
       "replace": "",
       "tests": [
         "src/test/shared-hook-routes-app.test.mjs"

@@ -14,13 +14,10 @@ import { useDesktopForTest, restoreDesktop } from "../adapters/desktop/desktop-p
 import { unsavedChanges } from "../bootstrap/wiring/save-owners.ts";
 import { currentHome, documentLocation, setHome } from "../bootstrap/wiring/location-owner.ts";
 import { sharedUndoRoute, undoOwner } from "../bootstrap/wiring/undo.ts";
-import { localFilesOwner } from "../bootstrap/wiring/local-files.ts";
-import { documentOpenings, documentTransitions } from "../bootstrap/wiring/transition-owners.ts";
+import { documentOpenings } from "../bootstrap/wiring/transition-owners.ts";
 import { setCellSelection } from "../features/common/cell-selection.ts";
-import { documentEntry } from "../bootstrap/wiring/ports/document-entry.ts";
 import { openingStatus } from "../bootstrap/wiring/ports/transitions.ts";
-import { startNewScript } from "../bootstrap/wiring/file-menu-controls.ts";
-import { nativeEditorActive } from "../bootstrap/wiring/shared-session.ts";
+import { forceLeaveSharedSession, nativeEditorActive } from "../bootstrap/wiring/shared-session.ts";
 
 window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};
@@ -30,10 +27,15 @@ const listenerProto = window.EventTarget.prototype, realAdd = listenerProto.addE
 const listenerSlot = (target, type, options) => (target === window ? "window " : "document ") + type
   + ((typeof options === "boolean" ? options : Boolean(options?.capture)) ? "/C" : "/B");
 listenerProto.addEventListener = function (type, listener, options) {
-  if ((this === window || this === document) && listener) {
+  const signal = options?.signal;
+  if ((this === window || this === document) && listener && !signal?.aborted) {
     const slot = listenerSlot(this, type, options);
     if (!globalListeners.has(slot)) globalListeners.set(slot, new Set());
-    globalListeners.get(slot).add(listener);
+    const listeners = globalListeners.get(slot);
+    if (!listeners.has(listener)) {
+      listeners.add(listener);
+      signal?.addEventListener("abort", () => listeners.delete(listener), { once: true });
+    }
   }
   return realAdd.call(this, type, listener, options);
 };
@@ -122,6 +124,32 @@ async function retryAndLeave(hook, listeners) {
   assert.deepEqual(listenerCounts(), listeners);
 }
 
+test("native public leave lands the unsaved copy and drafts it under the landed identity", async t => {
+  const { store } = draftStore(t);
+  script();
+  retitle("Before entry");
+  assert.equal((await flushDraftNow()).ok, true);
+  const hook = window.__sharedTest;
+  assert.deepEqual(await hook.enter(), { ok: true });
+  const sharedId = currentDocument().docId, seq = draftsTesting().status().seq, mark = store.writes.length;
+  assert.equal(hook.nativePeer.type("r1", 0, "Shared ").kind, "written");
+  try {
+    assert.deepEqual(hook.leave(), { ok: true });
+    const landed = landing(hook);
+    assert.notEqual(landed.id, sharedId);
+    assert.deepEqual(landed, { id: landed.id, text: ["Shared Hello"], visual: ["Wide"], title: "Before entry",
+      undo: { undo: 0, redo: 0 }, unsaved: true, drafting: "pending", seq, shared: false, native: false, peer: null });
+    undoOwner().undo();
+    assert.equal(currentDocument().title, "Before entry");
+    assert.deepEqual(fields(), { text: ["Shared Hello"], visual: ["Wide"] });
+    assert.equal((await flushDraftNow()).ok, true);
+    assert.deepEqual(store.writes[mark], { docId: landed.id, seq: seq + 1, text: ["Shared Hello"], visual: ["Wide"],
+      shared: false, kept: true });
+  } finally {
+    if (sharedSession()) forceLeaveSharedSession();
+  }
+});
+
 test("native leave keeps the whole copy and releases the peer when draft resume throws", async t => {
   draftStore(t);
   script();
@@ -144,58 +172,6 @@ test("native leave keeps the whole copy and releases the peer when draft resume 
     resume.mock.restore();
     draftSource.resumeWriting();
   }
-});
-
-const arrival = title => ({ from: { raw: { title, rows: [{ id: "new", audioText: title }] } },
-  destination: { kind: "none" }, reason: "native route test" });
-
-const leaveRoutes = [
-  ["public leave", hook => assert.deepEqual(hook.leave(), { ok: true }), false],
-  ["cancelled Open", () => localFilesOwner().openLocalFile(), false],
-  ["completed Open", () => documentTransitions().open(arrival("Opened")), true],
-  ["completed New", () => documentTransitions().startNew(arrival("Started")), true],
-  ["completed File New", () => assert.equal(startNewScript(), true), true]
-];
-
-for (const [name, run, replaces] of leaveRoutes) test(`native ${name} lands the whole copy and restores the listener inventory`, async t => {
-  const { store } = draftStore(t);
-  script();
-  retitle("Before entry");
-  assert.equal((await flushDraftNow()).ok, true);
-  const hook = window.__sharedTest, listeners = listenerCounts(), destroyed = t.mock.method(Doc.prototype, "destroy");
-  assert.deepEqual(await hook.enter(), { ok: true });
-  const sharedId = currentDocument().docId, seq = draftsTesting().status().seq, mark = store.writes.length;
-  assert.equal(hook.nativePeer.type("r1", 0, "Shared ").kind, "written");
-  let landed;
-  const before = documentEntry.before;
-  const observe = t.mock.method(documentEntry, "before", () => {
-    const outcome = before();
-    landed ??= landing(hook);
-    return outcome;
-  });
-  try { await run(hook); } finally { observe.mock.restore(); }
-  landed ??= landing(hook);
-  assert.notEqual(landed.id, sharedId);
-  assert.deepEqual(landed, { id: landed.id, text: ["Shared Hello"], visual: ["Wide"], title: "Before entry",
-    undo: { undo: 0, redo: 0 }, unsaved: true, drafting: "pending", seq, shared: false, native: false, peer: null });
-  assert.equal(destroyed.mock.callCount(), 2);
-  assert.equal(new Set(destroyed.mock.calls.map(call => call.this)).size, 2);
-  let destination = landed.id, expected = { text: ["Shared Hello"], visual: ["Wide"] };
-  if (replaces) {
-    destination = currentDocument().docId;
-    assert.notEqual(destination, landed.id);
-    if (!currentDocument().rows.length) currentDocument().rows.push(migrateRows(arrival("New").from.raw).rows[0]);
-    edit("Edited after entry");
-    expected = { text: ["Edited after entry"], visual: [""] };
-  } else {
-    undoOwner().undo();
-    assert.equal(currentDocument().title, "Before entry");
-    assert.deepEqual(fields(), expected);
-  }
-  assert.equal((await flushDraftNow()).ok, true);
-  assert.deepEqual(store.writes[mark], { docId: destination, seq: seq + 1, ...expected, shared: false, kept: true });
-  assert.deepEqual(listenerCounts(), listeners);
-  await retryAndLeave(hook, listeners);
 });
 
 function standaloneState() {
