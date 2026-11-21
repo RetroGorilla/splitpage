@@ -78,7 +78,7 @@ for (const candidate of ["A", "B"] as const) {
   });
 
   test(`PROJ media comment retains literal null anchor and load location ${candidate}`, () => {
-    const source = JSON.parse(readFileSync(new URL("supplement.splitpage", import.meta.url), "utf8")) as Record<string, unknown>;
+    const source = JSON.parse(readFileSync(new URL("../../../../tests/collab/fixtures/projection/supplement.splitpage", import.meta.url), "utf8")) as Record<string, unknown>;
     const replica = fromDocument(source, candidate);
     const other = createProjectionReplica(candidate, 11).doc;
     try {

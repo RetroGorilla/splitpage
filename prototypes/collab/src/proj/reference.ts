@@ -18,8 +18,9 @@ export interface ProjectionReference {
   resaved?: string;
 }
 
-export function projectionReferences(file = "app-reference.json"): ProjectionReference[] {
-  const manifest = JSON.parse(readFileSync(new URL(`../../test/proj/${file}`, import.meta.url), "utf8")) as { version: number; fixtures: ProjectionReference[] };
+export function projectionReferences(file?: string): ProjectionReference[] {
+  const path = file === undefined ? "projection-reference.json" : `projection/${file}`;
+  const manifest = JSON.parse(readFileSync(new URL(`../../../../tests/collab/fixtures/${path}`, import.meta.url), "utf8")) as { version: number; fixtures: ProjectionReference[] };
   if (manifest.version !== 1) throw new Error("Unsupported projection reference manifest");
   return manifest.fixtures;
 }
