@@ -3,7 +3,6 @@ import { appendFileSync, existsSync } from "node:fs";
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { isMain } from "./main-module.mjs";
-import { COLLAB_ORACLE_COPIES } from "./collab-oracle-copies.mjs";
 import { nativePath, oldAdapterFiles } from "./old-adapter-tests.mjs";
 
 const REPO = dirname(dirname(fileURLToPath(import.meta.url)));
@@ -15,8 +14,6 @@ const PROSE_ONLY = [
 ];
 
 const BUILD_PROSE = new Set(["docs/help.md"]);
-
-const COPIED_PROTOTYPE_FILES = new Set(COLLAB_ORACLE_COPIES.map((pair) => pair.original));
 
 const NON_APP = [
   /^prototypes\//,
@@ -35,12 +32,13 @@ export function needsChecks(files) {
 
 export function needsCollabChecks(files) {
   if (files === null || files.length === 0) return true;
-  return files.some((f) => f.startsWith("prototypes/collab/") || f === ".github/workflows/ci.yml");
+  return files.some((f) => f.startsWith("prototypes/collab/") || f === ".github/workflows/ci.yml" ||
+    f === "tests/collab/fixtures/projection-reference.json" || f.startsWith("tests/collab/fixtures/projection/"));
 }
 
 export function needsRootTests(files) {
   if (files === null || files.length === 0) return true;
-  return files.some((f) => COPIED_PROTOTYPE_FILES.has(f) || (!f.startsWith("prototypes/collab/") && needsChecks([f])));
+  return files.some((f) => !f.startsWith("prototypes/collab/") && needsChecks([f]));
 }
 
 const OLD_ADAPTER_INPUTS = [
@@ -55,7 +53,7 @@ const OLD_ADAPTER_INPUTS = [
 export function needsOldAdapterTests(files, repo = REPO, inventory = null) {
   if (files === null || files.length === 0) return true;
   const candidates = files.filter((path) => !nativePath(path) && needsChecks([path]));
-  if (candidates.some((path) => COPIED_PROTOTYPE_FILES.has(path) || OLD_ADAPTER_INPUTS.some((re) => re.test(path)))) return true;
+  if (candidates.some((path) => OLD_ADAPTER_INPUTS.some((re) => re.test(path)))) return true;
   if (candidates.length === 0) return false;
   const { dependencies, wiringImporters } = inventory ?? oldAdapterFiles(repo);
   return candidates.some((path) => dependencies.has(path) || wiringImporters.includes(path) ||

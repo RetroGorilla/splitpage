@@ -16,7 +16,9 @@ changes requiring a fresh run, the static checks always run. The eight always-ru
 shards run when `root_due=true`. On pull requests that means `root_tests=true`
 and a fresh tree. The three old-adapter shards run when `old_adapter=true`. Both root
 matrices run on every push to `main`, including prose pushes and trees that passed earlier.
-The prototype shards run when `collab=true` and the tree needs a fresh run. Only known test-only
+The prototype shards run when `collab=true` and the tree needs a fresh run.
+Changes to the shared projection corpus under `tests/collab/fixtures/`
+trigger both the root tests and the prototype shards. Only known test-only
 paths, the classifier itself, issue templates, Dependabot configuration and
 selected non-browser workflows can skip the app build, browser suites and
 built-app upload in `checks`. Runtime source, server code, dependencies,

@@ -16,6 +16,6 @@ export function projectionExperimentInputs(): { name: string; document: Projecti
 
 if (isProjectionEntry(import.meta.url) && process.argv.includes("--write")) {
   const cases = projectionExperimentInputs();
-  writeFileSync(new URL("../../test/proj/experiment-inputs.json", import.meta.url), '{"cases":[\n' + cases.map(value => JSON.stringify(value)).join(",\n") + "\n]}\n");
+  writeFileSync(new URL("../../../../tests/collab/fixtures/projection/experiment-inputs.json", import.meta.url), '{"cases":[\n' + cases.map(value => JSON.stringify(value)).join(",\n") + "\n]}\n");
   console.log(`projection experiment inputs: ${cases.length}`);
 }
