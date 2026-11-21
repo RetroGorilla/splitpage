@@ -9,10 +9,13 @@ import { adoptReplacement, currentCapabilities, currentDocument, sharedRecoveryS
 import { enterSharedSession, leaveRunningSharedSession } from "../bootstrap/wiring/shared-session.ts";
 import { openNativeEditor } from "../bootstrap/wiring/native-shared-session.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
+import { ids } from "../bootstrap/wiring/ports/identity.ts";
 import { sharedCommandRefusalNotice } from "../bootstrap/wiring/ports/shared-command-notices.ts";
 import { openingStatus } from "../bootstrap/wiring/ports/transitions.ts";
+import { commentRange } from "../core/text/edits.ts";
 import { closeBrollPage, openBrollPage, openBrollPanel, runBrollRefresh } from "../features/broll/panel.ts";
-import { openCommentsPanel, renderComments } from "../features/comments/comments.ts";
+import { armDeleteComment, closeCommentComposer, openCommentsPanel, renderComments } from "../features/comments/comments.ts";
+import { setCellSelection } from "../features/common/cell-selection.ts";
 import { openProductionPanel, renderProduction } from "../features/tags/panels.ts";
 
 window.Element.prototype.scrollBy = () => {};
@@ -77,6 +80,7 @@ async function enter(t) {
   t.after(() => {
     peer.close();
     closeBrollPage();
+    closeCommentComposer(true);
     if (sharedSession()) assert.deepEqual(leaveRunningSharedSession(), { ok: true });
     document.activeElement?.blur();
     assert.deepEqual(errors, []);
@@ -434,5 +438,133 @@ for (const order of orders) {
     assert.equal(f.local.commands.undo().kind, "unchanged");
     dismiss("#comments-list");
     assert.deepEqual(strip("#comments-list"), []);
+  });
+}
+
+const commentSelection = { from: 0, to: 6 };
+const commentBody = "#comment-body-editable";
+const commentPost = "#comment-post";
+const replyBody = '.reply-composer[data-for="thread"] .cell-editable';
+const replyPost = '[data-action="reply-post"][data-id="thread"]';
+
+function typeCommentBody(selector, value) {
+  const box = need(selector);
+  box.textContent = value;
+  box.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText" }));
+  return box;
+}
+
+function commentState(doc) {
+  const row = doc.rows.find(entry => entry.id === "r2");
+  return doc.comments.map(entry => ({
+    id: entry.id,
+    rowId: entry.rowId,
+    field: entry.field,
+    anchorId: entry.anchorId,
+    quotedText: entry.quotedText,
+    author: entry.author,
+    body: entry.body,
+    resolved: entry.resolved,
+    anchorRange: commentRange(fromHtml(row?.[entry.field]), entry.id),
+    replies: entry.replies.map(reply => ({ id: reply.id, author: reply.author, body: reply.body }))
+  }));
+}
+
+for (const reply of [false, true]) for (const order of orders) {
+  test(`a held ${reply ? "reply" : "new comment"} stays open during a delete-confirm redraw and publishes on the next microtask, ${order}`, async t => {
+    const f = await enter(t);
+    openCommentsPanel();
+    const selector = reply ? replyBody : commentBody;
+    const authorSelector = reply ? '.reply-composer[data-for="thread"] .reply-name-input' : "#comment-name";
+    const post = reply ? replyPost : commentPost;
+    const minted = reply ? null : t.mock.method(ids, "id");
+    if (reply) click('[data-action="toggle-reply"][data-id="thread"]');
+    else {
+      const narration = need('#rows .cell-editable[data-id="r2"][data-field="audioText"]');
+      narration.focus();
+      setCellSelection(narration, commentSelection.from, commentSelection.to);
+      narration.closest(".field-wrap").querySelector('[data-cmd="comment"]').click();
+    }
+    const draftId = minted ? minted.mock.calls.at(-1)?.result : null;
+    if (!reply) assert.match(draftId, /^c/);
+    const baseline = commentState(currentDocument());
+    assert.equal(baseline.length, 1);
+    assert.equal(baseline[0].id, "thread");
+    assert.equal(baseline[0].body, "Original");
+    assert.deepEqual(baseline[0].replies, []);
+    assert.equal(need(authorSelector).readOnly, true);
+    assert.equal(need(authorSelector).value, "Editor");
+    typeCommentBody(selector, "First");
+    const release = hold(t);
+    click(post);
+    assert.deepEqual(warnings(f.show), [refused]);
+    typeCommentBody(selector, "First sec");
+    const revision = f.local.revision();
+    release();
+    armDeleteComment(document.createElement("button"), "thread");
+    renderComments();
+    if (!reply) {
+      assert.equal(need("#comment-modal").hidden, false);
+      assert.equal(need("#comment-modal-quote").textContent, "“Second”");
+      assert.equal(need(selector).hasAttribute("data-unsaved"), true);
+    }
+    assert.equal(need(authorSelector).readOnly, true);
+    assert.equal(need(authorSelector).value, "Editor");
+    assert.equal(need(selector).textContent, "First sec");
+    assert.deepEqual(strip("#comments-list"), []);
+    copies(f, commentState, baseline);
+    assert.equal(f.local.revision(), revision);
+    assert.equal(f.local.commands.undo().kind, "unchanged");
+    assert.deepEqual(warnings(f.show), [refused]);
+
+    click(post);
+    assert.equal(f.local.revision(), revision + 1);
+    if (reply) assert.equal(find(selector), null);
+    else assert.equal(need("#comment-modal").hidden, true);
+    assert.deepEqual(commentState(currentDocument()), baseline);
+    assert.deepEqual(commentState(f.peer.document()), baseline);
+    const committed = commentState(f.local.document());
+    if (reply) {
+      assert.equal(committed.length, 1);
+      assert.equal(committed[0].id, "thread");
+      assert.equal(committed[0].body, "Original");
+      assert.equal(committed[0].replies.length, 1);
+      assert.match(committed[0].replies[0].id, /^rp/);
+      assert.equal(committed[0].replies[0].author, "Editor");
+      assert.equal(committed[0].replies[0].body, "First sec");
+    } else {
+      assert.equal(committed.length, 2);
+      assert.deepEqual(committed.find(entry => entry.id === "thread"), baseline[0]);
+      const created = committed.find(entry => entry.id !== "thread");
+      assert.ok(created);
+      assert.match(created.id, /^c[0-9a-z]+-[0-9a-z]+$/);
+      assert.notEqual(created.id, draftId);
+      assert.equal(created.anchorId, created.id);
+      assert.equal(created.rowId, "r2");
+      assert.equal(created.field, "audioText");
+      assert.equal(created.quotedText, "Second");
+      assert.equal(created.author, "Editor");
+      assert.equal(created.body, "First sec");
+      assert.equal(created.resolved, false);
+      assert.deepEqual(created.anchorRange, commentSelection);
+      assert.deepEqual(created.replies, []);
+    }
+
+    await Promise.resolve();
+    assert.deepEqual(commentState(currentDocument()), committed);
+    await exchange(f, order);
+    copies(f, commentState, committed);
+    renderComments();
+    copies(f, commentState, committed);
+    if (reply) assert.equal(find(selector), null);
+    else assert.equal(need("#comment-modal").hidden, true);
+    assert.deepEqual(strip("#comments-list"), []);
+    assert.equal(f.local.revision() - revision, 1);
+    assert.deepEqual(warnings(f.show), [refused]);
+    assert.equal(f.local.commands.undo().kind, "written");
+    assert.equal(f.local.commands.undo().kind, "unchanged");
+    await exchange(f, order);
+    copies(f, commentState, baseline);
+    assert.deepEqual(leaveRunningSharedSession(), { ok: true });
   });
 }
