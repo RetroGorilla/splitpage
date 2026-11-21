@@ -4,7 +4,7 @@ import * as Y from "yjs";
 import { changeNativeRegistry } from "../../../../src/adapters/collab/native/registry-commands.ts";
 import type { NativeRegistryChange } from "../../../../src/adapters/collab/native/registry-commands.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
-import { NATIVE_SHOT_PROPS } from "../../../../src/adapters/collab/native/shot-props.ts";
+import { NATIVE_SHOT_PROPS, newNativeShotProp } from "../../../../src/adapters/collab/native/shot-props.ts";
 import { openNativeUndo } from "../../../../src/adapters/collab/native/undo-commands.ts";
 import { decodeNativeValue, encodeNativeValue, mintNativeTagId, nativeFieldKey } from "../../../../src/adapters/collab/native/values.ts";
 import { BROLL_PROPS_MAX } from "../../../../src/core/document/broll.ts";
@@ -149,6 +149,38 @@ test("a shot without a prop map reads empty and its next prop edit starts empty"
     shot.delete(NATIVE_SHOT_PROPS);
     shot.set(nativeFieldKey("props"), encodeNativeValue(initial));
   }, source(initial));
+});
+
+test("damaged prop entries are reported individually and can be replaced or removed on a peer", () => {
+  const initial = initialProps(3), broken = initial[1];
+  assert.ok(broken);
+  const kept = initial.filter(prop => prop !== broken);
+  for (const corruption of ["rank", "name", "key", "record"]) for (const repair of ["set", "removeProp"]) {
+    registryCopies((left, right, settle) => {
+      const entries = propsOf(left), item = entries.get(broken.id);
+      assert.ok(item);
+      let key = broken.id;
+      if (corruption === "rank") item.set("rank", 12);
+      else if (corruption === "name") item.set("name", encodeNativeValue(12));
+      else if (corruption === "key") {
+        entries.delete(key);
+        key = 'n:"wrong"';
+        entries.set(key, newNativeShotProp(broken, null));
+      } else {
+        const map: Y.Map<unknown> = entries;
+        map.set(key, 12);
+      }
+      settle();
+      assert.deepEqual(read(right), kept);
+      const problem = { kind: "bad-value", where: "shots/shot/props/" + key };
+      assert.deepEqual(right.reader.problems(), [problem]);
+      if (repair === "set") write(right, { kind: "set", collection: "shots", ids: ["shot"], fields: { props: initial } });
+      else write(right, { kind: "removeProp", id: "shot", prop: key });
+      settle();
+      assert.deepEqual(read(left), repair === "set" ? initial : kept);
+      assert.deepEqual(left.reader.problems(), []);
+    }, undefined, source(initial));
+  }
 });
 
 test("same-name additions keep and show both IDs through undo, redo and whole-list clear", () => {

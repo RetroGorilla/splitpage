@@ -17,8 +17,8 @@ type Drop = Pick<NativeShotPropEntry, "key" | "rank">;
 export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape["productionTags"]) {
   const map = shot.get(NATIVE_SHOT_PROPS);
   if (shot.has(NATIVE_SHOT_PROPS) && !(map instanceof Y.Map)) return null;
-  const entries = map instanceof Y.Map ? nativeShotPropEntries(map) : [];
-  if (!entries) return null;
+  const bad = new Set<string>();
+  const entries = map instanceof Y.Map ? nativeShotPropEntries(map, key => { bad.add(key); }) : [];
   const resolved = resolveNativeShotPropEntries(entries, props => resolveBrollProps(props, tags));
   const shown = shownNativeShotPropEntries(resolved);
   const active = entries.filter(entry => !entry.removed);
@@ -41,6 +41,8 @@ export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape
   }
 
   function remove(writes: Write[], ref: string): void {
+    const key = ref.startsWith("n:") && !bad.has(ref) ? "n:" + encodeNativeValue(ref.slice(2)) : ref;
+    if (bad.has(key)) { plan(writes, [map => { map.delete(key); }]); return; }
     const entry = byRef.get(ref);
     if (entry) plan(writes, [map => { propRecord(map, entry.key).set("removed", true); }]);
   }
@@ -67,6 +69,7 @@ export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape
     const kept = new Set(desired.map(entry => entry.key));
     const omitted = active.filter(entry => !kept.has(entry.key));
     const changes: PropWrite[] = omitted.map(({ key }) => map => { propRecord(map, key).set("removed", true); });
+    for (const key of bad) if (!kept.has(key)) changes.push(map => { map.delete(key); });
     const positions = new Map(active.map((entry, at) => [entry.key, at]));
     const anchor = rankAnchors(desired.map(({ key }) => positions.get(key) ?? -1));
     let left: Drop | undefined;
@@ -92,7 +95,8 @@ export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape
     plan(writes, changes);
   }
 
-  return { activeCount: active.length, hasName: (name: string) => shown.some(({ prop }) => normalizeTagName(prop.name) === name),
+  return { activeCount: active.length, damaged: bad.size > 0,
+    hasName: (name: string) => shown.some(({ prop }) => normalizeTagName(prop.name) === name),
     add, remove, move, replace };
 }
 

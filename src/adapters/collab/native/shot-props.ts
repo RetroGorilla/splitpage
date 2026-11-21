@@ -35,16 +35,19 @@ export function newNativeShotProps(props: readonly BrollProp[]): Y.Map<unknown> 
   return map;
 }
 
-export function nativeShotPropEntries(map: Y.Map<unknown>): NativeShotPropEntry[] | null {
+export function nativeShotPropEntries(map: Y.Map<unknown>, bad?: (key: string) => void): NativeShotPropEntry[] {
   const entries: NativeShotPropEntry[] = [];
   for (const [key, record] of map) {
-    if (!(record instanceof Y.Map)) return null;
+    if (!(record instanceof Y.Map)) { bad?.(key); continue; }
     const rank: unknown = record.get("rank"), removed: unknown = record.get("removed");
     const id = isTagId(key) ? key : "";
     const stored: unknown = record.get("name");
     const name = stored === undefined && !record.has("name") ? id ? "" : decodeNativeValue(key.slice(2))?.value : decodeNativeValue(stored)?.value;
     if (typeof name !== "string" || nativeShotPropKey({ id, name }) !== key ||
-        record.has("rank") && !isValidNativeRank(rank) || record.has("removed") && removed !== true) return null;
+        record.has("rank") && !isValidNativeRank(rank) || record.has("removed") && removed !== true) {
+      bad?.(key);
+      continue;
+    }
     entries.push({ key, prop: { id, name }, rank: isValidNativeRank(rank) ? rank : null, removed: removed === true });
   }
   return entries.sort((a, b) => compareNativeRankedIds(a.key, a.rank, b.key, b.rank));

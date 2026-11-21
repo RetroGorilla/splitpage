@@ -244,7 +244,8 @@ function visibleRecords(root: Y.Map<Y.Map<unknown>>, name: string, problems: Pro
       if (name === "shots") {
         const fields = Object.fromEntries(fileFieldEntries(record, where, problems, NATIVE_SHOT_PROPS));
         const map = record.get(NATIVE_SHOT_PROPS);
-        const entries = map instanceof Y.Map ? nativeShotPropEntries(map) : null;
+        const entries = map instanceof Y.Map ? nativeShotPropEntries(map, problems
+          ? key => { problems.push({ kind: "bad-value", where: where + "/" + NATIVE_SHOT_PROPS + "/" + key }); } : undefined) : null;
         if (!entries && record.has(NATIVE_SHOT_PROPS)) problems?.push({ kind: "bad-value", where: where + "/" + NATIVE_SHOT_PROPS });
         return { ...fields, id, props: entries?.filter(entry => !entry.removed).map(entry => entry.prop) ?? [] };
       }

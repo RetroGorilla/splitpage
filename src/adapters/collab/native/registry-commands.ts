@@ -344,6 +344,7 @@ function changeProp(script: NativeScript, id: string, prop: string, kind: "addPr
   const props = prepareNativeShotProps(shot, document.productionTags);
   if (!props) return refuseRecord("stored");
   if (kind === "addProp") {
+    if (props.damaged) return refuseRecord("stored");
     const name = normalizeTagName(prop);
     if (props.hasName(name)) return RECORD_UNCHANGED;
     if (props.activeCount >= BROLL_PROPS_MAX) return refuseRecord("value");
