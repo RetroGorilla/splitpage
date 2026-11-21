@@ -1407,10 +1407,28 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
 
   const pageHide = (): void => { finish(); };
   const visibility = (): void => { if (document.visibilityState === "hidden") pageHide(); };
-  const stopUnload = guardUnload(window, () => !!finish());
-  window.addEventListener("pagehide", pageHide);
-  document.addEventListener("visibilitychange", visibility);
-  for (const type of EVENTS) window.addEventListener(type, intercept, true);
+  let stopUnload: (() => void) | undefined;
+  const dispose = (): void => {
+    clearTimeout(timer);
+    draft?.paint?.dispose();
+    draft = null;
+    stopWriterPaint?.();
+    stopPaint();
+    stopSize();
+    stopUnload?.();
+    window.removeEventListener("pagehide", pageHide);
+    document.removeEventListener("visibilitychange", visibility);
+    for (const type of EVENTS) window.removeEventListener(type, intercept, true);
+  };
+  try {
+    stopUnload = guardUnload(window, () => !!finish());
+    window.addEventListener("pagehide", pageHide);
+    document.addEventListener("visibilitychange", visibility);
+    for (const type of EVENTS) window.addEventListener(type, intercept, true);
+  } catch (error) {
+    dispose();
+    throw error;
+  }
   return {
     finish,
     beforePress,
@@ -1442,18 +1460,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       stopped = null;
       return bytes;
     },
-    dispose: () => {
-      clearTimeout(timer);
-      draft?.paint?.dispose();
-      draft = null;
-      stopWriterPaint?.();
-      stopPaint();
-      stopSize();
-      stopUnload();
-      window.removeEventListener("pagehide", pageHide);
-      document.removeEventListener("visibilitychange", visibility);
-      for (const type of EVENTS) window.removeEventListener(type, intercept, true);
-    }
+    dispose
   };
 }
 

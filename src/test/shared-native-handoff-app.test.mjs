@@ -1,10 +1,12 @@
+import { trackGlobalListeners } from "./_global-listener-inventory.mjs";
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { bootApp, closeApp, rewireApp } from "./_app-boot.mjs";
 import { createHeldFileHandle } from "./_m4-matrix.mjs";
 import { startApp, stopApp } from "../bootstrap/app.ts";
+import { changeSet } from "../application/session/change-set.ts";
 import { startupReady } from "../application/startup-signal.ts";
-import { adoptReplacement, currentDocument, holdSessionCommands, liveSession, noteSessionEdit, sharedSession } from "../bootstrap/wiring/session-owner.ts";
+import { adoptReplacement, currentDocument, holdSessionCommands, liveSession, onSessionChange, noteSessionEdit, runCommand, sharedSession } from "../bootstrap/wiring/session-owner.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { sharedUndoRoute, undoOwner } from "../bootstrap/wiring/undo.ts";
 import { draftResume, flushDraftNow } from "../bootstrap/wiring/recovery-owners.ts";
@@ -27,6 +29,7 @@ import { Doc } from "yjs";
 window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};
 localStorage.setItem("splitpage-onboarding", JSON.stringify({ v: 1, done: true, skipped: true }));
+const listenerCounts = trackGlobalListeners();
 await bootApp();
 after(closeApp);
 
@@ -311,14 +314,14 @@ function pendingInput(field, composing, writer = false) {
 }
 
 const stopCases = [
+  { name: "when both leave attempts are blocked", blocked: true, writer: true },
   { name: "after a peer commit" },
   { name: "with pending Split narration", field: "audioText" },
   { name: "with pending Split Visual", field: "visualText" },
   { name: "during Split narration composition", field: "audioText", composing: true },
   { name: "during Split Visual composition", field: "visualText", composing: true },
   { name: "with pending Writer narration", field: "audioText", writer: true },
-  { name: "during Writer narration composition", field: "audioText", composing: true, writer: true },
-  { name: "when both leave attempts are blocked", blocked: true }
+  { name: "during Writer narration composition", field: "audioText", composing: true, writer: true }
 ];
 
 for (const { name, field, composing, blocked, writer } of stopCases) test(`app stop ${name} releases the native peer, hook and listeners once`, async t => {
@@ -328,6 +331,7 @@ for (const { name, field, composing, blocked, writer } of stopCases) test(`app s
   row().visualText = "Wide";
   assert.equal((await flushDraftNow()).ok, true);
   if (writer) writerControls().openWriter();
+  const listeners = listenerCounts();
   const added = t.mock.method(window, "addEventListener");
   const removed = t.mock.method(window, "removeEventListener");
   const removedFromDocument = t.mock.method(document, "removeEventListener");
@@ -347,6 +351,22 @@ for (const { name, field, composing, blocked, writer } of stopCases) test(`app s
   assert.deepEqual([row().audioText, row().visualText], ["Shared Before sharing", field === "visualText" && !composing ? "Wide!" : "Wide"]);
   if (composing) assert.deepEqual(hook.leave(), { ok: false, reason: "native-input-pending" });
   const seq = draftsTesting().status().seq;
+  let box;
+  if (blocked) {
+    const root = document.getElementById("writer-doc"), node = root.querySelector('.wr-beat[data-id="r1"]').lastChild;
+    root.dispatchEvent(new window.Event("pointerdown", { bubbles: true }));
+    root.focus();
+    document.getSelection().setBaseAndExtent(node, 0, node, 5);
+    document.getElementById("wr-visual").click();
+    const cell = document.querySelector('.wr-flow-visual-box:not([hidden]) .wr-flow-visual-text');
+    assert.ok(cell);
+    assert.equal(cell.textContent, "");
+    box = cell.closest(".wr-flow-visual-box");
+    cell.focus();
+    cell.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
+    cell.textContent = "held";
+    cell.dispatchEvent(new window.InputEvent("input", { bubbles: true, isComposing: true, data: "held" }));
+  }
   const release = blocked ? holdSessionCommands("stop-test-hold", "entries") : () => {};
   let atRelease;
   const remove = document.removeEventListener;
@@ -354,12 +374,13 @@ for (const { name, field, composing, blocked, writer } of stopCases) test(`app s
     if (args[0] === "compositionstart" && args[1].name === "composition" && args[2] === true) {
       const doc = currentDocument();
       atRelease = {
-        text: doc.rows[0].audioText, visual: doc.rows[0].visualText, id: doc.docId, shared: sharedSession(),
+        visualBoxes: document.querySelectorAll('.wr-flow-visual-box').length,
+        writer: !!writerControls(), text: doc.rows[0].audioText, visual: doc.rows[0].visualText, id: doc.docId, shared: sharedSession(),
         native: nativeEditorActive(), undo: sharedUndoRoute() !== null, peer: hook.read().peer,
         unsaved: unsavedChanges(), drafting: draftSource.detachRefusal(), seq: draftsTesting().status().seq
       };
     }
-    return remove(...args);
+    return remove.call(document, ...args);
   });
   const errors = [];
   const capture = event => { errors.push(event.error); event.preventDefault(); };
@@ -383,6 +404,9 @@ for (const { name, field, composing, blocked, writer } of stopCases) test(`app s
     assert.ok(atRelease);
     assert.deepEqual([atRelease.native, atRelease.undo, atRelease.peer], [false, false, null]);
     if (blocked) {
+      assert.deepEqual([atRelease.visualBoxes, atRelease.writer], [0, true]);
+      assert.equal(box.isConnected, false);
+      assert.equal(document.querySelectorAll(".wr-flow-visual-box").length, 0);
       assert.deepEqual([atRelease.shared, atRelease.id], [true, sharedId]);
       assert.deepEqual(report.mock.calls.map(call => String(call.arguments[0])),
         ["Error: The shared session ended without landing a standalone copy: stop-test-hold"]);
@@ -407,8 +431,14 @@ for (const { name, field, composing, blocked, writer } of stopCases) test(`app s
   assert.notEqual(draftSource.detachRefusal(), "detached");
   store.install();
   script();
+  if (blocked) {
+    writerControls().openWriter();
+    assert.ok(writerControls().writerFlowControl());
+    assert.deepEqual(listenerCounts(), listeners);
+  }
   assert.deepEqual(await enter(), { ok: true });
   assert.deepEqual(hook.leave(), { ok: true });
+  if (blocked) assert.deepEqual(listenerCounts(), listeners);
 });
 
 for (const composing of [false, true]) test(`native forced leave settles Writer narration, composing=${composing}`, async t => {
@@ -446,12 +476,30 @@ for (const [name, run, replaced] of leaveRoutes) test(`native ${name} lands the 
   const store = draftStore(t), destroyed = t.mock.method(Doc.prototype, "destroy");
   script();
   edit("Source");
+  assert.equal(runCommand({ name: "route-title", needs: "edit", plan: () => ({
+    changes: changeSet({ docFields: ["title"] }), apply: doc => { doc.title = "Before entry"; }
+  }) }).kind, "applied");
+  undoOwner().flush();
+  assert.ok(undoOwner().sizes().undo > 0);
+  const sourceId = currentDocument().docId;
   assert.equal((await flushDraftNow()).ok, true);
-  assert.deepEqual(await enter(), { ok: true });
+  writerControls().openWriter();
+  const listeners = listenerCounts();
+  const root = document.getElementById("writer-doc"), node = root.querySelector(".wr-beat").lastChild;
+  root.focus();
+  document.getSelection().setBaseAndExtent(node, 0, node, 3);
+  const title = document.getElementById("writer-title");
+  const off = onSessionChange(change => {
+    if (change.kind === "adopt" && sharedSession()) queueMicrotask(() => { title.focus(); title.blur(); });
+  });
+  try { assert.deepEqual(await enter(), { ok: true }); } finally { off(); }
+  assert.equal(document.body.hasAttribute("data-native-caret-unplaced"), true);
   const sharedId = currentDocument().docId, seq = draftsTesting().status().seq;
   peerEdit();
+  await Promise.resolve();
+  const snapshot = structuredClone(currentDocument()), mark = store.writes.length;
   const landing = () => ({
-    id: currentDocument().docId, text: row().audioText, title: currentDocument().title,
+    doc: structuredClone(currentDocument()), id: currentDocument().docId, text: row().audioText, title: currentDocument().title,
     shared: sharedSession(), native: nativeEditorActive(), peer: hook.read().peer, unsaved: unsavedChanges(),
     draft: draftSource.detachRefusal(), seq: draftsTesting().status().seq, undo: undoOwner().sizes()
   });
@@ -466,23 +514,28 @@ for (const [name, run, replaced] of leaveRoutes) test(`native ${name} lands the 
   entry.mock.restore();
   landed ??= landing();
   assert.notEqual(landed.id, sharedId);
-  assert.deepEqual(landed, { id: landed.id, text: "Shared Source", title: "Checkpoint", shared: false, native: false, peer: null,
+  assert.notEqual(landed.id, sourceId);
+  assert.deepEqual(landed.doc, { ...snapshot, docId: landed.id });
+  assert.deepEqual(landed, { doc: landed.doc, id: landed.id, text: "Shared Source", title: "Before entry", shared: false, native: false, peer: null,
     unsaved: true, draft: "pending", seq, undo: { undo: 0, redo: 0 } });
   assert.equal(destroyed.mock.callCount(), 2);
   assert.equal(new Set(destroyed.mock.calls.map(call => call.this)).size, 2);
+  assert.deepEqual(listenerCounts(), listeners);
+  assert.equal(document.body.hasAttribute("data-native-caret-unplaced"), false);
   if (replaced) {
     assert.notEqual(currentDocument().docId, landed.id);
     if (!currentDocument().rows.length) currentDocument().rows.push(migrateRows(arrival("New").from.raw).rows[0]);
     edit("Edited after entry");
   } else {
     undoOwner().undo();
-    assert.equal(row().audioText, "Shared Source");
+    assert.deepEqual(currentDocument(), landed.doc);
   }
   assert.equal((await flushDraftNow()).ok, true);
-  assert.deepEqual(store.writes.at(-1), { seq: seq + 1, text: replaced ? "Edited after entry" : "Shared Source",
+  assert.deepEqual(store.writes[mark], { seq: seq + 1, text: replaced ? "Edited after entry" : "Shared Source",
     docId: currentDocument().docId, shared: false, kept: true });
   assert.deepEqual(await enter(), { ok: true });
   assert.deepEqual(hook.leave(), { ok: true });
+  assert.deepEqual(listenerCounts(), listeners);
 });
 
 function failOnce(t, owner, key, error) {

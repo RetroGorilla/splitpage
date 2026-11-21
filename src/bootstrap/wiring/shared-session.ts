@@ -1,3 +1,4 @@
+import { stopNativeCaretWait } from "./native-switch-caret.ts";
 import { createSharedDocument, destroySharedDocument } from "../../adapters/collab/document.ts";
 import { hydrateSharedDocument } from "../../adapters/collab/hydrate.ts";
 import { registerSharedOperationFamilies } from "../../adapters/collab/operation-families.ts";
@@ -313,6 +314,7 @@ async function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { reado
   } catch (error) {
     if (entrySettled && !failedDuringEntry) await entrySettled;
     if (selection) faults.attempt(selection.dispose);
+    faults.attempt(stopNativeCaretWait);
     faults.errors.unshift(error);
     running = null;
     // why: a shared callback whose timer cannot be cancelled must still not act once the session is gone
@@ -418,6 +420,7 @@ function leaveAvailableSession(ports: SharedSwitchPorts, preserveSelection: bool
   faults.attempt(now.stopRoute);
   now.backend.dispose(step => faults.attempt(step));
   holds.commands();
+  faults.attempt(stopNativeCaretWait);
   if (selection) {
     faults.attempt(selection.dispose);
     if (landedDocument && sessionStarted() && !sharedSession() && documentReader.current() === landedDocument) faults.attempt(selection.restore);
@@ -434,6 +437,7 @@ function dropRunning(now: Running, reason: string): void {
   running = null;
   now.end();
   now.backend.live(false);
+  faults.attempt(stopNativeCaretWait);
   // why: a dropped session releases every surface first, so the bindings tear down whatever the surfaces held
   faults.attempt(() => { now.backend.drop?.(); });
   faults.attempt(now.backend.unbind);

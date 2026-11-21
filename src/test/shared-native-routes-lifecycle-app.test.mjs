@@ -1,3 +1,4 @@
+import { trackGlobalListeners } from "./_global-listener-inventory.mjs";
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { Doc } from "yjs";
@@ -6,7 +7,7 @@ import { startApp, stopApp } from "../bootstrap/app.ts";
 import { startupReady } from "../application/startup-signal.ts";
 import { changeSet } from "../application/session/change-set.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
-import { adoptReplacement, currentDocument, liveSession, runCommand, sharedSession } from "../bootstrap/wiring/session-owner.ts";
+import { adoptReplacement, currentDocument, liveSession, onSessionChange, runCommand, sharedSession } from "../bootstrap/wiring/session-owner.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { draftSource, draftsTesting } from "../bootstrap/wiring/drafts.ts";
 import { draftResume, flushDraftNow } from "../bootstrap/wiring/recovery-owners.ts";
@@ -17,39 +18,15 @@ import { sharedUndoRoute, undoOwner } from "../bootstrap/wiring/undo.ts";
 import { documentOpenings } from "../bootstrap/wiring/transition-owners.ts";
 import { setCellSelection } from "../features/common/cell-selection.ts";
 import { openingStatus } from "../bootstrap/wiring/ports/transitions.ts";
+import { waitForNativeCaret } from "../bootstrap/wiring/native-switch-caret.ts";
 import { forceLeaveSharedSession, nativeEditorActive } from "../bootstrap/wiring/shared-session.ts";
 
 window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};
 localStorage.setItem("splitpage-onboarding", JSON.stringify({ v: 1, done: true, skipped: true }));
-const globalListeners = new Map();
-const listenerProto = window.EventTarget.prototype, realAdd = listenerProto.addEventListener, realRemove = listenerProto.removeEventListener;
-const listenerSlot = (target, type, options) => (target === window ? "window " : "document ") + type
-  + ((typeof options === "boolean" ? options : Boolean(options?.capture)) ? "/C" : "/B");
-listenerProto.addEventListener = function (type, listener, options) {
-  const signal = options?.signal;
-  if ((this === window || this === document) && listener && !signal?.aborted) {
-    const slot = listenerSlot(this, type, options);
-    if (!globalListeners.has(slot)) globalListeners.set(slot, new Set());
-    const listeners = globalListeners.get(slot);
-    if (!listeners.has(listener)) {
-      listeners.add(listener);
-      signal?.addEventListener("abort", () => listeners.delete(listener), { once: true });
-    }
-  }
-  return realAdd.call(this, type, listener, options);
-};
-listenerProto.removeEventListener = function (type, listener, options) {
-  if (this === window || this === document) globalListeners.get(listenerSlot(this, type, options))?.delete(listener);
-  return realRemove.call(this, type, listener, options);
-};
-const listenerCounts = () => Object.fromEntries([...globalListeners].map(([slot, set]) => [slot, set.size]).filter(([, size]) => size > 0).sort());
+const listenerCounts = trackGlobalListeners();
 await bootApp();
-after(() => {
-  listenerProto.addEventListener = realAdd;
-  listenerProto.removeEventListener = realRemove;
-  closeApp();
-});
+after(closeApp);
 
 const rows = [{ id: "r1", audioText: "Hello", visualText: "Wide" }];
 
@@ -178,7 +155,7 @@ function standaloneState() {
   return { doc: JSON.stringify(currentDocument()), epoch: liveSession().epoch(), generation: liveSession().generation(),
     home: JSON.stringify(currentHome()), writtenOut: documentLocation().writtenOut(), undo: undoOwner().sizes(),
     unsaved: unsavedChanges(), opening: openingStatus.openingPending(), shared: sharedSession(), native: nativeEditorActive(),
-    listeners: listenerCounts() };
+    waiting: document.body.hasAttribute("data-native-caret-unplaced"), listeners: listenerCounts() };
 }
 
 function throwOnLocation(kind, at = 1) {
@@ -219,6 +196,19 @@ const refusals = [
     return () => fault.mock.restore();
   }],
   ...["home", "writtenOut"].map(kind => [`${kind} subscriber`, "enter-failed", () => throwOnLocation(kind)]),
+  ["native focusout registration", "enter-failed", t => {
+    const add = window.addEventListener;
+    let installed = false;
+    const fault = t.mock.method(window, "addEventListener", function (type, listener, options) {
+      add.call(this, type, listener, options);
+      if (type === "focusout" && listener.name === "intercept" && options === true) {
+        installed = sharedSession();
+        waitForNativeCaret();
+        throw new Error("native input failed after registering focusout");
+      }
+    });
+    return () => { fault.mock.restore(); assert.equal(installed, true); };
+  }],
   ["undo reset", "enter-failed", throwOnUndoReset],
   ["undo reset and reattachment callbacks", "enter-failed", t => {
     const stops = [throwOnUndoReset(t), throwOnLocation("home", 2), throwOnLocation("writtenOut", 2)];
@@ -285,6 +275,7 @@ function splitInput(field, composing) {
 
 const stops = [
   { name: "after a peer commit", writer: true },
+  { name: "while waiting for caret placement", writer: true, waiting: true },
   { name: "with pending Split narration", field: "audioText" },
   { name: "after a Split Visual edit", field: "visualText" },
   { name: "during Split narration composition", field: "audioText", composing: true },
@@ -292,15 +283,26 @@ const stops = [
   { name: "with an empty Writer", writer: true, empty: true }
 ];
 
-for (const { name, field, composing, writer = false, empty } of stops) test(`native stop ${name} restores the listener inventory after restart`, async t => {
+for (const { name, field, composing, writer = false, empty, waiting } of stops) test(`native stop ${name} restores the listener inventory after restart`, async t => {
   const { store, install } = draftStore(t), source = empty ? [] : rows;
   script(source, writer);
   retitle("Before entry");
   assert.equal((await flushDraftNow()).ok, true);
   const listeners = listenerCounts(), hook = window.__sharedTest;
   const destroyed = t.mock.method(Doc.prototype, "destroy"), report = t.mock.method(console, "error", () => {});
-  assert.deepEqual(await hook.enter(), { ok: true });
+  let off = () => {};
+  if (waiting) {
+    const root = document.getElementById("writer-doc"), node = root.querySelector(".wr-beat").lastChild;
+    root.focus();
+    document.getSelection().setBaseAndExtent(node, 0, node, 3);
+    const title = document.getElementById("writer-title");
+    off = onSessionChange(change => {
+      if (change.kind === "adopt" && sharedSession()) queueMicrotask(() => { title.focus(); title.blur(); });
+    });
+  }
+  try { assert.deepEqual(await hook.enter(), { ok: true }); } finally { off(); }
   const sharedId = currentDocument().docId;
+  if (waiting) assert.equal(document.body.hasAttribute("data-native-caret-unplaced"), true);
   if (empty) {
     assert.ok(writerControls().writerFlowControl());
     assert.equal(document.querySelector(".empty-script-input"), null);
@@ -322,6 +324,7 @@ for (const { name, field, composing, writer = false, empty } of stops) test(`nat
   });
   try {
     stopApp();
+    assert.equal(document.body.hasAttribute("data-native-caret-unplaced"), false);
     await Promise.resolve();
     await Promise.resolve();
     assert.ok(landed);

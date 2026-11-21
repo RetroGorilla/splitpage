@@ -176,7 +176,6 @@ function startSharedTestHook(): () => void {
   exposeTestHook("__sharedTest", () => hook, release => { withdraw = release; });
   return () => {
     live = false;
-    stopNativeCaretWait();
     try { forceLeaveSharedSession(); } finally {
       document.removeEventListener("compositionstart", composition, true);
       document.removeEventListener("compositionend", composition, true);
@@ -196,5 +195,6 @@ export function mountSharedSessionFeature(): void {
 export function stopSharedSessionFeature(): void {
   const stop = stopHook;
   stopHook = null;
+  stopNativeCaretWait();
   stop?.();
 }

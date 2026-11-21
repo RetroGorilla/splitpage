@@ -1,3 +1,4 @@
+import { writerControls } from "./writer.ts";
 import { openNativeSession } from "../../adapters/collab/native/session.ts";
 import type { ReplicaOrigin, ReplicaPort } from "../../application/session/shared-session.ts";
 import { WHOLE_PROJECTION } from "../../application/session/shared-session.ts";
@@ -138,6 +139,7 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
     captureSelection: entering => native.isClosingOrClosed() ? null
       : captureNativeSwitchSelection(native, entering, () => !native.isClosingOrClosed() && published === native.revision()),
     abandon: () => { input?.abandonComposition(); },
+    drop: () => { writerControls()?.writerFlowControl()?.discardVisual?.(); },
     start: () => {
       initial = enterSharedDocument(native.document());
       published = native.revision();
