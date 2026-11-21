@@ -438,7 +438,7 @@ export function deleteNativePieces(live: NativeLiveRange, added = 0): void {
 // why: a command called while another transaction is open refuses, since that transaction's changes are not yet
 // observed
 export function replaceNativeText(script: NativeScript, range: NativeTextRange, runs: readonly Run[], stamp?: NativeEditStamp,
-  beforeWrite?: (target: NativeTextTarget) => void, adds?: boolean, afterWrite?: (anchor: NativeUndoAnchor) => void,
+  beforeWrite?: (target: NativeTextTarget, live: NativeLiveRange) => void, adds?: boolean, afterWrite?: (anchor: NativeUndoAnchor) => void,
   placement?: NativeTextPlacement): NativeCommitOutcome {
   const unavailable = nativeAvailability(script);
   if (unavailable) return refuse(unavailable, runs);
@@ -451,7 +451,7 @@ export function replaceNativeText(script: NativeScript, range: NativeTextRange, 
     if (typeof live === "string") return refuse(live, runs);
     if (!prepared.length && !live.pieces.some(piece => piece.until > piece.from)) return UNCHANGED;
     const updateStamp = encoded && script.reader.beatBoundary(checked.target.beat) && !sameStamp(script.roots.edited.get(checked.target.beat), encoded);
-    beforeWrite?.(checked.target);
+    beforeWrite?.(checked.target, live);
     const end = writeNativeRuns(script.doc, live.text, live.from, prepared, nativeLeftAt(nativeCellView(live.items), live.from - live.start));
     const added = end - live.from;
     deleteNativePieces(live, added);

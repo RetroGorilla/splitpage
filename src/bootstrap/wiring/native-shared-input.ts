@@ -29,7 +29,7 @@ import { sharedUndoRoute } from "./undo.ts";
 import { writerControls, writerFlowPorts } from "./writer.ts";
 
 interface NativeInputPorts {
-  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "resolveTextSelection" | "isClosingOrClosed" | "subscribe" | "revision">;
+  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "resolveTextSelection" | "isClosingOrClosed" | "subscribe" | "revision">;
   readonly session: Pick<SharedDocumentSession, "admit" | "refuse" | "run" | "subscribe">;
   readonly editAttribution: () => NativeEditStamp;
   readonly now?: () => number;
@@ -73,7 +73,7 @@ interface Draft {
   readonly surface: NativeTextSurface;
   readonly field: "audioText" | "visualText";
   readonly range: NativeTextRange | null;
-  readonly caretEnd: "from" | "to" | null;
+  readonly deletion: { readonly direction: -1 | 1; readonly at: number } | null;
   readonly before: NativeTextRange | null;
   readonly after: NativeTextRange | null;
   endsGroup: boolean;
@@ -311,14 +311,14 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     return reason;
   }
 
-  function begin(cell: Element, selection: CellRange, composing: boolean, text: string, caretEnd: Draft["caretEnd"] = null): Draft {
+  function begin(cell: Element, selection: CellRange, composing: boolean, text: string, deletion: Draft["deletion"] = null): Draft {
     const beat = cell.getAttribute("data-id") ?? "";
     const { from, to } = selection;
     const marks = !text && !composing ? {} : typingMarks(scriptCellOf(cell.innerHTML), from === to ? from : from + 1);
     const visual = visualTextSurface.cellAt(cell) === cell;
     return { beat, cell, surface: visual ? visualTextSurface : narrationSurfaceOf(cell), field: visual ? "visualText" : "audioText",
       selection, composing, composition: composing, text,
-      units: Math.max(text.length, selection.to - selection.from), previewCaret: selection.from + text.length, range: null, caretEnd,
+      units: Math.max(text.length, selection.to - selection.from), previewCaret: selection.from + text.length, range: null, deletion,
       before: null, after: null, endsGroup: false, paint: null, html: cell.innerHTML, marks };
   }
 
@@ -339,7 +339,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (anchored.kind === "refused") return anchored.reason;
     const end = next.composition || selection.from !== selection.to ? native.commands.anchorText(target, to.offset) : null;
     const after = end?.kind === "anchored" ? end.range : null, { range } = anchored;
-    const before = next.caretEnd === "to" ? after : next.caretEnd === "from" ? { target: range.target, from: range.from, to: range.from } : range;
+    const before = next.deletion?.direction === -1 ? after
+      : next.deletion?.direction === 1 ? { target: range.target, from: range.from, to: range.from } : range;
     return { ...next, range, before, after, paint: visual ? null : native.trackNarrationPaint(beat) };
   }
 
@@ -359,8 +360,9 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (!text) return target.commands.deleteText(range, attribution, places);
       return target.commands.replaceText(range, [{ text, marks }], attribution, places);
     }
-    const { before } = buffered;
+    const { before, deletion } = buffered;
     const step = typing ? target.commands.typeText.withSelection(before, range, text, marks, attribution, places)
+      : deletion ? target.commands.deleteTextInRun.withSelection(before, range, deletion.direction, deletion.at, attribution, places)
       : !text ? target.commands.deleteText.withSelection(before, range, attribution, places)
       : target.commands.replaceText.withSelection(before, range, [{ text, marks }], attribution, places);
     if (step.result.kind === "written") step.recordAfter(typing ? undefined : buffered.after);
@@ -385,7 +387,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         const start = native.resolveTextSelection(buffered.range)?.anchor.offset;
         if (start !== undefined) visualCaret = start + buffered.text.length;
       }
-      if (lastWrite !== null && at - lastWrite >= GROUP_PAUSE_MS) native.endTypingGroup();
+      if (!buffered.deletion && lastWrite !== null && at - lastWrite >= GROUP_PAUSE_MS) native.endTypingGroup();
       result = commit(buffered, native, selection?.indices ?? [null, null], true);
     } catch (error) {
       uncertain = true;
@@ -900,7 +902,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const selection = inputRange(input, cell);
     if (!selection || deletion && selection.from === selection.to) { session.refuse(deletion ? UNSUPPORTED : STALE); return; }
     const buffered = draft;
-    if (buffered && insideDraft(buffered, cell, selection)) {
+    if (buffered && !buffered.deletion && insideDraft(buffered, cell, selection)) {
       reviseDraft(buffered, selection, text);
       preview(cell, selection, text);
       if (atBatchBoundary(buffered)) finish();
@@ -908,10 +910,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     }
     if (touchesProtectedText(cell, selection)) { session.refuse(UNSUPPORTED); return; }
     const shown = deletion ? cellSelection(cell) : null;
-    const caretEnd = shown && shown.from === shown.to ? input.inputType.endsWith("Backward") ? "to" : "from" : null;
+    const gesture = shown && shown.from === shown.to ? { direction: input.inputType.endsWith("Backward") ? -1 : 1, at: now() } as const : null;
     const current = flushForInput(cell, selection);
     if (!current) return;
-    const next = begin(current.cell, current.selection, false, text, caretEnd);
+    const next = begin(current.cell, current.selection, false, text, gesture);
     let anchored: Draft | string;
     try { anchored = current.stale ? STALE : anchor(next); }
     catch (error) { report(error); anchored = PENDING; }
@@ -935,13 +937,15 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (draft?.composing) { event.preventDefault(); return; }
       composingText = "";
       compositionRefused = false;
-      if (draft && insideDraft(draft, cell, selection)) {
+      if (draft && !draft.deletion && insideDraft(draft, cell, selection)) {
         clearTimeout(timer);
         composingInside = { cell, selection, html: cell.innerHTML };
         draft.composing = true;
         return;
       }
-      if (finish() || !cell.isConnected) { session.refuse(STALE); event.preventDefault(); return; }
+      const reason = finish();
+      native.endDeletionGroup();
+      if (reason || !cell.isConnected) { session.refuse(STALE); event.preventDefault(); return; }
       const anchored = anchor(begin(cell, selection, true, ""));
       if (typeof anchored === "string") { session.refuse(anchored); event.preventDefault(); return; }
       draft = anchored;
@@ -1015,16 +1019,16 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         lastWriterEnterRefusal = null;
         if (next && next !== document.body) leaveHeadingLine(true);
       }
-      const buffered = draft;
-      if (buffered && cell && (buffered.cell === cell || cell.contains(buffered.cell))) {
-        queueMicrotask(() => { if (draft === buffered) settleBlur(buffered); });
-      }
+      if (cell) leaveTextCell(cell, next);
       return;
     }
     if (event.type === "pointerdown") {
       imeTarget = null;
       lastWriterEnterRefusal = null;
-      if (!draft?.composing && !stopped) finish();
+      if (!draft?.composing && !stopped) {
+        finish();
+        native.endDeletionGroup();
+      }
       if (target?.closest(ROW_MENU_BUTTON)) insertMenuSelection = captureInsertMenuSelection();
       else if (!target?.closest("#rows .row-menu")) insertMenuSelection = null;
       return;
@@ -1058,7 +1062,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       }
       if (undoing && cell?.matches(UNDO_SURFACES)) return;
       if (!editingKey(key) && !joining && !removeHeading) {
-        if (key.key.startsWith("Arrow") || key.key === "Home" || key.key === "End" || key.key === "Tab") finish();
+        if (key.key.startsWith("Arrow") || key.key === "Home" || key.key === "End" || key.key === "Tab") {
+          finish();
+          native.endDeletionGroup();
+        }
         return;
       }
     }
@@ -1112,7 +1119,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     try {
       if (native.isClosingOrClosed()) return;
       if (stopped && (editableText || heading || writer)) {
-        if (stopped !== "full" && narration && !splitting && !joining && !moving && !mark && !line && !adding && event.type !== "paste") session.refuse(stopped);
+        if (stopped !== "full" && narration && !splitting && !joining && !moving && !mark && !line && !adding
+          && event.type !== "paste" && !inputType?.startsWith("delete")) session.refuse(stopped);
         return;
       }
       if (adding && editableText) {
@@ -1172,6 +1180,31 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       session.refuse(UNSUPPORTED);
     }
   }
+  function leaveTextCell(cell: Element, next: EventTarget | null): void {
+    const buffered = draft && cell.contains(draft.cell) ? draft : null;
+    const settle = () => { if (buffered && draft === buffered) settleBlur(buffered); };
+    const beat = cell.getAttribute("data-id");
+    const field = cell.getAttribute("data-field");
+    const selector = cell.matches(".wr-flow-visual-text") ? ".wr-flow-visual-text" : "#rows .cell-editable";
+    const sameCell = (target: EventTarget | null) => target instanceof Node && (cell.contains(target)
+      || !!beat && target instanceof Element && target.matches(selector) && target.getAttribute("data-id") === beat
+      && target.getAttribute("data-field") === field);
+    if (next && next !== document.body) {
+      if (!sameCell(next)) {
+        if (buffered?.deletion) buffered.endsGroup = true;
+        else native.endDeletionGroup();
+      }
+      if (buffered) queueMicrotask(settle);
+      return;
+    }
+    // why: replacing a focused cell can blur it before the publication restores focus to its successor
+    queueMicrotask(() => {
+      const departed = !sameCell(document.activeElement);
+      settle();
+      if (departed) native.endDeletionGroup();
+    });
+  }
+
   function settleBlur(buffered: Draft): void {
     if (stopped) return;
     if (buffered.composing) endComposition(buffered, composingText);
