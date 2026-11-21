@@ -91,6 +91,7 @@ export interface Surface {
   readonly domRange: (range: FlowRange) => Range | null;
   readonly domCheck: () => string[];
   readonly paintedBase: (rowId: string) => PaintedText | null;
+  readonly setSelectionListener: (active: boolean) => void;
   readonly dispose: () => void;
 }
 
@@ -1372,19 +1373,24 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     [root, "focusout", buffered ? event => { if (!composing && buffered.finish()) onHostBlur(event); } : onHostBlur],
     ...buffered ? [[root, "drop", ((event: Event) => { ready(event); event.preventDefault(); }) as EventListener] as [EventTarget, string, EventListener],
       [root, "focusin", (() => {}) as EventListener] as [EventTarget, string, EventListener]] : [],
-    [window, "mouseup", buffered ? () => { if (buffered.held()) buffered.moved(selection(true)); onMouseUp(); } : onMouseUp],
-    [document, "selectionchange", buffered ? () => {
-      if (buffered.held()) buffered.moved(selection(true));
-      if (!buffered.dirty()) onSelectionChange();
-    } : onSelectionChange]
+    [window, "mouseup", buffered ? () => { if (buffered.held()) buffered.moved(selection(true)); onMouseUp(); } : onMouseUp]
   ];
-  const guarded = buffered ? listeners.map(([target, name, handler]): [EventTarget, string, EventListener] =>
-    [target, name, event => {
-      if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:start");
-      try { buffered.native(event, () => handler(event)); }
-      finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:end"); }
-    }]) : listeners;
+  const guardListener = (handler: EventListener): EventListener => buffered ? event => {
+    if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:start");
+    try { buffered.native(event, () => handler(event)); }
+    finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:end"); }
+  } : handler;
+  const guarded = buffered ? listeners.map(([target, name, handler]) => [target, name, guardListener(handler)] as const) : listeners;
+  const selectionChanged = guardListener(buffered ? () => {
+    if (buffered.held()) buffered.moved(selection(true));
+    if (!buffered.dirty()) onSelectionChange();
+  } : onSelectionChange);
+  const setSelectionListener = (active: boolean): void => {
+    if (active) document.addEventListener("selectionchange", selectionChanged);
+    else document.removeEventListener("selectionchange", selectionChanged);
+  };
   guarded.forEach(([target, name, handler]) => target.addEventListener(name, handler));
+  setSelectionListener(true);
   const clipboardHandlers = buffered ? {
     copy: (event: ClipboardEvent) => { buffered.native(event, () => clipboardActions.copy(event)); },
     cut: (event: ClipboardEvent) => { buffered.native(event, () => clipboardActions.cut(event)); },
@@ -1422,6 +1428,7 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     domRange,
     domCheck,
     paintedBase: rowId => buffered?.base(rowId) ?? (paintedBeats ? paintedBeats.base(rowId) : null),
+    setSelectionListener,
     dispose: () => {
       if (buffered && !buffered.dispose()) return;
       stopClipboard?.();
@@ -1431,6 +1438,7 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
       compositionTargets.clear();
       queuedPastes.length = 0;
       guarded.forEach(([target, name, handler]) => target.removeEventListener(name, handler));
+      setSelectionListener(false);
     }
   };
 }

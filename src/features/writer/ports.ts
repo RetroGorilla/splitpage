@@ -50,6 +50,7 @@ export interface FlowWriter {
   readonly selectedText: () => string | null;
   readonly place: (range: FlowRange, scroll?: boolean) => void;
   readonly check: () => string[];
+  readonly setDocumentObservers: (active: boolean) => void;
   readonly dispose: () => boolean;
 }
 

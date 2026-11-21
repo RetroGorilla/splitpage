@@ -316,15 +316,18 @@ const stopCases = [
   { name: "with pending Split Visual", field: "visualText" },
   { name: "during Split narration composition", field: "audioText", composing: true },
   { name: "during Split Visual composition", field: "visualText", composing: true },
+  { name: "with pending Writer narration", field: "audioText", writer: true },
+  { name: "during Writer narration composition", field: "audioText", composing: true, writer: true },
   { name: "when both leave attempts are blocked", blocked: true }
 ];
 
-for (const { name, field, composing, blocked } of stopCases) test(`app stop ${name} releases the native peer, hook and listeners once`, async t => {
+for (const { name, field, composing, blocked, writer } of stopCases) test(`app stop ${name} releases the native peer, hook and listeners once`, async t => {
   const store = draftStore(t);
   script();
   edit("Before sharing");
   row().visualText = "Wide";
   assert.equal((await flushDraftNow()).ok, true);
+  if (writer) writerControls().openWriter();
   const added = t.mock.method(window, "addEventListener");
   const removed = t.mock.method(window, "removeEventListener");
   const removedFromDocument = t.mock.method(document, "removeEventListener");
@@ -340,7 +343,7 @@ for (const { name, field, composing, blocked } of stopCases) test(`app stop ${na
   assert.ok(registrations.some(([type]) => type === "paste"));
   peerEdit();
   await Promise.resolve();
-  if (field) pendingInput(field, composing);
+  if (field) pendingInput(field, composing, writer);
   assert.deepEqual([row().audioText, row().visualText], ["Shared Before sharing", field === "visualText" && !composing ? "Wide!" : "Wide"]);
   if (composing) assert.deepEqual(hook.leave(), { ok: false, reason: "native-input-pending" });
   const seq = draftsTesting().status().seq;
@@ -358,10 +361,14 @@ for (const { name, field, composing, blocked } of stopCases) test(`app stop ${na
     }
     return remove(...args);
   });
+  const errors = [];
+  const capture = event => { errors.push(event.error); event.preventDefault(); };
+  window.addEventListener("error", capture);
   try {
     stopApp();
     stopApp();
     await Promise.resolve();
+    assert.deepEqual(errors, []);
     assert.equal(window.__sharedTest, undefined);
     assert.deepEqual(await originalHook.enter({ backend: "native" }), { ok: false, reason: "app-stopped" });
     assert.equal(destroyed.mock.callCount(), 2);
@@ -388,6 +395,7 @@ for (const { name, field, composing, blocked } of stopCases) test(`app stop ${na
     }
     assert.ok(store.writes.every(write => !write.shared));
   } finally {
+    window.removeEventListener("error", capture);
     release();
     observe.mock.restore();
     removedFromDocument.mock.restore();
