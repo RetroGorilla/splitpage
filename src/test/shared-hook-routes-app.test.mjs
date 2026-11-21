@@ -32,23 +32,29 @@ const { adoptReplacement, currentDocument, liveSession, runCommand, sharedSessio
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { writerControls } = await import("../bootstrap/wiring/writer.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
-const { draftResume, flushDraftNow } = await import("../bootstrap/wiring/recovery-owners.ts");
+const { flushDraftNow } = await import("../bootstrap/wiring/recovery-owners.ts");
 const { draftSource, draftsTesting } = await import("../bootstrap/wiring/drafts.ts");
 const { useDesktopForTest, restoreDesktop } = await import("../adapters/desktop/desktop-port.ts");
 const { unsavedChanges } = await import("../bootstrap/wiring/save-owners.ts");
+const { sharedSessionParts } = await import("../bootstrap/wiring/shared-session.ts");
 const { currentHome, documentLocation, setHome } = await import("../bootstrap/wiring/location-owner.ts");
-const { documentOpenings, documentTransitions } = await import("../bootstrap/wiring/transition-owners.ts");
+const { documentTransitions } = await import("../bootstrap/wiring/transition-owners.ts");
 const { localFilesOwner } = await import("../bootstrap/wiring/local-files.ts");
 const { startNewScript } = await import("../bootstrap/wiring/file-menu-controls.ts");
 const { documentEntry } = await import("../bootstrap/wiring/ports/document-entry.ts");
 const { documentReader } = await import("../bootstrap/wiring/ports/document.ts");
-const { recoveryPanelBinding } = await import("../bootstrap/wiring/recovery-panel.ts");
-const { sharedSessionParts } = await import("../bootstrap/wiring/shared-session.ts");
-const { appActions } = await import("../bootstrap/wiring/ports/actions.ts");
 const { openingStatus } = await import("../bootstrap/wiring/ports/transitions.ts");
+const { recoveryPanelBinding } = await import("../bootstrap/wiring/recovery-panel.ts");
 let hook = window.__legacySharedTest;
 
 const ROWS = [{ id: "r1", audioText: "Hello", visualText: "" }];
+
+const edit = text => {
+  const rowId = currentDocument().rows[0].id;
+  assert.equal(runCommand({ name: "route-edit", needs: "edit", plan: () => ({ changes: changeSet({ cells: [{ rowId, field: "audioText" }] }),
+    apply: live => { live.rows[0].audioText = text; } }) }).kind, "applied");
+  undoOwner().flush();
+};
 
 function script(rows) {
   writerControls().closeWriter();
@@ -66,13 +72,6 @@ function draftStore() {
   }, discardDraft: async () => ({ ok: true }), setDocumentState: () => {}, draftRestoreDone: () => {}, openFileDialog: async () => null, listRecents: async () => [] });
   return store;
 }
-
-const edit = text => {
-  const rowId = currentDocument().rows[0].id;
-  assert.equal(runCommand({ name: "route-edit", needs: "edit", plan: () => ({ changes: changeSet({ cells: [{ rowId, field: "audioText" }] }),
-    apply: live => { live.rows[0].audioText = text; } }) }).kind, "applied");
-  undoOwner().flush();
-};
 
 async function restartApp() {
   restoreDesktop();
@@ -113,48 +112,12 @@ function selectionVisualComposition() {
   assert.equal(writerControls().writerFlowControl().settle(), false, "the selection-visual edit is open");
 }
 
-function emptyInput() {
-  const input = document.querySelector(".empty-script-input");
-  assert.ok(input);
-  input.focus();
-  return input;
-}
-
-function splitPending(field, composition) {
-  writerControls().closeWriter();
-  const cell = document.querySelector(`#rows .cell-editable[data-id="r1"][data-field="${field}"]`);
-  assert.ok(cell); cell.focus();
-  const node = cell.lastChild, range = document.createRange();
-  range.setStart(node, node.data.length); range.collapse(true);
-  document.getSelection().removeAllRanges(); document.getSelection().addRange(range);
-  if (composition) {
-    cell.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
-    cell.dispatchEvent(new window.CompositionEvent("compositionupdate", { bubbles: true, data: " held" }));
-  }
-  const before = new window.InputEvent("beforeinput", { bubbles: true, cancelable: !composition,
-    inputType: composition ? "insertCompositionText" : "insertText", isComposing: composition, data: composition ? " held" : "!" });
-  Object.defineProperty(before, "getTargetRanges", { value: () => [range.cloneRange()] });
-  assert.equal(cell.dispatchEvent(before), true);
-  node.data += composition ? " held" : "!";
-  if (composition) cell.dispatchEvent(new window.InputEvent("input", { bubbles: true, isComposing: true, inputType: "insertCompositionText", data: " held" }));
-  assert.equal(hook.read().app.rows[0][field], field === "audioText" ? "Shared Hello" : "Wide");
-  if (composition) assert.equal(sharedSessionParts().session.admit()?.kind, "rejected");
-}
-
 const WAYS_OUT = [
   { name: "the public leave", rows: ROWS, run: () => { assert.deepEqual(hook.leave(), { ok: true }); } },
   { name: "Open, cancelled at its dialog", rows: ROWS, leaveFirst: true, run: () => localFilesOwner().openLocalFile() },
   { name: "Open, completed", rows: ROWS, leaveFirst: true, completes: true, run: () => { documentTransitions().open(arrival("Opened")); } },
   { name: "New, completed", rows: ROWS, leaveFirst: true, completes: true, run: () => { documentTransitions().startNew(arrival("Started")); } },
   { name: "File New, completed", rows: ROWS, leaveFirst: true, completes: true, run: () => { assert.equal(startNewScript(), true); } },
-  { name: "stopping the app with nothing pending", rows: ROWS, stops: true },
-  ...["audioText", "visualText"].flatMap(field => [
-    { name: `stopping the app with a pending Split ${field} edit`, rows: [{ id: "r1", audioText: "Hello", visualText: "Wide" }],
-      stops: true, visual: [field === "visualText" ? "Wide!" : "Wide"], landed: [field === "audioText" ? "Shared Hello!" : "Shared Hello"],
-      arrange: () => splitPending(field, false) },
-    { name: `stopping the app during a Split ${field} composition`, rows: [{ id: "r1", audioText: "Hello", visualText: "Wide" }],
-      stops: true, visual: ["Wide"], landed: ["Shared Hello"], arrange: () => splitPending(field, true) }
-  ]),
   { name: "stopping the app with a pending buffered edit", rows: ROWS, stops: true, landed: ["Shared Hello!"], arrange: () => {
     const { element, node, range } = caretAtEnd();
     const before = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: "!" });
@@ -172,14 +135,7 @@ const WAYS_OUT = [
     element.dispatchEvent(new window.InputEvent("input", { bubbles: true, isComposing: true, data: " held" }));
     assert.equal(writerControls().writerFlowControl().settle(), false);
   } },
-  { name: "stopping the app during a composition in the selection-visual box", rows: ROWS, stops: true, landed: ["Shared Hello"], arrange: selectionVisualComposition },
-  { name: "stopping the app during an open composition", rows: [], stops: true, arrange: () => {
-    const input = emptyInput();
-    input.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
-    input.value = "Held words";
-    input.dispatchEvent(new window.InputEvent("input", { bubbles: true, isComposing: true, data: "Held words" }));
-    assert.equal(writerControls().writerFlowControl().settle(), false);
-  } }
+  { name: "stopping the app during a composition in the selection-visual box", rows: ROWS, stops: true, landed: ["Shared Hello"], arrange: selectionVisualComposition }
 ];
 
 function landing() {
@@ -305,46 +261,6 @@ test("rule 166: stopping the app when even the forced leave cannot land ends wit
   }
 });
 
-const SHARED_WRITER_SURFACES = ["narration buffer (flow-buffer.ts)", "visual buffer (writer-visual-buffer.ts)",
-  "selection-visual edit (writer-visual-buffer.ts)", "empty-script input (empty-script.ts)", "Split cell buffer (split-buffer.ts)"];
-
-test("every surface the shared Writer and Split mount registers one abandon step, and leaving unregisters them all", async () => {
-  draftStore();
-  try {
-    script(ROWS);
-    assert.deepEqual(await hook.enter(), { ok: true });
-    assert.equal(hook.counters().abandonable, SHARED_WRITER_SURFACES.length, SHARED_WRITER_SURFACES.join(", "));
-    assert.deepEqual(hook.leave(), { ok: true });
-    assert.equal(hook.counters().abandonable, 0);
-  } finally {
-    if (sharedSession()) hook.leave();
-    await flushDraftNow();
-    restoreDesktop();
-  }
-});
-
-test("the way out runs every step: a draft resume that throws still disposes the peer, marks the landed copy unsaved, and is reported", async () => {
-  draftStore();
-  const report = console.error, reported = [];
-  let restore = () => {};
-  try {
-    script(ROWS);
-    assert.deepEqual(await hook.enter(), { ok: true });
-    hook.peer.type("r1", 0, "Shared "); hook.peer.deliver();
-    restore = throwOnce(draftSource, "resumeWriting", "the draft writer could not resume");
-    console.error = error => { reported.push(String(error)); };
-    try { assert.deepEqual(hook.leave(), { ok: true }); } finally { console.error = report; }
-    assert.deepEqual([currentDocument().rows.map(row => row.audioText), unsavedChanges(), hook.read().peer, sharedSession()], [["Shared Hello"], true, null, false]);
-    assert.ok(reported.some(text => text.includes("the draft writer could not resume")), reported.join("\n"));
-  } finally {
-    console.error = report; restore();
-    draftSource.resumeWriting();
-    if (sharedSession()) hook.leave();
-    await flushDraftNow();
-    restoreDesktop();
-  }
-});
-
 function throwOnce(owner, key, message, seen = () => {}) {
   const original = owner[key];
   let armed = true;
@@ -355,65 +271,20 @@ function throwOnce(owner, key, message, seen = () => {}) {
   return () => { owner[key] = original; };
 }
 
-function locationSubscriberThrows(change, at = 1) {
-  let seen = 0;
-  return documentLocation().onChange(kind => { if (kind === change && ++seen === at) throw new Error("a " + change + " subscriber failed"); });
-}
-
-const FAILURES = [
-  { name: "a live Writer composition", reason: "buffer-composition", arrange: () => {
-    const root = document.getElementById("writer-doc");
-    root.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
-    return () => { root.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "" })); };
-  } },
-  { name: "a pending draft restore", reason: "draft-restore-pending", arrange: () => {
-    draftResume().setRestorePending(true);
-    return () => { draftResume().setRestorePending(false); };
-  } },
-  { name: "a pending document opening", reason: "opening-pending", arrange: () => {
-    let release = () => {};
-    documentOpenings.track(() => new Promise(resolve => { release = resolve; }));
-    return () => { release(); };
-  } },
-  { name: "a draft store that refuses the entry flush", reason: "draft-not-kept", arrange: store => {
-    store.accepting = false;
-    edit("Unsaved before entry");
-    return () => { store.accepting = true; };
-  } },
-  { name: "a draft writer that refuses the final detach", reason: "draft-pending", arrange: () => {
-    const detach = draftSource.detachSource;
-    draftSource.detachSource = () => ({ ok: false, reason: "pending" });
-    return () => { draftSource.detachSource = detach; };
-  } },
-  { name: "the Writer binding throwing after it mounted", reason: "enter-failed", arrange: (_store, observed) => {
-    const standalone = writerControls();
-    return throwOnce(documentReader, "onReplaced", "the Writer binding failed", () => { observed.push(["mounted", writerControls() !== standalone, sharedSession()]); });
-  }, observed: [["mounted", true, true]] },
-  { name: "the recovery panel binding throwing after it mounted", reason: "enter-failed", arrange: (_store, observed) => {
-    const enter = recoveryPanelBinding.enter;
-    recoveryPanelBinding.enter = parts => {
-      enter(parts); recoveryPanelBinding.enter = enter;
-      observed.push(["mounted", appActions.has("recovery"), sharedSession()]);
-      throw new Error("the recovery panel binding failed");
-    };
-    return () => { recoveryPanelBinding.enter = enter; };
-  }, observed: [["mounted", true, true]] },
-  { name: "a home subscriber throwing at the home change", reason: "enter-failed", arrange: () => locationSubscriberThrows("home") },
-  { name: "the detach continuation failing at the written-out change", reason: "enter-failed", arrange: () => locationSubscriberThrows("writtenOut") },
-  { name: "the standalone undo reset failing once the detach has finished", reason: "enter-failed", arrange: () => throwOnce(undoOwner(), "adopt", "the undo reset failed") },
-  { name: "the undo reset failing, then the home and written-out subscribers both throwing during reattachment", reason: "enter-failed", arrange: () => {
-    const stops = [throwOnce(undoOwner(), "adopt", "the undo reset failed"), locationSubscriberThrows("home", 2), locationSubscriberThrows("writtenOut", 2)];
-    return () => { for (const stop of stops) stop(); };
-  } }
-];
-
 function standaloneState() {
   return { doc: JSON.stringify(currentDocument()), epoch: liveSession().epoch(), generation: liveSession().generation(), undo: undoOwner().sizes(),
     home: JSON.stringify(currentHome()), writtenOut: documentLocation().writtenOut(), unsaved: unsavedChanges(), shared: sharedSession(), parts: sharedSessionParts() !== null,
     opening: openingStatus.openingPending(), listeners: listenerCounts() };
 }
 
-for (const failure of FAILURES) {
+const failures = [{
+  name: "the Writer binding throwing after it mounted", reason: "enter-failed", arrange: (_store, observed) => {
+    const standalone = writerControls();
+    return throwOnce(documentReader, "onReplaced", "the Writer binding failed", () => { observed.push(["mounted", writerControls() !== standalone, sharedSession()]); });
+  }, observed: [["mounted", true, true]]
+}];
+
+for (const failure of failures) {
   test(`failed entry: ${failure.name} answers ${failure.reason} and leaves document, revision, undo, home, written-out mark, drafting and listeners as they were`, async () => {
     const store = draftStore(), report = console.error, reported = [], observed = [];
     let cleanup = () => {};

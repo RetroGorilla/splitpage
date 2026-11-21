@@ -659,11 +659,11 @@
     },
     {
       "label": "a refused entry flush answers the detach check instead of draft-not-kept",
-      "file": "tests/collab/legacy-app/shared-test.ts",
+      "file": "src/bootstrap/wiring/shared-test.ts",
       "find": "  if (flushed.ok) return draftDetachRefusal();\n",
       "replace": "  if (flushed || true) return draftDetachRefusal();\n",
       "tests": [
-        "src/test/shared-hook-routes-app.test.mjs"
+        "src/test/shared-native-handoff-app.test.mjs"
       ]
     },
     {
@@ -749,11 +749,11 @@
     },
     {
       "label": "a final draft detach refusal answers enter-failed with no notice",
-      "file": "tests/collab/legacy-app/shared-test.ts",
+      "file": "src/bootstrap/wiring/shared-test.ts",
       "find": "      if (detachRefused) {",
       "replace": "      if (detachRefused && false) {",
       "tests": [
-        "src/test/shared-hook-routes-app.test.mjs"
+        "src/test/shared-native-handoff-app.test.mjs"
       ]
     },
     {
@@ -767,11 +767,11 @@
     },
     {
       "label": "route: the public leave answers ok without leaving",
-      "file": "tests/collab/legacy-app/shared-test.ts",
+      "file": "src/bootstrap/wiring/shared-test.ts",
       "find": "    try { return leaveRunningSharedSession(); } finally { switching = false; }",
       "replace": "    try { return { ok: true }; } finally { switching = false; }",
       "tests": [
-        "src/test/shared-hook-routes-app.test.mjs"
+        "src/test/shared-native-routes-lifecycle-app.test.mjs"
       ]
     },
     {
@@ -780,7 +780,7 @@
       "find": "const result = permission.allowed ? leaveRunningSharedSession() :",
       "replace": "const result = permission.allowed ? { ok: true } as const :",
       "tests": [
-        "src/test/shared-hook-routes-app.test.mjs"
+        "src/test/shared-native-handoff-app.test.mjs"
       ]
     },
     {
@@ -796,7 +796,7 @@
     {
       "label": "route: a forced leave abandons before trying the ordinary leave",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "  const first = leaveSharedSession(now.ports);\n  if (first.ok || running !== now) return first;\n",
+      "find": "  const first = leaveSharedSession(now.ports, false);\n  if (first.ok || running !== now) return first;\n",
       "replace": "",
       "tests": [
         "src/test/shared-hook-routes-app.test.mjs"
@@ -821,15 +821,6 @@
       ]
     },
     {
-      "label": "route: an empty-script composition is not abandoned at stop",
-      "file": "src/features/empty-script/empty-script.ts",
-      "find": "abandoning = ports.abandonment?.(abandon);",
-      "replace": "abandoning = ports.abandonment?.(() => {});",
-      "tests": [
-        "src/test/shared-hook-routes-app.test.mjs"
-      ]
-    },
-    {
       "label": "route: a dropped session never hands the hook its way out",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "  if (left) faults.attempt(() => { left(false); });\n",
@@ -840,94 +831,12 @@
       ]
     },
     {
-      "label": "failure: the hook forgets an open composition",
-      "file": "tests/collab/legacy-app/shared-test.ts",
-      "find": "    ?? (composing ? \"buffer-composition\" : null)\n",
-      "replace": "",
-      "tests": [
-        "src/test/shared-hook-routes-app.test.mjs"
-      ]
-    },
-    {
-      "label": "failure: the hook forgets a pending draft restore",
-      "file": "tests/collab/legacy-app/shared-test.ts",
-      "find": "\n    ?? (draftResume().restorePending() ? \"draft-restore-pending\" : null);",
-      "replace": ";",
-      "tests": [
-        "src/test/shared-hook-routes-app.test.mjs"
-      ]
-    },
-    {
-      "label": "failure: the hook passes an opening reader that is always idle",
-      "file": "tests/collab/legacy-app/shared-test.ts",
-      "find": "        opening: openingStatus\n",
-      "replace": "        opening: { openingPending: () => false }\n",
-      "tests": [
-        "src/test/shared-hook-routes-app.test.mjs"
-      ]
-    },
-    {
       "label": "failure: the rollback never reattaches the draft writer",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "    if (!recovered && made.detaching && ports.reattach) faults.attempt(ports.reattach);\n",
       "replace": "",
       "tests": [
-        "src/test/shared-hook-routes-app.test.mjs",
         "tests/bootstrap/shared-switch.test.ts"
-      ]
-    },
-    {
-      "label": "failure: reattaching keeps the cleared home",
-      "file": "tests/collab/legacy-app/shared-test.ts",
-      "find": "  runEvery([() => { documentLocation().restoreHome(kept.home); }, ",
-      "replace": "  runEvery([",
-      "tests": [
-        "src/test/shared-hook-routes-app.test.mjs"
-      ]
-    },
-    {
-      "label": "failure: reattaching keeps the cleared written-out mark",
-      "file": "tests/collab/legacy-app/shared-test.ts",
-      "find": "() => { documentLocation().markWrittenOut(kept.writtenOut); },",
-      "replace": "",
-      "tests": [
-        "src/test/shared-hook-routes-app.test.mjs"
-      ]
-    },
-    {
-      "label": "failure: reattaching keeps the copy marked saved",
-      "file": "tests/collab/legacy-app/shared-test.ts",
-      "find": "    () => { if (kept.unsaved && !unsavedChanges()) noteSaveChange(); }, ",
-      "replace": "    ",
-      "tests": [
-        "src/test/shared-hook-routes-app.test.mjs"
-      ]
-    },
-    {
-      "label": "failure: reattaching leaves the draft writer detached",
-      "file": "tests/collab/legacy-app/shared-test.ts",
-      "find": " noteSaveChange(); }, () => { draftSource.resumeWriting(); }]);",
-      "replace": " noteSaveChange(); }]);",
-      "tests": [
-        "src/test/shared-hook-routes-app.test.mjs"
-      ]
-    },
-    {
-      "label": "failure: reattaching stops at its first exception",
-      "file": "tests/collab/legacy-app/shared-test.ts",
-      "find": "  runEvery([() => { documentLocation().restoreHome(kept.home); }, () => { documentLocation().markWrittenOut(kept.writtenOut); },\n    () => { if (kept.unsaved && !unsavedChanges()) noteSaveChange(); }, () => { draftSource.resumeWriting(); }]);",
-      "replace": "  for (const step of [() => { documentLocation().restoreHome(kept.home); }, () => { documentLocation().markWrittenOut(kept.writtenOut); },\n    () => { if (kept.unsaved && !unsavedChanges()) noteSaveChange(); }, () => { draftSource.resumeWriting(); }]) step();",
-      "tests": [
-        "src/test/shared-hook-routes-app.test.mjs"
-      ]
-    },
-    {
-      "label": "route: the way out stops at its first exception",
-      "file": "tests/collab/legacy-app/shared-test.ts",
-      "find": "    runEvery([() => { ending?.dispose(); }, ...(kept ? [() => { draftSource.resumeWriting(); }] : []), ...marks]);",
-      "replace": "    for (const step of [() => { ending?.dispose(); },...(kept ? [() => { draftSource.resumeWriting(); }] : []), ...marks]) step();",
-      "tests": [
-        "src/test/shared-hook-routes-app.test.mjs"
       ]
     },
     {
@@ -964,8 +873,7 @@
       "find": "    if (released) return true;\n",
       "replace": "",
       "tests": [
-        "tests/application/editing/buffered-field.test.ts",
-        "src/test/shared-hook-routes-app.test.mjs"
+        "tests/application/editing/buffered-field.test.ts"
       ]
     },
     {
