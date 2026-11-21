@@ -1,0 +1,61 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.P=S.nativePeer;F.openFile(new File([JSON.stringify({schema:2,title:'Native shared removal',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello',visualText:''},{id:'r2',audioText:'Removed words',visualText:'Shot'},{id:'r3',audioText:'Last',visualText:''}],comments:[]})],'removal.splitpage'))
+wait F.state().title === 'Native shared removal'
+eval window.json=value=>JSON.stringify(value);window.Q=(id,f)=>document.querySelector('#rows .cell-editable[data-id="'+id+'"][data-field="'+f+'"]');window.T=(id,f)=>{const c=Q(id,f);return c&&c.checkVisibility()&&c.getBoundingClientRect().width>0?c.textContent.replace(/\u200b/g,'').replace(/\u00a0/g,' '):null};window.same=()=>json(S.read().app)===json(S.read().peer);window.clean=()=>document.getElementById('shared-recovery-panel')===null&&document.querySelector('#toast-host .toast.warn:not(.is-leaving)')===null;true
+eval window.at=(id,f,o)=>{const c=Q(id,f);c.focus();const w=document.createTreeWalker(c,4);let n,k=o;while((n=w.nextNode())){if(k<=n.data.length){getSelection().setBaseAndExtent(n,k,n,k);return true}k-=n.data.length}getSelection().setBaseAndExtent(c,c.childNodes.length,c,c.childNodes.length);return true};window.caret=(id,f,o)=>{const c=Q(id,f),s=getSelection();if(!c||document.activeElement!==c||!s.rangeCount||!s.isCollapsed||!c.contains(s.anchorNode)||!c.contains(s.focusNode))return false;const r=document.createRange();r.setStart(c,0);r.setEnd(s.focusNode,s.focusOffset);return r.toString().replace(/\u200b/g,'').length===o};true
+eval window.view=(doc,expected)=>{const matching=expected.map(([id,audioText,visualText])=>({...base.rows.find(row=>row.id===id),audioText,visualText}));return json({...doc,rows:doc.rows.map(row=>{const ref=base.rows.find(item=>item.id===row.id);return {...row,updatedAt:ref?.updatedAt,updatedBy:ref?.updatedBy}})})===json({...base,rows:matching})};window.paint=expected=>base.rows.every(({id})=>{const row=expected.find(item=>item[0]===id);return T(id,'audioText')===(row?row[1]:null)&&T(id,'visualText')===(row?row[2]:null)});window.both=expected=>same()&&view(S.read().app,expected)&&paint(expected);window.readerMatches=()=>{const {app}=S.read();return json(P.readLateReader())===json(app)&&['app','peer'].every(source=>json(P.freshSnapshot(source))===json(app))};window.replay=order=>{const queued=P.queuedUpdates(),expected=order==='reverse'?[...queued].reverse():queued;return json(P.release(order))===json(expected)&&P.queuedUpdates().length===0};true
+eval window.originalId=F.state().docId;S.enter()
+wait S.read().peer!==null
+eval window.base=S.read().app;window.initial=[['r1','Hello',''],['r2','Removed words','Shot'],['r3','Last','']];window.narration=[['r1','Hello',''],['r2','Removed words!','Shot'],['r3','Last','']];window.narrationRemoved=[['r1','Hello!',''],['r3','Last','']];window.visual=[['r1','Hello',''],['r2','Removed words!','Shotx'],['r3','Last','']];window.visualRemoved=[['r1','Hello',''],['r3','Last','']];P.seedReader();true
+expect both(initial)&&readerMatches()&&clean()
+eval document.activeElement?.blur();true
+key ctrl KeyK
+wait !document.getElementById('cmdk').hidden
+type recovery
+expect document.querySelector('#cmdk [data-cmd="recovery"]')===null
+key Escape
+wait document.getElementById('cmdk').hidden
+eval P.hold('updates');at('r2','audioText',13)
+press !
+wait view(S.read().app,narration)
+expect paint(narration)&&caret('r2','audioText',14)&&view(S.read().peer,initial)
+eval window.removed=P.removeBeat('r2');true
+expect removed.kind==='written'&&view(S.read().peer,visualRemoved)&&view(S.read().app,narration)
+expect P.queuedUpdates().map(packet=>packet.to).join(',')==='peer,app'
+expect replay('forward')
+wait both(narrationRemoved)
+expect clean()&&Q('r2','audioText')===null&&Q('r2','visualText')===null&&json(P.readLateReader())===json(base)
+expect P.deliverToReader('app')&&readerMatches()
+eval window.afterNarrationRemoval=S.read().app;at('r3','audioText',2);window.undone=P.undoPeer();true
+expect undone.kind==='written'
+wait both(narration)
+expect caret('r3','audioText',2)&&clean()&&json(P.readLateReader())===json(afterNarrationRemoval)
+expect P.deliverToReader('peer')&&readerMatches()
+eval window.beforeVisual=S.read().app;P.hold('updates');at('r2','visualText',4)
+press x
+wait view(S.read().app,visual)
+expect paint(visual)&&caret('r2','visualText',5)&&view(S.read().peer,narration)
+eval window.removed=P.removeBeat('r2');true
+expect removed.kind==='written'&&view(S.read().peer,visualRemoved)&&view(S.read().app,visual)
+expect P.queuedUpdates().map(packet=>packet.to).join(',')==='peer,app'
+expect replay('reverse')
+wait both(visualRemoved)
+expect clean()&&Q('r2','audioText')===null&&Q('r2','visualText')===null&&json(P.readLateReader())===json(beforeVisual)
+expect P.deliverToReader('peer')&&readerMatches()
+eval window.afterVisualRemoval=S.read().app;at('r3','audioText',2);window.undone=P.undoPeer();true
+expect undone.kind==='written'
+wait both(visual)
+expect caret('r3','audioText',2)&&clean()&&json(P.readLateReader())===json(afterVisualRemoval)
+expect P.deliverToReader('app')&&readerMatches()
+eval at('r2','visualText',5)
+key ctrl KeyZ
+wait both(narration)
+expect caret('r2','visualText',4)&&clean()&&P.deliverToReader('app')&&readerMatches()
+key ctrl+shift KeyZ
+wait both(visual)
+expect caret('r2','visualText',5)&&clean()&&P.deliverToReader('peer')&&readerMatches()
+eval window.projection=S.read().app;window.left=S.leave();true
+expect left.ok&&S.read().peer===null&&P.readLateReader()===null&&P.freshSnapshot('app')===null&&P.freshSnapshot('peer')===null&&P.deliverToReader('app')===false&&clean()
+expect F.state().docId!==projection.docId&&F.state().docId!==originalId&&json({...F.state(),docId:projection.docId})===json(projection)
+expect paint(visual)&&caret('r2','visualText',5)
