@@ -102,7 +102,7 @@ test("out-of-scope input stays refused on the native path", async t => {
   assert.equal(beforeInput(target, "deleteContentBackward", null), true);
   visual.focus();
   setCellSelection(visual, 2);
-  assert.equal(beforeInput(visual, "insertText", "x"), true);
+  assert.equal(beforeInput(visual, "insertFromDrop", "x"), true);
   assert.equal(beforeInput(title, "insertText", "x"), true);
   await Promise.resolve();
   assert.deepEqual(hook.read(), before);
@@ -439,9 +439,10 @@ test("IME admission refuses a held editor and composition blocks non-IME input",
   release();
   assert.equal(compose(target, "start", ""), false);
   assert.equal(beforeInput(target, "insertParagraph", null), true);
+  assert.equal(beforeInput(target, "insertParagraph", null), true);
   assert.equal(compose(target, "end", ""), false);
   assert.equal(native.narrationHtml("R1"), "Captured words");
-  assert.deepEqual(refused.mock.calls.map(call => call.arguments), [["composition-held"], ["native-input-unavailable"]]);
+  assert.deepEqual(refused.mock.calls.map(call => call.arguments), [["composition-held"], ["native-input-pending"]]);
 });
 
 test("an unexpected browser input does not reset a buffered draft", async t => {
@@ -531,6 +532,16 @@ for (const committed of [true, false]) test("composition shields the DOM and " +
   assert.equal(cell("audioText").textContent, expected);
   if (committed) assert.deepEqual(cellSelection(cell("audioText")), { from: 3, to: 3 });
   assert.equal(seen.mock.callCount(), 1);
+  assert.equal(show.mock.callCount(), 1);
+});
+
+test("a flagged paragraph input with no active IME draft leaves the selection intact", async t => {
+  const show = await enter(t), target = cell("audioText");
+  target.focus();
+  setCellSelection(target, 1, 3);
+  assert.equal(beforeInput(target, "insertParagraph", null, { isComposing: true }), true);
+  assert.equal(text(), "Hello");
+  assert.deepEqual(cellSelection(target), { from: 1, to: 3 });
   assert.equal(show.mock.callCount(), 1);
 });
 

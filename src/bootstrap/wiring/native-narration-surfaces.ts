@@ -8,7 +8,7 @@ import { writerControls } from "./writer.ts";
 
 type ShownRow = Parameters<typeof paintedFromRow>[2];
 
-export interface NarrationSurface {
+export interface NativeTextSurface {
   readonly cellAt: (target: Element) => Element | null;
   readonly cell: (beat: string) => HTMLElement | null;
   readonly painted: (cell: Element, row: ShownRow) => boolean;
@@ -25,7 +25,7 @@ function select(cell: HTMLElement, anchor: number, head: number): void {
   document.getSelection()?.setBaseAndExtent(from.node, from.offset, to.node, to.offset);
 }
 
-export const splitNarration: NarrationSurface = Object.freeze({
+export const splitNarration: NativeTextSurface = Object.freeze({
   cellAt: (target: Element) => target.closest(SPLIT),
   cell: (beat: string) => document.querySelector<HTMLElement>(SPLIT + '[data-id="' + cssAttr(beat) + '"]'),
   painted: (cell: Element, row: ShownRow) => paintedFromRow(cell, "audioText", row),
@@ -51,7 +51,7 @@ export function writerSelectionCells(target: Element, selection: Selection | nul
   return anchor && head ? { anchor, head } : null;
 }
 
-export const writerNarration: NarrationSurface = Object.freeze({
+export const writerNarration: NativeTextSurface = Object.freeze({
   cellAt: (target: Element) => {
     const cells = writerSelectionCells(target, document.getSelection());
     return cells && cells.anchor === cells.head ? cells.head : null;
@@ -70,10 +70,26 @@ export function narrationAt(target: Element, editable: Element): Element | null 
   return editable.matches(SPLIT) ? editable : null;
 }
 
-export function narrationSurfaceOf(cell: Element): NarrationSurface {
+export function narrationSurfaceOf(cell: Element): NativeTextSurface {
   return cell.closest(WRITER) ? writerNarration : splitNarration;
 }
 
-export function shownNarrationSurface(): NarrationSurface {
+export function shownNarrationSurface(): NativeTextSurface {
   return writerControls()?.writerFlowControl() ? writerNarration : splitNarration;
 }
+
+const SPLIT_VISUAL = '#rows .cell-editable[data-field="visualText"]';
+const WRITER_VISUAL = '.wr-flow-visual-text[data-field="visualText"]';
+
+export const visualTextSurface: NativeTextSurface = Object.freeze({
+  cellAt: (target: Element) => target.closest(SPLIT_VISUAL + ", " + WRITER_VISUAL),
+  cell: (beat: string) => document.querySelector<HTMLElement>((writerControls()?.writerFlowControl() ? WRITER_VISUAL : SPLIT_VISUAL)
+    + '[data-id="' + cssAttr(beat) + '"]'),
+  painted: (cell: Element, row: ShownRow) => cell.closest("#rows") ? paintedFromRow(cell, "visualText", row)
+    : cell.getAttribute("data-id") === row.id && JSON.stringify(domKeys(cell)) === JSON.stringify(editorKeys(fromHtml(row.visualText ?? "", MEDIA))),
+  mayRestore: (old: Element, fresh: Element) => document.activeElement === document.body || document.activeElement === old || document.activeElement === fresh,
+  place: (cell: HTMLElement, _beat: string, anchor: number, head: number, scroll: boolean) => {
+    cell.focus({ preventScroll: !scroll });
+    select(cell, anchor, head);
+  }
+});

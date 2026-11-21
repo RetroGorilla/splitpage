@@ -1,5 +1,5 @@
 import { countInPieces, countInTags, findInCell, matchesInPieces, searchablePieces } from "../../core/text/search.ts";
-import type { FindControls, FindPorts } from "./ports.ts";
+import type { FindControls, FindNativeReplace, FindPorts } from "./ports.ts";
 import type { FindOptions } from "../../application/find-options.ts";
 import type { BulkTagTotals } from "../../application/commands/bulk-tags.ts";
 import type { CellRewrite, SharedRewritePorts } from "../../application/commands/document-edit.ts";
@@ -27,6 +27,7 @@ import { rewriteCellsCommand, rewrittenCopies } from "../../application/commands
 import { tagCellsCommand } from "../../application/commands/production-records.ts";
 import { cssAttr } from "../common/dom.ts";
 import { idMap } from "../../core/document/id-map.ts";
+import { beatPos } from "../../core/flow/flow.ts";
 import { escapeHtml, withoutLoneSurrogates } from "../../core/document/text-policy.ts";
 import { clampRange, deleteRange, replaceText, sliceCell } from "../../core/text/edits.ts";
 import { toHtml } from "../../core/text/html.ts";
@@ -46,6 +47,8 @@ let findIndex = -1;
 let findInTags = 0;
 let presentRanges: Range[] = [];
 let stopViewChange: (() => void) | null = null;
+let stopSplitFindChanges: (() => void) | null = null;
+let nativeReplace: FindNativeReplace | null = null;
 let releaseEscapeLock: (() => void) | null = null;
 let writerFind: WriterFindAccess | null = null;
 let writerMatches: readonly WriterSearchMatch[] = [];
@@ -68,7 +71,7 @@ function findNeedle() {
 }
 
 function cellReader(): (html: string) => readonly Run[] {
-  return (ports as FindRuntimePorts).shared?.()?.cells ?? (ports as FindRuntimePorts).text.cellOf;
+  return (ports as FindRuntimePorts).native?.()?.cells ?? (ports as FindRuntimePorts).shared?.()?.cells ?? (ports as FindRuntimePorts).text.cellOf;
 }
 
 function domOffset(model: readonly Run[], at: number) {
@@ -81,16 +84,19 @@ function domOffset(model: readonly Run[], at: number) {
   return at - media;
 }
 
-export function findInRows(rows: readonly DocumentRow[] | null | undefined, needle: string, matchCase: boolean) {
+export function findInRows(rows: readonly DocumentRow[] | null | undefined, needle: string, matchCase: boolean, nativeHits?: WriterSearchMatch[]) {
   const matches: FindMatch[] = [];
   let inTags = 0;
   if (!needle) return { matches: matches, inTags: inTags };
   const read = cellReader();
   (rows || []).forEach(function (row) {
-    ["visualText", "audioText"].forEach(function (field) {
+    (["visualText", "audioText"] as const).forEach(function (field) {
       const pieces = searchablePieces(read(row[field] as string));
-      const n = matchesInPieces(pieces, needle, matchCase).length;
-      for (let i = 0; i < n; i++) matches.push({ rowId: row.id, field: field, nth: i });
+      matchesInPieces(pieces, needle, matchCase).forEach((hit, nth) => {
+        matches.push({ rowId: row.id, field, nth });
+        nativeHits?.push(field === "visualText" ? { kind: "visual", rowId: row.id, ...hit }
+          : { kind: "narration", range: { anchor: beatPos(row.id, hit.from), head: beatPos(row.id, hit.to) } });
+      });
       inTags += countInPieces(pieces, needle, matchCase);
     });
   });
@@ -144,9 +150,13 @@ function sharedReplacement(html: string, needle: string, replacement: string, nt
 }
 
 function refreshFindMatches(keepIndex: boolean) {
+  const native = (ports as FindRuntimePorts).native?.();
+  const needle = findNeedle(), matchCase = (ports as FindRuntimePorts).options.matchesCase();
+  nativeReplace = null;
   if (writerFind) {
-    const found = writerFind.search(findNeedle(), (ports as FindRuntimePorts).options.matchesCase());
+    const found = writerFind.search(needle, matchCase);
     writerMatches = found.matches;
+    nativeReplace = native?.capture(writerMatches, needle, matchCase) ?? null;
     findInTags = found.inTags;
     findIndex = writerMatches.length ? keepIndex ? Math.max(0, Math.min(findIndex, writerMatches.length - 1)) : 0 : -1;
     updateFindCount();
@@ -154,7 +164,7 @@ function refreshFindMatches(keepIndex: boolean) {
   }
   if (findingInPresent()) {
     findMatches = [];
-    presentRanges = presentFindRanges(document.getElementById("prompter-content") as HTMLElement, findNeedle(), (ports as FindRuntimePorts).options.matchesCase());
+    presentRanges = presentFindRanges(document.getElementById("prompter-content") as HTMLElement, needle, matchCase);
     findInTags = 0;
     findIndex = presentRanges.length ? (keepIndex ? Math.max(0, Math.min(findIndex, presentRanges.length - 1)) : 0) : -1;
     if (highlightsSupported()) {
@@ -166,7 +176,9 @@ function refreshFindMatches(keepIndex: boolean) {
     return;
   }
   searchedRows = (ports as FindRuntimePorts).document.current()?.rows ?? [];
-  const found = findInRows(searchedRows, findNeedle(), (ports as FindRuntimePorts).options.matchesCase());
+  const hits = native ? [] as WriterSearchMatch[] : undefined;
+  const found = findInRows(searchedRows, needle, matchCase, hits);
+  if (native && hits) nativeReplace = native.capture(hits, needle, matchCase);
   findMatches = found.matches;
   findInTags = found.inTags;
   if (!findMatches.length) findIndex = -1;
@@ -266,6 +278,7 @@ function stepFind(dir: number) {
 
 function replaceCurrent() {
   if (findingInPresent()) return;
+  if ((ports as FindRuntimePorts).native?.()) { replaceNativeMatches(false); return; }
   if (writerFind) { replaceWriterMatches(false); return; }
   const needle = findNeedle();
   if (!needle || findIndex < 0 || !findMatches[findIndex]) return;
@@ -311,6 +324,7 @@ function replaceSharedMatch(m: FindMatch, needle: string, replacement: string, m
 
 export function replaceAll() {
   if (findingInPresent()) return;
+  if ((ports as FindRuntimePorts).native?.()) { replaceNativeMatches(true); return; }
   if (writerFind) { replaceWriterMatches(true); return; }
   const shared = (ports as FindRuntimePorts).shared?.() ?? null;
   if (!shared && (ports as FindRuntimePorts).sharedCommands.refuseUnsupported()) return;
@@ -392,6 +406,26 @@ function replaceWriterMatches(all: boolean) {
   if (all) (ports as FindRuntimePorts).notices.show("Replaced " + matches.length + " match" + (matches.length === 1 ? "" : "es"), "ok");
 }
 
+function replaceNativeMatches(all: boolean) {
+  if (!nativeReplace || !findNeedle() || !all && findIndex < 0) return;
+  const replacement = (document.getElementById("replace-input") as HTMLInputElement).value || "";
+  const inTags = findInTags;
+  writerFindUpdating = true;
+  let changed;
+  try { changed = nativeReplace(all ? null : findIndex, replacement); }
+  finally { writerFindUpdating = false; }
+  if (changed === null) return;
+  refreshFindMatches(!all);
+  revealFindMatch();
+  if (!all) return;
+  if (!changed) {
+    (ports as FindRuntimePorts).notices.show(inTags ? "Only found inside tags — rename it in Production instead." : "Nothing to replace.", "warn");
+    return;
+  }
+  const tagNote = !writerFind && inTags ? " · " + inTags + " left inside tag" + (inTags === 1 ? "" : "s") + " — rename those in Production" : "";
+  (ports as FindRuntimePorts).notices.show("Replaced " + changed + " match" + (changed === 1 ? "" : "es") + tagNote, "ok");
+}
+
 function toggleFindVisuals() {
   if (!writerFind) return;
   writerFind.setVisuals(!writerFind.visuals());
@@ -415,7 +449,7 @@ function mountWriterFindEvents() {
   function flush() {
     if (!active || !queued) return;
     queued = false;
-    refreshFindMatches(false);
+    refreshFindMatches(!!(ports as FindRuntimePorts).native?.());
     const navigate = !!bar?.contains(document.activeElement);
     writerRevealOwed = !navigate && writerMatches[findIndex]?.kind === "visual";
     revealFindMatch(navigate);
@@ -596,6 +630,20 @@ export function openFindBar() {
   }
   bar.classList.toggle("is-writer", !!writerFind);
   if (writerFind) mountWriterFindEvents();
+  if (!stopSplitFindChanges) {
+    let active = true, queued = false;
+    const stop = (ports as FindRuntimePorts).document.onChange(() => {
+      if (queued || writerFind || writerFindUpdating || findingInPresent() || !(ports as FindRuntimePorts).native?.()) return;
+      queued = true;
+      queueMicrotask(() => {
+        queued = false;
+        if (!active || writerFind || findingInPresent()) return;
+        refreshFindMatches(true);
+        revealFindMatch();
+      });
+    });
+    stopSplitFindChanges = () => { active = false; stop(); };
+  }
   paintFindVisuals();
   bar.classList.toggle("is-present", present);
   bar.hidden = false;
@@ -629,12 +677,15 @@ function firstMatchFrom(range: Range | null) {
   if (rowIdx === -1) return 0;
   const field = ((cell as Element).getAttribute("data-field") as string);
   const rows = ((ports as FindRuntimePorts).document.current() as FindDocumentView).rows;
-  const model = (ports as FindRuntimePorts).text.cellOf((rows[rowIdx] as DocumentRow)[field] as string);
-  const expect = projection(model);
+  const html = (rows[rowIdx] as DocumentRow)[field] as string;
+  const read = (ports as FindRuntimePorts).text.cellOf;
+  const model = ((ports as FindRuntimePorts).native?.()?.cells ?? read)(html);
+  const expect = projection(read(html));
   const hits = findInCell(model, findNeedle(), (ports as FindRuntimePorts).options.matchesCase());
   let nth = 0;
   while (nth < hits.length) {
-    const r = domRangeFor((cell as Element), (hits[nth] as { from: number; to: number; }).from, (hits[nth] as { from: number; to: number; }).to, expect);
+    const hit = hits[nth] as { from: number; to: number; };
+    const r = domRangeFor(cell as Element, domOffset(model, hit.from), domOffset(model, hit.to), expect);
     if (r && r.compareBoundaryPoints(Range.START_TO_START, range) >= 0) break;
     nth++;
   }
@@ -649,6 +700,9 @@ function firstMatchFrom(range: Range | null) {
 }
 
 export function closeFindBar() {
+  stopSplitFindChanges?.();
+  stopSplitFindChanges = null;
+  nativeReplace = null;
   stopWriterFindEvents?.();
   stopWriterFindEvents = null;
   releaseEscapeLock?.();
@@ -708,6 +762,9 @@ export function startFind(given: FindPorts): FindControls {
       disposed = true;
       if ((document.getElementById("findbar") as HTMLElement)) closeFindBar();
       else {
+        stopSplitFindChanges?.();
+        stopSplitFindChanges = null;
+        nativeReplace = null;
         stopWriterFindEvents?.();
         stopWriterFindEvents = null;
         writerFind = null;

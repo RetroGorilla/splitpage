@@ -17,7 +17,7 @@ import { writerControls } from "./writer.ts";
 import { sharedCommandGuard } from "./ports/shared-command-notices.ts";
 import { sharedRewritePorts } from "./ports/shared-rewrites.ts";
 import { sessionStamps, sharedSession } from "./session-owner.ts";
-import { sharedSessionParts } from "./shared-session.ts";
+import { nativeEditorFind, sharedSessionParts } from "./shared-session.ts";
 import { scriptCellOf } from "../richtext.ts";
 
 const find = owned<FindControls>();
@@ -35,6 +35,7 @@ export function mountFindFeature(): FindControls {
         readers: portText.productionReaders
       }),
       writer: () => writerControls()?.writerFlowControl()?.find ?? null,
+      native: nativeEditorFind,
       document: portDocument,
       edits: portEdits,
       text: portText,
