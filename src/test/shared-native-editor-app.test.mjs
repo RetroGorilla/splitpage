@@ -439,9 +439,10 @@ test("IME admission refuses a held editor and composition blocks non-IME input",
   release();
   assert.equal(compose(target, "start", ""), false);
   assert.equal(beforeInput(target, "insertParagraph", null), true);
+  assert.equal(beforeInput(target, "insertParagraph", null), true);
   assert.equal(compose(target, "end", ""), false);
   assert.equal(native.narrationHtml("R1"), "Captured words");
-  assert.deepEqual(refused.mock.calls.map(call => call.arguments), [["composition-held"], ["native-input-unavailable"]]);
+  assert.deepEqual(refused.mock.calls.map(call => call.arguments), [["composition-held"], ["native-input-pending"]]);
 });
 
 test("an unexpected browser input does not reset a buffered draft", async t => {

@@ -6,7 +6,7 @@ import type { SharedDocumentSession } from "../../application/session/shared-ses
 import { storedSceneName } from "../../core/document/scenes.ts";
 import { deleteRange, replaceText, sliceCell } from "../../core/text/edits.ts";
 import { cellLength, projection } from "../../core/text/runs.ts";
-import { findInCell } from "../../core/text/search.ts";
+import { searchablePieces } from "../../core/text/search.ts";
 import type { FindNativeAccess } from "../../features/find/ports.ts";
 import type { WriterSearchMatch } from "../../features/common/writer-find.ts";
 import { scriptCellOf } from "../richtext.ts";
@@ -48,7 +48,8 @@ function cellText(doc: ReturnType<NativeFindPorts["native"]["document"]> | NonNu
 export function createNativeEditorFind({ native, session, input, editAttribution, publish, report }: NativeFindPorts): FindNativeAccess {
   return {
     cells: scriptCellOf,
-    capture(matches, needle, matchCase) {
+    capture(matches) {
+      if (native.isClosingOrClosed()) return () => null;
       const shown = documentReader.current(), current = native.document();
       const shownRows = new Map(shown?.rows.map(row => [row.id, row]));
       const currentRows = new Map(current.rows.map(row => [row.id, row]));
@@ -74,11 +75,11 @@ export function createNativeEditorFind({ native, session, input, editAttribution
       });
       return (index, text) => {
         const owner = session(), typing = input();
-        if (!owner || !typing) return null;
+        if (!owner || !typing || native.isClosingOrClosed()) return null;
         try {
           const admission = owner.admit();
           if (admission?.kind === "failed") throw admission.error;
-          if (admission) { if (!admission.notified) owner.refuse(admission.reason); return null; }
+          if (admission) { if (!admission.notified) typing.refuseCommand(admission.reason); return null; }
           if (!editAllowed()) { owner.refuse(UNAVAILABLE); return null; }
           if (typing.beforePress()) return null;
           const hits = index === null ? found : [found[index]];
@@ -88,7 +89,7 @@ export function createNativeEditorFind({ native, session, input, editAttribution
           }
 
           const doc = native.document(), rows = new Map(doc.rows.map(row => [row.id, row]));
-          const read = new Map<string, { text: string; cell: ReturnType<typeof scriptCellOf>; ends: Map<number, number> }>();
+          const read = new Map<string, { text: string; cell: ReturnType<typeof scriptCellOf>; free: ReturnType<typeof searchablePieces>["free"] }>();
           const valid = hits.flatMap(hit => {
             if (!hit || hit === "unsupported") return [];
             const { range, target } = hit;
@@ -103,11 +104,11 @@ export function createNativeEditorFind({ native, session, input, editAttribution
               const html = cellText(doc, rows, target);
               if (typeof html !== "string") return [];
               const cell = target.cell === "name" ? [] : scriptCellOf(html);
-              source = { text: target.cell === "name" ? html : projection(cell), cell,
-                ends: new Map(findInCell(cell, needle, matchCase).map(({ from, to }) => [from, to])) };
+              source = { text: target.cell === "name" ? html : projection(cell), cell, free: searchablePieces(cell).free };
               read.set(key, source);
             }
-            if (source.text.slice(start, end) !== hit.text || target.cell !== "name" && source.ends.get(start) !== end) return [];
+            if (source.text.slice(start, end) !== hit.text ||
+              target.cell !== "name" && !source.free.some(piece => piece.start <= start && end <= piece.start + piece.text.length)) return [];
             return [{ target, start, end, source, range, selection }];
           });
           const first = valid[0];
@@ -134,7 +135,7 @@ export function createNativeEditorFind({ native, session, input, editAttribution
             const insert = sliceCell(next, start, start + length);
             step = native.commands.replaceText.withSelection(range, range, insert, editAttribution());
           }
-          if (step.result.kind === "refused" || step.result.kind === "recovery") { owner.refuse(step.result.reason); return null; }
+          if (step.result.kind === "refused" || step.result.kind === "recovery") { typing.refuseCommand(step.result.reason); return null; }
           if (step.result.kind === "unchanged") return 0;
           const landing = start + length;
           const point = target.cell === "narration" ? native.narrationCaret(target.beat, landing) : { beat: target.beat, offset: landing };
