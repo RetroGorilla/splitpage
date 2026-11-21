@@ -1,7 +1,14 @@
 import * as Y from "yjs";
+import { gallerySize } from "../../../core/document/gallery.ts";
+import { sceneBeforeBeat } from "../../../core/document/scenes.ts";
+import { HEADING_MARKER, SCENE_NAME_MAX, startsParagraph } from "../../../core/flow/flow.ts";
+import { headingLine } from "../../../core/text/edits.ts";
+import { cellLength, projection } from "../../../core/text/runs.ts";
 import { copyNativeCompoundInput } from "./compound-input.ts";
-import { nativeTextAllowed } from "./inline.ts";
+import { prepareNativeHeading, writeNativeHeading } from "./heading-commands.ts";
+import { nativeCellView, nativeStoredOffset, nativeTextAllowed } from "./inline.ts";
 import type { NativeDeltaItem } from "./inline.ts";
+import { nativeRankBetween, NativeRankError } from "./rank.ts";
 import { nativeSegmentSpans } from "./reader.ts";
 import { transactNativeCommand, transactPreparedNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
@@ -141,11 +148,15 @@ function writeSplit(script: NativeScript, beat: string, live: NativeLiveRange, d
   // why: given the formatting in force at its place, the boundary writes no formatting change of its own that a
   // later undo of that formatting could leave behind
   at.text.insertEmbed(index, { b: created }, index > 0 ? attributesBefore(at.text, index) : {});
-  const record = new Y.Map<unknown>();
-  roots.beats.set(created, record);
-  if (ranked) record.set("rank", rank);
-  roots.visuals.set(created, new Y.Text());
+  writeBeatRecord(script, created, ranked ? rank : undefined);
   return Object.freeze({ kind: "written", created });
+}
+
+function writeBeatRecord({ roots }: NativeScript, beat: string, rank: unknown): void {
+  const record = new Y.Map<unknown>();
+  roots.beats.set(beat, record);
+  if (rank !== undefined) record.set("rank", rank);
+  roots.visuals.set(beat, new Y.Text());
 }
 
 export function deleteAndSplitNativeRow(script: NativeScript, selection: NativeTextRange): NativeSplitOutcome | typeof UNCHANGED {
@@ -249,6 +260,98 @@ function merged(cuts: readonly Cut[]): Map<Y.Text, [number, number][]> {
   return byText;
 }
 
+function eraseCuts(cuts: ReturnType<typeof merged>): void {
+  for (const [text, ranges] of cuts) for (const [from, to] of ranges.reverse()) text.delete(from, to - from);
+}
+
+function headingPrefix(script: NativeScript, beat: string, length: number): Cut[] | null {
+  const cuts: Cut[] = [], parsed = new Map<string, ParsedPlace>();
+  let remaining = length;
+  for (const place of script.reader.narrationSpans(beat)) {
+    const segment = parsedPlace(script, place.segment, parsed), span = segment?.spans[place.span];
+    if (!segment || !span) return null;
+    const view = nativeCellView(span.items), count = Math.min(remaining, view.length);
+    const to = span.start + nativeStoredOffset(view, count);
+    if (to > span.start) cuts.push({ text: segment.text, from: span.start, to });
+    remaining -= count;
+    if (!remaining) return cuts;
+  }
+  return null;
+}
+
+function blankBeatAvailable(script: NativeScript, id: string): boolean {
+  const { roots, reader } = script, key = "b:" + id;
+  return !roots.beats.has(id) && !roots.visuals.has(id) && !roots.segments.has(key) &&
+    !roots.order.toArray().includes(key) && !reader.hasBeatMarker(id);
+}
+
+function writeBlankBeat(script: NativeScript, id: string, rank: string): void {
+  const { roots } = script, key = "b:" + id, segment = new Y.Map<unknown>();
+  roots.segments.set(key, segment);
+  segment.set("head", { b: id });
+  segment.set("text", new Y.Text());
+  roots.order.push([key]);
+  writeBeatRecord(script, id, rank);
+}
+
+type NativeMarkdownHeadingOutcome =
+  | { readonly kind: "written"; readonly beat: string; readonly offset: number; readonly consumed: number;
+      readonly heading?: string; readonly notice?: string }
+  | { readonly kind: "unchanged" }
+  | { readonly kind: "refused"; readonly reason: NativeRowRefusal | "rank" | "joined" };
+
+export function finalizeNativeHeading(script: NativeScript, beat: string, offset: number, enter: boolean): NativeMarkdownHeadingOutcome {
+  const unavailable = nativeAvailability(script);
+  if (unavailable) return refused(unavailable);
+  return transactPreparedNativeCommand(script, () => null, () => {
+    const { doc, reader, roots } = script, shown = reader.row(beat);
+    if (!shown) return refused("missing");
+    const snapshot = reader.document(), index = snapshot.rows.findIndex(row => row.id === beat);
+    if (!startsParagraph(snapshot, index) || !projection(shown.narration).startsWith(HEADING_MARKER)) return UNCHANGED;
+    if (shown.members.length !== 1) return { kind: "refused", reason: "joined" };
+    if (!Number.isInteger(offset) || offset < 0 || offset > cellLength(shown.narration)) return refused("range");
+    const follower = snapshot.rows[index + 1], runOn = !!follower && !startsParagraph(snapshot, index + 1);
+    const { name, restStart, notice } = headingLine(shown.narration, HEADING_MARKER, SCENE_NAME_MAX, enter ? offset : null, runOn);
+    const length = cellLength(shown.narration), count = restStart ?? HEADING_MARKER.length;
+    const cuts = headingPrefix(script, beat, count);
+    if (!cuts) return refused("range");
+    if (restStart === undefined) {
+      eraseCuts(merged(cuts));
+      return { kind: "written", beat, offset: Math.max(0, offset - count), consumed: count, ...(notice && { notice }) };
+    }
+    const remove = restStart === length && !cellLength(shown.visual) && !gallerySize(shown.fields);
+    const removed = remove ? shownRow(script, beat) : null;
+    if (remove && !removed) return refused("missing");
+    const existing = sceneBeforeBeat(snapshot, beat);
+    const next = follower && !sceneBeforeBeat(snapshot, follower.id) ? follower.id : null;
+    const blank = remove && !next ? mintNativeId(doc, "r") : null;
+    const precedingBlank = existing ? mintNativeId(doc, "r") + "-before" : null;
+    if (blank && !blankBeatAvailable(script, blank) || precedingBlank && !blankBeatAvailable(script, precedingBlank)) return refused("taken");
+    const heading = prepareNativeHeading(script, beat, mintNativeId(doc, "h"), name);
+    if (typeof heading === "string") return { kind: "refused", reason: heading };
+    let blankRank: string | null, precedingRank: string | null;
+    try {
+      blankRank = blank ? nativeRankBetween(heading.rank, heading.gap.after) : null;
+      precedingRank = precedingBlank ? nativeRankBetween(heading.gap.before, heading.rank) : null;
+    } catch (error) {
+      if (error instanceof NativeRankError) return { kind: "refused", reason: "rank" };
+      throw error;
+    }
+    const ranges = merged(removed?.cuts ?? cuts);
+    const at = heading.at;
+    const shifted = at === null ? null : at - (ranges.get(heading.text) ?? [])
+      .reduce((length, [start, end]) => length + Math.max(0, Math.min(at, end) - start), 0);
+    eraseCuts(ranges);
+    for (const segment of removed?.heads ?? []) segment.delete("head");
+    writeNativeHeading(script, { ...heading, at: shifted });
+    if (blank && blankRank) writeBlankBeat(script, blank, blankRank);
+    if (precedingBlank && precedingRank) writeBlankBeat(script, precedingBlank, precedingRank);
+    const landing = remove ? blank ?? next ?? beat : beat;
+    roots.beats.get(landing)?.delete("paragraphStart");
+    return { kind: "written", beat: landing, offset: 0, consumed: count, heading: heading.id };
+  }, refused, () => true);
+}
+
 // why: design decision 4: removing a row deletes the narration the reader shows for it with its boundary, or its
 // segment's head key; its record and visual cell stay, so a removal's undo brings back what others wrote there unseen
 export function removeNativeRows(script: NativeScript, beats: readonly string[]): NativeRowOutcome {
@@ -264,7 +367,7 @@ export function removeNativeRows(script: NativeScript, beats: readonly string[])
       if (!row) return;
       rows.push(row);
     }
-    for (const [text, ranges] of merged(rows.flatMap(row => row.cuts))) for (const [from, to] of ranges.reverse()) text.delete(from, to - from);
+    eraseCuts(merged(rows.flatMap(row => row.cuts)));
     for (const segment of new Set(rows.flatMap(row => row.heads))) segment.delete("head");
     outcome = WRITTEN;
   });

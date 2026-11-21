@@ -30,6 +30,12 @@ export interface SharedSessionParts {
   readonly author: SharedAuthorPort;
 }
 
+interface NativeWriterPaintBinding {
+  readonly headingCandidate: (beat: string) => boolean;
+  readonly finish: () => void;
+  readonly dispose: () => void;
+}
+
 export interface SharedBindings {
   readonly enter: (parts: SharedSessionParts) => void;
   readonly settle: () => string | null;
@@ -107,7 +113,7 @@ export interface SharedEditorBackend {
   readonly nativeRecords?: NativeEditorRecords;
   readonly nativeFind?: FindNativeAccess;
   readonly hasWriterPreview?: (beat: string) => boolean;
-  readonly bindWriterPaint?: (root: HTMLElement) => (() => void) | undefined;
+  readonly bindWriterPaint?: (root: HTMLElement) => NativeWriterPaintBinding | undefined;
   readonly structure?: (intent: DocumentStructureIntent) => CommandOutcome;
 }
 
@@ -135,7 +141,7 @@ export function hasNativeWriterPreview(beat: string): boolean {
   return running?.backend.hasWriterPreview?.(beat) ?? false;
 }
 
-export function bindNativeWriterPaint(root: HTMLElement): (() => void) | undefined {
+export function bindNativeWriterPaint(root: HTMLElement): NativeWriterPaintBinding | undefined {
   return running?.backend.bindWriterPaint?.(root);
 }
 

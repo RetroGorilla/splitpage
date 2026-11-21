@@ -69,6 +69,7 @@ export interface FlowWriterPorts {
   readonly visualKeydown?: (event: KeyboardEvent, cell: HTMLElement) => boolean;
   readonly clipboard?: SurfacePorts["clipboard"];
   readonly paintedText?: PaintedTextSource;
+  readonly nativeHeadingCandidate?: (beat: string) => boolean;
   readonly bufferedText?: SurfacePorts["bufferedText"];
   readonly lifetime: Pick<CommonDocumentSession, "epoch">;
   readonly heldSelection: Pick<EditorSelection<object, unknown, unknown>, "rememberFlow" | "resolveFlow" | "forget">;

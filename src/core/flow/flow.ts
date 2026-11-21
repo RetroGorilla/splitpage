@@ -8,7 +8,7 @@ import { normalizeBeatLength, rowStatusId } from "../document/timing.ts";
 import { normalizeScenes, scenesAfterRemoval as removedSceneAnchors, scenesInOrder, withSceneFirstBeat, newScene } from "../document/scenes.ts";
 import type { DocumentScene } from "../document/scenes.ts";
 import type { DocumentShape } from "../document/validated.ts";
-import { breakLine, clamp, clampRange, deleteRange, insertCell, insertText, joinCells, markThroughout, replaceText, setMark, sliceCell, splitCell } from "../text/edits.ts";
+import { breakLine, clamp, clampRange, deleteRange, headingLine, insertCell, insertText, joinCells, markThroughout, replaceText, setMark, sliceCell, splitCell } from "../text/edits.ts";
 import { toHtml } from "../text/html.ts";
 import { cellLength, commentIds, normalizeCell, OBJ, projection } from "../text/runs.ts";
 import type { MarkName, Marks, Run } from "../text/runs.ts";
@@ -759,24 +759,11 @@ export function finalizeHeading(doc: FlowDoc, rowId: string, enterAt: number | n
   if (!row || !isPendingHeading(doc, rowId, ports)) return null;
   const cell = ports.cells(row.audioText);
   const text = projection(cell);
-  const lineEnd = text.indexOf("\n") === -1 ? text.length : text.indexOf("\n");
-  const end = enterAt === null ? lineEnd : Math.min(enterAt, lineEnd);
-  const name = text.slice(HEADING_MARKER.length, end).trim();
   const fallback = keep ?? caretAt(beatPos(row.id, enterAt ?? text.length));
-  if (!name) return withoutMarker(doc, index, ports, fallback);
-  if (sliceCell(cell, 0, end).some(run => !!run.marks.tag || !!run.marks.cmt?.length)) {
-    return withoutMarker(doc, index, ports, fallback, "A scene header can't hold tags or comments.");
-  }
   const follower = doc.rows[index + 1];
   const anchors = sceneAnchors(doc);
-  const hasRunOn = lineEnd === text.length && !!follower && !startsParagraph(doc, index + 1);
-  if (enterAt === null && hasRunOn) {
-    return withoutMarker(doc, index, ports, fallback, "A scene header can't hold several beats. Press Enter after the header's words.");
-  }
-  if (Array.from(name).length > SCENE_NAME_MAX) {
-    return withoutMarker(doc, index, ports, fallback, "A scene name can be up to " + SCENE_NAME_MAX + " characters, so this stays as narration.");
-  }
-  const restStart = end < text.length && text[end] === "\n" ? end + 1 : end;
+  const { name, restStart, notice } = headingLine(cell, HEADING_MARKER, SCENE_NAME_MAX, enterAt, !!follower && !startsParagraph(doc, index + 1));
+  if (restStart === undefined) return withoutMarker(doc, index, ports, fallback, notice);
   const rest = sliceCell(cell, restStart);
   const rows = doc.rows.slice();
   const existing = anchors.get(row.id);
