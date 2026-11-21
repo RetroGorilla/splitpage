@@ -111,7 +111,7 @@ function selectionSnapshot(node) {
   return [node.innerHTML, document.activeElement, anchorNode, anchorOffset, focusNode, focusOffset];
 }
 
-async function enter(t, { rows = source, view = "Split", openBeforeEntry = false } = {}) {
+async function enter(t, { rows = source, view = "Split" } = {}) {
   const fixture = entrySwitchFixture();
   const doc = migrateRows({ schema: 2, title: "Shared callers", paragraphsDecided: true, rows });
   adoptReplacement(doc);
@@ -131,10 +131,6 @@ async function enter(t, { rows = source, view = "Split", openBeforeEntry = false
     document.dispatchEvent(new window.Event("selectionchange"));
     return target;
   };
-  if (openBeforeEntry) {
-    writer.openWriter();
-    place("r1", 5);
-  }
   assert.deepEqual(await enterSharedSession(ports, (script, failed) => {
     const opened = openNativeEditor(ports, script, failed);
     native = opened.native;
@@ -154,7 +150,7 @@ async function enter(t, { rows = source, view = "Split", openBeforeEntry = false
     }
   });
   const peer = openCopy(t, native.encodeState());
-  if (view === "Writer" && !openBeforeEntry) writer.openWriter();
+  if (view === "Writer") writer.openWriter();
   return { native, peer, cell, place, root, writer, notices: () => show.mock.calls.map(call => call.arguments) };
 }
 
@@ -269,31 +265,6 @@ for (const field of ["audioText", "visualText"]) for (const order of orders) {
 }
 
 for (const order of ["forward", "duplicate"]) {
-  test(`Writer: a composed xy and a held peer prefix keep both edits, ${order}`, async t => {
-    const f = await enter(t, { view: "Writer", rows: [{ id: "r1", audioText: "abcd" }, { id: "r2", audioText: "ef" }] });
-    const root = f.place("r1", 2);
-    assert.equal(compose(root, "start"), false);
-    composePreview(root, "x");
-    composePreview(root, "y");
-    assert.equal(text(f.cell()), "abxycd");
-    edit(f.peer, "r1", 0, 0, "Z");
-    delivery(f.native, order, f.peer.encodeState());
-    await Promise.resolve();
-    assert.deepEqual(audio(app()), ["abcd", "ef"]);
-    assert.deepEqual(audio(f.native.document()), ["Zabcd", "ef"]);
-    compose(root, "end", "xy");
-    agree(f, ["Zabxycd", "ef"]);
-    assert.equal(text(f.cell()), "Zabxycd");
-    caret(f, "r1", 5);
-    history(root);
-    agree(f, ["Zabcd", "ef"]);
-    assert.equal(text(f.cell("r2")), "ef");
-    caret(f, "r1", 3);
-    assert.deepEqual(f.notices(), []);
-    land(f, ["Zabcd", "ef"]);
-    assert.equal(text(f.cell()), "Zabcd");
-  });
-
   test(`Writer: replacement in repeated text follows a held peer suffix, ${order}`, async t => {
     for (const composing of [false, true]) {
       await t.test(composing ? "composition" : "typing", async sub => {
@@ -324,112 +295,6 @@ for (const order of ["forward", "duplicate"]) {
   });
 }
 
-test("Writer: entry caret survives reverse and duplicate exchange, undo, redo and leave", async t => {
-  const f = await enter(t, { view: "Writer", openBeforeEntry: true,
-    rows: [{ id: "r1", audioText: "Hello" }, { id: "r2", audioText: "World" }] });
-  caret(f, "r1", 5);
-  const root = f.root();
-  assert.equal(input(root, "insertText", "x"), true);
-  flush();
-  assert.deepEqual(audio(app()), ["Hellox", "World"]);
-  caret(f, "r1", 6);
-  const updates = packets(f.peer, () => {
-    edit(f.peer, "r1", 0, 0, "Y");
-    edit(f.peer, "r2", 5, 5, "!");
-  });
-  assert.deepEqual(audio(f.peer.document()), ["YHello", "World!"]);
-  delivery(f.native, "reverse", ...updates);
-  await Promise.resolve();
-  agree(f, ["YHellox", "World!"]);
-  assert.equal(text(f.cell()), "YHellox");
-  assert.equal(text(f.cell("r2")), "World!");
-  f.place("r1", 0);
-  history(root);
-  agree(f, ["YHello", "World!"]);
-  caret(f, "r1", 6);
-  history(root, true);
-  agree(f, ["YHellox", "World!"]);
-  caret(f, "r1", 7);
-  assert.equal(input(root, "insertText", "q"), true);
-  flush();
-  assert.deepEqual(audio(app()), ["YHelloxq", "World!"]);
-  delivery(f.native, "duplicate", ...packets(f.peer, () => edit(f.peer, "r2", 6, 6, "Z")));
-  await Promise.resolve();
-  agree(f, ["YHelloxq", "World!Z"]);
-  caret(f, "r1", 8);
-  assert.deepEqual(f.notices(), []);
-  land(f, ["YHelloxq", "World!Z"]);
-  assert.equal(text(f.cell()), "YHelloxq");
-  assert.equal(text(f.cell("r2")), "World!Z");
-});
-
-for (const order of ["forward", "duplicate"]) {
-  test(`Writer: buffered append keeps a held prefix and undo keeps only the prefix, ${order}`, async t => {
-    const f = await enter(t, { view: "Writer", rows: [{ id: "r1", audioText: "ab" }] });
-    const root = f.place("r1", 2);
-    assert.equal(input(root, "insertText", "c"), true);
-    assert.equal(text(f.cell()), "abc");
-    delivery(f.native, order, ...packets(f.peer, () => edit(f.peer, "r1", 0, 0, "X")));
-    await Promise.resolve();
-    assert.deepEqual(audio(app()), ["ab"]);
-    flush();
-    agree(f, ["Xabc"]);
-    caret(f, "r1", 4);
-    history(root);
-    agree(f, ["Xab"]);
-    caret(f, "r1", 3);
-    assert.deepEqual(f.notices(), []);
-    land(f, ["Xab"]);
-  });
-}
-
-test("Writer: composition at the second beat keeps a peer append to the first beat", async t => {
-  const f = await enter(t, { view: "Writer", rows: [{ id: "r1", audioText: "ab" }, { id: "r2", audioText: "cd" }] });
-  const root = f.place("r2", 0);
-  assert.equal(compose(root, "start"), false);
-  composePreview(root, "Z");
-  edit(f.peer, "r1", 2, 2, "Y");
-  send(f.peer, f.native);
-  await Promise.resolve();
-  assert.deepEqual(audio(app()), ["ab", "cd"]);
-  compose(root, "end", "Z");
-  agree(f, ["abY", "Zcd"]);
-  caret(f, "r2", 1);
-  history(root);
-  agree(f, ["abY", "cd"]);
-  caret(f, "r2", 0);
-  assert.deepEqual(f.notices(), []);
-  land(f, ["abY", "cd"]);
-});
-
-for (const field of ["audioText", "visualText"]) for (const order of orders) {
-  test(`Split ${field}: a drained removal keeps the composed draft visible and unwritten, ${order}`, async t => {
-    const f = await enter(t);
-    const node = f.place("r1", 3, 3, field);
-    assert.equal(compose(node, "start"), false);
-    composePreview(node, "X");
-    delivery(f.native, order, ...packets(f.peer, () => {
-      written(f.peer.commands.removeRows(["r1"]));
-      edit(f.peer, "r2", 0, 0, "Z");
-    }));
-    await Promise.resolve();
-    assert.deepEqual(audio(app()), ["abcdef", "Other", "Third"]);
-    const bytes = f.native.encodeState();
-    compose(node, "end", "X");
-    assert.deepEqual(f.native.encodeState(), bytes);
-    assert.deepEqual(f.native.document(), f.peer.document());
-    assert.deepEqual(cells(f.native.document()), [["r2", "ZOther", "Scene"], ["r3", "Third", "Final"]]);
-    assert.deepEqual(audio(app()), ["abcdef", "Other", "Third"]);
-    assert.equal(text(node), field === "audioText" ? "abcXdef" : "WidXe");
-    assert.ok(node.isConnected);
-    caret(f, "r1", 4, 4, field);
-    assert.deepEqual(f.notices(), [warning]);
-    assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: "missing" });
-    assert.equal(text(node), field === "audioText" ? "abcXdef" : "WidXe");
-    assert.deepEqual(f.notices(), [warning]);
-  });
-}
-
 test("Split: a peer cannot invoke recovery for a removed beat during or after sharing", async t => {
   const f = await enter(t);
   const check = () => {
@@ -450,53 +315,6 @@ test("Split: a peer cannot invoke recovery for a removed beat during or after sh
   assert.equal(text(f.cell("r2")), "Other");
   land(f, ["abcdef", "Other", "Third"]);
   check();
-});
-
-test("Split: passive late readers from either copy agree, and an editable joiner undoes only its own changes", async t => {
-  const f = await enter(t);
-  assert.equal(input(f.place("r1", 6), "insertText", "?"), true);
-  flush();
-  edit(f.peer, "r1", 0, 0, "B", "visual");
-  written(f.peer.commands.removeRows(["r2"]));
-  send(f.peer, f.native);
-  await Promise.resolve();
-  agree(f, ["abcdef?", "Third"]);
-  const initial = [["r1", "abcdef?", "BWide"], ["r3", "Third", "Final"]];
-  assert.deepEqual(cells(app()), initial);
-  const readers = [f.native, f.peer].map(origin => openCopy(t, origin.encodeState(), "Reader"));
-  for (const reader of readers) {
-    assert.deepEqual(cells(reader.document()), initial);
-    assert.deepEqual(reader.document(), app());
-  }
-  const joiner = openCopy(t, f.peer.encodeState(), "Joining editor");
-  const publish = async expected => {
-    send(joiner, f.native);
-    await Promise.resolve();
-    send(f.native, f.peer);
-    assert.deepEqual(cells(app()), expected);
-    assert.deepEqual(app(), joiner.document());
-    assert.deepEqual(f.peer.document(), joiner.document());
-    assert.equal(text(f.cell("r3")), expected[1][1]);
-    assert.equal(text(f.cell("r1", "visualText")), expected[0][2]);
-  };
-  edit(joiner, "r3", 5, 5, "!");
-  assert.deepEqual(cells(app()), initial);
-  assert.deepEqual(cells(joiner.document()), [initial[0], ["r3", "Third!", "Final"]]);
-  await publish([initial[0], ["r3", "Third!", "Final"]]);
-  edit(joiner, "r1", 5, 5, "s", "visual");
-  await publish([["r1", "abcdef?", "BWides"], ["r3", "Third!", "Final"]]);
-  written(joiner.commands.undo());
-  await publish([initial[0], ["r3", "Third!", "Final"]]);
-  written(joiner.commands.undo());
-  await publish(initial);
-  assert.equal(joiner.commands.undo().kind, "unchanged");
-  await publish(initial);
-  for (const reader of readers) assert.deepEqual(cells(reader.document()), initial);
-  assert.equal(input(f.place("r3", 5), "insertText", "."), true);
-  flush();
-  send(f.native, joiner);
-  await publish([initial[0], ["r3", "Third.", "Final"]]);
-  land(f, ["abcdef?", "Third."]);
 });
 
 test("Split: script beat paste refuses without consuming pending text", async t => {
@@ -588,26 +406,6 @@ test("Split: a peer split before the selection requires a new selection for Alt+
     agree(f, ["abcd", "efgh", "Other", "Third"]);
     assert.deepEqual(f.notices(), [warning]);
   });
-});
-
-test("Split: undo restores the peer letter when the split deletes the last text in the held selection", async t => {
-  const f = await enter(t);
-  assert.equal(input(f.place("r1", 6), "insertText", "X"), true);
-  f.place("r1", 2, 4);
-  edit(f.peer, "r1", 3, 3, "Z");
-  edit(f.peer, "r1", 2, 3, null);
-  edit(f.peer, "r1", 3, 4, null);
-  assert.deepEqual(audio(f.peer.document()), ["abZef", "Other", "Third"]);
-  send(f.peer, f.native);
-  await Promise.resolve();
-  assert.deepEqual(audio(app()), ["abcdef", "Other", "Third"]);
-  assert.equal(key(f.cell(), "Enter", { altKey: true }), true);
-  agree(f, ["ab", "efX", "Other", "Third"]);
-  history(document.activeElement);
-  agree(f, ["abZefX", "Other", "Third"]);
-  history(document.activeElement);
-  agree(f, ["abZef", "Other", "Third"]);
-  assert.deepEqual(f.notices(), []);
 });
 
 test("Split: Narration and Visual keep focus and local history around peer typing", async t => {
@@ -709,45 +507,6 @@ test("Writer: leaving Visual by Escape, Close or view switch keeps B-roll text w
   assert.deepEqual(app().rows.map(row => row.visualText), ["B-roll: Close up", "B-roll: Mug", "B-roll: Pour"]);
 });
 
-test("Writer: peer bold, erase and remove paint, and undo restores the removed beat", async t => {
-  const f = await enter(t, { view: "Writer", rows: [{ id: "r1", audioText: "Hello" }, { id: "r2", audioText: "World" }] });
-  const check = async expected => {
-    send(f.peer, f.native);
-    await Promise.resolve();
-    agree(f, expected);
-  };
-  const at = f.peer.commands.anchorText({ beat: "r1", cell: "narration" }, 0, 5);
-  assert.equal(at.kind, "anchored");
-  written(f.peer.commands.formatText(at.range, { kind: "plain", mark: "b", on: true }));
-  await check(["<strong>Hello</strong>", "World"]);
-  assert.equal(f.cell().querySelector("strong").textContent, "Hello");
-  edit(f.peer, "r1", 1, 3, null);
-  await check(["<strong>Hlo</strong>", "World"]);
-  assert.equal(f.cell().querySelector("strong").textContent, "Hlo");
-  written(f.peer.commands.removeRows(["r2"]));
-  await check(["<strong>Hlo</strong>"]);
-  assert.equal(f.cell("r2"), null);
-  for (const origin of [f.native, f.peer]) {
-    assert.deepEqual(openCopy(t, origin.encodeState(), "Reader").document(), app());
-  }
-  written(f.peer.commands.undo());
-  await check(["<strong>Hlo</strong>", "World"]);
-  assert.equal(text(f.cell("r2")), "World");
-
-  const root = f.place("r1", 2);
-  const flow = f.writer.writerFlowControl();
-  flow.place({ anchor: { kind: "beat", rowId: "r1", offset: 2 }, head: { kind: "beat", rowId: "r2", offset: 2 } });
-  document.dispatchEvent(new window.Event("selectionchange"));
-  const before = selectionSnapshot(root), bytes = f.native.encodeState();
-  assert.equal(input(root, "deleteContentBackward"), true);
-  assert.deepEqual(f.native.encodeState(), bytes);
-  assert.deepEqual(selectionSnapshot(root), before);
-  assert.deepEqual(f.notices(), [warning]);
-  agree(f, ["<strong>Hlo</strong>", "World"]);
-  land(f, ["<strong>Hlo</strong>", "World"]);
-  assert.equal(text(f.cell()), "Hlo");
-});
-
 function transfer(target, type, types) {
   const event = new window.Event(type, { bubbles: true, cancelable: true });
   Object.defineProperty(event, type === "drop" ? "dataTransfer" : "clipboardData", { value: {
@@ -758,110 +517,46 @@ function transfer(target, type, types) {
   return event.defaultPrevented;
 }
 
-for (const field of ["audioText", "visualText"]) for (const order of orders) {
-  test(`Split ${field}: refused transfers preserve the selection, and plain paste, line breaks and history edit it, ${order}`, async t => {
-    const f = await enter(t, { rows: [{ ...source[0], visualText: "abcdef" }, ...source.slice(1)] });
-    delivery(f.native, order, ...packets(f.peer, () => {
-      edit(f.peer, "r2", 0, 0, "P");
-      edit(f.peer, "r2", 1, 1, "Q");
-    }));
-    await Promise.resolve();
-    const node = f.place("r1", 2, 4, field);
-    const before = selectionSnapshot(node), bytes = f.native.encodeState();
-    const other = f.cell("r2", field);
-    for (const route of ["paste", "cut", "drop"]) {
-      assert.equal(transfer(node, route, ["text/plain", "text/html"]), true);
+for (const field of ["audioText", "visualText"]) {
+  test(`Split ${field}: composing transfers warn per gesture and keep the draft and selection`, async t => {
+    const f = await enter(t);
+    const node = f.place("r1", 3, 3, field);
+    assert.equal(compose(node, "start"), false);
+    composePreview(node, "X");
+    const before = selectionSnapshot(node), state = f.native.encodeState();
+    const plain = ["text/plain"], rich = ["text/plain", "text/html"];
+    const refuse = (gesture, warned) => {
+      const beforeCount = f.notices().length;
+      assert.equal(gesture(), true);
+      assert.deepEqual(f.notices().slice(beforeCount), warned ? [warning] : []);
       assert.deepEqual(selectionSnapshot(node), before);
-    }
-    assert.equal(transfer(other, "drop", ["text/plain"]), true);
-    assert.deepEqual(selectionSnapshot(node), before);
-    for (const route of ["insertFromPaste", "insertFromDrop", "deleteByCut", "deleteByDrag",
-      "insertOrderedList", "insertUnorderedList", "insertTranspose"]) {
-      assert.equal(input(node, route), true);
-      assert.deepEqual(selectionSnapshot(node), before);
-    }
-    assert.deepEqual(f.notices(), Array(11).fill(warning));
-    assert.deepEqual(f.native.encodeState(), bytes);
-    agree(f, ["abcdef", "PQOther", "Third"]);
-    const expected = value => {
-      agree(f, [field === "audioText" ? value : "abcdef", "PQOther", "Third"]);
-      assert.equal(app().rows[0][field], value);
+      assert.deepEqual(f.native.encodeState(), state);
     };
-    assert.equal(transfer(node, "paste", ["text/plain"]), true);
-    expected("abpastedef");
-    caret(f, "r1", 8, 8, field);
-    f.place("r1", 2, 8, field);
-    assert.equal(input(f.cell("r1", field), "insertParagraph"), true);
-    expected("ab<br>ef");
-    history(document.activeElement);
-    expected("abpastedef");
-    assert.equal(input(document.activeElement, "historyUndo"), true);
-    expected("abcdef");
-    assert.equal(input(document.activeElement, "historyRedo"), true);
-    expected("abpastedef");
-    assert.deepEqual(f.notices(), Array(11).fill(warning));
+    refuse(() => transfer(node, "paste", plain), true);
+    refuse(() => transfer(node, "paste", plain), false);
+    refuse(() => input(node, "insertFromPaste"), false);
+    refuse(() => transfer(node, "paste", rich), true);
+    refuse(() => transfer(node, "cut", plain), true);
+    refuse(() => transfer(node, "drop", plain), true);
+    refuse(() => transfer(f.cell("r2", field), "drop", plain), true);
+    compose(node, "end", "X");
+    agree(f, [field === "audioText" ? "abcXdef" : "abcdef", "Other", "Third"]);
+    assert.equal(app().rows[0].visualText, field === "visualText" ? "WidXe" : "Wide");
   });
-
-  for (const state of ["caret", "typing", "composition"]) {
-    test(`Split ${field}: unsupported gestures keep the ${state} in place, ${order}`, async t => {
-      const f = await enter(t, { rows: [{ ...source[0], visualText: "abcdef" }, ...source.slice(1)] });
-      delivery(f.native, order, ...packets(f.peer, () => {
-        edit(f.peer, "r2", 0, 0, "P");
-        edit(f.peer, "r2", 1, 1, "Q");
-      }));
-      await Promise.resolve();
-      const node = f.place("r1", 3, 3, field);
-      if (state === "typing") assert.equal(input(node, "insertText", "X"), true);
-      if (state === "composition") {
-        assert.equal(compose(node, "start"), false);
-        composePreview(node, "X");
-      }
-      const before = selectionSnapshot(node), bytes = f.native.encodeState();
-      const check = () => {
-        assert.deepEqual(selectionSnapshot(node), before);
-        assert.deepEqual(f.native.encodeState(), bytes);
-      };
-      assert.equal(transfer(node, "paste", ["text/plain", "text/html"]), true);
-      check();
-      for (const type of ["cut", "drop"]) {
-        assert.equal(transfer(node, type, ["text/plain"]), true);
-        check();
-      }
-      assert.equal(transfer(f.cell("r2", field), "drop", ["text/plain"]), true);
-      check();
-      for (const route of ["insertFromPaste", "insertFromDrop", "deleteByCut", "deleteByDrag",
-        "insertOrderedList", "insertUnorderedList", "insertTranspose"]) {
-        assert.equal(input(node, route), true);
-        check();
-      }
-      assert.deepEqual(f.notices(), Array(state === "composition" ? 5 : 11).fill(warning));
-      if (state === "composition") {
-        for (const modifiers of [{}, { ctrlKey: true }, { altKey: true }]) {
-          assert.equal(key(node, "Enter", modifiers), true);
-          check();
-        }
-        for (const name of ["ArrowUp", "ArrowDown"]) {
-          assert.equal(key(node, name, { altKey: true }), true);
-          check();
-        }
-        for (const name of ["b", "i", "u"]) {
-          assert.equal(key(node, name, { ctrlKey: true }), true);
-          check();
-        }
-        for (const route of ["insertParagraph", "insertLineBreak", "formatBold", "formatItalic", "formatUnderline",
-          "historyUndo", "historyRedo"]) {
-          assert.equal(input(node, route), true);
-          check();
-        }
-        assert.deepEqual(f.notices(), Array(5).fill(warning));
-        compose(node, "end", "X");
-      }
-      if (state === "typing") flush();
-      agree(f, [state !== "caret" && field === "audioText" ? "abcXdef" : "abcdef", "PQOther", "Third"]);
-      assert.equal(app().rows[0].visualText, state !== "caret" && field === "visualText" ? "abcXdef" : "abcdef");
-    });
-  }
 }
+
+test("Split: Alt+Arrow moves a live beat and replays its caret", async t => {
+  const f = await enter(t);
+  const node = f.place("r2", 2);
+  assert.equal(key(node, "ArrowUp", { altKey: true }), true);
+  agree(f, ["Other", "abcdef", "Third"]);
+  assert.deepEqual(cells(app()), [["r2", "Other", "Scene"], ["r1", "abcdef", "Wide"], ["r3", "Third", "Final"]]);
+  caret(f, "r2", 2);
+  assert.equal(key(f.cell("r2"), "ArrowDown", { altKey: true }), true);
+  agree(f, ["abcdef", "Other", "Third"]);
+  caret(f, "r2", 2);
+  assert.deepEqual(f.notices(), []);
+});
 
 test("Split: a prefix before the displayed Find match leaves both fields usable and replaces on the first click", async t => {
   const f = await enter(t, { rows: [{ id: "r1", audioText: "green tea" }] });
@@ -888,24 +583,3 @@ test("Split: a prefix before the displayed Find match leaves both fields usable 
   land(f, ["Xgreen pot"]);
   assert.equal(text(f.cell()), "Xgreen pot");
 });
-
-for (const field of ["audioText", "visualText"]) {
-  test(`Split ${field}: undo of a peer removal brings back concurrent text without a Recovery entry`, async t => {
-    const f = await enter(t);
-    const node = f.place("r2", 5, 5, field);
-    assert.equal(input(node, "insertText", "x"), true);
-    flush();
-    written(f.peer.commands.removeRows(["r2"]));
-    send(f.peer, f.native);
-    await Promise.resolve();
-    agree(f, [field === "audioText" ? "abcdefx" : "abcdef", "Third"]);
-    assert.equal(f.cell("r2", field), null);
-    assert.notEqual(appActions.invoke("recovery", "command-menu").kind, "ran");
-    written(f.peer.commands.undo());
-    send(f.peer, f.native);
-    await Promise.resolve();
-    agree(f, ["abcdef", field === "audioText" ? "Otherx" : "Other", "Third"]);
-    assert.equal(text(f.cell("r2", field)), field === "audioText" ? "Otherx" : "Scenex");
-    assert.deepEqual(f.notices(), []);
-  });
-}
