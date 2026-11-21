@@ -7,14 +7,13 @@ import { isBlankBeat, swapBeatsCommand } from "../../application/commands/rows.t
 import { sceneBeforeBeat, scenesInOrder, storedSceneName } from "../../core/document/scenes.ts";
 import { beatPos, headingPos } from "../../core/flow/flow.ts";
 import { cellLength, projection } from "../../core/text/runs.ts";
-import { mapThroughCell } from "../../core/text/selection.ts";
 import { domToPos, posToDom, readSelection } from "../../features/common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../../features/common/cell-selection.ts";
 import { noteFieldPainted, renderRow } from "../../features/rows/render.ts";
 import { undoGesture } from "../../features/undo/routes.ts";
 import { scriptCellOf } from "../richtext.ts";
 import { guardUnload } from "../startup/page-lifetime.ts";
-import { narrationAt, narrationKeys, narrationSurfaceOf, shownNarrationSurface, writerNarration, writerSelectionCells } from "./native-narration-surfaces.ts";
+import { narrationAt, narrationSurfaceOf, shownNarrationSurface, writerNarration, writerSelectionCells } from "./native-narration-surfaces.ts";
 import { rowDrag } from "./editor-owners.ts";
 import type { NarrationSurface } from "./native-narration-surfaces.ts";
 import { documentReader } from "./ports/document.ts";
@@ -27,6 +26,7 @@ interface NativeInputPorts {
   readonly editAttribution: () => NativeEditStamp;
   readonly now?: () => number;
   readonly report: ReportPort;
+  readonly paintIsCurrent?: () => boolean;
   readonly publish?: (buffered?: { readonly cell: Element; readonly beat: string }) => void;
 }
 
@@ -143,13 +143,14 @@ function moveDirection(key: KeyboardEvent): -1 | 1 | null {
   return key.key === "ArrowUp" ? -1 : key.key === "ArrowDown" ? 1 : null;
 }
 
-export function mountNativeSharedInput({ native, session, editAttribution, now = Date.now, report, publish = () => {} }: NativeInputPorts) {
+export function mountNativeSharedInput({ native, session, editAttribution, now = Date.now, report, paintIsCurrent = () => false, publish = () => {} }: NativeInputPorts) {
   let draft: Draft | null = null, stopped: string | null = null, uncertain = false;
   let composingInside: Pick<Draft, "cell" | "selection" | "html"> | null = null;
   let composingText = "";
   let timer: ReturnType<typeof setTimeout> | undefined;
   let placement: { readonly buffered: Draft; readonly caret: RelativePoint } | null = null;
   let lastWrite: number | null = null;
+  const movePaint = new Map<Element, TrackedPaint>();
   const stopPaint = session.subscribe(() => {
     writerControls()?.renderWriter();
     const placed = placement;
@@ -161,6 +162,35 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (offset === null) return;
     surface.place(fresh, beat, offset, offset, false);
   });
+
+  function clearMovePaint(): void {
+    for (const paint of movePaint.values()) paint.dispose();
+    movePaint.clear();
+  }
+
+  function shownWriterBeat(cell: Element, beat: string): boolean {
+    const row = documentReader.read(doc => doc?.rows.find(item => item.id === beat));
+    return !!row && writerNarration.painted(cell, row);
+  }
+
+  function trackMovePaint(): void {
+    const active = document.activeElement;
+    const cells = active && writerSelectionCells(active, document.getSelection());
+    if (stopped || !cells || cells.anchor === cells.head) { clearMovePaint(); return; }
+    for (const [cell, paint] of movePaint) {
+      if (cell === cells.anchor || cell === cells.head) continue;
+      paint.dispose();
+      movePaint.delete(cell);
+    }
+    // why: identical visible text can contain different native positions after an unpublished edit
+    if (!paintIsCurrent()) return;
+    for (const cell of [cells.anchor, cells.head]) {
+      const beat = cell.getAttribute("data-id");
+      if (beat && cell !== draft?.cell && !movePaint.has(cell) && shownWriterBeat(cell, beat)) {
+        movePaint.set(cell, native.trackNarrationPaint(beat));
+      }
+    }
+  }
 
   function narrationCell(beat: string, like: Element): HTMLElement | null {
     return narrationSurfaceOf(like).cell(beat);
@@ -748,11 +778,13 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
 
   function acrossMoveSelection({ anchor, head, backward }: Extract<NonNullable<ReturnType<typeof captureMoveSelection>>, { kind: "across" }>) {
     const buffered = draft;
+    trackMovePaint();
     function capture({ cell, offset }: MoveEndpoint, assoc: 0 | -1) {
       const beat = cell.getAttribute("data-id") ?? "";
       if (buffered?.cell === cell) return { beat, offset, preview: draftEndpoint(buffered, offset, assoc, true) };
-      const row = documentReader.read(doc => doc?.rows.find(item => item.id === beat));
-      return row && writerNarration.painted(cell, row) ? { beat, offset, shown: row.audioText ?? "" } : null;
+      if (!shownWriterBeat(cell, beat)) return null;
+      const point = movePaint.get(cell)?.point(offset, assoc);
+      return point && native.narrationOffset(beat, { from: point }, assoc) !== null ? { beat, point } : null;
     }
     const start = capture(backward ? head : anchor, 0), end = capture(backward ? anchor : head, -1);
     if (!start || !end) return null;
@@ -761,14 +793,11 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (reason) return { kind: "refused", reason } as const;
     if (!buffered) publish();
     function resolve(point: NonNullable<typeof start>, index: 0 | 1, assoc: 0 | -1) {
-      const { beat, offset, preview, shown } = point, html = native.narrationHtml(beat);
+      const { beat, preview } = point, html = native.narrationHtml(beat);
       const cell = writerNarration.cell(beat), row = documentReader.read(doc => doc?.rows.find(item => item.id === beat));
       if (!cell || !row || !writerNarration.painted(cell, row) || row.audioText !== html) return null;
-      // why: pending typing can defer peer repaint in the other beat, where there is no retained typing paint
       const rebased = preview ? resolveDraftEndpoint(beat, preview, selection.inserted?.[index], assoc)
-        : shown === html ? offset
-          : mapThroughCell({ anchor: offset, head: offset, affinity: assoc === 0 ? "forward" : "backward" },
-            narrationKeys(shown), narrationKeys(html)).head;
+        : point.point ? native.narrationOffset(beat, { from: point.point }, assoc) : null;
       return rebased === null ? null : native.narrationCaret(beat, rebased, assoc === 0);
     }
     return moveSelection(resolve(start, 0, 0), resolve(end, 1, -1), backward);
@@ -804,11 +833,13 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   const stopUnload = guardUnload(window, () => !!finish());
   window.addEventListener("pagehide", pageHide);
   document.addEventListener("visibilitychange", visibility);
+  document.addEventListener("selectionchange", trackMovePaint);
   for (const type of EVENTS) window.addEventListener(type, intercept, true);
   return {
     finish,
     beforePress,
     currentCaret,
+    clearMovePaint,
     captureMoveSelection,
     settleMoveSelection,
     show,
@@ -817,6 +848,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       else native.endTypingGroup();
     },
     buffered: () => draft !== null,
+    hasWriterPreview: (beat: string) => draft?.surface === writerNarration && draft.beat === beat,
     stop: () => { if (!stopped) stop(PENDING); },
     recover: (reopened: ReturnType<typeof openNativeSession>): Uint8Array | null => {
       if (!draft || draft.composing || uncertain || !draft.range) return null;
@@ -832,10 +864,12 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       clearTimeout(timer);
       draft?.paint?.dispose();
       draft = null;
+      clearMovePaint();
       stopPaint();
       stopUnload();
       window.removeEventListener("pagehide", pageHide);
       document.removeEventListener("visibilitychange", visibility);
+      document.removeEventListener("selectionchange", trackMovePaint);
       for (const type of EVENTS) window.removeEventListener(type, intercept, true);
     }
   };

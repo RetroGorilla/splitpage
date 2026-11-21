@@ -59,6 +59,7 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
     if (published === revision) return;
     const snapshot = native.document();
     if (buffered) keepNativeFieldPaint(buffered, snapshot.rows.find(row => row.id === buffered.beat));
+    input?.clearMovePaint();
     published = revision;
     publication.publish(snapshot, "remote");
   }
@@ -104,6 +105,7 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
   const backend: SharedEditorBackend = {
     replica: publication.replica, parts: null, unsupportedCommands: UNSUPPORTED,
     nativeRecords: records,
+    hasWriterPreview: beat => input?.hasWriterPreview(beat) ?? false,
     structure: createNativeEditorStructure({ native, session: () => commandSession, input: () => input, publish, report: ports.report }),
     undo: admission => nativeUndoRoute({ native, admission, input: () => input, publish: () => { publish(); } }),
     bind: session => {
@@ -116,7 +118,8 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
         stopRecords = () => { stopEvents(); stopTimes(); };
       }
       input ??= mountNativeSharedInput({
-        native, session, editAttribution: () => ({ at: new Date(ports.now()).toISOString(), by: actor }), now: ports.now, report: ports.report, publish
+        native, session, editAttribution: () => ({ at: new Date(ports.now()).toISOString(), by: actor }), now: ports.now, report: ports.report,
+        publish, paintIsCurrent: () => published === native.revision()
       });
     },
     unbind: () => {

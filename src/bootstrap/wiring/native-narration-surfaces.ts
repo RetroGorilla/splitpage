@@ -20,10 +20,6 @@ const SPLIT = '#rows .cell-editable[data-field="audioText"][data-id]';
 const WRITER = "#writer-doc";
 const MEDIA = Object.freeze({ media: true });
 
-export function narrationKeys(html: string | null | undefined): string[] {
-  return editorKeys(fromHtml(html ?? "", MEDIA));
-}
-
 function select(cell: HTMLElement, anchor: number, head: number): void {
   const from = posToDom(cell, anchor), to = anchor === head ? from : posToDom(cell, head);
   document.getSelection()?.setBaseAndExtent(from.node, from.offset, to.node, to.offset);
@@ -62,7 +58,7 @@ export const writerNarration: NarrationSurface = Object.freeze({
   },
   cell: (beat: string) => document.querySelector<HTMLElement>(WRITER + ' .wr-beat[data-id="' + cssAttr(beat) + '"]'),
   painted: (cell: Element, row: ShownRow) => cell.getAttribute("data-id") === row.id
-    && JSON.stringify(domKeys(cell)) === JSON.stringify(narrationKeys(row.audioText)),
+    && JSON.stringify(domKeys(cell)) === JSON.stringify(editorKeys(fromHtml(row.audioText ?? "", MEDIA))),
   mayRestore: () => document.activeElement === document.body || document.activeElement === document.querySelector(WRITER),
   place: (_cell: HTMLElement, beat: string, anchor: number, head: number, scroll: boolean) => {
     writerControls()?.writerFlowControl()?.place({ anchor: beatPos(beat, anchor), head: beatPos(beat, head) }, scroll);

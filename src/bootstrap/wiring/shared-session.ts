@@ -104,6 +104,7 @@ export interface SharedEditorBackend {
   readonly dispose: (attempt: (step: () => void) => boolean) => void;
   readonly unsupportedCommands?: string;
   readonly nativeRecords?: NativeEditorRecords;
+  readonly hasWriterPreview?: (beat: string) => boolean;
   readonly structure?: (intent: DocumentStructureIntent) => CommandOutcome;
 }
 
@@ -121,6 +122,10 @@ export function nativeEditorRecords() {
 
 export function nativeEditorActive(): boolean {
   return !!running?.backend.stopIngress;
+}
+
+export function hasNativeWriterPreview(beat: string): boolean {
+  return running?.backend.hasWriterPreview?.(beat) ?? false;
 }
 
 function copyOf(doc: ValidatedDocument): Record<string, unknown> {

@@ -30,7 +30,7 @@ import { screenIsStale } from "../../features/rows/render.ts";
 import { breakUndoGroup, undoOwner } from "./undo.ts";
 import { initializeFlowParagraphs } from "../../application/commands/flow.ts";
 import { sessionStamps, sharedSession, standaloneSession } from "./session-owner.ts";
-import { nativeEditorActive } from "./shared-session.ts";
+import { hasNativeWriterPreview, nativeEditorActive } from "./shared-session.ts";
 import { writerFlowCommands } from "./ports/writer-flow.ts";
 import { writerVisualBuffer } from "./ports/writer-visual-buffer.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
@@ -57,6 +57,8 @@ const UNCHANGED: CommandOutcome = Object.freeze({ kind: "noop" });
 // why: the native session refuses every command before planning, so an unchanged beat sync must not reach it
 const writerFieldText: WholeFieldTextCommit = Object.freeze({
   commit: (rowId: string, field: string, runs: readonly Run[]): CommandOutcome => {
+    // why: leaving a beat during selection changes can sync its preview while native input still owns the write
+    if (field === "audioText" && hasNativeWriterPreview(rowId)) return UNCHANGED;
     const row = nativeEditorActive() ? documentReader.current()?.rows.find(candidate => candidate.id === rowId) : undefined;
     return row?.[field] === toHtml(runs) ? UNCHANGED : wholeFieldText.commit(rowId, field, runs);
   }

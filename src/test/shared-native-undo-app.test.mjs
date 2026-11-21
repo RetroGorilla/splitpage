@@ -309,6 +309,7 @@ for (const [key, anchor, head, moved] of [
     const place = (a, h) => {
       const from = posToDom(beat(anchor), a), to = posToDom(beat(head), h);
       document.getSelection().setBaseAndExtent(from.node, from.offset, to.node, to.offset);
+      document.dispatchEvent(new window.Event("selectionchange"));
     };
     const check = async (order, a, h, count) => {
       assert.deepEqual(rowOrder(), order);
@@ -339,6 +340,62 @@ for (const [key, anchor, head, moved] of [
     assert.equal(show.mock.callCount(), 0);
   });
 }
+
+for (const endpoint of ["anchor", "head"]) {
+  test("Writer: a pending peer insertion in repeated text rebases the cross-beat " + endpoint, async t => {
+    const rows = threeBeats();
+    rows[1] = { ...rows[1], audioText: "aaaaa" };
+    const show = await enter(t, rows), view = writer(t);
+    const [anchor, head, moved] = endpoint === "anchor"
+      ? ["r2", "r1", ["r2", "r1", "r3"]]
+      : ["r1", "r2", ["r1", "r3", "r2"]];
+    const check = (order, editedOffset) => {
+      const live = document.getSelection();
+      assert.deepEqual(rowOrder(), order);
+      assert.equal(live.rangeCount, 1);
+      assert.equal(domToPos(beat(anchor), live.anchorNode, live.anchorOffset), endpoint === "anchor" ? editedOffset : 2);
+      assert.equal(domToPos(beat(head), live.focusNode, live.focusOffset), endpoint === "head" ? editedOffset : 2);
+    };
+    view.caret("r1", 1);
+    typeKeys(root(), "X");
+    const from = posToDom(beat(anchor), 2), to = posToDom(beat(head), 2);
+    document.getSelection().setBaseAndExtent(from.node, from.offset, to.node, to.offset);
+    document.dispatchEvent(new window.Event("selectionchange"));
+    assert.equal(hook.nativePeer.type("r2", 0, "a").kind, "written");
+    assert.equal(app(1), "aaaaa");
+    assert.equal(press(root(), "ArrowDown", { altKey: true, ctrlKey: false }), true);
+    check(moved, 3);
+    assert.equal(hook.nativePeer.type("r2", 0, "a").kind, "written");
+    await Promise.resolve();
+    view.caret("r3", 1);
+    assert.equal(press(root(), "z"), true);
+    check(["r1", "r2", "r3"], 4);
+    view.caret("r3", 1);
+    assert.equal(press(root(), "y"), true);
+    check(moved, 4);
+    await Promise.resolve();
+    assert.deepEqual(hook.read().peer, hook.read().app);
+    assert.equal(show.mock.callCount(), 0);
+  });
+}
+
+test("Writer: a cross-beat move with untracked peer paint leaves the selection and draft untouched", async t => {
+  const rows = threeBeats();
+  rows[1] = { ...rows[1], audioText: "aaaaa" };
+  const show = await enter(t, rows), view = writer(t);
+  view.caret("r1", 1);
+  typeKeys(root(), "X");
+  assert.equal(hook.nativePeer.type("r2", 0, "a").kind, "written");
+  const from = posToDom(beat("r1"), 2), to = posToDom(beat("r2"), 2), live = document.getSelection();
+  live.setBaseAndExtent(from.node, from.offset, to.node, to.offset);
+  document.dispatchEvent(new window.Event("selectionchange"));
+  assert.equal(press(root(), "ArrowDown", { altKey: true, ctrlKey: false }), true);
+  assert.deepEqual(rowOrder(), ["r1", "r2", "r3"]);
+  assert.deepEqual([live.anchorNode, live.anchorOffset, live.focusNode, live.focusOffset], [from.node, from.offset, to.node, to.offset]);
+  assert.deepEqual([app(0), app(1), peer(0), peer(1)], ["Hello", "aaaaa", "Hello", "aaaaaa"]);
+  assert.equal(beat("r1").textContent.replace(/\u200b/g, ""), "HXello");
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+});
 
 for (const [name, kind] of Object.entries(views)) {
   test(name + ": Alt+Enter splits only in Split", async t => {
