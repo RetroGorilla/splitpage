@@ -21,6 +21,9 @@ log, checkpoints and local write receipts in browser IndexedDB and through deskt
 ([#1668](https://github.com/RetroGorilla/splitpage/pull/1668), [#1679](https://github.com/RetroGorilla/splitpage/pull/1679)).
 These components have their own integration tests. The editor's shared mode is still entered only through
 `__sharedTest`. The hook defaults to the native session and selects the old backend with `{ backend: "legacy" }`.
+Entering and leaving native shared mode carries the focused Writer or Split selection across the repaint.
+If either endpoint cannot be restored, the caret goes to the end of the first visible beat.
+With no visible beat, focus goes to the Writer editor or Split's Add beat button.
 There is no release entry for shared mode. Slice 8 remains the removal of the old adapter and the mapping of its tests in
 [the build order](#11-build-order).
 

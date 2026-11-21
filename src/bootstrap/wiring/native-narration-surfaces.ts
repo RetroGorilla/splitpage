@@ -134,8 +134,10 @@ export function captureNativeSwitchSelection(): (() => void) | null {
       } else placeWriterEnd();
     };
   }
-  const selector = [SPLIT, SPLIT_VISUAL, WRITER_VISUAL].find(candidate => active?.matches(candidate));
-  if (!selector) return null;
+  if (!active) return null;
+  const selector = [SPLIT, SPLIT_VISUAL, WRITER_VISUAL].find(candidate => active.matches(candidate));
+  const focused = active.getAttribute("data-id");
+  if (!selector || !focused) return null;
   const anchor = cellPoint(selector, selection?.anchorNode ?? null, selection?.anchorOffset ?? 0);
   const head = cellPoint(selector, selection?.focusNode ?? null, selection?.focusOffset ?? 0);
   const surface = selector === SPLIT ? splitNarration : visualTextSurface;
@@ -148,7 +150,7 @@ export function captureNativeSwitchSelection(): (() => void) | null {
       if (from === to) surface.place(to, head.id, anchor.offset, head.offset, false);
       else {
         const a = posToDom(from, anchor.offset), h = posToDom(to, head.offset);
-        to.focus({ preventScroll: true });
+        (surface.cell(focused) ?? from).focus({ preventScroll: true });
         document.getSelection()?.setBaseAndExtent(a.node, a.offset, h.node, h.offset);
       }
       return;

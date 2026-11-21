@@ -2,14 +2,18 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import { openNativeSession } from "../adapters/collab/native/session.ts";
+import { restoreDesktop, useDesktopForTest } from "../adapters/desktop/desktop-port.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { sanitizeHtml, scriptCellOf } from "../bootstrap/richtext.ts";
+import { draftsTesting } from "../bootstrap/wiring/drafts.ts";
+import { flushDraftNow } from "../bootstrap/wiring/recovery-owners.ts";
 import { adoptReplacement, sharedSession } from "../bootstrap/wiring/session-owner.ts";
 import { forceLeaveSharedSession } from "../bootstrap/wiring/shared-session.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { beatPos } from "../core/flow/flow.ts";
 import { domToPos, posToDom } from "../features/common/cell-dom.ts";
 
+window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};
 localStorage.setItem("splitpage-onboarding", JSON.stringify({ v: 1, done: true, skipped: true }));
 await bootApp();
@@ -23,12 +27,15 @@ const flow = () => writerControls().writerFlowControl();
 const narration = (writer, id) => document.querySelector(writer
   ? `#writer-doc .wr-beat[data-id="${id}"]`
   : `#rows .cell-editable[data-field="audioText"][data-id="${id}"]`);
-const project = (beats = rows) => migrateRows({ schema: 2, title: "Caret round trip", paragraphsDecided: true, rows: beats });
+const project = (beats = rows) => migrateRows({
+  schema: 2, title: "Caret round trip", paragraphsDecided: true, rows: structuredClone(beats)
+});
 
 function start(t, writer) {
   t.after(() => {
     if (sharedSession()) forceLeaveSharedSession();
     writerControls().closeWriter();
+    document.activeElement.blur?.();
   });
   adoptReplacement(project());
   if (writer) writerControls().openWriter();
@@ -41,12 +48,12 @@ function place(writer, anchor, head) {
   }
   const a = posToDom(narration(false, anchor.rowId), anchor.offset);
   const h = posToDom(narration(false, head.rowId), head.offset);
-  narration(false, head.rowId).focus();
+  narration(false, anchor.rowId).focus();
   document.getSelection().setBaseAndExtent(a.node, a.offset, h.node, h.offset);
 }
 
 function check(writer, anchor, head) {
-  assert.equal(document.activeElement, writer ? writerRoot() : narration(false, head.rowId), "editing host has focus");
+  assert.equal(document.activeElement, writer ? writerRoot() : narration(false, anchor.rowId), "editing host has focus");
   if (writer) {
     assert.deepEqual(flow().selection(), { anchor, head });
   } else {
@@ -54,6 +61,14 @@ function check(writer, anchor, head) {
     assert.equal(domToPos(narration(false, anchor.rowId), selection.anchorNode, selection.anchorOffset), anchor.offset);
     assert.equal(domToPos(narration(false, head.rowId), selection.focusNode, selection.focusOffset), head.offset);
   }
+}
+
+function typeNative(text) {
+  const input = new window.InputEvent("beforeinput", {
+    bubbles: true, cancelable: true, inputType: "insertText", data: text
+  });
+  document.activeElement.dispatchEvent(input);
+  assert.equal(input.defaultPrevented, true);
 }
 
 function stored(beats) {
@@ -86,18 +101,72 @@ for (const writer of [true, false]) {
     });
   }
 
+  test(`${surface} restores both ends of a cross-beat range on a changed paint`, async t => {
+    start(t, writer);
+    const anchor = beatPos("r2", 4), head = beatPos("r1", 3);
+    place(writer, anchor, head);
+    const oldText = narration(writer, "r1").firstChild;
+    const changed = rows.map(row => ({ ...row, audioText: row.audioText + "!" }));
+    assert.deepEqual(await hook.enterFrom(stored(changed)), success);
+    assert.notEqual(narration(writer, "r1").firstChild, oldText);
+    check(writer, anchor, head);
+  });
+
   test(`${surface} places the caret at the end of the first beat when the selected beat is absent`, async t => {
     start(t, writer);
     place(writer, beatPos("r1", 2), beatPos("r1", 5));
     assert.deepEqual(await hook.enterFrom(stored([rows[1]])), success);
     const end = beatPos("r2", rows[1].audioText.length);
     check(writer, end, end);
-    const input = new window.InputEvent("beforeinput", {
-      bubbles: true, cancelable: true, inputType: "insertText", data: "!"
-    });
-    document.activeElement.dispatchEvent(input);
-    assert.equal(input.defaultPrevented, true);
+    typeNative("!");
     assert.deepEqual(hook.leave(), success);
     assert.equal(hook.read().app.rows[0].audioText, "World again!");
+  });
+
+  test(`${surface} restores focus when a peer removes the selected beat just before leave`, async t => {
+    start(t, writer);
+    assert.deepEqual(await hook.enter(), success);
+    place(writer, beatPos("r1", 2), beatPos("r2", 5));
+    assert.equal(hook.nativePeer.removeBeat("r1").kind, "written");
+    assert.deepEqual(hook.leave(), success);
+    const end = beatPos("r2", rows[1].audioText.length);
+    check(writer, end, end);
+  });
+
+  test(`${surface} flushes pending standalone typing on entry and keeps the caret after it`, async t => {
+    const writes = [];
+    useDesktopForTest({
+      writeDraft: async payload => {
+        writes.push({ text: JSON.parse(payload.stateJson).rows[0].audioText, shared: sharedSession() });
+        return { ok: true, seq: payload.seq };
+      },
+      discardDraft: async () => ({ ok: true }),
+      setDocumentState: () => {}
+    });
+    start(t, writer);
+    t.after(async () => {
+      try { await flushDraftNow(); } finally { restoreDesktop(); }
+    });
+    const initial = beatPos("r1", 5);
+    place(writer, initial, initial);
+    assert.equal(narration(writer, "r1").textContent, "Hello there");
+    const { node, offset } = posToDom(narration(writer, "r1"), initial.offset);
+    node.insertData(offset, "!");
+    document.getSelection().collapse(node, offset + 1);
+    document.activeElement.dispatchEvent(new window.InputEvent("input", {
+      bubbles: true, inputType: "insertText", data: "!"
+    }));
+    assert.equal(draftsTesting().status().pending, true);
+    assert.deepEqual(writes, []);
+    assert.deepEqual(await hook.enter(), success);
+    assert.deepEqual(writes, [{ text: "Hello! there", shared: false }]);
+    assert.equal(hook.read().peer.rows[0].audioText, "Hello! there");
+    const afterTyping = beatPos("r1", 6);
+    check(writer, afterTyping, afterTyping);
+    typeNative("?");
+    assert.deepEqual(hook.leave(), success);
+    assert.equal(hook.read().app.rows[0].audioText, "Hello!? there");
+    const afterLeave = beatPos("r1", 7);
+    check(writer, afterLeave, afterLeave);
   });
 }

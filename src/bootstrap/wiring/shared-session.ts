@@ -269,8 +269,8 @@ async function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { reado
   // why: an adoption microtask can interrupt a native transaction and queue another microtask with its terminal bytes
   const entrySettled = backend.failedEntry ? new Promise<void>(resolve => { setTimeout(resolve, 0); }) : null;
   let restoreSelection: (() => void) | null = null;
+  faults.attempt(() => { restoreSelection = backend.captureSelection?.() ?? null; });
   try {
-    restoreSelection = backend.captureSelection?.() ?? null;
     const admission = { admit: () => made.session ? made.session.admit() : { kind: "rejected" as const, reason: SHARED_SWITCHING } };
     // why: replacement listeners may already see the shared owner, so Ctrl+Z must reach its undo owner first
     made.stopRoute = routeSharedUndo(backend.undo(admission));
@@ -367,7 +367,8 @@ function leaveAvailableSession(ports: SharedSwitchPorts): SharedSwitchOutcome {
   let holding: string | null = null;
   if (!faults.attempt(() => { holding = now.backend.settle(); })) return failed(ports, faults, SHARED_LEAVE_FAILED);
   if (holding) return { ok: false, reason: holding };
-  const restoreSelection = now.backend.captureSelection?.();
+  let restoreSelection: (() => void) | null = null;
+  faults.attempt(() => { restoreSelection = now.backend.captureSelection?.() ?? null; });
   const holds: { session: (() => void) | null; commands: (() => void) | null } = { session: null, commands: null };
   let resumeIngress: (() => void) | undefined;
   const keep = (error: unknown): SharedSwitchOutcome => {
