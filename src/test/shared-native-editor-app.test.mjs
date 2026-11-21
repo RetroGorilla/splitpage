@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
+import { readFileSync } from "node:fs";
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import { adoptReplacement, currentCapabilities, onSessionChange, sharedSession } from "../bootstrap/wiring/session-owner.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
@@ -204,10 +205,32 @@ for (const [members, offset, beat, at, expected] of [
   assert.equal(hook.read().peer.rows[0].audioText, expected);
 });
 
+test("a complete stored native script opens with empty undo and redo", async t => {
+  const rows = ["one", "two", "three", "four"].map((audioText, i) => ({ id: "r" + i, audioText }));
+  const stored = migrateRows({ title: "Stored script", rows });
+  const bytes = nativeBytes(stored, undefined, undefined, source => {
+    const at = source.commands.anchorText({ beat: "r0", cell: "narration" }, 3);
+    assert.equal(at.kind, "anchored");
+    assert.equal(source.commands.typeText(at.range, "!", {}).kind, "written");
+    assert.equal(source.commands.setField({ kind: "beat", id: "r1", field: "status" }, "ready").kind, "written");
+    assert.equal(source.commands.undo().kind, "written");
+  });
+  adoptReplacement(migrateRows({ title: "Unopened", rows: [{ id: "local", audioText: "local" }] }));
+  t.after(cleanSession);
+  assert.deepEqual(await hook.enterFrom(bytes), { ok: true });
+  const opened = hook.read();
+  assert.deepEqual(opened.app.rows.map(row => row.audioText), ["one!", "two", "three", "four"]);
+  assert.deepEqual(opened.peer, opened.app);
+  assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
+  assert.equal(hook.nativePeer.step("redo").kind, "unchanged");
+  await Promise.resolve();
+  assert.deepEqual(hook.read(), opened);
+});
+
 test("native stored entry rejects old and malformed state and retains the four original beats", async () => {
   const doc = migrateRows({ title: "Formats", rows: ["one", "two", "three", "four"].map((audioText, index) => ({ id: "r" + index, audioText })) });
   adoptReplacement(doc);
-  const oldState = "AQe+oKMuACgBBG1ldGEFZG9jSWQBdyAwMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZigBBG1ldGEFZXh0cmEBdwJ7fSgBBG1ldGEJZmlsZVRpdGxlAXYAKAEEbWV0YQdjYXB0dXJlAXYAJwEEbWV0YQV0aXRsZQInAQRtZXRhCnRpdGxlTWFya3MBBAC+oKMuBAdGb3JtYXRzAA==";
+  const oldState = readFileSync(new URL("../../tests/collab/legacy-app/four-beat-state.base64", import.meta.url), "utf8").trim();
   const malformed = nativeBytes(doc, undefined, ydoc => {
     const segments = ydoc.getMap("segments");
     for (const name of segments.keys()) segments.delete(name);

@@ -29,6 +29,7 @@ await bootApp();
 after(closeApp);
 
 const hook = window.__sharedTest;
+const renderNotice = notices.show;
 const UNAVAILABLE = ["This is not available in a shared session yet.", "warn"];
 const cell = (id = "r1") => document.querySelector('#rows .cell-editable[data-id="' + id + '"][data-field="audioText"]');
 const beat = (id = "r1") => document.querySelector('#writer-doc .wr-beat[data-id="' + id + '"]');
@@ -624,7 +625,10 @@ for (const [name, kind] of Object.entries(views)) {
   });
 
   test(name + ": Replace and Replace all undo independently and keep a concurrent peer prefix", async t => {
-    await enter(t, [{ id: "r1", audioText: "a cup of tea" }, { id: "r2", audioText: "one cup" }]);
+    const show = await enter(t, [{ id: "r1", audioText: "a cup of tea" }, { id: "r2", audioText: "one cup" }]);
+    show.mock.mockImplementation(renderNotice);
+    const toasts = () => [...document.querySelectorAll("#toast-host .toast:not(.is-leaving)")];
+    for (const toast of toasts()) if (toast.textContent === "Replaced 1 match") toast.dismiss();
     kind.open(t);
     const field = search(t, "cup", "mug");
     const read = () => hook.read().app.rows.map(row => row.audioText);
@@ -640,6 +644,7 @@ for (const [name, kind] of Object.entries(views)) {
     assert.equal(hook.nativePeer.type("r2", 0, "X").kind, "written");
     hook.nativePeer.deliver();
     await expectText(["a mug of tea", "Xone mug"]);
+    assert.deepEqual(toasts().filter(toast => toast.textContent === "Replaced 1 match").map(toast => toast.textContent), ["Replaced 1 match"]);
     field.blur();
     assert.equal(press(document.body, "z"), true);
     await expectText(["a mug of tea", "Xone cup"]);

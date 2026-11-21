@@ -19,9 +19,11 @@ const src = (name) => readFileSync(join(ROOT, "src", name), "utf8");
 
 const chomp = (text) => (text.endsWith("\n") ? text.slice(0, -1) : text);
 
-export function appJs(testHooks) {
+export function appJs(testHooks, legacySharedTests = false) {
   const result = esbuild.buildSync({
-    entryPoints: [join(ROOT, "src", "bootstrap", "main.ts")],
+    entryPoints: [testHooks && legacySharedTests
+      ? join(ROOT, "tests", "collab", "legacy-app", "browser.ts")
+      : join(ROOT, "src", "bootstrap", "main.ts")],
     bundle: true,
     format: "iife",
     banner: { js: '"use strict";' },
@@ -240,8 +242,7 @@ const PARTS = [
   ["/*{{APP_CSS}}*/", appCss],
   ["{{SEED_STATE}}", () => src("seed-state.json")],
   ["{{HELP_TOC}}", () => helpHtml().toc],
-  ["{{HELP_HTML}}", () => helpHtml().html],
-  ["//{{APP_JS}}", () => appJs(TEST_BUILD)]
+  ["{{HELP_HTML}}", () => helpHtml().html]
 ];
 
 const CSP_DIRECTIVES = (scriptHash) => [
@@ -296,9 +297,9 @@ function stripHtmlComments(shell) {
     .replace(/<!--[\s\S]*?-->/g, "");
 }
 
-function build() {
+function build(legacySharedTests = false) {
   let html = stripHtmlComments(src("page.html"));
-  for (const [marker, load] of PARTS) {
+  for (const [marker, load] of [...PARTS, ["//{{APP_JS}}", () => appJs(TEST_BUILD, legacySharedTests)]]) {
     if (!html.includes(marker)) throw new Error(`marker ${marker} missing from src/page.html`);
     html = html.split(marker).join(chomp(load()));
   }
@@ -345,6 +346,7 @@ function main() {
   }
 
   writeFileSync(out, built);
+  if (TEST_BUILD) writeFileSync(join(ROOT, "_legacy-shared-tests.html"), build(true));
   console.log("wrote index.html (" + VARIANT + ", " + Buffer.byteLength(built) + " bytes)");
   writeFileSync(swOut, swBuilt);
   console.log("wrote sw.js (cache " + swCacheName(swBuilt) + ")");

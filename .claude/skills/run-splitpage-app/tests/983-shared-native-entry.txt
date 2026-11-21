@@ -103,7 +103,8 @@ eval S.enter()
 eval window.reentered=S.nativePeer.type('r1',0,'L');true
 expect window.reentered.kind === 'written' && S.peer === undefined
 wait text() === 'LYHexllo'
-eval S.leave()
+eval window.reentryId=S.read().app.docId;window.leftAgain=S.leave();true
+expect leftAgain.ok && S.read().peer === null && S.read().app.docId !== reentryId
 expect Q('audioText').textContent === 'LYHexllo'
 eval S.enter()
 eval at('audioText',2);window.keys='0123456789'.repeat(20);for(const key of keys)Q('audioText').dispatchEvent(new InputEvent('beforeinput',{bubbles:true,cancelable:true,inputType:'insertText',data:key}));true

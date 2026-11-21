@@ -22,6 +22,15 @@
       "replace": "drop: () => { closing = true; abandonAll(false); },"
     },
     {
+      "label": "Split rollback never releases an unhydrated field",
+      "file": "src/bootstrap/wiring/shared-split.ts",
+      "find": "if (buffer && entered?.session.read(doc => doc) === null) abandonAll(true);",
+      "replace": "",
+      "tests": [
+        "src/test/shared-hook-routes-app.test.mjs"
+      ]
+    },
+    {
       "label": "Split abandonment retains disposed registrations",
       "file": "src/bootstrap/wiring/shared-split.ts",
       "find": "return () => { abandons.delete(abandon); };",
@@ -62,6 +71,15 @@
       "file": "src/bootstrap/wiring/buffered-input.ts",
       "find": "abandonment: abandon => shared.bufferedText.abandonment?.(final => {\n          if (final || !binding.finish()) abandon(final);\n        }) ?? (() => {})",
       "replace": "abandonment: () => () => {}"
+    },
+    {
+      "label": "Hook ordinary abandon forgets Split",
+      "file": "tests/collab/legacy-app/shared-test.ts",
+      "find": "() => { splitting.abandon?.(); }",
+      "replace": "() => {}",
+      "tests": [
+        "src/test/shared-hook-routes-app.test.mjs"
+      ]
     }
   ]
 }

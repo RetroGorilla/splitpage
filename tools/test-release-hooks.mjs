@@ -118,9 +118,13 @@ eq("it keeps the fake desktop backend and its fault switches", FAKE_DESKTOP.filt
 eq("it keeps the render counters and blob store controls", HOOK_ONLY.filter((marker) => !testBuild.includes(marker)), []);
 eq("it keeps every history fault and distinctive control name", historyTestNames(testBuild), [...HISTORY_TEST_NAMES].sort());
 eq("it keeps the native shared session hook, its peer and their notices", SHARED_HOOK_ONLY.filter((marker) => !testBuild.includes(marker)), []);
-eq("it leaves out the retired shared peer and its notices", RETIRED_SHARED_HOOK_ONLY.filter((marker) => testBuild.includes(marker)), []);
+eq("it leaves out the legacy fixture and its peer", ["__legacySharedTest", ...RETIRED_SHARED_HOOK_ONLY].filter((marker) => testBuild.includes(marker)), []);
 eq("it keeps the remaining timing marks", [...TIMING_MARKS, "marksOn"].filter((mark) => !testBuild.includes(mark)), []);
 eq("it leaves out the retired trial timing marks", RETIRED_TIMING_MARKS.filter((mark) => testBuild.includes(mark)), []);
+
+const legacyTestBuild = appJs(true, true);
+eq("the legacy fixture page keeps its explicit hook and native entry", ["__legacySharedTest", "__sharedTest"].filter((marker) => !legacyTestBuild.includes(marker)), []);
+eq("the release build excludes the legacy fixture hook", ["__legacySharedTest"].filter((marker) => release.includes(marker)), []);
 
 console.log(`\n${passed} passed, ${failures.length} failed\n`);
 if (failures.length) {

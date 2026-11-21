@@ -19,9 +19,9 @@ The native relay has the reconnect wrapper, size admission, SQLite snapshots and
 The session layer has the offline-notice journal and put-back command, and local replica stores with an update
 log, checkpoints and local write receipts in browser IndexedDB and through desktop test IPC
 ([#1668](https://github.com/RetroGorilla/splitpage/pull/1668), [#1679](https://github.com/RetroGorilla/splitpage/pull/1679)).
-These components have their own integration tests. The editor's shared mode is still entered only through
-`__sharedTest`. Both entry methods open the native session. The [slice 8 app test mapping](slice-8-test-mapping.md)
-accounts for the retired hook tests and records the direct tests still needed. The old adapter and its dedicated tests
+These components have their own integration tests. The standard shared test hook `__sharedTest` opens only the
+native session. The [slice 8 app test mapping](slice-8-test-mapping.md) records which assertions were replaced and
+which still run through direct old wiring or the isolated legacy test fixture. The old adapter and its dedicated tests
 remain for the rest of [slice 8](#11-build-order). There is no release entry for shared mode.
 
 ## Known differences from standalone editing
