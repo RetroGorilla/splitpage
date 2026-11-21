@@ -48,8 +48,7 @@ function isRequest(value: unknown): value is NativeReplicaRequest {
   if (op === "close") return value.length === 3;
   if (op === "read") return value.length === 4 && (through === null || generation(through, 0));
   return op === "write" && value.length === 6 && generation(through, 1) && typeof checkpoint === "boolean"
-    && bytes instanceof Uint8Array && bytes.byteLength > 0 && bytes.buffer instanceof ArrayBuffer
-    && bytes.buffer.byteLength <= filesModule.MAX_REPLICA_UPDATE_BYTES;
+    && bytes instanceof Uint8Array && bytes.byteLength > 0 && bytes.buffer instanceof ArrayBuffer;
 }
 
 function failure(error: unknown): NativeReplicaReply {
@@ -94,6 +93,10 @@ function createNativeReplicaIpc(userData: string, disk?: NativeReplicaFileSystem
 
   async function handle(owner: Renderer, request: unknown): Promise<NativeReplicaReply> {
     if (!isRequest(request)) throw new TypeError("Invalid native replica request");
+    if (request[0] === "write" && request[5].buffer.byteLength > filesModule.MAX_REPLICA_UPDATE_BYTES) {
+      if (request[4]) return { kind: "failed", reason: "quota" };
+      throw new TypeError("Invalid native replica request");
+    }
     const [op, name, id] = request;
     if (op === "open") return open(name, owner);
     if (op === "delete") {

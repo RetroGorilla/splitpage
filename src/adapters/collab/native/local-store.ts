@@ -25,7 +25,13 @@ export type NativeLocalStoreFailure = {
 
 export type NativeLocalStoreReceipt =
   | { readonly kind: "stored"; readonly generation: number }
-  | (NativeLocalStoreFailure & { readonly generation: number; readonly committed: number; readonly operation?: "compact" });
+  | NativeLocalStoreFailedReceipt;
+
+type NativeLocalStoreFailedReceipt = NativeLocalStoreFailure & {
+  readonly generation: number;
+  readonly committed: number;
+  readonly operation?: "compact";
+};
 
 export type NativeLocalStoreClose = NativeLocalStoreReceipt & { readonly state: Uint8Array };
 
@@ -109,7 +115,7 @@ export async function attachNativeLocalStore(
   let committed = generation, next = generation;
   let checkpoint = entries[0]?.checkpoint ? entries[0].generation : 0;
   let active: Promise<NativeLocalStoreReceipt> | undefined;
-  let compaction: Promise<NativeLocalStoreReceipt | undefined> | undefined;
+  let compaction: Promise<NativeLocalStoreFailedReceipt | undefined> | undefined;
   let timer: ReturnType<typeof setTimeout> | undefined;
 
   function publish(receipt: NativeLocalStoreReceipt): void {
@@ -125,7 +131,7 @@ export async function attachNativeLocalStore(
 
   function cancelTimer(): void { clearTimeout(timer); timer = undefined; }
 
-  function compact(): Promise<NativeLocalStoreReceipt | undefined> {
+  function compact(): Promise<NativeLocalStoreFailedReceipt | undefined> {
     const through = committed;
     cancelTimer();
     compaction ??= (async () => {
@@ -169,7 +175,7 @@ export async function attachNativeLocalStore(
       if (!entry) break;
       if (!entry.checkpoint && committed - checkpoint >= MAX_TAIL) {
         const failed = await compact();
-        if (failed) return failedWrite(failed);
+        if (failed) return failedWrite({ ...failed, generation: entry.generation });
         if (stopped) break;
       }
       try { await write(entry); }
