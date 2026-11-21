@@ -55,7 +55,7 @@ export function openNativeUndo(script: NativeScript) {
     record(stackItem, null, prior);
   });
 
-  function captureSelection<T>(before: NativeUndoSelectionInput | null, write: (prepareWrite: () => void) => T) {
+  function captureSelection<T>(before: NativeUndoSelectionInput | null, write: (prepareWrite: () => boolean) => T, strict = false) {
     const ticket: SelectionCapture = {
       before: null, typedCaret: null,
       recordTypedCaret(anchor) { ticket.typedCaret = anchor; }
@@ -63,7 +63,8 @@ export function openNativeUndo(script: NativeScript) {
     capture = ticket;
     try {
       const result = write(() => {
-        ticket.before = before && snapshotNativeUndoAnchor(script, before);
+        ticket.before = before ? snapshotNativeUndoAnchor(script, before, strict) : null;
+        return before === null || ticket.before !== null;
       });
       return {
         result,
@@ -72,7 +73,7 @@ export function openNativeUndo(script: NativeScript) {
           const { selection } = pending;
           pending = null;
           selection.after = after === undefined ? ticket.typedCaret
-            : after && withNativeCommand(script, () => snapshotNativeUndoAnchor(script, after));
+            : after && withNativeCommand(script, () => snapshotNativeUndoAnchor(script, after, strict));
         }
       };
     } finally { capture = null; }

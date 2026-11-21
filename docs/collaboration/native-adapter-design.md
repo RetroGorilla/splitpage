@@ -189,9 +189,12 @@ Each command is one transaction.
 | Command | Writes |
 | --- | --- |
 | Type, paste | `insert` with an explicit attributes object, before any delete |
+| Replace all | Resolve and validate all narration and visual ranges together. In each Yjs text, replace from the highest stored offset down using the single replacement's unmarked insertion, before deleting the matched units |
 | Bold and other plain kinds | `format` with the plain key, `true` or `null` |
 | Tag, untag | A fresh application key; untag sets `null` on the keys seen. No re-keying |
 | Split | Boundary, record copying the parent's rank, visual cell. Never narration |
+| Delete and split | Delete a narration selection in one beat, then split at the resulting caret. Resolve the selection and validate the split before either write. A peer-erased selection changes nothing |
+| Create first beat | Reuse put-back to write a fresh segment, beat record, rank and cells if no beat is shown. Rule (b) letters stay in their original segments and the reader assigns them to the new beat |
 | Join, unjoin | Set or delete `joined` on the lower beat |
 | Remove beats | The observed text with its boundary (or `head`); the records, visual cells and segment stay |
 | Create, rename, remove heading | Boundary or segment, record, rank, name cell; rename edits the name cell; remove sets `removed` |
@@ -642,6 +645,10 @@ E11, 600 generated histories, names in cells, unless marked:
 | Two people edit the gallery of the same beat at once | One writer's whole gallery survives and stays intact on core reload, even when the writers edited different gallery fields |
 | Someone restores a registry entry before receiving another person's removal | The entry disappears again when the unseen removal arrives. Restoring it again brings back its fields |
 | Two people change one registry value at the same moment and the winner undoes | The value falls back to its default until someone sets it again. Rankless entries appear first in ID order and a move gives them a rank |
+| Two people create the first beat at the same moment | Both beats and their text stay. The tied ranks follow stored order, and any rule (b) letters are assigned by the reader |
+| A peer types inside a selection being deleted and split, or splits inside it | The peer's inserted letters or boundary survive. A surviving boundary can leave an empty beat |
+| A peer types inside a range being replaced by a batch | The new letters survive alongside the replacement |
+| A peer removes a beat while a batch replaces text in it | The new narration reads in a surviving beat under the reading rules. Undo of the batch can restore the matched letters there while the beat stays removed |
 
 Also, with no text lost: plain bold in E4's 60 two-copy trials, 72 letters missing bold at merge and 34 left bold
 after an undo; text composed beside a deleted letter landing across a same-moment insertion, 25 of 20,000 (E1); two

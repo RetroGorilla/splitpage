@@ -97,13 +97,15 @@ export function transactPreparedNativeCommand<Input, Result>(
   script: NativeScript,
   prepare: () => Input,
   write: (input: Input) => Result,
-  refuse: (reason: "full") => Result,
-  adds?: (input: Input) => boolean
+  refuse: (reason: "full" | "closed") => Result,
+  adds?: (input: Input) => boolean,
+  requireOpen = false
 ): Result {
   const admit = script.sizeRefusal;
-  if (!admit) return transactNativeCommand(script, () => write(prepare()));
+  if (!admit && !requireOpen) return transactNativeCommand(script, () => write(prepare()));
   return withNativeCommand(script, () => {
-    const input = prepare(), reason = admit(adds?.(input));
+    const input = prepare(), reason = admit?.(adds?.(input));
+    if (requireOpen && (script.closed() || script.reader.isClosed())) return refuse("closed");
     if (reason) return refuse(reason);
     script.prepareWrite?.();
     return script.doc.transact(() => write(input), script.origin);

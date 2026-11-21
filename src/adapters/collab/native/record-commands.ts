@@ -4,14 +4,14 @@ import { normalizeBeatLength, rowStatusId } from "../../../core/document/timing.
 import { encodeNativeGallery, normalizeNativeGallery, readNativeGallery } from "./gallery.ts";
 import { nativeSegmentSpans } from "./reader.ts";
 import {
-  copyArgument, copyRecordValue, nativeRecordId, plainRecordArgument, RECORD_UNCHANGED, RECORD_WRITTEN,
+  copyArgument, copyRecordValue, nativeRecordId, RECORD_UNCHANGED, RECORD_WRITTEN,
   refuseRecord, transactRecord, writeRecordFields
 } from "./record-values.ts";
 import type { NativeRecordOutcome } from "./record-values.ts";
 import type { NativeScript } from "./script.ts";
 import {
   NATIVE_GALLERY_FIELDS, NATIVE_GALLERY_KEY, decodeNativeValue, isNativeBeatField, isReservedBeatField, nativeFieldKey, nativeWellFormed,
-  recordBag, sameNativeValue
+  plainRecordArgument, recordBag, sameNativeValue
 } from "./values.ts";
 
 export type NativeFieldTarget = {

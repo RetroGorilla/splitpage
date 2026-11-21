@@ -1,12 +1,13 @@
 import * as Y from "yjs";
 import { OBJ } from "../../../core/text/runs.ts";
 import type { Marks, Run } from "../../../core/text/runs.ts";
+import { copyNativeCompoundInput, copyNativeDenseList } from "./compound-input.ts";
 import { nativeCellView, nativeLeftAt, nativeStoredOffset, prepareNativeRuns, writeNativeRuns } from "./inline.ts";
-import type { NativeDeltaItem } from "./inline.ts";
+import type { NativeCellView, NativeDeltaItem } from "./inline.ts";
 import { nativeSegmentSpans } from "./reader.ts";
 import { throwNativeFailures, transactPreparedNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
-import { encodeNativeValue, nativeWellFormed } from "./values.ts";
+import { encodeNativeValue, nativeWellFormed, plainRecordArgument } from "./values.ts";
 
 export interface NativeTextTarget {
   readonly beat: string;
@@ -79,8 +80,10 @@ interface LiveCell {
   readonly items: readonly NativeDeltaItem[];
 }
 
-const WRITTEN: NativeCommitOutcome = Object.freeze({ kind: "written" });
-const UNCHANGED: NativeCommitOutcome = Object.freeze({ kind: "unchanged" });
+type ParsedTextSegments = Map<string, { text: Y.Text; spans: NonNullable<ReturnType<typeof nativeSegmentSpans>> }>;
+
+const WRITTEN = Object.freeze({ kind: "written" } as const);
+const UNCHANGED = Object.freeze({ kind: "unchanged" } as const);
 
 export type NativeTextPlacement = readonly [number | null, number | null];
 
@@ -104,7 +107,7 @@ export function nativeWriteAvailability(script: NativeScript): "busy" | "closed"
   return nativeAvailability(script) ?? script.sizeRefusal?.() ?? null;
 }
 
-function liveCells(script: NativeScript, target: NativeTextTarget): LiveCell[] {
+function liveCells(script: NativeScript, target: NativeTextTarget, segments: ParsedTextSegments = new Map()): LiveCell[] {
   if (target.cell === "name") {
     const cell = script.roots.names.get(target.beat);
     if (!(cell instanceof Y.Text) || !script.reader.headingBoundary(target.beat, false)) return [];
@@ -118,7 +121,6 @@ function liveCells(script: NativeScript, target: NativeTextTarget): LiveCell[] {
     return script.reader.beatBoundary(target.beat) && visual instanceof Y.Text
       ? [{ text: visual, start: 0, end: visual.length, items: visual.toDelta() as NativeDeltaItem[] }] : [];
   }
-  const segments = new Map<string, { text: Y.Text; spans: NonNullable<ReturnType<typeof nativeSegmentSpans>> }>();
   const cells: LiveCell[] = [], own = script.reader.beatBoundary(target.beat);
   for (const place of places) {
     let segment = segments.get(place.segment);
@@ -145,14 +147,23 @@ function readTarget(target: NativeTextTarget): NativeTextTarget | null {
 
 const authoredRanges = new WeakMap<Y.Doc, WeakMap<NativeTextRange, NativeUndoAnchor>>();
 
-function shownPosition(cells: readonly LiveCell[], offset: number, name: boolean): { text: Y.Text; index: number } | null {
-  for (const cell of cells) {
-    const view = name ? null : nativeCellView(cell.items), size = view?.length ?? cell.end - cell.start;
+function shownPosition(cells: readonly LiveCell[], offset: number, name: boolean, views?: Map<LiveCell, NativeCellView>) {
+  for (const [part, cell] of cells.entries()) {
+    const view = name ? null : views?.get(cell) ?? nativeCellView(cell.items);
+    if (view) views?.set(cell, view);
+    const size = view?.length ?? cell.end - cell.start;
     if (offset > size) { offset -= size; continue; }
     if (splitsPair(view?.text ?? storedText(cell.items), offset)) return null;
-    return { text: cell.text, index: cell.start + (view ? nativeStoredOffset(view, offset) : offset) };
+    return { text: cell.text, index: cell.start + (view ? nativeStoredOffset(view, offset) : offset), part };
   }
   return null;
+}
+
+function livePieces(cells: readonly LiveCell[], first: number, last: number, from: number, to: number): NativeLivePiece[] {
+  return cells.slice(first, last + 1).map((cell, index) => ({
+    text: cell.text, start: cell.start, items: cell.items,
+    from: index === 0 ? from : cell.start, until: index === last - first ? to : cell.end
+  }));
 }
 
 function storedText(items: readonly NativeDeltaItem[]): string {
@@ -306,10 +317,7 @@ export function nativeLiveRange(script: NativeScript, range: NativeRangeData): N
     at.type === cell.text && at.index >= cell.start && at.index <= cell.end && !splitsPair(storedText(cell.items), at.index - cell.start);
   const first = cells.findIndex(cell => contains(cell, from)), last = cells.findIndex(cell => contains(cell, to));
   if (first < 0 || last < first || (first === last && to.index < from.index)) return "range";
-  let pieces = cells.slice(first, last + 1).map((cell, index) => ({
-    text: cell.text, start: cell.start, items: cell.items,
-    from: index === 0 ? from.index : cell.start, until: index === last - first ? to.index : cell.end
-  }));
+  let pieces = livePieces(cells, first, last, from.index, to.index);
   if (range.to && unitGone(range.from, script.doc) && unitGone(range.to, script.doc)
     && !pieces.some(piece => heldAlive(piece.text, piece.from, piece.until, range.seen))) {
     const firstPiece = pieces[0];
@@ -346,10 +354,16 @@ function snapshotUndoRange(script: NativeScript, range: NativeTextRange): Native
   return { anchor, head: first === last ? anchor : { target, position: last } };
 }
 
-export function snapshotNativeUndoAnchor(script: NativeScript, input: NativeUndoSelectionInput): NativeUndoAnchor | null {
+export function snapshotNativeUndoAnchor(script: NativeScript, input: NativeUndoSelectionInput, strict = false): NativeUndoAnchor | null {
   try {
-    if (!("anchor" in input)) return snapshotUndoRange(script, input);
-    const anchor = snapshotUndoRange(script, input.anchor), head = snapshotUndoRange(script, input.head);
+    const authored = strict ? authoredRanges.get(script.doc) : undefined;
+    // why: a locally authored anchor can follow surviving letters out of the beat named in its original range
+    const selection = strict
+      ? copyNativeCompoundInput(input, range => authored?.has(range as NativeTextRange) ?? false) as NativeUndoSelectionInput | undefined
+      : input;
+    if (!selection) return null;
+    if (!("anchor" in selection)) return snapshotUndoRange(script, selection);
+    const anchor = snapshotUndoRange(script, selection.anchor), head = snapshotUndoRange(script, selection.head);
     if (!anchor || !head || anchor.anchor !== anchor.head || head.anchor !== head.head) return null;
     return { anchor: anchor.anchor, head: head.head };
   } catch { return null; }
@@ -386,6 +400,13 @@ export function resolveNativeUndoSelection(script: NativeScript, recorded: Nativ
   return Object.freeze({ anchor, head: samePoint ? anchor : head });
 }
 
+export function deleteNativePieces(live: NativeLiveRange, added = 0): void {
+  for (const piece of live.pieces.toReversed()) {
+    const shift = piece.text === live.text && piece.from >= live.from ? added : 0;
+    if (piece.until > piece.from) piece.text.delete(piece.from + shift, piece.until - piece.from);
+  }
+}
+
 // why: a command called while another transaction is open refuses, since that transaction's changes are not yet
 // observed
 export function replaceNativeText(script: NativeScript, range: NativeTextRange, runs: readonly Run[], stamp?: NativeEditStamp,
@@ -405,10 +426,7 @@ export function replaceNativeText(script: NativeScript, range: NativeTextRange, 
     beforeWrite?.(checked.target);
     const end = writeNativeRuns(script.doc, live.text, live.from, prepared, nativeLeftAt(nativeCellView(live.items), live.from - live.start));
     const added = end - live.from;
-    for (const piece of live.pieces.toReversed()) {
-      const shift = piece.text === live.text && piece.from >= live.from ? added : 0;
-      if (piece.until > piece.from) piece.text.delete(piece.from + shift, piece.until - piece.from);
-    }
+    deleteNativePieces(live, added);
     if (encoded && updateStamp) script.roots.edited.set(checked.target.beat, encoded);
     if (afterWrite) {
       const anchor = undoEndpoint(checked.target, live.text, end, 0);
@@ -436,4 +454,93 @@ export function typeNativeText(script: NativeScript, range: NativeTextRange, tex
 
 export function deleteNativeText(script: NativeScript, range: NativeTextRange, stamp?: NativeEditStamp, placement?: NativeTextPlacement): NativeCommitOutcome {
   return replaceNativeText(script, range, [], stamp, undefined, false, undefined, placement);
+}
+
+export interface NativeReplaceAllRange {
+  readonly row: string;
+  readonly cell: "narration" | "visual";
+  readonly start: number;
+  readonly end: number;
+}
+
+type ReplaceAllOutcome = typeof WRITTEN | typeof UNCHANGED
+  | { readonly kind: "refused"; readonly reason: NativeRefusal };
+
+function refuseReplaceAll(reason: NativeRefusal): ReplaceAllOutcome {
+  return Object.freeze({ kind: "refused", reason });
+}
+
+function readReplaceAllRanges(ranges: readonly NativeReplaceAllRange[]): NativeReplaceAllRange[] | null {
+  try {
+    const copied: NativeReplaceAllRange[] = [], seen = new Set<unknown>();
+    for (const range of copyNativeDenseList(ranges)) {
+      if (seen.has(range) || !plainRecordArgument(range)) return null;
+      seen.add(range);
+      const fields = Object.getOwnPropertyDescriptors(range);
+      const row: unknown = fields.row?.value, cell: unknown = fields.cell?.value;
+      const start: unknown = fields.start?.value, end: unknown = fields.end?.value;
+      if (Reflect.ownKeys(fields).length !== 4 || !nativeWellFormed(row) || !row ||
+        (cell !== "narration" && cell !== "visual") || !wholeNumber(start) || !wholeNumber(end) || end < start) return null;
+      copied.push({ row, cell, start, end });
+    }
+    return copied;
+  } catch { return null; }
+}
+
+interface ReplacePiece {
+  readonly from: number;
+  readonly until: number;
+  readonly insert: boolean;
+}
+
+function planReplaceAll(script: NativeScript, ranges: readonly NativeReplaceAllRange[], inserting: boolean) {
+  const plans = new Map<Y.Text, ReplacePiece[]>(), segments: ParsedTextSegments = new Map();
+  const cellsOf = { narration: new Map<string, LiveCell[]>(), visual: new Map<string, LiveCell[]>() };
+  const views = new Map<LiveCell, NativeCellView>();
+  for (const { row, cell, start, end } of ranges) {
+    const cache = cellsOf[cell];
+    let cells = cache.get(row);
+    if (!cells) {
+      cells = liveCells(script, { beat: row, cell }, segments);
+      if (!cells.length) return "missing";
+      cache.set(row, cells);
+    }
+    const first = shownPosition(cells, start, false, views);
+    const last = start === end ? first : shownPosition(cells, end, false, views);
+    if (!first || !last) return "range";
+    for (const [index, { text, from, until }] of livePieces(cells, first.part, last.part, first.index, last.index).entries()) {
+      if (from === until && index > 0) continue;
+      const piece = { from, until, insert: inserting && index === 0 }, list = plans.get(text);
+      if (list) list.push(piece); else plans.set(text, [piece]);
+    }
+  }
+  for (const pieces of plans.values()) {
+    pieces.sort((a, b) => b.from - a.from);
+    for (let index = 1; index < pieces.length; index++) {
+      const previous = pieces[index - 1], current = pieces[index];
+      if (previous && current && (previous.from === current.from || current.until > previous.from)) return "range";
+    }
+  }
+  return plans;
+}
+
+export function replaceAllNativeText(script: NativeScript, ranges: readonly NativeReplaceAllRange[], replacement: string): ReplaceAllOutcome {
+  const unavailable = nativeAvailability(script);
+  if (unavailable) return refuseReplaceAll(unavailable);
+  return transactPreparedNativeCommand(script, () => ({
+    ranges: readReplaceAllRanges(ranges),
+    runs: typeof replacement === "string" ? prepareNativeRuns(replacement ? [{ text: replacement, marks: {} }] : []) : null
+  }), ({ ranges, runs }) => {
+    if (!runs) return refuseReplaceAll("text");
+    if (!ranges) return refuseReplaceAll("range");
+    const plans = planReplaceAll(script, ranges, runs.length > 0);
+    if (typeof plans === "string") return refuseReplaceAll(plans);
+    let changed = false;
+    for (const [text, pieces] of plans) for (const { from, until, insert } of pieces) {
+      const end = insert ? writeNativeRuns(script.doc, text, from, runs, null) : from;
+      if (until > from) text.delete(end, until - from);
+      changed ||= end > from || until > from;
+    }
+    return changed ? WRITTEN : UNCHANGED;
+  }, refuseReplaceAll, ({ ranges, runs }) => !!ranges?.length && !!runs?.length, true);
 }

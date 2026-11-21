@@ -2,13 +2,13 @@ import * as Y from "yjs";
 import { cappedText, plainName, plainText, textOf } from "../../../core/document/text-policy.ts";
 import { isValidNativeRank, nativeRankBetween } from "./rank.ts";
 import { nativeLiveBeatRecord } from "./record-commands.ts";
-import { copyArgument, nativeRecordId, plainRecordArgument, RECORD_UNCHANGED, RECORD_WRITTEN, refuseRecord, transactRecord, writeRecordFields } from "./record-values.ts";
+import { copyArgument, nativeRecordId, RECORD_UNCHANGED, RECORD_WRITTEN, refuseRecord, transactRecord, writeRecordFields } from "./record-values.ts";
 import type { NativeRecordOutcome } from "./record-values.ts";
 import type { NativeScript } from "./script.ts";
 import { planNativeCommentMark } from "./format-commands.ts";
 import { nativeRangeSnapshot } from "./text-commands.ts";
 import type { NativeTextRange } from "./text-commands.ts";
-import { decodeNativeValue, encodeNativeValue, mintNativeId, nativeFieldKey, nativeWellFormed } from "./values.ts";
+import { decodeNativeValue, encodeNativeValue, mintNativeId, nativeFieldKey, nativeWellFormed, plainRecordArgument } from "./values.ts";
 
 export interface NativeCommentTarget {
   readonly comment: string;
