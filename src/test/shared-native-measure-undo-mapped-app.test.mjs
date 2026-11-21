@@ -202,13 +202,15 @@ for (const { name, edit, expected } of [
 test("native peer cannot split or insert at a missing beat, or join beyond the last beat", async t => {
   const { editor, peer } = await enterWithPeer(t);
   const unchanged = JSON.parse(JSON.stringify(currentDocument()));
-  const updates = [];
-  peer.ydoc.on("update", update => updates.push(update));
+  const stored = peer.encodeState();
+  const changes = [];
+  t.after(peer.subscribe(change => changes.push(change)));
   assert.deepEqual(peer.commands.anchorText({ beat: "gone", cell: "narration" }, 1), { kind: "refused", reason: "missing" });
   assert.deepEqual(peer.commands.insertAdjacentBeat("gone", "below"), { kind: "refused", reason: "missing" });
   assert.deepEqual(peer.commands.joinRow("r1", "r2", " "), { kind: "refused", reason: "above" });
   assert.deepEqual(peer.commands.undo(), { kind: "unchanged" });
-  assert.deepEqual(updates, []);
+  assert.deepEqual(peer.encodeState(), stored);
+  assert.deepEqual(changes, []);
   assert.equal(applyNativePeerUpdate(editor, peer.encodeState()), true);
   await Promise.resolve();
   await agreedWithPeer(editor, peer, seed);
