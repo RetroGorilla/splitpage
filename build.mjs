@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -345,8 +345,10 @@ function main() {
     process.exit(stale ? 1 : 0);
   }
 
+  const legacyFixture = join(ROOT, "_legacy-shared-tests.html");
+  if (!TEST_BUILD) rmSync(legacyFixture, { force: true });
   writeFileSync(out, built);
-  if (TEST_BUILD) writeFileSync(join(ROOT, "_legacy-shared-tests.html"), build(true));
+  if (TEST_BUILD) writeFileSync(legacyFixture, build(true));
   console.log("wrote index.html (" + VARIANT + ", " + Buffer.byteLength(built) + " bytes)");
   writeFileSync(swOut, swBuilt);
   console.log("wrote sw.js (cache " + swCacheName(swBuilt) + ")");

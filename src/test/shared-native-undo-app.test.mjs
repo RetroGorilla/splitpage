@@ -2296,7 +2296,7 @@ for (const [name, change, [from, to], text] of boldPeerEdits) for (const peerFir
       await Promise.resolve();
     } else other.hold();
     view.caret("r1", peerFirst ? from : 1, peerFirst ? to : 3);
-    assert.equal(beforeInput(root(), "formatBold", null), true);
+    assert.equal(press(root(), "b"), true);
     assert.match(app(), /<strong>/);
     if (!peerFirst) {
       assert.equal(change(other).kind, "written");
@@ -2305,7 +2305,10 @@ for (const [name, change, [from, to], text] of boldPeerEdits) for (const peerFir
     }
     for (const key of ["z", "y", "z"]) {
       assert.equal(press(root(), key), true);
-      assert.deepEqual(view.at(), ["r1", from, to]);
+      assert.deepEqual(view.flow.selection(), {
+        anchor: { kind: "beat", rowId: "r1", offset: from },
+        head: { kind: "beat", rowId: "r1", offset: to }
+      });
       if (key === "z") assert.equal(app(), text);
       else assert.match(app(), /<strong>/);
       await Promise.resolve();
@@ -2322,10 +2325,16 @@ test("Writer: append to a 120,000-character beat and replay the caret through un
   typeKeys(root(), "x");
   assert.equal(press(root(), "z"), true);
   assert.equal(app(), original);
-  assert.deepEqual(view.at(), ["r1", 120000, 120000]);
+  assert.deepEqual(view.flow.selection(), {
+    anchor: { kind: "beat", rowId: "r1", offset: 120000 },
+    head: { kind: "beat", rowId: "r1", offset: 120000 }
+  });
   assert.equal(press(root(), "y"), true);
   assert.equal(app(), original + "x");
-  assert.deepEqual(view.at(), ["r1", 120001, 120001]);
+  assert.deepEqual(view.flow.selection(), {
+    anchor: { kind: "beat", rowId: "r1", offset: 120001 },
+    head: { kind: "beat", rowId: "r1", offset: 120001 }
+  });
   await Promise.resolve();
   assert.equal(peer(), original + "x");
 });
