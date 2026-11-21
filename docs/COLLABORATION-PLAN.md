@@ -27,7 +27,7 @@ Each superseded place below also carries a one-line pointer under its heading.
 | Section 8, *Server storage* | 19 | Snapshot storage, as above |
 | Section 8, *Durability receipts* | 19 | The owner reviewed the server-stop results on 2026-11-20 and deferred the update journal and durability receipts beyond the first version |
 | Section 8, *User-visible status*, "Your changes saved to server" | 19 | Not shown. The first version has no durability receipt |
-| Section 10, *Backups and restore* | 2 | Not designed yet. Proposed with slice 7 |
+| Section 10, *Backups and restore* | 19 | Slice 7 includes verified SQLite backups and isolated restore. See the [backup runbook](collaboration/native-adapter-design.md#backup-runbook) |
 | Section 11, *Implementation stages* | Note section 11 | The build order is the note's eight slices |
 | Section 13, *Acceptance evidence* | 11, 19; note appendix O | Slice gates replace the feasibility traces. The 2 MiB fixture gives way to the 15 MB limit. Receipt traces wait for decision 19 |
 | Section 14, receipt invariants | 19 | Written with receipts, not now |

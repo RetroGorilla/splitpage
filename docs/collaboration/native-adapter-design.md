@@ -10,14 +10,73 @@ pictures and screen design are out of scope.
 
 ## Build status
 
-Slices 1 to 6 are on `main`. The native shared-document command layer and undo are built.
-Slices 7a, 7c and 7h are merged. The native editor entry and Split narration typing are on `main`. PR #1673 builds 7d, the relay server and its storage. The old adapter stays untouched until slice 8.
-PR #1671 adds native undo selection replay and typing group boundaries for focus changes.
-Slice 7b-2 in PR #1675 adds buffered Split-view narration typing, composition, relative caret placement, and handling of native commit outcomes.
-PR #1669 builds slice 7e's offline-notice journal, comparison and put-back command.
-Slice 7f in PR #1668 adds the browser local store with transaction receipts, an update log and atomic checkpoints.
+Slices 1 to 7 are built on `main` at `2a1cebba1`. The native session runs Split and Writer with buffered
+narration and Visual input, composition, local undo and selection replay. The editor routes include beat and
+heading structure, anchored blank-beat insertion, Writer Markdown headings, Find and replacement, plain inline
+formatting, beat status and duration, picture galleries, comment threads and production registries.
 
-This PR builds slice 7b-6a: beat status and duration, picture gallery edits, and comment threads in the native editor.
+The native relay has the reconnect wrapper, size admission, SQLite snapshots and backup and restore commands.
+The session layer has the offline-notice journal and put-back command, and local replica stores with an update
+log, checkpoints and local write receipts in browser IndexedDB and through desktop test IPC
+([#1668](https://github.com/RetroGorilla/splitpage/pull/1668), [#1679](https://github.com/RetroGorilla/splitpage/pull/1679)).
+These components have their own integration tests. The editor's shared mode is still entered only through
+`__sharedTest`. The hook defaults to the old backend and can select the native session. There is no release
+entry for shared mode. Slice 8 remains the removal of the old adapter and the mapping of its tests in
+[the build order](#11-build-order).
+
+## Known differences from standalone editing
+
+| Area | What a person sees in the native shared editor | Source |
+| --- | --- | --- |
+| Script title | Split and Writer refuse title changes. | [#1665](https://github.com/RetroGorilla/splitpage/pull/1665) |
+| Split add bar | The unanchored add bar refuses to add a beat. | [#1665](https://github.com/RetroGorilla/splitpage/pull/1665), [#1686](https://github.com/RetroGorilla/splitpage/pull/1686) |
+| Empty Writer | Writer has no binding for the session's first-beat command. | [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
+| Joined row removal | A joined row keeps its member beats. The row's Remove acts on its visible head. | [#1682](https://github.com/RetroGorilla/splitpage/pull/1682) |
+| Moving past a heading | Scene headings have their own positions in the ranked outline. Moving a beat across a heading can change which beat follows that heading. | [#1682](https://github.com/RetroGorilla/splitpage/pull/1682) |
+| Writer move with stale paint | A cross-beat Alt+Arrow move refuses if a peer edit has invalidated the paint needed to resolve the selection. The selection and buffered typing stay in place. | [#1683](https://github.com/RetroGorilla/splitpage/pull/1683) |
+| Writer heading name | Editing a heading name to empty or whitespace is refused. Standalone Writer can keep an empty heading draft. | [#1682](https://github.com/RetroGorilla/splitpage/pull/1682) |
+| Writer Enter at the first heading | Enter at the start of a heading needs a preceding beat. It is refused when the heading starts the script. | [#1686](https://github.com/RetroGorilla/splitpage/pull/1686) |
+| Writer Enter on a blank | A second Enter on the blank between `Hello` and `World` in one paragraph inserts another blank and puts the caret there. Standalone removes the first blank and starts a paragraph at `World`, with the caret at its start. | [#1686](https://github.com/RetroGorilla/splitpage/pull/1686) |
+| Writer Enter on a selected prefix | Enter with `Wo` selected at the start of `World` leaves the original beat empty and puts `rld` and the caret in a new beat. Standalone keeps `rld` in the original beat and starts a paragraph there, with the caret at its start. | [#1686](https://github.com/RetroGorilla/splitpage/pull/1686) |
+| Writer Enter deleting and inserting | Enter refuses a selection deletion that would also insert an adjacent blank. | [#1686](https://github.com/RetroGorilla/splitpage/pull/1686) |
+| Writer Enter in a heading name | Enter refuses a split inside a heading name or an edit over a heading selection. | [#1686](https://github.com/RetroGorilla/splitpage/pull/1686) |
+| Writer Markdown undo | After undoing the conversion of typed `# Intro`, native undo removes `Intro` and then `# ` in separate steps. Standalone removes the typed line in one step. | [#1687](https://github.com/RetroGorilla/splitpage/pull/1687) |
+| Writer Markdown in a joined row | Enter on a pending heading leaves the text and caret in place and warns once for the unchanged candidate. | [#1687](https://github.com/RetroGorilla/splitpage/pull/1687) |
+| Concurrent Writer Markdown conversion | Two conversions of the same line can leave two stored headings and one visible title. Text that survives only in the other title is hidden. This can be the suffix after the earlier Enter position, or letters one writer added before converting. | [#1687](https://github.com/RetroGorilla/splitpage/pull/1687) |
+| Cross-beat text | A text edit or format range must address one native cell. Writer edits across beats and narration edits across joined members are refused. A draft that has already been previewed can stay on screen with input stopped, while the shared text remains unchanged. | [#1675](https://github.com/RetroGorilla/splitpage/pull/1675), [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
+| Joined Visual | A write to assembled Visual text is refused if it cannot be addressed in one native cell. | [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
+| Visual split | The Split Visual split gesture is refused. The anchored shortcut for inserting a blank beat works in Visual. | [#1684](https://github.com/RetroGorilla/splitpage/pull/1684), [#1686](https://github.com/RetroGorilla/splitpage/pull/1686) |
+| Formatting at a caret | A collapsed format toggle is refused. Plain inline formatting can be applied to an addressable selection. | [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
+| Tag and link tools | Applying tags in script text, editing links, and applying Find bulk tags are refused. | [#1681](https://github.com/RetroGorilla/splitpage/pull/1681), [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
+| Text clipboard and drag | Rich, script and multiline paste, cut, and text drag and drop are refused. Plain single-line text paste works in an addressable cell. | [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
+| Control-only paste | A paste that cleans to empty text leaves the selection intact. Standalone Writer deletes the selection. | [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
+| Picture and media clipboard | A picture file can be pasted or dropped in Split Visual. A paste combining an image with text is refused, including captions present only in HTML. The native clipboard and drop routes do not add web media or video files. | [#1676](https://github.com/RetroGorilla/splitpage/pull/1676) |
+| Joined galleries | An edit that depends on changing another member's picture, such as removing its picture from the assembled gallery, is refused. | [#1663](https://github.com/RetroGorilla/splitpage/pull/1663), [#1676](https://github.com/RetroGorilla/splitpage/pull/1676) |
+| Concurrent gallery edits | Concurrent edits to one beat's gallery choose one whole gallery, even if each writer edited a different gallery field. A picture can appear with a success notice and disappear when the other edit arrives. | [#1660](https://github.com/RetroGorilla/splitpage/pull/1660), [#1676](https://github.com/RetroGorilla/splitpage/pull/1676) |
+| Comment from a selection | The Split selection-comment button works. The Writer selection-comment route is unavailable. | [#1676](https://github.com/RetroGorilla/splitpage/pull/1676), [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
+| Comment assignment | The assignee control is disabled. | [#1676](https://github.com/RetroGorilla/splitpage/pull/1676) |
+| Imported conflicts | The imported conflict card cannot apply “Use my version”. | [#1676](https://github.com/RetroGorilla/splitpage/pull/1676) |
+| Find across members | A match spanning synthetic join text or another unaddressable range cannot be replaced. | [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
+| Find in Writer headings | A heading match can be replaced singly. A Replace all batch containing a heading match is refused. | [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
+| Find after a peer edit | Replacement requires the original matched characters. A peer's replacement with identical spelling still invalidates the match. Single Replace refuses it and Replace all skips it. | [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
+| Find replacement marks | Replace all inserts unmarked text. For example replacing every `cup` with `mug` in `<em>cupcup</em>` gives `mugmug`. Standalone keeps the emphasis. Single Replace inherits marks in both. | [#1684](https://github.com/RetroGorilla/splitpage/pull/1684) |
+| Undo selection after a peer change | Undo and redo resolve each saved endpoint against the live members. After a peer split a surviving endpoint can land in the new beat. If either endpoint no longer resolves, the command returns no selection to replay. | [#1671](https://github.com/RetroGorilla/splitpage/pull/1671), [#1677](https://github.com/RetroGorilla/splitpage/pull/1677) |
+| Deletion undo | Consecutive same-direction deletions at one caret in one cell can share an undo step within a rolling second. In the Split comparisons, Backspace then Delete, a caret move between deletions, and a selection deletion then Backspace take two native steps each. Backspace, typing, then Delete and deletions around Find Replace take three each. Each sequence takes one step in standalone. | [#1685](https://github.com/RetroGorilla/splitpage/pull/1685) |
+| Typing after a buffered deletion | Typing immediately after a buffered deletion starts its own undo step. | [#1685](https://github.com/RetroGorilla/splitpage/pull/1685) |
+| Peer insertion during Delete | A peer insertion at offset zero during a forward Delete run can break the run. | [#1685](https://github.com/RetroGorilla/splitpage/pull/1685) |
+| Composition after a buffered deletion | Starting composition before a buffered deletion is sent can use an offset taken before the flush rebases the caret. | [#1685](https://github.com/RetroGorilla/splitpage/pull/1685) |
+| Registry and text rewrites | Renaming a tag used in the script, deleting registry tags that still have inline labels, and removing those labels alone are refused. | [#1670](https://github.com/RetroGorilla/splitpage/pull/1670), [#1681](https://github.com/RetroGorilla/splitpage/pull/1681) |
+| Tag rename collision | Renaming a tag to an existing name in its category is refused. Standalone can merge the records and repoint shot props. | [#1670](https://github.com/RetroGorilla/splitpage/pull/1670), [#1681](https://github.com/RetroGorilla/splitpage/pull/1681) |
+| B-roll script rewrites | Adding a B-roll key to a line or renaming a script shot through its line is unavailable. | [#1665](https://github.com/RetroGorilla/splitpage/pull/1665), [#1681](https://github.com/RetroGorilla/splitpage/pull/1681) |
+| Derived B-roll shots | A shot projected only from a surviving key has no live record to edit. Undo can reveal the kept fields. | [#1681](https://github.com/RetroGorilla/splitpage/pull/1681) |
+| Unkeyed B-roll removal | Removing the shot behind an unkeyed line leaves it absent from the live projection. Core reload derives a shot with a new ID. | [#1670](https://github.com/RetroGorilla/splitpage/pull/1670) |
+| Registry recovery | The native editor does not expose the old Recovery panel's deleted registry entries. Local undo can restore a removal. | [#1681](https://github.com/RetroGorilla/splitpage/pull/1681) |
+| Concurrent same-name tag creation | Both records and distinct IDs survive. Production shows one card for the category and normalized name. | [#1681](https://github.com/RetroGorilla/splitpage/pull/1681) |
+| Concurrent registry writes | Undo of the winning write can leave a field absent. Unnamed stored entries are hidden, and a missing status can read at its default. An entry without a rank reads before ranked entries in ID order. See [appendix H](#h-outcomes-that-lose-nothing). | [#1670](https://github.com/RetroGorilla/splitpage/pull/1670) |
+| Concurrent shot prop additions | Distinct prop keys survive, with at most 40 shown. Removing a visible entry can reveal an overflow entry. | [#1678](https://github.com/RetroGorilla/splitpage/pull/1678) |
+| Concurrent shot prop moves | Two moves of one prop compete for its rank. Undo of the winning move can clear the rank and put the prop before ranked entries. Redo restores the winning order. See [section 5](#5-accepted-losses). | [#1678](https://github.com/RetroGorilla/splitpage/pull/1678) |
+| Cleared beat status | A cleared status is absent in the shared snapshot. Core reload supplies `todo`. | [#1660](https://github.com/RetroGorilla/splitpage/pull/1660) |
+| Edit size admission | One admitted edit can cross the measured 15 MB limit and even the 15.75 MB ceiling. It stays committed. The next addition is refused at the measured limit. At the measured ceiling all local writes, including removals and undo or redo, are refused. Reading, export and peer delivery remain available. | [#1667](https://github.com/RetroGorilla/splitpage/pull/1667), [#1680](https://github.com/RetroGorilla/splitpage/pull/1680) |
 
 ## Server-stop results and backup runbook
 
@@ -138,7 +197,7 @@ Decided by the owner: rows 1 to 13 on 2026-11-18; row 4's new form and rows 14 t
 | # | Decision | What a person will notice | Source |
 | --- | --- | --- | --- |
 | 1 | Standard Yjs. Beats share a segment's text, cut by boundary markers; each beat has a record and a visual cell | Nothing directly | Spike, E2 |
-| 2 | A shared script stays on the server between sessions. The design's reading: 15 MB bounds its whole shared life and server storage is in the first version; backups are not designed (appendix I) | Reopen any time; an offline copy can return days later | Owner |
+| 2 | A shared script stays on the server between sessions. The first version includes server storage and uses 15 MB for admission (section 8). Decision 19 records the storage choice and the backup runbook follows it | Reopen any time; an offline copy can return days later | Owner |
 | 3 | A plain formatting key per kind; a key per application for production tags only; standard writes; explicit attributes on every insert | Two people formatting touching words at once can lose some bold. Tags: section 5 | E4, E6, E11 |
 | 4 | Removing a row deletes its narration and boundary; its record and visual cell stay, hidden (replacing deletion of them) | If the remover undoes, others' unseen changes come back with the row, except a narration tag (section 4) | Owner, E14 |
 | 5 | A heading's name has its own text cell; the heading keeps its boundary, record, rank and `removed` mark | A removed heading restores with its name; narration never ends up in a title | E5, E11 |
@@ -376,7 +435,7 @@ requirements from the outside review.
 | 4 | Moves | E10's collision table; a move including a row without its record refused unwritten | Done ([#1656](https://github.com/RetroGorilla/splitpage/pull/1656)) |
 | 5 | Records, status, comments | Exact row changes; author-only bodies | Done ([#1658](https://github.com/RetroGorilla/splitpage/pull/1658)) |
 | 6 | Undo | E3, E11, E14 and E16 tests; E15's histories under option A; E17's histories under rule (g); creation undo and redo timing (appendix O); one change per press; E11's full tag recount (845 requested, 800 kept, 40 undone, 5 lost) | Done ([#1659](https://github.com/RetroGorilla/splitpage/pull/1659)) |
-| 7 | Session, editor, relay with the wrapper, server storage, offline notice | E13's pair table; E16's notice counts; every reader agrees on E17's histories; first loads per decision 16; a large offline return under stock timers; two writers past the size limit; server stops per decision 19; stale-target editor cases (appendix O); store and reload | Pending |
+| 7 | Session, editor, relay with the wrapper, server storage, offline notice | E13's pair table; E16's notice counts; every reader agrees on E17's histories; first loads per decision 16; a large offline return under stock timers; two writers past the size limit; server stops per decision 19; stale-target editor cases (appendix O); store and reload | Built on `main` at `2a1cebba1`. Open acceptance cases are in [appendix O](#o-acceptance-cases-from-the-outside-review). |
 | 8 | Delete the old adapter | Every deleted test mapped; `npm run verify` | Pending |
 
 Slice 3 was built as two pull requests: 3a, split, join and removal with
@@ -405,15 +464,15 @@ questions. Earlier rounds: [appendix K](#k-earlier-rounds).
 
 **(g) A taken minted ID stays taken until that copy's clock advances.** Retrying before then keeps returning `taken`. Another write that advances the clock, such as setting a field to a new value, gives the retry a new ID. The refusal for comments and replies, including IDs held by removed records, is pinned in [record command tests](../../tests/adapters/collab/native/record-commands.test.ts). [Session tests](../../tests/adapters/collab/native/session.test.ts) pin retry before and after a clock advance. [Slice 5 PR](https://github.com/RetroGorilla/splitpage/pull/1658).
 
-**(h) Open for slice 7.**
+**(h) Session acceptance notes.**
 
 - Pinned. Refused carets and selections, including root-named relative positions, leave `doc.share` and the encoded state unchanged. [Text command tests](../../tests/adapters/collab/native/text-commands.test.ts). [Slice 3a PR, Deferred](https://github.com/RetroGorilla/splitpage/pull/1654).
 - The session warns at a measured 12 MB and refuses local additions at a measured 15 MB. It measures at open and after enough Yjs update bytes accumulate to cover half the distance to the next line, with a minimum step of 64 KiB. Near a line, the measurement tolerance is in update bytes. One large edit can jump several lines. The published state can lag behind the exact size by more than a step because Yjs can split retained items or hold pending peer updates without emitting an update until they integrate. The session publishes one size event with the latest measured state after the transaction when the published state changes. Removals and undo/redo still work below the measured ceiling of 105% of the limit. At the ceiling every local write is refused, and reading, export and close remain available. Peer updates still apply. After a deletion while warning or full, a recovery measure can run before the growth step is reached, at least two seconds after the last measure. An arriving update or an attempted addition at full checks for recovery. One timer checks again when due if the copy stays idle. Closing cancels the timer. Deleting does not free space on your own copy while undo retains the text. Reopening may reclaim that space, and removed rows and comments keep their records. Export is the way out. [Session size tests](../../tests/adapters/collab/native/session-size.test.ts).
 - Pinned. Removing a comment leaves its inline mark in `document()`, matching core reload, which keeps orphan comment marks. [Record command tests](../../tests/adapters/collab/native/record-commands.test.ts). [Slice 5 PR](https://github.com/RetroGorilla/splitpage/pull/1658).
 - Author-only editing compares names. The session supplies the actor. [Record command tests](../../tests/adapters/collab/native/record-commands.test.ts) pin the equal-name edit. [Session tests](../../tests/adapters/collab/native/session.test.ts) pin actor selection for comment and reply bodies. [Slice 5 PR](https://github.com/RetroGorilla/splitpage/pull/1658).
 - Pinned. `document()` returns a snapshot frozen at every depth, and with several headings stacked above one row only the heading directly above it appears in `sections` while `problems()` reports each omitted heading. [Reader tests](../../tests/adapters/collab/native/reader.test.ts), [record command tests](../../tests/adapters/collab/native/record-commands.test.ts). [Slice 3b PR](https://github.com/RetroGorilla/splitpage/pull/1653), [native reader](../../src/adapters/collab/native/reader.ts).
-- Open for slice 7. Selection anchors carry the cost of retaining a state vector. A caret does not carry one. [Formatting tests](../../tests/adapters/collab/native/format-commands.test.ts) pin the caret and selection behaviour. The cost is not pinned. [Section 2](#2-what-each-command-writes), [slice 2 PR](https://github.com/RetroGorilla/splitpage/pull/1651).
-- Open for slice 7. A picture change on a joined row is checked against the assembled gallery before the core's form is applied, so it can be refused for a link the reader hides. Pinned as built. [Record race tests](../../tests/adapters/collab/native/record-races.test.ts).
+- Text command selection anchors retain a state vector. A caret does not carry one. [Formatting tests](../../tests/adapters/collab/native/format-commands.test.ts) pin the caret and selection behaviour. The cost of that text-command state vector is not pinned. [Section 2](#2-what-each-command-writes), [slice 2 PR](https://github.com/RetroGorilla/splitpage/pull/1651).
+- Pinned. A picture change on a joined row is checked against the assembled gallery before the core's form is applied, so it can be refused for a link the reader hides. [Record race tests](../../tests/adapters/collab/native/record-races.test.ts).
 
 **(i) Accepted as built.** After two competing moves and an undo, E15 history 16 ends `A B N X C D` in the product. The experiment's option A gave `A B X N C D`. Slice 4 moves pin followers that have no rank. Undo removes that pin and the split-off follows its narration neighbour. [Move race tests](../../tests/adapters/collab/native/move-races.test.ts), [slice 6 PR](https://github.com/RetroGorilla/splitpage/pull/1659).
 
@@ -436,7 +495,8 @@ The owner chose option A on 2026-11-20.
 
 The older plan's [Local replica storage](../COLLABORATION-PLAN.md#local-replica-storage) calls for a store that reports when a write completes. It uses IndexedDB in the browser and a main-process store on desktop. Its [Offline guarantees](../COLLABORATION-PLAN.md#offline-guarantees) describe reopening retained work. This note's [section 9](#9-offline-notice) describes a pending-edit journal for the notice. It specifies no local store or restart guarantee. The two passages cover different parts of offline work and do not disagree.
 
-On `main`, the native layer has no persistent client store wired into the app.
+On `main`, the native store can persist and reopen a session through browser IndexedDB or desktop test IPC.
+The editor entry through `__sharedTest` does not attach either store.
 
 - **A.** Include the plan's local store in the session work. A person can recover confirmed local edits on restart subject to the plan's storage conditions.
 - **B.** Stage the local store separately. Until it is available, a person can keep editing in a loaded offline session and cannot rely on reopening unsynced work after a restart.
@@ -464,7 +524,9 @@ The owner chose option A on 2026-11-20.
 
 The older plan's [Validation and resource limits](../COLLABORATION-PLAN.md#validation-and-resource-limits) call for separate bounds and checks before rejected updates affect other copies. The plan requires an explicit outcome for two valid edits that exceed a limit together. This note's [appendix B](#b-checks) and [appendix I](#i-smaller-open-points) specify a 15 MB encoded limit and local edit refusal. [Appendix O](#o-acceptance-cases-from-the-outside-review) records the gap for server checks and merged edits.
 
-On `main`, native commands check individual inputs. The encoded per-command limit and native relay enforcement are deferred. [Slice 5 PR](https://github.com/RetroGorilla/splitpage/pull/1658).
+On `main`, the session checks the last measured encoded size before a local command. The relay checks encoded size
+when admitting a connection and caps individual WebSocket payloads. Already admitted writers keep access when
+their updates cross the limit. See [section 8](#8-relay-and-size).
 
 - **A.** Use the local size check and define what happens when a merge goes over the limit. A person can hit a warning or refusal while editing. They need a clear outcome when offline edits combine.
 - **B.** Add the plan's server-side limits to the local check. A person whose valid local work would push the shared copy over its limit can be stopped from publishing it and keep it for export.
@@ -473,9 +535,9 @@ The owner chose option A on 2026-11-20.
 
 ### Backup timing
 
-The older plan's [Backups and restore](../COLLABORATION-PLAN.md#backups-and-restore) calls for daily backups and a restore drill before limited release. Its update supersedes the timing. This note's [appendix I](#i-smaller-open-points) leaves backup design open and proposes it with slice 7. It gives no schedule or release gate.
+The older plan's [Backups and restore](../COLLABORATION-PLAN.md#backups-and-restore) calls for daily backups and a restore drill before limited release. The native relay's [backup runbook](#backup-runbook) gives the schedule and the isolated restore procedure for SQLite snapshots.
 
-On `main`, no native server storage or backup workflow is wired in.
+On `main`, the relay stores SQLite snapshots and has commands to verify backups and restore into an empty volume.
 
 - **A.** Require daily backups and a restore drill before limited release. A person can expect recovery from the last backup if the server store is lost.
 - **B.** Set the schedule and release gate when slice 7 designs backups. A person has no promised backup interval until that decision is made.
@@ -486,7 +548,7 @@ The owner chose option A on 2026-11-20.
 
 The older plan's [Server storage](../COLLABORATION-PLAN.md#server-storage) and [Durability receipts](../COLLABORATION-PLAN.md#durability-receipts) require a committed update journal before a durable receipt. Its update supersedes that first-version choice. After reviewing the [server-stop results](#server-stop-results-and-backup-runbook), the owner confirmed [decision 19](#decisions-made) on 2026-11-20. The first version uses stock snapshots and makes no "saved to server" claim.
 
-On `main`, the native layer has no server store or saved-status integration.
+On `main`, the relay stores SQLite snapshots. The provider's applied acknowledgement carries no durability receipt.
 
 - **A.** Keep snapshots if the server-stop results are acceptable to the owner. Recent edits can be missing from the server after a stop, and a person gets no receipt that they were saved there.
 - **B.** Require the journal and durable receipts before others use the layer. A person can tell which edits were committed to server storage before a server process stop.
@@ -660,7 +722,7 @@ E11, 600 generated histories, names in cells, unless marked:
 | A restored row without a rank read at its stored place (rule (e)) | 5 histories; 3 with kept records (E14, E17) |
 | Two people edit the gallery of the same beat at once | One writer's whole gallery survives and stays intact on core reload, even when the writers edited different gallery fields |
 | Someone restores a registry entry before receiving another person's removal | The entry disappears again when the unseen removal arrives. Restoring it again brings back its fields |
-| Two people change one registry value at the same moment and the winner undoes | The value falls back to its default until someone sets it again. Rankless entries appear first in ID order and a move gives them a rank |
+| Two people change one registry value at the same moment and the winner undoes | The stored value can become absent. An entry without a name is hidden. A missing tag status reads as `needed`. Rankless entries appear first in ID order and a move gives them a rank. [#1670](https://github.com/RetroGorilla/splitpage/pull/1670) |
 | Two people add different props or move different props on one shot | Both entries survive. Equal ranks sort by key and undo on one copy leaves the other copy's edit |
 | Two people add the same normalized prop name under different tag IDs | Both show in rank and key order when within the cap, as on core reload. Undo removes the acting copy's addition and redo brings it back |
 | One person removes a prop while another edits it | The removed prop stays hidden. Undo of the removal restores it with the concurrent edit |
@@ -867,19 +929,21 @@ Requirements from the outside review of this note, added to the build order (sec
 10's four-step history.
 
 **Slice 7.**
-- **First loads** (decision 16): the sizes that fit at each supported speed, a limit on restarts and the message;
-  and a large offline return under stock timers.
+- **First loads** (decision 16): the [relay tests](../../tests/adapters/collab/native/relay.test.ts) pin one restart
+  after the stock receive wait and the message after the second timed-out attempt. The speed figures and large
+  offline return under stock timers in appendix I are from E13.
 - **Two writers past the size limit:** two offline copies, each under 15 MB, whose merge exceeds it. The test shows
-  where the refusal happens, what each person sees, how refused work is exported, and that retries stop. The note
-  has only a per-command refusal on the client (appendix I, "What happens at 15 MB"). The plan also requires bounds on
-  total document state checked before an update reaches other clients, explicit handling of legitimate concurrent
+  where the refusal happens, what each person sees, how refused work is exported, and that retries stop. The plan
+  also requires bounds on total document state checked before an update reaches other clients, explicit handling of legitimate concurrent
   limit conflicts, never discarding an update while claiming synchronization succeeded, preserving recoverable data,
-  and a test where individually valid edits merge past the limit ("Validation and resource limits"). That gap is
-  open.
+  and a test where individually valid edits merge past the limit ("Validation and resource limits"). The relay
+  checks size at connection admission and the session can refuse the next local write after crossing a measured
+  line. The combined offline-writer case and its export and retry outcomes remain open.
 - **Server stops** (decision 19): the [six-row stop table](#server-stop-results-and-backup-runbook) covers clean
   and killed stops before, during and after the store. The plan's receipt checker and kill-before-and-after-receipt
   tests are deferred with the update journal.
 - **Stale targets in the editor** (E1's four commit outcomes: written, unchanged, moved to the beat's live cell, or
   handed to a recovery list): IME composition and plain buffered typing, in narration and in visual cells, with the
-  target removed, replaced, restored, or hidden under rule (g). Each ends as a visible write or a recovery entry,
-  never silently. One case starts a composition in N while N is shown and commits it after N is hidden.
+  target removed, replaced, restored, or hidden under rule (g). The [editor tests](../../src/test/shared-native-editor-app.test.mjs)
+  cover buffered and composed input, stale paint and stopped drafts. The full target-state matrix, including
+  starting composition in N and committing after N is hidden, remains open.
