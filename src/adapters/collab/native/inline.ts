@@ -325,8 +325,10 @@ function merged(views: readonly ItemView[]): Run[] {
   return normalizeCell(runs);
 }
 
-export function nativeRunsOf(items: readonly NativeDeltaItem[]): Run[] {
-  return merged(itemViews(items, false));
+export function nativeRunsOf(items: readonly NativeDeltaItem[], visitWidth?: (index: number, width: number) => void): Run[] {
+  const views = itemViews(items, false);
+  if (visitWidth) views.forEach(({ shownCount }, index) => visitWidth(index, shownCount));
+  return merged(views);
 }
 
 export function nativeCellView(items: readonly NativeDeltaItem[]): NativeCellView {

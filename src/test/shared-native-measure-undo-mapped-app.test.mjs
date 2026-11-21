@@ -335,33 +335,36 @@ for (const size of [2, 50]) {
 }
 
 for (const view of ["Writer", "Split"]) {
-  for (const glue of [false, true]) test(`${view}: deleting ${glue ? "synthetic join space" : "across joined members"} stops at the uncommitted preview`, async t => {
+  for (const glue of [false, true]) test(`${view}: refusing deletion ${glue ? "of synthetic join space" : "across joined members"} keeps the editor usable`, async t => {
     const rows = glue ? [["r1", "a "], ["r2", " b"]] : [["r1", "abcd"], ["r2", "ef"]];
     const [from, to] = glue ? [2, 3] : [2, 6];
     const joined = source(t, rows);
     written(joined.commands.joinRow("r2", "r1", " "));
-    await enter(t, rows, joined.encodeState(), true);
+    await enter(t, rows, joined.encodeState());
     const show = t.mock.method(notices, "show", () => {});
-    t.mock.method(console, "error", () => {});
     if (view === "Writer") writer.openWriter();
     const surface = view === "Writer" ? root() : cell();
     place(view, from, to);
     const range = document.getSelection().getRangeAt(0).cloneRange();
     assert.equal(input(surface, "deleteContentBackward", null, range), true);
     const original = rows.map(([, text]) => text).join(" ");
-    const preview = original.slice(0, from) + original.slice(to);
+    const shown = () => (view === "Writer" ? beat("r1") : cell()).textContent.replaceAll("\u00a0", " ");
     await agreed([["r1", original]]);
     assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
     assert.deepEqual(show.mock.calls.map(call => call.arguments), refused);
-    assert.equal((view === "Writer" ? beat("r1") : cell()).textContent.replaceAll("\u00a0", " "), preview);
-    assert.deepEqual(selection(view), expectedSelection(view, from));
+    assert.equal(shown(), original);
+    assert.deepEqual(selection(view), expectedSelection(view, from, to));
     assert.equal(press(surface, "z", { ctrlKey: true }), true);
-    assert.deepEqual(selection(view), expectedSelection(view, from));
-    assert.equal((view === "Writer" ? beat("r1") : cell()).textContent.replaceAll("\u00a0", " "), preview);
+    assert.deepEqual(selection(view), expectedSelection(view, from, to));
+    assert.equal(shown(), original);
+    place(view, from);
     assert.equal(input(surface, "insertText", "X"), true);
-    assert.equal((view === "Writer" ? beat("r1") : cell()).textContent.replaceAll("\u00a0", " "), preview);
-    assert.equal(hook.leave().ok, false);
-    await agreed([["r1", original]]);
+    window.dispatchEvent(new window.Event("pagehide"));
+    const entered = original.slice(0, from) + "X" + original.slice(from);
+    await agreed([["r1", entered]]);
+    assert.equal(shown(), entered);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), refused);
+    leave([["r1", entered]]);
   });
 
   for (const pageHistory of view === "Split" ? [false, true] : [false]) {

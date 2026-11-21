@@ -160,6 +160,7 @@ function startSharedTestHook(): () => void {
       type: (beat: string, offset: number, text: string) => nativePeer?.type(beat, offset, text),
       field: (...args: Parameters<NonNullable<typeof nativePeer>["field"]>) => nativePeer?.field(...args),
       join: (lower: string, upper: string) => nativePeer?.join(lower, upper),
+      unjoin: (lower: string) => nativePeer?.unjoin(lower),
       split: (beat: string, offset: number) => nativePeer?.split(beat, offset),
       removeBeat: (id: string) => nativePeer?.removeBeat(id),
       moveBeat: (...args: Parameters<NonNullable<typeof nativePeer>["moveBeat"]>) => nativePeer?.moveBeat(...args),
