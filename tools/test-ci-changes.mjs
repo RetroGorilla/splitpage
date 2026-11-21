@@ -78,6 +78,10 @@ for (const path of ["src/bootstrap/main.ts", "tools/dep-report.mjs", ".github/wo
   eq(`mixed prototype and ${path} changes run every check`, [needsChecks(files), needsRootTests(files), needsCollabChecks(files), needsAppChecks(files), needsDesktopChecks(files)], [true, true, true, true, true]);
 }
 for (const files of [null, [], [".github/workflows/ci.yml"]]) eq("unknown diffs and workflow changes run prototype tests", needsCollabChecks(files), true);
+for (const path of ["tests/collab/fixtures/projection-reference.json", "tests/collab/fixtures/projection/supplement.splitpage", "tests/collab/fixtures/projection/experiment-reference.json"]) {
+  eq(`shared projection fixture ${path} runs both the root and prototype tests`, [needsRootTests([path]), needsCollabChecks([path]), needsAppChecks([path])], [true, true, false]);
+}
+eq("unrelated main-tree fixtures skip prototype tests", needsCollabChecks(["tests/collab/fixtures/buffer.json"]), false);
 eq("app-only changes do not run prototype tests", needsCollabChecks(["src/bootstrap/main.ts"]), false);
 eq("a mixed change still runs every affected check", [needsChecks(["prototypes/collab/src/probe.ts", "src/bootstrap/main.ts"]), needsCollabChecks(["prototypes/collab/src/probe.ts", "src/bootstrap/main.ts"]), needsDesktopChecks(["prototypes/collab/src/probe.ts", "src/bootstrap/main.ts"])], [true, true, true]);
 

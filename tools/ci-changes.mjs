@@ -35,7 +35,8 @@ export function needsChecks(files) {
 
 export function needsCollabChecks(files) {
   if (files === null || files.length === 0) return true;
-  return files.some((f) => f.startsWith("prototypes/collab/") || f === ".github/workflows/ci.yml");
+  return files.some((f) => f.startsWith("prototypes/collab/") || f === ".github/workflows/ci.yml" ||
+    f === "tests/collab/fixtures/projection-reference.json" || f.startsWith("tests/collab/fixtures/projection/"));
 }
 
 export function needsRootTests(files) {

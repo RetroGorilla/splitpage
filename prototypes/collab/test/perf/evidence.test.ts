@@ -77,7 +77,7 @@ test("timed audit retains original implementation hashes and refuses an unlisted
 
 test("timed audit rejects missing, duplicate, stale and wrongly attributed post-timing declarations", () => {
   const audit = JSON.parse(readFileSync(new URL("../../src/perf/timed-source.json", import.meta.url), "utf8")) as PerfTimedSourceAudit;
-  assert.equal(audit.postTimingChanges?.length, 5);
+  assert.equal(audit.postTimingChanges?.length, 7);
   for (const defect of ["missing", "duplicate", "current hash", "timed hash", "unlisted", "PR", "reason"] as const) {
     const wrong = structuredClone(audit);
     const changes = wrong.postTimingChanges;
@@ -94,9 +94,9 @@ test("timed audit rejects missing, duplicate, stale and wrongly attributed post-
   }
 });
 
-test("every tracked prototype text file omits private machine/user tokens and drive-letter absolute paths", () => {
+test("prototype text and shared projection fixtures omit private machine/user tokens and drive-letter absolute paths", () => {
   const root = new URL("../../../../", import.meta.url);
-  const tracked = execFileSync("git", ["ls-files", "-z", "--", "prototypes/collab/"], { cwd: fileURLToPath(root), encoding: "utf8" }).split("\0").filter(Boolean);
+  const tracked = execFileSync("git", ["ls-files", "-z", "--", "prototypes/collab/", "tests/collab/fixtures/projection-reference.json", "tests/collab/fixtures/projection/"], { cwd: fileURLToPath(root), encoding: "utf8" }).split("\0").filter(Boolean);
   assert.ok(tracked.length > 0);
   const leaking = tracked.filter(file => {
     if (file.split("/").includes("node_modules") || /(?:^|\/)(?:package-lock\.json|npm-shrinkwrap\.json|yarn\.lock|pnpm-lock\.yaml|bun\.lockb?)$/.test(file)) return false;
@@ -113,7 +113,7 @@ test("privacy scanning decodes JSON escapes without mistaking escaped mark-key q
 });
 
 test("the synthetic projection fixture exemption rejects another drive path and whole-value prefix/suffix variants", () => {
-  const file = "prototypes/collab/test/proj/supplement.splitpage";
+  const file = "tests/collab/fixtures/projection/supplement.splitpage";
   const text = readFileSync(new URL("../../../../" + file, import.meta.url), "utf8");
   const fixture = JSON.parse(text) as { rows: { imageLinks: { location: { path: string } }[] }[] };
   const location = fixture.rows[0]?.imageLinks[0]?.location;
