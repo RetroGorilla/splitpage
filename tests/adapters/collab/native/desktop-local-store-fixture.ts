@@ -31,9 +31,7 @@ export function replicasAt(userData: string, fs?: NativeReplicaFileSystem) {
 
 type DiskAction = (perform: () => Promise<void>, partial?: () => Promise<void>) => Promise<void>;
 
-export async function desktopFixture(t: TestContext, durableAppends = true) {
-  const directory = await disk.mkdtemp(join(tmpdir(), "splitpage-native-replica-"));
-  t.after(() => disk.rm(directory, { recursive: true, force: true }));
+export function replicaFileFaults(durableAppends = true) {
   let armed: { phase: string; action: DiskAction } | undefined;
   const phases: string[] = [];
   async function step(phase: string, perform: () => Promise<void>, partial?: () => Promise<void>): Promise<void> {
@@ -65,16 +63,23 @@ export async function desktopFixture(t: TestContext, durableAppends = true) {
       try { await handle.sync(); } finally { await handle.close(); }
     })
   };
-  const main = replicasAt(directory, fileSystem);
-  const first = main.window(), second = main.window();
   function intercept(phase: string, action: DiskAction): void {
     assert.equal(armed, undefined);
     armed = { phase, action };
   }
+  return { fileSystem, phases, intercept };
+}
+
+export async function desktopFixture(t: TestContext, durableAppends = true) {
+  const directory = await disk.mkdtemp(join(tmpdir(), "splitpage-native-replica-"));
+  t.after(() => disk.rm(directory, { recursive: true, force: true }));
+  const { fileSystem, phases, intercept } = replicaFileFaults(durableAppends);
+  const main = replicasAt(directory, fileSystem);
+  const first = main.window(), second = main.window();
   return {
     directory, main, first, second, phases, intercept,
     store: first.store, other: second.store,
-    restart: () => replicasAt(directory).window(),
+    restart: (observe = false) => replicasAt(directory, observe ? fileSystem : undefined).window(),
     failAppend(reason?: "quota") {
       intercept("append:sync", async () => {
         throw Object.assign(new Error("injected append failure"), { code: reason === "quota" ? "ENOSPC" : "EIO" });

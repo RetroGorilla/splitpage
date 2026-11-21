@@ -1,12 +1,18 @@
 import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
 import { createHash } from "node:crypto";
 import { readFile, writeFile } from "node:fs/promises";
-import { join } from "node:path";
+import { dirname, join } from "node:path";
 import { test, type TestContext } from "node:test";
+import { fileURLToPath } from "node:url";
+import { promisify } from "node:util";
 import type { NativeReplicaInvoke } from "../../../../shared/native-replica.d.ts";
 import { desktopFixture } from "./desktop-local-store-fixture.ts";
 import { eventResult } from "./indexeddb-fixture.ts";
 import { STORE_OPTIONS, STORED, seedSession, stored, typeAt } from "./local-store-fixture.ts";
+
+const runWriter = promisify(execFile);
+const interruptedWriter = fileURLToPath(new URL("./interrupt-desktop-write.ts", import.meta.url));
 
 function commands(t: TestContext) {
   const session = seedSession({ A: "start" });
@@ -95,6 +101,71 @@ test("a desktop receipt remains pending until append fsync returns", { timeout: 
   opened.session.close();
   await opened.closed;
 });
+
+for (const point of ["append", "checkpoint"] as const) {
+  test(`reopen syncs the interrupted ${point} before its recovered generation is stored`, { timeout: 15000 }, async t => {
+    const fixture = await desktopFixture(t), updates = commands(t), name = "interrupted";
+    const writer = await claim(fixture.first.invoke, name);
+    assert.deepEqual(await writer.write(1, updates.initial, point === "append"), STORED);
+    assert.deepEqual(await writer.close(), STORED);
+    const bytes = point === "append" ? updates.a : updates.throughA;
+    await runWriter(process.execPath, [interruptedWriter, fixture.directory, name, point, Buffer.from(bytes).toString("base64")], { timeout: 10000 });
+
+    const entered = eventResult<undefined>(), allow = eventResult<undefined>();
+    let synced = false;
+    fixture.intercept(point === "append" ? "updates:sync" : "checkpoint:sync", async sync => {
+      entered.resolve(undefined);
+      await allow.promise;
+      await sync();
+      synced = true;
+    });
+    const start = fixture.phases.length;
+    const receipt = fixture.restart(true).store.open(name, STORE_OPTIONS).then(async opened => {
+      assert.equal(opened.kind, "opened");
+      try {
+        assert.equal(opened.session.document().rows[0]?.audioText, "Astart");
+        const result = await opened.flush();
+        assert.equal(synced, true);
+        const phases = fixture.phases.slice(start);
+        assert.ok(phases.includes("checkpoint:sync"));
+        assert.ok(phases.includes("updates:sync"));
+        assert.ok(phases.includes("native-replicas:dir-sync"));
+        assert.ok(phases.includes(createHash("sha256").update(name).digest("hex") + ":dir-sync"));
+        return result;
+      } finally { opened.session.close(); await opened.closed; }
+    });
+    try {
+      assert.equal(await Promise.race([entered.promise.then(() => "sync"), receipt.then(() => "stored")]), "sync");
+    } finally { allow.resolve(undefined); }
+    assert.deepEqual(await receipt, stored(2));
+  });
+}
+
+for (const phase of ["checkpoint:sync", "updates:sync", "native-replicas:dir-sync"] as const) {
+  test(`reopen leaves files intact when ${phase} fails before torn tail repair`, async t => {
+    const fixture = await desktopFixture(t), updates = commands(t), name = "open-sync-failure";
+    const writer = await claim(fixture.first.invoke, name);
+    assert.deepEqual(await writer.write(1, updates.initial, true), STORED);
+    assert.deepEqual(await writer.write(2, updates.a), STORED);
+    assert.deepEqual(await writer.close(), STORED);
+    const log = logAt(fixture.directory, name), checkpoint = join(dirname(log), "checkpoint");
+    const snapshot = await readFile(checkpoint);
+    const original = await readFile(log);
+    const torn = Buffer.concat([original, Buffer.from([1, 2])]);
+    await writeFile(log, torn);
+    fixture.intercept(phase, async () => { throw new Error("injected recovery sync failure"); });
+    const { store } = fixture.restart(true);
+    assert.deepEqual(await store.open(name, STORE_OPTIONS), { kind: "failed", reason: "io" });
+    assert.deepEqual(await readFile(checkpoint), snapshot);
+    assert.deepEqual(await readFile(log), torn);
+    const reopened = await store.open(name, STORE_OPTIONS);
+    assert.equal(reopened.kind, "opened");
+    try {
+      assert.deepEqual(await reopened.flush(), stored(2));
+      assert.deepEqual(await readFile(log), original);
+    } finally { reopened.session.close(); await reopened.closed; }
+  });
+}
 
 for (const file of ["checkpoint.new", "updates.new"]) {
   for (const [operation, point] of [

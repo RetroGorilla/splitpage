@@ -86,12 +86,19 @@ function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSyste
     await disk.rename(temp, file);
   }
 
+  async function syncFile(file: string): Promise<void> {
+    const handle = await disk.open(file, "r+");
+    await useFile(handle, () => handle.sync());
+  }
+
   async function syncEntry(file: string, dir: string): Promise<void> {
-    if (process.platform === "win32") {
-      const handle = await disk.open(file, "r+");
-      await useFile(handle, () => handle.sync());
-    }
+    if (process.platform === "win32") await syncFile(file);
     await disk.syncDirectory(dir);
+  }
+
+  async function syncParentDirectories(): Promise<void> {
+    await disk.syncDirectory(userData);
+    await disk.syncDirectory(root);
   }
 
   async function open(name: string) {
@@ -102,7 +109,8 @@ function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSyste
     if (saved && (!checkpoint || saved.length !== HEADER_BYTES + checkpoint.bytes.byteLength)) {
       throw new Error("Invalid native replica checkpoint");
     }
-    const contents = await read(log) ?? EMPTY;
+    const logContents = await read(log);
+    const contents = logContents ?? EMPTY;
     let tail: NativeReplicaEntry[] = [];
     let length = 0;
     let previous = 0;
@@ -122,20 +130,29 @@ function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSyste
     let initialized = false;
     let logEntryNeedsSync = true;
 
+    if (saved || logContents) {
+      // why: a process can exit after writing a complete record that is still only in the OS cache
+      if (saved) await syncFile(snapshot);
+      if (logContents) await syncFile(log);
+      await syncParentDirectories();
+      await disk.syncDirectory(dir);
+      initialized = true;
+      logEntryNeedsSync = !logContents;
+    }
+
     async function initialize(): Promise<void> {
       if (initialized) return;
       await disk.mkdir(dir, { recursive: true });
-      await disk.syncDirectory(userData);
-      await disk.syncDirectory(root);
+      await syncParentDirectories();
       initialized = true;
     }
 
-    async function repairLog(): Promise<void> {
+    async function repairLog(sync = true): Promise<void> {
       // why: an append-only handle cannot truncate a file on Windows
       const handle = await disk.open(log, "r+");
       await useFile(handle, async () => {
         await handle.truncate(length);
-        await handle.sync();
+        if (sync) await handle.sync();
       });
       repair = false;
     }
@@ -146,7 +163,8 @@ function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSyste
       logEntryNeedsSync = false;
     }
 
-    if (repair) await repairLog();
+    // why: the recovered prefix is durable, and a failed recovery sync must leave the original tail intact
+    if (repair) await repairLog(false);
 
     async function append(entry: NativeReplicaEntry): Promise<void> {
       if (repair) await repairLog();
