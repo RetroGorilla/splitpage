@@ -16,7 +16,11 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>, 
 } = {}) {
   let paused = false;
   let capturing = false;
+  let reader: ReturnType<typeof openNativeSession> | null = null;
   const packets: Packet[] = [];
+  const replica = (source: "app" | "peer") => source === "app" ? app : peer;
+  const openReader = (source: "app" | "peer") =>
+    openNativeSession({ kind: "state", state: replica(source).encodeState() }, { actor: "Reader", sanitize: sanitizeHtml });
   const capture = (to: Packet["to"]) => (bytes: Uint8Array) => {
     if (capturing) packets.push({ to, bytes });
   };
@@ -52,6 +56,21 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>, 
   }
   return {
     read: peer.document,
+    seedReader: () => {
+      reader ??= openReader("app");
+      return reader.document();
+    },
+    readLateReader: () => reader?.document() ?? null,
+    deliverToReader: (source: "app" | "peer") =>
+      reader !== null && applyUpdate(reader, replica(source).encodeState()),
+    freshSnapshot: (source: "app" | "peer") => {
+      const fresh = openReader(source);
+      try {
+        return fresh.document();
+      } finally {
+        fresh.close();
+      }
+    },
     hold: (mode?: "updates") => {
       paused = true;
       capturing = mode === "updates";
@@ -88,6 +107,8 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>, 
       return at.kind === "anchored" ? forward(peer.commands.splitRow(at.range)) : at;
     },
     removeBeat: (id: string) => forward(peer.commands.removeRows([id])),
+    replaceAll: (...args: Parameters<typeof peer.commands.replaceAll>) => forward(peer.commands.replaceAll(...args)),
+    undoPeer: () => forward(peer.commands.undo()),
     moveBeat: (id: string, drop: NativeMoveBlock | null) => forward(peer.commands.moveBlocks([{ kind: "beat", id }], drop)),
     removeComment: (id: string) => forward(peer.commands.removeComment({ comment: id })),
     step: (direction: "undo" | "redo") => app.commands[direction](),
@@ -98,6 +119,8 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>, 
       stopAppUpdates();
       stopPeerUpdates();
       packets.length = 0;
+      reader?.close();
+      reader = null;
       peer.close();
     }
   };
