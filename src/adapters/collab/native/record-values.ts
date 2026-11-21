@@ -44,8 +44,9 @@ export function nativeRecordId(value: unknown): value is string {
 const MAX_DEPTH = 64;
 const MAX_UNITS = 15_000_000;
 
-export function copyRecordValue(value: unknown, stored = false): unknown {
+export function copyRecordValue(value: unknown, mode: "argument" | "stored" | "data" = "argument"): unknown {
   const copiedObjects = new WeakMap<object, unknown>();
+  const stored = mode === "stored";
   const depthLimit = stored ? NATIVE_STORED_VALUE_DEPTH + 1 : MAX_DEPTH;
   const unitsLimit = stored ? Number.MAX_SAFE_INTEGER : MAX_UNITS;
   const validString = (item: unknown) => stored ? typeof item === "string" : nativeWellFormed(item);
@@ -60,18 +61,19 @@ export function copyRecordValue(value: unknown, stored = false): unknown {
     if (item === null || typeof item !== "object") return item;
     if (copiedObjects.has(item)) return copiedObjects.get(item);
     copiedObjects.set(item, undefined);
+    const values = mode === "data" ? ownDataValues(item) : null;
     let result: unknown;
     if (Array.isArray(item)) {
-      const list: readonly unknown[] = item, length = list.length, items: unknown[] = [];
-      if (!Number.isSafeInteger(length) || length < 0 || length > remaining) throw new RangeError("Invalid file array size");
-      for (let index = 0; index < length; index++) items.push(copy(list[index], depth + 1));
+      const list: readonly unknown[] = item, length = values ? values.get("length") : list.length, items: unknown[] = [];
+      if (typeof length !== "number" || !Number.isSafeInteger(length) || length < 0 || length > remaining) throw new RangeError("Invalid file array size");
+      for (let index = 0; index < length; index++) items.push(copy(values ? values.get(String(index)) : list[index], depth + 1));
       result = items;
     } else {
       if (!plainRecordArgument(item)) throw new TypeError("Expected a plain file record");
       const source = item as Record<string, unknown>;
       result = Object.fromEntries(Object.keys(source).map(key => {
         charge(key.length);
-        return [key, copy(source[key], depth + 1)];
+        return [key, copy(values ? values.get(key) : source[key], depth + 1)];
       }));
     }
     copiedObjects.set(item, result);
@@ -96,6 +98,16 @@ export function copyRecordValue(value: unknown, stored = false): unknown {
   }
   check(copied, 0);
   return copied;
+}
+
+function ownDataValues(item: object): Map<PropertyKey, unknown> {
+  const values = new Map<PropertyKey, unknown>();
+  for (const key of Reflect.ownKeys(item)) {
+    const property = Object.getOwnPropertyDescriptor(item, key);
+    if (!property || !Object.hasOwn(property, "value")) throw new TypeError("Expected a data property");
+    values.set(key, property.value);
+  }
+  return values;
 }
 
 export function writeRecordFields(record: Y.Map<unknown>, fields: Readonly<Record<string, unknown>>): NativeRecordOutcome {

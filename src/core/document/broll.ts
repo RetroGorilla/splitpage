@@ -38,31 +38,38 @@ function registryPropName(name: unknown): string {
 }
 
 export function normalizeBrollProps(list: unknown,registry: readonly (TagRecord | null | undefined)[] | null | undefined): BrollProp[] {
+  const out: BrollProp[] = [], seen = new Set<string>();
+  for (const prop of resolveBrollProps(list, registry)) {
+    if (out.length >= BROLL_PROPS_MAX) break;
+    if (!prop) continue;
+    const key = brollPropKey(prop.id, prop.name);
+    if (seen.has(key)) continue;
+    seen.add(key);
+    out.push(prop);
+  }
+  return out;
+}
+
+export function resolveBrollProps(list: unknown, registry: readonly (TagRecord | null | undefined)[] | null | undefined): (BrollProp | null)[] {
   const byId: Record<string, TagRecord> = Object.create(null), byName: Record<string, TagRecord> = Object.create(null);
   (registry || []).forEach(function (t) {
     if (!t || !t.id || !t.name) return;
     byId[t.id] = t;
     if (t.cat === "prop" && !byName[normalizeTagName(t.name)]) byName[normalizeTagName(t.name)] = t;
   });
-  const out: BrollProp[] = [], seen: Record<string, boolean> = Object.create(null), items: BrollPropInput[] = [];
+  const items: BrollPropInput[] = [];
   (Array.isArray(list) ? list as unknown[] : []).forEach(function (p) {
     if (typeof p === "string") p = { name: p };
     if (p && typeof p === "object") items.push(p as BrollPropInput);
   });
   const names = settledNames(items.map(function (p) { return plainText(p.name); }), BROLL_PROP_NAME_MAX, normalizeTagName);
-  items.forEach(function (prop, at) {
-    if (out.length >= BROLL_PROPS_MAX) return;
+  return items.map(function (prop, at) {
     let id = isTagId(prop.id) ? prop.id : "";
     let name = names[at] as string;
     if (!id && name && byName[normalizeTagName(name)]) id = (byName[normalizeTagName(name)] as TagRecord).id as string;
     if (id && byId[id]) name = registryPropName((byId[id] as TagRecord).name);
-    if (!name) return;
-    const key = brollPropKey(id, name);
-    if (seen[key]) return;
-    seen[key] = true;
-    out.push({ id: id, name: name });
+    return name ? { id, name } : null;
   });
-  return out;
 }
 
 export function brollPropKey(id: string, name: unknown): string {

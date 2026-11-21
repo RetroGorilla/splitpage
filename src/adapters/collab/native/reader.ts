@@ -10,6 +10,7 @@ import { compareNativeRankedIds } from "./rank.ts";
 import { nativeRegistryRowChanged, projectNativeRegistries } from "./registry-projection.ts";
 import type { NativeRegistryRowInputs } from "./registry-projection.ts";
 import type { NativeRoots } from "./roots.ts";
+import { NATIVE_SHOT_PROPS, OBSOLETE_SHOT_PROPS, nativeShotPropEntries } from "./shot-props.ts";
 import {
   NATIVE_BEAT_FIELDS, NATIVE_FIELD_PREFIX, NATIVE_GALLERY_FIELDS, NATIVE_GALLERY_KEY, decodeNativeValue, deepFrozen,
   isNativeBeatExtra, isNativeBeatField, nativeFieldKey, nativeFieldName, nativeGalleryOf, sameNativeValue
@@ -192,12 +193,13 @@ function beatExtraEntries(record: Y.Map<unknown>, where: string, problems: Probl
   return entries;
 }
 
-function fileFieldEntries(record: Y.Map<unknown>, where: string, problems: Problems): [string, unknown][] {
+function fileFieldEntries(record: Y.Map<unknown>, where: string, problems: Problems, skip?: string): [string, unknown][] {
   const entries: [string, unknown][] = [];
   for (const key of [...record.keys()].sort()) {
     if (!key.startsWith(NATIVE_FIELD_PREFIX)) continue;
     const name = nativeFieldName(key);
     if (name === null) { problems?.push({ kind: "bad-key", where: where + "/" + key }); continue; }
+    if (name === skip) continue;
     const value = decoded(record, key, where, problems);
     if (value) entries.push([name, value.value]);
   }
@@ -237,7 +239,18 @@ function byRank(map: Y.Map<Y.Map<unknown>>): [string, Y.Map<unknown>][] {
 
 function visibleRecords(root: Y.Map<Y.Map<unknown>>, name: string, problems: Problems): Record<string, unknown>[] {
   return byRank(root).filter(([, record]) => record.get("removed") !== true)
-    .map(([id, record]) => ({ ...fileFields(record, name + "/" + id, problems), id }));
+    .map(([id, record]) => {
+      const where = name + "/" + id;
+      if (name === "shots") {
+        const fields = Object.fromEntries(fileFieldEntries(record, where, problems, NATIVE_SHOT_PROPS));
+        const map = record.get(NATIVE_SHOT_PROPS);
+        const entries = map instanceof Y.Map ? nativeShotPropEntries(map, problems
+          ? key => { problems.push({ kind: "bad-value", where: where + "/" + NATIVE_SHOT_PROPS + "/" + key }); } : undefined) : null;
+        if (problems && (!entries || record.has(OBSOLETE_SHOT_PROPS))) problems.push({ kind: "bad-value", where: where + "/" + NATIVE_SHOT_PROPS });
+        return { ...fields, id, props: entries?.filter(entry => !entry.removed).map(entry => entry.prop) ?? [] };
+      }
+      return { ...fileFields(record, where, problems), id };
+    });
 }
 
 // why: a run's shape is known, so it is frozen field by field instead of by a walk over every value

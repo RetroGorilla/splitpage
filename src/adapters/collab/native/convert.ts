@@ -1,4 +1,5 @@
 import * as Y from "yjs";
+import { normalizeBrollProps } from "../../../core/document/broll.ts";
 import type { ValidatedDocument } from "../../../core/document/validated.ts";
 import { tagStack, withTagStack } from "../../../core/text/runs.ts";
 import type { Run } from "../../../core/text/runs.ts";
@@ -9,6 +10,7 @@ import { NATIVE_FORMAT_VERSION } from "./roots.ts";
 import type { NativeRoots } from "./roots.ts";
 import { transactNativeCommand } from "./script.ts";
 import type { NativeScript } from "./script.ts";
+import { NATIVE_SHOT_PROPS, newNativeShotProps } from "./shot-props.ts";
 import {
   NATIVE_BEAT_FIELDS, NATIVE_GALLERY_KEY, encodeNativeValue, isNativeBeatExtra, nativeFieldKey, nativeGalleryOf, nativeWellFormed
 } from "./values.ts";
@@ -112,11 +114,12 @@ function emptyDocument(doc: Y.Doc): boolean {
   return Y.decodeStateVector(Y.encodeStateVector(doc)).size === 0;
 }
 
-function writeRecord(map: Y.Map<Y.Map<unknown>>, key: string, entries: Entries, rank: string, extra: readonly (readonly [string, string])[] = []): void {
+function writeRecord(map: Y.Map<Y.Map<unknown>>, key: string, entries: Entries, rank: string, extra: readonly (readonly [string, string])[] = []): Y.Map<unknown> {
   const record = new Y.Map<unknown>();
   map.set(key, record);
   for (const [field, value] of [...entries, ...extra]) record.set(field, value);
   record.set("rank", rank);
+  return record;
 }
 
 function write(script: NativeScript, roots: NativeRoots, plan: ReturnType<typeof prepare>): void {
@@ -154,9 +157,14 @@ function write(script: NativeScript, roots: NativeRoots, plan: ReturnType<typeof
     writeNativeRuns(script.doc, visual, 0, beat.visual, null);
     if (beat.edited.length) roots.edited.set(beat.id, Object.fromEntries(beat.edited));
   }
-  for (const [map, records] of [[roots.people, plan.people], [roots.tags, plan.tags], [roots.shots, plan.shots], [roots.comments, plan.comments]] as const) {
+  for (const [map, records] of [[roots.people, plan.people], [roots.tags, plan.tags]] as const) {
     records.forEach((record, index) => { writeRecord(map, record.key, record.entries, nativeInitialRank(index)); });
   }
+  plan.shots.forEach((shot, index) => {
+    const record = writeRecord(roots.shots, shot.key, shot.entries, nativeInitialRank(index));
+    record.set(NATIVE_SHOT_PROPS, newNativeShotProps(shot.props));
+  });
+  plan.comments.forEach((record, index) => { writeRecord(roots.comments, record.key, record.entries, nativeInitialRank(index)); });
   for (const reply of plan.replies) writeRecord(roots.replies, reply.key, reply.entries, reply.rank, [["commentId", reply.comment]]);
 }
 
@@ -189,7 +197,9 @@ function prepare(source: ValidatedDocument, ports: NativeConversionPorts) {
   return {
     meta: metaEntries(source), title: wellFormed(source.title),
     creation: [creation, { at, by }] as const, beats,
-    people: records(bags(source.people)), tags: records(tags), shots: records(bags(source.brollShots)),
+    people: records(bags(source.people)), tags: records(tags),
+    shots: bags(source.brollShots).map(shot => ({ key: String(shot.id), entries: fileEntries(shot, ["id", "props"]),
+      props: normalizeBrollProps(shot.props, []) })),
     comments: comments.map(comment => ({ id: String(comment.id), key: String(comment.id), entries: fileEntries(comment, ["id", "replies"]) })), replies
   };
 }

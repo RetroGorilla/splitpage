@@ -5,7 +5,7 @@ import type { ReportPort } from "../../application/session/ports.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
 import { isBlankBeat, swapBeatsCommand } from "../../application/commands/rows.ts";
 import { sceneBeforeBeat, scenesInOrder, storedSceneName } from "../../core/document/scenes.ts";
-import { headingPos } from "../../core/flow/flow.ts";
+import { beatPos, headingPos } from "../../core/flow/flow.ts";
 import { breakLine, deleteRange, markThroughout, replaceText, sliceCell, typingMarks } from "../../core/text/edits.ts";
 import { cellLength, projection } from "../../core/text/runs.ts";
 import type { Marks } from "../../core/text/runs.ts";
@@ -16,7 +16,7 @@ import { noteFieldPainted, renderRow } from "../../features/rows/render.ts";
 import { undoGesture } from "../../features/undo/routes.ts";
 import { scriptCellOf } from "../richtext.ts";
 import { guardUnload } from "../startup/page-lifetime.ts";
-import { narrationAt, narrationSurfaceOf, shownNarrationSurface, visualTextSurface } from "./native-narration-surfaces.ts";
+import { narrationAt, narrationSurfaceOf, shownNarrationSurface, visualTextSurface, writerNarration, writerSelectionCells } from "./native-narration-surfaces.ts";
 import { rowDrag } from "./editor-owners.ts";
 import type { NativeTextSurface } from "./native-narration-surfaces.ts";
 import { documentReader } from "./ports/document.ts";
@@ -30,6 +30,7 @@ interface NativeInputPorts {
   readonly editAttribution: () => NativeEditStamp;
   readonly now?: () => number;
   readonly report: ReportPort;
+  readonly paintIsCurrent?: () => boolean;
   readonly publish?: (buffered?: Pick<Draft, "cell" | "beat" | "field">) => void;
 }
 
@@ -54,6 +55,11 @@ type TrackedPaint = ReturnType<NativeInputPorts["native"]["trackNarrationPaint"]
 interface SelectionCapture {
   readonly indices: NativeTextPlacement;
   inserted?: readonly [RelativePoint | null, RelativePoint | null];
+}
+
+interface MoveEndpoint {
+  readonly cell: Element;
+  readonly offset: number;
 }
 
 interface Draft {
@@ -157,13 +163,15 @@ function formattingMark(event: Event, button: Element | null, key: KeyboardEvent
   return type.startsWith("format") ? FORMAT_MARKS.get(type.charAt(6).toLowerCase() + type.slice(7)) : undefined;
 }
 
-export function mountNativeSharedInput({ native, session, editAttribution, now = Date.now, report, publish = () => {} }: NativeInputPorts) {
+export function mountNativeSharedInput({ native, session, editAttribution, now = Date.now, report, paintIsCurrent = () => false, publish = () => {} }: NativeInputPorts) {
   let draft: Draft | null = null, stopped: string | null = null, uncertain = false;
   let composingInside: Pick<Draft, "cell" | "selection" | "html"> | null = null;
   let composingText = "";
   let timer: ReturnType<typeof setTimeout> | undefined;
   let placement: { readonly buffered: Draft; readonly caret: RelativePoint | number } | null = null;
   let lastWrite: number | null = null;
+  let stopWriterPaint: (() => void) | null = null;
+  const movePaint = new Map<Element, TrackedPaint>();
   const stopPaint = session.subscribe(() => {
     writerControls()?.renderWriter();
     const placed = placement;
@@ -175,6 +183,51 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (offset === null) return;
     surface.place(fresh, beat, offset, offset, false);
   });
+
+  function clearMovePaint(): void {
+    for (const paint of movePaint.values()) paint.dispose();
+    movePaint.clear();
+  }
+
+  function shownWriterBeat(cell: Element, beat: string): boolean {
+    const row = documentReader.read(doc => doc?.rows.find(item => item.id === beat));
+    return !!row && writerNarration.painted(cell, row);
+  }
+
+  function trackMovePaint(): void {
+    if (draft?.surface !== writerNarration || draft.composing || stopped) { clearMovePaint(); return; }
+    const active = document.activeElement;
+    const cells = active && writerSelectionCells(active, document.getSelection());
+    if (!cells || cells.anchor === cells.head) { clearMovePaint(); return; }
+    for (const [cell, paint] of movePaint) {
+      if (cell === cells.anchor || cell === cells.head) continue;
+      paint.dispose();
+      movePaint.delete(cell);
+    }
+    // why: identical visible text can contain different native positions after an unpublished edit
+    if (!paintIsCurrent()) return;
+    for (const cell of [cells.anchor, cells.head]) {
+      const beat = cell.getAttribute("data-id");
+      if (beat && cell !== draft?.cell && !movePaint.has(cell) && shownWriterBeat(cell, beat)) {
+        movePaint.set(cell, native.trackNarrationPaint(beat));
+      }
+    }
+  }
+
+  function bindWriterPaint(root: HTMLElement): () => void {
+    stopWriterPaint?.();
+    const stop = () => {
+      if (stopWriterPaint !== stop) return;
+      stopWriterPaint = null;
+      root.ownerDocument.removeEventListener("selectionchange", trackMovePaint);
+      root.removeEventListener("focusout", clearMovePaint);
+      clearMovePaint();
+    };
+    stopWriterPaint = stop;
+    root.ownerDocument.addEventListener("selectionchange", trackMovePaint);
+    root.addEventListener("focusout", clearMovePaint);
+    return stop;
+  }
 
   function narrationCell(beat: string, like: Element): HTMLElement | null {
     return narrationSurfaceOf(like).cell(beat);
@@ -190,6 +243,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     clearTimeout(timer);
     timer = undefined;
     draft?.paint?.dispose();
+    clearMovePaint();
     stopped = reason;
     if (!quiet) session.refuse(reason);
     return reason;
@@ -260,6 +314,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (refusal) return stop(refusal, quiet);
     let result;
     buffered.paint?.dispose();
+    clearMovePaint();
     const at = now();
     let visualCaret: number | null = null;
     try {
@@ -299,19 +354,25 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     }
   }
 
-  function acrossDraft(buffered: Draft, selection: CellRange) {
+  function draftEndpoint(buffered: Draft, offset: number, assoc: 0 | -1, coversDraftEdge: boolean) {
     const { from, to } = buffered.selection, end = from + buffered.text.length;
-    const endpoint = (offset: number, assoc: 0 | -1) => {
-      if (offset >= from && offset <= end && (buffered.text.length || from !== to)) {
-        return { point: null, index: offset - from, bound: false };
-      }
-      const original = offset > end ? offset - end + to : offset;
-      const bound = buffered.text.length > 0 && (assoc === 0
-        ? offset < from && selection.to >= from
-        : offset > end && selection.from <= end);
-      return { point: buffered.paint?.point(original, assoc) ?? null, index: bound ? (assoc === 0 ? 0 : buffered.text.length) : null, bound };
-    };
-    return [endpoint(selection.from, 0), endpoint(selection.to, -1)] as const;
+    if (offset >= from && offset <= end && (buffered.text.length || from !== to)) {
+      return { point: null, index: offset - from, bound: false };
+    }
+    const original = offset > end ? offset - end + to : offset;
+    const bound = coversDraftEdge && buffered.text.length > 0 && (assoc === 0 ? offset < from : offset > end);
+    return { point: buffered.paint?.point(original, assoc) ?? null, index: bound ? (assoc === 0 ? 0 : buffered.text.length) : null, bound };
+  }
+
+  function resolveDraftEndpoint(beat: string, endpoint: ReturnType<typeof draftEndpoint>, inserted: RelativePoint | null | undefined, assoc: 0 | -1) {
+    const resolve = (point: RelativePoint) => native.narrationOffset(beat, { from: point }, assoc);
+    if (!endpoint.bound) {
+      const point = endpoint.point ?? inserted;
+      return point ? resolve(point) : null;
+    }
+    const original = endpoint.point && resolve(endpoint.point), edge = inserted && resolve(inserted);
+    if (original == null || edge == null) return null;
+    return assoc === 0 ? Math.min(original, edge) : Math.max(original, edge);
   }
 
   function flushForInput(cell: Element, selection: CellRange, keepPreview = true, moveCaret = true): { cell: Element; selection: CellRange; stale?: true } | null {
@@ -331,22 +392,14 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (keepPreview) fresh.innerHTML = oldHtml;
       return { cell: fresh, selection, stale: true };
     }
-    const [start, end] = acrossDraft(buffered, selection);
+    const start = draftEndpoint(buffered, selection.from, 0, selection.to >= buffered.selection.from);
+    const end = draftEndpoint(buffered, selection.to, -1, selection.from <= buffered.selection.from + buffered.text.length);
     const capture: SelectionCapture = { indices: [start.index, end.index] };
     if (finish(capture, moveCaret)) return null;
     const fresh = buffered.surface.cell(buffered.beat);
     if (!fresh) { session.refuse(STALE); return null; }
-    const offset = (endpoint: typeof start, inserted: RelativePoint | null | undefined, assoc: 0 | -1) => {
-      const resolve = (point: RelativePoint) => native.narrationOffset(buffered.beat, { from: point }, assoc);
-      if (!endpoint.bound) {
-        const point = endpoint.point ?? inserted;
-        return point ? resolve(point) : null;
-      }
-      const original = endpoint.point && resolve(endpoint.point), edge = inserted && resolve(inserted);
-      if (original == null || edge == null) return null;
-      return assoc === 0 ? Math.min(original, edge) : Math.max(original, edge);
-    };
-    const from = offset(start, capture.inserted?.[0], 0), to = offset(end, capture.inserted?.[1], -1);
+    const from = resolveDraftEndpoint(buffered.beat, start, capture.inserted?.[0], 0);
+    const to = resolveDraftEndpoint(buffered.beat, end, capture.inserted?.[1], -1);
     if (from != null && to != null && from <= to) return { cell: fresh, selection: { from, to } };
     if (keepPreview) fresh.innerHTML = oldHtml;
     return { cell: fresh, selection, stale: true };
@@ -644,6 +697,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       restore(buffered);
       buffered.paint?.dispose();
       draft = null;
+      clearMovePaint();
       publish();
       return;
     }
@@ -755,13 +809,14 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     try {
       if (stopped && (editableText || heading || cell?.id === "writer-doc") && (splitting || joining || moving || removeHeading || mark || line || event.type === "paste")) return;
       if (editableText && stopped) { session.refuse(stopped); return; }
-      if (moving && narration) {
-        const id = narration.getAttribute("data-id");
+      if (moving) {
+        const source = narration ?? (target && writerSelectionCells(target, document.getSelection())?.head);
+        const id = source?.getAttribute("data-id");
         if (id) {
           const outcome = session.run(swapBeatsCommand(id, moving));
           if (outcome.kind === "failed") report(outcome.error);
+          return;
         }
-        return;
       }
       if (narration && joining) { join(narration, joining); return; }
       if (heading && (removeHeading || event.type === "beforeinput" && event.cancelable)) {
@@ -841,6 +896,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const head = rowPoint(selection.head), anchor = selection.anchor === selection.head ? head : rowPoint(selection.anchor);
     if (!head) return;
     const surface = shownNarrationSurface(), cell = surface.cell(head.row);
+    if (surface === writerNarration && anchor && anchor.row !== head.row) {
+      writerControls()?.writerFlowControl()?.place({ anchor: beatPos(anchor.row, anchor.offset), head: beatPos(head.row, head.offset) }, true);
+      return;
+    }
     if (cell) surface.place(cell, head.row, anchor?.row === head.row ? anchor.offset : head.offset, head.offset, true);
   }
 
@@ -863,16 +922,59 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
 
   function captureMoveSelection() {
     const active = document.activeElement;
-    const cell = active && shownNarrationSurface().cellAt(active);
-    const selection = cell && readSelection(cell, document.getSelection());
-    return cell && selection ? { cell, selection } : null;
+    if (!active) return null;
+    const live = document.getSelection(), cells = writerSelectionCells(active, live);
+    if (cells && cells.anchor !== cells.head && live?.anchorNode && live.focusNode) {
+      const anchor = domToPos(cells.anchor, live.anchorNode, live.anchorOffset);
+      const head = domToPos(cells.head, live.focusNode, live.focusOffset);
+      if (anchor === null || head === null) return null;
+      const backward = !!(cells.head.compareDocumentPosition(cells.anchor) & Node.DOCUMENT_POSITION_FOLLOWING);
+      return { kind: "across", anchor: { cell: cells.anchor, offset: anchor }, head: { cell: cells.head, offset: head }, backward } as const;
+    }
+    const cell = shownNarrationSurface().cellAt(active);
+    const selection = cell && readSelection(cell, live);
+    return cell && selection ? { kind: "within", cell, selection } as const : null;
   }
 
-  function settleMoveSelection(captured: NonNullable<ReturnType<typeof captureMoveSelection>>) {
-    const { cell, selection: { anchor, head } } = captured;
-    if (stopped || draft?.composing) {
-      return { kind: "refused", reason: beforePress() ?? PENDING } as const;
+  function moveSelection(a: ReturnType<typeof native.narrationCaret>, b: ReturnType<typeof native.narrationCaret>, backward: boolean) {
+    if (!a || !b) return null;
+    const left = caretAnchor(a.beat, a.offset), right = b === a ? left : caretAnchor(b.beat, b.offset);
+    if (!left || !right) return null;
+    const point = ({ beat, offset }: NonNullable<typeof a>): NativeUndoPoint => ({ target: { beat, cell: "narration" }, offset });
+    const start = point(a), end = a === b ? start : point(b);
+    return { kind: "ready", range: { anchor: backward ? right : left, head: backward ? left : right },
+      selection: { anchor: backward ? end : start, head: backward ? start : end } } as const;
+  }
+
+  function acrossMoveSelection({ anchor, head, backward }: Extract<NonNullable<ReturnType<typeof captureMoveSelection>>, { kind: "across" }>) {
+    const buffered = draft;
+    const current = paintIsCurrent();
+    function capture({ cell, offset }: MoveEndpoint, assoc: 0 | -1) {
+      const beat = cell.getAttribute("data-id") ?? "";
+      if (buffered?.cell === cell) return { beat, offset, preview: draftEndpoint(buffered, offset, assoc, true) };
+      if (!shownWriterBeat(cell, beat)) return null;
+      if (current) return { beat, offset };
+      const point = movePaint.get(cell)?.point(offset, assoc);
+      return point && native.narrationOffset(beat, { from: point }, assoc) !== null ? { beat, point } : null;
     }
+    const start = capture(backward ? head : anchor, 0), end = capture(backward ? anchor : head, -1);
+    if (!start || !end) return null;
+    const selection: SelectionCapture = { indices: [start.preview?.index ?? null, end.preview?.index ?? null] };
+    const reason = finish(selection, false);
+    if (reason) return { kind: "refused", reason } as const;
+    if (!buffered) publish();
+    function resolve(point: NonNullable<typeof start>, index: 0 | 1, assoc: 0 | -1) {
+      const { beat, preview } = point, html = native.narrationHtml(beat);
+      const cell = writerNarration.cell(beat), row = documentReader.read(doc => doc?.rows.find(item => item.id === beat));
+      if (!cell || !row || !writerNarration.painted(cell, row) || row.audioText !== html) return null;
+      const rebased = preview ? resolveDraftEndpoint(beat, preview, selection.inserted?.[index], assoc)
+        : point.point ? native.narrationOffset(beat, { from: point.point }, assoc) : point.offset ?? null;
+      return rebased === null ? null : native.narrationCaret(beat, rebased, assoc === 0);
+    }
+    return moveSelection(resolve(start, 0, 0), resolve(end, 1, -1), backward);
+  }
+
+  function withinMoveSelection(cell: Element, anchor: number, head: number) {
     const backward = anchor > head;
     const rebased = flushForInput(cell, { from: Math.min(anchor, head), to: Math.max(anchor, head) }, false, false);
     if (!rebased) return { kind: "refused", reason: stopped ?? STALE } as const;
@@ -881,14 +983,18 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (!rebased.stale && row && narrationSurfaceOf(rebased.cell).painted(rebased.cell, row) && row.audioText === native.narrationHtml(beat)) {
       const { from, to } = rebased.selection;
       const a = native.narrationCaret(beat, from, from !== to), b = from === to ? a : native.narrationCaret(beat, to);
-      const left = a && caretAnchor(a.beat, a.offset), right = b === a ? left : b && caretAnchor(b.beat, b.offset);
-      if (a && b && left && right) {
-        const point = ({ beat, offset }: typeof a): NativeUndoPoint => ({ target: { beat, cell: "narration" }, offset });
-        const start = point(a), end = a === b ? start : point(b);
-        return { kind: "ready", range: { anchor: backward ? right : left, head: backward ? left : right },
-          selection: { anchor: backward ? end : start, head: backward ? start : end } } as const;
-      }
+      return moveSelection(a, b, backward);
     }
+    return null;
+  }
+
+  function settleMoveSelection(captured: NonNullable<ReturnType<typeof captureMoveSelection>>) {
+    if (stopped || draft?.composing) {
+      return { kind: "refused", reason: beforePress() ?? PENDING } as const;
+    }
+    const settled = captured.kind === "across" ? acrossMoveSelection(captured)
+      : withinMoveSelection(captured.cell, captured.selection.anchor, captured.selection.head);
+    if (settled) return settled;
     session.refuse(STALE);
     return { kind: "refused", reason: STALE } as const;
   }
@@ -903,6 +1009,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     finish,
     beforePress,
     currentCaret,
+    bindWriterPaint,
+    clearMovePaint,
     captureMoveSelection,
     settleMoveSelection,
     show,
@@ -911,6 +1019,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       else native.endTypingGroup();
     },
     buffered: () => draft !== null,
+    hasWriterPreview: (beat: string) => draft?.surface === writerNarration && draft.beat === beat,
     stop: () => { if (!stopped) stop(PENDING); },
     recover: (reopened: ReturnType<typeof openNativeSession>): Uint8Array | null => {
       if (!draft || draft.composing || uncertain || !draft.range) return null;
@@ -919,6 +1028,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       const bytes = reopened.encodeState();
       draft.paint?.dispose();
       draft = null;
+      clearMovePaint();
       stopped = null;
       return bytes;
     },
@@ -926,6 +1036,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       clearTimeout(timer);
       draft?.paint?.dispose();
       draft = null;
+      stopWriterPaint?.();
       stopPaint();
       stopUnload();
       window.removeEventListener("pagehide", pageHide);

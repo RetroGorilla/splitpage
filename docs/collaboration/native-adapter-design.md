@@ -203,14 +203,14 @@ Each command is one transaction.
 | Create person, production tag or shot | One record map keyed by minted ID, its field keys and its rank. Tag IDs encode the writer and clock in the core's tag ID form |
 | Edit registry fields, cycle tag status, quick-add gear | Changed field keys only. A new owner or tag gets a new record. Quick add marks only omitted orphaned gear removed |
 | Move, remove, restore registry entries | Move writes a rank and re-ranks the right side of a tie at the drop. Remove sets `removed` and restore clears it. The reader keeps comment assignee names, clears missing owners and derives tags and shots from surviving labels and keyed lines as on reload |
-| Add, remove or reorder shot props | One changed encoded `props` array in list order. An added prop may also create its tag in the same transaction |
+| Add, remove or reorder shot props | Targeted commands require a stored prop map. Add writes the prop's entry and may create its tag in the same transaction. A name already shown is a no-op. Remove sets `removed` on a valid entry. Reorder writes its rank. A whole-list set keeps retained props on the keys they were read from and removes omitted entries, including overflow. It can replace a damaged prop map |
 
 **Check before writing** (decision 15). Every command finds each part it will touch by id: its rows' records,
 cells and boundaries, and the ranks of neighbours a move will write. If one is missing, it refuses without writing.
 A command aimed at a removed or hidden row returns that refusal; it never reports success, or nothing, through a
 stale target (E1). On section 10's four-step row 5 of 16 commands wrote and then threw as built, none under rule
 (g); the prototype skips some silently and its join throws (E16, E17). Commands on the row above work on the
-narration it shows.
+narration it shows. Targeted prop commands reject argument accessors before reading values.
 
 Composition folds in remote changes made meanwhile (E1). The reader writes nothing back. The file is converted
 once, and every copy adopts that conversion (appendix B). Conversion writes each heading's name into its name cell,
@@ -275,7 +275,14 @@ kept records (E16). Plain Yjs causes both: an undo the tagger had not seen resto
 
 **5b. A mark lost with a deleted letter.** A marks `pqr` and types a plain `X` inside it. B deletes `X`, and at the same time C removes the mark from `p`. Every copy then reads `opqr`, with the mark gone from `q` and `r` too. The test runs this with three copies, for a tag and for bold ([format-generated.test.ts](../../tests/adapters/collab/native/format-generated.test.ts), "found by the generated histories"). On raw Yjs with no observer, every copy reads `opqr` when it opened the text before the first updates arrived, and `op[qr|b]` when it opened the text after them (same test). Accepted with no repair writes (Owner). Generated counts: [appendix M](#m-accepted-losses-counted).
 
-**5c. Shot props.** A per-prop map converged in all 144 test histories. In two histories, adding different props at the same time to a shot with 39 props produced 41, and core reload kept 40. Same-rank additions in that layout sorted by prop ID. The stored shape stays one ordered array, so two writes to the same shot's props have one winner. An addition can be lost, or a removal can be reversed by the other writer's array. [Candidate test](../../tests/adapters/collab/native/prop-shape.test.ts), [command races](../../tests/adapters/collab/native/registry-races.test.ts).
+**5c. Shot props.** The earlier candidate exposed 41 props in two of 144 histories and core reload kept 40. The keyed
+reader now caps the projection before reload. All 144 command histories keep the projected document through reload.
+Stock Yjs still picks one writer when both add the same existing tag ID or move the same entry. Undo of the winning
+add clears that entry. Undo of the winning move can clear the rank so the prop reads before ranked entries. Redo
+restores the winning rank. The losing writer's undo and redo leave the winning rank in place after both updates arrive.
+If undo clears the fallback name of a prop with an orphaned tag ID, that prop is hidden. A targeted drop that would
+require rewriting a peer's tied rank is refused. [Shape and undo tests](../../tests/adapters/collab/native/prop-shape.test.ts),
+[command races](../../tests/adapters/collab/native/registry-races.test.ts).
 
 ## 6. Never acceptable
 
@@ -625,8 +632,17 @@ E5's checks are the template.
 | `visuals` | One visual cell (`Y.Text`) per beat, kept after the beat is removed |
 | `headings` | Per heading: `rank`, other fields; `removed` when set |
 | `names` | One name cell (`Y.Text`) per heading, written at conversion |
-| `comments`, `replies`, `people`, `tags`, `shots` | The file's fields; bodies are whole strings |
+| `comments`, `replies`, `people`, `tags` | The file's fields; bodies are whole strings |
+| `shots` | The shot's file fields and a nested `props` map. Each key is the tag ID, or `n:` followed by the JSON-encoded normalized name. Its record holds the encoded name, rank and optional `removed` mark |
 | `edited` | Per beat, `{by, at}` of the last typing |
+
+Conversion and creation store the prop map in the same transaction as the shot, even when it has no props.
+Props read in rank order, with equal ranks ordered by key. The core normalizer defines the projection, including
+the 40-prop cap. Other active entries stay stored and count toward the add limit. A missing or invalid map reads
+as empty and produces one problem for the shot's props. The old array form was never released. An explicit whole-list
+set can replace it with a map containing the requested props. Within a valid map, the reader reports damaged entries
+individually and keeps readable entries. A whole-list set replaces damaged requested keys and deletes omitted ones.
+A targeted removal of a damaged entry deletes its key.
 
 ### H. Outcomes that lose nothing
 
@@ -645,6 +661,12 @@ E11, 600 generated histories, names in cells, unless marked:
 | Two people edit the gallery of the same beat at once | One writer's whole gallery survives and stays intact on core reload, even when the writers edited different gallery fields |
 | Someone restores a registry entry before receiving another person's removal | The entry disappears again when the unseen removal arrives. Restoring it again brings back its fields |
 | Two people change one registry value at the same moment and the winner undoes | The value falls back to its default until someone sets it again. Rankless entries appear first in ID order and a move gives them a rank |
+| Two people add different props or move different props on one shot | Both entries survive. Equal ranks sort by key and undo on one copy leaves the other copy's edit |
+| Two people add the same normalized prop name under different tag IDs | Both show in rank and key order when within the cap, as on core reload. Undo removes the acting copy's addition and redo brings it back |
+| One person removes a prop while another edits it | The removed prop stays hidden. Undo of the removal restores it with the concurrent edit |
+| One person removes a prop while another keeps it in a whole-list set | The removal still applies, even when the prop's displayed tag ID differs from its stored name key |
+| Two people move the same prop and the losing writer undoes after both updates arrive | Undo and redo leave the winning order in place |
+| Two people add different props to a shot with 39 props | Both stay stored and 40 show. Removing a visible prop reveals the overflow entry. Core reload preserves the projection |
 | Two people create the first beat at the same moment | Both beats and their text stay. The tied ranks follow stored order, and any rule (b) letters are assigned by the reader |
 | A peer types inside a selection being deleted and split, or splits inside it | The peer's inserted letters or boundary survive. A surviving boundary can leave an empty beat |
 | A peer types inside a range being replaced by a batch | The new letters survive alongside the replacement |
