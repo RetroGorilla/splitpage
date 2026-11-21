@@ -78,3 +78,26 @@ wait beat('r1')?.querySelector('strong')
 eval mixed(beat('r1'),document.querySelector('#writer-doc'))
 press X
 wait docRows()[0].audioText === '<strong>HX</strong>o' && agree()
+jsclick #wr-close
+eval S.leave()
+eval F.openFile(new File([JSON.stringify({schema:2,title:'Replace all formatting',paragraphsDecided:true,rows:[{id:'r1',audioText:'<strong>cu</strong>p<em>cup</em> c<strong>up</strong>'}]})],'replace-all-formatting.splitpage'))
+wait F.state().title === 'Replace all formatting'
+eval S.enter()
+jsclick #btn-write
+wait beat('r1')?.querySelector('em')
+eval document.querySelector('#writer-doc').focus();true
+key ctrl KeyF
+wait document.querySelector('#findbar').classList.contains('is-writer')
+eval setFind('cup','mug')
+expect document.querySelector('#find-count').textContent === '1 of 3'
+jsclick #find-replace-all
+wait docRows()[0].audioText === '<strong>mug</strong><em>mug</em> mug' && agree()
+expect beat('r1').querySelector('strong').textContent === 'mug' && beat('r1').querySelector('em').textContent === 'mug'
+jsclick #find-close
+eval document.activeElement.blur();true
+key ctrl KeyZ
+wait docRows()[0].audioText === '<strong>cu</strong>p<em>cup</em> c<strong>up</strong>' && agree()
+expect Array.from(beat('r1').querySelectorAll('strong'),el=>el.textContent).join(' ') === 'cu up'
+key ctrl KeyY
+wait docRows()[0].audioText === '<strong>mug</strong><em>mug</em> mug' && agree()
+expect beat('r1').querySelector('strong').textContent === 'mug' && beat('r1').querySelector('em').textContent === 'mug'
