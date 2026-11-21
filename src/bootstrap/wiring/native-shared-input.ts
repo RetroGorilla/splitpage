@@ -1003,7 +1003,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     try {
       if (native.isClosingOrClosed()) return;
       if (stopped && (editableText || heading || writer)) {
-        if (stopped !== "full" && narration && !splitting && !joining && !moving && !mark && !line && event.type !== "paste" && !inputType?.startsWith("delete")) session.refuse(stopped);
+        if (stopped !== "full" && narration && !splitting && !joining && !moving && !mark && !line
+          && event.type !== "paste" && !inputType?.startsWith("delete")) session.refuse(stopped);
         return;
       }
       if (moving) {
@@ -1055,20 +1056,26 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   }
   function leaveTextCell(cell: Element, next: EventTarget | null): void {
     const buffered = draft && cell.contains(draft.cell) ? draft : null;
-    if (next instanceof Node && cell.contains(next)) return;
+    const settle = () => { if (buffered && draft === buffered) settleBlur(buffered); };
+    const beat = cell.getAttribute("data-id");
+    const field = cell.getAttribute("data-field");
+    const selector = cell.matches(".wr-flow-visual-text") ? ".wr-flow-visual-text" : "#rows .cell-editable";
+    const sameCell = (target: EventTarget | null) => target instanceof Node && (cell.contains(target)
+      || !!beat && target instanceof Element && target.matches(selector) && target.getAttribute("data-id") === beat
+      && target.getAttribute("data-field") === field);
     if (next && next !== document.body) {
-      if (buffered?.deletion) buffered.endsGroup = true;
-      else native.endDeletionGroup();
-      if (buffered) queueMicrotask(() => { if (draft === buffered) settleBlur(buffered); });
+      if (!sameCell(next)) {
+        if (buffered?.deletion) buffered.endsGroup = true;
+        else native.endDeletionGroup();
+      }
+      if (buffered) queueMicrotask(settle);
       return;
     }
+    // why: replacing a focused cell can blur it before the publication restores focus to its successor
     queueMicrotask(() => {
-      const active = document.activeElement;
-      const beat = cell.getAttribute("data-id");
-      const restored = !cell.isConnected && beat && active?.matches("#rows .cell-editable, .wr-flow-visual-text")
-        && active.getAttribute("data-id") === beat && active.getAttribute("data-field") === cell.getAttribute("data-field");
-      if (buffered && draft === buffered) settleBlur(buffered);
-      if (active !== cell && !restored) native.endDeletionGroup();
+      const departed = !sameCell(document.activeElement);
+      settle();
+      if (departed) native.endDeletionGroup();
     });
   }
 
