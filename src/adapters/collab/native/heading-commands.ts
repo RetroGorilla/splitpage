@@ -18,11 +18,16 @@ function refused(reason: NativeRefusal | "rank"): NativeHeadingOutcome {
   return Object.freeze({ kind: "refused", reason });
 }
 
-export function prepareNativeHeading(script: NativeScript, beat: string, id: string, name: string) {
+export function prepareNativeHeading(script: NativeScript, beat: string, id: string, name: string,
+  anchor?: NonNullable<ReturnType<typeof nativeRangeSnapshot>>) {
   if (!nativeWellFormed(id) || !id) return "missing" as const;
   if (!nativeWellFormed(name)) return "text" as const;
   const { roots, reader } = script, key = "h:" + id, order = roots.order.toArray();
   if (roots.headings.has(id) || roots.names.has(id) || roots.segments.has(key) || order.includes(key) || reader.hasHeadingMarker(id)) return "missing" as const;
+  if (anchor) {
+    const live = nativeLiveRange(script, anchor);
+    if (typeof live === "string") return live;
+  }
   const gap = reader.ranksAboveBeat(beat);
   if (!gap) return "missing" as const;
   let rank: string;
@@ -58,10 +63,8 @@ export function createNativeHeading(script: NativeScript, at: NativeTextRange, i
     if (!checked || checked.target.cell !== "narration" || checked.to) return refused("range");
     if (!nativeWellFormed(id) || !id) return refused("missing");
     if (!nativeWellFormed(name)) return refused("text");
-    const plan = prepareNativeHeading(script, checked.target.beat, id, name);
+    const plan = prepareNativeHeading(script, checked.target.beat, id, name, checked);
     if (typeof plan === "string") return refused(plan);
-    const live = nativeLiveRange(script, checked);
-    if (typeof live === "string") return refused(live);
     writeNativeHeading(script, plan);
     return WRITTEN;
   }, refused);

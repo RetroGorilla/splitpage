@@ -1,7 +1,8 @@
 import * as Y from "yjs";
 import { gallerySize } from "../../../core/document/gallery.ts";
 import { sceneBeforeBeat } from "../../../core/document/scenes.ts";
-import { HEADING_MARKER, headingLine, startsParagraph } from "../../../core/flow/flow.ts";
+import { HEADING_MARKER, SCENE_NAME_MAX, startsParagraph } from "../../../core/flow/flow.ts";
+import { headingLine } from "../../../core/flow/heading-line.ts";
 import { cellLength, projection } from "../../../core/text/runs.ts";
 import { copyNativeCompoundInput } from "./compound-input.ts";
 import { prepareNativeHeading, writeNativeHeading } from "./heading-commands.ts";
@@ -259,8 +260,8 @@ function merged(cuts: readonly Cut[]): Map<Y.Text, [number, number][]> {
   return byText;
 }
 
-function eraseCuts(cuts: readonly Cut[]): void {
-  for (const [text, ranges] of merged(cuts)) for (const [from, to] of ranges.reverse()) text.delete(from, to - from);
+function eraseCuts(cuts: ReturnType<typeof merged>): void {
+  for (const [text, ranges] of cuts) for (const [from, to] of ranges.reverse()) text.delete(from, to - from);
 }
 
 function headingPrefix(script: NativeScript, beat: string, length: number): Cut[] | null {
@@ -294,7 +295,8 @@ function writeBlankBeat(script: NativeScript, id: string, rank: string): void {
 }
 
 type NativeMarkdownHeadingOutcome =
-  | { readonly kind: "written"; readonly beat: string; readonly offset: number; readonly notice?: string }
+  | { readonly kind: "written"; readonly beat: string; readonly offset: number; readonly consumed: number;
+      readonly heading?: string; readonly notice?: string }
   | { readonly kind: "unchanged" }
   | { readonly kind: "refused"; readonly reason: NativeRowRefusal | "rank" };
 
@@ -308,13 +310,13 @@ export function finalizeNativeHeading(script: NativeScript, beat: string, offset
     if (!startsParagraph(snapshot, index) || !projection(shown.narration).startsWith(HEADING_MARKER)) return UNCHANGED;
     if (shown.members.length !== 1 || !Number.isInteger(offset) || offset < 0 || offset > cellLength(shown.narration)) return refused("range");
     const follower = snapshot.rows[index + 1], runOn = !!follower && !startsParagraph(snapshot, index + 1);
-    const { name, restStart, notice } = headingLine(shown.narration, enter ? offset : null, runOn);
+    const { name, restStart, notice } = headingLine(shown.narration, HEADING_MARKER, SCENE_NAME_MAX, enter ? offset : null, runOn);
     const length = cellLength(shown.narration), count = restStart ?? HEADING_MARKER.length;
     const cuts = headingPrefix(script, beat, count);
     if (!cuts) return refused("range");
     if (restStart === undefined) {
-      eraseCuts(cuts);
-      return { kind: "written", beat, offset: Math.max(0, offset - count), ...(notice && { notice }) };
+      eraseCuts(merged(cuts));
+      return { kind: "written", beat, offset: Math.max(0, offset - count), consumed: count, ...(notice && { notice }) };
     }
     const remove = restStart === length && !cellLength(shown.visual) && !gallerySize(shown.fields);
     const removed = remove ? shownRow(script, beat) : null;
@@ -334,16 +336,18 @@ export function finalizeNativeHeading(script: NativeScript, beat: string, offset
       if (error instanceof NativeRankError) return { kind: "refused", reason: "rank" };
       throw error;
     }
-    const position = heading.at === null ? null : Y.createRelativePositionFromTypeIndex(heading.text, heading.at, -1);
-    eraseCuts(removed?.cuts ?? cuts);
+    const ranges = merged(removed?.cuts ?? cuts);
+    const at = heading.at;
+    const shifted = at === null ? null : at - (ranges.get(heading.text) ?? [])
+      .reduce((length, [start, end]) => length + Math.max(0, Math.min(at, end) - start), 0);
+    eraseCuts(ranges);
     for (const segment of removed?.heads ?? []) segment.delete("head");
-    const at = position === null ? null : Y.createAbsolutePositionFromRelativePosition(position, doc)?.index ?? heading.at;
-    writeNativeHeading(script, { ...heading, at });
+    writeNativeHeading(script, { ...heading, at: shifted });
     if (blank && blankRank) writeBlankBeat(script, blank, blankRank);
     if (precedingBlank && precedingRank) writeBlankBeat(script, precedingBlank, precedingRank);
     const landing = remove ? blank ?? next ?? beat : beat;
     roots.beats.get(landing)?.delete("paragraphStart");
-    return { kind: "written", beat: landing, offset: 0 };
+    return { kind: "written", beat: landing, offset: 0, consumed: count, heading: heading.id };
   }, refused, () => true);
 }
 
@@ -362,7 +366,7 @@ export function removeNativeRows(script: NativeScript, beats: readonly string[])
       if (!row) return;
       rows.push(row);
     }
-    eraseCuts(rows.flatMap(row => row.cuts));
+    eraseCuts(merged(rows.flatMap(row => row.cuts)));
     for (const segment of new Set(rows.flatMap(row => row.heads))) segment.delete("head");
     outcome = WRITTEN;
   });

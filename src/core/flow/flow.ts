@@ -12,6 +12,7 @@ import { breakLine, clamp, clampRange, deleteRange, insertCell, insertText, join
 import { toHtml } from "../text/html.ts";
 import { cellLength, commentIds, normalizeCell, OBJ, projection } from "../text/runs.ts";
 import type { MarkName, Marks, Run } from "../text/runs.ts";
+import { headingLine } from "./heading-line.ts";
 import { describeFlow, flowIdentity } from "./operations.ts";
 import type { FlowOperationRequest, FlowOperationTrace } from "./operations.ts";
 import type { SharedOperation } from "../collab/operations.ts";
@@ -735,24 +736,6 @@ export function enterInHeading(doc: FlowDoc, pos: FlowPos, ports: FlowPorts): Fl
 
 export const HEADING_MARKER = "# ";
 
-export function headingLine(cell: readonly Run[], enterAt: number | null, hasRunOn: boolean) {
-  const text = projection(cell);
-  const newline = text.indexOf("\n"), lineEnd = newline === -1 ? text.length : newline;
-  const end = enterAt === null ? lineEnd : Math.min(enterAt, lineEnd);
-  const name = text.slice(HEADING_MARKER.length, end).trim();
-  if (!name) return {};
-  if (sliceCell(cell, 0, end).some(run => !!run.marks.tag || !!run.marks.cmt?.length)) {
-    return { notice: "A scene header can't hold tags or comments." };
-  }
-  if (enterAt === null && newline === -1 && hasRunOn) {
-    return { notice: "A scene header can't hold several beats. Press Enter after the header's words." };
-  }
-  if (Array.from(name).length > SCENE_NAME_MAX) {
-    return { notice: "A scene name can be up to " + SCENE_NAME_MAX + " characters, so this stays as narration." };
-  }
-  return { name, restStart: end < text.length && text[end] === "\n" ? end + 1 : end };
-}
-
 export function isPendingHeading(doc: FlowDoc, rowId: string, ports: FlowPorts): boolean {
   const index = indexOfRow(doc, rowId);
   const row = doc.rows[index];
@@ -780,7 +763,7 @@ export function finalizeHeading(doc: FlowDoc, rowId: string, enterAt: number | n
   const fallback = keep ?? caretAt(beatPos(row.id, enterAt ?? text.length));
   const follower = doc.rows[index + 1];
   const anchors = sceneAnchors(doc);
-  const { name, restStart, notice } = headingLine(cell, enterAt, !!follower && !startsParagraph(doc, index + 1));
+  const { name, restStart, notice } = headingLine(cell, HEADING_MARKER, SCENE_NAME_MAX, enterAt, !!follower && !startsParagraph(doc, index + 1));
   if (restStart === undefined) return withoutMarker(doc, index, ports, fallback, notice);
   const rest = sliceCell(cell, restStart);
   const rows = doc.rows.slice();
