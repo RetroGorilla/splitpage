@@ -264,6 +264,30 @@ for (const field of ["audioText", "visualText"]) for (const order of orders) {
   });
 }
 
+test("Writer: composing over bc removes an unpainted peer insertion and undo restores it", async t => {
+  const f = await enter(t, { view: "Writer", rows: [{ id: "r1", audioText: "abcd" }, { id: "r2", audioText: "ef" }] });
+  const root = f.place("r1", 1, 3);
+  assert.equal(compose(root, "start"), false);
+  composePreview(root, "β");
+  assert.equal(text(f.cell()), "aβd");
+  edit(f.peer, "r1", 2, 2, "X");
+  send(f.peer, f.native);
+  await Promise.resolve();
+  assert.deepEqual(audio(f.native.document()), ["abXcd", "ef"]);
+  assert.deepEqual(audio(f.peer.document()), ["abXcd", "ef"]);
+  assert.deepEqual(audio(app()), ["abcd", "ef"]);
+  assert.equal(text(f.cell()), "aβd");
+  compose(root, "end", "β");
+  agree(f, ["aβd", "ef"]);
+  assert.equal(text(f.cell()), "aβd");
+  caret(f, "r1", 2);
+  history(root);
+  agree(f, ["abXcd", "ef"]);
+  assert.equal(text(f.cell()), "abXcd");
+  caret(f, "r1", 1, 4);
+  assert.deepEqual(f.notices(), []);
+});
+
 for (const order of ["forward", "duplicate"]) {
   test(`Writer: replacement in repeated text follows a held peer suffix, ${order}`, async t => {
     for (const composing of [false, true]) {
