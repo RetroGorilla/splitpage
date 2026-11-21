@@ -1,12 +1,12 @@
 import type { DocumentRow } from "../../core/document/validated.ts";
 import { changeSet } from "../session/change-set.ts";
 import type { ChangeSet } from "../session/change-set.ts";
-import type { Command, DocumentView, Plan } from "../session/document-session.ts";
+import type { Command, DocumentStructureIntent, DocumentView, Plan } from "../session/document-session.ts";
 import type { StampPorts } from "../session/ports.ts";
 import { CELL_TEXT_DERIVES } from "./cell-text.ts";
 import { toPlainText } from "../../core/text/projections.ts";
 import type { TextServices } from "../text/services.ts";
-import { scenesAfterRemoval, scenesInOrder, withSceneFirstBeat, writeScenes } from "../../core/document/scenes.ts";
+import { sceneBeforeBeat, scenesAfterRemoval, scenesInOrder, withSceneFirstBeat, writeScenes } from "../../core/document/scenes.ts";
 import { applyParagraphFlags, paragraphCells, paragraphFlagsAfterOrder } from "./paragraphs.ts";
 import { sharedCreatedBeat, sharedMintedBeat, sharedRemoval, sharedStructureList, sharedStructureTrace } from "./shared-structure.ts";
 import type { CreatedBeatCommand, SharedStructurePorts } from "./shared-structure.ts";
@@ -35,26 +35,32 @@ function sharedAddition(doc: DocumentView, afterId: string | null, createdId: st
   return { shared: sharedStructureList(trace, shared, by, []) };
 }
 
-export function addBeatCommand(afterId: string | null, createdId: string, ports: StampPorts, shared?: SharedStructurePorts): CreatedBeatCommand {
+type InsertBeatPosition = Pick<Extract<DocumentStructureIntent, { kind: "insert-beat" }>, "side" | "cell">;
+
+export function addBeatCommand(neighbour: string | null, createdId: string, ports: StampPorts, shared?: SharedStructurePorts,
+  { side, cell }: InsertBeatPosition = { side: "below" }): CreatedBeatCommand {
   let created: string | null = null;
   return {
     name: "add-scene",
     needs: "edit",
+    ...neighbour === null ? {} : { structure: { kind: "insert-beat", id: neighbour, side, ...cell ? { cell } : {} } as const },
     created: () => created,
     plan: function (doc): Plan | null {
       created = null;
-      if (afterId !== null && indexOf(doc.rows, afterId) === -1) return null;
+      if (neighbour !== null && indexOf(doc.rows, neighbour) === -1) return null;
+      const heading = side === "above" && neighbour !== null ? sceneBeforeBeat(doc, neighbour) : undefined;
       created = createdId;
       return {
-        ...sharedAddition(doc, afterId, createdId, ports, shared, id => { created = id; }),
-        changes: changeSet({ rowsInserted: [createdId] }),
+        ...sharedAddition(doc, neighbour, createdId, ports, shared, id => { created = id; }),
+        changes: changeSet({ rowsInserted: [createdId], docFields: heading ? ["sections"] : [] }),
         apply: function (live) {
           const created: DocumentRow = {
             id: createdId, visualText: "", imageRef: null, audioText: "",
             status: "todo", updatedAt: ports.clock.nowIso(), updatedBy: ports.editor.name()
           };
-          if (afterId === null) live.rows.push(created);
-          else live.rows.splice(liveIndex(live.rows, afterId, "given a scene below it") + 1, 0, created);
+          if (neighbour === null) live.rows.push(created);
+          else live.rows.splice(liveIndex(live.rows, neighbour, "given an adjacent beat") + (side === "below" ? 1 : 0), 0, created);
+          if (heading) writeScenes(live, scenesInOrder(live)?.map(scene => scene.id === heading.id ? withSceneFirstBeat(scene, createdId) : scene));
         }
       };
     }

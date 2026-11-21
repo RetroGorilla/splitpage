@@ -116,7 +116,7 @@ function writer(t) {
 const views = {
   Split: {
     open: () => {},
-    surface: () => cell(),
+    surface: id => cell(id),
     caret: (_view, id, from, to = from) => { cell(id).focus(); setCellSelection(cell(id), from, to); },
     at: (_view, id = "r1") => {
       const selection = cellSelection(cell(id));
@@ -223,6 +223,30 @@ test("Writer: a stale heading cannot supply the range for a rename", async t => 
   assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
 });
 
+test("Split: the visual-cell insert shortcut lands in the new visual and replays its selection", async t => {
+  const show = await enter(t);
+  const visual = id => document.querySelector('#rows .cell-editable[data-id="' + id + '"][data-field="visualText"]');
+  const prior = visual("r1");
+  prior.focus();
+  setCellSelection(prior, 1, 3);
+  assert.equal(press(prior, "Enter"), true);
+  const [, created] = rowOrder();
+  assert.ok(created);
+  assert.equal(document.activeElement, visual(created));
+  assert.deepEqual(cellSelection(visual(created)), { from: 0, to: 0 });
+  assert.equal(press(visual(created), "z"), true);
+  assert.deepEqual(rowOrder(), ["r1"]);
+  assert.equal(document.activeElement, visual("r1"));
+  assert.deepEqual(cellSelection(visual("r1")), { from: 1, to: 3 });
+  assert.equal(press(visual("r1"), "y"), true);
+  assert.deepEqual(rowOrder(), ["r1", created]);
+  assert.equal(document.activeElement, visual(created));
+  assert.deepEqual(cellSelection(visual(created)), { from: 0, to: 0 });
+  await Promise.resolve();
+  assert.deepEqual(hook.read().peer, hook.read().app);
+  assert.equal(show.mock.callCount(), 0);
+});
+
 const threeBeats = () => [...twoBeats, { id: "r3", audioText: "Again" }];
 const fourBeats = () => [...threeBeats(), { id: "r4", audioText: "Last" }];
 const rowOrder = () => hook.read().app.rows.map(row => row.id);
@@ -299,6 +323,83 @@ for (const backend of ["standalone", "native"]) {
 }
 
 for (const [name, kind] of Object.entries(views)) {
+  for (const [side, id, index] of [["above", "r2", 1], ["below", "r3", 3]]) {
+    test(name + ": Add " + side + " inserts at a scene edge and replays both DOM selections", async t => {
+      const show = await enter(t, fourBeats(), undefined, [
+        { id: "s1", name: "First", firstSceneId: "r2" }, { id: "s2", name: "Second", firstSceneId: "r4" }
+      ]);
+      const view = kind.open(t), before = rowOrder();
+      kind.caret(view, id, 1, 3);
+      assert.equal(press(kind.surface(id), "Enter", { shiftKey: side === "above" }), true);
+      const created = rowOrder()[index];
+      assert.ok(!before.includes(created));
+      assert.deepEqual(rowOrder(), before.toSpliced(index, 0, created));
+      assert.equal(hook.read().app.sections[0].firstSceneId, side === "above" ? created : "r2");
+      assert.equal(hook.read().app.sections[1].firstSceneId, "r4");
+      assert.equal(kind.host(created).textContent.replace(/\u200b/g, ""), "");
+      assert.deepEqual(kind.at(view, created), [created, 0, 0]);
+      assert.equal(press(kind.surface(created), "z"), true);
+      assert.deepEqual(rowOrder(), before);
+      assert.deepEqual(kind.at(view, id), [id, 1, 3]);
+      assert.equal(press(kind.surface(id), "y"), true);
+      assert.deepEqual(rowOrder(), before.toSpliced(index, 0, created));
+      assert.deepEqual(kind.at(view, created), [created, 0, 0]);
+      await Promise.resolve();
+      assert.deepEqual(hook.read().peer, hook.read().app);
+      assert.equal(show.mock.callCount(), 0);
+    });
+  }
+
+  test(name + ": Add Below flushes buffered typing with a peer edit and gives insertion a separate undo step", async t => {
+    const show = await enter(t, twoBeats), view = kind.open(t);
+    kind.caret(view, "r1", 2);
+    typeKeys(kind.surface(), "X");
+    assert.equal(app(), "Hello");
+    assert.equal(hook.nativePeer.type("r1", 0, "P").kind, "written");
+    assert.equal(press(kind.surface(), "Enter"), true);
+    assert.equal(app(), "PHeXllo");
+    const created = rowOrder()[1];
+    assert.deepEqual(rowOrder(), ["r1", created, "r2"]);
+    assert.notEqual(created, "r2");
+    assert.deepEqual(kind.at(view, created), [created, 0, 0]);
+    assert.equal(press(kind.surface(created), "z"), true);
+    assert.deepEqual(rowOrder(), ["r1", "r2"]);
+    assert.equal(app(), "PHeXllo");
+    assert.deepEqual(kind.at(view, "r1"), ["r1", 4, 4]);
+    assert.equal(press(kind.surface(), "z"), true);
+    assert.equal(app(), "PHello");
+    await Promise.resolve();
+    assert.deepEqual(hook.read().peer, hook.read().app);
+    assert.equal(show.mock.callCount(), 0);
+  });
+
+  for (const remove of [false, true]) {
+    test(name + ": Add Below refuses when a peer " + (remove ? "removed the shown anchor" : "changed the shown neighbour"), async t => {
+      const show = await enter(t, threeBeats()), view = kind.open(t);
+      kind.caret(view, "r1", 2);
+      const peerEdit = remove ? hook.nativePeer.removeBeat("r1") : hook.nativePeer.moveBeat("r2", null);
+      assert.equal(peerEdit.kind, "written");
+      assert.deepEqual(rowOrder(), ["r1", "r2", "r3"]);
+      assert.equal(press(kind.surface(), "Enter"), true);
+      assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+      await Promise.resolve();
+      assert.deepEqual(rowOrder(), remove ? ["r2", "r3"] : ["r1", "r3", "r2"]);
+      assert.deepEqual(hook.read().peer, hook.read().app);
+    });
+  }
+
+  test(name + ": Add Above and Add Below cancel during an open composition", async t => {
+    const show = await enter(t, twoBeats), view = kind.open(t);
+    kind.caret(view, "r1", 2);
+    assert.equal(compose(kind.surface(), "start", ""), false);
+    const before = kind.at(view, "r1");
+    for (const shiftKey of [false, true]) assert.equal(press(kind.surface(), "Enter", { shiftKey }), true);
+    assert.deepEqual(rowOrder(), ["r1", "r2"]);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE, UNAVAILABLE]);
+    assert.deepEqual(kind.at(view, "r1"), before);
+    compose(kind.surface(), "end", "");
+  });
+
   test(name + ": Alt+Enter splits only in Split", async t => {
     const show = await enter(t), view = kind.open(t);
     kind.caret(view, "r1", 2);
@@ -906,6 +1007,18 @@ const fixtureViews = {
 };
 
 for (const [name, kind] of Object.entries(fixtureViews)) {
+  test(name + ": Add Above and Add Below stay quiet after native typing stops", async t => {
+    const { native, refused } = await openFixture(t), view = kind.open(t);
+    kind.caret(view, 8);
+    assert.equal(compose(kind.surface(), "start", ""), false);
+    native.close();
+    await Promise.resolve();
+    assert.deepEqual(refused.mock.calls.map(call => call.arguments), [["native-input-pending"]]);
+    for (const shiftKey of [false, true]) assert.equal(press(kind.surface(), "Enter", { shiftKey }), true);
+    assert.deepEqual(refused.mock.calls.map(call => call.arguments), [["native-input-pending"]]);
+    assert.equal(kind.host().textContent.replace(/\u200b/g, ""), "Captured words");
+  });
+
   test(name + ": an undo press at the size ceiling with a letter buffered is silent and keeps the letter on screen", async t => {
     const { native, refused } = await openFixture(t), view = kind.open(t), filler = new Doc();
     t.after(() => filler.destroy());

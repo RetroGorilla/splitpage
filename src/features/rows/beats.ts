@@ -51,11 +51,13 @@ function sharedCreated(command: CreatedBeatCommand) {
   return runSharedCommand(command) ? command.created() : null;
 }
 
-function addRow(afterId: string | null | undefined) {
+function addRow(afterId: string | null | undefined, side?: "above" | "below") {
   const createdId = (ports as BeatPortUse).ids.id("r"), shared = (ports as BeatPortUse).shared.ports();
   if (shared) return sharedCreated(addBeatCommand(afterId || null, createdId, (ports as BeatPortUse).edits.stamps, shared));
-  if (!runRowCommand(addBeatCommand(afterId || null, createdId, (ports as BeatPortUse).edits.stamps))) return null;
-  return createdId;
+  const command = addBeatCommand(afterId || null, createdId, (ports as BeatPortUse).edits.stamps, undefined, side ? { side } : undefined);
+  const outcome = (ports as BeatPortUse).edits.run(command);
+  if (outcome.kind === "failed") throw outcome.error;
+  return outcome.kind === "applied" || outcome.kind === "committed" ? outcome.changes.rowsInserted[0] ?? createdId : null;
 }
 
 function addRowAndFocus(afterId: string | null | undefined, field: string | null) {

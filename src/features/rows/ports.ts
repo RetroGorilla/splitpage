@@ -49,7 +49,7 @@ interface SplitBeat {
 }
 
 export interface Beats {
-  readonly addRow: (afterId: string | null | undefined) => string | null;
+  readonly addRow: (afterId: string | null | undefined, side?: "above" | "below") => string | null;
   readonly addRowAndFocus: (afterId: string | null | undefined, field: string | null) => void;
   readonly addRowAtCaret: (cell: Element) => void;
   readonly splitField: (cell: Element) => SplitBeat | null;

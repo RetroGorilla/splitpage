@@ -91,6 +91,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
     storedHtml: ports.storedHtml,
     syncBeat,
     editingBlocked: ports.editingBlocked,
+    ...(ports.insertAdjacentBeat ? { insertAdjacentBeat: ports.insertAdjacentBeat } : {}),
     moveBeat: (range, direction) => {
       if (!isCurrent() || ports.editingBlocked() || range.head.kind !== "beat") return;
       const command = ports.moveBeat(range.head.rowId, direction);

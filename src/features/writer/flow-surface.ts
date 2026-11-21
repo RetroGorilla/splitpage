@@ -22,6 +22,7 @@ import type { BufferedFieldPorts } from "../../application/editing/buffered-fiel
 import type { PaintedText, PaintedTextSource } from "../../application/editing/ports.ts";
 import type { EditorSelection } from "../../application/editing/selection.ts";
 import type { CommonDocumentSession } from "../../application/session/document-session.ts";
+import type { FlowBeatMenuActions } from "./flow-beat-menu.ts";
 
 declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
@@ -47,6 +48,7 @@ export interface SurfacePorts {
   readonly decode: (html: string) => Run[];
   readonly storedHtml: (html: string) => string;
   readonly moveBeat: (range: FlowRange, direction: -1 | 1) => void;
+  readonly insertAdjacentBeat?: FlowBeatMenuActions["insertAdjacentBeat"];
   readonly editingBlocked: () => boolean;
   readonly syncBeat: (rowId: string, runs: readonly Run[]) => void;
   readonly commit: (name: string, operation: (doc: FlowDoc) => FlowOutcome, before: FlowRange | null) => FlowOutcome;
@@ -138,6 +140,7 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
   const compositionTargets = new Set<HTMLElement>();
   let syncingComposition = false;
   const beatMenu = createFlowBeatMenu(root, {
+    ...(ports.insertAdjacentBeat ? { insertAdjacentBeat: ports.insertAdjacentBeat } : {}),
     canJoin: rowId => {
       const rows = ports.doc().rows;
       const index = rows.findIndex(row => row.id === rowId);

@@ -62,8 +62,8 @@ export function mountBeatMediaFeature(): BeatMedia {
 
 export const stopBeatMediaFeature = media.stop;
 
-export function addRow(afterId: string | null | undefined): string | null {
-  return beats.owner()?.addRow(afterId) ?? null;
+export function addRow(afterId: string | null | undefined, side?: "above" | "below"): string | null {
+  return beats.owner()?.addRow(afterId, side) ?? null;
 }
 
 export function addRowAndFocus(afterId: string | null | undefined, field: string | null): void {

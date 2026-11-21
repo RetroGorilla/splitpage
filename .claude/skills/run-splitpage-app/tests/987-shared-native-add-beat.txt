@@ -1,0 +1,46 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=window.__writerFlowTest;F.openFile(new File([JSON.stringify({schema:2,title:'Native blank beats',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello'},{id:'r2',audioText:'World'},{id:'r3',audioText:'Again'},{id:'r4',audioText:'Last'}],sections:[{id:'s1',name:'First',firstSceneId:'r2'},{id:'s2',name:'Second',firstSceneId:'r4'}]})],'native-blank-beats.splitpage'))
+wait F.state().title === 'Native blank beats'
+eval S.enter({backend:'native'})
+eval window.rows=()=>S.read().app.rows;window.order=()=>rows().map(r=>r.id).join(',');window.agree=()=>JSON.stringify(S.read().app)===JSON.stringify(S.read().peer);window.cell=id=>document.querySelector('#rows .cell-editable[data-id="'+id+'"][data-field="audioText"]');window.at=(id,i)=>{const el=cell(id);el.focus();getSelection().setBaseAndExtent(el.firstChild,i,el.firstChild,i);return true};window.splitAt=(id,i)=>document.activeElement===cell(id)&&cell(id).contains(getSelection().focusNode)&&getSelection().isCollapsed&&getSelection().focusOffset===i;window.blank=id=>rows().some(r=>r.id===id&&r.audioText===''&&r.visualText==='')
+eval at('r2',2)
+key ctrl+shift Enter
+wait rows().length === 5 && agree()
+eval window.above=rows()[1].id;true
+expect order() === 'r1,'+above+',r2,r3,r4' && S.read().app.sections[0].firstSceneId===above && blank(above) && splitAt(above,0)
+key ctrl KeyZ
+wait order() === 'r1,r2,r3,r4' && agree()
+expect splitAt('r2',2) && S.read().app.sections[0].firstSceneId==='r2'
+key ctrl KeyY
+wait order() === 'r1,'+above+',r2,r3,r4' && agree()
+expect splitAt(above,0)
+click #rows .row-more[data-id="r3"]
+click #rows .row-menu:not([hidden]) [data-action="insert-below"][data-id="r3"]
+wait rows().length === 6 && agree()
+eval window.below=rows()[4].id;true
+expect order() === 'r1,'+above+',r2,r3,'+below+',r4' && S.read().app.sections[1].firstSceneId==='r4' && blank(below) && splitAt(below,0)
+click #btn-write
+wait W.on()
+eval window.wdoc=()=>document.getElementById('writer-doc');window.wbeat=id=>wdoc().querySelector('.wr-beat[data-id="'+id+'"]');window.wat=(id,o)=>{wdoc().focus();W.place({anchor:{kind:'beat',rowId:id,offset:o},head:{kind:'beat',rowId:id,offset:o}});return true};window.wsel=(id,o)=>{const s=W.selection();return document.activeElement===wdoc()&&s?.anchor.rowId===id&&s.anchor.offset===o&&s.head.rowId===id&&s.head.offset===o&&wbeat(id).contains(getSelection().focusNode)&&getSelection().isCollapsed};window.tick=id=>{const r=wbeat(id).getClientRects()[0];return {x:r.left+1,y:r.top+2}};wat('r4',2)
+mouse click tick('r4')
+click .wr-flow-beat-menu:not([hidden]) [data-action="insert-above"]
+wait rows().length === 7 && agree()
+eval window.writerAbove=rows()[5].id;true
+expect S.read().app.sections[1].firstSceneId===writerAbove && blank(writerAbove) && wsel(writerAbove,0)
+key ctrl KeyZ
+wait rows().length === 6 && agree()
+expect wsel('r4',2) && S.read().app.sections[1].firstSceneId==='r4'
+key ctrl KeyY
+wait rows().length === 7 && agree()
+expect wsel(writerAbove,0)
+eval wat('r3',1);wdoc().dispatchEvent(new InputEvent('beforeinput',{bubbles:true,cancelable:true,inputType:'insertText',data:'X'}));S.nativePeer.type('r3',0,'P');wdoc().dispatchEvent(new KeyboardEvent('keydown',{key:'Enter',ctrlKey:true,bubbles:true,cancelable:true}));true
+wait rows().length === 8 && agree()
+eval window.writerBelow=rows()[4].id;true
+expect rows()[3].audioText === 'PAXgain' && blank(writerBelow) && wsel(writerBelow,0)
+key ctrl KeyZ
+wait rows().length === 7 && agree()
+expect rows()[3].audioText === 'PAXgain' && wsel('r3',3)
+key ctrl KeyZ
+wait rows()[3].audioText === 'PAgain' && agree()
+expect wsel('r3',2)

@@ -13,13 +13,14 @@ import { renderDeletes, renderProduction, tagPanelState } from "./ports/producti
 import { ids } from "./ports/identity.ts";
 import { shotHiding } from "./shot-hiding.ts";
 import { sceneView } from "./editor-owners.ts";
+import { nativeEditorActive } from "./shared-session.ts";
 
 const render = owned<ReturnType<typeof startRowsRender>>();
 
 export function mountRowsRenderFeature() {
   return render.replace(() => {
     const ports: RowsRenderPorts = {
-      document: documentReader, edits, text, video, editing: renderEditing, draft: renderDraft,
+      document: documentReader, edits, insertAboveAvailable: nativeEditorActive, text, video, editing: renderEditing, draft: renderDraft,
       undo: renderUndo, hiding: shotHiding, scenes: sceneView, pictures, personColors,
       preferences: renderPreferences, view: tagView, notices, actions,
       deletes: renderDeletes, tagPanel: tagPanelState, ids, production: renderProduction

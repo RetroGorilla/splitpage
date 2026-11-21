@@ -5,11 +5,11 @@ import type { CommandOutcome, DocumentStructureIntent } from "../../application/
 import type { ReportPort } from "../../application/session/ports.ts";
 import { changesBetween } from "../../application/session/projection-changes.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
-import { sceneBeforeBeat, sceneFirstBeatId, scenesInOrder, storedSceneName } from "../../core/document/scenes.ts";
+import { sceneBeforeBeat, sceneFirstBeatId, sceneForBeat, scenesInOrder, storedSceneName } from "../../core/document/scenes.ts";
 import type { SceneDocument } from "../../core/document/scenes.ts";
 import { cappedText } from "../../core/document/text-policy.ts";
 import { documentReader } from "./ports/document.ts";
-import { editAllowed } from "./session-owner.ts";
+import { editAllowed, sessionStamps } from "./session-owner.ts";
 import type { mountNativeSharedInput } from "./native-shared-input.ts";
 
 interface NativeStructurePorts {
@@ -23,6 +23,16 @@ interface NativeStructurePorts {
 const UNAVAILABLE = "native-command-unavailable";
 
 type MoveIntent = Extract<DocumentStructureIntent, { kind: "move-beat" | "swap-beats" }>;
+type InsertIntent = Extract<DocumentStructureIntent, { kind: "insert-beat" }>;
+
+function insertPlacement(doc: SceneDocument, { id, side }: InsertIntent) {
+  const at = doc.rows.findIndex(row => row.id === id);
+  if (at < 0) return null;
+  const scene = sceneForBeat(doc, id)?.id ?? null;
+  const next = doc.rows[at + (side === "above" ? -1 : 1)]?.id;
+  const heading = side === "above" ? sceneBeforeBeat(doc, id) : next ? sceneBeforeBeat(doc, next) : undefined;
+  return { scene, neighbour: heading?.id ?? next ?? null, kind: heading ? "heading" : "beat" };
+}
 
 function movePlacement(doc: SceneDocument, intent: MoveIntent) {
   const source = doc.rows.findIndex(row => row.id === intent.id);
@@ -40,8 +50,8 @@ function movePlacement(doc: SceneDocument, intent: MoveIntent) {
 }
 
 export function createNativeEditorStructure({ native, session, input, publish, report }: NativeStructurePorts) {
-  function anchor(beat: string, offset: number) {
-    const result = native.commands.anchorText({ beat, cell: "narration" }, offset);
+  function anchor(beat: string, offset: number, cell: "narration" | "visual" = "narration") {
+    const result = native.commands.anchorText({ beat, cell }, offset);
     return result.kind === "anchored" ? result.range : null;
   }
 
@@ -50,8 +60,10 @@ export function createNativeEditorStructure({ native, session, input, publish, r
     if (!owner || !typing) return { kind: "rejected", reason: "closed" };
     try {
       const moving = intent.kind === "move-beat" || intent.kind === "swap-beats";
+      const inserting = intent.kind === "insert-beat";
       const shown = moving ? documentReader.read(doc => doc && movePlacement(doc, intent)) : null;
-      const captured = moving ? typing.captureMoveSelection() : null;
+      const shownInsert = inserting ? documentReader.read(doc => doc && insertPlacement(doc, intent)) : null;
+      const captured = moving || inserting ? typing.captureMoveSelection() : null;
       const admission = owner.admit();
       if (admission?.kind === "failed") throw admission.error;
       if (admission) return admission.notified ? admission : owner.refuse(admission.reason);
@@ -65,6 +77,19 @@ export function createNativeEditorStructure({ native, session, input, publish, r
       let landing: string | undefined;
       let step;
       switch (intent.kind) {
+        case "insert-beat": {
+          const live = insertPlacement(before, intent);
+          if (!shownInsert || !live || shownInsert.scene !== live.scene || shownInsert.neighbour !== live.neighbour
+            || shownInsert.kind !== live.kind) return owner.refuse(UNAVAILABLE);
+          const selection = intent.cell ? typing.visualSelection(intent.id) : after;
+          step = native.commands.insertAdjacentBeat.withSelection(selection ?? anchor(intent.id, 0, intent.cell), intent.id, intent.side,
+            { by: sessionStamps.editor.name(), at: sessionStamps.clock.nowIso() });
+          if (step.result.kind === "written") {
+            landing = step.result.created;
+            after = anchor(landing, 0, intent.cell);
+          }
+          break;
+        }
         case "remove-beat": {
           const at = before.rows.findIndex(row => row.id === intent.id);
           if (at < 0) return owner.refuse("missing");
@@ -119,7 +144,8 @@ export function createNativeEditorStructure({ native, session, input, publish, r
       const changes = changesBetween(before, native.document());
       publish();
       if (landing) {
-        const point = { target: { beat: landing, cell: "narration" as const }, offset: 0 };
+        const cell = intent.kind === "insert-beat" ? intent.cell ?? "narration" : "narration";
+        const point = { target: { beat: landing, cell }, offset: 0 } as const;
         typing.show({ anchor: point, head: point });
       } else if (movedSelection?.kind === "ready") {
         typing.show(movedSelection.selection);
