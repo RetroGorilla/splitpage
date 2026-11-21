@@ -1400,7 +1400,7 @@ for (const [from, to] of [[0, 2], [3, 5]]) {
 }
 
 for (const repeatEnter of [true, false]) {
-  test("Writer: " + (repeatEnter ? "second Enter needs atomic blank removal and paragraph start" : "Enter on Wo needs atomic deletion and paragraph start"), async t => {
+  test("Writer: " + (repeatEnter ? "second Enter on a blank splits it as on native main" : "Enter over Wo deletes and splits as on native main"), async t => {
     adoptReplacement(migrateRows({ title: "Standalone paragraph", rows: twoBeats, paragraphsDecided: true }));
     const local = writer(t);
     const enterKey = () => assert.equal(press(root(), "Enter", { ctrlKey: false }), true);
@@ -1417,21 +1417,33 @@ for (const repeatEnter of [true, false]) {
     writerControls().closeWriter();
 
     const show = await enter(t, twoBeats), native = writer(t);
+    const snapshot = () => hook.read().app.rows.map(row => [row.id, row.audioText, !!row.paragraphStart]);
     if (repeatEnter) {
       native.caret("r1", 5);
       enterKey();
-      assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["Hello", "", "World"]);
-      assert.equal(show.mock.callCount(), 0);
+      const first = hook.read().app.rows[1].id;
+      assert.deepEqual(snapshot(), [["r1", "Hello", false], [first, "", false], ["r2", "World", false]]);
+      assert.deepEqual(native.at(), [first, 0, 0]);
     } else native.caret("r2", 0, 2);
-    const before = hook.read().app, selection = native.at();
-    for (let attempt = 0; attempt < 2; attempt++) {
-      enterKey();
-      await Promise.resolve();
-      assert.deepEqual(hook.read().app, before);
-      assert.deepEqual(hook.read().peer, before);
-      assert.deepEqual(native.at(), selection);
-      assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
-    }
+    const before = hook.read().app, selection = native.at(), first = before.rows[1].id;
+    enterKey();
+    const created = hook.read().app.rows[2].id;
+    assert.deepEqual(snapshot(), repeatEnter
+      ? [["r1", "Hello", false], [first, "", false], [created, "", false], ["r2", "World", false]]
+      : [["r1", "Hello", false], ["r2", "", false], [created, "rld", false]]);
+    assert.deepEqual(native.at(), [created, 0, 0]);
+    assert.equal(document.activeElement, root());
+    const after = hook.read().app;
+    await Promise.resolve();
+    assert.deepEqual(hook.read().peer, after);
+    assert.equal(press(root(), "z"), true);
+    assert.deepEqual(hook.read().app, before);
+    assert.deepEqual(native.at(), selection);
+    assert.equal(document.getSelection().toString(), repeatEnter ? "" : "Wo");
+    assert.equal(press(root(), "y"), true);
+    assert.deepEqual(hook.read().app, after);
+    assert.deepEqual(native.at(), [created, 0, 0]);
+    assert.equal(show.mock.callCount(), 0);
   });
 }
 

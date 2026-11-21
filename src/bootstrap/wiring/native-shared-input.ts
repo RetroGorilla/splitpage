@@ -659,9 +659,12 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       return false;
     }
     const planned = plan.rows[index];
-    if (caret.range || plan.rows.length !== doc.rows.length || planned?.id !== row.id || planned.paragraphStart !== true) {
+    // why: keep native splits available when standalone Enter also changes a paragraph flag
+    if (!caret.range && plan.rows.length === doc.rows.length - 1) return true;
+    if (plan.rows.length !== doc.rows.length || planned?.id !== row.id || planned.paragraphStart !== true) {
       return refuse();
     }
+    if (caret.range) return row.paragraphStart === true ? refuse() : true;
     const step = native.commands.setField.withSelection(caret.before, { kind: "beat", id: row.id, field: "paragraphStart" }, true);
     if (step.result.kind === "refused") refuseCommand(step.result.reason);
     if (step.result.kind === "written") {
