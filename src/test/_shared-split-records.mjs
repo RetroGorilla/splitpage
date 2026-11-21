@@ -17,7 +17,7 @@ import { clearProductionSelection, selectedKeys } from "../bootstrap/wiring/prod
 import { sharedGalleryCommands } from "../bootstrap/wiring/ports/shared-commands.ts";
 import { findOrAddPerson, registerProductionTag } from "../features/tags/production-tags.ts";
 import { addPersonForTag, applyGearQuickAdd, changeProductionOutline, clickProductionOutline, armDeleteTag, armPersonDelete, armRemoveTag, bulkDeleteSelected, openGearPanel, openProductionPanel, renderProduction, saveTagRename, setTagOwner, setTagStatus, toggleCardSelection } from "../features/tags/panels.ts";
-import { openBrollPage, openBrollPanel, runBrollRefresh } from "../features/broll/panel.ts";
+import { openBrollPanel } from "../features/broll/panel.ts";
 import { armDeleteComment, closeCommentComposer, openCommentComposer, openCommentsPanel, postComment, postReply, setCommentAssignee, toggleReplyComposer, toggleResolve } from "../features/comments/comments.ts";
 import { moveGallerySlot, removeGallerySlot } from "../core/document/gallery.ts";
 import { tagKey } from "../core/document/tags.ts";
@@ -511,57 +511,13 @@ export const HELD_OWNER_CALLS = [
 
 export const doc = () => currentDocument();
 
-export const nameOf = id => doc().people.find(p => p.id === id)?.name ?? "";
-
 export const shotB1 = () => doc().brollShots.find(s => s.id === "b1");
 
 export const tagById = id => doc().productionTags.find(t => t?.id === id);
 
-export const cyOwns = owner => () => [doc().people.filter(p => p.name === "Cy").length, nameOf(owner())];
-
 export const blurOut = el => { el.focus(); el.blur(); };
 
-export const NOTES = `#broll-panel .broll-notes-input${B1}`, PAGE_NOTE = `#broll-page .broll-page-note${B1}`, TAG_NOTES = `#production-panel .tag-notes-input${MUG}`;
-
-export const RENAME = `#production-panel .tag-rename-input${MUG}`;
-
-export const heldPath = name => { const path = HELD_PATHS.find(p => p.name === name); assert.ok(path, name); return path; };
-
-export const typedRow = (name, box, saved, want, how = {}) => {
-  const path = heldPath(name), real = path.how === "blur" ? blurOut : FIRE[path.how];
-  return { ...path, box, saved, want, refuse: how.refuse ?? real, save: how.save ?? real, redraw: how.redraw ?? (path.state === brollState ? runBrollRefresh : path.render) };
-};
-
-export const TYPED_PATHS = [
-  typedRow("the b-roll bulk new person box", "#broll-bulk-input", cyOwns(() => shotB1().owner), [1, "Cy"]),
-  typedRow("the b-roll bulk new location box", "#broll-bulk-input", () => shotB1().location, "Quay"),
-  typedRow("the b-roll shot person box, Enter", `#broll-panel .broll-person-input${B1}`, cyOwns(() => shotB1().owner), [1, "Cy"]),
-  typedRow("the b-roll shot person box, Add", `#broll-panel .broll-person-input${B1}`, cyOwns(() => shotB1().owner), [1, "Cy"]),
-  typedRow("the b-roll add box", "#broll-add-input", () => doc().brollShots.filter(s => s.name === "Park").length, 1),
-  typedRow("the b-roll prop box, Enter", `#broll-panel .broll-prop-input${B1}`, () => shotB1().props.map(p => p.name), ["Mug", "Lamp"]),
-  typedRow("the b-roll prop box, a suggestion pick", `#broll-panel .broll-prop-input${B1}`, () => shotB1().props.map(p => p.name), ["Mug", "Lamp"]),
-  typedRow("the b-roll location box, Enter", LOC, () => shotB1().location, "Quay"),
-  typedRow("the b-roll location box, blur", LOC, () => shotB1().location, "Quay"),
-  typedRow("the b-roll audio box, blur", REF, () => shotB1().audioRef, "0:12"),
-  typedRow("the b-roll notes box, blur", NOTES, () => shotB1().notes, "Wide"),
-  { name: "the b-roll notes box, typing then a redraw", box: NOTES, target: NOTES, saved: () => shotB1().notes, want: "Wide", redraw: runBrollRefresh,
-    setup: () => { brollOpen("b1"); typeIn(NOTES, "Wide", [1, 2]); }, refuse: blurOut, save: blurOut },
-  { name: "the b-roll page note, Enter", box: PAGE_NOTE, target: PAGE_NOTE, saved: () => shotB1().notes, want: "Wide", redraw: runBrollRefresh,
-    setup: () => { openBrollPage(); typeIn(PAGE_NOTE, "Wide", [1, 2]); }, refuse: el => { press(el, "Enter"); }, save: blurOut },
-  typedRow("the tag person box, Enter", `#production-panel .tag-person-input${MUG}`, cyOwns(() => tagById(M).owner), [1, "Cy"]),
-  typedRow("the tag person box, Add", `#production-panel .tag-person-input${MUG}`, cyOwns(() => tagById(M).owner), [1, "Cy"]),
-  typedRow("the gear tag person box, Enter", `#gear-panel .tag-person-input${DRONE}`, cyOwns(() => tagById(D).owner), [1, "Cy"]),
-  typedRow("the tag bulk person box, Enter", "#bulk-person-input", cyOwns(() => tagById(M).owner), [1, "Cy"]),
-  typedRow("the tag bulk person box, Add", "#bulk-person-input", cyOwns(() => tagById(M).owner), [1, "Cy"]),
-  { name: "the tag notes box, typing then blur", box: TAG_NOTES, target: TAG_NOTES, saved: () => tagById(M).notes, want: "Wide", redraw: renderProduction,
-    setup: () => { productionCards(); expandedCard("#production-panel", "prop mug"); typeIn(TAG_NOTES, "Wide", [1, 2]); },
-    refuse: el => { el.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: "e" })); }, save: blurOut },
-  typedRow("the gear quick add", "#gear-quickadd-input", () => doc().productionTags.filter(t => t?.cat === "gear").map(t => t.name).sort(), ["Crane", "Drone"]),
-  typedRow("the comment Post button", "#comment-name", () => doc().comments.map(c => c.id), ["C1", "C9"]),
-  typedRow("the reply Post button", '.reply-composer[data-for="C1"] .reply-name-input', () => doc().comments[0].replies.map(r => r.body), ["ok"])
-];
-
-export const boxValue = selector => $(selector).value;
+export const NOTES = `#broll-panel .broll-notes-input${B1}`;
 
 export const PREP_CHOICES = [
   { name: "the scene-prep Ready button", notice: "Marked as Have it", act: () => {

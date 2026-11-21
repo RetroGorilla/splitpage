@@ -4,8 +4,8 @@ import { REWRITE_CELL_CHANGED } from "../../application/commands/document-edit.t
 import type { ReportPort } from "../../application/session/ports.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
 import { storedSceneName } from "../../core/document/scenes.ts";
-import { deleteRange, replaceText, sliceCell } from "../../core/text/edits.ts";
-import { cellLength, projection } from "../../core/text/runs.ts";
+import { replacementInsert } from "../../core/text/edits.ts";
+import { projection } from "../../core/text/runs.ts";
 import { searchablePieces } from "../../core/text/search.ts";
 import type { FindNativeAccess } from "../../features/find/ports.ts";
 import type { WriterSearchMatch } from "../../features/common/writer-find.ts";
@@ -133,10 +133,9 @@ export function createNativeEditorFind({ native, session, input, editAttribution
             if (!name.trim() || [...name].length > 200) { owner.refuse(UNAVAILABLE); return null; }
             step = native.commands.renameHeading.withSelection(range, range, text);
           } else {
-            const next = replaceText(source.cell, start, end, text);
-            length = cellLength(next) - cellLength(deleteRange(source.cell, start, end));
-            const insert = sliceCell(next, start, start + length);
-            step = native.commands.replaceText.withSelection(range, range, insert, editAttribution());
+            const insert = replacementInsert(source.cell, start, end, text);
+            length = insert.length;
+            step = native.commands.replaceText.withSelection(range, range, insert.runs, editAttribution());
           }
           if (step.result.kind === "refused" || step.result.kind === "recovery") { typing.refuseCommand(step.result.reason); return null; }
           if (step.result.kind === "unchanged") return 0;

@@ -1090,7 +1090,7 @@ creating a person while assigning creates nobody | src/application/commands/prod
 rule 152: the shared picture toast offers an Undo that reads the standalone owner | src/application/editing/cell-editing.ts | src/test/shared-split-records-literals-pictures-app.test.mjs | tests/collab/split-records-mutants.json
 the comment wiring passes no shared port | src/bootstrap/wiring/comments.ts | src/test/shared-split-records-literals-comments-app.test.mjs | tests/collab/split-records-mutants.json
 the record wiring for the production tags passes no shared port | src/bootstrap/wiring/production-tags.ts | src/test/shared-split-records-literals-tags-app.test.mjs | tests/collab/split-records-mutants.json
-a b-roll redraw takes the typed value as the comparison base even when its write was refused | src/features/broll/panel.ts | src/test/shared-split-records-drafts-app.test.mjs | tests/collab/split-records-mutants.json
+a b-roll redraw takes the typed value as the comparison base even when its write was refused | src/features/broll/panel.ts | src/test/shared-native-record-drafts-mapped-app.test.mjs | tests/collab/split-records-mutants.json
 a b-roll redraw drops the unsaved text of a box that lost focus | src/features/broll/panel.ts | src/test/shared-split-records-lifetimes-app.test.mjs | tests/collab/split-records-mutants.json
 a tag panel redraw drops a box's unsaved text | src/features/tags/panels.ts | src/test/shared-split-records-lifetimes-app.test.mjs | tests/collab/split-records-mutants.json
 a blur in tag notes does not retry a refused write | src/features/tags/mount.ts | src/test/shared-split-records-typed-tags-app.test.mjs | tests/collab/split-records-mutants.json
@@ -1107,11 +1107,11 @@ the tag panels keep drafts across a document or session lifetime | src/features/
 the tag panels' first draw of a lifetime leaves the earlier lifetime's text in boxes it does not redraw | src/features/tags/panels.ts | src/test/shared-split-records-lifetimes-app.test.mjs | tests/collab/split-records-mutants.json
 the b-roll panel keeps drafts across a document or session lifetime | src/features/broll/panel.ts | src/test/shared-split-records-lifetimes-app.test.mjs | tests/collab/split-records-mutants.json
 a refused b-roll write is remembered past its session | src/features/broll/panel.ts | src/test/shared-split-records-lifetimes-app.test.mjs | tests/collab/split-records-mutants.json
-a hidden draft is dropped when its editor closes | src/features/common/typed-drafts.ts | src/test/shared-split-records-drafts-app.test.mjs | tests/collab/split-records-mutants.json
+a hidden draft is dropped when its editor closes | src/features/common/typed-drafts.ts | src/test/shared-native-record-drafts-mapped-app.test.mjs | tests/collab/split-records-mutants.json
 a redraw saves a draft | src/features/broll/panel.ts | tests/features/common/typed-drafts-inventory.test.ts | tests/collab/split-records-mutants.json
-a draft is keyed by the tag's name | src/features/tags/panels.ts | src/test/shared-split-records-drafts-app.test.mjs | tests/collab/split-records-mutants.json
+a draft is keyed by the tag's name | src/features/tags/panels.ts | src/test/shared-native-record-drafts-mapped-app.test.mjs | tests/collab/split-records-mutants.json
 typing back to the drawn value keeps the draft | src/features/common/typed-drafts.ts | src/features/common/typed-drafts.test.ts | tests/collab/split-records-mutants.json
-rename mode is left before the outcome | src/features/broll/panel.ts | src/test/shared-split-records-drafts-app.test.mjs | tests/collab/split-records-mutants.json
+rename mode is left before the outcome | src/features/broll/panel.ts | src/test/shared-native-record-drafts-mapped-app.test.mjs | tests/collab/split-records-mutants.json
 Escape drops b-roll field text instead of submitting it | src/features/broll/panel.ts | src/test/panel-escape-app.test.mjs | tests/collab/split-records-mutants.json
 Escape clears tag notes and Gear quick add as if they were cancel editors | src/features/tags/panels.ts | src/test/panel-escape-app.test.mjs | tests/collab/split-records-mutants.json
 Escape erases the comment body before its cancel command can be refused | src/features/comments/comments.ts | src/test/panel-escape-app.test.mjs | tests/collab/split-records-mutants.json
