@@ -3,10 +3,9 @@ import { BROLL_PROPS_MAX, brollPropKey } from "../../../core/document/broll.ts";
 import type { BrollProp } from "../../../core/document/broll.ts";
 import { isTagId, normalizeTagName } from "../../../core/document/tags.ts";
 import { compareNativeRankedIds, isValidNativeRank, nativeRankBetween } from "./rank.ts";
-import { decodeNativeValue, encodeNativeValue, nativeFieldKey } from "./values.ts";
+import { decodeNativeValue, encodeNativeValue } from "./values.ts";
 
 export const NATIVE_SHOT_PROPS = "props";
-export const LEGACY_SHOT_PROPS = nativeFieldKey("props");
 
 export interface NativeShotPropEntry {
   readonly key: string;
@@ -28,16 +27,12 @@ export function newNativeShotProp(prop: BrollProp, rank: string | null): Y.Map<u
 
 export function newNativeShotProps(props: readonly BrollProp[]): Y.Map<unknown> {
   const map = new Y.Map<unknown>();
-  for (const { key, prop, rank } of orderedNativeShotProps(props)) map.set(key, newNativeShotProp(prop, rank));
-  return map;
-}
-
-export function orderedNativeShotProps(props: readonly BrollProp[]) {
   let rank: string | null = null;
-  return props.map(prop => {
+  for (const prop of props) {
     rank = nativeRankBetween(rank, null);
-    return { key: nativeShotPropKey(prop), prop, rank, removed: false };
-  });
+    map.set(nativeShotPropKey(prop), newNativeShotProp(prop, rank));
+  }
+  return map;
 }
 
 export function nativeShotPropEntries(map: Y.Map<unknown>): NativeShotPropEntry[] | null {

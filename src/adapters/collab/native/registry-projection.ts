@@ -13,7 +13,6 @@ import { toPlainText } from "../../../core/text/projections.ts";
 import { tagIds } from "../../../core/text/runs.ts";
 import type { Run } from "../../../core/text/runs.ts";
 import type { NativeRoots } from "./roots.ts";
-import type { NativeShotPropEntry } from "./shot-props.ts";
 import { sameNativeValue } from "./values.ts";
 
 interface RegistryCellRow {
@@ -109,8 +108,7 @@ function propNormalizer(tags: DocumentShape["productionTags"]) {
   };
 }
 
-export function projectNativeRegistries(document: DocumentShape, roots: NativeRoots, rows: () => readonly RegistryCellRow[],
-  shotProps?: ReadonlyMap<string, readonly NativeShotPropEntry[]>): NativeRegistryRowInputs {
+export function projectNativeRegistries(document: DocumentShape, roots: NativeRoots, rows: () => readonly RegistryCellRow[]): NativeRegistryRowInputs {
   const tagsRemoved = hasRemoved(roots.tags) || document.productionTags.some(tag => tag && !tag.name);
   const shotsRemoved = hasRemoved(roots.shots) || document.brollShots.some(shot => !shot.name);
   const seededShots = new Set<string>();
@@ -140,12 +138,10 @@ export function projectNativeRegistries(document: DocumentShape, roots: NativeRo
   for (const record of [...document.productionTags, ...document.brollShots]) {
     if (record?.owner && !people.has(record.owner)) record.owner = "";
   }
-  if (document.brollShots.some(shot => shot.props?.length || shotProps?.get(shot.id)?.length)) {
+  if (document.brollShots.some(shot => shot.props?.length)) {
     const relevantTags = propNormalizer(document.productionTags);
     for (const shot of document.brollShots) {
-      const entries = shotProps?.get(shot.id);
-      const props = entries ? entries.filter(entry => !entry.removed).map(entry => entry.prop) : shot.props;
-      if (props?.length) shot.props = normalizeBrollProps(props, relevantTags(props));
+      if (shot.props?.length) shot.props = normalizeBrollProps(shot.props, relevantTags(shot.props));
     }
   }
   document.productionTags = document.productionTags.flatMap(tag => tag?.name ? [{ owner: "", notes: "", status: TAG_STATUS_IDS[0], ...tag }] : []);

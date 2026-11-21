@@ -11,7 +11,6 @@ import { nativeRegistryRowChanged, projectNativeRegistries } from "./registry-pr
 import type { NativeRegistryRowInputs } from "./registry-projection.ts";
 import type { NativeRoots } from "./roots.ts";
 import { NATIVE_SHOT_PROPS, nativeShotPropEntries } from "./shot-props.ts";
-import type { NativeShotPropEntry } from "./shot-props.ts";
 import {
   NATIVE_BEAT_FIELDS, NATIVE_FIELD_PREFIX, NATIVE_GALLERY_FIELDS, NATIVE_GALLERY_KEY, decodeNativeValue, deepFrozen,
   isNativeBeatExtra, isNativeBeatField, nativeFieldKey, nativeFieldName, nativeGalleryOf, sameNativeValue
@@ -194,12 +193,13 @@ function beatExtraEntries(record: Y.Map<unknown>, where: string, problems: Probl
   return entries;
 }
 
-function fileFieldEntries(record: Y.Map<unknown>, where: string, problems: Problems): [string, unknown][] {
+function fileFieldEntries(record: Y.Map<unknown>, where: string, problems: Problems, skip?: string): [string, unknown][] {
   const entries: [string, unknown][] = [];
   for (const key of [...record.keys()].sort()) {
     if (!key.startsWith(NATIVE_FIELD_PREFIX)) continue;
     const name = nativeFieldName(key);
     if (name === null) { problems?.push({ kind: "bad-key", where: where + "/" + key }); continue; }
+    if (name === skip) continue;
     const value = decoded(record, key, where, problems);
     if (value) entries.push([name, value.value]);
   }
@@ -237,19 +237,18 @@ function byRank(map: Y.Map<Y.Map<unknown>>): [string, Y.Map<unknown>][] {
   return entries.sort(([leftId, left], [rightId, right]) => compareNativeRankedIds(leftId, rankOf(left), rightId, rankOf(right)));
 }
 
-function visibleRecords(root: Y.Map<Y.Map<unknown>>, name: string, problems: Problems,
-  shotProps?: Map<string, NativeShotPropEntry[]>): Record<string, unknown>[] {
+function visibleRecords(root: Y.Map<Y.Map<unknown>>, name: string, problems: Problems): Record<string, unknown>[] {
   return byRank(root).filter(([, record]) => record.get("removed") !== true)
     .map(([id, record]) => {
-      const where = name + "/" + id, fields = fileFields(record, where, problems);
-      if (name === "shots" && record.has(NATIVE_SHOT_PROPS)) {
+      const where = name + "/" + id;
+      if (name === "shots") {
+        const fields = Object.fromEntries(fileFieldEntries(record, where, problems, NATIVE_SHOT_PROPS));
         const map = record.get(NATIVE_SHOT_PROPS);
         const entries = map instanceof Y.Map ? nativeShotPropEntries(map) : null;
-        if (entries) shotProps?.set(id, entries);
-        else problems?.push({ kind: "bad-value", where: where + "/" + NATIVE_SHOT_PROPS });
-        fields.props = [];
+        if (!entries && record.has(NATIVE_SHOT_PROPS)) problems?.push({ kind: "bad-value", where: where + "/" + NATIVE_SHOT_PROPS });
+        return { ...fields, id, props: entries?.filter(entry => !entry.removed).map(entry => entry.prop) ?? [] };
       }
-      return { ...fields, id };
+      return { ...fileFields(record, where, problems), id };
     });
 }
 
@@ -1085,11 +1084,11 @@ export class NativeScriptReader {
     };
   }
 
-  private storedRegistries(problems: Problems, shotProps?: Map<string, NativeShotPropEntry[]>): Registries {
+  private storedRegistries(problems: Problems): Registries {
     return {
       people: visibleRecords(this.roots.people, "people", problems) as DocumentShape["people"],
       productionTags: visibleRecords(this.roots.tags, "tags", problems) as DocumentShape["productionTags"],
-      brollShots: visibleRecords(this.roots.shots, "shots", problems, shotProps) as DocumentShape["brollShots"]
+      brollShots: visibleRecords(this.roots.shots, "shots", problems) as DocumentShape["brollShots"]
     };
   }
 
@@ -1107,9 +1106,8 @@ export class NativeScriptReader {
     });
     const document = { ...this.collect(null), rows, ...sections.length ? { sections } : {} };
     if (this.registryCache) return deepFrozen({ ...document, ...this.registryCache.records });
-    const shotProps = new Map<string, NativeShotPropEntry[]>();
-    const snapshot = { ...document, ...this.storedRegistries(null, shotProps) };
-    const inputs = projectNativeRegistries(snapshot, this.roots, () => this.rows(), shotProps);
+    const snapshot = { ...document, ...this.storedRegistries(null) };
+    const inputs = projectNativeRegistries(snapshot, this.roots, () => this.rows());
     const { people, productionTags, brollShots } = snapshot;
     this.registryCache = { inputs, records: deepFrozen({ people, productionTags, brollShots }) };
     return deepFrozen(snapshot);

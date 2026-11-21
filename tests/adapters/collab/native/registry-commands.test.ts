@@ -252,13 +252,12 @@ test("field guards read names, resolved targets, and touched encodings before co
     tag.delete("removed");
     tag.set(nativeFieldKey("notes"), "bad JSON");
     unchanged(script, bulk, "stored");
-    shot.delete("props");
-    shot.set(nativeFieldKey("props"), encodeNativeValue({ length: 1, prop: "Lamp" }));
+    shot.set("props", { length: 1, prop: "Lamp" });
     assert.deepEqual(script.reader.document().brollShots[0]?.props, []);
     unchanged(script, { kind: "addProp", id: "bs1", prop: "Rope" }, "stored");
     const clone = shot.clone();
     script.roots.shots.set("", clone);
-    clone.set(nativeFieldKey("props"), encodeNativeValue([]));
+    clone.set("props", new Y.Map());
     unchanged(script, { kind: "addProp", id: "", prop: "Lamp" }, "missing");
   } finally { script.doc.destroy(); }
 });

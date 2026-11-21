@@ -4,9 +4,9 @@ import * as Y from "yjs";
 import { changeNativeRegistry } from "../../../../src/adapters/collab/native/registry-commands.ts";
 import type { NativeRegistryChange } from "../../../../src/adapters/collab/native/registry-commands.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
-import { LEGACY_SHOT_PROPS, NATIVE_SHOT_PROPS } from "../../../../src/adapters/collab/native/shot-props.ts";
+import { NATIVE_SHOT_PROPS } from "../../../../src/adapters/collab/native/shot-props.ts";
 import { openNativeUndo } from "../../../../src/adapters/collab/native/undo-commands.ts";
-import { decodeNativeValue, mintNativeTagId } from "../../../../src/adapters/collab/native/values.ts";
+import { decodeNativeValue, encodeNativeValue, mintNativeTagId, nativeFieldKey } from "../../../../src/adapters/collab/native/values.ts";
 import { BROLL_PROPS_MAX } from "../../../../src/core/document/broll.ts";
 import type { BrollProp } from "../../../../src/core/document/broll.ts";
 import { registryCopies, registryReload, registrySource } from "./registry-harness.ts";
@@ -32,7 +32,7 @@ function source(props: readonly BrollProp[]) {
 function propsOf(script: NativeScript): Y.Map<Y.Map<unknown>> {
   const record = script.roots.shots.get("shot"), map = record?.get(NATIVE_SHOT_PROPS);
   assert.ok(map instanceof Y.Map);
-  assert.equal(record?.has(LEGACY_SHOT_PROPS), false);
+  assert.equal(record?.has(nativeFieldKey("props")), false);
   return map as Y.Map<Y.Map<unknown>>;
 }
 
@@ -133,6 +133,22 @@ test("conversion and whole-list set keep valid props with different IDs and a sh
     settle();
     assert.deepEqual(read(right), ropes.toReversed());
   }, undefined, source(ropes));
+});
+
+test("a shot without a prop map reads empty and its next prop edit starts empty", () => {
+  const initial = initialProps(3);
+  registryCopies((left, right, settle) => {
+    assert.deepEqual(read(left), []);
+    assert.deepEqual(read(right), []);
+    write(left, { kind: "addProp", id: "shot", prop: "Rope" });
+    settle();
+    assert.deepEqual(read(right), [{ id: "t_rope", name: "Rope" }]);
+  }, seed => {
+    const shot = seed.roots.shots.get("shot");
+    assert.ok(shot);
+    shot.delete(NATIVE_SHOT_PROPS);
+    shot.set(nativeFieldKey("props"), encodeNativeValue(initial));
+  }, source(initial));
 });
 
 test("same-name additions keep and show both IDs through undo, redo and whole-list clear", () => {

@@ -4,6 +4,7 @@ import * as Y from "yjs";
 import { changeNativeRegistry } from "../../../../src/adapters/collab/native/registry-commands.ts";
 import type { NativeRegistryChange } from "../../../../src/adapters/collab/native/registry-commands.ts";
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
+import { newNativeShotProps } from "../../../../src/adapters/collab/native/shot-props.ts";
 import { openNativeUndo } from "../../../../src/adapters/collab/native/undo-commands.ts";
 import { decodeNativeValue, encodeNativeValue, mintNativeId, mintNativeTagId, nativeFieldKey } from "../../../../src/adapters/collab/native/values.ts";
 import type { DocumentShape } from "../../../../src/core/document/validated.ts";
@@ -368,8 +369,7 @@ test("readding a displayed prop is a no-op across projected tags and same-name t
   }, seed => {
     const shot = seed.roots.shots.get("bs3");
     assert.ok(shot);
-    shot.delete("props");
-    shot.set(nativeFieldKey("props"), encodeNativeValue([{ id: "", name: "Lamp" }, { id: "t_case", name: "Case" }]));
+    shot.set("props", newNativeShotProps([{ id: "", name: "Lamp" }, { id: "t_case", name: "Case" }]));
   }, tagged);
   registryCopies((left, right, settle) => {
     const change = { kind: "addProp", id: "bs1", prop: "Umbrella" } as const;

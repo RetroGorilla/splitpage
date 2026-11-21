@@ -1,15 +1,14 @@
 import * as Y from "yjs";
-import { BROLL_PROPS_MAX, brollPropKey, normalizeBrollProps, resolveBrollProps } from "../../../core/document/broll.ts";
+import { brollPropKey, resolveBrollProps } from "../../../core/document/broll.ts";
 import type { BrollProp } from "../../../core/document/broll.ts";
 import { normalizeTagName } from "../../../core/document/tags.ts";
 import type { DocumentShape } from "../../../core/document/validated.ts";
 import { compareNativeRankedIds, nativeRankBetween } from "./rank.ts";
 import {
-  LEGACY_SHOT_PROPS, NATIVE_SHOT_PROPS, nativeShotPropEntries, nativeShotPropKey, newNativeShotProp, newNativeShotProps,
-  orderedNativeShotProps, resolveNativeShotPropEntries, shownNativeShotPropEntries
+  NATIVE_SHOT_PROPS, nativeShotPropEntries, nativeShotPropKey, newNativeShotProp, resolveNativeShotPropEntries, shownNativeShotPropEntries
 } from "./shot-props.ts";
 import type { NativeShotPropEntry } from "./shot-props.ts";
-import { decodeNativeValue, encodeNativeValue } from "./values.ts";
+import { encodeNativeValue } from "./values.ts";
 
 type PropWrite = (map: Y.Map<unknown>) => void;
 type Write = () => void;
@@ -18,10 +17,7 @@ type Drop = Pick<NativeShotPropEntry, "key" | "rank">;
 export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape["productionTags"]) {
   const map = shot.get(NATIVE_SHOT_PROPS);
   if (shot.has(NATIVE_SHOT_PROPS) && !(map instanceof Y.Map)) return null;
-  const raw = !(map instanceof Y.Map) && shot.has(LEGACY_SHOT_PROPS) ? decodeNativeValue(shot.get(LEGACY_SHOT_PROPS))?.value : [];
-  if (!Array.isArray(raw)) return null;
-  const legacy = normalizeBrollProps(raw, []);
-  const entries = map instanceof Y.Map ? nativeShotPropEntries(map) : orderedNativeShotProps(legacy);
+  const entries = map instanceof Y.Map ? nativeShotPropEntries(map) : [];
   if (!entries) return null;
   const resolved = resolveNativeShotPropEntries(entries, props => resolveBrollProps(props, tags));
   const shown = shownNativeShotPropEntries(resolved);
@@ -33,7 +29,7 @@ export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape
   function plan(writes: Write[], changes: readonly PropWrite[]): void {
     if (changes.length === 0) return;
     writes.push(() => {
-      const props = map instanceof Y.Map ? map : newNativeShotProps(legacy);
+      const props = map instanceof Y.Map ? map : new Y.Map<unknown>();
       if (!(map instanceof Y.Map)) shot.set(NATIVE_SHOT_PROPS, props);
       for (const change of changes) change(props);
     });
