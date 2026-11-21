@@ -826,7 +826,7 @@
       "find": "  if (left) faults.attempt(() => { left(false); });\n",
       "replace": "",
       "tests": [
-        "src/test/shared-hook-routes-app.test.mjs",
+        "src/test/shared-native-handoff-app.test.mjs",
         "tests/bootstrap/shared-switch.test.ts"
       ]
     },
@@ -864,7 +864,7 @@
       "replace": "",
       "tests": [
         "tests/bootstrap/shared-switch.test.ts",
-        "src/test/shared-hook-routes-app.test.mjs"
+        "src/test/shared-native-handoff-app.test.mjs"
       ]
     },
     {

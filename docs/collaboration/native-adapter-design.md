@@ -26,7 +26,9 @@ remain for the rest of [slice 8](#11-build-order). There is no release entry for
 
 A successful native switch restores a Writer or Split selection only when focus stayed in that editor and the
 touched beats, joined narration members and headings keep their identities, order and text. If a captured
-selection cannot be restored, there is no caret and typing waits until the person places one.
+selection cannot be restored, there is no caret and typing waits until the person places one. Leave ends an
+existing entry wait. If Leave itself cannot restore a captured selection, it clears the stale selection and
+waits for a new caret. App stop and entry rollback release any active wait.
 
 ## Known differences from standalone editing
 

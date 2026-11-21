@@ -134,7 +134,8 @@ for (const writer of [true, false]) {
     assert.deepEqual(await hook.enterFrom(stored(changed)), success);
     checkUnplaced(writer);
     assert.deepEqual(hook.leave(), success);
-    checkUnplaced(writer);
+    assert.equal(document.body.hasAttribute("data-native-caret-unplaced"), false);
+    assert.equal(document.getSelection().rangeCount, 0);
     assert.equal(hook.read().app.rows[0].audioText, "New Hello there");
   });
 
@@ -154,7 +155,8 @@ for (const writer of [true, false]) {
     assert.deepEqual(await hook.enterFrom(stored([rows[0], replacement, rows[1]])), success);
     checkUnplaced(writer);
     assert.deepEqual(hook.leave(), success);
-    checkUnplaced(writer);
+    assert.equal(document.body.hasAttribute("data-native-caret-unplaced"), false);
+    assert.equal(document.getSelection().rangeCount, 0);
     assert.deepEqual(hook.read().app.rows.map(row => [row.id, row.visualText]),
       [["r1", "Look again"], ["replacement", "Replacement Visual"], ["r2", ""]]);
   });

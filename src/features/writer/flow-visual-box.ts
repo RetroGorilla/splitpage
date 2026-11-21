@@ -400,8 +400,8 @@ function standaloneVisualBox(ports: FlowVisualBoxPorts) {
     open,
     refresh,
     close,
-    dispose(): void {
-      close(false);
+    dispose(discard = false): void {
+      if (!discard) close(false);
       listening.forEach(([element, event, handler]) => element.removeEventListener(event, handler));
       button.remove(); note.remove(); box.remove();
     }
