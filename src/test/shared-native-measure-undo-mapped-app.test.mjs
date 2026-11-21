@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { encodeStateAsUpdate, encodeStateVector } from "yjs";
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import { adoptReplacement, currentDocument, onSessionChange, sharedSession } from "../bootstrap/wiring/session-owner.ts";
@@ -16,6 +17,7 @@ import { createSessionCapabilities } from "../application/session/capabilities.t
 import { appActions } from "../bootstrap/wiring/ports/actions.ts";
 import { openNativeEditor } from "../bootstrap/wiring/native-shared-session.ts";
 import { entrySwitchFixture } from "../../tests/bootstrap/shared-entry-switch-support.ts";
+import { render, renderRow } from "../features/rows/render.ts";
 
 window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};
@@ -51,17 +53,26 @@ function openCopy(t, state) {
   return copy;
 }
 
-async function enter(t, rows = seed, state) {
+async function enter(t, rows = seed, state, stopped = false) {
   writer.closeWriter();
   adoptReplacement(docOf(rows));
   assert.deepEqual(await (state ? hook.enterFrom(state) : hook.enter()), { ok: true });
   t.after(() => {
     writer.closeWriter();
-    if (!sharedSession() || hook.leave().ok) return;
+    if (!sharedSession()) return;
+    if (!stopped) {
+      assert.deepEqual(hook.leave(), { ok: true });
+      return;
+    }
     forceLeaveSharedSession();
     const allowed = () => ({ allowed: true });
     adoptReplacement(docOf([]), createSessionCapabilities("standalone", { edit: allowed, comment: allowed }));
   });
+}
+
+function leave(expected) {
+  assert.deepEqual(hook.leave(), { ok: true });
+  assert.deepEqual(snapshot(currentDocument()), expected);
 }
 
 function press(target, key, modifiers = {}) {
@@ -91,10 +102,10 @@ function place(view, from, to = from, id = "r1", head = id) {
   }
 }
 
-function selection(view, originalIds) {
+function selection(view) {
   if (view === "Writer") {
     const range = writer.writerFlowControl().selection();
-    return range && [range.anchor, range.head].map(({ kind, rowId, offset }) => [kind, beatName(rowId, originalIds), offset]);
+    return range && [range.anchor, range.head].map(({ kind, rowId, offset }) => [kind, rowId, offset]);
   }
   const active = document.activeElement;
   const range = cellSelection(active);
@@ -106,11 +117,11 @@ function expectedSelection(view, from, to = from, id = "r1", head = id) {
   return [[kind, id, from], [kind, head, to]];
 }
 
-async function agreed(expected, originalIds) {
+async function agreed(expected) {
   await Promise.resolve();
   const { app, peer } = hook.read();
-  assert.deepEqual(snapshot(app, originalIds), expected, "editor");
-  assert.deepEqual(snapshot(peer, originalIds), expected, "peer");
+  assert.deepEqual(snapshot(app), expected, "editor");
+  assert.deepEqual(snapshot(peer), expected, "peer");
   assert.deepEqual(app, peer);
 }
 
@@ -126,8 +137,12 @@ function type(native, beatId, offset, text) {
 }
 
 async function enterWithPeer(t) {
+  writer.closeWriter();
   const fixture = entrySwitchFixture();
-  adoptReplacement(docOf(seed));
+  adoptReplacement(migrateRows({ title: "Shared script", paragraphsDecided: true, rows: [
+    { id: "r1", audioText: "Hello", visualText: "Desk" },
+    { id: "r2", audioText: "World", visualText: "Window", paragraphStart: true }
+  ] }));
   let editor;
   const { ports, errors } = fixture;
   const result = await enterSharedSession(ports, (doc, failed) => {
@@ -136,9 +151,23 @@ async function enterWithPeer(t) {
     return opened.backend;
   });
   assert.deepEqual(result, { ok: true }, errors.map(String).join("\n"));
-  t.after(() => assert.deepEqual(leaveRunningSharedSession(), { ok: true }));
+  t.after(() => {
+    writer.closeWriter();
+    assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+  });
   const peer = openCopy(t, editor.encodeState());
   return { editor, peer };
+}
+
+async function agreedWithPeer(editor, peer, expected, late) {
+  await Promise.resolve();
+  for (const doc of [editor.document(), peer.document()]) assert.deepEqual(snapshot(doc), expected);
+  const app = JSON.parse(JSON.stringify(currentDocument()));
+  const edit = JSON.parse(JSON.stringify(editor.document()));
+  const other = JSON.parse(JSON.stringify(peer.document()));
+  assert.deepEqual(app, edit);
+  assert.deepEqual(other, edit);
+  if (late) assert.deepEqual(JSON.parse(JSON.stringify(late.document())), edit);
 }
 
 for (const { name, edit, expected } of [
@@ -165,9 +194,7 @@ for (const { name, edit, expected } of [
       assert.equal(applyNativePeerUpdate(editor, peer.encodeState()), true);
       await Promise.resolve();
       const late = openCopy(t, editor.encodeState());
-      for (const doc of [currentDocument(), editor.document(), peer.document(), late.document()]) {
-        assert.deepEqual(snapshot(doc), rows);
-      }
+      await agreedWithPeer(editor, peer, rows, late);
       if (rows !== seed) written(peer.commands.undo());
     }
   });
@@ -175,33 +202,36 @@ for (const { name, edit, expected } of [
 
 test("native peer cannot split or insert at a missing beat, or join beyond the last beat", async t => {
   const { editor, peer } = await enterWithPeer(t);
+  const unchanged = JSON.parse(JSON.stringify(currentDocument()));
   const updates = [];
   peer.ydoc.on("update", update => updates.push(update));
   assert.deepEqual(peer.commands.anchorText({ beat: "gone", cell: "narration" }, 1), { kind: "refused", reason: "missing" });
   assert.deepEqual(peer.commands.insertAdjacentBeat("gone", "below"), { kind: "refused", reason: "missing" });
-  assert.equal(peer.commands.joinRow("gone", "r2", " ").kind, "refused");
+  assert.deepEqual(peer.commands.joinRow("r1", "r2", " "), { kind: "refused", reason: "above" });
   assert.deepEqual(peer.commands.undo(), { kind: "unchanged" });
   assert.deepEqual(updates, []);
   assert.equal(applyNativePeerUpdate(editor, peer.encodeState()), true);
   await Promise.resolve();
-  for (const doc of [currentDocument(), editor.document(), peer.document()]) assert.deepEqual(snapshot(doc), seed);
+  await agreedWithPeer(editor, peer, seed);
+  assert.deepEqual(currentDocument(), unchanged);
 });
 
 test("Split: anchored insert, undo and redo each publish one change", async t => {
   await enter(t);
-  const originalIds = new Set(seed.map(([id]) => id));
   const changes = [];
   t.after(onSessionChange(change => changes.push(change)));
   place("Split", 1, 1, "r2");
   assert.equal(press(cell("r2"), "Enter", { ctrlKey: true }), true);
-  const inserted = [...seed, [newBeat, ""]];
-  await agreed(inserted, originalIds);
+  const added = currentDocument().rows[2].id;
+  assert.ok(!seed.some(([id]) => id === added));
+  const inserted = [...seed, [added, ""]];
+  await agreed(inserted);
   assert.equal(changes.length, 1);
   assert.equal(press(document.activeElement, "z", { ctrlKey: true }), true);
   await agreed(seed);
   assert.equal(changes.length, 2);
   assert.equal(press(document.activeElement, "y", { ctrlKey: true }), true);
-  await agreed(inserted, originalIds);
+  await agreed(inserted);
   assert.equal(changes.length, 3);
 });
 
@@ -263,6 +293,13 @@ for (const field of ["audioText", "visualText"]) {
     assert.equal(document.querySelector("[data-shared-cell-space-form], [data-shared-cell-space]"), null);
     assert.deepEqual(payload("copy"), copy);
     assert.deepEqual(payload("dragstart"), [false, []]);
+    for (const repaint of [render, () => renderRow("r1")]) {
+      repaint();
+      assert.equal(cell("r1", field), target);
+      assert.equal(document.querySelector("[data-shared-cell-space-form], [data-shared-cell-space]"), null);
+      assert.deepEqual(payload("copy"), copy);
+      assert.deepEqual(payload("dragstart"), [false, []]);
+    }
   });
 }
 
@@ -279,6 +316,8 @@ for (const size of [2, 50]) {
     for (const editable of watched) observer.observe(editable, { childList: true, characterData: true, subtree: true });
     t.after(() => observer.disconnect());
     assert.equal(input(target, "insertText", "x"), true);
+    assert.equal(target.textContent, "Wordx ");
+    assert.equal(currentDocument().rows[0].audioText, "Word ");
     window.dispatchEvent(new window.Event("pagehide"));
     const touched = new Set(observer.takeRecords().map(({ target }) =>
       (target.nodeType === window.Node.ELEMENT_NODE ? target : target.parentElement)?.closest(".cell-editable")));
@@ -300,7 +339,7 @@ for (const view of ["Writer", "Split"]) {
     const [from, to] = glue ? [2, 3] : [2, 6];
     const joined = source(t, rows);
     written(joined.commands.joinRow("r2", "r1", " "));
-    await enter(t, rows, joined.encodeState());
+    await enter(t, rows, joined.encodeState(), true);
     const show = t.mock.method(notices, "show", () => {});
     t.mock.method(console, "error", () => {});
     if (view === "Writer") writer.openWriter();
@@ -317,6 +356,9 @@ for (const view of ["Writer", "Split"]) {
     assert.deepEqual(selection(view), expectedSelection(view, from));
     assert.equal(press(surface, "z", { ctrlKey: true }), true);
     assert.deepEqual(selection(view), expectedSelection(view, from));
+    assert.equal((view === "Writer" ? beat("r1") : cell()).textContent.replaceAll("\u00a0", " "), preview);
+    assert.equal(input(surface, "insertText", "X"), true);
+    assert.equal((view === "Writer" ? beat("r1") : cell()).textContent.replaceAll("\u00a0", " "), preview);
     assert.equal(hook.leave().ok, false);
     await agreed([["r1", original]]);
   });
@@ -343,6 +385,7 @@ for (const view of ["Writer", "Split"]) {
       assert.deepEqual(selection(view), expectedSelection(view, offset), key + " " + text);
       await agreed([["r1", text]]);
     }
+    leave([["r1", "aZd"]]);
   });
 
   test(`${view}: replacing bc with Z restores the original selection on each undo`, async t => {
@@ -358,24 +401,184 @@ for (const view of ["Writer", "Split"]) {
       assert.deepEqual(selection(view), expectedSelection(view, from, to));
       await agreed([["r1", text]]);
     }
+    leave([["r1", "abcd"]]);
   });
 }
 
 test("Writer: undo and redo of Enter in abcd replay the original and new beat carets", async t => {
   const rows = [["r1", "abcd"], ["r2", "ef"]];
-  const originalIds = new Set(rows.map(([id]) => id));
   await enter(t, rows);
   writer.openWriter();
   place("Writer", 2);
   assert.equal(press(root(), "Enter"), true);
-  const split = [["r1", "ab"], [newBeat, "cd"], ["r2", "ef"]];
-  await agreed(split, originalIds);
-  assert.deepEqual(selection("Writer", originalIds), expectedSelection("Writer", 0, 0, newBeat));
-  for (const [key, expected, id, at] of [["z", rows, "r1", 2], ["y", split, newBeat, 0], ["z", rows, "r1", 2]]) {
+  const added = currentDocument().rows[1].id;
+  assert.ok(!rows.some(([id]) => id === added));
+  const split = [["r1", "ab"], [added, "cd"], ["r2", "ef"]];
+  await agreed(split);
+  assert.deepEqual(selection("Writer"), expectedSelection("Writer", 0, 0, added));
+  for (const [key, expected, id, at] of [["z", rows, "r1", 2], ["y", split, added, 0], ["z", rows, "r1", 2]]) {
     assert.equal(press(root(), key, { ctrlKey: true }), true);
-    assert.deepEqual(selection("Writer", originalIds), expectedSelection("Writer", at, at, id));
-    await agreed(expected, originalIds);
+    assert.deepEqual(selection("Writer"), expectedSelection("Writer", at, at, id));
+    await agreed(expected);
   }
+  leave(rows);
+});
+
+function flushInput() {
+  window.dispatchEvent(new window.Event("pagehide"));
+}
+
+function typeWriter(text) {
+  for (const letter of text) assert.equal(input(root(), "insertText", letter), true);
+}
+
+function refuseBadPeerBytes(editor, peer) {
+  for (const target of [editor, peer]) {
+    const before = target.encodeState();
+    for (const bytes of [Uint8Array.of(1), Uint8Array.of(1, 2, 3)]) {
+      assert.throws(() => applyNativePeerUpdate(target, bytes), /Unexpected end of array/);
+      assert.deepEqual(target.encodeState(), before);
+    }
+  }
+}
+
+test("Writer: a peer prefix and local typing both survive unusable peer bytes", async t => {
+  const { editor, peer } = await enterWithPeer(t);
+  writer.openWriter();
+  type(peer, "r1", 0, "Y");
+  assert.equal(applyNativePeerUpdate(editor, peer.encodeState()), true);
+  await agreedWithPeer(editor, peer, [["r1", "YHello"], ["r2", "World"]]);
+  refuseBadPeerBytes(editor, peer);
+  await agreedWithPeer(editor, peer, [["r1", "YHello"], ["r2", "World"]]);
+  place("Writer", 6);
+  typeWriter("?");
+  flushInput();
+  assert.equal(applyNativePeerUpdate(peer, editor.encodeState()), true);
+  await agreedWithPeer(editor, peer, [["r1", "YHello?"], ["r2", "World"]]);
+  writer.closeWriter();
+});
+
+test("Writer: one typed character changes just its beat", async t => {
+  await enter(t);
+  writer.openWriter();
+  place("Writer", 5);
+  typeWriter("!");
+  flushInput();
+  await agreed([["r1", "Hello!"], ["r2", "World"]]);
+  leave([["r1", "Hello!"], ["r2", "World"]]);
+});
+
+test("Writer: both characters land when an earlier keyup listener stops propagation", async t => {
+  await enter(t);
+  writer.openWriter();
+  place("Writer", 5);
+  const target = root();
+  let stopped = 0, later = 0, bubbled = 0;
+  const listen = new window.AbortController();
+  t.after(() => listen.abort());
+  target.addEventListener("keyup", event => { stopped++; event.stopPropagation(); }, { signal: listen.signal });
+  target.addEventListener("keyup", () => { later++; }, { signal: listen.signal });
+  window.addEventListener("keyup", () => { bubbled++; }, { signal: listen.signal });
+  for (const letter of "!?") {
+    typeWriter(letter);
+    target.dispatchEvent(new window.KeyboardEvent("keyup", { key: letter, bubbles: true }));
+  }
+  assert.deepEqual([stopped, later, bubbled], [2, 2, 0]);
+  flushInput();
+  await agreed([["r1", "Hello!?"], ["r2", "World"]]);
+  leave([["r1", "Hello!?"], ["r2", "World"]]);
+});
+
+test("Writer to Split: buffered characters, peer prefixes, undo and two inserts all land", async t => {
+  const { editor, peer } = await enterWithPeer(t);
+  const originalIds = new Set(seed.map(([id]) => id));
+  const exchange = () => {
+    assert.equal(applyNativePeerUpdate(editor, peer.encodeState()), true);
+    assert.equal(applyNativePeerUpdate(peer, editor.encodeState()), true);
+  };
+  writer.openWriter();
+  place("Writer", 5);
+  typeWriter("!");
+  type(peer, "r2", 0, "Z");
+  exchange();
+  typeWriter("?");
+  type(peer, "r2", 0, "Y");
+  exchange();
+  refuseBadPeerBytes(editor, peer);
+  flushInput();
+  exchange();
+  await agreedWithPeer(editor, peer, [["r1", "Hello!?"], ["r2", "YZWorld"]]);
+  assert.equal(press(root(), "z", { ctrlKey: true }), true);
+  exchange();
+  await agreedWithPeer(editor, peer, [["r1", "Hello"], ["r2", "YZWorld"]]);
+  place("Writer", 5);
+  assert.equal(press(root(), "Enter"), true);
+  exchange();
+  const first = [["r1", "Hello"], [newBeat, ""], ["r2", "YZWorld"]];
+  for (const doc of [currentDocument(), peer.document()]) assert.deepEqual(snapshot(doc, originalIds), first);
+  writer.closeWriter();
+  place("Split", 5);
+  assert.equal(input(cell(), "insertText", "%"), true);
+  flushInput();
+  exchange();
+  const typed = [["r1", "Hello%"], [newBeat, ""], ["r2", "YZWorld"]];
+  for (const doc of [currentDocument(), peer.document()]) assert.deepEqual(snapshot(doc, originalIds), typed);
+  assert.equal(input(cell(), "insertText", "^"), true);
+  type(peer, "r2", 0, "X");
+  exchange();
+  assert.equal(press(cell(), "Enter", { ctrlKey: true }), true);
+  exchange();
+  const expected = [["r1", "Hello%^"], [newBeat, ""], [newBeat, ""], ["r2", "XYZWorld"]];
+  for (const doc of [currentDocument(), peer.document()]) assert.deepEqual(snapshot(doc, originalIds), expected);
+});
+
+test("Writer: a buffered key and valid peer update survive an unusable update", async t => {
+  const { editor, peer } = await enterWithPeer(t);
+  writer.openWriter();
+  place("Writer", 5);
+  typeWriter("!");
+  refuseBadPeerBytes(editor, peer);
+  await agreedWithPeer(editor, peer, seed);
+  type(peer, "r2", 0, "€€€€");
+  assert.equal(applyNativePeerUpdate(editor, peer.encodeState()), true);
+  assert.deepEqual(snapshot(currentDocument()), seed);
+  flushInput();
+  assert.equal(applyNativePeerUpdate(peer, editor.encodeState()), true);
+  await agreedWithPeer(editor, peer, [["r1", "Hello!"], ["r2", "€€€€World"]]);
+  writer.closeWriter();
+});
+
+test("Writer: local typing survives a held three-edit peer delivery", async t => {
+  await enter(t);
+  const peer = hook.nativePeer;
+  peer.hold();
+  for (const [offset, letter] of [..."ABC"].entries()) written(peer.type("r2", offset, letter));
+  writer.openWriter();
+  place("Writer", 5);
+  typeWriter("!");
+  flushInput();
+  assert.deepEqual(snapshot(hook.read().app), [["r1", "Hello!"], ["r2", "World"]]);
+  assert.deepEqual(snapshot(hook.read().peer), [["r1", "Hello"], ["r2", "ABCWorld"]]);
+  peer.deliver();
+  await agreed([["r1", "Hello!"], ["r2", "ABCWorld"]]);
+});
+
+test("Writer: buffered typing keeps a held peer prefix and a later edit", async t => {
+  const { editor, peer } = await enterWithPeer(t);
+  writer.openWriter();
+  place("Writer", 5);
+  typeWriter("!");
+  type(peer, "r2", 0, "€€€€");
+  const held = peer.encodeState();
+  type(peer, "r1", 0, "FUTURE");
+  assert.equal(applyNativePeerUpdate(editor, held), true);
+  assert.deepEqual(snapshot(currentDocument()), seed);
+  flushInput();
+  assert.deepEqual(snapshot(currentDocument()), [["r1", "Hello!"], ["r2", "€€€€World"]]);
+  assert.deepEqual(snapshot(peer.document()), [["r1", "FUTUREHello"], ["r2", "€€€€World"]]);
+  assert.equal(applyNativePeerUpdate(editor, peer.encodeState()), true);
+  assert.equal(applyNativePeerUpdate(peer, editor.encodeState()), true);
+  await agreedWithPeer(editor, peer, [["r1", "FUTUREHello!"], ["r2", "€€€€World"]]);
 });
 
 for (const afterSwitch of [false, true]) {
@@ -393,9 +596,11 @@ for (const afterSwitch of [false, true]) {
     for (const key of ["z", "y", "z"]) {
       assert.equal(press(afterSwitch ? document.body : root(), key, { ctrlKey: true }), true);
       await agreed(rows);
-      if (!afterSwitch) assert.deepEqual(selection("Writer"), expectedSelection("Writer", 2, 2, "r1", "r2"));
+      if (afterSwitch) assert.deepEqual(selection("Split"), expectedSelection("Split", 2, 2, "r2"));
+      else assert.deepEqual(selection("Writer"), expectedSelection("Writer", 2, 2, "r1", "r2"));
     }
     assert.deepEqual(show.mock.calls.map(call => call.arguments), refused);
+    leave(rows);
   });
 }
 
@@ -407,10 +612,16 @@ for (const view of ["Split", "Writer"]) {
       writer.writerFlowControl().openVisual("r1");
     }
     const box = document.querySelector(".wr-flow-visual-box");
+    if (view === "Writer") assert.equal(box.hidden, false);
     const target = view === "Writer" ? box.querySelector(".wr-flow-visual-text") : cell("r1", "visualText");
     target.focus();
     setCellSelection(target, 0);
     for (const letter of "B-roll: ") assert.equal(input(target, "insertText", letter), true);
+    assert.equal(target.textContent, "B-roll: Close up");
+    assert.equal(hook.read().app.rows[0].visualText, "Close up");
+    await delay(65);
+    assert.equal(hook.read().app.rows[0].visualText, "B-roll: Close up");
+    assert.equal(hook.read().peer.rows[0].visualText, "B-roll: Close up");
     if (view === "Writer") {
       press(target, "Escape");
       assert.equal(box.hidden, true);
@@ -465,4 +676,5 @@ test("Split: a peer prefix leaves the captured Find match replaceable on the fir
   field.blur();
   assert.equal(press(document.body, "z", { ctrlKey: true }), true);
   await agreed([["r1", "Xa cup of tea"]]);
+  leave([["r1", "Xa cup of tea"]]);
 });
