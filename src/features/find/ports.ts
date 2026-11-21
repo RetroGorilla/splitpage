@@ -10,12 +10,20 @@ import type { DocumentReader } from "../../application/session/document-reader.t
 import type { ShotHiding } from "../../application/shot-hiding.ts";
 import type { TextServices } from "../../application/text/services.ts";
 import type { PrompterState } from "../../application/prompter-state.ts";
-import type { WriterFindAccess } from "../common/writer-find.ts";
+import type { WriterFindAccess, WriterSearchMatch } from "../common/writer-find.ts";
+
+export type FindNativeReplace = (index: number | null, text: string) => number | null;
+
+export interface FindNativeAccess {
+  readonly cells: TextServices<HTMLElement>["cellOf"];
+  readonly capture: (matches: readonly WriterSearchMatch[], needle: string, matchCase: boolean) => FindNativeReplace;
+}
 
 export interface FindPorts {
   readonly sharedCommands: SharedCommandGuard;
   readonly shared?: () => SharedRewritePorts | null;
   readonly writer?: () => WriterFindAccess | null;
+  readonly native?: () => FindNativeAccess | null;
   readonly document: Pick<DocumentReader, "current" | "read" | "onChange">;
   readonly edits: Pick<DocumentEdits, "edit" | "run" | "stamps">;
   readonly text: Pick<TextServices<HTMLElement>, "cellOf" | "inertBody" | "sanitizeHtml">;

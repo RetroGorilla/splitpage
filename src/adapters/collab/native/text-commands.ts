@@ -327,6 +327,34 @@ export function nativeLiveRange(script: NativeScript, range: NativeRangeData): N
   return primary ? { ...primary, pieces } : "range";
 }
 
+function* rangeUnitIds(range: NativeLiveRange) {
+  for (const { text, from, until } of range.pieces) {
+    for (let index = from; index < until; index++) {
+      yield Y.createRelativePositionFromTypeIndex(text, index, 0).item;
+    }
+  }
+}
+
+export function captureNativeTextIdentity(script: NativeScript, range: NativeTextRange): (() => boolean) | null {
+  if (!authoredRanges.get(script.doc)?.has(range)) return null;
+  const checked = nativeRangeSnapshot(range);
+  if (!checked?.to) return null;
+  const before = nativeLiveRange(script, checked);
+  if (typeof before === "string") return null;
+  const ids = [...rangeUnitIds(before)];
+  if (!ids.length || ids.some(id => !id)) return null;
+  return () => {
+    const after = nativeLiveRange(script, checked);
+    if (typeof after === "string") return false;
+    let index = 0;
+    for (const id of rangeUnitIds(after)) {
+      const expected = ids[index++];
+      if (!expected || !id || expected.client !== id.client || expected.clock !== id.clock) return false;
+    }
+    return index === ids.length;
+  };
+}
+
 function memberOffset(cells: readonly LiveCell[], at: Y.AbsolutePosition, name: boolean): number | null {
   let offset = 0;
   for (const part of cells) {

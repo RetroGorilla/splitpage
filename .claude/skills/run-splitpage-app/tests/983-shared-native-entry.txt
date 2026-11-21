@@ -15,8 +15,14 @@ wait text() === 'Hexllo'
 expect Q('audioText').textContent === 'Hexllo'
 expect text() === 'Hexllo' && S.read().peer.rows[0].audioText === 'Hexllo'
 expect document.activeElement === Q('audioText') && getSelection().focusOffset === 3
-eval window.before=JSON.stringify(S.read());at('visualText',2)
+eval at('visualText',2)
 press q
+wait S.read().app.rows[0].visualText === 'Loqok' && S.read().peer.rows[0].visualText === 'Loqok'
+key ctrl KeyZ
+wait S.read().app.rows[0].visualText === 'Look' && S.read().peer.rows[0].visualText === 'Look' && text() === 'Hexllo'
+expect document.activeElement === Q('visualText') && getSelection().focusOffset === 2
+eval window.before=JSON.stringify(S.read());clear();at('visualText',2)
+key alt Enter
 expect warn() && JSON.stringify(S.read()) === window.before && Q('visualText').textContent === 'Look'
 eval at('audioText',3)
 eval clear()

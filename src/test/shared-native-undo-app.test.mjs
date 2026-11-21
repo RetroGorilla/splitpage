@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
 import { bootApp, closeApp } from "./_app-boot.mjs";
-import { adoptReplacement, liveSession, sharedSession } from "../bootstrap/wiring/session-owner.ts";
+import { adoptReplacement, liveSession, onSessionChange, sharedSession } from "../bootstrap/wiring/session-owner.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { cellSelection, setCellSelection } from "../features/common/cell-selection.ts";
@@ -19,6 +19,7 @@ import { Doc, encodeStateAsUpdate } from "yjs";
 import { breakUndoGroup } from "../bootstrap/wiring/undo.ts";
 import { mountNativeSharedInput } from "../bootstrap/wiring/native-shared-input.ts";
 import { createSessionCapabilities } from "../application/session/capabilities.ts";
+import { appActions } from "../bootstrap/wiring/ports/actions.ts";
 
 window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};
@@ -72,6 +73,13 @@ function press(target, key, extra = {}) {
 
 function typeKeys(target, keys) {
   for (const key of keys) assert.equal(beforeInput(target, "insertText", key), true, "key " + JSON.stringify(key));
+}
+
+function pastePlain(target, text) {
+  const event = new window.Event("paste", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", { value: { types: ["text/plain"], getData: type => type === "text/plain" ? text : "" } });
+  target.dispatchEvent(event);
+  return event.defaultPrevented;
 }
 
 function nativeBytes(doc, command) {
@@ -133,6 +141,465 @@ const views = {
     host: id => beat(id)
   }
 };
+
+test("Writer: Find replaces one heading match and refuses a compound heading rewrite", async t => {
+  const show = await enter(t, [{ id: "r1", audioText: "cup" }], null, [{ id: "s1", name: "cup cup", firstSceneId: "r1" }]);
+  writer(t);
+  const field = search(t, "cup", "mug");
+  assert.equal(document.getElementById("find-count").textContent, "1 of 3");
+  document.getElementById("find-replace-all").click();
+  assert.equal(app(), "cup");
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+  const heading = () => hook.read().app.sections[0].name;
+  assert.equal(heading(), "cup cup");
+  document.getElementById("find-replace").click();
+  assert.equal(heading(), "mug cup");
+  field.blur();
+  assert.equal(press(document.body, "z"), true);
+  assert.equal(heading(), "cup cup");
+  assert.equal(document.getSelection().toString(), "cup");
+  assert.equal(press(document.activeElement, "y"), true);
+  assert.equal(heading(), "mug cup");
+  assert.equal(document.getSelection().focusOffset, 3);
+});
+
+test("Split: Find bulk tagging refuses before it changes a match", async t => {
+  const show = await enter(t, [{ id: "r1", audioText: "Hello", visualText: "cup" }]);
+  search(t, "cup", "mug");
+  document.getElementById("find-tag").click();
+  assert.equal(document.getElementById("find-tag-row").hidden, false);
+  const before = hook.read();
+  document.getElementById("find-tag-go").click();
+  assert.deepEqual(hook.read(), before);
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+});
+
+function search(t, needle, replacement) {
+  assert.equal(appActions.invoke("find", "menu").kind, "ran");
+  t.after(() => document.getElementById("find-close").click());
+  const field = document.getElementById("find-input");
+  field.value = needle;
+  field.dispatchEvent(new window.Event("input", { bubbles: true }));
+  document.getElementById("replace-input").value = replacement;
+  return field;
+}
+
+for (const [name, kind] of Object.entries(views)) {
+  test(name + ": control-only paste and typing leave the selection intact", async t => {
+    adoptReplacement(migrateRows({ title: "Inline", rows: [{ id: "r1", audioText: "Hello" }] }));
+    const standalone = kind.open(t);
+    kind.caret(standalone, "r1", 1, 4);
+    assert.equal(pastePlain(kind.surface(), "\u0001"), true);
+    assert.equal(app(), name === "Split" ? "Hello" : "Ho");
+    writerControls().closeWriter();
+    const show = await enter(t), view = kind.open(t);
+    kind.caret(view, "r1", 1, 4);
+    const before = hook.read();
+    assert.equal(pastePlain(kind.surface(), "\u0001"), true);
+    assert.equal(beforeInput(kind.surface(), "insertText", "\u0001"), true);
+    await flushed();
+    assert.deepEqual(hook.read(), before);
+    assert.deepEqual(kind.at(view), ["r1", 1, 4]);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE, UNAVAILABLE]);
+  });
+
+  test(name + ": blocked cut, multiline paste and collapsed formatting preserve text and selection", async t => {
+    const show = await enter(t), view = kind.open(t);
+    const before = hook.read(), clipboardWrites = t.mock.fn();
+    kind.caret(view, "r1", 1, 4);
+    const cut = new window.Event("cut", { bubbles: true, cancelable: true });
+    Object.defineProperty(cut, "clipboardData", { value: { setData: clipboardWrites } });
+    assert.equal(kind.surface().dispatchEvent(cut), false);
+    assert.equal(pastePlain(kind.surface(), "one\ntwo"), true);
+    assert.deepEqual(kind.at(view), ["r1", 1, 4]);
+    kind.caret(view, "r1", 2);
+    assert.equal(press(kind.surface(), "b"), true);
+    assert.deepEqual(kind.at(view), ["r1", 2, 2]);
+    assert.deepEqual(hook.read(), before);
+    assert.equal(clipboardWrites.mock.callCount(), 0);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE, UNAVAILABLE, UNAVAILABLE]);
+  });
+
+  test(name + ": paste and Shift+Enter match standalone markup across inline formatting", async t => {
+    const rows = [{ id: "r1", audioText: "<strong>Hel</strong>lo" }];
+    for (const action of ["paste", "line"]) {
+      const apply = async native => {
+        if (native) await enter(t, rows);
+        else adoptReplacement(migrateRows({ title: "Inline", rows: structuredClone(rows) }));
+        const view = kind.open(t);
+        kind.caret(view, "r1", 1, 4);
+        assert.equal(action === "paste" ? pastePlain(kind.surface(), "X") :
+          press(kind.surface(), "Enter", { ctrlKey: false, shiftKey: true }), true);
+        const result = { html: app(), selection: kind.at(view) };
+        writerControls().closeWriter();
+        if (native) assert.deepEqual(hook.leave(), { ok: true });
+        return result;
+      };
+      const standalone = await apply(false);
+      const inserted = action === "paste" ? "X" : "<br>";
+      assert.equal(standalone.html, name === "Writer" ? "<strong>H</strong>" + inserted + "o" : "<strong>H" + inserted + "</strong>o");
+      assert.deepEqual(await apply(true), standalone);
+    }
+  });
+
+  test(name + ": Replace all retains an intact captured pair after a peer shifts adjacent matches", async t => {
+    adoptReplacement(migrateRows({ title: "Find", rows: [{ id: "r1", audioText: "aaa" }] }));
+    kind.open(t);
+    search(t, "aa", "X");
+    document.getElementById("find-replace-all").click();
+    assert.equal(app(), "Xa");
+    document.getElementById("find-close").click();
+    writerControls().closeWriter();
+    await enter(t, [{ id: "r1", audioText: "aaaa" }]);
+    const view = kind.open(t);
+    kind.caret(view, "r1", 0);
+    const field = search(t, "aa", "X");
+    assert.equal(hook.nativePeer.delete("r1", 0, 1).kind, "written");
+    document.getElementById("find-replace-all").click();
+    assert.equal(app(), "aX");
+    field.blur();
+    assert.equal(press(document.body, "z"), true);
+    assert.equal(app(), "aaa");
+    assert.deepEqual(kind.at(view), ["r1", 1, 3]);
+    assert.equal(press(document.activeElement, "y"), true);
+    assert.equal(app(), "aX");
+    await Promise.resolve();
+    assert.deepEqual(hook.read().app, hook.read().peer);
+  });
+
+  for (const all of [false, true]) test(name + ": Find " + (all ? "Replace all skips" : "Replace refuses") + " identical peer replacement text", async t => {
+    const show = await enter(t, [{ id: "r1", audioText: "abc abc" }]);
+    const view = kind.open(t);
+    kind.caret(view, "r1", 0);
+    const field = search(t, "abc", "X");
+    const peer = hook.nativePeer;
+    peer.hold();
+    assert.equal(peer.type("r1", 1, "abc").kind, "written");
+    assert.equal(peer.delete("r1", 4, 6).kind, "written");
+    assert.equal(peer.delete("r1", 0, 1).kind, "written");
+    peer.deliver();
+    assert.equal(hook.read().peer.rows[0].audioText, "abc abc");
+    document.getElementById(all ? "find-replace-all" : "find-replace").click();
+    await Promise.resolve();
+    assert.equal(app(), all ? "abc X" : "abc abc");
+    assert.deepEqual(hook.read().app, hook.read().peer);
+    if (!all) {
+      assert.deepEqual(show.mock.calls.map(call => call.arguments), [["This line changed. Try replacing again.", "warn"]]);
+      return;
+    }
+    field.blur();
+    assert.equal(press(document.body, "z"), true);
+    assert.equal(app(), "abc abc");
+    assert.deepEqual(kind.at(view), ["r1", 4, 7]);
+    assert.equal(press(document.activeElement, "y"), true);
+    assert.equal(app(), "abc X");
+  });
+
+  test(name + ": compound Find replacement inserts unmarked text while single Replace inherits marks", async t => {
+    for (const native of [false, true]) for (const all of [false, true]) {
+      const rows = [{ id: "r1", audioText: "<em>cupcup</em>" }];
+      if (native) await enter(t, rows);
+      else adoptReplacement(migrateRows({ title: "Find", rows }));
+      kind.open(t);
+      search(t, "cup", "mug");
+      document.getElementById(all ? "find-replace-all" : "find-replace").click();
+      assert.equal(app(), all ? native ? "mugmug" : "<em>mugmug</em>" : "<em>mugcup</em>");
+      document.getElementById("find-close").click();
+      writerControls().closeWriter();
+      if (native) assert.deepEqual(hook.leave(), { ok: true });
+    }
+  });
+
+  test(name + ": Find replaces the displayed match after a peer inserts before it", async t => {
+    const show = await enter(t, [{ id: "r1", audioText: "one <strong>cup</strong> and cup" }]);
+    const view = kind.open(t);
+    kind.caret(view, "r1", 0);
+    const field = search(t, "cup", "mug");
+    assert.equal(hook.nativePeer.type("r1", 0, "cup ").kind, "written");
+    document.getElementById("find-replace").click();
+    assert.equal(app(), "cup one <strong>mug</strong> and cup");
+    assert.equal(document.activeElement, field);
+    field.blur();
+    assert.equal(press(document.body, "z"), true);
+    assert.equal(app(), "cup one <strong>cup</strong> and cup");
+    assert.deepEqual(kind.at(view), ["r1", 8, 11]);
+    assert.equal(press(document.activeElement, "y"), true);
+    assert.equal(app(), "cup one <strong>mug</strong> and cup");
+    assert.deepEqual(kind.at(view), ["r1", 11, 11]);
+    await Promise.resolve();
+    assert.deepEqual(hook.read().peer, hook.read().app);
+    assert.equal(show.mock.callCount(), 0);
+  });
+
+  test(name + ": Find refuses a changed single match instead of replacing the next one", async t => {
+    const show = await enter(t, [{ id: "r1", audioText: "cup and cup" }]);
+    kind.open(t);
+    search(t, "cup", "mug");
+    assert.equal(hook.nativePeer.delete("r1", 0, 1).kind, "written");
+    document.getElementById("find-replace").click();
+    await Promise.resolve();
+    assert.equal(app(), "up and cup");
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [["This line changed. Try replacing again.", "warn"]]);
+    assert.equal(document.getElementById("find-count").textContent, "1 of 1");
+    document.getElementById("find-replace").click();
+    assert.equal(app(), "up and mug");
+  });
+
+  test(name + ": Find replaces Visual matches and replays the Visual selection", async t => {
+    await enter(t, [{ id: "r1", audioText: "Narration", visualText: "cup and cup" }]);
+    kind.open(t);
+    const field = search(t, "cup", "mug");
+    if (name === "Writer" && document.getElementById("find-visuals").getAttribute("aria-pressed") === "false") {
+      document.getElementById("find-visuals").click();
+    }
+    assert.equal(document.getElementById("find-count").textContent, "1 of 2");
+    const visual = () => hook.read().app.rows[0].visualText;
+    document.getElementById("find-replace").click();
+    assert.equal(visual(), "mug and cup");
+    document.getElementById("find-replace-all").click();
+    assert.equal(visual(), "mug and mug");
+    field.blur();
+    assert.equal(press(document.body, "z"), true);
+    assert.equal(visual(), "mug and cup");
+    assert.deepEqual(cellSelection(document.activeElement), { from: 8, to: 11 });
+    assert.equal(press(document.activeElement, "z"), true);
+    assert.equal(visual(), "cup and cup");
+    assert.deepEqual(cellSelection(document.activeElement), { from: 0, to: 3 });
+    assert.equal(press(document.activeElement, "y"), true);
+    assert.equal(visual(), "mug and cup");
+    assert.deepEqual(cellSelection(document.activeElement), { from: 3, to: 3 });
+    assert.equal(press(document.activeElement, "y"), true);
+    assert.equal(visual(), "mug and mug");
+    assert.deepEqual(cellSelection(document.activeElement), { from: 11, to: 11 });
+    await Promise.resolve();
+    assert.deepEqual(hook.read().peer, hook.read().app);
+  });
+
+  test(name + ": Replace all follows the joined narration members around synthetic glue", async t => {
+    await enter(t, [{ id: "r1", audioText: "cup" }, { id: "r2", audioText: "cup cup" }], joined);
+    kind.open(t);
+    const field = search(t, "cup", "mug");
+    assert.equal(document.getElementById("find-count").textContent, "1 of 3");
+    document.getElementById("find-replace-all").click();
+    assert.equal(app(), "mug mug mug");
+    field.blur();
+    assert.equal(press(document.body, "z"), true);
+    assert.equal(app(), "cup cup cup");
+    assert.equal(press(document.activeElement, "y"), true);
+    assert.equal(app(), "mug mug mug");
+    await Promise.resolve();
+    assert.deepEqual(hook.read().peer, hook.read().app);
+  });
+
+  test(name + ": a plain format command flushes typing and replays the selection", async t => {
+    const show = await enter(t, [{ id: "r1", audioText: "Hello" }, { id: "r2", audioText: "World" }]);
+    const view = kind.open(t);
+    kind.caret(view, "r1", 2);
+    typeKeys(kind.surface(), "x");
+    kind.caret(view, "r1", 1, 4);
+    assert.equal(hook.nativePeer.type("r2", 0, "Y").kind, "written");
+    assert.equal(press(kind.surface(), "b"), true);
+    assert.equal(app(), "H<strong>exl</strong>lo");
+    assert.deepEqual(kind.at(view), ["r1", 1, 4]);
+    assert.equal(press(document.activeElement, "z"), true);
+    assert.equal(app(), "Hexllo");
+    assert.deepEqual(kind.at(view), ["r1", 1, 4]);
+    assert.equal(press(document.activeElement, "y"), true);
+    assert.equal(app(), "H<strong>exl</strong>lo");
+    assert.deepEqual(kind.at(view), ["r1", 1, 4]);
+    compose(kind.surface(), "start", "");
+    assert.equal(press(kind.surface(), "i"), true);
+    assert.equal(app(), "H<strong>exl</strong>lo");
+    compose(kind.surface(), "end", "");
+    await Promise.resolve();
+    assert.equal(hook.read().app.rows[1].audioText, "YWorld");
+    assert.deepEqual(hook.read().peer, hook.read().app);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+  });
+
+  test(name + ": Visual typing and composition replay their selections without undoing peer narration", async t => {
+    const show = await enter(t, [{ id: "r1", audioText: "Hello", visualText: "Look" }]);
+    const view = kind.open(t);
+    if (name === "Writer") view.flow.openVisual("r1");
+    const visual = () => name === "Writer" ? document.querySelector(".wr-flow-visual-text")
+      : document.querySelector('#rows .cell-editable[data-id="r1"][data-field="visualText"]');
+    const text = () => hook.read().app.rows[0].visualText;
+    visual().focus();
+    setCellSelection(visual(), 2);
+    typeKeys(visual(), "x");
+    assert.equal(text(), "Loxok");
+    assert.deepEqual(cellSelection(visual()), { from: 3, to: 3 });
+    setCellSelection(visual(), 1, 4);
+    assert.equal(compose(visual(), "start", ""), false);
+    assert.equal(hook.nativePeer.type("r1", 0, "Y").kind, "written");
+    compose(visual(), "end", "字");
+    assert.equal(text(), "L字k");
+    assert.deepEqual(cellSelection(visual()), { from: 2, to: 2 });
+    assert.equal(press(visual(), "z"), true);
+    assert.equal(text(), "Loxok");
+    assert.deepEqual(cellSelection(visual()), { from: 1, to: 4 });
+    assert.equal(press(visual(), "y"), true);
+    assert.equal(text(), "L字k");
+    assert.deepEqual(cellSelection(visual()), { from: 2, to: 2 });
+    assert.equal(app(), "YHello");
+    await Promise.resolve();
+    assert.deepEqual(hook.read().peer, hook.read().app);
+    assert.equal(show.mock.callCount(), 0);
+  });
+
+  test(name + ": Visual typing retries are quiet after a stale paint stops typing", async t => {
+    const show = await enter(t), view = kind.open(t);
+    if (name === "Writer") view.flow.openVisual("r1");
+    const visual = document.querySelector(name === "Writer" ? ".wr-flow-visual-text"
+      : '#rows .cell-editable[data-id="r1"][data-field="visualText"]');
+    visual.focus();
+    setCellSelection(visual, 2);
+    assert.equal(hook.nativePeer.format({ beat: "r1", cell: "visual" }, 0, 4, { kind: "plain", mark: "b", on: true }).kind, "written");
+    typeKeys(visual, "x");
+    assert.equal(visual.textContent, "Loxok");
+    for (const key of "yz") typeKeys(visual, key);
+    assert.equal(visual.textContent, "Loxok");
+    assert.equal(hook.read().app.rows[0].visualText, "Look");
+    assert.equal(hook.read().peer.rows[0].visualText, "<strong>Look</strong>");
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+  });
+
+  test(name + ": joined Visual text refuses a write aimed at an unaddressable member", async t => {
+    const show = await enter(t, [{ id: "r1", audioText: "One" }, { id: "r2", audioText: "Two", visualText: "Look" }], joined);
+    const view = kind.open(t);
+    if (name === "Writer") view.flow.openVisual("r1");
+    const visual = document.querySelector(name === "Writer" ? ".wr-flow-visual-text"
+      : '#rows .cell-editable[data-id="r1"][data-field="visualText"]');
+    visual.focus();
+    setCellSelection(visual, 0);
+    const before = hook.read();
+    typeKeys(visual, "x");
+    assert.equal(visual.textContent, "Look");
+    assert.deepEqual(hook.read(), before);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+    assert.deepEqual(hook.leave(), { ok: true });
+  });
+
+  for (const line of [false, true]) test(name + ": " + (line ? "Shift+Enter" : "plain paste") + " replaces a selection after buffered typing", async t => {
+    const show = await enter(t, [{ id: "r1", audioText: "Hello" }, { id: "r2", audioText: "World" }]);
+    const view = kind.open(t);
+    kind.caret(view, "r1", 2);
+    typeKeys(kind.surface(), "x");
+    kind.caret(view, "r1", 1, 4);
+    assert.equal(hook.nativePeer.type("r2", 0, "Y").kind, "written");
+    compose(kind.surface(), "start", "");
+    const invoke = () => {
+      if (line) return press(kind.surface(), "Enter", { ctrlKey: false, shiftKey: true });
+      const event = new window.Event("paste", { bubbles: true, cancelable: true });
+      Object.defineProperty(event, "clipboardData", { value: { types: ["text/plain"], getData: () => "Z" } });
+      kind.surface().dispatchEvent(event);
+      return event.defaultPrevented;
+    };
+    assert.equal(invoke(), true);
+    assert.equal(app(), "Hexllo");
+    compose(kind.surface(), "end", "");
+    kind.caret(view, "r1", 1, 4);
+    assert.equal(invoke(), true);
+    assert.equal(app(), line ? "H<br>lo" : "HZlo");
+    assert.deepEqual(kind.at(view), ["r1", 2, 2]);
+    assert.equal(press(document.activeElement, "z"), true);
+    assert.equal(app(), "Hexllo");
+    assert.deepEqual(kind.at(view), ["r1", 1, 4]);
+    assert.equal(press(document.activeElement, "y"), true);
+    assert.equal(app(), line ? "H<br>lo" : "HZlo");
+    assert.deepEqual(kind.at(view), ["r1", 2, 2]);
+    assert.equal(hook.read().app.rows[1].audioText, "YWorld");
+    await Promise.resolve();
+    assert.deepEqual(hook.read().peer, hook.read().app);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+  });
+
+  test(name + ": replacing a selection across inline formatting keeps its opening marks", async t => {
+    await enter(t, [{ id: "r1", audioText: "<strong>Hel</strong>lo" }]);
+    const view = kind.open(t);
+    kind.caret(view, "r1", 1, 4);
+    typeKeys(kind.surface(), "X");
+    await flushed();
+    assert.equal(app(), "<strong>HX</strong>o");
+    assert.deepEqual(kind.at(view), ["r1", 2, 2]);
+    assert.equal(press(document.activeElement, "z"), true);
+    assert.equal(app(), "<strong>Hel</strong>lo");
+    assert.deepEqual(kind.at(view), ["r1", 1, 4]);
+    assert.equal(press(document.activeElement, "y"), true);
+    assert.equal(app(), "<strong>HX</strong>o");
+    assert.deepEqual(kind.at(view), ["r1", 2, 2]);
+  });
+
+  test(name + ": Replace all skips changed and deleted matches, keeps unseen matches and publishes once", async t => {
+    const rows = [
+      { id: "r1", audioText: "cup cup" }, { id: "r2", audioText: "cup" }, { id: "r3", audioText: "cup" },
+      ...Array.from({ length: 12 }, (_, index) => ({ id: "b" + index, audioText: "cup cup" })),
+      { id: "r4", audioText: "Other" }
+    ];
+    await enter(t, rows);
+    const view = kind.open(t);
+    kind.caret(view, "r1", 0);
+    const field = search(t, "cup", "mug");
+    assert.equal(hook.nativePeer.type("r1", 0, "cup ").kind, "written");
+    assert.equal(hook.nativePeer.type("r2", 1, "X").kind, "written");
+    assert.equal(hook.nativePeer.delete("r3", 0, 3).kind, "written");
+    assert.equal(hook.nativePeer.type("r4", 0, "Peer ").kind, "written");
+    let published = 0;
+    const stop = onSessionChange(() => { published++; });
+    t.after(stop);
+    document.getElementById("find-replace-all").click();
+    const texts = () => hook.read().app.rows.map(row => row.audioText);
+    const after = ["cup mug mug", "cXup", "", ...Array(12).fill("mug mug"), "Peer Other"];
+    const before = ["cup cup cup", "cXup", "", ...Array(12).fill("cup cup"), "Peer Other"];
+    assert.deepEqual(texts(), after);
+    assert.equal(published, 1);
+    field.blur();
+    assert.equal(press(document.body, "z"), true);
+    assert.deepEqual(texts(), before);
+    assert.deepEqual(kind.at(view), ["r1", 4, 7]);
+    assert.equal(press(document.activeElement, "y"), true);
+    assert.deepEqual(texts(), after);
+    assert.deepEqual(kind.at(view), ["r1", 7, 7]);
+    await Promise.resolve();
+    assert.deepEqual(hook.read().peer, hook.read().app);
+  });
+
+  for (const all of [false, true]) {
+    const button = all ? "find-replace-all" : "find-replace", label = all ? "Replace all" : "Replace";
+    test(name + ": " + label + " flushes typing and is refused during composition", async t => {
+      const show = await enter(t, [{ id: "r1", audioText: "cup end" }]);
+      const view = kind.open(t);
+      search(t, "cup", "mug");
+      kind.caret(view, "r1", 7);
+      compose(kind.surface(), "start", "");
+      document.getElementById(button).click();
+      assert.equal(app(), "cup end");
+      assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+      compose(kind.surface(), "end", "");
+      typeKeys(kind.surface(), "x");
+      assert.equal(app(), "cup end");
+      document.getElementById(button).click();
+      assert.equal(app(), "mug endx");
+      assert.equal(press(document.activeElement, "z"), true);
+      assert.equal(app(), "cup endx");
+      assert.equal(press(document.activeElement, "z"), true);
+      assert.equal(app(), "cup end");
+    });
+
+    test(name + ": " + label + " is quiet after typing stops", async t => {
+      const show = await enter(t, [{ id: "r1", audioText: "cup end" }]);
+      const view = kind.open(t);
+      search(t, "cup", "mug");
+      kind.caret(view, "r1", 7);
+      assert.equal(hook.nativePeer.type("r1", 0, "Y").kind, "written");
+      typeKeys(kind.surface(), "x");
+      document.getElementById(button).click();
+      assert.equal(app(), "cup end");
+      assert.equal(peer(), "Ycup end");
+      assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+    });
+  }
+}
 
 test("Split: removing a beat with a simultaneous peer insertion preserves the peer letters and undoes the removal", async t => {
   const show = await enter(t, twoBeats);
@@ -224,29 +691,33 @@ test("Writer: a stale heading cannot supply the range for a rename", async t => 
   assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
 });
 
-test("Split: the visual-cell insert shortcut lands in the new visual and replays its selection", async t => {
-  const show = await enter(t);
-  const visual = id => document.querySelector('#rows .cell-editable[data-id="' + id + '"][data-field="visualText"]');
-  const prior = visual("r1");
-  prior.focus();
-  setCellSelection(prior, 1, 3);
-  assert.equal(press(prior, "Enter"), true);
-  const [, created] = rowOrder();
-  assert.ok(created);
-  assert.equal(document.activeElement, visual(created));
-  assert.deepEqual(cellSelection(visual(created)), { from: 0, to: 0 });
-  assert.equal(press(visual(created), "z"), true);
-  assert.deepEqual(rowOrder(), ["r1"]);
-  assert.equal(document.activeElement, visual("r1"));
-  assert.deepEqual(cellSelection(visual("r1")), { from: 1, to: 3 });
-  assert.equal(press(visual("r1"), "y"), true);
-  assert.deepEqual(rowOrder(), ["r1", created]);
-  assert.equal(document.activeElement, visual(created));
-  assert.deepEqual(cellSelection(visual(created)), { from: 0, to: 0 });
-  await Promise.resolve();
-  assert.deepEqual(hook.read().peer, hook.read().app);
-  assert.equal(show.mock.callCount(), 0);
-});
+for (const [name, kind] of Object.entries(views)) {
+  test(name + ": the visual-cell insert shortcut lands in the new visual and replays its selection", async t => {
+    const show = await enter(t), view = kind.open(t);
+    const selector = name === "Writer" ? ".wr-flow-visual-text" : "#rows .cell-editable";
+    if (name === "Writer") view.flow.openVisual("r1");
+    const visual = id => document.querySelector(selector + '[data-id="' + id + '"][data-field="visualText"]');
+    const prior = visual("r1");
+    prior.focus();
+    setCellSelection(prior, 1, 3);
+    assert.equal(press(prior, "Enter"), true);
+    const [, created] = rowOrder();
+    assert.ok(created);
+    assert.equal(document.activeElement, visual(created));
+    assert.deepEqual(cellSelection(visual(created)), { from: 0, to: 0 });
+    assert.equal(press(visual(created), "z"), true);
+    assert.deepEqual(rowOrder(), ["r1"]);
+    assert.equal(document.activeElement, visual("r1"));
+    assert.deepEqual(cellSelection(visual("r1")), { from: 1, to: 3 });
+    assert.equal(press(visual("r1"), "y"), true);
+    assert.deepEqual(rowOrder(), ["r1", created]);
+    assert.equal(document.activeElement, visual(created));
+    assert.deepEqual(cellSelection(visual(created)), { from: 0, to: 0 });
+    await Promise.resolve();
+    assert.deepEqual(hook.read().peer, hook.read().app);
+    assert.equal(show.mock.callCount(), 0);
+  });
+}
 
 const threeBeats = () => [...twoBeats, { id: "r3", audioText: "Again" }];
 const fourBeats = () => [...threeBeats(), { id: "r4", audioText: "Last" }];
@@ -540,7 +1011,7 @@ for (const [name, kind] of Object.entries(views)) {
     const before = kind.at(view, "r1");
     for (const shiftKey of [false, true]) assert.equal(press(kind.surface(), "Enter", { shiftKey }), true);
     assert.deepEqual(rowOrder(), ["r1", "r2"]);
-    assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE, UNAVAILABLE]);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
     assert.deepEqual(kind.at(view, "r1"), before);
     compose(kind.surface(), "end", "");
   });
@@ -663,12 +1134,13 @@ for (const [name, kind] of Object.entries(views)) {
     assert.deepEqual(hook.read().peer, hook.read().app);
     assert.equal(show.mock.callCount(), 0);
   });
-  test(name + ": Enter flushes typing, splits once and replays both carets", async t => {
+  const splitKey = { ctrlKey: false, altKey: name === "Split" };
+  test(name + ": the split shortcut flushes typing, splits once and replays both carets", async t => {
     const show = await enter(t), view = kind.open(t);
     kind.caret(view, "r1", 2);
     typeKeys(kind.surface(), "x");
     assert.equal(app(), "Hello");
-    assert.equal(press(kind.surface(), "Enter", { ctrlKey: false }), true);
+    assert.equal(press(kind.surface(), "Enter", splitKey), true);
     const { app: local } = hook.read();
     const created = local.rows[1].id;
     assert.deepEqual(local.rows.map(row => row.audioText), ["Hex", "llo"]);
@@ -687,17 +1159,36 @@ for (const [name, kind] of Object.entries(views)) {
     assert.equal(show.mock.callCount(), 0);
   });
 
-  test(name + ": Enter refuses a selection or an open composition", async t => {
+  test(name + ": the split shortcut deletes the selection and splits with one undo step after buffered typing", async t => {
+    const show = await enter(t, twoBeats), view = kind.open(t);
+    kind.caret(view, "r1", 2);
+    typeKeys(kind.surface(), "x");
+    kind.caret(view, "r1", 1, 4);
+    assert.equal(hook.nativePeer.type("r2", 0, "Y").kind, "written");
+    assert.equal(press(kind.surface(), "Enter", splitKey), true);
+    const created = hook.read().app.rows[1].id;
+    assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["H", "lo", "YWorld"]);
+    assert.deepEqual(kind.at(view, created), [created, 0, 0]);
+    assert.equal(press(document.activeElement, "z"), true);
+    assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["Hexllo", "YWorld"]);
+    assert.deepEqual(kind.at(view), ["r1", 1, 4]);
+    assert.equal(press(document.activeElement, "y"), true);
+    assert.deepEqual(kind.at(view, created), [created, 0, 0]);
+    assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["H", "lo", "YWorld"]);
+    await Promise.resolve();
+    assert.deepEqual(hook.read().peer, hook.read().app);
+    assert.equal(show.mock.callCount(), 0);
+  });
+
+  test(name + ": Enter refuses a selection during composition", async t => {
     const show = await enter(t), view = kind.open(t);
     kind.caret(view, "r1", 1, 3);
-    assert.equal(press(kind.surface(), "Enter", { ctrlKey: false }), true);
-    kind.caret(view, "r1", 2);
     compose(kind.surface(), "start", "");
     assert.equal(press(kind.surface(), "Enter", { ctrlKey: false }), true);
     assert.equal(beforeInput(kind.surface(), "insertParagraph", null), true);
     compose(kind.surface(), "end", "");
     assert.equal(app(), "Hello");
-    assert.equal(show.mock.callCount(), 3);
+    assert.equal(show.mock.callCount(), 1);
   });
 
   test(name + ": recognised structure keys cancel the browser default during composition", async t => {
@@ -743,11 +1234,11 @@ for (const [name, kind] of Object.entries(views)) {
   });
 
   for (const peerSplits of [true, false]) {
-    test(name + ": Enter converges with a simultaneous peer " + (peerSplits ? "split" : "insertion"), async t => {
+    test(name + ": the split shortcut converges with a simultaneous peer " + (peerSplits ? "split" : "insertion"), async t => {
       const show = await enter(t), view = kind.open(t);
       hook.nativePeer.hold();
       kind.caret(view, "r1", 2);
-      assert.equal(press(kind.surface(), "Enter", { ctrlKey: false }), true);
+      assert.equal(press(kind.surface(), "Enter", splitKey), true);
       const other = peerSplits ? hook.nativePeer.split("r1", 4) : hook.nativePeer.type("r1", 3, "Y");
       assert.equal(other.kind, "written");
       hook.nativePeer.deliver();
@@ -1164,6 +1655,53 @@ for (const [name, kind] of Object.entries(fixtureViews)) {
     assert.equal(kind.host().textContent.replace(/\u200b/g, ""), "Captured words");
   });
 
+  test(name + ": retries share a single refusal during composition and at the size ceiling", async t => {
+    const { native, refused } = await openFixture(t), view = kind.open(t), filler = new Doc();
+    t.after(() => filler.destroy());
+    search(t, "Captured", "New");
+    const replace = () => document.getElementById("find-replace-all").click();
+    const line = () => press(kind.surface(), "Enter", { ctrlKey: false, shiftKey: true });
+    kind.caret(view, 4);
+    assert.equal(compose(kind.surface(), "start", ""), false);
+    for (let i = 0; i < 2; i++) { replace(); assert.equal(line(), true); }
+    assert.deepEqual(refused.mock.calls.map(call => call.arguments), [["native-input-pending"]]);
+    assert.equal(compose(kind.surface(), "end", ""), false);
+    filler.getMap("sizeFixture").set("payload", "x".repeat(Math.ceil(native.sizeLimits.limit * 1.06)));
+    assert.equal(applyNativePeerUpdate(native, encodeStateAsUpdate(filler)), true);
+    await Promise.resolve();
+    assert.equal(native.size, "full");
+    kind.caret(view, 4);
+    const revision = native.revision();
+    for (let i = 0; i < 2; i++) { replace(); assert.equal(line(), true); }
+    assert.equal(native.revision(), revision);
+    assert.equal(kind.host().textContent, "Captured words");
+    assert.deepEqual(refused.mock.calls.map(call => call.arguments), [["native-input-pending"], ["full"]]);
+    typeKeys(kind.surface(), "  x");
+    assert.equal(native.revision(), revision);
+    assert.equal(kind.host().textContent, "Capt ured words");
+    assert.deepEqual(refused.mock.calls.map(call => call.arguments), [["native-input-pending"], ["full"]]);
+  });
+
+  test(name + ": closed editor and Find retries stay quiet without reading the native projection", async t => {
+    const { native, refused } = await openFixture(t), view = kind.open(t);
+    const field = search(t, "Captured", "New");
+    kind.caret(view, 4);
+    native.close();
+    await Promise.resolve();
+    const reads = t.mock.method(NativeScriptReader.prototype, "document", () => { assert.fail("closed native projection was read"); });
+    try {
+      field.dispatchEvent(new window.Event("input", { bubbles: true }));
+      for (let i = 0; i < 2; i++) {
+        assert.equal(press(kind.surface(), "Enter", { ctrlKey: false, shiftKey: true }), true);
+        document.getElementById("find-replace").click();
+        document.getElementById("find-replace-all").click();
+      }
+      assert.equal(reads.mock.callCount(), 0);
+      assert.equal(kind.host().textContent, "Captured words");
+      assert.equal(refused.mock.callCount(), 0);
+    } finally { reads.mock.restore(); }
+  });
+
   test(name + ": an undo press at the size ceiling with a letter buffered is silent and keeps the letter on screen", async t => {
     const { native, refused } = await openFixture(t), view = kind.open(t), filler = new Doc();
     t.after(() => filler.destroy());
@@ -1194,13 +1732,39 @@ for (const [name, kind] of Object.entries(fixtureViews)) {
     assert.equal(kind.host().textContent.replace(/\u200b/g, ""), "Captured words");
   });
 }
+
+for (const to of [2, 3]) test("Split: plain Enter matches standalone with " + (to === 2 ? "a caret" : "a selection"), async t => {
+  const rows = [{ id: "r1", audioText: "Hello" }];
+  const from = to === 2 ? 2 : 1;
+  for (const native of [false, true]) {
+    if (native) await enter(t, rows);
+    else adoptReplacement(migrateRows({ title: "Split", rows: structuredClone(rows) }));
+    views.Split.caret(null, "r1", from, to);
+    assert.equal(press(cell(), "Enter", { ctrlKey: false }), true);
+    assert.deepEqual(hook.read().app.rows.map(row => row.audioText), [to === 2 ? "He<br>llo" : "H<br>lo"]);
+    assert.deepEqual(views.Split.at(null), ["r1", from + 1, from + 1]);
+    if (native) {
+      assert.equal(press(cell(), "z"), true);
+      assert.equal(app(), "Hello");
+      assert.deepEqual(views.Split.at(null), ["r1", from, to]);
+      assert.equal(press(cell(), "y"), true);
+      assert.equal(app(), to === 2 ? "He<br>llo" : "H<br>lo");
+      assert.deepEqual(views.Split.at(null), ["r1", from + 1, from + 1]);
+    }
+  }
+});
 const outOfScope = [
   ["typing over a selection across two beats", view => {
     view.flow.place({ anchor: { kind: "beat", rowId: "r1", offset: 2 }, head: { kind: "beat", rowId: "r2", offset: 2 } });
   }, () => beforeInput(root(), "insertText", "x")],
-  ["Ctrl+B", view => { view.caret("r1", 1, 3); }, () => press(root(), "b")],
+  ["formatting a selection across two beats", view => {
+    view.flow.place({ anchor: { kind: "beat", rowId: "r1", offset: 1 }, head: { kind: "beat", rowId: "r2", offset: 3 } });
+  }, () => press(root(), "b")],
   ["a rich paste", view => { view.caret("r1", 2); }, () => {
     const event = new window.Event("paste", { bubbles: true, cancelable: true });
+    Object.defineProperty(event, "clipboardData", { value: {
+      types: ["text/plain", "text/html"], getData: type => type === "text/html" ? "<strong>New</strong>" : "New"
+    } });
     root().dispatchEvent(event);
     return event.defaultPrevented;
   }]

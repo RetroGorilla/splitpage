@@ -1,0 +1,80 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;F.openFile(new File([JSON.stringify({schema:2,title:'Native Find',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello cup cup'},{id:'r2',audioText:'cup'},{id:'r3',audioText:'Other',visualText:'wide view'}]})],'native-find.splitpage'))
+wait F.state().title === 'Native Find'
+eval S.enter({backend:'native'})
+eval window.docRows=()=>S.read().app.rows;window.agree=()=>JSON.stringify(S.read().app)===JSON.stringify(S.read().peer);window.setFind=(needle,value)=>{const field=document.querySelector('#find-input');field.value=needle;field.dispatchEvent(new Event('input',{bubbles:true}));document.querySelector('#replace-input').value=value;return true};window.match=()=>Array.from(CSS.highlights.get('splitpage-find-match')||[],r=>r.toString()).join('');window.pick=(el,a,b)=>{el.focus();getSelection().setBaseAndExtent(el.firstChild,a,el.firstChild,b);return true};window.cell=(id,field='audioText')=>document.querySelector('#rows .cell-editable[data-id="'+id+'"][data-field="'+field+'"]');pick(cell('r1'),1,3)
+key Enter
+wait docRows()[0].audioText === 'H<br>lo cup cup' && agree()
+expect docRows().length === 3 && document.activeElement === cell('r1') && getSelection().focusNode.textContent === 'lo cup cup' && getSelection().focusOffset === 0
+key ctrl KeyZ
+wait docRows()[0].audioText === 'Hello cup cup' && agree()
+expect getSelection().toString() === 'el'
+eval getSelection().collapseToStart();true
+key ctrl KeyF
+wait !document.querySelector('#findbar').hidden
+eval setFind('cup','mug')
+expect match() === 'cup' && document.querySelector('#find-count').textContent === '1 of 3'
+eval S.nativePeer.delete('r2',0,3).kind === 'written'
+wait document.querySelector('#find-count').textContent === '1 of 2' && match() === 'cup'
+jsclick #find-next
+expect document.querySelector('#find-count').textContent === '2 of 2' && match() === 'cup'
+jsclick #find-replace
+wait docRows()[0].audioText === 'Hello cup mug' && agree()
+expect document.activeElement.id === 'find-input'
+jsclick #find-close
+jsclick #btn-write
+wait !document.querySelector('#writer').hidden && document.querySelector('#writer-doc .wr-beat')
+eval window.beat=id=>document.querySelector('#writer-doc .wr-beat[data-id="'+id+'"]');window.root=document.querySelector('#writer-doc');root.focus();getSelection().setBaseAndExtent(beat('r1').firstChild,1,beat('r1').firstChild,3);true
+key Enter
+wait docRows().length === 4 && agree()
+expect docRows()[0].audioText === 'H' && docRows()[1].audioText === 'lo cup mug' && getSelection().focusNode.parentElement.closest('.wr-beat').dataset.id === docRows()[1].id
+key ctrl KeyZ
+wait docRows().length === 3 && agree()
+expect getSelection().toString() === 'el'
+eval getSelection().collapseToStart();true
+key ctrl KeyF
+wait document.querySelector('#findbar').classList.contains('is-writer')
+jsclick #find-visuals
+eval setFind('wide','close')
+expect document.querySelector('#find-count').textContent === '1 of 1'
+jsclick #find-replace-all
+wait docRows()[2].visualText === 'close view' && agree()
+jsclick #find-close
+eval document.activeElement.blur();true
+key ctrl KeyZ
+wait docRows()[2].visualText === 'wide view' && agree()
+expect document.activeElement.classList.contains('wr-flow-visual-text') && getSelection().toString() === 'wide'
+key ctrl KeyY
+wait docRows()[2].visualText === 'close view' && agree()
+expect document.activeElement.classList.contains('wr-flow-visual-text') && getSelection().focusOffset === 5
+jsclick #wr-close
+eval S.leave()
+eval window.inlineFixture=()=>F.openFile(new File([JSON.stringify({schema:2,title:'Mixed formatting',paragraphsDecided:true,rows:[{id:'r1',audioText:'<strong>Hel</strong>lo'}]})],'mixed.splitpage'));window.mixed=(host,focus=host)=>{focus.focus();getSelection().setBaseAndExtent(host.querySelector('strong').firstChild,1,host.lastChild,1);return true};inlineFixture()
+wait cell('r1').innerHTML === '<strong>Hel</strong>lo'
+eval mixed(cell('r1'))
+press X
+wait F.state().rows[0].audioText === '<strong>HX</strong>o'
+eval inlineFixture()
+wait cell('r1').innerHTML === '<strong>Hel</strong>lo'
+eval S.enter({backend:'native'})
+eval mixed(cell('r1'))
+press X
+wait docRows()[0].audioText === '<strong>HX</strong>o' && agree()
+eval S.leave()
+eval inlineFixture()
+wait cell('r1').innerHTML === '<strong>Hel</strong>lo'
+jsclick #btn-write
+wait beat('r1')?.querySelector('strong')
+eval mixed(beat('r1'),document.querySelector('#writer-doc'))
+press X
+wait F.state().rows[0].audioText === '<strong>HX</strong>o'
+jsclick #wr-close
+eval inlineFixture()
+wait cell('r1').innerHTML === '<strong>Hel</strong>lo'
+eval S.enter({backend:'native'})
+jsclick #btn-write
+wait beat('r1')?.querySelector('strong')
+eval mixed(beat('r1'),document.querySelector('#writer-doc'))
+press X
+wait docRows()[0].audioText === '<strong>HX</strong>o' && agree()

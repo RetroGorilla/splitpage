@@ -4,7 +4,7 @@ eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;F.openFile(
 wait F.state().title === 'Native structure'
 eval S.enter({backend:'native'})
 eval window.rows=()=>S.read().app.rows;window.cell=id=>document.querySelector('#rows .cell-editable[data-id="'+id+'"][data-field="audioText"]');window.at=(id,i)=>{const el=cell(id);el.focus();const r=document.createRange();r.setStart(el.firstChild,i);r.collapse(true);getSelection().removeAllRanges();getSelection().addRange(r);return true};window.agree=()=>JSON.stringify(S.read().app)===JSON.stringify(S.read().peer);window.order=()=>rows().map(r=>r.id).join(',');at('r1',2)
-key Enter
+key alt Enter
 wait rows().length === 4 && agree()
 eval window.created=rows()[1].id;true
 expect cell('r1').textContent === 'He' && cell(created).textContent === 'llo' && document.activeElement === cell(created) && getSelection().focusOffset === 0

@@ -7,35 +7,40 @@ import type { SharedDocumentSession } from "../../application/session/shared-ses
 import { addBeatCommand, isBlankBeat, swapBeatsCommand } from "../../application/commands/rows.ts";
 import { sceneBeforeBeat, scenesInOrder, storedSceneName } from "../../core/document/scenes.ts";
 import { beatPos, headingPos } from "../../core/flow/flow.ts";
-import { cellLength, projection } from "../../core/text/runs.ts";
+import { breakLine, deleteRange, markThroughout, replaceText, sliceCell, typingMarks } from "../../core/text/edits.ts";
+import { cellLength, cleanText, projection } from "../../core/text/runs.ts";
+import type { Marks, Run } from "../../core/text/runs.ts";
+import type { NativePlainMark } from "../../adapters/collab/native/format-commands.ts";
 import { domToPos, posToDom, readSelection } from "../../features/common/cell-dom.ts";
 import { cellSelection, setCellSelection } from "../../features/common/cell-selection.ts";
 import { noteFieldPainted, renderRow } from "../../features/rows/render.ts";
 import { undoGesture } from "../../features/undo/routes.ts";
-import { cssAttr } from "../../features/common/dom.ts";
 import { scriptCellOf } from "../richtext.ts";
 import { guardUnload } from "../startup/page-lifetime.ts";
-import { narrationAt, narrationSurfaceOf, shownNarrationSurface, writerNarration, writerSelectionCells } from "./native-narration-surfaces.ts";
+import { narrationAt, narrationSurfaceOf, shownNarrationSurface, visualTextSurface, writerNarration, writerSelectionCells } from "./native-narration-surfaces.ts";
 import { rowDrag } from "./editor-owners.ts";
-import type { NarrationSurface } from "./native-narration-surfaces.ts";
+import type { NativeTextSurface } from "./native-narration-surfaces.ts";
 import { documentReader } from "./ports/document.ts";
 import { editAllowed, sessionStamps } from "./session-owner.ts";
+import { sharedUndoRoute } from "./undo.ts";
 import { writerControls } from "./writer.ts";
 
 interface NativeInputPorts {
-  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint">;
+  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "resolveTextSelection" | "isClosingOrClosed" | "subscribe">;
   readonly session: Pick<SharedDocumentSession, "admit" | "refuse" | "run" | "subscribe">;
   readonly editAttribution: () => NativeEditStamp;
   readonly now?: () => number;
   readonly report: ReportPort;
   readonly paintIsCurrent?: () => boolean;
-  readonly publish?: (buffered?: { readonly cell: Element; readonly beat: string }) => void;
+  readonly publish?: (buffered?: Pick<Draft, "cell" | "beat" | "field">) => void;
 }
 
 const EDITABLE = "#rows .cell-editable, #writer-doc, .wr-flow-visual-text, #doc-title, #writer-title";
-const SPLIT_VISUAL = '#rows .cell-editable[data-field="visualText"]';
-const UNDO_SURFACES = "#rows .cell-editable, #writer-doc";
+const UNDO_SURFACES = "#rows .cell-editable, #writer-doc, .wr-flow-visual-text";
 const HISTORY = /^history(Undo|Redo)$/;
+const FORMAT_MARKS = new Map<string, NativePlainMark>([
+  ["bold", "b"], ["italic", "i"], ["underline", "u"], ["strikeThrough", "s"], ["highlight", "hl"], ["direction", "dir"]
+]);
 const EVENTS = ["beforeinput", "input", "compositionstart", "compositionupdate", "compositionend", "paste", "cut", "drop", "keydown", "click", "pointerdown", "focusout"] as const;
 const UNSUPPORTED = "native-input-unavailable";
 const STALE = "native-selection-stale";
@@ -61,7 +66,8 @@ interface MoveEndpoint {
 interface Draft {
   readonly beat: string;
   readonly cell: Element;
-  readonly surface: NarrationSurface;
+  readonly surface: NativeTextSurface;
+  readonly field: "audioText" | "visualText";
   readonly range: NativeTextRange | null;
   readonly caretEnd: "from" | "to" | null;
   readonly before: NativeTextRange | null;
@@ -69,6 +75,7 @@ interface Draft {
   endsGroup: boolean;
   readonly selection: CellRange;
   readonly html: string;
+  readonly marks: Marks;
   composing: boolean;
   readonly composition: boolean;
   readonly paint: TrackedPaint | null;
@@ -137,24 +144,36 @@ function editingKey(key: KeyboardEvent): boolean {
     || key.altKey && (key.key === "ArrowUp" || key.key === "ArrowDown");
 }
 
-function splitKey(key: KeyboardEvent): boolean {
-  return key.key === "Enter" && !key.ctrlKey && !key.metaKey && !key.shiftKey;
-}
-
 function moveDirection(key: KeyboardEvent): -1 | 1 | null {
   if (!key.altKey || key.ctrlKey || key.metaKey) return null;
   return key.key === "ArrowUp" ? -1 : key.key === "ArrowDown" ? 1 : null;
 }
 
+function formattingMark(event: Event, button: Element | null, key: KeyboardEvent | null): NativePlainMark | undefined {
+  if (button) return FORMAT_MARKS.get(button.getAttribute("data-cmd") ?? "");
+  if (key && (key.ctrlKey || key.metaKey) && !key.altKey) {
+    const mark = key.key.toLowerCase();
+    return mark === "b" || mark === "i" || mark === "u" ? mark : undefined;
+  }
+  if (event.type !== "beforeinput" || !event.cancelable || (event as InputEvent).isComposing) return undefined;
+  const type = (event as InputEvent).inputType;
+  return type.startsWith("format") ? FORMAT_MARKS.get(type.charAt(6).toLowerCase() + type.slice(7)) : undefined;
+}
+
 export function mountNativeSharedInput({ native, session, editAttribution, now = Date.now, report, paintIsCurrent = () => false, publish = () => {} }: NativeInputPorts) {
   let draft: Draft | null = null, stopped: string | null = null, uncertain = false;
+  let imeTarget: Element | null = null;
+  let compositionRefused = false, fullRefused = false;
   let composingInside: Pick<Draft, "cell" | "selection" | "html"> | null = null;
   let composingText = "";
   let timer: ReturnType<typeof setTimeout> | undefined;
-  let placement: { readonly buffered: Draft; readonly caret: RelativePoint } | null = null;
+  let placement: { readonly buffered: Draft; readonly caret: RelativePoint | number } | null = null;
   let lastWrite: number | null = null;
   let stopWriterPaint: (() => void) | null = null;
   const movePaint = new Map<Element, TrackedPaint>();
+  const stopSize = native.subscribe(event => {
+    if (event.kind === "size" && event.state !== "full") fullRefused = false;
+  });
   const stopPaint = session.subscribe(() => {
     writerControls()?.renderWriter();
     const placed = placement;
@@ -162,7 +181,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (!placed) return;
     const { beat, cell, surface } = placed.buffered, fresh = surface.cell(beat);
     if (!fresh || !surface.mayRestore(cell, fresh)) return;
-    const offset = native.narrationOffset(beat, { from: placed.caret }, -1);
+    const offset = typeof placed.caret === "number" ? placed.caret : native.narrationOffset(beat, { from: placed.caret }, -1);
     if (offset === null) return;
     surface.place(fresh, beat, offset, offset, false);
   });
@@ -216,60 +235,90 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     return narrationSurfaceOf(like).cell(beat);
   }
 
+  function visualIsAddressable(beat: string, html: string | null | undefined): boolean {
+    if (html == null) return false;
+    const end = native.commands.anchorText({ beat, cell: "visual" }, cellLength(scriptCellOf(html)));
+    return end.kind === "anchored";
+  }
+
+  function refuseCommand(reason: string): void {
+    if (reason === "closed" || native.isClosingOrClosed()) return;
+    if (reason === PENDING && draft?.composing) {
+      if (compositionRefused) return;
+      compositionRefused = true;
+    }
+    if (reason === "full") {
+      if (fullRefused) return;
+      fullRefused = true;
+    }
+    session.refuse(reason);
+  }
+
   function stop(reason: string, quiet = false): string {
     clearTimeout(timer);
     timer = undefined;
     draft?.paint?.dispose();
     clearMovePaint();
     stopped = reason;
-    if (!quiet) session.refuse(reason);
+    if (!quiet) {
+      if (reason === "full") refuseCommand(reason);
+      else session.refuse(reason);
+    }
     return reason;
   }
 
   function begin(cell: Element, selection: CellRange, composing: boolean, text: string, caretEnd: Draft["caretEnd"] = null): Draft {
     const beat = cell.getAttribute("data-id") ?? "";
-    return { beat, cell, surface: narrationSurfaceOf(cell), selection, composing, composition: composing, text,
+    const { from, to } = selection;
+    const marks = !text && !composing ? {} : typingMarks(scriptCellOf(cell.innerHTML), from === to ? from : from + 1);
+    const visual = visualTextSurface.cellAt(cell) === cell;
+    return { beat, cell, surface: visual ? visualTextSurface : narrationSurfaceOf(cell), field: visual ? "visualText" : "audioText",
+      selection, composing, composition: composing, text,
       units: Math.max(text.length, selection.to - selection.from), previewCaret: selection.from + text.length, range: null, caretEnd,
-      before: null, after: null, endsGroup: false, paint: null, html: cell.innerHTML };
+      before: null, after: null, endsGroup: false, paint: null, html: cell.innerHTML, marks };
   }
 
   function anchor(next: Draft): Draft | string {
-    const { beat, cell, selection } = next;
+    const { beat, cell, selection, field } = next;
     const shown = documentReader.read(doc => doc?.rows.find(row => row.id === beat));
-    if (!shown || !next.surface.painted(cell, shown) || shown.audioText !== native.narrationHtml(beat)) {
+    const visual = field === "visualText";
+    const live = visual ? native.document().rows.find(row => row.id === beat)?.visualText : native.narrationHtml(beat);
+    if (!shown || !next.surface.painted(cell, shown) || shown[field] !== live) {
       return STALE;
     }
-    const from = native.narrationCaret(beat, selection.from, selection.from !== selection.to);
-    const to = selection.from === selection.to ? from : native.narrationCaret(beat, selection.to);
+    if (visual && !visualIsAddressable(beat, live)) return UNSUPPORTED;
+    const from = visual ? { beat, offset: selection.from } : native.narrationCaret(beat, selection.from, selection.from !== selection.to);
+    const to = selection.from === selection.to ? from : visual ? { beat, offset: selection.to } : native.narrationCaret(beat, selection.to);
     if (!from || !to || from.beat !== to.beat) return STALE;
-    const target = { beat: from.beat, cell: "narration" } as const;
+    const target = { beat: from.beat, cell: visual ? "visual" : "narration" } as const;
     const anchored = native.commands.anchorText(target, from.offset, to.offset);
     if (anchored.kind === "refused") return anchored.reason;
     const end = next.composition || selection.from !== selection.to ? native.commands.anchorText(target, to.offset) : null;
     const after = end?.kind === "anchored" ? end.range : null, { range } = anchored;
     const before = next.caretEnd === "to" ? after : next.caretEnd === "from" ? { target: range.target, from: range.from, to: range.from } : range;
-    return { ...next, range, before, after, paint: native.trackNarrationPaint(beat) };
+    return { ...next, range, before, after, paint: visual ? null : native.trackNarrationPaint(beat) };
   }
 
   function admissionRefusal(): string | null {
+    if (native.isClosingOrClosed()) return "closed";
     const admission = session.admit();
     if (admission?.kind === "failed") { report(admission.error); return UNSUPPORTED; }
     return admission?.reason ?? (editAllowed() ? null : UNSUPPORTED);
   }
 
   function commit(buffered: Draft, target: NativeInputPorts["native"], places?: NativeTextPlacement, recorded = false) {
-    const { range, text, selection, composition } = buffered;
+    const { range, text, selection, composition, marks } = buffered;
     if (!range) return null;
     const attribution = editAttribution(), typing = !composition && selection.from === selection.to;
     if (!recorded) {
-      if (typing) return target.commands.typeText(range, text, {}, attribution, places);
+      if (typing) return target.commands.typeText(range, text, marks, attribution, places);
       if (!text) return target.commands.deleteText(range, attribution, places);
-      return target.commands.replaceText(range, [{ text, marks: {} }], attribution, places);
+      return target.commands.replaceText(range, [{ text, marks }], attribution, places);
     }
     const { before } = buffered;
-    const step = typing ? target.commands.typeText.withSelection(before, range, text, {}, attribution, places)
+    const step = typing ? target.commands.typeText.withSelection(before, range, text, marks, attribution, places)
       : !text ? target.commands.deleteText.withSelection(before, range, attribution, places)
-      : target.commands.replaceText.withSelection(before, range, [{ text, marks: {} }], attribution, places);
+      : target.commands.replaceText.withSelection(before, range, [{ text, marks }], attribution, places);
     if (step.result.kind === "written") step.recordAfter(typing ? undefined : buffered.after);
     return step.result;
   }
@@ -286,7 +335,12 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     buffered.paint?.dispose();
     clearMovePaint();
     const at = now();
+    let visualCaret: number | null = null;
     try {
+      if (buffered.field === "visualText" && buffered.range) {
+        const start = native.resolveTextSelection(buffered.range)?.anchor.offset;
+        if (start !== undefined) visualCaret = start + buffered.text.length;
+      }
       if (lastWrite !== null && at - lastWrite >= GROUP_PAUSE_MS) native.endTypingGroup();
       result = commit(buffered, native, selection?.indices ?? [null, null], true);
     } catch (error) {
@@ -302,7 +356,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (result.kind === "unchanged") restore(buffered);
       if (result.kind === "written") {
         lastWrite = at;
-        if (moveCaret && result.caret) placement = { buffered, caret: result.caret };
+        if (moveCaret && result.caret) placement = { buffered, caret: visualCaret ?? result.caret };
         if (selection && result.selection) selection.inserted = result.selection;
       }
       publish(buffered);
@@ -314,7 +368,9 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
 
   function restore(buffered: Pick<Draft, "cell" | "selection" | "html">): void {
     buffered.cell.innerHTML = buffered.html;
-    if (document.activeElement === buffered.cell) setCellSelection(buffered.cell, buffered.selection.from, buffered.selection.to);
+    if (document.activeElement === buffered.cell || buffered.cell.closest("#writer-doc") === document.activeElement) {
+      setCellSelection(buffered.cell, buffered.selection.from, buffered.selection.to);
+    }
   }
 
   function draftEndpoint(buffered: Draft, offset: number, assoc: 0 | -1, coversDraftEdge: boolean) {
@@ -344,11 +400,12 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const oldHtml = cell.innerHTML;
     if (buffered.cell !== cell) {
       const beat = cell.getAttribute("data-id") ?? "";
-      const shown = () => documentReader.read(doc => doc?.rows.find(row => row.id === beat)?.audioText);
+      const visual = visualTextSurface.cellAt(cell) === cell;
+      const shown = () => documentReader.read(doc => doc?.rows.find(row => row.id === beat)?.[visual ? "visualText" : "audioText"]);
       const original = shown();
       if (buffered.composing) settleBlur(buffered);
       if (finish(undefined, moveCaret)) return null;
-      const fresh = narrationCell(beat, cell);
+      const fresh = visual ? visualTextSurface.cell(beat) : narrationCell(beat, cell);
       if (!fresh) { session.refuse(STALE); return null; }
       if (original === shown()) return { cell: fresh, selection };
       if (keepPreview) fresh.innerHTML = oldHtml;
@@ -377,38 +434,107 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     return anchored.kind === "anchored" ? anchored.range : null;
   }
 
-  function structureCaret(cell: Element) {
+  function structureCaret(cell: Element, selected = false) {
     const refusal = admissionRefusal();
-    if (refusal) { session.refuse(refusal); return null; }
-    const selection = cellSelection(cell);
-    if (!selection || selection.from !== selection.to) { session.refuse(UNSUPPORTED); return null; }
+    if (refusal) { refuseCommand(refusal); return null; }
+    const directed = readSelection(cell, document.getSelection());
+    if (!directed || !selected && directed.anchor !== directed.head) { session.refuse(UNSUPPORTED); return null; }
+    const backward = directed.anchor > directed.head;
+    const selection = { from: Math.min(directed.anchor, directed.head), to: Math.max(directed.anchor, directed.head) };
+    if (touchesProtectedText(cell, selection)) { session.refuse(UNSUPPORTED); return null; }
     const current = flushForInput(cell, selection, false);
     if (!current) return null;
     const beat = current.cell.getAttribute("data-id") ?? "";
     const row = documentReader.read(doc => doc?.rows.find(item => item.id === beat));
-    const surface = narrationSurfaceOf(current.cell);
-    if (current.stale || !row || !surface.painted(current.cell, row) || row.audioText !== native.narrationHtml(beat)) {
+    const visual = visualTextSurface.cellAt(cell) === cell;
+    const surface = visual ? visualTextSurface : narrationSurfaceOf(current.cell);
+    const html = visual ? native.document().rows.find(item => item.id === beat)?.visualText : native.narrationHtml(beat);
+    if (current.stale || !row || !surface.painted(current.cell, row) || row[visual ? "visualText" : "audioText"] !== html) {
       session.refuse(STALE);
       return null;
     }
-    const offset = current.selection.from;
-    const point = native.narrationCaret(beat, offset);
-    const before = point && caretAnchor(point.beat, point.offset);
+    if (visual && !visualIsAddressable(beat, html)) { session.refuse(UNSUPPORTED); return null; }
+    const { from: offset, to } = current.selection;
+    const at = (at: number, right = false) => visual ? { beat, offset: at } : native.narrationCaret(beat, at, right);
+    const anchor = (point: { beat: string; offset: number }) => {
+      const result = native.commands.anchorText({ beat: point.beat, cell: visual ? "visual" : "narration" }, point.offset);
+      return result.kind === "anchored" ? result.range : null;
+    };
+    const point = at(offset, offset !== to);
+    const before = point && anchor(point);
     if (!point || !before) { session.refuse(STALE); return null; }
-    return { beat, offset, before, surface };
+    if (offset === to) {
+      if (selection.from !== selection.to) { session.refuse(STALE); return null; }
+      return { beat, offset, endOffset: to, before, surface, html, range: null, backward: null };
+    }
+    const end = at(to);
+    if (!end || point.beat !== end.beat) { session.refuse(UNSUPPORTED); return null; }
+    const anchored = native.commands.anchorText(before.target, point.offset, end.offset);
+    if (anchored.kind === "refused") { session.refuse(anchored.reason); return null; }
+    const right = backward ? anchor(end) : null;
+    if (backward && !right) { session.refuse(STALE); return null; }
+    return { beat, offset, endOffset: to, before, surface, html, range: anchored.range, backward: right && { anchor: right, head: before } };
   }
 
   function split(cell: Element): void {
-    if (draft?.composing) { session.refuse(PENDING); return; }
-    const caret = structureCaret(cell);
+    if (draft?.composing) { refuseCommand(PENDING); return; }
+    const caret = structureCaret(cell, true);
     if (!caret) return;
-    const step = native.commands.splitRow.withSelection(caret.before, caret.before);
-    if (step.result.kind === "refused") { session.refuse(step.result.reason); return; }
+    const step = caret.range ? native.commands.deleteAndSplit.withSelection(caret.backward ?? caret.range, caret.range)
+      : native.commands.splitRow.withSelection(caret.before, caret.before);
+    if (step.result.kind === "refused") { refuseCommand(step.result.reason); return; }
+    if (step.result.kind === "unchanged") return;
     const beat = step.result.created;
     step.recordAfter(caretAnchor(beat, 0));
     publish();
     const fresh = caret.surface.cell(beat);
     if (fresh) caret.surface.place(fresh, beat, 0, 0, true);
+  }
+
+  function format(cell: Element, mark: NativePlainMark): void {
+    if (stopped || draft?.composing) { beforePress(); return; }
+    const selected = structureCaret(cell, true);
+    if (!selected) return;
+    if (!selected.range) { session.refuse(UNSUPPORTED); return; }
+    const { offset, endOffset } = selected;
+    const on = !markThroughout(scriptCellOf(selected.html ?? ""), offset, endOffset, mark);
+    const before = selected.backward ?? selected.range;
+    const step = native.commands.formatText.withSelection(before, selected.range, { kind: "plain", mark, on });
+    if (step.result.kind === "refused") { refuseCommand(step.result.reason); return; }
+    if (step.result.kind === "unchanged") return;
+    step.recordAfter(before);
+    publish();
+    const updated = selected.surface.cell(selected.beat);
+    if (updated) selected.surface.place(updated, selected.beat, selected.backward ? endOffset : offset,
+      selected.backward ? offset : endOffset, false);
+  }
+
+  function inlineText(cell: Element, text: string, line: boolean): void {
+    if (stopped || draft?.composing) { beforePress(); return; }
+    if (!line && cleanText(text) !== text) { refuseCommand(UNSUPPORTED); return; }
+    const selected = structureCaret(cell, true);
+    if (!selected) return;
+    const { beat, offset, endOffset, range, before, backward, surface, html } = selected;
+    let insert: readonly Run[] = [{ text, marks: {} }];
+    let landing = offset + text.length;
+    if (line ? surface !== writerNarration || !range : !cell.closest("#writer")) {
+      const model = scriptCellOf(html ?? "");
+      const broken = line ? breakLine(model, offset, endOffset) : null;
+      const next = broken?.cell ?? replaceText(model, offset, endOffset, text);
+      const added = cellLength(next) - cellLength(deleteRange(model, offset, endOffset));
+      insert = sliceCell(next, offset, offset + added);
+      landing = broken?.pos ?? offset + added;
+    }
+    const step = native.commands.replaceText.withSelection(backward ?? range ?? before, range ?? before,
+      insert, editAttribution());
+    if (step.result.kind === "recovery") { refuseCommand(step.result.reason); return; }
+    if (step.result.kind === "unchanged") return;
+    const point = before.target.cell === "visual" ? { beat, offset: landing } : native.narrationCaret(beat, landing);
+    const after = point && native.commands.anchorText({ ...before.target, beat: point.beat }, point.offset);
+    if (after?.kind === "anchored") step.recordAfter(after.range);
+    publish();
+    const fresh = surface.cell(beat);
+    if (fresh) surface.place(fresh, beat, landing, landing, false);
   }
 
   function joinDirection(event: Event, cell: Element): -1 | 1 | null {
@@ -442,7 +568,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (blank) {
       const next = blank === upper ? lower : upper, offset = blank === lower ? length : 0;
       const step = native.commands.removeRows.withSelection(caret.before, [blank.id]);
-      if (step.result.kind === "refused") { session.refuse(step.result.reason); return; }
+      if (step.result.kind === "refused") { refuseCommand(step.result.reason); return; }
       if (step.result.kind === "unchanged") return;
       const point = native.narrationCaret(next.id, offset);
       step.recordAfter(point && caretAnchor(point.beat, point.offset));
@@ -456,7 +582,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const glue = length && cellLength(b) && !/\s$/.test(projection(a)) ? " " : "";
     const seam = length + glue.length;
     const step = native.commands.joinRow.withSelection(caret.before, lower.id, point.beat, glue);
-    if (step.result.kind === "refused") { session.refuse(step.result.reason); return; }
+    if (step.result.kind === "refused") { refuseCommand(step.result.reason); return; }
     if (step.result.kind === "unchanged") return;
     const after = cellLength(b) ? caretAnchor(lower.id, 0) : caretAnchor(point.beat, point.offset);
     step.recordAfter(after);
@@ -474,7 +600,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
 
   function headingInput(event: Event, heading: Element, remove: boolean): void {
     const refusal = admissionRefusal();
-    if (refusal) { session.refuse(refusal); return; }
+    if (refusal) { refuseCommand(refusal); return; }
     if (beforePress()) return;
     const id = heading.getAttribute("data-scene") ?? "";
     const doc = native.document(), scene = scenesInOrder(doc)?.find(item => item.id === id), previousName = storedSceneName(doc, id);
@@ -492,7 +618,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       const beat = previous?.id ?? scene.firstSceneId, offset = previous ? cellLength(scriptCellOf(previous.audioText)) : 0;
       const point = native.narrationCaret(beat, offset);
       const step = native.commands.removeHeading.withSelection(before.range, id);
-      if (step.result.kind === "refused") { session.refuse(step.result.reason); return; }
+      if (step.result.kind === "refused") { refuseCommand(step.result.reason); return; }
       if (step.result.kind === "unchanged") return;
       step.recordAfter(point && caretAnchor(point.beat, point.offset));
       publish();
@@ -509,7 +635,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const edit = native.commands.anchorText(target, range.from, range.to);
     if (edit.kind === "refused") { session.refuse(edit.reason); return; }
     const step = native.commands.renameHeading.withSelection(before.range, edit.range, text);
-    if (step.result.kind === "refused") { session.refuse(step.result.reason); return; }
+    if (step.result.kind === "refused") { refuseCommand(step.result.reason); return; }
     if (step.result.kind === "unchanged") return;
     const offset = range.from + text.length, after = native.commands.anchorText(target, offset);
     if (after.kind === "anchored") step.recordAfter(after.range);
@@ -521,9 +647,9 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   function write(input: InputEvent, cell: Element): void {
     const deletion = /^delete(Content|Word|SoftLine|HardLine)(Backward|Forward)$/.test(input.inputType);
     const text = input.data ?? "";
-    if (input.isComposing || !(deletion || input.inputType === "insertText" && text)) { session.refuse(UNSUPPORTED); return; }
+    if (input.isComposing || !(deletion || input.inputType === "insertText" && text && cleanText(text) === text)) { refuseCommand(UNSUPPORTED); return; }
     const refusal = admissionRefusal();
-    if (refusal) { session.refuse(refusal); return; }
+    if (refusal) { refuseCommand(refusal); return; }
     const selection = inputRange(input, cell);
     if (!selection || deletion && selection.from === selection.to) { session.refuse(deletion ? UNSUPPORTED : STALE); return; }
     const buffered = draft;
@@ -542,10 +668,11 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     let anchored: Draft | string;
     try { anchored = current.stale ? STALE : anchor(next); }
     catch (error) { report(error); anchored = PENDING; }
+    if (anchored === UNSUPPORTED) { session.refuse(anchored); return; }
     draft = typeof anchored === "string" ? next : anchored;
     preview(current.cell, current.selection, text);
     if (typeof anchored === "string") { stop(anchored); return; }
-    if (atBatchBoundary(anchored)) finish();
+    if (anchored.field === "visualText" || atBatchBoundary(anchored)) finish();
     else timer = setTimeout(() => {
       const shown = cellSelection(anchored.cell);
       finish(undefined, shown?.from === anchored.previewCaret && shown.to === anchored.previewCaret || !anchored.cell.isConnected);
@@ -555,11 +682,12 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   function composition(event: CompositionEvent, cell: Element): void {
     if (event.type === "compositionstart") {
       const refusal = admissionRefusal();
-      if (refusal) { session.refuse(refusal); event.preventDefault(); return; }
+      if (refusal) { refuseCommand(refusal); event.preventDefault(); return; }
       const selection = cellSelection(cell);
       if (!selection || touchesProtectedText(cell, selection)) { session.refuse(STALE); event.preventDefault(); return; }
       if (draft?.composing) { event.preventDefault(); return; }
       composingText = "";
+      compositionRefused = false;
       if (draft && insideDraft(draft, cell, selection)) {
         clearTimeout(timer);
         composingInside = { cell, selection, html: cell.innerHTML };
@@ -608,17 +736,29 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   function intercept(event: Event): void {
     const target = event.target instanceof Element ? event.target : null;
     if (event.type === "drop" && target?.closest("#rows .row") && rowDrag().dragging()) return;
-    const cell = target?.closest(EDITABLE);
-    const narration = target && cell ? narrationAt(target, cell) : null;
+    const button = event.type === "click" ? target?.closest("#rows .mini-toolbar button[data-cmd], #writer .wr-fmt[data-cmd]") ?? null : null;
+    const cell = target?.closest(EDITABLE) ?? button?.closest(".field-wrap")?.querySelector(".cell-editable") ?? null;
+    const narration = button?.closest("#writer") ? shownNarrationSurface().cellAt(document.querySelector("#writer-doc") ?? button)
+      : target && cell ? narrationAt(target, cell) : null;
+    const visual = cell && visualTextSurface.cellAt(cell);
+    const editableText = narration ?? visual;
     const heading = headingAt(cell ?? null);
     const removeHeading = heading && joinDirection(event, heading) === -1;
     const joining = narration && joinDirection(event, narration);
     const key = event.type === "keydown" ? event as KeyboardEvent : null;
     const adding = key?.key === "Enter" && (key.ctrlKey || key.metaKey) && !key.altKey;
-    const visualAdd = adding && cell?.matches(SPLIT_VISUAL);
+    const mark = formattingMark(event, button, key);
+    const input = event.type === "beforeinput" ? event as InputEvent : null;
+    const inputType = input?.inputType;
+    const commandInput = input?.cancelable && !input.isComposing;
+    const writer = cell?.id === "writer-doc";
+    const enter = key?.key === "Enter" && !key.ctrlKey && !key.metaKey;
+    const line = key ? enter && !key.altKey && (key.shiftKey || !writer)
+      : commandInput && (inputType === "insertLineBreak" || inputType === "insertParagraph" && !writer);
     const moving = key && moveDirection(key);
-    const splitting = key ? splitKey(key) : event.type === "beforeinput" && event.cancelable && (event as InputEvent).inputType === "insertParagraph";
+    const splitting = key ? enter && (writer ? !key.altKey && !key.shiftKey : key.altKey) : writer && commandInput && inputType === "insertParagraph";
     if (event.type === "focusout") {
+      if (imeTarget === cell) imeTarget = null;
       const buffered = draft;
       if (buffered && cell && (buffered.cell === cell || cell.contains(buffered.cell))) {
         queueMicrotask(() => { if (draft === buffered) settleBlur(buffered); });
@@ -626,25 +766,33 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       return;
     }
     if (event.type === "pointerdown") {
+      imeTarget = null;
       if (!draft?.composing && !stopped) finish();
       return;
     }
     if (event.type === "click") {
-      if (!target?.closest("#rows .mini-toolbar button[data-cmd], #writer .wr-fmt[data-cmd]")) return;
+      if (!button) return;
     } else if (!cell && !(event.type === "drop" && target?.closest("#rows .visual-cell"))) return;
     if (key) {
+      const imeKey = key.isComposing || key.keyCode === 229, undoing = undoGesture(key);
+      imeTarget = imeKey ? cell : null;
       if (key.key === "Enter" && key.altKey && cell?.id === "writer-doc") {
         event.preventDefault();
         event.stopImmediatePropagation();
         return;
       }
-      const imeKey = key.isComposing || key.keyCode === 229, undoing = undoGesture(key);
-      if ((narration || heading || visualAdd || cell?.id === "writer-doc") && (draft?.composing || imeKey)) {
+      if ((editableText || heading || cell?.id === "writer-doc") && (draft?.composing || imeKey)) {
         event.stopImmediatePropagation();
-        if (undoing || adding || draft?.composing && (splitting || joining || removeHeading || moving)) {
+        if (undoing || adding || draft?.composing && (splitting || joining || removeHeading || moving || mark || line)) {
           event.preventDefault();
-          if (!stopped && (undoing || !imeKey)) session.refuse(PENDING);
+          if (!stopped && (undoing || !imeKey)) refuseCommand(PENDING);
         }
+        return;
+      }
+      if (undoing && visual?.closest("#writer")) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        sharedUndoRoute()?.replay?.(undoing);
         return;
       }
       if (undoing && cell?.matches(UNDO_SURFACES)) return;
@@ -653,18 +801,28 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         return;
       }
     }
-    if (narration && !stopped) {
+    if (input || event.type.startsWith("composition")) {
+      const followsImeKey = imeTarget !== null && imeTarget === cell;
+      imeTarget = null;
+      if (followsImeKey && !draft?.composing && commandInput && (inputType === "insertParagraph" || inputType === "insertLineBreak")) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (!stopped) refuseCommand(UNSUPPORTED);
+        return;
+      }
+    }
+    if (editableText && !stopped) {
       if (event.type.startsWith("composition")) {
         event.stopImmediatePropagation();
-        try { composition(event as CompositionEvent, narration); }
+        try { composition(event as CompositionEvent, editableText); }
         catch (error) { report(error); stop(PENDING); }
         return;
       }
-      if (draft?.composing && draft.cell === narration && (event.type === "beforeinput" || event.type === "input")) {
+      if (draft?.composing && draft.cell === editableText && (event.type === "beforeinput" || event.type === "input")) {
         const change = event as InputEvent;
         if (event.type === "beforeinput" && !change.isComposing && !change.inputType.includes("Composition")) {
           event.preventDefault();
-          session.refuse(UNSUPPORTED);
+          refuseCommand(PENDING);
         }
         if (event.type === "input" && (change.isComposing || change.inputType.includes("Composition"))) {
           if (change.data !== null) composingText = change.data;
@@ -673,24 +831,34 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         event.stopImmediatePropagation();
         return;
       }
-      if (event.type === "input" && draft?.cell === narration) {
+      if (event.type === "input" && draft?.cell === editableText) {
         event.stopImmediatePropagation();
         uncertain = true;
         stop(PENDING);
         return;
       }
     }
-    if (event.type === "beforeinput" && cell?.matches(UNDO_SURFACES) && HISTORY.test((event as InputEvent).inputType)) return;
+    if (inputType && cell?.matches(UNDO_SURFACES) && HISTORY.test(inputType)) {
+      if (visual?.closest("#writer")) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        sharedUndoRoute()?.replay?.(inputType === "historyUndo" ? "undo" : "redo");
+      }
+      return;
+    }
     event.preventDefault();
     event.stopImmediatePropagation();
     try {
-      if (stopped && (narration || heading || visualAdd || cell?.id === "writer-doc") && (splitting || joining || moving || removeHeading || adding)) return;
-      if (narration && stopped) { session.refuse(stopped); return; }
-      if (adding && (narration || visualAdd)) {
-        const id = (narration ?? cell)?.getAttribute("data-id");
+      if (native.isClosingOrClosed()) return;
+      if (stopped && (editableText || heading || writer)) {
+        if (stopped !== "full" && narration && !splitting && !joining && !moving && !mark && !line && !adding && event.type !== "paste") session.refuse(stopped);
+        return;
+      }
+      if (adding && editableText) {
+        const id = editableText.getAttribute("data-id");
         if (id) {
           const outcome = session.run(addBeatCommand(id, randomIds.id("r"), sessionStamps, undefined, {
-            side: key.shiftKey ? "above" : "below", ...visualAdd ? { cell: "visual" } : {}
+            side: key.shiftKey ? "above" : "below", ...visual ? { cell: "visual" } : {}
           }));
           if (outcome.kind === "failed") report(outcome.error);
         }
@@ -714,7 +882,17 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         split(narration);
         return;
       }
-      if (event.type === "beforeinput" && narration && event.cancelable) { write(event as InputEvent, narration); return; }
+      if (editableText && mark) { format(editableText, mark); return; }
+      if (editableText && line) { inlineText(editableText, "\n", true); return; }
+      if (editableText && event.type === "paste") {
+        const data = (event as ClipboardEvent).clipboardData;
+        const text = data?.getData("text/plain") ?? "";
+        if (text && !/[\r\n]/.test(text) && data?.types.every(type => type === "text/plain")) {
+          inlineText(editableText, text, false);
+          return;
+        }
+      }
+      if (event.type === "beforeinput" && editableText && event.cancelable) { write(event as InputEvent, editableText); return; }
       if (event.type === "input" && cell) {
         if (cell instanceof HTMLInputElement) cell.value = documentReader.current()?.title ?? "";
         else if (cell.closest("#rows")) {
@@ -753,12 +931,15 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
 
   function show(selection: NativeUndoSelection): void {
     if (selection.head.target.cell === "visual") {
-      if (writerControls()?.writerFlowControl()) return;
-      const cell = document.querySelector<HTMLElement>(SPLIT_VISUAL + '[data-id="' + cssAttr(selection.head.target.beat) + '"]');
+      const { beat } = selection.head.target;
+      let cell = visualTextSurface.cell(beat);
+      if (!cell) {
+        writerControls()?.writerFlowControl()?.openVisual(beat);
+        cell = visualTextSurface.cell(beat);
+      }
       if (!cell) return;
-      const from = posToDom(cell, selection.anchor.offset), to = posToDom(cell, selection.head.offset);
-      cell.focus();
-      document.getSelection()?.setBaseAndExtent(from.node, from.offset, to.node, to.offset);
+      const anchor = selection.anchor.target.cell === "visual" && selection.anchor.target.beat === beat ? selection.anchor : selection.head;
+      visualTextSurface.place(cell, beat, anchor.offset, selection.head.offset, false);
       return;
     }
     if (selection.head.target.cell === "name") {
@@ -778,14 +959,15 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   }
 
   function beforePress(): string | null {
+    if (native.isClosingOrClosed()) return "closed";
     if (stopped || !draft?.composing) return finish(undefined, true, true);
-    session.refuse(PENDING);
+    refuseCommand(PENDING);
     return PENDING;
   }
 
   function visualSelection(beat: string) {
-    const cell = document.activeElement;
-    if (!cell?.matches(SPLIT_VISUAL) || cell.getAttribute("data-id") !== beat) return null;
+    const active = document.activeElement, cell = active && visualTextSurface.cellAt(active);
+    if (cell?.getAttribute("data-id") !== beat) return null;
     const selection = readSelection(cell, document.getSelection());
     if (!selection) return null;
     const target = { beat, cell: "visual" } as const;
@@ -893,6 +1075,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   return {
     finish,
     beforePress,
+    refuseCommand,
     currentCaret,
     visualSelection,
     bindWriterPaint,
@@ -924,6 +1107,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       draft = null;
       stopWriterPaint?.();
       stopPaint();
+      stopSize();
       stopUnload();
       window.removeEventListener("pagehide", pageHide);
       document.removeEventListener("visibilitychange", visibility);
@@ -932,6 +1116,6 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   };
 }
 
-export function keepNativeFieldPaint(buffered: { readonly cell: Element; readonly beat: string }, row: Parameters<typeof noteFieldPainted>[2] | undefined): void {
-  if (row?.audioText === buffered.cell.innerHTML) noteFieldPainted(buffered.cell, "audioText", row);
+export function keepNativeFieldPaint(buffered: Pick<Draft, "cell" | "beat" | "field">, row: Parameters<typeof noteFieldPainted>[2] | undefined): void {
+  if (row?.[buffered.field] === buffered.cell.innerHTML) noteFieldPainted(buffered.cell, buffered.field, row);
 }
