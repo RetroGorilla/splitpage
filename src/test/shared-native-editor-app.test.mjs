@@ -510,7 +510,7 @@ for (const committed of [true, false]) test("composition shields the DOM and " +
   assert.equal(compose(target, "start", ""), false);
   for (const key of ["Enter", "Backspace", "Escape", "ArrowLeft"]) for (const signal of [{ isComposing: true }, { keyCode: 229 }]) {
     const event = new window.KeyboardEvent("keydown", { bubbles: true, cancelable: true, key, ...signal });
-    assert.equal(target.dispatchEvent(event), true);
+    assert.equal(target.dispatchEvent(event), key !== "Enter");
   }
   assert.equal(beforeInput(target, "insertCompositionText", "e", { isComposing: true }), false);
   target.firstChild.replaceData(1, 2, "e");

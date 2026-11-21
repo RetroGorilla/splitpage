@@ -5,6 +5,7 @@ import { createSharedReplica } from "../../adapters/collab/replica.ts";
 import type { SharedStructureContentPorts } from "../../adapters/collab/structure-content.ts";
 import type { SharedDocumentHandle } from "../../adapters/collab/types.ts";
 import type { SharedUndo } from "../../application/editing/undo/shared-undo.ts";
+import type { CommandOutcome, DocumentStructureIntent } from "../../application/session/document-session.ts";
 import { sharedUndoActions } from "../../application/editing/undo/shared-undo-actions.ts";
 import { createSessionCapabilities } from "../../application/session/capabilities.ts";
 import type { CapabilityPort, ReportPort, TimerPort } from "../../application/session/ports.ts";
@@ -103,6 +104,7 @@ export interface SharedEditorBackend {
   readonly dispose: (attempt: (step: () => void) => boolean) => void;
   readonly unsupportedCommands?: string;
   readonly nativeRecords?: NativeEditorRecords;
+  readonly structure?: (intent: DocumentStructureIntent) => CommandOutcome;
 }
 
 type OpenBackend = (hydration: ValidatedDocument, failedClose: () => boolean) => SharedEditorBackend;
@@ -247,12 +249,16 @@ async function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { reado
     // why: replacement listeners may already see the shared owner, so Ctrl+Z must reach its undo owner first
     made.stopRoute = routeSharedUndo(backend.undo(admission));
     made.swap = collectReplacementErrors(faults.errors, () => adoptShared(owner => {
-      const session = createSharedSession({
+      const shared = createSharedSession({
         replica: backend.replica, entry: owner.entry, undo: { record: () => {} },
         effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: jobs => { if (alive) owner.refresh(jobs); } },
         capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after, refused: ports.commandRefused,
         ...(backend.unsupportedCommands ? { unsupportedCommands: backend.unsupportedCommands } : {})
       });
+      const route = backend.structure;
+      const session = route ? { ...shared,
+        run: (command: Parameters<SharedDocumentSession["run"]>[0]) => command.structure ? route(command.structure) : shared.run(command)
+      } : shared;
       made.session = session;
       made.releaseSession = session.hold(SHARED_SWITCHING);
       return session;

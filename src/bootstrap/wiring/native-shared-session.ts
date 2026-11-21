@@ -8,6 +8,7 @@ import { paintRowTimes } from "../../features/rows/render.ts";
 import { keepNativeFieldPaint, mountNativeSharedInput } from "./native-shared-input.ts";
 import { createNativeEditorRecords } from "./native-shared-records.ts";
 import { mountNativeRecordEvents } from "./native-shared-record-events.ts";
+import { createNativeEditorStructure } from "./native-shared-structure.ts";
 import { nativeUndoRoute } from "./native-shared-undo.ts";
 import { notices } from "./ports/effects.ts";
 import { currentRowsRender } from "./render.ts";
@@ -49,7 +50,8 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
   let input: ReturnType<typeof mountNativeSharedInput> | null = null, terminal: Uint8Array | null = null;
   let commandSession: Parameters<SharedEditorBackend["bind"]>[0] | null = null;
   let stopRecords: (() => void) | null = null;
-  const records = createNativeEditorRecords(native, () => commandSession, actor, ports.now, ports.report);
+  const records = createNativeEditorRecords(native, () => commandSession, actor, ports.now, ports.report,
+    () => input?.finish(undefined, false, true) ?? null);
   let initial: ValidatedDocument | null = null;
   let published = native.revision();
   function publish(buffered?: Parameters<typeof keepNativeFieldPaint>[0]): void {
@@ -102,6 +104,7 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
   const backend: SharedEditorBackend = {
     replica: publication.replica, parts: null, unsupportedCommands: UNSUPPORTED,
     nativeRecords: records,
+    structure: createNativeEditorStructure({ native, session: () => commandSession, input: () => input, publish, report: ports.report }),
     undo: admission => nativeUndoRoute({ native, admission, input: () => input, publish: () => { publish(); } }),
     bind: session => {
       commandSession = session;
