@@ -1,6 +1,7 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { bootApp, closeApp } from "./_app-boot.mjs";
+import { trackGlobalListeners } from "./_global-listener-inventory.mjs";
 import { applyNativePeerUpdate } from "../adapters/collab/native/peer-update.ts";
 import { openNativeSession } from "../adapters/collab/native/session.ts";
 import { createSessionCapabilities } from "../application/session/capabilities.ts";
@@ -22,6 +23,7 @@ window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};
 window.Range.prototype.getClientRects = () => [];
 localStorage.setItem("splitpage-onboarding", JSON.stringify({ v: 1, done: true, skipped: true }));
+const listenerInventory = trackGlobalListeners();
 await bootApp();
 after(closeApp);
 
@@ -112,11 +114,14 @@ function selectionSnapshot(node) {
   return [node.innerHTML, document.activeElement, anchorNode, anchorOffset, focusNode, focusOffset];
 }
 
-async function enter(t, { rows = source, people = [], view = "Split" } = {}) {
+async function enter(t, { rows = source, people = [], sections = [], view = "Split", renderNotices = false } = {}) {
   const fixture = entrySwitchFixture();
-  const doc = migrateRows({ schema: 2, title: "Shared callers", paragraphsDecided: true, people, rows });
+  const doc = migrateRows({ schema: 2, title: "Shared callers", paragraphsDecided: true, wordsPerMinute: 150, people, rows, sections });
   adoptReplacement(doc);
-  const show = t.mock.method(notices, "show", () => {});
+  const baseline = listenerInventory();
+  const toastHost = document.getElementById("toast-host");
+  if (renderNotices) toastHost.replaceChildren();
+  const show = renderNotices ? t.mock.method(notices, "show") : t.mock.method(notices, "show", () => {});
   const ports = { ...fixture.ports, commandRefused: sharedCommandRefusalNotice(notices) };
   const writer = writerControls();
   let native;
@@ -152,7 +157,15 @@ async function enter(t, { rows = source, people = [], view = "Split" } = {}) {
   });
   const peer = openCopy(t, native.encodeState());
   if (view === "Writer") writer.openWriter();
-  return { native, peer, cell, place, root, writer, notices: () => show.mock.calls.map(call => call.arguments) };
+  const readNotices = () => {
+    const calls = show.mock.calls.map(call => call.arguments);
+    if (renderNotices) {
+      const warnings = [...toastHost.querySelectorAll(".toast.warn")].map(toast => toast.firstChild.textContent);
+      assert.deepEqual(warnings, calls.filter(([, level]) => level === "warn").map(([message]) => message));
+    }
+    return calls;
+  };
+  return { native, peer, cell, place, root, writer, baseline, notices: readNotices };
 }
 
 function agree(f, expected) {
@@ -639,4 +652,235 @@ test("Split: a prefix before the displayed Find match leaves both fields usable 
   assert.deepEqual(f.notices(), []);
   land(f, ["Xgreen pot"]);
   assert.equal(text(f.cell()), "Xgreen pot");
+});
+
+const settledRows = [
+  { id: "r1", audioText: "abcdef", visualText: "Wide", status: "todo" },
+  { id: "r2", audioText: "Other", visualText: "", status: "todo" },
+  { id: "r3", audioText: "Third", visualText: "", status: "todo" }
+];
+const settledSections = [{ id: "s1", name: "Scene", firstSceneId: "r3" }];
+const exchanges = ["local-first", "remote-first"];
+
+function withoutEditStamps(doc) {
+  const copy = structuredClone(doc);
+  for (const row of copy.rows) {
+    delete row.updatedAt;
+    delete row.updatedBy;
+  }
+  return copy;
+}
+
+async function enterSettled(t, narration = "abcdef") {
+  const f = await enter(t, {
+    rows: [{ ...settledRows[0], audioText: narration }, ...settledRows.slice(1)],
+    sections: settledSections,
+    renderNotices: true
+  });
+  const before = structuredClone(app());
+  assert.deepEqual(before.sections, settledSections);
+  assert.equal(before.wordsPerMinute, 150);
+  assert.equal(before.targetSeconds ?? null, null);
+  assert.deepEqual(f.peer.document(), before);
+  return { ...f, before };
+}
+
+function freshAgreement(f) {
+  const fresh = openNativeSession({ kind: "state", state: f.native.encodeState() }, { actor: "Reader", sanitize: sanitizeHtml });
+  try {
+    assert.deepEqual(f.peer.document(), f.native.document());
+    assert.deepEqual(fresh.document(), f.native.document());
+  } finally { fresh.close(); }
+}
+
+function exchangeSettled(f, order) {
+  if (order === "local-first") {
+    send(f.native, f.peer);
+    send(f.peer, f.native);
+  } else {
+    send(f.peer, f.native);
+    send(f.native, f.peer);
+  }
+}
+
+function settledAgreement(f, order, rows) {
+  exchangeSettled(f, order);
+  const expected = withoutEditStamps({ ...f.before, rows });
+  assert.deepEqual(withoutEditStamps(app()), expected);
+  assert.deepEqual(f.native.document(), app());
+  freshAgreement(f);
+}
+
+function leaveSettled(f) {
+  const expected = withoutEditStamps(migrateRows(structuredClone(app())));
+  f.place("r3", 0);
+  assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+  assert.equal(sharedSession(), false);
+  assert.equal(f.native.isClosingOrClosed(), true);
+  assert.notEqual(app().docId, expected.docId);
+  const landed = withoutEditStamps(app());
+  assert.deepEqual({ ...landed, docId: expected.docId }, expected);
+  f.cell("r3").dispatchEvent(new window.Event("pointerdown", { bubbles: true }));
+  assert.deepEqual(listenerInventory(), f.baseline);
+}
+
+function draftTyping(f, offset, from = offset + 1, to = from) {
+  assert.equal(input(f.place("r1", offset), "insertText", "X"), true);
+  const original = f.before.rows[0].audioText;
+  const draft = original.slice(0, offset) + "X" + original.slice(offset);
+  assert.equal(text(f.cell()), draft);
+  assert.deepEqual(app(), f.before);
+  f.place("r1", from, to);
+  return draft;
+}
+
+const narrationOf = (row, audioText) => ({ ...row, audioText });
+
+function freshBeat(f, author, id, audioText, blank = false) {
+  assert.ok(id && !f.before.rows.some(row => row.id === id));
+  assert.match(id, new RegExp("^r" + author.ydoc.clientID.toString(36) + "-[0-9a-z]+$"));
+  return { id, audioText, visualText: "", ...(blank ? { status: "todo" } : {}) };
+}
+
+for (const order of exchanges) for (const action of ["arm only", "confirm insert", "confirm join"]) {
+  test(`Split settled Remove: ${action}, ${order}`, async t => {
+    const f = await enterSettled(t);
+    const [first, target, last] = f.before.rows;
+    draftTyping(f, 6);
+    const joined = action === "confirm join";
+    const inserted = joined ? null : freshBeat(f, f.peer, written(f.peer.commands.insertAdjacentBeat("r1", "below")).created, "", true);
+    if (joined) written(f.peer.commands.joinRow("r2", "r1", " "));
+    const remoteRows = joined ? [narrationOf(first, "abcdef Other"), last] : [first, inserted, target, last];
+    send(f.peer, f.native);
+    await Promise.resolve();
+    assert.deepEqual(app(), f.before);
+    const button = removeButton("r2");
+    button.click();
+    assert.equal(button.isConnected, true);
+    assert.equal(removeButton("r2"), button);
+    assert.equal(button.classList.contains("armed"), true);
+    assert.equal(document.querySelectorAll("#rows .armed").length, 1);
+    assert.equal(text(f.cell()), "abcdefX");
+    assert.deepEqual(app(), f.before);
+    exchangeSettled(f, order);
+    assert.deepEqual(withoutEditStamps(f.native.document()), withoutEditStamps({ ...f.before, rows: remoteRows }));
+    freshAgreement(f);
+    assert.deepEqual(f.notices(), []);
+    const typed = narrationOf(first, joined ? "abcdefX Other" : "abcdefX");
+    if (action === "arm only") {
+      flush();
+      settledAgreement(f, order, [typed, inserted, target, last]);
+    } else {
+      button.click();
+      await Promise.resolve();
+      settledAgreement(f, order, joined ? [typed, last] : [typed, inserted, last]);
+      assert.equal(removeButton("r2"), null);
+      assert.equal(document.querySelectorAll("#rows .armed").length, 0);
+      assert.deepEqual(f.notices(), joined ? [warning] : []);
+      if (!joined) {
+        history(f.cell("r3"));
+        settledAgreement(f, order, [typed, inserted, target, last]);
+      }
+      history(f.cell("r3"));
+      settledAgreement(f, order, remoteRows);
+      history(f.cell("r3"));
+      settledAgreement(f, order, remoteRows);
+      assert.deepEqual(f.notices(), joined ? [warning] : []);
+    }
+    leaveSettled(f);
+  });
+}
+
+const typedOffsets = { before: [1, 3, 7], inside: [4, 2, 7], after: [7, 2, 6] };
+const peerOffsets = { before: 0, inside: 3, after: 8 };
+const untypedText = { before: "Zabcdefgh", inside: "abcZdefgh", after: "abcdefghZ" };
+const mergedText = {
+  before: ["ZaXbcdefgh", "aXbcZdefgh", "aXbcdefghZ"],
+  inside: ["ZabcdXefgh", "abcZdXefgh", "abcdXefghZ"],
+  after: ["ZabcdefgXh", "abcZdefgXh", "abcdefgXhZ"]
+};
+const splitText = { before: ["aXb", "gh"], inside: ["ab", "gh"], after: ["ab", "gXh"] };
+
+function pasteSettled(f, payload) {
+  const event = new window.Event("paste", { bubbles: true, cancelable: true });
+  Object.defineProperty(event, "clipboardData", { value: {
+    types: [BEATS_MIME, "text/plain"],
+    getData: type => type === BEATS_MIME ? payload.json : type === "text/plain" ? payload.text : ""
+  } });
+  f.cell().dispatchEvent(event);
+  assert.equal(event.defaultPrevented, true);
+}
+
+for (const order of exchanges) for (const [typed, offsets] of Object.entries(typedOffsets)) {
+  for (const [index, [peer, offset]] of Object.entries(peerOffsets).entries()) for (const caller of ["Alt+Enter", "Ctrl+Enter", "beat paste"]) {
+    test(`Split settled offsets: ${caller}, typing ${typed}, peer ${peer}, ${order}`, async t => {
+      const f = await enterSettled(t, "abcdefgh");
+      const [first, other, last] = f.before.rows;
+      const payload = buildBeatPayload(f.before, ["r2"], {});
+      const draft = draftTyping(f, ...offsets);
+      edit(f.peer, "r1", offset, offset, "Z");
+      send(f.peer, f.native);
+      await Promise.resolve();
+      assert.deepEqual(app(), f.before);
+      assert.deepEqual(withoutEditStamps(f.native.document()), withoutEditStamps({
+        ...f.before, rows: [narrationOf(first, untypedText[peer]), other, last]
+      }));
+      const refused = caller === "beat paste";
+      if (refused) {
+        const selection = selectionSnapshot(f.cell());
+        const bytes = f.native.encodeState();
+        pasteSettled(f, payload);
+        assert.deepEqual(f.notices(), [warning]);
+        assert.deepEqual(selectionSnapshot(f.cell()), selection);
+        assert.equal(text(f.cell()), draft);
+        assert.deepEqual(app(), f.before);
+        assert.deepEqual(f.native.encodeState(), bytes);
+        flush();
+      } else {
+        assert.equal(key(f.cell(), "Enter", caller === "Alt+Enter" ? { altKey: true } : { ctrlKey: true }), true);
+        assert.deepEqual(f.notices(), []);
+      }
+      const typedRows = [narrationOf(first, mergedText[typed][index]), other, last];
+      let finalRows = typedRows;
+      if (!refused) {
+        const [head, tail] = splitText[typed];
+        const left = caller === "Ctrl+Enter" ? mergedText[typed][index] : peer === "before" ? "Z" + head : head;
+        const right = caller === "Ctrl+Enter" ? "" : peer === "after" ? tail + "Z" : tail;
+        finalRows = [narrationOf(first, left), freshBeat(f, f.native, app().rows[1].id, right, caller === "Ctrl+Enter"), other, last];
+      }
+      settledAgreement(f, order, finalRows);
+      if (!refused) {
+        history(f.cell("r3"));
+        settledAgreement(f, order, typedRows);
+      }
+      const remoteRows = [narrationOf(first, untypedText[peer]), other, last];
+      history(f.cell("r3"));
+      settledAgreement(f, order, remoteRows);
+      history(f.cell("r3"));
+      settledAgreement(f, order, remoteRows);
+      history(f.cell("r3"), true);
+      settledAgreement(f, order, typedRows);
+      if (!refused) {
+        history(f.cell("r3"), true);
+        settledAgreement(f, order, finalRows);
+      }
+      history(f.cell("r3"), true);
+      settledAgreement(f, order, finalRows);
+      assert.deepEqual(f.notices(), refused ? [warning] : []);
+      leaveSettled(f);
+    });
+  }
+}
+
+for (const order of exchanges) test(`Split settled prefix: Alt+Enter leaves Zab and ef, ${order}`, async t => {
+  const f = await enterSettled(t);
+  const [first, other, last] = f.before.rows;
+  draftTyping(f, 3, 2, 5);
+  edit(f.peer, "r1", 0, 0, "Z");
+  send(f.peer, f.native);
+  assert.deepEqual(app(), f.before);
+  assert.equal(key(f.cell(), "Enter", { altKey: true }), true);
+  settledAgreement(f, order, [narrationOf(first, "Zab"), freshBeat(f, f.native, app().rows[1].id, "ef"), other, last]);
+  assert.deepEqual(f.notices(), []);
+  leaveSettled(f);
 });
