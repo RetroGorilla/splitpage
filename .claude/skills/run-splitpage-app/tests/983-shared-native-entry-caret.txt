@@ -1,0 +1,49 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;F.openFile(new File([JSON.stringify({schema:2,title:'Native caret round trip',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello there'},{id:'r2',audioText:'World again'}]})],'native-entry-caret.splitpage'))
+wait F.state().title === 'Native caret round trip'
+click #btn-write
+wait window.__writerFlowTest.on()
+eval window.W=window.__writerFlowTest;window.point=(rowId,offset)=>({kind:'beat',rowId,offset});window.writerAt=(a,h)=>{W.place({anchor:point(...a),head:point(...h)});return true};window.writerIs=(a,h)=>{const s=W.selection();return document.activeElement.id==='writer-doc'&&s?.anchor.rowId===a[0]&&s.anchor.offset===a[1]&&s.head.rowId===h[0]&&s.head.offset===h[1]};true
+eval writerAt(['r1',5],['r1',5])
+eval S.enter()
+expect writerIs(['r1',5],['r1',5])
+press x
+wait S.read().app.rows[0].audioText === 'Hellox there' && S.read().peer.rows[0].audioText === 'Hellox there'
+eval S.leave()
+expect writerIs(['r1',6],['r1',6])
+press y
+wait F.state().rows[0].audioText === 'Helloxy there'
+eval writerAt(['r2',4],['r1',3])
+eval S.enter()
+expect writerIs(['r2',4],['r1',3])
+eval S.leave()
+expect writerIs(['r2',4],['r1',3])
+click #wr-close
+eval window.cell=id=>document.querySelector('#rows .cell-editable[data-field="audioText"][data-id="'+id+'"]');window.splitAt=(a,h)=>{cell(a[0]).focus();getSelection().setBaseAndExtent(cell(a[0]).firstChild,a[1],cell(h[0]).firstChild,h[1]);return true};window.splitIs=(a,h)=>{const s=getSelection();return document.activeElement===cell(a[0])&&s.anchorNode===cell(a[0]).firstChild&&s.anchorOffset===a[1]&&s.focusNode===cell(h[0]).firstChild&&s.focusOffset===h[1]};true
+eval splitAt(['r1',3],['r2',4])
+expect splitIs(['r1',3],['r2',4])
+eval S.enter()
+expect splitIs(['r1',3],['r2',4])
+eval S.leave()
+expect splitIs(['r1',3],['r2',4])
+eval splitAt(['r1',5],['r1',5])
+eval S.enter()
+expect splitIs(['r1',5],['r1',5])
+press z
+wait S.read().app.rows[0].audioText === 'Hellozxy there' && S.read().peer.rows[0].audioText === 'Hellozxy there'
+eval S.leave()
+expect splitIs(['r1',6],['r1',6])
+click #btn-write
+eval S.enter()
+eval writerAt(['r1',2],['r2',2]);S.nativePeer.removeBeat('r1');S.leave()
+expect W.selection() === null
+eval document.getElementById('writer-doc').focus();true
+wait W.selection() === null && getSelection().rangeCount === 0
+press q
+expect F.state().rows.length === 1 && F.state().rows[0].audioText === 'World again'
+wait W.selection() === null && getSelection().rangeCount === 0
+click #writer-doc .wr-beat[data-id="r2"]
+wait W.selection()?.head.rowId === 'r2'
+press q
+wait F.state().rows[0].audioText.includes('q')

@@ -1,5 +1,5 @@
-// why: literal copy of prototypes/collab/test/undo-records/oracles.ts, the Stage 1 command-record undo expectations.
-// tools/test-collab-oracle-copies.mjs pins it to the original, so expected results change only by product decision.
+// why: literal copy of prototypes/collab/test/undo-records/oracles.ts (removed; see commit 5b9b2b141).
+// The digest pins the Stage 1 command-record undo expectations.
 import type { ScriptOracle } from "../../checker.ts";
 
 const removalRows = {

@@ -1040,7 +1040,6 @@
   "tests/starters/index.test.ts": 152,
   "tools/test-brand-casts.mjs": 4594,
   "tools/test-ci-changes.mjs": 12206,
-  "tools/test-ci-collab-shards.mjs": 379,
   "tools/test-ci-efficiency.mjs": 235,
   "tools/test-ci-old-adapter-shards.mjs": 5551,
   "tools/test-ci-shards.mjs": 5072,

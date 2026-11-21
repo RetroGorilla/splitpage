@@ -1,5 +1,12 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import * as Y from "yjs";
+import { replacementInsert } from "../../../../src/core/text/edits.ts";
+import { withoutCues } from "../../../../src/core/text/cues.ts";
+import { projection } from "../../../../src/core/text/runs.ts";
+import { scriptCellOf } from "../../../../src/bootstrap/richtext.ts";
+import { nativeSegmentSpans } from "../../../../src/adapters/collab/native/reader.ts";
+import { declareNativeRoots } from "../../../../src/adapters/collab/native/roots.ts";
 import type { NativeReplaceAllRange, NativeUndoSelectionInput } from "../../../../src/adapters/collab/native/text-commands.ts";
 import { compoundSeed, settleCompound } from "./compound-harness.ts";
 import { noticeCopy, noticeDeliver, noticeRange } from "./notice-harness.ts";
@@ -10,8 +17,18 @@ const range = (row: string, start: number, end: number, cell: NativeReplaceAllRa
 const seed = compoundSeed({ A: "abcdefghi", B: "jklmno", C: "pqrst" }, { A: "12345" });
 
 function single(copy: Copy, hit: NativeReplaceAllRange, text: string): void {
-  assert.equal(copy.commands.replaceText(noticeRange(copy, hit.row, hit.cell, hit.start, hit.end),
-    text ? [{ text, marks: {} }] : []).kind, "written");
+  const { row, cell, start, end } = hit;
+  const current = copy.document().rows.find(item => item.id === row);
+  const source = scriptCellOf(cell === "visual" ? current?.visualText : current?.audioText);
+  assert.equal(copy.commands.replaceText(noticeRange(copy, row, cell, start, end),
+    replacementInsert(source, start, end, text).runs).kind, "written");
+}
+
+function narrationItems(copy: Copy, row: string) {
+  const { order, segments } = declareNativeRoots(copy.ydoc);
+  const span = order.toArray().flatMap(key => nativeSegmentSpans(segments.get(key)) ?? []).find(span => span.key === "b:" + row);
+  assert.ok(span);
+  return span.items;
 }
 
 test("replace all handles unsorted ranges, adjacent matches and separate cells in one transaction and undo step", t => {
@@ -44,16 +61,77 @@ test("replace all handles unsorted ranges, adjacent matches and separate cells i
   assert.equal(writer.document().rows[0]?.visualText, "XYZ5");
 });
 
-test("replacement text has the same formatting as single unmarked replacement", t => {
-  const rich = compoundSeed({ A: "<strong>abc</strong><em>def</em><a href=\"https://example.com\">ghi</a>", B: "next" },
-    { A: "<strong>1234</strong>" });
-  const batch = noticeCopy(rich, 2), manual = noticeCopy(rich, 2);
-  t.after(() => { batch.close(); manual.close(); });
-  const hits = [range("A", 7, 8), range("A", 3, 5), range("A", 1, 2), range("A", 1, 3, "visual")];
-  assert.deepEqual(batch.commands.replaceAll(hits, "X"), { kind: "written" });
-  for (const hit of hits) single(manual, hit, "X");
+test("replacement keeps the marks of each match's first character, as single Find Replace does", t => {
+  const tag = '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="mug" contenteditable="false">';
+  const link = '<a href="https://example.com/" target="_blank" rel="noopener">';
+  const rich = compoundSeed({
+    A: "<strong>cup</strong><em>cup</em>",
+    B: "<strong>cu</strong>p c<strong>up</strong>",
+    C: link + "scups</a>",
+    D: tag + "scups</span>",
+    E: '<span class="cmt-anchor" data-cmt="c1"><u><em>cu</em></u></span>p',
+    F: link + "cu</a>p c" + link + "up</a>",
+    G: tag + "cu</span>p c" + tag + "up</span>"
+  }, { A: "<strong>1234</strong>" });
+  const batch = noticeCopy(rich, 2), manual = noticeCopy(rich, 2), peer = noticeCopy(rich, 3);
+  t.after(() => { batch.close(); manual.close(); peer.close(); });
+  const before = batch.document();
+  const hits = [range("A", 3, 6), range("A", 0, 3), range("B", 4, 7), range("B", 0, 3),
+    range("C", 1, 4), range("D", 1, 4), range("E", 0, 3), range("F", 4, 7), range("F", 0, 3),
+    range("G", 4, 7), range("G", 0, 3), range("A", 1, 3, "visual")];
+  let updates = 0;
+  batch.ydoc.on("update", () => { updates++; });
+  assert.deepEqual(batch.commands.replaceAll(hits, "teacup"), { kind: "written" });
+  assert.equal(updates, 1);
+  for (const hit of hits) single(manual, hit, "teacup");
+  const expected = ["<strong>teacup</strong><em>teacup</em>", "<strong>teacup</strong> teacup",
+    link + "steacups</a>", tag + "steacups</span>", '<span class="cmt-anchor" data-cmt="c1"><em><u>teacup</u></em></span>',
+    link + "teacup</a> teacup", tag + "teacup</span> teacup"];
+  settleCompound(batch, peer, expected);
   assert.deepEqual(batch.document(), manual.document());
-  assert.match(batch.document().rows[0]?.audioText ?? "", /<strong>a<\/strong>X<strong>c<\/strong>/);
+  assert.equal(batch.document().rows[0]?.visualText, "<strong>1teacup4</strong>");
+  assert.equal(batch.commands.undo().kind, "written");
+  settleCompound(batch, peer, before.rows.map(row => row.audioText ?? ""));
+  assert.deepEqual(batch.document(), before);
+  assert.deepEqual(batch.commands.undo(), { kind: "unchanged" });
+  assert.equal(batch.commands.redo().kind, "written");
+  settleCompound(batch, peer, expected);
+  assert.deepEqual(batch.document(), manual.document());
+});
+
+test("replacing a whole cue with non-cue text cannot hide a later replacement from the prompter", t => {
+  const source = compoundSeed({ A: '<span class="audio-cue">SFX: cup</span>' });
+  const batch = noticeCopy(source, 2), manual = noticeCopy(source, 2);
+  t.after(() => { batch.close(); manual.close(); });
+  const spoken = (copy: Copy) => projection(withoutCues(scriptCellOf(copy.document().rows[0]?.audioText)));
+  assert.equal(spoken(batch), "");
+  const first = range("A", 0, 8), second = range("A", 0, 1);
+  assert.equal(batch.commands.replaceAll([first], ": mug").kind, "written");
+  single(manual, first, ": mug");
+  const afterFirst = narrationItems(batch, "A");
+  assert.equal(spoken(batch), ": mug");
+  assert.equal(batch.commands.replaceAll([second], "SFX:").kind, "written");
+  single(manual, second, "SFX:");
+  assert.deepEqual(
+    { spoken: spoken(batch), afterFirst, afterSecond: narrationItems(batch, "A") },
+    { spoken: "SFX: mug", afterFirst: [{ insert: ": mug" }], afterSecond: [{ insert: "SFX: mug" }] }
+  );
+  assert.deepEqual(narrationItems(batch, "A"), narrationItems(manual, "A"));
+});
+
+test("replace all writes the same cue attributes as single Replace for whole lines and fragments", t => {
+  const source = compoundSeed({
+    A: '<span class="audio-cue">SFX: cup</span><br>Say cup',
+    B: '<span class="audio-cue">SFX: bell</span>'
+  });
+  const batch = noticeCopy(source, 2), manual = noticeCopy(source, 2);
+  t.after(() => { batch.close(); manual.close(); });
+  const hits = [range("A", 13, 16), range("A", 5, 8), range("B", 0, 9)];
+  assert.equal(batch.commands.replaceAll(hits, "Music: mug").kind, "written");
+  for (const hit of hits) single(manual, hit, "Music: mug");
+  for (const row of ["A", "B"]) assert.deepEqual(narrationItems(batch, row), narrationItems(manual, row));
+  assert.deepEqual(narrationItems(batch, "B"), [{ insert: "Music: mug", attributes: { cue: true } }]);
+  assert.deepEqual(batch.document(), manual.document());
 });
 
 test("invalid inputs refuse before writing any valid range", t => {
@@ -159,6 +237,49 @@ test("a batch uses shown offsets inside an assembled cell and refuses a split su
 });
 
 for (const reverse of [false, true]) {
+  for (const on of [true, false]) {
+    test(`replace all and concurrent ${on ? "bold" : "unbold"} converge, ${reverse ? "peer" : "writer"} delivered first`, t => {
+      const source = compoundSeed({ A: on ? "cup <em>cup</em>" : "<strong>cup</strong> <em>cup</em>" });
+      const writer = noticeCopy(source, 2), peer = noticeCopy(source, 3);
+      t.after(() => { writer.close(); peer.close(); });
+      assert.equal(writer.commands.replaceAll([range("A", 0, 3), range("A", 4, 7)], "mug").kind, "written");
+      assert.equal(peer.commands.formatText(noticeRange(peer, "A", "narration", 0, 3),
+        { kind: "plain", mark: "b", on }).kind, "written");
+      const order = reverse ? [peer, writer] as const : [writer, peer] as const;
+      settleCompound(...order, ["mug <em>mug</em>"]);
+    });
+  }
+
+  test(`a peer insertion invalidates only the edited formatted match, ${reverse ? "replacement" : "typing"} delivered first to a third copy`, t => {
+    const source = compoundSeed({ A: "<strong>cup</strong> <em>cup</em>" });
+    const writer = noticeCopy(source, 2), peer = noticeCopy(source, 3), observer = noticeCopy(source, 4);
+    t.after(() => { writer.close(); peer.close(); observer.close(); });
+    const hits = [range("A", 0, 3), range("A", 4, 7)].map(hit => {
+      const anchor = noticeRange(writer, hit.row, hit.cell, hit.start, hit.end);
+      const intact = writer.captureTextIdentity(anchor);
+      assert.ok(intact);
+      return { hit, anchor, intact };
+    });
+    const updates: Uint8Array[] = [];
+    peer.ydoc.once("update", (update: Uint8Array) => updates.push(update));
+    assert.equal(peer.commands.typeText(noticeRange(peer, "A", "narration", 1), "X", { b: true }).kind, "written");
+    noticeDeliver(peer, writer);
+    assert.deepEqual(hits.map(({ intact }) => intact()), [false, true]);
+    const remaining = hits.flatMap(({ hit, anchor, intact }) => {
+      if (!intact()) return [];
+      const selection = writer.resolveTextSelection(anchor);
+      assert.ok(selection);
+      return [{ ...hit, start: selection.anchor.offset, end: selection.head.offset }];
+    });
+    writer.ydoc.once("update", (update: Uint8Array) => updates.push(update));
+    assert.equal(writer.commands.replaceAll(remaining, "mug").kind, "written");
+    assert.equal(updates.length, 2);
+    for (const update of reverse ? updates.toReversed() : updates) Y.applyUpdate(observer.ydoc, update, "peer");
+    const expected = ["<strong>cXup</strong> <em>mug</em>"];
+    settleCompound(writer, peer, expected);
+    assert.deepEqual(observer.document(), writer.document());
+  });
+
   for (const peerEdit of ["type", "remove"] as const) {
     test(`replace all against concurrent ${peerEdit}, ${reverse ? "peer" : "writer"} delivered first`, t => {
       const writer = noticeCopy(seed, 2), peer = noticeCopy(seed, 3);

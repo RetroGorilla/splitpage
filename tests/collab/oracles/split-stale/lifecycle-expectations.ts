@@ -1,5 +1,5 @@
-// why: literal data of prototypes/collab/test/split-stale/lifecycle-expectations.ts; its assertion reads prototype
-// evidence types and stays there. tools/test-collab-oracle-copies.mjs pins every copied declaration to the original.
+// why: prototypes/collab/test/split-stale/lifecycle-expectations.ts (removed; see commit 5b9b2b141)
+// supplied the digest-pinned data. Its assertion stays with the prototype evidence types.
 import type { SplitCounterTuple } from "../split-reconcile/lifecycle-expectations.ts";
 
 const control: readonly SplitCounterTuple[] = [

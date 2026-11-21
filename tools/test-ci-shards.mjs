@@ -21,17 +21,10 @@ assert.equal(smoke["runs-on"], "ubuntu-latest");
 assert.equal(smoke["timeout-minutes"], 90);
 assert.equal(smoke.if, "needs.changes.outputs.desktop == 'true' && needs.changes.outputs.tested != 'true'");
 assert.equal(changes.outputs.desktop, "${{ steps.classify.outputs.desktop }}");
-assert.equal(changes.outputs.collab, "${{ steps.classify.outputs.collab }}");
-assert.equal(changes.outputs.root_tests, "${{ steps.classify.outputs.root_tests }}");
-const collabTests = workflow.jobs["collab-tests"];
-assert.equal(checks.steps.find((s) => s.run === "node tools/build-preload.mjs && node tools/check-preload.mjs").if, "needs.changes.outputs.root_tests == 'true'");
+assert.equal(checks.steps.find((s) => s.run === "node tools/build-preload.mjs && node tools/check-preload.mjs").if, undefined);
 for (const s of checks.steps.filter((s) => /^node build\.mjs|playwright@/.test(s.run ?? "") || s.run?.includes("playwright@"))) {
   assert.equal(s.if, "needs.changes.outputs.app == 'true'");
 }
-for (const job of [checks, collabTests, workflow.jobs["npm-cache"]]) {
-  assert.ok(job.steps.find((s) => s.uses?.startsWith("actions/setup-node@")).with["cache-dependency-path"].split("\n").includes("prototypes/collab/package-lock.json"));
-}
-assert.ok(workflow.jobs["npm-cache"].steps.some((s) => s.run?.includes("npm ci --ignore-scripts --prefix prototypes/collab")));
 assert.deepEqual(rootShards, Array.from({ length: shardCount }, (_, index) => index + 1));
 assert.equal(shardCount, 8);
 assert.equal(tests.name, `Tests (\${{ matrix.shard }}/${shardCount})`);
@@ -69,13 +62,12 @@ const fastMutants = fastJob.steps.find((s) => s.run?.includes("tools/mutants.mjs
 assert.equal(fastMutants, 'shopt -s extglob\nnode tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --shard "${{ matrix.shard }}/6" --concurrency 4 --no-baseline --fail-on-survivor\n');
 assert.deepEqual(fastReport.needs, ["mutants-fast-baseline", "mutants-fast"]);
 assert.equal(fastReport.if, "failure()");
-assert.deepEqual(gate.needs, ["changes", "checks", "tests", "old-adapter-tests", "collab-tests", "desktop-smoke"]);
+assert.deepEqual(gate.needs, ["changes", "checks", "tests", "old-adapter-tests", "desktop-smoke"]);
 assert.equal(gate.if, "always()");
 assert.deepEqual(gate.permissions, { actions: "read" });
 const step = gate.steps[0];
 const individual = gate.steps[1];
-assert.equal(individual.if, "needs.changes.outputs.root_due == 'true' || needs.changes.outputs.old_adapter == 'true' || (needs.changes.outputs.code == 'true' && needs.changes.outputs.tested != 'true' && needs.changes.outputs.collab == 'true')");
-const collabCount = collabTests.strategy.matrix.shard.length;
+assert.equal(individual.if, "needs.changes.outputs.root_due == 'true' || needs.changes.outputs.old_adapter == 'true'");
 const oldCount = workflow.jobs["old-adapter-tests"].strategy.matrix.shard.length;
 assert.equal(oldCount, 3);
 assert.equal(workflow.jobs["old-adapter-tests"].name, `Old adapter tests (\${{ matrix.shard }}/${oldCount})`);
@@ -83,14 +75,10 @@ assert.deepEqual(individual.env, {
   GH_TOKEN: "${{ github.token }}",
   ROOT_TESTS: "${{ needs.changes.outputs.root_due }}",
   OLD_ADAPTER: "${{ needs.changes.outputs.old_adapter }}",
-  COLLAB: "${{ needs.changes.outputs.code == 'true' && needs.changes.outputs.tested != 'true' && needs.changes.outputs.collab == 'true' }}",
   ROOT_SHARDS: String(shardCount),
-  OLD_SHARDS: String(oldCount),
-  COLLAB_SHARDS: String(collabCount)
+  OLD_SHARDS: String(oldCount)
 });
 assert.equal(step.env.SMOKE, "${{ needs.desktop-smoke.result }}");
-assert.equal(step.env.COLLAB_TESTS, "${{ needs.collab-tests.result }}");
-assert.equal(step.env.COLLAB, "${{ needs.changes.outputs.collab }}");
 assert.equal(step.env.DESKTOP, "${{ needs.changes.outputs.desktop }}");
 assert.equal(step.env.TESTS, "${{ needs.tests.result }}");
 assert.equal(step.env.CHECKS, "${{ needs.checks.result }}");
@@ -100,7 +88,7 @@ assert.equal(step.env.ROOT_DUE, "${{ needs.changes.outputs.root_due }}");
 assert.equal(step.env.OLD_ADAPTER, "${{ needs.changes.outputs.old_adapter }}");
 assert.equal(step.env.OLD_ADAPTER_TESTS, "${{ needs.old-adapter-tests.result }}");
 assert.equal(changes.outputs.old_adapter, "${{ steps.classify.outputs.old_adapter }}");
-assert.equal(changes.outputs.root_due, "${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || (steps.classify.outputs.root_tests == 'true' && steps.tested.outputs.tested != 'true') }}");
+assert.equal(changes.outputs.root_due, "${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || (steps.classify.outputs.code == 'true' && steps.tested.outputs.tested != 'true') }}");
 assert.equal(step.env.TESTED, "${{ needs.changes.outputs.tested }}");
 assert.equal(checks.if, "needs.changes.outputs.code == 'true' && needs.changes.outputs.tested != 'true'");
 assert.equal(changes.outputs.tested, "${{ steps.tested.outputs.tested }}");
@@ -108,7 +96,7 @@ assert.equal(changes.outputs.tree, "${{ steps.tested.outputs.tree }}");
 assert.equal(changes.permissions.actions, "read");
 const lookup = changes.steps.find((s) => s.id === "tested");
 assert.equal(lookup.run, "node tools/ci-tested-tree.mjs ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && '--lookup' || '' }}");
-const ran = "needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.old-adapter-tests.result == 'success' || needs.old-adapter-tests.result == 'skipped') && (needs.collab-tests.result == 'success' || needs.collab-tests.result == 'skipped') && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && needs.changes.outputs.tree != ''";
+const ran = "needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.old-adapter-tests.result == 'success' || needs.old-adapter-tests.result == 'skipped') && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && needs.changes.outputs.tree != ''";
 const upload = gate.steps.find((s) => s.uses?.startsWith("actions/upload-artifact@"));
 assert.equal(upload.with.name, "ci-passed-tree-${{ needs.changes.outputs.tree }}");
 assert.equal(upload.if, ran);
@@ -130,7 +118,7 @@ for (const change of bash ? results : []) {
           for (const test of others) {
             for (const smokeResult of others) {
               const result = spawnSync(bash, ["-e", "-c", step.run], {
-                env: { ...process.env, CHANGES: change, CODE: code, ROOT_DUE: String(code === "true" && tested !== "true"), OLD_ADAPTER: "false", OLD_ADAPTER_TESTS: "skipped", COLLAB: "false", TESTED: tested, DESKTOP: desktop, CHECKS: check, TESTS: test, COLLAB_TESTS: "skipped", SMOKE: smokeResult },
+                env: { ...process.env, CHANGES: change, CODE: code, ROOT_DUE: String(code === "true" && tested !== "true"), OLD_ADAPTER: "false", OLD_ADAPTER_TESTS: "skipped", TESTED: tested, DESKTOP: desktop, CHECKS: check, TESTS: test, SMOKE: smokeResult },
                 encoding: "utf8",
                 timeout: 5000
               });
@@ -146,82 +134,44 @@ for (const change of bash ? results : []) {
     }
   }
 }
-for (const code of bash ? ["true", "false"] : []) {
-  for (const tested of ["true", "false", ""]) {
-    for (const collab of ["true", "false"]) {
-      for (const collabResult of results) {
-        const ranFresh = code === "true" && tested !== "true";
-        const others = ranFresh ? "success" : "skipped";
-        const result = spawnSync(bash, ["-e", "-c", step.run], {
-          env: { ...process.env, CHANGES: "success", CODE: code, ROOT_DUE: String(code === "true" && tested !== "true"), OLD_ADAPTER: "false", OLD_ADAPTER_TESTS: "skipped", COLLAB: collab, TESTED: tested, DESKTOP: "false", CHECKS: others, TESTS: others, COLLAB_TESTS: collabResult, SMOKE: "skipped" },
-          encoding: "utf8",
-          timeout: 5000
-        });
-        const wantCollab = ranFresh && collab === "true" ? "success" : "skipped";
-        assert.equal(result.status === 0, collabResult === wantCollab, JSON.stringify({ code, tested, collab, collabTests: collabResult, error: result.error?.message }));
-        cases++;
-      }
-    }
-  }
-}
-for (const check of bash ? results : []) {
-  for (const test of results) {
-    for (const smokeResult of results) {
-      for (const collabResult of results) {
-        const result = spawnSync(bash, ["-e", "-c", step.run], {
-          env: { ...process.env, CHANGES: "success", CODE: "true", ROOT_DUE: "false", OLD_ADAPTER: "false", OLD_ADAPTER_TESTS: "skipped", COLLAB: "true", TESTED: "false", DESKTOP: "false", CHECKS: check, TESTS: test, COLLAB_TESTS: collabResult, SMOKE: smokeResult },
-          encoding: "utf8",
-          timeout: 5000
-        });
-        const expected = check === "success" && test === "skipped" && smokeResult === "skipped" && collabResult === "success";
-        assert.equal(result.status === 0, expected, JSON.stringify({ prototypeOnly: true, check, test, smoke: smokeResult, collabTests: collabResult, error: result.error?.message }));
-        cases++;
-      }
-    }
-  }
-}
 if (bash) {
   const shardJobs = (label, count) => Array.from({ length: count }, (_, index) => `${label} (${index + 1}/${count})\t1\tsuccess`);
   const rootJobs = shardJobs("Tests", shardCount);
   const oldJobs = shardJobs("Old adapter tests", oldCount);
-  const prototypeJobs = shardJobs("Collaboration prototype tests", collabCount);
-  for (const { jobs, root = "true", collab = "true", old = "false", apiStatus = "0", pass } of [
-    { jobs: [...rootJobs, ...prototypeJobs], pass: true },
-    { jobs: [rootJobs[0].replace("\t1\tsuccess", "\t2\tsuccess"), ...rootJobs, ...prototypeJobs], pass: true },
-    { jobs: [...rootJobs, ...prototypeJobs, rootJobs[0].replace("\t1\tsuccess", "\t2\tcancelled")], pass: false },
-    { jobs: rootJobs, collab: "false", pass: true },
-    { jobs: [...rootJobs, ...prototypeJobs, ...oldJobs], old: "true", pass: true },
-    { jobs: [...rootJobs, ...prototypeJobs], old: "true", pass: false },
-    { jobs: [...rootJobs, ...prototypeJobs, ...oldJobs.slice(1), oldJobs[0].replace("success", "cancelled")], old: "true", pass: false },
-    { jobs: prototypeJobs, root: "false", pass: true },
-    { jobs: [...rootJobs.slice(1), ...prototypeJobs], pass: false },
-    { jobs: [...rootJobs, ...prototypeJobs.slice(1)], pass: false },
-    { jobs: [...rootJobs, ...prototypeJobs, rootJobs[0]], pass: false },
-    ...["failure", "cancelled", "skipped"].flatMap((status) => [
-      { jobs: [...rootJobs.slice(1), rootJobs[0].replace("success", status), ...prototypeJobs], pass: false },
-      { jobs: [...rootJobs, ...prototypeJobs.slice(1), prototypeJobs[0].replace("success", status)], pass: false }
-    ]),
-    { jobs: [...rootJobs, ...prototypeJobs], apiStatus: "1", pass: false }
+  for (const { jobs, root = "true", old = "false", apiStatus = "0", pass } of [
+    { jobs: rootJobs, pass: true },
+    { jobs: [rootJobs[0].replace("\t1\tsuccess", "\t2\tsuccess"), ...rootJobs], pass: true },
+    { jobs: [...rootJobs, rootJobs[0].replace("\t1\tsuccess", "\t2\tcancelled")], pass: false },
+    { jobs: [...rootJobs, ...oldJobs], old: "true", pass: true },
+    { jobs: rootJobs, old: "true", pass: false },
+    { jobs: [...rootJobs, ...oldJobs.slice(1), oldJobs[0].replace("success", "cancelled")], old: "true", pass: false },
+    { jobs: oldJobs, root: "false", old: "true", pass: true },
+    { jobs: rootJobs.slice(1), pass: false },
+    { jobs: [...rootJobs, rootJobs[0]], pass: false },
+    ...["failure", "cancelled", "skipped"].map((status) => ({
+      jobs: [...rootJobs.slice(1), rootJobs[0].replace("success", status)], pass: false
+    })),
+    { jobs: rootJobs, apiStatus: "1", pass: false }
   ]) {
     const mock = 'gh() { printf "%s\\n" "$MOCK_JOBS"; return "$MOCK_STATUS"; }\n';
     const result = spawnSync(bash, ["-e", "-c", mock + individual.run], {
       env: {
         ...process.env, MOCK_JOBS: jobs.join("\n"), MOCK_STATUS: apiStatus,
-        ROOT_TESTS: root, OLD_ADAPTER: old, COLLAB: collab, ROOT_SHARDS: String(shardCount), OLD_SHARDS: String(oldCount), COLLAB_SHARDS: String(collabCount)
+        ROOT_TESTS: root, OLD_ADAPTER: old, ROOT_SHARDS: String(shardCount), OLD_SHARDS: String(oldCount)
       },
       encoding: "utf8",
       timeout: 5000
     });
     assert.equal(result.error, undefined);
-    assert.equal(result.status === 0, pass, JSON.stringify({ jobs, root, collab, apiStatus, output: result.stdout, error: result.stderr }));
+    assert.equal(result.status === 0, pass, JSON.stringify({ jobs, root, old, apiStatus, output: result.stdout, error: result.stderr }));
     cases++;
   }
   for (const oldDue of [true, false]) {
     for (const status of results) {
       const result = spawnSync(bash, ["-e", "-c", step.run], {
         env: { ...process.env, CHANGES: "success", CODE: "false", ROOT_DUE: "true", OLD_ADAPTER: String(oldDue),
-          COLLAB: "false", TESTED: "true", DESKTOP: "false", CHECKS: "skipped", TESTS: "success",
-          OLD_ADAPTER_TESTS: status, COLLAB_TESTS: "skipped", SMOKE: "skipped" },
+          TESTED: "true", DESKTOP: "false", CHECKS: "skipped", TESTS: "success",
+          OLD_ADAPTER_TESTS: status, SMOKE: "skipped" },
         encoding: "utf8",
         timeout: 5000
       });
