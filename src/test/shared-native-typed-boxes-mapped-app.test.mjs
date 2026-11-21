@@ -6,12 +6,13 @@ import { assertReplicasAgree } from "../../tests/collab/agreement.ts";
 import { openNativeSession } from "../adapters/collab/native/session.ts";
 import { applyNativePeerUpdate } from "../adapters/collab/native/peer-update.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
-import { sanitizeHtml } from "../bootstrap/richtext.ts";
+import { fromHtml, sanitizeHtml, scriptCellOf } from "../bootstrap/richtext.ts";
 import { adoptReplacement, currentDocument, sharedRecoverySession, sharedSession } from "../bootstrap/wiring/session-owner.ts";
 import { enterSharedSession, leaveRunningSharedSession } from "../bootstrap/wiring/shared-session.ts";
 import { openNativeEditor } from "../bootstrap/wiring/native-shared-session.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { sharedCommandRefusalNotice } from "../bootstrap/wiring/ports/shared-command-notices.ts";
+import { commentRange } from "../core/text/edits.ts";
 import { closeBrollPage, openBrollPage, openBrollPanel, runBrollRefresh } from "../features/broll/panel.ts";
 import { closeCommentComposer, openCommentsPanel, renderComments } from "../features/comments/comments.ts";
 import { setCellSelection } from "../features/common/cell-selection.ts";
@@ -24,6 +25,9 @@ await bootApp();
 after(closeApp);
 
 const actor = "Editor";
+const sharedDocId = "d00000000000000000000000000000001";
+const originalThreadId = "thread";
+const selection = { from: 1, to: 2 };
 const refused = "This is not available in a shared session yet.";
 const inlineMug = '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Mug" contenteditable="false">Mug</span>';
 const source = {
@@ -31,9 +35,9 @@ const source = {
   paragraphsDecided: true,
   title: "Typed record boxes",
   rows: [{ id: "r1", audioText: "One" }, { id: "r2", audioText: "Two" }],
-  comments: [{ id: "thread", rowId: "r1", field: "audioText", author: "Reader", body: "Original" }],
+  comments: [{ id: originalThreadId, rowId: "r1", field: "audioText", author: "Reader", body: "Original" }],
   people: [{ id: "p1", name: "Crew" }],
-  productionTags: [{ cat: "prop", name: "Mug" }, { cat: "prop", name: "Lamp" }, { cat: "gear", name: "Drone", owner: "p1" }],
+  productionTags: [{ cat: "prop", name: "Mug" }, { cat: "gear", name: "Drone", owner: "p1" }],
   brollShots: [{ id: "b1", name: "City", origin: "list", owner: "p1", props: [{ name: "Mug" }] }]
 };
 const orders = ["local-first", "remote-first"];
@@ -57,7 +61,9 @@ async function enter(t, fields = {}) {
   const { ports, errors } = entrySwitchFixture();
   ports.commandRefused = sharedCommandRefusalNotice(notices);
   ports.editor = () => actor;
-  adoptReplacement(migrateRows(structuredClone({ ...source, ...fields })));
+  ports.docId = () => sharedDocId;
+  const seed = { ...source, ...fields };
+  adoptReplacement(migrateRows(structuredClone(seed)));
   const show = t.mock.method(notices, "show", () => {});
   let native;
   assert.deepEqual(await enterSharedSession(ports, (doc, failed) => {
@@ -72,7 +78,17 @@ async function enter(t, fields = {}) {
     document.activeElement?.blur();
     assert.deepEqual(errors, []);
   });
-  return { native, warnings: () => show.mock.calls.filter(call => call.arguments[1] === "warn").map(call => call.arguments[0]) };
+  const shown = () => show.mock.calls.map(call => call.arguments);
+  return { native, seed, shown, warnings: () => shown().filter(([, level]) => level === "warn").map(([message]) => message) };
+}
+
+function referenceDocument(t, seed) {
+  const document = migrateRows(structuredClone({ ...seed, docId: sharedDocId }));
+  const reference = openNativeSession({
+    kind: "document", document, conversion: { cells: scriptCellOf, creation: sharedDocId, at: new Date(0).toISOString(), by: actor }
+  }, { actor, sanitize: sanitizeHtml });
+  t.after(reference.close);
+  return reference.document();
 }
 
 function clone(t, state) {
@@ -173,14 +189,20 @@ function tagBulk() {
 
 const person = record => doc => [doc.people.map(entry => entry.name).sort(),
   doc.people.find(entry => entry.id === record(doc).owner)?.name ?? ""];
-const prop = doc => shot(doc).props.map(entry => entry.name);
+function shotPropsAndRegistry(doc) {
+  const registeredProps = doc.productionTags.filter(entry => entry?.cat === "prop");
+  const props = shot(doc).props;
+  return [props.map(entry => entry.name), registeredProps.map(entry => entry.name).sort(),
+    props.every(prop => registeredProps.some(entry => entry.id === prop.id && entry.name === prop.name))];
+}
 const notes = doc => shot(doc).notes;
 const location = doc => shot(doc).location;
 const newPerson = [["Camera", "Crew"], "Camera"];
 const crew = [["Crew"], "Crew"];
 const unassigned = [["Crew"], ""];
 const shotPerson = { open: () => editShot("person-new"), box: shotBox("person"), text: "Camera", read: person(shot), before: crew, after: newPerson };
-const shotProp = { open: openShot, box: shotBox("prop"), text: "Lamp", read: prop, before: ["Mug"], after: ["Mug", "Lamp"] };
+const shotProp = { open: openShot, box: shotBox("prop"), text: "Lamp", read: shotPropsAndRegistry,
+  before: [["Mug"], ["Mug"], true], after: [["Mug", "Lamp"], ["Lamp", "Mug"], true] };
 const shotLocation = { open: () => editShot("loc-edit"), box: shotBox("loc"), text: "Quay", read: location };
 const shotNotes = { open: openShot, box: shotBox("notes"), text: "Wide", read: notes, submit: blur };
 const mugPerson = { open: () => { openMug(); click(tagAction("person-new")); }, box: tagBox("person"), text: "Camera",
@@ -272,7 +294,8 @@ for (const route of routes) for (const order of orders) {
 
 test("inline tag rename via Enter keeps the refused draft, focus and selection", async t => {
   const visualText = `A ${inlineMug}`;
-  const { native, warnings } = await enter(t, { rows: [source.rows[0], { ...source.rows[1], visualText }] });
+  const { native, seed, shown } = await enter(t, { rows: [source.rows[0], { ...source.rows[1], visualText }] });
+  const originalDocument = referenceDocument(t, seed);
   const peer = clone(t, native.encodeState());
   openMug();
   click(tagAction("rename"));
@@ -286,16 +309,25 @@ test("inline tag rename via Enter keeps the refused draft, focus and selection",
     const box = need(selector);
     assert.equal(document.activeElement, box);
     assert.deepEqual([box.value, box.selectionStart, box.selectionEnd], ["Cup", 1, 2]);
-    assert.deepEqual(warnings(), [refused]);
+    assert.deepEqual(shown(), [[refused, "warn"]]);
   }
+  assert.deepEqual(currentDocument(), originalDocument, "after redraw before Escape");
   key(need(selector), "Escape");
   assert.equal(find(selector), null);
   exchange(native, peer, "local-first");
   await Promise.resolve();
-  assertCopies(t, native, peer, "local-first", doc => [doc.productionTags.map(entry => entry.name).sort(), doc.rows[1].visualText],
-    [["Drone", "Lamp", "Mug"], visualText], "Two");
+  assertCopies(t, native, peer, "local-first", doc => doc, originalDocument, "Two");
   assert.equal(native.commands.undo().kind, "unchanged");
 });
+
+function threadsWithAnchors(doc) {
+  return doc.comments.map(entry => {
+    if (entry.id === originalThreadId) return entry;
+    const row = doc.rows.find(row => row.id === entry.rowId);
+    return [entry.rowId, entry.field, entry.quotedText, entry.author, entry.body, entry.replies,
+      entry.anchorId === entry.id, commentRange(fromHtml(row?.[entry.field]), entry.id)];
+  });
+}
 
 for (const reply of [false, true]) for (const order of orders) {
   test(`${reply ? "reply" : "comment"} Post keeps the held body and uses the session author, ${order}`, async t => {
@@ -305,7 +337,7 @@ for (const reply of [false, true]) for (const order of orders) {
     else {
       const cell = need('#rows .cell-editable[data-id="r1"][data-field="audioText"]');
       cell.focus();
-      setCellSelection(cell, 0, 3);
+      setCellSelection(cell, selection.from, selection.to);
       cell.closest(".field-wrap").querySelector('[data-cmd="comment"]').click();
     }
     const box = reply ? '.reply-composer[data-for="thread"] .cell-editable' : "#comment-body-editable";
@@ -319,12 +351,15 @@ for (const reply of [false, true]) for (const order of orders) {
       return need(box).textContent;
     };
     assert.equal(visible(), "");
+    const originalThreads = reply ? [] : referenceDocument(t, session.seed).comments;
+    const newThread = ["r1", "audioText", "n", actor, text, [], true, selection];
     await retryDraft(t, session, {
       box, text, visible, redraw: openCommentsPanel,
       type: () => { need(box).textContent = text; input(need(box)); },
-      submit: () => click(post), before: [], after: [[actor, text]],
-      read: doc => (reply ? doc.comments.find(entry => entry.id === "thread").replies : doc.comments.filter(entry => entry.id !== "thread"))
-        .map(entry => [entry.author, entry.body])
+      submit: () => click(post), before: originalThreads, after: reply ? [[actor, text]] : [...originalThreads, newThread],
+      read: reply
+        ? doc => doc.comments.find(entry => entry.id === originalThreadId).replies.map(entry => [entry.author, entry.body])
+        : threadsWithAnchors
     }, order);
     renderComments();
     if (reply) assert.equal(find(box), null);
