@@ -35,6 +35,7 @@ export type WriterReplayPlacement =
 export interface FlowWriter {
   readonly settle?: () => boolean;
   readonly find: WriterFindAccess;
+  readonly discardVisual?: () => void;
   readonly openVisual: (rowId: string, highlight?: { from: number; to: number }) => void;
   readonly isCurrent: () => boolean;
   readonly finish: () => FlowRange | null;

@@ -357,6 +357,10 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
       else observer.disconnect();
       surface.setSelectionListener(active);
     },
+    discardVisual: () => {
+      visual?.dispose(true);
+      visual = null;
+    },
     dispose: () => {
       if (visual?.settle && !visual.settle()) return false;
       if (surface.settle && !surface.settle()) return false;
