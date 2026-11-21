@@ -5,7 +5,7 @@ import type { ReportPort } from "../../application/session/ports.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
 import { isBlankBeat, swapBeatsCommand } from "../../application/commands/rows.ts";
 import { sceneBeforeBeat, scenesInOrder, storedSceneName } from "../../core/document/scenes.ts";
-import { beatPos, headingPos } from "../../core/flow/flow.ts";
+import { beatPos, HEADING_MARKER, headingPos } from "../../core/flow/flow.ts";
 import { breakLine, deleteRange, markThroughout, replaceText, sliceCell, typingMarks } from "../../core/text/edits.ts";
 import { cellLength, cleanText, projection } from "../../core/text/runs.ts";
 import type { Marks, Run } from "../../core/text/runs.ts";
@@ -20,6 +20,7 @@ import { narrationAt, narrationSurfaceOf, shownNarrationSurface, visualTextSurfa
 import { rowDrag } from "./editor-owners.ts";
 import type { NativeTextSurface } from "./native-narration-surfaces.ts";
 import { documentReader } from "./ports/document.ts";
+import { notices } from "./ports/effects.ts";
 import { editAllowed } from "./session-owner.ts";
 import { sharedUndoRoute } from "./undo.ts";
 import { writerControls } from "./writer.ts";
@@ -190,6 +191,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     movePaint.clear();
   }
 
+  const headingCandidates = new Set<string>();
+
   function shownWriterBeat(cell: Element, beat: string): boolean {
     const row = documentReader.read(doc => doc?.rows.find(item => item.id === beat));
     return !!row && writerNarration.painted(cell, row);
@@ -359,6 +362,11 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         if (selection && result.selection) selection.inserted = result.selection;
       }
       publish(buffered);
+      if (result.kind === "written" && buffered.surface === writerNarration && !buffered.composition &&
+          buffered.selection.from < HEADING_MARKER.length && buffered.text) {
+        const cell = writerNarration.cell(buffered.beat);
+        if (cell?.textContent?.startsWith(HEADING_MARKER)) headingCandidates.add(buffered.beat);
+      }
     } catch (error) {
       report(error);
     } finally { placement = null; }
@@ -479,6 +487,20 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (draft?.composing) { refuseCommand(PENDING); return; }
     const caret = structureCaret(cell, true);
     if (!caret) return;
+    if (caret.surface === writerNarration && !caret.range && headingCandidates.has(caret.beat)) {
+      const step = native.commands.finalizeHeading.withSelection(caret.before, caret.beat, caret.offset, true);
+      if (step.result.kind === "refused") { refuseCommand(step.result.reason); return; }
+      if (step.result.kind === "written") {
+        const { beat, offset, notice } = step.result;
+        headingCandidates.delete(caret.beat);
+        step.recordAfter(caretAnchor(beat, offset));
+        publish();
+        const fresh = writerNarration.cell(beat);
+        if (fresh) writerNarration.place(fresh, beat, offset, offset, true);
+        if (notice) notices.show(notice, "warn");
+        return;
+      }
+    }
     const step = caret.range ? native.commands.deleteAndSplit.withSelection(caret.backward ?? caret.range, caret.range)
       : native.commands.splitRow.withSelection(caret.before, caret.before);
     if (step.result.kind === "refused") { refuseCommand(step.result.reason); return; }

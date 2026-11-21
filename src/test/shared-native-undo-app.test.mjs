@@ -122,6 +122,31 @@ function writer(t) {
   };
 }
 
+const markdownEnter = () => press(root(), "Enter", { ctrlKey: false });
+
+test("Writer: Enter converts a typed Markdown heading and replays the narration caret", async t => {
+  const show = await enter(t, [{ id: "r1", audioText: "Intro", visualText: "Look" }]);
+  const view = writer(t);
+  view.caret("r1", 0);
+  typeKeys(root(), "# ");
+  view.caret("r1", 7);
+  typeKeys(root(), "!");
+  assert.equal(markdownEnter(), true);
+  assert.deepEqual(hook.read().app.sections.map(({ name, firstSceneId }) => [name, firstSceneId]), [["Intro!", "r1"]]);
+  assert.equal(app(), "");
+  assert.equal(hook.read().app.rows[0].visualText, "Look");
+  assert.deepEqual(view.at(), ["r1", 0, 0]);
+  assert.equal(press(root(), "z"), true);
+  assert.equal(app(), "# Intro!");
+  assert.deepEqual(view.at(), ["r1", 8, 8]);
+  assert.equal(press(root(), "y"), true);
+  assert.equal(app(), "");
+  assert.deepEqual(view.at(), ["r1", 0, 0]);
+  await Promise.resolve();
+  assert.deepEqual(hook.read().peer, hook.read().app);
+  assert.equal(show.mock.callCount(), 0);
+});
+
 const views = {
   Split: {
     open: () => {},

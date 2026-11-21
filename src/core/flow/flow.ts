@@ -735,6 +735,24 @@ export function enterInHeading(doc: FlowDoc, pos: FlowPos, ports: FlowPorts): Fl
 
 export const HEADING_MARKER = "# ";
 
+export function headingLine(cell: readonly Run[], enterAt: number | null, hasRunOn: boolean) {
+  const text = projection(cell);
+  const newline = text.indexOf("\n"), lineEnd = newline === -1 ? text.length : newline;
+  const end = enterAt === null ? lineEnd : Math.min(enterAt, lineEnd);
+  const name = text.slice(HEADING_MARKER.length, end).trim();
+  if (!name) return {};
+  if (sliceCell(cell, 0, end).some(run => !!run.marks.tag || !!run.marks.cmt?.length)) {
+    return { notice: "A scene header can't hold tags or comments." };
+  }
+  if (enterAt === null && newline === -1 && hasRunOn) {
+    return { notice: "A scene header can't hold several beats. Press Enter after the header's words." };
+  }
+  if (Array.from(name).length > SCENE_NAME_MAX) {
+    return { notice: "A scene name can be up to " + SCENE_NAME_MAX + " characters, so this stays as narration." };
+  }
+  return { name, restStart: end < text.length && text[end] === "\n" ? end + 1 : end };
+}
+
 export function isPendingHeading(doc: FlowDoc, rowId: string, ports: FlowPorts): boolean {
   const index = indexOfRow(doc, rowId);
   const row = doc.rows[index];
@@ -759,24 +777,11 @@ export function finalizeHeading(doc: FlowDoc, rowId: string, enterAt: number | n
   if (!row || !isPendingHeading(doc, rowId, ports)) return null;
   const cell = ports.cells(row.audioText);
   const text = projection(cell);
-  const lineEnd = text.indexOf("\n") === -1 ? text.length : text.indexOf("\n");
-  const end = enterAt === null ? lineEnd : Math.min(enterAt, lineEnd);
-  const name = text.slice(HEADING_MARKER.length, end).trim();
   const fallback = keep ?? caretAt(beatPos(row.id, enterAt ?? text.length));
-  if (!name) return withoutMarker(doc, index, ports, fallback);
-  if (sliceCell(cell, 0, end).some(run => !!run.marks.tag || !!run.marks.cmt?.length)) {
-    return withoutMarker(doc, index, ports, fallback, "A scene header can't hold tags or comments.");
-  }
   const follower = doc.rows[index + 1];
   const anchors = sceneAnchors(doc);
-  const hasRunOn = lineEnd === text.length && !!follower && !startsParagraph(doc, index + 1);
-  if (enterAt === null && hasRunOn) {
-    return withoutMarker(doc, index, ports, fallback, "A scene header can't hold several beats. Press Enter after the header's words.");
-  }
-  if (Array.from(name).length > SCENE_NAME_MAX) {
-    return withoutMarker(doc, index, ports, fallback, "A scene name can be up to " + SCENE_NAME_MAX + " characters, so this stays as narration.");
-  }
-  const restStart = end < text.length && text[end] === "\n" ? end + 1 : end;
+  const { name, restStart, notice } = headingLine(cell, enterAt, !!follower && !startsParagraph(doc, index + 1));
+  if (restStart === undefined) return withoutMarker(doc, index, ports, fallback, notice);
   const rest = sliceCell(cell, restStart);
   const rows = doc.rows.slice();
   const existing = anchors.get(row.id);

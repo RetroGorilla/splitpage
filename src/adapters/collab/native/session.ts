@@ -22,7 +22,7 @@ import { beforeNativeWrite, openNativeScript, withNativeCommand } from "./script
 import type { NativeScript } from "./script.ts";
 import { createNativeSizeTracker, resolveNativeSizeOptions } from "./size.ts";
 import type { NativeSessionSize, NativeSizeOptions } from "./size.ts";
-import { deleteAndSplitNativeRow, joinNativeRow, removeNativeRows, splitNativeRow, unjoinNativeRow } from "./structure-commands.ts";
+import { deleteAndSplitNativeRow, finalizeNativeHeading, joinNativeRow, removeNativeRows, splitNativeRow, unjoinNativeRow } from "./structure-commands.ts";
 import { anchorNativeText, captureNativeTextIdentity, deleteNativeText, replaceAllNativeText, replaceNativeText, resolveNativeTextPoint, resolveNativeUndoSelection, snapshotNativeUndoAnchor, typeNativeText } from "./text-commands.ts";
 import type { NativeEditStamp, NativeTextPlacement, NativeTextRange, NativeTextTarget, NativeUndoSelectionInput } from "./text-commands.ts";
 import { openNativeUndo } from "./undo-commands.ts";
@@ -283,6 +283,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     unjoinRow: bind(unjoinNativeRow, writing),
     removeRows: bind(removeNativeRows, writing),
     createHeading: bind(createNativeHeading, adding),
+    finalizeHeading: bind(finalizeNativeHeading, adding),
     renameHeading: bind(renameNativeHeading, writing),
     removeHeading: bind(removeNativeHeading, writing),
     restoreHeading: bind(restoreNativeHeading, adding),
