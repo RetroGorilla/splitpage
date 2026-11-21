@@ -321,11 +321,14 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     return anchored.kind === "anchored" ? anchored.range : null;
   }
 
-  function structureCaret(cell: Element) {
+  function structureCaret(cell: Element, selected = false) {
     const refusal = admissionRefusal();
     if (refusal) { session.refuse(refusal); return null; }
-    const selection = cellSelection(cell);
-    if (!selection || selection.from !== selection.to) { session.refuse(UNSUPPORTED); return null; }
+    const directed = readSelection(cell, document.getSelection());
+    if (!directed || !selected && directed.anchor !== directed.head) { session.refuse(UNSUPPORTED); return null; }
+    const backward = directed.anchor > directed.head;
+    const selection = { from: Math.min(directed.anchor, directed.head), to: Math.max(directed.anchor, directed.head) };
+    if (touchesProtectedText(cell, selection)) { session.refuse(UNSUPPORTED); return null; }
     const current = flushForInput(cell, selection, false);
     if (!current) return null;
     const beat = current.cell.getAttribute("data-id") ?? "";
@@ -335,19 +338,30 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       session.refuse(STALE);
       return null;
     }
-    const offset = current.selection.from;
-    const point = native.narrationCaret(beat, offset);
+    const { from: offset, to } = current.selection;
+    const point = native.narrationCaret(beat, offset, offset !== to);
     const before = point && caretAnchor(point.beat, point.offset);
     if (!point || !before) { session.refuse(STALE); return null; }
-    return { beat, offset, before, surface };
+    if (offset === to) {
+      if (selection.from !== selection.to) { session.refuse(STALE); return null; }
+      return { beat, offset, before, surface, range: null, backward: null };
+    }
+    const end = native.narrationCaret(beat, to);
+    if (!end || point.beat !== end.beat) { session.refuse(UNSUPPORTED); return null; }
+    const anchored = native.commands.anchorText(before.target, point.offset, end.offset);
+    if (anchored.kind === "refused") { session.refuse(anchored.reason); return null; }
+    const right = backward ? caretAnchor(end.beat, end.offset) : null;
+    return { beat, offset, before, surface, range: anchored.range, backward: right && { anchor: right, head: before } };
   }
 
   function split(cell: Element): void {
     if (draft?.composing) { session.refuse(PENDING); return; }
-    const caret = structureCaret(cell);
+    const caret = structureCaret(cell, true);
     if (!caret) return;
-    const step = native.commands.splitRow.withSelection(caret.before, caret.before);
+    const step = caret.range ? native.commands.deleteAndSplit.withSelection(caret.backward ?? caret.range, caret.range)
+      : native.commands.splitRow.withSelection(caret.before, caret.before);
     if (step.result.kind === "refused") { session.refuse(step.result.reason); return; }
+    if (step.result.kind === "unchanged") return;
     const beat = step.result.created;
     step.recordAfter(caretAnchor(beat, 0));
     publish();

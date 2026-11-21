@@ -441,17 +441,36 @@ for (const [name, kind] of Object.entries(views)) {
     assert.equal(show.mock.callCount(), 0);
   });
 
-  test(name + ": Enter refuses a selection or an open composition", async t => {
+  test(name + ": Enter deletes the selection and splits with one undo step after buffered typing", async t => {
+    const show = await enter(t, twoBeats), view = kind.open(t);
+    kind.caret(view, "r1", 2);
+    typeKeys(kind.surface(), "x");
+    kind.caret(view, "r1", 1, 4);
+    assert.equal(hook.nativePeer.type("r2", 0, "Y").kind, "written");
+    assert.equal(press(kind.surface(), "Enter", { ctrlKey: false }), true);
+    const created = hook.read().app.rows[1].id;
+    assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["H", "lo", "YWorld"]);
+    assert.deepEqual(kind.at(view, created), [created, 0, 0]);
+    assert.equal(press(document.activeElement, "z"), true);
+    assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["Hexllo", "YWorld"]);
+    assert.deepEqual(kind.at(view), ["r1", 1, 4]);
+    assert.equal(press(document.activeElement, "y"), true);
+    assert.deepEqual(kind.at(view, created), [created, 0, 0]);
+    assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["H", "lo", "YWorld"]);
+    await Promise.resolve();
+    assert.deepEqual(hook.read().peer, hook.read().app);
+    assert.equal(show.mock.callCount(), 0);
+  });
+
+  test(name + ": Enter refuses a selection during composition", async t => {
     const show = await enter(t), view = kind.open(t);
     kind.caret(view, "r1", 1, 3);
-    assert.equal(press(kind.surface(), "Enter", { ctrlKey: false }), true);
-    kind.caret(view, "r1", 2);
     compose(kind.surface(), "start", "");
     assert.equal(press(kind.surface(), "Enter", { ctrlKey: false }), true);
     assert.equal(beforeInput(kind.surface(), "insertParagraph", null), true);
     compose(kind.surface(), "end", "");
     assert.equal(app(), "Hello");
-    assert.equal(show.mock.callCount(), 3);
+    assert.equal(show.mock.callCount(), 2);
   });
 
   test(name + ": recognised structure keys cancel the browser default during composition", async t => {
