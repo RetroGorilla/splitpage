@@ -890,11 +890,11 @@
     },
     {
       "label": "route: the public leave answers ok without leaving",
-      "file": "tests/collab/legacy-app/shared-test.ts",
+      "file": "src/bootstrap/wiring/shared-test.ts",
       "find": "    try { return leaveRunningSharedSession(); } finally { switching = false; }",
       "replace": "    try { return { ok: true }; } finally { switching = false; }",
       "tests": [
-        "src/test/shared-hook-routes-app.test.mjs"
+        "src/test/shared-native-routes-lifecycle-app.test.mjs"
       ]
     },
     {
@@ -949,6 +949,7 @@
       "find": "  if (left) faults.attempt(() => { left(false); });\n",
       "replace": "",
       "tests": [
+        "src/test/shared-hook-routes-app.test.mjs",
         "tests/bootstrap/shared-switch.test.ts"
       ]
     },
@@ -985,7 +986,8 @@
       "find": "  faults.attempt(() => { now.backend.drop?.(); });\n",
       "replace": "",
       "tests": [
-        "tests/bootstrap/shared-switch.test.ts"
+        "tests/bootstrap/shared-switch.test.ts",
+        "src/test/shared-hook-routes-app.test.mjs"
       ]
     },
     {

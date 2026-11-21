@@ -28,7 +28,7 @@ after(() => { listenerProto.addEventListener = realAdd; listenerProto.removeEven
 const app = await import("../bootstrap/app.ts");
 const { startupReady } = await import("../application/startup-signal.ts");
 const { changeSet } = await import("../application/session/change-set.ts");
-const { adoptReplacement, currentDocument, runCommand, sharedSession } = await import("../bootstrap/wiring/session-owner.ts");
+const { adoptReplacement, currentDocument, liveSession, runCommand, sharedSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { writerControls } = await import("../bootstrap/wiring/writer.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
@@ -37,9 +37,20 @@ const { draftSource, draftsTesting } = await import("../bootstrap/wiring/drafts.
 const { useDesktopForTest, restoreDesktop } = await import("../adapters/desktop/desktop-port.ts");
 const { unsavedChanges } = await import("../bootstrap/wiring/save-owners.ts");
 const { sharedSessionParts } = await import("../bootstrap/wiring/shared-session.ts");
+const { currentHome, documentLocation, setHome } = await import("../bootstrap/wiring/location-owner.ts");
+const { documentReader } = await import("../bootstrap/wiring/ports/document.ts");
+const { openingStatus } = await import("../bootstrap/wiring/ports/transitions.ts");
+const { recoveryPanelBinding } = await import("../bootstrap/wiring/recovery-panel.ts");
 let hook = window.__legacySharedTest;
 
 const ROWS = [{ id: "r1", audioText: "Hello", visualText: "" }];
+
+const edit = text => {
+  const rowId = currentDocument().rows[0].id;
+  assert.equal(runCommand({ name: "route-edit", needs: "edit", plan: () => ({ changes: changeSet({ cells: [{ rowId, field: "audioText" }] }),
+    apply: live => { live.rows[0].audioText = text; } }) }).kind, "applied");
+  undoOwner().flush();
+};
 
 function script(rows) {
   writerControls().closeWriter();
@@ -165,6 +176,114 @@ for (const way of WAYS_OUT) {
       if (document.removeEventListener !== remove) delete document.removeEventListener;
       if (!window.__legacySharedTest) await restartApp();
       if (sharedSession()) hook.leave();
+      await flushDraftNow();
+      restoreDesktop();
+    }
+  });
+}
+
+test("rule 166: stopping the app when even the forced leave cannot land ends with no shared parts and no hook, and the restarted app enters", async () => {
+  const store = draftStore(), report = console.error, reported = [], leave = recoveryPanelBinding.leave;
+  try {
+    script(ROWS);
+    const listeners = listenerCounts();
+    assert.deepEqual(await hook.enter(), { ok: true });
+    hook.peer.type("r1", 0, "Shared "); hook.peer.deliver();
+    selectionVisualComposition();
+    recoveryPanelBinding.leave = () => { throw new Error("the recovery panel cannot leave"); };
+    console.error = error => { reported.push(String(error)); };
+    const remove = document.removeEventListener;
+    let started = null, dropped = null;
+    document.removeEventListener = function (type, listener, options) {
+      if (type === "compositionstart" && options === true) started = listener;
+      else if (type === "compositionend" && options === true && listener === started) {
+        dropped ??= { selectionVisual: document.querySelectorAll('.wr-flow-visual-text[data-field="selection-visual"]').length,
+          shared: sharedSession(), writer: writerControls() !== null };
+      }
+      return remove.call(this, type, listener, options);
+    };
+    try { app.stopApp(); } finally { delete document.removeEventListener; console.error = report; recoveryPanelBinding.leave = leave; }
+    assert.ok(reported.some(text => text.includes("ended without landing a standalone copy")), reported.join("\n"));
+    assert.equal(reported.some(text => text.includes("could not finish")), false, "the Writer tore down whatever its surfaces held:\n" + reported.join("\n"));
+    assert.deepEqual(dropped, { selectionVisual: 0, shared: true, writer: true }, "at the drop the shared Writer and its Visual box were replaced by a standalone Writer");
+    assert.deepEqual([sharedSessionParts() === null, window.__legacySharedTest === undefined, document.querySelectorAll(".wr-flow-visual-box").length],
+      [true, true, 0], "no shared parts, no hook and no Visual box left mounted");
+    assert.equal(store.writes.some(write => write.shared), false, "nothing from the shared stretch reached the draft store");
+    await restartApp();
+    assert.notEqual(draftSource.detachRefusal(), "detached", "the restarted app drafts again");
+    draftStore();
+    script(ROWS);
+    assert.ok(writerControls().writerFlowControl(), "a standalone Writer opens");
+    assert.deepEqual(listenerCounts(), listeners);
+    assert.deepEqual(await hook.enter(), { ok: true });
+    assert.deepEqual(hook.leave(), { ok: true });
+  } finally {
+    console.error = report; recoveryPanelBinding.leave = leave;
+    if (!window.__legacySharedTest) await restartApp();
+    if (sharedSession()) hook.leave();
+    await flushDraftNow();
+    restoreDesktop();
+  }
+});
+
+function throwOnce(owner, key, message, seen = () => {}) {
+  const original = owner[key];
+  let armed = true;
+  owner[key] = function (...args) {
+    if (armed) { armed = false; seen(); throw new Error(message); }
+    return original.apply(this, args);
+  };
+  return () => { owner[key] = original; };
+}
+
+function standaloneState() {
+  return { doc: JSON.stringify(currentDocument()), epoch: liveSession().epoch(), generation: liveSession().generation(), undo: undoOwner().sizes(),
+    home: JSON.stringify(currentHome()), writtenOut: documentLocation().writtenOut(), unsaved: unsavedChanges(), shared: sharedSession(), parts: sharedSessionParts() !== null,
+    opening: openingStatus.openingPending(), listeners: listenerCounts() };
+}
+
+const failures = [{
+  name: "the Writer binding throwing after it mounted", reason: "enter-failed", arrange: (_store, observed) => {
+    const standalone = writerControls();
+    return throwOnce(documentReader, "onReplaced", "the Writer binding failed", () => { observed.push(["mounted", writerControls() !== standalone, sharedSession()]); });
+  }, observed: [["mounted", true, true]]
+}];
+
+for (const failure of failures) {
+  test(`failed entry: ${failure.name} answers ${failure.reason} and leaves document, revision, undo, home, written-out mark, drafting and listeners as they were`, async () => {
+    const store = draftStore(), report = console.error, reported = [], observed = [];
+    let cleanup = () => {};
+    try {
+      script(ROWS);
+      setHome("file", { format: "splitpage", name: "source.splitpage",
+        handle: { kind: "file", name: "source.splitpage", _desktopId: "route-source", createWritable: () => { throw new Error("The source was written"); } } });
+      documentLocation().markWrittenOut(true);
+      edit("Edited before entry");
+      assert.equal((await flushDraftNow()).ok, true);
+      cleanup = failure.arrange(store, observed);
+      const was = standaloneState(), home = currentHome();
+      assert.deepEqual([was.undo.undo > 0, home.kind, was.writtenOut, was.unsaved], [true, "file", true, true]);
+      console.error = error => { reported.push(String(error)); };
+      try { assert.deepEqual(await hook.enter(), { ok: false, reason: failure.reason }); } finally { console.error = report; }
+      assert.deepEqual(observed, failure.observed ?? []);
+      if (failure.reason === "enter-failed") assert.ok(reported.length > 0, "the failure was reported");
+      const now = standaloneState();
+      assert.deepEqual(now, was);
+      assert.equal(currentHome() === home, true, "the same home record");
+      cleanup(); cleanup = () => {};
+      assert.notEqual(draftSource.detachRefusal(), "detached");
+      const last = store.writes.at(-1);
+      edit("Edited after the attempt");
+      assert.equal((await flushDraftNow()).ok, true);
+      const next = store.writes.at(-1);
+      assert.deepEqual([next.seq, next.rows, next.shared, next.kept], [last.seq + 1, ["Edited after the attempt"], false, true]);
+      assert.deepEqual(await hook.enter(), { ok: true });
+      assert.deepEqual(hook.leave(), { ok: true });
+    } finally {
+      console.error = report;
+      cleanup();
+      if (sharedSession()) hook.leave();
+      setHome("none");
       await flushDraftNow();
       restoreDesktop();
     }
