@@ -283,14 +283,17 @@ test("held tag notes stay on the renamed card when a different tag reuses the na
   assert.equal(need(cup).value, "For the original");
   release();
   renderProduction();
-  const read = doc => [tag(doc).name, tag(doc).notes, tag(doc, replacement.created).name, tag(doc, replacement.created).notes];
-  copies(f, read, ["Cup", "", "Mug", ""]);
+  const read = doc => ["t_original", replacement.created, "t_lamp"].map(id => {
+    const record = tag(doc, id);
+    return [record.name, record.notes];
+  });
+  copies(f, read, [["Cup", ""], ["Mug", ""], ["Lamp", ""]]);
   assert.equal(need(cup).defaultValue, "");
   assert.equal(f.local.commands.undo().kind, "unchanged");
   const revision = f.local.revision();
   blur(need(cup));
   await exchange(f, "peer-first");
-  copies(f, read, ["Cup", "For the original", "Mug", ""]);
+  copies(f, read, [["Cup", "For the original"], ["Mug", ""], ["Lamp", ""]]);
   assert.equal(f.local.revision() - revision, 1);
   assert.equal(f.local.commands.undo().kind, "written");
   assert.equal(f.local.commands.undo().kind, "unchanged");
@@ -308,6 +311,8 @@ for (const order of orders) {
     release();
     runBrollRefresh();
     assert.equal(need(notes).value, "Wide");
+    copies(f, readNote, "");
+    assert.deepEqual(warnings(f.show), [refused]);
     need(notes).focus();
     runBrollRefresh();
     assert.equal(document.activeElement, need(notes));
@@ -378,7 +383,8 @@ for (const order of orders) {
 }
 
 for (const held of [false, true]) {
-  test(`clicking Save on ${held ? "a held" : "an unsupported"} script-shot rename keeps the draft until Escape`, async t => {
+  const admission = held ? " with admission held" : "";
+  test(`clicking Save on an unsupported script-shot rename${admission} keeps the draft until Escape`, async t => {
     const f = await enter(t);
     openShot("script-shot");
     filter("all");
