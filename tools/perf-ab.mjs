@@ -1,6 +1,6 @@
 import { cpSync, existsSync, readFileSync, writeFileSync } from "node:fs";
 import { freemem } from "node:os";
-import { join, resolve } from "node:path";
+import { join } from "node:path";
 import { REPO } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
 import { buildArgs } from "./perf-record.mjs";
@@ -77,7 +77,6 @@ export async function waitForMemory(minMb, { free = () => freemem() / 2 ** 20, s
     waited += pollMs;
   }
 }
-
 
 export function measurements(text) {
   const rows = [];

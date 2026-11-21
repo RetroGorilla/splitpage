@@ -218,13 +218,6 @@
       "replace": "  (ports as TagPanelPorts).selection.clear();\n  if (editRecords(build => deleteTagsCommand(items.map("
     },
     {
-      "label": "rule 73: renaming a tag runs through the silent edit that drops the refusal",
-      "tests": ["src/test/shared-split-records-typed-tags-app.test.mjs"],
-      "file": "src/features/tags/panels.ts",
-      "find": "    const run = editRecords(() => command, quiet);",
-      "replace": "    const run = { changed: (ports as TagPanelPorts).edits.edit(command), held: false };"
-    },
-    {
       "label": "rule 73: removing a tag's labels in a shared session takes the standalone path, silent for a tag with no mentions",
       "tests": ["src/test/shared-split-records-refusals-app.test.mjs"],
       "file": "src/features/tags/panels.ts",
@@ -267,20 +260,6 @@
       "replace": "    if (run.held) { closeCommentComposer(); return heldWrite(run); }\n    if (pendingComment?.id === pending.id) {"
     },
     {
-      "label": "rule 154: a refused reply drops its composer and draft before the outcome",
-      "tests": ["src/test/shared-split-records-typed-comments-app.test.mjs"],
-      "file": "src/features/comments/comments.ts",
-      "find": "  replyDrafts[id as string] = { body: bodyEl.innerHTML, name: nameInput.value };\n  sameCommentLife();",
-      "replace": "  dropCommentState(id, false);\n  sameCommentLife();"
-    },
-    {
-      "label": "a refused reply drops its composer and draft",
-      "tests": ["src/test/shared-split-records-typed-comments-app.test.mjs"],
-      "file": "src/features/comments/comments.ts",
-      "find": "    if (run.held) return heldWrite(run);\n    if (!standalone) dropCommentState(id, false);",
-      "replace": "    if (run.held) { dropCommentState(id, false); return heldWrite(run); }\n    if (!standalone) dropCommentState(id, false);"
-    },
-    {
       "label": "a served reply leaves its composer open",
       "tests": ["src/test/shared-split-records-literals-comments-app.test.mjs"],
       "file": "src/features/comments/comments.ts",
@@ -307,34 +286,6 @@
       "find": "  return runRecord(ports, shared => addShotCommand(rec, shared)) ? rec : null;",
       "replace": "  runRecord(ports, shared => addShotCommand(rec, shared));\n  return rec;",
       "tests": ["tests/application/commands/production-actions.test.ts"]
-    },
-    {
-      "label": "a refused bulk assignment to a new person closes its box",
-      "tests": ["src/test/shared-split-records-typed-broll-app.test.mjs"],
-      "file": "src/features/broll/panel.ts",
-      "find": "kind === \"person\" ? bulkAssignNewPerson(text, closing, quiet)",
-      "replace": "kind === \"person\" ? (closing(), bulkAssignNewPerson(text, closing, quiet))"
-    },
-    {
-      "label": "a refused bulk new location closes its box",
-      "tests": ["src/test/shared-split-records-typed-broll-app.test.mjs"],
-      "file": "src/features/broll/panel.ts",
-      "find": ": bulkLocation(text, closing, quiet));",
-      "replace": ": (closing(), bulkLocation(text, closing, quiet)));"
-    },
-    {
-      "label": "the prop box clears the typed name before the outcome",
-      "tests": ["src/test/shared-split-records-typed-broll-app.test.mjs"],
-      "file": "src/features/broll/panel.ts",
-      "find": "  if (isHeld(typed().submit(\"broll-prop-input\", id, text, propSave(id)))) return;",
-      "replace": "  input.value = \"\";\n  if (isHeld(typed().submit(\"broll-prop-input\", id, text, propSave(id)))) return;"
-    },
-    {
-      "label": "the prop box ignores the outcome and re-renders",
-      "tests": ["src/test/shared-split-records-typed-broll-app.test.mjs"],
-      "file": "src/features/broll/panel.ts",
-      "find": "    return heldWrite(editShots(shared => addShotPropCommand(id, text, shared), quiet));",
-      "replace": "    editShots(shared => addShotPropCommand(id, text, shared), quiet);\n    return \"saved\";"
     },
     {
       "label": "the tag person box moves focus to Add person whatever the outcome (Enter)",
@@ -365,25 +316,11 @@
       "replace": "  if (!run.changed) {\n    (ports as OverlayPortUse).notices.show("
     },
     {
-      "label": "a refused new person for a shot closes its box",
-      "tests": ["src/test/shared-split-records-typed-broll-app.test.mjs"],
-      "file": "src/features/broll/panel.ts",
-      "find": "    if (run.held) return heldWrite(run);\n    if (addingPersonFor === id) addingPersonFor = null;",
-      "replace": "    if (addingPersonFor === id) addingPersonFor = null;\n    if (run.held) return heldWrite(run);"
-    },
-    {
       "label": "a refused bulk Mark filmed drops the selection",
       "tests": ["src/test/shared-split-records-held-broll-app.test.mjs"],
       "file": "src/features/broll/panel.ts",
       "find": "  if (run.held) return run;\n  closing();\n  if (!quiet) renderBrollViews();\n  if (run.changed)",
       "replace": "  if (run.held) { clearSelection(); return run; }\n  closing();\n  if (!quiet) renderBrollViews();\n  if (run.changed)"
-    },
-    {
-      "label": "a refused gear quick add refills the box from the list",
-      "tests": ["src/test/shared-split-records-typed-tags-app.test.mjs"],
-      "file": "src/features/tags/panels.ts",
-      "find": "  if (run.held) return heldWrite(run);\n  if (!run.changed) { fillGearQuickAdd(); return \"saved\"; }",
-      "replace": "  if (run.held) { (document.getElementById(\"gear-quickadd-input\") as HTMLTextAreaElement).value = gearEntries().map(e => e.name).join(\"\\n\"); return heldWrite(run); }\n  if (!run.changed) { fillGearQuickAdd(); return \"saved\"; }"
     },
     {
       "label": "assigning a tag's owner drops change.owner",
@@ -428,13 +365,6 @@
       "replace": "shared: { ports: () => null, refused: () => {} },"
     },
     {
-      "label": "a b-roll redraw takes the typed value as the comparison base even when its write was refused",
-      "file": "src/features/broll/panel.ts",
-      "find": "if (kept.ownValue && kept.saved && recordField(again)) again.defaultValue = kept.value;",
-      "replace": "if (kept.ownValue && recordField(again)) again.defaultValue = kept.value;",
-      "tests": ["src/test/shared-split-records-drafts-app.test.mjs"]
-    },
-    {
       "label": "a b-roll redraw drops the unsaved text of a box that lost focus",
       "tests": ["src/test/shared-split-records-lifetimes-app.test.mjs"],
       "file": "src/features/broll/panel.ts",
@@ -449,32 +379,11 @@
       "replace": "    if (box.unsaved && !box.unsaved) again.value = box.value;"
     },
     {
-      "label": "a blur in tag notes does not retry a refused write",
-      "tests": ["src/test/shared-split-records-typed-tags-app.test.mjs"],
-      "file": "src/features/tags/mount.ts",
-      "find": "if (ports.sessionShared() && box.value !== box.defaultValue) ports.setTagNotes(",
-      "replace": "if (!box) ports.setTagNotes("
-    },
-    {
       "label": "standalone, a blur in tag notes writes what its typing did not",
       "tests": ["src/test/panel-drafts-standalone-app.test.mjs"],
       "file": "src/features/tags/mount.ts",
       "find": "if (ports.sessionShared() && box.value !== box.defaultValue) ports.setTagNotes(",
       "replace": "if (box.value !== box.defaultValue) ports.setTagNotes("
-    },
-    {
-      "label": "the tag entity wiring reports no shared session, so a refused notes write is never retried on blur",
-      "tests": ["src/test/shared-split-records-typed-tags-app.test.mjs"],
-      "file": "src/bootstrap/wiring/production.ts",
-      "find": "        queueAutoSave: portSaves.dueNow,\n        sessionShared: sharedSession",
-      "replace": "        queueAutoSave: portSaves.dueNow,\n        sessionShared: () => false"
-    },
-    {
-      "label": "a tag rename closes its box before the outcome",
-      "tests": ["src/test/shared-split-records-typed-tags-app.test.mjs"],
-      "file": "src/features/tags/panels.ts",
-      "find": "  if (held) (ports as TagPanelPorts).view.setTagRenaming(quiet ? renaming : key);",
-      "replace": "  if (held) (ports as TagPanelPorts).view.setTagRenaming(null);"
     },
     {
       "label": "a refused scene-prep Ready still shows its success notice",
@@ -547,13 +456,6 @@
       "replace": "  return same;\n}"
     },
     {
-      "label": "a hidden draft is dropped when its editor closes",
-      "file": "src/features/common/typed-drafts.ts",
-      "find": "      return [...orphaned.values(), ...[...held.values()].filter(draft => !rendered(draft))];",
-      "replace": "      for (const draft of held.values()) if (!rendered(draft)) held.delete(keyOf(draft.box, draft.record));\n      return [...orphaned.values()];",
-      "tests": ["src/test/shared-split-records-drafts-app.test.mjs"]
-    },
-    {
       "label": "a redraw saves a draft",
       "file": "src/features/broll/panel.ts",
       "find": "const saved = !field || !ownValue || !shared && held !== active.value && submitField(active) === \"saved\";",
@@ -561,25 +463,11 @@
       "tests": ["tests/features/common/typed-drafts-inventory.test.ts"]
     },
     {
-      "label": "a draft is keyed by the tag's name",
-      "file": "src/features/tags/panels.ts",
-      "find": "  const record = item.id ?? \"\";",
-      "replace": "  const record = item.key;",
-      "tests": ["src/test/shared-split-records-drafts-app.test.mjs"]
-    },
-    {
       "label": "typing back to the drawn value keeps the draft",
       "file": "src/features/common/typed-drafts.ts",
       "find": "      if (text === drawn) held.delete(key);",
       "replace": "      if (text === drawn) return;",
       "tests": ["src/features/common/typed-drafts.test.ts"]
-    },
-    {
-      "label": "rename mode is left before the outcome",
-      "file": "src/features/broll/panel.ts",
-      "find": "  if (!isHeld(wrote)) renamingId = null;\n  renderBrollViews();",
-      "replace": "  renamingId = null;\n  renderBrollViews();",
-      "tests": ["src/test/shared-split-records-drafts-app.test.mjs"]
     }
   ]
 }

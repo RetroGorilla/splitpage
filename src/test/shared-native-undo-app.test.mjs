@@ -97,7 +97,7 @@ async function enter(t, rows = [{ id: "r1", audioText: "Hello", visualText: "Loo
   const doc = migrateRows({ schema: 2, title: "Native script", rows, sections });
   adoptReplacement(doc);
   const show = t.mock.method(notices, "show", () => {});
-  assert.deepEqual(await (command ? hook.enterFrom(nativeBytes(doc, command), { backend: "native" }) : hook.enter({ backend: "native" })), { ok: true });
+  assert.deepEqual(await (command ? hook.enterFrom(nativeBytes(doc, command)) : hook.enter()), { ok: true });
   t.after(cleanSession);
   return show;
 }
@@ -621,6 +621,30 @@ for (const [name, kind] of Object.entries(views)) {
       assert.equal(standalone.html, name === "Writer" ? "<strong>H</strong>" + inserted + "o" : "<strong>H" + inserted + "</strong>o");
       assert.deepEqual(await apply(true), standalone);
     }
+  });
+
+  test(name + ": Replace and Replace all undo independently and keep a concurrent peer prefix", async t => {
+    await enter(t, [{ id: "r1", audioText: "a cup of tea" }, { id: "r2", audioText: "one cup" }]);
+    kind.open(t);
+    const field = search(t, "cup", "mug");
+    const read = () => hook.read().app.rows.map(row => row.audioText);
+    const expectText = async expected => {
+      await Promise.resolve();
+      assert.deepEqual(read(), expected);
+      assert.deepEqual(hook.read().app, hook.read().peer);
+    };
+    document.getElementById("find-replace").click();
+    await expectText(["a mug of tea", "one cup"]);
+    hook.nativePeer.hold();
+    document.getElementById("find-replace-all").click();
+    assert.equal(hook.nativePeer.type("r2", 0, "X").kind, "written");
+    hook.nativePeer.deliver();
+    await expectText(["a mug of tea", "Xone mug"]);
+    field.blur();
+    assert.equal(press(document.body, "z"), true);
+    await expectText(["a mug of tea", "Xone cup"]);
+    assert.equal(press(document.body, "z"), true);
+    await expectText(["a cup of tea", "Xone cup"]);
   });
 
   test(name + ": Replace all retains an intact captured pair after a peer shifts adjacent matches", async t => {
@@ -2248,6 +2272,57 @@ test("Writer: a burst of 200 keys reaches both copies whole with the caret after
   await Promise.resolve();
   assert.equal(peer(), expected);
   assert.equal(show.mock.callCount(), 0);
+});
+
+const boldPeerEdits = [
+  ["inserting before the range", peer => peer.type("r1", 0, "X"), [2, 4], "Xabcd"],
+  ["inserting inside the range", peer => peer.type("r1", 2, "X"), [1, 4], "abXcd"],
+  ["inserting after the range", peer => peer.type("r1", 4, "X"), [1, 3], "abcdX"],
+  ["deleting the character before the range", peer => peer.delete("r1", 0, 1), [0, 2], "bcd"],
+  ["deleting part of the range", peer => peer.delete("r1", 1, 2), [1, 2], "acd"]
+];
+
+for (const [name, change, [from, to], text] of boldPeerEdits) for (const peerFirst of [false, true]) {
+  test(`Writer: bold selection replay after a peer edits by ${name}, peer first=${peerFirst}`, async t => {
+    await enter(t, [{ id: "r1", audioText: "abcd" }]);
+    const view = writer(t), other = hook.nativePeer;
+    if (peerFirst) {
+      assert.equal(change(other).kind, "written");
+      await Promise.resolve();
+    } else other.hold();
+    view.caret("r1", peerFirst ? from : 1, peerFirst ? to : 3);
+    assert.equal(beforeInput(root(), "formatBold", null), true);
+    assert.match(app(), /<strong>/);
+    if (!peerFirst) {
+      assert.equal(change(other).kind, "written");
+      other.deliver();
+      await Promise.resolve();
+    }
+    for (const key of ["z", "y", "z"]) {
+      assert.equal(press(root(), key), true);
+      assert.deepEqual(view.at(), ["r1", from, to]);
+      if (key === "z") assert.equal(app(), text);
+      else assert.match(app(), /<strong>/);
+      await Promise.resolve();
+      assert.equal(peer(), app());
+    }
+  });
+}
+
+test("Writer: append to a 120,000-character beat and replay the caret through undo and redo", async t => {
+  const original = "a".repeat(120000);
+  await enter(t, [{ id: "r1", audioText: original }]);
+  const view = writer(t);
+  view.caret("r1", original.length);
+  typeKeys(root(), "x");
+  assert.equal(press(root(), "z"), true);
+  assert.equal(app(), original);
+  assert.deepEqual(view.at(), ["r1", 120000, 120000]);
+  assert.equal(press(root(), "y"), true);
+  assert.equal(app(), original + "x");
+  assert.deepEqual(view.at(), ["r1", 120001, 120001]);
+  await Promise.resolve();
+  assert.equal(peer(), original + "x");
 });
 
 test("Writer: a peer edit in the same beat while letters are buffered keeps both", async t => {

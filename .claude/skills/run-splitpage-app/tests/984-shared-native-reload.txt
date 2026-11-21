@@ -2,7 +2,7 @@ open
 wait document.querySelectorAll('#rows .row').length > 0
 eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;sessionStorage.removeItem('nativeReload');sessionStorage.removeItem('nativeReloadPeer');F.openFile(new File([JSON.stringify({schema:2,title:'Native reload',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello'}],comments:[]})],'native-reload.splitpage'))
 wait F.state().title === 'Native reload'
-eval S.enter({backend:'native'})
+eval S.enter()
 expect S.read().app.rows[0].audioText === 'Hello'
 eval window.nativeCell=document.querySelector('#rows .cell-editable[data-id="r1"][data-field="audioText"]');nativeCell.focus();getSelection().setBaseAndExtent(nativeCell.firstChild,2,nativeCell.firstChild,2);true
 press z

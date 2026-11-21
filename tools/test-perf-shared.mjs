@@ -6,7 +6,7 @@ import { test } from "node:test";
 import { abbaOrder, parseArgs, placeTools, toolRevision, waitForMemory, writeRecord } from "./perf-ab.mjs";
 import { parsePairedArgs, pairedSummary, parseRound } from "./measure-shared-paired.mjs";
 import { PROBE, parsePerf } from "./perf-record.mjs";
-import { EARLIER_RECORDS, PERCENTILE_RULE, latencyFigures, median, nearestRank } from "./perf-stats.mjs";
+import { PERCENTILE_RULE, latencyFigures, median, nearestRank } from "./perf-stats.mjs";
 import { TASK_RECORD, TRACE_CATEGORIES, traceRecords } from "./perf-trace.mjs";
 
 const SEAMS = ["trial", "live-apply", "queue", "mirror-apply", "assembly", "projection-listeners", "session-receive", "document-entry", "render",
@@ -149,4 +149,3 @@ test("the paired summary reports the base, head and difference per case", () => 
   assert.deepEqual(parseRound('noise\nROUND [{"name":"short"}]\n'), [{ name: "short" }]);
   assert.throws(() => parseRound("nothing"));
 });
-

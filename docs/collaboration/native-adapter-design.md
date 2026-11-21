@@ -20,9 +20,9 @@ The session layer has the offline-notice journal and put-back command, and local
 log, checkpoints and local write receipts in browser IndexedDB and through desktop test IPC
 ([#1668](https://github.com/RetroGorilla/splitpage/pull/1668), [#1679](https://github.com/RetroGorilla/splitpage/pull/1679)).
 These components have their own integration tests. The editor's shared mode is still entered only through
-`__sharedTest`. The hook defaults to the native session and selects the old backend with `{ backend: "legacy" }`.
-There is no release entry for shared mode. Slice 8 remains the removal of the old adapter and the mapping of its tests in
-[the build order](#11-build-order).
+`__sharedTest`. Both entry methods open the native session. The [slice 8 app test mapping](slice-8-test-mapping.md)
+accounts for the retired hook tests and records the direct tests still needed. The old adapter and its dedicated tests
+remain for the rest of [slice 8](#11-build-order). There is no release entry for shared mode.
 
 ## Known differences from standalone editing
 
@@ -436,7 +436,7 @@ requirements from the outside review.
 | 5 | Records, status, comments | Exact row changes; author-only bodies | Done ([#1658](https://github.com/RetroGorilla/splitpage/pull/1658)) |
 | 6 | Undo | E3, E11, E14 and E16 tests; E15's histories under option A; E17's histories under rule (g); creation undo and redo timing (appendix O); one change per press; E11's full tag recount (845 requested, 800 kept, 40 undone, 5 lost) | Done ([#1659](https://github.com/RetroGorilla/splitpage/pull/1659)) |
 | 7 | Session, editor, relay with the wrapper, server storage, offline notice | E13's pair table; E16's notice counts; every reader agrees on E17's histories; first loads per decision 16; a large offline return under stock timers; two writers past the size limit; server stops per decision 19; stale-target editor cases (appendix O); store and reload | Built on `main` at `2a1cebba1`. Open acceptance cases are in [appendix O](#o-acceptance-cases-from-the-outside-review). |
-| 8 | Delete the old adapter | Every deleted test mapped; `npm run verify` | Pending |
+| 8 | Delete the old adapter | Every deleted test mapped ([app tests](slice-8-test-mapping.md)); `npm run verify` | Native-only hook complete. Adapter removal pending. |
 
 Slice 3 was built as two pull requests: 3a, split, join and removal with
 kept records; 3b, headings and reading rules (a) to (g). The E11 full tag recount moved from slice 2 to slice 6, because
@@ -673,7 +673,7 @@ to R10, R13, R17; Q02, Q04, Q06, Q07. Dropped after E3: U10.
 | Application: `shared-undo.ts`, `replayed-steps.ts` | Shrink to admission and the grouping rule |
 | Tests: `tests/collab/` delivery, agreement, checker, fixtures | Carry over; dropped rules marked |
 | Tests: `tests/adapters/collab/` (173 files), `tests/collab/*-mutants.json` (41 lists) | Deleted once slice 8 maps each behaviour to its replacement |
-| Tests: `src/test/shared-*-app.test.mjs` (41 files) | Kept; outcomes change only for dropped rules |
+| Tests: `src/test/shared-*-app.test.mjs` | Native suites and direct tests with remaining coverage stay. The [app test mapping](slice-8-test-mapping.md) accounts for retired cases. |
 
 ### F. Evidence rule for generated tests
 

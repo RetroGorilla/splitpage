@@ -5,8 +5,6 @@ import { adoptReplacement, currentCapabilities, onSessionChange, sharedSession }
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { cellSelection, setCellSelection } from "../features/common/cell-selection.ts";
-import { createSharedDocument, destroySharedDocument, encodeSharedState } from "../adapters/collab/document.ts";
-import { hydrateSharedDocument } from "../adapters/collab/hydrate.ts";
 import { openNativeSession } from "../adapters/collab/native/session.ts";
 import { scriptCellOf, sanitizeHtml } from "../bootstrap/richtext.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
@@ -71,7 +69,7 @@ function compose(target, type, data) {
 async function enter(t, rows = [{ id: "r1", audioText: "Hello", visualText: "Look" }]) {
   adoptReplacement(migrateRows({ schema: 2, title: "Native script", rows }));
   const show = t.mock.method(notices, "show", () => {});
-  assert.deepEqual(await hook.enter({ backend: "native" }), { ok: true });
+  assert.deepEqual(await hook.enter(), { ok: true });
   t.after(cleanSession);
   return show;
 }
@@ -165,9 +163,9 @@ function nativeBytes(doc, join, change, command = () => {}) {
 }
 
 for (const [method, open] of [["enter", () => hook.enter()], ["enterFrom", doc => hook.enterFrom(nativeBytes(doc))]]) {
-  test(`the shared test hook's ${method} defaults to the native backend`, async t => {
+  test(`the shared test hook's ${method} opens the native backend`, async t => {
     const doc = migrateRows({ title: "Default backend", rows: [{ id: "r1", audioText: "Hello" }] });
-    adoptReplacement(doc);
+    adoptReplacement(method === "enter" ? doc : migrateRows({ title: "Standalone source", rows: [{ id: "different", audioText: "Unopened" }] }));
     t.after(cleanSession);
     assert.deepEqual(await open(doc), { ok: true });
     assert.equal(nativeEditorActive(), true);
@@ -195,7 +193,7 @@ for (const [members, offset, beat, at, expected] of [
   t.after(oracle.close);
   assert.equal(oracle.document().rows[0].audioText, expected);
   adoptReplacement(doc);
-  assert.deepEqual(await hook.enterFrom(bytes, { backend: "native" }), { ok: true });
+  assert.deepEqual(await hook.enterFrom(bytes), { ok: true });
   t.after(() => { if (sharedSession()) hook.leave(); });
   const target = cell("audioText");
   target.focus();
@@ -206,24 +204,19 @@ for (const [members, offset, beat, at, expected] of [
   assert.equal(hook.read().peer.rows[0].audioText, expected);
 });
 
-test("cross-format stored entry refuses in both directions and retains the four original beats", async () => {
+test("native stored entry rejects old and malformed state and retains the four original beats", async () => {
   const doc = migrateRows({ title: "Formats", rows: ["one", "two", "three", "four"].map((audioText, index) => ({ id: "r" + index, audioText })) });
   adoptReplacement(doc);
-  const old = createSharedDocument();
-  try {
-    hydrateSharedDocument(old, doc);
-    for (const [bytes, options] of [[encodeSharedState(old), { backend: "native" }], [nativeBytes(doc), { backend: "legacy" }]]) {
-      assert.deepEqual(await hook.enterFrom(bytes, options), { ok: false, reason: "enter-failed" });
-      assert.equal(sharedSession(), false);
-      assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["one", "two", "three", "four"]);
-    }
-    const malformed = nativeBytes(doc, undefined, ydoc => {
-      const segments = ydoc.getMap("segments");
-      for (const name of segments.keys()) segments.delete(name);
-    });
-    assert.deepEqual(await hook.enterFrom(malformed, { backend: "native" }), { ok: false, reason: "enter-failed" });
+  const oldState = "AQe+oKMuACgBBG1ldGEFZG9jSWQBdyAwMTIzNDU2Nzg5YWJjZGVmMDEyMzQ1Njc4OWFiY2RlZigBBG1ldGEFZXh0cmEBdwJ7fSgBBG1ldGEJZmlsZVRpdGxlAXYAKAEEbWV0YQdjYXB0dXJlAXYAJwEEbWV0YQV0aXRsZQInAQRtZXRhCnRpdGxlTWFya3MBBAC+oKMuBAdGb3JtYXRzAA==";
+  const malformed = nativeBytes(doc, undefined, ydoc => {
+    const segments = ydoc.getMap("segments");
+    for (const name of segments.keys()) segments.delete(name);
+  });
+  for (const state of [oldState, malformed]) {
+    assert.deepEqual(await hook.enterFrom(state), { ok: false, reason: "enter-failed" });
+    assert.equal(sharedSession(), false);
     assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["one", "two", "three", "four"]);
-  } finally { destroySharedDocument(old); }
+  }
 });
 
 for (const [field, breakField] of [
@@ -235,7 +228,7 @@ for (const [field, breakField] of [
   const doc = migrateRows({ title: "Native script", rows: [{ id: "r1", audioText: "Hello" }] });
   adoptReplacement(doc);
   const broken = nativeBytes(doc, undefined, breakField);
-  assert.deepEqual(await hook.enterFrom(broken, { backend: "native" }), { ok: false, reason: "enter-failed" });
+  assert.deepEqual(await hook.enterFrom(broken), { ok: false, reason: "enter-failed" });
   assert.equal(sharedSession(), false);
   assert.equal(text(), "Hello");
 });
@@ -245,7 +238,7 @@ for (const [glue, at, expected] of [[" ", 8, "Hello WoXrld"], [" ", 5, "HelloX W
     const doc = migrateRows({ title: "Join", rows: [{ id: "r1", audioText: "Hello" }, { id: "r2", audioText: "World" }] });
     adoptReplacement(doc);
     const show = t.mock.method(notices, "show", () => {});
-    assert.deepEqual(await hook.enterFrom(nativeBytes(doc, glue), { backend: "native" }), { ok: true });
+    assert.deepEqual(await hook.enterFrom(nativeBytes(doc, glue)), { ok: true });
     t.after(cleanSession);
     const target = cell("audioText");
     target.focus();
@@ -338,7 +331,7 @@ for (const [glue, from, to, expected] of [
   const doc = migrateRows({ title: "Join", rows: [{ id: "r1", audioText: "Hello" }, { id: "r2", audioText: "World" }] });
   adoptReplacement(doc);
   const show = t.mock.method(notices, "show", () => {});
-  assert.deepEqual(await hook.enterFrom(nativeBytes(doc, glue), { backend: "native" }), { ok: true });
+  assert.deepEqual(await hook.enterFrom(nativeBytes(doc, glue)), { ok: true });
   t.after(cleanSession);
   const target = cell("audioText");
   target.focus();
@@ -382,7 +375,7 @@ test("a selection across joined members stays visible as a refused edit", async 
   const doc = migrateRows({ title: "Join", rows: [{ id: "r1", audioText: "Hello" }, { id: "r2", audioText: "World" }] });
   adoptReplacement(doc);
   const show = t.mock.method(notices, "show", () => {});
-  assert.deepEqual(await hook.enterFrom(nativeBytes(doc, " "), { backend: "native" }), { ok: true });
+  assert.deepEqual(await hook.enterFrom(nativeBytes(doc, " ")), { ok: true });
   t.after(cleanSession);
   const target = cell("audioText");
   target.focus();
@@ -877,7 +870,7 @@ test("native input honors edit permission", async t => {
   adoptReplacement(migrateRows({ title: "Locked", rows: [{ id: "r1", audioText: "Hello" }] }),
     createSessionCapabilities("standalone", { edit: () => ({ allowed: false, reason: "locked" }), comment: () => ({ allowed: true }) }));
   const show = t.mock.method(notices, "show", () => {});
-  assert.deepEqual(await hook.enter({ backend: "native" }), { ok: true });
+  assert.deepEqual(await hook.enter(), { ok: true });
   t.after(() => {
     if (sharedSession()) hook.leave();
     adoptReplacement(migrateRows({ title: "Unlocked", rows: [{ id: "r1", audioText: "Hello" }] }),
@@ -1288,7 +1281,7 @@ test("removing a picture from a joined projection refuses where the child still 
   ] });
   adoptReplacement(doc);
   const show = t.mock.method(notices, "show", () => {});
-  assert.deepEqual(await hook.enterFrom(nativeBytes(doc, " "), { backend: "native" }), { ok: true });
+  assert.deepEqual(await hook.enterFrom(nativeBytes(doc, " ")), { ok: true });
   t.after(() => { if (sharedSession()) hook.leave(); });
   const before = hook.read();
   assert.equal(before.app.rows[0].moreImages[0].imageRef.sha256, "b".repeat(64));
@@ -1346,7 +1339,7 @@ test("cancel discards a provisional selection and a non-author cannot edit a com
     comments: [{ id: "c1", rowId: "r1", field: "audioText", author: "Another editor", body: "Original", replies: [] }] });
   adoptReplacement(doc);
   const show = t.mock.method(notices, "show", () => {});
-  assert.deepEqual(await hook.enter({ backend: "native" }), { ok: true });
+  assert.deepEqual(await hook.enter(), { ok: true });
   t.after(() => { if (sharedSession()) hook.leave(); });
   const target = cell("audioText");
   target.focus();
