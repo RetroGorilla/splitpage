@@ -88,6 +88,34 @@ test("invalid inputs refuse before writing any valid range", t => {
   assert.deepEqual(copy.encodeState(), original);
 });
 
+test("replace all refuses a range list that grows or shrinks while being read", t => {
+  const first = range("A", 1, 3), second = range("B", 1, 3);
+  for (const growing of [true, false]) {
+    const copy = noticeCopy(seed, 2), state = copy.encodeState();
+    t.after(copy.close);
+    const list = growing ? [first] : [first, second];
+    let changed = false;
+    const changing = new Proxy(list, {
+      getOwnPropertyDescriptor(source, key) {
+        if (key === "length" && !changed) {
+          changed = true;
+          if (growing) {
+            const length = Reflect.getOwnPropertyDescriptor(source, key);
+            source.push(second);
+            return length;
+          }
+          source.length = 0;
+        }
+        return Reflect.getOwnPropertyDescriptor(source, key);
+      }
+    });
+    assert.deepEqual(copy.commands.replaceAll(changing, "X"), { kind: "refused", reason: "range" });
+    assert.equal(changed, true);
+    assert.deepEqual(copy.encodeState(), state);
+    assert.deepEqual(copy.commands.undo(), { kind: "unchanged" });
+  }
+});
+
 test("a batch uses shown offsets inside an assembled cell and refuses a split surrogate", t => {
   const source = compoundSeed({ A: "abc", B: "def", C: "g😀hi" });
   const writer = noticeCopy(source, 2), peer = noticeCopy(source, 3);
