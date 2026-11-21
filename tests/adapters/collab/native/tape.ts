@@ -46,8 +46,8 @@ export function spliceUnits(units: Run[], from: number, to: number, insert: read
   units.splice(start, end - start, ...unitsOf(insert));
 }
 
-// why: the counts of prototypes/collab/src/native/tape.ts: one correction per 55 typed characters,
-// then half of each of the first five beats replaced by the next beat's words
+// why: prototypes/collab/src/native/tape.ts (removed; see commit 5b9b2b141) used one correction per 55 characters,
+// then replaced half of each of the first five beats with the next beat's words.
 export function typingTape(writers: number): TypingTape {
   const source = fixture("src/starters/long-demo.json"), ops: TapeOp[] = [], lengths = new Map<string, number>();
   const document = migrateRows({ ...structuredClone(source), rows: source.rows.map(row => ({ ...structuredClone(row), audioText: "", visualText: "" })) });

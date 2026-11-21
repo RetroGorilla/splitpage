@@ -23,8 +23,8 @@ const SCENARIOS: Scenario[] = [
   { name: "Bold bc, then unbold bc", a: [1, 3], b: [1, 3], other: "unbold", typing: "none", typeAt: 0, otherSawA: true }
 ];
 
-// why: the kind-key column of prototypes/collab/src/format-keys/RESULT.md, the evidence for design decision 3's
-// plain keys
+// why: the kind-key column of prototypes/collab/src/format-keys/RESULT.md (removed; see commit 5b9b2b141)
+// supplies the evidence for design decision 3's plain keys
 const E4_KIND_KEYS: readonly string[] = [
   "0/0/0/0/0 · 0/0 · r,r/r,r · 1,1/1,1 · 0 · 0", "0/0/0/0/0 · 0/0 · r,r/r,r · 1,1/1,1 · 2 · 0", "0/0/0/0/0/0 · 4/0 · r,r/r,r · 1,1/1,1 · 0 · 0",
   "0/0/0/0/0 · 0/0 · r,r/r,r · 1,1/1,1 · 0 · 0", "0/0/0/0/0 · 0/0 · r,r/r,r · 1,1/1,1 · 2 · 0", "0/0/0/0/0/0 · 4/0 · r,r/r,r · 1,1/1,1 · 0 · 0",
@@ -43,7 +43,8 @@ function letters([from, to]: Span): string[] { return [...ORIGINAL.slice(from, t
 
 interface Measurement { missing: number[]; leftover: number[]; steps: string[]; updates: number[]; disagreement: number; xBold: boolean; afterAUndo: string }
 
-// why: after prototypes/collab/test/format-keys/schemes.test.ts; the expected bold comes from the commands issued alone
+// why: after prototypes/collab/test/format-keys/schemes.test.ts (removed; see commit 5b9b2b141).
+// The expected bold comes from the commands issued alone.
 function measure(scenario: Scenario, aHasLowerId: boolean): Measurement {
   const { other, typing, otherSawA } = scenario, aLetters = letters(scenario.a), bLetters = letters(scenario.b);
   const seedBold = other === "unbold" && !otherSawA;
