@@ -211,7 +211,7 @@ function refuse(reason: NativeRefusal, runs: readonly Run[]): NativeCommitOutcom
 
 interface EncodedStamp { readonly by: string; readonly at: string }
 
-function encodedStamp(stamp: NativeEditStamp | undefined): EncodedStamp | null | undefined {
+export function encodeNativeEditStamp(stamp: NativeEditStamp | undefined): EncodedStamp | null | undefined {
   if (stamp === undefined) return undefined;
   try {
     const by: unknown = stamp.by, at: unknown = stamp.at;
@@ -415,7 +415,7 @@ export function replaceNativeText(script: NativeScript, range: NativeTextRange, 
   const unavailable = nativeAvailability(script);
   if (unavailable) return refuse(unavailable, runs);
   return transactPreparedNativeCommand(script, () => ({
-    prepared: prepareNativeRuns(runs), encoded: encodedStamp(stamp), checked: nativeRangeSnapshot(range), points: capturePlacement(placement)
+    prepared: prepareNativeRuns(runs), encoded: encodeNativeEditStamp(stamp), checked: nativeRangeSnapshot(range), points: capturePlacement(placement)
   }), ({ prepared, encoded, checked, points }) => {
     if (!prepared || encoded === null) return refuse("text", runs);
     if (!checked || checked.target.cell === "name") return refuse("range", runs);
