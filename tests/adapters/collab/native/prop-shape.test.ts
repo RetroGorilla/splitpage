@@ -73,16 +73,16 @@ function issue(script: NativeScript, initial: readonly BrollProp[], edit: TrialE
   assert.deepEqual(read(script), expected(initial, [edit]), "Local command effect for " + label);
 }
 
-test("the keyed prop shape preserves every generated edit and caps the projection before core reload", () => {
+test("copies converge across generated prop edits and survive core reload", () => {
   let runs = 0, overflows = 0;
   for (const count of [3, BROLL_PROPS_MAX - 1]) {
-    const initial = initialProps(count);
+    const initial = initialProps(count), fixture = source(initial);
     for (const [at, first] of edits.entries()) for (const second of edits.slice(at)) {
       const later = second.kind === "edit" ? { ...second, name: second.name + " on the right" } : second;
       const history = JSON.stringify({ count, first, later });
       try {
         registryCopies((left, right, settle) => {
-          assert.deepEqual(read(left), initial);
+          for (const copy of [left, right]) assert.deepEqual(copy.reader.document(), fixture);
           assert.deepEqual([...propsOf(left).keys()], initial.map(prop => prop.id));
           issue(left, initial, first);
           issue(right, initial, later);
@@ -107,7 +107,7 @@ test("the keyed prop shape preserves every generated edit and caps the projectio
             overflows++;
           }
           runs++;
-        }, undefined, source(initial));
+        }, undefined, fixture);
       } catch (error) {
         throw new Error("Prop history failed: " + history, { cause: error });
       }
@@ -157,8 +157,10 @@ test("damaged prop entries are reported individually and can be replaced or remo
   const kept = initial.filter(prop => prop !== broken);
   for (const corruption of ["rank", "name", "key", "record"]) for (const repair of ["set", "removeProp"]) {
     registryCopies((left, right, settle) => {
-      const entries = propsOf(left), item = entries.get(broken.id);
-      assert.ok(item);
+      const stored = left.roots.shots.get("shot")?.get(NATIVE_SHOT_PROPS);
+      assert.ok(stored instanceof Y.Map);
+      const entries = stored as Y.Map<unknown>, item = entries.get(broken.id);
+      assert.ok(item instanceof Y.Map);
       let key = broken.id;
       if (corruption === "rank") item.set("rank", 12);
       else if (corruption === "name") item.set("name", encodeNativeValue(12));
@@ -166,10 +168,7 @@ test("damaged prop entries are reported individually and can be replaced or remo
         entries.delete(key);
         key = 'n:"wrong"';
         entries.set(key, newNativeShotProp(broken, null));
-      } else {
-        const map: Y.Map<unknown> = entries;
-        map.set(key, 12);
-      }
+      } else entries.set(key, 12);
       settle();
       assert.deepEqual(read(right), kept);
       const problem = { kind: "bad-value", where: "shots/shot/props/" + key };

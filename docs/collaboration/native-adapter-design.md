@@ -200,14 +200,14 @@ Each command is one transaction.
 | Create person, production tag or shot | One record map keyed by minted ID, its field keys and its rank. Tag IDs encode the writer and clock in the core's tag ID form |
 | Edit registry fields, cycle tag status, quick-add gear | Changed field keys only. A new owner or tag gets a new record. Quick add marks only omitted orphaned gear removed |
 | Move, remove, restore registry entries | Move writes a rank and re-ranks the right side of a tie at the drop. Remove sets `removed` and restore clears it. The reader keeps comment assignee names, clears missing owners and derives tags and shots from surviving labels and keyed lines as on reload |
-| Add, remove or reorder shot props | Add writes the prop's own entry and may create its tag in the same transaction. Remove sets `removed` on the entry. Reorder writes its rank. A whole-list set writes changed entries and leaves unchanged fields alone |
+| Add, remove or reorder shot props | Add writes the prop's own entry and may create its tag in the same transaction. A name already shown is a no-op. Remove sets `removed` on a valid entry. Reorder writes its rank. A whole-list set updates changed fields and removes every omitted entry, including overflow. A set or remove can repair damaged entries |
 
 **Check before writing** (decision 15). Every command finds each part it will touch by id: its rows' records,
 cells and boundaries, and the ranks of neighbours a move will write. If one is missing, it refuses without writing.
 A command aimed at a removed or hidden row returns that refusal; it never reports success, or nothing, through a
 stale target (E1). On section 10's four-step row 5 of 16 commands wrote and then threw as built, none under rule
 (g); the prototype skips some silently and its join throws (E16, E17). Commands on the row above work on the
-narration it shows.
+narration it shows. Targeted prop commands reject argument accessors before reading values.
 
 Composition folds in remote changes made meanwhile (E1). The reader writes nothing back. The file is converted
 once, and every copy adopts that conversion (appendix B). Conversion writes each heading's name into its name cell,
@@ -632,9 +632,10 @@ E5's checks are the template.
 | `shots` | The shot's file fields and a nested `props` map. Each key is the tag ID, or `n:` followed by the JSON-encoded normalized name. Its record holds the encoded name, rank and optional `removed` mark |
 | `edited` | Per beat, `{by, at}` of the last typing |
 
-Props read in rank order, with equal ranks ordered by key. The reader shows the first entry for each normalized
-projected name, up to 40. Other active entries stay stored and count toward the add limit. When a test script
-still has an encoded props array, the reader uses it until the first prop edit installs the map.
+Props read in rank order, with equal ranks ordered by key. The core prop normalizer defines the projection, including
+the 40-prop cap. Other active entries stay stored and count toward the add limit. A shot without a prop map reads
+as empty. The reader reports damaged entries individually and keeps the readable entries. Removing a damaged entry
+deletes its key. A validated whole-list set replaces damaged entries requested by key and deletes omitted damaged entries.
 
 ### H. Outcomes that lose nothing
 
@@ -654,7 +655,7 @@ E11, 600 generated histories, names in cells, unless marked:
 | Someone restores a registry entry before receiving another person's removal | The entry disappears again when the unseen removal arrives. Restoring it again brings back its fields |
 | Two people change one registry value at the same moment and the winner undoes | The value falls back to its default until someone sets it again. Rankless entries appear first in ID order and a move gives them a rank |
 | Two people add different props or move different props on one shot | Both entries survive. Equal ranks sort by key and undo on one copy leaves the other copy's edit |
-| Two people add the same normalized prop name under different keys | The first in rank and key order shows. Undo of that addition reveals the next, and redo restores the first |
+| Two people add the same normalized prop name under different tag IDs | Both show in rank and key order when within the cap, as on core reload. Undo removes the acting copy's addition and redo brings it back |
 | One person removes a prop while another edits it | The removed prop stays hidden. Undo of the removal restores it with the concurrent edit |
 | Two people add different props to a shot with 39 props | Both stay stored and 40 show. Removing a visible prop reveals the overflow entry. Core reload preserves the projection |
 

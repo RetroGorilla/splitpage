@@ -6,7 +6,7 @@ import type { NativeRegistryChange } from "../../../../src/adapters/collab/nativ
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import { newNativeShotProps } from "../../../../src/adapters/collab/native/shot-props.ts";
 import { openNativeUndo } from "../../../../src/adapters/collab/native/undo-commands.ts";
-import { decodeNativeValue, encodeNativeValue, mintNativeId, mintNativeTagId, nativeFieldKey } from "../../../../src/adapters/collab/native/values.ts";
+import { decodeNativeValue, mintNativeId, mintNativeTagId, nativeFieldKey } from "../../../../src/adapters/collab/native/values.ts";
 import type { DocumentShape } from "../../../../src/core/document/validated.ts";
 import { registryCopies, registrySource, registryUndoCopies } from "./registry-harness.ts";
 
