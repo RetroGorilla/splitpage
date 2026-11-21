@@ -1,7 +1,8 @@
-import { beatPos } from "../../core/flow/flow.ts";
+import { beatPos, caretAt } from "../../core/flow/flow.ts";
+import type { FlowPos } from "../../core/flow/flow.ts";
 import { editorKeys } from "../../core/text/selection.ts";
 import { cssAttr } from "../../features/common/dom.ts";
-import { domKeys, posToDom } from "../../features/common/cell-dom.ts";
+import { domKeys, domToPos, posToDom } from "../../features/common/cell-dom.ts";
 import { paintedFromRow } from "../../features/rows/render.ts";
 import { fromHtml } from "../richtext.ts";
 import { writerControls } from "./writer.ts";
@@ -93,3 +94,70 @@ export const visualTextSurface: NativeTextSurface = Object.freeze({
     select(cell, anchor, head);
   }
 });
+
+function endOf(cell: Element): number {
+  return domToPos(cell, cell, cell.childNodes.length) ?? 0;
+}
+
+function writerPointExists(point: FlowPos): boolean {
+  const cell = point.kind === "beat" ? writerNarration.cell(point.rowId)
+    : document.querySelector(WRITER + ' .wr-heading[data-scene="' + cssAttr(point.sceneId) + '"]');
+  return !!cell && point.offset <= endOf(cell);
+}
+
+function placeWriterEnd(): void {
+  const root = document.querySelector<HTMLElement>(WRITER), first = root?.querySelector(".wr-beat[data-id]");
+  const beat = first?.getAttribute("data-id");
+  if (first && beat) writerControls()?.writerFlowControl()?.place(caretAt(beatPos(beat, endOf(first))));
+  else if (root) {
+    root.focus({ preventScroll: true });
+    document.getSelection()?.collapse(root, root.childNodes.length);
+  }
+}
+
+function cellPoint(selector: string, node: Node | null, offset: number) {
+  const element = node instanceof Element ? node : node?.parentElement;
+  const cell = element?.closest(selector), id = cell?.getAttribute("data-id");
+  if (!cell || !node || !id) return null;
+  const at = domToPos(cell, node, offset);
+  return at === null ? null : { id, offset: at };
+}
+
+export function captureNativeSwitchSelection(): (() => void) | null {
+  const active = document.activeElement;
+  const selection = document.getSelection();
+  if (active?.matches(WRITER)) {
+    const range = writerControls()?.writerFlowControl()?.selection();
+    return () => {
+      if (range && writerPointExists(range.anchor) && writerPointExists(range.head)) {
+        writerControls()?.writerFlowControl()?.place(range);
+      } else placeWriterEnd();
+    };
+  }
+  const selector = [SPLIT, SPLIT_VISUAL, WRITER_VISUAL].find(candidate => active?.matches(candidate));
+  if (!selector) return null;
+  const anchor = cellPoint(selector, selection?.anchorNode ?? null, selection?.anchorOffset ?? 0);
+  const head = cellPoint(selector, selection?.focusNode ?? null, selection?.focusOffset ?? 0);
+  const surface = selector === SPLIT ? splitNarration : visualTextSurface;
+  return () => {
+    if (selector === WRITER_VISUAL && head && !surface.cell(head.id)) {
+      writerControls()?.writerFlowControl()?.openVisual(head.id);
+    }
+    const from = anchor && surface.cell(anchor.id), to = head && surface.cell(head.id);
+    if (anchor && head && from && to && anchor.offset <= endOf(from) && head.offset <= endOf(to)) {
+      if (from === to) surface.place(to, head.id, anchor.offset, head.offset, false);
+      else {
+        const a = posToDom(from, anchor.offset), h = posToDom(to, head.offset);
+        to.focus({ preventScroll: true });
+        document.getSelection()?.setBaseAndExtent(a.node, a.offset, h.node, h.offset);
+      }
+      return;
+    }
+    if (selector === WRITER_VISUAL) { placeWriterEnd(); return; }
+    const first = document.querySelector<HTMLElement>(selector);
+    if (first) {
+      const end = endOf(first);
+      surface.place(first, first.dataset.id ?? "", end, end, false);
+    } else document.querySelector<HTMLElement>(".add-row-btn")?.focus({ preventScroll: true });
+  };
+}
