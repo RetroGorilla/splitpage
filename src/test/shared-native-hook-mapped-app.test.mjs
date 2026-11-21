@@ -57,6 +57,7 @@ after(() => {
 
 const hook = () => window.__sharedTest;
 const rows = doc => doc.rows.map(row => [row.id, row.audioText, row.visualText ?? ""]);
+const snapshot = doc => JSON.parse(JSON.stringify(doc));
 const script = [{ id: "r1", audioText: "Hello", visualText: "Look" }, { id: "r2", audioText: "World", visualText: "" }];
 const initial = [["r1", "Hello", "Look"], ["r2", "World", ""]];
 const root = () => document.getElementById("writer-doc");
@@ -166,6 +167,7 @@ test("native Writer paints reversed and duplicate peer updates and lands a fresh
   await tick();
   const expectPaint = (first, second) => {
     assertCopies([["r1", first, "Look"], ["r2", second, ""]], app, peer);
+    assert.deepEqual(snapshot(currentDocument()), snapshot(peer.document()));
     assert.deepEqual([painted("r1"), painted("r2")], [first, second]);
   };
   expectPaint("YHello", "World!");
@@ -180,10 +182,27 @@ test("native Writer paints reversed and duplicate peer updates and lands a fresh
   assert.equal(type(peer, "r1", 7, "!").kind, "written");
   await tick();
   expectPaint("YHello?!", "World!");
+  const { docId: shared, ...sharedContent } = snapshot(currentDocument());
   assert.deepEqual(leaveRunningSharedSession(), { ok: true });
   assert.notEqual(currentDocument().docId, sourceId);
+  const { docId: landed, ...landedContent } = snapshot(currentDocument());
+  assert.notEqual(landed, shared);
+  assert.deepEqual(landedContent, sharedContent);
   assert.deepEqual(rows(currentDocument()), [["r1", "YHello?!", "Look"], ["r2", "World!", ""]]);
   assert.equal(app.acceptsPeerUpdate(), false);
+});
+
+test("leaving the native hook withdraws its peer and keeps the peer edit", async t => {
+  await enterHook(t, script, true);
+  const active = hook();
+  assert.equal(active.nativePeer.type("r1", 0, "Y").kind, "written");
+  await tick();
+  const { app, peer } = active.read();
+  assert.deepEqual(rows(app), [["r1", "YHello", "Look"], ["r2", "World", ""]]);
+  assert.deepEqual(app, snapshot(peer));
+  assert.deepEqual(active.leave(), { ok: true });
+  assert.equal(active.read().peer, null);
+  assert.equal(active.nativePeer.type("r1", 0, "X"), undefined);
 });
 
 test("a native refused command renders one warning and writes nothing", async t => {
@@ -208,6 +227,24 @@ test("a native Writer edit with missing paint renders one warning and writes not
   assert.deepEqual(rows(hook().read().app), initial);
   assert.deepEqual(rows(hook().read().peer), initial);
   assert.deepEqual(hook().leave(), { ok: true });
+});
+
+test("ArrowRight on missing native Writer paint leaves both copies unchanged without a warning", async t => {
+  await enterHook(t, script, true);
+  const target = writerEnd("r1"), shown = t.mock.method(notices, "show"), before = warnings();
+  target.dataset.id = "missing";
+  target.textContent = "Unowned text";
+  try {
+    target.dispatchEvent(new window.KeyboardEvent("keydown", { key: "ArrowRight", bubbles: true, cancelable: true }));
+    await tick();
+    assert.deepEqual(rows(hook().read().app), initial);
+    assert.deepEqual(rows(hook().read().peer), initial);
+    assert.equal(shown.mock.callCount(), 0);
+    assert.deepEqual(warnings(), before);
+  } finally {
+    target.dataset.id = "r1";
+    target.textContent = "Hello";
+  }
 });
 
 test("an empty native Writer stays open without a first-beat input", async t => {
@@ -245,6 +282,8 @@ test("explicit draft flush after native leave writes the peer text and fresh ide
   const shared = currentDocument().docId;
   assert.equal(hook().nativePeer.type("r1", 0, "Shared ").kind, "written");
   await tick();
+  assert.equal(currentDocument().rows[0].audioText, "Shared Stored");
+  assert.equal(document.querySelector('#rows .cell-editable[data-id="r1"][data-field="audioText"]').textContent, "Shared Stored");
   assert.deepEqual(hook().leave(), { ok: true });
   const landed = currentDocument().docId;
   assert.notEqual(landed, original);
@@ -269,6 +308,7 @@ test("native peer removal offers no Recovery action and the removing author's un
   deliver(app, ...updates.splice(0));
   await tick();
   assertCopies(initial, app, peer);
+  assert.deepEqual(snapshot(currentDocument()), snapshot(peer.document()));
   assert.equal(painted("r2"), "World");
 });
 
@@ -322,8 +362,10 @@ test("native peer undo and redo publish two independent steps and empty history 
     await tick();
     assertCopies([["r1", audio, "Look"], ["r2", second, ""]], app, peer);
   };
+  const starting = snapshot(currentDocument());
   assert.equal(peer.commands.undo().kind, "unchanged");
   assert.equal(updates.length, 0);
+  assert.deepEqual(snapshot(peer.document()), starting);
   await check("Hello", "World");
   assert.equal(type(peer, "r1", 5, "?").kind, "written");
   assert.equal(peer.commands.formatText(anchor(peer, "r2", 0, 5), italic).kind, "written");
@@ -336,6 +378,7 @@ test("native peer undo and redo publish two independent steps and empty history 
     assert.equal(updates.length, 1);
     await check(first, second);
   }
+  assert.deepEqual(snapshot(currentDocument()), snapshot(peer.document()));
   assert.equal(app.commands.undo().kind, "unchanged");
 });
 
@@ -422,6 +465,8 @@ test("native peer Visual edits and a late joiner's own undo travel independently
   deliver(app, ...remote.splice(0));
   await tick();
   assertCopies(merged, app, peer, joiner);
+  assert.deepEqual(snapshot(currentDocument()), snapshot(peer.document()));
+  assert.deepEqual(snapshot(joiner.document()), snapshot(peer.document()));
   for (const [visual, audio] of [["BLoos", "World!"], ["BLoo", "World!"]]) {
     assert.equal(joiner.commands.undo().kind, "written");
     exchangeJoiner();
@@ -430,9 +475,11 @@ test("native peer Visual edits and a late joiner's own undo travel independently
   }
   assert.equal(joiner.commands.undo().kind, "unchanged");
   assert.equal(joined.length, 0);
+  assert.deepEqual(snapshot(currentDocument()), snapshot(peer.document()));
+  assert.deepEqual(snapshot(joiner.document()), snapshot(peer.document()));
 });
 
-test("a native late replica holds its chosen snapshot until delivery and closes after catch-up", async t => {
+test("a native late replica holds its chosen snapshot until delivery and stays live across app leave", async t => {
   const app = await enterNative(t), source = replica(t, app), remote = stream(source);
   assert.equal(type(source, "r2", 5, "!").kind, "written");
   deliver(app, ...remote.splice(0));
@@ -448,9 +495,11 @@ test("a native late replica holds its chosen snapshot until delivery and closes 
   assert.deepEqual(rows(joiner.document()), [["r2", "World!", ""]]);
   assert.equal(updates.length, 0);
   assert.deepEqual(leaveRunningSharedSession(), { ok: true });
-  joiner.close();
   assert.equal(app.acceptsPeerUpdate(), false);
-  assert.equal(joiner.acceptsPeerUpdate(), false);
+  assert.equal(type(source, "r2", 6, "?").kind, "written");
+  assert.equal(applyNativePeerUpdate(joiner, remote.at(-1)), true);
+  assert.deepEqual(rows(joiner.document()), [["r2", "World!?", ""]]);
+  assert.deepEqual(rows(currentDocument()), [["r2", "World!", ""]]);
 });
 
 function backspaceAt(id, from, to) {
