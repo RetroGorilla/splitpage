@@ -35,7 +35,7 @@ function written(result) {
 async function enter(t, view, initial = rows()) {
   adoptReplacement(migrateRows({ schema: 2, title: "Pending structure", paragraphsDecided: true, rows: initial }));
   const show = t.mock.method(notices, "show", () => {});
-  assert.deepEqual(await hook.enter({ backend: "native" }), { ok: true });
+  assert.deepEqual(await hook.enter(), { ok: true });
   const writer = writerControls();
   if (view === "Writer") writer.openWriter();
   t.after(() => {

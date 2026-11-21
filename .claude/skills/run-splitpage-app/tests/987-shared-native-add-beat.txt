@@ -2,7 +2,7 @@ open
 wait document.querySelectorAll('#rows .row').length > 0
 eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=window.__writerFlowTest;F.openFile(new File([JSON.stringify({schema:2,title:'Native blank beats',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello'},{id:'r2',audioText:'World'},{id:'r3',audioText:'Again'},{id:'r4',audioText:'Last'}],sections:[{id:'s1',name:'First',firstSceneId:'r2'},{id:'s2',name:'Second',firstSceneId:'r4'}]})],'native-blank-beats.splitpage'))
 wait F.state().title === 'Native blank beats'
-eval S.enter({backend:'native'})
+eval S.enter()
 eval window.rows=()=>S.read().app.rows;window.order=()=>rows().map(r=>r.id).join(',');window.agree=()=>JSON.stringify(S.read().app)===JSON.stringify(S.read().peer);window.cell=id=>document.querySelector('#rows .cell-editable[data-id="'+id+'"][data-field="audioText"]');window.at=(id,i)=>{const el=cell(id);el.focus();getSelection().setBaseAndExtent(el.firstChild,i,el.firstChild,i);return true};window.splitAt=(id,i)=>document.activeElement===cell(id)&&cell(id).contains(getSelection().focusNode)&&getSelection().isCollapsed&&getSelection().focusOffset===i;window.blank=id=>rows().some(r=>r.id===id&&r.audioText===''&&r.visualText==='')
 eval at('r1',1);getSelection().setBaseAndExtent(cell('r1').firstChild,1,cell('r1').firstChild,3);true
 click #rows .row-more[data-id="r1"]

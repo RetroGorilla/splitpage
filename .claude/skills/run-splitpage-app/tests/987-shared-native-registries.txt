@@ -2,7 +2,7 @@ open
 wait document.querySelectorAll('#rows .row').length > 0
 eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.Q=function(s){return document.querySelector(s)};F.openFile(new File([JSON.stringify({schema:2,title:'Native registries',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello',visualText:'<span class="tag-anchor" data-tag-cat="prop" data-tag-name="Mug" contenteditable="false">Mug</span><br><span class="broll-key" data-broll-id="bs1" contenteditable="false">B-roll:</span> Wide'}],people:[{id:'p1',name:'Cam'}],productionTags:[{id:'t_drone',cat:'gear',name:'Drone'}]})],'registries.splitpage'))
 wait F.state().title === 'Native registries'
-eval S.enter({backend:'native'})
+eval S.enter()
 eval window.same=function(read,want){return [S.read().app,S.read().peer].every(function(doc){return JSON.stringify(read(doc))===JSON.stringify(want)})};window.tag=function(cat,name){return Q('#production-list .tag-entity[data-key="'+cat+' '+name+'"]')};window.shot=function(d){return d.brollShots.find(function(s){return s.id==='bs1'})};window.notes=function(){return Q('.broll-card[data-id="bs1"] .broll-notes-input')};window.cell=function(){return Q('#rows .cell-editable[data-id="r1"][data-field="audioText"]')};Q('#btn-production').click();Q('#production-modes [data-group="cat"]').click()
 expect !!tag('prop','mug') && !!tag('gear','drone')
 eval tag('prop','mug').querySelector('[data-action="tag-status-cycle"]').click()

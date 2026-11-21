@@ -1,9 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { rows, checkParity, peer, runShared } from "./_undo-caret-parity.mjs";
+import { rows, checkCaret, peer, runShared } from "./_undo-caret-parity.mjs";
 
 for (const row of rows) for (const view of row.views) for (const order of row.orders ?? ["mine first"]) {
-  test(`undo caret parity, ${row.name}, ${view}${row.orders ? ", " + order : ""}: shared equals standalone`, () => checkParity(row, view, order));
+  test(`undo caret parity, ${row.name}, ${view}${row.orders ? ", " + order : ""}: shared equals standalone`, () => checkCaret(row, view, order));
 }
 
 test("undo caret, the other person adds a picture before the change, split: the cell decoder measures it", async () => {

@@ -1,4 +1,4 @@
-import { bootApp, closeApp } from "./_app-boot.mjs";
+import { bootApp, closeApp } from "./_legacy-shared-app-boot.mjs";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 
@@ -12,7 +12,7 @@ const { adoptReplacement, sharedSession } = await import("../bootstrap/wiring/se
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { writerControls } = await import("../bootstrap/wiring/writer.ts");
 const { undoOwner, sharedUndoRoute, stepSharedUndo } = await import("../bootstrap/wiring/undo.ts");
-const hook = window.__sharedTest;
+const hook = window.__legacySharedTest;
 
 const ROWS = [{ id: "r1", audioText: "Hello", visualText: "" }, { id: "r2", audioText: "World", visualText: "" }];
 const HELLO = ["h1", "h2", "h3", "h4", "h5"], WORLD = ["w1", "w2", "w3", "w4", "w5"];
@@ -97,7 +97,7 @@ async function walk(steps, act) {
 for (const row of GROUPING) {
   test(`peer grouping matches the Writer: ${row.name}`, async () => {
     script(TWINS);
-    assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
+    assert.deepEqual(await hook.enter(), { ok: true });
     try {
       const p = hook.peer, text = index => hook.read().app.rows[index].audioText;
       await walk(row.steps, ([kind, from, at]) => { if (kind === "erase") appEdits(from, at, ""); else appEdits(from, from, at); });
@@ -115,7 +115,7 @@ for (const row of GROUPING) {
 
 test("peer grouping: a plan that changes nothing leaves the open group open, and an applied plan ends it", async () => {
   script(TWINS);
-  assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
+  assert.deepEqual(await hook.enter(), { ok: true });
   try {
     const p = hook.peer, text = () => hook.read().peer.rows[1].audioText;
     assert.equal(p.type("r2", 5, "a").kind, "applied");
@@ -135,7 +135,7 @@ test("peer grouping: a plan that changes nothing leaves the open group open, and
 
 test("naming refuses a name already given to another identity, for characters and for beats, and a refused call names nothing", async () => {
   script();
-  assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
+  assert.deepEqual(await hook.enter(), { ok: true });
   try {
     const p = hook.peer, units = (which, beat) => p.identities(which).find(entry => entry.beat === beat).units;
     assert.throws(() => p.nameIdentities("app", "r1", 0, ["h", "e", "same", "same", "o"]), /The name is already given to another identity: same/);
@@ -167,7 +167,7 @@ function nameAppTyping(p) {
 for (const action of PEER_ACTIONS) for (const order of ORDERS) {
   test(`peer table: ${action.name}, delivered ${order === "D3" ? "D3 (the peer's change arrives while the app's typing is still buffered, without a composition)" : order}: both copies and every late joiner agree, identities match, and the peer's undo reverses it everywhere`, async () => {
     script();
-    assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
+    assert.deepEqual(await hook.enter(), { ok: true });
     try {
       const p = hook.peer, counted = hook.counters();
       p.nameIdentities("app", "r1", 0, HELLO);
@@ -219,7 +219,7 @@ for (const action of PEER_ACTIONS) for (const order of ORDERS) {
 
 test("the peer's undo and redo walk its own history through the shared undo, and an empty history refuses without changing anything", async () => {
   script();
-  assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
+  assert.deepEqual(await hook.enter(), { ok: true });
   try {
     const p = hook.peer, start = hook.read().app;
     const empty = p.undo();
@@ -241,7 +241,7 @@ test("the peer's undo and redo walk its own history through the shared undo, and
 
 test("the peer types and erases in a visual cell, and the joiner types and undoes through its own shared undo; catching up carries only the joiner's own changes", async () => {
   script([{ id: "r1", audioText: "Hello", visualText: "Look" }, { id: "r2", audioText: "World", visualText: "" }]);
-  assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
+  assert.deepEqual(await hook.enter(), { ok: true });
   try {
     const p = hook.peer, cells = doc => doc.rows.map(row => [row.id, row.audioText, row.visualText]);
     assert.equal(p.type("r1", 0, "B", "visualText").kind, "applied");
@@ -275,7 +275,7 @@ test("the peer types and erases in a visual cell, and the joiner types and undoe
 
 test("a joiner built at a chosen moment holds that moment until it catches up, and leaving the session disposes it", async () => {
   script();
-  assert.deepEqual(await hook.enter({ backend: "legacy" }), { ok: true });
+  assert.deepEqual(await hook.enter(), { ok: true });
   try {
     const p = hook.peer;
     assert.equal(p.type("r2", 5, "!").kind, "applied"); p.deliver();

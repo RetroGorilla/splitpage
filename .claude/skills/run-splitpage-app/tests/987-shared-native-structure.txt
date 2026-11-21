@@ -2,7 +2,7 @@ open
 wait document.querySelectorAll('#rows .row').length > 0
 eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;F.openFile(new File([JSON.stringify({schema:2,title:'Native structure',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello'},{id:'r2',audioText:'World'},{id:'r3',audioText:'Again'}]})],'native-structure.splitpage'))
 wait F.state().title === 'Native structure'
-eval S.enter({backend:'native'})
+eval S.enter()
 eval window.rows=()=>S.read().app.rows;window.cell=id=>document.querySelector('#rows .cell-editable[data-id="'+id+'"][data-field="audioText"]');window.at=(id,i)=>{const el=cell(id);el.focus();const r=document.createRange();r.setStart(el.firstChild,i);r.collapse(true);getSelection().removeAllRanges();getSelection().addRange(r);return true};window.agree=()=>JSON.stringify(S.read().app)===JSON.stringify(S.read().peer);window.order=()=>rows().map(r=>r.id).join(',');at('r1',2)
 key alt Enter
 wait rows().length === 4 && agree()

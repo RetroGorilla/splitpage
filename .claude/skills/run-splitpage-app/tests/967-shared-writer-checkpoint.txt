@@ -1,11 +1,11 @@
-open
+open /_legacy-shared-tests.html
 wait document.querySelectorAll('#rows .row').length > 0
-eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;F.openFile(new File([JSON.stringify({schema:2,title:'Shared Writer checkpoint',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello',visualText:''},{id:'r2',audioText:'World',visualText:''}],comments:[]})],'checkpoint.splitpage'))
+eval window.F=window.__splitpageFormats;window.S=window.__legacySharedTest;F.openFile(new File([JSON.stringify({schema:2,title:'Shared Writer checkpoint',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello',visualText:''},{id:'r2',audioText:'World',visualText:''}],comments:[]})],'checkpoint.splitpage'))
 wait F.state().title === 'Shared Writer checkpoint'
 click #btn-write
 wait window.__writerFlowTest.on()
 eval window.__writerFlowTest.place({anchor:{kind:'beat',rowId:'r1',offset:5},head:{kind:'beat',rowId:'r1',offset:5}});true
-eval S.enter({backend:'legacy'})
+eval S.enter()
 expect window.__writerFlowTest.on()
 expect window.__writerFlowTest.selection().head.rowId === 'r1' && window.__writerFlowTest.selection().head.offset === 5
 eval window.applied=S.peer.appliedUpdates().length;S.peer.hold();document.getElementById('writer-doc').focus();true

@@ -2,7 +2,7 @@ open
 wait document.querySelectorAll('#rows .row').length > 0
 eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;F.openFile(new File([JSON.stringify({schema:2,title:'Native IME',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello'},{id:'r2',audioText:'World'}],comments:[]})],'native-ime.splitpage'))
 wait F.state().title === 'Native IME'
-eval S.enter({backend:'native'})
+eval S.enter()
 eval window.C=function(id){return document.querySelector('#rows .cell-editable[data-id="'+id+'"][data-field="audioText"]')};window.at=function(id,n){var e=C(id);e.focus();getSelection().setBaseAndExtent(e.firstChild,n,e.firstChild,n);return true};at('r1',2)
 ime set か
 expect C('r1').textContent === 'Heかllo' && S.read().app.rows[0].audioText === 'Hello'

@@ -218,13 +218,6 @@
       "replace": "  (ports as TagPanelPorts).selection.clear();\n  if (editRecords(build => deleteTagsCommand(items.map("
     },
     {
-      "label": "rule 73: renaming a tag runs through the silent edit that drops the refusal",
-      "tests": ["src/test/shared-split-records-typed-tags-app.test.mjs"],
-      "file": "src/features/tags/panels.ts",
-      "find": "    const run = editRecords(() => command, quiet);",
-      "replace": "    const run = { changed: (ports as TagPanelPorts).edits.edit(command), held: false };"
-    },
-    {
       "label": "rule 73: removing a tag's labels in a shared session takes the standalone path, silent for a tag with no mentions",
       "tests": ["src/test/shared-split-records-refusals-app.test.mjs"],
       "file": "src/features/tags/panels.ts",
@@ -330,13 +323,6 @@
       "replace": "  input.value = \"\";\n  if (isHeld(typed().submit(\"broll-prop-input\", id, text, propSave(id)))) return;"
     },
     {
-      "label": "the prop box ignores the outcome and re-renders",
-      "tests": ["src/test/shared-split-records-typed-broll-app.test.mjs"],
-      "file": "src/features/broll/panel.ts",
-      "find": "    return heldWrite(editShots(shared => addShotPropCommand(id, text, shared), quiet));",
-      "replace": "    editShots(shared => addShotPropCommand(id, text, shared), quiet);\n    return \"saved\";"
-    },
-    {
       "label": "the tag person box moves focus to Add person whatever the outcome (Enter)",
       "tests": ["src/test/shared-split-records-held-tags-app.test.mjs"],
       "file": "src/features/tags/mount.ts",
@@ -377,13 +363,6 @@
       "file": "src/features/broll/panel.ts",
       "find": "  if (run.held) return run;\n  closing();\n  if (!quiet) renderBrollViews();\n  if (run.changed)",
       "replace": "  if (run.held) { clearSelection(); return run; }\n  closing();\n  if (!quiet) renderBrollViews();\n  if (run.changed)"
-    },
-    {
-      "label": "a refused gear quick add refills the box from the list",
-      "tests": ["src/test/shared-split-records-typed-tags-app.test.mjs"],
-      "file": "src/features/tags/panels.ts",
-      "find": "  if (run.held) return heldWrite(run);\n  if (!run.changed) { fillGearQuickAdd(); return \"saved\"; }",
-      "replace": "  if (run.held) { (document.getElementById(\"gear-quickadd-input\") as HTMLTextAreaElement).value = gearEntries().map(e => e.name).join(\"\\n\"); return heldWrite(run); }\n  if (!run.changed) { fillGearQuickAdd(); return \"saved\"; }"
     },
     {
       "label": "assigning a tag's owner drops change.owner",

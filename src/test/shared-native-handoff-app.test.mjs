@@ -31,7 +31,7 @@ await bootApp();
 after(closeApp);
 
 let hook = window.__sharedTest;
-const enter = () => hook.enter({ backend: "native" });
+const enter = () => hook.enter();
 const warning = "The shared session did not start: your recovery copy could not be saved.";
 const warnings = () => [...document.querySelectorAll("#toast-host .toast.warn")].map(toast => toast.textContent);
 const row = () => currentDocument().rows[0];
@@ -370,7 +370,7 @@ for (const { name, field, composing, blocked, writer } of stopCases) test(`app s
     await Promise.resolve();
     assert.deepEqual(errors, []);
     assert.equal(window.__sharedTest, undefined);
-    assert.deepEqual(await originalHook.enter({ backend: "native" }), { ok: false, reason: "app-stopped" });
+    assert.deepEqual(await originalHook.enter(), { ok: false, reason: "app-stopped" });
     assert.equal(destroyed.mock.callCount(), 2);
     assert.equal(new Set(destroyed.mock.calls.map(call => call.this)).size, 2);
     for (const [type, fn, capture] of registrations) {

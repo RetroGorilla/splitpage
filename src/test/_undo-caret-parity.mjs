@@ -266,14 +266,13 @@ export const longRows = [
   { name: "append to 120,000 characters", views: ["writer"], seed: [["R1", "a".repeat(120000)]], edits: [["type", "R1", 120000, 120000, "x"]], undo: 120000, redo: 120001 }
 ];
 
-export async function checkParity(row, view, order) {
+export async function checkCaret(row, view, sharedOrder) {
   const standalone = runStandalone(row, view);
-  const shared = await runShared(row, view, order);
   const rowId = row.caretRow ?? row.edits[0][1];
   if (row.undo !== undefined) assert.deepEqual(standalone.slice(0, 2).map(at => at?.slice(0, 3)), [[rowId, row.undo, row.undo], [rowId, row.redo, row.redo]], "standalone gives the literal");
   const seeded = new Set([...row.seed, ...(row.shared?.seed ?? [])].map(([id]) => id)), named = carets => carets.map(at => at?.map((part, index) => (index === 0 || index === 3) && typeof part === "string" && !["audioText", "visualText"].includes(part) && !seeded.has(part) ? "new row" : part));
   if (row.expect?.[view]) assert.deepEqual(named(standalone), row.expect[view], "standalone gives the literal selections");
-  assert.deepEqual(named(shared), named(standalone));
+  if (sharedOrder) assert.deepEqual(named(await runShared(row, view, sharedOrder)), named(standalone));
   assert.ok(currentDocument());
 }
 

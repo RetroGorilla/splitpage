@@ -1,10 +1,10 @@
-open
+open /_legacy-shared-tests.html
 wait document.querySelectorAll('#rows .row').length > 0
-eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.T=function(id){var e=document.querySelector('#writer-doc .wr-beat[data-id="'+id+'"]');return e?e.textContent.replace(/​/g,''):null};F.openFile(new File([JSON.stringify({schema:2,title:'Shared peer actions',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello',visualText:''},{id:'r2',audioText:'World',visualText:''}],comments:[]})],'peer-actions.splitpage'))
+eval window.F=window.__splitpageFormats;window.S=window.__legacySharedTest;window.T=function(id){var e=document.querySelector('#writer-doc .wr-beat[data-id="'+id+'"]');return e?e.textContent.replace(/​/g,''):null};F.openFile(new File([JSON.stringify({schema:2,title:'Shared peer actions',paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello',visualText:''},{id:'r2',audioText:'World',visualText:''}],comments:[]})],'peer-actions.splitpage'))
 wait F.state().title === 'Shared peer actions'
 click #btn-write
 wait window.__writerFlowTest.on()
-eval S.enter({backend:'legacy'})
+eval S.enter()
 wait S.read().peer !== null
 eval S.peer.nameIdentities('app','r1',0,['h1','h2','h3','h4','h5']);S.peer.nameIdentities('app','r2',0,['w1','w2','w3','w4','w5']);window.joined=S.peer.lateJoiner('app');true
 expect JSON.stringify(window.joined) === JSON.stringify(S.read().app)
