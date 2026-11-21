@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
+import { decodeStateVector, encodeStateAsUpdate, encodeStateVector } from "yjs";
 import { bootApp, closeApp, rewireApp } from "./_app-boot.mjs";
 import { startApp, stopApp } from "../bootstrap/app.ts";
 import { startupReady } from "../application/startup-signal.ts";
@@ -635,48 +636,125 @@ for (const [name, elapsed, typing, edited, undos] of [
   check("Hello");
 });
 
+test("native Writer refuses one deletion range from Hello to World", async t => {
+  const standalone = inventory();
+  await enterHook(t, script, true);
+  const active = hook(), before = snapshot(currentDocument());
+  const shown = t.mock.method(notices, "show");
+  const selection = {
+    anchor: { kind: "beat", rowId: "r1", offset: 3 },
+    head: { kind: "beat", rowId: "r2", offset: 2 }
+  };
+  root().focus();
+  writerControls().writerFlowControl().place(selection);
+  document.dispatchEvent(new window.Event("selectionchange"));
+  const range = document.getSelection().getRangeAt(0).cloneRange();
+  for (const direction of ["Backward", "Forward"]) {
+    assert.equal(input(root(), `deleteContent${direction}`, null, range), true);
+    await tick();
+    assert.deepEqual(snapshot(currentDocument()), before);
+    assert.deepEqual(snapshot(active.read().peer), before);
+    assert.deepEqual(writerControls().writerFlowControl().selection(), selection);
+  }
+  const warning = ["This is not available in a shared session yet.", "warn"];
+  assert.deepEqual(shown.mock.calls.map(call => call.arguments), [warning, warning]);
+  assert.equal(active.nativePeer.step("undo").kind, "unchanged");
+  assert.deepEqual(active.leave(), { ok: true });
+  assert.notEqual(currentDocument().docId, before.docId);
+  assert.deepEqual(snapshot(currentDocument()), { ...before, docId: currentDocument().docId });
+  writerControls().closeWriter();
+  assert.deepEqual(inventory(), standalone);
+});
+
 const peerEdits = [
   ["types", peer => type(peer, "r1", 0, "Y"), [["r1", "YHello!", "Look"], ["r2", "World", ""]]],
   ["types astral text", peer => type(peer, "r1", 0, "😀"), [["r1", "😀Hello!", "Look"], ["r2", "World", ""]]],
   ["deletes text", peer => peer.commands.deleteText(anchor(peer, "r1", 1, 3)), [["r1", "Hlo!", "Look"], ["r2", "World", ""]]],
-  ["formats text", peer => peer.commands.formatText(anchor(peer, "r1", 0, 4), bold),
-    [["r1", "<strong>Hell</strong>o!", "Look"], ["r2", "World", ""]]],
+  ["formats text", peer => peer.commands.formatText(anchor(peer, "r1", 0, 5), bold),
+    [["r1", "<strong>Hello</strong>!", "Look"], ["r2", "World", ""]]],
+  ["deletes across beats", peer => peer.commands.replaceAll([
+    { row: "r1", cell: "narration", start: 3, end: 5 },
+    { row: "r2", cell: "narration", start: 0, end: 2 }
+  ], ""), [["r1", "Hel!", "Look"], ["r2", "rld", ""]]],
+  ["removes the edited beat", peer => peer.commands.removeRows(["r1"]), [["r2", "!World", ""]]],
   ["removes the other beat", peer => peer.commands.removeRows(["r2"]), [["r1", "Hello!", "Look"]]]
 ];
 const afterTyping = [["r1", "Hello!", "Look"], ["r2", "World", ""]];
 for (const [name, edit, expected] of peerEdits) {
-  const orders = name === "removes the other beat" ? ["forward", "reverse", "duplicate"] : ["forward", "reverse", "duplicate", "buffered"];
+  const orders = ["forward", "reverse", "duplicate", "buffered"];
   for (const order of orders) {
-    test(`native peer ${name} with ${order} delivery and only its undo changes the replicas`, async t => {
+    const variants = name === "formats text" && order !== "buffered" ? [" (app first client ID)", " (peer first client ID)"] : [""];
+    for (const variant of variants) test(`native peer ${name} with ${order} delivery${variant} and only its undo changes the replicas`, async t => {
+      const standalone = inventory();
       const app = await enterNative(t, script, true), peer = replica(t, app), joiner = replica(t, app);
+      if (variant) {
+        const stored = decodeStateVector(encodeStateVector(app.ydoc));
+        const clients = [1, 2, 3].filter(id => !stored.has(id));
+        if (variant.includes("peer first")) clients.reverse();
+        [app.ydoc.clientID, peer.ydoc.clientID] = clients;
+      }
       const local = stream(app), remote = stream(peer);
+      const initialWarnings = warnings();
+      const start = snapshot(app.document());
+      assert.deepEqual(snapshot(joiner.document()), start);
       assert.equal(edit(peer).kind, "written");
+      assert.deepEqual(rows(peer.document()), expected.map(([id, audio, visual]) =>
+        [id, id === "r1" ? audio.slice(0, -1) : audio.replace(/^!/, ""), visual]));
+      assert.equal(remote.length, 1);
       assert.equal(input(writerEnd("r1"), "insertText", "!"), true);
       assert.equal(painted("r1"), "Hello!");
-      if (order === "buffered") {
-        deliver(app, ...remote);
-        await tick();
-        assert.deepEqual(rows(currentDocument()), initial);
-      }
+      assert.equal(local.length, 0);
+      if (order === "buffered") deliver(app, remote[0]);
+      await tick();
+      assert.deepEqual(snapshot(currentDocument()), start);
+      assert.deepEqual(snapshot(app.document()), order === "buffered" ? snapshot(peer.document()) : start);
+      assert.equal(painted("r1"), "Hello!");
       window.dispatchEvent(new window.Event("pagehide"));
       await tick();
-      if (order !== "buffered") assert.deepEqual(rows(currentDocument()), afterTyping);
-      for (const [target, updates] of (order === "reverse" ? [[peer, local], [app, remote]] : [[app, remote], [peer, local]])) {
-        deliver(target, ...updates);
-        if (order === "duplicate") deliver(target, ...updates);
+      assert.equal(local.length, 1);
+      assert.deepEqual(rows(currentDocument()), order === "buffered" ? expected : afterTyping);
+      const exchange = order === "buffered" ? [[peer, local[0]]] : [[app, remote[0]], [peer, local[0]]];
+      if (order === "reverse") exchange.reverse();
+      for (const [target, update] of exchange) {
+        deliver(target, update);
+        if (order === "duplicate") deliver(target, update);
       }
-      deliver(joiner, ...local, ...remote);
-      await tick();
-      assertCopies(expected, app, peer, joiner);
-      assert.deepEqual(rows(replica(t, app).document()), expected);
-      assert.deepEqual(rows(replica(t, peer).document()), expected);
+      assert.deepEqual(snapshot(joiner.document()), start);
+      const catchUp = () => {
+        for (const source of [app, peer]) {
+          deliver(joiner, encodeStateAsUpdate(source.ydoc, encodeStateVector(joiner.ydoc)));
+        }
+      };
+      catchUp();
+      const agree = async expectedRows => {
+        await tick();
+        assert.deepEqual(rows(currentDocument()), expectedRows);
+        const projection = snapshot(currentDocument());
+        for (const copy of [app, peer, joiner, replica(t, app), replica(t, peer)]) {
+          assert.deepEqual(snapshot(copy.document()), projection);
+        }
+        return projection;
+      };
+      const merged = variant.includes("app first")
+        ? [["r1", "<strong>Hello!</strong>", "Look"], ["r2", "World", ""]]
+        : expected;
+      await agree(merged);
+      assert.equal(appActions.has("recovery"), false);
       remote.length = 0;
       assert.equal(peer.commands.undo().kind, "written");
+      assert.equal(remote.length, 1);
       deliver(app, ...remote);
-      deliver(joiner, ...remote);
-      await tick();
-      assertCopies(afterTyping, app, peer, joiner);
+      catchUp();
+      const restored = name === "removes the other beat" && order === "buffered"
+        ? [["r1", "Hello", "Look"], ["r2", "World!", ""]]
+        : afterTyping;
+      const landed = await agree(restored);
+      assert.deepEqual(warnings(), initialWarnings);
       assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+      assert.notEqual(currentDocument().docId, landed.docId);
+      assert.deepEqual(snapshot(currentDocument()), { ...landed, docId: currentDocument().docId });
+      writerControls().closeWriter();
+      assert.deepEqual(inventory(), standalone);
     });
   }
 }
