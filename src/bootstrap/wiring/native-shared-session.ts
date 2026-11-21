@@ -6,6 +6,7 @@ import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { scriptCellOf, sanitizeHtml } from "../richtext.ts";
 import { paintRowTimes } from "../../features/rows/render.ts";
 import { keepNativeFieldPaint, mountNativeSharedInput } from "./native-shared-input.ts";
+import { captureNativeSwitchSelection } from "./native-narration-surfaces.ts";
 import { createNativeEditorRecords } from "./native-shared-records.ts";
 import { createNativeEditorFind } from "./native-shared-find.ts";
 import { mountNativeRecordEvents } from "./native-shared-record-events.ts";
@@ -134,6 +135,8 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
       input = null;
     },
     settle: () => input?.finish() ?? null,
+    captureSelection: entering => native.isClosingOrClosed() ? null
+      : captureNativeSwitchSelection(native, entering, () => !native.isClosingOrClosed() && published === native.revision()),
     abandon: () => { input?.abandonComposition(); },
     start: () => {
       initial = enterSharedDocument(native.document());
