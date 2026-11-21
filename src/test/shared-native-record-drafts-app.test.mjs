@@ -222,15 +222,21 @@ for (const announced of [false, true]) {
     const show = await enter(t);
     openShot();
     const release = announced ? sharedRecoverySession().beforeCommand(() => { notices.show(refused, "warn"); return "announced"; }) : hold(t);
+    const removed = "The shot was removed, so its note was not saved. The text is kept at the top of the b-roll list.";
     try {
       blur(type(notes, "Wide take"));
       assert.deepEqual(warnings(show), [refused]);
       await removeShot();
       assert.equal(find(notes), null);
       assert.deepEqual(strip("#broll-panel"), ["Wide take"]);
+      if (announced) {
+        runBrollRefresh();
+        runBrollRefresh();
+        assert.deepEqual([warnings(show), strip("#broll-panel")], [[refused, removed], ["Wide take"]]);
+      }
       release();
       runBrollRefresh();
-      assert.deepEqual(warnings(show).slice(1), ["The shot was removed, so its note was not saved. The text is kept at the top of the b-roll list."]);
+      assert.deepEqual(warnings(show), [refused, removed]);
       copies(doc => shot(doc), undefined);
       click('#broll-panel [data-action="typed-unsaved-dismiss"]');
       runBrollRefresh();
@@ -371,7 +377,10 @@ for (const dismiss of [false, true]) {
     sidePanels().close("gear-panel");
     openTags();
     assert.deepEqual(strip("#production-panel"), ["Drone\nWireless lav"]);
-    if (dismiss) click('#production-panel [data-action="typed-unsaved-dismiss"][data-box="gear-quickadd-input"]');
+    if (dismiss) {
+      click('#production-panel [data-action="typed-unsaved-dismiss"][data-box="gear-quickadd-input"]');
+      assert.deepEqual(strip("#production-panel"), []);
+    }
     release();
     renderProduction();
     copies(gear, ["Drone"]);
@@ -399,8 +408,11 @@ for (const remove of [false, true]) {
     release();
     renderProduction();
     copies(doc => doc.people, []);
-    if (remove) copies(doc => tag(doc), undefined);
-    else {
+    if (remove) {
+      copies(doc => tag(doc), undefined);
+      assert.deepEqual(strip("#production-panel"), ["Camera"]);
+      assert.equal(need("#production-panel .typed-unsaved-text").readOnly, true);
+    } else {
       assert.equal(need(tagBox("person")).value, "Camera");
       assert.deepEqual(strip("#production-panel"), []);
       click(tagAction("person-save"));
@@ -591,6 +603,8 @@ for (const panel of ["tag", "B-roll"]) {
     const read = doc => isTag ? [owner(doc, tag(doc)), owner(doc, tag(doc, "Lamp"))] : [shot(doc).location, shot(doc, "b2").location];
     if (isTag) renderProduction(); else runBrollRefresh();
     copies(read, ["", ""]);
+    copies(doc => [doc.people, shot(doc).location, shot(doc, "b2").location], [[], "", ""]);
+    assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
     if (!find(selector)) {
       assert.deepEqual(strip(isTag ? "#production-panel" : "#broll-panel"), [text]);
       if (isTag) click('[data-action="bulk-person-new"]'); else toggleShotBulk("location");
@@ -599,6 +613,7 @@ for (const panel of ["tag", "B-roll"]) {
     key(need(selector), "Enter");
     await update();
     copies(read, ["", text]);
+    if (isTag) copies(doc => tag(doc).owner, "");
     assert.equal(hook.nativePeer.step("undo").kind, "written");
     assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
   });
@@ -640,12 +655,14 @@ for (const reply of [false, true]) {
     armDeleteComment(document.createElement("button"), "thread");
     renderComments();
     assert.equal(need(selector).textContent, "Revised version");
-    const bodies = doc => reply ? doc.comments[0].replies.map(entry => entry.body) : doc.comments.slice(1).map(entry => entry.body);
-    copies(bodies, []);
+    const threads = doc => doc.comments.map(entry => [entry.id === "thread", entry.body, entry.replies.map(response => response.body)]);
+    copies(threads, [[true, "Original", []]]);
+    const posted = reply ? [[true, "Original", ["Revised version"]]] : [[true, "Original", []], [false, "Revised version", []]];
     click(post);
     await update();
+    copies(threads, posted);
     renderComments();
-    copies(bodies, ["Revised version"]);
+    copies(threads, posted);
     assert.equal(hook.nativePeer.step("undo").kind, "written");
     assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
   });
@@ -670,6 +687,7 @@ for (const remove of [false, true]) {
     assert.equal(warnings(show).length, remove ? 2 : 1);
     if (remove) assert.match(warnings(show)[1], /comment was removed.*reply was not saved/);
     click('#comments-list [data-action="typed-unsaved-dismiss"]');
+    assert.deepEqual(strip("#comments-list"), []);
     setCommentFilterMode("all");
     if (!remove) {
       openReply();
