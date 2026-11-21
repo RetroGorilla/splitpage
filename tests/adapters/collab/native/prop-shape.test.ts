@@ -334,6 +334,13 @@ test("concurrent adds at the cap keep the hidden entry through undo, redo and re
       assert.deepEqual(read(right), [...initial, box]);
       settle();
       assert.deepEqual(read(left), [...initial, box]);
+      write(right, { kind: "set", collection: "shots", ids: ["shot"], fields: { props: [] } });
+      settle();
+      assert.deepEqual(read(left), []);
+      assert.ok([...propsOf(left).values()].every(record => record.get("removed") === true));
+      assert.equal(undo.undo().kind, "written");
+      settle();
+      assert.deepEqual(read(left), [...initial, box]);
       write(left, { kind: "removeProp", id: "shot", prop: "t_seed1" });
       settle();
       assert.deepEqual(read(left), [...initial.slice(1), box, rope]);

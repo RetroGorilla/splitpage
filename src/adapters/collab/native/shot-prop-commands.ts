@@ -23,7 +23,6 @@ export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape
   const shown = shownNativeShotPropEntries(resolved);
   const active = entries.filter(entry => !entry.removed);
   const byKey = new Map(entries.map(entry => [entry.key, entry]));
-  const resolvedByKey = new Map(resolved.map(entry => [entry.key, entry.prop]));
   const byRef = new Map(shown.map(entry => [brollPropKey(entry.prop.id, entry.prop.name), entry]));
 
   function plan(writes: Write[], changes: readonly PropWrite[]): void {
@@ -64,7 +63,7 @@ export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape
   function replace(writes: Write[], props: readonly BrollProp[]): void {
     const desired = props.map(prop => {
       const key = nativeShotPropKey(prop);
-      return { prop, key, entry: byKey.get(key), projected: resolvedByKey.get(key) };
+      return { prop, key, entry: byKey.get(key) };
     });
     const kept = new Set(desired.map(entry => entry.key));
     const omitted = active.filter(entry => !kept.has(entry.key));
@@ -73,10 +72,10 @@ export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape
     const positions = new Map(active.map((entry, at) => [entry.key, at]));
     const anchor = rankAnchors(desired.map(({ key }) => positions.get(key) ?? -1));
     let left: Drop | undefined;
-    for (const [at, { prop, key, projected, entry }] of desired.entries()) {
+    for (const [at, { prop, key, entry }] of desired.entries()) {
       if (anchor.has(at) && entry) {
         left = entry;
-        if ((projected?.name ?? entry.prop.name) !== prop.name) changes.push(map => { propRecord(map, key).set("name", encodeNativeValue(prop.name)); });
+        if (entry.prop.name !== prop.name) changes.push(map => { propRecord(map, key).set("name", encodeNativeValue(prop.name)); });
         continue;
       }
       let rightAt = desired.findIndex((_, next) => next > at && anchor.has(next));
@@ -89,7 +88,7 @@ export function prepareNativeShotProps(shot: Y.Map<unknown>, tags: DocumentShape
         placement = dropRank(key, left, right);
       }
       const rank = entry && after(entry, left) && (!right || after(right, entry)) ? entry.rank : placement?.rank ?? null;
-      changes.push(putProp(key, projected?.name === prop.name && entry ? entry.prop : prop, rank, entry));
+      changes.push(putProp(key, prop, rank, entry));
       left = { key, rank };
     }
     plan(writes, changes);

@@ -473,6 +473,11 @@ test("whole-list prop edits and a targeted move only write the entries they chan
     assert.equal(changeNativeRegistry(script, list([lamp, rope, box])).kind, "written");
     assert.deepEqual(changes.splice(0), [[["bs1", "props", rope.id], ["removed"]]]);
     assert.deepEqual(script.reader.document().brollShots[0]?.props, [lamp, rope, box]);
+    const renamed = { ...lamp, name: "Desk lamp" };
+    assert.equal(changeNativeRegistry(script, { kind: "set", collection: "tags", ids: [lamp.id], fields: { name: renamed.name } }).kind, "written");
+    assert.equal(changeNativeRegistry(script, list([renamed, rope, box])).kind, "written");
+    assert.deepEqual(changes.splice(0), [[["bs1", "props", lamp.id], ["name"]]]);
+    unchanged(script, list([renamed, rope, box]));
   } finally { script.doc.destroy(); }
 });
 
