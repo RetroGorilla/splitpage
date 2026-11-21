@@ -54,8 +54,10 @@ wait noToast()
 key Enter
 wait A('r1','audioText') === 'abcq<br>def' && same()
 expect noToast() && document.querySelectorAll('#rows .row').length === 5 && document.activeElement === Q('r1','audioText')
+expect Q('r1','audioText').innerHTML === 'abcq<br>def' && Q('r1','audioText').querySelectorAll('br').length === 1 && getSelection().isCollapsed && getSelection().focusNode === Q('r1','audioText').lastChild && getSelection().focusNode.textContent === 'def' && getSelection().focusOffset === 0
 press w
 wait A('r1','audioText') === 'abcq<br>wdef' && same()
+expect Q('r1','audioText').innerHTML === 'abcq<br>wdef' && getSelection().isCollapsed && getSelection().focusNode.textContent === 'wdef' && getSelection().focusOffset === 1
 key ctrl KeyZ
 wait A('r1','audioText') === 'abcq<br>def' && same()
 key ctrl KeyZ
@@ -88,9 +90,11 @@ wait noToast()
 key alt ArrowUp
 wait S.read().app.rows.map(function(r){return r.id}).join() === 'r1,r3,r2,r4,r5' && same()
 expect noToast() && document.activeElement === document.getElementById('writer-doc') && window.__writerFlowTest.selection().head.rowId === 'r3' && window.__writerFlowTest.selection().head.offset === 1
+expect Array.from(document.querySelectorAll('#writer-doc .wr-beat'),function(el){return el.dataset.id}).join() === 'r1,r3,r2,r4,r5' && getSelection().isCollapsed && document.querySelector('#writer-doc .wr-beat[data-id="r3"]').contains(getSelection().focusNode)
 press v
 wait A('r3','audioText') === 'ovne' && same()
-expect S.read().app.rows.map(function(r){return r.id}).join() === 'r1,r3,r2,r4,r5' && window.__writerFlowTest.selection().head.rowId === 'r3' && window.__writerFlowTest.selection().head.offset === 2
+expect S.read().app.rows.map(function(r){return r.id}).join() === 'r1,r3,r2,r4,r5' && Array.from(document.querySelectorAll('#writer-doc .wr-beat'),function(el){return el.dataset.id}).join() === 'r1,r3,r2,r4,r5'
+expect document.querySelector('#writer-doc .wr-beat[data-id="r3"]').textContent.replace(/\u200b/g,'') === 'ovne' && window.__writerFlowTest.selection().head.rowId === 'r3' && window.__writerFlowTest.selection().head.offset === 2
 click #wr-close
 wait !window.__writerFlowTest.on()
 key ctrl KeyF
@@ -146,3 +150,18 @@ expect noToast() && document.activeElement === RI && !RI.disabled && FI.value ==
 eval window.sharedId=S.read().app.docId;window.withoutId=function(d){var c=Object.assign({},d);delete c.docId;return JSON.stringify(c)};window.finalDoc=withoutId(S.read().app);window.left=S.leave();true
 expect left.ok === true && S.read().peer === null && S.read().app.docId !== sharedId && withoutId(S.read().app) === finalDoc
 expect Q('r5','audioText').textContent === 'Xgreen pot' && Q('r2','visualText').querySelector('.broll-key')?.dataset.brollId === 'S1'
+jsclick #find-close
+eval F.openFile(new File([JSON.stringify({schema:2,title:'Shared refusals narration key',paragraphsDecided:true,people:[{id:'p1',name:'Alice'}],brollShots:[{id:'S1',name:'Cup',status:'unshot',origin:'list'}],rows:[{id:'r1',audioText:'abcdef',visualText:'abcdef'},{id:'r2',audioText:KEY+' a cup',visualText:''},{id:'r3',audioText:'one',visualText:''},{id:'r4',audioText:'two',visualText:'mug'},{id:'r5',audioText:'green tea',visualText:''}],comments:[]})],'native-refusals-narration-key.splitpage'))
+wait F.state().title === 'Shared refusals narration key'
+eval S.enter()
+wait S.read().peer !== null
+expect same() && Q('r2','audioText').textContent === 'B-roll: a cup' && Q('r2','audioText').querySelector('.broll-key')?.dataset.brollId === 'S1'
+expect [S.read().app,S.read().peer].every(function(d){return d.rows[1].audioText===KEY+' a cup'&&d.rows[1].visualText===''&&d.brollShots.some(function(s){return s.id==='S1'&&s.name==='Cup'})})
+key ctrl KeyF
+wait !document.querySelector('.findbar').hidden
+eval window.FI=document.getElementById('find-input');FI.focus();FI.select();true
+press cup
+expect FI.value === 'cup' && document.getElementById('find-count').textContent === '1 of 1'
+eval window.narrationSharedId=S.read().app.docId;window.narrationFinalDoc=withoutId(S.read().app);window.narrationLeft=S.leave();true
+expect narrationLeft.ok === true && S.read().peer === null && S.read().app.docId !== narrationSharedId && withoutId(S.read().app) === narrationFinalDoc
+expect Q('r2','audioText').textContent === 'B-roll: a cup' && Q('r2','audioText').querySelector('.broll-key')?.dataset.brollId === 'S1'
