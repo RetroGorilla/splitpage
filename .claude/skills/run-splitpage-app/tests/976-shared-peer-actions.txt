@@ -4,7 +4,7 @@ eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.T=fu
 wait F.state().title === 'Shared peer actions'
 click #btn-write
 wait window.__writerFlowTest.on()
-eval S.enter()
+eval S.enter({backend:'legacy'})
 wait S.read().peer !== null
 eval S.peer.nameIdentities('app','r1',0,['h1','h2','h3','h4','h5']);S.peer.nameIdentities('app','r2',0,['w1','w2','w3','w4','w5']);window.joined=S.peer.lateJoiner('app');true
 expect JSON.stringify(window.joined) === JSON.stringify(S.read().app)

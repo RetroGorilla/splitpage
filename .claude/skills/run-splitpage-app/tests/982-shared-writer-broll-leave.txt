@@ -6,7 +6,7 @@ eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=wi
 wait F.state().title === 'Writer leave'
 click #btn-write
 wait W.on()
-eval S.enter()
+eval S.enter({backend:'legacy'})
 wait S.read().peer !== null
 # Type the marker in the visual box and leave it with Escape
 eval W.openVisual('r1');true

@@ -108,7 +108,7 @@ function startSharedTestHook(): () => void {
     const marks = landed && kept ? [() => { noteSaveChange(); }, () => { noteDraftChange(); }] : [];
     runEvery([() => { ending?.dispose(); }, () => { endingNative?.dispose(); }, ...(kept ? [() => { draftSource.resumeWriting(); }] : []), ...marks]);
   };
-  type EntryOptions = { readonly backend?: "native" };
+  type EntryOptions = { readonly backend?: "native" | "legacy" };
   const enter = async (stored?: Uint8Array, options?: EntryOptions): Promise<SharedSwitchOutcome> => {
     if (!live) return { ok: false, reason: APP_STOPPED };
     if (switching) return { ok: false, reason: SHARED_SWITCHING };
@@ -150,7 +150,7 @@ function startSharedTestHook(): () => void {
         } } : {}),
         opening: openingStatus
       };
-      const nativeEntry = options?.backend === "native";
+      const nativeEntry = options?.backend !== "legacy";
       const opened: { session?: ReturnType<typeof openNativeEditor>["native"] } = {};
       const result = await enterSharedSession(entering, nativeEntry ? (doc, failedClose) => {
         const { backend, native } = openNativeEditor(entering, doc, failedClose, stored);
