@@ -81,7 +81,7 @@ function plainVisual(row: FlowRow): string {
   return gallerySize(row) ? "Picture" : "";
 }
 
-const flowPorts: FlowPorts = {
+export const writerFlowPorts: FlowPorts = {
   cells: flowCell,
   newId: () => randomIds.id("r"),
   hasVisual: row => !!projection(flowCell(row.visualText)) || !!gallerySize(row)
@@ -110,7 +110,7 @@ export interface SharedWriterSource {
 
 export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
   if (!stopWriterRuntimeFeature()) throw new Error("The Writer could not finish");
-  const commands = shared ? writerFlowCommands(flowPorts, { author: shared.author, writer: shared.writer, handle: shared.handle }) : null;
+  const commands = shared ? writerFlowCommands(writerFlowPorts, { author: shared.author, writer: shared.writer, handle: shared.handle }) : null;
   return writer.replace(() => {
     const render = currentRowsRender();
     if (!render) throw new Error("Writer needs the row renderer to be mounted");
@@ -130,7 +130,7 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
           // why: rule 78: opening the Writer in a shared session writes no paragraphs
           if (!shared && !sharedSession()) {
             undoOwner().flush();
-            const initialized = standaloneSession().amend(initializeFlowParagraphs(flowPorts, edits.allowed, starts => { undoOwner().settleAfterApply(starts); }));
+            const initialized = standaloneSession().amend(initializeFlowParagraphs(writerFlowPorts, edits.allowed, starts => { undoOwner().settleAfterApply(starts); }));
             if (initialized.kind === "failed") throw initialized.error;
           }
           let dismissedGhost: typeof tagGhost = null;
@@ -178,13 +178,13 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
               mount: handlers => mountFlowClipboardRoutes(root, handlers),
               copy: (range, data, cut) => {
                 const doc = documentReader.current();
-                if (doc && copyFlowClipboard(doc, range, data, flowPorts, cut ? randomHexBytes(16) : null, migrateRows)) {
+                if (doc && copyFlowClipboard(doc, range, data, writerFlowPorts, cut ? randomHexBytes(16) : null, migrateRows)) {
                   notices.show("Some pictures didn't fit on the clipboard: they paste only where their files are available.", "warn");
                 }
               },
               paste: (range, data) => {
                 const doc = documentReader.current();
-                return doc ? pasteFlowClipboard(doc, range, data, flowPorts, text.inertBody, migrateRows) : null;
+                return doc ? pasteFlowClipboard(doc, range, data, writerFlowPorts, text.inertBody, migrateRows) : null;
               }
             },
             lifetime: documentLifetime,
@@ -192,7 +192,7 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
             root,
             // why: disposal can finish the old surface between the owner swap and shared hydration
             doc: () => documentReader.current() as unknown as FlowDoc ?? openedDocument,
-            flow: commands ? commands.flow : flowPorts,
+            flow: commands ? commands.flow : writerFlowPorts,
             decode: flowCell,
             storedHtml: text.storedHtmlFromDom,
             run: edits.run,

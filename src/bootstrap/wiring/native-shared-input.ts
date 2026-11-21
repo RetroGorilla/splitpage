@@ -1,11 +1,13 @@
+import { randomIds } from "../../adapters/identity/ids.ts";
 import type { openNativeSession } from "../../adapters/collab/native/session.ts";
 import type { NativeEditStamp, NativeTextPlacement, NativeTextRange, NativeUndoPoint, NativeUndoSelection, NativeUndoSelectionInput } from "../../adapters/collab/native/text-commands.ts";
 import type { CellRange } from "../../application/editing/cell-editing.ts";
 import type { ReportPort } from "../../application/session/ports.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
-import { isBlankBeat, swapBeatsCommand } from "../../application/commands/rows.ts";
-import { sceneBeforeBeat, scenesInOrder, storedSceneName } from "../../core/document/scenes.ts";
-import { beatPos, HEADING_MARKER, headingPos, startsParagraph } from "../../core/flow/flow.ts";
+import { addBeatCommand, isBlankBeat, swapBeatsCommand } from "../../application/commands/rows.ts";
+import { sceneBeforeBeat, sceneForBeat, scenesInOrder, storedSceneName } from "../../core/document/scenes.ts";
+import type { SceneDocument } from "../../core/document/scenes.ts";
+import { beatPos, enterAt, HEADING_MARKER, headingPos, startsParagraph } from "../../core/flow/flow.ts";
 import type { FlowDoc, FlowPos, FlowRange } from "../../core/flow/flow.ts";
 import { breakLine, deleteRange, markThroughout, replaceText, sliceCell, typingMarks } from "../../core/text/edits.ts";
 import { cellLength, cleanText, projection } from "../../core/text/runs.ts";
@@ -22,12 +24,12 @@ import { rowDrag } from "./editor-owners.ts";
 import type { NativeTextSurface } from "./native-narration-surfaces.ts";
 import { documentReader } from "./ports/document.ts";
 import { notices } from "./ports/effects.ts";
-import { editAllowed } from "./session-owner.ts";
+import { editAllowed, sessionStamps } from "./session-owner.ts";
 import { sharedUndoRoute } from "./undo.ts";
-import { writerControls } from "./writer.ts";
+import { writerControls, writerFlowPorts } from "./writer.ts";
 
 interface NativeInputPorts {
-  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "resolveTextSelection" | "isClosingOrClosed" | "subscribe">;
+  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "resolveTextSelection" | "isClosingOrClosed" | "subscribe" | "revision">;
   readonly session: Pick<SharedDocumentSession, "admit" | "refuse" | "run" | "subscribe">;
   readonly editAttribution: () => NativeEditStamp;
   readonly now?: () => number;
@@ -38,6 +40,7 @@ interface NativeInputPorts {
 
 const EDITABLE = "#rows .cell-editable, #writer-doc, .wr-flow-visual-text, #doc-title, #writer-title";
 const UNDO_SURFACES = "#rows .cell-editable, #writer-doc, .wr-flow-visual-text";
+const ROW_MENU_BUTTON = '#rows [data-action="row-menu"]';
 const HISTORY = /^history(Undo|Redo)$/;
 const FORMAT_MARKS = new Map<string, NativePlainMark>([
   ["bold", "b"], ["italic", "i"], ["underline", "u"], ["strikeThrough", "s"], ["highlight", "hl"], ["direction", "dir"]
@@ -161,8 +164,24 @@ function formattingMark(event: Event, button: Element | null, key: KeyboardEvent
   return type.startsWith("format") ? FORMAT_MARKS.get(type.charAt(6).toLowerCase() + type.slice(7)) : undefined;
 }
 
+function insertPlacement(doc: SceneDocument, id: string, side: "above" | "below") {
+  const at = doc.rows.findIndex(row => row.id === id);
+  if (at < 0) return null;
+  const scene = sceneForBeat(doc, id)?.id ?? null;
+  const next = doc.rows[at + (side === "above" ? -1 : 1)]?.id;
+  const heading = side === "above" ? sceneBeforeBeat(doc, id) : next ? sceneBeforeBeat(doc, next) : undefined;
+  return { scene, neighbour: heading?.id ?? next ?? null, kind: heading ? "heading" : "beat" };
+}
+
+export function sameNativeInsertPlacement(shown: SceneDocument | null, live: SceneDocument, beat: string, side: "above" | "below"): boolean {
+  const before = shown && insertPlacement(shown, beat, side), after = insertPlacement(live, beat, side);
+  return !!before && !!after && before.scene === after.scene && before.neighbour === after.neighbour && before.kind === after.kind;
+}
+
 export function mountNativeSharedInput({ native, session, editAttribution, now = Date.now, report, paintIsCurrent = () => false, publish = () => {} }: NativeInputPorts) {
   let draft: Draft | null = null, stopped: string | null = null, uncertain = false;
+  let insertMenuSelection: ReturnType<typeof captureInsertMenuSelection> | null = null;
+  let lastWriterEnterRefusal: string | null = null;
   let imeTarget: Element | null = null;
   let compositionRefused = false, fullRefused = false;
   let composingInside: Pick<Draft, "cell" | "selection" | "html"> | null = null;
@@ -602,8 +621,65 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     return { beat, offset, endOffset: to, before, surface, html, range: anchored.range, backward: right && { anchor: right, head: before } };
   }
 
-  function split(cell: Element): void {
+  function insertWriterBeat(beat: string, side: "above" | "below", before: NativeTextRange, keep: boolean, transferParagraphStart = false): void {
+    const step = native.commands.insertAdjacentBeat.withSelection(before, beat, side, editAttribution(), transferParagraphStart);
+    if (step.result.kind === "refused") { refuseCommand(step.result.reason); return; }
+    const landing = keep ? beat : step.result.created;
+    step.recordAfter(caretAnchor(landing, 0));
+    publish();
+    const fresh = writerNarration.cell(landing);
+    if (fresh) writerNarration.place(fresh, landing, 0, 0, true);
+  }
+
+  function refuseWriterEnter(beat: string, from: number, to: number, cell: "narration" | "name"): false {
+    const key = JSON.stringify([native.revision(), cell, beat, from, to]);
+    if (key !== lastWriterEnterRefusal) {
+      lastWriterEnterRefusal = key;
+      refuseCommand(UNSUPPORTED);
+    }
+    return false;
+  }
+
+  function writerSplit(caret: NonNullable<ReturnType<typeof structureCaret>>, shown: ReturnType<typeof documentReader.current>): boolean {
+    const doc = native.document(), index = doc.rows.findIndex(row => row.id === caret.beat);
+    const row = doc.rows[index];
+    if (!row) return false;
+    const at = (offset: number) => beatPos(caret.beat, offset);
+    const plan = enterAt(doc as unknown as FlowDoc, { anchor: at(caret.offset), head: at(caret.endOffset) }, writerFlowPorts);
+    if (!plan) return false;
+    const refuse = () => refuseWriterEnter(caret.beat, caret.offset, caret.endOffset, "narration");
+    if (!("rows" in plan)) return refuse();
+    if (plan.rows.length === doc.rows.length + 1) {
+      const above = plan.rows[index]?.id !== row.id;
+      const fresh = plan.rows[index + (above ? 0 : 1)];
+      if (fresh?.audioText && !above) return true;
+      const side = above ? "above" : "below";
+      if (!fresh || caret.range || !sameNativeInsertPlacement(shown, doc, row.id, side)) {
+        return refuse();
+      }
+      insertWriterBeat(row.id, side, caret.before, above, fresh.paragraphStart === true);
+      return false;
+    }
+    const planned = plan.rows[index];
+    // why: keep native splits available when standalone Enter also changes a paragraph flag
+    if (!caret.range && plan.rows.length === doc.rows.length - 1) return true;
+    if (plan.rows.length !== doc.rows.length || planned?.id !== row.id || planned.paragraphStart !== true) {
+      return refuse();
+    }
+    if (caret.range) return row.paragraphStart === true ? refuse() : true;
+    const step = native.commands.setField.withSelection(caret.before, { kind: "beat", id: row.id, field: "paragraphStart" }, true);
+    if (step.result.kind === "refused") refuseCommand(step.result.reason);
+    if (step.result.kind === "written") {
+      step.recordAfter(caret.before);
+      publish();
+      show({ anchor: { target: caret.before.target, offset: caret.offset }, head: { target: caret.before.target, offset: caret.offset } });
+    }
+    return false;
+  }
+
+  function split(cell: Element, writer = false): void {
     if (draft?.composing) { refuseCommand(PENDING); return; }
+    const shown = writer ? documentReader.current() : null;
     const caret = structureCaret(cell, true);
     if (!caret) return;
     if (caret.surface === writerNarration && !caret.range && headingCandidates.has(caret.beat)) {
@@ -621,6 +697,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         return;
       }
     }
+    if (writer && !writerSplit(caret, shown)) return;
     const step = caret.range ? native.commands.deleteAndSplit.withSelection(caret.backward ?? caret.range, caret.range)
       : native.commands.splitRow.withSelection(caret.before, caret.before);
     if (step.result.kind === "refused") { refuseCommand(step.result.reason); return; }
@@ -742,6 +819,32 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const node = document.getSelection()?.focusNode;
     const heading = (node instanceof Element ? node : node?.parentElement)?.closest(".wr-heading");
     return heading && cell.contains(heading) ? heading : null;
+  }
+
+  function enterWriterHeading(heading: Element): void {
+    const shown = documentReader.current(), id = heading.getAttribute("data-scene") ?? "";
+    const refusal = admissionRefusal();
+    if (refusal) { refuseCommand(refusal); return; }
+    if (beforePress()) return;
+    const doc = native.document(), scene = scenesInOrder(doc)?.find(item => item.id === id);
+    const name = storedSceneName(doc, id), selection = cellSelection(heading);
+    if (!scene || !name || heading.textContent !== name || !selection || selection.from !== selection.to) {
+      session.refuse(UNSUPPORTED);
+      return;
+    }
+    if (selection.from === name.length) {
+      const fresh = writerNarration.cell(scene.firstSceneId);
+      if (fresh) writerNarration.place(fresh, scene.firstSceneId, 0, 0, true);
+      return;
+    }
+    const index = doc.rows.findIndex(row => row.id === scene.firstSceneId), previous = doc.rows[index - 1];
+    if (selection.from !== 0 || !previous || !sameNativeInsertPlacement(shown, doc, previous.id, "below")) {
+      refuseWriterEnter(id, selection.from, selection.to, "name");
+      return;
+    }
+    const anchor = native.commands.anchorText({ beat: id, cell: "name" }, 0);
+    if (anchor.kind === "refused") { refuseCommand(anchor.reason); return; }
+    insertWriterBeat(previous.id, "below", anchor.range, false);
   }
 
   function headingInput(event: Event, heading: Element, remove: boolean): void {
@@ -894,32 +997,45 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const removeHeading = heading && joinDirection(event, heading) === -1;
     const joining = narration && joinDirection(event, narration);
     const key = event.type === "keydown" ? event as KeyboardEvent : null;
+    const adding = key?.key === "Enter" && (key.ctrlKey || key.metaKey) && !!editableText?.closest("#rows");
     const mark = formattingMark(event, button, key);
     const input = event.type === "beforeinput" ? event as InputEvent : null;
     const inputType = input?.inputType;
     const commandInput = input?.cancelable && !input.isComposing;
     const writer = cell?.id === "writer-doc";
-    const enter = key?.key === "Enter" && !key.ctrlKey && !key.metaKey;
-    const line = key ? enter && !key.altKey && (key.shiftKey || !writer)
+    const modified = key && (key.ctrlKey || key.metaKey);
+    const enter = key?.key === "Enter" && (writer || !modified);
+    const line = key ? enter && !modified && !key.altKey && (key.shiftKey || !writer)
       : commandInput && (inputType === "insertLineBreak" || inputType === "insertParagraph" && !writer);
     const moving = key && moveDirection(key);
-    const splitting = key ? enter && (writer ? !key.altKey && !key.shiftKey : key.altKey) : writer && commandInput && inputType === "insertParagraph";
+    const splitting = key ? enter && (writer ? !key.altKey && (!key.shiftKey || modified) : key.altKey) : writer && commandInput && inputType === "insertParagraph";
     if (event.type === "focusout") {
       if (imeTarget === cell) imeTarget = null;
       const next = (event as FocusEvent).relatedTarget;
-      if (writer && next && next !== document.body) leaveHeadingLine(true);
+      if (cell && next instanceof Element && next.closest(ROW_MENU_BUTTON)) {
+        insertMenuSelection = captureInsertMenuSelection(cell) ?? insertMenuSelection;
+      }
+      if (writer) {
+        lastWriterEnterRefusal = null;
+        if (next && next !== document.body) leaveHeadingLine(true);
+      }
       if (cell) leaveTextCell(cell, next);
       return;
     }
     if (event.type === "pointerdown") {
       imeTarget = null;
+      lastWriterEnterRefusal = null;
       if (!draft?.composing && !stopped) {
         finish();
         native.endDeletionGroup();
       }
+      if (target?.closest(ROW_MENU_BUTTON)) insertMenuSelection = captureInsertMenuSelection();
+      else if (!target?.closest("#rows .row-menu")) insertMenuSelection = null;
       return;
     }
     if (event.type === "click") {
+      if (target?.closest(ROW_MENU_BUTTON)) insertMenuSelection = captureInsertMenuSelection() ?? insertMenuSelection;
+      else if (!target?.closest("#rows .row-menu")) insertMenuSelection = null;
       if (!button) return;
     } else if (!cell && !(event.type === "drop" && target?.closest("#rows .visual-cell"))) return;
     if (key) {
@@ -932,7 +1048,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       }
       if ((editableText || heading || cell?.id === "writer-doc") && (draft?.composing || imeKey)) {
         event.stopImmediatePropagation();
-        if (undoing || draft?.composing && (splitting || joining || removeHeading || moving || mark || line)) {
+        if (undoing || adding || draft?.composing && (splitting || joining || removeHeading || moving || mark || line)) {
           event.preventDefault();
           if (!stopped && (undoing || !imeKey)) refuseCommand(PENDING);
         }
@@ -1003,8 +1119,17 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     try {
       if (native.isClosingOrClosed()) return;
       if (stopped && (editableText || heading || writer)) {
-        if (stopped !== "full" && narration && !splitting && !joining && !moving && !mark && !line
+        if (stopped !== "full" && narration && !splitting && !joining && !moving && !mark && !line && !adding
           && event.type !== "paste" && !inputType?.startsWith("delete")) session.refuse(stopped);
+        return;
+      }
+      if (adding && editableText) {
+        const id = editableText.getAttribute("data-id");
+        if (id) {
+          const command = addBeatCommand(id, randomIds.id("r"), sessionStamps);
+          const outcome = session.run({ ...command, structure: { kind: "insert-beat", id, focus: visual ? "visual" : "narration" } });
+          if (outcome.kind === "failed") report(outcome.error);
+        }
         return;
       }
       if (moving) {
@@ -1017,12 +1142,13 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         }
       }
       if (narration && joining) { join(narration, joining); return; }
+      if (heading && splitting) { enterWriterHeading(heading); return; }
       if (heading && (removeHeading || event.type === "beforeinput" && event.cancelable)) {
         headingInput(event, heading, !!removeHeading);
         return;
       }
       if (narration && splitting) {
-        split(narration);
+        split(narration, writer);
         return;
       }
       if (editableText && mark) { format(editableText, mark); return; }
@@ -1135,6 +1261,17 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     return PENDING;
   }
 
+  function visualSelection(beat: string, active = document.activeElement) {
+    const cell = active && visualTextSurface.cellAt(active);
+    if (cell?.getAttribute("data-id") !== beat) return null;
+    const selection = readSelection(cell, document.getSelection());
+    if (!selection) return null;
+    const target = { beat, cell: "visual" } as const;
+    const anchor = native.commands.anchorText(target, selection.anchor);
+    const head = native.commands.anchorText(target, selection.head);
+    return anchor.kind === "anchored" && head.kind === "anchored" ? { anchor: anchor.range, head: head.range } : null;
+  }
+
   function currentCaret() {
     const active = document.activeElement;
     const cell = active && shownNarrationSurface().cellAt(active);
@@ -1146,8 +1283,20 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     return point && { row, range: caretAnchor(point.beat, point.offset) };
   }
 
-  function captureMoveSelection() {
-    const active = document.activeElement;
+  function captureInsertMenuSelection(active = document.activeElement) {
+    if (!active?.closest("#rows .cell-editable")) return null;
+    const narration = captureMoveSelection(active);
+    const visual = visualSelection(active.getAttribute("data-id") ?? "", active);
+    return narration || visual ? { narration, visual } : null;
+  }
+
+  function takeInsertMenuSelection() {
+    const selection = insertMenuSelection;
+    insertMenuSelection = null;
+    return selection;
+  }
+
+  function captureMoveSelection(active = document.activeElement) {
     if (!active) return null;
     const live = document.getSelection(), cells = writerSelectionCells(active, live);
     if (cells && cells.anchor !== cells.head && live?.anchorNode && live.focusNode) {
@@ -1236,6 +1385,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     beforePress,
     refuseCommand,
     currentCaret,
+    visualSelection,
+    takeInsertMenuSelection,
     bindWriterPaint,
     clearMovePaint,
     captureMoveSelection,

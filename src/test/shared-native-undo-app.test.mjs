@@ -20,6 +20,7 @@ import { breakUndoGroup } from "../bootstrap/wiring/undo.ts";
 import { mountNativeSharedInput } from "../bootstrap/wiring/native-shared-input.ts";
 import { createSessionCapabilities } from "../application/session/capabilities.ts";
 import { appActions } from "../bootstrap/wiring/ports/actions.ts";
+import { documentReader } from "../bootstrap/wiring/ports/document.ts";
 
 window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};
@@ -441,7 +442,7 @@ test("Writer: Markdown Enter rebases buffered typing around a peer edit in the s
 const views = {
   Split: {
     open: () => {},
-    surface: () => cell(),
+    surface: id => cell(id),
     caret: (_view, id, from, to = from) => { cell(id).focus(); setCellSelection(cell(id), from, to); },
     at: (_view, id = "r1") => {
       const selection = cellSelection(cell(id));
@@ -1092,6 +1093,38 @@ test("Writer: a stale heading cannot supply the range for a rename", async t => 
   assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
 });
 
+test("Split: Visual Ctrl+Enter matches standalone and replays its selection", async t => {
+  const visual = id => document.querySelector('#rows .cell-editable[data-id="' + id + '"][data-field="visualText"]');
+  const insert = () => {
+    const prior = visual("r1");
+    prior.focus();
+    setCellSelection(prior, 1, 3);
+    assert.equal(press(prior, "Enter"), true);
+  };
+  const at = id => {
+    const target = visual(id), selection = cellSelection(target);
+    assert.equal(document.activeElement, target);
+    return [id, selection.from, selection.to];
+  };
+  const original = ["r1"], rows = [{ id: "r1", audioText: "Hello", visualText: "Look" }];
+  adoptReplacement(migrateRows({ title: "Standalone Visual", rows }));
+  insert();
+  const local = documentReader.current();
+  const expected = insertSnapshot(local, original, at(local.rows[1].id));
+  const show = await enter(t, rows);
+  insert();
+  const [, created] = rowOrder();
+  assert.deepEqual(insertSnapshot(hook.read().app, original, at(created)), expected);
+  assert.equal(press(visual(created), "z"), true);
+  assert.deepEqual(rowOrder(), original);
+  assert.deepEqual(at("r1"), ["r1", 1, 3]);
+  assert.equal(press(visual("r1"), "y"), true);
+  assert.deepEqual(insertSnapshot(hook.read().app, original, at(created)), expected);
+  await Promise.resolve();
+  assert.deepEqual(hook.read().peer, hook.read().app);
+  assert.equal(show.mock.callCount(), 0);
+});
+
 const threeBeats = () => [...twoBeats, { id: "r3", audioText: "Again" }];
 const fourBeats = () => [...threeBeats(), { id: "r4", audioText: "Last" }];
 const rowOrder = () => hook.read().app.rows.map(row => row.id);
@@ -1311,7 +1344,247 @@ test("Native Split attaches no move paint listener and Writer removes its listen
   assert.deepEqual(moveListeners(removed), [listener]);
 });
 
+function insertSnapshot(doc, original, selection) {
+  const key = id => original.includes(id) ? id : "blank";
+  return {
+    rows: doc.rows.map(row => [key(row.id), row.audioText, row.visualText, row.status, !!row.paragraphStart]),
+    sections: doc.sections?.map(scene => [scene.id, key(scene.firstSceneId)]),
+    selection: selection && [key(selection[0]), selection[1], selection[2]]
+  };
+}
+
+const sceneEdges = [{ id: "s1", name: "First", firstSceneId: "r2" }, { id: "s2", name: "Second", firstSceneId: "r4" }];
+
+for (const [name, id, offset, keys, index, stays] of [
+  ["Split", "r3", 2, {}, 3, false],
+  ["Split", "r3", 2, { ctrlKey: false, metaKey: true, shiftKey: true }, 3, false],
+  ["Writer", "r2", 0, { ctrlKey: false }, 1, true],
+  ["Writer", "r2", 0, {}, 1, true],
+  ["Writer", "r3", 5, { ctrlKey: false, metaKey: true, shiftKey: true }, 3, false],
+  ["Writer", "r3", 0, {}, 3, false]
+]) {
+  const visualOnly = name === "Writer" && id === "r3" && offset === 0;
+  test(name + ": Enter insertion matches standalone " + id + " at " + offset + " " + JSON.stringify(keys), async t => {
+    const rows = structuredClone(fourBeats());
+    rows[1].paragraphStart = true;
+    if (visualOnly) { rows[2].audioText = ""; rows[2].visualText = "Look"; }
+    const original = rows.map(row => row.id), kind = views[name];
+    adoptReplacement(migrateRows({ title: "Standalone script", rows, sections: sceneEdges, paragraphsDecided: true }));
+    const local = kind.open(t);
+    kind.caret(local, id, offset);
+    assert.equal(press(kind.surface(id), "Enter", keys), true);
+    const expected = insertSnapshot(documentReader.current(), original, kind.at(local, documentReader.current().rows[stays ? index + 1 : index].id));
+    assert.equal(expected.rows[index][0], "blank");
+    if (name === "Writer") writerControls().closeWriter();
+    const show = await enter(t, rows, undefined, sceneEdges), view = kind.open(t);
+    kind.caret(view, id, offset);
+    const before = insertSnapshot(hook.read().app, original, kind.at(view, id));
+    assert.equal(press(kind.surface(id), "Enter", keys), true);
+    const created = rowOrder()[index], landing = stays ? id : created;
+    assert.deepEqual(insertSnapshot(hook.read().app, original, kind.at(view, landing)), expected);
+    assert.equal(press(kind.surface(landing), "z"), true);
+    assert.deepEqual(insertSnapshot(hook.read().app, original, kind.at(view, id)), before);
+    assert.equal(press(kind.surface(id), "y"), true);
+    assert.deepEqual(insertSnapshot(hook.read().app, original, kind.at(view, landing)), expected);
+    await Promise.resolve();
+    assert.deepEqual(hook.read().peer, hook.read().app);
+    assert.equal(show.mock.callCount(), 0);
+  });
+}
+
+test("Split: clicking Insert beat keeps menu focus and records the narration selection for undo and redo", async t => {
+  const kind = views.Split, original = ["r1", "r2"];
+  const menu = () => document.querySelector('#rows .row-more[data-id="r1"]');
+  const mouseClick = button => {
+    button.dispatchEvent(new window.MouseEvent("pointerdown", { bubbles: true }));
+    button.focus();
+    button.dispatchEvent(new window.MouseEvent("click", { bubbles: true, detail: 1 }));
+  };
+  const choose = () => {
+    mouseClick(menu());
+    const insert = document.querySelector('#rows .row-menu:not([hidden]) [data-action="insert-below"][data-id="r1"]');
+    assert.equal(insert.textContent.trim(), "Insert beat");
+    mouseClick(insert);
+    assert.equal(document.activeElement, insert);
+    return insert;
+  };
+  adoptReplacement(migrateRows({ title: "Standalone script", rows: twoBeats }));
+  kind.caret(null, "r1", 1, 3);
+  choose();
+  const expected = insertSnapshot(documentReader.current(), original, null);
+  const selected = document.getSelection().toString();
+  mouseClick(menu());
+  const show = await enter(t, twoBeats);
+  kind.caret(null, "r1", 1, 3);
+  const insert = choose();
+  assert.deepEqual(insertSnapshot(hook.read().app, original, null), expected);
+  assert.equal(document.getSelection().toString(), selected);
+  insert.blur();
+  assert.equal(press(document.body, "z"), true);
+  assert.deepEqual(rowOrder(), original);
+  assert.deepEqual(kind.at(null), ["r1", 1, 3]);
+  assert.equal(document.getSelection().toString(), "el");
+  assert.equal(press(cell(), "y"), true);
+  assert.deepEqual(kind.at(null), ["r1", 1, 3]);
+  assert.deepEqual(insertSnapshot(hook.read().app, original, null), expected);
+  assert.equal(show.mock.callCount(), 0);
+});
+
+for (const atTop of [false, true]) {
+  test("Writer: Enter at a heading start " + (atTop ? "refuses without a preceding beat" : "matches standalone before a later heading"), async t => {
+    const rows = atTop ? [{ id: "r1", audioText: "Hello" }] : twoBeats;
+    const sections = [{ id: "s1", name: "Scene", firstSceneId: atTop ? "r1" : "r2" }];
+    const original = rows.map(row => row.id), point = { kind: "heading", sceneId: "s1", offset: 0 };
+    adoptReplacement(migrateRows({ title: "Standalone heading", rows, sections, paragraphsDecided: true }));
+    const local = writer(t);
+    local.flow.place({ anchor: point, head: point });
+    assert.equal(press(root(), "Enter", { ctrlKey: false }), true);
+    const expected = insertSnapshot(documentReader.current(), original, local.at());
+    assert.equal(expected.rows[atTop ? 0 : 1][0], "blank");
+    assert.equal(expected.sections[0][1], sections[0].firstSceneId);
+    writerControls().closeWriter();
+    const show = await enter(t, rows, undefined, sections), view = writer(t);
+    view.flow.place({ anchor: point, head: point });
+    assert.equal(press(root(), "Enter", { ctrlKey: false }), true);
+    if (atTop) {
+      assert.deepEqual(rowOrder(), original);
+      assert.deepEqual(view.flow.selection().head, point);
+      assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+      assert.equal(press(root(), "Enter", { ctrlKey: false }), true);
+      assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+    } else {
+      assert.deepEqual(insertSnapshot(hook.read().app, original, view.at()), expected);
+      assert.equal(press(root(), "z"), true);
+      assert.deepEqual(rowOrder(), original);
+      assert.deepEqual(view.flow.selection().head, point);
+      assert.equal(press(root(), "y"), true);
+      assert.deepEqual(insertSnapshot(hook.read().app, original, view.at()), expected);
+      assert.equal(show.mock.callCount(), 0);
+    }
+  });
+}
+
+for (const [from, to] of [[0, 2], [3, 5]]) {
+  test("Writer: selection deletion and adjacent blank insertion refuse as one unsupported edit " + from, async t => {
+    adoptReplacement(migrateRows({ title: "Standalone selection", rows: twoBeats, paragraphsDecided: true }));
+    const local = writer(t);
+    local.caret("r1", from, to);
+    assert.equal(press(root(), "Enter", { ctrlKey: false }), true);
+    const expected = documentReader.current().rows;
+    assert.deepEqual(expected.map(row => row.audioText), from === 0 ? ["", "llo", "World"] : ["Hel", "", "World"]);
+    writerControls().closeWriter();
+    const show = await enter(t, twoBeats), view = writer(t);
+    view.caret("r1", from, to);
+    assert.equal(press(root(), "Enter", { ctrlKey: false }), true);
+    assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["Hello", "World"]);
+    assert.deepEqual(view.at(), ["r1", from, to]);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+    assert.equal(press(root(), "Enter", { ctrlKey: false }), true);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+  });
+}
+
+for (const repeatEnter of [true, false]) {
+  test("Writer: " + (repeatEnter ? "second Enter on a blank splits it as on native main" : "Enter over Wo deletes and splits as on native main"), async t => {
+    adoptReplacement(migrateRows({ title: "Standalone paragraph", rows: twoBeats, paragraphsDecided: true }));
+    const local = writer(t);
+    const enterKey = () => assert.equal(press(root(), "Enter", { ctrlKey: false }), true);
+    if (repeatEnter) {
+      local.caret("r1", 5);
+      enterKey();
+      assert.deepEqual(documentReader.current().rows.map(row => row.audioText), ["Hello", "", "World"]);
+    } else local.caret("r2", 0, 2);
+    enterKey();
+    assert.deepEqual(documentReader.current().rows.map(row => [row.id, row.audioText, !!row.paragraphStart]), [
+      ["r1", "Hello", false], ["r2", repeatEnter ? "World" : "rld", true]
+    ]);
+    assert.deepEqual(local.at(), ["r2", 0, 0]);
+    writerControls().closeWriter();
+
+    const show = await enter(t, twoBeats), native = writer(t);
+    const snapshot = () => hook.read().app.rows.map(row => [row.id, row.audioText, !!row.paragraphStart]);
+    if (repeatEnter) {
+      native.caret("r1", 5);
+      enterKey();
+      const first = hook.read().app.rows[1].id;
+      assert.deepEqual(snapshot(), [["r1", "Hello", false], [first, "", false], ["r2", "World", false]]);
+      assert.deepEqual(native.at(), [first, 0, 0]);
+    } else native.caret("r2", 0, 2);
+    const before = hook.read().app, selection = native.at(), first = before.rows[1].id;
+    enterKey();
+    const created = hook.read().app.rows[2].id;
+    assert.deepEqual(snapshot(), repeatEnter
+      ? [["r1", "Hello", false], [first, "", false], [created, "", false], ["r2", "World", false]]
+      : [["r1", "Hello", false], ["r2", "", false], [created, "rld", false]]);
+    assert.deepEqual(native.at(), [created, 0, 0]);
+    assert.equal(document.activeElement, root());
+    const after = hook.read().app;
+    await Promise.resolve();
+    assert.deepEqual(hook.read().peer, after);
+    assert.equal(press(root(), "z"), true);
+    assert.deepEqual(hook.read().app, before);
+    assert.deepEqual(native.at(), selection);
+    assert.equal(document.getSelection().toString(), repeatEnter ? "" : "Wo");
+    assert.equal(press(root(), "y"), true);
+    assert.deepEqual(hook.read().app, after);
+    assert.deepEqual(native.at(), [created, 0, 0]);
+    assert.equal(show.mock.callCount(), 0);
+  });
+}
+
 for (const [name, kind] of Object.entries(views)) {
+  test(name + ": insertion flushes buffered typing with a peer edit and gives insertion a separate undo step", async t => {
+    const show = await enter(t, twoBeats), view = kind.open(t);
+    const writerEnd = name === "Writer", offset = writerEnd ? 5 : 2;
+    kind.caret(view, "r1", offset);
+    typeKeys(kind.surface(), "X");
+    assert.equal(app(), "Hello");
+    assert.equal(hook.nativePeer.type("r1", 0, "P").kind, "written");
+    assert.equal(press(kind.surface(), "Enter"), true);
+    const text = writerEnd ? "PHelloX" : "PHeXllo";
+    assert.equal(app(), text);
+    const created = rowOrder()[1];
+    assert.deepEqual(rowOrder(), ["r1", created, "r2"]);
+    assert.notEqual(created, "r2");
+    assert.deepEqual(kind.at(view, created), [created, 0, 0]);
+    assert.equal(press(kind.surface(created), "z"), true);
+    assert.deepEqual(rowOrder(), ["r1", "r2"]);
+    assert.equal(app(), text);
+    assert.deepEqual(kind.at(view, "r1"), ["r1", offset + 2, offset + 2]);
+    assert.equal(press(kind.surface(), "z"), true);
+    assert.equal(app(), "PHello");
+    await Promise.resolve();
+    assert.deepEqual(hook.read().peer, hook.read().app);
+    assert.equal(show.mock.callCount(), 0);
+  });
+
+  for (const remove of [false, true]) {
+    test(name + ": insertion refuses when a peer " + (remove ? "removed the shown anchor" : "changed the shown neighbour"), async t => {
+      const show = await enter(t, threeBeats()), view = kind.open(t);
+      kind.caret(view, "r1", 5);
+      const peerEdit = remove ? hook.nativePeer.removeBeat("r1") : hook.nativePeer.moveBeat("r2", null);
+      assert.equal(peerEdit.kind, "written");
+      assert.deepEqual(rowOrder(), ["r1", "r2", "r3"]);
+      assert.equal(press(kind.surface(), "Enter"), true);
+      assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+      await Promise.resolve();
+      assert.deepEqual(rowOrder(), remove ? ["r2", "r3"] : ["r1", "r3", "r2"]);
+      assert.deepEqual(hook.read().peer, hook.read().app);
+    });
+  }
+
+  test(name + ": insertion shortcuts cancel during an open composition", async t => {
+    const show = await enter(t, twoBeats), view = kind.open(t);
+    kind.caret(view, "r1", 2);
+    assert.equal(compose(kind.surface(), "start", ""), false);
+    const before = kind.at(view, "r1");
+    for (const shiftKey of [false, true]) assert.equal(press(kind.surface(), "Enter", { shiftKey }), true);
+    assert.deepEqual(rowOrder(), ["r1", "r2"]);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [UNAVAILABLE]);
+    assert.deepEqual(kind.at(view, "r1"), before);
+    compose(kind.surface(), "end", "");
+  });
+
   test(name + ": Alt+Enter splits only in Split", async t => {
     const show = await enter(t), view = kind.open(t);
     kind.caret(view, "r1", 2);
@@ -2075,6 +2348,18 @@ const fixtureViews = {
 };
 
 for (const [name, kind] of Object.entries(fixtureViews)) {
+  test(name + ": insertion shortcuts stay quiet after native typing stops", async t => {
+    const { native, refused } = await openFixture(t), view = kind.open(t);
+    kind.caret(view, 8);
+    assert.equal(compose(kind.surface(), "start", ""), false);
+    native.close();
+    await Promise.resolve();
+    assert.deepEqual(refused.mock.calls.map(call => call.arguments), [["native-input-pending"]]);
+    for (const shiftKey of [false, true]) assert.equal(press(kind.surface(), "Enter", { shiftKey }), true);
+    assert.deepEqual(refused.mock.calls.map(call => call.arguments), [["native-input-pending"]]);
+    assert.equal(kind.host().textContent.replace(/\u200b/g, ""), "Captured words");
+  });
+
   test(name + ": retries share a single refusal during composition and at the size ceiling", async t => {
     const { native, refused } = await openFixture(t), view = kind.open(t), filler = new Doc();
     t.after(() => filler.destroy());

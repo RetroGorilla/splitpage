@@ -198,6 +198,7 @@ const STEPS: readonly Site[] = [
 const FIELDS: readonly Site[] = [
   ["adapters/collab/native/comment-commands.ts#createNativeComment", "anchorId 2, resolvedAt 1, resolvedBy 1, updatedAt 1", "record-stated", "comment-stamp"],
   ["adapters/collab/native/comment-commands.ts#fieldsOf", "createdAt 1", "comment-stamp"],
+  ["adapters/collab/native/insert-commands.ts#blankBeat", "paragraphStart 1", "stated-write"],
   ["adapters/collab/native/reader.ts#NativeScriptReader", "docId 1, rev 1", "capture-read", "stored-read"],
   ["adapters/collab/native/registry-projection.ts#projectNativeRegistries", "owner 1", "stored-read"],
   ["adapters/collab/project.ts#assembleSharedDocument", "rev 1", "capture-read"],

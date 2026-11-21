@@ -40,6 +40,7 @@ export function addBeatCommand(afterId: string | null, createdId: string, ports:
   return {
     name: "add-scene",
     needs: "edit",
+    ...afterId === null ? {} : { structure: { kind: "insert-beat", id: afterId } as const },
     created: () => created,
     plan: function (doc): Plan | null {
       created = null;
