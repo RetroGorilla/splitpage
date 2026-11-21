@@ -7,14 +7,25 @@ import type { NativeMarkChange } from "../../adapters/collab/native/format-comma
 import type { NativeTextTarget } from "../../adapters/collab/native/text-commands.ts";
 import type { NativeMoveBlock } from "../../adapters/collab/native/move-commands.ts";
 
-export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>) {
-  const peer = openNativeSession({ kind: "state", state: app.encodeState() }, { actor: "Peer", sanitize: sanitizeHtml });
+type Packet = { to: "app" | "peer"; bytes: Uint8Array };
+
+export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>, {
+  peer = openNativeSession({ kind: "state", state: app.encodeState() }, { actor: "Peer", sanitize: sanitizeHtml }),
+  applyUpdate = applyNativePeerUpdate
+} = {}) {
   let paused = false;
+  let capturing = false;
+  const packets: Packet[] = [];
+  const capture = (to: Packet["to"]) => (bytes: Uint8Array) => {
+    if (capturing) packets.push({ to, bytes });
+  };
+  const stopAppUpdates = app.subscribeLocalUpdates(capture("peer"));
+  const stopPeerUpdates = peer.subscribeLocalUpdates(capture("app"));
   const stop = app.subscribe(event => {
-    if (event.kind === "changed" && !paused) applyNativePeerUpdate(peer, app.encodeState());
+    if (event.kind === "changed" && !paused) applyUpdate(peer, app.encodeState());
   });
   function forward<Result extends { readonly kind: string }>(result: Result): Result {
-    if (result.kind === "written" && !paused) applyNativePeerUpdate(app, peer.encodeState());
+    if (result.kind === "written" && !paused) applyUpdate(app, peer.encodeState());
     return result;
   }
   function edit(beat: string, from: number, to: number, text?: string) {
@@ -26,12 +37,35 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>) 
   }
   return {
     read: peer.document,
-    hold: () => { paused = true; },
+    hold: (mode?: "updates") => {
+      paused = true;
+      capturing = mode === "updates";
+      packets.length = 0;
+    },
+    queuedUpdates: () => packets.map(({ to, bytes }) => ({ to, bytes: Array.from(bytes) })),
+    release: (order: "reverse" | "duplicate") => {
+      capturing = false;
+      const queued = packets.splice(0);
+      const replay = order === "reverse" ? queued.reverse() : queued.flatMap(packet => [packet, packet]);
+      const applied = [];
+      try {
+        for (const { to, bytes } of replay) {
+          if (applyUpdate(to === "app" ? app : peer, bytes)) {
+            applied.push({ to, bytes: Array.from(bytes) });
+          }
+        }
+        return applied;
+      } finally {
+        paused = false;
+      }
+    },
     deliver: () => {
+      capturing = false;
+      packets.length = 0;
       paused = false;
       const bytes = app.encodeState();
-      applyNativePeerUpdate(app, peer.encodeState());
-      applyNativePeerUpdate(peer, bytes);
+      applyUpdate(app, peer.encodeState());
+      applyUpdate(peer, bytes);
     },
     field: (target: NativeFieldTarget, value: unknown) => forward(peer.commands.setField(target, value)),
     registry: (change: NativeRegistryChange) => forward(peer.commands.changeRegistry(change)),
@@ -51,6 +85,12 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>) 
     step: (direction: "undo" | "redo") => app.commands[direction](),
     type: (beat: string, offset: number, text: string) => edit(beat, offset, offset, text),
     delete: (beat: string, from: number, to: number) => edit(beat, from, to),
-    dispose: () => { stop(); peer.close(); }
+    dispose: () => {
+      stop();
+      stopAppUpdates();
+      stopPeerUpdates();
+      packets.length = 0;
+      peer.close();
+    }
   };
 }

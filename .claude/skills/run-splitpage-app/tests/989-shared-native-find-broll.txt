@@ -3,25 +3,35 @@ wait document.querySelectorAll('#rows .row').length > 0
 eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.KEY='<span class="broll-key" data-broll-id="S1" contenteditable="false">B-roll:</span>';F.openFile(new File([JSON.stringify({schema:2,title:'Keyed Visual Find',paragraphsDecided:true,brollShots:[{id:'S1',name:'a cup closeup',status:'unshot',origin:'list'}],rows:[{id:'r1',audioText:'',visualText:KEY+' a cup closeup'},{id:'r2',audioText:'another cup',visualText:''}],comments:[]})],'keyed-visual.splitpage'))
 wait F.state().title === 'Keyed Visual Find'
 eval S.enter()
-eval window.visual=()=>document.querySelector('#rows .cell-editable[data-id="r1"][data-field="visualText"]');window.keyed=()=>visual().textContent==='B-roll: a cup closeup'&&visual().querySelector('.broll-key')?.dataset.brollId==='S1';window.snap=()=>JSON.stringify(S.read());window.warn=()=>{const toasts=document.querySelectorAll('#toast-host .toast');return toasts.length===1&&toasts[0].classList.contains('warn')&&toasts[0].textContent==='This is not available in a shared session yet.'};true
-expect keyed() && [S.read().app,S.read().peer].every(doc=>doc.rows[0].visualText===KEY+' a cup closeup'&&doc.brollShots.some(shot=>shot.id==='S1'&&shot.name==='a cup closeup'))
+eval window.visual=()=>document.querySelector('#rows .cell-editable[data-id="r1"][data-field="visualText"]');window.keyed=()=>visual().textContent==='B-roll: a cup closeup'&&visual().querySelector('.broll-key')?.dataset.brollId==='S1';window.bothKeyed=()=>[S.read().app,S.read().peer].every(doc=>doc.rows[0].visualText===KEY+' a cup closeup'&&doc.brollShots.some(shot=>shot.id==='S1'&&shot.name==='a cup closeup'));window.snap=()=>JSON.stringify(S.read());window.warn=()=>{const toasts=document.querySelectorAll('#toast-host .toast');return toasts.length===1&&toasts[0].classList.contains('warn')&&toasts[0].textContent==='This is not available in a shared session yet.'};true
+expect keyed() && bothKeyed()
 key ctrl KeyF
 wait !document.querySelector('.findbar').hidden
+eval window.FI=document.getElementById('find-input');window.RI=document.getElementById('replace-input');true
+expect document.activeElement === FI
 press closeup
 click #replace-input
 press pot
-expect document.getElementById('find-count').textContent === '1 of 1'
+expect FI.value === 'closeup' && RI.value === 'pot' && document.activeElement === RI && document.getElementById('find-count').textContent === '1 of 1'
 eval document.querySelectorAll('#toast-host .toast').forEach(toast=>toast.dismiss());true
 wait document.querySelectorAll('#toast-host .toast').length === 0
 eval window.before=snap();true
 click #find-replace
-expect warn() && keyed() && snap() === window.before
+expect warn() && keyed() && bothKeyed() && snap() === window.before && !RI.disabled && document.getElementById('find-count').textContent === '1 of 1'
+eval RI.focus();true
+press s
+expect RI.value === 'pots' && snap() === window.before
 eval document.querySelectorAll('#toast-host .toast').forEach(toast=>toast.dismiss());true
 wait document.querySelectorAll('#toast-host .toast').length === 0
 click #find-input
 key ctrl KeyA
 press cup
-expect document.getElementById('find-count').textContent === '1 of 2'
+expect FI.value === 'cup' && document.getElementById('find-count').textContent === '1 of 2'
 eval window.beforeAll=snap();true
 click #find-replace-all
-expect warn() && snap() === window.beforeAll
+expect warn() && keyed() && bothKeyed() && snap() === window.beforeAll && !RI.disabled && document.getElementById('find-count').textContent === '1 of 2'
+eval RI.focus();true
+key Backspace
+expect RI.value === 'pot' && snap() === window.beforeAll
+eval window.sharedId=S.read().app.docId;window.withoutId=d=>{const c=Object.assign({},d);delete c.docId;return JSON.stringify(c)};window.finalDoc=withoutId(S.read().app);window.left=S.leave();true
+expect left.ok === true && S.read().peer === null && S.read().app.docId !== sharedId && withoutId(S.read().app) === finalDoc && keyed()
