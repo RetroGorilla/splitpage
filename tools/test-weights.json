@@ -504,7 +504,6 @@
   "tests/application/commands/bulk-tags.test.ts": 119,
   "tests/application/commands/comments-shared.test.ts": 7975,
   "tests/application/commands/flow-shared.test.ts": 3237,
-  "tests/application/commands/gallery-shared.test.ts": 13329,
   "tests/application/commands/production-actions.test.ts": 1231,
   "tests/application/commands/records-shared.test.ts": 13228,
   "tests/application/commands/shared-refusals.test.ts": 2351,

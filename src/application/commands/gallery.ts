@@ -1,7 +1,4 @@
 import type { DocumentRow } from "../../core/document/validated.ts";
-import type { SharedContentRef, SharedOperation } from "../../core/collab/operations.ts";
-import { sharedGalleryOperations, sharedGalleryProbe } from "../../core/collab/gallery-operations.ts";
-import type { SharedPictureRecord } from "../../core/collab/gallery-operations.ts";
 import { changeSet } from "../session/change-set.ts";
 import type { ChangeSet } from "../session/change-set.ts";
 import type { Command, DeepReadonly, Plan } from "../session/document-session.ts";
@@ -9,13 +6,6 @@ import type { StampPorts } from "../session/ports.ts";
 import type { RecordCommandRun } from "./shared-records.ts";
 
 export type GalleryEdit = (row: DocumentRow) => unknown;
-
-export interface SharedGalleryPorts {
-  readonly author: () => { readonly id: string; readonly by: string } | null;
-  readonly pictures: (beat: string) => readonly SharedPictureRecord[];
-  readonly joined: (beat: string) => readonly SharedPictureRecord[];
-  readonly beatStamp: (beat: SharedContentRef, author: { readonly id: string; readonly by: string }) => SharedOperation;
-}
 
 export interface SharedGalleryCommands {
   readonly editNative?: (rowId: string, message: string, edit: GalleryEdit) => RecordCommandRun | null;
@@ -60,7 +50,7 @@ function galleryPlan(rowId: string, draft: DocumentRow, fields: readonly string[
   };
 }
 
-export function galleryCommand(rowId: string, edit: GalleryEdit, stamps: StampPorts, shared?: SharedGalleryPorts): Command {
+export function galleryCommand(rowId: string, edit: GalleryEdit, stamps: StampPorts): Command {
   return {
     name: "gallery-edit",
     needs: "edit",
@@ -71,14 +61,7 @@ export function galleryCommand(rowId: string, edit: GalleryEdit, stamps: StampPo
       if (!edit(draft)) return null;
       const fields = changedFields(row, draft);
       if (!fields.length) return null;
-      const plan = galleryPlan(rowId, draft, fields, stamps);
-      const author = shared ? shared.author() : null;
-      if (!shared || !author) return plan;
-      const probed = sharedGalleryProbe(row) as DocumentRow;
-      edit(probed);
-      const result = sharedGalleryOperations({ beat: rowId, before: row, after: draft, probed, records: shared.pictures(rowId), joined: shared.joined(rowId), author });
-      if ("refused" in result) return { refused: result.refused };
-      return { ...plan, shared: { operations: [...result.operations, shared.beatStamp(rowId as SharedContentRef, { id: author.id + "_stamp_0", by: author.by })] } };
+      return galleryPlan(rowId, draft, fields, stamps);
     }
   };
 }

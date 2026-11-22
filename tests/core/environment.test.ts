@@ -14,7 +14,6 @@ const modules: Record<string, Record<string, unknown>> = {
   "collab/buffer-operations.ts": await import("../../src/core/collab/buffer-operations.ts"),
   "collab/cell-text-operations.ts": await import("../../src/core/collab/cell-text-operations.ts"),
   "collab/comment-mark-operations.ts": await import("../../src/core/collab/comment-mark-operations.ts"),
-  "collab/gallery-operations.ts": await import("../../src/core/collab/gallery-operations.ts"),
   "collab/operations.ts": await import("../../src/core/collab/operations.ts"),
   "collab/removal-state.ts": await import("../../src/core/collab/removal-state.ts"),
   "collab/text-records.ts": await import("../../src/core/collab/text-records.ts"),

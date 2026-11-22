@@ -357,7 +357,6 @@ const ENGINES: readonly Site[] = [
   ["application/commands/document-edit.ts#planByTrial", "Plan.shared (provided) 2", "record-stated"],
   ["application/commands/document-edit.ts#rewriteCellsCommand", "Plan.shared (provided) 2", "stated-write", "beat-stamp"],
   ["application/commands/flow.ts#flowCommand", "Plan.shared (provided) 2", "stated-write", "beat-stamp"],
-  ["application/commands/gallery.ts#galleryCommand", "Plan.shared (provided) 2", "record-stated", "beat-stamp"],
   ["application/commands/production-records.ts#addPersonCommand", "addPerson 1", "record-stated"],
   ["application/commands/production-records.ts#chosenOwner", "addPerson 1", "record-stated"],
   ["application/commands/production-records.ts#registerTagCommand", "addRegistryTag 1", "record-stated"],
