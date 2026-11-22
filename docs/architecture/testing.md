@@ -55,7 +55,7 @@ directory. Failures preserve PDFs, screenshots, page records and `summary.txt`
 in a unique `splitpage-print-layout-*` TEMP directory. The standalone
 inspector still accepts `<out> --lists --probes` after fixture generation.
 
-In CI, each Tests shard installs Playwright's pinned Chromium and passes it as
+In CI, each Tests shard whose selection includes printed PDF tests installs Playwright's pinned Chromium and passes it as
 `SPLITPAGE_CHROME`. Without that step, on 1 November 2026, GitHub's runners
 fell through to PATH's browser and failed with `e: missing glyph on page 1`.
 Whether the browser or its system libraries caused that wasn't established.
@@ -461,7 +461,7 @@ only. The pull request, push to `main` and nightly root matrices cover the full 
 `--shard <index/total>` balances files using the recorded timing weights
 described above. PR CI uses eight shards. The ten nightly shards use
 `--shard 1/10` through
-`--shard 10/10`. Full discovery, area coverage,
+`--shard 10/10`. Both matrices cover all 887 discovered root tests after the legacy shared-adapter removal (#1746–#1750, down from 1,132). Full discovery, area coverage,
 orphan, overlap, required-group and golden-update guards still run in each
 shard. A group can have no files assigned to one shard, but a shard with no
 assigned files at all fails. Invalid shard coordinates and combining `--shard`
@@ -576,7 +576,7 @@ final scheme test makes redundant.
 
 ### Collaboration mutants in CI
 
-Every `tests/collab/*-mutants.json` file runs
+Every `tests/collab/*-mutants.json` file (26 manifests, 449 entries after #1750; 16 other entries sit outside the nightly glob in `tests/features/find/shared-refusal-mutants.json` and `tools/paragraph-mutants.json`) runs
 nightly in `nightly.yml`, not in pull request CI. "Collaboration mutants
 baseline (fast set)" runs one baseline for the whole set, and "Collaboration
 mutants (fast set)" runs six shards in parallel.
@@ -608,10 +608,9 @@ repeated work from each shard's time limit.
 
 A failing nightly mutants run shows as a failed scheduled run of `nightly.yml`
 in the repository's Actions tab, and GitHub notifies the account that last
-changed the workflow's schedule, as its notification settings say. The report
-steps also open an issue titled "Nightly collaboration mutants failed", or
-comment on the open one, with a link to the run: the slow job's report step,
-and `mutants-fast-report` for the fast set. No pull request is blocked.
+changed the workflow's schedule, as its notification settings say. `mutants-fast-report`
+also opens an issue titled "Nightly collaboration mutants failed", or
+comments on the open one, with a link to the run. No pull request is blocked.
 
 The nightly mutant jobs run every night and on demand, whatever the change, so
 no pull request waits on them. A test helper outside `tests/collab/` that a
