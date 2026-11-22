@@ -104,10 +104,11 @@ function dispatch(route, target, accesses) {
 
 async function enter(order, mention) {
   const fixture = entrySwitchFixture();
-  const text = mention ? "@Alice" : "abcdef";
+  const audio = mention ? "@Alice" : "abcdef";
+  const visual = mention ? "Alice" : "abcdef";
   adoptReplacement(migrateRows({ schema: 2, title: "Split Visual refusals", paragraphsDecided: true,
     people: [{ id: "p1", name: "Alice" }], rows: [
-      { id: "r1", audioText: text, visualText: text }, { id: "r2", audioText: "other", visualText: "other" }
+      { id: "r1", audioText: audio, visualText: visual }, { id: "r2", audioText: "other", visualText: "other" }
     ] }));
   undoOwner().flush();
   const writer = writerControls();
@@ -134,7 +135,7 @@ async function enter(order, mention) {
     assert.equal(applyNativePeerUpdate(native, bytes), true);
   }
   await tick();
-  assert.deepEqual(cells(currentDocument()), [["r1", text, text], ["r2", "PQother", "other"]]);
+  assert.deepEqual(cells(currentDocument()), [["r1", audio, visual], ["r2", "PQother", "other"]]);
   assert.deepEqual(currentDocument(), peer.document());
   return { native, peer, errors: fixture.errors };
 }
@@ -159,9 +160,17 @@ function expectedEdit(route, state) {
 }
 
 function expectedNotices(route, state, edit) {
-  if (route.name === "Tab" && (state === "selection" || state === "composition")) return null;
+  if (route.name === "Tab" && (state === "selection" || state === "composition")) return [];
   if (edit || state !== "composition" && route.name.startsWith("history")) return [];
   return [warning];
+}
+
+function expectedPrevented(route, state) {
+  return !(route.name === "Tab" && state === "composition");
+}
+
+function expectedPickerOpen(route, state) {
+  return route.name === "Tab" && state === "composition";
 }
 
 function paint(expected) {
@@ -192,7 +201,8 @@ function coherent(native, peer) {
 
 async function verifyHistory(native, peer, route, state, edit, before) {
   const after = projected();
-  const undoable = route.name === "historyUndo" && edit ? false : !!edit || state === "typed";
+  const mention = route.name === "Tab";
+  const undoable = route.name === "historyUndo" && edit ? false : !!edit || state === "typed" || mention;
   assert.equal(native.commands.undo().kind, undoable ? "written" : "unchanged");
   await tick();
   if (!undoable) {
@@ -206,17 +216,17 @@ async function verifyHistory(native, peer, route, state, edit, before) {
     }
   } else {
     const previous = cells(before);
-    if (!edit) previous[0][2] = route.name === "Tab" ? "@Alice" : "abcdef";
+    if (!edit) previous[0][2] = mention ? (state === "typed" ? "@Alice" : "Alice") : "abcdef";
     assert.deepEqual(cells(currentDocument()), previous);
-    if (edit && state === "typed") {
+    if (state === "typed" && (edit || mention)) {
       assert.equal(native.commands.undo().kind, "written");
       await tick();
-      previous[0][2] = "abcdef";
+      previous[0][2] = mention ? "Alice" : "abcdef";
       assert.deepEqual(cells(currentDocument()), previous);
       assert.equal(native.commands.undo().kind, "unchanged");
       assert.equal(native.commands.redo().kind, "written");
       await tick();
-      assert.deepEqual(cells(currentDocument()), cells(before));
+      assert.deepEqual(cells(currentDocument()), mention ? cells(before).map((row, index) => index === 0 ? [row[0], row[1], "@Alice"] : row) : cells(before));
     } else assert.equal(native.commands.undo().kind, "unchanged");
     assert.equal(native.commands.redo().kind, "written");
     await tick();
@@ -238,9 +248,13 @@ for (const order of ["forward", "reverse"]) {
       const node = cell(), who = currentWhoList(), accesses = [];
       try {
         if (mention) {
-          place(node, 1);
-          who.maybeOpen({ inputType: "insertText", data: "@" }, node);
+          place(node, 0);
+          assert.equal(input(node, "insertText", "@").defaultPrevented, true);
+          await tick();
+          assert.equal(applyNativePeerUpdate(peer, native.encodeState()), true);
+          native.endTypingGroup();
           assert.equal(who.isOpen(node), true);
+          assert.equal(document.getElementById("who-list").hidden, false);
         }
         place(node, state === "selection" ? 2 : 3, state === "selection" ? 4 : 3);
         if (state === "composition") preview(node);
@@ -266,10 +280,12 @@ for (const order of ["forward", "reverse"]) {
         assert.deepEqual([errors, eventErrors], [[], []], label);
         assert.equal(standaloneUndo.reduce((count, method) => count + method.mock.calls.length, 0), 0, label);
         assert.deepEqual(accesses, route.name === "paste" ? [["get", "text/plain"]] : [], label);
-        if (warnings !== null) {
-          assert.equal(event.defaultPrevented, true, label);
-          assert.deepEqual(immediate, warnings, label);
-          assert.deepEqual(show.mock.calls.map(call => call.arguments), warnings, label);
+        assert.equal(event.defaultPrevented, expectedPrevented(route, state), label);
+        assert.deepEqual(immediate, warnings, label);
+        assert.deepEqual(show.mock.calls.map(call => call.arguments), warnings, label);
+        if (mention) {
+          assert.equal(who.isOpen(node), expectedPickerOpen(route, state), label);
+          assert.equal(document.getElementById("who-list").hidden, !expectedPickerOpen(route, state), label);
         }
         assert.deepEqual(peer.encodeState(), peerBytes, label);
         assert.deepEqual(peer.document(), before, label);

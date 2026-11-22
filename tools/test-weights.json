@@ -263,8 +263,6 @@
   "src/test/shared-split-refusals-audio-reverse-app.test.mjs": 49079,
   "src/test/shared-split-refusals-drained-app.test.mjs": 7429,
   "src/test/shared-split-refusals-ime-app.test.mjs": 37592,
-  "src/test/shared-split-refusals-visual-forward-app.test.mjs": 38514,
-  "src/test/shared-split-refusals-visual-reverse-app.test.mjs": 43583,
   "src/test/shared-split-space-app.test.mjs": 8655,
   "src/test/shared-text.test.mjs": 181,
   "src/test/shared-writer-app.test.mjs": 9445,
