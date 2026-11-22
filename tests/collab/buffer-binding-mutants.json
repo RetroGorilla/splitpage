@@ -718,7 +718,7 @@
     "file": "src/adapters/collab/buffer.ts",
     "find": "? createSharedAnchor(handle, target, first.from, \"after\")",
     "replace": "? preceding ? sharedAnchorCharacterEnd(preceding) : painted.identity(0) ?? painted.emptyGap ?? null",
-    "tests": ["src/test/shared-writer-app.test.mjs", "tests/features/writer/buffer-undo.test.ts"]
+    "tests": ["tests/features/writer/buffer-undo.test.ts"]
   }, {
     "label": "failed Writer reopen registration leaves its earlier listener registered",
     "file": "src/bootstrap/wiring/shared-writer.ts",
