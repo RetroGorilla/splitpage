@@ -116,6 +116,8 @@ check("no timing mark name of any kind is left in it", !release.includes("measur
 console.log("\nthe test build (node build.mjs --test):\n");
 
 const testBuild = appJs(true);
+const retiredRecoveryMarkers = ["shared-recovery-panel", "Nothing in recovery.", "Reply without comment", "recovery-no-session", "removed discarded restore"];
+eq("the release and test builds exclude the shared removal panel", retiredRecoveryMarkers.filter((marker) => release.includes(marker) || testBuild.includes(marker)), []);
 eq("it exposes every hook, the converted ones included", hookNames(testBuild), [...STILL_IN_RELEASE, ...CONVERTED].sort());
 eq("a converted hook is never also on the list", CONVERTED.filter((name) => STILL_IN_RELEASE.includes(name)), []);
 eq("it keeps the fake desktop backend and its fault switches", FAKE_DESKTOP.filter((marker) => !testBuild.includes(marker)), []);

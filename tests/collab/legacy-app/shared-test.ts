@@ -4,14 +4,13 @@ import { startupReady } from "../../../src/application/startup-signal.ts";
 import { migrateRows } from "../../../src/bootstrap/document-ports.ts";
 import { fromHtml } from "../../../src/bootstrap/richtext.ts";
 import { currentCapabilities, sharedSession } from "../../../src/bootstrap/wiring/session-owner.ts";
-import { SHARED_ALREADY, SHARED_NOT_RUNNING, SHARED_SWITCHING, enterSharedSession, forceLeaveSharedSession, joinSharedBindings, leaveRunningSharedSession,
+import { SHARED_ALREADY, SHARED_NOT_RUNNING, SHARED_SWITCHING, enterSharedSession, forceLeaveSharedSession, leaveRunningSharedSession,
   sharedSessionParts } from "../../../src/bootstrap/wiring/shared-session.ts";
-import { recoveryPanelBinding } from "../../../src/bootstrap/wiring/recovery-panel.ts";
 import type { SharedBindings, SharedSwitchOutcome, SharedSwitchPorts } from "../../../src/bootstrap/wiring/shared-session.ts";
 import type { Home } from "../../../src/application/location/document-location.ts";
 import { sharedWriterBindings } from "../../../src/bootstrap/wiring/shared-writer.ts";
 import { sharedSplitBindings } from "../../../src/bootstrap/wiring/shared-split.ts";
-import { createSharedTestPeer, sharedTestBytes, sharedTestPeerHook } from "./shared-test-peer.ts";
+import { createSharedTestPeer, sharedTestPeerHook } from "./shared-test-peer.ts";
 import { sharedCommandRefusalNotice } from "../../../src/bootstrap/wiring/ports/shared-command-notices.ts";
 import { notices } from "../../../src/bootstrap/wiring/ports/effects.ts";
 import { documentReader } from "../../../src/bootstrap/wiring/ports/document.ts";
@@ -25,10 +24,7 @@ import { confirmSavedNow, noteSaveChange, unsavedChanges } from "../../../src/bo
 import { currentHome, documentLocation, setHome } from "../../../src/bootstrap/wiring/location-owner.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import { sharedIntakeStopped } from "../../../src/adapters/collab/ingress.ts";
-import { hydrateSharedDocumentFromState } from "../../../src/adapters/collab/hydrate.ts";
-import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { timingMarks } from "../../../shared/timing-marks.ts";
-import { hasNativeFormat } from "../../../src/adapters/collab/native/session.ts";
 
 declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
@@ -90,14 +86,13 @@ function startSharedTestHook(): () => void {
     ownershipScan: () => { counts.ownershipScans++; }, report
   };
   const writing = sharedWriterBindings(effects), splitting = sharedSplitBindings(effects);
-  const editing: SharedBindings = {
+  const bindings: SharedBindings = {
     enter: parts => { writing.enter(parts); splitting.enter(parts); },
     settle: () => writing.settle() ?? splitting.settle(),
     leave: () => { runEvery([splitting.leave, writing.leave]); },
     abandon: () => { runEvery([() => { writing.abandon?.(); }, () => { splitting.abandon?.(); }]); },
     drop: () => { runEvery([() => { writing.drop?.(); }, () => { splitting.drop?.(); }]); }
   };
-  const bindings = joinSharedBindings(editing, recoveryPanelBinding);
   const left = (landed: boolean): void => {
     const ending = peer, kept = detached;
     peer = null; detached = null;
@@ -105,7 +100,7 @@ function startSharedTestHook(): () => void {
     const marks = landed && kept ? [() => { noteSaveChange(); }, () => { noteDraftChange(); }] : [];
     runEvery([() => { ending?.dispose(); }, ...(kept ? [() => { draftSource.resumeWriting(); }] : []), ...marks]);
   };
-  const enter = async (stored?: Uint8Array): Promise<SharedSwitchOutcome> => {
+  const enter = async (): Promise<SharedSwitchOutcome> => {
     if (!live) return { ok: false, reason: APP_STOPPED };
     if (switching) return { ok: false, reason: SHARED_SWITCHING };
     if (sharedSession()) return { ok: false, reason: SHARED_ALREADY };
@@ -140,10 +135,6 @@ function startSharedTestHook(): () => void {
         structure: { cells: html => fromHtml(html) }, report,
         timers: { now: () => Date.now(), start: (run, ms) => setTimeout(run, ms), stop: timer => { clearTimeout(timer as ReturnType<typeof setTimeout>); } },
         now: () => Date.now(),
-        ...(stored ? { hydrate: (handle: SharedDocumentHandle) => {
-          if (hasNativeFormat(stored)) throw new Error("A native script needs the native backend");
-          hydrateSharedDocumentFromState(handle, stored);
-        } } : {}),
         opening: openingStatus
       };
       const result = await enterSharedSession(entering);
@@ -167,7 +158,6 @@ function startSharedTestHook(): () => void {
   };
   const hook = {
     enter: () => enter(),
-    enterFrom: (state: string | Uint8Array | ArrayBuffer) => enter(sharedTestBytes(state)),
     leave,
     timing: (on: boolean) => { timingMarks.marksOn = on === true; },
     peer: sharedTestPeerHook(() => peer),
