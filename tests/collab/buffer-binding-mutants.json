@@ -244,7 +244,7 @@
               {
     "label": "an unsettled edit is committed anyway",
     "file": "src/application/editing/buffered-field.ts",
-    "find": "const unsettled = restoring ? null : surface.unsettled?.(held.rowId, held.edit.text());",
+    "find": "const unsettled = surface.unsettled?.(held.rowId, held.edit.text());",
     "replace": "const unsettled = null;",
     "tests": ["tests/features/writer/buffer-heading.test.ts"]
   },
