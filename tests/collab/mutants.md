@@ -993,7 +993,7 @@ cancelling a comment still calls the standalone unwrap in a shared session | src
 posting a comment still calls the standalone command in a shared session | src/features/comments/comments.ts | src/test/shared-native-typed-boxes-mapped-app.test.mjs | tests/collab/split-records-mutants.json
 resolving a comment still calls the standalone command in a shared session | src/features/comments/comments.ts | tests/features/comments/shared-ports.test.ts | tests/collab/split-records-mutants.json
 deleting a comment still calls the standalone command in a shared session | src/features/comments/comments.ts | tests/features/comments/shared-ports.test.ts | tests/collab/split-records-mutants.json
-replying to a comment still calls the standalone command in a shared session | src/features/comments/comments.ts | src/test/shared-split-records-literals-comments-app.test.mjs | tests/collab/split-records-mutants.json
+replying to a comment still calls the standalone command in a shared session | src/features/comments/comments.ts | tests/features/comments/shared-ports.test.ts | tests/collab/split-records-mutants.json
 a refused record command shows no notice | src/application/commands/shared-records.ts | tests/application/commands/shared-refusals.test.ts | tests/collab/split-records-mutants.json
 a shared record command runs through the silent edit that drops its refusal | src/application/commands/shared-records.ts | tests/application/commands/shared-refusals.test.ts | tests/collab/split-records-mutants.json
 a refused bulk tag delete still shows its success toast | src/features/tags/panels.ts | src/test/shared-native-registries-app.test.mjs | tests/collab/split-records-mutants.json
@@ -1023,7 +1023,7 @@ assigning a tag's owner drops change.owner | src/application/commands/production
 assigning a known owner clears the owner instead | src/application/commands/production-records.ts | src/test/shared-split-records-literals-tags-app.test.mjs | tests/collab/split-records-mutants.json
 creating a person while assigning creates nobody | src/application/commands/production-records.ts | src/test/shared-split-records-literals-broll-app.test.mjs | tests/collab/split-records-mutants.json
 rule 152: the shared picture toast offers an Undo that reads the standalone owner | src/bootstrap/wiring/native-shared-records.ts | src/test/shared-native-record-guards-app.test.mjs | tests/collab/split-records-mutants.json
-the comment wiring passes no shared port | src/bootstrap/wiring/comments.ts | src/test/shared-split-records-literals-comments-app.test.mjs | tests/collab/split-records-mutants.json
+the comment wiring passes no shared port | src/bootstrap/wiring/comments.ts | src/test/shared-native-typed-boxes-mapped-app.test.mjs | tests/collab/split-records-mutants.json
 the record wiring for the production tags passes no shared port | src/bootstrap/wiring/production-tags.ts | src/test/shared-split-records-literals-tags-app.test.mjs | tests/collab/split-records-mutants.json
 a b-roll redraw takes the typed value as the comparison base even when its write was refused | src/features/broll/panel.ts | src/test/shared-native-record-drafts-mapped-app.test.mjs | tests/collab/split-records-mutants.json
 a b-roll redraw drops the unsaved text of a box that lost focus | src/features/broll/panel.ts | src/test/shared-native-record-drafts-app.test.mjs | tests/collab/split-records-mutants.json

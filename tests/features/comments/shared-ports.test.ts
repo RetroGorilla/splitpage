@@ -7,7 +7,7 @@ import type { SharedCommentPorts } from "../../../src/application/commands/comme
 import type { Command, CommandOutcome } from "../../../src/application/session/document-session.ts";
 import { createSessionCapabilities } from "../../../src/application/session/capabilities.ts";
 import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
-import { armDeleteComment, closeCommentComposer, openCommentComposer, setCommentAssignee, startComments, toggleResolve } from "../../../src/features/comments/comments.ts";
+import { armDeleteComment, closeCommentComposer, openCommentComposer, postReply, setCommentAssignee, startComments, toggleResolve } from "../../../src/features/comments/comments.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
@@ -131,5 +131,17 @@ test("a refused legacy comment assignment reports its outcome", () => {
         { kind: "record-set", id: "w1_1:updatedAt", by: "Ada", target: { collection: "comments", record: "C1" }, field: "updatedAt", value: AT }
       ]
     }]);
+  } finally { owner.dispose(); }
+});
+
+test("posting a reply plans the shared record append through isolated feature ports", () => {
+  const fake = fixture({ author: () => ({ id: "w1_1", by: "Ada" }), cells: createFlowLoadRuntime().cells });
+  const owner = startComments(fake.ports);
+  try {
+    document.getElementById("comments-panel")!.innerHTML = '<div class="reply-composer" data-for="C1"><input class="reply-name-input" value="Ada"><div class="cell-editable">First</div></div>';
+    postReply("C1");
+    const [shared] = planned(fake.commands);
+    assert.ok(shared?.operations.length);
+    assert.deepEqual(shared.operations.map(operation => operation.kind), ["record-create", "record-set"]);
   } finally { owner.dispose(); }
 });

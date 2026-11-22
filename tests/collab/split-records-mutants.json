@@ -237,7 +237,7 @@
     {
       "label": "replying to a comment still calls the standalone command in a shared session",
       "tests": [
-        "src/test/shared-split-records-literals-comments-app.test.mjs"
+        "tests/features/comments/shared-ports.test.ts"
       ],
       "file": "src/features/comments/comments.ts",
       "find": "addReplyCommand(id, reply, (ports as CommentsRuntimePorts).edits.stamps.clock, build)",
@@ -507,11 +507,11 @@
     {
       "label": "the comment wiring passes no shared port",
       "tests": [
-        "src/test/shared-split-records-literals-comments-app.test.mjs"
+        "src/test/shared-native-typed-boxes-mapped-app.test.mjs"
       ],
       "file": "src/bootstrap/wiring/comments.ts",
-      "find": "      shared: sharedCommentCommands",
-      "replace": "      shared: { ports: () => null, refused: () => {} }"
+      "find": "      nativeComments: () => nativeEditorRecords()?.comments ?? null",
+      "replace": "      nativeComments: () => null"
     },
     {
       "label": "the record wiring for the production tags passes no shared port",
