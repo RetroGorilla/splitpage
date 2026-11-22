@@ -2,7 +2,6 @@
   "tests": [
     "tests/adapters/collab/undo-heading-creation.test.ts",
     "tests/adapters/collab/undo-heading.test.ts",
-    "tests/application/commands/flow-paste-shared.test.ts",
     "tests/features/rows/scene-create.test.ts"
   ],
   "mutants": [

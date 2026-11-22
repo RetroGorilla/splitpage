@@ -13,7 +13,6 @@ type Row = { readonly registers: string } | { readonly holdsNothing: string } | 
 const SURFACES: Readonly<Record<string, Row>> = {
   "application/editing/buffered-field.ts": { registers: "const stopAbandonment = ports.abandonment?.(abandon);" },
   "features/writer/flow-buffer.ts": { registers: "createBufferedField(ports" },
-  "features/empty-script/empty-script.ts": { registers: "abandoning = ports.abandonment?.(abandon);" },
   "features/rows/scene-controls.ts": { notSharedYet: "#1591" }
 };
 

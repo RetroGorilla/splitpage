@@ -6,11 +6,6 @@ import type { SharedContentRef, SharedOperation } from "../../../src/core/collab
 import type { SharedAuthorPort } from "../../bootstrap/legacy-shared-switch-support.ts";
 import { sharedBeatStamp } from "../../../src/adapters/collab/stamp.ts";
 import { sharedStructureIdentity } from "../../../src/adapters/collab/structure-identity.ts";
-import { sharedFlowPaste } from "../../../src/application/commands/flow-paste.ts";
-import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
-import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
-import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
-import { sharedRecordFieldAccepted } from "../../../src/adapters/collab/record-codec.ts";
 
 export interface WriterFlowCommands {
   readonly flow: FlowPorts;
@@ -29,7 +24,7 @@ function committedFlowRange(range: FlowRange, operations: readonly SharedOperati
   return { anchor: position(range.anchor), head: position(range.head) };
 }
 
-export function writerFlowCommands(flow: FlowPorts, source: { readonly author: SharedAuthorPort; readonly writer: () => string; readonly handle?: () => SharedDocumentHandle | null }): WriterFlowCommands {
+export function writerFlowCommands(flow: FlowPorts, source: { readonly author: SharedAuthorPort; readonly writer: () => string }): WriterFlowCommands {
   let operations: FlowOperationRequest | undefined;
   return {
     flow: { ...flow, get operations() { return operations; } },
@@ -42,23 +37,7 @@ export function writerFlowCommands(flow: FlowPorts, source: { readonly author: S
           operations = request ?? undefined;
           const ports = request ? { ...stamps, operations: request, beatStamp: (beat: SharedContentRef, by: FlowOperationRequest) => sharedBeatStamp(beat, by, stamps) } : stamps;
           try { return flowCommand(name, () => {
-            const original = operation(doc);
-            const edited = request && original && "rows" in original && original.clipboard ? sharedFlowPaste(doc, original, {
-              author: request, cells: flow.cells, recordField: sharedRecordFieldAccepted,
-              identity: (operation, role) => sharedStructureIdentity(source.writer(), operation, role),
-              reference: (span, purpose) => {
-                const handle = source.handle?.(); if (!handle) return null;
-                const target = { owner: span.owner as SharedContentRef, segment: span.owner as SharedContentRef, field: span.field };
-                if (purpose !== "range") {
-                  const anchor = createSharedAnchor(handle, target, span.from + (purpose === "left" ? 1 : 0), purpose === "left" ? "after" : "before");
-                  return anchor ? [anchor] : null;
-                }
-                const painted = readSharedPaintedText(handle, target); if (!painted) return null;
-                const units: SharedContentRef[] = [];
-                for (let index = span.from; index < span.to; index++) { const unit = painted.identity(index); if (!unit) return null; units.push(unit); }
-                return units;
-              }
-            }) : original;
+            const edited = operation(doc);
             result = request && edited && "rows" in edited && edited.ops
               ? { ...edited, selection: committedFlowRange(edited.selection, edited.ops, source.writer()) } : edited;
             return result;

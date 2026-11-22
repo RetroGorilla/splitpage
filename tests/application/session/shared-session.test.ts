@@ -5,6 +5,7 @@ import type { ReplicaOrigin } from "../../../src/application/session/shared-sess
 import { DISPOSED, NO_DOCUMENT } from "../../../src/application/session/document-session.ts";
 import type { Command, CommandOutcome } from "../../../src/application/session/document-session.ts";
 import { changeSet } from "../../../src/application/session/change-set.ts";
+import type { SharedRecoveryEntry } from "../../../src/core/collab/recovery.ts";
 import type { SharedOperation } from "../../../src/core/collab/operations.ts";
 import { readOperation } from "../../../src/core/collab/read-operation.ts";
 import type { FlowSelectionPair } from "../../../src/core/flow/flow.ts";
@@ -435,4 +436,35 @@ test("refresh jobs coalesce in the idle window and can be cancelled, as in a sta
   h.session.cancelRefresh(["broll"]);
   h.clock.advance(180);
   assert.deepEqual(h.refreshes, [["production"]]);
+});
+
+test("recovery and the held revision stay paired across a failed projection and disposal", () => {
+  const replica = fakeReplica(script());
+  let entries: readonly SharedRecoveryEntry[] = [];
+  const h = sharedHarness({ ...replica.port, recovery: () => entries });
+  const removed = (id: string, audioText: string): SharedRecoveryEntry =>
+    ({ kind: "removed-beat", row: { id, audioText }, members: [id] });
+  const held = () => [h.session.readAt((doc, revision) => [revision, doc?.rows.map(row => row.id)]), h.session.recovery()];
+  try {
+    assert.deepEqual(held(), [[1, ["R1", "R2"]], []]);
+    const first = removed("R1", "ab");
+    entries = Object.freeze([first]);
+    replica.write("remote", script({ rows: [{ id: "R2", audioText: "cd" }] }));
+    assert.deepEqual(held(), [[2, ["R2"]], [first]]);
+    assert.equal(Object.isFrozen(h.session.recovery()), true);
+
+    const error = new Error("projection");
+    const second = removed("R2", "cd");
+    entries = Object.freeze([first, second]);
+    replica.fail(error);
+    replica.write("remote", script({ rows: [] }));
+    assert.deepEqual(held(), [[2, ["R2"]], [first]]);
+    assert.deepEqual(h.reported, [error]);
+
+    replica.fail(null);
+    replica.write("remote", script({ rows: [] }));
+    assert.deepEqual(held(), [[4, []], [first, second]]);
+    h.session.dispose();
+    assert.deepEqual([h.session.read(doc => doc), h.session.recovery()], [null, []]);
+  } finally { h.session.dispose(); }
 });

@@ -2,9 +2,6 @@
   "tests": [
     "tests/adapters/collab/undo-creation.test.ts",
     "tests/adapters/collab/creation-undo-cost.test.ts",
-    "tests/application/commands/empty-script.test.ts",
-    "tests/application/commands/flow-paste-shared.test.ts",
-    "tests/features/empty-script/shared.test.ts",
     "tests/adapters/collab/creation-retirement-phases.test.ts",
     "tests/adapters/collab/creation-retirement-cost-matrix.test.ts"
   ],
@@ -150,7 +147,7 @@
       "find": "const retired = operation.kind === \"segment-retire\";",
       "replace": "const retired = true;",
       "tests": [
-        "tests/application/commands/empty-script.test.ts"
+        "tests/adapters/collab/undo-creation.test.ts"
       ]
     },
     {
@@ -159,7 +156,7 @@
       "find": "field = [SHARED_CREATION_RETIREMENT_FIELD, operation.beat]",
       "replace": "field = [SHARED_CREATION_RETIREMENT_FIELD, \"creationIgnored\"]",
       "tests": [
-        "tests/application/commands/empty-script.test.ts"
+        "tests/adapters/collab/undo-creation.test.ts"
       ]
     },
     {
@@ -222,7 +219,7 @@
       "find": "return JSON.stringify([fields(record, writer, unstamped), narration(",
       "replace": "return JSON.stringify([fields(record, writer, key => key === SHARED_CREATION_RETIREMENT_FIELD), narration(",
       "tests": [
-        "tests/application/commands/empty-script.test.ts"
+        "tests/adapters/collab/undo-creation.test.ts"
       ]
     },
     {
@@ -249,7 +246,7 @@
       "find": ".filter(block => block.id === null || !hidden.has(block.id))",
       "replace": ".filter(() => true)",
       "tests": [
-        "tests/application/commands/empty-script.test.ts"
+        "tests/adapters/collab/undo-creation.test.ts"
       ]
     },
     {
