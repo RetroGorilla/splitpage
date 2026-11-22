@@ -192,7 +192,7 @@
     {
       "label": "assigning a comment still calls the standalone command in a shared session",
       "tests": [
-        "src/test/shared-split-records-literals-comments-app.test.mjs"
+        "tests/features/comments/shared-ports.test.ts"
       ],
       "file": "src/features/comments/comments.ts",
       "find": "setCommentAssigneeCommand(id as string, name, (ports as CommentsRuntimePorts).edits.stamps.clock, shared)",
@@ -201,7 +201,7 @@
     {
       "label": "cancelling a comment still calls the standalone unwrap in a shared session",
       "tests": [
-        "src/test/shared-split-records-literals-comments-app.test.mjs"
+        "tests/features/comments/shared-ports.test.ts"
       ],
       "file": "src/features/comments/comments.ts",
       "find": "shared && { ports: shared, anchor: pending.id }",
@@ -210,7 +210,7 @@
     {
       "label": "posting a comment still calls the standalone command in a shared session",
       "tests": [
-        "src/test/shared-split-records-literals-comments-app.test.mjs"
+        "src/test/shared-native-typed-boxes-mapped-app.test.mjs"
       ],
       "file": "src/features/comments/comments.ts",
       "find": "    const run = nativeComments()?.add(comment) ?? editComments(shared => addCommentCommand(comment, shared), quiet);",
@@ -219,7 +219,7 @@
     {
       "label": "resolving a comment still calls the standalone command in a shared session",
       "tests": [
-        "src/test/shared-split-records-literals-comments-app.test.mjs"
+        "tests/features/comments/shared-ports.test.ts"
       ],
       "file": "src/features/comments/comments.ts",
       "find": "toggleResolveCommand(id as string, (ports as CommentsRuntimePorts).edits.stamps, shared)",
@@ -228,7 +228,7 @@
     {
       "label": "deleting a comment still calls the standalone command in a shared session",
       "tests": [
-        "src/test/shared-split-records-literals-comments-app.test.mjs"
+        "tests/features/comments/shared-ports.test.ts"
       ],
       "file": "src/features/comments/comments.ts",
       "find": "deleteCommentCommand(id as string, anchorUnwrapped(c.rowId, c.field, c.anchorId), build)",
@@ -327,7 +327,7 @@
     {
       "label": "rule 154: a refused comment closes the composer and drops its text",
       "tests": [
-        "src/test/shared-split-records-held-comments-app.test.mjs"
+        "src/test/shared-native-typed-boxes-mapped-app.test.mjs"
       ],
       "file": "src/features/comments/comments.ts",
       "find": "    if (run.held) return heldWrite(run);\n    if (pendingComment?.id === pending.id) {",
@@ -354,7 +354,7 @@
     {
       "label": "a served reply leaves its composer open",
       "tests": [
-        "src/test/shared-split-records-literals-comments-app.test.mjs"
+        "src/test/shared-native-typed-boxes-mapped-app.test.mjs"
       ],
       "file": "src/features/comments/comments.ts",
       "find": "    if (!standalone) dropCommentState(id, false);\n    sendNow();",
@@ -363,7 +363,7 @@
     {
       "label": "a refused comment delete closes the comment's menu before the outcome",
       "tests": [
-        "src/test/shared-split-records-held-comments-app.test.mjs"
+        "src/test/shared-native-record-drafts-app.test.mjs"
       ],
       "file": "src/features/comments/comments.ts",
       "find": "  if (standalone) dropCommentState(id, true);\n  if ((native?.remove(c.id) ?? editComments(build => deleteCommentCommand(",
@@ -372,7 +372,7 @@
     {
       "label": "a refused comment cancel closes the composer",
       "tests": [
-        "src/test/shared-split-records-held-comments-app.test.mjs"
+        "tests/features/comments/shared-ports.test.ts"
       ],
       "file": "src/features/comments/comments.ts",
       "find": "pending.id })).held) return;",

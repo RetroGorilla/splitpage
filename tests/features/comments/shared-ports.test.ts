@@ -117,3 +117,19 @@ test("a refused legacy comment cancellation keeps the visible typed body", () =>
     assert.deepEqual(fake.refusals, [refusal]);
   } finally { owner.dispose(); }
 });
+
+test("a refused legacy comment assignment reports its outcome", () => {
+  const refusal = { kind: "rejected", reason: "buffer-pending" } as const;
+  const fake = fixture({ author: () => ({ id: "w1_1", by: "Ada" }), cells: createFlowLoadRuntime().cells }, () => refusal);
+  const owner = startComments(fake.ports);
+  try {
+    setCommentAssignee("C1", "Bob");
+    assert.deepEqual(fake.refusals, [refusal]);
+    assert.deepEqual(planned(fake.commands), [{
+      operations: [
+        { kind: "record-set", id: "w1_1:assignee", by: "Ada", target: { collection: "comments", record: "C1" }, field: "assignee", value: "Bob" },
+        { kind: "record-set", id: "w1_1:updatedAt", by: "Ada", target: { collection: "comments", record: "C1" }, field: "updatedAt", value: AT }
+      ]
+    }]);
+  } finally { owner.dispose(); }
+});

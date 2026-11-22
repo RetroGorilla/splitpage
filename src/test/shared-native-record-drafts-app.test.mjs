@@ -7,7 +7,7 @@ import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { sidePanels } from "../bootstrap/wiring/ports/panels.ts";
 import { setCellSelection } from "../features/common/cell-selection.ts";
 import { closeBrollPage, openBrollPage, openBrollPanel, runBrollRefresh } from "../features/broll/panel.ts";
-import { armDeleteComment, closeCommentComposer, openCommentsPanel, renderComments, setCommentFilterMode } from "../features/comments/comments.ts";
+import { armDeleteComment, closeCommentComposer, openCommentsPanel, renderComments, setCommentFilterMode, toggleResolve } from "../features/comments/comments.ts";
 import { openGearPanel, openProductionPanel, renderProduction, toggleCardSelection } from "../features/tags/panels.ts";
 
 window.Element.prototype.scrollBy = () => {};
@@ -710,3 +710,37 @@ for (const remove of [false, true]) {
     copies(doc => doc.comments.map(entry => entry.replies), remove ? [] : [[]]);
   });
 }
+
+test("a held comment delete keeps its open menu so it can be tried again", async t => {
+  const show = await enter(t);
+  openCommentsPanel();
+  const menu = '[data-action="comment-menu"][data-id="thread"]';
+  const remove = '[data-action="delete-comment"][data-id="thread"]';
+  click(menu);
+  click(remove);
+  const release = hold(t);
+  const before = hook.read();
+  click(remove);
+  renderComments();
+  assert.equal(need(menu).getAttribute("aria-expanded"), "true");
+  assert.deepEqual(hook.read(), before);
+  assert.deepEqual(warnings(show), [refused]);
+  release();
+  click(remove);
+  click(remove);
+  await update();
+  copies(doc => doc.comments.map(comment => comment.id), []);
+});
+
+test("a held comment resolve warns once without writing", async t => {
+  const show = await enter(t);
+  openCommentsPanel();
+  const before = hook.read();
+  const release = hold(t);
+  toggleResolve("thread");
+  renderComments();
+  assert.deepEqual(hook.read(), before);
+  assert.deepEqual(warnings(show), [refused]);
+  release();
+  assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
+});

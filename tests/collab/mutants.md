@@ -988,11 +988,11 @@ bulk deleting selected tags still calls the standalone command in a shared sessi
 adding a person from the production panel still calls the standalone command in a shared session | src/features/tags/panels.ts | src/test/shared-split-records-literals-tags-app.test.mjs | tests/collab/split-records-mutants.json
 deleting a person still calls the standalone command in a shared session | src/features/tags/panels.ts | src/test/shared-split-records-literals-tags-app.test.mjs | tests/collab/split-records-mutants.json
 editing the gallery still calls the standalone command in a shared session | src/application/editing/cell-editing.ts | src/test/shared-native-record-guards-app.test.mjs | tests/collab/split-records-mutants.json
-assigning a comment still calls the standalone command in a shared session | src/features/comments/comments.ts | src/test/shared-split-records-literals-comments-app.test.mjs | tests/collab/split-records-mutants.json
-cancelling a comment still calls the standalone unwrap in a shared session | src/features/comments/comments.ts | src/test/shared-split-records-literals-comments-app.test.mjs | tests/collab/split-records-mutants.json
-posting a comment still calls the standalone command in a shared session | src/features/comments/comments.ts | src/test/shared-split-records-literals-comments-app.test.mjs | tests/collab/split-records-mutants.json
-resolving a comment still calls the standalone command in a shared session | src/features/comments/comments.ts | src/test/shared-split-records-literals-comments-app.test.mjs | tests/collab/split-records-mutants.json
-deleting a comment still calls the standalone command in a shared session | src/features/comments/comments.ts | src/test/shared-split-records-literals-comments-app.test.mjs | tests/collab/split-records-mutants.json
+assigning a comment still calls the standalone command in a shared session | src/features/comments/comments.ts | tests/features/comments/shared-ports.test.ts | tests/collab/split-records-mutants.json
+cancelling a comment still calls the standalone unwrap in a shared session | src/features/comments/comments.ts | tests/features/comments/shared-ports.test.ts | tests/collab/split-records-mutants.json
+posting a comment still calls the standalone command in a shared session | src/features/comments/comments.ts | src/test/shared-native-typed-boxes-mapped-app.test.mjs | tests/collab/split-records-mutants.json
+resolving a comment still calls the standalone command in a shared session | src/features/comments/comments.ts | tests/features/comments/shared-ports.test.ts | tests/collab/split-records-mutants.json
+deleting a comment still calls the standalone command in a shared session | src/features/comments/comments.ts | tests/features/comments/shared-ports.test.ts | tests/collab/split-records-mutants.json
 replying to a comment still calls the standalone command in a shared session | src/features/comments/comments.ts | src/test/shared-split-records-literals-comments-app.test.mjs | tests/collab/split-records-mutants.json
 a refused record command shows no notice | src/application/commands/shared-records.ts | tests/application/commands/shared-refusals.test.ts | tests/collab/split-records-mutants.json
 a shared record command runs through the silent edit that drops its refusal | src/application/commands/shared-records.ts | tests/application/commands/shared-refusals.test.ts | tests/collab/split-records-mutants.json
@@ -1003,12 +1003,12 @@ a refused record command reports nothing held, so its caller closes and clears a
 a shared record command that changes nothing reports itself held, so its caller keeps the box open instead of cleaning up | src/application/commands/shared-records.ts | tests/application/commands/shared-refusals.test.ts | tests/collab/split-records-mutants.json
 a refused picture edit reports nothing held, so the gallery moves its selection as if it had removed | src/bootstrap/wiring/native-shared-records.ts | src/test/shared-native-record-guards-app.test.mjs | tests/collab/split-records-mutants.json
 the gallery remove moves the selection without the outcome | src/features/gallery/overlay.ts | src/test/shared-native-record-guards-app.test.mjs | tests/collab/split-records-mutants.json
-rule 154: a refused comment closes the composer and drops its text | src/features/comments/comments.ts | src/test/shared-split-records-held-comments-app.test.mjs | tests/collab/split-records-mutants.json
+rule 154: a refused comment closes the composer and drops its text | src/features/comments/comments.ts | src/test/shared-native-typed-boxes-mapped-app.test.mjs | tests/collab/split-records-mutants.json
 rule 154: a refused reply drops its composer and draft before the outcome | src/features/comments/comments.ts | src/test/shared-split-records-typed-comments-app.test.mjs | tests/collab/split-records-mutants.json
 a refused reply drops its composer and draft | src/features/comments/comments.ts | src/test/shared-split-records-typed-comments-app.test.mjs | tests/collab/split-records-mutants.json
-a served reply leaves its composer open | src/features/comments/comments.ts | src/test/shared-split-records-literals-comments-app.test.mjs | tests/collab/split-records-mutants.json
-a refused comment delete closes the comment's menu before the outcome | src/features/comments/comments.ts | src/test/shared-split-records-held-comments-app.test.mjs | tests/collab/split-records-mutants.json
-a refused comment cancel closes the composer | src/features/comments/comments.ts | src/test/shared-split-records-held-comments-app.test.mjs | tests/collab/split-records-mutants.json
+a served reply leaves its composer open | src/features/comments/comments.ts | src/test/shared-native-typed-boxes-mapped-app.test.mjs | tests/collab/split-records-mutants.json
+a refused comment delete closes the comment's menu before the outcome | src/features/comments/comments.ts | src/test/shared-native-record-drafts-app.test.mjs | tests/collab/split-records-mutants.json
+a refused comment cancel closes the composer | src/features/comments/comments.ts | tests/features/comments/shared-ports.test.ts | tests/collab/split-records-mutants.json
 a refused shot add clears the typed name and announces success | src/application/commands/production-actions.ts | tests/application/commands/production-actions.test.ts | tests/collab/split-records-mutants.json
 a refused bulk assignment to a new person closes its box | src/features/broll/panel.ts | src/test/shared-split-records-typed-broll-app.test.mjs | tests/collab/split-records-mutants.json
 a refused bulk new location closes its box | src/features/broll/panel.ts | src/test/shared-split-records-typed-broll-app.test.mjs | tests/collab/split-records-mutants.json
