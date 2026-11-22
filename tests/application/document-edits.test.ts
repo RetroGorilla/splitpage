@@ -84,7 +84,7 @@ test("isolated record plans require an author, preserve their shared form, and r
   assert.ok(doc);
   const allowed = () => ({ allowed: true }) as const;
   const capabilities = createSessionCapabilities("standalone", { edit: allowed, comment: allowed });
-  const shared = { author: () => ({ id: "record", by: "Adam" }), ranks: () => [], heads: () => [] };
+  const shared = { author: () => ({ id: "record", by: "Fixture Editor" }), ranks: () => [], heads: () => [] };
   const shot: DocumentShot = { id: "b2", name: "Close", status: "unshot", origin: "list", props: [] };
   const clarify = (command: Command) => {
     const plan = command.plan(doc, capabilities);
