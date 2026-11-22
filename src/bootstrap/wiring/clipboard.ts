@@ -22,7 +22,6 @@ import { cellEditing, paintGuard, rowDrag } from "./editor-owners.ts";
 import { viewFlags } from "./preferences-owner.ts";
 import { imageRefOf } from "../richtext.ts";
 import { sharedCellSpaceForm } from "./ports/shared-cell-space.ts";
-import { sharedStructureCommands } from "./ports/shared-commands.ts";
 
 const copyPaste = owned<CopyPasteMount>();
 
@@ -59,7 +58,6 @@ export function mountCopyPasteFeature(): CopyPasteMount {
       document: portDocument,
       lifetime: portLifetime,
       edits: portEdits,
-      structure: sharedStructureCommands,
       undo: portUndo,
       pictures: portPictures,
       notices: portNotices,

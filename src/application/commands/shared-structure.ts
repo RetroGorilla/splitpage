@@ -4,7 +4,7 @@ import { flowBaseReference } from "../../core/collab/base-reference.ts";
 import { FlowOperationTrace, flowIdentity } from "../../core/flow/operations.ts";
 import { cellLength } from "../../core/text/runs.ts";
 import type { Run } from "../../core/text/runs.ts";
-import type { Command, CommandOutcome, DocumentView, Plan } from "../session/document-session.ts";
+import type { Command, DocumentView, Plan } from "../session/document-session.ts";
 import type { ParagraphFlagChange } from "./paragraphs.ts";
 import type { SharedValuePorts } from "./shared-values.ts";
 
@@ -18,19 +18,6 @@ export interface SharedStructurePorts extends Pick<SharedValuePorts, "author" | 
 
 export interface CreatedBeatCommand extends Command {
   readonly created: () => string | null;
-}
-
-export interface SharedSettledSelection {
-  readonly rowId: string;
-  readonly removed: readonly (readonly [number, number])[];
-  readonly at: number;
-}
-
-export interface SharedStructureCommands {
-  readonly ports: () => SharedStructurePorts | null;
-  readonly refused: (outcome: CommandOutcome) => void;
-  readonly settle: () => boolean;
-  readonly settleSelection: (rowId: string, read: () => { readonly from: number; readonly to: number } | null) => SharedSettledSelection | null;
 }
 
 export function sharedStructureTrace(doc: DocumentView, ports: SharedStructurePorts, author: SharedStructureAuthor): FlowOperationTrace {

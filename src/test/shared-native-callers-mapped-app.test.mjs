@@ -12,7 +12,7 @@ import { appActions } from "../bootstrap/wiring/ports/actions.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { setBeatLength } from "../features/rows/read-time.ts";
 import { undoOwner } from "../bootstrap/wiring/undo.ts";
-import { sharedStructureCommands, sharedValueCommands } from "../bootstrap/wiring/ports/shared-commands.ts";
+import { sharedRecordCommands } from "../bootstrap/wiring/ports/shared-commands.ts";
 import { sharedCommandRefusalNotice } from "../bootstrap/wiring/ports/shared-command-notices.ts";
 import { adoptReplacement, currentDocument, sharedSession } from "../bootstrap/wiring/session-owner.ts";
 import { enterSharedSession, forceLeaveSharedSession, leaveRunningSharedSession } from "../bootstrap/wiring/shared-session.ts";
@@ -1004,12 +1004,10 @@ test("Read-time Ctrl+Z undoes a native length edit and leaves standalone history
 
 test("Command refusal notices distinguish silent, previously announced and no-op outcomes", async t => {
   const f = await enter(t);
-  for (const commands of [sharedStructureCommands, sharedValueCommands]) {
-    const before = f.notices().length;
-    commands.refused({ kind: "rejected", reason: "buffer-pending", notified: true });
-    commands.refused({ kind: "noop" });
-    assert.deepEqual(f.notices().slice(before), []);
-    commands.refused({ kind: "rejected", reason: "buffer-pending" });
-    assert.deepEqual(f.notices().slice(before), [warning]);
-  }
+  const before = f.notices().length;
+  sharedRecordCommands.refused({ kind: "rejected", reason: "buffer-pending", notified: true });
+  sharedRecordCommands.refused({ kind: "noop" });
+  assert.deepEqual(f.notices().slice(before), []);
+  sharedRecordCommands.refused({ kind: "rejected", reason: "buffer-pending" });
+  assert.deepEqual(f.notices().slice(before), [warning]);
 });

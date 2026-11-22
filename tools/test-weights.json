@@ -236,8 +236,6 @@
   "src/test/shared-split-app.test.mjs": 7186,
   "src/test/shared-split-callers-literals-app.test.mjs": 22427,
   "src/test/shared-split-callers-notices-app.test.mjs": 19220,
-  "src/test/shared-split-callers-settled-app.test.mjs": 56070,
-  "src/test/shared-split-callers-structure-app.test.mjs": 22857,
   "src/test/shared-split-records-standalone-app.test.mjs": 3360,
   "src/test/shared-split-records-typed-broll-app.test.mjs": 10252,
   "src/test/shared-split-records-typed-comments-app.test.mjs": 3965,

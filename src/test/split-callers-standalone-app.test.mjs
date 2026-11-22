@@ -5,7 +5,7 @@ import { adoptReplacement, currentDocument, sharedSession } from "../bootstrap/w
 import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { addRow } from "../bootstrap/wiring/rows.ts";
 import { cycleRowStatus, setBeatFilmed } from "../bootstrap/wiring/beat-status.ts";
-import { sharedStructureCommands, sharedValueCommands } from "../bootstrap/wiring/ports/shared-commands.ts";
+import { nativeBeatField } from "../bootstrap/wiring/ports/shared-commands.ts";
 import { setBeatLength } from "../features/rows/read-time.ts";
 import { setTargetLength } from "../features/rundown/target.ts";
 import { bootApp, closeApp } from "./_app-boot.mjs";
@@ -48,8 +48,7 @@ test("C7 standalone: the callers read no shared ports and keep the list-local id
   writerControls().closeWriter();
   adoptReplacement(migrateRows(structuredClone(SOURCE)));
   assert.equal(sharedSession(), false);
-  assert.equal(sharedStructureCommands.ports(), null);
-  assert.equal(sharedValueCommands.ports(), null);
+  assert.equal(nativeBeatField("r1", "status", "ready"), null);
   clearWarnings();
   select(cellOf("audioText"), 3);
   assert.equal(press(cellOf("audioText"), "Enter", { altKey: true }), true);

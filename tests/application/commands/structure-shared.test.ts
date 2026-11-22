@@ -748,3 +748,18 @@ test("the structure port reports the canonical beat id for a creation operation"
     assert.equal(ports(set.a, stampsOf("Alice", 5)).createdBeat("w1_1_o_0" as SharedContentRef), ADD_A);
   } finally { set.close(); }
 });
+
+for (const kind of ["add", "split"] as const) test("the isolated " + kind + " command returns the minted beat ID after commit", () => {
+  const set = setup();
+  const session = sharedHarness(adapterReplica(set.a)).session;
+  try {
+    const stamps = stampsOf("Alice", 5), shared = ports(set.a, stamps);
+    const command = kind === "add" ? addBeatCommand("R1", "N1", stamps, shared)
+      : splitBeatCommand("R1", "audioText", textCut(1, 2), "N1", { ...stamps, cells }, shared);
+    assert.equal(command.created(), null);
+    assert.equal(session.run(command).kind, "applied");
+    const expected = kind === "add" ? ADD_A : SPLIT_A;
+    assert.equal(command.created(), expected);
+    assert.equal(session.read(doc => doc?.rows[1]?.id), expected);
+  } finally { session.dispose(); set.close(); }
+});

@@ -2,8 +2,7 @@ import type { SharedCommentPorts } from "../../../application/commands/comments.
 import type { SharedGalleryCommands } from "../../../application/commands/gallery.ts";
 import type { EditorRegistryCommands } from "../../../application/commands/registry-editor.ts";
 import type { SharedRecordCommands } from "../../../application/commands/shared-records.ts";
-import type { SharedStructureCommands } from "../../../application/commands/shared-structure.ts";
-import type { SharedValueCommands } from "../../../application/commands/shared-values.ts";
+import type { SharedBeatField } from "../../../application/commands/shared-values.ts";
 import type { CommandOutcome } from "../../../application/session/document-session.ts";
 import type { UndoControl } from "../../../application/editing/undo-control.ts";
 import { nativeEditorRecords } from "../shared-session.ts";
@@ -17,11 +16,7 @@ function refused(outcome: CommandOutcome): void {
   if (outcome.kind === "rejected" && !outcome.notified) refuse(outcome.reason);
 }
 
-export const sharedValueCommands: SharedValueCommands = {
-  beatField: (...args) => nativeEditorRecords()?.beatField(...args) ?? null,
-  ports: () => null,
-  refused
-};
+export const nativeBeatField: SharedBeatField = (...args) => nativeEditorRecords()?.beatField(...args) ?? null;
 
 export const sharedRecordCommands: EditorRegistryCommands = {
   native: () => nativeEditorRecords()?.registry ?? null,
@@ -36,13 +31,6 @@ export const sharedGalleryCommands: SharedGalleryCommands = {
 export const sharedCommentCommands: SharedRecordCommands<SharedCommentPorts> = {
   ports: () => null,
   refused
-};
-
-export const sharedStructureCommands: SharedStructureCommands = {
-  ports: () => null,
-  refused,
-  settle: () => true,
-  settleSelection: () => null
 };
 
 // why: while shared the standalone owner refuses its held document, so a control's own Ctrl+Z steps the shared owner

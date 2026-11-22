@@ -26,12 +26,6 @@ export function fakeSharedCommands(): SharedCommandGuard {
   return { refuseUnsupported: () => false };
 }
 const standaloneRefusal = (): never => { throw new Error("a standalone caller reported a shared refusal"); };
-export function fakeStandaloneStructure(): SharedStructureCommands {
-  return { ports: () => null, refused: standaloneRefusal, settle: standaloneRefusal, settleSelection: standaloneRefusal };
-}
-export function fakeStandaloneValues(): SharedValueCommands {
-  return { ports: () => null, refused: standaloneRefusal };
-}
 export function fakeStandaloneRecords(): EditorRegistryCommands {
   return { native: () => null, ports: () => null, refused: standaloneRefusal };
 }
@@ -40,9 +34,7 @@ export function fakeStandaloneGallery(): SharedGalleryCommands {
 }
 import type { SharedGalleryCommands } from "../../src/application/commands/gallery.ts";
 import type { EditorRegistryCommands } from "../../src/application/commands/registry-editor.ts";
-import type { SharedStructureCommands } from "../../src/application/commands/shared-structure.ts";
 import type { SharedAdmissionAnswer } from "../../src/application/session/shared-session.ts";
-import type { SharedValueCommands } from "../../src/application/commands/shared-values.ts";
 import type { TextServices } from "../../src/application/text/services.ts";
 import type { PrompterFeaturePorts } from "../../src/features/prompter/ports.ts";
 import type { FindPorts } from "../../src/features/find/ports.ts";

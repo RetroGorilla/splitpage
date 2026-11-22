@@ -3,7 +3,6 @@ import { targetLengthOf } from "../../core/document/timing.ts";
 import { formatDuration } from "../../core/production/timing.ts";
 import { onRundownPaint, rundownLayout } from "./rundown.ts";
 import { targetLengthCommand } from "../../application/commands/document-settings.ts";
-import { sharedCommandTaken } from "../../application/commands/shared-values.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
 
 let ports: TargetPorts | null = null;
@@ -86,8 +85,6 @@ export function paintTargetOverlay() {
 
 export function setTargetLength(seconds: number | null | undefined) {
   if (!(ports as TargetPorts).document.current()) return false;
-  const shared = (ports as TargetPorts).shared.ports();
-  if (shared) return sharedCommandTaken((ports as TargetPorts).edits.run(targetLengthCommand(seconds, shared)), (ports as TargetPorts).shared.refused);
   return !!(ports as TargetPorts).edits.edit(targetLengthCommand(seconds));
 }
 

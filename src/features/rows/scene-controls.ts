@@ -17,7 +17,6 @@ import type { BufferedInput, BufferedInputPorts } from "../common/buffered-input
 import { headingFieldKey, unsettledHeading } from "../../application/editing/buffered-field-key.ts";
 import { headingPos } from "../../core/flow/flow.ts";
 import type { SharedSceneCreation } from "../../application/commands/shared-scenes.ts";
-import type { SharedStructureCommands } from "../../application/commands/shared-structure.ts";
 
 export interface SceneControlsPorts {
   readonly document: Pick<DocumentReader, "current" | "numbering">;
@@ -29,7 +28,6 @@ export interface SceneControlsPorts {
   readonly notices: Pick<NoticePort, "show">;
   readonly scroll: (x: number, y: number) => void;
   readonly stopScroll: () => void;
-  readonly structure: SharedStructureCommands;
   readonly sharedNames?: BufferedInputPorts;
   readonly sharedScenes?: SharedSceneCreation;
 }
@@ -346,12 +344,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
       rename(id, divider);
     }
     else if (action === "remove") {
-      const shared = ports.structure.ports();
-      if (!shared) ports.edits.run(removeSceneCommand(id));
-      else {
-        const outcome = ports.edits.run(removeSceneCommand(id, shared));
-        if (outcome.kind === "rejected") ports.structure.refused(outcome);
-      }
+      ports.edits.run(removeSceneCommand(id));
     }
     else if (action === "up" || action === "down") {
       const groups = sceneGroups(state), index = groups.findIndex(group => group.scene.id === id);

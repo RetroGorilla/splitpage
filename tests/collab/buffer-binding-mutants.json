@@ -382,7 +382,7 @@
     "file": "src/core/migrate.ts",
     "find": "  return projected as ValidatedDocument;\n}",
     "replace": "  if (Array.isArray(projected.sections)) for (const scene of projected.sections) if (scene && typeof scene.name === \"string\") scene.name = scene.name.trim();\n  return projected as ValidatedDocument;\n}",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
+    "tests": ["tests/application/session/shared-entry.test.ts"]
   }, {
     "label": "the Split rename form reads the trimmed name",
     "file": "src/features/rows/scene-controls.ts",

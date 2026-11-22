@@ -5,7 +5,6 @@ import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { addRow, armDelete, splitRowFieldCore } from "../bootstrap/wiring/rows.ts";
 import { cycleRowStatus, setBeatFilmed } from "../bootstrap/wiring/beat-status.ts";
 import { promptForTarget, promptForWpm } from "../bootstrap/wiring/title-chrome.ts";
-import { sharedStructureCommands, sharedValueCommands } from "../bootstrap/wiring/ports/shared-commands.ts";
 import { setBeatLength } from "../features/rows/read-time.ts";
 import { setTargetLength } from "../features/rundown/target.ts";
 import { deleteSelectedBeats, pasteBeatsAt, selectBeats } from "../features/clipboard/beat-select.ts";
@@ -115,18 +114,6 @@ test("C7 one refusal, one notice: Ctrl+Enter after a faulted typing buffer annou
     assert.deepEqual(noticeCalls, [[REFUSED, "warn"]]);
     assert.deepEqual([encodeSharedState(f.parts.handle), f.parts.undo.sizes()], [encoded, sizes]);
   } finally { clearWarnings(); ports.bindings.abandon(); f.close(); }
-});
-
-test("C7 callers: a refusal the session already announced is not announced again", () => {
-  clearWarnings();
-  for (const commands of [sharedStructureCommands, sharedValueCommands]) {
-    commands.refused({ kind: "rejected", reason: "not shared", notified: true });
-    commands.refused({ kind: "noop" });
-    assert.deepEqual(warnings(), []);
-    commands.refused({ kind: "rejected", reason: "not shared" });
-    assert.deepEqual(warnings(), [REFUSED]);
-    clearWarnings();
-  }
 });
 
 for (const order of ORDERS) test(`C7 rule 73: pasting copied beats has no shared port, warns once and writes nothing, ${order}`, async () => {

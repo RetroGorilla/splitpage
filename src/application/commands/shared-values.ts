@@ -1,6 +1,5 @@
 import type { SharedContentRef, SharedOperation, SharedScalarAddress } from "../../core/collab/operations.ts";
 import type { RowStatusId } from "../../core/document/timing.ts";
-import type { CommandOutcome } from "../session/document-session.ts";
 import type { RecordCommandRun } from "./shared-records.ts";
 
 type SharedValueAuthor = { readonly id: string; readonly by: string };
@@ -12,17 +11,7 @@ export interface SharedValuePorts {
   readonly statusParts: (beat: string) => readonly string[];
 }
 
-export interface SharedValueCommands {
-  readonly beatField?: (rowId: string, field: "status" | "lengthSeconds", value: RowStatusId | number | null) => RecordCommandRun | null;
-  readonly ports: () => SharedValuePorts | null;
-  readonly refused: (outcome: CommandOutcome) => void;
-}
-
-export function sharedCommandTaken(outcome: CommandOutcome, refused: SharedValueCommands["refused"]): boolean {
-  if (outcome.kind === "failed") throw outcome.error;
-  if (outcome.kind === "rejected") refused(outcome);
-  return outcome.kind === "applied" || outcome.kind === "committed";
-}
+export type SharedBeatField = (rowId: string, field: "status" | "lengthSeconds", value: RowStatusId | number | null) => RecordCommandRun | null;
 
 // why: a joined beat shows the highest status of its parts, so every part the row reads gets the new status.
 export function sharedBeatStatus(ports: SharedValuePorts, author: SharedValueAuthor, beat: string, value: RowStatusId): SharedOperation[] {
