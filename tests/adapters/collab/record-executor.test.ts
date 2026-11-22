@@ -6,7 +6,7 @@ import { readSharedRecords } from "../../../src/adapters/collab/record-reader.ts
 import { readSharedStatus } from "../../../src/adapters/collab/status.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { encodeSharedState, transactSharedDocument, observeSharedTransactions } from "../../../src/adapters/collab/document.ts";
-import { readSharedScalars } from "../../../src/adapters/collab/scalar-reader.ts";
+import { observeSharedScalars } from "./scalar-observations.ts";
 import { commentsOracle, commentsReplyOracle } from "../../collab/oracles/oracles.ts";
 import { deliveryOrders } from "../../collab/delivery.ts";
 import type { SharedRecordCollection } from "../../../src/core/collab/operations.ts";
@@ -217,9 +217,9 @@ test("a hand-written hydrated document accepts one mixed batch and preserves tex
     for (const kind of Object.keys(selected) as SharedRecordCollection[]) agree(`loaded ${kind}`, "rev", [run.a, run.b],
       handle => readSharedRecords(handle, kind).map(({ key, fields }) => ({ key, fields: Object.fromEntries(selected[kind].map(field => [field, fields[field]])) })), expected[kind]);
     agree("loaded scalar roots", "rev", [run.a, run.b], handle => [
-      readSharedScalars(handle, { scope: "document", record: ref("d00000000000000000000000000000000") })?.wordsPerMinute,
-      readSharedScalars(handle, { scope: "beat", record: ref("R1") })?.lengthSeconds,
-      readSharedScalars(handle, { scope: "heading", record: ref("H1") })?.extra], [180, 6, '{"future":true}']);
+      observeSharedScalars(handle, { scope: "document", record: ref("d00000000000000000000000000000000") })?.wordsPerMinute,
+      observeSharedScalars(handle, { scope: "beat", record: ref("R1") })?.lengthSeconds,
+      observeSharedScalars(handle, { scope: "heading", record: ref("H1") })?.extra], [180, 6, '{"future":true}']);
     const visual = collabState(run.a).roots.visuals.get("R1") as Y.Map<unknown>;
     assert.equal((visual.get("text") as Y.Text).toString(), "Visual"); assert.ok(visual.get("markRecords") instanceof Y.Map);
   } finally { run.close(); }

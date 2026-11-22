@@ -6,7 +6,6 @@ import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/remo
 import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-executor.ts";
 import { registerSharedTextOperationHandlers } from "../../../src/adapters/collab/text-executor.ts";
 import { registerSharedHeadingHandlers } from "../../../src/adapters/collab/heading-executor.ts";
-import { registerSharedMoveRefusal } from "../../../src/adapters/collab/move-refusal.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { encodeSharedState, encodeSharedStateVector, readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
@@ -30,28 +29,28 @@ function refusedUnchanged(ops: readonly SharedOperation[], index: number): void 
   const set = replicas(2, source);
   try {
     registerSharedRemovalHandlers(set.a); registerSharedSplitHandlers(set.a, runtime); registerSharedTextOperationHandlers(set.a);
-    registerSharedHeadingHandlers(set.a); registerSharedMoveRefusal(set.a);
+    registerSharedHeadingHandlers(set.a);
     const before = [encodeSharedState(set.a), encodeSharedStateVector(set.a), readSharedRevision(set.a)];
     assert.deepEqual(executeSharedOperations(set.a, ops, { base: readSharedRevision(set.a) }),
-      { ok: false, index, operation: ops[index], reason: "move-in-shared-session" });
+      { ok: false, index, operation: ops[index], reason: "unhandled-kind" });
     assert.deepEqual([encodeSharedState(set.a), encodeSharedStateVector(set.a), readSharedRevision(set.a)], before);
     assert.deepEqual(runtime.load(projectSharedDocument(set.a)).rows.map(row => [row.id, row.audioText]), [["R1", "ab"], ["R2", "cd"], ["R3", "ef"], ["R4", "gh"]]);
   } finally { set.close(); }
 }
 
-test("a whole-beat move from the flow is refused by name and writes nothing", () => {
+test("a whole-beat move from the flow has no registered handler and writes nothing", () => {
   const ops = opsOf(moveBeats(doc, ["R2"], beatPos("R4", 2), ports));
   assert.deepEqual(ops.map(op => op.kind), ["segment-move", "scalar"]);
   refusedUnchanged(ops, 0);
 });
 
-test("moving a scene's beats before another scene is refused by name after its heading removal prepared, and writes nothing", () => {
+test("moving a scene's beats before another scene has no registered handler after its heading removal prepared, and writes nothing", () => {
   const ops = opsOf(moveBeats(doc, ["R3", "R4"], headingPos("H1", 0), ports));
   assert.deepEqual(ops.map(op => op.kind), ["heading-remove", "segment-move", "scalar"]);
   refusedUnchanged(ops, 1);
 });
 
-test("a list that types a character and then moves a beat is refused whole and the character is not written", () => {
+test("a list that types a character and then moves a beat is refused as one operation list and the character is not written", () => {
   const typed = opsOf(typeWithMarks(doc, beatPos("R1", 1), "x", {}, { ...runtime.ports, operations: { id: "typed", by: "Writer" } }));
   assert.deepEqual(typed.map(op => op.kind), ["text-insert"]);
   refusedUnchanged([...typed, ...opsOf(moveBeats(doc, ["R2"], beatPos("R4", 2), ports))], 1);

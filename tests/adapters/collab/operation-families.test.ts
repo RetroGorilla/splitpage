@@ -29,7 +29,7 @@ const OWNERS: Readonly<Record<SharedOperation["kind"], string>> = {
   remove: "removal", restore: "removal", "heading-remove": "removal", discard: "removal", "discard-retire": "removal",
   join: "join", "join-glue": "join", "join-retire": "join",
   "heading-create": "heading", "heading-finalize": "heading",
-  "segment-move": "move refusal",
+  "segment-move": "retired",
   "text-restore": "undo", "mark-retract": "undo", "status-retire": "undo", "split-retire": "undo", "split-restore": "undo",
   "gallery-retire": "undo", "gallery-restore": "undo",
   "segment-retire": "undo", "segment-restore": "undo", "heading-retire": "undo", "heading-restore": "undo",
@@ -58,9 +58,9 @@ test("every operation kind has one owner: a family the composition registers, or
   const handle = familyHandle();
   try {
     const registered = Object.keys(registeredSharedOperationHandlers(handle)).sort();
-    assert.deepEqual(registered, Object.entries(OWNERS).filter(([, owner]) => owner !== "executor").map(([kind]) => kind).sort());
+    assert.deepEqual(registered, Object.entries(OWNERS).filter(([, owner]) => owner !== "executor" && owner !== "retired").map(([kind]) => kind).sort());
     assert.deepEqual(registered, ["discard", "discard-retire", "gallery-restore", "gallery-retire", "heading-create", "heading-finalize", "heading-remove", "heading-restore", "heading-retire", "join", "join-glue", "join-retire",
-      "mark", "mark-retract", "record-create", "record-delete", "record-revive", "record-set", "remove", "restore", "segment-create", "segment-move", "segment-restore", "segment-retire", "split",
+      "mark", "mark-retract", "record-create", "record-delete", "record-revive", "record-set", "remove", "restore", "segment-create", "segment-restore", "segment-retire", "split",
       "split-before", "split-restore", "split-retire", "status-retire", "text-delete", "text-insert", "text-restore"]);
   } finally { destroySharedDocument(handle); }
 });
@@ -177,12 +177,12 @@ test("seeded list, headings: create with a name, finalize a typed line and remov
   } finally { created.set.close(); finalized.set.close(); removed.set.close(); }
 });
 
-test("seeded list, moves: a segment move reaches the registered refusal and writes nothing (rule 40)", () => {
+test("seeded list, retired segment moves have no handler and write nothing", () => {
   const { set, a } = world({ rows: [{ id: "R1", audioText: "ab" }, { id: "R2", audioText: "cd" }] });
   try {
     const move = operation({ kind: "segment-move", id: "move", by: "Alice", segments: ["b:R2"], observedOrder: ["b:R2"], at: { left: null, right: "b:R1", affinity: "before" } });
     const revision = readSharedRevision(a);
-    assert.deepEqual(executeSharedOperations(a, [move], { base: revision }), { ok: false, index: 0, operation: move, reason: "move-in-shared-session" });
+    assert.deepEqual(executeSharedOperations(a, [move], { base: revision }), { ok: false, index: 0, operation: move, reason: "unhandled-kind" });
     assert.equal(readSharedRevision(a), revision);
   } finally { set.close(); }
 });

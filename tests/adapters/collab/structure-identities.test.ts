@@ -26,7 +26,7 @@ import { structureIdentityFixture } from "../../collab/structure-identity.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import type { DeliveryOrder } from "../../collab/delivery.ts";
 import { readSharedStatus } from "../../../src/adapters/collab/status.ts";
-import { readSharedScalars } from "../../../src/adapters/collab/scalar-reader.ts";
+import { observeSharedScalars } from "./scalar-observations.ts";
 import { ref } from "./executor-support.ts";
 
 const runtime = createFlowLoadRuntime(), ports = { cells: runtime.cells };
@@ -251,7 +251,7 @@ function concurrentCleanedCollision(order: DeliveryOrder): void {
       operation({ kind: "status", id: "visible-status", by: "Writer", target: { scope: "beat", record: beat }, parents: [], prior: "todo", value: "ready" })
     ]), { ok: true }); set.queue.flush(order);
     agree("cleaned beat fields resolve to the shown row", order, [set.a, set.b], handle => ({
-      status: readSharedStatus(handle, { scope: "beat", record: ref(beat) }), fields: readSharedScalars(handle, { scope: "beat", record: ref(beat) }),
+      status: readSharedStatus(handle, { scope: "beat", record: ref(beat) }), fields: observeSharedScalars(handle, { scope: "beat", record: ref(beat) }),
       shown: projectSharedDocument(handle).rows[0]?.lengthSeconds,
       hidden: (collabState(handle).roots.beats.get(beat) as Y.Map<unknown>).get("lengthSeconds")
     }), { status: "ready", fields: { lengthSeconds: 9 }, shown: 9, hidden: undefined });

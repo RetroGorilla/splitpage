@@ -7,10 +7,7 @@ import type { CommandOutcome } from "../../../src/application/session/document-s
 import type { ProductionTagPorts } from "../../../src/features/tags/ports.ts";
 import { fakeDocument, fakeEdits, fakeNotices, fakeSharedCommands, fakeStandaloneRecords } from "../fakes.ts";
 import { sharedCommandGuard } from "../../../src/bootstrap/wiring/ports/shared-command-notices.ts";
-import { replicas } from "../../adapters/collab/executor-support.ts";
-import { sharedHarness } from "../../application/session/shared-session-support.ts";
-import { adapterReplica } from "../../application/session/legacy-shared-session-support.ts";
-import { encodeSharedState } from "../../../src/adapters/collab/document.ts";
+import { fakeReplica, sharedHarness } from "../../application/session/shared-session-support.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { createProductionIndex } from "../../../src/application/production/production-index.ts";
 import { deepFreeze } from "../../../src/core/document/freeze.ts";
@@ -58,7 +55,8 @@ function fixture() {
 
 test("rule 73: the tag composer refuses single and bulk tagging without a success toast or standalone undo", () => {
   for (const all of [false, true]) {
-    const set = replicas(), shared = sharedHarness(adapterReplica(set.a)), h = fixture();
+    const replica = fakeReplica({ rows: [{ id: "R1", audioText: "words" }] });
+    const shared = sharedHarness(replica.port), h = fixture();
     document.body.innerHTML = '<div id="tag-quote"></div><input id="tag-name"><div id="tag-cats"></div><div id="tag-name-list"></div>' +
       '<input id="tag-all" type="checkbox"><div id="tag-hint"></div><div id="tag-modal" hidden></div>';
     const mounted = startProductionTags({ ...h.ports,
@@ -69,12 +67,12 @@ test("rule 73: the tag composer refuses single and bulk tagging without a succes
       openTagComposer({ quotedText: "Cup", rowId: "R1", field: "visualText" });
       (document.getElementById("tag-name") as HTMLInputElement).value = "Cup";
       (document.getElementById("tag-all") as HTMLInputElement).checked = all;
-      const before = encodeSharedState(set.a);
+      const before = replica.port.project();
       applyTag();
       assert.deepEqual(h.notices.shown.map(item => [item.message, item.kind]), [["This is not available in a shared session yet.", "warn"]]);
-      assert.deepEqual(encodeSharedState(set.a), before);
+      assert.deepEqual(replica.port.project(), before);
       assert.deepEqual([h.edits.ran, shared.undo], [[], []]);
-    } finally { mounted.dispose(); shared.session.dispose(); set.close(); }
+    } finally { mounted.dispose(); shared.session.dispose(); }
   }
 });
 

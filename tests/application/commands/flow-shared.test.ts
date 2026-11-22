@@ -139,7 +139,7 @@ const cases: readonly SharedFlowLiteral[] = [
     { kind: "segment-move", id: "w1_1:0", by: "Alice", segments: ["R2"], observedOrder: ["R1", "R2"], at: { left: null, right: "R1", affinity: "before" } },
     { kind: "scalar", id: "w1_1:1", by: "Alice", target: { scope: "beat", record: "R2" }, field: "paragraphStart", value: true },
     { kind: "scalar", id: "w1_1:2", by: "Alice", target: { scope: "beat", record: "R1" }, field: "paragraphStart", value: true }
-  ], text: ["abc", "def"], refused: "move-in-shared-session" },
+  ], text: ["abc", "def"], refused: "unhandled-kind" },
   { name: "rename-scene", source: { rows: [{ id: "R1", audioText: "abc" }, { id: "R2", audioText: "def" }], sections: [{ id: "H1", name: "Scene", firstSceneId: "R1" }] },
     run: doc => flow.renameHeading(doc, "H1", "New", 3), operations: null, text: ["abc", "def"], names: ["Scene"], sections: [{ id: "H1", name: "Scene", firstSceneId: "R1" }], refused: "flow-operations-unavailable" },
   { name: "inline-markdown", source: { rows: [{ id: "R1", audioText: "**b**" }, { id: "R2", audioText: "def" }] }, run: (doc, ports) => {

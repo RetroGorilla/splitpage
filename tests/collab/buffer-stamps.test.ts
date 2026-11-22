@@ -7,7 +7,7 @@ import { createSharedBufferedText } from "../../src/adapters/collab/buffer.ts";
 import { readSharedPaintedText } from "../../src/adapters/collab/paint-base.ts";
 import { projectSharedDocumentWithRecovery } from "../../src/adapters/collab/project.ts";
 import { scalarTarget } from "../../src/adapters/collab/scalar-executor.ts";
-import { readSharedScalars } from "../../src/adapters/collab/scalar-reader.ts";
+import { observeSharedScalars } from "../adapters/collab/scalar-observations.ts";
 import { applySharedUpdate, createSharedDocument, destroySharedDocument, encodeSharedState, transactSharedDocument } from "../../src/adapters/collab/document.ts";
 import { registerSharedUndoOperationHandlers } from "../../src/adapters/collab/undo-handlers.ts";
 import { executeSharedCommand, reverseSharedUndoRecord } from "../../src/adapters/collab/undo-executor.ts";
@@ -119,7 +119,7 @@ test("a stored stamp whose time is not text never hides a valid one, in the proj
     for (const handle of [h.a, loaded]) {
       assert.deepEqual(stored(h, handle), ["stamp:0", "stamp:1"]);
       assert.deepEqual(stamps(handle), { at: "2026-11-12T10:00:05.000Z", by: "Alice" });
-      assert.deepEqual(readSharedScalars(handle, { scope: "beat", record: h.target("R1").owner })?.stamp, { at: "2026-11-12T10:00:05.000Z", by: "Alice" });
+      assert.deepEqual(observeSharedScalars(handle, { scope: "beat", record: h.target("R1").owner })?.stamp, { at: "2026-11-12T10:00:05.000Z", by: "Alice" });
     }
   } finally { a.session.session.dispose(); destroySharedDocument(loaded); h.destroy(); }
 });

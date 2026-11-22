@@ -5,7 +5,7 @@ import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts
 import { registerSharedOperationHandlers } from "../../../src/adapters/collab/operation-handlers.ts";
 import { encodeSharedState, observeSharedTransactions, transactSharedDocument } from "../../../src/adapters/collab/document.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
-import { readSharedScalars } from "../../../src/adapters/collab/scalar-reader.ts";
+import { observeSharedScalars } from "./scalar-observations.ts";
 import { readSharedStatus, readSharedStatusHeads, readSharedStatusNotices } from "../../../src/adapters/collab/status.ts";
 import { markOracles } from "../../collab/oracles/marks/oracles.ts";
 import { deliveryOrders } from "../../collab/delivery.ts";
@@ -57,13 +57,13 @@ test("hydrated scalar roots retain literal values, grouped fields and cleared pr
       scalar("b", "beat", "R1", "paragraphStart", true), scalar("s", "beat", "R1", "stamp", { at: "2026-11-10T00:00:00Z", by: "Alice" }),
       scalar("h", "heading", "H1", "extra", '{"future":1}'));
     run.queue.flush("D1");
-    agree("document scalars", "D1", [run.a, run.b], handle => readSharedScalars(handle, { scope: "document", record: ref(document) }),
+    agree("document scalars", "D1", [run.a, run.b], handle => observeSharedScalars(handle, { scope: "document", record: ref(document) }),
       { fileTitle: { titleOrigin: "user", titleVersion: "v2" }, wordsPerMinute: 180, targetSeconds: 90, paragraphsDecided: true, extra: "{}" });
-    agree("beat scalars", "D1", [run.a, run.b], handle => readSharedScalars(handle, target),
+    agree("beat scalars", "D1", [run.a, run.b], handle => observeSharedScalars(handle, target),
       { lengthSeconds: 8, paragraphStart: true, stamp: { at: "2026-11-10T00:00:00Z", by: "Alice" }, extra: "{}" });
-    agree("heading scalars", "D1", [run.a, run.b], handle => readSharedScalars(handle, { scope: "heading", record: ref("H1") }), { extra: '{"future":1}' });
+    agree("heading scalars", "D1", [run.a, run.b], handle => observeSharedScalars(handle, { scope: "heading", record: ref("H1") }), { extra: '{"future":1}' });
     execute(run.a, { kind: "scalar", id: "clear", by: "Alice", target, field: "lengthSeconds", clear: true });
-    assert.equal(Object.hasOwn(readSharedScalars(run.a, target) ?? {}, "lengthSeconds"), false);
+    assert.equal(Object.hasOwn(observeSharedScalars(run.a, target) ?? {}, "lengthSeconds"), false);
     for (const field of ["id", "audioText", "title", "docId", "schema", "rev", "lastEditedBy", "capture"]) {
       assert.equal(executeSharedOperations(run.a, [operation(scalar("blocked", "document", document, field, "x"))]).ok, false);
     }
@@ -132,7 +132,7 @@ test("seeded malformed status records and scalar values read equally after wire 
         beat.set("lengthSeconds", values[(seed >>> 8) % values.length]);
       });
       agree("wrong shape", "rev", [run.a], handle => ({ status: readSharedStatus(handle, target), heads: readSharedStatusHeads(handle, target),
-        notices: readSharedStatusNotices(handle, target), scalars: readSharedScalars(handle, target) })); checks++;
+        notices: readSharedStatusNotices(handle, target), scalars: observeSharedScalars(handle, target) })); checks++;
     }
     assert.equal(checks, 120);
   } finally { run.close(); }

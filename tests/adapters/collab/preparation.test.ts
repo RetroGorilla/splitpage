@@ -10,7 +10,7 @@ import type { SharedPreparedWrite } from "../../../src/adapters/collab/prepare.t
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { encodeSharedState, encodeSharedStateVector, transactSharedDocument, destroySharedDocument } from "../../../src/adapters/collab/document.ts";
 import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
-import { readSharedScalars } from "../../../src/adapters/collab/scalar-reader.ts";
+import { observeSharedScalars } from "./scalar-observations.ts";
 import { readSharedStatus, readSharedStatusHeads } from "../../../src/adapters/collab/status.ts";
 import { deliveryOrders } from "../../collab/delivery.ts";
 import { validatedFixture, createMonitoredSharedDocument as createSharedDocument } from "./helpers.ts";
@@ -54,10 +54,10 @@ for (const order of deliveryOrders) test(`file-title pair stays atomic across hy
     const target = { scope: "document" as const, record: ref(String(collabState(run.a).roots.meta.get("docId"))) };
     execute(run.a, { kind: "scalar", id: "a", by: "A", target, field: "fileTitle", value: { titleOrigin: "user", titleVersion: "v2" } });
     execute(run.b, { kind: "scalar", id: "b", by: "B", target, field: "fileTitle", value: { titleOrigin: "file", titleVersion: "v37" } }); run.queue.flush(order);
-    agree("atomic pair", order, [run.a, run.b], handle => readSharedScalars(handle, target)?.fileTitle, { titleOrigin: "file", titleVersion: "v37" });
+    agree("atomic pair", order, [run.a, run.b], handle => observeSharedScalars(handle, target)?.fileTitle, { titleOrigin: "file", titleVersion: "v37" });
     execute(run.a, { kind: "scalar", id: "c", by: "A", target, field: "fileTitle", value: { titleOrigin: "user", titleVersion: "v3" } });
     execute(run.b, { kind: "scalar", id: "d", by: "B", target, field: "fileTitle", value: { titleVersion: "v38" } }); run.queue.flush(order);
-    agree("atomic omitted origin", order, [run.a, run.b], handle => readSharedScalars(handle, target)?.fileTitle, { titleVersion: "v38" });
+    agree("atomic omitted origin", order, [run.a, run.b], handle => observeSharedScalars(handle, target)?.fileTitle, { titleVersion: "v38" });
   } finally { run.close(); }
 });
 
@@ -143,14 +143,14 @@ test("hydration and commands share the atomic file-title form; array origins are
   try {
     hydrateSharedDocument(handle, validatedFixture({ titleOrigin: "file", titleVersion: "v37", rows: [] }));
     const target = { scope: "document" as const, record: ref(String(collabState(handle).roots.meta.get("docId"))) };
-    assert.deepEqual(readSharedScalars(handle, target)?.fileTitle, { titleOrigin: "file", titleVersion: "v37" });
+    assert.deepEqual(observeSharedScalars(handle, target)?.fileTitle, { titleOrigin: "file", titleVersion: "v37" });
     assert.equal(collabState(handle).roots.meta.has("titleOrigin"), false); assert.equal(collabState(handle).roots.meta.has("titleVersion"), false);
     const before = encodeSharedState(handle);
     assert.equal(executeSharedOperations(handle, [operation({ kind: "scalar", id: "bad", by: "A", target, field: "fileTitle", value: { titleOrigin: ["file"] } })]).ok, false);
     assert.deepEqual(encodeSharedState(handle), before);
     transactSharedDocument(handle, "remote", () => collabState(handle).roots.meta.set("fileTitle", { titleOrigin: ["file"] }));
-    agree("array origin", "rev", [handle], copy => readSharedScalars(copy, target));
-    assert.equal(Object.hasOwn(readSharedScalars(handle, target) ?? {}, "fileTitle"), false);
+    agree("array origin", "rev", [handle], copy => observeSharedScalars(copy, target));
+    assert.equal(Object.hasOwn(observeSharedScalars(handle, target) ?? {}, "fileTitle"), false);
   } finally { destroySharedDocument(handle); }
 });
 

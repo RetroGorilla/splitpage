@@ -1,11 +1,11 @@
-import type { SharedScalarAddress } from "../../core/collab/operations.ts";
-import type { SharedDocumentHandle } from "./types.ts";
-import { scalarTarget } from "./scalar-executor.ts";
-import { scalarFieldAllowed } from "./scalar-fields.ts";
-import { sharedJson, withSharedSnapshot } from "./snapshot.ts";
-import { readSharedStamp } from "./stamp.ts";
+import type { SharedScalarAddress } from "../../../src/core/collab/operations.ts";
+import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
+import { scalarTarget } from "../../../src/adapters/collab/scalar-executor.ts";
+import { scalarFieldAllowed } from "../../../src/adapters/collab/scalar-fields.ts";
+import { sharedJson, withSharedSnapshot } from "../../../src/adapters/collab/snapshot.ts";
+import { readSharedStamp } from "../../../src/adapters/collab/stamp.ts";
 
-export function readSharedScalars(handle: SharedDocumentHandle, target: SharedScalarAddress): Record<string, unknown> | null {
+export function observeSharedScalars(handle: SharedDocumentHandle, target: SharedScalarAddress): Record<string, unknown> | null {
   return withSharedSnapshot(handle, copy => {
     const source = scalarTarget(copy as unknown as SharedDocumentHandle, target);
     if (!source) return null;

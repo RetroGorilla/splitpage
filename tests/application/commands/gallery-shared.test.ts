@@ -24,6 +24,8 @@ import { replicas, operation } from "../../adapters/collab/executor-support.ts";
 import { sharedHarness } from "../session/shared-session-support.ts";
 import { adapterReplica } from "../session/legacy-shared-session-support.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
+import { sharedCommandRefusalNotice } from "../../../src/bootstrap/wiring/ports/shared-command-notices.ts";
+import { fakeNotices } from "../../features/fakes.ts";
 import { assertReplicasAgree } from "../../collab/agreement.ts";
 
 type Fields = Record<string, unknown>;
@@ -533,4 +535,42 @@ test("shared gallery command refuses a beat joined through another beat with one
     assert.deepEqual(a.session.run(galleryCommand("R1", r => removeGallerySlot(r, 0), alice, ports(h.a, "Alice", alice))), { kind: "rejected", reason: "gallery-joined-beat" });
     assert.deepEqual(a.executed, []);
   } finally { a.session.dispose(); h.close(); }
+});
+
+const refusalStamps = { clock: { nowIso: () => STAMP }, editor: { name: () => "Editor" } };
+const refusalPicture = (key: string) => ({ sha256: key.padStart(64, "0"), mime: "image/png", width: 1, height: 1 });
+const galleryCases: readonly { readonly reason: string | null; readonly beat: string; readonly edit: () => GalleryEdit; readonly joined?: true }[] = [
+  { reason: null, beat: "R2", edit: () => row => addGalleryPicture(row, refusalPicture("4"), "New") !== -1 },
+  { reason: "gallery-local-file", beat: "R2", edit: () => row => addGalleryVideo(row, { name: "clip.mp4", size: 3, location: { kind: "bundled", name: "clip.mp4" } }) !== -1 },
+  { reason: "gallery-embedded-image", beat: "R2", edit: () => row => { row.visualImage = "data:image/png;base64,iVBORw0KGgo="; return true; } },
+  { reason: "gallery-joined-beat", beat: "R1", joined: true, edit: () => row => removeGallerySlot(row, 0) },
+  { reason: "gallery-overflow", beat: "R2", edit: () => row => { row.moreImages = Array.from({ length: 62 }, (_, index) => ({ imageRef: refusalPicture(index.toString(16)) })); return true; } },
+  { reason: "gallery-order-unavailable", beat: "R1", edit: () => row => moveGallerySlot(row, 2, 0) },
+  { reason: "gallery-slot-unknown", beat: "R2", edit: () => { let calls = 0; return row => { if (++calls === 1) row.imageRef = refusalPicture("4"); return true; }; } }
+];
+
+for (const literal of galleryCases) test(`rule 73: served gallery ${literal.reason ?? "picture creation"} uses the real shared command`, () => {
+  const set = replicas(2, { rows: [
+    { id: "R1", audioText: "ab", imageRef: refusalPicture("1"), moreImages: [{ imageRef: refusalPicture("2") }, { imageRef: refusalPicture("3") }] },
+    { id: "R2", audioText: "cd", imageRef: null }, { id: "R3", audioText: "ef", imageRef: refusalPicture("5") }
+  ] });
+  registerSharedOperationFamilies(set.a, { cells: createFlowLoadRuntime().cells });
+  if (literal.joined) assert.deepEqual(executeSharedOperations(set.a, [operation({ kind: "join", id: "join", by: "Editor", from: "R3", into: "R1", glue: " " })]), { ok: true });
+  const notices = fakeNotices(), h = sharedHarness(adapterReplica(set.a), { refused: sharedCommandRefusalNotice(notices.notices) });
+  const author = sharedAuthorPort({ handle: () => set.a, name: refusalStamps.editor.name });
+  try {
+    const before = encodeSharedState(set.a);
+    const ports = sharedGalleryPorts({ handle: () => set.a, author: author.next, stamps: refusalStamps });
+    const outcome = h.session.run(galleryCommand(literal.beat, literal.edit(), refusalStamps, ports));
+    if (literal.reason === null) {
+      assert.equal(outcome.kind, "applied");
+      assert.equal(notices.shown.length, 0);
+      assert.deepEqual(h.session.read(doc => doc?.rows.find(row => row.id === "R2")?.imageRef), refusalPicture("4"));
+    } else {
+      assert.deepEqual(outcome, { kind: "rejected", reason: literal.reason, notified: true });
+      assert.deepEqual(notices.shown.map(item => [item.message, item.kind]), [["This is not available in a shared session yet.", "warn"]]);
+      assert.deepEqual(encodeSharedState(set.a), before);
+      assert.deepEqual([h.undo, h.executed, h.published], [[], [], []]);
+    }
+  } finally { h.session.dispose(); set.close(); }
 });

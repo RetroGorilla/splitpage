@@ -4,7 +4,7 @@ import type { SharedOperation, SharedRecordCollection, SharedStatusEvent } from 
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { readSharedRecords } from "../../../src/adapters/collab/record-reader.ts";
 import { readSharedStatus, readSharedStatusHeads } from "../../../src/adapters/collab/status.ts";
-import { readSharedScalars } from "../../../src/adapters/collab/scalar-reader.ts";
+import { observeSharedScalars } from "./scalar-observations.ts";
 import { encodeSharedState } from "../../../src/adapters/collab/document.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { deliveryOrders } from "../../collab/delivery.ts";
@@ -74,7 +74,7 @@ for (const order of deliveryOrders) for (const writers of [2, 3]) test(`seeded a
         }
         const document = String(collabState(run.a).roots.meta.get("docId"));
         for (const target of [{ scope: "document", record: ref(document) }, { scope: "beat", record: ref("R1") }, { scope: "heading", record: ref("H1") }] as const)
-          agree("scalar reload", order, copies, handle => readSharedScalars(handle, target));
+          agree("scalar reload", order, copies, handle => observeSharedScalars(handle, target));
       } catch (error) { violations.push(`${String(error)}\n${JSON.stringify(trace)}`); }
       checkpoints++;
     };
@@ -172,9 +172,9 @@ for (const order of deliveryOrders) for (const writers of [2, 3]) test(`seeded a
           const target = { scope: "heading" as const, record: ref("H1") }, value = JSON.stringify({ joined: seed });
           submit(2, { kind: "scalar", id: `late${seed}`, by: "late", target, field: "extra", value });
           assert.ok(run.queue.pending.some(message => message.from === "C" && message.to === "A"));
-          assert.notEqual(readSharedScalars(run.a, target)?.extra, value); visibility++;
+          assert.notEqual(observeSharedScalars(run.a, target)?.extra, value); visibility++;
           checkpoint();
-          agree("late joiner authors back to existing writers", order, [run.a, run.b, run.c], handle => readSharedScalars(handle, target)?.extra, value);
+          agree("late joiner authors back to existing writers", order, [run.a, run.b, run.c], handle => observeSharedScalars(handle, target)?.extra, value);
         }
       }
       histories++;

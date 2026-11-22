@@ -4,7 +4,7 @@ import { deliveryOrders } from "../../collab/delivery.ts";
 import { encodeSharedState } from "../../../src/adapters/collab/document.ts";
 import { deliveryReplica } from "./helpers.ts";
 import { readSharedStatus, readSharedStatusHeads } from "../../../src/adapters/collab/status.ts";
-import { readSharedScalars } from "../../../src/adapters/collab/scalar-reader.ts";
+import { observeSharedScalars } from "./scalar-observations.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { agree, execute, ref, replicas } from "./executor-support.ts";
 
@@ -83,7 +83,7 @@ for (const order of deliveryOrders) for (const writers of [2, 3]) test(`seeded s
             : target.scope === "beat" ? ["lengthSeconds", "paragraphStart", "stamp", "extra"] : ["extra"];
           return Object.fromEntries(fields.map(field => [field, scalarCommands.find(command => command[0] === target.scope && command[2] === field)?.[3]]));
         });
-        scalarTargets.forEach((target, index) => { agree("scalar command model", order, joined ? [...handles, run.c] : handles, handle => readSharedScalars(handle, target), expected[index]); checkpoints++; });
+        scalarTargets.forEach((target, index) => { agree("scalar command model", order, joined ? [...handles, run.c] : handles, handle => observeSharedScalars(handle, target), expected[index]); checkpoints++; });
         let winningLength = 0;
         for (const [writer, handle] of handles.entries()) {
           winningLength = 1000 + pick(1000);
@@ -92,14 +92,14 @@ for (const order of deliveryOrders) for (const writers of [2, 3]) test(`seeded s
           if (order === "D3" && writer === 1) { run.queue.deliverFrom("B", order); selective++; assert.ok(run.queue.pending.some(message => message.from === "A")); }
         }
         run.queue.flush(order);
-        agree("same scalar native client order", order, joined ? [...handles, run.c] : handles, handle => readSharedScalars(handle, { scope: "beat", record: ref("R1") })?.lengthSeconds, winningLength); checkpoints++;
+        agree("same scalar native client order", order, joined ? [...handles, run.c] : handles, handle => observeSharedScalars(handle, { scope: "beat", record: ref("R1") })?.lengthSeconds, winningLength); checkpoints++;
         for (const [index, [scope, record, field]] of scalarCommands.entries()) {
           if (!["targetSeconds", "lengthSeconds", "paragraphStart"].includes(field)) continue;
           execute(run.a, { kind: "scalar", id: `clear${round}-${index}`, by: "writer", target: { scope, record }, field, clear: true }); commands++;
           run.queue.flush(order);
           const targetIndex = scalarTargets.findIndex(target => target.scope === scope), wanted = expected[targetIndex]; assert.ok(wanted);
           Reflect.deleteProperty(wanted, field);
-          agree("immediate clear checkpoint", order, joined ? [...handles, run.c] : handles, handle => readSharedScalars(handle, scalarTargets[targetIndex] as typeof scalarTargets[number]), wanted); checkpoints++;
+          agree("immediate clear checkpoint", order, joined ? [...handles, run.c] : handles, handle => observeSharedScalars(handle, scalarTargets[targetIndex] as typeof scalarTargets[number]), wanted); checkpoints++;
         }
         if (order === "late-C" && writers === 2 && round === 3) { run.queue.lateJoin("C", deliveryReplica(run.c), "A", encodeSharedState(run.a)); joined = true; late++; }
       }
