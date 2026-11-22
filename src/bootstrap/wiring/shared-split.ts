@@ -11,7 +11,7 @@ import { sessionStamps } from "./session-owner.ts";
 import type { SharedBindings, SharedSessionParts } from "./shared-session.ts";
 import { mountSharedSplitBuffer } from "./split-buffer.ts";
 
-export function sharedSplitBindings(effects: Pick<BufferedFieldPorts, "missingBase" | "recovered" | "report" | "ownershipScan">): SharedBindings & {
+export function sharedSplitBindings(effects: Pick<BufferedFieldPorts, "missingBase" | "recovered" | "report">): SharedBindings & {
   readonly abandonable: () => number;
 } {
   let entered: SharedSessionParts | null = null, buffer: CellBuffer | null = null;

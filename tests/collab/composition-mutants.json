@@ -6,35 +6,17 @@
     "tests/features/writer/buffer-undo.test.ts",
     "tests/bootstrap/shared-switch.test.ts",
     "src/test/shared-writer-app.test.mjs",
-    "src/test/shared-hook-legacy-probes-app.test.mjs",
+    "tests/features/shared-undo-surfaces.test.ts",
     "src/test/shared-hook-routes-app.test.mjs"
   ],
   "mutants": [
-    {
-      "label": "native ownership scans are not counted",
-      "file": "src/application/editing/buffered-field.ts",
-      "find": "    ports.ownershipScan?.();\n",
-      "replace": "",
-      "tests": [
-        "src/test/shared-hook-legacy-probes-app.test.mjs"
-      ]
-    },
-    {
-      "label": "the first shared narration caret is not placed",
-      "file": "src/bootstrap/wiring/writer-empty-script.ts",
-      "find": "flow.repaint(); flow.place(range, true);",
-      "replace": "flow.repaint();",
-      "tests": [
-        "src/test/shared-hook-legacy-probes-app.test.mjs"
-      ]
-    },
     {
       "label": "used-up shared undo steps do not warn",
       "file": "src/bootstrap/wiring/undo.ts",
       "find": "const notice = sharedUndoNotice(outcome, direction);",
       "replace": "const notice = !outcome.ok ? sharedUndoNotice(outcome, direction) : null;",
       "tests": [
-        "src/test/shared-hook-legacy-probes-app.test.mjs"
+        "tests/features/shared-undo-surfaces.test.ts"
       ]
     },
     {

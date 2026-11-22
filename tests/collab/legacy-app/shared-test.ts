@@ -75,7 +75,7 @@ function startSharedTestHook(): () => void {
   let peer: ReturnType<typeof createSharedTestPeer> | null = null, detached: Detached | null = null;
   let switching = false, composing = false, live = true, detachRefused: string | null = null;
   let withdraw = (): void => {};
-  const counts = { recovered: 0, missingBase: 0, ownershipScans: 0 };
+  const counts = { recovered: 0, missingBase: 0 };
   const report = (error: unknown): void => { console.error(error); };
   const composition = (event: Event): void => { composing = event.type === "compositionstart"; };
   document.addEventListener("compositionstart", composition, true);
@@ -83,7 +83,7 @@ function startSharedTestHook(): () => void {
   const effects = {
     recovered: () => { counts.recovered++; notices.show("Your writing was kept in recovery.", "warn"); },
     missingBase: () => { counts.missingBase++; notices.show("This line changed. Try writing again.", "warn"); },
-    ownershipScan: () => { counts.ownershipScans++; }, report
+    report
   };
   const writing = sharedWriterBindings(effects), splitting = sharedSplitBindings(effects);
   const bindings: SharedBindings = {

@@ -15,7 +15,7 @@ import type { FlowRange } from "../../core/flow/flow.ts";
 
 export const SHARED_WRITER_NO_AUTHOR = "The shared Writer has no author";
 
-export function sharedWriterBindings(effects: Pick<BufferedFieldPorts, "missingBase" | "recovered" | "report" | "ownershipScan">): SharedBindings & {
+export function sharedWriterBindings(effects: Pick<BufferedFieldPorts, "missingBase" | "recovered" | "report">): SharedBindings & {
   readonly abandonable: () => number;
 } {
   let entered: SharedSessionParts | null = null;

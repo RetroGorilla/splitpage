@@ -29,7 +29,7 @@ import { paintGuard, sceneView, undoGuard } from "./editor-owners.ts";
 import { screenIsStale } from "../../features/rows/render.ts";
 import { breakUndoGroup, undoOwner } from "./undo.ts";
 import { initializeFlowParagraphs } from "../../application/commands/flow.ts";
-import { sessionStamps, sharedSession, standaloneSession } from "./session-owner.ts";
+import { sharedSession, standaloneSession } from "./session-owner.ts";
 import { bindNativeWriterPaint, hasNativeWriterPreview, nativeEditorActive } from "./shared-session.ts";
 import { writerFlowCommands } from "./ports/writer-flow.ts";
 import { writerVisualBuffer } from "./ports/writer-visual-buffer.ts";
@@ -39,7 +39,6 @@ import type { CommandOutcome } from "../../application/session/document-session.
 import { toHtml } from "../../core/text/html.ts";
 import type { BufferedFieldPorts } from "../../application/editing/buffered-field.ts";
 import type { SharedDocumentHandle } from "../../adapters/collab/types.ts";
-import { mountWriterEmptyScript } from "./writer-empty-script.ts";
 import { maybeCueShortcut, maybeDirectionShortcut, typeAtDirectionEdge } from "../../features/rows/render.ts";
 import { anchorBrollInLeftCell, maybeCaptureBroll } from "./broll.ts";
 import { pictures } from "./ports/pictures.ts";
@@ -265,10 +264,7 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
               return true;
             } };
           }
-          const handle = shared.handle();
-          return handle ? mountWriterEmptyScript(flow, root, { handle, session: shared.lifetime, author: shared.author,
-            writer: shared.writer, stamps: sessionStamps, report: shared.text.bufferedText.report,
-            ...(shared.text.bufferedText.abandonment ? { abandonment: shared.text.bufferedText.abandonment } : {}) }) : flow;
+          return flow;
         }
       },
       document: documentReader, edits, text, editing: writerEditing, undo: writerUndo,

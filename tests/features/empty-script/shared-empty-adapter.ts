@@ -1,17 +1,17 @@
-import { emptyScriptCommand } from "../../../application/commands/empty-script.ts";
-import type { SharedDocumentSession } from "../../../application/session/shared-session.ts";
-import type { StampPorts } from "../../../application/session/ports.ts";
-import type { SharedDocumentHandle } from "../../../adapters/collab/types.ts";
-import type { EmptyScriptPorts } from "../../../features/empty-script/ports.ts";
-import { startEmptyScript } from "../../../features/empty-script/empty-script.ts";
-import { holdSharedBuffer } from "../../../adapters/collab/ingress.ts";
-import { observeSharedStructureOrder } from "../../../adapters/collab/structure-order-index.ts";
-import { sharedStructureKey } from "../../../core/collab/structure-key.ts";
-import { collabState } from "../../../adapters/collab/state.ts";
-import { readSharedContentRef } from "../../../core/collab/read-operation.ts";
-import type { SharedAuthorPort } from "./shared-author.ts";
-import type { NoticePort } from "../../../application/effects/ports.ts";
-import { sharedCommandReport } from "./shared-command-notices.ts";
+import { emptyScriptCommand } from "../../../src/application/commands/empty-script.ts";
+import type { SharedDocumentSession } from "../../../src/application/session/shared-session.ts";
+import type { StampPorts } from "../../../src/application/session/ports.ts";
+import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
+import type { EmptyScriptPorts } from "../../../src/features/empty-script/ports.ts";
+import { startEmptyScript } from "../../../src/features/empty-script/empty-script.ts";
+import { holdSharedBuffer } from "../../../src/adapters/collab/ingress.ts";
+import { observeSharedStructureOrder } from "../../../src/adapters/collab/structure-order-index.ts";
+import { sharedStructureKey } from "../../../src/core/collab/structure-key.ts";
+import { collabState } from "../../../src/adapters/collab/state.ts";
+import { readSharedContentRef } from "../../../src/core/collab/read-operation.ts";
+import type { SharedAuthorPort } from "../../../src/bootstrap/wiring/ports/shared-author.ts";
+import type { NoticePort } from "../../../src/application/effects/ports.ts";
+import { sharedCommandReport } from "../../../src/bootstrap/wiring/ports/shared-command-notices.ts";
 
 export function mountSharedEmptyScript(shared: {
   readonly handle: SharedDocumentHandle;

@@ -1,7 +1,7 @@
 import "../../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { mountSharedEmptyScript } from "../../../src/bootstrap/wiring/ports/empty-script.ts";
+import { mountSharedEmptyScript } from "./shared-empty-adapter.ts";
 import { sharedAuthorPort } from "../../../src/bootstrap/wiring/ports/shared-author.ts";
 import { sharedHarness } from "../../application/session/shared-session-support.ts";
 import { adapterReplica } from "../../application/session/legacy-shared-session-support.ts";

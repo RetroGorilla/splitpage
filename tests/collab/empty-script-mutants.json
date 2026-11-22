@@ -9,14 +9,14 @@
     },
     {
       "label": "first input wiring drops the session refusal notice marker",
-      "file": "src/bootstrap/wiring/ports/empty-script.ts",
+      "file": "tests/features/empty-script/shared-empty-adapter.ts",
       "find": "{ ...result, ok: false }",
       "replace": "{ ok: false, reason: result.reason }",
       "tests": ["tests/features/empty-script/shared.test.ts"]
     },
     {
       "label": "empty target refusals miss the shared notice",
-      "file": "src/bootstrap/wiring/ports/empty-script.ts",
+      "file": "tests/features/empty-script/shared-empty-adapter.ts",
       "find": "report: sharedCommandReport(surface.notices, surface.report)",
       "replace": "report: surface.report",
       "tests": ["tests/features/empty-script/shared.test.ts"]
@@ -318,7 +318,7 @@
     },
     {
       "label": "empty target takes another surface's hold",
-      "file": "src/bootstrap/wiring/ports/empty-script.ts",
+      "file": "tests/features/empty-script/shared-empty-adapter.ts",
       "find": "if (collabState(shared.handle).ingress.holds.has(\"buffer\"))",
       "replace": "if (false)",
       "tests": [
@@ -327,7 +327,7 @@
     },
     {
       "label": "first input proceeds without an author",
-      "file": "src/bootstrap/wiring/ports/empty-script.ts",
+      "file": "tests/features/empty-script/shared-empty-adapter.ts",
       "find": "const author = shared.author.next(); if (!author) return { ok: false, reason: \"empty-script-no-author\" };",
       "replace": "const author = shared.author.next() ?? { id: \"absent\", by: \"absent\" };",
       "tests": [
@@ -336,7 +336,7 @@
     },
     {
       "label": "first input skips malformed placement refusal",
-      "file": "src/bootstrap/wiring/ports/empty-script.ts",
+      "file": "tests/features/empty-script/shared-empty-adapter.ts",
       "find": "if (raw !== undefined && !first)",
       "replace": "if (false)",
       "tests": [
@@ -345,7 +345,7 @@
     },
     {
       "label": "first input skips unresolved identity refusal",
-      "file": "src/bootstrap/wiring/ports/empty-script.ts",
+      "file": "tests/features/empty-script/shared-empty-adapter.ts",
       "find": "if (!id || !rowId)",
       "replace": "if (false)",
       "tests": [
@@ -354,7 +354,7 @@
     },
     {
       "label": "failed first command is swallowed",
-      "file": "src/bootstrap/wiring/ports/empty-script.ts",
+      "file": "tests/features/empty-script/shared-empty-adapter.ts",
       "find": "if (result.kind === \"failed\") throw result.error;",
       "replace": "",
       "tests": [
@@ -363,7 +363,7 @@
     },
     {
       "label": "committed creation is retried after an effect fails",
-      "file": "src/bootstrap/wiring/ports/empty-script.ts",
+      "file": "tests/features/empty-script/shared-empty-adapter.ts",
       "find": " || result.kind === \"committed\"",
       "replace": "",
       "tests": [
@@ -372,7 +372,7 @@
     },
     {
       "label": "first beat reclaims the emptied scene's heading",
-      "file": "src/bootstrap/wiring/ports/empty-script.ts",
+      "file": "tests/features/empty-script/shared-empty-adapter.ts",
       "find": "gap: { left: null, right: first, affinity: \"before\" }",
       "replace": "gap: { left: null, right: null, affinity: \"after\" }",
       "tests": [
@@ -381,7 +381,7 @@
     },
     {
       "label": "first caret uses the operation id instead of the resolved beat",
-      "file": "src/bootstrap/wiring/ports/empty-script.ts",
+      "file": "tests/features/empty-script/shared-empty-adapter.ts",
       "find": "? { ok: true, rowId }",
       "replace": "? { ok: true, rowId: author.id }",
       "tests": [
