@@ -272,23 +272,35 @@ The Old adapter tests job stays in place. The colocated fixture under `tests/col
 
 ## Legacy adapter removal plan
 
-Inventory at `867353bd9`, from `git ls-files`: 112 source files and 183 test files outside the respective native subtrees, 34 native source files, 88 native test and support files, and 41 mutation manifests. The design's adapter-test row says 173. The current count is 183 outside native and 271 including native. The fixture has four tracked files. The HTML page is generated and untracked. The 125 boundary importers below exclude the legacy adapter and its own test subtree. There are 47 distinct legacy targets across these edges. Neither native subtree directly imports the old adapter. Native bootstrap wiring reaches it indirectly through the combined switch and command ports.
+Inventory at `867353bd9`, from `git ls-files`: 112 source files and 183 test files outside the respective native subtrees, 34 native source files, 88 native test and support files, and 41 mutation manifests with 1,286 entries. The design's adapter-test row says 173. The current count is 183 outside native and 271 including native. The fixture has four tracked files. The HTML page is generated and untracked. The 125 boundary importers below exclude the legacy adapter and its own test subtree. There are 47 distinct legacy targets across these edges. Neither native subtree directly imports the old adapter. Native bootstrap wiring reaches it indirectly through the combined switch and command ports.
 
 ### Merge order
 
-1. **Retire the legacy browser fixture and app guards.** Move `tests/collab/legacy-app/four-beat-state.base64` unchanged to `tests/adapters/collab/native/fixtures/legacy-four-beat-state.base64` and update `src/test/shared-native-editor-app.test.mjs`. Keep the native refusal and untouched-document assertions. Remove the other three fixture files, `src/test/_legacy-shared-app-boot.mjs`, the four `shared-hook-{legacy-probes,measure,peer,routes}-app.test.mjs` files and the legacy-only direct app suites named under Not yet removable. Remove helper files only after their remaining callers are gone. Preserve the standalone record assertions from `shared-split-records-standalone-app.test.mjs`, including each no-op, by moving their shared-independent setup out of `_shared-split-records.mjs` before cutting the shared halves. Keep the standalone halves of the undo parity cases and the Split route inventory. In `_undo-caret-parity.mjs` retain the standalone setup, cases and caret checks for `undo-caret-parity{,-long,-selection}.test.mjs`; keep the Split media decoder assertion. Remove the second entry and generated page in `build.mjs`, its fixture assertions in `tools/test-strict-bundle.mjs` and `tests/bootstrap/composition-root.test.ts`, and the page reference in the browser harness instructions. Keep the normal test-hook and release exclusion checks. Update affected manifests and `tests/collab/mutants.md` in this PR so nightly never references a removed test or fixture.
-2. **Disconnect legacy editor wiring and remove the adapter in one PR.** Stage the wiring and adapter file sets separately for review. The adapter tests and old wiring depend on one another, so merge both file sets together. Keep `shared-session.ts` as the switch owner, its native factory/backend path, and the enter, rollback, Leave, forced stop, draft and history ordering. Drop its legacy parts builder and default backend in the same change that removes their callers. Keep `session-owner.ts`, the application session bridge, `native-shared-*.ts`, native accessors and native forwarding in `ports/shared-commands.ts`. Remove `shared-split.ts`, `shared-writer.ts`, `buffered-input.ts`, `writer-empty-script.ts`, the legacy Recovery panel mount/actions and the legacy-only ports in the boundary inventory after updating callers. Follow their reverse imports through `app.ts`, `main.ts`, `actions.ts`, `editor.ts`, `writer.ts`, `undo.ts`, `ports/editing.ts` and the view, row, title, Find and production mounts. Preserve shared-independent feature logic and ports used by native. There is no production adapter file to relocate: surviving callers use the existing native routes or standalone fallbacks. When extracting shared-independent test setup, retarget every importer directly and leave no compatibility re-export.
-   **Adapter, test and tooling file set.** Delete the 112 tracked source files and the 183 non-native test files, with the legacy-only external fixtures/tests in the inventory below. External mixed tests must have their surviving assertions extracted in the preceding stage or in the same cut. Keep the old CI job and its three test inventories until the adapter cut. Then update `.github/workflows/ci.yml` (change detection, matrix, gate, evidence and success predicates), `tools/{ci-changes,run-tests,test-ci-changes,test-ci-shards,test-ci-efficiency,test-run-tests}.mjs`; remove `tools/{old-adapter-tests,test-ci-old-adapter-shards}.mjs`. Remove `--suite=always` from CI, leaving the full surviving root tests in the regular shards. Remove the separate slow mutation job, whose sole input is `undo-slow-mutants.json`, and simplify the nightly manifest glob and its assertions. Prune stale weights and resolved dependency/comment baseline entries. Retire the old measurement entry points in `tests/collab/measure/`; keep `mark-parts.mjs` and its tests. Treat `native-spike-main.mjs` as a historical comparison harness with a live legacy dependency, and retire it with its launcher after checking for any live native measurement callers. Remove the old trial-copy special case in `tools/perf-ab.mjs` and update `tools/test-perf-shared.mjs` while maintaining the cross-revision standalone comparison. Do not move old backend implementations into native to keep historical measurements running.
-3. **Close the mapping.** Resolve the Retained rows against the actual removals, update Build status, section 11 and the adapter-test row, and add one Unreleased changelog line. Compare standalone performance once from pre-stage-1 to post-removal main and record it. Rebase each stage on the preceding merge and require green CI. For local verification use type checking, dependency and comment gates, lint, code map, affected test files, and the targeted browser suites for visible changes. Match all stale path and export references before pushing.
+1. **Prepare the boundary.** Relocate `tests/collab/legacy-app/four-beat-state.base64` unchanged to `tests/adapters/collab/native/fixtures/legacy-four-beat-state.base64`; update `src/test/shared-native-editor-app.test.mjs` and preserve the refusal and unchanged-document checks. Extract the standalone and native test setup listed below and prove the manifest retargets while the three legacy fixture modules, test page, legacy routes and live legacy guards still run. Repair the nine already-missing registrations in this stage. Keep legacy targets alongside the new targets when both still exercise live paths. Decouple the adapter-side tests and update classifier expectations as specified below.
+2. **Retire the fixture, editor wiring and their guards.** Delete `tests/collab/legacy-app/{browser,shared-test,shared-test-peer}.ts`, `src/test/_legacy-shared-app-boot.mjs`, `src/test/shared-hook-{legacy-probes,measure,peer,routes}-app.test.mjs` and the legacy-only app suites under Not yet removable. Cut the legacy halves of mixed suites only after stage 1. Remove helper modules such as `_shared-split-{callers,records,refusals,space}.mjs` after their last legacy caller goes. In `build.mjs` remove the legacy entry, second build argument and generated page. Update `tools/test-strict-bundle.mjs`, `tools/test-release-hooks.mjs` (including `appJs(true, true)`), `tests/bootstrap/composition-root.test.ts` and the browser harness documentation in the same change. Keep the normal test-hook and release exclusion assertions.
+
+   Keep `src/bootstrap/wiring/shared-session.ts` as the switch owner with the native factory/backend, entry, rollback, ordinary and forced Leave paths. Remove its legacy parts builder and default backend. Remove `shared-split.ts`, `shared-writer.ts`, `split-buffer.ts`, `buffered-input.ts`, `writer-empty-script.ts`, `ports/writer-visual-buffer.ts`, the legacy Recovery panel and the legacy-only port edges in the boundary table. Update reverse callers in `app.ts`, `main.ts`, `actions.ts`, `editor.ts`, `writer.ts`, `undo.ts`, `ports/editing.ts` and the view, row, title, Find and production mounts. In `ports/shared-commands.ts` keep the native forwarding and standalone fallback. Drop legacy-only external tests that require this wiring and their mutation guards in this stage. Keep the adapter and its behavioral tests, adapter fixture support, classifier and both CI partitions. Recompute the classifier on the post-cut tree and prove the stage 2 partition checks below.
+3. **Remove the isolated adapter.** Delete the 112 tracked legacy source files and remaining files from the 183-file non-native test inventory, including adapter-only tests outside that directory and their support. Retire the old measurement harness in `tests/collab/measure/` and its old-only launcher/callers while preserving `mark-parts.mjs` and its tests. Drop adapter-only mutation entries and remove the nightly slow job for `undo-slow-mutants.json`. Update the fast manifest enumeration and prove every surviving manifest runs exactly once. Remove the old CI job, change detection, gate/evidence fields, and success predicates in `.github/workflows/ci.yml`; remove the suite input in `.github/actions/root-test-setup/action.yml`. Update `tools/{ci-changes,run-tests,test-ci-changes,test-ci-shards,test-ci-efficiency,test-run-tests}.mjs` and remove `tools/{old-adapter-tests,test-ci-old-adapter-shards}.mjs`. Prove the regular PR matrix and nightly matrix each cover all surviving discovered root tests exactly once. Prune stale weights and resolved dependency/comment exceptions. Remove the old trial-copy special case from `tools/perf-ab.mjs` and update `tools/test-perf-shared.mjs`, leaving the standalone cross-revision comparison runnable.
+4. **Close the mapping and record performance.** Resolve remaining Retained rows, update Build status, section 11 and the design adapter-test row, and add one Unreleased changelog line. Compare pre-stage-1 main against main after the adapter cut using the standalone performance driver and record the result.
+
+Each PR starts from the previous green merge. Run typecheck, dependency and comment gates, lint, code map, affected test files and a search for deleted paths and exports at every cut. Use browser suites for visible behavior. After stage 1 run the extracted standalone, native and adapter cases plus both classifier partitions. After stage 2 run release hooks, strict bundle, composition and load-order checks, native entry/handoff, standalone Split/Writer/history/draft tests, and the named adapter tests below. Run `tools/test-ci-old-adapter-shards.mjs`, `tools/test-ci-changes.mjs` and `tools/test-ci-shards.mjs`. In CI, require successful jobs in both PR test partitions after the wiring cut, plus the nightly exactly-once configuration check. After stage 3 run CI changes, shard, runner and performance tool tests along with focused native and standalone checks. Full coverage runs in CI.
+
+### Isolating the adapter tests before the wiring cut
+
+- Move the seed and delivery setup needed by `tests/adapters/collab/painted-selection.test.ts` out of `tests/features/editing/split-caret-support.ts` into `tests/adapters/collab/painted-selection-support.ts`. Use the existing executor harness, seeded Visual operations, buffered key and delivery queue. Update the adapter test's import and have `split-caret-support.ts` use the extracted seed helper until the feature fixture goes. Keep its rank/validator cases, duplicate delivery, late-reader comparisons, malformed-unit wire text and no-write assertions. Leave DOM repaint and selection setup with the feature fixture until stage 2. The adapter test should have no dependency on the feature fixture, DOM, editor wiring or shared-buffer port.
+- In stage 2, replace the last tree inventory's exact app-wiring list in `tests/adapters/collab/operation-families.test.ts` with the post-cut invariant that production wiring no longer references legacy registration or its author port. Preserve the registration, duplicate registration, dispatch and write/refusal cases on the composed adapter handle through stage 3. Keep `guarded-subscriptions.test.ts` and `trial-replica.test.ts` through that stage as well.
+- Keep `tests/application/session/shared-session-support.ts` available through stage 3 for `tests/adapters/collab/{comment-stamps,join-buffer-routing,long-row}.test.ts`. In stage 1 move the adapter-backed `adapterReplica` and `registerSplits` helpers to `tests/application/session/legacy-shared-session-support.ts`, update every direct caller and keep the replica-neutral `sharedHarness`, `sharedCommand` and `fakeReplica` at the original path. The three adapter tests use both modules where needed. Delete the legacy support only with its final callers in stage 3.
+- Separate native fixture lifetime from `tests/bootstrap/shared-entry-switch-support.ts`: extract boot, ports and native cleanup to `tests/bootstrap/native-entry-switch-support.ts` and update native consumers, including `tests/bootstrap/native-shared-entry.test.ts` and every `src/test/shared-native-*-app.test.mjs` importer. Keep legacy state/handle teardown with the legacy switch tests until stage 2. Update callers directly and leave no compatibility re-exports.
+- Keep all four `TREE_INVENTORIES` in the always matrix after stage 2: `tests/adapters/collab/{guarded-subscriptions,operation-families,trial-replica}.test.ts` and `tests/application/commit-time-writers.test.ts`. Update the latter's old operation/writer entries in stage 2, preserving its live standalone and native cases. Update `tools/test-ci-old-adapter-shards.mjs` to assert zero old-adapter imports from bootstrap wiring in place of the pinned `editor.ts` edge. Verify the complete discovered set lands in the two PR partitions exactly once, including an unweighted test; every transitive dependency of each old-partition test triggers the old matrix, and the nightly shards cover the same discovered set exactly once. In stage 3 retire the first three tree inventories with the adapter and keep `commit-time-writers.test.ts` in regular root tests.
 
 ### Standalone and native behavior to preserve
 
 - `editor.ts`: keep the default Split keydown, input, focus and composition mounts, the local cell synchronization before structure changes, and the standalone undo/redo route including Writer replay and selection. Removing the shared branch is safe only if these paths retain their original ordering and native still reaches its own replay route.
 - `writer.ts`: preserve the standalone blank-script creation, local synchronization, Visual B-roll keying and tag cleanup on leave, and local history flush/peek/replay. Do not replace the native preview, selection and paint bindings with the standalone defaults. `ports/shared-commands.ts` must still forward native registry, gallery and value calls and provide the existing standalone fallback when there is no session.
-- Recovery panel removal is scoped to the shared removed-content panel. Keep local draft/conflict recovery, merge and save controls. Check the action registry and panel markup for any visible change in standalone before removing them. Preserve standalone startup order and default focus.
+- Recovery panel removal is scoped to the shared removed-content panel. Keep local draft/conflict recovery, merge and save controls, as well as native offline notices and Put back. Preserve the native shared-session accessor used for command holds. No standalone change is approved. Check the action registry and panel markup for any visible change in standalone before removing them. Preserve standalone startup order and default focus. Keep standalone draft flush and settlement before owner adoption, detach before undo reset, rollback reattachment when recovery does not complete, and Leave capture and landing before the draft writer resumes.
 - **Stop for a maintainer decision** if a proposed cut changes a standalone gesture, edit, focus/selection, undo boundary, save/draft transition, or visible command availability. In particular, keep the local sync in Split before split/remove and the Writer Visual leave callback. Dropping either along with the legacy wrappers changes live standalone editing. Keep or extract the local path with identical behavior. If parity requires a different callback order or the panel is reachable in standalone, bring the concrete before/after to the maintainer before implementing it. Fixture relocation and import-only test setup moves are safe dependency changes.
 
-The Recovery panel mount and registration are gated by the test-hook flag and the panel's session source returns null in standalone. This is a safe removal from production standalone. Update `tests/bootstrap/recovery-panel-{lifetime,release}.test.ts`, the recovery load-order fixture and the matching action/composition inventory in the panel cut. Keep the independent recovery owners. The shared-cell-space reader returns null until a shared binding connects, so removing it is safe for standalone provided clipboard retains its existing whitespace fallback.
+The Recovery panel mount and registration are gated by the test-hook flag and the panel's session source returns null in standalone. This is a safe removal from production standalone. Update `tests/bootstrap/recovery-panel-{lifetime,release}.test.ts`, `src/test/_load-order-hooks.mjs`, `tests/bootstrap/load-order/recovery.json` and the matching action/composition inventory in the panel cut. Keep the independent recovery owners. The shared-cell-space reader returns null until a shared binding connects, so removing it is safe for standalone provided clipboard retains its existing whitespace fallback.
 
 The replacement test helpers can live at `src/test/_standalone-records.mjs` (used by `panel-escape-app.test.mjs` and `shared-split-records-standalone-app.test.mjs`) and `src/test/_undo-caret-parity.mjs` (retain the existing path and remove the legacy imports). Keep the existing native switch types in `src/bootstrap/wiring/shared-session.ts`, so native consumers need no import redirect. Retarget old-format bytes as specified in stage 1. Use `git rm` for tracked deletions.
 
@@ -426,61 +438,91 @@ Targets are relative to `src/adapters/collab/`. This inventory includes type imp
 
 ### Mutation manifests
 
-Names identify `tests/collab/<name>-mutants.json`. Numbers are one-based positions in the base revision. Keep the listed entries and surviving test targets. Remove retired test paths from both defaults and overrides. Match the original label and source target before editing a renumbered list.
+Names identify `tests/collab/<name>-mutants.json`. Numbers are one-based positions in the base revision. Stage 1 retains every base entry and repairs or retargets the named entries below. Stage 2 removes the listed wiring-dependent entries and prunes legacy test targets from both defaults and overrides. Stage 3 removes the unlisted remainder and keeps the explicit final entries. Delete a manifest when its last entry goes. Match the original label and source target before editing a renumbered list. Before each cut, verify the edited source and every effective test path still exist, each surviving edit matches once, and every live original assertion has a target. If an isolated adapter case still catches an entry marked for stage 2, keep that test target and entry through stage 3.
 
-| Manifest | Entries at base | Keep | Reason |
-| --- | ---: | --- | --- |
-| `broll-keying` | 33 | 3-5, 8-10, 12-14, 16, 28 | Standalone Writer Visual leave and pure key/shot planning |
-| `buffer-binding` | 156 | 12, 25, 29-31, 144, 150-152 | Drag, field/selection and cost contracts |
-| `buffer-commit` | 2 | 2 | Pure splice planning |
-| `buffer` | 4 | Delete | Legacy-only |
-| `comment-command` | 16 | 1-16 | Comment admission, authorship and draft guards |
-| `commit-writer` | 12 | Delete | Legacy-only |
-| `composition` | 96 | 42-43, 45-46, 48-53, 56-61, 72, 75-77, 79, 82-86, 90-91, 94-95 | Native lifecycle, common switch rollback, draft/history, Writer disposal and buffered-field contracts |
-| `creation-undo` | 42 | Delete | Legacy-only |
-| `disable-list` | 18 | 1-18 | Local save, merge, drafts and bundles |
-| `draft-detach` | 28 | 1-28 | Draft lifecycle and ownership |
-| `empty-script` | 45 | 7-11, 15-17, 19, 22-26, 28-29, 31, 34, 36-37 | Shared-independent feature guards |
-| `find-replace` | 27 | 13-18 | Pure cell splice order and bounds |
-| `gallery-command` | 25 | Delete | Legacy-only |
-| `heading-creation-undo` | 14 | Delete | Legacy-only |
-| `ingress-gate` | 9 | Delete | Legacy-only |
-| `join-glue` | 3 | 2 | Pure projection glue |
-| `join` | 10 | Delete | Legacy-only |
-| `join-neighborhood` | 4 | Delete | Legacy-only |
-| `join-routing` | 12 | Delete | Legacy-only |
-| `measure-hook` | 19 | 2, 7-19 | Native entry, storage, peer, history and Find plus timing infrastructure |
-| `projection` | 48 | 10, 19-20, 25, 27-29, 41-42 | Pure projection contracts |
-| `record-command` | 21 | Delete | Legacy-only |
-| `record-removal` | 36 | Delete | Legacy-only |
-| `recovery-panel` | 48 | Delete | Legacy-only |
-| `removal` | 30 | 23, 27, 30 | Pure discard and recovery contracts |
-| `scene-create` | 12 | Delete | Legacy-only |
-| `shared-entry` | 76 | 1-9, 25, 27-32, 35-42, 65, 69-72 | Local files, drafts, navigation and shared admission |
-| `shared-session` | 27 | 23 | Publication change computation |
-| `split-abandonment` | 10 | Delete | Legacy-only |
-| `split-callers` | 50 | 43, 47 | Row command ports |
-| `split-composed` | 22 | 18-22 | Clipboard and row editor routing |
-| `split-records` | 80 | 1-4, 38-39, 43-46, 50-51, 59, 62-65, 69-70, 76-80 | Standalone Escape and drafts, native draft retry, independent production commands, overlay and draft inventory |
-| `split-review` | 4 | Delete | Legacy-only |
-| `structure-command` | 14 | Delete | Legacy-only |
-| `structure` | 27 | Delete | Legacy-only |
-| `trial-replica` | 22 | Delete | Legacy-only |
-| `undo` | 142 | 1, 4, 6-14, 16, 18-22, 24-29 | Adapter-independent undo contracts |
-| `undo-slow` | 5 | Delete | Legacy-only |
-| `value-command` | 9 | Delete | Legacy-only |
-| `visible-refusal` | 11 | Delete | Legacy-only |
-| `writer-visual` | 17 | 11 | Standalone Visual key cost |
+| Manifest | Entries at base | Remove in stage 2 | Keep after stage 3 | Reason to keep |
+| --- | ---: | --- | --- | --- |
+| `broll-keying` | 33 | 1, 11, 25-27, 29-33 | 3-5, 8-10, 12-14, 16, 28 | Standalone Writer Visual leave and pure key/shot planning |
+| `buffer-binding` | 156 | 1-11, 13-19, 24, 26-28, 32-143, 145-156 | 12, 25, 29-31, 144 | Field, selection and cost contracts |
+| `buffer-commit` | 2 | None | 2 | Pure splice planning |
+| `buffer` | 4 | None | None | Legacy-only |
+| `comment-command` | 16 | None | 1-16 | Comment admission, authorship and draft guards |
+| `commit-writer` | 12 | None | None | Legacy-only |
+| `composition` | 96 | 1-22, 24-41, 44, 47, 54-55, 62-70, 73-74, 78, 80-81, 88-89, 92-93, 96 | 42-43, 45-46, 48-53, 56-61, 71-72, 75-77, 79, 82-87, 90-91, 94-95 | Native lifecycle, common switch rollback, draft/history, Writer disposal and buffered-field contracts |
+| `creation-undo` | 42 | 16-17, 24, 27 | None | Legacy-only |
+| `disable-list` | 18 | None | 1-18 | Local save, merge, drafts and bundles |
+| `draft-detach` | 28 | None | 1-28 | Draft lifecycle and ownership |
+| `empty-script` | 45 | 1-6, 12-14, 18, 20-21, 27, 30, 32-33, 35, 38-45 | 7-11, 15-17, 19, 22-26, 28-29, 31, 34, 36-37 | Shared-independent feature guards |
+| `find-replace` | 27 | 1-12, 19-23, 25, 27 | 13-18 | Pure cell splice order and bounds |
+| `gallery-command` | 25 | 1-25 | None | Legacy-only |
+| `heading-creation-undo` | 14 | None | None | Legacy-only |
+| `ingress-gate` | 9 | None | None | Legacy-only |
+| `join-glue` | 3 | None | 2 | Pure projection glue |
+| `join` | 10 | None | None | Legacy-only |
+| `join-neighborhood` | 4 | None | None | Legacy-only |
+| `join-routing` | 12 | None | None | Legacy-only |
+| `measure-hook` | 19 | None | 2, 7-19 | Native entry, storage, peer, history and Find plus timing infrastructure |
+| `projection` | 48 | None | 10, 19-20, 25, 27-29, 41-42 | Pure projection contracts |
+| `record-command` | 21 | 19-20 | None | Legacy-only |
+| `record-removal` | 36 | 18, 30-31, 35 | None | Legacy-only |
+| `recovery-panel` | 48 | 1-48 | None | Legacy-only |
+| `removal` | 30 | 19 | 23, 27, 30 | Pure discard and recovery contracts |
+| `scene-create` | 12 | 1-12 | None | Legacy-only |
+| `shared-entry` | 76 | 13-24, 26, 33-34, 43-47, 52-64, 66-68, 73-76 | 1-12, 25, 27-32, 35-42, 48-51, 65, 69-72 | Local files, drafts, navigation and shared admission |
+| `shared-session` | 27 | None | 23 | Publication change computation |
+| `split-abandonment` | 10 | 1-10 | None | Legacy-only |
+| `split-callers` | 50 | 1-42, 44-46, 48-50 | 43, 47 | Row command ports |
+| `split-composed` | 22 | 1-17 | 18-22 | Clipboard and row editor routing |
+| `split-records` | 80 | 5-37, 40-42, 47-49, 52-58, 60-61, 66-68, 71-75 | 1-4, 38-39, 43-46, 50-51, 59, 62-65, 69-70, 76-80 | Standalone Escape and drafts, native draft retry, independent production commands, overlay and draft inventory |
+| `split-review` | 4 | 1-4 | None | Legacy-only |
+| `structure-command` | 14 | 1-14 | None | Legacy-only |
+| `structure` | 27 | None | None | Legacy-only |
+| `trial-replica` | 22 | None | None | Legacy-only |
+| `undo` | 142 | None | 1, 4, 6-14, 16, 18-22, 24-29 | Adapter-independent undo contracts |
+| `undo-slow` | 5 | None | None | Legacy-only |
+| `value-command` | 9 | 1-9 | None | Legacy-only |
+| `visible-refusal` | 11 | 1-7, 10-11 | None | Legacy-only |
+| `writer-visual` | 17 | 1-10, 12-17 | 11 | Standalone Visual key cost |
 
-The nine split-records entries 38-39, 44-46, 51, 62, 64 and 65 still name three retired typed-box app tests at the base revision. Retarget them in stage 1 to `src/test/shared-native-typed-boxes-mapped-app.test.mjs` (reply, B-roll person/location/prop, tag notes and rename). Verify each retained edit matches and is caught by the corresponding native case before the manifest change merges. The base entries and file counts describe tracked files and manifest contents, separate from the state of a nightly run.
+### Evidence required before retiring legacy targets
 
-For common switch entries in composition, exercise the native factory through `tests/bootstrap/native-shared-entry.test.ts` or the existing native handoff app tests. Carry forward the rollback, reattach and drop assertions and confirm each retained mutant fails there before deleting the old target. In particular, keep composition 86 temporarily pointed at `tests/bootstrap/shared-switch.test.ts` when removing the fixture. Keep composition 90 and 94 on the native app target after retiring the old switch tests. Keep the shared-cell-space drag mutation only while the route it exercises survives. Delete Recovery panel coverage with the panel. Preserve local draft recovery and its separate tests.
+These are implementation gates. The plan review checked source matches and test ownership. The static inventory proposes 582 stage-2 removals, 447 stage-3 removals and 257 survivors. Those counts are pending the per-entry evidence below. Each retarget needs a clean focused baseline and a separate run where that one edit matches once and fails the intended assertion. Preserve the original outcome, including state and route-order assertions. Resolve drift in the entry's match text against current source before attempting the kill.
+
+| Entry | Stage 1 evidence and stage 2 disposition |
+| --- | --- |
+| buffer-binding 150-152 | Keep all three through preparation. Remove 150 with the legacy shared-cell clipboard reader. Remove 151 and 152 with `mountCellBuffer`'s legacy Split/Writer Visual callers: 151 targets its unchanged-HTML repaint shortcut and 152 targets its stored-space restoration on disposal. Native input has no `mountCellBuffer` caller. Extract the initial and post-Leave standalone zero-work checks in `tests/features/editing/split-caret-cost.test.ts`. Preserve the mapping and paint counters and the absence of legacy DOM markers; the removed reader has no counter after removal. The legacy enter/dispose part and its edits stay together until stage 2. |
+| shared-entry 10 | Refresh the stale leave-facade match to include the current selection and explicit-Leave parameters. Prove no-argument Leave uses the running native session and its original ports. Keep. |
+| shared-entry 11 | Leave with foreign ports after native entry. The original binding, draft migration and identity ports must land the copy, and foreign ports must remain unused. Keep. |
+| shared-entry 12 | Exercise opening-pending before native factory entry and during settlement. Assert no owner or byte change and no factory open. Keep. |
+| shared-entry 48 | Refresh the stale entry-wrapper match, including the forwarded release function and factory. In a native settlement callback prove the entry-only hold blocks recursive entry while permitting settlement commands and releases after completion. Keep. |
+| shared-entry 49 | Refresh the stale leave-wrapper match, including selection and explicit-Leave parameters. Hold through native binding settlement, assert Open and New cannot overtake it, then check copy and draft ownership after release. Keep. |
+| shared-entry 50 | Refresh the signature with the optional native factory. Force nested entry into the live scope and assert the original hold remains active. Keep. |
+| shared-entry 51 | Refresh the signature with both leave flags. Force nested leave into the same scope and assert that the active owner, guards and outcome remain those of the outer call. Keep. |
+| composition 71 | Keep the standalone Split media decoder assertion in `src/test/undo-caret-parity-selection.test.mjs` and import `cellCaretAfterStep` directly from `editor.ts`. Prove that the Writer decoder substitution still fails that standalone test. |
+| composition 86 | Exercise ordinary native Leave and require exactly one `left(true)` after landing with the draft owner restored. Keep after deleting both old targets. |
+| composition 87 | Verify native forced stop attempts ordinary Leave before abandonment. On success it never abandons; on a blocked attempt it abandons then retries. Require order and counts on the native backend. Keep after deleting the old route fixture. |
+| composition 90 | Use only the native dropped-session path and assert one `left(false)` with the session and route released. Kill independently of 86. |
+| composition 94 | Use only the native dropped-session path and assert native backend teardown of surfaces/listeners once. Kill independently of 90 with the hook callback still intact. |
+| split-callers 50 | Keep the direct plain-Enter guard and refusal test through preparation. Remove both with the old Split keydown branch in stage 2. Keep native and standalone Enter behavior checks. |
+| split-records 38 | Retarget to the native refused reply Post case. Assert the body survives the redraw and submits once. |
+| split-records 39 | Retarget to the native refused reply Post case. Assert refused reply mode stays open until successful Post. Kill independently of 38. |
+| split-records 44 | Retarget to native B-roll bulk new person. Assert the draft and box survive refusal until explicit save. |
+| split-records 45 | Retarget to native B-roll bulk new location. Assert its held draft and single explicit save. |
+| split-records 46 | Retarget to the native B-roll prop case. Assert the submitted name stays typed on refusal. |
+| split-records 51 | Retarget to the native B-roll shot person case. Assert the box and draft stay available after refusal. |
+| split-records 62 | Retarget to native tag notes typed then blurred. Assert the refused write retries on the intended blur. |
+| split-records 64 | Retarget to native tag notes. Prove production wiring detects the active native session and enables the retry; kill independently of 62. |
+| split-records 65 | Retarget to native inline tag rename via Enter. Assert editing mode, draft, focus and selection remain after refusal. |
+
+The base match scan also found retained entries needing refresh in composition 49-52, 56-57 and 85, measure-hook 17, split-records 69-70, and undo 20. Inspect the current branch of each target before updating the match, then verify its clean baseline and individual kill. Apply the same check to all entries still live in each intermediate PR so a stale match cannot break nightly after a partial cut.
+
+Use `tests/bootstrap/native-shared-entry.test.ts` and, where the behavior crosses an actual app transition, `src/test/shared-native-{handoff,routes-lifecycle}-app.test.mjs` for the switch gates. A case that asserts a final document without checking the intermediate ownership or route order is insufficient. Use `src/test/shared-native-typed-boxes-mapped-app.test.mjs` for the nine typed-box entries. All nine source matches occur once at the base, but their old test paths are already absent. Replace each dead registration in both manifest defaults and overrides where present. Run nine individual baseline/kill pairs before accepting the repair. Run the same per-entry baseline/kill check for the other common switch retargets in the table above. If a surviving behavior lacks a matching native case, carry over that assertion in preparation while the legacy case still runs.
 
 ### Mixed test cut points
 
 - `src/features/find/ports.test.ts` retains match reveal and isolates refusal from the concrete old document. `tests/features/empty-script/before.test.ts` retains all three standalone removal/repair cases. `tests/bootstrap/shared-entry-refusals.test.ts` retains the standalone duplicate-identity case. `tests/bootstrap/native-shared-entry.test.ts` retains preflight, rollback, retry, leave and release-bundle checks and drops the cases about selecting and constructing a legacy default backend.
 - `src/test/panel-escape-app.test.mjs` retains standalone Escape per row. Extract its shared-independent setup from `_shared-split-records.mjs` alongside the standalone record tests. `src/test/cut-paste-app.test.mjs` retains regular drag and standalone route assertions.
-- `tests/bootstrap/timing-marks-release.test.ts` and `tests/application/commit-time-writers.test.ts` are cross-tree inventories. Update their old modules/operations in the same cut while holding the surviving native and standalone assertions. Review every external test slated for deletion at case level. Here ?native typing? in an old Split fixture refers to browser input events.
+- `tests/bootstrap/timing-marks-release.test.ts` and `tests/application/commit-time-writers.test.ts` are cross-tree inventories. Update their old modules/operations in the same cut while holding the surviving native and standalone assertions. Review every external test slated for deletion at case level. Here `native typing` in an old Split fixture refers to browser input events.
 - Remove the legacy paired-measurement callers `tools/measure-shared-{admission,paired}.mjs` and their focused assertions in `tools/test-perf-shared.mjs` with the old harness if no supported caller remains. Keep the standalone performance driver and its tests.
 
 ## T01 Writer schedules
