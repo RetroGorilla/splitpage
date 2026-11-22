@@ -1,5 +1,9 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { currentBrollRecords } from "../bootstrap/wiring/broll.ts";
+import { openBrollPanel } from "../features/broll/panel.ts";
+import { findOrAddPerson, registerProductionTag } from "../features/tags/production-tags.ts";
+import { tagKey } from "../core/document/tags.ts";
 import { buildPublishHtml } from "../adapters/page/page-shell.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { SHARED_ADMISSION_ANNOUNCED } from "../application/session/shared-session.ts";
@@ -10,10 +14,14 @@ import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { removeGallerySlot } from "../core/document/gallery.ts";
 import { openCommentsPanel } from "../features/comments/comments.ts";
 import { selectedKeys } from "../bootstrap/wiring/production-editing-owners.ts";
-import { armRemoveTag, bulkDeleteSelected, openProductionPanel } from "../features/tags/panels.ts";
 import {
-  $, ADMISSION_HELD, FIRE, REFUSED, SOURCE, adopt, brollButton, brollOpen, clearWarnings, commentState,
-  galleryState, noticeCalls, press, productionPick, shape, tidyStandalone, toastHost, twice
+  addPersonForTag, applyGearQuickAdd, armDeleteTag, armPersonDelete, armRemoveTag, bulkDeleteSelected, openGearPanel,
+  openProductionPanel, setTagOwner, setTagStatus
+} from "../features/tags/panels.ts";
+import {
+  $, ADMISSION_HELD, B1, FIRE, M, MUG, REFUSED, SOURCE, adopt, brollButton, brollOpen, brollSelect, clearWarnings,
+  commentState, expandedCard, galleryState, noticeCalls, press, productionCards, productionPick, shape, tidyStandalone,
+  toastHost, twice, typeIn, warnings
 } from "./_standalone-records.mjs";
 
 const hook = window.__sharedTest;
@@ -282,4 +290,104 @@ for (const order of ["forward", "reverse"]) {
       await exhausted(session);
     });
   }
+}
+
+function tagPersonBox(panel, key) {
+  expandedCard(panel, key);
+  $(panel + ' [data-action="tag-person-new"][data-key="' + key + '"]').click();
+  typeIn(panel + ' .tag-person-input[data-key="' + key + '"]', "Cy", [1, 2]);
+}
+
+const edit = (s, change) => { const next = structuredClone(s); change(next); return next; };
+
+const keyboardLiterals = [
+  { name: "registering a production tag", act: () => { assert.equal(registerProductionTag("location", "Park"), true); },
+    after: s => edit(s, n => { n.tags.push(["location", "Park", "", "needed"]); }) },
+  { name: "finding or adding a person", act: () => { assert.notEqual(findOrAddPerson("Cy"), ""); },
+    after: s => edit(s, n => { n.people.push("Cy"); }) },
+  { name: "adding a prop to a shot", act: () => { assert.deepEqual(currentBrollRecords()?.addBrollProp("b1", "Lamp"), { changed: true, held: false }); },
+    after: s => edit(s, n => { n.tags.push(["prop", "Lamp", "", "needed"]); n.shots[0][4].push("Lamp"); }) },
+  { name: "the b-roll bulk Mark filmed", act: () => {
+    brollSelect("b1");
+    const bulk = document.querySelector('#broll-panel [data-action="broll-bulk-shot"]'); assert.ok(bulk); bulk.click();
+  }, after: s => edit(s, n => { n.shots[0][1] = "shot"; }) },
+  { name: "the b-roll bulk assign to a new person", act: () => {
+    brollSelect("b1");
+    const owner = document.getElementById("broll-bulk-owner"); assert.ok(owner);
+    owner.value = "__new__"; owner.dispatchEvent(new window.Event("change", { bubbles: true }));
+    const box = document.getElementById("broll-bulk-input"); assert.ok(box); box.value = "Cy";
+    const save = document.querySelector('#broll-panel [data-action="broll-bulk-input-save"]'); assert.ok(save); save.click();
+    assert.equal(document.getElementById("broll-bulk-input"), null, "the bulk box closes");
+  }, after: s => edit(s, n => { n.people.push("Cy"); n.shots[0][2] = "Cy"; }) },
+  { name: "the b-roll prop box", act: () => {
+    brollOpen("b1"); typeIn(`#broll-panel .broll-prop-input${B1}`, "Lamp", [4, 4]); FIRE.enter($(`#broll-panel .broll-prop-input${B1}`));
+    const box = $(`#broll-panel .broll-prop-input${B1}`); assert.equal(box.value, "", "the prop box empties"); assert.equal(document.activeElement, box);
+    box.blur();
+  }, after: s => edit(s, n => { n.tags.push(["prop", "Lamp", "", "needed"]); n.shots[0][4].push("Lamp"); }) },
+  { name: "the tag person box", act: () => {
+    productionCards(); tagPersonBox("#production-panel", "prop mug"); FIRE.enter($(`#production-panel .tag-person-input${MUG}`));
+    assert.equal(document.querySelector(`#production-panel .tag-person-input${MUG}`), null, "the person box closes");
+    assert.equal(document.activeElement, $(`#production-panel [data-action="tag-person-new"]${MUG}`));
+  }, after: s => edit(s, n => { n.people.push("Cy"); n.tags[1][2] = "Cy"; }) },
+  { name: "the b-roll delete", act: () => {
+    brollOpen("b1");
+    if (!document.querySelector('#broll-panel [data-action="broll-delete"][data-id="b1"]')) brollButton("broll-menu", "b1").click();
+    brollButton("broll-delete", "b1").click();
+  }, after: s => edit(s, n => { n.shots = []; }) },
+  { name: "the b-roll new person for a shot", act: () => {
+    brollOpen("b1"); brollButton("broll-person-new", "b1").click();
+    const box = document.querySelector('#broll-panel .broll-person-input[data-id="b1"]'); assert.ok(box); box.value = "Cy";
+    brollButton("broll-person-save", "b1").click();
+  }, after: s => edit(s, n => { n.people.push("Cy"); n.shots[0][2] = "Cy"; }) },
+  { name: "adding a shot from the b-roll panel", act: () => {
+    openBrollPanel();
+    const box = document.getElementById("broll-add-input"); assert.ok(box); box.value = "Park";
+    press(box, "Enter");
+  }, after: s => edit(s, n => { n.shots.push(["Park", "unshot", "", false, []]); }) },
+  { name: "removing a prop from a shot", act: () => { brollOpen("b1"); brollButton("broll-prop-remove", "b1", `[data-ref="${M}"]`).click(); },
+    after: s => edit(s, n => { n.shots[0][4] = []; }) },
+  { name: "the gear quick add", act: () => {
+    openGearPanel();
+    const box = $("#gear-quickadd-input");
+    box.value = "Drone\nCrane";
+    applyGearQuickAdd();
+  }, after: s => edit(s, n => { n.tags.push(["gear", "Crane", "", "needed"]); }) },
+  { name: "advancing a tag's status", act: () => { openProductionPanel(); setTagStatus(tagKey("gear", "Drone"), null); },
+    after: s => edit(s, n => { n.tags[0][3] = "sourcing"; }) },
+  { name: "deleting a tag from its card", act: () => { openProductionPanel(); twice(armDeleteTag, tagKey("gear", "Drone")); },
+    after: s => edit(s, n => { n.tags.shift(); }) },
+  { name: "assigning a tag's owner", act: () => { openProductionPanel(); setTagOwner(tagKey("prop", "Mug"), "p2"); },
+    after: s => edit(s, n => { n.tags[1][2] = "Bob"; }) },
+  { name: "creating a person while assigning a tag (one undo step removes both)", act: () => { openProductionPanel(); addPersonForTag(tagKey("prop", "Mug"), "Cy"); },
+    after: s => edit(s, n => { n.people.push("Cy"); n.tags[1][2] = "Cy"; }) },
+  { name: "adding a person from the production panel", act: () => { openProductionPanel(); addPersonForTag(null, "Cy"); },
+    after: s => edit(s, n => { n.people.push("Cy"); }) },
+  { name: "deleting a person", act: () => { openProductionPanel(); twice(armPersonDelete, "p2"); },
+    after: s => edit(s, n => { n.people = ["Ann"]; }) },
+  { name: "posting a reply", act: () => {
+    openCommentsPanel();
+    $('[data-action="toggle-reply"][data-id="C1"]').click();
+    $('.reply-composer[data-for="C1"] .cell-editable').textContent = "ok";
+    $('[data-action="reply-post"][data-id="C1"]').click();
+    assert.equal(document.querySelector('.reply-composer[data-for="C1"]'), null);
+  }, after: s => edit(s, n => { n.comments[0][3] = ["ok"]; }) }
+];
+
+for (const literal of keyboardLiterals) for (const order of ["forward", "reverse"]) {
+  test("Native keyboard Undo after " + literal.name + ", " + order, async t => {
+    const { start, standalone, session } = await enter(t);
+    literal.act();
+    const queued = peer.queuedUpdates().map(packet => packet.to);
+    assert.deepEqual(queued, ["app", "app", "peer"]);
+    assert.deepEqual(peer.release(order).map(packet => packet.to), order === "forward" ? queued : queued.toReversed());
+    await agree(withPeer(literal.after(start)), standalone);
+    assert.deepEqual(warnings(), []);
+
+    peer.hold("updates");
+    assert.equal(undo(), true);
+    assert.deepEqual(peer.release(order).map(packet => packet.to), ["peer"]);
+    await agree(withPeer(start), standalone);
+    await exhausted(session);
+    assert.deepEqual(warnings(), []);
+  });
 }
