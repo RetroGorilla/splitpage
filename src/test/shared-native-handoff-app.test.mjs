@@ -1,3 +1,4 @@
+import { render } from "../features/rows/render.ts";
 import { trackGlobalListeners } from "./_global-listener-inventory.mjs";
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
@@ -635,4 +636,17 @@ for (const [name, reason, arrange] of entryFaults) test(`native entry after ${na
     docId: currentDocument().docId, shared: false, kept: true });
   assert.deepEqual(await enter(), { ok: true });
   assert.deepEqual(hook.leave(), { ok: true });
+});
+
+test("row paint skips standalone undo tracking until native Leave", async t => {
+  draftStore(t);
+  script();
+  assert.deepEqual(await enter(), { ok: true });
+  const track = t.mock.method(undoOwner(), "track", () => {});
+  render();
+  assert.equal(track.mock.callCount(), 0);
+  assert.deepEqual(hook.leave(), { ok: true });
+  track.mock.resetCalls();
+  render();
+  assert.equal(track.mock.callCount(), 1);
 });

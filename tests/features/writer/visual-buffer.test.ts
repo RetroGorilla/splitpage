@@ -184,6 +184,17 @@ for (const literal of [
   } finally { page.close(); }
 });
 
+for (const key of ["z", "y"]) test("Writer Visual closes without a leave callback before Ctrl+" + key.toUpperCase(), () => {
+  const page = visualWriter();
+  try {
+    page.cell.focus();
+    assert.equal(page.cell.dispatchEvent(new window.KeyboardEvent("keydown", { key, ctrlKey: true, bubbles: true, cancelable: true })), false);
+    assert.equal(page.cell.closest<HTMLElement>(".wr-flow-visual-box")?.hidden, true);
+    assert.deepEqual(page.leaves, []);
+    assert.deepEqual(page.a.executed, []);
+  } finally { page.close(); }
+});
+
 for (const order of ["dup", "rev"] as const) test("Writer visual holds same-visual remote typing until its native input commits, then restores the caret by identity: " + order, () => {
   const page = visualWriter(order);
   try {
