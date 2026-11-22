@@ -217,11 +217,7 @@ console.log("\nsharded runs (--shard):\n");
 
 eq("--shard takes a one-based index and total", parseArgs(["all", "--shard", "1/2"]), { sets: SETS, listOnly: false, only: [], shard: { index: 1, total: 2 } });
 eq("--shard= works with --list", parseArgs(["unit", "--list", "--shard=2/3"]), { sets: ["unit"], listOnly: true, only: [], shard: { index: 2, total: 3 } });
-eq("a root suite selects a partition within the shard", parseArgs(["all", "--shard", "1/5", "--suite=always"]), {
-  sets: SETS, listOnly: false, only: [], shard: { index: 1, total: 5 }, suite: "always"
-});
-check("a suite requires a shard", Boolean(parseArgs(["--suite=old-adapter"]).error));
-check("an unknown suite is refused", Boolean(parseArgs(["--shard=1/5", "--suite=unknown"]).error));
+check("the retired suite flag is refused", Boolean(parseArgs(["--shard=1/5", "--suite=unknown"]).error));
 for (const value of ["", "0/2", "1/0", "3/2", "1", "1.5/2", "-1/2", "1/two", "1/2/3", "1/9007199254740992"]) {
   check(`invalid shard ${JSON.stringify(value)} is a usage error`, Boolean(parseArgs(["--shard", value]).error));
 }

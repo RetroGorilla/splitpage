@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, renameSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { needsChecks, needsAppChecks, needsDesktopChecks, needsOldAdapterTests, changedFiles } from "./ci-changes.mjs";
+import { needsChecks, needsAppChecks, needsDesktopChecks, changedFiles } from "./ci-changes.mjs";
 import { isScanned, canScan } from "./comment-gate.mjs";
 import { listRepoFiles } from "./source-scan.mjs";
 
@@ -60,33 +60,12 @@ for (const files of [["README.md"], ["tests/application/session.test.ts"], ["src
 }
 eq("a smoke change that is not prose runs the smoke although app checks skip it", [needsAppChecks(["desktop/test/smoke.mjs"]), needsDesktopChecks(["desktop/test/smoke.mjs"])], [false, true]);
 
-eq("a main-tree oracle change runs both root matrices", [
-  needsChecks(["tests/collab/oracles/oracles.ts"]), needsOldAdapterTests(["tests/collab/oracles/oracles.ts"])
-], [true, true]);
 for (const path of ["tests/collab/fixtures/projection-reference.json", "tests/collab/fixtures/projection/supplement.splitpage", "tests/collab/fixtures/projection/experiment-reference.json"]) {
   eq(`shared projection fixture ${path} runs root tests and skips app checks`, [needsChecks([path]), needsAppChecks([path])], [true, false]);
 }
 
-eq("native adapter changes run the always-required app and root coverage only", [
-  needsAppChecks(["src/adapters/collab/native/document.ts", "tests/adapters/collab/native/document.test.ts"]),
-  needsChecks(["src/adapters/collab/native/document.ts", "tests/adapters/collab/native/document.test.ts"]),
-  needsOldAdapterTests(["src/adapters/collab/native/document.ts", "tests/adapters/collab/native/document.test.ts"])
-], [true, true, false]);
-for (const files of [
-  null, [], ["src/adapters/collab/document.ts"], ["src/core/text/runs.ts"], ["shared/text.ts"],
-  ["src/application/session/shared-session.ts"], ["tests/collab/editor-ports/shared-buffer.ts"],
-  ["tests/adapters/collab/guarded-subscriptions.test.ts"], ["tests/collab/undo/model.ts"],
-  ["tools/run-tests.mjs"], [".github/workflows/ci.yml"], [".github/actions/root-test-setup/action.yml"],
-  ["package.json"], ["package-lock.json"],
-  ["tests/features/writer/removed-old-test.test.ts"]
-]) eq(`old-adapter checks run for ${JSON.stringify(files)}`, needsOldAdapterTests(files), true);
-eq("real old-adapter support triggers the filter", needsOldAdapterTests(["tests/core/migrate-ports.ts"]), true);
-eq("shipping feature changes stay outside the old-adapter filter", needsOldAdapterTests(["src/features/editing/cell-buffer.ts"]), false);
-eq("prose alone skips old-adapter checks on a PR", needsOldAdapterTests(["README.md"]), false);
-eq("prose inside the old test folder skips both root matrices", [
-  needsChecks(["tests/collab/mutants.md"]), needsOldAdapterTests(["tests/collab/mutants.md"])
-], [false, false]);
-eq("an unrelated feature test stays outside the old-adapter filter", needsOldAdapterTests(["tests/features/writer/idle-word-count.test.ts"]), false);
+eq("an oracle change runs root tests", needsChecks(["tests/collab/oracles/oracles.ts"]), true);
+eq("a native adapter change runs root tests", needsChecks(["src/adapters/collab/native/document.ts"]), true);
 
 const repo = mkdtempSync(join(tmpdir(), "splitpage-ci-changes-"));
 const git = (...args) => spawnSync("git", ["-c", "user.name=t", "-c", "user.email=t@t", ...args], { cwd: repo, encoding: "utf8" }).stdout.trim();

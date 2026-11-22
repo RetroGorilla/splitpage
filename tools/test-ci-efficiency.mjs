@@ -37,7 +37,7 @@ const testSteps = parse(readFileSync(join(REPO, ".github/actions/root-test-setup
 assert.equal(testSteps.find((s) => s.name === cache.name)?.run, cache.run);
 assert.ok(testSteps.find((s) => s.name === "Install Chromium")?.run.includes("--with-deps"));
 assert.ok(testSteps.findIndex((s) => s.name === cache.name) < testSteps.findIndex((s) => s.name === "Install Chromium"));
-for (const job of [ci.jobs.tests, ci.jobs["old-adapter-tests"], readWorkflow("nightly").jobs["root-tests"]]) {
+for (const job of [ci.jobs.tests, readWorkflow("nightly").jobs["root-tests"]]) {
   assert.equal(job.steps[1].uses, "./.github/actions/root-test-setup");
   assert.ok(job.steps[2].run.includes("npm run test:all"));
 }

@@ -30,7 +30,6 @@ jobs:
       app: ${{ steps.classify.outputs.app }}
       desktop: ${{ steps.classify.outputs.desktop }}
       root_due: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || (steps.classify.outputs.code == 'true' && steps.tested.outputs.tested != 'true') }}
-      old_adapter: ${{ steps.classify.outputs.old_adapter }}
     steps:
       - uses: actions/checkout@v7
         with:
@@ -97,8 +96,6 @@ jobs:
       - name: Install tooling
         run: npm ci && npm ci --prefix desktop && npm ci --prefix collab-server
 
-      - name: Root test partitions cover every test
-        run: node tools/test-ci-old-adapter-shards.mjs
 
       - name: Desktop browser scripts are generated from their checked sources
         run: node tools/build-preload.mjs && node tools/check-preload.mjs
@@ -205,36 +202,12 @@ jobs:
       - uses: ./.github/actions/root-test-setup
         with:
           shard: ${{ matrix.shard }}/8
-          suite: always
 
       - name: Unit, desktop and tool test shard
-        run: npm run test:all -- --shard "${{ matrix.shard }}/8" --suite=always
-
-  old-adapter-tests:
-    name: Old adapter tests (${{ matrix.shard }}/3)
-    needs: changes
-    if: needs.changes.outputs.old_adapter == 'true'
-    runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
-    timeout-minutes: 25
-    env:
-      SPLITPAGE_CHROME_ARGS: --no-sandbox --disable-dev-shm-usage
-    strategy:
-      fail-fast: false
-      matrix:
-        shard: [1, 2, 3]
-    steps:
-      - uses: actions/checkout@v7
-
-      - uses: ./.github/actions/root-test-setup
-        with:
-          shard: ${{ matrix.shard }}/3
-          suite: old-adapter
-
-      - name: Old adapter test shard
-        run: npm run test:all -- --shard "${{ matrix.shard }}/3" --suite=old-adapter
+        run: npm run test:all -- --shard "${{ matrix.shard }}/8"
 
   gate:
-    needs: [changes, checks, tests, old-adapter-tests, desktop-smoke]
+    needs: [changes, checks, tests, desktop-smoke]
     if: always()
     runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 2
@@ -243,14 +216,11 @@ jobs:
     steps:
       - name: Every required job passed, or the change was prose only
         run: |
-          echo "changes=$CHANGES code=$CODE root_due=$ROOT_DUE old_adapter=$OLD_ADAPTER tested=$TESTED desktop=$DESKTOP checks=$CHECKS tests=$TESTS old_adapter_tests=$OLD_ADAPTER_TESTS smoke=$SMOKE"
+          echo "changes=$CHANGES code=$CODE root_due=$ROOT_DUE tested=$TESTED desktop=$DESKTOP checks=$CHECKS tests=$TESTS smoke=$SMOKE"
           [ "$CHANGES" = success ] || exit 1
           want_tests=skipped
           if [ "$ROOT_DUE" = true ]; then want_tests=success; fi
           [ "$TESTS" = "$want_tests" ] || exit 1
-          want_old=skipped
-          if [ "$OLD_ADAPTER" = true ]; then want_old=success; fi
-          [ "$OLD_ADAPTER_TESTS" = "$want_old" ] || exit 1
           if [ "$CODE" = true ] && [ "$TESTED" != true ]; then
             want_smoke=skipped
             if [ "$DESKTOP" = true ]; then want_smoke=success; fi
@@ -262,16 +232,14 @@ jobs:
           CHANGES: ${{ needs.changes.result }}
           CODE: ${{ needs.changes.outputs.code }}
           ROOT_DUE: ${{ needs.changes.outputs.root_due }}
-          OLD_ADAPTER: ${{ needs.changes.outputs.old_adapter }}
           TESTED: ${{ needs.changes.outputs.tested }}
           DESKTOP: ${{ needs.changes.outputs.desktop }}
           CHECKS: ${{ needs.checks.result }}
           TESTS: ${{ needs.tests.result }}
-          OLD_ADAPTER_TESTS: ${{ needs.old-adapter-tests.result }}
           SMOKE: ${{ needs.desktop-smoke.result }}
 
       - name: Every required matrix shard passed
-        if: needs.changes.outputs.root_due == 'true' || needs.changes.outputs.old_adapter == 'true'
+        if: needs.changes.outputs.root_due == 'true'
         run: |
           jobs=$(gh api --paginate "repos/$GITHUB_REPOSITORY/actions/runs/$GITHUB_RUN_ID/jobs?filter=all&per_page=100" --jq '.jobs[] | [.name, .run_attempt, .conclusion] | @tsv')
           verify_shards() {
@@ -293,22 +261,19 @@ jobs:
             done
           }
           if [ "$ROOT_TESTS" = true ]; then verify_shards "Tests" "$ROOT_SHARDS"; fi
-          if [ "$OLD_ADAPTER" = true ]; then verify_shards "Old adapter tests" "$OLD_SHARDS"; fi
         env:
           GH_TOKEN: ${{ github.token }}
           ROOT_TESTS: ${{ needs.changes.outputs.root_due }}
-          OLD_ADAPTER: ${{ needs.changes.outputs.old_adapter }}
           ROOT_SHARDS: '8'
-          OLD_SHARDS: '3'
 
       - name: Write the passed tree's marker
-        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.old-adapter-tests.result == 'success' || needs.old-adapter-tests.result == 'skipped') && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && needs.changes.outputs.tree != ''
+        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && needs.changes.outputs.tree != ''
         run: echo "$TREE" > "$RUNNER_TEMP/passed-tree.txt"
         env:
           TREE: ${{ needs.changes.outputs.tree }}
 
       - name: Upload the passed tree's marker
-        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.old-adapter-tests.result == 'success' || needs.old-adapter-tests.result == 'skipped') && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && needs.changes.outputs.tree != ''
+        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && needs.changes.outputs.tree != ''
         uses: actions/upload-artifact@v7
         with:
           name: ci-passed-tree-${{ needs.changes.outputs.tree }}
