@@ -365,6 +365,55 @@ export function captureNativeTextIdentity(script: NativeScript, range: NativeTex
   };
 }
 
+export function captureNativeCompositionCaret(script: NativeScript, range: NativeTextRange) {
+  if (!authoredRanges.get(script.doc)?.has(range)) return null;
+  const checked = nativeRangeSnapshot(range);
+  if (!checked || checked.to) return null;
+  const original = nativeLiveRange(script, checked);
+  if (typeof original === "string" || original.pieces.length !== 1) return null;
+  const text = original.text, offset = original.from - original.start;
+  const content = storedText(original.items);
+  const boundary = (live: NativeLiveRange, length: number) => [
+    live.from > live.start ? undoEndpoint(checked.target, live.text, live.from, -1).position : null,
+    live.from - live.start < length ? undoEndpoint(checked.target, live.text, live.from, 0).position : null
+  ];
+  let expected = boundary(original, content.length);
+  const point = () => {
+    const live = nativeLiveRange(script, checked);
+    return typeof live !== "string" && live.pieces.length === 1 && live.text === text &&
+      live.from - live.start === offset ? live : null;
+  };
+  return {
+    intact: () => {
+      const live = point();
+      return !!live && boundary(live, storedText(live.items).length).every((side, i) => {
+        const saved = expected[i];
+        return saved === null ? side === null : !!side && Y.compareIDs(saved.item, side.item);
+      });
+    },
+    watchRestoration: () => {
+      const removed = expected.filter(side => side !== null);
+      if (checked.target.cell !== "narration" || nativeLiveRange(script, checked) !== "missing" ||
+        !removed.length || !removed.every(side => unitGone(side, script.doc))) return null;
+      const stop = () => script.doc.off("afterTransaction", restored);
+      const restored = (transaction: Y.Transaction) => {
+        try {
+          if (!script.reader.beatBoundary(checked.target.beat)) return;
+          stop();
+          // why: peer undo recreates removed narration; a restore mixed with new deletions cannot prove the gap
+          if (transaction.local || !Y.equalDeleteSets(transaction.deleteSet, Y.createDeleteSet())) return;
+          const live = point();
+          if (live && storedText(live.items) === content) expected = boundary(live, content.length);
+        } catch {
+          stop();
+        }
+      };
+      script.doc.on("afterTransaction", restored);
+      return stop;
+    }
+  };
+}
+
 function memberOffset(cells: readonly LiveCell[], at: Y.AbsolutePosition, name: boolean): number | null {
   let offset = 0;
   for (const part of cells) {

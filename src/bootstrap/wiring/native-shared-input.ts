@@ -32,7 +32,7 @@ import { writerControls, writerFlowPorts } from "./writer.ts";
 import { currentWhoList } from "./who-list.ts";
 
 interface NativeInputPorts {
-  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "resolveTextSelection" | "captureTextIdentity" | "isClosingOrClosed" | "subscribe" | "revision" | "hasBeatMarker">;
+  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "resolveTextSelection" | "captureTextIdentity" | "captureCompositionCaret" | "isClosingOrClosed" | "subscribe" | "revision" | "hasBeatMarker">;
   readonly session: Pick<SharedDocumentSession, "admit" | "refuse" | "run" | "subscribe">;
   readonly editAttribution: () => NativeEditStamp;
   readonly now?: () => number;
@@ -88,6 +88,7 @@ interface Draft {
   composing: boolean;
   readonly composition: boolean;
   compositionIdentity?: (() => boolean) | null;
+  compositionCaret?: ReturnType<NativeInputPorts["native"]["captureCompositionCaret"]>;
   readonly paint: TrackedPaint | null;
   text: string;
   units: number;
@@ -187,6 +188,7 @@ export function sameNativeInsertPlacement(shown: SceneDocument | null, live: Sce
 export function mountNativeSharedInput({ native, session, editAttribution, now = Date.now, report, paintIsCurrent = () => false,
   paintedJoinSeams = () => null, publish = () => {} }: NativeInputPorts) {
   let draft: Draft | null = null, stopped: string | null = null, uncertain = false;
+  let stopRestoration: (() => void) | null = null;
   let insertMenuSelection: ReturnType<typeof captureInsertMenuSelection> | null = null;
   let lastWriterEnterRefusal: string | null = null;
   let imeTarget: Element | null = null;
@@ -410,6 +412,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         const { range, selection: { from, to }, text, composition } = buffered;
         if (result.reason !== "missing" || range?.target.cell !== "narration" ||
           composition || composed || !text || from !== to || native.hasBeatMarker(range.target.beat)) {
+          if (result.reason === "missing") stopRestoration ??= buffered.compositionCaret?.watchRestoration() ?? null;
           return stop(result.reason, quiet);
         }
       }
@@ -463,7 +466,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (range.target.beat !== beat || range.target.cell !== (visual ? "visual" : "narration")) return stopped;
     const original = documentReader.read(doc => doc?.rows.find(row => row.id === beat)?.[field]);
     const live = visual ? native.document().rows.find(row => row.id === beat)?.visualText : native.narrationHtml(beat);
-    if (original == null || original !== live || (from !== to && !draft.compositionIdentity?.())) return stopped;
+    if (original == null || original !== live ||
+      !(from === to ? draft.compositionCaret?.intact() : draft.compositionIdentity?.())) return stopped;
     const resolved = native.resolveTextSelection(range);
     const start = visual ? { beat, offset: from } : native.narrationCaret(beat, from, from !== to);
     const end = from === to ? start : visual ? { beat, offset: to } : native.narrationCaret(beat, to);
@@ -1045,7 +1049,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (reason || !cell.isConnected) { session.refuse(STALE); event.preventDefault(); return; }
       const anchored = anchor(begin(cell, selection, true, ""));
       if (typeof anchored === "string") { session.refuse(anchored); event.preventDefault(); return; }
-      if (anchored.range && selection.from !== selection.to) anchored.compositionIdentity = native.captureTextIdentity(anchored.range);
+      if (anchored.range) {
+        if (selection.from === selection.to) anchored.compositionCaret = native.captureCompositionCaret(anchored.range);
+        else anchored.compositionIdentity = native.captureTextIdentity(anchored.range);
+      }
       draft = anchored;
       return;
     }
@@ -1497,6 +1504,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   let stopUnload: (() => void) | undefined;
   const dispose = (): void => {
     clearTimeout(timer);
+    stopRestoration?.();
     draft?.paint?.dispose();
     draft = null;
     stopWriterPaint?.();
