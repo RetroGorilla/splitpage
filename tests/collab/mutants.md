@@ -971,8 +971,8 @@ rule 206: beats typed under a heading count as its name | src/adapters/collab/cr
 rule 208: a heading finished from a typed line is undone by hiding its words | src/adapters/collab/undo-heading-creation.ts: every finished line is recorded | tests/adapters/collab/undo-heading-creation.test.ts: rule 208: a heading finished from a typed Writer line stays skipped with rule 71, and a demotion stays refused by name | tests/collab/heading-creation-undo-mutants.json
 rule 208: an undo that would clear a scene's first beat stays stuck instead of skipping | src/adapters/collab/undo-executor.ts: the firstSceneId refusal is removed | tests/adapters/collab/undo-heading.test.ts: rule 208: a paste list whose heading lands on the first beat of an existing scene moves that scene's first beat, which an undo cannot clear, so it is skipped by name | tests/collab/heading-creation-undo-mutants.json
 
-registering a production tag still calls the standalone command in a shared session | src/features/tags/production-tags.ts | src/test/shared-split-records-literals-tags-app.test.mjs | tests/collab/split-records-mutants.json
-finding or adding a person still calls the standalone command in a shared session | src/features/tags/production-tags.ts | src/test/shared-split-records-literals-tags-app.test.mjs | tests/collab/split-records-mutants.json
+registering a production tag still calls the standalone command in a shared session | src/features/tags/production-tags.ts | tests/features/tags/production-tags-mount.test.ts | tests/collab/split-records-mutants.json
+finding or adding a person still calls the standalone command in a shared session | src/features/tags/production-tags.ts | tests/features/tags/production-tags-mount.test.ts | tests/collab/split-records-mutants.json
 adding a prop to a shot still calls the standalone command in a shared session | src/features/broll/records.ts | tests/features/broll/records.test.ts | tests/collab/split-records-mutants.json
 the b-roll status toggle still calls the standalone command in a shared session | src/features/broll/panel.ts | src/test/shared-native-registries-app.test.mjs | tests/collab/split-records-mutants.json
 the b-roll bulk update still calls the standalone command in a shared session | src/features/broll/panel.ts | src/test/shared-native-record-drafts-app.test.mjs | tests/collab/split-records-mutants.json
@@ -981,12 +981,12 @@ the b-roll delete still calls the standalone command in a shared session | src/f
 the b-roll new person for a shot still calls the standalone command in a shared session | src/features/broll/panel.ts | src/test/shared-native-registries-app.test.mjs | tests/collab/split-records-mutants.json
 adding a shot from the b-roll panel still calls the standalone command in a shared session | src/application/commands/production-actions.ts | tests/application/commands/production-actions.test.ts | tests/collab/split-records-mutants.json
 removing a prop from a shot still calls the standalone command in a shared session | src/application/commands/production-actions.ts | tests/application/commands/production-actions.test.ts | tests/collab/split-records-mutants.json
-the gear quick add still calls the standalone command in a shared session | src/features/tags/panels.ts | src/test/shared-split-records-literals-tags-app.test.mjs | tests/collab/split-records-mutants.json
-updating tags still calls the standalone command in a shared session | src/features/tags/panels.ts | src/test/shared-split-records-literals-tags-app.test.mjs | tests/collab/split-records-mutants.json
-deleting a tag from its card still calls the standalone command in a shared session | src/features/tags/panels.ts | src/test/shared-split-records-literals-tags-app.test.mjs | tests/collab/split-records-mutants.json
-bulk deleting selected tags still calls the standalone command in a shared session | src/features/tags/panels.ts | src/test/shared-split-records-literals-tags-app.test.mjs | tests/collab/split-records-mutants.json
-adding a person from the production panel still calls the standalone command in a shared session | src/features/tags/panels.ts | src/test/shared-split-records-literals-tags-app.test.mjs | tests/collab/split-records-mutants.json
-deleting a person still calls the standalone command in a shared session | src/features/tags/panels.ts | src/test/shared-split-records-literals-tags-app.test.mjs | tests/collab/split-records-mutants.json
+the gear quick add still calls the standalone command in a shared session | src/features/tags/panels.ts | tests/features/tags/panel-mount.test.ts | tests/collab/split-records-mutants.json
+updating tags still calls the standalone command in a shared session | src/features/tags/panels.ts | src/test/shared-native-registries-app.test.mjs | tests/collab/split-records-mutants.json
+deleting a tag from its card still calls the standalone command in a shared session | src/features/tags/panels.ts | tests/features/tags/panel-mount.test.ts | tests/collab/split-records-mutants.json
+bulk deleting selected tags still calls the standalone command in a shared session | src/features/tags/panels.ts | tests/features/tags/panel-mount.test.ts | tests/collab/split-records-mutants.json
+adding a person from the production panel still calls the standalone command in a shared session | src/features/tags/panels.ts | tests/features/tags/panel-mount.test.ts | tests/collab/split-records-mutants.json
+deleting a person still calls the standalone command in a shared session | src/features/tags/panels.ts | tests/features/tags/panel-mount.test.ts | tests/collab/split-records-mutants.json
 editing the gallery still calls the standalone command in a shared session | src/application/editing/cell-editing.ts | src/test/shared-native-record-guards-app.test.mjs | tests/collab/split-records-mutants.json
 assigning a comment still calls the standalone command in a shared session | src/features/comments/comments.ts | tests/features/comments/shared-ports.test.ts | tests/collab/split-records-mutants.json
 cancelling a comment still calls the standalone unwrap in a shared session | src/features/comments/comments.ts | tests/features/comments/shared-ports.test.ts | tests/collab/split-records-mutants.json
@@ -1013,18 +1013,18 @@ a refused shot add clears the typed name and announces success | src/application
 a refused bulk assignment to a new person closes its box | src/features/broll/panel.ts | src/test/shared-split-records-typed-broll-app.test.mjs | tests/collab/split-records-mutants.json
 a refused bulk new location closes its box | src/features/broll/panel.ts | src/test/shared-split-records-typed-broll-app.test.mjs | tests/collab/split-records-mutants.json
 the prop box clears the typed name before the outcome | src/features/broll/panel.ts | src/test/shared-split-records-typed-broll-app.test.mjs | tests/collab/split-records-mutants.json
-the tag person box moves focus to Add person whatever the outcome (Enter) | src/features/tags/mount.ts | src/test/shared-split-records-held-tags-app.test.mjs | tests/collab/split-records-mutants.json
-the tag person box moves focus to Add person whatever the outcome (Add) | src/features/tags/mount.ts | src/test/shared-split-records-held-tags-app.test.mjs | tests/collab/split-records-mutants.json
-a refused tag person box closes | src/features/tags/panels.ts | src/test/shared-split-records-held-tags-app.test.mjs | tests/collab/split-records-mutants.json
+the tag person box moves focus to Add person whatever the outcome (Enter) | src/features/tags/mount.ts | src/test/shared-native-record-controls-app.test.mjs | tests/collab/split-records-mutants.json
+the tag person box moves focus to Add person whatever the outcome (Add) | src/features/tags/mount.ts | src/test/shared-native-record-controls-app.test.mjs | tests/collab/split-records-mutants.json
+a refused tag person box closes | src/features/tags/panels.ts | src/test/shared-native-typed-boxes-mapped-app.test.mjs | tests/collab/split-records-mutants.json
 a refused annotation removal adds its own warning to the refusal | src/features/gallery/overlay.ts | tests/features/gallery/overlay.test.ts | tests/collab/split-records-mutants.json
 a refused new person for a shot closes its box | src/features/broll/panel.ts | src/test/shared-split-records-typed-broll-app.test.mjs | tests/collab/split-records-mutants.json
 a refused bulk Mark filmed drops the selection | src/features/broll/panel.ts | src/test/shared-native-record-drafts-app.test.mjs | tests/collab/split-records-mutants.json
-assigning a tag's owner drops change.owner | src/application/commands/production-records.ts | src/test/shared-split-records-literals-tags-app.test.mjs | tests/collab/split-records-mutants.json
-assigning a known owner clears the owner instead | src/application/commands/production-records.ts | src/test/shared-split-records-literals-tags-app.test.mjs | tests/collab/split-records-mutants.json
+assigning a tag's owner drops change.owner | src/application/commands/production-records.ts | tests/application/commands/records-shared.test.ts | tests/collab/split-records-mutants.json
+assigning a known owner clears the owner instead | src/application/commands/production-records.ts | tests/application/commands/records-shared.test.ts | tests/collab/split-records-mutants.json
 creating a person while assigning creates nobody | src/application/commands/production-records.ts | tests/application/commands/records-shared.test.ts | tests/collab/split-records-mutants.json
 rule 152: the shared picture toast offers an Undo that reads the standalone owner | src/bootstrap/wiring/native-shared-records.ts | src/test/shared-native-record-guards-app.test.mjs | tests/collab/split-records-mutants.json
 the comment wiring passes no shared port | src/bootstrap/wiring/comments.ts | src/test/shared-native-typed-boxes-mapped-app.test.mjs | tests/collab/split-records-mutants.json
-the record wiring for the production tags passes no shared port | src/bootstrap/wiring/production-tags.ts | src/test/shared-split-records-literals-tags-app.test.mjs | tests/collab/split-records-mutants.json
+the record wiring for the production tags passes no shared port | src/bootstrap/wiring/production-tags.ts | src/test/shared-native-registries-app.test.mjs | tests/collab/split-records-mutants.json
 a b-roll redraw takes the typed value as the comparison base even when its write was refused | src/features/broll/panel.ts | src/test/shared-native-record-drafts-mapped-app.test.mjs | tests/collab/split-records-mutants.json
 a b-roll redraw drops the unsaved text of a box that lost focus | src/features/broll/panel.ts | src/test/shared-native-record-drafts-app.test.mjs | tests/collab/split-records-mutants.json
 a tag panel redraw drops a box's unsaved text | src/features/tags/panels.ts | src/test/shared-native-record-drafts-app.test.mjs | tests/collab/split-records-mutants.json
@@ -1063,3 +1063,5 @@ Six Split selection edits retire with the old command port. The old capture sett
 All 17 standalone Escape rows run alongside native allowed, held and refused cases. B-roll submit, tag notes and reply draft retention each fail independently under the corresponding edit. The reply edit uses the live comment lifetime accessor. The isolated comment feature still catches a Cancel that erases the body before an older shared command can report a refusal.
 
 The production switch receives a backend factory explicitly. Its nested-entry guard still fails on the native reentrant-entry case. The isolated adapter factory retains setup and destruction error ordering. Its destroy retry, author client prefix, absent-author answer, increasing command serial, and post-commit undo error reporting each have an independent failing edit on the isolated test target.
+
+The native record controls and literals suites exercise the 32 held rows and 20 successful B-roll and tag rows in both delivery orders. Native owner selectors restore the published value on refusal and keep focus. Isolated command and feature tests retain older command payload checks. The native cases check refusal notices, pending draft and selection state, replica agreement, and standalone history isolation.

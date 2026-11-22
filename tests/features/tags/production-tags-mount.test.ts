@@ -1,7 +1,8 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
-import { startProductionTags, registerProductionTag, scheduleProductionRefresh, scheduleUntaggedScan, tagsInField, onTagged, announceTagged, openTagComposer, applyTag, healTagRegistry } from "../../../src/features/tags/production-tags.ts";
+import { startProductionTags, findOrAddPerson, registerProductionTag, scheduleProductionRefresh, scheduleUntaggedScan, tagsInField, onTagged, announceTagged, openTagComposer, applyTag, healTagRegistry } from "../../../src/features/tags/production-tags.ts";
+import { createSessionCapabilities } from "../../../src/application/session/capabilities.ts";
 import type { CommandOutcome } from "../../../src/application/session/document-session.ts";
 import type { ProductionTagPorts } from "../../../src/features/tags/ports.ts";
 import { fakeDocument, fakeEdits, fakeNotices, fakeSharedCommands, fakeStandaloneRecords } from "../fakes.ts";
@@ -307,3 +308,22 @@ for (const remount of [false, true]) {
     }
   });
 }
+
+test("registering a tag and finding a new person plan shared registry writes in isolation", () => {
+  const h = fixture();
+  const doc = migrateRows({ title: "Production", rows: [{ id: "R1" }] }, h.migration.ports);
+  const { document } = fakeDocument(doc);
+  const shared = { author: () => ({ id: "editor_1", by: "Ada" }), ranks: () => [], heads: () => [] };
+  const owner = startProductionTags({ ...h.ports, document, shared: { ports: () => shared, refused: () => assert.fail("registry write refused") } });
+  try {
+    registerProductionTag("prop", "Mug");
+    findOrAddPerson("Ada");
+    assert.deepEqual(h.edits.ran.map(command => command.name), ["register-tag", "add-person"]);
+    const capabilities = createSessionCapabilities("shared", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) });
+    for (const command of h.edits.ran) {
+      const plan = command.plan(doc, capabilities);
+      assert.ok(plan && !("refused" in plan) && plan.shared);
+      assert.deepEqual(plan.shared.operations.map(operation => operation.kind), ["record-create"]);
+    }
+  } finally { owner.dispose(); }
+});
