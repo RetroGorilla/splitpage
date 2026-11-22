@@ -1306,6 +1306,13 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   function show(selection: NativeUndoSelection): void {
     if (selection.head.target.cell === "visual") {
       const { beat } = selection.head.target;
+      if (document.activeElement?.id === "writer-doc" && document.querySelector(".wr-flow-visual-box[hidden]")) {
+        const flow = writerControls()?.writerFlowControl();
+        const range = flow?.selection();
+        // why: placing Visual's caret in a hidden box leaves Writer focus with selection outside its editing host
+        if (flow && range) flow.place(range);
+        return;
+      }
       let cell = visualTextSurface.cell(beat);
       if (!cell) {
         writerControls()?.writerFlowControl()?.openVisual(beat);
