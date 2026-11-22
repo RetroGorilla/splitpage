@@ -1,9 +1,11 @@
+import { legacySessionParts } from "./legacy-shared-switch-support.ts";
+import type { LegacySharedSwitchPorts } from "./legacy-shared-switch-support.ts";
+import { enterLegacySharedSession } from "./legacy-shared-switch-support.ts";
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { bootApp, closeApp } from "../../src/test/_app-boot.mjs";
 import { stopApp } from "../../src/bootstrap/app.ts";
-import { enterSharedSession, leaveSharedSession, sharedSessionParts } from "../../src/bootstrap/wiring/shared-session.ts";
-import type { SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
+import { leaveSharedSession } from "../../src/bootstrap/wiring/shared-session.ts";
 import { currentCapabilities, currentDocument, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
 import { documentTransitions } from "../../src/bootstrap/wiring/transition-owners.ts";
 import { openingStatus } from "../../src/bootstrap/wiring/ports/transitions.ts";
@@ -34,7 +36,7 @@ async function share() {
   documentTransitions().open({ from: { raw: structuredClone(source) }, reason: "C8 fixture" });
   const errors: unknown[] = [];
   const standalone = currentCapabilities();
-  const ports: SharedSwitchPorts = {
+  const ports: LegacySharedSwitchPorts = {
     opening: openingStatus,
     commandRefused: undefined,
     refusal: () => null, settle: () => {}, detach: () => {},
@@ -44,8 +46,8 @@ async function share() {
   };
   // why: C7 has not replaced Split's standalone undo tracking; these entry tests mount only the shared owners.
   stopRowsRenderFeature();
-  assert.deepEqual(await enterSharedSession(ports), { ok: true });
-  const parts = sharedSessionParts(); assert.ok(parts);
+  assert.deepEqual(await enterLegacySharedSession(ports), { ok: true });
+  const parts = legacySessionParts(); assert.ok(parts);
   assert.deepEqual(errors, []);
   return { parts, close: () => { assert.deepEqual(leaveSharedSession(ports), { ok: true }); assert.deepEqual(errors, []); mountRowsRenderFeature(); } };
 }
@@ -96,7 +98,7 @@ test("D13: the real history wiring refuses a merge-snapshot restore while shared
     assert.deepEqual(encodeSharedState(page.parts.handle), before);
     assert.deepEqual(page.parts.undo.sizes(), undo);
     assert.equal(sharedSession(), true);
-    assert.equal(sharedSessionParts(), page.parts);
+    assert.equal(legacySessionParts(), page.parts);
   } finally { Object.assign(history, kept); page.close(); }
 });
 
@@ -108,7 +110,7 @@ test("C8: the real draft recovery wiring keeps a refused restore while shared", 
     assert.deepEqual(encodeSharedState(page.parts.handle), before);
     assert.deepEqual(page.parts.undo.sizes(), undo);
     assert.equal(sharedSession(), true);
-    assert.equal(sharedSessionParts(), page.parts);
+    assert.equal(legacySessionParts(), page.parts);
   } finally { page.close(); }
 });
 
@@ -121,7 +123,7 @@ test("C8: prompter launch reads the projection and keeps the shared owner", asyn
     assert.equal(document.getElementById("prompter")?.hidden, false);
     assert.match(document.getElementById("prompter-content")?.textContent ?? "", /Read this shared projection\./);
     assert.equal(sharedSession(), true);
-    assert.equal(sharedSessionParts(), page.parts);
+    assert.equal(legacySessionParts(), page.parts);
     assert.deepEqual(encodeSharedState(page.parts.handle), before);
     assert.deepEqual(page.parts.undo.sizes(), undo);
   } finally { page.close(); }
@@ -134,6 +136,6 @@ test("rule 74: automatic last-file resume never runs over the shared owner", asy
     await localFilesOwner().tryResumeLastProject();
     assert.deepEqual(encodeSharedState(page.parts.handle), before);
     assert.deepEqual(page.parts.undo.sizes(), undo);
-    assert.equal(sharedSessionParts(), page.parts);
+    assert.equal(legacySessionParts(), page.parts);
   } finally { page.close(); }
 });

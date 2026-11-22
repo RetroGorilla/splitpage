@@ -7,7 +7,7 @@ import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { sidePanels } from "../bootstrap/wiring/ports/panels.ts";
 import { setCellSelection } from "../features/common/cell-selection.ts";
 import { closeBrollPage, openBrollPage, openBrollPanel, runBrollRefresh } from "../features/broll/panel.ts";
-import { armDeleteComment, closeCommentComposer, openCommentsPanel, renderComments, setCommentFilterMode } from "../features/comments/comments.ts";
+import { armDeleteComment, closeCommentComposer, openCommentsPanel, renderComments, setCommentFilterMode, toggleResolve } from "../features/comments/comments.ts";
 import { openGearPanel, openProductionPanel, renderProduction, toggleCardSelection } from "../features/tags/panels.ts";
 
 window.Element.prototype.scrollBy = () => {};
@@ -271,6 +271,7 @@ test("a refused note is cleared on leave and a new native session only saves on 
   openShot();
   const release = hold(t);
   blur(type(notes, "Wide take"));
+  copies(doc => shot(doc).notes, "");
   release();
   assert.deepEqual(hook.leave(), { ok: true });
   adopt();
@@ -284,6 +285,7 @@ test("a refused note is cleared on leave and a new native session only saves on 
   openShot();
   const releaseSecond = hold(t);
   blur(type(notes, "Wide take"));
+  copies(doc => shot(doc).notes, "");
   releaseSecond();
   assert.deepEqual(hook.leave(), { ok: true });
   adopt();
@@ -708,3 +710,60 @@ for (const remove of [false, true]) {
     copies(doc => doc.comments.map(entry => entry.replies), remove ? [] : [[]]);
   });
 }
+
+test("a held comment delete keeps its open menu so it can be tried again", async t => {
+  const show = await enter(t);
+  openCommentsPanel();
+  const menu = '[data-action="comment-menu"][data-id="thread"]';
+  const remove = '[data-action="delete-comment"][data-id="thread"]';
+  click(menu);
+  click(remove);
+  const release = hold(t);
+  const before = hook.read();
+  click(remove);
+  renderComments();
+  assert.equal(need(menu).getAttribute("aria-expanded"), "true");
+  assert.deepEqual(hook.read(), before);
+  assert.deepEqual(warnings(show), [refused]);
+  release();
+  click(remove);
+  click(remove);
+  await update();
+  copies(doc => doc.comments.map(comment => comment.id), []);
+});
+
+test("a held comment resolve warns once without writing", async t => {
+  const show = await enter(t);
+  openCommentsPanel();
+  const before = hook.read();
+  const release = hold(t);
+  toggleResolve("thread");
+  renderComments();
+  assert.deepEqual(hook.read(), before);
+  assert.deepEqual(warnings(show), [refused]);
+  release();
+  assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
+});
+
+test("B-roll bulk Mark filmed keeps the selected shot on refusal and saves on retry", async t => {
+  const show = await enter(t);
+  openShot();
+  const selected = window.__brollTest.selected();
+  for (const id of selected) if (id !== "b1") selectShot(id);
+  if (!selected.includes("b1")) selectShot("b1");
+  const button = '#broll-panel [data-action="broll-bulk-shot"]';
+  assert.deepEqual(window.__brollTest.selected(), ["b1"]);
+  const release = hold(t);
+  const before = hook.read();
+  click(button);
+  runBrollRefresh();
+  assert.deepEqual(window.__brollTest.selected(), ["b1"]);
+  assert.deepEqual(hook.read(), before);
+  assert.deepEqual(warnings(show), [refused]);
+  release();
+  click(button);
+  await update();
+  copies(doc => doc.brollShots.map(shot => shot.status), ["shot", "unshot"]);
+  assert.equal(hook.nativePeer.step("undo").kind, "written");
+  assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
+});

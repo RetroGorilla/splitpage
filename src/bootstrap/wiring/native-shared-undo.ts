@@ -53,7 +53,6 @@ export function nativeUndoRoute({ native, admission, input, publish }: NativeUnd
       if (typing) typing.endGroup();
       else native.endTypingGroup();
     },
-    replayed: () => null,
     replay: (direction: UndoDirection) => {
       if (marking()) performance.mark("measure:input-command:start");
       try {

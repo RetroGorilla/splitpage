@@ -7,6 +7,7 @@ import type { NewBrollPorts, RemoveTagPorts } from "../../../src/application/com
 import { brollPropKey } from "../../../src/core/document/broll.ts";
 import { SCHEMA_VERSION } from "../../../src/core/document/fields.ts";
 import { retagMentions, retagRewrites } from "../../../src/application/commands/tag-rewrites.ts";
+import { createSessionCapabilities } from "../../../src/application/session/capabilities.ts";
 import type { Command } from "../../../src/application/session/document-session.ts";
 import type { StampPorts } from "../../../src/application/session/ports.ts";
 import { harness, runConfined } from "../session-fakes.ts";
@@ -192,4 +193,25 @@ test("removing a shot prop reports whether anything was removed", () => {
 test("removing a prop from a shot that does not exist reports false", () => {
   const h = opened();
   assert.equal(removeBrollProp("nope", "n:mug", rig(h).ports), false);
+});
+
+test("isolated production actions plan shared writes for shot creation and prop removal", () => {
+  const h = opened({ brollShots: [{ id: "bs1", name: "Pier", props: [{ name: "Mug" }] }] });
+  const r = rig(h);
+  const capabilities = createSessionCapabilities("shared", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) });
+  const shared = { author: () => ({ id: "editor_1", by: "Fixture Editor" }), ranks: () => [], heads: () => [] };
+  const planned: string[][] = [];
+  const ports: NewBrollPorts = { ...r.ports, run: () => { assert.fail("shared action used the standalone route"); },
+    edit: build => h.session.read(doc => {
+      assert.ok(doc);
+      const plan = build(shared).plan(doc, capabilities);
+      assert.ok(plan && !("refused" in plan) && plan.shared);
+      planned.push(plan.shared.operations.map(operation => operation.kind));
+      return true;
+    })
+  };
+  assert.equal(newBrollRecord({ name: "Docks" }, ports)?.name, "Docks");
+  const prop = shots(h)[0]?.props[0] as { name: string; id: string };
+  assert.equal(removeBrollProp("bs1", brollPropKey(prop.id, prop.name), ports), true);
+  assert.deepEqual(planned, [["record-create"], ["record-set"]]);
 });

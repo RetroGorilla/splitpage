@@ -4,8 +4,8 @@ import { createRequire } from "node:module";
 import { Stage1ExecutorHarness } from "../../adapters/collab/stage1-executor-support.ts";
 import { sharedHarness } from "../../application/session/shared-session-support.ts";
 import { adapterReplica } from "../../application/session/legacy-shared-session-support.ts";
-import { sharedBufferPorts } from "../../../src/bootstrap/wiring/ports/shared-buffer.ts";
-import { sharedSceneCreation } from "../../../src/bootstrap/wiring/ports/shared-scenes.ts";
+import { sharedBufferPorts } from "../../collab/editor-ports/shared-buffer.ts";
+import { sharedSceneCreation } from "./scene-create-adapter.ts";
 import { createBufferedField } from "../../../src/application/editing/buffered-field.ts";
 import { createPaintedBeats } from "../../../src/application/editing/painted-beats.ts";
 import { mountSceneControls } from "../../../src/features/rows/scene-controls.ts";
@@ -14,7 +14,7 @@ import { deriveDocumentNumbering } from "../../../src/core/document/numbering.ts
 import { sceneGroups } from "../../../src/core/document/scenes.ts";
 import { registerSharedHeadingHandlers } from "../../../src/adapters/collab/heading-executor.ts";
 import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/removal-executor.ts";
-import { fakeNotices, fakeStandaloneStructure, fakeWriterBufferEffects } from "../fakes.ts";
+import { fakeNotices, fakeWriterBufferEffects } from "../fakes.ts";
 import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
 import { edgeInput } from "../edge-input.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
@@ -69,7 +69,6 @@ export function sceneCreationPages() {
       edits: { allowed: () => true, run: command => { standalone.push(command.name); return { kind: "noop" }; } },
       scenes: createSceneView(), focus: { focusedRow: () => {} }, drag: { dragging: () => null, end: () => {} },
       ids: { id: () => { standalone.push("id"); return "created"; } }, notices: fakeNotices().notices, scroll: () => {}, stopScroll: () => {},
-      structure: fakeStandaloneStructure(),
       sharedScenes: sharedSceneCreation(handle, a.session, author),
       sharedNames: {
         field: surface => createBufferedField(shared.bufferedText, surface), painted: createPaintedBeats(shared.paintedText), report: effects.report,

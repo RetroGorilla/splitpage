@@ -4,10 +4,10 @@ import assert from "node:assert/strict";
 import { deriveDocumentNumbering } from "../../../src/core/document/numbering.ts";
 import type { CommentStatePorts } from "../../../src/features/comments/ports.ts";
 import type { SharedCommentPorts } from "../../../src/application/commands/comments.ts";
-import type { Command } from "../../../src/application/session/document-session.ts";
+import type { Command, CommandOutcome } from "../../../src/application/session/document-session.ts";
 import { createSessionCapabilities } from "../../../src/application/session/capabilities.ts";
 import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
-import { armDeleteComment, closeCommentComposer, openCommentComposer, setCommentAssignee, startComments, toggleResolve } from "../../../src/features/comments/comments.ts";
+import { armDeleteComment, closeCommentComposer, openCommentComposer, postReply, setCommentAssignee, startComments, toggleResolve } from "../../../src/features/comments/comments.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
@@ -20,15 +20,16 @@ const SOURCE: Record<string, unknown> = {
 };
 const DOC: ValidatedDocument = { ...migrateRows({}, fakeMigration().ports), ...SOURCE };
 
-function fixture(shared: SharedCommentPorts | null) {
+function fixture(shared: SharedCommentPorts | null, outcome: () => CommandOutcome = () => ({ kind: "noop" })) {
   document.body.innerHTML = '<div id="comment-modal" hidden><div id="comment-modal-quote"></div><input id="comment-name"><div id="comment-body-editable"></div></div>'
     + '<div id="comments-panel" hidden></div>';
   const commands: Command[] = [];
+  const refusals: CommandOutcome[] = [];
   const clock = { nowIso: () => AT };
   const ports: CommentStatePorts = {
     sort: { current: () => "position", choose: () => "position" },
     document: { numbering: () => deriveDocumentNumbering({ rows: [] }), current: () => DOC, read: (select) => select(DOC) },
-    edits: { edit: (command) => { commands.push(command); return true; }, run: (command) => { commands.push(command); return { kind: "noop" }; },
+    edits: { edit: (command) => { commands.push(command); return true; }, run: (command) => { commands.push(command); return outcome(); },
       stamps: { clock, editor: { name: () => "Ada" } } },
     notices: { show: () => ({ isConnected: false, dismiss: () => {}, removeEventListener: () => {} }) },
     preferences: {
@@ -49,9 +50,9 @@ function fixture(shared: SharedCommentPorts | null) {
     shots: { reveal: () => {} },
     pictures: { imgHtml: () => "" },
     clearDraftUndo: () => {},
-    shared: { ports: () => shared, refused: () => { throw new Error("no refusal expected"); } }
+    shared: { ports: () => shared, refused: outcome => { refusals.push(outcome); } }
   };
-  return { ports, commands };
+  return { ports, commands, refusals };
 }
 
 function planned(commands: readonly Command[]) {
@@ -79,6 +80,7 @@ test("D26: the comment feature passes its shared ports to resolve, assign and de
     drive();
     const comment = { collection: "comments", record: "C1" };
     const set = (id: string, field: string, value: unknown) => ({ kind: "record-set", id, by: "Ada", target: comment, field, value });
+    assert.deepEqual(fake.refusals, []);
     assert.deepEqual(planned(fake.commands), [
       { operations: [set("w1_1:resolution-stamp", "resolution-stamp", { at: AT, by: "Ada", resolution: { resolved: true, resolvedAt: AT, resolvedBy: "Ada" } }),
         set("w1_1:updatedAt", "updatedAt", AT)], undo: false },
@@ -96,6 +98,52 @@ test("D26: with no shared ports the comment feature plans standalone commands", 
   const owner = startComments(fake.ports);
   try {
     drive();
+    assert.deepEqual(fake.refusals, []);
     assert.deepEqual(planned(fake.commands), [undefined, undefined, undefined, undefined]);
+  } finally { owner.dispose(); }
+});
+
+test("a refused legacy comment cancellation keeps the visible typed body", () => {
+  const refusal = { kind: "rejected", reason: "buffer-pending" } as const;
+  const fake = fixture({ author: () => ({ id: "w1_1", by: "Ada" }), cells: createFlowLoadRuntime().cells }, () => refusal);
+  const owner = startComments(fake.ports);
+  try {
+    openCommentComposer({ id: "C1", rowId: "R1", field: "audioText", quotedText: "bc" });
+    const body = document.getElementById("comment-body-editable") as HTMLElement;
+    body.innerHTML = "First";
+    closeCommentComposer(true);
+    assert.equal(body.innerHTML, "First");
+    assert.equal((document.getElementById("comment-modal") as HTMLElement).hidden, false);
+    assert.deepEqual(fake.refusals, [refusal]);
+  } finally { owner.dispose(); }
+});
+
+test("a refused legacy comment assignment reports its outcome", () => {
+  const refusal = { kind: "rejected", reason: "buffer-pending" } as const;
+  const fake = fixture({ author: () => ({ id: "w1_1", by: "Ada" }), cells: createFlowLoadRuntime().cells }, () => refusal);
+  const owner = startComments(fake.ports);
+  try {
+    setCommentAssignee("C1", "Bob");
+    assert.deepEqual(fake.refusals, [refusal]);
+    assert.deepEqual(planned(fake.commands), [{
+      operations: [
+        { kind: "record-set", id: "w1_1:assignee", by: "Ada", target: { collection: "comments", record: "C1" }, field: "assignee", value: "Bob" },
+        { kind: "record-set", id: "w1_1:updatedAt", by: "Ada", target: { collection: "comments", record: "C1" }, field: "updatedAt", value: AT }
+      ]
+    }]);
+  } finally { owner.dispose(); }
+});
+
+test("posting a reply plans the shared record append through isolated feature ports", () => {
+  const fake = fixture({ author: () => ({ id: "w1_1", by: "Ada" }), cells: createFlowLoadRuntime().cells });
+  const owner = startComments(fake.ports);
+  try {
+    const panel = document.getElementById("comments-panel");
+    assert.ok(panel);
+    panel.innerHTML = '<div class="reply-composer" data-for="C1"><input class="reply-name-input" value="Ada"><div class="cell-editable">First</div></div>';
+    postReply("C1");
+    const [shared] = planned(fake.commands);
+    assert.ok(shared?.operations.length);
+    assert.deepEqual(shared.operations.map(operation => operation.kind), ["record-create", "record-set"]);
   } finally { owner.dispose(); }
 });

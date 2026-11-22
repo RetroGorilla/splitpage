@@ -11,7 +11,6 @@ import { localFilesOwner } from "../../src/bootstrap/wiring/local-files.ts";
 import { stopRowsRenderFeature } from "../../src/bootstrap/wiring/render.ts";
 import { setHome } from "../../src/bootstrap/wiring/location-owner.ts";
 import { migrateRows } from "../../src/bootstrap/document-ports.ts";
-import { fromHtml } from "../../src/bootstrap/richtext.ts";
 import { fakeClock } from "../application/session-fakes.ts";
 
 const SOURCE = { title: "Captured script", rows: [{ id: "R1", audioText: "Captured words" }] };
@@ -42,14 +41,13 @@ export function nativeEntrySwitchFixture() {
   const standalone = currentCapabilities(), errors: unknown[] = [];
   const ports: SharedSwitchPorts = {
     opening: openingStatus, commandRefused: undefined, refusal: () => null, settle: () => {}, detach: () => {},
-    bindings: { enter: () => {}, settle: () => null, leave: () => {} }, common: standalone, standalone,
+    common: standalone, standalone,
     migrate: migrateRows, docId: () => "d" + String(++serial).padStart(32, "0"), editor: () => "Editor",
-    structure: { cells: fromHtml }, timers: fakeClock(), now: () => 0, report: error => { errors.push(error); }
+    timers: fakeClock(), now: () => 0, report: error => { errors.push(error); }
   };
   return {
     ports,
     errors,
-    enter: () => enterSharedSession(ports),
     enterNative: (customPorts: SharedSwitchPorts = ports) => {
       const opened: { value?: ReturnType<typeof openNativeEditor> } = {};
       return enterSharedSession(customPorts, (doc, failed) => {

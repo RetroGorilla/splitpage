@@ -13,10 +13,7 @@ type Row = { readonly registers: string } | { readonly holdsNothing: string } | 
 const SURFACES: Readonly<Record<string, Row>> = {
   "application/editing/buffered-field.ts": { registers: "const stopAbandonment = ports.abandonment?.(abandon);" },
   "features/writer/flow-buffer.ts": { registers: "createBufferedField(ports" },
-  "bootstrap/wiring/ports/writer-visual-buffer.ts": { registers: "const stopAbandonment = shared.bufferedText.abandonment?.(abandon);" },
   "features/empty-script/empty-script.ts": { registers: "abandoning = ports.abandonment?.(abandon);" },
-  "bootstrap/wiring/split-buffer.ts": { registers: "abandonment: abandon => shared.bufferedText.abandonment?.(final => {" },
-  "bootstrap/wiring/buffered-input.ts": { registers: "abandonment: abandon => shared.bufferedText.abandonment?.(final => {" },
   "features/rows/scene-controls.ts": { notSharedYet: "#1591" }
 };
 
@@ -33,7 +30,7 @@ const source = (path: string): string => readFileSync(join(REPO, "src", path), "
 test("every surface that can hold an uncommitted shared edit or composition has an abandonment row, and every registered row registers", () => {
   const holders = modules().filter(path => HOLDS.some(pattern => pattern.test(source(path)))).sort();
   assert.deepEqual(holders, Object.keys(SURFACES).sort(),
-    "a surface that admits shared commands or holds a buffered edit must register for abandonment (SharedBindings.abandon and drop) and add its row here");
+    "a surface that admits shared commands or holds a buffered edit must register for abandonment and add its row here");
   for (const [path, row] of Object.entries(SURFACES)) {
     if ("registers" in row) assert.ok(source(path).includes(row.registers), path + " registers its abandon step");
     if ("notSharedYet" in row) {

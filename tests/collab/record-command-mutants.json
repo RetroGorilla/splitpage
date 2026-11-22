@@ -92,12 +92,12 @@
     "replace": "return out;"
   }, {
     "label": "the record ports read no stored ranks",
-    "file": "src/bootstrap/wiring/ports/shared-records.ts",
+    "file": "tests/collab/editor-ports/shared-records.ts",
     "find": "return handle ? readSharedRecords(handle, collection).flatMap(record => typeof record.fields.rank === \"string\" ? [record.fields.rank] : []) : [];",
     "replace": "return [];"
   }, {
     "label": "the record ports read no status heads",
-    "file": "src/bootstrap/wiring/ports/shared-records.ts",
+    "file": "tests/collab/editor-ports/shared-records.ts",
     "find": "return handle ? readSharedStatusHeads(handle, { scope, record: record as SharedContentRef }) : [];",
     "replace": "return [];"
   }, {

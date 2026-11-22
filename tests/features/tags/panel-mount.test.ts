@@ -3,7 +3,8 @@ import { clickProductionOutline, changeProductionOutline, revealProductionItem }
 import test from "node:test";
 import assert from "node:assert/strict";
 import { jsdomWindow } from "../editing/jsdom.mjs";
-import { startTagPanels, IS_TOUCH, openProductionPanel, saveTagRename, setTagNotes, tagAllMentions } from "../../../src/features/tags/panels.ts";
+import { addPersonForTag, applyGearQuickAdd, armDeleteTag, armPersonDelete, bulkDeleteSelected, startTagPanels, IS_TOUCH, openProductionPanel, saveTagRename, setTagNotes, tagAllMentions } from "../../../src/features/tags/panels.ts";
+import { createSessionCapabilities } from "../../../src/application/session/capabilities.ts";
 import type { TagPanelPorts } from "../../../src/features/tags/ports.ts";
 import { createProductionSelection } from "../../../src/application/editing/production-selection.ts";
 import { createDeleteConfirm } from "../../../src/application/editing/delete-confirm.ts";
@@ -560,4 +561,45 @@ test("the teleprompter hand-off forwards all five commands and releases only its
   assert.deepEqual(calls, [["second", "render"], ["second", "rename", "hat", "cap"], ["second", "person", "hat", "Alice"], ["second", "owner", "hat", "ada"], ["second", "notes", "hat", "Packed"]]);
   second();
   assert.throws(commands.renderProduction, /not installed yet/);
+});
+
+const isolatedRegistryActions = [
+  { name: "Gear quick add", act: () => {
+    const box = win.document.createElement("textarea");
+    box.id = "gear-quickadd-input";
+    box.value = "Crane";
+    win.document.body.append(box);
+    applyGearQuickAdd();
+  }, kind: "record-create" },
+  { name: "deleting a tag from its card", act: () => {
+    const button = win.document.createElement("button");
+    armDeleteTag(button, "gear hat");
+    armDeleteTag(button, "gear hat");
+  }, kind: "record-delete" },
+  { name: "bulk deleting selected tags", act: (h: ReturnType<typeof fixture>) => {
+    h.selection.toggle("gear hat");
+    bulkDeleteSelected();
+  }, kind: "record-delete" },
+  { name: "adding a person from the production panel", act: () => { addPersonForTag(null, "Bo"); }, kind: "record-create" },
+  { name: "deleting a person", act: () => {
+    const button = win.document.createElement("button");
+    armPersonDelete(button, "p1");
+    armPersonDelete(button, "p1");
+  }, kind: "record-delete" }
+];
+
+for (const action of isolatedRegistryActions) test("isolated tag panel shared planning: " + action.name, () => {
+  const h = fixture("gear");
+  const doc = { ...h.doc, people: [{ id: "p1", name: "Ada" }] };
+  h.document.replace(doc);
+  const shared = { author: () => ({ id: "editor_1", by: "Ada" }), ranks: () => [], heads: () => [] };
+  const owner = startTagPanels({ ...h.ports, shared: { ports: () => shared, refused: () => assert.fail("registry write refused") } });
+  try {
+    action.act(h);
+    assert.equal(h.edits.ran.length, 1);
+    const capabilities = createSessionCapabilities("shared", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) });
+    const plan = h.edits.ran[0]?.plan(doc, capabilities);
+    assert.ok(plan && !("refused" in plan) && plan.shared);
+    assert.ok(plan.shared.operations.some(operation => operation.kind === action.kind));
+  } finally { owner.dispose(); }
 });

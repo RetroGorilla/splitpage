@@ -57,7 +57,7 @@
     "replace": "content: [{ value: \"\", marks: [] }]"
   }, {
     "label": "the binding follows a caller alias instead of the canonical heading",
-    "file": "src/bootstrap/wiring/ports/shared-scenes.ts",
+    "file": "tests/features/rows/scene-create-adapter.ts",
     "find": "? heading : null, outcome",
     "replace": "? \"scene_\" + next.id : null, outcome"
   }]

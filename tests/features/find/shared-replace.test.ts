@@ -1,7 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { cellOf } from "../../../src/bootstrap/richtext.ts";
-import { sharedRewritePorts } from "../../../src/bootstrap/wiring/ports/shared-rewrites.ts";
 import { rewriteCellsCommand } from "../../../src/application/commands/document-edit.ts";
 import { encodeSharedState, readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
@@ -13,7 +12,7 @@ import { harness } from "../../application/session-fakes.ts";
 import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
 import { fakeNotices } from "../fakes.ts";
 import {
-  FIND_ORDERS as ORDERS, findSource as source, finder, findAct as act, findReplicas as setup, findCopy as copy, rowCells as cells, stampedCells as expected,
+  sharedRewritePorts, FIND_ORDERS as ORDERS, findSource as source, finder, findAct as act, findReplicas as setup, findCopy as copy, rowCells as cells, stampedCells as expected,
   agreedRows as agreeing, deliverAll as flush, sendAs as send, typedAt as typing, deletedAt as deleting, shownMessages as messages
 } from "./shared-replace-support.ts";
 

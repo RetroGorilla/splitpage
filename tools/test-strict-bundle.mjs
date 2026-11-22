@@ -77,13 +77,14 @@ function checkPage(html) {
 }
 
 const output = join(REPO, "index.html");
+const retiredFixture = join(REPO, "_legacy-shared-tests.html");
 const previous = existsSync(output) ? readFileSync(output) : null;
-const fixturePage = join(REPO, "_legacy-shared-tests.html");
-const previousFixture = existsSync(fixturePage) ? readFileSync(fixturePage) : null;
 const previousDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
 try {
   for (const flags of [["--test"], []]) {
+    if (!existsSync(retiredFixture)) writeFileSync(retiredFixture, "<!doctype html><title>Stale collaboration fixture</title>");
     execFileSync(process.execPath, ["build.mjs", ...flags], { cwd: REPO, stdio: "pipe", timeout: 60000 });
+    assert.equal(existsSync(retiredFixture), false, "a rebuild removes the retired collaboration fixture");
     const html = readFileSync(output, "utf8");
     const script = checkPage(html);
     const dom = new JSDOM(html);
@@ -96,20 +97,12 @@ try {
       dom.window.close();
     }
     console.log("  ok   " + (flags.length ? "test" : "release") + " bundle and SplitShare: runtime strictness and CSP hash");
-    if (flags.length) {
-      assert.match(checkPage(readFileSync(fixturePage, "utf8")), /\b__legacySharedTest\b/);
-    } else {
-      assert.equal(existsSync(fixturePage), false, "release build removes the legacy fixture page and its inline bundle");
-      assert.doesNotMatch(script, /\b__legacySharedTest\b/);
-      console.log("  ok   release build removes the legacy fixture after a test build in the same directory");
-    }
   }
 } finally {
   if (previousDocument) Object.defineProperty(globalThis, "document", previousDocument);
   else delete globalThis.document;
   if (previous) writeFileSync(output, previous);
   else if (existsSync(output)) unlinkSync(output);
-  if (previousFixture) writeFileSync(fixturePage, previousFixture);
-  else if (existsSync(fixturePage)) unlinkSync(fixturePage);
+  if (existsSync(retiredFixture)) unlinkSync(retiredFixture);
 }
-console.log("3 passed, 0 failed");
+console.log("2 passed, 0 failed");

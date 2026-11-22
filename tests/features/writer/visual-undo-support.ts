@@ -6,8 +6,8 @@ import { adapterReplica } from "../../application/session/legacy-shared-session-
 import type { SharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
 import { createPaintGuard } from "../../../src/application/editing/paint-guard.ts";
 import { createFlowVisualBox } from "../../../src/features/writer/flow-visual-box.ts";
-import { writerVisualBuffer } from "../../../src/bootstrap/wiring/ports/writer-visual-buffer.ts";
-import { sharedBufferPorts } from "../../../src/bootstrap/wiring/ports/shared-buffer.ts";
+import { writerVisualBuffer } from "../../collab/editor-ports/writer-visual-buffer.ts";
+import { sharedBufferPorts } from "../../collab/editor-ports/shared-buffer.ts";
 import { caretAt, beatPos } from "../../../src/core/flow/flow.ts";
 import { fromHtml } from "../../../src/bootstrap/richtext.ts";
 import { fakeWriterBufferEffects } from "../fakes.ts";

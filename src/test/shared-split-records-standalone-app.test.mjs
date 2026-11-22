@@ -1,27 +1,35 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../bootstrap/document-ports.ts";
-import { adoptReplacement, currentDocument, sharedSession } from "../bootstrap/wiring/session-owner.ts";
+import { adoptReplacement, currentDocument, sharedRecoverySession, sharedSession } from "../bootstrap/wiring/session-owner.ts";
 import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { currentBrollRecords } from "../bootstrap/wiring/broll.ts";
 import { cellEditing } from "../bootstrap/wiring/editor-owners.ts";
 import { clearProductionSelection } from "../bootstrap/wiring/production-editing-owners.ts";
-import { sharedCommentCommands, sharedGalleryCommands, sharedRecordCommands } from "../bootstrap/wiring/ports/shared-commands.ts";
+import { sharedCommentCommands, sharedRecordCommands } from "../bootstrap/wiring/ports/shared-commands.ts";
 import { findOrAddPerson, registerProductionTag } from "../features/tags/production-tags.ts";
 import { armRemoveTag, openProductionPanel, saveTagRename } from "../features/tags/panels.ts";
 import { closeCommentComposer, toggleResolve } from "../features/comments/comments.ts";
-import { removeGallerySlot } from "../core/document/gallery.ts";
+import { moveGallerySlot, removeGallerySlot } from "../core/document/gallery.ts";
 import { tagKey } from "../core/document/tags.ts";
-import { encodeSharedState } from "../adapters/collab/document.ts";
-import { enter, tidy } from "./_shared-split-records.mjs";
-import { toastHost, warnings, clearWarnings, SOURCE, shape, brollOpen, twice, post, $, typeIn, FIRE, B1, NOOPS, noopOnce } from "./_standalone-records.mjs";
+import { toastHost, warnings, clearWarnings, SOURCE, shape, brollOpen, twice, post, $, typeIn, FIRE, B1, NOOPS, noopOnce, tidyStandalone } from "./_standalone-records.mjs";
 
-for (const noop of NOOPS) test(`C7 record no-op: ${noop.name}, shared and standalone alike, with nothing written and no warning`, async () => {
-  const f = await enter();
+for (const noop of NOOPS) test("C7 record no-op: " + noop.name + ", native and standalone alike, with nothing written and no warning", async () => {
+  writerControls().closeWriter();
+  adoptReplacement(migrateRows(structuredClone(SOURCE)));
+  const hook = window.__sharedTest;
+  assert.deepEqual(await hook.enter(), { ok: true });
   try {
-    noopOnce(noop.act, noop.cleaned, () => [encodeSharedState(f.parts.handle), f.parts.undo.sizes(), undoOwner().sizes()]);
-  } finally { tidy(f); }
+    const session = sharedRecoverySession();
+    const before = hook.nativePeer.freshSnapshot("app");
+    noopOnce(noop.act, noop.cleaned, () => [session.generation(), undoOwner().sizes(), hook.read()]);
+    assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
+    assert.deepEqual(hook.nativePeer.freshSnapshot("app"), before);
+  } finally {
+    tidyStandalone();
+    assert.deepEqual(hook.leave(), { ok: true });
+  }
   writerControls().closeWriter();
   adoptReplacement(migrateRows(structuredClone(SOURCE)));
   try {
@@ -29,12 +37,19 @@ for (const noop of NOOPS) test(`C7 record no-op: ${noop.name}, shared and standa
   } finally { closeCommentComposer(); clearProductionSelection(); }
 });
 
+test("a standalone gallery no-op writes nothing and makes no notice", () => {
+  writerControls().closeWriter();
+  adoptReplacement(migrateRows(structuredClone(SOURCE)));
+  noopOnce(() => {
+    assert.deepEqual(cellEditing().editGallery("r1", "Made the cover", row => moveGallerySlot(row, 0, 0)), { changed: false, held: false });
+  }, () => {}, () => undoOwner().sizes());
+});
+
 test("C7 record standalone: the record, picture and comment callers read no shared ports", () => {
   writerControls().closeWriter();
   adoptReplacement(migrateRows(structuredClone(SOURCE)));
   assert.equal(sharedSession(), false);
   assert.equal(sharedRecordCommands.ports(), null);
-  assert.equal(sharedGalleryCommands.ports(), null);
   assert.equal(sharedCommentCommands.ports(), null);
   clearWarnings();
   assert.equal(registerProductionTag("location", "Park"), true);

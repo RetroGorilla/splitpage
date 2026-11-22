@@ -1,5 +1,4 @@
 import type { BrollSeedPlace } from "../../application/commands/clipboard.ts";
-import type { SharedStructureCommands } from "../../application/commands/shared-structure.ts";
 import type { CellEditing, CellRange } from "../../application/editing/cell-editing.ts";
 import type { PaintGuard } from "../../application/editing/paint-guard.ts";
 import type { RowDrag } from "../../application/editing/row-drag.ts";
@@ -50,7 +49,6 @@ export interface BeatSelectPorts {
   readonly document: Pick<DocumentReader, "current">;
   readonly lifetime: Pick<CommonDocumentSession, "epoch">;
   readonly edits: Pick<DocumentEdits, "run">;
-  readonly structure: SharedStructureCommands;
   readonly undo: Pick<UndoControl, "breakCoalescing" | "flush" | "last" | "undo">;
   readonly pictures: Pick<PictureStore, "ensureBytes">;
   readonly notices: Pick<NoticePort, "show" | "showAction">;

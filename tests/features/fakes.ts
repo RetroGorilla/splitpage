@@ -26,23 +26,15 @@ export function fakeSharedCommands(): SharedCommandGuard {
   return { refuseUnsupported: () => false };
 }
 const standaloneRefusal = (): never => { throw new Error("a standalone caller reported a shared refusal"); };
-export function fakeStandaloneStructure(): SharedStructureCommands {
-  return { ports: () => null, refused: standaloneRefusal, settle: standaloneRefusal, settleSelection: standaloneRefusal };
-}
-export function fakeStandaloneValues(): SharedValueCommands {
-  return { ports: () => null, refused: standaloneRefusal };
-}
 export function fakeStandaloneRecords(): EditorRegistryCommands {
   return { native: () => null, ports: () => null, refused: standaloneRefusal };
 }
 export function fakeStandaloneGallery(): SharedGalleryCommands {
-  return { ports: () => null, refused: standaloneRefusal, done: standaloneRefusal };
+  return { editNative: () => null };
 }
 import type { SharedGalleryCommands } from "../../src/application/commands/gallery.ts";
 import type { EditorRegistryCommands } from "../../src/application/commands/registry-editor.ts";
-import type { SharedStructureCommands } from "../../src/application/commands/shared-structure.ts";
 import type { SharedAdmissionAnswer } from "../../src/application/session/shared-session.ts";
-import type { SharedValueCommands } from "../../src/application/commands/shared-values.ts";
 import type { TextServices } from "../../src/application/text/services.ts";
 import type { PrompterFeaturePorts } from "../../src/features/prompter/ports.ts";
 import type { FindPorts } from "../../src/features/find/ports.ts";
@@ -618,28 +610,4 @@ export function fakeOnboardingPorts() {
     onFileMenuChoice: (listener) => { choices.add(listener); return () => { choices.delete(listener); }; }
   };
   return { ports, state, actions, panels, recorded, choices };
-}
-import type { RecoveryPanelPorts } from "../../src/features/recovery-panel/ports.ts";
-import type { SharedRecoveryEntry } from "../../src/core/collab/recovery.ts";
-import { changeSet } from "../../src/application/session/change-set.ts";
-
-export function fakeRecoveryPanelPorts(entries: readonly SharedRecoveryEntry[] = [], initial: DocumentView | null = null) {
-  const mode = new Set<() => void>(), published = new Set<() => void>(), calls: { action: string; entry: Parameters<RecoveryPanelPorts["restore"]>[0] }[] = [];
-  const notices = fakeNotices(), doc = fakeDocument(initial), host = document.body.appendChild(document.createElement("div"));
-  const state = { shared: false, currentReads: 0, reads: 0, subscriptions: 0, openedReaders: 0, modeRegistrations: 0, docReads: 0, outcome: { kind: "noop" } as CommandOutcome };
-  const reader: NonNullable<ReturnType<RecoveryPanelPorts["session"]["current"]>> = {
-    recovery: () => { state.reads++; return entries; },
-    subscribe: listener => { state.subscriptions++; state.openedReaders++; const run = () => listener({ kind: "remote", epoch: 1, generation: 1, changes: changeSet({}) }); published.add(run);
-      return () => { state.subscriptions--; published.delete(run); }; }
-  };
-  const ports: RecoveryPanelPorts = { host,
-    session: { current: () => { state.currentReads++; return state.shared ? reader : null; },
-      onChange: listener => { state.modeRegistrations++; const run = () => listener(); mode.add(run); return () => { mode.delete(run); }; } },
-    document: { current: () => { state.docReads++; return doc.document.current(); } },
-    text: { htmlToPlainText: html => String(html ?? "") }, reply: () => null, notices: notices.notices,
-    restore: entry => { calls.push({ action: "restore", entry }); return state.outcome; },
-    discard: entry => { calls.push({ action: "discard", entry }); return state.outcome; }
-  };
-  return { ports, state, calls, notices, doc, mode, published,
-    changed: () => { for (const listener of mode) listener(); }, publish: () => { for (const listener of published) listener(); } };
 }

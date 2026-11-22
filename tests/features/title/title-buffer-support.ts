@@ -4,7 +4,7 @@ import { Stage1ExecutorHarness } from "../../adapters/collab/stage1-executor-sup
 import { sharedHarness } from "../../application/session/shared-session-support.ts";
 import { adapterReplica } from "../../application/session/legacy-shared-session-support.ts";
 import type { SharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
-import { sharedBufferPorts } from "../../../src/bootstrap/wiring/ports/shared-buffer.ts";
+import { sharedBufferPorts } from "../../collab/editor-ports/shared-buffer.ts";
 import { createBufferedField } from "../../../src/application/editing/buffered-field.ts";
 import { createPaintedBeats } from "../../../src/application/editing/painted-beats.ts";
 import { TITLE_FIELD_KEY } from "../../../src/application/editing/buffered-field-key.ts";
@@ -15,8 +15,8 @@ import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
 import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
 import { sharedBufferedTarget } from "../../../src/adapters/collab/buffer.ts";
 import { edgeInput } from "../edge-input.ts";
-import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
-import { sharedBufferedInputHistory } from "../../../src/bootstrap/wiring/buffered-input.ts";
+import { sharedUndoOwner } from "../../collab/editor-ports/shared-undo.ts";
+import { sharedBufferedInputHistory } from "../buffered-input-history.ts";
 import { registerSharedUndoOperationHandlers } from "../../../src/adapters/collab/undo-handlers.ts";
 
 export type TitlePage = ReturnType<typeof sharedTitle>;

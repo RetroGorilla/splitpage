@@ -1,15 +1,15 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { joinBeatsCommand, splitBeatCommand, textCut } from "../../../src/application/commands/split-join.ts";
+import { joinBeatsCommand, splitBeatCommand, textCut, unitsCut } from "../../../src/application/commands/split-join.ts";
 import { addBeatCommand, deleteBeatCommand } from "../../../src/application/commands/rows.ts";
 import { removeBeatsCommand } from "../../../src/application/commands/beats.ts";
 import { removeSceneCommand } from "../../../src/application/commands/scenes.ts";
 import type { SharedStructurePorts } from "../../../src/application/commands/shared-structure.ts";
 import type { Command } from "../../../src/application/session/document-session.ts";
 import type { StampPorts } from "../../../src/application/session/ports.ts";
-import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
-import { sharedStructurePorts } from "../../../src/bootstrap/wiring/ports/shared-values.ts";
-import { sharedAuthorPort } from "../../../src/bootstrap/wiring/ports/shared-author.ts";
+import { sharedUndoOwner } from "../../collab/editor-ports/shared-undo.ts";
+import { sharedStructurePorts } from "../../collab/editor-ports/shared-values.ts";
+import { sharedAuthorPort } from "../../collab/editor-ports/shared-author.ts";
 import { registerSharedOperationFamilies } from "../../../src/adapters/collab/operation-families.ts";
 import { createSharedDocument, applySharedUpdate, destroySharedDocument, encodeSharedState, readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
@@ -25,7 +25,7 @@ import { createSessionCapabilities } from "../../../src/application/session/capa
 import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import type { SharedOperation } from "../../../src/core/collab/operations.ts";
+import type { SharedContentRef, SharedOperation } from "../../../src/core/collab/operations.ts";
 import type { SharedUndoRecord } from "../../../src/core/collab/undo-record.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { toPlainText } from "../../../src/core/text/projections.ts";
@@ -717,4 +717,49 @@ for (const literal of [...cases, { name: "visual split", make: visualSplit }]) t
     assert.deepEqual({ ...plan, apply: null }, { ...baseline, apply: null });
     assert.deepEqual(observe(command), expected);
   }
+});
+
+for (const order of ORDERS) test(`undo restores selected narration into the beat that survives the split undo: ${order}`, () => {
+  const h = setup(documentWith([beat("R1", { audio: "abcdef" }), beat("R2", { audio: "Other" })], null));
+  const owner = undoOwner(h.a), a = sharedHarness(adapterReplica(h.a, owner));
+  const target = { owner: "R1", segment: "R1", field: "audioText" };
+  const narration = (label: string) => agreeing(label, [h.a, h.b], order)?.document.rows.map(row => row.audioText);
+  try {
+    send(h.a, { ...typing("R1"), id: "pending", by: "Alice",
+      at: { left: flowBaseReference("R1", "audioText", 5), right: null, affinity: "after" } });
+    send(h.b, { ...typing("R1"), id: "peer-insert", at: { left: null, right: flowBaseReference("R1", "audioText", 3), affinity: "before" },
+      content: [{ value: "Z", marks: [] }] },
+    { kind: "text-delete", id: "peer-delete", by: "Bob", target, observed: [flowBaseReference("R1", "audioText", 2, 3)] });
+    flush(h.queue, order);
+    assert.deepEqual(narration("peer changes and local typing settled"), ["abZdefX", "Other"]);
+    const make: Make = (stamps, shared) => splitBeatCommand("R1", "audioText", unitsCut([[3, 4]], 2), "N1", { ...stamps, cells }, shared);
+    assert.equal(a.session.run(run(h.a, { make }, "Alice", 5)).kind, "applied");
+    flush(h.queue, order);
+    assert.deepEqual(narration("split keeps the peer insert on the new beat"), ["ab", "ZefX", "Other"]);
+    assert.deepEqual(owner.undo(), { ok: true, effective: true, label: "split-scene", selection: null });
+    flush(h.queue, order);
+    assert.deepEqual(narration("undo moves the restored text to the surviving beat"), ["abZdefX", "Other"]);
+  } finally { a.session.dispose(); h.close(); }
+});
+
+test("the structure port reports the canonical beat id for a creation operation", () => {
+  const set = setup();
+  try {
+    assert.equal(ports(set.a, stampsOf("Alice", 5)).createdBeat("w1_1_o_0" as SharedContentRef), ADD_A);
+  } finally { set.close(); }
+});
+
+for (const kind of ["add", "split"] as const) test("the isolated " + kind + " command returns the minted beat ID after commit", () => {
+  const set = setup();
+  const session = sharedHarness(adapterReplica(set.a)).session;
+  try {
+    const stamps = stampsOf("Alice", 5), shared = ports(set.a, stamps);
+    const command = kind === "add" ? addBeatCommand("R1", "N1", stamps, shared)
+      : splitBeatCommand("R1", "audioText", textCut(1, 2), "N1", { ...stamps, cells }, shared);
+    assert.equal(command.created(), null);
+    assert.equal(session.run(command).kind, "applied");
+    const expected = kind === "add" ? ADD_A : SPLIT_A;
+    assert.equal(command.created(), expected);
+    assert.equal(session.read(doc => doc?.rows[1]?.id), expected);
+  } finally { session.dispose(); set.close(); }
 });

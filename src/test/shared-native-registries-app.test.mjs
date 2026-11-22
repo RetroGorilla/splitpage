@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import { migrateRows } from "../bootstrap/document-ports.ts";
-import { adoptReplacement } from "../bootstrap/wiring/session-owner.ts";
-import { addPersonForTag, applyGearQuickAdd, armDeleteTag, armPersonDelete, bulkDeleteSelected, openGearPanel,
-  openProductionPanel, saveTagRename, setTagNotes, setTagStatus, toggleCardSelection } from "../features/tags/panels.ts";
+import { adoptReplacement, sharedRecoverySession } from "../bootstrap/wiring/session-owner.ts";
+import { addPersonForTag, applyGearQuickAdd, armDeleteTag, armRemoveTag, armPersonDelete, bulkDeleteSelected, changeProductionOutline, clickProductionOutline, openGearPanel,
+  openProductionPanel, renderProduction, saveTagRename, setTagNotes, setTagStatus, toggleCardSelection } from "../features/tags/panels.ts";
 import { findOrAddPerson, registerProductionTag } from "../features/tags/production-tags.ts";
 import { cellSelection, setCellSelection } from "../features/common/cell-selection.ts";
+import { currentBrollRecords } from "../bootstrap/wiring/broll.ts";
+import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { openBrollPanel } from "../features/broll/panel.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { namedTagId } from "../core/text/runs.ts";
@@ -159,6 +161,8 @@ test("a tag derived from cell markup reaches the panel and takes registry edits"
   bulkDeleteSelected();
   await Promise.resolve();
   assert.deepEqual(hook.read(), before);
+  renderProduction();
+  assert.equal(tagCard("prop mug").getAttribute("aria-selected"), "true");
   assert.deepEqual(show.mock.calls.map(call => call.arguments), Array(2).fill(["This is not available in a shared session yet.", "warn"]));
 });
 
@@ -601,3 +605,93 @@ for (const panel of ["production", "b-roll"]) test(`an accepted native ${panel} 
   copies(owner, "p1");
   assert.equal(select().value, "p1");
 });
+
+const heldOwnerCalls = [
+  { name: "registering a production tag", act: () => assert.equal(registerProductionTag("location", "Park"), false) },
+  { name: "finding or adding a person", act: () => assert.equal(findOrAddPerson("Cy"), "") },
+  { name: "adding a prop to a shot", act: () => assert.deepEqual(currentBrollRecords().addBrollProp("b1", "Lamp"), { changed: false, held: true }) }
+];
+
+for (const caller of heldOwnerCalls) for (const [admission, order] of [["held", "forward"], ["held", "reverse"], ["announced", "forward"]]) {
+  test(caller.name + " writes nothing and warns once when " + admission + ", " + order, async t => {
+    await enter(t, { brollShots: [{ id: "b1", name: "City", origin: "panel" }] });
+    const warning = ["This is not available in a shared session yet.", "warn"];
+    const show = t.mock.method(notices, "show", () => {});
+    hook.nativePeer.hold("updates");
+    assert.equal(hook.nativePeer.type("r1", 0, "Z").kind, "written");
+    assert.equal(hook.nativePeer.type("r1", 6, "!").kind, "written");
+    const session = sharedRecoverySession();
+    const release = admission === "held" ? session.hold("owner-call-held") : session.beforeCommand(() => {
+      notices.show(...warning);
+      return "announced";
+    });
+    try {
+      const before = [session.generation(), hook.read(), undoOwner().sizes(), hook.nativePeer.queuedUpdates()];
+      caller.act();
+      assert.deepEqual(show.mock.calls.map(call => call.arguments), [warning]);
+      assert.deepEqual([session.generation(), hook.read(), undoOwner().sizes(), hook.nativePeer.queuedUpdates()], before);
+    } finally { release(); }
+    assert.deepEqual(hook.nativePeer.release(order).map(packet => packet.to), ["app", "app"]);
+    await Promise.resolve();
+    copies(doc => doc.rows[0].audioText, "ZHello!");
+    assert.deepEqual(hook.nativePeer.freshSnapshot("app"), hook.read().app);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [warning]);
+  });
+}
+
+test("removing a tag's labels from the panel is refused even with no mentions", async t => {
+  await enter(t, { productionTags: [{ cat: "prop", name: "Lens" }] });
+  production();
+  const before = hook.read();
+  const show = t.mock.method(notices, "show", () => {});
+  const button = document.createElement("button");
+  armRemoveTag(button, "prop lens");
+  armRemoveTag(button, "prop lens");
+  assert.deepEqual(hook.read(), before);
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), [["This is not available in a shared session yet.", "warn"]]);
+});
+
+const prepChoices = [
+  { name: "Ready", notice: "Marked as Have it", act: () => {
+    const button = $("#production-list").appendChild(document.createElement("button"));
+    button.dataset.prep = "ready";
+    button.dataset.id = "prop mug";
+    try { assert.equal(clickProductionOutline({ target: button }), true); } finally { button.remove(); }
+  } },
+  { name: "status choice", notice: "Requirement status updated", act: () => {
+    const select = $("#production-list").appendChild(document.createElement("select"));
+    select.className = "prep-status-select";
+    select.dataset.key = "prop mug";
+    select.add(new window.Option("Have it", "have", true, true));
+    try { changeProductionOutline(select); } finally { select.remove(); }
+  } }
+];
+
+for (const choice of prepChoices) for (const order of ["forward", "reverse"]) {
+  test("Scene prep " + choice.name + " refuses once and offers no standalone Undo after retry, " + order, async t => {
+    await enter(t, { productionTags: [{ cat: "prop", name: "Mug" }] });
+    production("prep");
+    const show = t.mock.method(notices, "show");
+    const showAction = t.mock.method(notices, "showAction");
+    const session = sharedRecoverySession();
+    const release = session.hold("scene-prep-held");
+    hook.nativePeer.hold("updates");
+    assert.equal(hook.nativePeer.type("r1", 0, "Z").kind, "written");
+    const before = hook.read(), standalone = undoOwner().sizes();
+    try {
+      choice.act();
+      assert.deepEqual(show.mock.calls.map(call => call.arguments), [["This is not available in a shared session yet.", "warn"]]);
+      assert.deepEqual(hook.read(), before);
+    } finally { release(); }
+    assert.doesNotThrow(choice.act);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments).slice(1), [[choice.notice, "ok"]]);
+    assert.equal(showAction.mock.callCount(), 0);
+    const toast = [...document.querySelectorAll("#toast-host .toast")].find(item => item.firstChild.textContent === choice.notice);
+    assert.ok(toast);
+    assert.equal(toast.querySelector(".toast-action"), null);
+    hook.nativePeer.release(order);
+    await Promise.resolve();
+    copies(doc => [doc.rows[0].audioText, tag(doc, "Mug").status], ["ZHello", "have"]);
+    assert.deepEqual(undoOwner().sizes(), standalone);
+  });
+}

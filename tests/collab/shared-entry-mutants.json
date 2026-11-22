@@ -428,8 +428,8 @@
     {
       "label": "enter admits a nested switch into its scope",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "export async function enterSharedSession(ports: SharedSwitchPorts, open?: OpenBackend): Promise<SharedSwitchOutcome> {\n  const holdReason = sessionEntryRefusal();\n  if (holdReason) return { ok: false, reason: holdReason };",
-      "replace": "export async function enterSharedSession(ports: SharedSwitchPorts, open?: OpenBackend): Promise<SharedSwitchOutcome> {\n  const holdReason = sessionEntryRefusal();\n  void holdReason;",
+      "find": "export async function enterSharedSession(ports: SharedSwitchPorts, open: OpenBackend): Promise<SharedSwitchOutcome> {\n  const holdReason = sessionEntryRefusal();\n  if (holdReason) return { ok: false, reason: holdReason };",
+      "replace": "export async function enterSharedSession(ports: SharedSwitchPorts, open: OpenBackend): Promise<SharedSwitchOutcome> {\n  const holdReason = sessionEntryRefusal();\n  void holdReason;",
       "tests": [
         "tests/bootstrap/shared-switch.test.ts",
         "tests/bootstrap/native-shared-entry.test.ts"

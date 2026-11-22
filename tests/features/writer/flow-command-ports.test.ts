@@ -2,8 +2,8 @@ import "../../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createFlowWriter } from "../../../src/features/writer/flow-writer.ts";
-import { writerFlowCommands } from "../../../src/bootstrap/wiring/ports/writer-flow.ts";
-import { sharedAuthorPort } from "../../../src/bootstrap/wiring/ports/shared-author.ts";
+import { writerFlowCommands } from "../../collab/editor-ports/writer-flow.ts";
+import { sharedAuthorPort } from "../../collab/editor-ports/shared-author.ts";
 import { replicas } from "../../adapters/collab/executor-support.ts";
 import { sharedHarness } from "../../application/session/shared-session-support.ts";
 import { adapterReplica } from "../../application/session/legacy-shared-session-support.ts";
@@ -17,7 +17,7 @@ import { writerPage } from "./painted-base-support.ts";
 import { fakeFlowCommandEffects, fakeWriterBufferEffects, fakeNotices } from "../fakes.ts";
 import { sharedCommandRefusalNotice } from "../../../src/bootstrap/wiring/ports/shared-command-notices.ts";
 import { SHARED_SESSION_DISABLED } from "../../../src/application/session/ports.ts";
-import { sharedBufferPorts } from "../../../src/bootstrap/wiring/ports/shared-buffer.ts";
+import { sharedBufferPorts } from "../../collab/editor-ports/shared-buffer.ts";
 import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
 
 test("the Writer uses its shared command ports for formatting and asks the author once per admitted command", () => {

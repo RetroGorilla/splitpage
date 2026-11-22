@@ -74,7 +74,7 @@ eq("native adapter changes run the always-required app and root coverage only", 
 ], [true, true, false]);
 for (const files of [
   null, [], ["src/adapters/collab/document.ts"], ["src/core/text/runs.ts"], ["shared/text.ts"],
-  ["src/application/session/shared-session.ts"], ["src/bootstrap/wiring/ports/shared-buffer.ts"],
+  ["src/application/session/shared-session.ts"], ["tests/collab/editor-ports/shared-buffer.ts"],
   ["tests/adapters/collab/guarded-subscriptions.test.ts"], ["tests/collab/undo/model.ts"],
   ["tools/run-tests.mjs"], [".github/workflows/ci.yml"], [".github/actions/root-test-setup/action.yml"],
   ["package.json"], ["package-lock.json"],

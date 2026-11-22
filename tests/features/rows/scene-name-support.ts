@@ -4,7 +4,7 @@ import { Stage1ExecutorHarness } from "../../adapters/collab/stage1-executor-sup
 import { sharedHarness } from "../../application/session/shared-session-support.ts";
 import { adapterReplica } from "../../application/session/legacy-shared-session-support.ts";
 import type { SharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
-import { sharedBufferPorts } from "../../../src/bootstrap/wiring/ports/shared-buffer.ts";
+import { sharedBufferPorts } from "../../collab/editor-ports/shared-buffer.ts";
 import { createBufferedField } from "../../../src/application/editing/buffered-field.ts";
 import { createPaintedBeats } from "../../../src/application/editing/painted-beats.ts";
 import { mountSceneControls } from "../../../src/features/rows/scene-controls.ts";
@@ -12,15 +12,15 @@ import { createSceneView } from "../../../src/application/editing/scene-view.ts"
 import { deriveDocumentNumbering } from "../../../src/core/document/numbering.ts";
 import { sceneGroups } from "../../../src/core/document/scenes.ts";
 import type { DocumentView } from "../../../src/application/session/document-session.ts";
-import { fakeNotices, fakeStandaloneStructure, fakeWriterBufferEffects } from "../fakes.ts";
+import { fakeNotices, fakeWriterBufferEffects } from "../fakes.ts";
 import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
 import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
 import { sharedBufferedTarget } from "../../../src/adapters/collab/buffer.ts";
 import { edgeInput } from "../edge-input.ts";
-import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
-import { sharedBufferedInputHistory } from "../../../src/bootstrap/wiring/buffered-input.ts";
+import { sharedUndoOwner } from "../../collab/editor-ports/shared-undo.ts";
+import { sharedBufferedInputHistory } from "../buffered-input-history.ts";
 import { registerSharedUndoOperationHandlers } from "../../../src/adapters/collab/undo-handlers.ts";
-import { sharedSceneCreation } from "../../../src/bootstrap/wiring/ports/shared-scenes.ts";
+import { sharedSceneCreation } from "./scene-create-adapter.ts";
 import { registerSharedHeadingHandlers } from "../../../src/adapters/collab/heading-executor.ts";
 
 export type RenamePage = ReturnType<typeof sharedRename>;
@@ -66,7 +66,7 @@ export function sharedRename(name = "Scene", options: {
     document: { current, numbering: () => deriveDocumentNumbering(current() ?? { rows: [] }) },
     edits: { allowed: () => true, run: command => { commands.push(command.name); return { kind: "noop" }; } },
     scenes: createSceneView(), focus: { focusedRow: () => {} }, drag: { dragging: () => null, end: () => {} },
-    ids: { id: () => "created" }, notices: fakeNotices().notices, scroll: () => {}, stopScroll: () => {}, structure: fakeStandaloneStructure(),
+    ids: { id: () => "created" }, notices: fakeNotices().notices, scroll: () => {}, stopScroll: () => {},
     ...options.creation === false ? {} : { sharedScenes: sharedSceneCreation(h.a, a.session, () => ({ id: "create_scene", by: "Alice" })) },
     sharedNames: {
       history: sharedBufferedInputHistory(h.a, a.session, owner),

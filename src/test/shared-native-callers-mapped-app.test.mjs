@@ -5,18 +5,27 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import { applyNativePeerUpdate } from "../adapters/collab/native/peer-update.ts";
 import { openNativeSession } from "../adapters/collab/native/session.ts";
 import { createSessionCapabilities } from "../application/session/capabilities.ts";
+import { SHARED_ADMISSION_ANNOUNCED } from "../application/session/shared-session.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { sanitizeHtml } from "../bootstrap/richtext.ts";
 import { openNativeEditor } from "../bootstrap/wiring/native-shared-session.ts";
 import { appActions } from "../bootstrap/wiring/ports/actions.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
+import { setBeatFilmed } from "../bootstrap/wiring/beat-status.ts";
+import { promptForTarget, promptForWpm } from "../bootstrap/wiring/title-chrome.ts";
+import { setTargetLength } from "../features/rundown/target.ts";
+import { selectBeats } from "../features/clipboard/beat-select.ts";
+import { openProductionPanel } from "../features/tags/panels.ts";
+import { setBeatLength } from "../features/rows/read-time.ts";
+import { undoOwner } from "../bootstrap/wiring/undo.ts";
+import { sharedRecordCommands } from "../bootstrap/wiring/ports/shared-commands.ts";
 import { sharedCommandRefusalNotice } from "../bootstrap/wiring/ports/shared-command-notices.ts";
 import { adoptReplacement, currentDocument, sharedSession } from "../bootstrap/wiring/session-owner.ts";
 import { enterSharedSession, forceLeaveSharedSession, leaveRunningSharedSession } from "../bootstrap/wiring/shared-session.ts";
 import { currentWhoList } from "../bootstrap/wiring/who-list.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { cellSelection, setCellSelection } from "../features/common/cell-selection.ts";
-import { BEATS_MIME, buildBeatPayload } from "../features/clipboard/beat-clip.ts";
+import { BEATS_MIME, buildBeatPayload, parseBeatPayload } from "../features/clipboard/beat-clip.ts";
 import { nativeEntrySwitchFixture as entrySwitchFixture } from "../../tests/bootstrap/native-entry-switch-support.ts";
 
 window.Element.prototype.scrollBy = () => {};
@@ -121,9 +130,12 @@ async function enter(t, { rows = source, people = [], sections = [], wordsPerMin
   const toastHost = document.getElementById("toast-host");
   if (renderNotices) toastHost.replaceChildren();
   const show = renderNotices ? t.mock.method(notices, "show") : t.mock.method(notices, "show", () => {});
-  const ports = { ...fixture.ports, commandRefused: sharedCommandRefusalNotice(notices) };
+  let editRefused = false;
+  const ports = { ...fixture.ports, common: { ...fixture.ports.common,
+    edit: () => editRefused ? { allowed: false, reason: "Editing is paused." } : fixture.ports.common.edit()
+  }, commandRefused: sharedCommandRefusalNotice(notices) };
   const writer = writerControls();
-  let native;
+  let native, commandSession;
   const root = () => document.getElementById("writer-doc");
   const cell = (id = "r1", field = "audioText") => document.querySelector(view === "Split"
     ? `#rows .cell-editable[data-id="${id}"][data-field="${field}"]`
@@ -140,7 +152,10 @@ async function enter(t, { rows = source, people = [], sections = [], wordsPerMin
   assert.deepEqual(await enterSharedSession(ports, (script, failed) => {
     const opened = openNativeEditor(ports, script, failed);
     native = opened.native;
-    return opened.backend;
+    return { ...opened.backend, bind: session => {
+      commandSession = session;
+      opened.backend.bind(session);
+    } };
   }), { ok: true });
   t.after(() => {
     try {
@@ -165,7 +180,9 @@ async function enter(t, { rows = source, people = [], sections = [], wordsPerMin
     }
     return calls;
   };
-  return { native, peer, cell, place, root, writer, baseline, errors: fixture.errors, notices: readNotices };
+  return { native, peer, cell, place, root, writer, baseline, errors: fixture.errors, notices: readNotices,
+    beforeCommand: listener => commandSession.beforeCommand(listener), hold: () => commandSession.hold("test-held"),
+    refuseEdit: () => { editRefused = true; return () => { editRefused = false; }; } };
 }
 
 function agree(f, expected) {
@@ -480,6 +497,244 @@ function splitPeer(peer, id, offset) {
 }
 
 const removeButton = id => document.querySelector(`#rows .row[data-id="${id}"] [data-action="delete-row"]`);
+
+for (const command of ["delete", "cut"]) for (const route of ["keyboard", "menu"]) {
+  for (const mode of ["allowed", "capability", "hold", "silent", "announced"]) {
+    test(`Native selected beat baseline: ${command}, ${route}, ${mode}`, async t => {
+      const f = await enter(t);
+      const before = structuredClone(app()), native = f.native.encodeState(), peer = f.peer.encodeState();
+      const standalone = undoOwner().sizes(), action = t.mock.method(notices, "showAction");
+      const clipboard = new Map();
+      const exec = Object.getOwnPropertyDescriptor(document, "execCommand");
+      Object.defineProperty(document, "execCommand", { configurable: true, value: name => {
+        assert.equal(name, "copy");
+        const event = new window.Event("copy", { bubbles: true, cancelable: true });
+        Object.defineProperty(event, "clipboardData", { value: { setData: (type, content) => clipboard.set(type, content) } });
+        document.body.dispatchEvent(event);
+        return event.defaultPrevented;
+      } });
+      t.after(() => { if (exec) Object.defineProperty(document, "execCommand", exec); else delete document.execCommand; });
+      document.activeElement?.blur();
+      selectBeats("r2", "r3");
+      assert.equal(document.body.classList.contains("has-scene-selection"), true);
+      const selection = document.getElementById("scene-selection-style").textContent;
+      assert.match(selection, /data-id="r2"/);
+      assert.match(selection, /data-id="r3"/);
+      let calls = 0;
+      const stop = f.beforeCommand(() => {
+        calls++;
+        if (mode === "silent") return false;
+        if (mode !== "announced") return true;
+        notices.show("Held by the listener.", "warn");
+        return SHARED_ADMISSION_ANNOUNCED;
+      });
+      const release = mode === "capability" ? f.refuseEdit() : mode === "hold" ? f.hold() : () => {};
+      const errors = [];
+      const observe = event => { errors.push(event.error?.message); event.preventDefault(); };
+      window.addEventListener("error", observe);
+      try {
+        if (route === "keyboard") {
+          assert.equal(key(document.body, command === "cut" ? "x" : "Delete", command === "cut" ? { ctrlKey: true } : {}), true);
+        } else {
+          const menu = new window.MouseEvent("contextmenu", { bubbles: true, cancelable: true });
+          f.cell("r2").dispatchEvent(menu);
+          assert.equal(menu.defaultPrevented, true);
+          document.querySelector(`#scene-menu [data-scene-action="${command}"]`).click();
+          assert.equal(document.querySelector("#scene-menu").hidden, true);
+        }
+        assert.equal(document.body.classList.contains("has-scene-selection"), true);
+        assert.equal(document.getElementById("scene-selection-style").textContent, selection);
+        assert.deepEqual(app(), before);
+        assert.deepEqual(f.native.document(), before);
+        assert.deepEqual(f.peer.document(), before);
+        assert.deepEqual(f.native.encodeState(), native);
+        assert.deepEqual(f.peer.encodeState(), peer);
+        assert.deepEqual(undoOwner().sizes(), standalone);
+        assert.equal(action.mock.callCount(), 0);
+        if (command === "cut") {
+          const clip = parseBeatPayload(clipboard.get(BEATS_MIME));
+          assert.deepEqual(clip.rows.map(({ audioText, visualText }) => [audioText, visualText]), [["Other", "Scene"], ["Third", "Final"]]);
+          assert.ok(clip.cut);
+          assert.match(clipboard.get("text/plain"), /Other[\s\S]*Third/);
+          assert.match(clipboard.get("text/html"), /Other[\s\S]*Third/);
+        } else assert.equal(clipboard.size, 0);
+        assert.equal(calls, 0);
+        assert.deepEqual(f.notices(), []);
+        assert.deepEqual(errors, ["standalone only while the session is shared: held"]);
+      } finally {
+        window.removeEventListener("error", observe);
+        release();
+        stop();
+      }
+      for (const copy of [f.native, f.peer]) {
+        assert.deepEqual(copy.commands.undo(), { kind: "unchanged" });
+        assert.deepEqual(copy.commands.redo(), { kind: "unchanged" });
+      }
+    });
+  }
+}
+
+const refusalGestures = [
+  ["Ctrl+Enter", f => () => assert.equal(key(f.place("r1", 3), "Enter", { ctrlKey: true }), true)],
+  ["Alt+Enter", f => () => assert.equal(key(f.place("r1", 3), "Enter", { altKey: true }), true)],
+  ["add bar", () => () => document.querySelector(".add-row-bar [data-action=add-row]").click()],
+  ["scene menu", () => () => document.querySelector('[data-section-id="s1"] [data-section-action="remove"]').click()],
+  ["status chip", () => () => document.querySelector('[data-action="cycle-status"][data-id="r1"]').click()],
+  ["Filmed", () => () => setBeatFilmed("r1", true)],
+  ["Filmed box", (_f, t) => {
+    openProductionPanel();
+    document.querySelector('#production-modes [data-group="cat"]').click();
+    document.querySelector('#production-modes [data-group="prep"]').click();
+    t.after(() => document.getElementById("production-close").click());
+    const selector = '.prep-film-input[data-row="r1"]';
+    if (!document.querySelector(selector)) document.querySelector(".prep-scene-head").click();
+    const filmed = document.querySelector(selector);
+    assert.ok(filmed);
+    assert.equal(filmed.checked, false);
+    return () => filmed.click();
+  }],
+  ["read-time", () => {
+    document.querySelector('.row-read[data-id="r1"]').click();
+    const box = document.querySelector(".row-read-input");
+    box.value = "42";
+    return () => assert.equal(key(box, "Enter"), true);
+  }],
+  ["rundown target", () => () => setTargetLength(90)],
+  ["title target", () => {
+    promptForTarget();
+    const box = document.getElementById("target-input");
+    box.value = "2:00";
+    return () => assert.equal(key(box, "Enter"), true);
+  }],
+  ["title WPM", () => {
+    promptForWpm();
+    document.getElementById("wpm-input").value = "180";
+    return () => document.getElementById("wpm-save").click();
+  }]
+];
+
+const nativeCallerWrites = new Map([
+  ["Ctrl+Enter", () => assert.deepEqual(audio(app()), ["abcdef", "", "Other", "Third"])],
+  ["Alt+Enter", () => assert.deepEqual(audio(app()), ["abc", "def", "Other", "Third"])],
+  ["scene menu", () => assert.equal(app().sections, undefined)],
+  ["status chip", () => assert.equal(app().rows[0].status, "ready")],
+  ["Filmed", () => assert.equal(app().rows[0].status, "shot")],
+  ["Filmed box", () => assert.equal(app().rows[0].status, "shot")],
+  ["read-time", () => assert.equal(app().rows[0].lengthSeconds, 42)]
+]);
+const listenerWarning = ["Held by the listener.", "warn"];
+
+for (const [name, prepare] of refusalGestures) for (const mode of ["allowed", "capability", "hold", "silent", "announced"]) {
+  test(`Native caller admission: ${name}, ${mode}`, async t => {
+    const f = await enter(t, { sections: [{ id: "s1", name: "Scene", firstSceneId: "r2" }], wordsPerMinute: 150 });
+    const action = t.mock.method(notices, "showAction");
+    const act = prepare(f, t);
+    let calls = 0;
+    const stop = f.beforeCommand(() => {
+      calls++;
+      if (mode === "silent") return false;
+      if (mode !== "announced") return true;
+      notices.show(...listenerWarning);
+      return SHARED_ADMISSION_ANNOUNCED;
+    });
+    const release = mode === "capability" ? f.refuseEdit() : mode === "hold" ? f.hold() : () => {};
+    const before = structuredClone(app()), native = f.native.encodeState(), peer = f.peer.encodeState();
+    const sizes = undoOwner().sizes();
+    try {
+      act();
+      await new Promise(resolve => setImmediate(resolve));
+      assert.deepEqual(undoOwner().sizes(), sizes);
+      assert.equal(action.mock.callCount(), 0);
+      const verifyWrite = nativeCallerWrites.get(name);
+      const preflight = name === "scene menu" && mode === "capability";
+      const filmedNotice = name === "Filmed box" ? [["Beat marked as Filmed", "ok"]] : [];
+      assert.equal(calls, mode === "hold" || preflight ? 0 : 1);
+      if (mode === "allowed" && verifyWrite) {
+        verifyWrite();
+        assert.deepEqual(f.notices(), filmedNotice);
+        send(f.native, f.peer);
+        assert.deepEqual(f.native.document(), app());
+        assert.deepEqual(f.peer.document(), app());
+        return;
+      }
+      const expected = mode === "announced" ? name === "Alt+Enter" ? [listenerWarning, warning] : [listenerWarning]
+        : preflight || (!verifyWrite && (mode === "hold" || mode === "silent")) ? [] : [warning];
+      assert.deepEqual(f.notices(), [...expected, ...filmedNotice]);
+      assert.deepEqual(app(), before);
+      assert.deepEqual(f.native.document(), before);
+      assert.deepEqual(f.peer.document(), before);
+      assert.deepEqual(f.native.encodeState(), native);
+      assert.deepEqual(f.peer.encodeState(), peer);
+    } finally { release(); stop(); }
+    for (const copy of [f.native, f.peer]) {
+      assert.deepEqual(copy.commands.undo(), { kind: "unchanged" });
+      assert.deepEqual(copy.commands.redo(), { kind: "unchanged" });
+    }
+  });
+}
+
+for (const alreadyAnnounced of [false, true]) {
+  test(`Split: Remove confirmation admits the command once and warns once, already announced=${alreadyAnnounced}`, async t => {
+    const f = await enter(t, { renderNotices: true });
+    const before = structuredClone(app()), nativeBefore = f.native.encodeState(), peerBefore = f.peer.encodeState();
+    const standaloneHistory = undoOwner().sizes();
+    const button = removeButton("r2");
+    assert.deepEqual(cells(app())[1], ["r2", "Other", "Scene"]);
+    button.click();
+    assert.equal(button.classList.contains("armed"), true);
+    assert.deepEqual(f.notices(), []);
+    let admitted = 0;
+    const stop = f.beforeCommand(() => {
+      admitted++;
+      if (!alreadyAnnounced) return false;
+      notices.show(...warning);
+      return SHARED_ADMISSION_ANNOUNCED;
+    });
+    try {
+      button.click();
+      await Promise.resolve();
+      assert.equal(admitted, 1);
+      assert.deepEqual(f.notices(), [warning]);
+      assert.deepEqual(app(), before);
+      assert.deepEqual(f.native.document(), before);
+      assert.deepEqual(f.peer.document(), before);
+      assert.deepEqual(f.native.encodeState(), nativeBefore);
+      assert.deepEqual(f.peer.encodeState(), peerBefore);
+      assert.deepEqual(undoOwner().sizes(), standaloneHistory);
+    } finally { stop(); }
+    for (const copy of [f.native, f.peer]) {
+      assert.deepEqual(copy.commands.undo(), { kind: "unchanged" });
+      assert.deepEqual(copy.commands.redo(), { kind: "unchanged" });
+    }
+  });
+}
+
+test("Split: a peer picture before a local deletion stays in the original beat through Undo and Redo", async t => {
+  const f = await enter(t, { rows: [{ id: "R1", audioText: "abcdef" }] });
+  const ref = { sha256: "c".repeat(64), width: 3, height: 3, mime: "image/png" };
+  const at = f.peer.commands.anchorText({ beat: "R1", cell: "narration" }, 2);
+  assert.equal(at.kind, "anchored");
+  written(f.peer.commands.replaceText(at.range, [{ atom: "image", ref, text: "", marks: {} }]));
+  send(f.peer, f.native);
+  await Promise.resolve();
+  const picture = f.cell("R1").querySelector("img");
+  assert.ok(picture);
+  const original = app().rows[0].audioText;
+  assert.equal(text(f.cell("R1")), "abcdef");
+  assert.equal(input(f.place("R1", 4, 5), "deleteContentBackward"), true);
+  flush();
+  const deleted = app().rows[0].audioText;
+  assert.equal(text(f.cell("R1")), "abcef");
+  history(f.cell("R1"));
+  agree(f, [original]);
+  assert.ok(f.cell("R1").querySelector("img"));
+  caret(f, "R1", 4, 5);
+  history(f.cell("R1"), true);
+  agree(f, [deleted]);
+  assert.ok(f.cell("R1").querySelector("img"));
+  caret(f, "R1", 4);
+  assert.deepEqual(f.notices(), []);
+});
 
 for (const operation of ["insert", "join"]) {
   test(`Split: Remove arms before draining a held peer ${operation} and checks the beat on confirmation`, async t => {
@@ -978,4 +1233,33 @@ for (const order of exchanges) test(`Split settled prefix: Alt+Enter leaves Zab 
   settledAgreement(f, order, [narrationOf(first, "Zab"), freshBeat(f, f.native, app().rows[1].id, "ef"), other, last]);
   assert.deepEqual(f.notices(), []);
   leaveSettled(f);
+});
+
+test("Read-time Ctrl+Z undoes a native length edit and leaves standalone history alone", async t => {
+  const f = await enter(t);
+  const length = doc => doc.rows.find(row => row.id === "r1").lengthSeconds;
+  const before = length(app());
+  const standalone = undoOwner().sizes();
+  assert.equal(setBeatLength("r1", 42), true);
+  await Promise.resolve();
+  assert.equal(length(app()), 42);
+  const button = document.querySelector('#rows .row-read[data-id="r1"]');
+  assert.ok(button);
+  button.focus();
+  assert.equal(key(button, "z", { ctrlKey: true }), true);
+  await Promise.resolve();
+  send(f.native, f.peer);
+  assert.deepEqual([length(app()), length(f.peer.document())], [before, before]);
+  assert.deepEqual(undoOwner().sizes(), standalone);
+  assert.deepEqual(f.notices(), []);
+});
+
+test("Command refusal notices distinguish silent, previously announced and no-op outcomes", async t => {
+  const f = await enter(t);
+  const before = f.notices().length;
+  sharedRecordCommands.refused({ kind: "rejected", reason: "buffer-pending", notified: true });
+  sharedRecordCommands.refused({ kind: "noop" });
+  assert.deepEqual(f.notices().slice(before), []);
+  sharedRecordCommands.refused({ kind: "rejected", reason: "buffer-pending" });
+  assert.deepEqual(f.notices().slice(before), [warning]);
 });

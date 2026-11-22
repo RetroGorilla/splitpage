@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { Stage1ExecutorHarness } from "../../adapters/collab/stage1-executor-support.ts";
 import { sharedHarness } from "../../application/session/shared-session-support.ts";
 import { adapterReplica } from "../../application/session/legacy-shared-session-support.ts";
-import { sharedBufferPorts } from "../../../src/bootstrap/wiring/ports/shared-buffer.ts";
+import { sharedBufferPorts } from "../../collab/editor-ports/shared-buffer.ts";
 import { createSurface } from "../../../src/features/writer/flow-surface.ts";
 import type { SurfacePorts } from "../../../src/features/writer/flow-surface.ts";
 import { writerPage } from "./painted-base-support.ts";
@@ -39,12 +39,13 @@ export function bufferedWriter(text = "ab", sourceReady = true,
     fields?: Record<string, unknown>;
     undo?: (h: Stage1ExecutorHarness) => Pick<SharedUndo, "perform">;
     history?: SharedUndoActions;
+    abandonment?: NonNullable<Parameters<typeof sharedBufferPorts>[2]["abandonment"]>;
   } = {}) {
   const h = options.h ?? new Stage1ExecutorHarness([{ id: "R1", text }, { id: "R2", text: "next" }], options.fields), a = sharedHarness(adapterReplica(h.a, options.undo?.(h)));
   const root = options.h ? document.body.appendChild(document.createElement("div")) : writerPage(), { effects, reports, missing, recovered } = fakeWriterBufferEffects();
   const notices: string[] = [];
   let serial = 0, reads = 0, ready = sourceReady;
-  const shared = sharedBufferPorts(h.a, a.session, { ...effects, readers: bufferReaders, stamps: bufferStamps("Alice"), author: () => {
+  const shared = sharedBufferPorts(h.a, a.session, { ...effects, ...options.abandonment ? { abandonment: options.abandonment } : {}, readers: bufferReaders, stamps: bufferStamps("Alice"), author: () => {
     const next = ++serial;
     return { id: options.author?.(next) ?? (options.h ? "other_native:" : "native:") + next, by: "Alice" };
   } });

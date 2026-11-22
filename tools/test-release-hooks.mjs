@@ -72,9 +72,9 @@ const RETIRED_SHARED_HOOK_ONLY = Object.freeze([
 ]);
 
 const timingMarks = (seams) => seams.flatMap((seam) => [`measure:${seam}:start`, `measure:${seam}:end`]);
-const TIMING_MARKS = Object.freeze(timingMarks(["live-apply", "mirror-apply", "assembly", "projection-listeners", "session-receive", "document-entry", "render",
-  "input-handler", "input-command", "input-write"]));
-const RETIRED_TIMING_MARKS = Object.freeze(timingMarks(["trial"]));
+const TIMING_MARKS = Object.freeze(timingMarks(["document-entry", "render", "input-handler", "input-command"]));
+const ISOLATED_TIMING_MARKS = Object.freeze(timingMarks(["trial", "live-apply", "mirror-apply", "assembly", "projection-listeners",
+  "session-receive", "input-write"]));
 
 let passed = 0;
 const failures = [];
@@ -110,12 +110,14 @@ eq("the fake desktop backend and its fault switches are left out", FAKE_DESKTOP.
 eq("the render counters and blob store controls are left out", HOOK_ONLY.filter((marker) => release.includes(marker)), []);
 eq("history fault queues, controls and inspection code are left out", historyTestNames(release), []);
 eq("the shared session hook, its peer and their notices are left out", [...SHARED_HOOK_ONLY, ...RETIRED_SHARED_HOOK_ONLY].filter((marker) => release.includes(marker)), []);
-eq("no timing mark is left in it", [...TIMING_MARKS, ...RETIRED_TIMING_MARKS, "marksOn"].filter((mark) => release.includes(mark)), []);
+eq("no timing mark is left in it", [...TIMING_MARKS, ...ISOLATED_TIMING_MARKS, "marksOn"].filter((mark) => release.includes(mark)), []);
 check("no timing mark name of any kind is left in it", !release.includes("measure:"), null);
 
 console.log("\nthe test build (node build.mjs --test):\n");
 
 const testBuild = appJs(true);
+const retiredRecoveryMarkers = ["shared-recovery-panel", "Nothing in recovery.", "Reply without comment", "recovery-no-session", "removed discarded restore"];
+eq("the release and test builds exclude the shared removal panel", retiredRecoveryMarkers.filter((marker) => release.includes(marker) || testBuild.includes(marker)), []);
 eq("it exposes every hook, the converted ones included", hookNames(testBuild), [...STILL_IN_RELEASE, ...CONVERTED].sort());
 eq("a converted hook is never also on the list", CONVERTED.filter((name) => STILL_IN_RELEASE.includes(name)), []);
 eq("it keeps the fake desktop backend and its fault switches", FAKE_DESKTOP.filter((marker) => !testBuild.includes(marker)), []);
@@ -124,10 +126,8 @@ eq("it keeps every history fault and distinctive control name", historyTestNames
 eq("it keeps the native shared session hook, its peer and their notices", SHARED_HOOK_ONLY.filter((marker) => !testBuild.includes(marker)), []);
 eq("it leaves out the legacy fixture and its peer", ["__legacySharedTest", ...RETIRED_SHARED_HOOK_ONLY].filter((marker) => testBuild.includes(marker)), []);
 eq("it keeps the remaining timing marks", [...TIMING_MARKS, "marksOn"].filter((mark) => !testBuild.includes(mark)), []);
-eq("it leaves out the retired trial timing marks", RETIRED_TIMING_MARKS.filter((mark) => testBuild.includes(mark)), []);
+eq("it leaves out the isolated adapter timing marks", ISOLATED_TIMING_MARKS.filter((mark) => testBuild.includes(mark)), []);
 
-const legacyTestBuild = appJs(true, true);
-eq("the legacy fixture page keeps its explicit hook and native entry", ["__legacySharedTest", "__sharedTest"].filter((marker) => !legacyTestBuild.includes(marker)), []);
 eq("the release build excludes the legacy fixture hook", ["__legacySharedTest"].filter((marker) => release.includes(marker)), []);
 
 console.log(`\n${passed} passed, ${failures.length} failed\n`);

@@ -29,7 +29,7 @@
     },
     {
       "label": "gallery port reads no joined beat",
-      "file": "src/bootstrap/wiring/ports/shared-gallery.ts",
+      "file": "tests/application/commands/legacy-gallery-ports.ts",
       "find": "members = handle ? readSharedJoinedBeats(handle, beat) : []",
       "replace": "members: string[] = []"
     },
@@ -149,7 +149,7 @@
     },
     {
       "label": "gallery port reads every beat's pictures",
-      "file": "src/bootstrap/wiring/ports/shared-gallery.ts",
+      "file": "tests/application/commands/legacy-gallery-ports.ts",
       "find": ".filter(record => record.fields.beat === beat)",
       "replace": ""
     }

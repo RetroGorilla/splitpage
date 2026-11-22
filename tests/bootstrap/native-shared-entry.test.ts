@@ -1,9 +1,11 @@
+import { legacySessionParts } from "./legacy-shared-switch-support.ts";
+import { enterLegacySharedSession, withLegacySwitchPorts } from "./legacy-shared-switch-support.ts";
 import assert from "node:assert/strict";
 import { test, before, after } from "node:test";
 import { openNativeEditor } from "../../src/bootstrap/wiring/native-shared-session.ts";
 import { adoptReplacement, currentDocument, liveSession, mergeBase, onDocumentReplaced, onRefresh, onSessionChange, runCommand, sessionEntryRefusal, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
 import { enterSharedSession, forceLeaveSharedSession, leaveRunningSharedSession, leaveSharedSession,
-  nativeEditorActive, nativeEditorRecords, sharedSessionParts, SHARED_NOT_RUNNING, SHARED_SWITCHING } from "../../src/bootstrap/wiring/shared-session.ts";
+  nativeEditorActive, nativeEditorRecords, SHARED_NOT_RUNNING, SHARED_SWITCHING } from "../../src/bootstrap/wiring/shared-session.ts";
 import type { SharedEditorBackend, SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
 import { attemptNativeSwitchEntry, bootNativeEntrySwitchFixture as bootEntrySwitchFixture,
   nativeEntrySwitchFixture as entrySwitchFixture, stopNativeEntrySwitchFixture as stopEntrySwitchFixture } from "./native-entry-switch-support.ts";
@@ -53,14 +55,14 @@ async function nativeEntry(fixture: ReturnType<typeof entrySwitchFixture>) {
   return opened.value.native;
 }
 
-test("preflight refuses before selecting a backend and entry without a factory builds the legacy parts", async t => {
+test("preflight refuses before selecting a backend and an isolated factory can provide the legacy parts", async t => {
   const fixture = entrySwitchFixture();
   t.after(fixture.close);
   const open = t.mock.fn(() => { throw new Error("open"); });
   assert.deepEqual(await enterSharedSession({ ...fixture.ports, refusal: () => "held" }, open), { ok: false, reason: "held" });
   assert.equal(open.mock.callCount(), 0);
-  assert.deepEqual(await fixture.enter(), { ok: true });
-  assert.ok(sharedSessionParts()?.handle);
+  assert.deepEqual(await enterLegacySharedSession(withLegacySwitchPorts(fixture.ports)), { ok: true });
+  assert.ok(legacySessionParts()?.handle);
   assert.equal(currentDocument()?.rows[0]?.audioText, "Captured words");
 });
 
@@ -70,7 +72,7 @@ test("the installed owner hears adoption and diffs the asynchronous native snaps
   const seen: { kind: string; text: string | null | undefined; fields: readonly unknown[] }[] = [];
   t.after(onSessionChange(change => seen.push({ kind: change.kind, text: currentDocument()?.rows[0]?.audioText, fields: change.changes.cells })));
   const native = await nativeEntry(fixture);
-  assert.equal(sharedSessionParts(), null);
+  assert.equal(legacySessionParts(), null);
   assert.deepEqual(seen, [{ kind: "adopt", text: "Captured words", fields: [] }]);
   const anchor = native.commands.anchorText({ beat: "R1", cell: "narration" }, 8);
   if (anchor.kind !== "anchored") throw new Error(anchor.reason);
@@ -403,7 +405,7 @@ test("legacy setup failure reports before its destroy failure and leaves standal
     if (this.guid === live && !failedOnce) { failedOnce = true; throw destruction; }
     destroy.call(this);
   });
-  assert.deepEqual(await fixture.enter(), { ok: false, reason: "enter-failed" });
+  assert.deepEqual(await enterLegacySharedSession(withLegacySwitchPorts(fixture.ports)), { ok: false, reason: "enter-failed" });
   assert.deepEqual(fixture.errors.slice(0, 2), [setup, destruction]);
   assert.equal(currentDocument(), original);
 });
@@ -724,7 +726,6 @@ test("foreign leave ports remain unused when leaving a native session", async t 
   const wrong = (): never => { assert.fail("foreign switch ports were used"); };
   const foreign: SharedSwitchPorts = {
     ...fixture.ports,
-    bindings: { enter: wrong, settle: wrong, leave: wrong },
     migrate: wrong, docId: wrong, left: wrong, report: wrong
   };
   assert.deepEqual(leaveSharedSession(foreign), { ok: true });

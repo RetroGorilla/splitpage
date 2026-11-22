@@ -5,7 +5,6 @@ import { notices as portNotices } from "./ports/effects.ts";
 import { text as portText } from "./ports/text.ts";
 import { ownership as portOwnership } from "./ports/saving.ts";
 import { pictures as portPictures } from "./ports/pictures.ts";
-import { sharedStructureCommands } from "./ports/shared-commands.ts";
 import { nativeEditorActive, nativeEditorRecords } from "./shared-session.ts";
 import { placeCaretAtTextOffset } from "../../features/common/caret.ts";
 import { cellSelection, setCellSelection } from "../../features/common/cell-selection.ts";
@@ -36,8 +35,7 @@ export function mountBeatsFeature(): Beats {
         armedId: (area) => deleteConfirmation().armedId(area),
         arm: (area, id, expired, show, timers) => { deleteConfirmation().arm(area, id, expired, show, timers); },
         disarm: (area) => { deleteConfirmation().disarm(area); }
-      },
-      shared: sharedStructureCommands
+      }
     };
     return mountBeats(ports);
   });
@@ -134,8 +132,4 @@ export function removeImage(rowId: string, slot?: number): void {
 
 export function removeImageLink(rowId: string, slot: number, key: string): void {
   media.owner()?.removeLink(rowId, slot, key);
-}
-
-export function splitRowFieldCore(cell: Element) {
-  return beats.owner()?.splitField(cell) ?? null;
 }

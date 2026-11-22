@@ -1,5 +1,4 @@
 import { createUndo } from "../../application/editing/undo/undo.ts";
-import type { SharedUndoRecord } from "../../core/collab/undo-record.ts";
 import type { ReplayRunner, Undo, UndoDirection, UndoHooks, UndoPorts } from "../../application/editing/undo/undo.ts";
 import type { SharedUndo, SharedUndoOutcome } from "../../application/editing/undo/shared-undo.ts";
 import type { SharedUndoActions } from "../../application/editing/undo/shared-undo-actions.ts";
@@ -18,7 +17,6 @@ let started: Undo | null = null;
 export interface SharedUndoRoute {
   readonly actions: SharedUndoActions;
   readonly breakGroup: SharedUndo["breakGroup"];
-  readonly replayed: () => SharedUndoRecord | null;
   readonly replay?: (direction: UndoDirection) => void;
 }
 

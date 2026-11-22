@@ -1,13 +1,5 @@
 import { stopNativeCaretWait } from "./native-switch-caret.ts";
-import { createSharedDocument, destroySharedDocument } from "../../adapters/collab/document.ts";
-import { hydrateSharedDocument } from "../../adapters/collab/hydrate.ts";
-import { registerSharedOperationFamilies } from "../../adapters/collab/operation-families.ts";
-import { createSharedReplica } from "../../adapters/collab/replica.ts";
-import type { SharedStructureContentPorts } from "../../adapters/collab/structure-content.ts";
-import type { SharedDocumentHandle } from "../../adapters/collab/types.ts";
-import type { SharedUndo } from "../../application/editing/undo/shared-undo.ts";
 import type { CommandOutcome, DocumentStructureIntent } from "../../application/session/document-session.ts";
-import { sharedUndoActions } from "../../application/editing/undo/shared-undo-actions.ts";
 import { createSessionCapabilities } from "../../application/session/capabilities.ts";
 import type { CapabilityPort, ReportPort, TimerPort } from "../../application/session/ports.ts";
 import { createSharedSession } from "../../application/session/shared-session.ts";
@@ -19,32 +11,14 @@ import type { OwnerSwap } from "./session-owner.ts";
 import type { SharedUndoRoute } from "./undo.ts";
 import { routeSharedUndo, undoOwner } from "./undo.ts";
 import { documentReader } from "./ports/document.ts";
-import { sharedAuthorPort } from "./ports/shared-author.ts";
-import type { SharedAuthorPort } from "./ports/shared-author.ts";
-import { sharedUndoOwner } from "./ports/shared-undo.ts";
 import type { NativeEditorRecords } from "./native-shared-records.ts";
 import type { FindNativeAccess } from "../../features/find/ports.ts";
-
-export interface SharedSessionParts {
-  readonly handle: SharedDocumentHandle;
-  readonly session: SharedDocumentSession;
-  readonly undo: SharedUndo;
-  readonly author: SharedAuthorPort;
-}
 
 interface NativeWriterPaintBinding {
   readonly headingCandidate: (beat: string) => boolean;
   readonly settle: () => boolean;
   readonly finish: () => void;
   readonly dispose: () => void;
-}
-
-export interface SharedBindings {
-  readonly enter: (parts: SharedSessionParts) => void;
-  readonly settle: () => string | null;
-  readonly leave: () => void;
-  readonly abandon?: () => void;
-  readonly drop?: () => void;
 }
 
 export interface SharedSwitchPorts {
@@ -55,28 +29,15 @@ export interface SharedSwitchPorts {
   readonly detach: () => void;
   readonly reattach?: () => void;
   readonly left?: (landed: boolean) => void;
-  readonly bindings: SharedBindings;
   readonly common: Pick<CapabilityPort, "edit" | "comment">;
   readonly standalone: CapabilityPort;
   readonly migrate: (raw: unknown) => ValidatedDocument;
   readonly docId: () => string;
   readonly editor: () => string;
-  readonly structure: SharedStructureContentPorts;
   readonly report: ReportPort;
   readonly timers: TimerPort;
   readonly now: () => number;
   readonly opening: Pick<DocumentOpeningActivity, "openingPending">;
-  readonly hydrate?: (handle: SharedDocumentHandle, migrated: ValidatedDocument) => void;
-}
-
-export function joinSharedBindings(first: SharedBindings, second: Pick<SharedBindings, "enter" | "leave">): SharedBindings {
-  return {
-    enter: parts => { first.enter(parts); second.enter(parts); },
-    settle: () => first.settle(),
-    leave: () => { try { second.leave(); } finally { first.leave(); } },
-    abandon: () => { first.abandon?.(); },
-    drop: () => { first.drop?.(); }
-  };
 }
 
 export type SharedSwitchOutcome = { readonly ok: true } | { readonly ok: false; readonly reason: string };
@@ -99,7 +60,6 @@ interface Running {
 
 export interface SharedEditorBackend {
   readonly replica: ReplicaPort;
-  readonly parts: SharedSessionParts | null;
   readonly undo: (admission: Pick<SharedDocumentSession, "admit">) => SharedUndoRoute;
   readonly bind: (session: SharedDocumentSession) => void;
   readonly unbind: () => void;
@@ -121,13 +81,9 @@ export interface SharedEditorBackend {
   readonly structure?: (intent: DocumentStructureIntent) => CommandOutcome;
 }
 
-type OpenBackend = (hydration: ValidatedDocument, failedClose: () => boolean) => SharedEditorBackend;
+type OpenBackend = (hydration: ValidatedDocument, failedClose: () => boolean, attempt: (step: () => void) => boolean) => SharedEditorBackend;
 
 let running: Running | null = null;
-
-export function sharedSessionParts(): SharedSessionParts | null {
-  return running?.backend.parts ?? null;
-}
 
 export function nativeEditorRecords() {
   return running?.backend.nativeRecords ?? null;
@@ -170,11 +126,6 @@ function captureSelection(backend: SharedEditorBackend, faults: Faults, entering
   return captured.selection ?? null;
 }
 
-// why: a destroy listener that throws stops Yjs before it drops its observers; a second attempt finishes the job
-function destroy(attempt: (step: () => void) => boolean, handle: SharedDocumentHandle): void {
-  if (!attempt(() => { destroySharedDocument(handle); })) attempt(() => { destroySharedDocument(handle); });
-}
-
 function refusedNow(ports: SharedSwitchPorts, faults: Faults): string | null {
   if (running || sharedSession()) return SHARED_ALREADY;
   let reason: string | null = null;
@@ -186,14 +137,14 @@ function failed(ports: SharedSwitchPorts, faults: Faults, reason: string): Share
   return { ok: false, reason };
 }
 
-export async function enterSharedSession(ports: SharedSwitchPorts, open?: OpenBackend): Promise<SharedSwitchOutcome> {
+export async function enterSharedSession(ports: SharedSwitchPorts, open: OpenBackend): Promise<SharedSwitchOutcome> {
   const holdReason = sessionEntryRefusal();
   if (holdReason) return { ok: false, reason: holdReason };
   const release = holdSessionCommands(SHARED_SWITCHING, "entries");
   try { return await enterAvailableSession(ports, release, open); } finally { release(); }
 }
 
-async function enterAvailableSession(ports: SharedSwitchPorts, releaseEntries: () => void, open?: OpenBackend): Promise<SharedSwitchOutcome> {
+async function enterAvailableSession(ports: SharedSwitchPorts, releaseEntries: () => void, open: OpenBackend): Promise<SharedSwitchOutcome> {
   const faults = new Faults();
   const first = refusedNow(ports, faults);
   if (first) return failed(ports, faults, first);
@@ -220,38 +171,7 @@ async function enterAvailableSession(ports: SharedSwitchPorts, releaseEntries: (
     releaseCommands();
     return failed(ports, faults, SHARED_ENTER_FAILED);
   }
-  return enter(ports, faults, { kept, hydration, releaseCommands, releaseEntries }, open ?? (doc => openLegacyBackend(ports, doc, faults)));
-}
-
-function openLegacyBackend(ports: SharedSwitchPorts, hydration: ValidatedDocument, faults: Faults): SharedEditorBackend {
-  const handle = createSharedDocument();
-  let on = true, parts: SharedSessionParts | null = null;
-  const author = sharedAuthorPort({ handle: () => on ? handle : null, name: ports.editor });
-  try {
-    registerSharedOperationFamilies(handle, ports.structure);
-    const undo = sharedUndoOwner(handle, () => author.next(), ports.now, ports.report);
-    const replica = createSharedReplica(handle, undefined, undo);
-    return {
-      replica,
-      get parts() { return parts; },
-      undo: admission => ({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup, replayed: undo.replayed }),
-      bind: session => { parts ??= { handle, session, undo, author }; ports.bindings.enter(parts); },
-      unbind: () => ports.bindings.leave(),
-      settle: () => ports.bindings.settle(),
-      abandon: () => { ports.bindings.abandon?.(); },
-      drop: () => { ports.bindings.drop?.(); },
-      start: () => (ports.hydrate ?? hydrateSharedDocument)(handle, hydration),
-      landing: currentDocument,
-      live: value => { on = value; },
-      dispose: attempt => {
-        attempt(() => { replica.dispose(); });
-        destroy(attempt, handle);
-      }
-    };
-  } catch (error) {
-    destroy(step => faults.attempt(step), handle);
-    throw error;
-  }
+  return enter(ports, faults, { kept, hydration, releaseCommands, releaseEntries }, open);
 }
 
 async function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { readonly kept: Record<string, unknown>; readonly hydration: ValidatedDocument;
@@ -265,7 +185,7 @@ async function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { reado
       const result = leaveSharedSession(ports, false);
       if (!result.ok) ports.report(new Error(`The failed shared session could not land: ${result.reason}`));
       return true;
-    });
+    }, step => faults.attempt(step));
   } catch (error) {
     faults.errors.unshift(error);
     releaseCommands();

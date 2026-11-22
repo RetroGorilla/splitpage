@@ -41,7 +41,7 @@
     },
     {
       "label": "Writer visual selection hold never releases",
-      "file": "src/bootstrap/wiring/ports/writer-visual-buffer.ts",
+      "file": "tests/collab/editor-ports/writer-visual-buffer.ts",
       "find": "edit?.cancel();",
       "replace": "",
       "tests": [
@@ -50,7 +50,7 @@
     },
     {
       "label": "Writer visual selection never holds narration ingress",
-      "file": "src/bootstrap/wiring/ports/writer-visual-buffer.ts",
+      "file": "tests/collab/editor-ports/writer-visual-buffer.ts",
       "find": "selectionEdit = base ? shared.bufferedText.open(range.head.rowId, base) : null;",
       "replace": "selectionEdit = null;",
       "tests": [
@@ -59,7 +59,7 @@
     },
     {
       "label": "Writer visual idle caret remains at numeric offsets",
-      "file": "src/bootstrap/wiring/ports/writer-visual-buffer.ts",
+      "file": "tests/collab/editor-ports/writer-visual-buffer.ts",
       "find": "placeSelection(cell, root.ownerDocument.getSelection(), resolved);",
       "replace": "",
       "tests": [
@@ -122,7 +122,7 @@
     },
     {
       "label": "Writer deleted narration selection becomes a visual edit at a collapsed caret",
-      "file": "src/bootstrap/wiring/ports/writer-visual-buffer.ts",
+      "file": "tests/collab/editor-ports/writer-visual-buffer.ts",
       "find": "if (!resolved || resolved.anchor === resolved.head)",
       "replace": "if (!resolved)",
       "tests": [
@@ -140,7 +140,7 @@
     },
     {
       "label": "Writer vanished visual remains in DOM ownership admission",
-      "file": "src/bootstrap/wiring/ports/writer-visual-buffer.ts",
+      "file": "tests/collab/editor-ports/writer-visual-buffer.ts",
       "find": "cell.dataset.field = \"inactive-visual\";",
       "replace": "",
       "tests": [

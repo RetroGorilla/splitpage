@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import { migrateRows } from "../bootstrap/document-ports.ts";
-import { adoptReplacement, currentDocument, sharedSession } from "../bootstrap/wiring/session-owner.ts";
+import { adoptReplacement, currentDocument, sharedRecoverySession, sharedSession } from "../bootstrap/wiring/session-owner.ts";
 import { getEditorName } from "../bootstrap/wiring/preferences-owner.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { enterSharedSession, leaveRunningSharedSession, nativeEditorRecords } from "../bootstrap/wiring/shared-session.ts";
@@ -10,13 +10,14 @@ import { openNativeEditor } from "../bootstrap/wiring/native-shared-session.ts";
 import { nativeEntrySwitchFixture as entrySwitchFixture } from "../../tests/bootstrap/native-entry-switch-support.ts";
 import { nativeGalleryOf } from "../adapters/collab/native/values.ts";
 import { pictures } from "../bootstrap/wiring/ports/pictures.ts";
+import { cellEditing } from "../bootstrap/wiring/editor-owners.ts";
 import { setBeatLength } from "../features/rows/read-time.ts";
 import { setBeatFilmed } from "../bootstrap/wiring/beat-status.ts";
 import { setCellSelection } from "../features/common/cell-selection.ts";
 import { openCommentsPanel } from "../features/comments/comments.ts";
 import { blobStore, createMemoryBackend, setBackend } from "../adapters/storage/02c-blobs.ts";
 import { createHeldFetch, createHeldImageDecode } from "./_m4-matrix.mjs";
-import { rowSlots } from "../core/document/gallery.ts";
+import { moveGallerySlot, rowSlots } from "../core/document/gallery.ts";
 import { closeAnnotator, openAnnotator } from "../features/gallery/annotate.ts";
 import { closeGalleryOverlay, openGalleryOverlay } from "../features/gallery/overlay.ts";
 import { createNativeEditorRecords } from "../bootstrap/wiring/native-shared-records.ts";
@@ -57,6 +58,64 @@ async function enter(t, comments = [], rows = [
   t.after(() => { if (sharedSession()) hook.leave(); });
   return show;
 }
+
+test("a held native gallery removal keeps the selected picture", async t => {
+  const show = await enter(t, [], [{ id: "r1", audioText: "Hello", imageRef: ref("a"), moreImages: [{ imageRef: ref("b") }] }]);
+  t.after(closeGalleryOverlay);
+  openGalleryOverlay("r1", 1);
+  const remove = find(".scene-gallery-remove");
+  assert.ok(remove);
+  remove.focus();
+  const selected = () => find(".scene-gallery-grid-tile.is-selected")?.getAttribute("data-slot");
+  assert.equal(selected(), "1");
+  const before = hook.read();
+  const release = sharedRecoverySession().hold("record-edit-held");
+  try { remove.click(); } finally { release(); }
+  assert.equal(selected(), "1");
+  assert.equal(document.activeElement, remove);
+  assert.equal(remove.closest("[hidden]"), null);
+  assert.deepEqual(hook.read(), before);
+  assert.deepEqual(show.mock.calls.map(call => call.arguments[1]), ["warn"]);
+  assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
+});
+
+test("a native gallery no-op writes nothing and makes no notice", async t => {
+  const show = await enter(t, [], [{ id: "r1", audioText: "Hello", imageRef: ref("a") }]);
+  const before = hook.read();
+  assert.deepEqual(cellEditing().editGallery("r1", "Made the cover", row => moveGallerySlot(row, 0, 0)), { changed: false, held: false });
+  assert.deepEqual(hook.read(), before);
+  assert.equal(show.mock.callCount(), 0);
+  assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
+});
+
+test("native gallery removal keeps peer text and reports success without a standalone Undo action", async t => {
+  const show = await enter(t, [], [
+    { id: "r1", audioText: "Hello", imageRef: ref("a"), moreImages: [{ imageRef: ref("b") }, { imageRef: ref("c") }] },
+    { id: "r2", audioText: "Second" }
+  ]);
+  t.after(closeGalleryOverlay);
+  const action = t.mock.method(notices, "showAction", () => {});
+  assert.equal(hook.nativePeer.type("r2", 0, "Z").kind, "written");
+  await until(() => hook.read().app.rows[1].audioText === "ZSecond");
+  openGalleryOverlay("r1", 1);
+  const remove = find(".scene-gallery-remove");
+  assert.ok(remove);
+  const gallery = doc => rowSlots(doc.rows[0]).map(slot => slot.ref.sha256[0]);
+  remove.click();
+  await until(() => gallery(hook.read().peer).length === 2);
+  assert.equal(action.mock.callCount(), 0);
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), [["Picture removed", "ok"]]);
+  for (const copy of Object.values(hook.read())) {
+    assert.deepEqual(gallery(copy), ["a", "c"]);
+    assert.equal(copy.rows[1].audioText, "ZSecond");
+  }
+  assert.equal(hook.nativePeer.step("undo").kind, "written");
+  await until(() => gallery(hook.read().app).length === 3);
+  for (const copy of Object.values(hook.read())) {
+    assert.deepEqual(gallery(copy), ["a", "b", "c"]);
+    assert.equal(copy.rows[1].audioText, "ZSecond");
+  }
+});
 
 function commentToolbar(from = 0, to = 5, target = cell("audioText")) {
   target.focus();

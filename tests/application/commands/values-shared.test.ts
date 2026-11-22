@@ -7,8 +7,8 @@ import type { SharedValuePorts } from "../../../src/application/commands/shared-
 import type { Command } from "../../../src/application/session/document-session.ts";
 import type { StampPorts } from "../../../src/application/session/ports.ts";
 import { createSharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
-import { sharedValuePorts } from "../../../src/bootstrap/wiring/ports/shared-values.ts";
-import { sharedAuthorPort } from "../../../src/bootstrap/wiring/ports/shared-author.ts";
+import { sharedValuePorts } from "../../collab/editor-ports/shared-values.ts";
+import { sharedAuthorPort } from "../../collab/editor-ports/shared-author.ts";
 import { registerSharedOperationFamilies } from "../../../src/adapters/collab/operation-families.ts";
 import { createSharedDocument, applySharedUpdate, destroySharedDocument, encodeSharedState, readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";

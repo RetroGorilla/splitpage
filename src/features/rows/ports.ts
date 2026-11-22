@@ -10,14 +10,13 @@ import type { DocumentEdits } from "../../application/session/document-edits.ts"
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { TextServices } from "../../application/text/services.ts";
 import type { IdSource } from "../../core/document/ports.ts";
-import type { SharedStructureCommands } from "../../application/commands/shared-structure.ts";
-import type { SharedValueCommands } from "../../application/commands/shared-values.ts";
+import type { SharedBeatField } from "../../application/commands/shared-values.ts";
 
 export interface ReadTimePorts {
   readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
   readonly text: Pick<TextServices, "productionReaders">;
   readonly edits: Pick<DocumentEdits, "run" | "stamps">;
-  readonly shared: SharedValueCommands;
+  readonly beatField: SharedBeatField;
   readonly undo: Pick<UndoControl, "undo" | "redo">;
   readonly paint: Pick<PaintGuard, "afterThisPaint">;
   readonly notices: Pick<NoticePort, "show">;
@@ -40,7 +39,6 @@ export interface BeatPorts {
   readonly placeCaret: (cell: Element, offset: number) => void;
   readonly rowDrag: Pick<RowDrag, "dragging">;
   readonly deletes: Pick<DeleteConfirm, "armedId" | "arm" | "disarm">;
-  readonly shared: SharedStructureCommands;
 }
 
 interface SplitBeat {

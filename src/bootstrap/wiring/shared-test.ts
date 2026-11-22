@@ -2,7 +2,6 @@ import { exposeTestHook } from "../../features/common/test-hooks.ts";
 import { mintDocId } from "../../adapters/identity/ids.ts";
 import { startupReady } from "../../application/startup-signal.ts";
 import { migrateRows } from "../document-ports.ts";
-import { fromHtml } from "../richtext.ts";
 import { currentCapabilities, sharedSession } from "./session-owner.ts";
 import { SHARED_ALREADY, SHARED_NOT_RUNNING, SHARED_SWITCHING, enterSharedSession, forceLeaveSharedSession, leaveRunningSharedSession } from "./shared-session.ts";
 import type { SharedSwitchOutcome, SharedSwitchPorts } from "./shared-session.ts";
@@ -119,9 +118,9 @@ function startSharedTestHook(): () => void {
           detached = null;
           if (kept) reattachDraft(kept);
         },
-        left, bindings: { enter: () => {}, settle: () => null, leave: () => {} },
+        left,
         common, standalone, migrate: migrateRows, docId: mintDocId, editor: getEditorName,
-        structure: { cells: html => fromHtml(html) }, report,
+        report,
         timers: { now: () => Date.now(), start: (run, ms) => setTimeout(run, ms), stop: timer => { clearTimeout(timer as ReturnType<typeof setTimeout>); } },
         now: () => Date.now(),
         opening: openingStatus

@@ -11,7 +11,7 @@ import { beatPos, startBeat } from "../../../src/core/flow/flow.ts";
 import { fromHtml } from "../../../src/bootstrap/richtext.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import type { SurfacePorts } from "../../../src/features/writer/flow-surface.ts";
-import { writerFlowCommands } from "../../../src/bootstrap/wiring/ports/writer-flow.ts";
+import { writerFlowCommands } from "../../collab/editor-ports/writer-flow.ts";
 import { registerSharedRecordHandlers } from "../../../src/adapters/collab/record-executor.ts";
 import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/removal-executor.ts";
 import { registerSharedJoinHandlers } from "../../../src/adapters/collab/join-executor.ts";
@@ -456,4 +456,23 @@ test("rule 29: a refused recovery write shows its refusal and retains native tex
     assert.deepEqual([...collabState(page.h.a).ingress.holds], []);
     assert.equal(page.beat().textContent, "abcd");
   } finally { page.close(); }
+});
+
+test("abandoning an unfinished Writer composition releases its buffered text without a write", () => {
+  const abandons = new Set<(final: boolean) => void>();
+  const page = bufferedWriter("ab", true, undefined, undefined, { abandonment: abandon => {
+    abandons.add(abandon);
+    return () => { abandons.delete(abandon); };
+  } });
+  try {
+    page.start(2);
+    assert.equal(page.native(2, 2, "held", undefined, "insertCompositionText"), true);
+    assert.equal(page.surface.settle?.(), false);
+    assert.equal(page.text(), "ab");
+    for (const abandon of abandons) abandon(false);
+    assert.equal(page.surface.settle?.(), true);
+    assert.deepEqual([page.text(), page.beat().textContent, page.a.executed.length], ["ab", "ab", 0]);
+    assert.deepEqual([...collabState(page.h.a).ingress.holds], []);
+  } finally { page.close(); }
+  assert.equal(abandons.size, 0);
 });

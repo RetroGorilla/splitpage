@@ -13,7 +13,7 @@ import { registerSharedOperationFamilies } from "../../../src/adapters/collab/op
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { createSharedReplica } from "../../../src/adapters/collab/replica.ts";
 import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
-import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
+import { sharedUndoOwner } from "../editor-ports/shared-undo.ts";
 
 const strip = html => String(html ?? "").replace(/<span class="(?:broll-key|who-anchor)"[^>]*>[^<]*<\/span>/g, "￼").replace(/<br>/g, "\n").replace(/<[^>]*>/g, "")
   .replace(/&nbsp;/g, " ").replace(/&lt;/g, "<").replace(/&gt;/g, ">").replace(/&quot;/g, '"').replace(/&amp;/g, "&");

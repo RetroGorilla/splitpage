@@ -9,7 +9,7 @@ import { applySharedUpdate, encodeSharedState, destroySharedDocument } from "../
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
 import { sharedBufferedTarget } from "../../../src/adapters/collab/buffer.ts";
-import { sharedBufferPorts } from "../../../src/bootstrap/wiring/ports/shared-buffer.ts";
+import { sharedBufferPorts } from "../../collab/editor-ports/shared-buffer.ts";
 import { createBufferedField } from "../../../src/application/editing/buffered-field.ts";
 import { createPaintedBeats } from "../../../src/application/editing/painted-beats.ts";
 import { bindBufferedInput } from "../../../src/features/common/buffered-input.ts";

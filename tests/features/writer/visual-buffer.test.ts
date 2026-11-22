@@ -2,10 +2,10 @@ import "../../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createFlowWriter } from "../../../src/features/writer/flow-writer.ts";
-import { writerVisualBuffer } from "../../../src/bootstrap/wiring/ports/writer-visual-buffer.ts";
-import { writerFlowCommands } from "../../../src/bootstrap/wiring/ports/writer-flow.ts";
-import { sharedAuthorPort } from "../../../src/bootstrap/wiring/ports/shared-author.ts";
-import { sharedBufferPorts } from "../../../src/bootstrap/wiring/ports/shared-buffer.ts";
+import { writerVisualBuffer } from "../../collab/editor-ports/writer-visual-buffer.ts";
+import { writerFlowCommands } from "../../collab/editor-ports/writer-flow.ts";
+import { sharedAuthorPort } from "../../collab/editor-ports/shared-author.ts";
+import { sharedBufferPorts } from "../../collab/editor-ports/shared-buffer.ts";
 import { createPaintGuard } from "../../../src/application/editing/paint-guard.ts";
 import { createEditorSelection } from "../../../src/application/editing/selection.ts";
 import { registerSharedOperationFamilies } from "../../../src/adapters/collab/operation-families.ts";
@@ -35,7 +35,7 @@ import type { FlowDoc, FlowOutcome, FlowPorts } from "../../../src/core/flow/flo
 import type { DeliveryOrder } from "../../collab/delivery.ts";
 import { deliveryReplica } from "../../adapters/collab/helpers.ts";
 import { createFlowVisualBox } from "../../../src/features/writer/flow-visual-box.ts";
-import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
+import { sharedUndoOwner } from "../../collab/editor-ports/shared-undo.ts";
 import { sharedUndoActions } from "../../../src/application/editing/undo/shared-undo-actions.ts";
 
 const changed = { updatedAt: "2026-11-12T10:00:00.000Z", updatedBy: "Alice" };
@@ -67,7 +67,9 @@ function visualWriter(order: DeliveryOrder = "dup", secondVisual = "", recordUnd
   function left(...more: [string, string][]): void { intended.push(...more); assert.deepEqual(leaves, intended, "the box's leaves"); }
   const documentView = () => a.session.read(doc => doc);
   const author = sharedAuthorPort({ handle: () => h.a, name: () => "Alice" });
-  const shared = sharedBufferPorts(h.a, a.session, { ...bufferEffects, readers: bufferReaders, stamps: bufferStamps("Alice"), author: () => { const request = author.next(); assert.ok(request); return request; } });
+  const abandons = new Set<(final: boolean) => void>();
+  const abandonment = (abandon: (final: boolean) => void) => { abandons.add(abandon); return () => { abandons.delete(abandon); }; };
+  const shared = sharedBufferPorts(h.a, a.session, { ...bufferEffects, abandonment, readers: bufferReaders, stamps: bufferStamps("Alice"), author: () => { const request = author.next(); assert.ok(request); return request; } });
   const commands = writerFlowCommands(runtime.ports, { author, writer: () => "1" });
   const writer = createFlowWriter({ ...effects, ...shared, ...commands, root,
     visualBuffer: writerVisualBuffer(shared, { document: documentView, lifetime: a.session, decode: fromHtml, storedHtml: html => html, shown: guard.whileShown }),
@@ -155,7 +157,7 @@ function visualWriter(order: DeliveryOrder = "dup", secondVisual = "", recordUnd
     cell.focus(); setCellSelection(cell, 1);
     return { key: (from: number, to: number, data: string) => input(target, from, to, data, "insertText", undefined, false) };
   }
-  return { h, a, b, writer, root, cell, undo, undoOwner, key: (from: number, to: number, data: string, type = "insertText", during?: () => void) => input(cell, from, to, data, type, during), agrees, split, otherVisual, reports, missing, recovered, notices, guard, leaves, left,
+  return { h, a, b, writer, root, cell, abandons, undo, undoOwner, key: (from: number, to: number, data: string, type = "insertText", during?: () => void) => input(cell, from, to, data, type, during), agrees, split, otherVisual, reports, missing, recovered, notices, guard, leaves, left,
     close: () => {
       try { splitClose?.(); stop(); writer.dispose(); assert.deepEqual(unexpected, []); left(); }
       finally { a.session.dispose(); b.session.dispose(); h.close(); root.parentElement?.remove(); document.querySelector(".writer-bar")?.remove(); }
@@ -179,6 +181,17 @@ for (const literal of [
     page.writer.finish();
     assert.equal(page.cell.closest<HTMLElement>(".wr-flow-visual-box")?.hidden, true);
     assert.deepEqual(page.leaves, [], "a view switch closes the box abandoned and leaves nothing");
+  } finally { page.close(); }
+});
+
+for (const key of ["z", "y"]) test("Writer Visual closes without a leave callback before Ctrl+" + key.toUpperCase(), () => {
+  const page = visualWriter();
+  try {
+    page.cell.focus();
+    assert.equal(page.cell.dispatchEvent(new window.KeyboardEvent("keydown", { key, ctrlKey: true, bubbles: true, cancelable: true })), false);
+    assert.equal(page.cell.closest<HTMLElement>(".wr-flow-visual-box")?.hidden, true);
+    assert.deepEqual(page.leaves, []);
+    assert.deepEqual(page.a.executed, []);
   } finally { page.close(); }
 });
 
@@ -353,6 +366,25 @@ function openSelectedVisual(page: ReturnType<typeof visualWriter>, rowId: string
   document.getElementById("wr-visual")?.click();
   assert.equal(page.cell.dataset.field, "selection-visual");
 }
+
+test("abandoning an unfinished selection Visual edit never writes when the box closes", () => {
+  const page = visualWriter();
+  try {
+    openSelectedVisual(page, "R1", 1, 2);
+    page.cell.focus();
+    page.cell.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
+    page.cell.textContent = "held";
+    page.cell.dispatchEvent(new window.InputEvent("input", { bubbles: true, isComposing: true, data: "held" }));
+    assert.equal(page.writer.settle?.(), false);
+    assert.deepEqual([...collabState(page.h.a).ingress.holds], ["buffer"]);
+    for (const abandon of page.abandons) abandon(false);
+    assert.equal(page.writer.settle?.(), true);
+    page.writer.finish();
+    assert.equal(page.cell.closest<HTMLElement>(".wr-flow-visual-box")?.hidden, true);
+    assert.deepEqual(page.a.executed, []);
+    page.agrees(expected("ab", "Alice", [row("R1", "abc", "ab"), row("R2", "def", "")]));
+  } finally { page.close(); }
+});
 
 function bobNarration(page: ReturnType<typeof visualWriter>, offset: number, text: string) {
   const target = { owner: ref("R1"), segment: ref("R1"), field: "audioText" as const };

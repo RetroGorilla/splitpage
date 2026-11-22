@@ -31,14 +31,10 @@ let editing: ReadTimeEditor | null = null;
 export function readTimeEditing() { return editing ? editing.rowId : null; }
 
 function applyBeatLength(rowId: string | null, seconds: number | null | undefined) {
-  const native = (ports as ReadTimePortUse).shared.beatField?.(rowId ?? "", "lengthSeconds", seconds ?? null);
+  const native = (ports as ReadTimePortUse).beatField(rowId ?? "", "lengthSeconds", seconds ?? null);
   if (native) return native.changed;
-  const shared = (ports as ReadTimePortUse).shared.ports();
-  const outcome = (ports as ReadTimePortUse).edits.run(shared
-    ? (beatLengthCommand as ReadTimeLengthCommand)(rowId, seconds, (ports as ReadTimePortUse).edits.stamps, shared)
-    : (beatLengthCommand as ReadTimeLengthCommand)(rowId, seconds, (ports as ReadTimePortUse).edits.stamps));
+  const outcome = (ports as ReadTimePortUse).edits.run((beatLengthCommand as ReadTimeLengthCommand)(rowId, seconds, (ports as ReadTimePortUse).edits.stamps));
   if (outcome.kind === "failed") throw outcome.error;
-  if (shared && outcome.kind === "rejected") (ports as ReadTimePortUse).shared.refused(outcome);
   return outcome.kind === "applied" || outcome.kind === "committed";
 }
 

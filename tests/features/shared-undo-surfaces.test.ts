@@ -18,19 +18,20 @@ import { sharedUndoActions } from "../../src/application/editing/undo/shared-und
 import type { SharedDocumentSession } from "../../src/application/session/shared-session.ts";
 import { headingFieldKey, TITLE_FIELD_KEY } from "../../src/application/editing/buffered-field-key.ts";
 import { bufferedFieldKey } from "../../src/core/collab/buffer.ts";
-import { sharedUndoOwner } from "../../src/bootstrap/wiring/ports/shared-undo.ts";
+import { stepSharedUndo } from "../../src/bootstrap/wiring/undo.ts";
+import { sharedUndoOwner } from "../collab/editor-ports/shared-undo.ts";
 import { sharedWriterVisualBox } from "./writer/visual-undo-support.ts";
 import { bufferReaders, bufferStamps } from "../collab/buffer-readers.ts";
 import { edgeInput } from "./edge-input.ts";
 import type { EdgeInput } from "./edge-input.ts";
-import { sharedBufferPorts } from "../../src/bootstrap/wiring/ports/shared-buffer.ts";
+import { sharedBufferPorts } from "../collab/editor-ports/shared-buffer.ts";
 import { createPaintedBeats } from "../../src/application/editing/painted-beats.ts";
 import { createBufferedField } from "../../src/application/editing/buffered-field.ts";
 import { bindBufferedInput } from "../../src/features/common/buffered-input.ts";
 import { beatPos, headingPos } from "../../src/core/flow/flow.ts";
 import { createMonitoredSharedDocument } from "../adapters/collab/helpers.ts";
 import { applySharedUpdate, encodeSharedState, destroySharedDocument } from "../../src/adapters/collab/document.ts";
-import { sharedBufferedInputHistory } from "../../src/bootstrap/wiring/buffered-input.ts";
+import { sharedBufferedInputHistory } from "./buffered-input-history.ts";
 
 type Hook = (h: Stage1ExecutorHarness) => SharedUndo;
 
@@ -428,3 +429,14 @@ for (const key of [TITLE_FIELD_KEY, headingFieldKey("H1")]) {
     assert.deepEqual(violations, limits);
   });
 }
+
+test("the legacy shared undo route warns for a used-up step in either direction", () => {
+  const used = { ok: true, effective: false, reason: "used-up", label: "typing", selection: null } as const;
+  const route = { actions: { undo: () => used, redo: () => used }, breakGroup: () => {}, replayed: () => null };
+  const messages: string[] = [];
+  for (const direction of ["undo", "redo"] as const) assert.equal(stepSharedUndo(route, direction, text => messages.push(text)), used);
+  assert.deepEqual(messages, [
+    "That step could not be undone because someone else changed it.",
+    "That step could not be redone because someone else changed it."
+  ]);
+});

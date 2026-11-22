@@ -355,6 +355,29 @@ test("a keystroke not yet stored is stored by the split and counts as its own ed
   assert.equal(currentDocument().rows[1].audioText, "lo there?");
 });
 
+test("Ctrl+Enter stores the cell's current text before inserting a beat", async () => {
+  await open();
+  const el = cellOf("r1", "audioText");
+  el.focus();
+  el.appendChild(document.createTextNode("?"));
+  selectText(el, 3, 3);
+  const narrationAtInsert = [];
+  const stop = liveSession().subscribe(change => {
+    if (change.changes.rowsInserted.length) narrationAtInsert.push(row("r1").audioText);
+  });
+  try { assert.equal(key(el, "Enter", { ctrlKey: true }).defaultPrevented, true); } finally { stop(); }
+  assert.deepEqual(narrationAtInsert, ["Hello there?"]);
+  assert.equal(row("r1").audioText, "Hello there?");
+  const created = currentDocument().rows[1];
+  assert.equal(created.audioText, "");
+  await settle();
+  flushEdits();
+  assert.deepEqual(undoSizes(), { undo: 1, redo: 0 });
+  assert.equal(undo().ok, true);
+  assert.deepEqual(ids(), ["r1", "r2", "r3", "r4"]);
+  assert.equal(row("r1").audioText, "Hello there");
+});
+
 test("a Writer split is the same single edit with no grid render", async () => {
   await open();
   writer.openWriter();

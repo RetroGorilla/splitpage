@@ -14,7 +14,7 @@ const NBSP = "\u00a0";
 interface Field { readonly rowId: string; shown: string }
 
 function fieldBinding(text: string, foldSpaceForm: boolean | undefined, drain?: () => void,
-  session: Pick<BufferedFieldPorts, "abandonment"> = {}) {
+  session: Partial<Pick<BufferedFieldPorts, "abandonment" | "beforeCommand">> = {}) {
   const field: Field = { rowId: "R1", shown: text };
   let painted = text, stored = text, revision = 1, composing = false, resets = 0;
   const reports: CommandOutcome[] = [], replaced: [number, number, string][][] = [], committed: string[] = [];
@@ -34,7 +34,7 @@ function fieldBinding(text: string, foldSpaceForm: boolean | undefined, drain?: 
       };
       return edit;
     },
-    beforeCommand: () => () => {},
+    beforeCommand: session.beforeCommand ?? (() => () => {}),
     missingBase: () => {}, recovered: () => {},
     report: outcome => { reports.push(outcome); },
     ...(session.abandonment ? { abandonment: session.abandonment } : {})
@@ -156,4 +156,17 @@ test("rule 55: a paint during the drain of a commit resets a field shown in the 
   page = fieldBinding("the t", true, () => { assert.ok(page); assert.equal(page.binding.canPaint(), false); });
   assert.equal(page.key(4, 5, "the" + NBSP, "deleteContentBackward", null), true);
   assert.deepEqual([page.committed, page.resets(), page.reports], [["the "], 1, []]);
+});
+
+test("a previously reported buffer fault leaves the next command to announce its own refusal", () => {
+  const admissions: Parameters<BufferedFieldPorts["beforeCommand"]>[0][] = [];
+  const p = fieldBinding("the t", true, undefined, { beforeCommand: listener => { admissions.push(listener); return () => {}; } });
+  assert.equal(p.key(4, 5, "thX" + NBSP, "deleteContentBackward", null), true);
+  const report = { kind: "rejected", reason: "buffer-native-evidence" };
+  assert.deepEqual(p.reports, [report]);
+  const [admit] = admissions;
+  assert.ok(admit);
+  assert.equal(admit(), false);
+  assert.deepEqual(p.reports, [report]);
+  assert.deepEqual(p.committed, []);
 });

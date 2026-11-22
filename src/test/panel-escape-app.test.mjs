@@ -1,14 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
+import { currentDocument, sharedRecoverySession } from "../bootstrap/wiring/session-owner.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { sidePanels } from "../bootstrap/wiring/ports/panels.ts";
 import { clearProductionSelection } from "../bootstrap/wiring/production-editing-owners.ts";
 import { closeBrollPage, openBrollPage, openBrollPanel, runBrollRefresh } from "../features/broll/panel.ts";
 import { openGearPanel, renderProduction } from "../features/tags/panels.ts";
 import { closeCommentComposer, openCommentComposer, openCommentsPanel, postReply, renderComments, toggleReplyComposer } from "../features/comments/comments.ts";
-import { enter, tidy } from "./_shared-split-records.mjs";
-import { $, ADMISSION_HELD, REFUSED, SOURCE, adopt, brollBulkNew, brollButton, brollOpen, expandedCard, noticeCalls, press, productionCards, productionPick } from "./_standalone-records.mjs";
+import { $, ADMISSION_HELD, REFUSED, SOURCE, adopt, brollBulkNew, brollButton, brollOpen, expandedCard, noticeCalls, press, productionCards, productionPick, tidyStandalone } from "./_standalone-records.mjs";
 
 const ESCAPE_SOURCE = { ...SOURCE,
   rows: [...SOURCE.rows, { id: "r3", audioText: "Three", visualText: '<span class="broll-key" data-broll-id="bs1" contenteditable="false">B-roll:</span> Pier', status: "todo" }],
@@ -65,7 +64,7 @@ const ROWS = [
     prepare: () => { productionPick("prop mug"); $('[data-action="bulk-person-new"]').click(); }, stored: people, redraw: renderProduction },
   { name: "Gear quick add", selector: "#gear-quickadd-input", text: "Drone\nWireless lav", keep: true, prior: () => { $("#gear-quickadd-save").click(); },
     prepare: openGearPanel, stored: gear, redraw: renderProduction },
-  { name: "comment composer", selector: "#comment-body-editable", text: "First", cancelCommand: true,
+  { name: "comment composer", selector: "#comment-body-editable", text: "First", cancel: true,
     prepare: () => { openCommentsPanel(); openCommentComposer({ id: "C9", rowId: "r1", field: "visualText", quotedText: "yz" }); $("#comment-name").value = "Alice"; },
     stored: commentIds, redraw: renderComments },
   { name: "reply composer", selector: '.reply-composer[data-for="C1"] .cell-editable', text: "First", keep: true, prior: () => { postReply("C1"); },
@@ -76,22 +75,27 @@ const ROWS = [
 async function run(row, mode, standalone) {
   closeCommentComposer(); closeBrollPage(() => {}); sidePanels().closeAll(); clearProductionSelection();
   const shared = mode !== "standalone";
-  const f = shared ? await enter(ESCAPE_SOURCE) : (adopt(ESCAPE_SOURCE), { close: () => {} });
+  adopt(ESCAPE_SOURCE);
+  const hook = window.__sharedTest;
+  if (shared) assert.deepEqual(await hook.enter(), { ok: true });
+  const session = shared ? sharedRecoverySession() : null;
+  noticeCalls.length = 0;
   let release = () => {};
   try {
     row.prepare();
-    if (mode === "held") release = f.parts.session.hold(ADMISSION_HELD);
-    if (mode === "refused") release = f.parts.session.beforeCommand(() => { notices.show(REFUSED, "warn"); return "announced"; });
+    if (mode === "held") release = session.hold(ADMISSION_HELD);
+    if (mode === "refused") release = session.beforeCommand(() => { notices.show(REFUSED, "warn"); return "announced"; });
     input($(row.selector), row.text);
     const blocked = mode === "held" || mode === "refused";
     if (blocked && row.prior) row.prior($(row.selector));
     const before = structuredClone(row.stored()), warned = () => noticeCalls.filter(call => call[1] === "warn");
     const warningsBefore = warned().length;
     press($(row.selector), "Escape");
+    await Promise.resolve();
     const box = document.querySelector(row.selector);
     const result = { stored: structuredClone(row.stored()), showing: visible(box), text: visible(box) ? value(box) : null };
     if (!shared) return result;
-    assert.equal(warned().length - warningsBefore, blocked && (row.saving || row.cancelCommand) ? 1 : 0, row.name + " " + mode + ": one notice for an Escape submit, none for a cancel");
+    assert.equal(warned().length - warningsBefore, blocked && row.saving ? 1 : 0, row.name + " " + mode + ": one notice for an Escape submit, none for a cancel");
     if (!blocked) assert.deepEqual(result, standalone, row.name + ": allowed Escape matches standalone");
     if (blocked) assert.deepEqual(row.stored(), before, row.name + ": held/refused Escape writes no field");
     if (row.cancel) {
@@ -102,10 +106,10 @@ async function run(row, mode, standalone) {
     release(); row.redraw(); row.reopen?.();
     assert.deepEqual(row.stored(), afterEscape, row.name + ": release and redraw never save");
     assert.equal(warned().length, noticesAfter, row.name + ": redraw adds no notice");
-    if (row.keep || blocked && (row.saving || row.cancelCommand)) assert.equal(retained(row.text), true, row.name + ": uncancelled text survives Escape and redraw");
+    if (row.keep || blocked && row.saving) assert.equal(retained(row.text), true, row.name + ": uncancelled text survives Escape and redraw");
     if (row.cancel) assert.equal(stripValues().includes(row.text), false, row.name + ": a cancelled draft does not return");
     return result;
-  } finally { release(); closeBrollPage(() => {}); tidy(f); sidePanels().closeAll(); }
+  } finally { release(); closeBrollPage(() => {}); tidyStandalone(); if (shared) assert.deepEqual(hook.leave(), { ok: true }); sidePanels().closeAll(); }
 }
 
 for (const row of ROWS) test("Escape: " + row.name + " follows standalone when allowed, held and refused", async () => {
