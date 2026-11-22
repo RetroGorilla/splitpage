@@ -314,7 +314,8 @@ function pendingInput(field, composing, writer = false) {
 }
 
 const stopCases = [
-  { name: "when both leave attempts are blocked", blocked: true, writer: true },
+  { name: "when both leave attempts are blocked", blocked: true, writer: true, selectionVisual: true },
+  { name: "during Writer selection Visual composition", writer: true, selectionVisual: true },
   { name: "after a peer commit" },
   { name: "with pending Split narration", field: "audioText" },
   { name: "with pending Split Visual", field: "visualText" },
@@ -324,7 +325,7 @@ const stopCases = [
   { name: "during Writer narration composition", field: "audioText", composing: true, writer: true }
 ];
 
-for (const { name, field, composing, blocked, writer } of stopCases) test(`app stop ${name} releases the native peer, hook and listeners once`, async t => {
+for (const { name, field, composing, blocked, writer, selectionVisual } of stopCases) test(`app stop ${name} releases the native peer, hook and listeners once`, async t => {
   const store = draftStore(t);
   script();
   edit("Before sharing");
@@ -344,7 +345,7 @@ for (const { name, field, composing, blocked, writer } of stopCases) test(`app s
   const report = t.mock.method(console, "error", () => {});
   const originalHook = hook;
   assert.deepEqual(await enter(), { ok: true });
-  const sharedId = currentDocument().docId;
+  const { docId: sharedId, title: sharedTitle } = currentDocument();
   const registrations = added.mock.calls.map(call => call.arguments).filter(([type, listener, capture]) =>
     capture === true && ["intercept", "comment", "pictures"].includes(listener.name) || type === "pagehide" && listener.name === "pageHide");
   assert.ok(registrations.some(([type]) => type === "beforeinput"));
@@ -357,7 +358,7 @@ for (const { name, field, composing, blocked, writer } of stopCases) test(`app s
   if (composing) assert.deepEqual(hook.leave(), { ok: false, reason: "native-input-pending" });
   const seq = draftsTesting().status().seq;
   let box;
-  if (blocked) {
+  if (selectionVisual) {
     const root = document.getElementById("writer-doc"), node = root.querySelector('.wr-beat[data-id="r1"]').lastChild;
     root.dispatchEvent(new window.Event("pointerdown", { bubbles: true }));
     root.focus();
@@ -380,9 +381,9 @@ for (const { name, field, composing, blocked, writer } of stopCases) test(`app s
       const doc = currentDocument();
       atRelease = {
         visualBoxes: document.querySelectorAll('.wr-flow-visual-box').length,
-        writer: !!writerControls(), text: doc.rows[0].audioText, visual: doc.rows[0].visualText, id: doc.docId, shared: sharedSession(),
+        writer: !!writerControls(), text: doc.rows[0].audioText, visual: doc.rows[0].visualText, id: doc.docId, title: doc.title, shared: sharedSession(),
         native: nativeEditorActive(), undo: sharedUndoRoute() !== null, peer: hook.read().peer,
-        unsaved: unsavedChanges(), drafting: draftSource.detachRefusal(), seq: draftsTesting().status().seq
+        unsaved: unsavedChanges(), drafting: draftSource.detachRefusal(), seq: draftsTesting().status().seq, history: undoOwner().sizes()
       };
     }
     return remove.call(document, ...args);
@@ -424,6 +425,10 @@ for (const { name, field, composing, blocked, writer } of stopCases) test(`app s
       assert.equal(atRelease.visual, field === "visualText" && !composing ? "Wide!" : "Wide");
       assert.deepEqual(report.mock.calls.map(call => String(call.arguments[0])), []);
     }
+    if (selectionVisual && !blocked) {
+      assert.equal(box.isConnected, false);
+      assert.deepEqual([atRelease.title, atRelease.history], [sharedTitle, { undo: 0, redo: 0 }]);
+    }
     assert.ok(store.writes.every(write => !write.shared));
   } finally {
     window.removeEventListener("error", capture);
@@ -439,14 +444,14 @@ for (const { name, field, composing, blocked, writer } of stopCases) test(`app s
   assert.notEqual(draftSource.detachRefusal(), "detached");
   store.install();
   script();
-  if (blocked) {
+  if (selectionVisual) {
     writerControls().openWriter();
     assert.ok(writerControls().writerFlowControl());
     assert.deepEqual(listenerCounts(), listeners);
   }
   assert.deepEqual(await enter(), { ok: true });
   assert.deepEqual(hook.leave(), { ok: true });
-  if (blocked) assert.deepEqual(listenerCounts(), listeners);
+  if (selectionVisual) assert.deepEqual(listenerCounts(), listeners);
 });
 
 for (const composing of [false, true]) test(`native forced leave settles Writer narration, composing=${composing}`, async t => {
