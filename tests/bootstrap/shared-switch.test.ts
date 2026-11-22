@@ -1,3 +1,4 @@
+import type { LegacySharedSwitchPorts } from "./legacy-shared-switch-support.ts";
 import { enterLegacySharedSession } from "./legacy-shared-switch-support.ts";
 import "../../src/test/_dom.mjs";
 import test from "node:test";
@@ -21,7 +22,7 @@ import {
   forceLeaveSharedSession, leaveSharedSession, leaveRunningSharedSession, sharedSessionParts, SHARED_ALREADY, SHARED_ENTER_FAILED,
   SHARED_LEAVE_FAILED, SHARED_NOT_RUNNING, SHARED_SWITCHING
 } from "../../src/bootstrap/wiring/shared-session.ts";
-import type { SharedSessionParts, SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
+import type { SharedSessionParts } from "../../src/bootstrap/wiring/shared-session.ts";
 import { fakeMigration } from "../core/migrate-ports.ts";
 import { createFlowLoadRuntime } from "../core/flow/load.ts";
 import { fakeClock } from "../application/session-fakes.ts";
@@ -34,7 +35,7 @@ type Fault = "refusal" | "settle" | "docId" | "migrate" | "replaced-while-shared
   | "bindings.leave" | "hydration" | "detach" | "destroy" | "report" | "bridge entry" | "timers.stop" | "reattach" | "left" | "undo.reset";
 
 interface Switch {
-  readonly ports: SharedSwitchPorts;
+  readonly ports: LegacySharedSwitchPorts;
   readonly log: string[];
   readonly reported: string[];
   readonly entered: () => SharedSessionParts;
@@ -77,7 +78,7 @@ function start(): Switch {
     trip(sharedSession() ? "replaced-while-shared" : "replaced-while-standalone");
   }));
   standaloneSession().adopt(source());
-  const ports: SharedSwitchPorts = {
+  const ports: LegacySharedSwitchPorts = {
     opening: { openingPending: () => false },
     refusal: () => { trip("refusal"); return refusal; },
     commandRefused: undefined,
@@ -142,7 +143,7 @@ const length = (): unknown => currentDocument()?.rows[0]?.["lengthSeconds"];
 test("command refusals reach the supplied callback once while entry refusal is consulted only on entry", async () => {
   const s = start(), refusals: string[] = [];
   let entries = 0;
-  const ports: SharedSwitchPorts = { ...s.ports,
+  const ports: LegacySharedSwitchPorts = { ...s.ports,
     refusal: () => { entries++; return s.ports.refusal(); },
     commandRefused: reason => { refusals.push(reason); }
   };
@@ -225,7 +226,7 @@ test("C8 foreign leave ports cannot replace the mounted bindings or retained mig
   try {
     assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
     const wrong = (): never => { assert.fail("foreign switch ports were used"); };
-    const foreign: SharedSwitchPorts = { ...s.ports, bindings: { enter: wrong, settle: wrong, leave: wrong }, migrate: wrong, docId: wrong, report: wrong };
+    const foreign: LegacySharedSwitchPorts = { ...s.ports, bindings: { enter: wrong, settle: wrong, leave: wrong }, migrate: wrong, docId: wrong, report: wrong };
     assert.deepEqual(leaveSharedSession(foreign), { ok: true });
     assert.equal(currentDocument()?.docId, newId(2));
   } finally { s.stop(); }
@@ -250,7 +251,7 @@ test("C8 a later shared session leaves through its own ports", async () => {
     assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
     assert.deepEqual(leaveRunningSharedSession(), { ok: true });
     let settled = 0, left = 0;
-    const next: SharedSwitchPorts = { ...s.ports, bindings: { enter: () => {}, settle: () => { settled++; return null; }, leave: () => { left++; } }, docId: () => newId(99) };
+    const next: LegacySharedSwitchPorts = { ...s.ports, bindings: { enter: () => {}, settle: () => { settled++; return null; }, leave: () => { left++; } }, docId: () => newId(99) };
     assert.deepEqual(await enterLegacySharedSession(next), { ok: true });
     assert.deepEqual(leaveRunningSharedSession(), { ok: true });
     assert.deepEqual([settled, left, currentDocument()?.docId], [1, 1, newId(99)]);
@@ -609,7 +610,7 @@ test("entry runs the boundary's preparation after settling and a microtask, befo
     const s = start(), order: string[] = [];
     try {
       let refusals = 0;
-      const ports: SharedSwitchPorts = { ...s.ports,
+      const ports: LegacySharedSwitchPorts = { ...s.ports,
         refusal: () => { refusals++; order.push("refusal"); return null; },
         settle: () => { order.push("settle"); },
         prepare: async () => {

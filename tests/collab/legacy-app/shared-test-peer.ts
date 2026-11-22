@@ -1,3 +1,4 @@
+import type { LegacySharedSwitchPorts } from "../../bootstrap/legacy-shared-switch-support.ts";
 import { applySharedUpdate, createSharedDocument, destroySharedDocument, encodeSharedState, encodeSharedStateVector, encodeSharedUpdate,
   observeSharedUpdates, shouldDeliverSharedUpdate } from "../../../src/adapters/collab/document.ts";
 import { observeSharedDeclined } from "../../../src/adapters/collab/ingress.ts";
@@ -18,7 +19,7 @@ import type { FlowDoc, FlowOutcome, FlowPorts, FlowRange } from "../../../src/co
 import { enterSharedDocument } from "../../../src/core/migrate.ts";
 import { projection } from "../../../src/core/text/runs.ts";
 import type { MarkName } from "../../../src/core/text/runs.ts";
-import type { SharedSwitchPorts, SharedSessionParts } from "../../../src/bootstrap/wiring/shared-session.ts";
+import type { SharedSessionParts } from "../../../src/bootstrap/wiring/shared-session.ts";
 import { sharedAuthorPort } from "../editor-ports/shared-author.ts";
 import { sharedBufferPorts } from "../../../src/bootstrap/wiring/ports/shared-buffer.ts";
 import { sharedUndoOwner } from "../editor-ports/shared-undo.ts";
@@ -78,7 +79,7 @@ function copy<T>(value: T): T {
   return JSON.parse(JSON.stringify(value)) as T;
 }
 
-function sessionOn(handle: SharedDocumentHandle, ports: SharedSwitchPorts, undo?: SharedUndo) {
+function sessionOn(handle: SharedDocumentHandle, ports: LegacySharedSwitchPorts, undo?: SharedUndo) {
   const replica = createSharedReplica(handle, undefined, undo);
   const session = createSharedSession({ replica, entry: enterSharedDocument, undo: { record: () => {} },
     effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: () => {} },
@@ -86,7 +87,7 @@ function sessionOn(handle: SharedDocumentHandle, ports: SharedSwitchPorts, undo?
   return { replica, session };
 }
 
-function hydratedCopy(source: SharedDocumentHandle, ports: SharedSwitchPorts): SharedDocumentHandle {
+function hydratedCopy(source: SharedDocumentHandle, ports: LegacySharedSwitchPorts): SharedDocumentHandle {
   const handle = createSharedDocument();
   registerSharedOperationFamilies(handle, ports.structure);
   const hydrated = applySharedUpdate(handle, encodeSharedState(source));
@@ -98,7 +99,7 @@ function range(rowId: string, from: number, endRow: string, to: number): FlowRan
   return { anchor: beatPos(rowId, from), head: beatPos(endRow, to) };
 }
 
-function participantOn(handle: SharedDocumentHandle, ports: SharedSwitchPorts, name: string, live: () => boolean) {
+function participantOn(handle: SharedDocumentHandle, ports: LegacySharedSwitchPorts, name: string, live: () => boolean) {
   const author = sharedAuthorPort({ handle: () => live() ? handle : null, name: () => name });
   const undo = sharedUndoOwner(handle, () => author.next(), ports.now, ports.report);
   const { replica, session } = sessionOn(handle, ports, undo);
@@ -119,7 +120,7 @@ function participantOn(handle: SharedDocumentHandle, ports: SharedSwitchPorts, n
   return { author, undo, replica, session, history, stamps, buffered };
 }
 
-export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitchPorts) {
+export function createSharedTestPeer(app: SharedSessionParts, ports: LegacySharedSwitchPorts) {
   const handle = hydratedCopy(app.handle, ports);
   let live = true, paused = false;
   const { author, undo, replica, session, history, stamps, buffered } = participantOn(handle, ports, "Peer", () => live);

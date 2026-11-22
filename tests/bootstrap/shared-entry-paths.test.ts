@@ -1,3 +1,4 @@
+import type { LegacySharedSwitchPorts } from "./legacy-shared-switch-support.ts";
 import { enterLegacySharedSession } from "./legacy-shared-switch-support.ts";
 import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
@@ -8,7 +9,6 @@ import { documentEntry } from "../../src/bootstrap/wiring/ports/document-entry.t
 import { openingStatus } from "../../src/bootstrap/wiring/ports/transitions.ts";
 import { currentCapabilities, currentDocument, liveSession, runCommand, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
 import { leaveRunningSharedSession, sharedSessionParts } from "../../src/bootstrap/wiring/shared-session.ts";
-import type { SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
 import { mountRowsRenderFeature, stopRowsRenderFeature } from "../../src/bootstrap/wiring/render.ts";
 import { confirmSavedNow, unsavedChanges } from "../../src/bootstrap/wiring/save-owners.ts";
 import { fileHome, currentHome, setHome } from "../../src/bootstrap/wiring/location-owner.ts";
@@ -45,7 +45,7 @@ function deferred<T>() {
 
 function switcher() {
   const log: string[] = [], errors: unknown[] = [], standalone = currentCapabilities(); let held: string | null = null;
-  const ports: SharedSwitchPorts = { opening: openingStatus, commandRefused: undefined, refusal: () => { log.push("refusal"); return null; },
+  const ports: LegacySharedSwitchPorts = { opening: openingStatus, commandRefused: undefined, refusal: () => { log.push("refusal"); return null; },
     settle: () => { log.push("settle"); }, detach: () => { setHome("none"); },
     bindings: { enter: () => { log.push("enter"); }, settle: () => { log.push("binding-settle"); return held; }, leave: () => { log.push("leave"); } },
     common: standalone, standalone, migrate: migrateRows, docId: () => { log.push("id"); return "d" + String(serial++).padStart(32, "0"); },

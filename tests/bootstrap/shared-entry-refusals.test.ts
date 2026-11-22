@@ -1,10 +1,10 @@
+import type { LegacySharedSwitchPorts } from "./legacy-shared-switch-support.ts";
 import { enterLegacySharedSession } from "./legacy-shared-switch-support.ts";
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { bootApp, closeApp } from "../../src/test/_app-boot.mjs";
 import { stopApp } from "../../src/bootstrap/app.ts";
 import { leaveSharedSession, sharedSessionParts } from "../../src/bootstrap/wiring/shared-session.ts";
-import type { SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
 import { currentCapabilities, currentDocument, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
 import { documentTransitions } from "../../src/bootstrap/wiring/transition-owners.ts";
 import { openingStatus } from "../../src/bootstrap/wiring/ports/transitions.ts";
@@ -35,7 +35,7 @@ async function share() {
   documentTransitions().open({ from: { raw: structuredClone(source) }, reason: "C8 fixture" });
   const errors: unknown[] = [];
   const standalone = currentCapabilities();
-  const ports: SharedSwitchPorts = {
+  const ports: LegacySharedSwitchPorts = {
     opening: openingStatus,
     commandRefused: undefined,
     refusal: () => null, settle: () => {}, detach: () => {},

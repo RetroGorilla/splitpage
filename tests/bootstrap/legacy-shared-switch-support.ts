@@ -7,16 +7,28 @@ import { sharedUndoActions } from "../../src/application/editing/undo/shared-und
 import { sharedAuthorPort } from "../collab/editor-ports/shared-author.ts";
 import { sharedUndoOwner } from "../collab/editor-ports/shared-undo.ts";
 import type { ValidatedDocument } from "../../src/core/document/validated.ts";
+import type { SharedStructureContentPorts } from "../../src/adapters/collab/structure-content.ts";
+import { fromHtml } from "../../src/bootstrap/richtext.ts";
 import { currentDocument } from "../../src/bootstrap/wiring/session-owner.ts";
 import { enterSharedSession } from "../../src/bootstrap/wiring/shared-session.ts";
-import type { SharedEditorBackend, SharedSessionParts, SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
+import type { SharedBindings, SharedEditorBackend, SharedSessionParts, SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
+
+export interface LegacySharedSwitchPorts extends SharedSwitchPorts {
+  readonly bindings: SharedBindings;
+  readonly structure: SharedStructureContentPorts;
+  readonly hydrate?: (handle: SharedDocumentHandle, migrated: ValidatedDocument) => void;
+}
+
+export function withLegacySwitchPorts(ports: SharedSwitchPorts): LegacySharedSwitchPorts {
+  return { ...ports, bindings: { enter: () => {}, settle: () => null, leave: () => {} }, structure: { cells: fromHtml } };
+}
 
 // why: a destroy listener that throws stops Yjs before it drops its observers; a second attempt finishes the job
 function destroy(attempt: (step: () => void) => boolean, handle: SharedDocumentHandle): void {
   if (!attempt(() => { destroySharedDocument(handle); })) attempt(() => { destroySharedDocument(handle); });
 }
 
-function openLegacyBackend(ports: SharedSwitchPorts, hydration: ValidatedDocument, attempt: (step: () => void) => boolean): SharedEditorBackend {
+function openLegacyBackend(ports: LegacySharedSwitchPorts, hydration: ValidatedDocument, attempt: (step: () => void) => boolean): SharedEditorBackend {
   const handle = createSharedDocument();
   let on = true, parts: SharedSessionParts | null = null;
   const author = sharedAuthorPort({ handle: () => on ? handle : null, name: ports.editor });
@@ -47,6 +59,6 @@ function openLegacyBackend(ports: SharedSwitchPorts, hydration: ValidatedDocumen
   }
 }
 
-export function enterLegacySharedSession(ports: SharedSwitchPorts) {
+export function enterLegacySharedSession(ports: LegacySharedSwitchPorts) {
   return enterSharedSession(ports, (doc, _failed, attempt) => openLegacyBackend(ports, doc, attempt));
 }

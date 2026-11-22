@@ -8,7 +8,7 @@ import { setBeatLength } from "../features/rows/read-time.ts";
 import { setTargetLength } from "../features/rundown/target.ts";
 import { deleteSelectedBeats, selectBeats } from "../features/clipboard/beat-select.ts";
 import { collabState } from "../adapters/collab/state.ts";
-import { ORDERS, START, agree, base, caret, cellOf, clearWarnings, deliverInsideNextPublication, enter, exchange, minted, press, remoteCreate,
+import { ORDERS, START, agree, base, caret, cellOf, deliverInsideNextPublication, enter, exchange, minted, press, remoteCreate,
   remoteInsert, remoteSplit, row, select, toastHost, type, undoOnce, warnings } from "./_shared-split-callers.mjs";
 
 const served = [

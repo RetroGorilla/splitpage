@@ -1,5 +1,4 @@
 import { stopNativeCaretWait } from "./native-switch-caret.ts";
-import type { SharedStructureContentPorts } from "../../adapters/collab/structure-content.ts";
 import type { SharedDocumentHandle } from "../../adapters/collab/types.ts";
 import type { SharedUndo } from "../../application/editing/undo/shared-undo.ts";
 import type { CommandOutcome, DocumentStructureIntent } from "../../application/session/document-session.ts";
@@ -51,18 +50,15 @@ export interface SharedSwitchPorts {
   readonly detach: () => void;
   readonly reattach?: () => void;
   readonly left?: (landed: boolean) => void;
-  readonly bindings: SharedBindings;
   readonly common: Pick<CapabilityPort, "edit" | "comment">;
   readonly standalone: CapabilityPort;
   readonly migrate: (raw: unknown) => ValidatedDocument;
   readonly docId: () => string;
   readonly editor: () => string;
-  readonly structure: SharedStructureContentPorts;
   readonly report: ReportPort;
   readonly timers: TimerPort;
   readonly now: () => number;
   readonly opening: Pick<DocumentOpeningActivity, "openingPending">;
-  readonly hydrate?: (handle: SharedDocumentHandle, migrated: ValidatedDocument) => void;
 }
 
 export type SharedSwitchOutcome = { readonly ok: true } | { readonly ok: false; readonly reason: string };

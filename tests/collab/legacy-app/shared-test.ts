@@ -1,3 +1,4 @@
+import type { LegacySharedSwitchPorts } from "../../bootstrap/legacy-shared-switch-support.ts";
 import { enterLegacySharedSession } from "../../bootstrap/legacy-shared-switch-support.ts";
 import { exposeTestHook } from "../../../src/features/common/test-hooks.ts";
 import { mintDocId } from "../../../src/adapters/identity/ids.ts";
@@ -7,7 +8,7 @@ import { fromHtml } from "../../../src/bootstrap/richtext.ts";
 import { currentCapabilities, sharedSession } from "../../../src/bootstrap/wiring/session-owner.ts";
 import { SHARED_ALREADY, SHARED_NOT_RUNNING, SHARED_SWITCHING, forceLeaveSharedSession, leaveRunningSharedSession,
   sharedSessionParts } from "../../../src/bootstrap/wiring/shared-session.ts";
-import type { SharedSwitchOutcome, SharedSwitchPorts } from "../../../src/bootstrap/wiring/shared-session.ts";
+import type { SharedSwitchOutcome } from "../../../src/bootstrap/wiring/shared-session.ts";
 import type { Home } from "../../../src/application/location/document-location.ts";
 import { sharedSplitBindings } from "../../../src/bootstrap/wiring/shared-split.ts";
 import { createSharedTestPeer, sharedTestPeerHook } from "./shared-test-peer.ts";
@@ -104,7 +105,7 @@ function startSharedTestHook(): () => void {
       const standalone = currentCapabilities();
       const common = { edit: standalone.edit, comment: standalone.edit };
       const refusal = (): string | null => (!live ? APP_STOPPED : null) ?? sharedEntryRefusal(ready, composing);
-      const entering: SharedSwitchPorts = {
+      const entering: LegacySharedSwitchPorts = {
         refusal, commandRefused: sharedCommandRefusalNotice(notices),
         settle: () => {
           if (writerControls()?.writerFlowControl()?.settle?.() === false) throw new Error("The Writer could not settle");

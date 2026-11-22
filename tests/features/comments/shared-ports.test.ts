@@ -138,7 +138,9 @@ test("posting a reply plans the shared record append through isolated feature po
   const fake = fixture({ author: () => ({ id: "w1_1", by: "Ada" }), cells: createFlowLoadRuntime().cells });
   const owner = startComments(fake.ports);
   try {
-    document.getElementById("comments-panel")!.innerHTML = '<div class="reply-composer" data-for="C1"><input class="reply-name-input" value="Ada"><div class="cell-editable">First</div></div>';
+    const panel = document.getElementById("comments-panel");
+    assert.ok(panel);
+    panel.innerHTML = '<div class="reply-composer" data-for="C1"><input class="reply-name-input" value="Ada"><div class="cell-editable">First</div></div>';
     postReply("C1");
     const [shared] = planned(fake.commands);
     assert.ok(shared?.operations.length);

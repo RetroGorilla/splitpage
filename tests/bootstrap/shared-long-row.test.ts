@@ -1,3 +1,4 @@
+import type { LegacySharedSwitchPorts } from "./legacy-shared-switch-support.ts";
 import { enterLegacySharedSession } from "./legacy-shared-switch-support.ts";
 import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
@@ -7,7 +8,6 @@ import { documentTransitions } from "../../src/bootstrap/wiring/transition-owner
 import { openingStatus } from "../../src/bootstrap/wiring/ports/transitions.ts";
 import { currentCapabilities, currentDocument, runCommand, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
 import { leaveRunningSharedSession, sharedSessionParts } from "../../src/bootstrap/wiring/shared-session.ts";
-import type { SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
 import { mountRowsRenderFeature, stopRowsRenderFeature } from "../../src/bootstrap/wiring/render.ts";
 import { confirmSavedNow } from "../../src/bootstrap/wiring/save-owners.ts";
 import { setHome } from "../../src/bootstrap/wiring/location-owner.ts";
@@ -23,7 +23,7 @@ const SOURCE = { schema: 2, docId: "d" + "1".repeat(32), title: "Entry source", 
 before(async () => { await bootApp(JSON.stringify(SOURCE)); });
 after(() => { stopApp(); closeApp(); });
 
-function ports(errors: unknown[]): SharedSwitchPorts {
+function ports(errors: unknown[]): LegacySharedSwitchPorts {
   const standalone = currentCapabilities();
   return { opening: openingStatus, commandRefused: undefined, refusal: () => null, settle: () => {}, detach: () => { setHome("none"); },
     bindings: { enter: () => {}, settle: () => null, leave: () => {} }, common: standalone, standalone, migrate: migrateRows,
