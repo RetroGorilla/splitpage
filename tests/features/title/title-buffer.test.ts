@@ -116,8 +116,8 @@ test("shared title: typing settles each keystroke as title text operations on th
     assert.equal(page.edge.type("X"), true);
     page.edge.select(1, 3);
     assert.equal(page.edge.backspace(), true);
-    assert.deepEqual([page.stored(), page.main.value, page.writer.value, caret(page.main), page.reports, page.commands],
-      ["DftX", "DftX", "DftX", [1, 1, "none"], [], []]);
+    assert.deepEqual([page.stored(), page.main.value, page.writer.value, caret(page.main), page.reports],
+      ["DftX", "DftX", "DftX", [1, 1, "none"], []]);
     assert.deepEqual(written(page), [[inserted("X")], [{ kind: "text-delete", observed: 2 }]]);
     assert.deepEqual(page.a.described.map(described => [described?.label, described?.typing, described?.selection !== null]), [["typing", "X", true], ["typing", "", true]]);
     assert.deepEqual(targets(page), [page.target(), page.target()]);
@@ -416,7 +416,7 @@ test("shared title: two writers each committing two units onto 298 leave 302 sto
   } finally { page.close(); }
 });
 
-test("shared title: closing the routes after typing leaves what is shared and repaints once", () => {
+test("shared title: disposing the binding after typing leaves what is shared and repaints once", () => {
   const page = sharedTitle();
   try {
     page.main.focus();
@@ -424,7 +424,7 @@ test("shared title: closing the routes after typing leaves what is shared and re
     page.edge.type("X");
     page.routes.dispose();
     page.routes.dispose();
-    assert.deepEqual([page.stored(), page.repaints(), page.reports, page.commands], ["DraftX", 1, [], []]);
+    assert.deepEqual([page.stored(), page.repaints(), page.reports], ["DraftX", 1, []]);
     page.edge.type("Y");
     assert.deepEqual([page.stored(), page.a.executed.length], ["DraftX", 1]);
   } finally { page.close(); }

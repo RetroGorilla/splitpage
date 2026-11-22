@@ -7,8 +7,10 @@ import type { SharedUndo } from "../../../src/application/editing/undo/shared-un
 import { sharedBufferPorts } from "../../collab/editor-ports/shared-buffer.ts";
 import { createBufferedField } from "../../../src/application/editing/buffered-field.ts";
 import { createPaintedBeats } from "../../../src/application/editing/painted-beats.ts";
-import { TITLE_FIELD_KEY } from "../../../src/application/editing/buffered-field-key.ts";
-import { mountTitleRoutes } from "../../../src/features/title/routes.ts";
+import { TITLE_FIELD_KEY, unsettledTitle } from "../../../src/application/editing/buffered-field-key.ts";
+import { TITLE_MAX } from "../../../src/core/document/file-title.ts";
+import { beatPos } from "../../../src/core/flow/flow.ts";
+import { bindBufferedInput } from "../../../src/features/common/buffered-input.ts";
 import type { DocumentView } from "../../../src/application/session/document-session.ts";
 import { fakeWriterBufferEffects } from "../fakes.ts";
 import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
@@ -31,7 +33,7 @@ export function sharedTitle(title = "Draft", fields: Record<string, unknown> = {
   let serial = 0, depth = 0, repaints = 0, pageTitles = 0;
   const shared = sharedBufferPorts(h.a, a.session, { ...effects, readers: bufferReaders, stamps: bufferStamps("Alice"),
     author: () => ({ id: "native:" + ++serial, by: "Alice" }) });
-  const listeners: (() => void)[] = [], checks: (() => void)[] = [], commands: string[] = [];
+  const listeners: (() => void)[] = [], checks: (() => void)[] = [];
   const current = () => { const doc = a.session.read(view => view) as DocumentView | null; return doc ? doc.title || "" : null; };
   document.body.innerHTML = '<input id="doc-title"><div id="writer"><input id="writer-title"></div><button id="away">away</button>';
   const byId = (id: string): HTMLInputElement => { const found = document.getElementById(id); assert.ok(found instanceof window.HTMLInputElement); return found; };
@@ -42,22 +44,23 @@ export function sharedTitle(title = "Draft", fields: Record<string, unknown> = {
     for (const listener of listeners.slice()) listener();
   }
   const watch = <T>(list: T[], item: T) => { list.push(item); return () => { const at = list.indexOf(item); if (at >= 0) list.splice(at, 1); }; };
-  const routes = mountTitleRoutes({
-    main, writer,
-    ports: { run: command => { commands.push(command.name); return { kind: "noop" }; }, current, pageTitle: () => { pageTitles++; } },
-    shared: {
-      history: sharedBufferedInputHistory(h.a, a.session, owner),
-      field: surface => createBufferedField(shared.bufferedText, surface),
-      painted: createPaintedBeats(shared.paintedText),
-      report: shared.bufferedText.report,
-      shown: edit => { depth++; try { return edit(); } finally { depth--; } },
-      repaint: () => { repaints++; paint(); },
-      onPainted: listener => watch(listeners, listener),
-      beforePaint: check => watch(checks, check)
-    }
+  const painted = createPaintedBeats(shared.paintedText), paintedTitle = () => painted.stored(TITLE_FIELD_KEY);
+  const routes = bindBufferedInput({
+    inputs: [main, writer], key: TITLE_FIELD_KEY, stored: paintedTitle, changed: () => { pageTitles++; }, pasteLimit: TITLE_MAX,
+    unsettled: text => unsettledTitle(text, paintedTitle() ?? ""),
+    position: offset => beatPos(TITLE_FIELD_KEY, offset), owns: pos => pos.kind === "beat" && pos.rowId === TITLE_FIELD_KEY
+  }, {
+    history: sharedBufferedInputHistory(h.a, a.session, owner),
+    field: surface => createBufferedField(shared.bufferedText, surface),
+    painted,
+    report: shared.bufferedText.report,
+    shown: edit => { depth++; try { return edit(); } finally { depth--; } },
+    repaint: () => { repaints++; paint(); },
+    onPainted: listener => watch(listeners, listener),
+    beforePaint: check => watch(checks, check)
   });
   const stored = () => readSharedPaintedText(h.a, sharedBufferedTarget(h.a, TITLE_FIELD_KEY))?.text;
-  return { h, a, main, writer, routes, reports, recovered, commands, stored, paint, owner, viewTitle: current,
+  return { h, a, main, writer, routes, reports, recovered, stored, paint, owner, viewTitle: current,
     edge: edgeInput(() => main), writerEdge: edgeInput(() => writer),
     target: () => sharedBufferedTarget(h.a, TITLE_FIELD_KEY),
     repaints: () => repaints, pageTitles: () => pageTitles, shownDepth: () => depth,

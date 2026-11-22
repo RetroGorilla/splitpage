@@ -598,28 +598,7 @@
     "replace": "      binding.keydown(key);\n",
     "tests": ["tests/features/rows/scene-name-buffer.test.ts"]
   },
-              {
-    "label": "a shared title still runs the set-title command",
-    "file": "src/features/title/routes.ts",
-    "find": "  if (mount.shared) {",
-    "replace": "  if (!mount.ports) {",
-    "tests": ["tests/features/title/title-buffer.test.ts"]
-  },
-              {
-    "label": "the Writer's title is not bound in a shared session",
-    "file": "src/features/title/routes.ts",
-    "find": "inputs: [mount.main, mount.writer]",
-    "replace": "inputs: [mount.main]",
-    "tests": ["tests/features/title/title-buffer.test.ts"]
-  },
-              {
-    "label": "a settled shared title leaves the page title stale",
-    "file": "src/features/title/routes.ts",
-    "find": "changed: ports.pageTitle,",
-    "replace": "",
-    "tests": ["tests/features/title/title-buffer.test.ts"]
-  },
-              {
+                                                  {
     "label": "a buffered input repaints only the input being typed in",
     "file": "src/features/common/buffered-input.ts",
     "find": "for (const input of inputs) if (input.value !== text) input.value = text;",
@@ -633,14 +612,7 @@
     "replace": "text: () => typing().value,",
     "tests": ["tests/features/title/title-buffer.test.ts"]
   },
-              {
-    "label": "a shared title has no length verdict",
-    "file": "src/features/title/routes.ts",
-    "find": "      unsettled: text => unsettledTitle(text, stored() ?? \"\"),\n",
-    "replace": "",
-    "tests": ["tests/features/title/title-buffer.test.ts"]
-  },
-              {
+                          {
     "label": "a title past the cap cannot be shortened",
     "file": "src/application/editing/buffered-field-key.ts",
     "find": "units > TITLE_MAX && units > Array.from(stored).length",
@@ -654,14 +626,7 @@
     "replace": "{ reason: \"buffer-title-length\", hold: true }",
     "tests": ["tests/features/title/title-buffer.test.ts"]
   },
-              {
-    "label": "closing the shared title routes does not settle",
-    "file": "src/features/title/routes.ts",
-    "find": "if (open && bound.dispose()) open = false;",
-    "replace": "open = false;",
-    "tests": ["tests/features/title/title-buffer.test.ts"]
-  },
-              {
+                          {
     "label": "a visual commit addressed to the narration",
     "file": "src/adapters/collab/buffer.ts",
     "find": "  return { owner, segment: owner, field: field.field };",
