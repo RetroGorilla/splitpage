@@ -6,8 +6,7 @@
     "tests/features/writer/buffer-undo.test.ts",
     "tests/bootstrap/shared-switch.test.ts",
     "src/test/shared-writer-app.test.mjs",
-    "tests/features/shared-undo-surfaces.test.ts",
-    "src/test/shared-hook-routes-app.test.mjs"
+    "tests/features/shared-undo-surfaces.test.ts"
   ],
   "mutants": [
     {
@@ -651,20 +650,20 @@
     },
     {
       "label": "leaving keeps the landed copy clean, so the next flush discards the stored draft",
-      "file": "tests/collab/legacy-app/shared-test.ts",
+      "file": "src/bootstrap/wiring/shared-test.ts",
       "find": "[() => { noteSaveChange(); }, () => { noteDraftChange(); }]",
       "replace": "[() => { noteDraftChange(); }]",
       "tests": [
-        "src/test/shared-hook-routes-app.test.mjs"
+        "src/test/shared-native-handoff-app.test.mjs"
       ]
     },
     {
       "label": "leaving does not resume the draft writer",
-      "file": "tests/collab/legacy-app/shared-test.ts",
+      "file": "src/bootstrap/wiring/shared-test.ts",
       "find": "...(kept ? [() => { draftSource.resumeWriting(); }] : []), ",
       "replace": "",
       "tests": [
-        "src/test/shared-hook-routes-app.test.mjs"
+        "src/test/shared-native-handoff-app.test.mjs"
       ]
     },
     {
@@ -696,11 +695,11 @@
     },
     {
       "label": "stopping the app does not leave the shared session",
-      "file": "tests/collab/legacy-app/shared-test.ts",
+      "file": "src/bootstrap/wiring/shared-test.ts",
       "find": "    try { forceLeaveSharedSession(); } finally {",
       "replace": "    try { void forceLeaveSharedSession; } finally {",
       "tests": [
-        "src/test/shared-hook-routes-app.test.mjs"
+        "src/test/shared-native-handoff-app.test.mjs"
       ]
     },
     {
@@ -754,7 +753,6 @@
       "find": "  if (left) faults.attempt(() => { left(true); });\n",
       "replace": "",
       "tests": [
-        "src/test/shared-hook-routes-app.test.mjs",
         "tests/bootstrap/shared-switch.test.ts",
         "tests/bootstrap/native-shared-entry.test.ts"
       ]
@@ -765,7 +763,6 @@
       "find": "  const first = leaveSharedSession(now.ports, false);\n  if (first.ok || running !== now) return first;\n",
       "replace": "",
       "tests": [
-        "src/test/shared-hook-routes-app.test.mjs",
         "tests/bootstrap/native-shared-entry.test.ts"
       ]
     },
@@ -775,7 +772,7 @@
       "find": "    abandon: () => { closing = true; abandonAll(false); },",
       "replace": "    abandon: () => { closing = true; },",
       "tests": [
-        "src/test/shared-hook-routes-app.test.mjs"
+        "src/test/shared-writer-broll-leave-app.test.mjs"
       ]
     },
     {
@@ -784,7 +781,7 @@
       "find": "  const stopAbandonment = ports.abandonment?.(abandon);",
       "replace": "  const stopAbandonment = ports.abandonment?.(() => {});",
       "tests": [
-        "src/test/shared-hook-routes-app.test.mjs"
+        "tests/features/writer/buffer-binding.test.ts"
       ]
     },
     {
@@ -813,7 +810,7 @@
       "find": "    const stopAbandonment = shared.bufferedText.abandonment?.(abandon);",
       "replace": "    const stopAbandonment = shared.bufferedText.abandonment?.(() => {});",
       "tests": [
-        "src/test/shared-hook-routes-app.test.mjs"
+        "tests/features/writer/visual-buffer.test.ts"
       ]
     },
     {
@@ -822,7 +819,7 @@
       "find": "      if (binding?.discarded?.()) return null;\n",
       "replace": "",
       "tests": [
-        "src/test/shared-hook-routes-app.test.mjs"
+        "tests/features/writer/visual-buffer.test.ts"
       ]
     },
     {

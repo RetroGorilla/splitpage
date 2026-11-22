@@ -39,12 +39,13 @@ export function bufferedWriter(text = "ab", sourceReady = true,
     fields?: Record<string, unknown>;
     undo?: (h: Stage1ExecutorHarness) => Pick<SharedUndo, "perform">;
     history?: SharedUndoActions;
+    abandonment?: NonNullable<Parameters<typeof sharedBufferPorts>[2]["abandonment"]>;
   } = {}) {
   const h = options.h ?? new Stage1ExecutorHarness([{ id: "R1", text }, { id: "R2", text: "next" }], options.fields), a = sharedHarness(adapterReplica(h.a, options.undo?.(h)));
   const root = options.h ? document.body.appendChild(document.createElement("div")) : writerPage(), { effects, reports, missing, recovered } = fakeWriterBufferEffects();
   const notices: string[] = [];
   let serial = 0, reads = 0, ready = sourceReady;
-  const shared = sharedBufferPorts(h.a, a.session, { ...effects, readers: bufferReaders, stamps: bufferStamps("Alice"), author: () => {
+  const shared = sharedBufferPorts(h.a, a.session, { ...effects, ...options.abandonment ? { abandonment: options.abandonment } : {}, readers: bufferReaders, stamps: bufferStamps("Alice"), author: () => {
     const next = ++serial;
     return { id: options.author?.(next) ?? (options.h ? "other_native:" : "native:") + next, by: "Alice" };
   } });

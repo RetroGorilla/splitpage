@@ -425,6 +425,24 @@ test("rule 198: the box left while the session is being abandoned keys nothing",
   } finally { f.close(); }
 });
 
+test("abandoning the Writer binding closes its unfinished Visual composition without a write", async () => {
+  const f = await enter("Close up");
+  const box = openVisual();
+  try {
+    box.focus();
+    box.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true }));
+    box.textContent = "held";
+    box.dispatchEvent(new window.InputEvent("input", { bubbles: true, isComposing: true, data: "held" }));
+    assert.equal(writerControls().writerFlowControl().settle(), false);
+    ports.bindings.abandon();
+    assert.equal(writerControls().writerFlowControl().settle(), true);
+    assert.equal(currentDocument().rows[0].visualText, "Close up");
+  } finally {
+    if (!writerControls().writerFlowControl().settle()) box.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true }));
+    f.close();
+  }
+});
+
 test("rule 198: another copy removing the row under the open box keys nothing, and the box closes", async () => {
   const f = await enter("B-roll: Close up");
   try {

@@ -6,9 +6,8 @@ import { fromHtml } from "../../../src/bootstrap/richtext.ts";
 import { currentCapabilities, sharedSession } from "../../../src/bootstrap/wiring/session-owner.ts";
 import { SHARED_ALREADY, SHARED_NOT_RUNNING, SHARED_SWITCHING, enterSharedSession, forceLeaveSharedSession, leaveRunningSharedSession,
   sharedSessionParts } from "../../../src/bootstrap/wiring/shared-session.ts";
-import type { SharedBindings, SharedSwitchOutcome, SharedSwitchPorts } from "../../../src/bootstrap/wiring/shared-session.ts";
+import type { SharedSwitchOutcome, SharedSwitchPorts } from "../../../src/bootstrap/wiring/shared-session.ts";
 import type { Home } from "../../../src/application/location/document-location.ts";
-import { sharedWriterBindings } from "../../../src/bootstrap/wiring/shared-writer.ts";
 import { sharedSplitBindings } from "../../../src/bootstrap/wiring/shared-split.ts";
 import { createSharedTestPeer, sharedTestPeerHook } from "./shared-test-peer.ts";
 import { sharedCommandRefusalNotice } from "../../../src/bootstrap/wiring/ports/shared-command-notices.ts";
@@ -23,8 +22,6 @@ import { draftSource } from "../../../src/bootstrap/wiring/drafts.ts";
 import { confirmSavedNow, noteSaveChange, unsavedChanges } from "../../../src/bootstrap/wiring/save-owners.ts";
 import { currentHome, documentLocation, setHome } from "../../../src/bootstrap/wiring/location-owner.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
-import { sharedIntakeStopped } from "../../../src/adapters/collab/ingress.ts";
-import { timingMarks } from "../../../shared/timing-marks.ts";
 
 declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
@@ -85,14 +82,7 @@ function startSharedTestHook(): () => void {
     missingBase: () => { counts.missingBase++; notices.show("This line changed. Try writing again.", "warn"); },
     report
   };
-  const writing = sharedWriterBindings(effects), splitting = sharedSplitBindings(effects);
-  const bindings: SharedBindings = {
-    enter: parts => { writing.enter(parts); splitting.enter(parts); },
-    settle: () => writing.settle() ?? splitting.settle(),
-    leave: () => { runEvery([splitting.leave, writing.leave]); },
-    abandon: () => { runEvery([() => { writing.abandon?.(); }, () => { splitting.abandon?.(); }]); },
-    drop: () => { runEvery([() => { writing.drop?.(); }, () => { splitting.drop?.(); }]); }
-  };
+  const bindings = sharedSplitBindings(effects);
   const left = (landed: boolean): void => {
     const ending = peer, kept = detached;
     peer = null; detached = null;
@@ -159,15 +149,13 @@ function startSharedTestHook(): () => void {
   const hook = {
     enter: () => enter(),
     leave,
-    timing: (on: boolean) => { timingMarks.marksOn = on === true; },
     peer: sharedTestPeerHook(() => peer),
     read: () => ({ app: documentReader.read(doc => doc ? JSON.parse(JSON.stringify(doc)) as unknown : null), peer: peer?.read() ?? null }),
     recovery: () => {
       const parts = sharedSessionParts();
       return { app: parts ? projectSharedDocumentWithRecovery(parts.handle).recovery : [], peer: peer?.recovery() ?? [] };
     },
-    counters: () => ({ ...counts, queued: peer?.queued() ?? 0, abandonable: writing.abandonable() + splitting.abandonable() }),
-    intakeStopped: () => { const parts = sharedSessionParts(); return parts ? sharedIntakeStopped(parts.handle) : false; }
+    counters: () => ({ ...counts, queued: peer?.queued() ?? 0 })
   };
   exposeTestHook("__legacySharedTest", () => hook, release => { withdraw = release; });
   return () => {
