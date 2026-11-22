@@ -1,0 +1,184 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.P=S.nativePeer;window.json=JSON.stringify;window.Q=(id,f)=>document.querySelector('#rows .cell-editable[data-id="'+id+'"][data-field="'+f+'"]');window.warn=()=>[...document.querySelectorAll('#toast-host .toast.warn:not(.is-leaving)')].map(t=>t.textContent);window.clearWarn=()=>{document.querySelectorAll('#toast-host .toast').forEach(t=>t.dismiss());return true};window.refused=()=>json(warn())===json(['This is not available in a shared session yet.']);window.same=()=>json(S.read().app)===json(S.read().peer);window.rowIds=()=>S.read().app.rows.map(r=>r.id).join(',');window.cellHtml=(id,f)=>Q(id,f)?.innerHTML.replace(/\u200b/g,'')??null;window.selOf=(id,f)=>{const c=Q(id,f),s=getSelection();if(!c||!s.rangeCount||!c.contains(s.anchorNode)||!c.contains(s.focusNode))return null;const a=document.createRange();a.setStart(c,0);a.setEnd(s.anchorNode,s.anchorOffset);const h=document.createRange();h.setStart(c,0);h.setEnd(s.focusNode,s.focusOffset);return [a.toString().replace(/\u200b/g,'').length,h.toString().replace(/\u200b/g,'').length]};window.place=(id,f,from,to=from)=>{const c=Q(id,f);c.focus();const locate=off=>{const w=document.createTreeWalker(c,4);let n,k=off;while((n=w.nextNode())){if(k<=n.data.length)return [n,k];k-=n.data.length}return [c,c.childNodes.length]};const [an,ao]=locate(from),[fn,fo]=locate(to);getSelection().setBaseAndExtent(an,ao,fn,fo);return true};window.keyEvents=[];window.addEventListener('keydown',e=>{if((e.altKey&&e.key==='ArrowUp')||((e.ctrlKey||e.metaKey)&&/^[biu]$/i.test(e.key)))setTimeout(()=>window.keyEvents.push({key:e.key,altKey:e.altKey,ctrlKey:e.ctrlKey,defaultPrevented:e.defaultPrevented,isTrusted:e.isTrusted,isComposing:e.isComposing}),0)},true);window.bufferX=()=>{place('r1','audioText',3);const c=Q('r1','audioText'),r=getSelection().getRangeAt(0).cloneRange(),ev=new InputEvent('beforeinput',{bubbles:true,cancelable:true,inputType:'insertText',data:'X'});Object.defineProperty(ev,'getTargetRanges',{value:()=>[r.cloneRange()]});const uncanceled=c.dispatchEvent(ev);return {uncanceled,html:cellHtml('r1','audioText'),sel:selOf('r1','audioText'),app:S.read().app.rows[0].audioText,peer:S.read().peer.rows[0].audioText,queued:P.queuedUpdates().length}};window.probePending=spec=>{P.hold('updates');const pre=bufferX();const c=Q('r1','audioText');const ev=spec.type==='keydown'?new KeyboardEvent('keydown',{bubbles:true,cancelable:true,key:spec.key,altKey:!!spec.altKey,ctrlKey:!!spec.ctrlKey}):new InputEvent('beforeinput',{bubbles:true,cancelable:true,inputType:spec.inputType,data:null});c.dispatchEvent(ev);const q=P.queuedUpdates();return {pre,prevented:ev.defaultPrevented,warnings:warn(),rows:rowIds(),appAudio:S.read().app.rows[0].audioText,peerAudio:S.read().peer.rows[0].audioText,html:cellHtml('r1','audioText'),active:document.activeElement===c,sel:selOf('r1','audioText'),queued:q}};window.load=title=>F.openFile(new File([JSON.stringify({schema:2,title,paragraphsDecided:true,people:[{id:'p1',name:'Alice'}],rows:[{id:'r1',audioText:'abcdef',visualText:'abcdef'},{id:'r2',audioText:'other',visualText:'other'}]})],'split-audio-refusals.splitpage'));true
+
+eval clearWarn();load('Split Audio first-beat Alt+Up and collapsed format settlement')
+wait F.state().title==='Split Audio first-beat Alt+Up and collapsed format settlement'&&warn().length===0
+eval window.originalId=F.state().docId;S.enter()
+wait S.read().peer!==null&&same()
+eval P.type('r2',0,'P');P.type('r2',1,'Q');true
+wait same()&&S.read().app.rows[1].audioText==='PQother'
+
+eval window.beforeDoc=json(S.read());P.hold('updates');keyEvents.length=0;place('r1','audioText',3)
+key alt ArrowUp
+wait keyEvents.length===1
+expect keyEvents[0].isTrusted&&keyEvents[0].defaultPrevented&&warn().length===0&&rowIds()==='r1,r2'&&document.activeElement===Q('r1','audioText')&&json(selOf('r1','audioText'))==='[3,3]'&&json(S.read())===beforeDoc&&P.queuedUpdates().length===0
+eval P.release('forward');true
+
+eval window.beforeDoc=json(S.read());P.hold('updates');keyEvents.length=0;place('r1','audioText',2,4)
+key alt ArrowUp
+wait keyEvents.length===1
+expect keyEvents[0].isTrusted&&keyEvents[0].defaultPrevented&&warn().length===0&&rowIds()==='r1,r2'&&document.activeElement===Q('r1','audioText')&&json(selOf('r1','audioText'))==='[2,4]'&&json(S.read())===beforeDoc&&P.queuedUpdates().length===0
+eval P.release('forward');true
+
+eval window.res=probePending({type:'keydown',key:'ArrowUp',altKey:true});true
+expect !res.pre.uncanceled&&res.pre.html==='abcXdef'&&json(res.pre.sel)==='[4,4]'&&res.pre.app==='abcdef'&&res.pre.peer==='abcdef'&&res.pre.queued===0
+expect res.prevented&&res.warnings.length===0&&res.rows==='r1,r2'&&res.appAudio==='abcXdef'&&res.peerAudio==='abcdef'&&res.html==='abcXdef'&&res.active&&json(res.sel)==='[4,4]'&&res.queued.length===1&&res.queued[0].to==='peer'&&res.queued[0].bytes.length>0
+sleep 60
+eval window.dispatchEvent(new Event('pagehide'));true
+expect json(P.queuedUpdates())===json(res.queued)&&warn().length===0&&rowIds()==='r1,r2'&&document.activeElement===Q('r1','audioText')&&json(selOf('r1','audioText'))==='[4,4]'&&S.read().peer.rows[0].audioText==='abcdef'
+eval window.replayed=P.release('forward');true
+expect json(replayed)===json(res.queued)&&P.queuedUpdates().length===0&&same()&&S.read().app.rows[0].audioText==='abcXdef'&&S.read().app.rows[1].audioText==='PQother'&&cellHtml('r1','audioText')==='abcXdef'&&warn().length===0
+eval P.undoPeer();true
+wait same()&&S.read().app.rows[1].audioText==='other'
+expect S.read().app.rows[0].audioText==='abcXdef'&&cellHtml('r1','audioText')==='abcXdef'&&warn().length===0
+eval P.type('r2',0,'P');P.type('r2',1,'Q');true
+wait same()&&S.read().app.rows[1].audioText==='PQother'
+eval place('r1','audioText',4);true
+key ctrl KeyZ
+wait same()&&S.read().app.rows[0].audioText==='abcdef'&&S.read().app.rows[1].audioText==='PQother'
+expect cellHtml('r1','audioText')==='abcdef'&&warn().length===0
+key ctrl+shift KeyZ
+wait same()&&S.read().app.rows[0].audioText==='abcXdef'&&S.read().app.rows[1].audioText==='PQother'
+expect cellHtml('r1','audioText')==='abcXdef'&&warn().length===0
+key ctrl KeyZ
+wait same()&&S.read().app.rows[0].audioText==='abcdef'
+
+eval P.hold('updates');clearWarn();keyEvents.length=0;place('r1','audioText',3)
+wait warn().length===0
+ime set X
+expect cellHtml('r1','audioText')==='abcXdef'&&S.read().app.rows[0].audioText==='abcdef'&&S.read().peer.rows[0].audioText==='abcdef'&&P.queuedUpdates().length===0&&warn().length===0
+key alt ArrowUp
+wait keyEvents.length===1
+expect keyEvents[0].isTrusted&&keyEvents[0].isComposing&&keyEvents[0].defaultPrevented&&warn().length===0&&rowIds()==='r1,r2'&&cellHtml('r1','audioText')==='abcXdef'&&S.read().app.rows[0].audioText==='abcdef'&&S.read().peer.rows[0].audioText==='abcdef'&&P.queuedUpdates().length===0
+eval window.nonIme=new KeyboardEvent('keydown',{bubbles:true,cancelable:true,key:'ArrowUp',altKey:true});Q('r1','audioText').dispatchEvent(nonIme);true
+expect nonIme.defaultPrevented&&refused()&&rowIds()==='r1,r2'&&cellHtml('r1','audioText')==='abcXdef'&&S.read().app.rows[0].audioText==='abcdef'&&S.read().peer.rows[0].audioText==='abcdef'&&P.queuedUpdates().length===0
+ime commit X
+wait S.read().app.rows[0].audioText==='abcXdef'
+eval P.release('forward');true
+wait same()&&S.read().app.rows[0].audioText==='abcXdef'
+key ctrl KeyZ
+wait same()&&S.read().app.rows[0].audioText==='abcdef'
+eval clearWarn();true
+wait warn().length===0
+
+eval window.beforeDoc=json(S.read());P.hold('updates');keyEvents.length=0;place('r1','audioText',3)
+key ctrl KeyB
+wait keyEvents.length===1
+expect keyEvents[0].isTrusted&&keyEvents[0].defaultPrevented&&refused()&&json(S.read())===beforeDoc&&P.queuedUpdates().length===0&&document.activeElement===Q('r1','audioText')&&json(selOf('r1','audioText'))==='[3,3]'
+eval P.release('forward');clearWarn();true
+wait warn().length===0
+
+eval window.res=probePending({type:'keydown',key:'b',ctrlKey:true});true
+expect !res.pre.uncanceled&&res.pre.html==='abcXdef'&&json(res.pre.sel)==='[4,4]'&&res.pre.app==='abcdef'&&res.pre.peer==='abcdef'&&res.pre.queued===0
+expect res.prevented&&json(res.warnings)===json(['This is not available in a shared session yet.'])&&res.appAudio==='abcXdef'&&res.peerAudio==='abcdef'&&res.html==='abcXdef'&&res.active&&json(res.sel)==='[4,4]'&&res.queued.length===1&&res.queued[0].to==='peer'&&res.queued[0].bytes.length>0
+sleep 60
+eval window.dispatchEvent(new Event('pagehide'));true
+expect json(P.queuedUpdates())===json(res.queued)&&refused()&&document.activeElement===Q('r1','audioText')&&json(selOf('r1','audioText'))==='[4,4]'&&S.read().peer.rows[0].audioText==='abcdef'
+eval window.replayed=P.release('forward');true
+expect json(replayed)===json(res.queued)&&P.queuedUpdates().length===0&&same()&&S.read().app.rows[0].audioText==='abcXdef'&&cellHtml('r1','audioText')==='abcXdef'
+eval P.undoPeer();true
+wait same()&&S.read().app.rows[1].audioText==='other'
+expect S.read().app.rows[0].audioText==='abcXdef'&&cellHtml('r1','audioText')==='abcXdef'
+eval P.type('r2',0,'P');P.type('r2',1,'Q');true
+wait same()&&S.read().app.rows[1].audioText==='PQother'
+eval place('r1','audioText',4);true
+key ctrl KeyZ
+wait same()&&S.read().app.rows[0].audioText==='abcdef'&&S.read().app.rows[1].audioText==='PQother'
+key ctrl+shift KeyZ
+wait same()&&S.read().app.rows[0].audioText==='abcXdef'&&S.read().app.rows[1].audioText==='PQother'
+expect cellHtml('r1','audioText')==='abcXdef'
+key ctrl KeyZ
+wait same()&&S.read().app.rows[0].audioText==='abcdef'
+eval clearWarn();true
+wait warn().length===0
+
+eval window.res=probePending({type:'keydown',key:'i',ctrlKey:true});true
+expect !res.pre.uncanceled&&res.pre.app==='abcdef'&&res.pre.queued===0&&res.prevented&&json(res.warnings)===json(['This is not available in a shared session yet.'])&&res.appAudio==='abcXdef'&&res.peerAudio==='abcdef'&&res.html==='abcXdef'&&res.active&&json(res.sel)==='[4,4]'&&res.queued.length===1&&res.queued[0].bytes.length>0
+sleep 60
+eval window.dispatchEvent(new Event('pagehide'));true
+expect json(P.queuedUpdates())===json(res.queued)&&refused()
+eval P.release('forward');true
+wait same()&&S.read().app.rows[0].audioText==='abcXdef'
+key ctrl KeyZ
+wait same()&&S.read().app.rows[0].audioText==='abcdef'
+key ctrl+shift KeyZ
+wait same()&&S.read().app.rows[0].audioText==='abcXdef'
+key ctrl KeyZ
+wait same()&&S.read().app.rows[0].audioText==='abcdef'
+eval clearWarn();true
+wait warn().length===0
+
+eval window.res=probePending({type:'keydown',key:'u',ctrlKey:true});true
+expect !res.pre.uncanceled&&res.pre.app==='abcdef'&&res.pre.queued===0&&res.prevented&&json(res.warnings)===json(['This is not available in a shared session yet.'])&&res.appAudio==='abcXdef'&&res.peerAudio==='abcdef'&&res.html==='abcXdef'&&res.active&&json(res.sel)==='[4,4]'&&res.queued.length===1&&res.queued[0].bytes.length>0
+sleep 60
+eval window.dispatchEvent(new Event('pagehide'));true
+expect json(P.queuedUpdates())===json(res.queued)&&refused()
+eval P.release('forward');true
+wait same()&&S.read().app.rows[0].audioText==='abcXdef'
+key ctrl KeyZ
+wait same()&&S.read().app.rows[0].audioText==='abcdef'
+key ctrl+shift KeyZ
+wait same()&&S.read().app.rows[0].audioText==='abcXdef'
+key ctrl KeyZ
+wait same()&&S.read().app.rows[0].audioText==='abcdef'
+eval clearWarn();true
+wait warn().length===0
+
+eval window.res=probePending({type:'beforeinput',inputType:'formatBold'});true
+expect !res.pre.uncanceled&&res.pre.html==='abcXdef'&&json(res.pre.sel)==='[4,4]'&&res.pre.app==='abcdef'&&res.pre.peer==='abcdef'&&res.pre.queued===0
+expect res.prevented&&json(res.warnings)===json(['This is not available in a shared session yet.'])&&res.appAudio==='abcXdef'&&res.peerAudio==='abcdef'&&res.html==='abcXdef'&&res.active&&json(res.sel)==='[4,4]'&&res.queued.length===1&&res.queued[0].to==='peer'&&res.queued[0].bytes.length>0
+sleep 60
+eval window.dispatchEvent(new Event('pagehide'));true
+expect json(P.queuedUpdates())===json(res.queued)&&refused()&&document.activeElement===Q('r1','audioText')&&json(selOf('r1','audioText'))==='[4,4]'&&S.read().peer.rows[0].audioText==='abcdef'
+eval window.replayed=P.release('forward');true
+expect json(replayed)===json(res.queued)&&P.queuedUpdates().length===0&&same()&&S.read().app.rows[0].audioText==='abcXdef'&&cellHtml('r1','audioText')==='abcXdef'
+eval P.undoPeer();true
+wait same()&&S.read().app.rows[1].audioText==='other'
+expect S.read().app.rows[0].audioText==='abcXdef'&&cellHtml('r1','audioText')==='abcXdef'
+eval P.type('r2',0,'P');P.type('r2',1,'Q');true
+wait same()&&S.read().app.rows[1].audioText==='PQother'
+eval place('r1','audioText',4);true
+key ctrl KeyZ
+wait same()&&S.read().app.rows[0].audioText==='abcdef'&&S.read().app.rows[1].audioText==='PQother'
+key ctrl+shift KeyZ
+wait same()&&S.read().app.rows[0].audioText==='abcXdef'&&S.read().app.rows[1].audioText==='PQother'
+key ctrl KeyZ
+wait same()&&S.read().app.rows[0].audioText==='abcdef'
+eval clearWarn();true
+wait warn().length===0
+
+eval window.res=probePending({type:'beforeinput',inputType:'formatItalic'});true
+expect !res.pre.uncanceled&&res.pre.app==='abcdef'&&res.pre.queued===0&&res.prevented&&json(res.warnings)===json(['This is not available in a shared session yet.'])&&res.appAudio==='abcXdef'&&res.peerAudio==='abcdef'&&res.html==='abcXdef'&&res.active&&json(res.sel)==='[4,4]'&&res.queued.length===1&&res.queued[0].bytes.length>0
+sleep 60
+eval window.dispatchEvent(new Event('pagehide'));true
+expect json(P.queuedUpdates())===json(res.queued)&&refused()
+eval P.release('forward');true
+wait same()&&S.read().app.rows[0].audioText==='abcXdef'
+key ctrl KeyZ
+wait same()&&S.read().app.rows[0].audioText==='abcdef'
+key ctrl+shift KeyZ
+wait same()&&S.read().app.rows[0].audioText==='abcXdef'
+key ctrl KeyZ
+wait same()&&S.read().app.rows[0].audioText==='abcdef'
+eval clearWarn();true
+wait warn().length===0
+
+eval window.res=probePending({type:'beforeinput',inputType:'formatUnderline'});true
+expect !res.pre.uncanceled&&res.pre.app==='abcdef'&&res.pre.queued===0&&res.prevented&&json(res.warnings)===json(['This is not available in a shared session yet.'])&&res.appAudio==='abcXdef'&&res.peerAudio==='abcdef'&&res.html==='abcXdef'&&res.active&&json(res.sel)==='[4,4]'&&res.queued.length===1&&res.queued[0].bytes.length>0
+sleep 60
+eval window.dispatchEvent(new Event('pagehide'));true
+expect json(P.queuedUpdates())===json(res.queued)&&refused()
+eval P.release('forward');true
+wait same()&&S.read().app.rows[0].audioText==='abcXdef'
+key ctrl KeyZ
+wait same()&&S.read().app.rows[0].audioText==='abcdef'
+key ctrl+shift KeyZ
+wait same()&&S.read().app.rows[0].audioText==='abcXdef'
+expect cellHtml('r1','audioText')==='abcXdef'
+
+eval window.projection=S.read().app;window.left=S.leave();true
+expect left.ok&&S.read().peer===null&&F.state().docId!==projection.docId&&F.state().docId!==originalId
+expect json({...F.state(),docId:projection.docId})===json(projection)
+expect cellHtml('r1','audioText')==='abcXdef'&&cellHtml('r2','audioText')==='PQother'
+quit
