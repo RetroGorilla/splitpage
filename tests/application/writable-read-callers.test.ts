@@ -51,7 +51,7 @@ const BRIDGE_FUNCTION = {
   "bootstrap/wiring/ports/document.ts": 2,
   "bootstrap/wiring/recovery-owners.ts": 2,
   "bootstrap/wiring/session-owner.ts": 3,
-  "bootstrap/wiring/shared-session.ts": 4
+  "bootstrap/wiring/shared-session.ts": 3
 };
 
 const VIEW_PORT_USERS = {
@@ -62,8 +62,7 @@ const VIEW_PORT_USERS = {
   "bootstrap/wiring/ports/document-identity.ts": 2,
   "bootstrap/wiring/ports/person-colors.ts": 2,
   "bootstrap/wiring/ports/shot-hiding.ts": 2,
-  "bootstrap/wiring/shot-hiding.ts": 2,
-  "bootstrap/wiring/split-buffer.ts": 2
+  "bootstrap/wiring/shot-hiding.ts": 2
 };
 
 const BEAT_INSERTS = {

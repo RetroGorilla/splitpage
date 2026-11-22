@@ -1,3 +1,4 @@
+import { legacySessionParts } from "./legacy-shared-switch-support.ts";
 import type { LegacySharedSwitchPorts } from "./legacy-shared-switch-support.ts";
 import { enterLegacySharedSession } from "./legacy-shared-switch-support.ts";
 import { before, after, test } from "node:test";
@@ -7,11 +8,11 @@ import { stopApp } from "../../src/bootstrap/app.ts";
 import { documentTransitions } from "../../src/bootstrap/wiring/transition-owners.ts";
 import { openingStatus } from "../../src/bootstrap/wiring/ports/transitions.ts";
 import { currentCapabilities, currentDocument, runCommand, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
-import { leaveRunningSharedSession, sharedSessionParts } from "../../src/bootstrap/wiring/shared-session.ts";
+import { leaveRunningSharedSession } from "../../src/bootstrap/wiring/shared-session.ts";
 import { mountRowsRenderFeature, stopRowsRenderFeature } from "../../src/bootstrap/wiring/render.ts";
 import { confirmSavedNow } from "../../src/bootstrap/wiring/save-owners.ts";
 import { setHome } from "../../src/bootstrap/wiring/location-owner.ts";
-import { writerFlowCommands } from "../../src/bootstrap/wiring/ports/writer-flow.ts";
+import { writerFlowCommands } from "../collab/editor-ports/writer-flow.ts";
 import { migrateRows } from "../../src/bootstrap/document-ports.ts";
 import { fromHtml } from "../../src/bootstrap/richtext.ts";
 import { collabState } from "../../src/adapters/collab/state.ts";
@@ -36,7 +37,7 @@ async function roundTrip(audioText: string) {
   const original = currentDocument()?.rows.map(row => row.audioText), errors: unknown[] = [];
   try {
     assert.deepEqual(await enterLegacySharedSession(ports(errors)), { ok: true });
-    const parts = sharedSessionParts(); assert.ok(parts);
+    const parts = legacySessionParts(); assert.ok(parts);
     assert.deepEqual(currentDocument()?.rows.map(row => row.audioText), original);
     const length = audioText.length;
     const commands = writerFlowCommands({ cells: fromHtml, newId: () => "new", hasVisual: () => false },

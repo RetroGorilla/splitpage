@@ -1,3 +1,5 @@
+import type { SharedSessionParts } from "./legacy-shared-switch-support.ts";
+import { legacySessionParts } from "./legacy-shared-switch-support.ts";
 import type { LegacySharedSwitchPorts } from "./legacy-shared-switch-support.ts";
 import { enterLegacySharedSession } from "./legacy-shared-switch-support.ts";
 import "../../src/test/_dom.mjs";
@@ -19,10 +21,9 @@ import {
 } from "../../src/bootstrap/wiring/session-owner.ts";
 import { routeUndoReplays, sharedUndoRoute, startUndo, stepSharedUndo, undoOwner, undoPorts, undoSessionPort } from "../../src/bootstrap/wiring/undo.ts";
 import {
-  forceLeaveSharedSession, leaveSharedSession, leaveRunningSharedSession, sharedSessionParts, SHARED_ALREADY, SHARED_ENTER_FAILED,
+  forceLeaveSharedSession, leaveSharedSession, leaveRunningSharedSession, SHARED_ALREADY, SHARED_ENTER_FAILED,
   SHARED_LEAVE_FAILED, SHARED_NOT_RUNNING, SHARED_SWITCHING
 } from "../../src/bootstrap/wiring/shared-session.ts";
-import type { SharedSessionParts } from "../../src/bootstrap/wiring/shared-session.ts";
 import { fakeMigration } from "../core/migrate-ports.ts";
 import { createFlowLoadRuntime } from "../core/flow/load.ts";
 import { fakeClock } from "../application/session-fakes.ts";
@@ -123,7 +124,7 @@ function start(): Switch {
     advance: ms => { clock.advance(ms); },
     stop: () => {
       armed.clear();
-      try { if (sharedSessionParts()) leaveSharedSession(ports); } finally { while (stops.length) stops.pop()?.(); }
+      try { if (legacySessionParts()) leaveSharedSession(ports); } finally { while (stops.length) stops.pop()?.(); }
     }
   };
 }
@@ -160,7 +161,7 @@ test("command refusals reach the supplied callback once while entry refusal is c
   } finally { s.stop(); }
 });
 
-const state =(): unknown[] => [sharedSession(), sharedUndoRoute() !== null, sharedSessionParts() !== null, currentDocument()?.title];
+const state =(): unknown[] => [sharedSession(), sharedUndoRoute() !== null, legacySessionParts() !== null, currentDocument()?.title];
 
 function standaloneUsable(title = "Again"): void {
   assert.equal(runCommand(titleCommand(title)).kind, "applied");
@@ -308,7 +309,7 @@ for (const duringSettle of [false, true]) test("C8 opening admission " + (during
   try {
     if (duringSettle) s.onSettle(() => { pending = true; });
     assert.deepEqual(await enterLegacySharedSession(ports), { ok: false, reason: "opening-pending" });
-    assert.deepEqual([s.log, sharedSession(), currentDocument()?.docId, sharedSessionParts(), s.reported],
+    assert.deepEqual([s.log, sharedSession(), currentDocument()?.docId, legacySessionParts(), s.reported],
       [duringSettle ? ["settle"] : [], false, START_ID, null, []]);
   } finally { s.stop(); }
 });
@@ -402,7 +403,7 @@ for (const fault of ROLLBACK_FAULTS_B) {
     try {
       s.arm("hydration", fault);
       assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: false, reason: SHARED_ENTER_FAILED });
-      assert.deepEqual([sharedSession(), currentDocument()?.docId, currentDocument()?.title, s.reported[0], sharedSessionParts()],
+      assert.deepEqual([sharedSession(), currentDocument()?.docId, currentDocument()?.title, s.reported[0], legacySessionParts()],
         [false, START_ID, "Pilot", "Error: fault at hydration", null]);
       assert.equal(collabState(s.entered().handle).destroyed, true);
       standaloneUsable();
@@ -574,7 +575,7 @@ for (const [name, leave] of Object.entries(WAYS_OUT)) {
       assert.equal(runCommand(lengthCommand()).kind, "applied");
       s.log.length = 0;
       let landedAtLeft: unknown = null;
-      Object.assign(s.ports, { left: (landed: boolean) => { s.log.push("left:" + String(landed)); landedAtLeft = [sharedSession(), sharedSessionParts(), length()]; } });
+      Object.assign(s.ports, { left: (landed: boolean) => { s.log.push("left:" + String(landed)); landedAtLeft = [sharedSession(), legacySessionParts(), length()]; } });
       assert.deepEqual(leave(s), { ok: true });
       assert.deepEqual(s.log.filter(line => line.startsWith("left:")), ["left:true"]);
       assert.equal(s.log.at(-1), "left:true");
@@ -594,7 +595,7 @@ test("a forced leave that still cannot land ends the session without a copy: no 
     s.log.length = 0;
     s.hold("buffer-stuck");
     assert.deepEqual(forceLeaveSharedSession(), { ok: false, reason: "buffer-stuck" });
-    assert.deepEqual([sharedSessionParts(), sharedUndoRoute(), s.log.filter(line => line.startsWith("left:") || line === "bindings.abandon")],
+    assert.deepEqual([legacySessionParts(), sharedUndoRoute(), s.log.filter(line => line.startsWith("left:") || line === "bindings.abandon")],
       [null, null, ["bindings.abandon", "left:false"]]);
     assert.ok(s.log.includes("bindings.leave:true"));
     assert.deepEqual(s.log.filter(line => /^(bindings\.(abandon|drop|leave)|left:)/.test(line)).map(line => line.replace(/^bindings\.leave:.*/, "bindings.leave")).slice(-3),

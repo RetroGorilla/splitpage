@@ -1,3 +1,4 @@
+import { legacySessionParts } from "./legacy-shared-switch-support.ts";
 import type { LegacySharedSwitchPorts } from "./legacy-shared-switch-support.ts";
 import { enterLegacySharedSession } from "./legacy-shared-switch-support.ts";
 import assert from "node:assert/strict";
@@ -5,7 +6,7 @@ import { bootApp, closeApp } from "../../src/test/_app-boot.mjs";
 import { stopApp } from "../../src/bootstrap/app.ts";
 import { documentTransitions } from "../../src/bootstrap/wiring/transition-owners.ts";
 import { currentCapabilities, currentDocument } from "../../src/bootstrap/wiring/session-owner.ts";
-import { leaveRunningSharedSession, sharedSessionParts } from "../../src/bootstrap/wiring/shared-session.ts";
+import { leaveRunningSharedSession } from "../../src/bootstrap/wiring/shared-session.ts";
 import { openingStatus } from "../../src/bootstrap/wiring/ports/transitions.ts";
 import { localFilesOwner } from "../../src/bootstrap/wiring/local-files.ts";
 import { stopRowsRenderFeature } from "../../src/bootstrap/wiring/render.ts";
@@ -25,7 +26,7 @@ export async function bootEntrySwitchFixture() {
 }
 
 export function stopEntrySwitchFixture() {
-  const parts = sharedSessionParts();
+  const parts = legacySessionParts();
   try { if (parts) leaveRunningSharedSession(); }
   finally {
     if (parts && !collabState(parts.handle).destroyed) destroySharedDocument(parts.handle);
@@ -34,7 +35,7 @@ export function stopEntrySwitchFixture() {
 }
 
 export function entrySwitchFixture() {
-  assert.equal(sharedSessionParts() === null, true);
+  assert.equal(legacySessionParts() === null, true);
   documentTransitions().open({ from: { raw: structuredClone(SOURCE) }, reason: "switch entry fixture" });
   setHome("none");
   let serial = 0;
@@ -44,7 +45,7 @@ export function entrySwitchFixture() {
     migrate: migrateRows, docId: () => "d" + String(++serial).padStart(32, "0"), editor: () => "Editor",
     structure: { cells: fromHtml }, timers: fakeClock(), now: () => 0, report: error => { errors.push(error); } };
   return { ports, errors, enter: () => enterLegacySharedSession(ports), close: () => {
-    if (sharedSessionParts()) leaveRunningSharedSession();
+    if (legacySessionParts()) leaveRunningSharedSession();
   } };
 }
 

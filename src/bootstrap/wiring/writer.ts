@@ -31,14 +31,9 @@ import { breakUndoGroup, undoOwner } from "./undo.ts";
 import { initializeFlowParagraphs } from "../../application/commands/flow.ts";
 import { sharedSession, standaloneSession } from "./session-owner.ts";
 import { bindNativeWriterPaint, hasNativeWriterPreview, nativeEditorActive } from "./shared-session.ts";
-import { writerFlowCommands } from "./ports/writer-flow.ts";
-import { writerVisualBuffer } from "./ports/writer-visual-buffer.ts";
-import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
-import type { PaintedTextSource, WholeFieldTextCommit } from "../../application/editing/ports.ts";
+import type { WholeFieldTextCommit } from "../../application/editing/ports.ts";
 import type { CommandOutcome } from "../../application/session/document-session.ts";
 import { toHtml } from "../../core/text/html.ts";
-import type { BufferedFieldPorts } from "../../application/editing/buffered-field.ts";
-import type { SharedDocumentHandle } from "../../adapters/collab/types.ts";
 import { maybeCueShortcut, maybeDirectionShortcut, typeAtDirectionEdge } from "../../features/rows/render.ts";
 import { anchorBrollInLeftCell, maybeCaptureBroll } from "./broll.ts";
 import { pictures } from "./ports/pictures.ts";
@@ -98,18 +93,8 @@ export function connectWriter(controlChanged: (control: ReturnType<typeof startW
   };
 }
 
-export interface SharedWriterSource {
-  readonly text: { readonly paintedText: PaintedTextSource; readonly bufferedText: BufferedFieldPorts };
-  readonly author: { readonly next: () => { readonly id: string; readonly by: string } | null };
-  readonly writer: () => string;
-  readonly handle: () => SharedDocumentHandle | null;
-  readonly lifetime: Pick<SharedDocumentSession, "epoch" | "read" | "run" | "subscribe" | "beforeCommand">;
-  readonly leftVisual: (cell: Element) => void;
-}
-
-export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
+export function mountWriterRuntimeFeature() {
   if (!stopWriterRuntimeFeature()) throw new Error("The Writer could not finish");
-  const commands = shared ? writerFlowCommands(writerFlowPorts, { author: shared.author, writer: shared.writer, handle: shared.handle }) : null;
   return writer.replace(() => {
     const render = currentRowsRender();
     if (!render) throw new Error("Writer needs the row renderer to be mounted");
@@ -127,7 +112,7 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
         create: (root, selectionMoved, undoStep) => {
           const openedDocument = documentReader.current() as unknown as FlowDoc;
           // why: rule 78: opening the Writer in a shared session writes no paragraphs
-          if (!shared && !sharedSession()) {
+          if (!sharedSession()) {
             undoOwner().flush();
             const initialized = standaloneSession().amend(initializeFlowParagraphs(writerFlowPorts, edits.allowed, starts => { undoOwner().settleAfterApply(starts); }));
             if (initialized.kind === "failed") throw initialized.error;
@@ -136,9 +121,6 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
           let nativePaint: ReturnType<typeof bindNativeWriterPaint>;
           const flow = createFlowWriter({
             ...(nativeEditorActive() ? { nativeHeadingCandidate: (beat: string) => nativePaint?.headingCandidate(beat) ?? false } : {}),
-            ...(shared && commands ? { paintedText: shared.text.paintedText, bufferedText: shared.text.bufferedText, commands: commands.commands,
-              visualBuffer: writerVisualBuffer(shared.text, { document: () => documentReader.current(), lifetime: shared.lifetime, decode: flowCell,
-                storedHtml: text.storedHtmlFromDom, shown: edit => paintGuard().whileShown(edit) }) } : {}),
             openFind: () => { actions.invoke("find", "shortcut"); },
             closeFind: () => { actions.invoke("find", "button", "close"); },
             pictures,
@@ -151,7 +133,7 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
               currentWhoList()?.maybeOpen(event, cell);
               updateTagGhost(cell);
             },
-            visualLeave: shared ? shared.leftVisual : cell => {
+            visualLeave: cell => {
               if (nativeEditorActive()) return;
               currentWhoList()?.cancel();
               if (currentPlainTags()?.isOpen(cell)) currentPlainTags()?.close();
@@ -191,7 +173,7 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
             root,
             // why: disposal can finish the old surface between the owner swap and shared hydration
             doc: () => documentReader.current() as unknown as FlowDoc ?? openedDocument,
-            flow: commands ? commands.flow : writerFlowPorts,
+            flow: writerFlowPorts,
             decode: flowCell,
             storedHtml: text.storedHtmlFromDom,
             run: edits.run,
@@ -202,10 +184,10 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
             text: edits.text,
             undo: {
               step: undoStep,
-              flush: () => { if (!shared) undoOwner().flush(); },
+              flush: () => { undoOwner().flush(); },
               breakCoalescing: breakUndoGroup,
-              last: () => shared ? null : undoOwner().last(),
-              nextRedo: () => shared ? null : undoOwner().nextRedo()
+              last: () => undoOwner().last(),
+              nextRedo: () => undoOwner().nextRedo()
             },
             caretAfterStep: step => caretAfterStep(html => flowCell(html as string | null | undefined), step),
             replayPlacement: (recorded, dir, steps) => replayPlacement({ surface: "writer", dir, recorded, steps }),
@@ -251,20 +233,17 @@ export function mountWriterRuntimeFeature(shared?: SharedWriterSource) {
             newCommentId: () => randomIds.id("c"),
             openComment: at => { actions.invoke("comment-on-selection", "button", at); }
           });
-          if (!shared) {
-            const binding = bindNativeWriterPaint(root);
-            if (!binding) return flow;
-            nativePaint = binding;
-            return { ...flow, settle: () => binding.settle() && flow.settle?.() !== false, finish: () => {
-              binding.finish();
-              return flow.finish();
-            }, dispose: () => {
-              if (flow.dispose() === false) return false;
-              binding.dispose();
-              return true;
-            } };
-          }
-          return flow;
+          const binding = bindNativeWriterPaint(root);
+          if (!binding) return flow;
+          nativePaint = binding;
+          return { ...flow, settle: () => binding.settle() && flow.settle?.() !== false, finish: () => {
+            binding.finish();
+            return flow.finish();
+          }, dispose: () => {
+            if (flow.dispose() === false) return false;
+            binding.dispose();
+            return true;
+          } };
         }
       },
       document: documentReader, edits, text, editing: writerEditing, undo: writerUndo,

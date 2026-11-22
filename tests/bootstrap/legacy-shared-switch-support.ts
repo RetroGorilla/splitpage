@@ -9,9 +9,38 @@ import { sharedUndoOwner } from "../collab/editor-ports/shared-undo.ts";
 import type { ValidatedDocument } from "../../src/core/document/validated.ts";
 import type { SharedStructureContentPorts } from "../../src/adapters/collab/structure-content.ts";
 import { fromHtml } from "../../src/bootstrap/richtext.ts";
-import { currentDocument } from "../../src/bootstrap/wiring/session-owner.ts";
+import { currentDocument, sharedRecoverySession } from "../../src/bootstrap/wiring/session-owner.ts";
 import { enterSharedSession } from "../../src/bootstrap/wiring/shared-session.ts";
-import type { SharedBindings, SharedEditorBackend, SharedSessionParts, SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
+import type { SharedEditorBackend, SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
+
+import type { SharedUndo } from "../../src/application/editing/undo/shared-undo.ts";
+import type { SharedDocumentSession } from "../../src/application/session/shared-session.ts";
+
+export interface SharedAuthorPort {
+  readonly next: () => { readonly id: string; readonly by: string } | null;
+}
+
+export interface SharedSessionParts {
+  readonly handle: SharedDocumentHandle;
+  readonly session: SharedDocumentSession;
+  readonly undo: SharedUndo;
+  readonly author: SharedAuthorPort;
+}
+
+export interface SharedBindings {
+  readonly enter: (parts: SharedSessionParts) => void;
+  readonly settle: () => string | null;
+  readonly leave: () => void;
+  readonly abandon?: () => void;
+  readonly drop?: () => void;
+}
+
+const partsBySession = new WeakMap<object, SharedSessionParts>();
+
+export function legacySessionParts(): SharedSessionParts | null {
+  const session = sharedRecoverySession();
+  return session ? partsBySession.get(session) ?? null : null;
+}
 
 export interface LegacySharedSwitchPorts extends SharedSwitchPorts {
   readonly bindings: SharedBindings;
@@ -38,9 +67,8 @@ function openLegacyBackend(ports: LegacySharedSwitchPorts, hydration: ValidatedD
     const replica = createSharedReplica(handle, undefined, undo);
     return {
       replica,
-      get parts() { return parts; },
-      undo: admission => ({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup, replayed: undo.replayed }),
-      bind: session => { parts ??= { handle, session, undo, author }; ports.bindings.enter(parts); },
+      undo: admission => ({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup }),
+      bind: session => { parts ??= { handle, session, undo, author }; partsBySession.set(session, parts); ports.bindings.enter(parts); },
       unbind: () => ports.bindings.leave(),
       settle: () => ports.bindings.settle(),
       abandon: () => { ports.bindings.abandon?.(); },
@@ -49,6 +77,7 @@ function openLegacyBackend(ports: LegacySharedSwitchPorts, hydration: ValidatedD
       landing: currentDocument,
       live: value => { on = value; },
       dispose: attempt => {
+        if (parts) partsBySession.delete(parts.session);
         attempt(() => { replica.dispose(); });
         destroy(attempt, handle);
       }

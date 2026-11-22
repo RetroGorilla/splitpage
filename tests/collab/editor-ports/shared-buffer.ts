@@ -1,12 +1,12 @@
-import { createSharedBufferedText, sharedBufferedTarget } from "../../../adapters/collab/buffer.ts";
-import { readSharedPaintedText, readSharedPaintedSelectionText } from "../../../adapters/collab/paint-base.ts";
-import type { SharedDocumentHandle } from "../../../adapters/collab/types.ts";
-import type { SharedDocumentSession } from "../../../application/session/shared-session.ts";
-import type { PaintedTextSource } from "../../../application/editing/ports.ts";
-import type { BufferedFieldPorts } from "../../../application/editing/buffered-field.ts";
-import { bufferedFieldTarget } from "../../../application/editing/buffered-field-key.ts";
-import type { ProductionReaders } from "../../../core/production/ports.ts";
-import type { StampPorts } from "../../../application/session/ports.ts";
+import { createSharedBufferedText, sharedBufferedTarget } from "../../../src/adapters/collab/buffer.ts";
+import { readSharedPaintedText, readSharedPaintedSelectionText } from "../../../src/adapters/collab/paint-base.ts";
+import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
+import type { SharedDocumentSession } from "../../../src/application/session/shared-session.ts";
+import type { PaintedTextSource } from "../../../src/application/editing/ports.ts";
+import type { BufferedFieldPorts } from "../../../src/application/editing/buffered-field.ts";
+import { bufferedFieldTarget } from "../../../src/application/editing/buffered-field-key.ts";
+import type { ProductionReaders } from "../../../src/core/production/ports.ts";
+import type { StampPorts } from "../../../src/application/session/ports.ts";
 
 export function sharedBufferPorts(handle: SharedDocumentHandle, session: Pick<SharedDocumentSession, "run" | "read" | "readAt" | "epoch" | "beforeCommand">,
   effects: Pick<BufferedFieldPorts, "missingBase" | "recovered" | "report" | "abandonment"> & {

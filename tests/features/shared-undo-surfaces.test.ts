@@ -24,7 +24,7 @@ import { sharedWriterVisualBox } from "./writer/visual-undo-support.ts";
 import { bufferReaders, bufferStamps } from "../collab/buffer-readers.ts";
 import { edgeInput } from "./edge-input.ts";
 import type { EdgeInput } from "./edge-input.ts";
-import { sharedBufferPorts } from "../../src/bootstrap/wiring/ports/shared-buffer.ts";
+import { sharedBufferPorts } from "../collab/editor-ports/shared-buffer.ts";
 import { createPaintedBeats } from "../../src/application/editing/painted-beats.ts";
 import { createBufferedField } from "../../src/application/editing/buffered-field.ts";
 import { bindBufferedInput } from "../../src/features/common/buffered-input.ts";

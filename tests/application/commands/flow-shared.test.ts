@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import * as flow from "../../../src/core/flow/flow.ts";
 import type { FlowDoc, FlowOutcome, FlowPorts, FlowRange } from "../../../src/core/flow/flow.ts";
 import { flowCommand } from "../../../src/application/commands/flow.ts";
-import { writerFlowCommands } from "../../../src/bootstrap/wiring/ports/writer-flow.ts";
+import { writerFlowCommands } from "../../collab/editor-ports/writer-flow.ts";
 import { sharedAuthorPort } from "../../collab/editor-ports/shared-author.ts";
 import { registerSharedOperationFamilies } from "../../../src/adapters/collab/operation-families.ts";
 import { applySharedUpdate, encodeSharedState } from "../../../src/adapters/collab/document.ts";

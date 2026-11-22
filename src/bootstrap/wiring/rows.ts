@@ -133,7 +133,3 @@ export function removeImage(rowId: string, slot?: number): void {
 export function removeImageLink(rowId: string, slot: number, key: string): void {
   media.owner()?.removeLink(rowId, slot, key);
 }
-
-export function splitRowFieldCore(cell: Element) {
-  return beats.owner()?.splitField(cell) ?? null;
-}

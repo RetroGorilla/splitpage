@@ -16,7 +16,7 @@ import { createEditorSelection } from "../../../src/application/editing/selectio
 import { createPaintGuard, createUndoGuard } from "../../../src/application/editing/paint-guard.ts";
 import { createBufferedField } from "../../../src/application/editing/buffered-field.ts";
 import { createPaintedBeats } from "../../../src/application/editing/painted-beats.ts";
-import { sharedBufferPorts } from "../../../src/bootstrap/wiring/ports/shared-buffer.ts";
+import { sharedBufferPorts } from "../../collab/editor-ports/shared-buffer.ts";
 import { fromHtml } from "../../../src/bootstrap/richtext.ts";
 import { startRowsRender, paintedFromRow, onBeforePaint } from "../../../src/features/rows/render.ts";
 import { mountCellBuffer } from "../../../src/features/editing/cell-buffer.ts";

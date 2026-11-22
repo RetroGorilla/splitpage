@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sharedBufferPorts } from "../../../src/bootstrap/wiring/ports/shared-buffer.ts";
+import { sharedBufferPorts } from "../../collab/editor-ports/shared-buffer.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";

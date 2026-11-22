@@ -19,7 +19,6 @@ import type { EditorFocusPorts } from "../../features/editing/focus.ts";
 import { mountEditorToolbar } from "../../features/editing/toolbar.ts";
 import type { EditorToolbarPorts } from "../../features/editing/toolbar.ts";
 import { mountClipboardRoutes } from "../../features/clipboard/routes.ts";
-import { sharedCellSpaceForm } from "./ports/shared-cell-space.ts";
 import { mountMediaRoutes } from "../../features/media/routes.ts";
 import type { MediaRoutePorts } from "../../features/media/routes.ts";
 import { mountMergeBanner } from "../../features/merge/banner.ts";
@@ -130,16 +129,8 @@ import {
 } from "../../features/comments/comments.ts";
 import { showActionToast, showToast } from "./effects-owner.ts";
 import { viewFlags } from "./preferences-owner.ts";
-import { breakUndoGroup, configureUndo, sharedUndoRoute, stepSharedUndo, undoOwner } from "./undo.ts";
-import { nativeEditorActive, sharedSessionParts } from "./shared-session.ts";
-import { resolveSharedBufferedSelection } from "../../adapters/collab/buffer-selection.ts";
-import { resolveSharedRecordedSelection, sharedRowShowing } from "../../adapters/collab/recorded-selection.ts";
-import { sharedAnchorTarget } from "../../adapters/collab/anchors.ts";
-import type { SharedUndoSelection } from "../../core/collab/undo-record.ts";
-import type { FlowRange, FlowSelectionPair } from "../../core/flow/flow.ts";
-import { beatPos } from "../../core/flow/flow.ts";
-import type { UndoDirection } from "../../application/editing/undo/undo.ts";
-import { replayedSteps } from "../../application/editing/undo/replayed-steps.ts";
+import { breakUndoGroup, configureUndo, sharedUndoRoute, undoOwner } from "./undo.ts";
+import { nativeEditorActive } from "./shared-session.ts";
 import { connectWriter } from "./writer.ts";
 import { mountSceneHeaders } from "./scene-headers.ts";
 import { sceneView } from "./editor-owners.ts";
@@ -149,19 +140,6 @@ declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 function inactiveWriter(): void {}
 function skipWriterUndo(): boolean { return false; }
-let placeWriterRange: (range: FlowRange) => void = () => {};
-let placeWriterVisual: (range: FlowRange) => void = () => {};
-
-function placeSharedSelection(selection: SharedUndoSelection): void {
-  const parts = sharedSessionParts();
-  const target = sharedAnchorTarget(selection.focus);
-  const visual = target?.field === "visualText" ? { key: target.owner, target } : undefined;
-  const range = parts ? resolveSharedBufferedSelection(parts.handle, [selection.anchor, selection.focus], visual) : undefined;
-  if (range) {
-    if (visual) placeWriterVisual(range);
-    else placeWriterRange(range);
-  }
-}
 let scheduleWriterStats: () => void = inactiveWriter;
 
 type RootInput = Pick<Event, "target">;
@@ -285,7 +263,7 @@ function refreshFormatState(cellEl: Element): void {
 }
 
 const noWriterReplay = (): boolean => false;
-let writerReplayed: (steps: readonly unknown[], shared?: { readonly recorded: FlowSelectionPair | null; readonly dir: UndoDirection }) => boolean = noWriterReplay;
+let writerReplayed: (steps: readonly unknown[]) => boolean = noWriterReplay;
 
 const editorToolbar = owned<ReturnType<typeof mountEditorToolbar>>();
 
@@ -343,11 +321,6 @@ export function mountCellEditingFeature(): { readonly dispose: () => void } {
     scheduleWriterStats = control?.scheduleWriterStats ?? inactiveWriter;
     const step = control?.writerUndoStep;
     undoRoutePorts.writerStep = step ? dir => !sharedUndoRoute() && step(dir) : skipWriterUndo;
-    placeWriterRange = range => { control?.writerFlowControl()?.place(range); };
-    placeWriterVisual = range => {
-      if (range.head.kind !== "beat" || range.anchor.kind !== "beat") return;
-      control?.writerFlowControl()?.openVisual(range.head.rowId, { from: range.anchor.offset, to: range.head.offset });
-    };
     writerReplayed = control?.writerReplayed ?? noWriterReplay;
     control?.connectFlowUndo((dir) => { undoRoutes.owner()?.step(dir); });
     writerRoutePorts.format = control?.onWriterFormat ?? inactiveWriter;
@@ -366,7 +339,6 @@ const undoRoutePorts: { -readonly [K in keyof UndoRoutePorts]: UndoRoutePorts[K]
   replay: function (dir) {
     const shared = sharedUndoRoute();
     if (shared?.replay) { shared.replay(dir); return; }
-    if (shared) { replaySharedStep(shared, dir); return; }
     if (dir === "redo") undoOwner().redo(); else undoOwner().undo();
   },
   writerStep: skipWriterUndo,
@@ -463,7 +435,6 @@ function openLinkInNewWindow(href: string): void {
 }
 
 const rowRoutePorts: RowRoutePorts = {
-  cellDragStart: event => clipboardRoutes.owner()?.dragStart(event) ?? false,
   mac: IS_MAC,
   scriptCell: isScriptCell,
   openLink: openLinkInNewWindow,
@@ -536,30 +507,9 @@ function notAttachableText(names: readonly string[]): string {
   return what + " Splitpage doesn't attach programs, scripts, shortcuts or files without an extension.";
 }
 
-function sharedSplitKeydown(event: KeyboardEvent): void {
-  if (!event.isComposing && event.keyCode !== 229) onRootKeydown(event);
-}
-
-function sharedSplitInput(event: Event): void {
-  const cell = event.target instanceof Element ? event.target.closest(".cell-editable") : null;
-  if (cell && isScriptCell(cell)) afterScriptCellChange(cell);
-  else onRootInput(event);
-}
-
-export function mountRowsEditingFeature(sharedSplit = false): ReturnType<typeof mountRowsEditor> {
+export function mountRowsEditingFeature(): ReturnType<typeof mountRowsEditor> {
   return rowsEditor.replace(function () {
-    const ports = sharedSplit ? { ...rowsEditorPorts, keydown: (event: KeyboardEvent) => {
-      if (!((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn)) { sharedSplitKeydown(event); return; }
-      if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:start");
-      try { sharedSplitKeydown(event); }
-      finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:end"); }
-    }, input: (event: Event) => {
-      if (!((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn)) { sharedSplitInput(event); return; }
-      if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:start");
-      try { sharedSplitInput(event); }
-      finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:end"); }
-    } } : rowsEditorPorts;
-    return mountRowsEditor({ window: window, rows: document.getElementById("rows") as Element, addBar: document.querySelector(".add-row-bar"), ports });
+    return mountRowsEditor({ window: window, rows: document.getElementById("rows") as Element, addBar: document.querySelector(".add-row-bar"), ports: rowsEditorPorts });
   });
 }
 
@@ -594,28 +544,6 @@ function afterUndoApplied(steps: readonly unknown[]): void {
   undoOwner().settleAfterApply();
   if (writerReplayed(steps)) return;
   placeCellCaret(cellStep);
-}
-
-// why: the visual box is a cell: caretAfterStep gives its caret, and the box opens there
-function placeReplayedCaret(steps: readonly unknown[], recorded: FlowSelectionPair | null, dir: UndoDirection): boolean {
-  if (!viewFlags().writerOpen()) return placeCellCaret(undoCellStep(steps));
-  if (replayPlacement({ surface: "writer", dir, recorded, steps })) return writerReplayed(steps, { recorded, dir });
-  const visual = undoCellStep(steps);
-  if (!visual) return false;
-  const at = beatPos(visual.rowId, caretAfterStep(decodeCell, visual));
-  placeWriterVisual({ anchor: at, head: at });
-  return true;
-}
-
-function replaySharedStep(shared: NonNullable<ReturnType<typeof sharedUndoRoute>>, dir: UndoDirection): void {
-  const before = liveDocument.current();
-  const outcome = stepSharedUndo(shared, dir, message => { showToast(message, "warn"); });
-  if (!outcome.ok || !outcome.effective) return;
-  const after = liveDocument.current(), parts = sharedSessionParts(), replayed = shared.replayed();
-  const cells = (replayed?.cells ?? []).map(cell => parts ? { ...cell, rowId: sharedRowShowing(parts.handle, cell.rowId) } : cell);
-  const steps = before && after ? replayedSteps(before, after, cells, dir) : [];
-  const recorded = parts && replayed?.recorded ? resolveSharedRecordedSelection(parts.handle, replayed.recorded) : null;
-  if (!placeReplayedCaret(steps, recorded, dir) && outcome.selection) placeSharedSelection(outcome.selection);
 }
 
 export function onRootInput(e: RootInput): void {
@@ -660,12 +588,12 @@ function scriptCellOf(target: EventTarget | null): CompositionCell | null {
   return cellEl && isScriptCell(cellEl) ? { rowId: cellEl.getAttribute("data-id") as string, field: cellEl.getAttribute("data-field") as string } : null;
 }
 
-export function mountCompositionFeature(sharedSplit = false): ReturnType<typeof mountComposition> {
+export function mountCompositionFeature(): ReturnType<typeof mountComposition> {
   return composition.replace(function () {
     return mountComposition({
       roots: editorRoots(),
       ports: {
-        cellOf: sharedSplit ? target => target instanceof Element && target.closest("#rows") ? null : scriptCellOf(target) : scriptCellOf,
+        cellOf: scriptCellOf,
         epoch: function () { return liveSession().epoch(); },
         mark: function (cell) { return undoOwner().compositionMark(cell.rowId, cell.field); },
         dropEmptySince: (mark, cancelled) => undoOwner().dropEmptySince(mark, cancelled)
@@ -763,14 +691,10 @@ export const onRootFocusOut = editorBlur(editorFocusPorts);
 
 const editorFocus = owned<{ readonly dispose: () => void }>();
 
-export function mountFocusFeature(sharedSplit?: { readonly leftCell: (cell: Element) => void }): { readonly dispose: () => void } {
+export function mountFocusFeature(): { readonly dispose: () => void } {
   return editorFocus.replace(function () {
     const roots = editorRoots();
-    const ports = sharedSplit ? { ...editorFocusPorts,
-      isScriptCell: (cell: Element) => !cell.closest("#rows") && isScriptCell(cell),
-      blurredCell: (cell: Element) => { if (!cell.closest("#rows")) editorFocusPorts.blurredCell(cell); else sharedSplit.leftCell(cell); }
-    } : editorFocusPorts;
-    return { dispose: mountEditorFocus({ rows: roots[0] as Element, doc: document, ports }) };
+    return { dispose: mountEditorFocus({ rows: roots[0] as Element, doc: document, ports: editorFocusPorts }) };
   });
 }
 
@@ -780,7 +704,6 @@ const clipboardRoutes = owned<ReturnType<typeof mountClipboardRoutes>>();
 
 const clipboardRoutePorts = {
   scriptCell: isScriptCell,
-  sharedCell: (cell: Element) => sharedCellSpaceForm(cell) !== null,
   copy: copyFromCell,
   afterCut: afterScriptCellChange,
   pasteBeats: pasteBeatsAt,
@@ -868,27 +791,6 @@ export function onRootPaste(e: ClipboardEvent): void {
   if (clipboard) clipboard.paste(e);
 }
 
-export function refuseSharedSplitNative(event: Event, cell: Element | null): boolean {
-  if (!cell || !isScriptCell(cell)) {
-    return event.type === "drop" && event.target instanceof Element && !!event.target.closest(".visual-cell")
-      && !event.target.closest("input,textarea");
-  }
-  if (event.type === "paste" || event.type === "cut" || event.type === "drop") return true;
-  if (event.type === "beforeinput") {
-    const type = (event as InputEvent).inputType;
-    return type === "deleteByCut" || type === "deleteByDrag"
-      || !/^(insertText|insertReplacementText|insertCompositionText|insertFromComposition|delete.*)$/.test(type);
-  }
-  if (event.type !== "keydown") return false;
-  const key = event as KeyboardEvent, mod = key.ctrlKey || key.metaKey;
-  if (key.isComposing || key.keyCode === 229) return false;
-  if (key.key === "Enter" && !mod && !key.altKey || mod && /^(b|i|u)$/i.test(key.key)
-    || key.altKey && !mod && (key.key === "ArrowUp" || key.key === "ArrowDown")) return true;
-  return key.key === "Tab" && (!!currentWhoList()?.isOpen(cell) || !!currentPlainTags()?.isOpen(cell)
-    || shownTagGhost()?.cellEl === cell || shownUntaggedSuggestion()?.cellEl === cell)
-    || key.key === "Escape" && !!currentPlainTags()?.isOpen(cell);
-}
-
 const videoPopover = owned<ReturnType<typeof mountVideoPopover>>();
 
 export function mountVideoFeature(): ReturnType<typeof mountVideoPopover> {
@@ -939,8 +841,7 @@ export function onRootKeydown(e: KeyboardEvent): void {
   if (e.key === "Enter" && e.altKey && !mod && isScriptCell(cellEl)) {
     e.preventDefault();
     hideTagGhost();
-    // why: in a shared session the command's admission settles the cell, and a second settle warns twice
-    if (!sharedSessionParts()) cellEditing().sync(cellEl);
+    cellEditing().sync(cellEl);
     splitCellField(cellEl);
     return;
   }
@@ -961,7 +862,7 @@ export function onRootKeydown(e: KeyboardEvent): void {
   if (e.key === "Enter" && mod && isScriptCell(cellEl)) {
     e.preventDefault();
     hideTagGhost();
-    if (!sharedSessionParts()) cellEditing().sync(cellEl);
+    cellEditing().sync(cellEl);
     addRowAtCaret(cellEl);
     return;
   }

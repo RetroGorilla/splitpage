@@ -5,7 +5,6 @@
     "tests/collab/undo-seam.test.ts",
     "tests/features/writer/buffer-undo.test.ts",
     "tests/bootstrap/shared-switch.test.ts",
-    "src/test/shared-writer-app.test.mjs",
     "tests/features/shared-undo-surfaces.test.ts"
   ],
   "mutants": [
@@ -101,7 +100,7 @@
     },
     {
       "label": "whole paste skips shared record preparation",
-      "file": "src/bootstrap/wiring/ports/writer-flow.ts",
+      "file": "tests/collab/editor-ports/writer-flow.ts",
       "find": "request && original && \"rows\" in original && original.clipboard ? sharedFlowPaste",
       "replace": "false && original && \"rows\" in original && original.clipboard ? sharedFlowPaste",
       "tests": [
@@ -253,7 +252,7 @@
         "tests/application/commands/flow-shared.test.ts",
         "tests/features/writer/flow-command-ports.test.ts"
       ],
-      "file": "src/bootstrap/wiring/ports/writer-flow.ts",
+      "file": "tests/collab/editor-ports/writer-flow.ts",
       "find": "const request = source.author.next();"
     },
     {
@@ -263,7 +262,7 @@
         "tests/application/commands/flow-shared.test.ts",
         "tests/features/writer/flow-command-ports.test.ts"
       ],
-      "file": "src/bootstrap/wiring/ports/writer-flow.ts",
+      "file": "tests/collab/editor-ports/writer-flow.ts",
       "find": "operations = request ?? undefined;"
     },
     {
@@ -273,7 +272,7 @@
         "tests/application/commands/flow-shared.test.ts",
         "tests/features/writer/flow-command-ports.test.ts"
       ],
-      "file": "src/bootstrap/wiring/ports/writer-flow.ts",
+      "file": "tests/collab/editor-ports/writer-flow.ts",
       "find": "sharedBeatStamp(beat, by, stamps)"
     },
     {
@@ -298,7 +297,7 @@
     },
     {
       "label": "flow leaves the caret on a temporary beat identity",
-      "file": "src/bootstrap/wiring/ports/writer-flow.ts",
+      "file": "tests/collab/editor-ports/writer-flow.ts",
       "find": "rowId: beats.get(pos.rowId) ?? pos.rowId",
       "replace": "rowId: pos.rowId",
       "tests": [
@@ -307,7 +306,7 @@
     },
     {
       "label": "flow leaves the caret on a temporary heading identity",
-      "file": "src/bootstrap/wiring/ports/writer-flow.ts",
+      "file": "tests/collab/editor-ports/writer-flow.ts",
       "find": "sceneId: headings.get(pos.sceneId) ?? pos.sceneId",
       "replace": "sceneId: pos.sceneId",
       "tests": [
@@ -550,66 +549,12 @@
       ]
     },
     {
-      "label": "Ctrl+Z in a shared Writer ignores the returned selection",
-      "file": "src/bootstrap/wiring/editor.ts",
-      "find": "  if (!placeReplayedCaret(steps, recorded, dir) && outcome.selection) placeSharedSelection(outcome.selection);\n",
-      "replace": "  placeReplayedCaret(steps, recorded, dir);\n",
-      "tests": [
-        "src/test/shared-writer-app.test.mjs"
-      ]
-    },
-    {
       "label": "the row paint reads the standalone undo owner while shared",
       "file": "src/bootstrap/wiring/ports/editing.ts",
       "find": "track: (): void => { if (!sharedUndoRoute()) undoOwner().track(); }",
       "replace": "track: (): void => { undoOwner().track(); }",
       "tests": [
         "src/test/shared-native-handoff-app.test.mjs"
-      ]
-    },
-    {
-      "label": "the shared undo caret comes from the undo record instead of the painted values",
-      "file": "src/bootstrap/wiring/editor.ts",
-      "find": "if (!placeReplayedCaret(steps, recorded, dir) && outcome.selection) placeSharedSelection(outcome.selection);",
-      "replace": "if (outcome.selection) placeSharedSelection(outcome.selection);",
-      "tests": [
-        "src/test/undo-caret-parity-selection.test.mjs"
-      ]
-    },
-    {
-      "label": "the shared undo reads the before value after the step",
-      "file": "src/bootstrap/wiring/editor.ts",
-      "find": "replayedSteps(before, after, cells, dir)",
-      "replace": "replayedSteps(after, after, cells, dir)",
-      "tests": [
-        "src/test/undo-caret-parity.test.mjs"
-      ]
-    },
-    {
-      "label": "the shared undo looks the row up by the saved address instead of the painted row",
-      "file": "src/bootstrap/wiring/editor.ts",
-      "find": "replayedSteps(before, after, cells, dir)",
-      "replace": "replayedSteps(before, after, replayed?.cells ?? [], dir)",
-      "tests": [
-        "src/test/undo-caret-parity.test.mjs"
-      ]
-    },
-    {
-      "label": "the shared replay ignores a structural record's recorded selection",
-      "file": "src/bootstrap/wiring/editor.ts",
-      "find": "placeReplayedCaret(steps, recorded, dir) && outcome.selection",
-      "replace": "placeReplayedCaret(steps, null, dir) && outcome.selection",
-      "tests": [
-        "src/test/undo-caret-parity-selection.test.mjs"
-      ]
-    },
-    {
-      "label": "the shared replay keeps the written order on undo",
-      "file": "src/application/editing/undo/replayed-steps.ts",
-      "find": "for (const cell of dir === \"undo\" ? [...cells].reverse() : cells) {",
-      "replace": "for (const cell of cells) {",
-      "tests": [
-        "src/test/undo-caret-parity.test.mjs"
       ]
     },
     {
@@ -627,7 +572,7 @@
       "find": "range: input.dir === \"undo\" ? input.recorded.before ?? input.recorded.after : input.recorded.after };",
       "replace": "range: input.recorded.after };",
       "tests": [
-        "src/test/undo-caret-parity.test.mjs"
+        "src/test/undo-caret-parity-selection.test.mjs"
       ]
     },
     {
@@ -676,15 +621,6 @@
       ]
     },
     {
-      "label": "the release build keeps the shared hook and its peer",
-      "file": "tests/collab/legacy-app/shared-test.ts",
-      "find": "const startForTest = typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS ? startSharedTestHook : null;",
-      "replace": "const startForTest = startSharedTestHook;",
-      "tests": [
-        "tests/bootstrap/shared-test-release.test.ts"
-      ]
-    },
-    {
       "label": "the shared hook lives outside the app's start and stop",
       "file": "src/bootstrap/app.ts",
       "find": "    run([mountSharedSessionFeature, stopSharedSessionFeature]);\n",
@@ -700,15 +636,6 @@
       "replace": "    try { void forceLeaveSharedSession; } finally {",
       "tests": [
         "src/test/shared-native-handoff-app.test.mjs"
-      ]
-    },
-    {
-      "label": "stopping the app keeps the hook's composition listeners",
-      "file": "tests/collab/legacy-app/shared-test.ts",
-      "find": "      document.removeEventListener(\"compositionstart\", composition, true);\n",
-      "replace": "",
-      "tests": [
-        "tests/bootstrap/wiring.test.ts"
       ]
     },
     {
@@ -754,7 +681,8 @@
       "replace": "",
       "tests": [
         "tests/bootstrap/shared-switch.test.ts",
-        "tests/bootstrap/native-shared-entry.test.ts"
+        "tests/bootstrap/native-shared-entry.test.ts",
+        "src/test/shared-native-handoff-app.test.mjs"
       ]
     },
     {
@@ -764,15 +692,6 @@
       "replace": "",
       "tests": [
         "tests/bootstrap/native-shared-entry.test.ts"
-      ]
-    },
-    {
-      "label": "route: the shared Writer binding abandons nothing",
-      "file": "src/bootstrap/wiring/shared-writer.ts",
-      "find": "    abandon: () => { closing = true; abandonAll(false); },",
-      "replace": "    abandon: () => { closing = true; },",
-      "tests": [
-        "src/test/shared-writer-broll-leave-app.test.mjs"
       ]
     },
     {
@@ -806,7 +725,7 @@
     },
     {
       "label": "abandonment: the selection-visual edit is not registered",
-      "file": "src/bootstrap/wiring/ports/writer-visual-buffer.ts",
+      "file": "tests/collab/editor-ports/writer-visual-buffer.ts",
       "find": "    const stopAbandonment = shared.bufferedText.abandonment?.(abandon);",
       "replace": "    const stopAbandonment = shared.bufferedText.abandonment?.(() => {});",
       "tests": [

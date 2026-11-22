@@ -1,3 +1,4 @@
+import type { SharedAuthorPort } from "../../bootstrap/legacy-shared-switch-support.ts";
 import { emptyScriptCommand } from "../../../src/application/commands/empty-script.ts";
 import type { SharedDocumentSession } from "../../../src/application/session/shared-session.ts";
 import type { StampPorts } from "../../../src/application/session/ports.ts";
@@ -9,7 +10,6 @@ import { observeSharedStructureOrder } from "../../../src/adapters/collab/struct
 import { sharedStructureKey } from "../../../src/core/collab/structure-key.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { readSharedContentRef } from "../../../src/core/collab/read-operation.ts";
-import type { SharedAuthorPort } from "../../../src/bootstrap/wiring/shared-session.ts";
 import type { NoticePort } from "../../../src/application/effects/ports.ts";
 import { sharedCommandReport } from "../../../src/bootstrap/wiring/ports/shared-command-notices.ts";
 

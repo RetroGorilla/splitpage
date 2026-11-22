@@ -11,7 +11,7 @@ import { beatPos, startBeat } from "../../../src/core/flow/flow.ts";
 import { fromHtml } from "../../../src/bootstrap/richtext.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import type { SurfacePorts } from "../../../src/features/writer/flow-surface.ts";
-import { writerFlowCommands } from "../../../src/bootstrap/wiring/ports/writer-flow.ts";
+import { writerFlowCommands } from "../../collab/editor-ports/writer-flow.ts";
 import { registerSharedRecordHandlers } from "../../../src/adapters/collab/record-executor.ts";
 import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/removal-executor.ts";
 import { registerSharedJoinHandlers } from "../../../src/adapters/collab/join-executor.ts";

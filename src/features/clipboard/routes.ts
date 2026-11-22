@@ -1,6 +1,6 @@
 interface ClipboardRoutePorts<Owner, Place, Extra> {
   readonly scriptCell: (el: Element) => boolean;
-  readonly sharedCell: (cell: Element) => boolean;
+  readonly sharedCell?: (cell: Element) => boolean;
   readonly copy: (e: Pick<ClipboardEvent, "clipboardData" | "preventDefault">, cell: Element, cut: boolean) => boolean;
   readonly afterCut: (cell: Element) => void;
   readonly pasteBeats: (data: DataTransfer | null, cell: Element) => boolean;
@@ -71,7 +71,7 @@ export function mountClipboardRoutes<Owner, Place, Extra>(mount: ClipboardRoutes
   function dragStart(event: DragEvent): boolean {
     if (!open || event.defaultPrevented) return false;
     const cell = cellAround(event), data = event.dataTransfer;
-    if (!cell || !data || !ports.sharedCell(cell) || !ports.scriptCell(cell)) return false;
+    if (!cell || !data || !ports.sharedCell?.(cell) || !ports.scriptCell(cell)) return false;
     return ports.copy({ clipboardData: data, preventDefault: () => {} }, cell, false);
   }
 

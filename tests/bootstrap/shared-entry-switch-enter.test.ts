@@ -1,9 +1,10 @@
+import { legacySessionParts } from "./legacy-shared-switch-support.ts";
 import { enterLegacySharedSession } from "./legacy-shared-switch-support.ts";
 import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
 import { bootEntrySwitchFixture, stopEntrySwitchFixture, entrySwitchFixture, attemptSwitchEntry } from "./shared-entry-switch-support.ts";
 import { currentDocument, onDocumentReplaced, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
-import { sharedSessionParts, SHARED_SWITCHING } from "../../src/bootstrap/wiring/shared-session.ts";
+import { SHARED_SWITCHING } from "../../src/bootstrap/wiring/shared-session.ts";
 
 before(bootEntrySwitchFixture);
 after(stopEntrySwitchFixture);
@@ -35,7 +36,7 @@ for (const kind of ["open", "startNew"] as const) {
     try {
       assert.deepEqual(await enterLegacySharedSession({ ...f.ports, detach: () => { throw new Error("detach refused"); } }), { ok: false, reason: "enter-failed" });
       assert.deepEqual(observed, [{ refused: SHARED_SWITCHING }]);
-      assert.deepEqual([sharedSessionParts(), sharedSession(), currentDocument()?.title], [null, false, "Captured script"]);
+      assert.deepEqual([legacySessionParts(), sharedSession(), currentDocument()?.title], [null, false, "Captured script"]);
       stop(); assert.deepEqual(attemptSwitchEntry(kind), { accepted: "Replacement script" });
     } finally { stop(); f.close(); }
   });

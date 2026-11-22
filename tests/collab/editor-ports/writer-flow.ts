@@ -1,16 +1,16 @@
-import { flowCommand } from "../../../application/commands/flow.ts";
-import type { FlowCommandSource } from "../../../application/commands/flow.ts";
-import type { FlowOutcome, FlowPorts, FlowPos, FlowRange } from "../../../core/flow/flow.ts";
-import type { FlowOperationRequest } from "../../../core/flow/operations.ts";
-import type { SharedContentRef, SharedOperation } from "../../../core/collab/operations.ts";
-import type { SharedAuthorPort } from "../shared-session.ts";
-import { sharedBeatStamp } from "../../../adapters/collab/stamp.ts";
-import { sharedStructureIdentity } from "../../../adapters/collab/structure-identity.ts";
-import { sharedFlowPaste } from "../../../application/commands/flow-paste.ts";
-import type { SharedDocumentHandle } from "../../../adapters/collab/types.ts";
-import { readSharedPaintedText } from "../../../adapters/collab/paint-base.ts";
-import { createSharedAnchor } from "../../../adapters/collab/anchors.ts";
-import { sharedRecordFieldAccepted } from "../../../adapters/collab/record-codec.ts";
+import { flowCommand } from "../../../src/application/commands/flow.ts";
+import type { FlowCommandSource } from "../../../src/application/commands/flow.ts";
+import type { FlowOutcome, FlowPorts, FlowPos, FlowRange } from "../../../src/core/flow/flow.ts";
+import type { FlowOperationRequest } from "../../../src/core/flow/operations.ts";
+import type { SharedContentRef, SharedOperation } from "../../../src/core/collab/operations.ts";
+import type { SharedAuthorPort } from "../../bootstrap/legacy-shared-switch-support.ts";
+import { sharedBeatStamp } from "../../../src/adapters/collab/stamp.ts";
+import { sharedStructureIdentity } from "../../../src/adapters/collab/structure-identity.ts";
+import { sharedFlowPaste } from "../../../src/application/commands/flow-paste.ts";
+import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
+import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
+import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
+import { sharedRecordFieldAccepted } from "../../../src/adapters/collab/record-codec.ts";
 
 export interface WriterFlowCommands {
   readonly flow: FlowPorts;

@@ -1,15 +1,12 @@
-import { sharedBrollCellKeyable, sharedBrollShotRemoved, sharedBrollShotUntouched } from "../../../adapters/collab/broll-keying.ts";
-import { sharedBeatStamp } from "../../../adapters/collab/stamp.ts";
-import type { SharedDocumentHandle } from "../../../adapters/collab/types.ts";
-import { keySharedLeftCell } from "../../../application/commands/shared-broll-keying.ts";
-import type { SharedBrollKeyingPorts } from "../../../application/commands/shared-broll-keying.ts";
-import type { BufferedFieldPorts } from "../../../application/editing/buffered-field.ts";
-import type { StampPorts } from "../../../application/session/ports.ts";
-import type { CommonDocumentSession } from "../../../application/session/document-session.ts";
-import { productionReaders } from "../../document-ports.ts";
-import { scriptCellOf } from "../../richtext.ts";
-import { text } from "./text.ts";
-import { timingMarks } from "../../../../shared/timing-marks.ts";
+import { sharedBrollCellKeyable, sharedBrollShotRemoved, sharedBrollShotUntouched } from "../../../src/adapters/collab/broll-keying.ts";
+import { sharedBeatStamp } from "../../../src/adapters/collab/stamp.ts";
+import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
+import { keySharedLeftCell } from "../../../src/application/commands/shared-broll-keying.ts";
+import type { SharedBrollKeyingPorts } from "../../../src/application/commands/shared-broll-keying.ts";
+import type { BufferedFieldPorts } from "../../../src/application/editing/buffered-field.ts";
+import type { StampPorts } from "../../../src/application/session/ports.ts";
+import type { CommonDocumentSession } from "../../../src/application/session/document-session.ts";
+import { timingMarks } from "../../../shared/timing-marks.ts";
 
 declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
@@ -25,12 +22,6 @@ export function sharedBrollKeyingPorts(handle: SharedDocumentHandle, source: Pic
     shotRemoved: id => sharedBrollShotRemoved(handle, id),
     shotUntouched: id => sharedBrollShotUntouched(handle, id)
   };
-}
-
-export function sharedScriptBrollKeyingPorts(parts: { readonly handle: SharedDocumentHandle;
-  readonly author: { readonly next: () => { readonly id: string; readonly by: string } | null } }, stamps: StampPorts): SharedBrollKeyingPorts {
-  return sharedBrollKeyingPorts(parts.handle, { author: () => parts.author.next(), cells: scriptCellOf, readers: productionReaders,
-    plainTextOf: text.htmlToPlainText, stamps });
 }
 
 // why: rules 196 to 198 on #1414: the Split and the Writer key a left visual cell through this one leave; a leave

@@ -1,3 +1,4 @@
+import { legacySessionParts } from "./legacy-shared-switch-support.ts";
 import type { LegacySharedSwitchPorts } from "./legacy-shared-switch-support.ts";
 import { enterLegacySharedSession } from "./legacy-shared-switch-support.ts";
 import { before, after, test } from "node:test";
@@ -8,7 +9,7 @@ import { documentOpenings, documentSources, documentTransitions, openDocument } 
 import { documentEntry } from "../../src/bootstrap/wiring/ports/document-entry.ts";
 import { openingStatus } from "../../src/bootstrap/wiring/ports/transitions.ts";
 import { currentCapabilities, currentDocument, liveSession, runCommand, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
-import { leaveRunningSharedSession, sharedSessionParts } from "../../src/bootstrap/wiring/shared-session.ts";
+import { leaveRunningSharedSession } from "../../src/bootstrap/wiring/shared-session.ts";
 import { mountRowsRenderFeature, stopRowsRenderFeature } from "../../src/bootstrap/wiring/render.ts";
 import { confirmSavedNow, unsavedChanges } from "../../src/bootstrap/wiring/save-owners.ts";
 import { fileHome, currentHome, setHome } from "../../src/bootstrap/wiring/location-owner.ts";
@@ -62,7 +63,7 @@ function reset() {
 async function share() {
   reset(); const s = switcher(); stopRowsRenderFeature();
   assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
-  const parts = sharedSessionParts(); assert.ok(parts);
+  const parts = legacySessionParts(); assert.ok(parts);
   return { ...s, parts };
 }
 
@@ -76,7 +77,7 @@ async function refusedDuringOpening(s: ReturnType<typeof switcher>) {
   assert.equal(documentOpenings.openingPending(), true);
   assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: false, reason: "opening-pending" });
   assert.equal(currentDocument() === doc, true);
-  assert.deepEqual([liveSession().epoch(), liveSession().generation(), sharedSession(), sharedSessionParts(), s.log, s.errors], [epoch, generation, false, null, [], []]);
+  assert.deepEqual([liveSession().epoch(), liveSession().generation(), sharedSession(), legacySessionParts(), s.log, s.errors], [epoch, generation, false, null, [], []]);
 }
 
 async function enterAfterLanding(s: ReturnType<typeof switcher>, title: string) {
@@ -245,7 +246,7 @@ test("C8 a held binding refuses all entry boundaries before source access or New
     assert.equal(await hooks.__prompterTest.launchFromScript("1".repeat(64)), false);
     assert.equal(reads, 0); assert.equal(currentDocument() === doc, true);
     assert.deepEqual(encodeSharedState(page.parts.handle), bytes); assert.deepEqual(page.parts.undo.sizes(), undo);
-    assert.equal(sharedSessionParts() === page.parts, true); assert.equal(documentOpenings.openingPending(), false);
+    assert.equal(legacySessionParts() === page.parts, true); assert.equal(documentOpenings.openingPending(), false);
   } finally { unregister(); globalThis.fetch = previous; stop(); page.hold(null); close(); }
 });
 

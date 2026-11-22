@@ -1,10 +1,5 @@
 {
   "tests": [
-    "src/test/shared-split-callers-literals-app.test.mjs",
-    "src/test/shared-split-callers-notices-app.test.mjs",
-    "src/test/shared-split-refusals-app.test.mjs",
-    "src/test/shared-split-refusals-ime-app.test.mjs",
-    "src/test/shared-split-refusals-audio-forward-app.test.mjs",
     "tests/features/rows/beats.test.ts"
   ],
   "mutants": [
@@ -95,7 +90,7 @@
       "find": "return finish() || (reported === before ? false : SHARED_ADMISSION_ANNOUNCED);",
       "replace": "return finish() || SHARED_ADMISSION_ANNOUNCED;",
       "tests": [
-        "src/test/shared-split-callers-notices-app.test.mjs"
+        "tests/application/editing/buffered-field.test.ts"
       ]
     },
     {
@@ -108,48 +103,12 @@
       ]
     },
     {
-      "label": "Ctrl+Enter in a shared session settles the cell before its command too, so a refusal warns twice",
-      "file": "src/bootstrap/wiring/editor.ts",
-      "find": "    if (!sharedSessionParts()) cellEditing().sync(cellEl);\n    addRowAtCaret(",
-      "replace": "    cellEditing().sync(cellEl);\n    addRowAtCaret(",
-      "tests": [
-        "src/test/shared-split-callers-notices-app.test.mjs"
-      ]
-    },
-    {
-      "label": "Alt+Enter in a shared session settles the cell before its command too, so a refusal warns twice",
-      "file": "src/bootstrap/wiring/editor.ts",
-      "find": "    if (!sharedSessionParts()) cellEditing().sync(cellEl);\n    splitCellField(cellEl);",
-      "replace": "    cellEditing().sync(cellEl);\n    splitCellField(cellEl);",
-      "tests": [
-        "src/test/shared-split-callers-notices-app.test.mjs"
-      ]
-    },
-    {
       "label": "the standalone split reads its selection without syncing the cell first",
       "file": "src/features/rows/beats.ts",
       "find": "  (ports as BeatPortUse).cells.sync(cellEl);\n  const sel =",
       "replace": "  const sel =",
       "tests": [
         "tests/features/rows/beats.test.ts"
-      ]
-    },
-    {
-      "label": "Ctrl+Enter and Alt+Enter in a script cell are refused natively instead of reaching their shared commands",
-      "file": "src/bootstrap/wiring/editor.ts",
-      "find": "key.key === \"Enter\" && !mod && !key.altKey ||",
-      "replace": "key.key === \"Enter\" ||",
-      "tests": [
-        "src/test/shared-split-callers-literals-app.test.mjs"
-      ]
-    },
-    {
-      "label": "plain Enter in a script cell is no longer refused natively, so an unserved line break reaches standalone code",
-      "file": "src/bootstrap/wiring/editor.ts",
-      "find": "key.key === \"Enter\" && !mod && !key.altKey ||",
-      "replace": "key.key === \"Enter\" && false ||",
-      "tests": [
-        "src/test/shared-split-refusals-audio-forward-app.test.mjs"
       ]
     }
   ]

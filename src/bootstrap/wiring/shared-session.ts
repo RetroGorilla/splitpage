@@ -1,6 +1,4 @@
 import { stopNativeCaretWait } from "./native-switch-caret.ts";
-import type { SharedDocumentHandle } from "../../adapters/collab/types.ts";
-import type { SharedUndo } from "../../application/editing/undo/shared-undo.ts";
 import type { CommandOutcome, DocumentStructureIntent } from "../../application/session/document-session.ts";
 import { createSessionCapabilities } from "../../application/session/capabilities.ts";
 import type { CapabilityPort, ReportPort, TimerPort } from "../../application/session/ports.ts";
@@ -16,30 +14,11 @@ import { documentReader } from "./ports/document.ts";
 import type { NativeEditorRecords } from "./native-shared-records.ts";
 import type { FindNativeAccess } from "../../features/find/ports.ts";
 
-export interface SharedAuthorPort {
-  readonly next: () => { readonly id: string; readonly by: string } | null;
-}
-
-export interface SharedSessionParts {
-  readonly handle: SharedDocumentHandle;
-  readonly session: SharedDocumentSession;
-  readonly undo: SharedUndo;
-  readonly author: SharedAuthorPort;
-}
-
 interface NativeWriterPaintBinding {
   readonly headingCandidate: (beat: string) => boolean;
   readonly settle: () => boolean;
   readonly finish: () => void;
   readonly dispose: () => void;
-}
-
-export interface SharedBindings {
-  readonly enter: (parts: SharedSessionParts) => void;
-  readonly settle: () => string | null;
-  readonly leave: () => void;
-  readonly abandon?: () => void;
-  readonly drop?: () => void;
 }
 
 export interface SharedSwitchPorts {
@@ -81,7 +60,6 @@ interface Running {
 
 export interface SharedEditorBackend {
   readonly replica: ReplicaPort;
-  readonly parts: SharedSessionParts | null;
   readonly undo: (admission: Pick<SharedDocumentSession, "admit">) => SharedUndoRoute;
   readonly bind: (session: SharedDocumentSession) => void;
   readonly unbind: () => void;
@@ -106,10 +84,6 @@ export interface SharedEditorBackend {
 type OpenBackend = (hydration: ValidatedDocument, failedClose: () => boolean, attempt: (step: () => void) => boolean) => SharedEditorBackend;
 
 let running: Running | null = null;
-
-export function sharedSessionParts(): SharedSessionParts | null {
-  return running?.backend.parts ?? null;
-}
 
 export function nativeEditorRecords() {
   return running?.backend.nativeRecords ?? null;

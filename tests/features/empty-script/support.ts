@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { sharedHarness } from "../../application/session/shared-session-support.ts";
 import { adapterReplica } from "../../application/session/legacy-shared-session-support.ts";
-import { sharedBufferPorts } from "../../../src/bootstrap/wiring/ports/shared-buffer.ts";
+import { sharedBufferPorts } from "../../collab/editor-ports/shared-buffer.ts";
 import { createFlowWriter } from "../../../src/features/writer/flow-writer.ts";
 import { createEditorSelection } from "../../../src/application/editing/selection.ts";
 import { createPaintGuard, createUndoGuard } from "../../../src/application/editing/paint-guard.ts";

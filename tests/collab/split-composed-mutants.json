@@ -1,5 +1,4 @@
 {
-  "tests": ["src/test/shared-split-app.test.mjs"],
   "mutants": [
     {
       "label": "C7 disposal drops a selection endpoint while restoring native space forms",
@@ -12,97 +11,22 @@
       "label": "C7 leave retains a native nonbreaking stand-in for a stored plain space",
       "file": "src/features/editing/cell-buffer.ts",
       "find": "const restored = stored === undefined ? null : readSharedCellSpaceForm(cell, stored);",
-      "replace": "const restored = null;"
-    },
-    {
-      "label": "C7 enters without mounting the Split binding",
-      "file": "src/bootstrap/wiring/shared-split.ts",
-      "find": "buffer = mountSharedSplitBuffer({ ...shared, refuseNative: refuseSharedSplitNative });",
-      "replace": "void shared;"
-    },
-    {
-      "label": "C7 remounts the same parts after refused disposal",
-      "file": "src/bootstrap/wiring/shared-split.ts",
-      "find": "if (entered === parts && buffer) return;",
-      "replace": ""
-    },
-    {
-      "label": "C7 ignores a refused finish on leave",
-      "file": "src/bootstrap/wiring/shared-split.ts",
-      "find": "return !buffer || buffer.binding.finish() ? null : refusal ?? \"buffer-pending\";",
-      "replace": "buffer?.binding.finish(); return null;"
-    },
-    {
-      "label": "C7 ignores a refused binding disposal",
-      "file": "src/bootstrap/wiring/shared-split.ts",
-      "find": "if (buffer && !buffer.dispose()) throw new Error(refusal ?? \"buffer-pending\");",
-      "replace": "buffer?.dispose();"
-    },
-    {
-      "label": "C7 leaving keeps the Split binding mounted",
-      "file": "src/bootstrap/wiring/shared-split.ts",
-      "find": "if (buffer && !buffer.dispose()) throw new Error(refusal ?? \"buffer-pending\");",
-      "replace": "void buffer;"
+      "replace": "const restored = null;",
+      "tests": ["tests/features/editing/split-caret-review.test.ts"]
     },
     {
       "label": "C7 shared paint calls standalone undo tracking",
       "file": "src/bootstrap/wiring/ports/editing.ts",
       "find": "if (!sharedUndoRoute()) undoOwner().track();",
-      "replace": "undoOwner().track();"
+      "replace": "undoOwner().track();",
+      "tests": ["src/test/shared-native-handoff-app.test.mjs"]
     },
     {
       "label": "C7 leave never resumes standalone render tracking",
       "file": "src/bootstrap/wiring/undo.ts",
       "find": "if (sharedRoute === route) sharedRoute = null;",
-      "replace": "void route;"
-    },
-    {
-      "label": "C7 leave keeps standalone focus in shared mode",
-      "file": "src/bootstrap/wiring/shared-split.ts",
-      "find": "() => mountFocusFeature()",
-      "replace": "() => mountFocusFeature(true)"
-    },
-    {
-      "label": "C7 leave keeps standalone composition in shared mode",
-      "file": "src/bootstrap/wiring/shared-split.ts",
-      "find": "() => mountCompositionFeature()",
-      "replace": "() => mountCompositionFeature(true)"
-    },
-    {
-      "label": "C7 leave keeps standalone rows input in shared mode",
-      "file": "src/bootstrap/wiring/shared-split.ts",
-      "find": "() => mountRowsEditingFeature()",
-      "replace": "() => mountRowsEditingFeature(true)"
-    },
-    {
-      "label": "C7 shared input uses standalone whole-field synchronization",
-      "file": "src/bootstrap/wiring/editor.ts",
-      "find": "if (cell && isScriptCell(cell)) afterScriptCellChange(cell);\n  else onRootInput(event);",
-      "replace": "onRootInput(event);"
-    },
-    {
-      "label": "C7 shared blur uses standalone whole-field synchronization",
-      "file": "src/bootstrap/wiring/editor.ts",
-      "find": "blurredCell: (cell: Element) => { if (!cell.closest(\"#rows\")) editorFocusPorts.blurredCell(cell); else sharedSplit.leftCell(cell); }",
-      "replace": "blurredCell: editorFocusPorts.blurredCell"
-    },
-    {
-      "label": "C7 shared composition reaches standalone undo",
-      "file": "src/bootstrap/wiring/editor.ts",
-      "find": "cellOf: sharedSplit ? target => target instanceof Element && target.closest(\"#rows\") ? null : scriptCellOf(target) : scriptCellOf,",
-      "replace": "cellOf: scriptCellOf,"
-    },
-    {
-      "label": "C7 typeAtMarks is left on for shared Split cells",
-      "file": "src/bootstrap/wiring/editor.ts",
-      "find": "isScriptCell: (cell: Element) => !cell.closest(\"#rows\") && isScriptCell(cell),",
-      "replace": "isScriptCell,"
-    },
-    {
-      "label": "C7 buffer refusals bypass the visible report port",
-      "file": "src/bootstrap/wiring/shared-split.ts",
-      "find": "report: outcome => { refusal = outcome.kind === \"rejected\" ? outcome.reason : null; notify(outcome); }",
-      "replace": "report: outcome => { refusal = outcome.kind === \"rejected\" ? outcome.reason : null; effects.report(outcome); }"
+      "replace": "void route;",
+      "tests": ["src/test/shared-native-handoff-app.test.mjs"]
     },
     {
       "label": "C7 prevented copy or cut reaches standalone clipboard handlers",

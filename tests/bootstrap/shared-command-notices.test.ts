@@ -1,7 +1,7 @@
 import test from "node:test";
 import assert from "node:assert/strict";
 import { sharedCommandRefusalNotice, sharedCommandReport } from "../../src/bootstrap/wiring/ports/shared-command-notices.ts";
-import { sharedBufferPorts } from "../../src/bootstrap/wiring/ports/shared-buffer.ts";
+import { sharedBufferPorts } from "../collab/editor-ports/shared-buffer.ts";
 import { encodeSharedState } from "../../src/adapters/collab/document.ts";
 import { replicas } from "../adapters/collab/executor-support.ts";
 import { sharedHarness } from "../application/session/shared-session-support.ts";

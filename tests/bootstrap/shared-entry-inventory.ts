@@ -1,3 +1,4 @@
+import { legacySessionParts } from "./legacy-shared-switch-support.ts";
 import { enterLegacySharedSession } from "./legacy-shared-switch-support.ts";
 import assert from "node:assert/strict";
 import { currentDocument, liveSession, onDocumentReplaced, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
@@ -21,7 +22,7 @@ import { startDesktopView } from "../../src/features/desktop/desktop.ts";
 import type { DesktopPorts } from "../../src/features/desktop/ports.ts";
 import type { DesktopOpenedFile } from "../../src/application/desktop/shell.ts";
 import { migrateRows } from "../../src/bootstrap/document-ports.ts";
-import { leaveRunningSharedSession, sharedSessionParts } from "../../src/bootstrap/wiring/shared-session.ts";
+import { leaveRunningSharedSession } from "../../src/bootstrap/wiring/shared-session.ts";
 import { sharedUndoRoute } from "../../src/bootstrap/wiring/undo.ts";
 import { collabState } from "../../src/adapters/collab/state.ts";
 import { entrySwitchFixture } from "./shared-entry-switch-support.ts";
@@ -162,7 +163,7 @@ export async function exerciseHeldEntry(entry: EntryCase, phase: "enter" | "leav
   try {
     if (phase === "enter") entry.prepare?.(context);
     const entered = await enterLegacySharedSession(ports);
-    const parts = sharedSessionParts(); assert.ok(parts);
+    const parts = legacySessionParts(); assert.ok(parts);
     let left: unknown = null;
     if (phase === "leave") { entry.prepare?.(context); left = leaveRunningSharedSession(); }
     const result = await pending;
@@ -176,7 +177,7 @@ export async function exerciseHeldEntry(entry: EntryCase, phase: "enter" | "leav
     assert.deepEqual(entered, { ok: true });
     assert.deepEqual([currentDocument()?.title, currentDocument()?.rows.map(row => [row.id, row.audioText])], ["Captured script", [["R1", "Captured words"]]]);
     if (phase === "leave") {
-      assert.deepEqual(left, { ok: true }); assert.equal(sharedSessionParts() === null, true); assert.equal(sharedUndoRoute() === null, true);
+      assert.deepEqual(left, { ok: true }); assert.equal(legacySessionParts() === null, true); assert.equal(sharedUndoRoute() === null, true);
       assert.equal(collabState(parts.handle).destroyed, true);
       documentTransitions().startNew(arrival()); assert.equal(currentDocument()?.title, TARGET.title);
     }

@@ -110,7 +110,7 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
     try { return enterSharedDocument(recovered.document()); } finally { recovered.close(); }
   };
   const backend: SharedEditorBackend = {
-    replica: publication.replica, parts: null, unsupportedCommands: UNSUPPORTED,
+    replica: publication.replica, unsupportedCommands: UNSUPPORTED,
     nativeRecords: records,
     nativeFind: createNativeEditorFind({ native, session: () => commandSession, input: () => input, editAttribution, publish, report: ports.report }),
     hasWriterPreview: beat => input?.hasWriterPreview(beat) ?? false,

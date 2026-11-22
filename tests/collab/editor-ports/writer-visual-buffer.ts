@@ -1,18 +1,18 @@
-import { createBufferedField } from "../../../application/editing/buffered-field.ts";
-import type { BufferedFieldPorts } from "../../../application/editing/buffered-field.ts";
-import { createPaintedBeats } from "../../../application/editing/painted-beats.ts";
-import type { BufferedTextEdit, PaintedText, PaintedTextSource } from "../../../application/editing/ports.ts";
-import { createSelectionModel } from "../../../application/editing/selection.ts";
-import type { CommonDocumentSession, DocumentView } from "../../../application/session/document-session.ts";
-import { bufferedFieldKey, readBufferedFieldKey } from "../../../core/collab/buffer.ts";
-import type { Run } from "../../../core/text/runs.ts";
-import { projection } from "../../../core/text/runs.ts";
-import { mountCellBuffer } from "../../../features/editing/cell-buffer.ts";
-import { createCellPage } from "../../../features/editing/cell-page.ts";
-import { ensureTrailingCaretSpot } from "../../../features/common/dom.ts";
-import { placeSelection, readSelection } from "../../../features/common/cell-dom.ts";
-import type { FlowVisualBufferMount } from "../../../features/writer/flow-visual-box.ts";
-import { beatPos } from "../../../core/flow/flow.ts";
+import { createBufferedField } from "../../../src/application/editing/buffered-field.ts";
+import type { BufferedFieldPorts } from "../../../src/application/editing/buffered-field.ts";
+import { createPaintedBeats } from "../../../src/application/editing/painted-beats.ts";
+import type { BufferedTextEdit, PaintedText, PaintedTextSource } from "../../../src/application/editing/ports.ts";
+import { createSelectionModel } from "../../../src/application/editing/selection.ts";
+import type { CommonDocumentSession, DocumentView } from "../../../src/application/session/document-session.ts";
+import { bufferedFieldKey, readBufferedFieldKey } from "../../../src/core/collab/buffer.ts";
+import type { Run } from "../../../src/core/text/runs.ts";
+import { projection } from "../../../src/core/text/runs.ts";
+import { mountCellBuffer } from "../../../src/features/editing/cell-buffer.ts";
+import { createCellPage } from "../../../src/features/editing/cell-page.ts";
+import { ensureTrailingCaretSpot } from "../../../src/features/common/dom.ts";
+import { placeSelection, readSelection } from "../../../src/features/common/cell-dom.ts";
+import type { FlowVisualBufferMount } from "../../../src/features/writer/flow-visual-box.ts";
+import { beatPos } from "../../../src/core/flow/flow.ts";
 
 function identities(base: PaintedText | null): readonly string[] | null {
   if (!base) return null;

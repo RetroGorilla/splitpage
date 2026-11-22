@@ -4,7 +4,7 @@ import { createRequire } from "node:module";
 import { Stage1ExecutorHarness } from "../../adapters/collab/stage1-executor-support.ts";
 import { sharedHarness } from "../../application/session/shared-session-support.ts";
 import { adapterReplica } from "../../application/session/legacy-shared-session-support.ts";
-import { sharedBufferPorts } from "../../../src/bootstrap/wiring/ports/shared-buffer.ts";
+import { sharedBufferPorts } from "../../collab/editor-ports/shared-buffer.ts";
 import { sharedSceneCreation } from "./scene-create-adapter.ts";
 import { createBufferedField } from "../../../src/application/editing/buffered-field.ts";
 import { createPaintedBeats } from "../../../src/application/editing/painted-beats.ts";
