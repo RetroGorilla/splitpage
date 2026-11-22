@@ -108,7 +108,7 @@ expect FI.value === 'cup' && RI.value === 'pot' && document.activeElement === RI
 eval clear();true
 wait noToast()
 expect document.getElementById('find-count').textContent === '1 of 1'
-eval window.keyed=function(){var v=Q('r2','visualText');return v.textContent==='B-roll: a cup'&&v.querySelector('.broll-key')?.dataset.brollId==='S1'&&[S.read().app,S.read().peer].every(function(d){return d.rows[2].visualText===KEY+' a cup'&&d.brollShots.some(function(s){return s.id==='S1'&&s.name==='a cup'})})};window.before=snap();true
+eval window.keyed=function(){var v=Q('r2','visualText'),k=v&&v.querySelector('.broll-key');return same()&&v.textContent==='B-roll: a cup'&&v.querySelectorAll('.broll-key').length===1&&k?.dataset.brollId==='S1'&&k?.getAttribute('contenteditable')==='false'&&k?.textContent==='B-roll:'&&[S.read().app,S.read().peer].every(function(d){return d.rows[2].visualText===KEY+' a cup'&&d.brollShots.length===1&&d.brollShots.some(function(s){return s.id==='S1'&&s.name==='a cup'})})};window.before=snap();true
 jsclick #find-replace
 expect one(NOT) && snap() === window.before && keyed()
 expect document.activeElement === RI && !RI.disabled
@@ -151,17 +151,75 @@ eval window.sharedId=S.read().app.docId;window.withoutId=function(d){var c=Objec
 expect left.ok === true && S.read().peer === null && S.read().app.docId !== sharedId && withoutId(S.read().app) === finalDoc
 expect Q('r5','audioText').textContent === 'Xgreen pot' && Q('r2','visualText').querySelector('.broll-key')?.dataset.brollId === 'S1'
 jsclick #find-close
-eval F.openFile(new File([JSON.stringify({schema:2,title:'Shared refusals narration key',paragraphsDecided:true,people:[{id:'p1',name:'Alice'}],brollShots:[{id:'S1',name:'Cup',status:'unshot',origin:'list'}],rows:[{id:'r1',audioText:'abcdef',visualText:'abcdef'},{id:'r2',audioText:KEY+' a cup',visualText:''},{id:'r3',audioText:'one',visualText:''},{id:'r4',audioText:'two',visualText:'mug'},{id:'r5',audioText:'green tea',visualText:''}],comments:[]})],'native-refusals-narration-key.splitpage'))
-wait F.state().title === 'Shared refusals narration key'
+wait document.querySelector('.findbar').hidden
+eval window.okToast=function(m){var t=[].slice.call(document.querySelectorAll('#toast-host .toast'));return t.length===1&&t[0].classList.contains('ok')&&!t[0].classList.contains('warn')&&t[0].textContent===m};window.stripStamp=function(d){var c=JSON.parse(JSON.stringify(d));delete c.docId;c.rows=c.rows.map(function(r){delete r.updatedAt;delete r.updatedBy;return r});return c};window.narrationAtom=function(suffix){var c=Q('r2','audioText'),k=c&&c.querySelector('.broll-key');return !!c&&c.textContent==='B-roll: '+suffix&&c.querySelectorAll('.broll-key').length===1&&!!k&&k.dataset.brollId==='S1'&&k.getAttribute('contenteditable')==='false'&&k.textContent==='B-roll:'};window.bothDocs=function(suffix){var exp=JSON.parse(JSON.stringify(window.baseDoc));exp.rows[1].audioText=KEY+' '+suffix;var expJson=JSON.stringify(exp);return same()&&[S.read().app,S.read().peer].every(function(d){return JSON.stringify(stripStamp(d))===expJson&&d.rows[1].id==='r2'&&d.rows[1].audioText===KEY+' '+suffix&&d.rows[1].visualText===''&&d.brollShots.length===1&&d.brollShots[0].id==='S1'&&d.brollShots[0].name==='Cup'&&d.brollShots[0].status==='unshot'&&d.brollShots[0].origin==='list'})};window.endAt=function(id,f){var c=Q(id,f);c.focus();var r=document.createRange();r.selectNodeContents(c);r.collapse(false);var s=getSelection();s.removeAllRanges();s.addRange(r);return true};window.open979=function(){window.prevDocId=F.state().docId;F.openFile(new File([JSON.stringify({schema:2,title:'Shared refusals',paragraphsDecided:true,people:[{id:'p1',name:'Alice'}],brollShots:[{id:'S1',name:'Cup',status:'unshot',origin:'list'}],rows:[{id:'r1',audioText:'abcdef',visualText:'abcdef'},{id:'r2',audioText:KEY+' a cup',visualText:''},{id:'r3',audioText:'one',visualText:''},{id:'r4',audioText:'two',visualText:'mug'},{id:'r5',audioText:'green tea',visualText:''}],comments:[]})],'refusals.splitpage'));return true};open979()
+wait F.state().docId !== window.prevDocId && F.state().title === 'Shared refusals' && Q('r2','audioText')?.textContent === 'B-roll: a cup'
 eval S.enter()
 wait S.read().peer !== null
-expect same() && Q('r2','audioText').textContent === 'B-roll: a cup' && Q('r2','audioText').querySelector('.broll-key')?.dataset.brollId === 'S1'
-expect [S.read().app,S.read().peer].every(function(d){return d.rows[1].audioText===KEY+' a cup'&&d.rows[1].visualText===''&&d.brollShots.some(function(s){return s.id==='S1'&&s.name==='Cup'})})
+eval window.baseDoc=stripStamp(S.read().app);clear();true
+wait noToast()
+expect bothDocs('a cup') && narrationAtom('a cup')
 key ctrl KeyF
 wait !document.querySelector('.findbar').hidden
-eval window.FI=document.getElementById('find-input');FI.focus();FI.select();true
+eval window.FI=document.getElementById('find-input');window.RI=document.getElementById('replace-input');FI.focus();FI.select();true
+expect document.activeElement === FI
+press B-roll:
+expect FI.value === 'B-roll:' && document.getElementById('find-count').textContent === 'No matches'
+eval FI.focus();FI.select();true
 press cup
-expect FI.value === 'cup' && document.getElementById('find-count').textContent === '1 of 1'
+eval RI.focus();RI.select();true
+press pot
+expect FI.value === 'cup' && RI.value === 'pot' && document.activeElement === RI && document.getElementById('find-count').textContent === '1 of 1' && noToast()
+jsclick #find-replace
+wait bothDocs('a pot') && narrationAtom('a pot')
+expect noToast() && document.getElementById('find-count').textContent === 'No matches' && document.activeElement === RI && !RI.disabled && !FI.disabled && FI.value === 'cup' && RI.value === 'pot'
+press s
+expect RI.value === 'pots' && bothDocs('a pot') && narrationAtom('a pot')
+jsclick #find-close
+wait document.querySelector('.findbar').hidden
+eval endAt('r2','audioText');true
+press !
+wait bothDocs('a pot!') && narrationAtom('a pot!')
+expect noToast() && document.activeElement === Q('r2','audioText')
+key ctrl KeyZ
+wait bothDocs('a pot') && narrationAtom('a pot')
+key ctrl KeyZ
+wait bothDocs('a cup') && narrationAtom('a cup')
+key ctrl+shift KeyZ
+wait bothDocs('a pot') && narrationAtom('a pot')
+expect noToast()
 eval window.narrationSharedId=S.read().app.docId;window.narrationFinalDoc=withoutId(S.read().app);window.narrationLeft=S.leave();true
 expect narrationLeft.ok === true && S.read().peer === null && S.read().app.docId !== narrationSharedId && withoutId(S.read().app) === narrationFinalDoc
-expect Q('r2','audioText').textContent === 'B-roll: a cup' && Q('r2','audioText').querySelector('.broll-key')?.dataset.brollId === 'S1'
+expect narrationAtom('a pot') && S.read().app.rows[1].audioText === KEY+' a pot' && S.read().app.brollShots.length === 1 && S.read().app.brollShots[0].id === 'S1' && S.read().app.brollShots[0].name === 'Cup' && S.read().app.brollShots[0].status === 'unshot' && S.read().app.brollShots[0].origin === 'list'
+eval open979()
+wait F.state().docId !== window.prevDocId && F.state().title === 'Shared refusals' && Q('r2','audioText')?.textContent === 'B-roll: a cup'
+eval S.enter()
+wait S.read().peer !== null
+eval window.baseDoc=stripStamp(S.read().app);clear();true
+wait noToast()
+expect bothDocs('a cup') && narrationAtom('a cup')
+key ctrl KeyF
+wait !document.querySelector('.findbar').hidden
+eval window.FI=document.getElementById('find-input');window.RI=document.getElementById('replace-input');FI.focus();FI.select();true
+expect document.activeElement === FI
+press cup
+eval RI.focus();RI.select();true
+press pot
+expect FI.value === 'cup' && RI.value === 'pot' && document.activeElement === RI && document.getElementById('find-count').textContent === '1 of 1' && noToast()
+jsclick #find-replace-all
+wait bothDocs('a pot') && narrationAtom('a pot')
+expect okToast('Replaced 1 match') && document.getElementById('find-count').textContent === 'No matches' && document.activeElement === RI && !RI.disabled && !FI.disabled && FI.value === 'cup' && RI.value === 'pot'
+key Backspace
+expect RI.value === 'po' && bothDocs('a pot') && narrationAtom('a pot')
+jsclick #find-close
+wait document.querySelector('.findbar').hidden
+eval clear();true
+wait noToast()
+key ctrl KeyZ
+wait bothDocs('a cup') && narrationAtom('a cup')
+key ctrl+shift KeyZ
+wait bothDocs('a pot') && narrationAtom('a pot')
+expect noToast()
+eval window.allSharedId=S.read().app.docId;window.allFinalDoc=withoutId(S.read().app);window.allLeft=S.leave();true
+expect allLeft.ok === true && S.read().peer === null && S.read().app.docId !== allSharedId && withoutId(S.read().app) === allFinalDoc
+expect narrationAtom('a pot') && S.read().app.rows[1].audioText === KEY+' a pot' && S.read().app.brollShots.length === 1 && S.read().app.brollShots[0].id === 'S1' && S.read().app.brollShots[0].name === 'Cup' && S.read().app.brollShots[0].status === 'unshot' && S.read().app.brollShots[0].origin === 'list'
