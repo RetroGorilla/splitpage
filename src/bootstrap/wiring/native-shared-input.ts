@@ -207,13 +207,29 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     writerControls()?.renderWriter();
     const placed = placement;
     placement = null;
-    if (!placed) return;
+    if (!placed) {
+      if (currentWhoList()?.isOpen()) currentWhoList()?.refresh();
+      return;
+    }
     const { beat, cell, surface } = placed.buffered, fresh = surface.cell(beat);
     if (!fresh || !surface.mayRestore(cell, fresh)) return;
     const offset = typeof placed.caret === "number" ? placed.caret : native.narrationOffset(beat, { from: placed.caret }, -1);
     if (offset === null) return;
     surface.place(fresh, beat, offset, offset, false);
   });
+
+  function updateSplitVisualWhoList(beat: string, input?: Pick<InputEvent, "inputType" | "data">): void {
+    const who = currentWhoList();
+    if (!who) return;
+    const live = visualTextSurface.cell(beat);
+    if (!live?.closest("#rows")) {
+      if (who.isOpen()) who.refresh();
+      return;
+    }
+    if (who.isOpen() && !who.isOpen(live)) who.refresh();
+    if (input) who.maybeOpen(input, live);
+    else if (who.isOpen(live)) who.refresh();
+  }
 
   function clearMovePaint(): void {
     for (const paint of movePaint.values()) paint.dispose();
@@ -848,6 +864,9 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     publish();
     const fresh = surface.cell(beat);
     if (fresh) surface.place(fresh, beat, landing, landing, false);
+    if (before.target.cell === "visual" && fresh?.closest("#rows") && currentWhoList()?.isOpen()) {
+      updateSplitVisualWhoList(beat);
+    }
   }
 
   function joinDirection(event: Event, cell: Element): -1 | 1 | null {
@@ -1015,7 +1034,12 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     draft = typeof anchored === "string" ? next : anchored;
     preview(current.cell, current.selection, text);
     if (typeof anchored === "string") { stop(anchored); return; }
-    if (anchored.field === "visualText" || atBatchBoundary(anchored)) finish();
+    if (anchored.field === "visualText" || atBatchBoundary(anchored)) {
+      const reason = finish();
+      if (!reason && anchored.field === "visualText" && anchored.cell.closest("#rows")) {
+        updateSplitVisualWhoList(anchored.beat, input);
+      }
+    }
     else timer = setTimeout(() => {
       const shown = cellSelection(anchored.cell);
       finish(undefined, shown?.from === anchored.previewCaret && shown.to === anchored.previewCaret || !anchored.cell.isConnected);
@@ -1081,13 +1105,15 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       draft = null;
       clearMovePaint();
       publish();
+      if (buffered.field === "visualText" && buffered.cell.closest("#rows")) updateSplitVisualWhoList(buffered.beat);
       return;
     }
     buffered.text = text;
     restore(buffered);
     preview(cell, buffered.selection, text);
-    finish();
+    const reason = finish();
     if (draft !== buffered) buffered.compositionCaret?.dispose();
+    if (!reason && buffered.field === "visualText" && buffered.cell.closest("#rows")) updateSplitVisualWhoList(buffered.beat);
   }
 
   function intercept(event: Event): void {
@@ -1220,6 +1246,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         if (event.type === "input" && (change.isComposing || change.inputType.includes("Composition"))) {
           if (change.data !== null) composingText = change.data;
           else if (change.inputType === "deleteCompositionText") composingText = "";
+          if (visual?.closest("#rows") && currentWhoList()?.isOpen(visual)) currentWhoList()?.refresh();
         }
         event.stopImmediatePropagation();
         return;
@@ -1509,6 +1536,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     draft?.paint?.dispose();
     draft = null;
     stopWriterPaint?.();
+    if (currentWhoList()?.isOpen()) currentWhoList()?.cancel();
     stopPaint();
     stopSize();
     stopUnload?.();
