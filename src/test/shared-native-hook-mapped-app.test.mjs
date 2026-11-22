@@ -790,9 +790,12 @@ for (const [name, edit, expected] of peerEdits) {
       const app = await enterNative(t, script, true), peer = replica(t, app), joiner = replica(t, app);
       if (variant) {
         const stored = decodeStateVector(encodeStateVector(app.ydoc));
-        const clients = [1, 2, 3].filter(id => !stored.has(id));
+        const clients = [1, 2, 3, 4].filter(id => !stored.has(id) && id !== joiner.ydoc.clientID).slice(0, 2);
         if (variant.includes("peer first")) clients.reverse();
         [app.ydoc.clientID, peer.ydoc.clientID] = clients;
+        assert.equal(app.ydoc.clientID < peer.ydoc.clientID, variant.includes("app first"));
+        assert.equal(stored.has(app.ydoc.clientID), false);
+        assert.equal(stored.has(peer.ydoc.clientID), false);
       }
       const local = stream(app), remote = stream(peer);
       const initialWarnings = warnings();
@@ -840,6 +843,11 @@ for (const [name, edit, expected] of peerEdits) {
         ? [["r1", "<strong>Hello!</strong>", "Look"], ["r2", "World", ""]]
         : expected;
       await agree(merged);
+      if (name === "formats text") {
+        assert.equal(painted("r1"), "Hello!");
+        const boldRuns = [...beat("r1").querySelectorAll("strong, b")].map(mark => mark.textContent);
+        assert.deepEqual(boldRuns, [variant.includes("app first") ? "Hello!" : "Hello"]);
+      }
       assert.equal(appActions.has("recovery"), false);
       remote.length = 0;
       assert.equal(peer.commands.undo().kind, "written");
@@ -850,6 +858,11 @@ for (const [name, edit, expected] of peerEdits) {
         ? [["r1", "Hello", "Look"], ["r2", "World!", ""]]
         : afterTyping;
       const landed = await agree(restored);
+      if (name === "formats text") {
+        assert.equal(painted("r1"), "Hello!");
+        assert.equal(beat("r1").querySelector("strong, b"), null);
+        assert.equal(peer.commands.undo().kind, "unchanged");
+      }
       assert.deepEqual(warnings(), initialWarnings);
       assert.deepEqual(leaveRunningSharedSession(), { ok: true });
       assert.notEqual(currentDocument().docId, landed.docId);
