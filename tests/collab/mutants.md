@@ -996,9 +996,9 @@ deleting a comment still calls the standalone command in a shared session | src/
 replying to a comment still calls the standalone command in a shared session | src/features/comments/comments.ts | src/test/shared-split-records-literals-comments-app.test.mjs | tests/collab/split-records-mutants.json
 a refused record command shows no notice | src/application/commands/shared-records.ts | tests/application/commands/shared-refusals.test.ts | tests/collab/split-records-mutants.json
 a shared record command runs through the silent edit that drops its refusal | src/application/commands/shared-records.ts | tests/application/commands/shared-refusals.test.ts | tests/collab/split-records-mutants.json
-a refused bulk tag delete still shows its success toast | src/features/tags/panels.ts | src/test/shared-split-records-refusals-app.test.mjs | tests/collab/split-records-mutants.json
-a refused bulk tag delete drops the selection before the command runs | src/features/tags/panels.ts | src/test/shared-split-records-refusals-app.test.mjs | tests/collab/split-records-mutants.json
-rule 73: removing a tag's labels in a shared session takes the standalone path, silent for a tag with no mentions | src/features/tags/panels.ts | src/test/shared-split-records-refusals-app.test.mjs | tests/collab/split-records-mutants.json
+a refused bulk tag delete still shows its success toast | src/features/tags/panels.ts | src/test/shared-native-registries-app.test.mjs | tests/collab/split-records-mutants.json
+a refused bulk tag delete drops the selection before the command runs | src/features/tags/panels.ts | src/test/shared-native-registries-app.test.mjs | tests/collab/split-records-mutants.json
+rule 73: removing a tag's labels in a shared session takes the standalone path, silent for a tag with no mentions | src/features/tags/panels.ts | src/test/shared-native-registries-app.test.mjs | tests/collab/split-records-mutants.json
 a refused record command reports nothing held, so its caller closes and clears as if it had saved | src/application/commands/shared-records.ts | tests/application/commands/shared-refusals.test.ts | tests/collab/split-records-mutants.json
 a shared record command that changes nothing reports itself held, so its caller keeps the box open instead of cleaning up | src/application/commands/shared-records.ts | tests/application/commands/shared-refusals.test.ts | tests/collab/split-records-mutants.json
 a refused picture edit reports nothing held, so the gallery moves its selection as if it had removed | src/bootstrap/wiring/native-shared-records.ts | src/test/shared-native-record-guards-app.test.mjs | tests/collab/split-records-mutants.json
@@ -1049,7 +1049,7 @@ typing back to the drawn value keeps the draft | src/features/common/typed-draft
 rename mode is left before the outcome | src/features/broll/panel.ts | src/test/shared-native-record-drafts-mapped-app.test.mjs | tests/collab/split-records-mutants.json
 Escape drops b-roll field text instead of submitting it | src/features/broll/panel.ts | src/test/panel-escape-app.test.mjs | tests/collab/split-records-mutants.json
 Escape clears tag notes and Gear quick add as if they were cancel editors | src/features/tags/panels.ts | src/test/panel-escape-app.test.mjs | tests/collab/split-records-mutants.json
-Escape erases the comment body before its cancel command can be refused | src/features/comments/comments.ts | src/test/panel-escape-app.test.mjs | tests/collab/split-records-mutants.json
+Escape erases the comment body before its cancel command can be refused | src/features/comments/comments.ts | tests/features/comments/shared-ports.test.ts | tests/collab/split-records-mutants.json
 Escape discards a reply instead of only closing the comments panel | src/features/comments/comments.ts | src/test/panel-escape-app.test.mjs | tests/collab/split-records-mutants.json
 
 ## Stage 2 command wiring

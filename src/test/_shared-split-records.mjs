@@ -11,7 +11,7 @@ import { openingStatus } from "../bootstrap/wiring/ports/transitions.ts";
 import { currentBrollRecords } from "../bootstrap/wiring/broll.ts";
 import { clearProductionSelection, selectedKeys } from "../bootstrap/wiring/production-editing-owners.ts";
 import { findOrAddPerson, registerProductionTag } from "../features/tags/production-tags.ts";
-import { addPersonForTag, applyGearQuickAdd, changeProductionOutline, clickProductionOutline, armDeleteTag, armPersonDelete, armRemoveTag, bulkDeleteSelected, openProductionPanel, renderProduction, saveTagRename, setTagOwner, setTagStatus, toggleCardSelection } from "../features/tags/panels.ts";
+import { addPersonForTag, applyGearQuickAdd, changeProductionOutline, clickProductionOutline, armDeleteTag, armPersonDelete, bulkDeleteSelected, openProductionPanel, renderProduction, saveTagRename, setTagOwner, setTagStatus, toggleCardSelection } from "../features/tags/panels.ts";
 import { openBrollPanel } from "../features/broll/panel.ts";
 import { armDeleteComment, closeCommentComposer, openCommentComposer, openCommentsPanel, postReply, setCommentAssignee, toggleReplyComposer, toggleResolve } from "../features/comments/comments.ts";
 import { tagKey } from "../core/document/tags.ts";
@@ -195,30 +195,6 @@ export const reply = name => {
   card.querySelector(".reply-name-input").value = name; card.querySelector(".cell-editable").innerHTML = "ok";
   postReply("C1");
 };
-
-export const composerKept = (name, body) => () => {
-  assert.equal(document.getElementById("comment-modal").hidden, false, "the composer stays open");
-  assert.deepEqual([document.getElementById("comment-name").value, document.getElementById("comment-body-editable").innerHTML], [name, body]);
-};
-
-export const replyKept = name => () => {
-  openCommentsPanel();
-  const card = document.querySelector('.reply-composer[data-for="C1"]'); assert.ok(card, "the reply composer stays open after a render");
-  assert.deepEqual([card.querySelector(".reply-name-input").value, card.querySelector(".cell-editable").innerHTML], [name, "ok"]);
-};
-
-export const tagsKept = key => () => { openProductionPanel(); assert.deepEqual(selectedKeys(), [key]); };
-
-export const refusals = [
-  { name: "rule 153: posting a comment under another name than the session's", act: () => { post("Bob"); }, kept: composerKept("Bob", "new") },
-  { name: "rule 153: replying under another name than the session's", act: () => { reply("Bob"); }, kept: replyKept("Bob") },
-  { name: "rule 73: bulk deleting a tag the script labels needs a text rewrite", act: () => {
-    selectOnly(tagKey("prop", "Mug")); bulkDeleteSelected();
-  }, kept: tagsKept(tagKey("prop", "Mug")) },
-  { name: "rule 73: renaming a tag has no shared port", act: () => { openProductionPanel(); assert.equal(saveTagRename(tagKey("prop", "Mug"), "Cup"), tagKey("prop", "Mug")); } },
-  { name: "rule 73: removing a tag's labels has no shared port", act: () => { openProductionPanel(); twice(armRemoveTag, tagKey("prop", "Mug")); } },
-  { name: "rule 73: removing the labels of a tag the script never mentions has no shared port", act: () => { openProductionPanel(); twice(armRemoveTag, tagKey("gear", "Drone")); } }
-];
 
 export function refusedOnce(f, order, act, kept) {
   remoteInsert(f.peer, "r2", "audioText", 0, "Z");

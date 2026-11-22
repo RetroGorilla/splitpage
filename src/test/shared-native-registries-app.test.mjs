@@ -3,8 +3,8 @@ import { after, test } from "node:test";
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { adoptReplacement, sharedRecoverySession } from "../bootstrap/wiring/session-owner.ts";
-import { addPersonForTag, applyGearQuickAdd, armDeleteTag, armPersonDelete, bulkDeleteSelected, openGearPanel,
-  openProductionPanel, saveTagRename, setTagNotes, setTagStatus, toggleCardSelection } from "../features/tags/panels.ts";
+import { addPersonForTag, applyGearQuickAdd, armDeleteTag, armRemoveTag, armPersonDelete, bulkDeleteSelected, openGearPanel,
+  openProductionPanel, renderProduction, saveTagRename, setTagNotes, setTagStatus, toggleCardSelection } from "../features/tags/panels.ts";
 import { findOrAddPerson, registerProductionTag } from "../features/tags/production-tags.ts";
 import { cellSelection, setCellSelection } from "../features/common/cell-selection.ts";
 import { currentBrollRecords } from "../bootstrap/wiring/broll.ts";
@@ -161,6 +161,8 @@ test("a tag derived from cell markup reaches the panel and takes registry edits"
   bulkDeleteSelected();
   await Promise.resolve();
   assert.deepEqual(hook.read(), before);
+  renderProduction();
+  assert.equal(tagCard("prop mug").getAttribute("aria-selected"), "true");
   assert.deepEqual(show.mock.calls.map(call => call.arguments), Array(2).fill(["This is not available in a shared session yet.", "warn"]));
 });
 
@@ -636,3 +638,15 @@ for (const caller of heldOwnerCalls) for (const [admission, order] of [["held", 
     assert.deepEqual(show.mock.calls.map(call => call.arguments), [warning]);
   });
 }
+
+test("removing a tag's labels from the panel is refused even with no mentions", async t => {
+  await enter(t, { productionTags: [{ cat: "prop", name: "Lens" }] });
+  production();
+  const before = hook.read();
+  const show = t.mock.method(notices, "show", () => {});
+  const button = document.createElement("button");
+  armRemoveTag(button, "prop lens");
+  armRemoveTag(button, "prop lens");
+  assert.deepEqual(hook.read(), before);
+  assert.deepEqual(show.mock.calls.map(call => call.arguments), [["This is not available in a shared session yet.", "warn"]]);
+});

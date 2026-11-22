@@ -264,7 +264,7 @@
     {
       "label": "a refused bulk tag delete still shows its success toast",
       "tests": [
-        "src/test/shared-split-records-refusals-app.test.mjs"
+        "src/test/shared-native-registries-app.test.mjs"
       ],
       "file": "src/features/tags/panels.ts",
       "find": "(ports as TagPanelPorts).edits.stamps, build)).held) return;",
@@ -273,7 +273,7 @@
     {
       "label": "a refused bulk tag delete drops the selection before the command runs",
       "tests": [
-        "src/test/shared-split-records-refusals-app.test.mjs"
+        "src/test/shared-native-registries-app.test.mjs"
       ],
       "file": "src/features/tags/panels.ts",
       "find": "  if (!sharedRegistryLife()) (ports as TagPanelPorts).selection.clear();\n  if (removeTags(items, labelled.length > 0, build => deleteTagsCommand(",
@@ -282,7 +282,7 @@
     {
       "label": "rule 73: removing a tag's labels in a shared session takes the standalone path, silent for a tag with no mentions",
       "tests": [
-        "src/test/shared-split-records-refusals-app.test.mjs"
+        "src/test/shared-native-registries-app.test.mjs"
       ],
       "file": "src/features/tags/panels.ts",
       "find": "    if (sharedRegistryLife()) {\n      (ports as TagPanelPorts).shared.refused(",
