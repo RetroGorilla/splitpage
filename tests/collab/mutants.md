@@ -1026,8 +1026,8 @@ rule 152: the shared picture toast offers an Undo that reads the standalone owne
 the comment wiring passes no shared port | src/bootstrap/wiring/comments.ts | src/test/shared-split-records-literals-comments-app.test.mjs | tests/collab/split-records-mutants.json
 the record wiring for the production tags passes no shared port | src/bootstrap/wiring/production-tags.ts | src/test/shared-split-records-literals-tags-app.test.mjs | tests/collab/split-records-mutants.json
 a b-roll redraw takes the typed value as the comparison base even when its write was refused | src/features/broll/panel.ts | src/test/shared-native-record-drafts-mapped-app.test.mjs | tests/collab/split-records-mutants.json
-a b-roll redraw drops the unsaved text of a box that lost focus | src/features/broll/panel.ts | src/test/shared-split-records-lifetimes-app.test.mjs | tests/collab/split-records-mutants.json
-a tag panel redraw drops a box's unsaved text | src/features/tags/panels.ts | src/test/shared-split-records-lifetimes-app.test.mjs | tests/collab/split-records-mutants.json
+a b-roll redraw drops the unsaved text of a box that lost focus | src/features/broll/panel.ts | src/test/shared-native-record-drafts-app.test.mjs | tests/collab/split-records-mutants.json
+a tag panel redraw drops a box's unsaved text | src/features/tags/panels.ts | src/test/shared-native-record-drafts-app.test.mjs | tests/collab/split-records-mutants.json
 a blur in tag notes does not retry a refused write | src/features/tags/mount.ts | src/test/shared-split-records-typed-tags-app.test.mjs | tests/collab/split-records-mutants.json
 standalone, a blur in tag notes writes what its typing did not | src/features/tags/mount.ts | src/test/panel-drafts-standalone-app.test.mjs | tests/collab/split-records-mutants.json
 the tag entity wiring reports no shared session, so a refused notes write is never retried on blur | src/bootstrap/wiring/production.ts | src/test/shared-split-records-typed-tags-app.test.mjs | tests/collab/split-records-mutants.json
@@ -1037,11 +1037,11 @@ a refused scene-prep status choice still shows its success notice | src/features
 rule 157: the shared scene-prep notice offers an Undo that reads the standalone owner | src/features/tags/panels.ts | src/test/shared-split-records-prep-app.test.mjs | tests/collab/split-records-mutants.json
 the tag panels keep typed drafts across a redraw in standalone too | src/features/tags/panels.ts | src/test/panel-drafts-standalone-app.test.mjs | tests/collab/split-records-mutants.json
 the b-roll panel keeps typed drafts across a redraw in standalone too | src/features/broll/panel.ts | src/test/panel-drafts-standalone-app.test.mjs | tests/collab/split-records-mutants.json
-a tag draft's key leaves out its scene, so two occurrences of one tag share a box | src/features/tags/panels.ts | src/test/shared-split-records-lifetimes-app.test.mjs | tests/collab/split-records-mutants.json
-the tag panels keep drafts across a document or session lifetime | src/features/tags/panels.ts | src/test/shared-split-records-lifetimes-app.test.mjs | tests/collab/split-records-mutants.json
-the tag panels' first draw of a lifetime leaves the earlier lifetime's text in boxes it does not redraw | src/features/tags/panels.ts | src/test/shared-split-records-lifetimes-app.test.mjs | tests/collab/split-records-mutants.json
-the b-roll panel keeps drafts across a document or session lifetime | src/features/broll/panel.ts | src/test/shared-split-records-lifetimes-app.test.mjs | tests/collab/split-records-mutants.json
-a refused b-roll write is remembered past its session | src/features/broll/panel.ts | src/test/shared-split-records-lifetimes-app.test.mjs | tests/collab/split-records-mutants.json
+a tag draft's key leaves out its scene, so two occurrences of one tag share a box | src/features/tags/panels.ts | src/test/shared-native-record-drafts-app.test.mjs | tests/collab/split-records-mutants.json
+the tag panels keep drafts across a document or session lifetime | src/features/tags/panels.ts | src/test/shared-native-record-drafts-app.test.mjs | tests/collab/split-records-mutants.json
+the tag panels' first draw of a lifetime leaves the earlier lifetime's text in boxes it does not redraw | src/features/tags/panels.ts | src/test/shared-native-record-drafts-app.test.mjs | tests/collab/split-records-mutants.json
+the b-roll panel keeps drafts across a document or session lifetime | src/features/broll/panel.ts | src/test/shared-native-record-drafts-app.test.mjs | tests/collab/split-records-mutants.json
+a refused b-roll write is remembered past its session | src/features/broll/panel.ts | src/test/shared-native-record-drafts-app.test.mjs | tests/collab/split-records-mutants.json
 a hidden draft is dropped when its editor closes | src/features/common/typed-drafts.ts | src/test/shared-native-record-drafts-mapped-app.test.mjs | tests/collab/split-records-mutants.json
 a redraw saves a draft | src/features/broll/panel.ts | tests/features/common/typed-drafts-inventory.test.ts | tests/collab/split-records-mutants.json
 a draft is keyed by the tag's name | src/features/tags/panels.ts | src/test/shared-native-record-drafts-mapped-app.test.mjs | tests/collab/split-records-mutants.json

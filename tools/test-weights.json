@@ -244,7 +244,6 @@
   "src/test/shared-split-records-held-comments-app.test.mjs": 7457,
   "src/test/shared-split-records-held-pictures-app.test.mjs": 2859,
   "src/test/shared-split-records-held-tags-app.test.mjs": 16990,
-  "src/test/shared-split-records-lifetimes-app.test.mjs": 5341,
   "src/test/shared-split-records-literals-broll-app.test.mjs": 13275,
   "src/test/shared-split-records-literals-comments-app.test.mjs": 7664,
   "src/test/shared-split-records-literals-pictures-app.test.mjs": 4007,

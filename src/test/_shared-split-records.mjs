@@ -391,22 +391,3 @@ export const PREP_CHOICES = [
     try { changeProductionOutline(select); } finally { select.remove(); }
   } }
 ];
-
-export const tagAnchor = name => '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="' + name + '" contenteditable="false">' + name + "</span>";
-export const LAMP = "t_3lampxyzq0abc";
-export const SCENED = { ...SOURCE, sections: [{ id: "H1", name: "Open", firstSceneId: "r1" }, { id: "H2", name: "Close", firstSceneId: "r2" }],
-  rows: [{ ...SOURCE.rows[0], visualText: SOURCE.rows[0].visualText + " " + tagAnchor("Mug") }, { ...SOURCE.rows[1], visualText: SOURCE.rows[1].visualText + " " + tagAnchor("Lamp") }],
-  productionTags: [...SOURCE.productionTags, { id: LAMP, cat: "prop", name: "Lamp", owner: "", notes: "", status: "needed" }] };
-export const OTHER = { ...SOURCE, title: "Other script", brollShots: [{ ...SOURCE.brollShots[0], name: "Harbour", props: [] }] };
-export const PROP = `#broll-panel .broll-prop-input${B1}`;
-export const shownValue = selector => document.querySelector(selector)?.value ?? "";
-
-export async function refusedNotes() {
-  const f = await enter();
-  try {
-    brollOpen("b1"); typeIn(NOTES, "Wide", [4, 4]);
-    const stop = f.parts.session.hold(ADMISSION_HELD);
-    try { blurOut($(NOTES)); } finally { stop(); }
-    assert.equal(shotB1().notes, "");
-  } finally { tidy(f); }
-}

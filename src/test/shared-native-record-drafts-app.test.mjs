@@ -271,6 +271,7 @@ test("a refused note is cleared on leave and a new native session only saves on 
   openShot();
   const release = hold(t);
   blur(type(notes, "Wide take"));
+  copies(doc => shot(doc).notes, "");
   release();
   assert.deepEqual(hook.leave(), { ok: true });
   adopt();
@@ -284,6 +285,7 @@ test("a refused note is cleared on leave and a new native session only saves on 
   openShot();
   const releaseSecond = hold(t);
   blur(type(notes, "Wide take"));
+  copies(doc => shot(doc).notes, "");
   releaseSecond();
   assert.deepEqual(hook.leave(), { ok: true });
   adopt();

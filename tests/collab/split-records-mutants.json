@@ -534,7 +534,7 @@
     {
       "label": "a b-roll redraw drops the unsaved text of a box that lost focus",
       "tests": [
-        "src/test/shared-split-records-lifetimes-app.test.mjs"
+        "src/test/shared-native-record-drafts-app.test.mjs"
       ],
       "file": "src/features/broll/panel.ts",
       "find": "    if (again) again.value = box.value;",
@@ -543,7 +543,7 @@
     {
       "label": "a tag panel redraw drops a box's unsaved text",
       "tests": [
-        "src/test/shared-split-records-lifetimes-app.test.mjs"
+        "src/test/shared-native-record-drafts-app.test.mjs"
       ],
       "file": "src/features/tags/panels.ts",
       "find": "    if (box.unsaved) again.value = box.value;",
@@ -633,7 +633,6 @@
     {
       "label": "a tag draft's key leaves out its scene, so two occurrences of one tag share a box",
       "tests": [
-        "src/test/shared-split-records-lifetimes-app.test.mjs",
         "src/test/shared-native-record-drafts-app.test.mjs"
       ],
       "file": "src/features/tags/panels.ts",
@@ -643,7 +642,6 @@
     {
       "label": "the tag panels keep drafts across a document or session lifetime",
       "tests": [
-        "src/test/shared-split-records-lifetimes-app.test.mjs",
         "src/test/shared-native-record-drafts-app.test.mjs"
       ],
       "file": "src/features/tags/panels.ts",
@@ -653,7 +651,6 @@
     {
       "label": "the tag panels' first draw of a lifetime leaves the earlier lifetime's text in boxes it does not redraw",
       "tests": [
-        "src/test/shared-split-records-lifetimes-app.test.mjs",
         "src/test/shared-native-record-drafts-app.test.mjs"
       ],
       "file": "src/features/tags/panels.ts",
@@ -663,7 +660,6 @@
     {
       "label": "the b-roll panel keeps drafts across a document or session lifetime",
       "tests": [
-        "src/test/shared-split-records-lifetimes-app.test.mjs",
         "src/test/shared-native-record-drafts-app.test.mjs"
       ],
       "file": "src/features/broll/panel.ts",
@@ -673,7 +669,6 @@
     {
       "label": "a refused b-roll write is remembered past its session",
       "tests": [
-        "src/test/shared-split-records-lifetimes-app.test.mjs",
         "src/test/shared-native-record-drafts-app.test.mjs"
       ],
       "file": "src/features/broll/panel.ts",
