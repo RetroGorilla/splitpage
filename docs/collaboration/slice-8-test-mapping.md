@@ -270,6 +270,219 @@ The discarded match strings for the rollback reattachment and dropped-surface mu
 
 The Old adapter tests job stays in place. The colocated fixture under `tests/collab/legacy-app/` is built into `_legacy-shared-tests.html` only by the test build. No browser suite opens `_legacy-shared-tests.html` anymore; the fixture page stays until the later legacy-adapter cleanup phase. The standard test and release bundles exclude that fixture.
 
+## Legacy adapter removal plan
+
+Inventory at `867353bd9`, from `git ls-files`: 112 source files and 183 test files outside the respective native subtrees, 34 native source files, 88 native test and support files, and 41 mutation manifests. The design's adapter-test row says 173. The current count is 183 outside native and 271 including native. The fixture has four tracked files. The HTML page is generated and untracked. The 125 boundary importers below exclude the legacy adapter and its own test subtree. There are 47 distinct legacy targets across these edges. Neither native subtree directly imports the old adapter. Native bootstrap wiring reaches it indirectly through the combined switch and command ports.
+
+### Merge order
+
+1. **Retire the legacy browser fixture and app guards.** Move `tests/collab/legacy-app/four-beat-state.base64` unchanged to `tests/adapters/collab/native/fixtures/legacy-four-beat-state.base64` and update `src/test/shared-native-editor-app.test.mjs`. Keep the native refusal and untouched-document assertions. Remove the other three fixture files, `src/test/_legacy-shared-app-boot.mjs`, the four `shared-hook-{legacy-probes,measure,peer,routes}-app.test.mjs` files and the legacy-only direct app suites named under Not yet removable. Remove helper files only after their remaining callers are gone. Preserve the standalone record assertions from `shared-split-records-standalone-app.test.mjs`, including each no-op, by moving their shared-independent setup out of `_shared-split-records.mjs` before cutting the shared halves. Keep the standalone halves of the undo parity cases and the Split route inventory. In `_undo-caret-parity.mjs` retain the standalone setup, cases and caret checks for `undo-caret-parity{,-long,-selection}.test.mjs`; keep the Split media decoder assertion. Remove the second entry and generated page in `build.mjs`, its fixture assertions in `tools/test-strict-bundle.mjs` and `tests/bootstrap/composition-root.test.ts`, and the page reference in the browser harness instructions. Keep the normal test-hook and release exclusion checks. Update affected manifests and `tests/collab/mutants.md` in this PR so nightly never references a removed test or fixture.
+2. **Disconnect legacy editor wiring and remove the adapter in one PR.** Stage the wiring and adapter file sets separately for review. The adapter tests and old wiring depend on one another, so merge both file sets together. Keep `shared-session.ts` as the switch owner, its native factory/backend path, and the enter, rollback, Leave, forced stop, draft and history ordering. Drop its legacy parts builder and default backend in the same change that removes their callers. Keep `session-owner.ts`, the application session bridge, `native-shared-*.ts`, native accessors and native forwarding in `ports/shared-commands.ts`. Remove `shared-split.ts`, `shared-writer.ts`, `buffered-input.ts`, `writer-empty-script.ts`, the legacy Recovery panel mount/actions and the legacy-only ports in the boundary inventory after updating callers. Follow their reverse imports through `app.ts`, `main.ts`, `actions.ts`, `editor.ts`, `writer.ts`, `undo.ts`, `ports/editing.ts` and the view, row, title, Find and production mounts. Preserve shared-independent feature logic and ports used by native. There is no production adapter file to relocate: surviving callers use the existing native routes or standalone fallbacks. When extracting shared-independent test setup, retarget every importer directly and leave no compatibility re-export.
+   **Adapter, test and tooling file set.** Delete the 112 tracked source files and the 183 non-native test files, with the legacy-only external fixtures/tests in the inventory below. External mixed tests must have their surviving assertions extracted in the preceding stage or in the same cut. Keep the old CI job and its three test inventories until the adapter cut. Then update `.github/workflows/ci.yml` (change detection, matrix, gate, evidence and success predicates), `tools/{ci-changes,run-tests,test-ci-changes,test-ci-shards,test-ci-efficiency,test-run-tests}.mjs`; remove `tools/{old-adapter-tests,test-ci-old-adapter-shards}.mjs`. Remove `--suite=always` from CI, leaving the full surviving root tests in the regular shards. Remove the separate slow mutation job, whose sole input is `undo-slow-mutants.json`, and simplify the nightly manifest glob and its assertions. Prune stale weights and resolved dependency/comment baseline entries. Retire the old measurement entry points in `tests/collab/measure/`; keep `mark-parts.mjs` and its tests. Treat `native-spike-main.mjs` as a historical comparison harness with a live legacy dependency, and retire it with its launcher after checking for any live native measurement callers. Remove the old trial-copy special case in `tools/perf-ab.mjs` and update `tools/test-perf-shared.mjs` while maintaining the cross-revision standalone comparison. Do not move old backend implementations into native to keep historical measurements running.
+3. **Close the mapping.** Resolve the Retained rows against the actual removals, update Build status, section 11 and the adapter-test row, and add one Unreleased changelog line. Compare standalone performance once from pre-stage-1 to post-removal main and record it. Rebase each stage on the preceding merge and require green CI. For local verification use type checking, dependency and comment gates, lint, code map, affected test files, and the targeted browser suites for visible changes. Match all stale path and export references before pushing.
+
+### Standalone and native behavior to preserve
+
+- `editor.ts`: keep the default Split keydown, input, focus and composition mounts, the local cell synchronization before structure changes, and the standalone undo/redo route including Writer replay and selection. Removing the shared branch is safe only if these paths retain their original ordering and native still reaches its own replay route.
+- `writer.ts`: preserve the standalone blank-script creation, local synchronization, Visual B-roll keying and tag cleanup on leave, and local history flush/peek/replay. Do not replace the native preview, selection and paint bindings with the standalone defaults. `ports/shared-commands.ts` must still forward native registry, gallery and value calls and provide the existing standalone fallback when there is no session.
+- Recovery panel removal is scoped to the shared removed-content panel. Keep local draft/conflict recovery, merge and save controls. Check the action registry and panel markup for any visible change in standalone before removing them. Preserve standalone startup order and default focus.
+- **Stop for a maintainer decision** if a proposed cut changes a standalone gesture, edit, focus/selection, undo boundary, save/draft transition, or visible command availability. In particular, keep the local sync in Split before split/remove and the Writer Visual leave callback. Dropping either along with the legacy wrappers changes live standalone editing. Keep or extract the local path with identical behavior. If parity requires a different callback order or the panel is reachable in standalone, bring the concrete before/after to the maintainer before implementing it. Fixture relocation and import-only test setup moves are safe dependency changes.
+
+The Recovery panel mount and registration are gated by the test-hook flag and the panel's session source returns null in standalone. This is a safe removal from production standalone. Update `tests/bootstrap/recovery-panel-{lifetime,release}.test.ts`, the recovery load-order fixture and the matching action/composition inventory in the panel cut. Keep the independent recovery owners. The shared-cell-space reader returns null until a shared binding connects, so removing it is safe for standalone provided clipboard retains its existing whitespace fallback.
+
+The replacement test helpers can live at `src/test/_standalone-records.mjs` (used by `panel-escape-app.test.mjs` and `shared-split-records-standalone-app.test.mjs`) and `src/test/_undo-caret-parity.mjs` (retain the existing path and remove the legacy imports). Keep the existing native switch types in `src/bootstrap/wiring/shared-session.ts`, so native consumers need no import redirect. Retarget old-format bytes as specified in stage 1. Use `git rm` for tracked deletions.
+
+### Boundary importers
+
+Targets are relative to `src/adapters/collab/`. This inventory includes type imports, dynamic imports and fixture references resolved as local module paths. Tests inside the 183-file legacy adapter-test subtree form part of the deletion set and are excluded from this boundary list.
+
+| Importer | Legacy files |
+| --- | --- |
+| `src/bootstrap/wiring/buffered-input.ts` | `buffer-selection.ts`, `buffer.ts`, `types.ts` |
+| `src/bootstrap/wiring/editor.ts` | `anchors.ts`, `buffer-selection.ts`, `recorded-selection.ts` |
+| `src/bootstrap/wiring/ports/empty-script.ts` | `ingress.ts`, `state.ts`, `structure-order-index.ts`, `types.ts` |
+| `src/bootstrap/wiring/ports/shared-author.ts` | `state.ts`, `types.ts` |
+| `src/bootstrap/wiring/ports/shared-broll-keying.ts` | `broll-keying.ts`, `stamp.ts`, `types.ts` |
+| `src/bootstrap/wiring/ports/shared-buffer.ts` | `buffer.ts`, `paint-base.ts`, `types.ts` |
+| `src/bootstrap/wiring/ports/shared-commands.ts` | `buffer.ts`, `ingress.ts`, `text-units.ts` |
+| `src/bootstrap/wiring/ports/shared-comments.ts` | `types.ts` |
+| `src/bootstrap/wiring/ports/shared-gallery.ts` | `record-reader.ts`, `stamp.ts`, `types.ts`, `undo-join.ts` |
+| `src/bootstrap/wiring/ports/shared-records.ts` | `record-reader.ts`, `status.ts`, `types.ts` |
+| `src/bootstrap/wiring/ports/shared-rewrites.ts` | `stamp.ts`, `types.ts` |
+| `src/bootstrap/wiring/ports/shared-scenes.ts` | `ingress.ts`, `state.ts`, `types.ts` |
+| `src/bootstrap/wiring/ports/shared-undo.ts` | `types.ts`, `undo-executor.ts` |
+| `src/bootstrap/wiring/ports/shared-values.ts` | `stamp.ts`, `state.ts`, `status.ts`, `structure-identity.ts`, `types.ts`, `undo-join.ts` |
+| `src/bootstrap/wiring/ports/writer-flow.ts` | `anchors.ts`, `paint-base.ts`, `record-codec.ts`, `stamp.ts`, `structure-identity.ts`, `types.ts` |
+| `src/bootstrap/wiring/recovery-panel.ts` | `record-reader.ts` |
+| `src/bootstrap/wiring/shared-session.ts` | `document.ts`, `hydrate.ts`, `operation-families.ts`, `replica.ts`, `structure-content.ts`, `types.ts` |
+| `src/bootstrap/wiring/shared-writer.ts` | `state.ts` |
+| `src/bootstrap/wiring/writer-empty-script.ts` | `anchors.ts`, `buffer-selection.ts`, `buffer.ts` |
+| `src/bootstrap/wiring/writer.ts` | `types.ts` |
+| `src/features/find/ports.test.ts` | `document.ts` |
+| `src/test/_shared-split-callers.mjs` | `buffer.ts`, `document.ts`, `execute.ts`, `executor-references.ts`, `operation-families.ts`, `paint-base.ts`, `project.ts`, `state.ts` |
+| `src/test/_shared-split-records.mjs` | `buffer.ts`, `document.ts`, `execute.ts`, `operation-families.ts`, `paint-base.ts`, `project.ts` |
+| `src/test/_shared-split-refusals.mjs` | `document.ts` |
+| `src/test/_undo-caret-parity.mjs` | `anchors.ts`, `buffer.ts`, `document.ts`, `execute.ts`, `executor-references.ts`, `operation-families.ts`, `paint-base.ts` |
+| `src/test/shared-broll-leave-app.test.mjs` | `buffer.ts`, `document.ts`, `execute.ts`, `operation-families.ts`, `paint-base.ts`, `project.ts` |
+| `src/test/shared-split-app.test.mjs` | `buffer.ts`, `document.ts`, `execute.ts`, `operation-families.ts`, `paint-base.ts`, `project.ts` |
+| `src/test/shared-split-callers-boundaries-app.test.mjs` | `document.ts`, `project.ts` |
+| `src/test/shared-split-callers-literals-app.test.mjs` | `state.ts` |
+| `src/test/shared-split-callers-notices-app.test.mjs` | `document.ts` |
+| `src/test/shared-split-callers-settled-app.test.mjs` | `document.ts` |
+| `src/test/shared-split-callers-structure-app.test.mjs` | `document.ts` |
+| `src/test/shared-split-records-standalone-app.test.mjs` | `document.ts` |
+| `src/test/shared-split-refusals-audio-forward-app.test.mjs` | `document.ts` |
+| `src/test/shared-split-refusals-drained-app.test.mjs` | `document.ts`, `operation-families.ts`, `project.ts` |
+| `src/test/shared-split-refusals-ime-app.test.mjs` | `document.ts` |
+| `src/test/shared-writer-app.test.mjs` | `buffer.ts`, `document.ts`, `execute.ts`, `operation-families.ts`, `paint-base.ts`, `project.ts`, `state.ts` |
+| `src/test/shared-writer-broll-leave-app.test.mjs` | `buffer.ts`, `document.ts`, `execute.ts`, `operation-families.ts`, `paint-base.ts`, `project.ts` |
+| `tests/application/commands/comments-shared.test.ts` | `document.ts`, `execute.ts`, `operation-families.ts`, `project.ts`, `types.ts`, `undo-executor.ts` |
+| `tests/application/commands/empty-script.test.ts` | `buffer.ts`, `document.ts`, `operation-families.ts`, `paint-base.ts`, `project.ts`, `undo-executor.ts` |
+| `tests/application/commands/flow-paste-shared.test.ts` | `document.ts`, `execute.ts`, `operation-families.ts`, `project.ts`, `state.ts`, `undo-executor.ts` |
+| `tests/application/commands/flow-shared.test.ts` | `document.ts`, `operation-families.ts` |
+| `tests/application/commands/gallery-shared.test.ts` | `document.ts`, `execute.ts`, `operation-families.ts`, `project.ts`, `types.ts`, `undo-executor.ts` |
+| `tests/application/commands/records-shared.test.ts` | `document.ts`, `execute.ts`, `operation-families.ts`, `project.ts`, `types.ts`, `undo-executor.ts` |
+| `tests/application/commands/shared-refusals.test.ts` | `document.ts`, `execute.ts`, `operation-families.ts` |
+| `tests/application/commands/structure-shared.test.ts` | `document.ts`, `execute.ts`, `joined-text-geometry.ts`, `operation-families.ts`, `prepare.ts`, `project.ts`, `structure-index.ts`, `structure-plan.ts`, `types.ts`, `undo-executor.ts`, `undo-join.ts` |
+| `tests/application/commands/values-shared.test.ts` | `document.ts`, `execute.ts`, `operation-families.ts`, `project.ts`, `types.ts`, `undo-executor.ts` |
+| `tests/application/session/shared-session-generator.test.ts` | `anchors.ts`, `document.ts`, `executor-references.ts`, `project.ts`, `state.ts`, `status.ts`, `text-executor.ts`, `text-target.ts`, `types.ts` |
+| `tests/application/session/shared-session-recovery.test.ts` | `document.ts`, `execute.ts`, `project.ts`, `removal-executor.ts`, `replica.ts`, `types.ts` |
+| `tests/application/session/shared-session-replica.test.ts` | `document.ts`, `project.ts`, `replica.ts`, `state.ts` |
+| `tests/application/session/shared-session-replicas.test.ts` | `anchors.ts`, `document.ts`, `hydrate.ts`, `project.ts`, `state.ts`, `text-executor.ts`, `types.ts` |
+| `tests/application/session/shared-session-rows.test.ts` | `document.ts`, `replica.ts`, `state.ts` |
+| `tests/application/session/shared-session-support.ts` | `replica.ts`, `split-executor.ts`, `types.ts` |
+| `tests/bootstrap/shared-author.test.ts` | `document.ts`, `execute.ts`, `operation-families.ts`, `state.ts`, `structure-identity.ts`, `types.ts` |
+| `tests/bootstrap/shared-command-notices.test.ts` | `document.ts` |
+| `tests/bootstrap/shared-entry-inventory.ts` | `state.ts` |
+| `tests/bootstrap/shared-entry-paths.test.ts` | `document.ts`, `state.ts` |
+| `tests/bootstrap/shared-entry-refusals.test.ts` | `document.ts` |
+| `tests/bootstrap/shared-entry-switch-leave-new.test.ts` | `state.ts` |
+| `tests/bootstrap/shared-entry-switch-leave-open.test.ts` | `state.ts` |
+| `tests/bootstrap/shared-entry-switch-support.ts` | `document.ts`, `state.ts` |
+| `tests/bootstrap/shared-long-row.test.ts` | `state.ts` |
+| `tests/bootstrap/shared-switch.test.ts` | `document.ts`, `ingress.ts`, `state.ts`, `trial-replica.ts` |
+| `tests/collab/benchmark-document.ts` | `document.ts`, `execute.ts`, `hydrate.ts`, `record-executor.ts`, `split-executor.ts`, `state.ts`, `text-executor.ts`, `types.ts` |
+| `tests/collab/benchmark-read-caches.ts` | `mark-state.ts`, `prepare.ts`, `read-counts.ts` |
+| `tests/collab/broll-keying.test.ts` | `anchors.ts`, `document.ts`, `execute.ts`, `project.ts`, `state.ts`, `text-history.ts`, `types.ts` |
+| `tests/collab/broll-text-records.test.ts` | `record-reader.ts` |
+| `tests/collab/buffer-commit.test.ts` | `buffer.ts`, `document.ts`, `paint-base.ts`, `project.ts`, `state.ts` |
+| `tests/collab/buffer-generator.test.ts` | `buffer.ts`, `document.ts`, `paint-base.ts`, `project.ts` |
+| `tests/collab/buffer-overflow.test.ts` | `document.ts`, `ingress.ts`, `project.ts`, `state.ts` |
+| `tests/collab/buffer-recovery.test.ts` | `buffer.ts`, `document.ts`, `execute.ts`, `paint-base.ts`, `project.ts`, `removal-executor.ts`, `state.ts`, `types.ts` |
+| `tests/collab/buffer-stamps.test.ts` | `buffer.ts`, `document.ts`, `paint-base.ts`, `project.ts`, `scalar-executor.ts`, `scalar-reader.ts`, `types.ts`, `undo-executor.ts`, `undo-handlers.ts` |
+| `tests/collab/buffer-text-records.test.ts` | `buffer.ts`, `paint-base.ts`, `project.ts`, `record-executor.ts`, `types.ts` |
+| `tests/collab/legacy-app/shared-test-peer.ts` | `buffer.ts`, `document.ts`, `ingress.ts`, `operation-families.ts`, `paint-base.ts`, `project.ts`, `replica.ts`, `state.ts`, `types.ts` |
+| `tests/collab/legacy-app/shared-test.ts` | `hydrate.ts`, `ingress.ts`, `project.ts`, `types.ts` |
+| `tests/collab/library-read-counts.ts` | `state.ts`, `types.ts` |
+| `tests/collab/measure/bytes.mjs` | `document.ts`, `execute.ts`, `hydrate.ts`, `state.ts` |
+| `tests/collab/measure/native-spike-main.mjs` | `document.ts`, `execute.ts`, `hydrate.ts`, `operation-families.ts`, `paint-base.ts`, `project.ts`, `replica.ts`, `state.ts` |
+| `tests/collab/measure/options.mjs` | `document.ts`, `state.ts` |
+| `tests/collab/measure/options.test.mjs` | `document.ts`, `hydrate.ts`, `state.ts` |
+| `tests/collab/measure/run.mjs` | `anchors.ts`, `document.ts`, `execute.ts`, `hydrate.ts`, `join-executor.ts`, `project.ts`, `removal-executor.ts`, `split-executor.ts`, `state.ts`, `text-executor.ts`, `text-history.ts`, `undo-executor.ts`, `undo-handlers.ts` |
+| `tests/collab/measure/trial-heap.mjs` | `document.ts`, `hydrate.ts`, `incremental-project.ts`, `trial-replica.ts` |
+| `tests/collab/measure/trial-method.mjs` | `trial-replica.ts` |
+| `tests/collab/people-text-records.test.ts` | `record-reader.ts` |
+| `tests/collab/undo-seam.test.ts` | `buffer.ts`, `document.ts`, `paint-base.ts`, `types.ts`, `undo-handlers.ts` |
+| `tests/collab/undo/adapter-world.ts` | `anchors.ts`, `document.ts`, `executor-references.ts`, `hydrate.ts`, `mark-provenance.ts`, `mark-store.ts`, `record-codec.ts`, `record-executor.ts`, `record-reader.ts`, `scalar-executor.ts`, `state.ts`, `status.ts`, `text-executor.ts`, `text-history.ts`, `types.ts`, `undo-executor.ts`, `undo-handlers.ts` |
+| `tests/collab/undo/generator.test.ts` | `undo-executor.ts` |
+| `tests/collab/undo/mirrored-rules.test.ts` | `scalar-executor.ts` |
+| `tests/features/editing/cell-buffer-recovery.test.ts` | `document.ts`, `execute.ts`, `project.ts`, `removal-executor.ts`, `state.ts`, `types.ts` |
+| `tests/features/editing/cell-buffer-support.ts` | `removal-executor.ts` |
+| `tests/features/editing/cell-buffer-visual.test.ts` | `anchors.ts`, `document.ts`, `execute.ts`, `join-executor.ts`, `project.ts`, `state.ts` |
+| `tests/features/editing/cell-buffer.test.ts` | `state.ts` |
+| `tests/features/editing/split-caret-review.test.ts` | `project.ts` |
+| `tests/features/editing/split-caret-support.ts` | `document.ts`, `execute.ts`, `executor-references.ts`, `join-executor.ts`, `paint-base.ts`, `split-executor.ts`, `types.ts` |
+| `tests/features/editing/split-caret.test.ts` | `buffer.ts`, `document.ts`, `paint-base.ts`, `project.ts` |
+| `tests/features/empty-script/before.test.ts` | `document.ts`, `execute.ts`, `operation-families.ts`, `project.ts`, `structure-order-index.ts` |
+| `tests/features/empty-script/shared.test.ts` | `document.ts`, `ingress.ts`, `operation-families.ts`, `project.ts`, `state.ts`, `types.ts` |
+| `tests/features/empty-script/support.ts` | `document.ts`, `execute.ts`, `operation-families.ts`, `types.ts` |
+| `tests/features/find/shared-replace-generator.test.ts` | `document.ts` |
+| `tests/features/find/shared-replace-rejoined.test.ts` | `project.ts` |
+| `tests/features/find/shared-replace-storage.test.ts` | `document.ts` |
+| `tests/features/find/shared-replace-structure.test.ts` | `project.ts` |
+| `tests/features/find/shared-replace-support.ts` | `document.ts`, `execute.ts`, `operation-families.ts`, `project.ts`, `types.ts` |
+| `tests/features/find/shared-replace.test.ts` | `document.ts`, `project.ts` |
+| `tests/features/recovery-panel/entries.test.ts` | `project.ts`, `types.ts` |
+| `tests/features/recovery-panel/races.test.ts` | `document.ts`, `project.ts` |
+| `tests/features/recovery-panel/support.ts` | `document.ts`, `execute.ts`, `mark-store.ts`, `operation-families.ts`, `state.ts`, `types.ts` |
+| `tests/features/rows/scene-create-support.ts` | `heading-executor.ts`, `project.ts`, `removal-executor.ts`, `types.ts` |
+| `tests/features/rows/scene-create.test.ts` | `anchors.ts`, `document.ts`, `execute.ts`, `heading-executor.ts`, `project.ts`, `state.ts`, `text-executor.ts`, `undo-executor.ts`, `undo-handlers.ts` |
+| `tests/features/rows/scene-name-buffer.test.ts` | `anchors.ts`, `document.ts`, `project.ts`, `removal-executor.ts`, `state.ts`, `types.ts` |
+| `tests/features/rows/scene-name-support.ts` | `buffer.ts`, `heading-executor.ts`, `paint-base.ts`, `undo-handlers.ts` |
+| `tests/features/shared-undo-surfaces.test.ts` | `buffer.ts`, `document.ts`, `paint-base.ts`, `types.ts`, `undo-handlers.ts` |
+| `tests/features/tags/panel-mount.test.ts` | `document.ts` |
+| `tests/features/tags/production-tags-mount.test.ts` | `document.ts` |
+| `tests/features/title/name-box-clipboard-generator.test.ts` | `buffer.ts`, `document.ts`, `paint-base.ts`, `types.ts` |
+| `tests/features/title/title-buffer-support.ts` | `buffer.ts`, `paint-base.ts`, `undo-handlers.ts` |
+| `tests/features/title/title-buffer.test.ts` | `anchors.ts`, `buffer.ts`, `project.ts`, `state.ts`, `types.ts` |
+| `tests/features/writer/buffer-binding.test.ts` | `document.ts`, `join-executor.ts`, `project.ts`, `record-executor.ts`, `removal-executor.ts`, `state.ts` |
+| `tests/features/writer/buffer-heading.test.ts` | `anchors.ts`, `buffer.ts`, `document.ts`, `execute.ts`, `paint-base.ts`, `project.ts`, `removal-executor.ts`, `state.ts`, `types.ts` |
+| `tests/features/writer/buffer-invariants.test.ts` | `document.ts`, `project.ts`, `state.ts` |
+| `tests/features/writer/buffer-recovery.test.ts` | `document.ts`, `execute.ts`, `project.ts`, `removal-executor.ts`, `state.ts`, `types.ts` |
+| `tests/features/writer/buffer-review.test.ts` | `document.ts`, `execute.ts`, `project.ts`, `state.ts` |
+| `tests/features/writer/buffer-undo.test.ts` | `undo-handlers.ts` |
+| `tests/features/writer/flow-command-ports.test.ts` | `document.ts`, `operation-families.ts` |
+| `tests/features/writer/visual-buffer.test.ts` | `anchors.ts`, `document.ts`, `execute.ts`, `operation-families.ts`, `state.ts` |
+
+### Mutation manifests
+
+Names identify `tests/collab/<name>-mutants.json`. Numbers are one-based positions in the base revision. Keep the listed entries and surviving test targets. Remove retired test paths from both defaults and overrides. Match the original label and source target before editing a renumbered list.
+
+| Manifest | Entries at base | Keep | Reason |
+| --- | ---: | --- | --- |
+| `broll-keying` | 33 | 3-5, 8-10, 12-14, 16, 28 | Standalone Writer Visual leave and pure key/shot planning |
+| `buffer-binding` | 156 | 12, 25, 29-31, 144, 150-152 | Drag, field/selection and cost contracts |
+| `buffer-commit` | 2 | 2 | Pure splice planning |
+| `buffer` | 4 | Delete | Legacy-only |
+| `comment-command` | 16 | 1-16 | Comment admission, authorship and draft guards |
+| `commit-writer` | 12 | Delete | Legacy-only |
+| `composition` | 96 | 42-43, 45-46, 48-53, 56-61, 72, 75-77, 79, 82-86, 90-91, 94-95 | Native lifecycle, common switch rollback, draft/history, Writer disposal and buffered-field contracts |
+| `creation-undo` | 42 | Delete | Legacy-only |
+| `disable-list` | 18 | 1-18 | Local save, merge, drafts and bundles |
+| `draft-detach` | 28 | 1-28 | Draft lifecycle and ownership |
+| `empty-script` | 45 | 7-11, 15-17, 19, 22-26, 28-29, 31, 34, 36-37 | Shared-independent feature guards |
+| `find-replace` | 27 | 13-18 | Pure cell splice order and bounds |
+| `gallery-command` | 25 | Delete | Legacy-only |
+| `heading-creation-undo` | 14 | Delete | Legacy-only |
+| `ingress-gate` | 9 | Delete | Legacy-only |
+| `join-glue` | 3 | 2 | Pure projection glue |
+| `join` | 10 | Delete | Legacy-only |
+| `join-neighborhood` | 4 | Delete | Legacy-only |
+| `join-routing` | 12 | Delete | Legacy-only |
+| `measure-hook` | 19 | 2, 7-19 | Native entry, storage, peer, history and Find plus timing infrastructure |
+| `projection` | 48 | 10, 19-20, 25, 27-29, 41-42 | Pure projection contracts |
+| `record-command` | 21 | Delete | Legacy-only |
+| `record-removal` | 36 | Delete | Legacy-only |
+| `recovery-panel` | 48 | Delete | Legacy-only |
+| `removal` | 30 | 23, 27, 30 | Pure discard and recovery contracts |
+| `scene-create` | 12 | Delete | Legacy-only |
+| `shared-entry` | 76 | 1-9, 25, 27-32, 35-42, 65, 69-72 | Local files, drafts, navigation and shared admission |
+| `shared-session` | 27 | 23 | Publication change computation |
+| `split-abandonment` | 10 | Delete | Legacy-only |
+| `split-callers` | 50 | 43, 47 | Row command ports |
+| `split-composed` | 22 | 18-22 | Clipboard and row editor routing |
+| `split-records` | 80 | 1-4, 38-39, 43-46, 50-51, 59, 62-65, 69-70, 76-80 | Standalone Escape and drafts, native draft retry, independent production commands, overlay and draft inventory |
+| `split-review` | 4 | Delete | Legacy-only |
+| `structure-command` | 14 | Delete | Legacy-only |
+| `structure` | 27 | Delete | Legacy-only |
+| `trial-replica` | 22 | Delete | Legacy-only |
+| `undo` | 142 | 1, 4, 6-14, 16, 18-22, 24-29 | Adapter-independent undo contracts |
+| `undo-slow` | 5 | Delete | Legacy-only |
+| `value-command` | 9 | Delete | Legacy-only |
+| `visible-refusal` | 11 | Delete | Legacy-only |
+| `writer-visual` | 17 | 11 | Standalone Visual key cost |
+
+The nine split-records entries 38-39, 44-46, 51, 62, 64 and 65 still name three retired typed-box app tests at the base revision. Retarget them in stage 1 to `src/test/shared-native-typed-boxes-mapped-app.test.mjs` (reply, B-roll person/location/prop, tag notes and rename). Verify each retained edit matches and is caught by the corresponding native case before the manifest change merges. The base entries and file counts describe tracked files and manifest contents, separate from the state of a nightly run.
+
+For common switch entries in composition, exercise the native factory through `tests/bootstrap/native-shared-entry.test.ts` or the existing native handoff app tests. Carry forward the rollback, reattach and drop assertions and confirm each retained mutant fails there before deleting the old target. In particular, keep composition 86 temporarily pointed at `tests/bootstrap/shared-switch.test.ts` when removing the fixture. Keep composition 90 and 94 on the native app target after retiring the old switch tests. Keep the shared-cell-space drag mutation only while the route it exercises survives. Delete Recovery panel coverage with the panel. Preserve local draft recovery and its separate tests.
+
+### Mixed test cut points
+
+- `src/features/find/ports.test.ts` retains match reveal and isolates refusal from the concrete old document. `tests/features/empty-script/before.test.ts` retains all three standalone removal/repair cases. `tests/bootstrap/shared-entry-refusals.test.ts` retains the standalone duplicate-identity case. `tests/bootstrap/native-shared-entry.test.ts` retains preflight, rollback, retry, leave and release-bundle checks and drops the cases about selecting and constructing a legacy default backend.
+- `src/test/panel-escape-app.test.mjs` retains standalone Escape per row. Extract its shared-independent setup from `_shared-split-records.mjs` alongside the standalone record tests. `src/test/cut-paste-app.test.mjs` retains regular drag and standalone route assertions.
+- `tests/bootstrap/timing-marks-release.test.ts` and `tests/application/commit-time-writers.test.ts` are cross-tree inventories. Update their old modules/operations in the same cut while holding the surviving native and standalone assertions. Review every external test slated for deletion at case level. Here ?native typing? in an old Split fixture refers to browser input events.
+- Remove the legacy paired-measurement callers `tools/measure-shared-{admission,paired}.mjs` and their focused assertions in `tools/test-perf-shared.mjs` with the old harness if no supported caller remains. Keep the standalone performance driver and its tests.
+
 ## T01 Writer schedules
 
 Suite 992 covers all five T01 schedules and the approved T01 Undo range (`1–4` in `abXcd`). Legacy suite 972 is retired. Suite 992 uses the captured native partial updates from [#1718](https://github.com/RetroGorilla/splitpage/pull/1718) and forward and directional delivery from [#1722](https://github.com/RetroGorilla/splitpage/pull/1722). Both helpers are on main as of `748d16b25`. The named T01 stale-base mutant targets `tests/collab/buffer-commit.test.ts`. The composition manifest targets unit and app tests. Neither manifest names suite 972.
