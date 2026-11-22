@@ -13,6 +13,7 @@ import { openNativeSession } from "../adapters/collab/native/session.ts";
 import { applyNativePeerUpdate } from "../adapters/collab/native/peer-update.ts";
 import { entrySwitchFixture } from "../../tests/bootstrap/shared-entry-switch-support.ts";
 import { setTimeout as delay } from "node:timers/promises";
+import { compareIDs, compareRelativePositions, createRelativePositionFromTypeIndex, Text as YText } from "yjs";
 
 window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};
@@ -304,6 +305,100 @@ for (const [scenario, offset] of [["unchanged", 0], ["empty visual", 0], ["moved
     assert.equal(copy.rows.find(row => row.id === f.id).visualText,
       scenario === "empty visual" ? "X" : offset === 0 ? "XScene" : "SceneX");
     assert.deepEqual(reasons(f), ["missing"]);
+  });
+}
+
+for (const side of ["left", "right"]) {
+  test(`Split composition Leave checks the middle caret's ${side} identity independently`, async t => {
+    const f = await enter(t, "Split", "visual"), offset = 2;
+    const target = { beat: f.id, cell: "visual" };
+    const anchor = f.native.commands.anchorText(target, offset);
+    assert.equal(anchor.kind, "anchored");
+    const visual = f.native.ydoc.getMap("visuals").get(f.id);
+    const adjacent = () => [-1, 0].map(assoc => createRelativePositionFromTypeIndex(visual, offset, assoc).item);
+    const before = adjacent();
+    assert.ok(before.every(id => id !== null));
+    setCellSelection(f.editor(), offset);
+    beginComposition(f.target, "X");
+    written(f.peer.commands.removeRows([f.id]));
+    send(f.peer, f.native);
+    composition(f.target, "end", "X");
+    written(f.peer.commands.undo());
+    const peerVisual = f.peer.ydoc.getMap("visuals").get(f.id);
+    const index = side === "left" ? offset - 1 : offset;
+    const identical = peerVisual.toString()[index];
+    f.peer.ydoc.transact(() => {
+      peerVisual.delete(index, 1);
+      peerVisual.insert(index, identical);
+    });
+    send(f.peer, f.native);
+    assert.equal(f.native.ydoc.getMap("visuals").get(f.id), visual);
+    const after = adjacent();
+    assert.deepEqual(before.map((id, i) => compareIDs(id, after[i])),
+      side === "left" ? [false, true] : [true, false]);
+    const point = { target, offset };
+    assert.deepEqual(f.native.resolveTextSelection(anchor.range), { anchor: point, head: point });
+    assert.equal(f.native.document().rows.find(row => row.id === f.id).visualText, "Scene");
+    rejectCompositionLeave(t, f, "ScXene", offset + 1);
+  });
+}
+
+function rejectCompositionLeave(t, f, preview, offset) {
+  const shared = structuredClone(currentDocument()), bytes = f.native.encodeState(), updates = [];
+  t.after(f.native.subscribeLocalUpdates(update => updates.push(update)));
+  assert.deepEqual(f.native.document(), f.peer.document());
+  for (let attempt = 0; attempt < 2; attempt++) {
+    assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: "missing" });
+    assert.equal(sharedSession(), true);
+    assert.deepEqual(currentDocument(), shared);
+    assert.deepEqual(f.native.encodeState(), bytes);
+    assert.deepEqual(updates, []);
+    assert.deepEqual(reasons(f), ["missing"]);
+    assert.equal(f.editor().innerHTML, preview);
+    assert.equal(document.activeElement, f.editor());
+    assert.deepEqual(cellSelection(f.editor()), { from: offset, to: offset });
+  }
+}
+
+for (const recreated of [false, true]) {
+  test(`Split composition Leave distinguishes a ${recreated ? "recreated" : "restored"} Visual container at the same beat ID`, async t => {
+    const f = await enter(t, "Split", "visual");
+    const target = { beat: f.id, cell: "visual" }, offset = 5;
+    const map = f.native.ydoc.getMap("visuals"), visual = map.get(f.id);
+    const identity = createRelativePositionFromTypeIndex(visual, offset);
+    const originalAnchor = f.native.commands.anchorText(target, offset);
+    assert.equal(originalAnchor.kind, "anchored");
+    const sharedId = currentDocument().docId;
+    setCellSelection(f.editor(), offset);
+    beginComposition(f.target, "X");
+    written(f.peer.commands.removeRows([f.id]));
+    send(f.peer, f.native);
+    composition(f.target, "end", "X");
+    written(f.peer.commands.undo());
+    if (recreated) f.peer.ydoc.getMap("visuals").set(f.id, new YText("Scene"));
+    send(f.peer, f.native);
+    const live = map.get(f.id);
+    assert.equal(live === visual, !recreated);
+    assert.equal(compareRelativePositions(identity, createRelativePositionFromTypeIndex(live, offset)), !recreated);
+    assert.equal(f.native.document().rows.find(row => row.id === f.id).visualText, "Scene");
+    assert.equal(f.editor().innerHTML, "SceneX");
+    if (recreated) {
+      assert.equal(f.native.resolveTextSelection(originalAnchor.range), null);
+      rejectCompositionLeave(t, f, "SceneX", offset + 1);
+      return;
+    }
+    const point = { target, offset };
+    assert.deepEqual(f.native.resolveTextSelection(originalAnchor.range), { anchor: point, head: point });
+    const packets = [];
+    t.after(f.native.subscribeLocalUpdates(bytes => packets.push(bytes)));
+    assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+    assert.equal(packets.length, 1);
+    assert.equal(applyNativePeerUpdate(f.peer, packets[0]), true);
+    assert.notEqual(currentDocument().docId, sharedId);
+    assert.deepEqual(currentDocument(), { ...f.peer.document(), docId: currentDocument().docId });
+    assert.equal(f.peer.document().rows.find(row => row.id === f.id).visualText, "SceneX");
+    assert.deepEqual(reasons(f), ["missing"]);
+    assert.equal(sharedSession(), false);
   });
 }
 
