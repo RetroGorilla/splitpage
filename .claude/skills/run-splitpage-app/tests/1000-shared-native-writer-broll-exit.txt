@@ -1,0 +1,54 @@
+﻿open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.P=S.nativePeer;window.W=window.__writerFlowTest;window.narration=['Pour the coffee','Drink it','Wash up'];F.openFile(new File([JSON.stringify({schema:2,title:'Native Writer Visual exits',paragraphsDecided:true,rows:narration.map((audioText,i)=>({id:'r'+(i+1),audioText,visualText:''})),comments:[]})],'writer-visual.splitpage'))
+wait F.state().title==='Native Writer Visual exits'
+click #btn-write
+wait W.on()
+eval window.json=JSON.stringify;window.writer=()=>document.getElementById('writer-doc');window.box=()=>document.querySelector('.wr-flow-visual-box');window.visual=()=>document.querySelector('.wr-flow-visual-text');window.visible=n=>n?.checkVisibility()&&n.getBoundingClientRect().width>0;window.text=n=>n?.textContent.replace(/\u200b/g,'');window.opened=(id,value)=>visible(box())&&document.activeElement===visual()&&visual().dataset.id===id&&text(visual())===value;window.visualCaret=offset=>{const s=getSelection();if(!s.isCollapsed||!visual().contains(s.focusNode))return false;const r=document.createRange();r.setStart(visual(),0);r.setEnd(s.focusNode,s.focusOffset);return r.toString().replace(/\u200b/g,'').length===offset};true
+eval window.copy=(doc,values)=>doc.rows.length===3&&doc.rows.every((r,i)=>r.id==='r'+(i+1)&&r.audioText===narration[i]&&r.visualText===values[i])&&json(doc.brollShots)==='[]';window.agree=(...values)=>json(S.read().app)===json(S.read().peer)&&copy(S.read().app,values);window.split=(...values)=>values.every((value,i)=>{const row='[data-id="r'+(i+1)+'"]';const audio=document.querySelector('#rows .cell-editable'+row+'[data-field="audioText"]');const visual=document.querySelector('#rows .cell-editable'+row+'[data-field="visualText"]');return visible(audio)&&text(audio)===narration[i]&&visible(visual)&&text(visual)===value});window.note=()=>[...document.querySelectorAll(".wr-visual-note")].some(n=>visible(n)&&text(n)==="B-roll: Close up");true
+eval window.originalId=F.state().docId;S.enter()
+wait S.read().peer!==null&&agree('','','')
+eval W.openVisual('r1');true
+wait opened('r1','')
+type B-roll: Close up
+wait agree('B-roll: Close up','','')&&opened('r1','B-roll: Close up')
+expect visualCaret(16)
+key Escape
+wait box().hidden&&W.on()&&agree('B-roll: Close up','','')
+expect document.activeElement===writer()&&getSelection().isCollapsed&&writer().contains(getSelection().focusNode)&&[W.selection().anchor,W.selection().head].every(p=>p.rowId==="r1"&&p.offset===0)&&note()
+expect json(P.freshSnapshot('app'))===json(S.read().app)&&json(P.seedReader())===json(S.read().app)
+eval window.seed=P.readLateReader();true
+key ctrl KeyZ
+wait agree('','','')
+expect json(P.readLateReader())===json(seed)
+expect P.deliverToReader('app')&&json(P.readLateReader())===json(S.read().app)
+eval window.undone=P.readLateReader();W.openVisual("r1");true
+wait opened("r1","")
+expect visualCaret(0)
+key ctrl KeyY
+wait agree('B-roll: Close up','','')
+expect json(P.readLateReader())===json(undone)
+expect P.deliverToReader('peer')&&json(P.readLateReader())===json(S.read().app)&&json(P.freshSnapshot('peer'))===json(S.read().app)
+eval W.openVisual('r2');true
+wait opened('r2','')
+type B-roll: Mug
+wait agree('B-roll: Close up','B-roll: Mug','')&&opened('r2','B-roll: Mug')
+expect visualCaret(11)
+click #wr-close
+wait !W.on()&&document.getElementById('writer').hidden
+wait agree('B-roll: Close up','B-roll: Mug','')&&split('B-roll: Close up','B-roll: Mug','')
+click #btn-write
+wait W.on()&&!document.getElementById('writer').hidden
+eval W.openVisual('r3');true
+wait opened('r3','')
+type B-roll: Pour
+wait agree('B-roll: Close up','B-roll: Mug','B-roll: Pour')&&opened('r3','B-roll: Pour')
+expect visualCaret(12)
+jsclick #wr-close
+wait !W.on()&&document.getElementById('writer').hidden
+wait agree('B-roll: Close up','B-roll: Mug','B-roll: Pour')&&split('B-roll: Close up','B-roll: Mug','B-roll: Pour')
+expect P.deliverToReader('app')&&json(P.readLateReader())===json(S.read().app)
+eval window.projection=S.read().app;window.left=S.leave();true
+expect left.ok&&S.read().peer===null&&P.readLateReader()===null&&P.freshSnapshot('app')===null&&P.freshSnapshot('peer')===null&&P.deliverToReader('app')===false
+expect F.state().docId!==projection.docId&&F.state().docId!==originalId&&json({...F.state(),docId:projection.docId,brollShots:projection.brollShots})===json(projection)
+expect split('B-roll: Close up','B-roll: Mug','B-roll: Pour')
