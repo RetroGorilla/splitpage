@@ -1,5 +1,7 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
+import { buildPublishHtml } from "../adapters/page/page-shell.ts";
+import { migrateRows } from "../bootstrap/document-ports.ts";
 import { SHARED_ADMISSION_ANNOUNCED } from "../application/session/shared-session.ts";
 import { cellEditing } from "../bootstrap/wiring/editor-owners.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
@@ -186,6 +188,15 @@ for (const order of ["forward", "reverse"]) {
         assert.match(start.rows[0][1], /data-cmt="C1"/);
       }
       await agree(expected, standalone);
+      if (action === "delete") {
+        const cell = $('#rows .cell-editable[data-id="r1"][data-field="audioText"]');
+        assert.equal(cell.querySelector('.cmt-anchor[data-cmt="C1"]')?.textContent, "bc");
+        const html = buildPublishHtml(JSON.stringify(hook.read().app));
+        const saved = new window.DOMParser().parseFromString(html, "text/html").getElementById("state-data");
+        const reopened = migrateRows(JSON.parse(saved.textContent));
+        assert.deepEqual(reopened.comments, []);
+        assert.equal(reopened.rows[0].audioText, start.rows[0][1]);
+      }
       peer.hold("updates");
       assert.equal(undo(), true);
       assert.deepEqual(peer.release(order).map(packet => packet.to), ["peer"]);

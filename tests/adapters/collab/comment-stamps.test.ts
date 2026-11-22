@@ -51,12 +51,14 @@ test("a resolve sends its stamp and updatedAt in one list, and a reopen written 
     const run = recordReplicas(2, SOURCE), a = copy(run.a, "Alice", 5), b = copy(run.b, "Bob", 1);
     try {
       assert.equal(a.toggle(), "applied");
+      assert.equal(a.harness.undo.length, 0);
       assert.deepEqual(a.harness.executed.map(entry => entry.operations.map(item => item.kind === "record-set" ? [item.field, "value" in item ? item.value : null] : item.kind)),
         [[["resolution-stamp", { at: at(5), by: "Alice", resolution: { resolved: true, resolvedAt: at(5), resolvedBy: "Alice" } }], ["updatedAt", at(5)]]]);
       run.queue.flush(order);
       agree("resolve", order, [run.a, run.b], (handle): Record<string, unknown> => ({ ...resolution(handle), updatedAt: comment(handle)?.updatedAt, stored: stored(handle) }),
         { resolved: true, resolvedAt: at(5), resolvedBy: "Alice", updatedAt: at(5), stored: ["resolution:1"] });
       assert.equal(b.toggle(), "applied");
+      assert.equal(b.harness.undo.length, 0);
       run.queue.flush(order);
       agree("reopen after seeing", order, [run.a, run.b], (handle): Record<string, unknown> => ({ ...resolution(handle), updatedAt: comment(handle)?.updatedAt, stored: stored(handle) }),
         { ...OPEN, updatedAt: at(1), stored: ["resolution:2"] });
