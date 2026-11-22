@@ -398,7 +398,6 @@ const ENGINES: readonly Site[] = [
   ["bootstrap/wiring/ports/imports.ts#importFormats", "anchorBrollInRows 1", "file-entry"],
   ["bootstrap/wiring/ports/production.ts#production", "ProductionIndexOwner.recordsPlan 1, ProductionIndexOwner.recordsPlan (provided) 1", "tag-from-text", "cue-retitle"],
   ["bootstrap/wiring/ports/shared-broll-keying.ts#sharedBrollKeyingPorts", "sharedBeatStamp 1", "beat-stamp"],
-  ["bootstrap/wiring/ports/shared-gallery.ts#sharedGalleryPorts", "sharedBeatStamp 1", "beat-stamp"],
   ["bootstrap/wiring/ports/shared-values.ts#sharedValuePorts", "sharedBeatStamp 1", "beat-stamp"],
   ["bootstrap/wiring/ports/writer-flow.ts#writerFlowCommands", "sharedBeatStamp 1", "beat-stamp"],
   ["bootstrap/wiring/session-owner.ts#createSession", "ReconcilePort.anchors (provided) 1, ReconcilePort.records (provided) 1, syncCommentAnchors 1", "anchor-repair", ...FROM_TEXT],

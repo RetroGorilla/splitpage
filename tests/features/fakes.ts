@@ -36,7 +36,7 @@ export function fakeStandaloneRecords(): EditorRegistryCommands {
   return { native: () => null, ports: () => null, refused: standaloneRefusal };
 }
 export function fakeStandaloneGallery(): SharedGalleryCommands {
-  return { ports: () => null, refused: standaloneRefusal, done: standaloneRefusal };
+  return { editNative: () => null };
 }
 import type { SharedGalleryCommands } from "../../src/application/commands/gallery.ts";
 import type { EditorRegistryCommands } from "../../src/application/commands/registry-editor.ts";

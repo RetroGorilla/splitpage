@@ -9,14 +9,11 @@ import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { sharedCommandRefusalNotice } from "../bootstrap/wiring/ports/shared-command-notices.ts";
 import { openingStatus } from "../bootstrap/wiring/ports/transitions.ts";
 import { currentBrollRecords } from "../bootstrap/wiring/broll.ts";
-import { cellEditing } from "../bootstrap/wiring/editor-owners.ts";
 import { clearProductionSelection, selectedKeys } from "../bootstrap/wiring/production-editing-owners.ts";
-import { sharedGalleryCommands } from "../bootstrap/wiring/ports/shared-commands.ts";
 import { findOrAddPerson, registerProductionTag } from "../features/tags/production-tags.ts";
 import { addPersonForTag, applyGearQuickAdd, changeProductionOutline, clickProductionOutline, armDeleteTag, armPersonDelete, armRemoveTag, bulkDeleteSelected, openProductionPanel, renderProduction, saveTagRename, setTagOwner, setTagStatus, toggleCardSelection } from "../features/tags/panels.ts";
 import { openBrollPanel } from "../features/broll/panel.ts";
 import { armDeleteComment, closeCommentComposer, openCommentComposer, openCommentsPanel, postReply, setCommentAssignee, toggleReplyComposer, toggleResolve } from "../features/comments/comments.ts";
-import { moveGallerySlot, removeGallerySlot } from "../core/document/gallery.ts";
 import { tagKey } from "../core/document/tags.ts";
 import { createSessionCapabilities } from "../application/session/capabilities.ts";
 import { fromHtml } from "../bootstrap/richtext.ts";
@@ -30,9 +27,9 @@ import { sharedBufferedTarget } from "../adapters/collab/buffer.ts";
 import { bufferedFieldKey } from "../core/collab/buffer.ts";
 import { readOperation } from "../core/collab/read-operation.ts";
 import {
-  $, ADMISSION_HELD, B1, DRONE, FIRE, M, MUG, REFUSED, SOURCE, adopt, brollBulkNew, brollButton, brollOpen, brollSelect,
-  choose, clearWarnings, commentState, composer, expandedCard, galleryState, gearOpen, noticeCalls, post, press,
-  productionCards, productionPick, shape, tidyStandalone, toastHost, twice, typeIn
+  $, B1, DRONE, FIRE, M, MUG, REFUSED, SOURCE, adopt, brollBulkNew, brollButton, brollOpen, brollSelect,
+  choose, clearWarnings, commentState, composer, expandedCard, gearOpen, noticeCalls, post, press,
+  productionCards, productionPick, shape, tidyStandalone, twice, typeIn
 } from "./_standalone-records.mjs";
 
 export const reports = [], errors = [];
@@ -176,12 +173,6 @@ export const served = [
     after: s => edit(s, n => { n.people.push("Cy"); }) },
   { name: "deleting a person", act: () => { openProductionPanel(); twice(armPersonDelete, "p2"); },
     after: s => edit(s, n => { n.people = ["Ann"]; }) },
-  { name: "removing a picture from the gallery (rule 152: its toast has no Undo)", act: () => {
-    clearWarnings(); noticeCalls.length = 0;
-    assert.doesNotThrow(() => { assert.deepEqual(cellEditing().editGallery("r1", "Picture removed", row => removeGallerySlot(row, 1)), { changed: true, held: false }); });
-    assert.deepEqual(noticeCalls, [["Picture removed", "ok"]]);
-    assert.deepEqual([...toastHost().querySelectorAll(".toast")].map(el => [el.firstChild.textContent, el.querySelector(".toast-action")]), [["Picture removed", null]]);
-  }, after: s => edit(s, n => { n.rows[0][3] = ["a", "c"]; }) },
   { name: "resolving a comment (rule 35 on #1414: a resolve records no undo step)", act: () => { toggleResolve("C1"); }, undoable: false,
     after: s => edit(s, n => { n.comments[0][1] = true; }) },
   { name: "assigning a comment", act: () => { setCommentAssignee("C1", "Bob"); }, after: s => edit(s, n => { n.comments[0][2] = "Bob"; }) },
@@ -226,13 +217,7 @@ export const refusals = [
   }, kept: tagsKept(tagKey("prop", "Mug")) },
   { name: "rule 73: renaming a tag has no shared port", act: () => { openProductionPanel(); assert.equal(saveTagRename(tagKey("prop", "Mug"), "Cup"), tagKey("prop", "Mug")); } },
   { name: "rule 73: removing a tag's labels has no shared port", act: () => { openProductionPanel(); twice(armRemoveTag, tagKey("prop", "Mug")); } },
-  { name: "rule 73: removing the labels of a tag the script never mentions has no shared port", act: () => { openProductionPanel(); twice(armRemoveTag, tagKey("gear", "Drone")); } },
-  { name: "gallery-order-unavailable: making the last of three pictures loaded together the cover", act: () => {
-    const reasons = [], refused = sharedGalleryCommands.refused;
-    sharedGalleryCommands.refused = outcome => { reasons.push(outcome.reason); refused(outcome); };
-    try { assert.deepEqual(cellEditing().editGallery("r1", "Made the cover", row => moveGallerySlot(row, 2, 0)), { changed: false, held: true }); } finally { sharedGalleryCommands.refused = refused; }
-    assert.deepEqual(reasons, ["gallery-order-unavailable"]);
-  } }
+  { name: "rule 73: removing the labels of a tag the script never mentions has no shared port", act: () => { openProductionPanel(); twice(armRemoveTag, tagKey("gear", "Drone")); } }
 ];
 
 export function refusedOnce(f, order, act, kept) {
@@ -361,16 +346,13 @@ export const HELD_PATHS = [
   comments("the comment resolve button", "click", '[data-action="toggle-resolve"][data-id="C1"]', () => { openCommentsPanel(); }),
   comments("the comment assignee control", "change", '.comment-assignee-select[data-id="C1"]', () => {
     openCommentsPanel(); choose('.comment-assignee-select[data-id="C1"]', optionNamed('.comment-assignee-select[data-id="C1"]', "Bob"));
-  }),
-  { name: "the gallery remove button", how: "click", target: ".scene-gallery-remove", state: galleryState, render: () => {}, kept: true,
-    setup: () => { $('[data-action="gallery-open"][data-id="r1"][data-slot="1"]').click(); } }
+  })
 ];
 
 export const HELD_OWNER_CALLS = [
   { name: "registering a production tag", act: () => { assert.equal(registerProductionTag("location", "Park"), false); } },
   { name: "finding or adding a person", act: () => { assert.equal(findOrAddPerson("Cy"), ""); } },
-  { name: "adding a prop to a shot", act: () => { assert.deepEqual(currentBrollRecords()?.addBrollProp("b1", "Lamp"), { changed: false, held: true }); } },
-  { name: "a picture edit", act: () => { assert.deepEqual(cellEditing().editGallery("r1", "Picture removed", row => removeGallerySlot(row, 1)), { changed: false, held: true }); } }
+  { name: "adding a prop to a shot", act: () => { assert.deepEqual(currentBrollRecords()?.addBrollProp("b1", "Lamp"), { changed: false, held: true }); } }
 ];
 
 export const doc = () => currentDocument();

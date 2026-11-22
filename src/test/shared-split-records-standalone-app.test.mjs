@@ -7,11 +7,11 @@ import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { currentBrollRecords } from "../bootstrap/wiring/broll.ts";
 import { cellEditing } from "../bootstrap/wiring/editor-owners.ts";
 import { clearProductionSelection } from "../bootstrap/wiring/production-editing-owners.ts";
-import { sharedCommentCommands, sharedGalleryCommands, sharedRecordCommands } from "../bootstrap/wiring/ports/shared-commands.ts";
+import { sharedCommentCommands, sharedRecordCommands } from "../bootstrap/wiring/ports/shared-commands.ts";
 import { findOrAddPerson, registerProductionTag } from "../features/tags/production-tags.ts";
 import { armRemoveTag, openProductionPanel, saveTagRename } from "../features/tags/panels.ts";
 import { closeCommentComposer, toggleResolve } from "../features/comments/comments.ts";
-import { removeGallerySlot } from "../core/document/gallery.ts";
+import { moveGallerySlot, removeGallerySlot } from "../core/document/gallery.ts";
 import { tagKey } from "../core/document/tags.ts";
 import { encodeSharedState } from "../adapters/collab/document.ts";
 import { enter, tidy } from "./_shared-split-records.mjs";
@@ -29,12 +29,19 @@ for (const noop of NOOPS) test(`C7 record no-op: ${noop.name}, shared and standa
   } finally { closeCommentComposer(); clearProductionSelection(); }
 });
 
+test("a standalone gallery no-op writes nothing and makes no notice", () => {
+  writerControls().closeWriter();
+  adoptReplacement(migrateRows(structuredClone(SOURCE)));
+  noopOnce(() => {
+    assert.deepEqual(cellEditing().editGallery("r1", "Made the cover", row => moveGallerySlot(row, 0, 0)), { changed: false, held: false });
+  }, () => {}, () => undoOwner().sizes());
+});
+
 test("C7 record standalone: the record, picture and comment callers read no shared ports", () => {
   writerControls().closeWriter();
   adoptReplacement(migrateRows(structuredClone(SOURCE)));
   assert.equal(sharedSession(), false);
   assert.equal(sharedRecordCommands.ports(), null);
-  assert.equal(sharedGalleryCommands.ports(), null);
   assert.equal(sharedCommentCommands.ports(), null);
   clearWarnings();
   assert.equal(registerProductionTag("location", "Park"), true);

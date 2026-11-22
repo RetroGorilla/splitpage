@@ -5,12 +5,10 @@ import { migrateRows } from "../bootstrap/document-ports.ts";
 import { adoptReplacement, currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
-import { cellEditing } from "../bootstrap/wiring/editor-owners.ts";
 import { clearProductionSelection, selectedKeys } from "../bootstrap/wiring/production-editing-owners.ts";
 import { openGearPanel, openProductionPanel } from "../features/tags/panels.ts";
 import { openBrollPanel } from "../features/broll/panel.ts";
 import { closeCommentComposer, openCommentComposer, postComment } from "../features/comments/comments.ts";
-import { moveGallerySlot } from "../core/document/gallery.ts";
 
 window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};
@@ -159,10 +157,7 @@ export const NOOPS = [
     } },
   { name: "the comment Cancel button after a peer removed the anchor closes the composer",
     act: () => { composer("C8"); $("#comment-cancel").click(); },
-    cleaned: () => { const [hidden, , body] = commentState().composer; assert.deepEqual([hidden, body], [true, ""]); } },
-  { name: "a picture edit that changes nothing",
-    act: () => { assert.deepEqual(cellEditing().editGallery("r1", "Made the cover", row => moveGallerySlot(row, 0, 0)), { changed: false, held: false }); },
-    cleaned: () => {} }
+    cleaned: () => { const [hidden, , body] = commentState().composer; assert.deepEqual([hidden, body], [true, ""]); } }
 ];
 
 export function noopOnce(act, cleaned, written) {

@@ -162,15 +162,6 @@ export function createCellEditing<E, Html = never>(ports: CellEditingPorts<E, Ht
     const native = ports.gallery.editNative?.(rowId, message, change);
     if (native) return native;
     if (rowIndexOf(ports.document(), rowId) === -1) return { changed: false, held: false };
-    const shared = ports.gallery.ports();
-    if (shared) {
-      ports.undo.breakCoalescing();
-      const outcome = ports.run(galleryCommand(rowId, change, ports.text, shared));
-      if (outcome.kind === "rejected") ports.gallery.refused(outcome);
-      if (!took(outcome)) return { changed: false, held: outcome.kind === "rejected" };
-      ports.gallery.done(message);
-      return { changed: true, held: false };
-    }
     const before = ports.undo.latest();
     ports.undo.breakCoalescing();
     if (!took(ports.run(galleryCommand(rowId, change, ports.text)))) return { changed: false, held: false };

@@ -183,11 +183,11 @@
     {
       "label": "editing the gallery still calls the standalone command in a shared session",
       "tests": [
-        "src/test/shared-split-records-literals-pictures-app.test.mjs"
+        "src/test/shared-native-record-guards-app.test.mjs"
       ],
       "file": "src/application/editing/cell-editing.ts",
-      "find": "const shared = ports.gallery.ports();",
-      "replace": "const shared = null;"
+      "find": "    const native = ports.gallery.editNative?.(rowId, message, change);",
+      "replace": "    const native = null;"
     },
     {
       "label": "assigning a comment still calls the standalone command in a shared session",
@@ -309,17 +309,16 @@
     {
       "label": "a refused picture edit reports nothing held, so the gallery moves its selection as if it had removed",
       "tests": [
-        "src/test/shared-split-records-held-pictures-app.test.mjs"
+        "src/test/shared-native-record-guards-app.test.mjs"
       ],
-      "file": "src/application/editing/cell-editing.ts",
-      "find": "return { changed: false, held: outcome.kind === \"rejected\" };",
-      "replace": "return { changed: false, held: false };"
+      "file": "src/bootstrap/wiring/native-shared-records.ts",
+      "find": "      if (admission) return admission.notified ? RECORD_REFUSED : refuse(admission.reason, owner);",
+      "replace": "      if (admission) return { ...(admission.notified ? RECORD_REFUSED : refuse(admission.reason, owner)), held: false };"
     },
     {
       "label": "the gallery remove moves the selection without the outcome",
       "tests": [
-        "src/test/shared-native-record-guards-app.test.mjs",
-        "src/test/shared-split-records-held-pictures-app.test.mjs"
+        "src/test/shared-native-record-guards-app.test.mjs"
       ],
       "file": "src/features/gallery/overlay.ts",
       "find": "function (row) { return removeGallerySlot(row, at); }).held) return;",
@@ -499,11 +498,11 @@
     {
       "label": "rule 152: the shared picture toast offers an Undo that reads the standalone owner",
       "tests": [
-        "src/test/shared-split-records-literals-pictures-app.test.mjs"
+        "src/test/shared-native-record-guards-app.test.mjs"
       ],
-      "file": "src/application/editing/cell-editing.ts",
-      "find": "      ports.gallery.done(message);",
-      "replace": "      ports.announce(message, null);"
+      "file": "src/bootstrap/wiring/native-shared-records.ts",
+      "find": "      if (done) notices.show(done, \"ok\");",
+      "replace": "      if (done) notices.showAction(done, \"ok\", \"Undo\", () => {});"
     },
     {
       "label": "the comment wiring passes no shared port",

@@ -2,7 +2,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { galleryCommand } from "../../../src/application/commands/gallery.ts";
 import type { GalleryEdit } from "../../../src/application/commands/gallery.ts";
-import { sharedGalleryPorts } from "../../../src/bootstrap/wiring/ports/shared-gallery.ts";
+import { sharedGalleryPorts } from "./legacy-gallery-ports.ts";
 import { sharedAuthorPort } from "../../../src/bootstrap/wiring/ports/shared-author.ts";
 import { registerSharedOperationFamilies } from "../../../src/adapters/collab/operation-families.ts";
 import { createSharedDocument, applySharedUpdate, destroySharedDocument, encodeSharedState, readSharedRevision } from "../../../src/adapters/collab/document.ts";

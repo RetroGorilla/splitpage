@@ -1,9 +1,9 @@
-import type { SharedGalleryPorts } from "../../../application/commands/gallery.ts";
-import type { StampPorts } from "../../../application/session/ports.ts";
-import type { SharedDocumentHandle } from "../../../adapters/collab/types.ts";
-import { readSharedRecords } from "../../../adapters/collab/record-reader.ts";
-import { readSharedJoinedBeats } from "../../../adapters/collab/undo-join.ts";
-import { sharedBeatStamp } from "../../../adapters/collab/stamp.ts";
+import type { SharedGalleryPorts } from "../../../src/application/commands/gallery.ts";
+import type { StampPorts } from "../../../src/application/session/ports.ts";
+import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
+import { readSharedRecords } from "../../../src/adapters/collab/record-reader.ts";
+import { readSharedJoinedBeats } from "../../../src/adapters/collab/undo-join.ts";
+import { sharedBeatStamp } from "../../../src/adapters/collab/stamp.ts";
 
 export function sharedGalleryPorts(source: { readonly handle: () => SharedDocumentHandle | null; readonly author: SharedGalleryPorts["author"]; readonly stamps: StampPorts }): SharedGalleryPorts {
   return {

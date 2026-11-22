@@ -8,7 +8,7 @@ import { pasteBeatsCommand } from "../../../src/application/commands/beats.ts";
 import { galleryCommand } from "../../../src/application/commands/gallery.ts";
 import type { GalleryEdit } from "../../../src/application/commands/gallery.ts";
 import { addGalleryPicture, addGalleryVideo, moveGallerySlot, removeGallerySlot } from "../../../src/core/document/gallery.ts";
-import { sharedGalleryPorts } from "../../../src/bootstrap/wiring/ports/shared-gallery.ts";
+import { sharedGalleryPorts } from "./legacy-gallery-ports.ts";
 import { sharedAuthorPort } from "../../../src/bootstrap/wiring/ports/shared-author.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { importRowsCommand } from "../../../src/application/commands/import-rows.ts";

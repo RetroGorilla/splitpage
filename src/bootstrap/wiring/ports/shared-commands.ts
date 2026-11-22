@@ -17,7 +17,6 @@ import { sharedUndoRoute, stepSharedUndo, undoOwner } from "../undo.ts";
 import { notices } from "./effects.ts";
 import { sharedCommandRefusalNotice } from "./shared-command-notices.ts";
 import { sharedCommentPorts } from "./shared-comments.ts";
-import { sharedGalleryPorts } from "./shared-gallery.ts";
 import { sharedRecordPorts } from "./shared-records.ts";
 import { sharedStructurePorts, sharedValuePorts } from "./shared-values.ts";
 import { timingMarks } from "../../../../shared/timing-marks.ts";
@@ -165,13 +164,7 @@ export const sharedRecordCommands: EditorRegistryCommands = {
 };
 
 export const sharedGalleryCommands: SharedGalleryCommands = {
-  editNative: (...args) => nativeEditorRecords()?.gallery(...args) ?? null,
-  ports: () => {
-    const parts = sharedSessionParts();
-    return parts ? sharedGalleryPorts(source(parts)) : null;
-  },
-  refused,
-  done: message => { notices.show(message, "ok"); }
+  editNative: (...args) => nativeEditorRecords()?.gallery(...args) ?? null
 };
 
 const commentPorts = new WeakMap<SharedSessionParts, SharedCommentPorts>();

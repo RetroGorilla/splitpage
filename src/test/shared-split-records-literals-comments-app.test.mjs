@@ -5,7 +5,7 @@ import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { served as allCases, ORDERS, enter, remoteInsert, exchange, agree, undoOnce, withZ, tidy } from "./_shared-split-records.mjs";
 import { warnings, shape } from "./_standalone-records.mjs";
 
-const served = allCases.filter((_, index) => [21,22,23,24,25,26].includes(index));
+const served = allCases.filter((_, index) => [20,21,22,23,24,25].includes(index));
 
 for (const literal of served) for (const order of ORDERS) test(`C7 record caller literal: ${literal.name}, ${order}`, async () => {
   const f = await enter();
