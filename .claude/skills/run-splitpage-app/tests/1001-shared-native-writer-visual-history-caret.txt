@@ -1,0 +1,69 @@
+﻿open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.P=S.nativePeer;window.W=window.__writerFlowTest;window.narration=['Pour the coffee','Drink it','Wash up'];window.openTrace=()=>F.openFile(new File([JSON.stringify({schema:2,title:'Native Writer Visual exits',paragraphsDecided:true,rows:narration.map((audioText,i)=>({id:'r'+(i+1),audioText,visualText:''})),comments:[]})],'writer-visual.splitpage'));openTrace()
+wait F.state().title==='Native Writer Visual exits'
+click #btn-write
+wait W.on()
+eval window.json=JSON.stringify;window.writer=()=>document.getElementById('writer-doc');window.box=()=>document.querySelector('.wr-flow-visual-box');window.visual=()=>document.querySelector('.wr-flow-visual-text');window.visible=n=>n?.checkVisibility()&&n.getBoundingClientRect().width>0;window.text=n=>n?.textContent.replace(/\u200b/g,'');window.opened=(value)=>visible(box())&&document.activeElement===visual()&&visual().dataset.id==="r1"&&text(visual())===value;true
+eval window.check=(audio,visualText)=>{const {app,peer}=S.read();return json(app)===json(peer)&&json(app.rows.map(r=>[r.id,r.audioText,r.visualText]))===json([['r1',audio,visualText],['r2','Drink it',''],['r3','Wash up','']])&&json(app.brollShots)==='[]'};window.caret=(root,offset)=>{const s=getSelection();if(!s.isCollapsed||!root.contains(s.anchorNode)||!root.contains(s.focusNode))return false;const r=document.createRange();r.setStart(root,0);r.setEnd(s.focusNode,s.focusOffset);return r.toString().replace(/\u200b/g,'').length===offset};window.firstBeat=()=>writer().querySelector('.wr-beat[data-id="r1"]');window.narrationAt=(value,offset)=>box().hidden&&document.activeElement===writer()&&visible(firstBeat())&&text(firstBeat())===value&&caret(firstBeat(),offset)&&[W.selection().anchor,W.selection().head].every(p=>p.rowId==='r1'&&p.offset===offset);true
+eval window.originalId=F.state().docId;S.enter()
+wait S.read().peer!==null&&check('Pour the coffee','')
+eval W.openVisual('r1');true
+wait opened('')
+type B-roll: Close up
+wait check('Pour the coffee','B-roll: Close up')&&opened('B-roll: Close up')&&caret(visual(),16)
+key Escape
+press x
+wait check('xPour the coffee','B-roll: Close up')
+expect narrationAt('xPour the coffee',1)
+expect document.querySelector('#toast-host .toast.warn')===null
+eval window.projection=S.read().app;window.left=S.leave();true
+expect left.ok&&S.read().peer===null&&F.state().docId!==projection.docId&&F.state().docId!==originalId
+expect json({...F.state(),docId:projection.docId,brollShots:projection.brollShots})===json(projection)
+eval openTrace()
+wait F.state().title==="Native Writer Visual exits"&&F.state().rows[0].visualText===""&&F.state().rows[0].audioText==="Pour the coffee"
+eval if(!W.on())document.getElementById("btn-write").click();true
+wait W.on()
+eval window.originalId=F.state().docId;S.enter()
+wait S.read().peer!==null&&check('Pour the coffee','')
+eval W.openVisual('r1');true
+wait opened('')
+type B-roll: Close up
+wait check('Pour the coffee','B-roll: Close up')&&opened('B-roll: Close up')&&caret(visual(),16)
+key Escape
+key ctrl KeyZ
+press x
+wait check('xPour the coffee','')
+expect narrationAt('xPour the coffee',1)
+press y
+wait check('xyPour the coffee','')
+key ctrl KeyZ
+wait check('Pour the coffee','')
+expect narrationAt('Pour the coffee',0)
+expect document.querySelector('#toast-host .toast.warn')===null
+eval window.projection=S.read().app;window.left=S.leave();true
+expect left.ok&&S.read().peer===null&&F.state().docId!==projection.docId&&F.state().docId!==originalId
+expect json({...F.state(),docId:projection.docId,brollShots:projection.brollShots})===json(projection)
+eval openTrace()
+wait F.state().title==="Native Writer Visual exits"&&F.state().rows[0].visualText===""&&F.state().rows[0].audioText==="Pour the coffee"
+eval if(!W.on())document.getElementById("btn-write").click();true
+wait W.on()
+eval window.originalId=F.state().docId;S.enter()
+wait S.read().peer!==null&&check('Pour the coffee','')
+eval W.openVisual('r1');true
+wait opened('')
+type B-roll: Close up
+wait check('Pour the coffee','B-roll: Close up')&&opened('B-roll: Close up')&&caret(visual(),16)
+key Escape
+key ctrl KeyZ
+wait check('Pour the coffee','')
+eval W.openVisual('r1');true
+wait opened('')&&caret(visual(),0)
+key ctrl KeyY
+press x
+wait check('Pour the coffee','B-roll: Close upx')
+expect opened('B-roll: Close upx')&&caret(visual(),17)
+expect document.querySelector('#toast-host .toast.warn')===null
+eval window.projection=S.read().app;window.left=S.leave();true
+expect left.ok&&S.read().peer===null&&F.state().docId!==projection.docId&&F.state().docId!==originalId
+expect json({...F.state(),docId:projection.docId,brollShots:projection.brollShots})===json(projection)
