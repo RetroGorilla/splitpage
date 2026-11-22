@@ -24,14 +24,14 @@
       "find": "  if (cancelled && pendingComment) {\n    const pending = pendingComment;",
       "replace": "  if (cancelled && pendingComment) {\n    (document.getElementById(\"comment-body-editable\") as HTMLElement).innerHTML = \"\";\n    const pending = pendingComment;",
       "tests": [
-        "src/test/panel-escape-app.test.mjs"
+        "tests/features/comments/shared-ports.test.ts"
       ]
     },
     {
       "label": "Escape discards a reply instead of only closing the comments panel",
       "file": "src/features/comments/comments.ts",
       "find": "  listen(document, \"input\", onTypedComment);",
-      "replace": "  listen(document, \"input\", onTypedComment);\n  listen(document, \"keydown\", (event: KeyboardEvent) => { if (event.key === \"Escape\" && (ports as CommentsRuntimePorts).shared.ports()) { const body = (event.target as HTMLElement)?.closest?.<HTMLElement>(\".reply-composer .cell-editable\"); if (body) body.innerHTML = \"\"; } }, true);",
+      "replace": "  listen(document, \"input\", onTypedComment);\n  listen(document, \"keydown\", (event: KeyboardEvent) => { if (event.key === \"Escape\" && commentLife()) { const body = (event.target as HTMLElement)?.closest?.<HTMLElement>(\".reply-composer .cell-editable\"); if (body) body.innerHTML = \"\"; } }, true);",
       "tests": [
         "src/test/panel-escape-app.test.mjs"
       ]
