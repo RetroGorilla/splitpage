@@ -880,15 +880,6 @@
       "tests": [
         "tests/application/editing/buffered-field.test.ts"
       ]
-    },
-    {
-      "label": "peer: identities are enumerated by code point",
-      "file": "tests/collab/legacy-app/shared-test-peer.ts",
-      "find": "    return Array.from({ length: painted.text.length }, (_, index) => painted.identity(index) ?? \"\");\n",
-      "replace": "    return Array.from(painted.text, (_, index) => painted.identity(index) ?? \"\");\n",
-      "tests": [
-        "src/test/shared-hook-peer-app.test.mjs"
-      ]
     }
   ]
 }

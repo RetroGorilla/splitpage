@@ -3,9 +3,7 @@ import { applySharedUpdate, createSharedDocument, destroySharedDocument, encodeS
 import { observeSharedDeclined } from "../../../src/adapters/collab/ingress.ts";
 import { registerSharedOperationFamilies } from "../../../src/adapters/collab/operation-families.ts";
 import { createSharedReplica } from "../../../src/adapters/collab/replica.ts";
-import { sharedBufferedTarget } from "../../../src/adapters/collab/buffer.ts";
 import { bufferedFieldKey } from "../../../src/core/collab/buffer.ts";
-import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { randomIds } from "../../../src/adapters/identity/ids.ts";
@@ -97,10 +95,6 @@ function hydratedCopy(source: SharedDocumentHandle, ports: SharedSwitchPorts): S
   return handle;
 }
 
-function refuseName(name: string): never {
-  throw new Error(NAME_TAKEN + ": " + name);
-}
-
 function range(rowId: string, from: number, endRow: string, to: number): FlowRange {
   return { anchor: beatPos(rowId, from), head: beatPos(endRow, to) };
 }
@@ -135,7 +129,6 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
   const flow = writerFlowCommands(PEER_FLOW, { author, writer: () => String(collabState(handle).doc.clientID), handle: () => live ? handle : null });
   let joiner: { readonly handle: SharedDocumentHandle; readonly session: SharedDocumentSession; readonly dispose: () => void;
     readonly participant: ReturnType<typeof participantOn>; readonly written: Uint8Array[] } | null = null;
-  const unitNames = new Map<string, string>(), beatNames = new Map<string, string>();
   const pending: { readonly side: Side; readonly id: number; readonly update: Uint8Array }[] = [];
   const applied: { readonly to: Side; readonly update: number }[] = [];
   let sent = 0;
@@ -217,13 +210,6 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
   };
   const replicaOf = (which: SharedTestReplica): { readonly handle: SharedDocumentHandle; readonly session: SharedDocumentSession } | null =>
     which === "app" ? app : which === "peer" ? { handle, session } : joiner;
-  const unitsOf = (which: SharedTestReplica, rowId: string): readonly string[] | null => {
-    const found = replicaOf(which);
-    if (!found) return null;
-    const painted = readSharedPaintedText(found.handle, sharedBufferedTarget(found.handle, rowId));
-    if (!painted) return null;
-    return Array.from({ length: painted.text.length }, (_, index) => painted.identity(index) ?? "");
-  };
   const leaveJoiner = (): void => { const left = joiner; joiner = null; left?.dispose(); };
   const cellText = { ...stamps, cells: (html: string) => PEER_FLOW.cells(html) };
   const joinText = { ...cellText, plainText: (html: string | null | undefined) => projection(fromHtml(html ?? "", MEDIA_CELL)) };
@@ -337,31 +323,6 @@ export function createSharedTestPeer(app: SharedSessionParts, ports: SharedSwitc
       const found = replicaOf(which);
       return found ? copy(found.session.recovery()) : null;
     },
-    nameIdentities: (which: SharedTestReplica, rowId: string, from: number, names: readonly string[]) => {
-      const units = unitsOf(which, rowId);
-      if (!units) throw new Error("The beat has no painted text on " + which);
-      const chosen = names.map((name, index) => {
-        const unit = units[from + index];
-        if (!unit) throw new Error("No character at " + String(from + index) + " in " + rowId + " on " + which);
-        return [unit, name] as const;
-      });
-      chosen.forEach(([unit, name], index) => {
-        if (chosen.some(([other, again], at) => at < index && again === name && other !== unit)) refuseName(name);
-        const owner = [...unitNames].find(([other, given]) => given === name && other !== unit);
-        if (owner) refuseName(name);
-      });
-      for (const [unit, name] of chosen) unitNames.set(unit, name);
-    },
-    nameBeat: (rowId: string, name: string) => {
-      if ([...beatNames].some(([other, given]) => given === name && other !== rowId)) refuseName(name);
-      beatNames.set(rowId, name);
-    },
-    identities: (which: SharedTestReplica = "peer") => {
-      const found = replicaOf(which);
-      if (!found) return null;
-      const rows = found.session.read(doc => doc ? doc.rows.map(row => row.id) : []);
-      return rows.map(rowId => ({ beat: beatNames.get(rowId) ?? rowId, units: (unitsOf(which, rowId) ?? []).map(unit => unitNames.get(unit) ?? null) }));
-    },
     queued: () => pending.length,
     appliedUpdates: () => applied.map(entry => ({ ...entry })),
     dispose: () => {
@@ -403,9 +364,6 @@ export function sharedTestPeerHook(current: () => SharedTestPeer | null) {
     joinerUndo: () => current()?.joinerUndo(),
     joined: () => current()?.read("joiner") ?? null,
     recoveryEntries: (which?: SharedTestReplica) => current()?.recoveryEntries(which) ?? null,
-    nameIdentities: (which: SharedTestReplica, rowId: string, from: number, names: readonly string[]) => { current()?.nameIdentities(which, rowId, from, names); },
-    nameBeat: (rowId: string, name: string) => { current()?.nameBeat(rowId, name); },
-    identities: (which?: SharedTestReplica) => current()?.identities(which) ?? null,
     appliedUpdates: () => current()?.appliedUpdates() ?? []
   };
 }

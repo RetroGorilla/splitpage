@@ -234,7 +234,6 @@
   "src/test/shared-file-names.test.mjs": 136,
   "src/test/shared-find-replace-app.test.mjs": 2738,
   "src/test/shared-hook-measure-app.test.mjs": 34643,
-  "src/test/shared-hook-peer-app.test.mjs": 53171,
   "src/test/shared-hook-routes-app.test.mjs": 41626,
   "src/test/shared-split-app.test.mjs": 7186,
   "src/test/shared-split-callers-boundaries-app.test.mjs": 19216,
