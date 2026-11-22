@@ -1,15 +1,18 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { resolveSharedBufferedSelection } from "../../../src/adapters/collab/buffer-selection.ts";
+import { collabState } from "../../../src/adapters/collab/state.ts";
+import { beatPos, caretAt } from "../../../src/core/flow/flow.ts";
 import { bufferedWriter } from "./buffer-support.ts";
 import { registerSharedUndoOperationHandlers } from "../../../src/adapters/collab/undo-handlers.ts";
 import type { SharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
 import { sharedUndoActions } from "../../../src/application/editing/undo/shared-undo-actions.ts";
 import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
 
-function writerWithUndo() {
+function writerWithUndo(text = "ab") {
   const held: { owner: SharedUndo | null } = { owner: null };
   let serial = 0;
-  const page = bufferedWriter("ab", true, undefined, undefined, { undo: h => {
+  const page = bufferedWriter(text, true, undefined, undefined, { undo: h => {
     registerSharedUndoOperationHandlers(h.a);
     const owner = sharedUndoOwner(h.a, () => ({ id: "undo" + ++serial, by: "Alice" }), () => 0, error => { throw error; });
     held.owner = owner;
@@ -42,5 +45,26 @@ test("D32: Writer typing reaches the one undo stack, and one undo takes back the
     assert.deepEqual([page.text(), owner.sizes().undo], ["abxy", 1]);
     assert.equal(actions.undo().ok, true);
     assert.deepEqual([page.text(), owner.sizes(), page.reports], ["ab", { undo: 0, redo: 1, dropped: 0 }, []]);
+  } finally { page.close(); }
+});
+
+
+test("undo of identical retyped narration tracks a peer insertion in its original gap", () => {
+  const { page, actions } = writerWithUndo("the the");
+  try {
+    collabState(page.h.b).doc.clientID = 0;
+    assert.equal(page.native(4, 7, "the"), true);
+    page.h.execute("B", [page.h.insertion("B", "R1", page.h.point("B", "R1", 4), "n")], ["peer"]);
+    page.h.queue.flush("D1");
+    assert.equal(page.text(), "the nthe");
+    const undone = actions.undo();
+    assert.ok(undone.ok && undone.effective && undone.selection);
+    assert.equal(page.text(), "the nthe");
+    assert.deepEqual(resolveSharedBufferedSelection(page.h.a, [undone.selection.anchor, undone.selection.focus]), caretAt(beatPos("R1", 5)));
+    page.h.queue.flush("dup");
+    page.h.join();
+    for (const handle of [page.h.a, page.h.b, page.h.c]) {
+      assert.equal(page.h.characters(handle, "R1").map(unit => unit.value).join(""), "the nthe");
+    }
   } finally { page.close(); }
 });
