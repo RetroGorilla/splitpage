@@ -318,6 +318,7 @@
     {
       "label": "the gallery remove moves the selection without the outcome",
       "tests": [
+        "src/test/shared-native-record-guards-app.test.mjs",
         "src/test/shared-split-records-held-pictures-app.test.mjs"
       ],
       "file": "src/features/gallery/overlay.ts",

@@ -2,7 +2,7 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import { migrateRows } from "../bootstrap/document-ports.ts";
-import { adoptReplacement, currentDocument, sharedSession } from "../bootstrap/wiring/session-owner.ts";
+import { adoptReplacement, currentDocument, sharedRecoverySession, sharedSession } from "../bootstrap/wiring/session-owner.ts";
 import { getEditorName } from "../bootstrap/wiring/preferences-owner.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { enterSharedSession, leaveRunningSharedSession, nativeEditorRecords } from "../bootstrap/wiring/shared-session.ts";
@@ -57,6 +57,26 @@ async function enter(t, comments = [], rows = [
   t.after(() => { if (sharedSession()) hook.leave(); });
   return show;
 }
+
+test("a held native gallery removal keeps the selected picture", async t => {
+  const show = await enter(t, [], [{ id: "r1", audioText: "Hello", imageRef: ref("a"), moreImages: [{ imageRef: ref("b") }] }]);
+  t.after(closeGalleryOverlay);
+  openGalleryOverlay("r1", 1);
+  const remove = find(".scene-gallery-remove");
+  assert.ok(remove);
+  remove.focus();
+  const selected = () => find(".scene-gallery-grid-tile.is-selected")?.getAttribute("data-slot");
+  assert.equal(selected(), "1");
+  const before = hook.read();
+  const release = sharedRecoverySession().hold("record-edit-held");
+  try { remove.click(); } finally { release(); }
+  assert.equal(selected(), "1");
+  assert.equal(document.activeElement, remove);
+  assert.equal(remove.closest("[hidden]"), null);
+  assert.deepEqual(hook.read(), before);
+  assert.deepEqual(show.mock.calls.map(call => call.arguments[1]), ["warn"]);
+  assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
+});
 
 function commentToolbar(from = 0, to = 5, target = cell("audioText")) {
   target.focus();
