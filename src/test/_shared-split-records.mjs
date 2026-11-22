@@ -12,7 +12,7 @@ import { openingStatus } from "../bootstrap/wiring/ports/transitions.ts";
 import { currentBrollRecords } from "../bootstrap/wiring/broll.ts";
 import { clearProductionSelection, selectedKeys } from "../bootstrap/wiring/production-editing-owners.ts";
 import { findOrAddPerson, registerProductionTag } from "../features/tags/production-tags.ts";
-import { addPersonForTag, applyGearQuickAdd, changeProductionOutline, clickProductionOutline, armDeleteTag, armPersonDelete, bulkDeleteSelected, openProductionPanel, renderProduction, setTagOwner, setTagStatus, toggleCardSelection } from "../features/tags/panels.ts";
+import { addPersonForTag, applyGearQuickAdd, armDeleteTag, armPersonDelete, bulkDeleteSelected, openProductionPanel, renderProduction, setTagOwner, setTagStatus, toggleCardSelection } from "../features/tags/panels.ts";
 import { openBrollPanel } from "../features/broll/panel.ts";
 import { armDeleteComment, closeCommentComposer, openCommentComposer, openCommentsPanel, postReply, setCommentAssignee, toggleReplyComposer, toggleResolve } from "../features/comments/comments.ts";
 import { tagKey } from "../core/document/tags.ts";
@@ -331,16 +331,3 @@ export const shotB1 = () => doc().brollShots.find(s => s.id === "b1");
 export const tagById = id => doc().productionTags.find(t => t?.id === id);
 export const blurOut = el => { el.focus(); el.blur(); };
 export const NOTES = `#broll-panel .broll-notes-input${B1}`;
-
-export const PREP_CHOICES = [
-  { name: "the scene-prep Ready button", notice: "Marked as Have it", act: () => {
-    const button = $("#production-list").appendChild(document.createElement("button"));
-    button.dataset.prep = "ready"; button.dataset.id = "prop mug";
-    try { assert.equal(clickProductionOutline({ target: button }), true); } finally { button.remove(); }
-  } },
-  { name: "the scene-prep status choice", notice: "Requirement status updated", act: () => {
-    const select = $("#production-list").appendChild(document.createElement("select"));
-    select.className = "prep-status-select"; select.dataset.key = "prop mug"; select.add(new window.Option("Have it", "have", true, true));
-    try { changeProductionOutline(select); } finally { select.remove(); }
-  } }
-];

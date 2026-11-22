@@ -588,7 +588,7 @@
     {
       "label": "a refused scene-prep Ready still shows its success notice",
       "tests": [
-        "src/test/shared-split-records-prep-app.test.mjs"
+        "src/test/shared-native-registries-app.test.mjs"
       ],
       "file": "src/features/tags/panels.ts",
       "find": "if (!statusSet(id, \"have\").held) prepNotice(\"Marked as Have it\");",
@@ -597,7 +597,7 @@
     {
       "label": "a refused scene-prep status choice still shows its success notice",
       "tests": [
-        "src/test/shared-split-records-prep-app.test.mjs"
+        "src/test/shared-native-registries-app.test.mjs"
       ],
       "file": "src/features/tags/panels.ts",
       "find": "if (!statusSet(target.dataset[\"key\"] ?? null, (target as HTMLSelectElement).value).held) prepNotice(\"Requirement status updated\");",
@@ -606,7 +606,7 @@
     {
       "label": "rule 157: the shared scene-prep notice offers an Undo that reads the standalone owner",
       "tests": [
-        "src/test/shared-split-records-prep-app.test.mjs"
+        "src/test/shared-native-registries-app.test.mjs"
       ],
       "file": "src/features/tags/panels.ts",
       "find": "  if (sharedRegistryLife()) { p.notices.show(message, \"ok\"); return; }",

@@ -1032,9 +1032,9 @@ a blur in tag notes does not retry a refused write | src/features/tags/mount.ts 
 standalone, a blur in tag notes writes what its typing did not | src/features/tags/mount.ts | src/test/panel-drafts-standalone-app.test.mjs | tests/collab/split-records-mutants.json
 the tag entity wiring reports no shared session, so a refused notes write is never retried on blur | src/bootstrap/wiring/production.ts | src/test/shared-split-records-typed-tags-app.test.mjs | tests/collab/split-records-mutants.json
 a tag rename closes its box before the outcome | src/features/tags/panels.ts | src/test/shared-split-records-typed-tags-app.test.mjs | tests/collab/split-records-mutants.json
-a refused scene-prep Ready still shows its success notice | src/features/tags/panels.ts | src/test/shared-split-records-prep-app.test.mjs | tests/collab/split-records-mutants.json
-a refused scene-prep status choice still shows its success notice | src/features/tags/panels.ts | src/test/shared-split-records-prep-app.test.mjs | tests/collab/split-records-mutants.json
-rule 157: the shared scene-prep notice offers an Undo that reads the standalone owner | src/features/tags/panels.ts | src/test/shared-split-records-prep-app.test.mjs | tests/collab/split-records-mutants.json
+a refused scene-prep Ready still shows its success notice | src/features/tags/panels.ts | src/test/shared-native-registries-app.test.mjs | tests/collab/split-records-mutants.json
+a refused scene-prep status choice still shows its success notice | src/features/tags/panels.ts | src/test/shared-native-registries-app.test.mjs | tests/collab/split-records-mutants.json
+rule 157: the shared scene-prep notice offers an Undo that reads the standalone owner | src/features/tags/panels.ts | src/test/shared-native-registries-app.test.mjs | tests/collab/split-records-mutants.json
 the tag panels keep typed drafts across a redraw in standalone too | src/features/tags/panels.ts | src/test/panel-drafts-standalone-app.test.mjs | tests/collab/split-records-mutants.json
 the b-roll panel keeps typed drafts across a redraw in standalone too | src/features/broll/panel.ts | src/test/panel-drafts-standalone-app.test.mjs | tests/collab/split-records-mutants.json
 a tag draft's key leaves out its scene, so two occurrences of one tag share a box | src/features/tags/panels.ts | src/test/shared-native-record-drafts-app.test.mjs | tests/collab/split-records-mutants.json

@@ -3,7 +3,7 @@ import { after, test } from "node:test";
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { adoptReplacement, sharedRecoverySession } from "../bootstrap/wiring/session-owner.ts";
-import { addPersonForTag, applyGearQuickAdd, armDeleteTag, armRemoveTag, armPersonDelete, bulkDeleteSelected, openGearPanel,
+import { addPersonForTag, applyGearQuickAdd, armDeleteTag, armRemoveTag, armPersonDelete, bulkDeleteSelected, changeProductionOutline, clickProductionOutline, openGearPanel,
   openProductionPanel, renderProduction, saveTagRename, setTagNotes, setTagStatus, toggleCardSelection } from "../features/tags/panels.ts";
 import { findOrAddPerson, registerProductionTag } from "../features/tags/production-tags.ts";
 import { cellSelection, setCellSelection } from "../features/common/cell-selection.ts";
@@ -650,3 +650,48 @@ test("removing a tag's labels from the panel is refused even with no mentions", 
   assert.deepEqual(hook.read(), before);
   assert.deepEqual(show.mock.calls.map(call => call.arguments), [["This is not available in a shared session yet.", "warn"]]);
 });
+
+const prepChoices = [
+  { name: "Ready", notice: "Marked as Have it", act: () => {
+    const button = $("#production-list").appendChild(document.createElement("button"));
+    button.dataset.prep = "ready";
+    button.dataset.id = "prop mug";
+    try { assert.equal(clickProductionOutline({ target: button }), true); } finally { button.remove(); }
+  } },
+  { name: "status choice", notice: "Requirement status updated", act: () => {
+    const select = $("#production-list").appendChild(document.createElement("select"));
+    select.className = "prep-status-select";
+    select.dataset.key = "prop mug";
+    select.add(new window.Option("Have it", "have", true, true));
+    try { changeProductionOutline(select); } finally { select.remove(); }
+  } }
+];
+
+for (const choice of prepChoices) for (const order of ["forward", "reverse"]) {
+  test("Scene prep " + choice.name + " refuses once and offers no standalone Undo after retry, " + order, async t => {
+    await enter(t, { productionTags: [{ cat: "prop", name: "Mug" }] });
+    production("prep");
+    const show = t.mock.method(notices, "show");
+    const showAction = t.mock.method(notices, "showAction");
+    const session = sharedRecoverySession();
+    const release = session.hold("scene-prep-held");
+    hook.nativePeer.hold("updates");
+    assert.equal(hook.nativePeer.type("r1", 0, "Z").kind, "written");
+    const before = hook.read(), standalone = undoOwner().sizes();
+    try {
+      choice.act();
+      assert.deepEqual(show.mock.calls.map(call => call.arguments), [["This is not available in a shared session yet.", "warn"]]);
+      assert.deepEqual(hook.read(), before);
+    } finally { release(); }
+    assert.doesNotThrow(choice.act);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments).slice(1), [[choice.notice, "ok"]]);
+    assert.equal(showAction.mock.callCount(), 0);
+    const toast = [...document.querySelectorAll("#toast-host .toast")].find(item => item.firstChild.textContent === choice.notice);
+    assert.ok(toast);
+    assert.equal(toast.querySelector(".toast-action"), null);
+    hook.nativePeer.release(order);
+    await Promise.resolve();
+    copies(doc => [doc.rows[0].audioText, tag(doc, "Mug").status], ["ZHello", "have"]);
+    assert.deepEqual(undoOwner().sizes(), standalone);
+  });
+}
