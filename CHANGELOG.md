@@ -10,6 +10,9 @@ appear in the app under **Help**. The format follows
 - Click buttons through the empty space beside and between notifications.
 - Keep every tag picker choice clickable while editing a tag, with Done available when the picker closes.
 
+### For maintainers
+- Replaced the old shared-document adapter, its editor wiring, dedicated test suites and CI job with the standard-Yjs native layer under `src/adapters/collab/native/` (no release entry for shared mode yet).
+
 ## 0.4.3 — 2026-11-09
 
 This release brings nested tags, the flowing writer, scenes and beats, files

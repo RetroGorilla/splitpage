@@ -437,6 +437,25 @@ The undo rows have one key, so p95 equals p50. The other cases (short and long s
 
 No case is slower than its spread. For every row, the head p50 sits inside the range that the base and head runs cover together, and every head p50 is well inside its limit (the closest is long new scene, 34.4 ms against 65). Typing p50 is flat at both fixtures; long typing p95 rose from 13.9 to 16.9 ms (+21.6%), with base p95 runs of 13 to 17 ms and head runs of 13.6 to 17.4 ms. Long undo, a watch item from the previous batch, fell 12.3% (35.7 to 31.3 ms) and short undo is unchanged. The other moves above 20% are long writer open tag spaces (+60.5%, base runs 3.1 to 9.3 ms, head 5.2 to 9.3 ms), short split open tag spaces (+29.4%, 8.5 to 11 ms) and the short exports, all under 1.5 ms. `Range.getClientRects` calls per run are the same in base and head.
 
+## Collaboration legacy adapter removal (Slice 8), 5fceae0c2 to 0b7102f6a
+
+Recorded 2026-11-22 on Windows with Edge 158 and Node 24.22.1 using exact commit archives, matching installed dependencies, and the head recorder and browser driver. The run followed the `perf-ab.mjs --only short,long --rounds 3` procedure, measuring base then head in each round. Latency is measured from keydown through the task after the next animation frame. The range covers the full legacy shared-adapter removal across stages 1–3 ([#1746](https://github.com/RetroGorilla/splitpage/pull/1746), [#1747](https://github.com/RetroGorilla/splitpage/pull/1747), [#1750](https://github.com/RetroGorilla/splitpage/pull/1750)): 494 tracked deletions (187 `src/`, 303 `tests/`, 4 `tools/`), 1 relocated fixture and 17 additions. Shared-mode cases and the image-heavy fixture were outside this run.
+
+### Input latency, median of 3 rounds (ms)
+
+| Case | Base p50 | Head p50 | Base p95 | Head p95 | Limit (p50) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| short typing | 3.0 | 2.8 | 14.6 | 16.1 | 8 |
+| long typing | 3.5 | 3.1 | 13.5 | 15.2 | 8 |
+| long undo the delete | 29.8 | 33.1 | 29.8 | 33.1 | 70 |
+| long hide shot scenes | 14.7 | 16.1 | 23.6 | 22.2 | 65 |
+
+Additional tail observations: long Split open tag name p95 moved from 3.7 to 8.2 ms, and short Writer open tag name p95 moved from 3.9 to 10.5 ms. Long bulk-delete Undo runs spanned 28.6–30.8 ms in base and 31–38 ms in head. No case crossed its p50 budget, zero long tasks fired, and layout read counts were unchanged.
+
+### Reading it
+
+Typing p50 moved slightly down on both fixtures (3.0 to 2.8 ms short; 3.5 to 3.1 ms long) while typing p95 moved up by about 1.5–1.7 ms. Long bulk-delete Undo (29.8 to 33.1 ms, base 28.6–30.8 vs head 31–38 ms), long hide shot scenes (14.7 to 16.1 ms) and the two open-tag-name p95 figures moved up across three rounds without crossing any p50 limit, firing a long task, or changing layout read counts. Three rounds on one workstation do not establish a cause for those shifts; they are recorded as observed rather than attributed or dismissed. Shared-session editing and image-heavy cases were not measured in this run.
+
 ## Comparing two commits
 
 Run `node tools/perf-ab.mjs <base> [head] --only short,long --rounds 3` with dependencies installed. Head defaults to the committed `HEAD`; uncommitted changes are excluded. `--only` accepts the recorder's fixtures (`short,long,images`, all by default). Each round runs base then head, one browser at a time. The wrapper creates two detached worktrees under the system temporary directory, links this checkout's installed `node_modules`, builds each with `node build.mjs --test` (or a plain build when the old build script lacks `--test`, reported in the output), and copies the selected head's tools and browser driver helpers into the base tree before measuring. Both builds therefore use the head's recorder and helpers. A standalone `node tools/perf-record.mjs` also builds the test variant before measuring, with the same fallback for older build scripts. Use compatible installed dependencies for the two commits; no install or network access is performed.
