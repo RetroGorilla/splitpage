@@ -20,6 +20,7 @@ expect json(P.freshSnapshot('app'))===json(S.read().app)&&json(P.seedReader())==
 eval window.seed=P.readLateReader();true
 key ctrl KeyZ
 wait agree('','','')
+expect box().hidden&&document.activeElement===writer()&&getSelection().isCollapsed&&writer().querySelector('.wr-beat[data-id="r1"]').contains(getSelection().focusNode)&&[W.selection().anchor,W.selection().head].every(p=>p.rowId==="r1"&&p.offset===0)
 expect json(P.readLateReader())===json(seed)
 expect P.deliverToReader('app')&&json(P.readLateReader())===json(S.read().app)
 eval window.undone=P.readLateReader();W.openVisual("r1");true
@@ -27,6 +28,7 @@ wait opened("r1","")
 expect visualCaret(0)
 key ctrl KeyY
 wait agree('B-roll: Close up','','')
+expect opened('r1','B-roll: Close up')&&visualCaret(16)
 expect json(P.readLateReader())===json(undone)
 expect P.deliverToReader('peer')&&json(P.readLateReader())===json(S.read().app)&&json(P.freshSnapshot('peer'))===json(S.read().app)
 eval W.openVisual('r2');true
