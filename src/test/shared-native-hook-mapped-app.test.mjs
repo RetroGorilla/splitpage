@@ -845,7 +845,8 @@ for (const [name, edit, expected] of peerEdits) {
       await agree(merged);
       if (name === "formats text") {
         assert.equal(painted("r1"), "Hello!");
-        assert.equal(beat("r1").querySelector("strong")?.textContent, variant.includes("app first") ? "Hello!" : "Hello");
+        const boldRuns = [...beat("r1").querySelectorAll("strong, b")].map(mark => mark.textContent);
+        assert.deepEqual(boldRuns, [variant.includes("app first") ? "Hello!" : "Hello"]);
       }
       assert.equal(appActions.has("recovery"), false);
       remote.length = 0;
@@ -859,7 +860,7 @@ for (const [name, edit, expected] of peerEdits) {
       const landed = await agree(restored);
       if (name === "formats text") {
         assert.equal(painted("r1"), "Hello!");
-        assert.equal(beat("r1").querySelector("strong"), null);
+        assert.equal(beat("r1").querySelector("strong, b"), null);
         assert.equal(peer.commands.undo().kind, "unchanged");
       }
       assert.deepEqual(warnings(), initialWarnings);
