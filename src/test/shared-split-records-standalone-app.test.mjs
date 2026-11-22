@@ -1,7 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { migrateRows } from "../bootstrap/document-ports.ts";
-import { adoptReplacement, currentDocument, sharedSession } from "../bootstrap/wiring/session-owner.ts";
+import { adoptReplacement, currentDocument, sharedRecoverySession, sharedSession } from "../bootstrap/wiring/session-owner.ts";
 import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { currentBrollRecords } from "../bootstrap/wiring/broll.ts";
@@ -13,15 +13,23 @@ import { armRemoveTag, openProductionPanel, saveTagRename } from "../features/ta
 import { closeCommentComposer, toggleResolve } from "../features/comments/comments.ts";
 import { moveGallerySlot, removeGallerySlot } from "../core/document/gallery.ts";
 import { tagKey } from "../core/document/tags.ts";
-import { encodeSharedState } from "../adapters/collab/document.ts";
-import { enter, tidy } from "./_shared-split-records.mjs";
-import { toastHost, warnings, clearWarnings, SOURCE, shape, brollOpen, twice, post, $, typeIn, FIRE, B1, NOOPS, noopOnce } from "./_standalone-records.mjs";
+import { toastHost, warnings, clearWarnings, SOURCE, shape, brollOpen, twice, post, $, typeIn, FIRE, B1, NOOPS, noopOnce, tidyStandalone } from "./_standalone-records.mjs";
 
-for (const noop of NOOPS) test(`C7 record no-op: ${noop.name}, shared and standalone alike, with nothing written and no warning`, async () => {
-  const f = await enter();
+for (const noop of NOOPS) test("C7 record no-op: " + noop.name + ", native and standalone alike, with nothing written and no warning", async () => {
+  writerControls().closeWriter();
+  adoptReplacement(migrateRows(structuredClone(SOURCE)));
+  const hook = window.__sharedTest;
+  assert.deepEqual(await hook.enter(), { ok: true });
   try {
-    noopOnce(noop.act, noop.cleaned, () => [encodeSharedState(f.parts.handle), f.parts.undo.sizes(), undoOwner().sizes()]);
-  } finally { tidy(f); }
+    const session = sharedRecoverySession();
+    const before = hook.nativePeer.freshSnapshot("app");
+    noopOnce(noop.act, noop.cleaned, () => [session.generation(), undoOwner().sizes(), hook.read()]);
+    assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
+    assert.deepEqual(hook.nativePeer.freshSnapshot("app"), before);
+  } finally {
+    tidyStandalone();
+    assert.deepEqual(hook.leave(), { ok: true });
+  }
   writerControls().closeWriter();
   adoptReplacement(migrateRows(structuredClone(SOURCE)));
   try {

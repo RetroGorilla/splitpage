@@ -2,11 +2,13 @@ import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import { migrateRows } from "../bootstrap/document-ports.ts";
-import { adoptReplacement } from "../bootstrap/wiring/session-owner.ts";
+import { adoptReplacement, sharedRecoverySession } from "../bootstrap/wiring/session-owner.ts";
 import { addPersonForTag, applyGearQuickAdd, armDeleteTag, armPersonDelete, bulkDeleteSelected, openGearPanel,
   openProductionPanel, saveTagRename, setTagNotes, setTagStatus, toggleCardSelection } from "../features/tags/panels.ts";
 import { findOrAddPerson, registerProductionTag } from "../features/tags/production-tags.ts";
 import { cellSelection, setCellSelection } from "../features/common/cell-selection.ts";
+import { currentBrollRecords } from "../bootstrap/wiring/broll.ts";
+import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { openBrollPanel } from "../features/broll/panel.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { namedTagId } from "../core/text/runs.ts";
@@ -601,3 +603,36 @@ for (const panel of ["production", "b-roll"]) test(`an accepted native ${panel} 
   copies(owner, "p1");
   assert.equal(select().value, "p1");
 });
+
+const heldOwnerCalls = [
+  { name: "registering a production tag", act: () => assert.equal(registerProductionTag("location", "Park"), false) },
+  { name: "finding or adding a person", act: () => assert.equal(findOrAddPerson("Cy"), "") },
+  { name: "adding a prop to a shot", act: () => assert.deepEqual(currentBrollRecords().addBrollProp("b1", "Lamp"), { changed: false, held: true }) }
+];
+
+for (const caller of heldOwnerCalls) for (const [admission, order] of [["held", "forward"], ["held", "reverse"], ["announced", "forward"]]) {
+  test(caller.name + " writes nothing and warns once when " + admission + ", " + order, async t => {
+    await enter(t, { brollShots: [{ id: "b1", name: "City", origin: "panel" }] });
+    const warning = ["This is not available in a shared session yet.", "warn"];
+    const show = t.mock.method(notices, "show", () => {});
+    hook.nativePeer.hold("updates");
+    assert.equal(hook.nativePeer.type("r1", 0, "Z").kind, "written");
+    assert.equal(hook.nativePeer.type("r1", 6, "!").kind, "written");
+    const session = sharedRecoverySession();
+    const release = admission === "held" ? session.hold("owner-call-held") : session.beforeCommand(() => {
+      notices.show(...warning);
+      return "announced";
+    });
+    try {
+      const before = [session.generation(), hook.read(), undoOwner().sizes(), hook.nativePeer.queuedUpdates()];
+      caller.act();
+      assert.deepEqual(show.mock.calls.map(call => call.arguments), [warning]);
+      assert.deepEqual([session.generation(), hook.read(), undoOwner().sizes(), hook.nativePeer.queuedUpdates()], before);
+    } finally { release(); }
+    assert.deepEqual(hook.nativePeer.release(order).map(packet => packet.to), ["app", "app"]);
+    await Promise.resolve();
+    copies(doc => doc.rows[0].audioText, "ZHello!");
+    assert.deepEqual(hook.nativePeer.freshSnapshot("app"), hook.read().app);
+    assert.deepEqual(show.mock.calls.map(call => call.arguments), [warning]);
+  });
+}

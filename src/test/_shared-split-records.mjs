@@ -349,12 +349,6 @@ export const HELD_PATHS = [
   })
 ];
 
-export const HELD_OWNER_CALLS = [
-  { name: "registering a production tag", act: () => { assert.equal(registerProductionTag("location", "Park"), false); } },
-  { name: "finding or adding a person", act: () => { assert.equal(findOrAddPerson("Cy"), ""); } },
-  { name: "adding a prop to a shot", act: () => { assert.deepEqual(currentBrollRecords()?.addBrollProp("b1", "Lamp"), { changed: false, held: true }); } }
-];
-
 export const doc = () => currentDocument();
 export const shotB1 = () => doc().brollShots.find(s => s.id === "b1");
 export const tagById = id => doc().productionTags.find(t => t?.id === id);
