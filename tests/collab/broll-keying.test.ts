@@ -23,7 +23,7 @@ import { explode } from "../../src/core/text/edits.ts";
 import type { Run } from "../../src/core/text/runs.ts";
 import { sharedCellTextOperations } from "../../src/core/collab/cell-text-operations.ts";
 import { sharedStructureKey } from "../../src/core/collab/structure-key.ts";
-import { sharedStructurePorts } from "../../src/bootstrap/wiring/ports/shared-values.ts";
+import { sharedStructurePorts } from "./editor-ports/shared-values.ts";
 import { deleteBeatCommand } from "../../src/application/commands/rows.ts";
 import type { SharedTextAddress } from "../../src/core/collab/operations.ts";
 import { collabState } from "../../src/adapters/collab/state.ts";

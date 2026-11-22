@@ -16,7 +16,7 @@ import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { sharedAuthorPort } from "../bootstrap/wiring/ports/shared-author.ts";
 import { sharedUndoOwner } from "../bootstrap/wiring/ports/shared-undo.ts";
 import { sharedBrollKeyingPorts } from "../bootstrap/wiring/ports/shared-broll-keying.ts";
-import { sharedStructurePorts } from "../bootstrap/wiring/ports/shared-values.ts";
+import { sharedStructurePorts } from "../../tests/collab/editor-ports/shared-values.ts";
 import { keySharedLeftCell } from "../application/commands/shared-broll-keying.ts";
 import { deleteBeatCommand } from "../application/commands/rows.ts";
 import { createSessionCapabilities } from "../application/session/capabilities.ts";

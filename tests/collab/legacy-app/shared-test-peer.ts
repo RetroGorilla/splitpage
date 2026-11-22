@@ -22,7 +22,7 @@ import type { SharedSwitchPorts, SharedSessionParts } from "../../../src/bootstr
 import { sharedAuthorPort } from "../../../src/bootstrap/wiring/ports/shared-author.ts";
 import { sharedBufferPorts } from "../../../src/bootstrap/wiring/ports/shared-buffer.ts";
 import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
-import { sharedStructurePorts } from "../../../src/bootstrap/wiring/ports/shared-values.ts";
+import { sharedStructurePorts } from "../editor-ports/shared-values.ts";
 import { writerFlowCommands } from "../../../src/bootstrap/wiring/ports/writer-flow.ts";
 import { addBeatCommand, deleteBeatCommand } from "../../../src/application/commands/rows.ts";
 import { joinBeatsCommand, splitBeatCommand, textCut } from "../../../src/application/commands/split-join.ts";

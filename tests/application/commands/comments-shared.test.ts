@@ -5,7 +5,7 @@ import { addReplyCommand, deleteCommentCommand, toggleResolveCommand, unwrapComm
 import type { SharedCommentPorts } from "../../../src/application/commands/comments.ts";
 import type { RewritePlanner } from "../../../src/application/commands/document-edit.ts";
 import type { Command } from "../../../src/application/session/document-session.ts";
-import { sharedCommentPorts } from "../../../src/bootstrap/wiring/ports/shared-comments.ts";
+import { sharedCommentPorts } from "../../collab/editor-ports/shared-comments.ts";
 import { sharedAuthorPort } from "../../../src/bootstrap/wiring/ports/shared-author.ts";
 import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
 import { registerSharedOperationFamilies } from "../../../src/adapters/collab/operation-families.ts";

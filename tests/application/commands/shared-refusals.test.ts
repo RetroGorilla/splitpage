@@ -18,7 +18,7 @@ import { documentIdStamp, editStamp } from "../../../src/application/commands/sa
 import { flowCommand, initializeFlowParagraphs, standaloneFlowCommand } from "../../../src/application/commands/flow.ts";
 import { rewriteCellsCommand } from "../../../src/application/commands/document-edit.ts";
 import { deleteTagsCommand, gearQuickAddCommand, retagCommand, tagCellsCommand } from "../../../src/application/commands/production-records.ts";
-import { sharedRecordPorts } from "../../../src/bootstrap/wiring/ports/shared-records.ts";
+import { sharedRecordPorts } from "../../collab/editor-ports/shared-records.ts";
 import { SHARED_SESSION_DISABLED } from "../../../src/application/session/ports.ts";
 import { changeSet } from "../../../src/application/session/change-set.ts";
 import { sharedCommandRefusalNotice } from "../../../src/bootstrap/wiring/ports/shared-command-notices.ts";
