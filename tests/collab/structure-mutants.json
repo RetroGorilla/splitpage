@@ -149,12 +149,12 @@
     "file": "src/adapters/collab/split-executor.ts",
     "find": "{ kind: \"set\", path: [...path, \"visual\"], value: visual }, ",
     "replace": "",
-    "tests": ["tests/adapters/collab/split-visual.test.ts","tests/features/editing/cell-buffer-visual.test.ts"]
+    "tests": ["tests/adapters/collab/split-visual.test.ts"]
   }, {
     "label": "split creates the visual record without its text",
     "file": "src/adapters/collab/split-executor.ts",
     "find": "applySharedTextCreation(handle, description.text); ",
     "replace": "",
-    "tests": ["tests/adapters/collab/split-visual.test.ts","tests/features/editing/cell-buffer-visual.test.ts"]
+    "tests": ["tests/adapters/collab/split-visual.test.ts"]
   }]
 }

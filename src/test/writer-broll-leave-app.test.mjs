@@ -79,6 +79,14 @@ for (const [leave, run] of Object.entries(LEAVES)) for (const start of Object.ke
   });
 }
 
+test("standalone Writer keeps a typed B-roll label plain until the visual box closes", () => {
+  load("Close up");
+  const cell = openVisual();
+  typeInBox(cell, 0, "B-roll: ");
+  assert.equal(cell.closest(".wr-flow-visual-box").hidden, false);
+  assert.deepEqual(state(), { visual: "B-roll: Close up", shots: [] });
+});
+
 test("standalone Writer: leaving a narration beat holding a marker keys nothing", () => {
   writerControls().closeWriter();
   adoptReplacement(migrateRows({ schema: 2, title: "Writer leave", paragraphsDecided: true, rows: [

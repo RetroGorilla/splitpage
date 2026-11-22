@@ -6,7 +6,6 @@ import { sharedHarness } from "../application/session/shared-session-support.ts"
 import { adapterReplica } from "../application/session/legacy-shared-session-support.ts";
 import { bufferedWriter } from "./writer/buffer-support.ts";
 import { headedWriter } from "./writer/buffer-heading-support.ts";
-import { bufferedSplit } from "./editing/cell-buffer-support.ts";
 import { createSharedBufferedText, sharedBufferedTarget } from "../../src/adapters/collab/buffer.ts";
 import { readSharedPaintedText } from "../../src/adapters/collab/paint-base.ts";
 import type { SharedDocumentHandle } from "../../src/adapters/collab/types.ts";
@@ -15,9 +14,7 @@ import type { SharedUndo } from "../../src/application/editing/undo/shared-undo.
 import { sharedUndoActions } from "../../src/application/editing/undo/shared-undo-actions.ts";
 import type { SharedDocumentSession } from "../../src/application/session/shared-session.ts";
 import { headingFieldKey } from "../../src/application/editing/buffered-field-key.ts";
-import { bufferedFieldKey } from "../../src/core/collab/buffer.ts";
 import { sharedUndoOwner } from "../collab/editor-ports/shared-undo.ts";
-import { sharedWriterVisualBox } from "./writer/visual-undo-support.ts";
 import { bufferReaders, bufferStamps } from "../collab/buffer-readers.ts";
 
 type Hook = (h: Stage1ExecutorHarness) => SharedUndo;
@@ -44,15 +41,6 @@ const SURFACES: readonly Surface[] = [
   { name: "Writer heading", key: headingFieldKey("H1"), start: "Scene", open: undo => {
     const page = headedWriter("Scene", undefined, { undo });
     return { h: page.h, session: page.a.session, typeA: () => { assert.equal(page.typeHeading(5, 5, "x"), true); }, close: page.close };
-  } },
-  { name: "Writer visual box", key: bufferedFieldKey("R1", "visualText"), start: "", open: sharedWriterVisualBox },
-  { name: "Split narration cell", key: "R1", start: "ab", open: undo => {
-    const page = bufferedSplit([{ id: "R1", text: "ab" }], true, { undo });
-    return { h: page.h, session: page.a.session, typeA: () => { assert.equal(page.key("R1", 2, 2, "insertText", "x"), true); }, close: page.close };
-  } },
-  { name: "Split visual column", key: bufferedFieldKey("R1", "visualText"), start: "", open: undo => {
-    const page = bufferedSplit([{ id: "R1", text: "ab" }], true, { undo });
-    return { h: page.h, session: page.a.session, typeA: () => { assert.equal(page.key("R1", 0, 0, "insertText", "x", { field: "visualText" }), true); }, close: page.close };
   } }
 ];
 

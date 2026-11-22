@@ -3,6 +3,7 @@ import assert from "node:assert/strict";
 import { replicas, agree, operation } from "./executor-support.ts";
 import { captureIncrementalReplica, assertIncremental } from "./incremental-support.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
+import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-executor.ts";
 import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/removal-executor.ts";
 import { registerSharedTextOperationHandlers } from "../../../src/adapters/collab/text-executor.ts";
 import { registerSharedRecordHandlers } from "../../../src/adapters/collab/record-executor.ts";
@@ -146,3 +147,18 @@ test("the replacement as one list, and its operations as separate lists at the b
     assert.deepEqual(read(apart.set.a), state("", "New" + OLD));
   } finally { one.close(); apart.close(); }
 });
+
+test("a visual set over part of narration resolves its new visual through the prepared split identity", () => scenario("dup", run => {
+  registerSharedSplitHandlers(run.set.a, { cells: runtime.cells });
+  const { document } = projectSharedDocumentWithRecovery(run.set.a);
+  const doc = { rows: document.rows, sections: document.sections, comments: [] } as unknown as FlowDoc;
+  const outcome = setVisualForRange(doc, { anchor: beatPos("R1", 1), head: beatPos("R1", 2) }, "Wide",
+    { ...runtime.ports, newId: () => "temporary", operations: { id: "selected", by: "Alice" } });
+  assert.ok(outcome && "rows" in outcome && outcome.ops);
+  assert.deepEqual(outcome.ops.map(op => op.kind), ["split", "text-insert"]);
+  assert.deepEqual(executeSharedOperations(run.set.a, outcome.ops, { base: readSharedRevision(run.set.a) }), { ok: true });
+  run.flush();
+  for (const handle of [run.set.a, run.set.b, run.set.c]) {
+    assert.deepEqual(read(handle).rows.map(([, audio, visual]) => [audio, visual]), [["a", ""], ["b", "Wide"], ["cd", OLD]]);
+  }
+}));

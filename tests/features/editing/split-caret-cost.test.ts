@@ -14,14 +14,6 @@ function runIsolated(script: string) {
 test("standalone Split full and row repaint add no shared caret mapping, paint normalization or legacy markers before and after native leave", () => {
   runIsolated(String.raw`
     import assert from "node:assert/strict";
-    import { mock } from "node:test";
-    import { pathToFileURL } from "node:url";
-    const url = path => pathToFileURL(path).href;
-    const mapping = await import("./src/application/editing/painted-selection.ts");
-    const cells = await import("./src/features/common/cell-dom.ts");
-    const counts = { mapping: 0, paint: 0 };
-    mock.module(url("src/application/editing/painted-selection.ts"), { namedExports: { ...mapping, followPaintedCaret: (...args) => { counts.mapping++; return mapping.followPaintedCaret(...args); } } });
-    mock.module(url("src/features/common/cell-dom.ts"), { namedExports: { ...cells, paintTrailingCellSpaces: (...args) => { counts.paint++; return cells.paintTrailingCellSpaces(...args); } } });
     const { bootApp, closeApp } = await import("./src/test/_app-boot.mjs");
     window.Element.prototype.scrollBy = () => {};
     window.Element.prototype.scrollIntoView = () => {};
@@ -37,39 +29,14 @@ test("standalone Split full and row repaint add no shared caret mapping, paint n
       await openDocument({ kind: "file", file, handle: null, options: { skipSnapshot: true } });
       assert.equal(document.querySelector('#rows .cell-editable[data-id="r0"][data-field="audioText"]').textContent, "Word ");
       render(); renderRow("r0");
-      assert.deepEqual(counts, { mapping: 0, paint: 0 });
       assert.equal(document.querySelector("[data-shared-cell-space-form], [data-shared-cell-space]"), null);
     }
     assert.deepEqual(await window.__sharedTest.enter(), { ok: true });
     render(); renderRow("r0");
     assert.equal(document.querySelector("[data-shared-cell-space-form], [data-shared-cell-space]"), null);
     assert.deepEqual(window.__sharedTest.leave(), { ok: true });
-    Object.assign(counts, { mapping: 0, paint: 0 });
     render(); renderRow("r0");
-    assert.deepEqual(counts, { mapping: 0, paint: 0 });
     assert.equal(document.querySelector("[data-shared-cell-space-form], [data-shared-cell-space]"), null);
     await closeApp();
-  `);
-});
-
-test("the isolated Split buffer does not repaint unchanged stored space forms", () => {
-  runIsolated(String.raw`
-    import assert from "node:assert/strict";
-    import { mock } from "node:test";
-    import { pathToFileURL } from "node:url";
-    const cells = await import("./src/features/common/cell-dom.ts");
-    let paint = 0;
-    mock.module(pathToFileURL("src/features/common/cell-dom.ts").href, {
-      namedExports: { ...cells, paintTrailingCellSpaces: (...args) => { paint++; return cells.paintTrailingCellSpaces(...args); } }
-    });
-    const { splitCaretPage } = await import("./tests/features/editing/split-caret-support.ts");
-    const page = splitCaretPage("Word ", "Tail ");
-    try {
-      assert.ok(page.cell("audioText").querySelector("[data-shared-cell-space]"));
-      paint = 0;
-      page.render.render();
-      page.render.renderRow("R1");
-      assert.equal(paint, 0);
-    } finally { page.close(); }
   `);
 });

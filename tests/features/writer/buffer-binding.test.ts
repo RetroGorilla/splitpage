@@ -476,3 +476,23 @@ test("abandoning an unfinished Writer composition releases its buffered text wit
   } finally { page.close(); }
   assert.equal(abandons.size, 0);
 });
+
+test("the Writer adopts another beat without settling the native target registered in the same beforeinput", () => {
+  const page = bufferedWriter();
+  try {
+    const point = beatPos("R1", 2), range = { anchor: point, head: point };
+    page.surface.place(range);
+    page.beat("R2").append("Z");
+    const before = new window.InputEvent("beforeinput", { bubbles: true, cancelable: true, inputType: "insertText", data: "Y" });
+    Object.defineProperty(before, "getTargetRanges", { value: () => [page.surface.domRange(range)] });
+    assert.equal(page.root.dispatchEvent(before), true);
+    assert.deepEqual([page.text(), page.a.session.read(doc => doc?.rows[1]?.audioText), page.reports], ["ab", "nextZ", []]);
+    const insert = page.surface.domRange(range);
+    assert.ok(insert);
+    const typed = document.createTextNode("Y");
+    insert.insertNode(typed);
+    window.getSelection()?.setBaseAndExtent(typed, 1, typed, 1);
+    page.root.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: "Y" }));
+    assert.deepEqual([page.text(), page.reports], ["abY", []]);
+  } finally { page.close(); }
+});

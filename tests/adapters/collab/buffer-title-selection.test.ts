@@ -1,9 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { replicas } from "./executor-support.ts";
 import { Stage1ExecutorHarness } from "./stage1-executor-support.ts";
 import { createSharedAnchor } from "../../../src/adapters/collab/anchors.ts";
 import { createSharedBufferedText, sharedBufferedTarget } from "../../../src/adapters/collab/buffer.ts";
 import { resolveSharedBufferedSelection } from "../../../src/adapters/collab/buffer-selection.ts";
+import { bufferedFieldKey } from "../../../src/core/collab/buffer.ts";
 import { TITLE_FIELD_KEY } from "../../../src/application/editing/buffered-field-key.ts";
 import { beatPos } from "../../../src/core/flow/flow.ts";
 import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
@@ -49,4 +51,16 @@ test("title redo restores the pre-typing boundary after replaying an insertion",
     assert.deepEqual(resolveSharedBufferedSelection(run.a, [redo.selection.anchor, redo.selection.focus], { key, target }),
       { anchor: beatPos(key, 5), head: beatPos(key, 5) });
   } finally { session.dispose(); run.destroy(); }
+});
+
+test("a visual field resolves its own text anchors and keeps its write target", () => {
+  const run = replicas(2, { rows: [{ id: "R1", audioText: "ab", visualText: "Wide" }] });
+  try {
+    const key = bufferedFieldKey("R1", "visualText"), target = sharedBufferedTarget(run.a, key);
+    assert.deepEqual(target, { owner: "R1", segment: "R1", field: "visualText" });
+    const anchor = createSharedAnchor(run.a, target, 1, "before"), focus = createSharedAnchor(run.a, target, 4, "after");
+    assert.ok(anchor && focus);
+    assert.deepEqual(resolveSharedBufferedSelection(run.a, [anchor, focus], { key, target }),
+      { anchor: beatPos(key, 1), head: beatPos(key, 4) });
+  } finally { run.close(); }
 });

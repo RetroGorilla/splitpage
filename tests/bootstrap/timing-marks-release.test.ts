@@ -13,8 +13,7 @@ const MARKED = ["src/adapters/collab/document.ts", "src/adapters/collab/state.ts
   "src/adapters/collab/replica.ts",
   "src/adapters/collab/buffer.ts", "src/bootstrap/wiring/session-owner.ts", "src/bootstrap/wiring/undo.ts", "tests/collab/editor-ports/shared-undo.ts",
   "src/bootstrap/wiring/editor.ts",
-  "src/features/editing/cell-buffer.ts", "src/features/writer/flow-surface.ts",
-  "src/features/writer/flow-visual-box.ts"];
+  "src/features/writer/flow-surface.ts"];
 
 const ENTRY = [
   'export { applySharedUpdate } from "./src/adapters/collab/document.ts";',
@@ -26,9 +25,7 @@ const ENTRY = [
   'export { stepSharedUndo } from "./src/bootstrap/wiring/undo.ts";',
   'export { sharedUndoOwner } from "./tests/collab/editor-ports/shared-undo.ts";',
   'export { mountRowsEditingFeature } from "./src/bootstrap/wiring/editor.ts";',
-  'export { mountCellBuffer } from "./src/features/editing/cell-buffer.ts";',
-  'export { createSurface } from "./src/features/writer/flow-surface.ts";',
-  'export { createFlowVisualBox } from "./src/features/writer/flow-visual-box.ts";'
+  'export { createSurface } from "./src/features/writer/flow-surface.ts";'
 ].join("\n");
 
 const stripMarks: Plugin = { name: "strip-marks", setup(plugin) {

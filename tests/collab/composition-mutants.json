@@ -562,24 +562,6 @@
       ]
     },
     {
-      "label": "abandonment: the selection-visual edit is not registered",
-      "file": "tests/collab/editor-ports/writer-visual-buffer.ts",
-      "find": "    const stopAbandonment = shared.bufferedText.abandonment?.(abandon);",
-      "replace": "    const stopAbandonment = shared.bufferedText.abandonment?.(() => {});",
-      "tests": [
-        "tests/features/writer/visual-buffer.test.ts"
-      ]
-    },
-    {
-      "label": "abandonment: an abandoned selection-visual box still saves on close",
-      "file": "src/features/writer/flow-visual-box.ts",
-      "find": "      if (binding?.discarded?.()) return null;\n",
-      "replace": "",
-      "tests": [
-        "tests/features/writer/visual-buffer.test.ts"
-      ]
-    },
-    {
       "label": "drop: a dropped session never releases its surfaces",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "  faults.attempt(() => { now.backend.drop?.(); });\n",

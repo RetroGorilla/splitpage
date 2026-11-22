@@ -7,9 +7,7 @@
       "file": "src/application/editing/buffered-field.ts",
       "find": "if (outcome.recovered) ports.recovered(held.rowId);",
       "replace": "",
-      "tests": [
-        "tests/features/editing/cell-buffer-recovery.test.ts"
-      ]
+      "tests": ["tests/features/writer/buffer-recovery.test.ts"]
     }
   ]
 }

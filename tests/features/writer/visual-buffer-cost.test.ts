@@ -10,12 +10,10 @@ test("standalone Writer visual key builds no shared buffer and keeps the same wo
     import { pathToFileURL } from "node:url";
     const field = await import("./src/application/editing/buffered-field.ts");
     const painted = await import("./src/application/editing/painted-beats.ts");
-    const cells = await import("./src/features/editing/cell-buffer.ts");
     const rich = await import("./src/bootstrap/richtext.ts");
-    let built = 0, records = 0, mounts = 0, decodes = 0;
+    let built = 0, records = 0, decodes = 0;
     mock.module(pathToFileURL("src/application/editing/buffered-field.ts").href, { namedExports: { createBufferedField: (...args) => { built++; return field.createBufferedField(...args); } } });
     mock.module(pathToFileURL("src/application/editing/painted-beats.ts").href, { namedExports: { createPaintedBeats: (...args) => { records++; return painted.createPaintedBeats(...args); } } });
-    mock.module(pathToFileURL("src/features/editing/cell-buffer.ts").href, { namedExports: { mountCellBuffer: (...args) => { mounts++; return cells.mountCellBuffer(...args); } } });
     mock.module(pathToFileURL("src/bootstrap/richtext.ts").href, { namedExports: { ...rich, fromHtml: (...args) => { decodes++; return rich.fromHtml(...args); } } });
     const { writerFor } = await import("./tests/features/writer/painted-base-support.ts");
     const counts = [];
@@ -39,7 +37,7 @@ test("standalone Writer visual key builds no shared buffer and keeps the same wo
       assert.equal(page.writer.settle, undefined);
       page.writer.dispose();
     }
-    assert.deepEqual({ built, records, mounts }, { built: 0, records: 0, mounts: 0 });
+    assert.deepEqual({ built, records }, { built: 0, records: 0 });
     console.log(JSON.stringify(counts));
   `;
   const result = spawnSync(process.execPath, ["--experimental-test-module-mocks", "--input-type=module", "--eval", script],

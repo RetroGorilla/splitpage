@@ -125,7 +125,6 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   });
 
   visual = createFlowVisualBox({
-    ...(ports.visualBuffer ? { buffer: ports.visualBuffer } : {}),
     root, doc: ports.doc, selection: surface.selection, prepare: surface.prepareVisual, place: range => { surface.place(range); }, current: isCurrent,
     plainVisual: ports.plainVisual,
     blocked: ports.editingBlocked,
@@ -211,7 +210,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   }
 
   function closeVisualAside(): void {
-    if (visual?.abandon) visual.abandon(); else visual?.close(false);
+    visual?.close(false);
   }
 
   function beforeReplay(dir: UndoDirection): void {
@@ -284,7 +283,6 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
   const writer: FlowWriter = {
     openVisual: (rowId, highlight) => {
       if (!isCurrent() || !rowOf(rowId)) return;
-      if (visual?.settle && !visual.settle()) return;
       surface.place(caretAt(beatPos(rowId, 0)), true);
       visual?.open(caretAt(beatPos(rowId, 0)), highlight);
     },
@@ -334,7 +332,7 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
         return index < 0 ? 0 : index;
       }
     },
-    ...(visual.settle ? { settle: () => !!visual?.settle?.() && (surface.settle?.() ?? true) } : surface.settle ? { settle: surface.settle } : {}),
+    ...(surface.settle ? { settle: surface.settle } : {}),
     isCurrent,
     finish: () => { closeVisualAside(); return isCurrent() ? surface.finish() : null; },
     repaint: restore => { if (isCurrent()) { surface.repaint(restore); visual?.refresh(restore); } },
@@ -362,7 +360,6 @@ export function createFlowWriter(ports: FlowWriterPorts): FlowWriter {
       visual = null;
     },
     dispose: () => {
-      if (visual?.settle && !visual.settle()) return false;
       if (surface.settle && !surface.settle()) return false;
       ports.closeFind?.();
       observer.disconnect();

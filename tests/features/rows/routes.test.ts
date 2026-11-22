@@ -42,7 +42,6 @@ function harness(p: ReturnType<typeof page>, mac = false) {
     rows: p.byId("rows"),
     ports: {
       mac,
-      cellDragStart: () => false,
       scriptCell: (cell) => cell.classList.contains("script"),
       openLink: (href) => { calls.push("open:" + href); },
       dragging: () => state.dragging,

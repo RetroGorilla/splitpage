@@ -1,20 +1,6 @@
 {
   "mutants": [
     {
-      "label": "C7 disposal drops a selection endpoint while restoring native space forms",
-      "file": "src/features/editing/cell-buffer.ts",
-      "find": "if (selection) {\n        const cell = cellOf(selection.anchor.key), end = cellOf(selection.head.key);",
-      "replace": "if (false && selection) {\n        const cell = cellOf(selection.anchor.key), end = cellOf(selection.head.key);",
-      "tests": ["tests/features/editing/split-caret-review.test.ts"]
-    },
-    {
-      "label": "C7 leave retains a native nonbreaking stand-in for a stored plain space",
-      "file": "src/features/editing/cell-buffer.ts",
-      "find": "const restored = stored === undefined ? null : readSharedCellSpaceForm(cell, stored);",
-      "replace": "const restored = null;",
-      "tests": ["tests/features/editing/split-caret-review.test.ts"]
-    },
-    {
       "label": "C7 shared paint calls standalone undo tracking",
       "file": "src/bootstrap/wiring/ports/editing.ts",
       "find": "if (!sharedUndoRoute()) undoOwner().track();",
