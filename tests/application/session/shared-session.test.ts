@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { NOT_SHARED, ORIGIN_KINDS, REENTERED } from "../../../src/application/session/shared-session.ts";
+import { NOT_SHARED, ORIGIN_KINDS, REENTERED, WHOLE_PROJECTION } from "../../../src/application/session/shared-session.ts";
 import type { ReplicaOrigin } from "../../../src/application/session/shared-session.ts";
 import { DISPOSED, NO_DOCUMENT } from "../../../src/application/session/document-session.ts";
 import type { Command, CommandOutcome } from "../../../src/application/session/document-session.ts";
@@ -467,4 +467,24 @@ test("recovery and the held revision stay paired across a failed projection and 
     h.session.dispose();
     assert.deepEqual([h.session.read(doc => doc), h.session.recovery()], [null, []]);
   } finally { h.session.dispose(); }
+});
+
+test("a local write whose projection had to retry publishes once, reports its error and marks the rows whole", () => {
+  const replica = fakeReplica(timed(3)), h = sharedHarness(replica.port);
+  const broken = new Error("retry projection"), rows: unknown[] = [];
+  h.session.subscribeRows(changed => { rows.push(changed); });
+  replica.script(() => {
+    replica.write("local-command", timed(7), { error: broken });
+    return { ok: true };
+  });
+  assert.deepEqual(h.session.run(sharedCommand("length", [LENGTH])),
+    { kind: "committed", generation: 1, changes: LENGTH_CELL, errors: [broken] });
+  assert.deepEqual(h.reported, [broken]);
+  assert.deepEqual(rows, [WHOLE_PROJECTION]);
+  assert.equal(h.session.read(doc => doc?.rows[0]?.lengthSeconds), 7);
+  assert.equal(h.undo.length, 1);
+  replica.write("remote", timed(8));
+  assert.deepEqual(rows, [WHOLE_PROJECTION, { whole: false, added: [], removed: [], moved: [], changed: [{ id: "R1", fields: ["lengthSeconds"] }], fields: [] }]);
+  assert.equal(h.published.length, 2);
+  h.session.dispose();
 });

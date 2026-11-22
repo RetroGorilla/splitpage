@@ -16,7 +16,6 @@ import { sharedUndoActions } from "../../src/application/editing/undo/shared-und
 import type { SharedDocumentSession } from "../../src/application/session/shared-session.ts";
 import { headingFieldKey } from "../../src/application/editing/buffered-field-key.ts";
 import { bufferedFieldKey } from "../../src/core/collab/buffer.ts";
-import { stepSharedUndo } from "../../src/bootstrap/wiring/undo.ts";
 import { sharedUndoOwner } from "../collab/editor-ports/shared-undo.ts";
 import { sharedWriterVisualBox } from "./writer/visual-undo-support.ts";
 import { bufferReaders, bufferStamps } from "../collab/buffer-readers.ts";
@@ -109,14 +108,3 @@ for (const surface of SURFACES) {
     });
   }
 }
-
-test("the legacy shared undo route warns for a used-up step in either direction", () => {
-  const used = { ok: true, effective: false, reason: "used-up", label: "typing", selection: null } as const;
-  const route = { actions: { undo: () => used, redo: () => used }, breakGroup: () => {}, replayed: () => null };
-  const messages: string[] = [];
-  for (const direction of ["undo", "redo"] as const) assert.equal(stepSharedUndo(route, direction, text => messages.push(text)), used);
-  assert.deepEqual(messages, [
-    "That step could not be undone because someone else changed it.",
-    "That step could not be redone because someone else changed it."
-  ]);
-});

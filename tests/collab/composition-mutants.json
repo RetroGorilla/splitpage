@@ -14,7 +14,7 @@
       "find": "const notice = sharedUndoNotice(outcome, direction);",
       "replace": "const notice = !outcome.ok ? sharedUndoNotice(outcome, direction) : null;",
       "tests": [
-        "tests/features/shared-undo-surfaces.test.ts"
+        "tests/application/editing/undo/shared-undo-notice.test.ts"
       ]
     },
     {
