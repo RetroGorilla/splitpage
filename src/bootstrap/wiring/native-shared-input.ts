@@ -32,7 +32,7 @@ import { writerControls, writerFlowPorts } from "./writer.ts";
 import { currentWhoList } from "./who-list.ts";
 
 interface NativeInputPorts {
-  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "resolveTextSelection" | "isClosingOrClosed" | "subscribe" | "revision" | "hasBeatMarker">;
+  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "resolveTextSelection" | "captureTextIdentity" | "captureCompositionCaret" | "isClosingOrClosed" | "subscribe" | "revision" | "hasBeatMarker">;
   readonly session: Pick<SharedDocumentSession, "admit" | "refuse" | "run" | "subscribe">;
   readonly editAttribution: () => NativeEditStamp;
   readonly now?: () => number;
@@ -87,6 +87,8 @@ interface Draft {
   readonly marks: Marks;
   composing: boolean;
   readonly composition: boolean;
+  compositionIdentity?: (() => boolean) | null;
+  compositionCaret?: ReturnType<NativeInputPorts["native"]["captureCompositionCaret"]>;
   readonly paint: TrackedPaint | null;
   text: string;
   units: number;
@@ -452,6 +454,32 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     buffered.cell.innerHTML = buffered.html;
     if (document.activeElement === buffered.cell || buffered.cell.closest("#writer-doc") === document.activeElement) {
       setCellSelection(buffered.cell, buffered.selection.from, buffered.selection.to);
+    }
+  }
+
+  function settleLeave(): string | null {
+    if (stopped !== "missing" || !draft?.composition || draft.composing || uncertain || !draft.range) return finish();
+    const { beat, field, range, selection: { from, to } } = draft;
+    const visual = field === "visualText";
+    if (range.target.beat !== beat || range.target.cell !== (visual ? "visual" : "narration")) return stopped;
+    const original = documentReader.read(doc => doc?.rows.find(row => row.id === beat)?.[field]);
+    const live = visual ? native.document().rows.find(row => row.id === beat)?.visualText : native.narrationHtml(beat);
+    if (original == null || original !== live ||
+      !(from === to ? draft.compositionCaret?.intact() : draft.compositionIdentity?.())) return stopped;
+    const resolved = native.resolveTextSelection(range);
+    const start = visual ? { beat, offset: from } : native.narrationCaret(beat, from, from !== to);
+    const end = from === to ? start : visual ? { beat, offset: to } : native.narrationCaret(beat, to);
+    if (!resolved || start?.beat !== beat || end?.beat !== beat || resolved.anchor.target.beat !== beat ||
+      resolved.head.target.beat !== beat || resolved.anchor.target.cell !== range.target.cell ||
+      resolved.head.target.cell !== range.target.cell || resolved.anchor.offset !== start.offset ||
+      resolved.head.offset !== end.offset) return stopped;
+    const buffered = draft;
+    stopped = null;
+    try {
+      return finish(undefined, true, true);
+    } finally {
+      if (draft === buffered && !stopped) stopped = "missing";
+      if (draft !== buffered) buffered.compositionCaret?.dispose();
     }
   }
 
@@ -1020,6 +1048,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (reason || !cell.isConnected) { session.refuse(STALE); event.preventDefault(); return; }
       const anchored = anchor(begin(cell, selection, true, ""));
       if (typeof anchored === "string") { session.refuse(anchored); event.preventDefault(); return; }
+      if (anchored.range) {
+        if (selection.from === selection.to) anchored.compositionCaret = native.captureCompositionCaret(anchored.range);
+        else anchored.compositionIdentity = native.captureTextIdentity(anchored.range);
+      }
       draft = anchored;
       return;
     }
@@ -1045,6 +1077,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (!text) {
       restore(buffered);
       buffered.paint?.dispose();
+      buffered.compositionCaret?.dispose();
       draft = null;
       clearMovePaint();
       publish();
@@ -1054,6 +1087,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     restore(buffered);
     preview(cell, buffered.selection, text);
     finish();
+    if (draft !== buffered) buffered.compositionCaret?.dispose();
   }
 
   function intercept(event: Event): void {
@@ -1471,6 +1505,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   let stopUnload: (() => void) | undefined;
   const dispose = (): void => {
     clearTimeout(timer);
+    draft?.compositionCaret?.dispose();
     draft?.paint?.dispose();
     draft = null;
     stopWriterPaint?.();
@@ -1492,6 +1527,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   }
   return {
     finish,
+    settleLeave,
     beforePress,
     refuseCommand,
     currentCaret,
@@ -1516,6 +1552,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (!result || result.kind === "recovery") return null;
       const bytes = reopened.encodeState();
       draft.paint?.dispose();
+      draft.compositionCaret?.dispose();
       draft = null;
       clearMovePaint();
       stopped = null;

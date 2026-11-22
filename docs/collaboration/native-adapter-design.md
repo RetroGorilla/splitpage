@@ -994,3 +994,16 @@ Requirements from the outside review of this note, added to the build order (sec
   untouched by the draft, keeps the preview visible, and stops input with a refusal. Writer close preserves a
   stopped draft on screen. Plain Visual typing settles in the input event, and the tests cover stale paint across
   the same four peer changes. The target-state matrix is covered for the input routes that can remain pending.
+  After a completed composition is refused because its beat is missing, restoring the beat does not retry
+  the write. Explicit Leave retries once if the retained range still resolves to the original offsets in
+  the same beat and field and the field content matches the original paint. A selected range must retain
+  its units. A caret must retain its text container and adjacent units at its original gap, including
+  the sole neighbor at the start or end of a nonempty field. An empty field uses its original container.
+  Peer Undo can recreate deleted Narration units in their original container. The first observed restore
+  may establish new adjacent units only after a removal that deleted the original neighbors without
+  inserting replacement units. The restore must bring back the original gap and content without new
+  deletions. A successful write lands the complete document under a fresh ID. If landing fails after
+  a successful write, a later Leave lands that write
+  without repeating it.
+  An unavailable or ambiguous target keeps its local preview and the session open. Further Leave attempts
+  report the refusal and emit no writes while the range remains invalid.

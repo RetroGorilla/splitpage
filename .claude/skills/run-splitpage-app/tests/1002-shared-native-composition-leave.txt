@@ -1,0 +1,75 @@
+open
+wait document.querySelectorAll('#rows .row').length>0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.P=S.nativePeer;window.field="audioText";window.cell=()=>document.querySelector('#rows .cell-editable[data-id="r3"][data-field="'+field+'"]');window.load=title=>F.openFile(new File([JSON.stringify({schema:2,title,paragraphsDecided:true,rows:[{id:'r1',audioText:'Hello',visualText:'Look'},{id:'r3',audioText:'Last',visualText:'Shot'}]})],'ime-removal.splitpage'));window.json=JSON.stringify;window.focus=offset=>{cell().focus();getSelection().collapse(cell().firstChild,offset);return true};window.caret=offset=>{const s=getSelection();return document.activeElement===cell()&&s.isCollapsed&&cell().contains(s.focusNode)&&s.focusOffset===offset};window.warn=()=>[...document.querySelectorAll('#toast-host .toast.warn:not(.is-leaving)')].map(t=>t.textContent);window.refused=()=>json(warn())===json(['This is not available in a shared session yet.']);window.same=()=>json(S.read().app)===json(S.read().peer);window.audio=side=>S.read()[side].rows.find(row=>row.id==='r3')?.audioText;window.readers=()=>['app','peer'].every(side=>json(P.freshSnapshot(side))===json(S.read().app));window.land=()=>{const landed=F.state();return landed.docId!==originalId&&landed.docId!==before.docId&&json({...landed,docId:before.docId,rows:[landed.rows[0],{...landed.rows[1],updatedAt:before.rows[1].updatedAt,updatedBy:before.rows[1].updatedBy}]})===json({...before,rows:[before.rows[0],{...before.rows[1],audioText:'Lasts'}]})};window.sessionClosed=()=>S.read().peer===null&&P.readLateReader()===null&&P.freshSnapshot('app')===null;true
+eval load('Restore after commit')
+wait F.state().title==='Restore after commit'
+eval window.originalId=F.state().docId;S.enter()
+wait same()&&audio('app')==='Last'
+eval window.before=S.read().app;P.seedReader();P.hold('updates');focus(4)
+ime set s
+eval window.removed=P.removeBeat('r3');window.packet=P.drain('forward','app');true
+expect removed.kind==='written'&&packet.length===1&&packet[0].to==='app'&&audio('peer')===undefined&&json(S.read().app)===json(before)&&cell().textContent==='Lasts'&&caret(5)&&warn().length===0
+ime commit s
+expect refused()&&cell().textContent==='Lasts'&&caret(5)&&json(P.release('forward'))==='[]'
+eval window.restored=P.undoPeer();true
+expect restored.kind==='written'&&same()&&audio('app')==='Last'&&readers()&&json(P.readLateReader())===json(before)
+expect cell().textContent==='Lasts'&&caret(5)&&refused()
+eval window.left=S.leave();true
+expect left.ok&&sessionClosed()&&land()&&refused()&&cell().textContent==='Lasts'&&caret(5)
+eval document.querySelectorAll('#toast-host .toast').forEach(t=>t.dismiss());load('Restore before commit')
+wait F.state().title==='Restore before commit'&&warn().length===0
+eval window.originalId=F.state().docId;S.enter()
+wait same()&&audio('app')==='Last'
+eval window.before=S.read().app;P.seedReader();P.hold('updates');focus(4)
+ime set s
+eval window.removed=P.removeBeat('r3');window.packet=P.drain('forward','app');true
+expect removed.kind==='written'&&packet.length===1&&packet[0].to==='app'&&audio('peer')===undefined&&json(S.read().app)===json(before)&&cell().textContent==='Lasts'&&caret(5)
+eval window.restored=P.undoPeer();window.packet=P.drain('forward','app');true
+expect restored.kind==='written'&&packet.length===1&&packet[0].to==='app'&&same()&&cell().textContent==='Lasts'&&caret(5)
+ime commit s
+expect P.queuedUpdates().length===1&&P.queuedUpdates()[0].to==='peer'
+expect P.release('forward').length===1&&same()&&audio('app')==='Lasts'&&cell().textContent==='Lasts'&&caret(5)&&warn().length===0
+expect json(P.readLateReader())===json(before)&&P.deliverToReader('peer')&&json(P.readLateReader())===json(S.read().app)&&readers()
+eval window.left=S.leave();true
+expect left.ok&&sessionClosed()&&land()&&warn().length===0&&cell().textContent==='Lasts'&&caret(5)
+eval load('Missing and changed after commit')
+wait F.state().title==='Missing and changed after commit'
+eval window.originalId=F.state().docId;S.enter()
+wait same()&&audio('app')==='Last'
+eval window.before=S.read().app;P.seedReader();P.hold('updates');focus(4)
+ime set s
+eval window.removed=P.removeBeat('r3');window.packet=P.drain('forward','app');true
+expect removed.kind==='written'&&packet.length===1&&packet[0].to==='app'&&audio('peer')===undefined&&cell().textContent==='Lasts'&&caret(5)
+ime commit s
+expect refused()&&json(P.release('forward'))==='[]'
+eval window.left=S.leave();true
+expect !left.ok&&left.reason==='missing'&&audio('peer')===undefined&&json(S.read().app)===json(before)&&caret(5)&&refused()
+eval window.restored=P.undoPeer();window.changed=P.type('r3',0,'P');P.hold('updates');true
+expect restored.kind==='written'&&changed.kind==='written'&&audio('peer')==='PLast'&&json(S.read().app)===json(before)&&json(P.readLateReader())===json(before)
+eval window.first=S.leave();window.second=S.leave();true
+expect !first.ok&&first.reason==='missing'&&!second.ok&&second.reason==='missing'&&P.queuedUpdates().length===0
+expect audio('peer')==='PLast'&&json(S.read().app)===json(before)&&cell().textContent==='Lasts'&&caret(5)&&refused()
+expect P.deliverToReader('peer')&&json(P.readLateReader())===json(P.freshSnapshot('app'))&&json(P.readLateReader())===json(S.read().peer)
+expect json(P.release('forward'))==='[]'
+eval window.restored=P.undoPeer();true
+expect restored.kind==='written'&&same()&&audio('app')==='Last'&&cell().textContent==='Lasts'&&caret(5)&&refused()
+eval window.left=S.leave();true
+expect left.ok&&sessionClosed()&&land()&&refused()&&cell().textContent==='Lasts'&&caret(5)
+
+eval document.querySelectorAll('#toast-host .toast').forEach(t=>t.dismiss());field='visualText';load('Identical Visual replacement')
+wait F.state().title==='Identical Visual replacement'&&warn().length===0
+eval S.enter()
+wait same()&&cell().textContent==='Shot'
+eval window.before=S.read().app;P.seedReader();P.hold('updates');focus(4)
+ime set x
+eval window.removed=P.removeBeat('r3');window.packet=P.drain('forward','app');true
+expect removed.kind==='written'&&packet.length===1&&packet[0].to==='app'&&audio('peer')===undefined&&cell().textContent==='Shotx'&&caret(5)
+ime commit x
+expect refused()&&json(P.release('forward'))==='[]'
+eval P.hold('updates');window.restored=P.undoPeer();window.replaced=P.replaceAll([{row:'r3',cell:'visual',start:3,end:4}],'t');true
+expect restored.kind==='written'&&replaced.kind==='written'&&P.queuedUpdates().map(packet=>packet.to).join(',')==='app,app'
+expect P.drain('forward','app').length===2&&P.queuedUpdates().length===0&&S.read().peer.rows[1].visualText==='Shot'&&json(S.read().app)===json(before)
+expect P.deliverToReader('peer')&&json(P.readLateReader())===json(P.freshSnapshot('app'))&&json(P.readLateReader())===json(S.read().peer)
+eval window.first=S.leave();window.second=S.leave();true
+expect !first.ok&&first.reason==='missing'&&!second.ok&&second.reason==='missing'&&P.queuedUpdates().length===0
+expect S.read().peer.rows[1].visualText==='Shot'&&json(S.read().app)===json(before)&&cell().textContent==='Shotx'&&caret(5)&&refused()

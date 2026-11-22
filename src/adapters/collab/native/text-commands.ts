@@ -365,6 +365,67 @@ export function captureNativeTextIdentity(script: NativeScript, range: NativeTex
   };
 }
 
+export function captureNativeCompositionCaret(script: NativeScript, range: NativeTextRange,
+  subscribe: (observe: (transaction: Y.Transaction) => void) => () => void) {
+  if (!authoredRanges.get(script.doc)?.has(range)) return null;
+  const checked = nativeRangeSnapshot(range);
+  if (!checked || checked.to) return null;
+  const original = nativeLiveRange(script, checked);
+  if (typeof original === "string" || original.pieces.length !== 1) return null;
+  const target = checked.target;
+  const text = original.text, offset = original.from - original.start;
+  const content = storedText(original.items);
+  const boundary = (live: NativeLiveRange, length: number) => [
+    live.from > live.start ? undoEndpoint(target, live.text, live.from, -1).position : null,
+    live.from - live.start < length ? undoEndpoint(target, live.text, live.from, 0).position : null
+  ] as const;
+  const sameSide = (saved: PlainPosition | null, live: PlainPosition | null) =>
+    saved === null ? live === null : live !== null && Y.compareIDs(saved.item, live.item);
+  let expected = boundary(original, content.length);
+  const units = expected.filter(side => side !== null);
+  const point = () => {
+    const live = nativeLiveRange(script, checked);
+    return typeof live !== "string" && live.pieces.length === 1 && live.text === text &&
+      live.from - live.start === offset ? live : null;
+  };
+  let removed = false;
+  function observe(transaction: Y.Transaction): void {
+    try {
+      const present = !!script.reader.beatBoundary(target.beat);
+      if (!removed) {
+        if (present) {
+          if (units.some(side => unitGone(side, script.doc))) dispose();
+          return;
+        }
+        // why: replacement mixed into removal must not qualify its new units for a later retry
+        removed = !transaction.local && transaction.beforeState.size === transaction.afterState.size &&
+          [...transaction.afterState].every(([client, clock]) => transaction.beforeState.get(client) === clock) &&
+          units.every(side => unitGone(side, script.doc));
+        if (!removed) dispose();
+        return;
+      }
+      if (!present) return;
+      dispose();
+      // why: peer undo recreates removed narration; a restore mixed with new deletions cannot prove the gap
+      if (transaction.local || !Y.equalDeleteSets(transaction.deleteSet, Y.createDeleteSet())) return;
+      const live = point();
+      if (live && storedText(live.items) === content) expected = boundary(live, content.length);
+    } catch {
+      dispose();
+    }
+  }
+  const dispose = target.cell === "narration" && units.length > 0 ? subscribe(observe) : () => {};
+  return {
+    intact: () => {
+      const live = point();
+      if (!live) return false;
+      const [left, right] = boundary(live, storedText(live.items).length);
+      return sameSide(expected[0], left) && sameSide(expected[1], right);
+    },
+    dispose
+  };
+}
+
 function memberOffset(cells: readonly LiveCell[], at: Y.AbsolutePosition, name: boolean): number | null {
   let offset = 0;
   for (const part of cells) {

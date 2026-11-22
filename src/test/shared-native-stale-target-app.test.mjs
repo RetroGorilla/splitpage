@@ -8,11 +8,12 @@ import { enterSharedSession, forceLeaveSharedSession, leaveRunningSharedSession 
 import { openNativeEditor } from "../bootstrap/wiring/native-shared-session.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { sanitizeHtml } from "../bootstrap/richtext.ts";
-import { setCellSelection } from "../features/common/cell-selection.ts";
+import { cellSelection, setCellSelection } from "../features/common/cell-selection.ts";
 import { openNativeSession } from "../adapters/collab/native/session.ts";
 import { applyNativePeerUpdate } from "../adapters/collab/native/peer-update.ts";
 import { entrySwitchFixture } from "../../tests/bootstrap/shared-entry-switch-support.ts";
 import { setTimeout as delay } from "node:timers/promises";
+import { compareIDs, compareRelativePositions, createRelativePositionFromTypeIndex, Text as YText } from "yjs";
 
 window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};
@@ -52,16 +53,23 @@ function split(native, beat, offset) {
   return written(native.commands.splitRow(at.range)).created;
 }
 
-async function enter(t, view, field, state = "live") {
+async function enter(t, view, field, state = "live", failLanding = false) {
   const fixture = entrySwitchFixture();
   const refuse = t.mock.fn();
   const ports = { ...fixture.ports, commandRefused: refuse };
-  adoptReplacement(migrateRows({ schema: 2, title: "Stale targets", rows: source }));
+  let landingError;
+  const rows = state === "empty visual" ? source.map(row => row.id === "r2" ? { ...row, visualText: "" } : row) : source;
+  adoptReplacement(migrateRows({ schema: 2, title: "Stale targets", rows }));
   let native;
   assert.deepEqual(await enterSharedSession(ports, (doc, failed) => {
     const opened = openNativeEditor(ports, doc, failed);
     native = opened.native;
-    return opened.backend;
+    if (!failLanding) return opened.backend;
+    return { ...opened.backend, landing: () => {
+      if (landingError) return opened.backend.landing();
+      landingError = new Error("Leave could not capture the standalone copy");
+      throw landingError;
+    } };
   }), { ok: true });
   const controls = writerControls();
   t.after(() => {
@@ -145,6 +153,293 @@ function transfer(target, type, plain = false) {
 function reasons(f) {
   return f.refuse.mock.calls.map(call => call.arguments[0]);
 }
+
+for (const scenario of ["restored", "restored selection", "still removed", "changed", "shifted anchor", "same text replaced", "restored before commit"]) {
+  test(`Split composition Leave: original target ${scenario}`, async t => {
+    const selected = scenario === "same text replaced" || scenario === "restored selection";
+    const field = selected ? "visual" : "narration", column = selected ? "visualText" : "audioText";
+    const f = await enter(t, "Split", field);
+    const original = structuredClone(currentDocument()), reader = clone(f.native, t);
+    const updates = [];
+    t.after(f.native.subscribeLocalUpdates(bytes => updates.push(bytes)));
+    const preview = selected ? "SXe" : scenario === "shifted anchor" ? "WoXrld" : "WorldX";
+    const offset = selected ? 2 : scenario === "shifted anchor" ? 3 : 6;
+    if (selected) setCellSelection(f.editor(), 1, 4);
+    else if (scenario !== "shifted anchor") setCellSelection(f.editor(), 5);
+    beginComposition(f.target, "X");
+    written(f.peer.commands.removeRows([f.id]));
+    send(f.peer, f.native);
+    await tick();
+    if (scenario === "restored before commit") {
+      written(f.peer.commands.undo());
+      send(f.peer, f.native);
+    }
+    composition(f.target, "end", "X");
+    await tick();
+    if (scenario !== "still removed" && scenario !== "restored before commit") {
+      written(f.peer.commands.undo());
+      if (scenario === "changed" || scenario === "same text replaced") {
+        const at = f.peer.commands.anchorText({ beat: f.id, cell: field }, selected ? 1 : 0, selected ? 4 : 0);
+        assert.equal(at.kind, "anchored");
+        written(f.peer.commands.replaceText(at.range, [{ text: selected ? "cen" : "P", marks: {} }]));
+      }
+      send(f.peer, f.native);
+      await tick();
+    }
+    const control = scenario === "restored before commit";
+    assert.deepEqual(reasons(f), control ? [] : ["missing"]);
+    assert.equal(updates.length, control ? 1 : 0);
+    assert.deepEqual(reader.document(), original);
+    assert.equal(text(f.editor()), preview);
+    assert.equal(document.activeElement, f.editor());
+    assert.deepEqual(cellSelection(f.editor()), { from: offset, to: offset });
+    if (!control) {
+      assert.deepEqual(currentDocument(), original);
+      assert.deepEqual(f.native.document(), f.peer.document());
+      assert.deepEqual(leaveRunningSharedSession(false), { ok: false, reason: "missing" });
+      assert.equal(updates.length, 0);
+    }
+    if (scenario === "restored" || scenario === "restored selection" || control) {
+      assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+      assert.equal(updates.length, 1);
+      for (const bytes of updates) assert.equal(applyNativePeerUpdate(f.peer, bytes), true);
+      send(f.peer, reader);
+      const full = f.peer.document(), landed = currentDocument();
+      assert.equal(full.rows.find(row => row.id === f.id)[column], preview);
+      assert.deepEqual(reader.document(), full);
+      assert.deepEqual(landed, { ...full, docId: landed.docId });
+      assert.notEqual(landed.docId, original.docId);
+      assert.equal(f.native.isClosingOrClosed(), true);
+      assert.equal(sharedSession(), false);
+      assert.equal(document.activeElement, f.editor());
+      assert.deepEqual(cellSelection(f.editor()), { from: offset, to: offset });
+      assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: "not-shared" });
+    } else {
+      const bytes = f.native.encodeState();
+      for (let attempt = 0; attempt < 2; attempt++) {
+        assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: "missing" });
+        assert.equal(sharedSession(), true);
+        assert.deepEqual(currentDocument(), original);
+        assert.deepEqual(f.native.encodeState(), bytes);
+        assert.equal(updates.length, 0);
+        assert.equal(text(f.editor()), preview);
+        assert.equal(document.activeElement, f.editor());
+        assert.deepEqual(cellSelection(f.editor()), { from: offset, to: offset });
+      }
+    }
+    assert.deepEqual(reasons(f), control ? [] : ["missing"]);
+    assert.deepEqual(f.errors, []);
+  });
+}
+
+for (const [field, offset, timing] of [
+  ["visual", 0, "with restore"], ["visual", 5, "with restore"], ["narration", 5, "with restore"],
+  ["narration", 5, "after restore"], ["narration", 5, "before removal"], ["narration", 5, "with removal"]
+]) {
+  test(`Split composition Leave refuses an identical ${field} replacement at offset ${offset} ${timing}`, async t => {
+    const f = await enter(t, "Split", field);
+    const originalText = field === "visual" ? "Scene" : "World";
+    const preview = originalText.slice(0, offset) + "X" + originalText.slice(offset);
+    setCellSelection(f.editor(), offset);
+    beginComposition(f.target, "X");
+    const replaceAdjacent = () => {
+      const from = offset === 0 ? 0 : offset - 1;
+      const adjacent = f.peer.commands.anchorText({ beat: f.id, cell: field }, from, from + 1);
+      assert.equal(adjacent.kind, "anchored");
+      written(f.peer.commands.replaceText(adjacent.range, [{ text: originalText[from], marks: {} }]));
+    };
+    const beforeRemoval = timing === "before removal" || timing === "with removal";
+    if (beforeRemoval) replaceAdjacent();
+    if (timing === "before removal") send(f.peer, f.native);
+    written(f.peer.commands.removeRows([f.id]));
+    send(f.peer, f.native);
+    composition(f.target, "end", "X");
+    written(f.peer.commands.undo());
+    if (timing === "after restore") send(f.peer, f.native);
+    if (!beforeRemoval) replaceAdjacent();
+    send(f.peer, f.native);
+    await tick();
+    const before = structuredClone(currentDocument()), bytes = f.native.encodeState(), updates = [];
+    t.after(f.native.subscribeLocalUpdates(update => updates.push(update)));
+    const column = field === "visual" ? "visualText" : "audioText";
+    assert.equal(f.native.document().rows.find(row => row.id === f.id)[column], originalText);
+    assert.deepEqual(f.native.document(), f.peer.document());
+    for (let attempt = 0; attempt < 2; attempt++) {
+      assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: "missing" });
+      assert.equal(sharedSession(), true);
+      assert.deepEqual(currentDocument(), before);
+      assert.deepEqual(f.native.encodeState(), bytes);
+      assert.deepEqual(updates, []);
+      assert.deepEqual(reasons(f), ["missing"]);
+      assert.equal(text(f.editor()), preview);
+      assert.equal(document.activeElement, f.editor());
+      assert.deepEqual(cellSelection(f.editor()), { from: offset + 1, to: offset + 1 });
+    }
+  });
+}
+
+for (const [scenario, offset] of [["unchanged", 0], ["empty visual", 0], ["moved", 5]]) {
+  test(`Split composition Leave retains the original Visual caret after restoring the ${scenario} field`, async t => {
+    const f = await enter(t, "Split", "visual", scenario);
+    const original = currentDocument().docId, updates = [];
+    t.after(f.native.subscribeLocalUpdates(update => updates.push(update)));
+    setCellSelection(f.editor(), offset);
+    beginComposition(f.target, "X");
+    written(f.peer.commands.removeRows([f.id]));
+    send(f.peer, f.native);
+    composition(f.target, "end", "X");
+    written(f.peer.commands.undo());
+    send(f.peer, f.native);
+    if (scenario === "moved") {
+      written(f.peer.commands.moveBlocks([{ kind: "beat", id: f.id }], { kind: "beat", id: "r1" }));
+      send(f.peer, f.native);
+    }
+    assert.equal(updates.length, 0);
+    assert.deepEqual(reasons(f), ["missing"]);
+    assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+    assert.equal(updates.length, 1);
+    assert.equal(applyNativePeerUpdate(f.peer, updates[0]), true);
+    const copy = f.peer.document(), landed = currentDocument();
+    assert.notEqual(landed.docId, original);
+    assert.deepEqual(landed, { ...copy, docId: landed.docId });
+    assert.equal(copy.rows.find(row => row.id === f.id).visualText,
+      scenario === "empty visual" ? "X" : offset === 0 ? "XScene" : "SceneX");
+    assert.deepEqual(reasons(f), ["missing"]);
+  });
+}
+
+for (const side of ["left", "right"]) {
+  test(`Split composition Leave checks the middle caret's ${side} identity independently`, async t => {
+    const f = await enter(t, "Split", "visual"), offset = 2;
+    const target = { beat: f.id, cell: "visual" };
+    const anchor = f.native.commands.anchorText(target, offset);
+    assert.equal(anchor.kind, "anchored");
+    const visual = f.native.ydoc.getMap("visuals").get(f.id);
+    const adjacent = () => [-1, 0].map(assoc => createRelativePositionFromTypeIndex(visual, offset, assoc).item);
+    const before = adjacent();
+    assert.ok(before.every(id => id !== null));
+    setCellSelection(f.editor(), offset);
+    beginComposition(f.target, "X");
+    written(f.peer.commands.removeRows([f.id]));
+    send(f.peer, f.native);
+    composition(f.target, "end", "X");
+    written(f.peer.commands.undo());
+    const peerVisual = f.peer.ydoc.getMap("visuals").get(f.id);
+    const index = side === "left" ? offset - 1 : offset;
+    const identical = peerVisual.toString()[index];
+    f.peer.ydoc.transact(() => {
+      peerVisual.delete(index, 1);
+      peerVisual.insert(index, identical);
+    });
+    send(f.peer, f.native);
+    assert.equal(f.native.ydoc.getMap("visuals").get(f.id), visual);
+    const after = adjacent();
+    assert.deepEqual(before.map((id, i) => compareIDs(id, after[i])),
+      side === "left" ? [false, true] : [true, false]);
+    const point = { target, offset };
+    assert.deepEqual(f.native.resolveTextSelection(anchor.range), { anchor: point, head: point });
+    assert.equal(f.native.document().rows.find(row => row.id === f.id).visualText, "Scene");
+    rejectCompositionLeave(t, f, "ScXene", offset + 1);
+  });
+}
+
+function rejectCompositionLeave(t, f, preview, offset) {
+  const shared = structuredClone(currentDocument()), bytes = f.native.encodeState(), updates = [];
+  t.after(f.native.subscribeLocalUpdates(update => updates.push(update)));
+  assert.deepEqual(f.native.document(), f.peer.document());
+  for (let attempt = 0; attempt < 2; attempt++) {
+    assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: "missing" });
+    assert.equal(sharedSession(), true);
+    assert.deepEqual(currentDocument(), shared);
+    assert.deepEqual(f.native.encodeState(), bytes);
+    assert.deepEqual(updates, []);
+    assert.deepEqual(reasons(f), ["missing"]);
+    assert.equal(f.editor().innerHTML, preview);
+    assert.equal(document.activeElement, f.editor());
+    assert.deepEqual(cellSelection(f.editor()), { from: offset, to: offset });
+  }
+}
+
+for (const recreated of [false, true]) {
+  test(`Split composition Leave distinguishes a ${recreated ? "recreated" : "restored"} Visual container at the same beat ID`, async t => {
+    const f = await enter(t, "Split", "visual");
+    const target = { beat: f.id, cell: "visual" }, offset = 5;
+    const map = f.native.ydoc.getMap("visuals"), visual = map.get(f.id);
+    const identity = createRelativePositionFromTypeIndex(visual, offset);
+    const originalAnchor = f.native.commands.anchorText(target, offset);
+    assert.equal(originalAnchor.kind, "anchored");
+    const sharedId = currentDocument().docId;
+    setCellSelection(f.editor(), offset);
+    beginComposition(f.target, "X");
+    written(f.peer.commands.removeRows([f.id]));
+    send(f.peer, f.native);
+    composition(f.target, "end", "X");
+    written(f.peer.commands.undo());
+    if (recreated) f.peer.ydoc.getMap("visuals").set(f.id, new YText("Scene"));
+    send(f.peer, f.native);
+    const live = map.get(f.id);
+    assert.equal(live === visual, !recreated);
+    assert.equal(compareRelativePositions(identity, createRelativePositionFromTypeIndex(live, offset)), !recreated);
+    assert.equal(f.native.document().rows.find(row => row.id === f.id).visualText, "Scene");
+    assert.equal(f.editor().innerHTML, "SceneX");
+    if (recreated) {
+      assert.equal(f.native.resolveTextSelection(originalAnchor.range), null);
+      rejectCompositionLeave(t, f, "SceneX", offset + 1);
+      return;
+    }
+    const point = { target, offset };
+    assert.deepEqual(f.native.resolveTextSelection(originalAnchor.range), { anchor: point, head: point });
+    const packets = [];
+    t.after(f.native.subscribeLocalUpdates(bytes => packets.push(bytes)));
+    assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+    assert.equal(packets.length, 1);
+    assert.equal(applyNativePeerUpdate(f.peer, packets[0]), true);
+    assert.notEqual(currentDocument().docId, sharedId);
+    assert.deepEqual(currentDocument(), { ...f.peer.document(), docId: currentDocument().docId });
+    assert.equal(f.peer.document().rows.find(row => row.id === f.id).visualText, "SceneX");
+    assert.deepEqual(reasons(f), ["missing"]);
+    assert.equal(sharedSession(), false);
+  });
+}
+
+test("a successful composition retry emits one update even if the first Leave cannot land", async t => {
+  const f = await enter(t, "Split", "narration", "live", true);
+  const original = currentDocument().docId, reader = clone(f.native, t), updates = [];
+  t.after(f.native.subscribeLocalUpdates(update => updates.push(update)));
+  setCellSelection(f.editor(), 5);
+  beginComposition(f.target, "X");
+  written(f.peer.commands.removeRows([f.id]));
+  send(f.peer, f.native);
+  composition(f.target, "end", "X");
+  for (let attempt = 0; attempt < 2; attempt++) {
+    assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: "missing" });
+    assert.equal(sharedSession(), true);
+    assert.equal(updates.length, 0);
+    assert.deepEqual(reasons(f), ["missing"]);
+  }
+  written(f.peer.commands.undo());
+  send(f.peer, f.native);
+  assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: "leave-failed" });
+  assert.equal(sharedSession(), true);
+  assert.equal(f.native.isClosingOrClosed(), false);
+  assert.equal(updates.length, 1);
+  assert.equal(applyNativePeerUpdate(f.peer, updates[0]), true);
+  send(f.peer, reader);
+  const committed = structuredClone(currentDocument());
+  assert.equal(committed.rows.find(row => row.id === f.id).audioText, "WorldX");
+  assert.deepEqual(committed, f.peer.document());
+  assert.deepEqual(committed, reader.document());
+  assert.deepEqual(reasons(f), ["missing"]);
+  assert.equal(f.errors.length, 1);
+  assert.match(f.errors[0].message, /could not capture/);
+  assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+  assert.equal(updates.length, 1);
+  assert.equal(sharedSession(), false);
+  assert.equal(f.native.isClosingOrClosed(), true);
+  assert.notEqual(currentDocument().docId, original);
+  assert.deepEqual(currentDocument(), { ...committed, docId: currentDocument().docId });
+  assert.equal(text(f.editor()), "WorldX");
+});
 
 function peerChange(t, { native, peer, id }, state) {
   if (state === "hidden") {

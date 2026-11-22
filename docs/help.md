@@ -9,6 +9,11 @@ Scripts save as plain Markdown (`.md`) you can open anywhere, or as
 `.splitpage` files. Splitpage runs in a browser or as a
 [desktop app](#desktop-app) for Windows.
 
+## What's new since 0.4.3
+
+- **Leaving a shared edit.** If a co-writer restores a beat that was removed during your
+  composition, Leave retries the pending text when its original edit range is still valid.
+
 ## What's new in 0.4.3
 
 The instructions below describe this release.
