@@ -118,9 +118,9 @@ export function mountWriterRuntimeFeature() {
             if (initialized.kind === "failed") throw initialized.error;
           }
           let dismissedGhost: typeof tagGhost = null;
-          let nativePaint: ReturnType<typeof bindNativeWriterPaint>;
+          const nativePaint: { binding?: ReturnType<typeof bindNativeWriterPaint> } = {};
           const flow = createFlowWriter({
-            ...(nativeEditorActive() ? { nativeHeadingCandidate: (beat: string) => nativePaint?.headingCandidate(beat) ?? false } : {}),
+            ...(nativeEditorActive() ? { nativeHeadingCandidate: (beat: string) => nativePaint.binding?.headingCandidate(beat) ?? false } : {}),
             openFind: () => { actions.invoke("find", "shortcut"); },
             closeFind: () => { actions.invoke("find", "button", "close"); },
             pictures,
@@ -235,7 +235,7 @@ export function mountWriterRuntimeFeature() {
           });
           const binding = bindNativeWriterPaint(root);
           if (!binding) return flow;
-          nativePaint = binding;
+          nativePaint.binding = binding;
           return { ...flow, settle: () => binding.settle() && flow.settle?.() !== false, finish: () => {
             binding.finish();
             return flow.finish();
