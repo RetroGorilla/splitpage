@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { test, before, after } from "node:test";
 import { openNativeEditor } from "../../src/bootstrap/wiring/native-shared-session.ts";
-import { adoptReplacement, currentDocument, liveSession, mergeBase, onDocumentReplaced, onRefresh, onSessionChange, runCommand, sessionEntryRefusal, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
+import { adoptReplacement, currentDocument, holdSessionCommands, liveSession, mergeBase, onDocumentReplaced, onRefresh, onSessionChange, runCommand, sessionEntryRefusal, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
 import { enterSharedSession, forceLeaveSharedSession, leaveRunningSharedSession, leaveSharedSession,
   nativeEditorActive, nativeEditorRecords, SHARED_NOT_RUNNING, SHARED_SWITCHING } from "../../src/bootstrap/wiring/shared-session.ts";
 import type { SharedEditorBackend, SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
@@ -436,6 +436,22 @@ test("leaving unsubscribes the bridge before the queued update and closes the na
   await Promise.resolve();
   assert.equal(backend.replica.revision(), revision);
   assert.equal(native.ydoc.isDestroyed, true);
+});
+
+test("C8 entry-only holds admit settlement commands and retain an enclosing command refusal", () => {
+  entrySwitchFixture();
+  const entry = holdSessionCommands(SHARED_SWITCHING, "entries");
+  try {
+    assert.equal(sessionEntryRefusal(), SHARED_SWITCHING);
+    assert.equal(runCommand(titleCommand("Settled title")).kind, "applied");
+  } finally { entry(); }
+  const outer = holdSessionCommands("outer-command"), inner = holdSessionCommands(SHARED_SWITCHING, "entries");
+  try {
+    assert.deepEqual(runCommand(titleCommand("Refused title")), { kind: "rejected", reason: "outer-command" });
+    assert.equal(sessionEntryRefusal(), SHARED_SWITCHING);
+    inner(); assert.equal(sessionEntryRefusal(), "outer-command");
+  } finally { inner(); outer(); }
+  assert.equal(sessionEntryRefusal(), null);
 });
 
 test("nested native switches cannot replace the entry or leave hold", async t => {

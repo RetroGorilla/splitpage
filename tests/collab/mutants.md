@@ -746,9 +746,9 @@ abandonment: the selection-visual edit is not registered | src/bootstrap/wiring/
 abandonment: an abandoned selection-visual box still saves on close | src/features/writer/flow-visual-box.ts: the save ignores discarded | tests/features/writer/visual-buffer.test.ts | tests/collab/composition-mutants.json
 drop: a dropped session never releases its surfaces | src/bootstrap/wiring/shared-session.ts: dropRunning skips backend.drop | tests/bootstrap/shared-switch.test.ts: a forced leave that still cannot land; src/test/shared-native-handoff-app.test.mjs: app stop when both leave attempts are blocked | tests/collab/composition-mutants.json
 drop: a released buffered field still refuses to finish | src/application/editing/buffered-field.ts: finish ignores released | tests/application/editing/buffered-field.test.ts: rule 166 | tests/collab/composition-mutants.json
-entry facade ignores the running session | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/shared-switch.test.ts | tests/collab/shared-entry-mutants.json
-foreign leave ports replace the entry-owned bindings | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/shared-switch.test.ts | tests/collab/shared-entry-mutants.json
-shared entry ignores pending openings | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/shared-switch.test.ts | tests/collab/shared-entry-mutants.json
+entry facade ignores the running session | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/native-shared-entry.test.ts | tests/collab/shared-entry-mutants.json
+foreign leave ports replace the entry-owned bindings | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/native-shared-entry.test.ts | tests/collab/shared-entry-mutants.json
+shared entry ignores pending openings | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/native-shared-entry.test.ts | tests/collab/shared-entry-mutants.json
 opening capture never becomes pending | src/bootstrap/wiring/transition-owners.ts | tests/bootstrap/shared-ports-transitions.test.ts | tests/collab/shared-entry-mutants.json
 opening completion leaves its token pending | src/bootstrap/wiring/transition-owners.ts | tests/bootstrap/shared-ports-transitions.test.ts | tests/collab/shared-entry-mutants.json
 synchronous opening leaves its token pending | src/bootstrap/wiring/transition-owners.ts | tests/bootstrap/shared-ports-transitions.test.ts | tests/collab/shared-entry-mutants.json
@@ -790,13 +790,13 @@ creation forgets separator register ownership | src/adapters/collab/creation-ret
 creation rechecks invalidated markers for born formatting | src/adapters/collab/creation-observation-cache.ts: typing a formatted character rebuilds a known mismatch | tests/adapters/collab/creation-undo-cost.test.ts: creation retirement typing cost: R1, unrelated=0 | tests/collab/creation-undo-mutants.json
 admit when the owner is standalone during enter | src/bootstrap/wiring/ports/capabilities.ts | tests/bootstrap/shared-entry-switch-enter.test.ts | tests/collab/shared-entry-mutants.json
 admit when the owner is standalone during leave | src/bootstrap/wiring/ports/capabilities.ts | tests/bootstrap/shared-entry-switch-leave-new.test.ts, tests/bootstrap/shared-entry-switch-leave-open.test.ts | tests/collab/shared-entry-mutants.json
-entry-only scope blocks settlement commands | src/bootstrap/wiring/session-owner.ts | tests/bootstrap/shared-switch.test.ts | tests/collab/shared-entry-mutants.json
-entry-only scope hides the enclosing command refusal | src/bootstrap/wiring/session-owner.ts | tests/bootstrap/shared-switch.test.ts | tests/collab/shared-entry-mutants.json
+entry-only scope blocks settlement commands | src/bootstrap/wiring/session-owner.ts | tests/bootstrap/native-shared-entry.test.ts | tests/collab/shared-entry-mutants.json
+entry-only scope hides the enclosing command refusal | src/bootstrap/wiring/session-owner.ts | tests/bootstrap/native-shared-entry.test.ts | tests/collab/shared-entry-mutants.json
 entry admission forgets the active command hold | src/bootstrap/wiring/session-owner.ts | tests/bootstrap/shared-entry-switch-enter.test.ts | tests/collab/shared-entry-mutants.json
 enter leaves settlement outside its entry scope | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/shared-entry-switch-enter.test.ts | tests/collab/shared-entry-mutants.json
 leave leaves binding settlement outside its entry scope | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/shared-entry-switch-leave-new.test.ts, tests/bootstrap/shared-entry-switch-leave-open.test.ts | tests/collab/shared-entry-mutants.json
-enter admits a nested switch into its scope | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/shared-switch.test.ts | tests/collab/shared-entry-mutants.json
-leave admits a nested switch into its scope | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/shared-switch.test.ts | tests/collab/shared-entry-mutants.json
+enter admits a nested switch into its scope | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/native-shared-entry.test.ts | tests/collab/shared-entry-mutants.json
+leave admits a nested switch into its scope | src/bootstrap/wiring/shared-session.ts | tests/bootstrap/native-shared-entry.test.ts | tests/collab/shared-entry-mutants.json
 automatic resume ignores the switch hold while standalone | src/bootstrap/wiring/ports/capabilities.ts | tests/bootstrap/shared-entry-switch-auto.test.ts | tests/collab/shared-entry-mutants.json
 recover bypasses the hold | src/bootstrap/wiring/transition-owners.ts | tests/bootstrap/shared-entry-inventory-enter.test.ts | tests/collab/shared-entry-mutants.json
 restore bypasses the hold | src/bootstrap/wiring/transition-owners.ts | tests/bootstrap/shared-entry-inventory-enter.test.ts | tests/collab/shared-entry-mutants.json
