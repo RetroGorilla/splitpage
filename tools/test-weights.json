@@ -692,7 +692,6 @@
   "tests/bootstrap/video-files.test.ts": 1071,
   "tests/bootstrap/wiring.test.ts": 15171,
   "tests/collab/agreement.test.ts": 199,
-  "tests/collab/broll-keying.test.ts": 62977,
   "tests/collab/broll-text-records.test.ts": 1719,
   "tests/collab/buffer-commit.test.ts": 1099,
   "tests/collab/buffer-generator.test.ts": 2137,

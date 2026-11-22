@@ -2,6 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { sharedBrollKeying, sharedBrollRepeats } from "../../../src/core/collab/broll-keying.ts";
 import type { BrollState } from "../../../src/core/production/broll.ts";
+import { toHtml } from "../../../src/core/text/html.ts";
+import type { Run } from "../../../src/core/text/runs.ts";
 import { bufferReaders } from "../../collab/buffer-readers.ts";
 
 const AUTHOR = { id: "w1_1", by: "Alice" };
@@ -94,4 +96,29 @@ test("cleanup keeps a dropped key's shot while another line in the script holds 
   const other = bufferReaders.cellOf(KEY("bs_later") + " Elsewhere");
   const result = sharedBrollRepeats({ rowId: "R1", cell }, ["bs_first", "bs_later"], AUTHOR, [other], () => true);
   assert.deepEqual(result?.map(operation => operation.kind), ["text-delete"]);
+});
+
+test("repeat cleanup drops the later key even when its author performs the cleanup", () => {
+  const first = "bs_w1_1_0", later = "bs_w2_1_0";
+  const cell = bufferReaders.cellOf(KEY(first) + KEY(later) + " Close up");
+  for (const author of [AUTHOR, { id: "w2_1", by: "Bob" }]) {
+    const operations = sharedBrollRepeats({ rowId: "R1", cell }, [first, later], author, [], () => true);
+    assert.deepEqual(operations?.flatMap(operation => operation.kind === "text-delete" ? operation.observed : []),
+      ['["flow-base","R1","visualText",1,2]']);
+    assert.deepEqual(operations?.flatMap(operation => operation.kind === "record-delete" ? [operation.target.record] : []), [later]);
+  }
+});
+
+test("marker replacement leaves a preceding image, video, or person outside the observed deletion", () => {
+  const atoms: Run[] = [
+    { atom: "image", ref: { sha256: "a".repeat(64), mime: "image/png", width: 1, height: 1 }, text: "", marks: {} },
+    { atom: "video", href: "https://example.com/clip.mp4", host: "example.com", text: "", marks: {} },
+    { atom: "who", name: "Bob", text: "@Bob", marks: {} }
+  ];
+  for (const atom of atoms) {
+    const result = keyed(toHtml([atom, { text: "B-roll: Close up", marks: {} }]));
+    assert.deepEqual(result?.operations.flatMap(operation => operation.kind === "text-delete" ? operation.observed : []),
+      ['["flow-base","R1","visualText",1,8]'], atom.atom);
+    assert.deepEqual(result?.keys, ["bs_w1_1_0"], atom.atom);
+  }
 });
