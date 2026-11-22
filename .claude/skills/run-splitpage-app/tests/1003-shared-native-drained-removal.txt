@@ -1,0 +1,171 @@
+open
+wait document.querySelectorAll('#rows .row').length>0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.P=S.nativePeer;window.json=JSON.stringify;window.load=title=>F.openFile(new File([JSON.stringify({schema:2,title,paragraphsDecided:true,rows:[{id:'r1',audioText:'abcdef',visualText:'abcdef'},{id:'r2',audioText:'other',visualText:'other'}]})],'drained-removal.splitpage'));window.cell=(id,f)=>document.querySelector('#rows .cell-editable[data-id="'+id+'"][data-field="'+f+'"]');window.paint=(id,f)=>cell(id,f)?.textContent.replace(/\u200b/g,'')??null;window.at=offset=>{const c=cell('r1',field);c.focus();getSelection().collapse(c.firstChild,offset);return true};window.caret=offset=>{const c=cell('r1',field),s=getSelection();return c.checkVisibility()&&document.activeElement===c&&s.isCollapsed&&c.contains(s.focusNode)&&s.focusOffset===offset};window.warn=()=>[...document.querySelectorAll('#toast-host .toast.warn:not(.is-leaving)')].map(t=>t.textContent);window.refused=()=>json(warn())===json(['This is not available in a shared session yet.']);window.replay=(order,direction)=>{const queued=P.queuedUpdates();const expected=order==='reverse'?[...queued].reverse():order==='duplicate'?queued.flatMap(packet=>[packet,packet]):queued;return queued.length>0&&queued.every(packet=>packet.to===direction&&packet.bytes.length>0)&&json(P.drain(order,direction))===json(expected)&&P.queuedUpdates().length===0};window.same=()=>json(S.read().app)===json(S.read().peer);window.currentCopies=()=>json(P.readLateReader())===json(P.freshSnapshot('app'))&&json(P.readLateReader())===json(P.freshSnapshot('peer'))&&json(P.readLateReader())===json(S.read().peer);true
+
+eval document.querySelectorAll('#toast-host .toast').forEach(t=>t.dismiss());window.field='audioText';window.offset=6;window.order='forward';load('Drained audioText forward')
+wait F.state().title==='Drained audioText forward'&&warn().length===0
+eval window.originalId=F.state().docId;S.enter()
+wait same()
+eval P.hold('updates');window.first=P.type('r2',0,'P');window.second=P.type('r2',1,'Q');true
+expect first.kind==='written'&&second.kind==='written'&&P.queuedUpdates().length===2&&replay(order,'app')&&json(P.release('forward'))==='[]'
+wait same()&&paint('r2','audioText')==='PQother'
+eval window.base=S.read().app;window.preview='abcdef'.slice(0,offset)+'X'+'abcdef'.slice(offset);P.seedReader();P.hold('updates');at(offset)
+ime set X
+eval window.removed=P.removeBeat('r1');window.edit=P.type('r2',0,'Z');true
+expect removed.kind==='written'&&edit.kind==='written'&&P.queuedUpdates().length===2&&S.read().peer.rows.length===1&&S.read().peer.rows[0].audioText==='ZPQother'
+expect replay(order,'app')&&json(S.read().app)===json(base)&&paint('r1',field)===preview&&paint('r2','audioText')==='PQother'&&caret(offset+1)&&warn().length===0
+ime commit X
+expect P.queuedUpdates().length===0&&json(S.read().app)===json(base)&&paint('r1',field)===preview&&caret(offset+1)&&refused()
+expect json(P.readLateReader())===json(base)&&P.deliverToReader('app')&&currentCopies()&&P.readLateReader().rows[0].audioText==='ZPQother'
+eval window.blocked=S.leave();true
+expect !blocked.ok&&blocked.reason==='missing'&&P.queuedUpdates().length===0&&refused()&&paint('r1',field)===preview&&caret(offset+1)
+eval window.undidTyping=P.undoPeer();window.undidRemoval=P.undoPeer();window.reapplied=P.type('r2',0,'Z');true
+expect undidTyping.kind==='written'&&undidRemoval.kind==='written'&&reapplied.kind==='written'&&P.queuedUpdates().length===3
+expect replay('forward','app')&&json(P.release('forward'))==='[]'
+expect S.read().peer.rows.map(row=>row.id).join(',')==='r1,r2'&&S.read().peer.rows[0][field]==='abcdef'&&S.read().peer.rows[1].audioText==='ZPQother'
+expect P.readLateReader().rows.length===1&&P.deliverToReader('peer')&&currentCopies()
+expect json(S.read().app)===json(base)&&paint('r1',field)===preview&&caret(offset+1)&&refused()
+eval window.restoredDoc=S.read().peer;window.left=S.leave();true
+expect left.ok&&S.read().peer===null&&P.readLateReader()===null&&P.freshSnapshot('app')===null&&P.freshSnapshot('peer')===null&&P.deliverToReader('app')===false
+expect F.state().docId!==restoredDoc.docId&&F.state().docId!==originalId&&json({...F.state(),docId:restoredDoc.docId,rows:[{...F.state().rows[0],updatedAt:restoredDoc.rows[0].updatedAt,updatedBy:restoredDoc.rows[0].updatedBy},F.state().rows[1]]})===json({...restoredDoc,rows:[{...restoredDoc.rows[0],[field]:preview},restoredDoc.rows[1]]})
+expect paint('r1',field)===preview&&paint('r2','audioText')==='ZPQother'&&paint('r2','visualText')==='other'&&caret(offset+1)&&refused()
+
+eval document.querySelectorAll('#toast-host .toast').forEach(t=>t.dismiss());window.field='audioText';window.offset=6;window.order='reverse';load('Drained audioText reverse')
+wait F.state().title==='Drained audioText reverse'&&warn().length===0
+eval window.originalId=F.state().docId;S.enter()
+wait same()
+eval P.hold('updates');window.first=P.type('r2',0,'P');window.second=P.type('r2',1,'Q');true
+expect first.kind==='written'&&second.kind==='written'&&P.queuedUpdates().length===2&&replay(order,'app')&&json(P.release('forward'))==='[]'
+wait same()&&paint('r2','audioText')==='PQother'
+eval window.base=S.read().app;window.preview='abcdef'.slice(0,offset)+'X'+'abcdef'.slice(offset);P.seedReader();P.hold('updates');at(offset)
+ime set X
+eval window.removed=P.removeBeat('r1');window.edit=P.type('r2',0,'Z');true
+expect removed.kind==='written'&&edit.kind==='written'&&P.queuedUpdates().length===2&&S.read().peer.rows.length===1&&S.read().peer.rows[0].audioText==='ZPQother'
+expect replay(order,'app')&&json(S.read().app)===json(base)&&paint('r1',field)===preview&&paint('r2','audioText')==='PQother'&&caret(offset+1)&&warn().length===0
+ime commit X
+expect P.queuedUpdates().length===0&&json(S.read().app)===json(base)&&paint('r1',field)===preview&&caret(offset+1)&&refused()
+expect json(P.readLateReader())===json(base)&&P.deliverToReader('app')&&currentCopies()&&P.readLateReader().rows[0].audioText==='ZPQother'
+eval window.blocked=S.leave();true
+expect !blocked.ok&&blocked.reason==='missing'&&P.queuedUpdates().length===0&&refused()&&paint('r1',field)===preview&&caret(offset+1)
+eval window.undidTyping=P.undoPeer();window.undidRemoval=P.undoPeer();window.reapplied=P.type('r2',0,'Z');true
+expect undidTyping.kind==='written'&&undidRemoval.kind==='written'&&reapplied.kind==='written'&&P.queuedUpdates().length===3
+expect replay('forward','app')&&json(P.release('forward'))==='[]'
+expect S.read().peer.rows.map(row=>row.id).join(',')==='r1,r2'&&S.read().peer.rows[0][field]==='abcdef'&&S.read().peer.rows[1].audioText==='ZPQother'
+expect P.readLateReader().rows.length===1&&P.deliverToReader('peer')&&currentCopies()
+expect json(S.read().app)===json(base)&&paint('r1',field)===preview&&caret(offset+1)&&refused()
+eval window.restoredDoc=S.read().peer;window.left=S.leave();true
+expect left.ok&&S.read().peer===null&&P.readLateReader()===null&&P.freshSnapshot('app')===null&&P.freshSnapshot('peer')===null&&P.deliverToReader('app')===false
+expect F.state().docId!==restoredDoc.docId&&F.state().docId!==originalId&&json({...F.state(),docId:restoredDoc.docId,rows:[{...F.state().rows[0],updatedAt:restoredDoc.rows[0].updatedAt,updatedBy:restoredDoc.rows[0].updatedBy},F.state().rows[1]]})===json({...restoredDoc,rows:[{...restoredDoc.rows[0],[field]:preview},restoredDoc.rows[1]]})
+expect paint('r1',field)===preview&&paint('r2','audioText')==='ZPQother'&&paint('r2','visualText')==='other'&&caret(offset+1)&&refused()
+
+eval document.querySelectorAll('#toast-host .toast').forEach(t=>t.dismiss());window.field='audioText';window.offset=6;window.order='duplicate';load('Drained audioText duplicate')
+wait F.state().title==='Drained audioText duplicate'&&warn().length===0
+eval window.originalId=F.state().docId;S.enter()
+wait same()
+eval P.hold('updates');window.first=P.type('r2',0,'P');window.second=P.type('r2',1,'Q');true
+expect first.kind==='written'&&second.kind==='written'&&P.queuedUpdates().length===2&&replay(order,'app')&&json(P.release('forward'))==='[]'
+wait same()&&paint('r2','audioText')==='PQother'
+eval window.base=S.read().app;window.preview='abcdef'.slice(0,offset)+'X'+'abcdef'.slice(offset);P.seedReader();P.hold('updates');at(offset)
+ime set X
+eval window.removed=P.removeBeat('r1');window.edit=P.type('r2',0,'Z');true
+expect removed.kind==='written'&&edit.kind==='written'&&P.queuedUpdates().length===2&&S.read().peer.rows.length===1&&S.read().peer.rows[0].audioText==='ZPQother'
+expect replay(order,'app')&&json(S.read().app)===json(base)&&paint('r1',field)===preview&&paint('r2','audioText')==='PQother'&&caret(offset+1)&&warn().length===0
+ime commit X
+expect P.queuedUpdates().length===0&&json(S.read().app)===json(base)&&paint('r1',field)===preview&&caret(offset+1)&&refused()
+expect json(P.readLateReader())===json(base)&&P.deliverToReader('app')&&currentCopies()&&P.readLateReader().rows[0].audioText==='ZPQother'
+eval window.blocked=S.leave();true
+expect !blocked.ok&&blocked.reason==='missing'&&P.queuedUpdates().length===0&&refused()&&paint('r1',field)===preview&&caret(offset+1)
+eval window.undidTyping=P.undoPeer();window.undidRemoval=P.undoPeer();window.reapplied=P.type('r2',0,'Z');true
+expect undidTyping.kind==='written'&&undidRemoval.kind==='written'&&reapplied.kind==='written'&&P.queuedUpdates().length===3
+expect replay('forward','app')&&json(P.release('forward'))==='[]'
+expect S.read().peer.rows.map(row=>row.id).join(',')==='r1,r2'&&S.read().peer.rows[0][field]==='abcdef'&&S.read().peer.rows[1].audioText==='ZPQother'
+expect P.readLateReader().rows.length===1&&P.deliverToReader('peer')&&currentCopies()
+expect json(S.read().app)===json(base)&&paint('r1',field)===preview&&caret(offset+1)&&refused()
+eval window.restoredDoc=S.read().peer;window.left=S.leave();true
+expect left.ok&&S.read().peer===null&&P.readLateReader()===null&&P.freshSnapshot('app')===null&&P.freshSnapshot('peer')===null&&P.deliverToReader('app')===false
+expect F.state().docId!==restoredDoc.docId&&F.state().docId!==originalId&&json({...F.state(),docId:restoredDoc.docId,rows:[{...F.state().rows[0],updatedAt:restoredDoc.rows[0].updatedAt,updatedBy:restoredDoc.rows[0].updatedBy},F.state().rows[1]]})===json({...restoredDoc,rows:[{...restoredDoc.rows[0],[field]:preview},restoredDoc.rows[1]]})
+expect paint('r1',field)===preview&&paint('r2','audioText')==='ZPQother'&&paint('r2','visualText')==='other'&&caret(offset+1)&&refused()
+
+eval document.querySelectorAll('#toast-host .toast').forEach(t=>t.dismiss());window.field='visualText';window.offset=3;window.order='forward';load('Drained visualText forward')
+wait F.state().title==='Drained visualText forward'&&warn().length===0
+eval window.originalId=F.state().docId;S.enter()
+wait same()
+eval P.hold('updates');window.first=P.type('r2',0,'P');window.second=P.type('r2',1,'Q');true
+expect first.kind==='written'&&second.kind==='written'&&P.queuedUpdates().length===2&&replay(order,'app')&&json(P.release('forward'))==='[]'
+wait same()&&paint('r2','audioText')==='PQother'
+eval window.base=S.read().app;window.preview='abcdef'.slice(0,offset)+'X'+'abcdef'.slice(offset);P.seedReader();P.hold('updates');at(offset)
+ime set X
+eval window.removed=P.removeBeat('r1');window.edit=P.type('r2',0,'Z');true
+expect removed.kind==='written'&&edit.kind==='written'&&P.queuedUpdates().length===2&&S.read().peer.rows.length===1&&S.read().peer.rows[0].audioText==='ZPQother'
+expect replay(order,'app')&&json(S.read().app)===json(base)&&paint('r1',field)===preview&&paint('r2','audioText')==='PQother'&&caret(offset+1)&&warn().length===0
+ime commit X
+expect P.queuedUpdates().length===0&&json(S.read().app)===json(base)&&paint('r1',field)===preview&&caret(offset+1)&&refused()
+expect json(P.readLateReader())===json(base)&&P.deliverToReader('app')&&currentCopies()&&P.readLateReader().rows[0].audioText==='ZPQother'
+eval window.blocked=S.leave();true
+expect !blocked.ok&&blocked.reason==='missing'&&P.queuedUpdates().length===0&&refused()&&paint('r1',field)===preview&&caret(offset+1)
+eval window.undidTyping=P.undoPeer();window.undidRemoval=P.undoPeer();window.reapplied=P.type('r2',0,'Z');true
+expect undidTyping.kind==='written'&&undidRemoval.kind==='written'&&reapplied.kind==='written'&&P.queuedUpdates().length===3
+expect replay('forward','app')&&json(P.release('forward'))==='[]'
+expect S.read().peer.rows.map(row=>row.id).join(',')==='r1,r2'&&S.read().peer.rows[0][field]==='abcdef'&&S.read().peer.rows[1].audioText==='ZPQother'
+expect P.readLateReader().rows.length===1&&P.deliverToReader('peer')&&currentCopies()
+expect json(S.read().app)===json(base)&&paint('r1',field)===preview&&caret(offset+1)&&refused()
+eval window.restoredDoc=S.read().peer;window.left=S.leave();true
+expect left.ok&&S.read().peer===null&&P.readLateReader()===null&&P.freshSnapshot('app')===null&&P.freshSnapshot('peer')===null&&P.deliverToReader('app')===false
+expect F.state().docId!==restoredDoc.docId&&F.state().docId!==originalId&&json({...F.state(),docId:restoredDoc.docId,rows:[{...F.state().rows[0],updatedAt:restoredDoc.rows[0].updatedAt,updatedBy:restoredDoc.rows[0].updatedBy},F.state().rows[1]]})===json({...restoredDoc,rows:[{...restoredDoc.rows[0],[field]:preview},restoredDoc.rows[1]]})
+expect paint('r1',field)===preview&&paint('r2','audioText')==='ZPQother'&&paint('r2','visualText')==='other'&&caret(offset+1)&&refused()
+
+eval document.querySelectorAll('#toast-host .toast').forEach(t=>t.dismiss());window.field='visualText';window.offset=3;window.order='reverse';load('Drained visualText reverse')
+wait F.state().title==='Drained visualText reverse'&&warn().length===0
+eval window.originalId=F.state().docId;S.enter()
+wait same()
+eval P.hold('updates');window.first=P.type('r2',0,'P');window.second=P.type('r2',1,'Q');true
+expect first.kind==='written'&&second.kind==='written'&&P.queuedUpdates().length===2&&replay(order,'app')&&json(P.release('forward'))==='[]'
+wait same()&&paint('r2','audioText')==='PQother'
+eval window.base=S.read().app;window.preview='abcdef'.slice(0,offset)+'X'+'abcdef'.slice(offset);P.seedReader();P.hold('updates');at(offset)
+ime set X
+eval window.removed=P.removeBeat('r1');window.edit=P.type('r2',0,'Z');true
+expect removed.kind==='written'&&edit.kind==='written'&&P.queuedUpdates().length===2&&S.read().peer.rows.length===1&&S.read().peer.rows[0].audioText==='ZPQother'
+expect replay(order,'app')&&json(S.read().app)===json(base)&&paint('r1',field)===preview&&paint('r2','audioText')==='PQother'&&caret(offset+1)&&warn().length===0
+ime commit X
+expect P.queuedUpdates().length===0&&json(S.read().app)===json(base)&&paint('r1',field)===preview&&caret(offset+1)&&refused()
+expect json(P.readLateReader())===json(base)&&P.deliverToReader('app')&&currentCopies()&&P.readLateReader().rows[0].audioText==='ZPQother'
+eval window.blocked=S.leave();true
+expect !blocked.ok&&blocked.reason==='missing'&&P.queuedUpdates().length===0&&refused()&&paint('r1',field)===preview&&caret(offset+1)
+eval window.undidTyping=P.undoPeer();window.undidRemoval=P.undoPeer();window.reapplied=P.type('r2',0,'Z');true
+expect undidTyping.kind==='written'&&undidRemoval.kind==='written'&&reapplied.kind==='written'&&P.queuedUpdates().length===3
+expect replay('forward','app')&&json(P.release('forward'))==='[]'
+expect S.read().peer.rows.map(row=>row.id).join(',')==='r1,r2'&&S.read().peer.rows[0][field]==='abcdef'&&S.read().peer.rows[1].audioText==='ZPQother'
+expect P.readLateReader().rows.length===1&&P.deliverToReader('peer')&&currentCopies()
+expect json(S.read().app)===json(base)&&paint('r1',field)===preview&&caret(offset+1)&&refused()
+eval window.restoredDoc=S.read().peer;window.left=S.leave();true
+expect left.ok&&S.read().peer===null&&P.readLateReader()===null&&P.freshSnapshot('app')===null&&P.freshSnapshot('peer')===null&&P.deliverToReader('app')===false
+expect F.state().docId!==restoredDoc.docId&&F.state().docId!==originalId&&json({...F.state(),docId:restoredDoc.docId,rows:[{...F.state().rows[0],updatedAt:restoredDoc.rows[0].updatedAt,updatedBy:restoredDoc.rows[0].updatedBy},F.state().rows[1]]})===json({...restoredDoc,rows:[{...restoredDoc.rows[0],[field]:preview},restoredDoc.rows[1]]})
+expect paint('r1',field)===preview&&paint('r2','audioText')==='ZPQother'&&paint('r2','visualText')==='other'&&caret(offset+1)&&refused()
+
+eval document.querySelectorAll('#toast-host .toast').forEach(t=>t.dismiss());window.field='visualText';window.offset=3;window.order='duplicate';load('Drained visualText duplicate')
+wait F.state().title==='Drained visualText duplicate'&&warn().length===0
+eval window.originalId=F.state().docId;S.enter()
+wait same()
+eval P.hold('updates');window.first=P.type('r2',0,'P');window.second=P.type('r2',1,'Q');true
+expect first.kind==='written'&&second.kind==='written'&&P.queuedUpdates().length===2&&replay(order,'app')&&json(P.release('forward'))==='[]'
+wait same()&&paint('r2','audioText')==='PQother'
+eval window.base=S.read().app;window.preview='abcdef'.slice(0,offset)+'X'+'abcdef'.slice(offset);P.seedReader();P.hold('updates');at(offset)
+ime set X
+eval window.removed=P.removeBeat('r1');window.edit=P.type('r2',0,'Z');true
+expect removed.kind==='written'&&edit.kind==='written'&&P.queuedUpdates().length===2&&S.read().peer.rows.length===1&&S.read().peer.rows[0].audioText==='ZPQother'
+expect replay(order,'app')&&json(S.read().app)===json(base)&&paint('r1',field)===preview&&paint('r2','audioText')==='PQother'&&caret(offset+1)&&warn().length===0
+ime commit X
+expect P.queuedUpdates().length===0&&json(S.read().app)===json(base)&&paint('r1',field)===preview&&caret(offset+1)&&refused()
+expect json(P.readLateReader())===json(base)&&P.deliverToReader('app')&&currentCopies()&&P.readLateReader().rows[0].audioText==='ZPQother'
+eval window.blocked=S.leave();true
+expect !blocked.ok&&blocked.reason==='missing'&&P.queuedUpdates().length===0&&refused()&&paint('r1',field)===preview&&caret(offset+1)
+eval window.undidTyping=P.undoPeer();window.undidRemoval=P.undoPeer();window.reapplied=P.type('r2',0,'Z');true
+expect undidTyping.kind==='written'&&undidRemoval.kind==='written'&&reapplied.kind==='written'&&P.queuedUpdates().length===3
+expect replay('forward','app')&&json(P.release('forward'))==='[]'
+expect S.read().peer.rows.map(row=>row.id).join(',')==='r1,r2'&&S.read().peer.rows[0][field]==='abcdef'&&S.read().peer.rows[1].audioText==='ZPQother'
+expect P.readLateReader().rows.length===1&&P.deliverToReader('peer')&&currentCopies()
+expect json(S.read().app)===json(base)&&paint('r1',field)===preview&&caret(offset+1)&&refused()
+eval window.restoredDoc=S.read().peer;window.left=S.leave();true
+expect left.ok&&S.read().peer===null&&P.readLateReader()===null&&P.freshSnapshot('app')===null&&P.freshSnapshot('peer')===null&&P.deliverToReader('app')===false
+expect F.state().docId!==restoredDoc.docId&&F.state().docId!==originalId&&json({...F.state(),docId:restoredDoc.docId,rows:[{...F.state().rows[0],updatedAt:restoredDoc.rows[0].updatedAt,updatedBy:restoredDoc.rows[0].updatedBy},F.state().rows[1]]})===json({...restoredDoc,rows:[{...restoredDoc.rows[0],[field]:preview},restoredDoc.rows[1]]})
+expect paint('r1',field)===preview&&paint('r2','audioText')==='ZPQother'&&paint('r2','visualText')==='other'&&caret(offset+1)&&refused()
