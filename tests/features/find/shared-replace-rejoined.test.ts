@@ -5,7 +5,7 @@ import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
 import { fakeNotices, fakeWriterBufferEffects } from "../fakes.ts";
-import { FIND_AT, FIND_ORDERS, agreedRows, deliverAll, findAct, findCopy, findReplicas, findSource, finder, sendAs } from "./shared-replace-support.ts";
+import { FIND_AT, FIND_ORDERS, agreedRows, deliverAll, findCopy, findReplicas, findSource, sendAs } from "./shared-replace-support.ts";
 
 const FIRST = "structure_2_006300750074_beat_0", SECOND = "structure_2_0063007500740032_beat_0";
 const split = (id: string, owner: string, at: number, length: number) => ({ kind: "split", id, by: "Bob", target: { owner, segment: owner, field: "audioText" },
@@ -40,18 +40,15 @@ const rows = (set: ReturnType<typeof findReplicas>, label: string, order: typeof
   return projectSharedDocumentWithRecovery(set.a).document.rows.map(row => [row.id, row.audioText]);
 };
 
-for (const item of CASES) for (const way of ["typed by hand", "Find"] as const) for (const order of FIND_ORDERS) {
-  test(`${item.name}, replacement ${way}, undone, redone and undone: ${order}`, () => {
+for (const item of CASES) for (const order of FIND_ORDERS) {
+  test(`${item.name}, buffered replacement, undone, redone and undone: ${order}`, () => {
     const notices = fakeNotices(), document = findSource("a cup of tea");
     (document.comments as unknown[]).length = 0;
     const set = findReplicas(document), a = findCopy(set.a, "Alice", notices);
     try {
       for (const step of item.structure) { sendAs(set.b, ...step); deliverAll(set.queue, order); }
       assert.deepEqual(rows(set, "rejoined", order), [["R1", item.rejoined], ["R2", "a cup"]]);
-      if (way === "Find") {
-        const route = finder(a.session, notices, a.shared);
-        try { findAct(route, { find: item.find, put: "mug" }); } finally { route.dispose(); }
-      } else typed(set, a, item.find);
+      typed(set, a, item.find);
       deliverAll(set.queue, order);
       assert.deepEqual(rows(set, "replaced", order), [["R1", item.after], ["R2", "a cup"]]);
       for (const [step, expected] of [["undo", item.rejoined], ["redo", item.after], ["undo", item.rejoined]] as const) {

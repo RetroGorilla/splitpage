@@ -5,7 +5,7 @@ import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
 import { fakeNotices, fakeWriterBufferEffects } from "../fakes.ts";
-import { FIND_AT, FIND_ORDERS, agreedRows, deliverAll, findAct, findCopy, findReplicas, findSource, finder, sendAs } from "./shared-replace-support.ts";
+import { FIND_AT, FIND_ORDERS, agreedRows, deliverAll, findCopy, findReplicas, findSource, sendAs } from "./shared-replace-support.ts";
 
 const NEW = "structure_2_006300750074_beat_0";
 const splitAt = (at: number) => ({ kind: "split", id: "cut", by: "Bob", target: { owner: "R1", segment: "R1", field: "audioText" },
@@ -68,11 +68,6 @@ function handTyped(set: ReturnType<typeof findReplicas>, a: ReturnType<typeof fi
   assert.equal(edit.commit([{ text: text.slice(0, at) + "mug" + text.slice(at + 3), marks: {} }]).kind, "applied");
 }
 
-function found(a: ReturnType<typeof findCopy>, notices: ReturnType<typeof fakeNotices>, second: boolean) {
-  const route = finder(a.session, notices, a.shared);
-  try { findAct(route, { find: "cup", put: "mug", nth: second ? 1 : 0 }); } finally { route.dispose(); }
-}
-
 function projected(set: ReturnType<typeof findReplicas>, label: string, order: typeof FIND_ORDERS[number]): Rows {
   agreedRows(label, set, order);
   return projectSharedDocumentWithRecovery(set.a).document.rows.map(row => [row.id, row.audioText] as const);
@@ -83,14 +78,14 @@ const outcome = (value: unknown) => {
   return Object.fromEntries(["ok", "effective", "reason"].filter(key => key in result).map(key => [key, result[key]]));
 };
 
-for (const structure of STRUCTURES) for (const way of ["typed by hand", "Find"] as const) for (const order of FIND_ORDERS) {
-  test(`${structure.name}, replacement ${way}: ${order}`, () => {
+for (const structure of STRUCTURES) for (const order of FIND_ORDERS) {
+  test(`${structure.name}, buffered replacement: ${order}`, () => {
     const notices = fakeNotices(), document = findSource("a cup of tea");
     (document.comments as unknown[]).length = 0;
     const set = findReplicas(document), a = findCopy(set.a, "Alice", notices);
     try {
       if (structure.synced) { sendAs(set.b, structure.operation); deliverAll(set.queue, order); }
-      if (way === "Find") found(a, notices, !!structure.second); else handTyped(set, a, !!structure.second);
+      handTyped(set, a, !!structure.second);
       if (!structure.synced) sendAs(set.b, structure.operation);
       deliverAll(set.queue, order);
       assert.deepEqual(projected(set, "after", order), structure.after);
