@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { joinBeatsCommand, splitBeatCommand, textCut } from "../../../src/application/commands/split-join.ts";
+import { joinBeatsCommand, splitBeatCommand, textCut, unitsCut } from "../../../src/application/commands/split-join.ts";
 import { addBeatCommand, deleteBeatCommand } from "../../../src/application/commands/rows.ts";
 import { removeBeatsCommand } from "../../../src/application/commands/beats.ts";
 import { removeSceneCommand } from "../../../src/application/commands/scenes.ts";
@@ -717,4 +717,27 @@ for (const literal of [...cases, { name: "visual split", make: visualSplit }]) t
     assert.deepEqual({ ...plan, apply: null }, { ...baseline, apply: null });
     assert.deepEqual(observe(command), expected);
   }
+});
+
+for (const order of ORDERS) test(`undo restores selected narration into the beat that survives the split undo: ${order}`, () => {
+  const h = setup(documentWith([beat("R1", { audio: "abcdef" }), beat("R2", { audio: "Other" })], null));
+  const owner = undoOwner(h.a), a = sharedHarness(adapterReplica(h.a, owner));
+  const target = { owner: "R1", segment: "R1", field: "audioText" };
+  const narration = (label: string) => agreeing(label, [h.a, h.b], order)?.document.rows.map(row => row.audioText);
+  try {
+    send(h.a, { ...typing("R1"), id: "pending", by: "Alice",
+      at: { left: flowBaseReference("R1", "audioText", 5), right: null, affinity: "after" } });
+    send(h.b, { ...typing("R1"), id: "peer-insert", at: { left: null, right: flowBaseReference("R1", "audioText", 3), affinity: "before" },
+      content: [{ value: "Z", marks: [] }] },
+    { kind: "text-delete", id: "peer-delete", by: "Bob", target, observed: [flowBaseReference("R1", "audioText", 2, 3)] });
+    flush(h.queue, order);
+    assert.deepEqual(narration("peer changes and local typing settled"), ["abZdefX", "Other"]);
+    const make: Make = (stamps, shared) => splitBeatCommand("R1", "audioText", unitsCut([[3, 4]], 2), "N1", { ...stamps, cells }, shared);
+    assert.equal(a.session.run(run(h.a, { make }, "Alice", 5)).kind, "applied");
+    flush(h.queue, order);
+    assert.deepEqual(narration("split keeps the peer insert on the new beat"), ["ab", "ZefX", "Other"]);
+    assert.deepEqual(owner.undo(), { ok: true, effective: true, label: "split-scene", selection: null });
+    flush(h.queue, order);
+    assert.deepEqual(narration("undo moves the restored text to the surviving beat"), ["abZdefX", "Other"]);
+  } finally { a.session.dispose(); h.close(); }
 });
