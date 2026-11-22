@@ -1,4 +1,8 @@
 import assert from "node:assert/strict";
+import { createSharedBufferedText, sharedBufferedTarget } from "../../../src/adapters/collab/buffer.ts";
+import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
+import type { SharedDocumentSession } from "../../../src/application/session/shared-session.ts";
+import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
 import { sharedAuthorPort } from "../../collab/editor-ports/shared-author.ts";
 import { sharedUndoOwner } from "../../collab/editor-ports/shared-undo.ts";
 import { sharedCommandRefusalNotice } from "../../../src/bootstrap/wiring/ports/shared-command-notices.ts";
@@ -67,4 +71,16 @@ export function deliverAll(queue: ReturnType<typeof replicas>["queue"], order: F
 }
 export function sendAs(handle: SharedDocumentHandle, ...values: unknown[]) {
   assert.deepEqual(executeSharedOperations(handle, values.map(operation), { base: readSharedRevision(handle) }), { ok: true });
+}
+
+export function openReplacement(handle: SharedDocumentHandle, session: SharedDocumentSession, row: string) {
+  const target = sharedBufferedTarget(handle, row);
+  const base = readSharedPaintedText(handle, target);
+  assert.ok(base);
+  let serial = 0;
+  const buffers = createSharedBufferedText(handle, session, { target: () => target, readers: bufferReaders,
+    stamps: bufferStamps("Alice", () => FIND_AT), author: () => ({ id: "hand" + ++serial, by: "Alice" }) });
+  const edit = buffers.open(row, base);
+  assert.ok(edit);
+  return edit;
 }

@@ -453,7 +453,7 @@
     {
       "label": "assigning a tag's owner drops change.owner",
       "tests": [
-        "tests/application/commands/records-shared.test.ts"
+        "tests/application/document-edits.test.ts"
       ],
       "file": "src/application/commands/production-records.ts",
       "find": "const owner = change.owner === undefined ? undefined : chosenOwner(live, change.owner, ids);",
@@ -462,7 +462,7 @@
     {
       "label": "assigning a known owner clears the owner instead",
       "tests": [
-        "tests/application/commands/records-shared.test.ts"
+        "tests/application/document-edits.test.ts"
       ],
       "file": "src/application/commands/production-records.ts",
       "find": "  return personById(live, owner.id) ? owner.id : \"\";",
@@ -471,7 +471,7 @@
     {
       "label": "creating a person while assigning creates nobody",
       "tests": [
-        "tests/application/commands/records-shared.test.ts"
+        "tests/application/document-edits.test.ts"
       ],
       "file": "src/application/commands/production-records.ts",
       "find": "  if (\"name\" in owner) return addPerson(live, owner.name, ids);",

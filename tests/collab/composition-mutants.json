@@ -165,7 +165,7 @@
       "find": "    const refused = session.admit();",
       "replace": "    const refused = null as ReturnType<typeof session.admit>;",
       "tests": [
-        "tests/collab/undo-seam.test.ts"
+        "tests/bootstrap/shared-switch.test.ts"
       ]
     },
     {

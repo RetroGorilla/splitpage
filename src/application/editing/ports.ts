@@ -27,8 +27,3 @@ export interface BufferedTextEdit {
 export interface BufferedTextCommit {
   readonly open: (rowId: string, painted: PaintedText) => BufferedTextEdit | null;
 }
-
-export interface PaintedTextSource {
-  readonly documentRevision: () => number;
-  readonly read: (rowId: string, field: string) => PaintedText | null;
-}

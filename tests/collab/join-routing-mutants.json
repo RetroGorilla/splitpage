@@ -4,7 +4,7 @@
     "file": "src/core/collab/projection/join-layout.ts",
     "find": "const point = endEntry?.binding?.end;",
     "replace": "const point = undefined;",
-    "tests": ["tests/adapters/collab/join-split-handoff.test.ts"]
+    "tests": ["tests/core/collab/projection-join-layout.test.ts"]
   }, {
     "label": "seen and unseen differ",
     "file": "src/adapters/collab/split-executor.ts",
@@ -22,13 +22,13 @@
     "file": "src/core/collab/projection/join-layout.ts",
     "find": "sources.set(id, { id, into: root ?? into, entry, blocks: parts,",
     "replace": "sources.set(id, { id, into: root ?? into, entry, blocks: [own],",
-    "tests": ["tests/adapters/collab/join-layout-histories.test.ts"]
+    "tests": ["tests/core/collab/projection-join-layout.test.ts"]
   }, {
     "label": "visual fields follow the narration tail",
     "file": "src/core/collab/projection/join-layout.ts",
     "find": "into: source.into });",
     "replace": "into: source.end });",
-    "tests": ["tests/adapters/collab/joined-flow-agreement.test.ts"]
+    "tests": ["tests/core/collab/projection-join-layout.test.ts"]
   }, {
     "label": "joined lookup walks unrelated beat values",
     "file": "src/adapters/collab/join-index.ts",
@@ -64,7 +64,7 @@
     "file": "src/core/collab/projection/joins.ts",
     "find": "for (const format of part.formats ?? [])",
     "replace": "for (const format of [])",
-    "tests": ["tests/adapters/collab/join-marks.test.ts"]
+    "tests": ["tests/core/collab/projection-joins.test.ts"]
   }, {
     "label": "join space keeps a removed format",
     "file": "src/adapters/collab/mark-executor.ts",

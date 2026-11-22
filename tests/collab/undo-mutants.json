@@ -15,7 +15,7 @@
       "find": "if (!reversal.effective) return { ok: true, effective: false, label: entry.record.label, selection: null, reason: \"used-up\" };",
       "replace": "if (!reversal.effective) return step(direction);",
       "tests": [
-        "tests/collab/undo/stage1-records.test.ts"
+        "tests/application/editing/undo/shared-undo.test.ts"
       ]
     },
     {
@@ -24,7 +24,7 @@
       "find": "if (!reversal.effective) return { ok: true, effective: false, label: entry.record.label, selection: null, reason: \"used-up\" };",
       "replace": "if (!reversal.effective) return step(direction);",
       "tests": [
-        "tests/collab/undo/generator.test.ts"
+        "tests/application/editing/undo/shared-undo.test.ts"
       ]
     },
     {
@@ -42,7 +42,7 @@
       "find": "if (!reversal.effective) return { ok: true, effective: false, label: entry.record.label, selection: null, reason: \"used-up\" };",
       "replace": "if (!reversal.effective) { push(to, { record: reversal.inverse, at: entry.at, group: entry.group, endsInSpace: entry.endsInSpace }); return { ok: true, effective: false, label: entry.record.label, selection: null, reason: \"used-up\" }; }",
       "tests": [
-        "tests/collab/undo/generator.test.ts"
+        "tests/application/editing/undo/shared-undo.test.ts"
       ]
     },
     {
@@ -114,8 +114,7 @@
       "find": "if (outcome.ok) return outcome.effective ? null : USED_UP[direction];",
       "replace": "if (outcome.ok) return null;",
       "tests": [
-        "tests/application/editing/undo/shared-undo-notice.test.ts",
-        "tests/adapters/collab/undo-notice.test.ts"
+        "tests/application/editing/undo/shared-undo-notice.test.ts"
       ]
     },
     {
@@ -133,7 +132,7 @@
       "find": "    reversing = true;\n    try {",
       "replace": "    reversing = true;\n    from.pop();\n    try {",
       "tests": [
-        "tests/collab/undo/stage1-records.test.ts"
+        "tests/application/editing/undo/shared-undo.test.ts"
       ]
     },
     {
@@ -151,7 +150,7 @@
       "find": "    undone.length = 0;\n    serial++;\n    if (grouping",
       "replace": "    serial++;\n    if (grouping",
       "tests": [
-        "tests/collab/undo/generator.test.ts"
+        "tests/application/editing/undo/shared-undo.test.ts"
       ]
     },
     {
@@ -205,7 +204,7 @@
       "find": "  if (record.typing === null) return null;\n",
       "replace": "",
       "tests": [
-        "tests/collab/undo/decided-rows.test.ts"
+        "tests/application/editing/undo/shared-undo.test.ts"
       ]
     },
     {
@@ -927,7 +926,7 @@
       "find": "if (!next || next.kind === \"b\" && owners.get(next.id)?.retired) {",
       "replace": "if (!next) {",
       "tests": [
-        "tests/adapters/collab/undo-split.test.ts"
+        "tests/core/collab/projection-blocks.test.ts"
       ]
     },
     {
@@ -1252,7 +1251,7 @@
       "find": "ports.trace.replace(rowId, cell, 0, cellLength(cell), piece, \"visualText\")",
       "replace": "ports.trace.replace(rowId, cell, 0, 0, piece, \"visualText\")",
       "tests": [
-        "tests/adapters/collab/visual-set.test.ts"
+        "tests/core/flow/visual.test.ts"
       ]
     },
     {
@@ -1261,7 +1260,7 @@
       "find": "original && toHtml(cell) !== toHtml(piece)",
       "replace": "original",
       "tests": [
-        "tests/adapters/collab/visual-set.test.ts"
+        "tests/core/flow/visual.test.ts"
       ]
     },
     {

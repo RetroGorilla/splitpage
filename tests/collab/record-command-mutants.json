@@ -4,72 +4,86 @@
     "label": "an owner set to nobody is written as an empty value that can win over an assignment the writer never saw",
     "file": "src/core/collab/record-operations.ts",
     "find": "entry[field] === undefined || field === \"owner\" && entry[field] === \"\" ? {",
-    "replace": "entry[field] === undefined ? {"
+    "replace": "entry[field] === undefined ? {",
+      "tests": ["tests/core/collab/record-operations.test.ts"]
   }, {
     "label": "a record the edit moved to the end keeps its stored rank",
     "file": "src/core/collab/record-operations.ts",
     "find": "if (moved.has(key)) {",
-    "replace": "if (false) {"
+    "replace": "if (false) {",
+      "tests": ["tests/core/collab/record-operations.test.ts"]
   }, {
     "label": "the fewest records are not chosen to move for a reorder",
     "file": "src/core/collab/record-operations.ts",
     "find": "for (let stay = kept.length; stay > 0; stay--) {",
-    "replace": "for (let stay = 0; stay > 0; stay--) {"
+    "replace": "for (let stay = 0; stay > 0; stay--) {",
+      "tests": ["tests/core/collab/record-operations.test.ts"]
   }, {
     "label": "a cleared owner projects as a missing field instead of no owner",
     "file": "src/core/collab/projection/fields.ts",
     "find": "if (!Object.hasOwn(out, \"owner\")) out.owner = \"\";",
-    "replace": ""
+    "replace": "",
+      "tests": ["tests/core/collab/projection.test.ts"]
   }, {
     "label": "a record without an id or with a repeated id is diffed by a made-up key",
     "file": "src/core/collab/record-operations.ts",
     "find": "if (!entry || typeof entry.id !== \"string\" || !entry.id || out.has(entry.id)) return null;",
-    "replace": "if (!entry) return null;"
+    "replace": "if (!entry) return null;",
+      "tests": ["tests/core/collab/record-operations.test.ts"]
   }, {
     "label": "a new record takes the highest stored rank instead of the next one",
     "file": "src/core/collab/record-operations.ts",
     "find": "String(Number(rank) + 1).padStart(10, \"0\")",
-    "replace": "String(Number(rank)).padStart(10, \"0\")"
+    "replace": "String(Number(rank)).padStart(10, \"0\")",
+      "tests": ["tests/core/collab/record-operations.test.ts"]
   }, {
     "label": "new records rank after the lowest stored rank",
     "file": "src/core/collab/record-operations.ts",
     "find": "if (top === null || rank > top) top = rank;",
-    "replace": "if (top === null || rank < top) top = rank;"
+    "replace": "if (top === null || rank < top) top = rank;",
+      "tests": ["tests/core/collab/record-operations.test.ts"]
   }, {
     "label": "a created tag or shot loses its status",
     "file": "src/core/collab/record-operations.ts",
     "find": "for (const field of [\"status\", ...storedFields(collection)])",
-    "replace": "for (const field of [...storedFields(collection)])"
+    "replace": "for (const field of [...storedFields(collection)])",
+      "tests": ["tests/core/collab/record-operations.test.ts"]
   }, {
     "label": "a created person loses their name",
     "file": "src/core/collab/record-operations.ts",
     "find": "if (collection === \"people\" && entry.name !== undefined) fields.name = entry.name;",
-    "replace": ""
+    "replace": "",
+      "tests": ["tests/core/collab/record-operations.test.ts"]
   }, {
     "label": "a changed field the table does not store is never written",
     "file": "src/core/collab/record-operations.ts",
     "find": "if (extra(collection, was) !== extra(collection, entry)) operations.push(",
-    "replace": "if (false) operations.push("
+    "replace": "if (false) operations.push(",
+      "tests": ["tests/core/collab/record-operations.test.ts"]
   }, {
     "label": "a dropped stored field is written as a value instead of cleared",
     "file": "src/core/collab/record-operations.ts",
     "find": "operations.push(entry[field] === undefined || field",
-    "replace": "operations.push(false || field"
+    "replace": "operations.push(false || field",
+      "tests": ["tests/core/collab/record-operations.test.ts"]
   }, {
     "label": "a status change names no parents",
     "file": "src/core/collab/record-operations.ts",
     "find": "parents: edit.heads(scope, key) as SharedContentRef[]",
-    "replace": "parents: [] as SharedContentRef[]"
+    "replace": "parents: [] as SharedContentRef[]",
+      "tests": ["tests/core/collab/record-operations.test.ts"]
   }, {
     "label": "a tag status change is stated on the shot scope",
     "file": "src/core/collab/record-operations.ts",
     "find": "const scope = collection === \"tags\" ? \"tag\" as const : \"shot\" as const;",
-    "replace": "const scope = collection === \"shots\" ? \"tag\" as const : \"shot\" as const;"
+    "replace": "const scope = collection === \"shots\" ? \"tag\" as const : \"shot\" as const;",
+      "tests": ["tests/core/collab/record-operations.test.ts"]
   }, {
     "label": "a record the edit removed is kept",
     "file": "src/core/collab/record-operations.ts",
     "find": "if (!after.has(key)) operations.push({ kind: \"record-delete\"",
-    "replace": "if (false) operations.push({ kind: \"record-delete\""
+    "replace": "if (false) operations.push({ kind: \"record-delete\"",
+      "tests": ["tests/core/collab/record-operations.test.ts"]
   }, {
     "label": "a direct record builder plans shared operations without an author",
     "file": "src/application/commands/shared-records.ts",

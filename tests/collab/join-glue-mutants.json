@@ -4,7 +4,7 @@
     "file": "src/core/collab/projection/join-glue.ts",
     "find": "return readSharedJoinGlue(register) ?? issued;",
     "replace": "void register; return issued;",
-    "tests": ["tests/adapters/collab/projection-join-glue.test.ts"]
+    "tests": ["tests/core/collab/projection-join-glue.test.ts"]
   }, {
     "label": "invalid glue register accepted",
     "file": "src/core/collab/projection/join-glue.ts",

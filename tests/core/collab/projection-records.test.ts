@@ -64,6 +64,48 @@ test("folded file links keep the first details and fill a missing location", () 
   assert.deepEqual(projectSharedGroupGallery(root, [root, { id: "R2" }], records), { row: { id: "R1", imageRef,
     imageLinks: [{ name: "clip.mp4", size: 7, duration: 3, location, poster: true }] }, overflow: [] });
 });
+
+test("gallery rank wins over item ID and a blank placeholder does not take the primary picture", () => {
+  const root = { id: "R1", imageRef: null };
+  const imageRef = { sha256: "c".repeat(64), width: 2, height: 2, mime: "image/png" };
+  const records = [
+    { key: "placeholder", fields: { beat: "R1", rank: "0", picture: { imageRef: null } } },
+    { key: "z", fields: { beat: "R1", rank: "1", picture: { imageRef, name: "First" } } },
+    { key: "a", fields: { beat: "R1", rank: "2", picture: { imageRef, name: "Later" } } }
+  ];
+  assert.deepEqual(projectSharedGroupGallery(root, [root], records), {
+    row: { id: "R1", imageRef, imageName: "First" }, overflow: []
+  });
+  assert.deepEqual(projectSharedGroupGallery(root, [root], records.slice(0, 2)), {
+    row: { id: "R1", imageRef, imageName: "First" }, overflow: []
+  });
+});
+
+test("video-only gallery items retain distinct slots after a join", () => {
+  const root = { id: "R1" }, child = { id: "R2" };
+  const first = { href: "https://example.test/one" }, second = { href: "https://example.test/two" };
+  const records = [
+    { key: "first", fields: { beat: "R1", picture: { imageRef: null }, links: [{ fields: first }] } },
+    { key: "second", fields: { beat: "R2", picture: { imageRef: null }, links: [{ fields: second }] } }
+  ];
+  assert.deepEqual(projectSharedGroupGallery(root, [root, child], records), {
+    row: { id: "R1", imageRef: null, imageLinks: [first], moreImages: [{ imageRef: null, links: [second] }] }, overflow: []
+  });
+});
+
+test("gallery overflow starts with the first item past the 61 visible slots", () => {
+  const root = { id: "R1" };
+  const slots = Array.from({ length: 63 }, (_, i) => ({
+    imageRef: { sha256: i.toString(16).padStart(64, "0"), width: 1, height: 1, mime: "image/png" }
+  }));
+  const records = slots.map((slot, i) => ({ key: String(i).padStart(2, "0"), fields: { beat: "R1", picture: slot } }));
+  const first = slots[0];
+  assert.ok(first);
+  assert.deepEqual(projectSharedGroupGallery(root, [root], records), {
+    row: { id: "R1", imageRef: first.imageRef, moreImages: slots.slice(1, 61) },
+    overflow: [{ itemId: "61", beat: "R1", slot: slots[61] }, { itemId: "62", beat: "R1", slot: slots[62] }]
+  });
+});
 test("pure b-roll callers without stable atom identities are rejected before and after unrelated typing", () => {
   const id = readSharedContentRef("S1"); assert.ok(id);
   const unit: SharedProjectionUnit = freeze({ value: { atom: "broll", id, text: "B-roll:" }, marks: [] });

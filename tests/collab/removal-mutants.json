@@ -15,7 +15,7 @@
       "find": "active = false; cancelled = false;",
       "replace": "active = false;",
       "tests": [
-        "tests/adapters/collab/structure-removal.test.ts"
+        "tests/core/collab/removal-state.test.ts"
       ]
     },
     {
@@ -105,7 +105,7 @@
       "find": "part.removals.some(removal => !removal.observed.has(sharedRecoveryIdentityKey(identity)))",
       "replace": "part.removals.some(removal => removal.key.length > 0)",
       "tests": [
-        "tests/adapters/collab/removal-stage1.test.ts"
+        "tests/core/collab/recovery-discard.test.ts"
       ]
     },
     {
@@ -123,7 +123,7 @@
       "find": "block.units.some(unit => unit.identity !== undefined && source.observed.has(sharedRecoveryIdentityKey(unit.identity)))",
       "replace": "block.units.length >= 0",
       "tests": [
-        "tests/adapters/collab/split-removal.test.ts"
+        "tests/core/collab/recovery-discard.test.ts"
       ]
     },
     {
@@ -177,7 +177,7 @@
       "find": "return !(entry.kind === \"removed-beat\" || entry.kind === \"removed-heading\" ? entry.removal?.ids ?? [] : []).every(id => ids.has(id));",
       "replace": "return false;",
       "tests": [
-        "tests/adapters/collab/discard.test.ts"
+        "tests/core/collab/recovery-discard.test.ts"
       ]
     },
     {
@@ -195,7 +195,7 @@
       "find": "key: JSON.stringify([entry.occurrence, entry.start])",
       "replace": "key: entry.occurrence",
       "tests": [
-        "tests/adapters/collab/discard.test.ts"
+        "tests/core/collab/recovery-discard.test.ts"
       ]
     },
     {
@@ -222,7 +222,7 @@
       "find": "key: JSON.stringify([entry.segment, entry.start])",
       "replace": "key: JSON.stringify([entry.segment, entry.from])",
       "tests": [
-        "tests/adapters/collab/discard.test.ts"
+        "tests/core/collab/recovery-discard.test.ts"
       ]
     },
     {
@@ -249,7 +249,7 @@
       "find": "if (entry.kind !== \"deleted-person\" || people.some(",
       "replace": "if (entry.kind !== \"deleted-person\" || false && people.some(",
       "tests": [
-        "tests/adapters/collab/people-recovery.test.ts"
+        "tests/core/collab/recovery-discard.test.ts"
       ]
     },
     {

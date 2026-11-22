@@ -52,13 +52,13 @@
     "file": "src/core/collab/projection/blocks.ts",
     "find": "if (!block.reason && beats.has(cleanId(block.id)))",
     "replace": "if (false && !block.reason && beats.has(cleanId(block.id)))",
-    "tests": ["tests/adapters/collab/structure-identities.test.ts"]
+    "tests": ["tests/core/collab/projection-blocks.test.ts"]
   }, {
     "label": "empty cleaned beat identity gets a row",
     "file": "src/core/collab/projection/blocks.ts",
     "find": "if (!block.reason && !cleanId(block.id))",
     "replace": "if (false && !block.reason && !cleanId(block.id))",
-    "tests": ["tests/adapters/collab/structure-identities.test.ts"]
+    "tests": ["tests/core/collab/projection-blocks.test.ts"]
   }, {
     "label": "created visual address ignores its record pointer",
     "file": "src/adapters/collab/text-location.ts",

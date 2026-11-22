@@ -1,11 +1,9 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sharedBufferPorts } from "../../collab/editor-ports/shared-buffer.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
-import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
-import { fakeNotices, fakeWriterBufferEffects } from "../fakes.ts";
-import { FIND_AT, FIND_ORDERS, agreedRows, deliverAll, findCopy, findReplicas, findSource, sendAs } from "./shared-replace-support.ts";
+import { fakeNotices } from "../fakes.ts";
+import { FIND_AT, FIND_ORDERS, agreedRows, openReplacement, deliverAll, findCopy, findReplicas, findSource, sendAs } from "./shared-replace-support.ts";
 
 const NEW = "structure_2_006300750074_beat_0";
 const splitAt = (at: number) => ({ kind: "split", id: "cut", by: "Bob", target: { owner: "R1", segment: "R1", field: "audioText" },
@@ -57,12 +55,8 @@ const STRUCTURES: readonly Structure[] = [
 ];
 
 function handTyped(set: ReturnType<typeof findReplicas>, a: ReturnType<typeof findCopy>, second: boolean) {
-  let serial = 0;
-  const ports = sharedBufferPorts(set.a, a.session, { ...fakeWriterBufferEffects().effects, readers: bufferReaders, stamps: bufferStamps("Alice", () => FIND_AT),
-    author: () => ({ id: "hand" + ++serial, by: "Alice" }) });
   const row = second && projectSharedDocumentWithRecovery(set.a).document.rows.some(item => item.id === "R2") ? "R2" : "R1";
-  const base = ports.paintedText.read(row, "audioText"); assert.ok(base);
-  const edit = ports.bufferedText.open(row, base); assert.ok(edit);
+  const edit = openReplacement(set.a, a.session, row);
   const text = edit.text(), at = second ? text.lastIndexOf("cup") : text.indexOf("cup");
   edit.replace(at, at + 3, "mug");
   assert.equal(edit.commit([{ text: text.slice(0, at) + "mug" + text.slice(at + 3), marks: {} }]).kind, "applied");

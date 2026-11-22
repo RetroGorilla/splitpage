@@ -45,3 +45,20 @@ test("one tag name is a presence set: overlapping native occurrences have one ou
   assert.deepEqual(projected.rejected, []);
   assert.deepEqual(projected.units.map(unit => unit.marks.map(mark => mark.value)), [["t:prop:Cup"], ["t:prop:Cup", "t:cast:Ada"], ["t:prop:Cup", "t:cast:Ada"], ["t:prop:Cup"]]);
 });
+
+test("a removed tag occurrence on either side of an atom gives two fragments", () => {
+  const mark = { kind: "tag", id: "occurrence", value: "missing" } as const;
+  assert.deepEqual(projectSharedTagExtents([
+    { value: "a", marks: [mark] }, { value: { atom: "who", name: "Ada" }, marks: [] }, { value: "b", marks: [mark] }
+  ], []).rejected, [
+    { kind: "deleted-tag", occurrence: "occurrence", tag: "missing", from: 0, to: 1, words: "a" },
+    { kind: "deleted-tag", occurrence: "occurrence", tag: "missing", from: 2, to: 3, words: "b" }
+  ]);
+});
+
+test("a united removed tag is reported under its smallest native occurrence ID", () => {
+  assert.deepEqual(projectSharedTagExtents([
+    { value: "a", marks: [{ kind: "tag", id: "z", value: "missing" }] },
+    { value: "b", marks: [{ kind: "tag", id: "a", value: "missing" }] }
+  ], []).rejected, [{ kind: "deleted-tag", occurrence: "a", tag: "missing", from: 0, to: 2, words: "ab" }]);
+});

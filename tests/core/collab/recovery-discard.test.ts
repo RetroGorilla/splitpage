@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { hideSharedDiscardedEntries, projectSharedDeletedPeople, readSharedWhoNames, sharedRecoveryDiscardOperation, sharedRecoveryEntryName,
+import { hideSharedDiscardedEntries, projectSharedCoveredBeats, projectSharedDeletedPeople, projectSharedRecoveryRemoval, readSharedWhoNames, sharedRecoveryDiscardOperation, sharedRecoveryEntryName,
   sharedRecoveryPersonRestore } from "../../../src/core/collab/recovery.ts";
 import type { SharedRecoveryEntry } from "../../../src/core/collab/recovery.ts";
 import { readOperation } from "../../../src/core/collab/read-operation.ts";
@@ -19,6 +19,26 @@ const ENTRIES: readonly SharedRecoveryEntry[] = [
   { kind: "scene-with-no-beats", heading: { id: "H2" }, beforeRowId: null }
 ];
 const named = (entries: readonly SharedRecoveryEntry[]) => entries.map(entry => { const name = sharedRecoveryEntryName(entry); return name.kind + " " + name.key; });
+
+test("removal provenance lists only edits the remover did not observe", () => {
+  const observed = { value: "a", marks: [], identity: { client: 2, clock: 1 } };
+  const unseen = { value: "b", marks: [], identity: { client: 3, clock: 1 } };
+  assert.deepEqual(projectSharedRecoveryRemoval([{
+    removals: [{ key: "cut", by: "Ada", observed: new Set(["2:1"]) }], units: [observed, unseen]
+  }]), { ids: ["cut"], by: "Ada", edited: [{ client: 3, clock: 1 }] });
+});
+
+test("a removal follows a split-off beat only when the beat retains an observed unit", () => {
+  const source = { key: "cut", by: "Ada", observed: new Set(["2:1"]) };
+  const blocks = [
+    { id: "original", segment: "S", units: [] },
+    { id: "covered", segment: "S", units: [{ value: "a", marks: [], identity: { client: 2, clock: 1 } }] },
+    { id: "unseen", segment: "S", units: [{ value: "b", marks: [], identity: { client: 3, clock: 1 } }] },
+    { id: "other", segment: "T", units: [{ value: "a", marks: [], identity: { client: 2, clock: 1 } }] }
+  ];
+  assert.deepEqual(projectSharedCoveredBeats(blocks, new Set(["original"]), new Map([["original", [source]]])),
+    new Map([["covered", [source]]]));
+});
 
 test("assumed rule 54: a deleted person is listed only while an owner or an @Name refers to it, once per row, and restore is refused while a live person has its name", () => {
   const deleted = [{ person: "P1", name: "Ada", by: "Bob" }, { person: "P2", name: "Bo", by: "Bob" }, { person: "P3", name: "Cy", by: "Bob" }];
