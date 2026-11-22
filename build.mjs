@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -343,6 +343,7 @@ function main() {
     process.exit(stale ? 1 : 0);
   }
 
+  rmSync(join(ROOT, "_legacy-shared-tests.html"), { force: true });
   writeFileSync(out, built);
   console.log("wrote index.html (" + VARIANT + ", " + Buffer.byteLength(built) + " bytes)");
   writeFileSync(swOut, swBuilt);

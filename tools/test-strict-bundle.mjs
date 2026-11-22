@@ -77,11 +77,14 @@ function checkPage(html) {
 }
 
 const output = join(REPO, "index.html");
+const retiredFixture = join(REPO, "_legacy-shared-tests.html");
 const previous = existsSync(output) ? readFileSync(output) : null;
 const previousDocument = Object.getOwnPropertyDescriptor(globalThis, "document");
 try {
   for (const flags of [["--test"], []]) {
+    if (!existsSync(retiredFixture)) writeFileSync(retiredFixture, "<!doctype html><title>Stale collaboration fixture</title>");
     execFileSync(process.execPath, ["build.mjs", ...flags], { cwd: REPO, stdio: "pipe", timeout: 60000 });
+    assert.equal(existsSync(retiredFixture), false, "a rebuild removes the retired collaboration fixture");
     const html = readFileSync(output, "utf8");
     const script = checkPage(html);
     const dom = new JSDOM(html);
@@ -100,5 +103,6 @@ try {
   else delete globalThis.document;
   if (previous) writeFileSync(output, previous);
   else if (existsSync(output)) unlinkSync(output);
+  if (existsSync(retiredFixture)) unlinkSync(retiredFixture);
 }
 console.log("2 passed, 0 failed");
