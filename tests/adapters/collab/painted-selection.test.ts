@@ -8,12 +8,9 @@ import { createMonitoredSharedDocument } from "./helpers.ts";
 import { readSharedPaintedSelectionText } from "../../../src/adapters/collab/paint-base.ts";
 import { sharedBufferedTarget } from "../../../src/adapters/collab/buffer.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
-import { projection } from "../../../src/core/text/runs.ts";
-import { createFlowLoadRuntime } from "../../core/flow/load.ts";
+import { toHtml } from "../../../src/core/text/html.ts";
 import { assertReplicasAgree } from "../../collab/agreement.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
-
-const runtime = createFlowLoadRuntime();
 
 function watchNoWrites(handles: readonly SharedDocumentHandle[]) {
   const before = handles.map(encodeSharedState);
@@ -56,7 +53,7 @@ test("caret visual readings use the existing record validator and wire rank orde
       for (const handle of handles) {
         const read = readSharedPaintedSelectionText(handle, sharedBufferedTarget(handle, p.key("visualText")));
         assert.equal(read?.text, scenario.text); assert.ok(read);
-        assert.equal(projection(runtime.cells(projectSharedDocumentWithRecovery(handle).document.rows[0]?.visualText ?? "")), scenario.text);
+        assert.equal(projectSharedDocumentWithRecovery(handle).document.rows[0]?.visualText ?? "", toHtml([{ text: scenario.text, marks: {} }]));
         const actual = Array.from({ length: read.text.length }, (_, at) => read.identity(at));
         if (identity) assert.deepEqual(actual, identity); else identity = actual;
       }

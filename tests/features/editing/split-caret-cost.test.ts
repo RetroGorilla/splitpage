@@ -74,10 +74,14 @@ test("legacy Split enter and dispose keep unchanged stored space forms and resto
     const { buildSplitpageFile } = await import("./src/adapters/formats/project-file.ts");
     const { openDocument } = await import("./src/bootstrap/wiring/transition-owners.ts");
     const { render, renderRow } = await import("./src/features/rows/render.ts");
-    const rows = Array.from({ length: 2 }, (_, index) => ({ id: "r" + index, audioText: "Word ", visualText: "Wide " }));
-    const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows({ schema: 2, paragraphsDecided: true, title: "Paint cost", rows })))], "paint.splitpage");
-    await openDocument({ kind: "file", file, handle: null, options: { skipSnapshot: true } });
-    assert.deepEqual(counts, { mapping: 0, paint: 0, reading: 0 });
+    for (const size of [2, 50]) {
+      const rows = Array.from({ length: size }, (_, index) => ({ id: "r" + index, audioText: "Word ", visualText: "Wide " }));
+      const file = new File([buildSplitpageFile(exportDocumentOf(migrateRows({ schema: 2, paragraphsDecided: true, title: "Paint cost", rows })))], "paint.splitpage");
+      await openDocument({ kind: "file", file, handle: null, options: { skipSnapshot: true } });
+      assert.equal(document.querySelector('#rows .cell-editable[data-id="r0"][data-field="audioText"]').textContent, "Word ");
+      render(); renderRow("r0");
+      assert.deepEqual(counts, { mapping: 0, paint: 0, reading: 0 });
+    }
     const { splitSpaceSwitch } = await import("./src/test/_shared-split-space.mjs");
     const { enterSharedSession, leaveSharedSession } = await import("./src/bootstrap/wiring/shared-session.ts");
     const { ports } = splitSpaceSwitch();
