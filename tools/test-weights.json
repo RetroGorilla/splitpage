@@ -426,7 +426,6 @@
   "tests/adapters/collab/text-preparation.test.ts": 751,
   "tests/adapters/collab/timing-marks.test.ts": 560,
   "tests/adapters/collab/transaction-origin.test.ts": 337,
-  "tests/adapters/collab/trial-replica.test.ts": 1840,
   "tests/adapters/collab/undo-creation.test.ts": 17608,
   "tests/adapters/collab/undo-gallery.test.ts": 12312,
   "tests/adapters/collab/undo-heading-consumed.test.ts": 2779,

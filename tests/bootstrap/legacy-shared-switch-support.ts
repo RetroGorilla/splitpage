@@ -8,7 +8,6 @@ import { sharedAuthorPort } from "../collab/editor-ports/shared-author.ts";
 import { sharedUndoOwner } from "../collab/editor-ports/shared-undo.ts";
 import type { ValidatedDocument } from "../../src/core/document/validated.ts";
 import type { SharedStructureContentPorts } from "../../src/adapters/collab/structure-content.ts";
-import { fromHtml } from "../../src/bootstrap/richtext.ts";
 import { currentDocument, sharedRecoverySession } from "../../src/bootstrap/wiring/session-owner.ts";
 import { enterSharedSession } from "../../src/bootstrap/wiring/shared-session.ts";
 import type { SharedEditorBackend, SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
@@ -46,10 +45,6 @@ export interface LegacySharedSwitchPorts extends SharedSwitchPorts {
   readonly bindings: SharedBindings;
   readonly structure: SharedStructureContentPorts;
   readonly hydrate?: (handle: SharedDocumentHandle, migrated: ValidatedDocument) => void;
-}
-
-export function withLegacySwitchPorts(ports: SharedSwitchPorts): LegacySharedSwitchPorts {
-  return { ...ports, bindings: { enter: () => {}, settle: () => null, leave: () => {} }, structure: { cells: fromHtml } };
 }
 
 // why: a destroy listener that throws stops Yjs before it drops its observers; a second attempt finishes the job

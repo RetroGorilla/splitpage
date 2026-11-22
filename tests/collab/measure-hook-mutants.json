@@ -38,8 +38,8 @@
     {
       "label": "an open-gate live apply spans the updates its frame drains",
       "file": "src/adapters/collab/document.ts",
-      "find": "        applyAdmittedUpdate(state, update, apply => transactRemoteCollabState(state, apply));",
-      "replace": "        if (timingMarks.marksOn) performance.mark(\"measure:live-apply:start\"); try { applyAdmittedUpdate(state, update, apply => transactCollabState(state, \"remote\", apply)); } finally { if (timingMarks.marksOn) performance.mark(\"measure:live-apply:end\"); }",
+      "find": "      applyAdmittedUpdate(state, update, apply => transactRemoteCollabState(state, apply));",
+      "replace": "      if (timingMarks.marksOn) performance.mark(\"measure:live-apply:start\"); try { applyAdmittedUpdate(state, update, apply => transactCollabState(state, \"remote\", apply)); } finally { if (timingMarks.marksOn) performance.mark(\"measure:live-apply:end\"); }",
       "tests": [
         "tests/adapters/collab/timing-marks.test.ts"
       ]

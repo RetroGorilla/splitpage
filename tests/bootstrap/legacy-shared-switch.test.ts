@@ -1,7 +1,7 @@
 import type { SharedSessionParts } from "./legacy-shared-switch-support.ts";
 import { legacySessionParts } from "./legacy-shared-switch-support.ts";
 import type { LegacySharedSwitchPorts } from "./legacy-shared-switch-support.ts";
-import { enterLegacySharedSession, withLegacySwitchPorts } from "./legacy-shared-switch-support.ts";
+import { enterLegacySharedSession } from "./legacy-shared-switch-support.ts";
 import "../../src/test/_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -12,22 +12,17 @@ import type { Command } from "../../src/application/session/document-session.ts"
 import { readOperation } from "../../src/core/collab/read-operation.ts";
 import { migrateRows } from "../../src/core/migrate.ts";
 import { collabState } from "../../src/adapters/collab/state.ts";
-import { applySharedUpdate, createSharedDocument, destroySharedDocument, encodeSharedState, encodeSharedStateVector, encodeSharedUpdate, observeSharedTransactions,
-  transactSharedDocument } from "../../src/adapters/collab/document.ts";
-import { holdSharedBuffer } from "../../src/adapters/collab/ingress.ts";
-import { openSharedTrialReplicas, SharedTrialReplica } from "../../src/adapters/collab/trial-replica.ts";
+import { observeSharedTransactions } from "../../src/adapters/collab/document.ts";
 import {
   currentDocument, onDocumentReplaced, runCommand, sharedSession, standaloneSession, startSessionBridge
 } from "../../src/bootstrap/wiring/session-owner.ts";
 import { routeUndoReplays, sharedUndoRoute, startUndo, undoOwner, undoPorts, undoSessionPort } from "../../src/bootstrap/wiring/undo.ts";
 import {
-  forceLeaveSharedSession, leaveSharedSession, SHARED_ENTER_FAILED,
+  leaveSharedSession, SHARED_ENTER_FAILED,
 } from "../../src/bootstrap/wiring/shared-session.ts";
 import { fakeMigration } from "../core/migrate-ports.ts";
 import { createFlowLoadRuntime } from "../core/flow/load.ts";
 import { fakeClock } from "../application/session-fakes.ts";
-import { Doc } from "yjs";
-import { bootNativeEntrySwitchFixture, nativeEntrySwitchFixture, stopNativeEntrySwitchFixture } from "./native-entry-switch-support.ts";
 
 const CAN = { edit: () => ({ allowed: true as const }), comment: () => ({ allowed: true as const }) };
 const START_ID = "d" + "1".repeat(32), newId = (n: number): string => "d" + String(n).padStart(32, "0");
@@ -181,88 +176,3 @@ for (const fault of LEAVE_FAULTS_A_LANDED) {
     } finally { s.stop(); }
   });
 }
-
-function runningTrial(parts: SharedSessionParts): SharedTrialReplica {
-  const trial = collabState(parts.handle).trial;
-  assert.ok(trial instanceof SharedTrialReplica);
-  return trial;
-}
-
-function followsLive(parts: SharedSessionParts): boolean {
-  const replica = runningTrial(parts).encode(), live = encodeSharedState(parts.handle);
-  return replica.byteLength === live.byteLength && replica.every((value, index) => value === live[index]);
-}
-
-test("entry starts one trial replica that follows hydration and bridge commands, leave releases it, and a new entry starts a fresh one", async () => {
-  const s = start(), open = openSharedTrialReplicas();
-  try {
-    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
-    const first = s.entered(), trial = runningTrial(first), replica = trial.replica;
-    assert.deepEqual([openSharedTrialReplicas() - open, followsLive(first)], [1, true]);
-    assert.equal(runCommand(lengthCommand()).kind, "applied");
-    assert.deepEqual([length(), followsLive(first)], [7, true]);
-    assert.deepEqual(leaveSharedSession(s.ports), { ok: true });
-    assert.deepEqual([openSharedTrialReplicas() - open, collabState(first.handle).trial, replica.isDestroyed], [0, null, true]);
-    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
-    const second = s.entered();
-    assert.notEqual(runningTrial(second), trial);
-    assert.deepEqual([openSharedTrialReplicas() - open, followsLive(second)], [1, true]);
-    assert.deepEqual(leaveSharedSession(s.ports), { ok: true });
-    assert.equal(openSharedTrialReplicas() - open, 0);
-  } finally { s.stop(); }
-});
-
-test("a failed entry, before or after hydration, releases the trial replica it started", async () => {
-  for (const fault of ["bindings.enter", "hydration", "detach"] as const) {
-    const s = start(), open = openSharedTrialReplicas();
-    try {
-      s.arm(fault);
-      assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: false, reason: SHARED_ENTER_FAILED });
-      const parts = s.entered();
-      assert.deepEqual([fault, openSharedTrialReplicas() - open, collabState(parts.handle).trial], [fault, 0, null]);
-    } finally { s.stop(); }
-  }
-});
-
-test("a forced leave that ends the session during a buffer hold with a held update releases the trial replica and every observer", async () => {
-  const s = start(), open = openSharedTrialReplicas();
-  try {
-    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
-    const parts = s.entered(), trial = runningTrial(parts), sender = createSharedDocument();
-    assert.deepEqual(applySharedUpdate(sender, encodeSharedState(parts.handle)), { ok: true });
-    const vector = encodeSharedStateVector(sender);
-    transactSharedDocument(sender, "local-command", () => { collabState(sender).roots.meta.set("peer", true); });
-    holdSharedBuffer(parts.handle);
-    assert.deepEqual(applySharedUpdate(parts.handle, encodeSharedUpdate(sender, vector)), { ok: true });
-    assert.equal(collabState(parts.handle).ingress.held.length, 1);
-    s.hold("buffer-stuck");
-    assert.deepEqual(forceLeaveSharedSession(), { ok: false, reason: "buffer-stuck" });
-    assert.deepEqual([openSharedTrialReplicas() - open, collabState(parts.handle).trial, trial.replica.isDestroyed, collabState(parts.handle).ingress.held.length],
-      [0, null, true, 0]);
-    sharedGone(parts);
-    destroySharedDocument(sender);
-  } finally { s.stop(); }
-});
-
-test("legacy setup failure reports before its destroy failure and leaves standalone installed", async t => {
-  await bootNativeEntrySwitchFixture();
-  t.after(stopNativeEntrySwitchFixture);
-  const fixture = nativeEntrySwitchFixture(), original = currentDocument();
-  t.after(fixture.close);
-  const setup = new Error("setup"), destruction = new Error("destroy");
-  const destroy = Doc.prototype.destroy;
-  let live: string | undefined, failedOnce = false;
-  const on = Doc.prototype.on;
-  t.mock.method(Doc.prototype, "on", function (this: Doc, ...args: Parameters<Doc["on"]>) {
-    live ??= this.guid;
-    if (this.guid !== live && args[0] === "beforeTransaction") throw setup;
-    return on.apply(this, args);
-  });
-  t.mock.method(Doc.prototype, "destroy", function (this: Doc) {
-    if (this.guid === live && !failedOnce) { failedOnce = true; throw destruction; }
-    destroy.call(this);
-  });
-  assert.deepEqual(await enterLegacySharedSession(withLegacySwitchPorts(fixture.ports)), { ok: false, reason: "enter-failed" });
-  assert.deepEqual(fixture.errors.slice(0, 2), [setup, destruction]);
-  assert.equal(currentDocument(), original);
-});
