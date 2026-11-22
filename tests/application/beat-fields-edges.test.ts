@@ -1,7 +1,8 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { beatAt, beatLengthCommand } from "../../src/application/commands/beat-length.ts";
-import { beatStatusCommand } from "../../src/application/commands/beat-status.ts";
+import { beatStatusCommand, setBeatFilmedCommand } from "../../src/application/commands/beat-status.ts";
+import { targetLengthCommand, wordsPerMinuteCommand } from "../../src/application/commands/document-settings.ts";
 import type { StampPorts } from "../../src/application/session/ports.ts";
 import { MAY_EDIT, liveOf, planOf, rowsOf, viewOf } from "./plan-views.ts";
 
@@ -49,4 +50,12 @@ test("a status write whose scene left before it fails, naming the scene, and wri
   const live = liveOf({ rows: rowsOf(["r2"]) });
   assert.throws(() => planned.apply(live), { message: "scene r1 left the document before its status was set" });
   assert.equal(live.rows[0]?.status, "todo");
+});
+
+test("unchanged standalone beat fields and document settings plan no edit", () => {
+  const doc = viewOf({ rows: rowsOf(["R1"], { lengthSeconds: 5, status: "todo" }), targetSeconds: 60, wordsPerMinute: 150 });
+  for (const command of [beatStatusCommand("R9", stamps), setBeatFilmedCommand("R1", false, stamps), beatLengthCommand("R1", 5, stamps),
+    targetLengthCommand(60), wordsPerMinuteCommand(150), wordsPerMinuteCommand(20)]) {
+    assert.equal(command.plan(doc, MAY_EDIT), null, command.name);
+  }
 });

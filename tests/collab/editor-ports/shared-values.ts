@@ -5,23 +5,14 @@ import type { CellDecoder } from "../../../src/core/text/ports.ts";
 import type { SharedContentRef } from "../../../src/core/collab/operations.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { sharedBeatStamp } from "../../../src/adapters/collab/stamp.ts";
-import { readSharedStatusHeads } from "../../../src/adapters/collab/status.ts";
-import { readSharedJoinedFields, readSharedJoinedParts } from "../../../src/adapters/collab/undo-join.ts";
+import { readSharedJoinedParts } from "../../../src/adapters/collab/undo-join.ts";
 import { collabState } from "../../../src/adapters/collab/state.ts";
 import { sharedStructureIdentity } from "../../../src/adapters/collab/structure-identity.ts";
 
 export function sharedValuePorts(source: { readonly handle: () => SharedDocumentHandle | null; readonly author: SharedValuePorts["author"]; readonly stamps: StampPorts }): () => SharedValuePorts | null {
   return () => source.handle() ? {
     author: source.author,
-    beatStamp: (beat, author) => sharedBeatStamp(beat as SharedContentRef, author, source.stamps),
-    statusHeads: beat => {
-      const handle = source.handle();
-      return handle ? readSharedStatusHeads(handle, { scope: "beat", record: beat as SharedContentRef }) : [];
-    },
-    statusParts: beat => {
-      const handle = source.handle();
-      return handle ? readSharedJoinedFields(handle, beat) : [beat];
-    }
+    beatStamp: (beat, author) => sharedBeatStamp(beat as SharedContentRef, author, source.stamps)
   } : null;
 }
 

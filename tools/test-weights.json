@@ -510,7 +510,6 @@
   "tests/application/commands/shared-refusals.test.ts": 2351,
   "tests/application/commands/structure-shared.test.ts": 18241,
   "tests/application/commands/tag-rewrites.test.ts": 831,
-  "tests/application/commands/values-shared.test.ts": 11052,
   "tests/application/comment-author.test.ts": 157,
   "tests/application/comment-capability.test.ts": 383,
   "tests/application/commit-time-writers.test.ts": 51602,
