@@ -44,24 +44,6 @@
       "file": "src/bootstrap/wiring/split-buffer.ts",
       "find": "abandonment: abandon => shared.bufferedText.abandonment?.(final => {\n            if (final || !binding.finish()) abandon(final);\n          }) ?? (() => {})",
       "replace": "abandonment: () => () => {}"
-    },
-    {
-      "label": "Input ordinary abandon discards committable text",
-      "file": "src/bootstrap/wiring/buffered-input.ts",
-      "find": "if (final || !binding.finish()) abandon(final);",
-      "replace": "abandon(final);"
-    },
-    {
-      "label": "Input field loses final abandonment",
-      "file": "src/bootstrap/wiring/buffered-input.ts",
-      "find": "if (final || !binding.finish()) abandon(final);",
-      "replace": "if (final || !binding.finish()) abandon(false);"
-    },
-    {
-      "label": "Input field never registers for abandonment",
-      "file": "src/bootstrap/wiring/buffered-input.ts",
-      "find": "abandonment: abandon => shared.bufferedText.abandonment?.(final => {\n          if (final || !binding.finish()) abandon(final);\n        }) ?? (() => {})",
-      "replace": "abandonment: () => () => {}"
     }
   ]
 }

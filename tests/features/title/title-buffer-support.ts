@@ -16,7 +16,7 @@ import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.t
 import { sharedBufferedTarget } from "../../../src/adapters/collab/buffer.ts";
 import { edgeInput } from "../edge-input.ts";
 import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
-import { sharedBufferedInputHistory } from "../../../src/bootstrap/wiring/buffered-input.ts";
+import { sharedBufferedInputHistory } from "../buffered-input-history.ts";
 import { registerSharedUndoOperationHandlers } from "../../../src/adapters/collab/undo-handlers.ts";
 
 export type TitlePage = ReturnType<typeof sharedTitle>;

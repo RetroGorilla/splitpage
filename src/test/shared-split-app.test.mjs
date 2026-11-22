@@ -2,7 +2,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
 import { assertReplicasAgree } from "../../tests/collab/agreement.ts";
-import { migrateRows, productionReaders } from "../bootstrap/document-ports.ts";
+import { migrateRows } from "../bootstrap/document-ports.ts";
 import { sharedSplitBindings } from "../bootstrap/wiring/shared-split.ts";
 import { adoptReplacement, currentDocument, sharedSession } from "../bootstrap/wiring/session-owner.ts";
 import { enterSharedSession, leaveSharedSession, sharedSessionParts } from "../bootstrap/wiring/shared-session.ts";
@@ -24,13 +24,6 @@ import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { sharedCellSpaceForm } from "../bootstrap/wiring/ports/shared-cell-space.ts";
 import { sharedCommandRefusalNotice } from "../bootstrap/wiring/ports/shared-command-notices.ts";
 import { openingStatus } from "../bootstrap/wiring/ports/transitions.ts";
-import { sharedBufferPorts } from "../bootstrap/wiring/ports/shared-buffer.ts";
-import { sharedBufferedInputPorts } from "../bootstrap/wiring/buffered-input.ts";
-import { sessionStamps } from "../bootstrap/wiring/session-owner.ts";
-import { TITLE_FIELD_KEY } from "../application/editing/buffered-field-key.ts";
-import { bindBufferedInput } from "../features/common/buffered-input.ts";
-import { beatPos } from "../core/flow/flow.ts";
-import { edgeInput } from "../../tests/features/edge-input.ts";
 
 window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};
@@ -382,44 +375,4 @@ for (const field of ["audioText", "visualText"]) test(`rule 166 C7 ${field}: aba
       [refusedWarning, refusedWarning, refusedWarning]);
   } finally { stop(); f.close(); }
   assert.equal(ports.bindings.abandonable(), 0);
-});
-
-test("rule 166 C7 buffered input factory registers, preserves committable text, cancels composition and releases on final abandon", async () => {
-  const f = await enter(), steps = new Set();
-  const input = document.createElement("input"); document.body.append(input);
-  let bound = null, stop = () => {};
-  try {
-    const shared = sharedBufferPorts(f.parts.handle, f.parts.session, { readers: productionReaders, stamps: sessionStamps,
-      author: () => f.parts.author.next(), missingBase: key => { missing.push(key); }, recovered: key => { recovered.push(key); },
-      report: outcome => { reports.push(outcome); }, abandonment: step => { steps.add(step); return () => { steps.delete(step); }; } });
-    const inputs = sharedBufferedInputPorts(shared);
-    bound = bindBufferedInput({ inputs: [input], key: TITLE_FIELD_KEY, pasteLimit: 300,
-      stored: () => currentDocument().title, position: offset => beatPos(TITLE_FIELD_KEY, offset),
-      owns: pos => pos.kind === "beat" && pos.rowId === TITLE_FIELD_KEY }, inputs);
-    assert.equal(steps.size, 1);
-    input.focus(); input.setSelectionRange(input.value.length, input.value.length);
-    const edge = edgeInput(() => input);
-    input.dispatchEvent(new window.InputEvent("beforeinput", { inputType: "insertText", data: "!", bubbles: true, cancelable: true }));
-    input.value += "!"; input.setSelectionRange(input.value.length, input.value.length);
-    for (const step of steps) step(false);
-    assert.equal(currentDocument().title, "Shared Split!");
-    edge.imeSet("held");
-    for (const step of steps) step(false);
-    assert.equal(bound.finish(), true);
-    assert.equal(input.value, "Shared Split!");
-    const answers = []; let draining = false;
-    stop = f.parts.session.subscribe(() => {
-      if (draining) return; draining = true;
-      for (const step of steps) step(false);
-      answers.push(bound.finish());
-      for (const step of steps) step(true);
-      answers.push(bound.finish());
-    });
-    input.setSelectionRange(input.value.length, input.value.length); assert.equal(edge.type("x"), true);
-    stop(); assert.deepEqual(answers, [false, true]);
-    assert.equal(currentDocument().title, "Shared Split!x");
-    assert.equal(bound.dispose(), true); assert.equal(steps.size, 0);
-    agree(f, [["r1", "abcdef", "abcdef"], ["r2", "Other", "Wide"]], [], [{ kind: "rejected", reason: "buffer-composition" },
-      { kind: "rejected", reason: "buffer-pending" }, { kind: "rejected", reason: "buffer-pending" }]);
-  } finally { stop(); bound?.dispose(); input.remove(); f.close(); }
 });

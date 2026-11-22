@@ -16,7 +16,6 @@ const SURFACES: Readonly<Record<string, Row>> = {
   "bootstrap/wiring/ports/writer-visual-buffer.ts": { registers: "const stopAbandonment = shared.bufferedText.abandonment?.(abandon);" },
   "features/empty-script/empty-script.ts": { registers: "abandoning = ports.abandonment?.(abandon);" },
   "bootstrap/wiring/split-buffer.ts": { registers: "abandonment: abandon => shared.bufferedText.abandonment?.(final => {" },
-  "bootstrap/wiring/buffered-input.ts": { registers: "abandonment: abandon => shared.bufferedText.abandonment?.(final => {" },
   "features/rows/scene-controls.ts": { notSharedYet: "#1591" }
 };
 

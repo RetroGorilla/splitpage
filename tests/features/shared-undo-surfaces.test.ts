@@ -30,7 +30,7 @@ import { bindBufferedInput } from "../../src/features/common/buffered-input.ts";
 import { beatPos, headingPos } from "../../src/core/flow/flow.ts";
 import { createMonitoredSharedDocument } from "../adapters/collab/helpers.ts";
 import { applySharedUpdate, encodeSharedState, destroySharedDocument } from "../../src/adapters/collab/document.ts";
-import { sharedBufferedInputHistory } from "../../src/bootstrap/wiring/buffered-input.ts";
+import { sharedBufferedInputHistory } from "./buffered-input-history.ts";
 
 type Hook = (h: Stage1ExecutorHarness) => SharedUndo;
 
