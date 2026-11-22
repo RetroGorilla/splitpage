@@ -279,7 +279,7 @@ Inventory at `867353bd9`, from `git ls-files`: 112 source files and 183 test fil
 1. **Prepare the boundary.** Relocate `tests/collab/legacy-app/four-beat-state.base64` unchanged to `tests/adapters/collab/native/fixtures/legacy-four-beat-state.base64`; update `src/test/shared-native-editor-app.test.mjs` and preserve the refusal and unchanged-document checks. Extract the standalone and native test setup listed below and prove the manifest retargets while the three legacy fixture modules, test page, legacy routes and live legacy guards still run. Repair the nine already-missing registrations in this stage. Keep legacy targets alongside the new targets when both still exercise live paths. Decouple the adapter-side tests and update classifier expectations as specified below.
 2. **Retire the fixture, editor wiring and their guards.** Delete `tests/collab/legacy-app/{browser,shared-test,shared-test-peer}.ts`, `src/test/_legacy-shared-app-boot.mjs`, `src/test/shared-hook-{legacy-probes,measure,peer,routes}-app.test.mjs` and the legacy-only app suites under Not yet removable. Cut the legacy halves of mixed suites only after stage 1. Remove helper modules such as `_shared-split-{callers,records,refusals,space}.mjs` after their last legacy caller goes. In `build.mjs` remove the legacy entry, second build argument and generated page. Update `tools/test-strict-bundle.mjs`, `tools/test-release-hooks.mjs` (including `appJs(true, true)`), `tests/bootstrap/composition-root.test.ts` and the browser harness documentation in the same change. Keep the normal test-hook and release exclusion assertions.
 
-   Keep `src/bootstrap/wiring/shared-session.ts` as the switch owner with the native factory/backend, entry, rollback, ordinary and forced Leave paths. Remove its legacy parts builder and default backend. Remove `shared-split.ts`, `shared-writer.ts`, `split-buffer.ts`, `buffered-input.ts`, `writer-empty-script.ts`, `ports/writer-visual-buffer.ts`, the legacy Recovery panel and the legacy-only port edges in the boundary table. Update reverse callers in `app.ts`, `main.ts`, `actions.ts`, `editor.ts`, `writer.ts`, `undo.ts`, `ports/editing.ts` and the view, row, title, Find and production mounts. In `ports/shared-commands.ts` keep the native forwarding and standalone fallback. Drop legacy-only external tests that require this wiring and their mutation guards in this stage. Keep the adapter and its behavioral tests, adapter fixture support, classifier and both CI partitions. Recompute the classifier on the post-cut tree and prove the stage 2 partition checks below.
+   Keep `src/bootstrap/wiring/shared-session.ts` as the switch owner with the native factory/backend, entry, rollback, ordinary and forced Leave paths. Remove its legacy parts builder and default backend. Remove `shared-split.ts`, `shared-writer.ts`, `split-buffer.ts`, `buffered-input.ts`, `writer-empty-script.ts`, `ports/writer-visual-buffer.ts`, the legacy Recovery panel and the legacy-only port edges in the boundary table. Update reverse callers in `app.ts`, `main.ts`, `actions.ts`, `editor.ts`, `writer.ts`, `undo.ts`, `ports/editing.ts` and the view, row, title, Find and production mounts. In `ports/shared-commands.ts` keep the native forwarding and standalone fallback. Drop a legacy-only external test with this wiring only after each surviving guard has passed on its replacement target. The source-lifetime audit below gates that decision. Keep the adapter and its behavioral tests, adapter fixture support, classifier and both CI partitions. Recompute the classifier on the post-cut tree and prove the stage 2 partition checks below.
 3. **Remove the isolated adapter.** Delete the 112 tracked legacy source files and remaining files from the 183-file non-native test inventory, including adapter-only tests outside that directory and their support. Retire the old measurement harness in `tests/collab/measure/` and its old-only launcher/callers while preserving `mark-parts.mjs` and its tests. Drop adapter-only mutation entries and remove the nightly slow job for `undo-slow-mutants.json`. Update the fast manifest enumeration and prove every surviving manifest runs exactly once. Remove the old CI job, change detection, gate/evidence fields, and success predicates in `.github/workflows/ci.yml`; remove the suite input in `.github/actions/root-test-setup/action.yml`. Update `tools/{ci-changes,run-tests,test-ci-changes,test-ci-shards,test-ci-efficiency,test-run-tests}.mjs` and remove `tools/{old-adapter-tests,test-ci-old-adapter-shards}.mjs`. Prove the regular PR matrix and nightly matrix each cover all surviving discovered root tests exactly once. Prune stale weights and resolved dependency/comment exceptions. Remove the old trial-copy special case from `tools/perf-ab.mjs` and update `tools/test-perf-shared.mjs`, leaving the standalone cross-revision comparison runnable.
 4. **Close the mapping and record performance.** Resolve remaining Retained rows, update Build status, section 11 and the design adapter-test row, and add one Unreleased changelog line. Compare pre-stage-1 main against main after the adapter cut using the standalone performance driver and record the result.
 
@@ -438,55 +438,82 @@ Targets are relative to `src/adapters/collab/`. This inventory includes type imp
 
 ### Mutation manifests
 
-Names identify `tests/collab/<name>-mutants.json`. Numbers are one-based positions in the base revision. Stage 1 retains every base entry and repairs or retargets the named entries below. Stage 2 removes the listed wiring-dependent entries and prunes legacy test targets from both defaults and overrides. Stage 3 removes the unlisted remainder and keeps the explicit final entries. Delete a manifest when its last entry goes. Match the original label and source target before editing a renumbered list. Before each cut, verify the edited source and every effective test path still exist, each surviving edit matches once, and every live original assertion has a target. If an isolated adapter case still catches an entry marked for stage 2, keep that test target and entry through stage 3.
+Names identify `tests/collab/<name>-mutants.json`. Numbers are one-based positions in the base revision. Stage 1 retains every base entry and repairs or retargets the named entries below. Stage 2 removes only the listed source branches and prunes retired test targets from both defaults and overrides. Stage 3 removes the unlisted remainder, subject to the source-lifetime gate below. Permanent guards keep their covered behavior. Entries in the hold column stay live until the exact mutated branch and its callers have been traced. Delete a manifest when its last entry goes. Match the original label and source target before editing a renumbered list. Before each cut, verify the edited source and every effective test path still exist, each surviving edit matches once, and every live original assertion has a target. If an isolated adapter case still catches an entry marked for stage 2, keep that test target and entry through stage 3.
 
-| Manifest | Entries at base | Remove in stage 2 | Keep after stage 3 | Reason to keep |
-| --- | ---: | --- | --- | --- |
-| `broll-keying` | 33 | 1, 11, 25-27, 29-33 | 3-5, 8-10, 12-14, 16, 28 | Standalone Writer Visual leave and pure key/shot planning |
-| `buffer-binding` | 156 | 1-11, 13-19, 24, 26-28, 32-143, 145-156 | 12, 25, 29-31, 144 | Field, selection and cost contracts |
-| `buffer-commit` | 2 | None | 2 | Pure splice planning |
-| `buffer` | 4 | None | None | Legacy-only |
-| `comment-command` | 16 | None | 1-16 | Comment admission, authorship and draft guards |
-| `commit-writer` | 12 | None | None | Legacy-only |
-| `composition` | 96 | 1-22, 24-41, 44, 47, 54-55, 62-70, 73-74, 78, 80-81, 88-89, 92-93, 96 | 42-43, 45-46, 48-53, 56-61, 71-72, 75-77, 79, 82-87, 90-91, 94-95 | Native lifecycle, common switch rollback, draft/history, Writer disposal and buffered-field contracts |
-| `creation-undo` | 42 | 16-17, 24, 27 | None | Legacy-only |
-| `disable-list` | 18 | None | 1-18 | Local save, merge, drafts and bundles |
-| `draft-detach` | 28 | None | 1-28 | Draft lifecycle and ownership |
-| `empty-script` | 45 | 1-6, 12-14, 18, 20-21, 27, 30, 32-33, 35, 38-45 | 7-11, 15-17, 19, 22-26, 28-29, 31, 34, 36-37 | Shared-independent feature guards |
-| `find-replace` | 27 | 1-12, 19-23, 25, 27 | 13-18 | Pure cell splice order and bounds |
-| `gallery-command` | 25 | 1-25 | None | Legacy-only |
-| `heading-creation-undo` | 14 | None | None | Legacy-only |
-| `ingress-gate` | 9 | None | None | Legacy-only |
-| `join-glue` | 3 | None | 2 | Pure projection glue |
-| `join` | 10 | None | None | Legacy-only |
-| `join-neighborhood` | 4 | None | None | Legacy-only |
-| `join-routing` | 12 | None | None | Legacy-only |
-| `measure-hook` | 19 | None | 2, 7-19 | Native entry, storage, peer, history and Find plus timing infrastructure |
-| `projection` | 48 | None | 10, 19-20, 25, 27-29, 41-42 | Pure projection contracts |
-| `record-command` | 21 | 19-20 | None | Legacy-only |
-| `record-removal` | 36 | 18, 30-31, 35 | None | Legacy-only |
-| `recovery-panel` | 48 | 1-48 | None | Legacy-only |
-| `removal` | 30 | 19 | 23, 27, 30 | Pure discard and recovery contracts |
-| `scene-create` | 12 | 1-12 | None | Legacy-only |
-| `shared-entry` | 76 | 13-24, 26, 33-34, 43-47, 52-64, 66-68, 73-76 | 1-12, 25, 27-32, 35-42, 48-51, 65, 69-72 | Local files, drafts, navigation and shared admission |
-| `shared-session` | 27 | None | 23 | Publication change computation |
-| `split-abandonment` | 10 | 1-10 | None | Legacy-only |
-| `split-callers` | 50 | 1-42, 44-46, 48-50 | 43, 47 | Row command ports |
-| `split-composed` | 22 | 1-17 | 18-22 | Clipboard and row editor routing |
-| `split-records` | 80 | 5-37, 40-42, 47-49, 52-58, 60-61, 66-68, 71-75 | 1-4, 38-39, 43-46, 50-51, 59, 62-65, 69-70, 76-80 | Standalone Escape and drafts, native draft retry, independent production commands, overlay and draft inventory |
-| `split-review` | 4 | 1-4 | None | Legacy-only |
-| `structure-command` | 14 | 1-14 | None | Legacy-only |
-| `structure` | 27 | None | None | Legacy-only |
-| `trial-replica` | 22 | None | None | Legacy-only |
-| `undo` | 142 | None | 1, 4, 6-14, 16, 18-22, 24-29 | Adapter-independent undo contracts |
-| `undo-slow` | 5 | None | None | Legacy-only |
-| `value-command` | 9 | 1-9 | None | Legacy-only |
-| `visible-refusal` | 11 | 1-7, 10-11 | None | Legacy-only |
-| `writer-visual` | 17 | 1-10, 12-17 | 11 | Standalone Visual key cost |
+| Manifest | Entries at base | Remove in stage 2 | Hold for branch audit | Keep after stage 3 | Reason to keep |
+| --- | ---: | --- | --- | --- | --- |
+| `broll-keying` | 33 | 1, 11, 32-33 | 25-27, 29-31 | 3-5, 8-10, 12-14, 16, 28 | Standalone Writer Visual leave and pure key/shot planning |
+| `buffer-binding` | 156 | 32-39, 41-42, 44, 101, 124-125, 128-134, 140, 146, 150-155 | 1-11, 14-19, 26-28, 40, 43, 45-48, 50, 53-97, 99, 102-106, 108-113, 115-121, 126-127, 141-143, 145, 147-149, 156 | 12, 25, 29-31, 144 | Field, selection and cost contracts |
+| `buffer-commit` | 2 | None | None | 2 | Pure splice planning |
+| `buffer` | 4 | None | None | None | Legacy-only |
+| `comment-command` | 16 | None | None | 1-16 | Comment admission, authorship and draft guards |
+| `commit-writer` | 12 | None | None | None | Legacy-only |
+| `composition` | 96 | 2, 13, 24-25, 29-31, 34-35, 41, 44, 47, 54-55, 73-74, 78, 80-81, 88, 92, 96 | 1, 3-12, 14-22, 26-28, 32-33, 36, 39, 62-70, 89, 93 | 42-43, 45-46, 48-53, 56-61, 71-72, 75-77, 79, 82-87, 90-91, 94-95 | Native lifecycle, common switch rollback, draft/history, Writer disposal and buffered-field contracts |
+| `creation-undo` | 42 | None | None | None | Legacy-only |
+| `disable-list` | 18 | None | None | 1-18 | Local save, merge, drafts and bundles |
+| `draft-detach` | 28 | None | None | 1-28 | Draft lifecycle and ownership |
+| `empty-script` | 45 | 2-3, 38-45 | 1, 4-6, 12-14, 18, 20-21, 27, 30, 32-33, 35 | 7-11, 15-17, 19, 22-26, 28-29, 31, 34, 36-37 | Shared-independent feature guards |
+| `find-replace` | 27 | None | 1-12 | 13-18 | Pure cell splice order and bounds |
+| `gallery-command` | 25 | 5, 25 | 1-4, 8-24 | None | Legacy-only |
+| `heading-creation-undo` | 14 | None | None | None | Legacy-only |
+| `ingress-gate` | 9 | None | None | None | Legacy-only |
+| `join-glue` | 3 | None | None | 2 | Pure projection glue |
+| `join` | 10 | None | None | None | Legacy-only |
+| `join-neighborhood` | 4 | None | None | None | Legacy-only |
+| `join-routing` | 12 | None | None | None | Legacy-only |
+| `measure-hook` | 19 | None | None | 2, 7-19 | Native entry, storage, peer, history and Find plus timing infrastructure |
+| `projection` | 48 | None | None | 10, 19-20, 25, 27-29, 41-42 | Pure projection contracts |
+| `record-command` | 21 | 19-20 | None | None | Legacy-only |
+| `record-removal` | 36 | 30-31, 35 | None | None | Legacy-only |
+| `recovery-panel` | 48 | 2-48 | None | 1 | The shared session accessor still serves native holds |
+| `removal` | 30 | None | None | 23, 27, 30 | Pure discard and recovery contracts |
+| `scene-create` | 12 | 12 | 1-11 | None | Legacy-only |
+| `shared-entry` | 76 | None | None | 1-76 | Common entry, opening, capabilities, bookkeeping, local files and navigation |
+| `shared-session` | 27 | None | None | 23 | Publication change computation |
+| `split-abandonment` | 10 | 1-10 | None | None | Legacy-only |
+| `split-callers` | 50 | 19-20, 50 | 1-18, 21-42, 44-46, 48-49 | 43, 47 | Row command ports |
+| `split-composed` | 22 | 1-7, 10-12, 17 | 8-9, 13-16 | 18-22 | Clipboard and row editor routing |
+| `split-records` | 80 | None | 28-29, 33-34 | 1-27, 30-32, 35-80 | Surviving record routing, notices and draft lifetimes |
+| `split-review` | 4 | 3 | 1-2, 4 | None | Legacy-only |
+| `structure-command` | 14 | 14 | 2-11 | None | Legacy-only |
+| `structure` | 27 | None | None | None | Legacy-only |
+| `trial-replica` | 22 | None | None | None | Legacy-only |
+| `undo` | 142 | None | None | 1, 4, 6-14, 16, 18-22, 24-29 | Adapter-independent undo contracts |
+| `undo-slow` | 5 | None | None | None | Legacy-only |
+| `value-command` | 9 | 9 | 1-2, 4-8 | None | Legacy-only |
+| `visible-refusal` | 11 | None | 1-7, 10-11 | None | Legacy-only |
+| `writer-visual` | 17 | 5-7, 14, 16 | 1-4, 9-10, 12-13, 15, 17 | 11 | Standalone Visual key cost |
+
+### Source lifetime audit
+
+Use the mutation's production branch and the behavior it changes to decide the cut. A test that happens to enter through the legacy fixture can still cover shared-independent code.
+
+- Adapter and adapter-reader edits formerly marked for stage 2 stay with their implementation until stage 3. This includes buffer-binding 135-139, plus the remaining early adapter targets in buffer-binding, composition, creation-undo, find-replace, gallery-command, record-removal, removal, structure-command, value-command and writer-visual. For buffer-binding 137-139, keep `tests/adapters/collab/painted-selection.test.ts` as the adapter-local target after the stage-1 extraction. Establish a clean baseline and show separately that 137 changes wire rank order, 138 bypasses validation and 139 loses malformed-text normalization. Each must fail its original reader assertion before the wiring cut.
+- Keep all shared-entry entries. The opening tokens, entry capabilities, history and draft controls, navigation, session admission and post-adoption lifecycle continue through the native factory and standalone paths. Keep the Recovery panel manifest's entry 1 too: native still uses `sharedRecoverySession` for the held session and the switch checks it before restoring selection.
+- Retain the shared-independent record and panel routes marked permanent in split-records. Their native or standalone callers still exercise the same feature branches, including refusal, success notices, menu and box state, focus and draft identity. Four entries in the old shared-record command layer need individual branch proof before retirement.
+- The hold column names previous early drops whose targets are in surviving or mixed modules. Examples include the Writer surface and buffered fields, title and scene input, caret and clipboard helpers, replay helpers, row and Split caller routing, admission notices, empty-script guards and gallery planning. For each, read the exact edit and follow its callers through native and standalone wiring. If the behavior still exists, extract its assertion and prove a kill in preparation. If only adapter-local callers remain, keep it through stage 3. Place it in stage 2 only if the cut deletes the exact branch and it no longer has a caller. When the result is unresolved, keep the guard and delay removal of its old fixture or supply a same-behavior isolated target first. Apply this test to the stage-3 remainder too, particularly to targets outside `src/adapters/collab/`.
+- Record the current path, exact branch, remaining callers, behavior, target file and clean baseline/individual-kill result for each moved guard before accepting the cut. Refresh stale match text to select the same behavior exactly once. Check that both defaults and overrides resolve to live test files. Keep one unchanged full assertion set per originally covered behavior through the staging changes.
+
+### Bookkeeping and draft lifetime carryover
+
+Run each preserved case unmodified first, then run each guard separately with its corrected test target and match text. Assert the same invariants on the surviving production route.
+
+| Guard | Preparation target and invariant |
+| --- | --- |
+| shared-entry 60 and 75 | Move the asynchronous merge case in `tests/bootstrap/shared-entry-bookkeeping.test.ts` to the native-capable switch fixture. The pre-adoption merge lands despite the later refusal, the edited text stays dirty, and the banner is shown. Kill 60 and 75 separately. |
+| shared-entry 61 | Carry both autosave cases from the same suite. An admitted edit during failed settlement leaves an enabled, pending autosave; a write already due during settlement runs once on release and leaves no armed timer. |
+| shared-entry 62 and 63 | Carry the draft notification and flush case. Pending becomes true and the already-admitted draft writes once with the expected sequence and bytes despite failed entry. Kill the flush and notification edits separately. |
+| shared-entry 64 | Run both bookkeeping leave-first cases, Open and New, using the real native factory. Keep the continuation hold, history result, landed destination and clean errors. Preserve the dedicated leave-first Open/New route checks as well, including blocking a nested replacement during each continuation and admitting the next entry. |
+| split-records 71 | Carry the By scene case from `src/test/shared-split-records-lifetimes-app.test.mjs` to native panel coverage. A successful unrelated status update redraws the panel and both copies of the tag retain their different typed values. The old match is stale: use the current scene-prefix and typed-box selector in `panels.ts`, preserving the mutation that drops scene identity. |
+| split-records 72 and 73 | Carry the pre-entry draft case. Native entry and redraw clear prior standalone tag and prop boxes, including a box outside the redraw set. Kill the lifetime check and first-draw cleanup separately. |
+| split-records 74 | Carry the same-ID shot case. A held prop survives redraw in the old session, then Leave and opening a different script clear the draft. Press Enter on the new shot and confirm its props stay empty. Also preserve the pre-entry prop assertion. |
+| split-records 75 | Carry both notes cases. After the refused write and Leave, an ordinary standalone redraw saves the same notes. A new native session starts with empty visible and stored drafts; repeated redraw writes nothing and blur writes once with one undo step. |
+
+Put the six switch cases in `tests/bootstrap/shared-entry-bookkeeping.test.ts` using the extracted native fixture, and keep their existing case-level assertions. Put the five panel cases in the surviving native record-draft app coverage with standalone exercised where the original case leaves the session. Run the complete clean case inventory on both sides of the fixture change, then run one independent kill per entry. At the base the six bookkeeping needles and four of the five lifetime needles match once. Refresh 71 against the live scene selector. The broader retained match scan also flags shared-entry 19 and split-records 8-12, 16, 24, 31-32, 41 and 68. Refresh these and the previously listed stale matches before requiring the focused kills. Mutation repair must preserve the original user invariant, including save/draft rollback ordering and both recovery routes.
 
 ### Evidence required before retiring legacy targets
 
-These are implementation gates. The plan review checked source matches and test ownership. The static inventory proposes 582 stage-2 removals, 447 stage-3 removals and 257 survivors. Those counts are pending the per-entry evidence below. Each retarget needs a clean focused baseline and a separate run where that one edit matches once and fails the intended assertion. Preserve the original outcome, including state and route-order assertions. Resolve drift in the entry's match text against current source before attempting the kill.
+These are implementation gates. The plan review checked source matches and test ownership. The inventory has 152 stage-2 removals, 486 stage-3 removals, 350 permanent guards and 298 guards held for branch-level proof. Each retarget needs a clean focused baseline and a separate run where that one edit matches once and fails the intended assertion. Preserve the original outcome, including state and route-order assertions. Resolve drift in the entry's match text against current source before attempting the kill.
 
 | Entry | Stage 1 evidence and stage 2 disposition |
 | --- | --- |
