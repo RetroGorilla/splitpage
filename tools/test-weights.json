@@ -234,7 +234,6 @@
   "src/test/shared-file-names.test.mjs": 136,
   "src/test/shared-find-replace-app.test.mjs": 2738,
   "src/test/shared-split-app.test.mjs": 7186,
-  "src/test/shared-split-callers-boundaries-app.test.mjs": 19216,
   "src/test/shared-split-callers-literals-app.test.mjs": 22427,
   "src/test/shared-split-callers-notices-app.test.mjs": 19220,
   "src/test/shared-split-callers-settled-app.test.mjs": 56070,
