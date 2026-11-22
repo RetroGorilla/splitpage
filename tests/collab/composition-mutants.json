@@ -686,24 +686,6 @@
       ]
     },
     {
-      "label": "a throwing second leave skips the first binding",
-      "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "leave: () => { try { second.leave(); } finally { first.leave(); } }",
-      "replace": "leave: () => { second.leave(); first.leave(); }",
-      "tests": [
-        "tests/bootstrap/shared-switch.test.ts"
-      ]
-    },
-    {
-      "label": "joined bindings never leave the second binding",
-      "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "leave: () => { try { second.leave(); } finally { first.leave(); } }",
-      "replace": "leave: () => { first.leave(); }",
-      "tests": [
-        "tests/bootstrap/shared-switch.test.ts"
-      ]
-    },
-    {
       "label": "the Writer discards a flow whose disposal refuses",
       "file": "src/features/writer/writer.ts",
       "find": "  if (flowWriter.dispose() === false) return false;",

@@ -69,16 +69,6 @@ export interface SharedSwitchPorts {
   readonly hydrate?: (handle: SharedDocumentHandle, migrated: ValidatedDocument) => void;
 }
 
-export function joinSharedBindings(first: SharedBindings, second: Pick<SharedBindings, "enter" | "leave">): SharedBindings {
-  return {
-    enter: parts => { first.enter(parts); second.enter(parts); },
-    settle: () => first.settle(),
-    leave: () => { try { second.leave(); } finally { first.leave(); } },
-    abandon: () => { first.abandon?.(); },
-    drop: () => { first.drop?.(); }
-  };
-}
-
 export type SharedSwitchOutcome = { readonly ok: true } | { readonly ok: false; readonly reason: string };
 
 export const SHARED_ALREADY = "already-shared";
