@@ -183,17 +183,6 @@ export const builderOperationCoverage = [
     ["standalone paragraph and retained-record fields", ["scalar"]],
     ["shared classification of partial-source/cross-scene clipboard policy", ["move-in-shared-session", "cross-scene-structural-paste"]],
     ["standalone application only; no shared plan, optional selection, null/caret-only/refused/no-change", []]
-  ]]),
-  classified("serve", ["flowCommand", "structure", "text-insert,text-delete,mark,segment-create,split,split-before,join,remove,restore,segment-move,heading-create,heading-finalize,heading-remove,record-create,record-set,scalar | move-in-shared-session,cross-scene-structural-paste", [
-    ["typing and arbitrary range-replacement outcomes", ["text-insert", "text-delete", "segment-create", "remove", "heading-remove"]],
-    ["observed mark and inline-markdown outcomes", ["mark"]],
-    ["ordinary and prefix-isolation split outcomes", ["split", "split-before"]],
-    ["joinWithPrevious outcomes", ["join"]],
-    ["structural clipboard restore/move/header and record outcomes", ["restore", "segment-move", "heading-create", "record-create", "record-set"]],
-    ["heading finalization outcomes", ["heading-finalize"]],
-    ["paragraph/retained-record field edits", ["scalar"]],
-    ["partial-source/cross-scene structural clipboard guards", ["move-in-shared-session", "cross-scene-structural-paste"]],
-    ["removed comment words stay in recovery / optional selection / null/caret-only/refused/no-change", []]
   ]])
 ] as const;
 

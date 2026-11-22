@@ -59,12 +59,8 @@ cache layout. No new schedule or runner routing is introduced.
 Every browser suite, four lanes, on `CI_RUNNER`, once a day and on demand. The
 nightly root matrix runs every unit, desktop and tool test across ten shards. The
 collaboration mutants run here too. `mutants-fast-baseline` and `mutants-fast`
-(six shards) run every `tests/collab/*-mutants.json` except the slow one, and
-`mutants` runs `tests/collab/undo-slow-mutants.json`, too slow for a pull
-request; [testing.md](testing.md#collaboration-mutants-in-ci) says which and why.
-When the fast set fails, `mutants-fast-report` opens or comments on the issue
-"Nightly collaboration mutants failed"; the slow job's report step does the same.
-The jobs pass or fail separately.
+(six shards) run every `tests/collab/*-mutants.json`. [Testing](testing.md#collaboration-mutants-in-ci) describes the baseline and shards.
+When a job fails, `mutants-fast-report` opens or comments on the issue "Nightly collaboration mutants failed".
 
 | Where | Why |
 | --- | --- |

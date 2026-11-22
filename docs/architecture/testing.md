@@ -576,15 +576,14 @@ final scheme test makes redundant.
 
 ### Collaboration mutants in CI
 
-Every `tests/collab/*-mutants.json` file except `undo-slow-mutants.json` runs
+Every `tests/collab/*-mutants.json` file runs
 nightly in `nightly.yml`, not in pull request CI. "Collaboration mutants
 baseline (fast set)" runs one baseline for the whole set, and "Collaboration
-mutants (fast set)" runs six shards in parallel. Both turn on bash's `extglob`
-first:
+mutants (fast set)" runs six shards in parallel.
 
 ```
-node tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --baseline-only --baseline-timeout 1500
-node tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --shard K/6 --concurrency 4 --no-baseline --fail-on-survivor
+node tools/mutants.mjs tests/collab/*-mutants.json --baseline-only --baseline-timeout 1500
+node tools/mutants.mjs tests/collab/*-mutants.json --shard K/6 --concurrency 4 --no-baseline --fail-on-survivor
 ```
 
 A survivor, an inconclusive mutant or a mutant that cannot be applied fails its
@@ -605,29 +604,7 @@ took about 19 minutes for 183. Three shards across two pull requests reached
 the limit one to twelve mutants short. Running the baseline once removes that
 repeated work from each shard's time limit.
 
-`tests/collab/undo-slow-mutants.json` runs in the nightly workflow instead, job
-`mutants`, at `--concurrency 2` with a 600 s timeout per mutant. Its entries are
-the undo mutants caught only by the seeded generator histories, which run long
-before the failing seed:
-
-| Mutant | Local, Windows workstation | PR CI shard, 4-core runner |
-| --- | --- | --- |
-| duplicated identity (text restore, model executor, generator) | 169 s | 217 s |
-| duplicated identity (restored beside a visible copy, model executor) | 169 s | over 300 s (timed out) |
-| undo leaves the identical mark that arrives later (model executor, generator) | 171 s | 216 s |
-| scalar undo overwrites a later value (model executor) | 170 s | over 300 s (timed out) |
-| undo of a field change overwrites a later value (generator) | 164 s | over 300 s (timed out) |
-
-In PR CI they finished or timed out depending on how many landed in the same
-shard, and a timeout makes a mutant inconclusive, which fails the shard. The
-next slowest, "a restored character is written behind the whole deleted run
-(generator)", took 125 s locally and 260 s in CI beside three of the five, and
-belongs to the fast set; every other undo mutant took under 100 s locally. The
-sources these five edit are also edited by faster mutants in
-`undo-mutants.json`, which the nightly fast set covers. `tools/test-ci-shards.mjs`
-expands the file arguments of both nightly mutant commands in bash and fails
-unless every mutants file is run by exactly one of them; a new file is run by
-the fast set unless it is named `undo-slow-mutants.json`.
+`tools/test-ci-shards.mjs` expands the nightly file arguments in bash and checks that each collaboration manifest is included exactly once.
 
 A failing nightly mutants run shows as a failed scheduled run of `nightly.yml`
 in the repository's Actions tab, and GitHub notifies the account that last

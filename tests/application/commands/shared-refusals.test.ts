@@ -9,7 +9,7 @@ import { importRowsCommand } from "../../../src/application/commands/import-rows
 import { restoreConflictCommand } from "../../../src/application/commands/comments.ts";
 import { fileTitleCommand, titleCommand } from "../../../src/application/commands/title.ts";
 import { documentIdStamp, editStamp } from "../../../src/application/commands/save-stamps.ts";
-import { flowCommand, initializeFlowParagraphs, standaloneFlowCommand } from "../../../src/application/commands/flow.ts";
+import { initializeFlowParagraphs, standaloneFlowCommand } from "../../../src/application/commands/flow.ts";
 import { rewriteCellsCommand } from "../../../src/application/commands/document-edit.ts";
 import { deleteTagsCommand, gearQuickAddCommand, retagCommand, tagCellsCommand } from "../../../src/application/commands/production-records.ts";
 import { recordCommandRun } from "../../../src/application/commands/shared-records.ts";
@@ -21,7 +21,7 @@ import type { FlowDoc } from "../../../src/core/flow/flow.ts";
 import { readOperation } from "../../../src/core/collab/read-operation.ts";
 import { builderOperationCoverage } from "../../core/collab/coverage-fixture.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
-import { fakeReplica, sharedHarness } from "../session/shared-session-support.ts";
+import { fakeReplica, sharedCommand, sharedHarness } from "../session/shared-session-support.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeNotices } from "../../features/fakes.ts";
@@ -128,15 +128,17 @@ test("D23: a swap at an absent beat still asks moves and shows its reason", () =
   } finally { h.session.dispose(); }
 });
 
-test("served flow commands still write, and an executor refusal is visible", () => {
+test("a served command still writes, and an executor refusal is visible", () => {
   const replica = replicaOf({ rows: [{ id: "R1", audioText: "abc" }] });
   const notices = fakeNotices();
   const h = sharedHarness(replica.port, { refused: sharedCommandRefusalNotice(notices.notices) });
   try {
-    const operations = { id: "typing", by: "Editor" };
-    const ports = { ...runtime.ports, operations };
-    const command = flowCommand("type", doc => typeWithMarks(doc, beatPos("R1", 1), "Z", {}, ports), { ...stamps, operations,
-      beatStamp: () => { const op = readOperation({ kind: "scalar", id: "stamp", by: "Editor", target: { scope: "beat", record: "R1" }, field: "stamp", value: { at: stamps.clock.nowIso(), by: "Editor" } }); assert.ok(op); return op; } });
+    const insert = readOperation({ kind: "text-insert", id: "typing", by: "Editor", target: { owner: "R1", segment: "R1", field: "audioText" },
+      at: { left: null, right: '["flow-base","R1","audioText",1]', affinity: "before" }, content: [{ value: "Z", marks: [] }] });
+    const stamp = readOperation({ kind: "scalar", id: "stamp", by: "Editor", target: { scope: "beat", record: "R1" },
+      field: "stamp", value: { at: stamps.clock.nowIso(), by: "Editor" } });
+    assert.ok(insert && stamp);
+    const command = sharedCommand("type", [insert, stamp]);
     replica.script(operations => {
       assert.deepEqual(operations.map(operation => operation.kind), ["text-insert", "scalar"]);
       replica.write("local-command", { rows: [{ id: "R1", audioText: "aZbc" }] });

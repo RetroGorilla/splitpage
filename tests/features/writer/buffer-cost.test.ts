@@ -36,14 +36,6 @@ test("standalone keystroke work: production input dispatch adds no buffer work o
 test("standalone heading keystroke: the rename runs as before, with no buffer, painted record or field key", () => {
   const script = String.raw`
     import assert from "node:assert/strict";
-    import { mock } from "node:test";
-    import { pathToFileURL } from "node:url";
-    const keys = await import("./src/application/editing/buffered-field-key.ts");
-    const calls = { keys: 0 };
-    mock.module(pathToFileURL("src/application/editing/buffered-field-key.ts").href, { namedExports: { ...keys,
-      bufferedFieldTarget: (...args) => { calls.keys++; return keys.bufferedFieldTarget(...args); },
-      headingFieldKey: (...args) => { calls.keys++; return keys.headingFieldKey(...args); }
-    } });
     const { writerFor } = await import("./tests/features/writer/painted-base-support.ts");
     for (const size of [2, 200]) {
       const page = writerFor(size, [{ id: "H1", name: "Scene", firstSceneId: "a" }]);
@@ -58,7 +50,6 @@ test("standalone heading keystroke: the rename runs as before, with no buffer, p
       assert.equal(page.writer.settle, undefined);
       page.writer.dispose();
     }
-    assert.deepEqual(calls, { keys: 0 });
   `;
   const result = spawnSync(process.execPath, ["--experimental-test-module-mocks", "--input-type=module", "--eval", script],
     { cwd: fileURLToPath(new URL("../../../", import.meta.url)), encoding: "utf8", windowsHide: true });

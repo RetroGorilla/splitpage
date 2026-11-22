@@ -72,16 +72,14 @@ assert.ok(discovered.includes("tests/application/commit-time-writers.test.ts"));
 for (const count of [shardCount, nightlyCount]) {
   assert.deepEqual(assignShards(withUnweighted, count).flat().sort(), [...discovered, unweighted].sort());
 }
-const nightlyMutants = nightly.jobs.mutants.steps.find((s) => s.run?.includes("tools/mutants.mjs")).run;
-assert.equal(nightlyMutants, 'set -o pipefail\nnode tools/mutants.mjs tests/collab/undo-slow-mutants.json --concurrency 2 --timeout 600 --baseline-timeout 900 --fail-on-survivor 2>&1 | tee "$RUNNER_TEMP/nightly-mutants.log"\n');
-assert.equal(nightly.jobs.mutants["runs-on"], nightly.jobs.suites["runs-on"]);
+assert.equal(nightly.jobs.mutants, undefined);
 const fastBaselineJob = nightly.jobs["mutants-fast-baseline"];
 const fastJob = nightly.jobs["mutants-fast"];
 const fastReport = nightly.jobs["mutants-fast-report"];
 for (const job of [fastBaselineJob, fastJob]) {
   assert.equal(job.needs, undefined);
   assert.equal(job.if, undefined);
-  assert.equal(job["runs-on"], nightly.jobs.mutants["runs-on"]);
+  assert.equal(job["runs-on"], nightly.jobs.suites["runs-on"]);
   assert.equal(job["timeout-minutes"], 30);
 }
 assert.deepEqual(fastJob.strategy.matrix.shard, [1, 2, 3, 4, 5, 6]);
@@ -89,9 +87,9 @@ assert.equal(fastJob.strategy["fail-fast"], false);
 assert.deepEqual(fastBaselineJob.steps.slice(0, 3), fastJob.steps.slice(0, 3));
 assert.equal(fastBaselineJob.steps.length, 4);
 const fastBaselineRun = fastBaselineJob.steps[3].run;
-assert.equal(fastBaselineRun, 'shopt -s extglob\nnode tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --baseline-only --baseline-timeout 1500\n');
+assert.equal(fastBaselineRun, 'node tools/mutants.mjs tests/collab/*-mutants.json --baseline-only --baseline-timeout 1500\n');
 const fastMutants = fastJob.steps.find((s) => s.run?.includes("tools/mutants.mjs")).run;
-assert.equal(fastMutants, 'shopt -s extglob\nnode tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --shard "${{ matrix.shard }}/6" --concurrency 4 --no-baseline --fail-on-survivor\n');
+assert.equal(fastMutants, 'node tools/mutants.mjs tests/collab/*-mutants.json --shard "${{ matrix.shard }}/6" --concurrency 4 --no-baseline --fail-on-survivor\n');
 assert.deepEqual(fastReport.needs, ["mutants-fast-baseline", "mutants-fast"]);
 assert.equal(fastReport.if, "failure()");
 assert.deepEqual(gate.needs, ["changes", "checks", "tests", "desktop-smoke"]);
@@ -196,12 +194,11 @@ if (bash) {
       rmSync(work, { recursive: true, force: true });
     }
   };
-  const fastFiles = manifestsRunBy(fastMutants), slowFiles = manifestsRunBy(nightlyMutants);
+  const fastFiles = manifestsRunBy(fastMutants);
   assert.deepEqual(manifestsRunBy(fastBaselineRun), fastFiles);
   const manifests = readdirSync(join(REPO, "tests/collab")).filter((name) => name.endsWith("-mutants.json")).map((name) => `tests/collab/${name}`).sort();
-  for (const file of manifests) assert.equal(fastFiles.filter((f) => f === file).length + slowFiles.filter((f) => f === file).length, 1, `${file} must be run by exactly one nightly mutant job`);
-  assert.deepEqual([...fastFiles, ...slowFiles].sort(), manifests);
-  assert.deepEqual(slowFiles, ["tests/collab/undo-slow-mutants.json"]);
+  for (const file of manifests) assert.equal(fastFiles.filter((f) => f === file).length, 1, `${file} must be run by exactly one nightly mutant job`);
+  assert.deepEqual([...fastFiles].sort(), manifests);
   cases++;
 }
 console.log(`CI shard configuration covers ${discovered.length} root test files and ${cases} real gate outcomes passed`);

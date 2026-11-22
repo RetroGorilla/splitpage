@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { flowCommand } from "../../src/application/commands/flow.ts";
+import { standaloneFlowCommand } from "../../src/application/commands/flow.ts";
 import { beatPos } from "../../src/core/flow/flow.ts";
 import { pasteFlowRange } from "../../src/core/flow/flow.ts";
 import type { FlowPorts, FlowSelectionPair } from "../../src/core/flow/flow.ts";
@@ -21,7 +21,7 @@ for (const backward of [false, true]) {
     const ports: FlowPorts = { cells: html => html ? [{ text: html, marks: {} }] : [], newId: () => "new", hasVisual: () => false };
     const a = beatPos("a", 2), b = beatPos("b", 2);
     const range = backward ? { anchor: b, head: a } : { anchor: a, head: b };
-    const command = flowCommand("paste", doc => {
+    const command = standaloneFlowCommand("paste", doc => {
       const pasted = pasteFlowRange(doc, range, { text: "Pasted", rows: source.rows, headers: [], wholeIds: ["pasted"] }, ports);
       assert.ok(pasted && "rows" in pasted);
       return { ...pasted, clipboard: { comments: source.comments, people: source.people, productionTags: source.productionTags, brollShots: source.brollShots } };

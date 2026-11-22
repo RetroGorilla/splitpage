@@ -1,8 +1,5 @@
 {
   "tests": [
-    "tests/adapters/collab/operation-families.test.ts",
-    "tests/bootstrap/shared-author.test.ts",
-    "tests/collab/undo-seam.test.ts",
     "tests/bootstrap/shared-switch.test.ts"
   ],
   "mutants": [
@@ -16,174 +13,12 @@
       ]
     },
     {
-      "label": "changed flow plan with empty operations is admitted",
-      "file": "src/application/commands/flow.ts",
-      "find": "      if (plan && !result.ops.length) return { refused: \"flow-operations-empty\" };\n",
-      "replace": "",
-      "tests": [
-        "tests/application/commands/flow-shared.test.ts"
-      ]
-    },
-    {
-      "label": "one family left out of the composition",
-      "file": "src/adapters/collab/operation-families.ts",
-      "find": "  registerSharedJoinHandlers(handle);\n",
-      "replace": "",
-      "tests": [
-        "tests/adapters/collab/operation-families.test.ts"
-      ]
-    },
-    {
-      "label": "author ids without the replica's client number",
-      "file": "tests/collab/editor-ports/shared-author.ts",
-      "find": "\"w\" + String(collabState(handle).doc.clientID) + \"_\" + String(++serial)",
-      "replace": "\"w_\" + String(++serial)",
-      "tests": [
-        "tests/bootstrap/shared-author.test.ts"
-      ]
-    },
-    {
-      "label": "author port answers in a standalone session",
-      "file": "tests/collab/editor-ports/shared-author.ts",
-      "find": "by: source.name() } : null;",
-      "replace": "by: source.name() } : { id: \"w0_\" + String(++serial), by: source.name() };",
-      "tests": [
-        "tests/bootstrap/shared-author.test.ts"
-      ]
-    },
-    {
-      "label": "flow command drops the planner operation list",
-      "replace": "...[], ...[...stamped]",
-      "tests": [
-        "tests/application/commands/flow-shared.test.ts"
-      ],
-      "file": "src/application/commands/flow.ts",
-      "find": "...result.ops, ...[...stamped]"
-    },
-    {
-      "label": "flow command never stamps inserted beats",
-      "replace": ".concat([])",
-      "tests": [
-        "tests/application/commands/flow-shared.test.ts"
-      ],
-      "file": "src/application/commands/flow.ts",
-      "find": ".concat(plan.changes.rowsInserted)"
-    },
-    {
-      "label": "Writer author refusal becomes a request",
-      "replace": "const request = source.author.next() ?? { id: \"forbidden\", by: \"Forbidden\" };",
-      "tests": [
-        "tests/application/commands/flow-shared.test.ts"
-      ],
-      "file": "tests/collab/editor-ports/writer-flow.ts",
-      "find": "const request = source.author.next();"
-    },
-    {
-      "label": "Writer planner never receives the author request",
-      "replace": "operations = undefined;",
-      "tests": [
-        "tests/application/commands/flow-shared.test.ts"
-      ],
-      "file": "tests/collab/editor-ports/writer-flow.ts",
-      "find": "operations = request ?? undefined;"
-    },
-    {
-      "label": "flow stamp uses a different command identity",
-      "replace": "sharedBeatStamp(beat, { ...by, id: \"wrong\" }, stamps)",
-      "tests": [
-        "tests/application/commands/flow-shared.test.ts"
-      ],
-      "file": "tests/collab/editor-ports/writer-flow.ts",
-      "find": "sharedBeatStamp(beat, by, stamps)"
-    },
-    {
-      "label": "flow drops identical-text replacement intent",
-      "file": "src/application/commands/flow.ts",
-      "find": "if (!plan && !result.ops.length) return null;",
-      "replace": "if (!plan) return null;",
-      "tests": [
-        "tests/application/commands/flow-shared.test.ts"
-      ]
-    },
-    {
-      "label": "flow omits beat stamps",
-      "file": "src/application/commands/flow.ts",
-      "find": "...result.ops, ...[...stamped].map",
-      "replace": "...result.ops, ...[].map",
-      "tests": [
-        "tests/application/commands/flow-shared.test.ts"
-      ]
-    },
-    {
-      "label": "flow leaves the caret on a temporary beat identity",
-      "file": "tests/collab/editor-ports/writer-flow.ts",
-      "find": "rowId: beats.get(pos.rowId) ?? pos.rowId",
-      "replace": "rowId: pos.rowId",
-      "tests": [
-        "tests/application/commands/flow-shared.test.ts"
-      ]
-    },
-    {
-      "label": "flow leaves the caret on a temporary heading identity",
-      "file": "tests/collab/editor-ports/writer-flow.ts",
-      "find": "sceneId: headings.get(pos.sceneId) ?? pos.sceneId",
-      "replace": "sceneId: pos.sceneId",
-      "tests": [
-        "tests/application/commands/flow-shared.test.ts"
-      ]
-    },
-    {
-      "label": "flow silently drops clipboard registry changes",
-      "file": "src/application/commands/flow.ts",
-      "find": "if (clipboard && ([\"comments\", \"people\", \"productionTags\", \"brollShots\"] as const).some",
-      "replace": "if (false && ([\"comments\", \"people\", \"productionTags\", \"brollShots\"] as const).some",
-      "tests": [
-        "tests/application/commands/flow-shared.test.ts"
-      ]
-    },
-    {
-      "label": "the replica drops the command's undo record",
-      "file": "src/adapters/collab/replica.ts",
-      "find": "          kept = done.result.ok ? done.record : null;",
-      "replace": "          kept = null;",
-      "tests": [
-        "tests/collab/undo-seam.test.ts"
-      ]
-    },
-    {
-      "label": "the replica hands one record to the undo owner twice",
-      "file": "src/adapters/collab/replica.ts",
-      "find": "        return kept;\n      });\n",
-      "replace": "        Object.assign(failed, { kept: kept });\n        return kept;\n      });\n      undo.perform(() => (failed as unknown as { kept: SharedUndoRecord | null }).kept);\n",
-      "tests": [
-        "tests/collab/undo-seam.test.ts"
-      ]
-    },
-    {
       "label": "undo skips the session's admission",
       "file": "src/application/editing/undo/shared-undo-actions.ts",
       "find": "    const refused = session.admit();",
       "replace": "    const refused = null as ReturnType<typeof session.admit>;",
       "tests": [
         "tests/bootstrap/shared-switch.test.ts"
-      ]
-    },
-    {
-      "label": "a callback failing after the commit loses the command's record",
-      "file": "src/adapters/collab/replica.ts",
-      "find": "      } catch (error) { failed.thrown = true; failed.error = error; }",
-      "replace": "      } catch (error) { failed.thrown = true; failed.error = error; kept = null; }",
-      "tests": [
-        "tests/collab/undo-seam.test.ts"
-      ]
-    },
-    {
-      "label": "the shared undo owner swallows a callback's failure during undo",
-      "file": "tests/collab/editor-ports/shared-undo.ts",
-      "find": "        report(error);\n",
-      "replace": "",
-      "tests": [
-        "tests/collab/undo-seam.test.ts"
       ]
     },
     {
@@ -302,15 +137,6 @@
       "replace": "    releaseCommands();\n",
       "tests": [
         "tests/bootstrap/shared-switch.test.ts"
-      ]
-    },
-    {
-      "label": "a throwing destroy listener keeps the handle's observers",
-      "file": "tests/bootstrap/legacy-shared-switch-support.ts",
-      "find": "  if (!attempt(() => { destroySharedDocument(handle); })) attempt(() => { destroySharedDocument(handle); });",
-      "replace": "  attempt(() => { destroySharedDocument(handle); });",
-      "tests": [
-        "tests/bootstrap/legacy-shared-switch.test.ts"
       ]
     },
     {

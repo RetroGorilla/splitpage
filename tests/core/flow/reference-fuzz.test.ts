@@ -8,7 +8,7 @@ import { rowSlots } from "../../../src/core/document/gallery.ts";
 import type { FlowDoc, FlowPorts, FlowPos, FlowRange } from "../../../src/core/flow/flow.ts";
 import type { DocumentScene } from "../../../src/core/document/scenes.ts";
 import type { Run } from "../../../src/core/text/runs.ts";
-import { flowCommand } from "../../../src/application/commands/flow.ts";
+import { standaloneFlowCommand } from "../../../src/application/commands/flow.ts";
 import { createUndo } from "../../../src/application/editing/undo/undo.ts";
 import { syncCommentAnchors } from "../../../src/core/text/anchors.ts";
 import { jsdomParser } from "../../adapters/richtext/jsdom.mjs";
@@ -95,7 +95,7 @@ test("seeded reference: 1800 replacements compare headings, text, beat identitie
     const unroute = undo.routeReplays(h.session.replay, null);
     const before = observedFlowContent(h.session.held() as FlowDoc, doc, p);
     const expected = referenceReplacement(h.session.held() as FlowDoc, range, "X", p, true);
-    const out = runConfined(h.session, flowCommand("reference-replace", current => replaceRange(current, range, [{ text: "X", marks: {} }], p), stamps));
+    const out = runConfined(h.session, standaloneFlowCommand("reference-replace", current => replaceRange(current, range, [{ text: "X", marks: {} }], p), stamps));
     assert.equal(out.kind, "applied", "session seed=" + seed);
     assert.deepEqual(observedFlowContent(h.session.held() as FlowDoc, doc, p), expected, "session seed=" + seed);
     assert.equal(undo.sizes().undo, 1, "session seed=" + seed);

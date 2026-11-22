@@ -1,17 +1,76 @@
 {
-  "tests": ["tests/core/collab/broll-keying.test.ts"],
+  "tests": [
+    "tests/core/collab/broll-keying.test.ts"
+  ],
   "mutants": [
-    {"label":"the shot is authored by another copy","file":"src/core/collab/broll-keying.ts","find":"id: (author.id + \":shot:\" + index) as SharedContentRef, by: author.by,","replace":"id: (author.id + \":shot:\" + index) as SharedContentRef, by: \"Bob\","},
-    {"label":"two keyings share a shot id","file":"src/core/collab/broll-keying.ts","find":"const mint = () => \"bs_\" + author.id + \"_\" + minted++;","replace":"const mint = () => \"bs_line_\" + minted++;"},
-    {"label":"a repaired key keeps its shared old id","file":"src/core/collab/broll-keying.ts","find":"    const id = mint();\n    splices.push","replace":"    const id = key.id;\n    splices.push"},
-    {"label":"undo of record creation leaves the record","file":"src/adapters/collab/undo-executor.ts","find":"if (effective) operations.push(operationOf({ kind: gallery ? \"gallery-retire\" : \"record-delete\"","replace":"if (effective && gallery) operations.push(operationOf({ kind: gallery ? \"gallery-retire\" : \"record-delete\"","tests":["tests/adapters/collab/undo-records.test.ts"]},
-    {"label":"cleanup picks by arrival order: each copy keeps the key it made","file":"src/core/collab/broll-keying.ts","find":"    splices.push({ from: at, to: at + 1, insert: [] });","replace":"    const mine = repeat.id.split(\"_\").at(-2) === author.id.slice(1).split(\"_\")[0], first = at - 1;\n    splices.push(mine ? { from: first, to: first + 1, insert: [] } : { from: at, to: at + 1, insert: [] });"},
-    {"label":"cleanup removes the key the shot answers to","file":"src/core/collab/broll-keying.ts","find":"    splices.push({ from: at, to: at + 1, insert: [] });","replace":"    splices.push({ from: at - 1, to: at, insert: [] });"},
-    {"label":"cleanup deletes a key on a second real line","file":"src/core/collab/broll-keying.ts","find":"if (key?.atom !== \"broll\" || repeat?.atom !== \"broll\") continue;","replace":"if (repeat?.atom !== \"broll\") continue;"},
-    {"label":"marker replacement is widened to the start of the line","file":"src/core/collab/broll-keying.ts","find":"splices.push({ from: unit.pos, to: unit.pos + take, insert: first","replace":"splices.push({ from: first ? item.found.line.start : unit.pos, to: unit.pos + take, insert: first"},
-    {"label":"adjacent keys with different ids are kept","file":"src/core/collab/broll-keying.ts","find":"if (key?.atom !== \"broll\" || repeat?.atom !== \"broll\") continue;","replace":"if (key?.atom !== \"broll\" || repeat?.atom !== \"broll\" || repeat.id !== key.id && !repeat.id.startsWith(\"broll_\")) continue;"},
-    {"label":"a nameless marker is keyed","file":"src/core/collab/broll-keying.ts","find":"if (item.found.marker.key || !named.has(item.found.line.start)) return [];","replace":"if (item.found.marker.key) return [];"},
-    {"label":"cleanup removes a changed shot","file":"src/core/collab/broll-keying.ts","find":"if (shots.has(id) && !held.has(id) && untouched(id)) operations.push(","replace":"if (shots.has(id) && !held.has(id)) operations.push("},
-    {"label":"the Writer leave keys in standalone through the shared command","file":"src/bootstrap/wiring/writer.ts","find":"              anchorBrollInLeftCell(cell);\n              hideTagGhost();","replace":"              shared?.leftVisual(cell);\n              hideTagGhost();","tests":["src/test/writer-broll-leave-app.test.mjs"]}
+    {
+      "label": "the shot is authored by another copy",
+      "file": "src/core/collab/broll-keying.ts",
+      "find": "id: (author.id + \":shot:\" + index) as SharedContentRef, by: author.by,",
+      "replace": "id: (author.id + \":shot:\" + index) as SharedContentRef, by: \"Bob\","
+    },
+    {
+      "label": "two keyings share a shot id",
+      "file": "src/core/collab/broll-keying.ts",
+      "find": "const mint = () => \"bs_\" + author.id + \"_\" + minted++;",
+      "replace": "const mint = () => \"bs_line_\" + minted++;"
+    },
+    {
+      "label": "a repaired key keeps its shared old id",
+      "file": "src/core/collab/broll-keying.ts",
+      "find": "    const id = mint();\n    splices.push",
+      "replace": "    const id = key.id;\n    splices.push"
+    },
+    {
+      "label": "cleanup picks by arrival order: each copy keeps the key it made",
+      "file": "src/core/collab/broll-keying.ts",
+      "find": "    splices.push({ from: at, to: at + 1, insert: [] });",
+      "replace": "    const mine = repeat.id.split(\"_\").at(-2) === author.id.slice(1).split(\"_\")[0], first = at - 1;\n    splices.push(mine ? { from: first, to: first + 1, insert: [] } : { from: at, to: at + 1, insert: [] });"
+    },
+    {
+      "label": "cleanup removes the key the shot answers to",
+      "file": "src/core/collab/broll-keying.ts",
+      "find": "    splices.push({ from: at, to: at + 1, insert: [] });",
+      "replace": "    splices.push({ from: at - 1, to: at, insert: [] });"
+    },
+    {
+      "label": "cleanup deletes a key on a second real line",
+      "file": "src/core/collab/broll-keying.ts",
+      "find": "if (key?.atom !== \"broll\" || repeat?.atom !== \"broll\") continue;",
+      "replace": "if (repeat?.atom !== \"broll\") continue;"
+    },
+    {
+      "label": "marker replacement is widened to the start of the line",
+      "file": "src/core/collab/broll-keying.ts",
+      "find": "splices.push({ from: unit.pos, to: unit.pos + take, insert: first",
+      "replace": "splices.push({ from: first ? item.found.line.start : unit.pos, to: unit.pos + take, insert: first"
+    },
+    {
+      "label": "adjacent keys with different ids are kept",
+      "file": "src/core/collab/broll-keying.ts",
+      "find": "if (key?.atom !== \"broll\" || repeat?.atom !== \"broll\") continue;",
+      "replace": "if (key?.atom !== \"broll\" || repeat?.atom !== \"broll\" || repeat.id !== key.id && !repeat.id.startsWith(\"broll_\")) continue;"
+    },
+    {
+      "label": "a nameless marker is keyed",
+      "file": "src/core/collab/broll-keying.ts",
+      "find": "if (item.found.marker.key || !named.has(item.found.line.start)) return [];",
+      "replace": "if (item.found.marker.key) return [];"
+    },
+    {
+      "label": "cleanup removes a changed shot",
+      "file": "src/core/collab/broll-keying.ts",
+      "find": "if (shots.has(id) && !held.has(id) && untouched(id)) operations.push(",
+      "replace": "if (shots.has(id) && !held.has(id)) operations.push("
+    },
+    {
+      "label": "the Writer leave keys in standalone through the shared command",
+      "file": "src/bootstrap/wiring/writer.ts",
+      "find": "              anchorBrollInLeftCell(cell);\n              hideTagGhost();",
+      "replace": "              shared?.leftVisual(cell);\n              hideTagGhost();",
+      "tests": [
+        "src/test/writer-broll-leave-app.test.mjs"
+      ]
+    }
   ]
 }

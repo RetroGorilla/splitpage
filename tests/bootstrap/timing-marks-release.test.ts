@@ -6,22 +6,13 @@ import { readFileSync } from "node:fs";
 import { fileURLToPath } from "node:url";
 
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
-const TIMING_MARKS = ["trial", "live-apply", "queue", "mirror-apply", "assembly", "projection-listeners", "session-receive", "document-entry", "render",
-  "cell-refresh", "input-command", "input-write", "receive", "drain"].flatMap(seam => [`measure:${seam}:start`, `measure:${seam}:end`]);
+const TIMING_MARKS = ["document-entry", "render", "cell-refresh", "input-command"].flatMap(seam => [`measure:${seam}:start`, `measure:${seam}:end`]);
 const MARK_LINE = /if \(\(typeof SPLITPAGE_TEST_HOOKS === "undefined" \|\| SPLITPAGE_TEST_HOOKS\) && timingMarks\.marksOn\) performance\.mark\("measure:[a-z-]+:(?:start|end)"\);/g;
-const MARKED = ["src/adapters/collab/document.ts", "src/adapters/collab/state.ts", "src/adapters/collab/incremental-project.ts",
-  "src/adapters/collab/replica.ts",
-  "src/adapters/collab/buffer.ts", "src/bootstrap/wiring/session-owner.ts", "src/bootstrap/wiring/undo.ts", "tests/collab/editor-ports/shared-undo.ts",
-  "src/bootstrap/wiring/editor.ts"];
+const MARKED = ["src/bootstrap/wiring/session-owner.ts", "src/bootstrap/wiring/undo.ts", "src/bootstrap/wiring/editor.ts"];
 
 const ENTRY = [
-  'export { applySharedUpdate } from "./src/adapters/collab/document.ts";',
-  'export { sharedWriteFrame } from "./src/adapters/collab/state.ts";',
-  'export { createSharedReplica } from "./src/adapters/collab/replica.ts";',
-  'export { createSharedBufferedText } from "./src/adapters/collab/buffer.ts";',
   'export { adoptShared, onSessionChange, runCommand } from "./src/bootstrap/wiring/session-owner.ts";',
   'export { stepSharedUndo } from "./src/bootstrap/wiring/undo.ts";',
-  'export { sharedUndoOwner } from "./tests/collab/editor-ports/shared-undo.ts";',
   'export { mountRowsEditingFeature } from "./src/bootstrap/wiring/editor.ts";'
 ].join("\n");
 

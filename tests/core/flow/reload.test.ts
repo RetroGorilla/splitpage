@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import * as flow from "../../../src/core/flow/flow.ts";
 import type { FlowDoc, FlowEdit, FlowOutcome, FlowRange } from "../../../src/core/flow/flow.ts";
 import type { DocumentScene } from "../../../src/core/document/scenes.ts";
-import { flowCommand } from "../../../src/application/commands/flow.ts";
+import { standaloneFlowCommand } from "../../../src/application/commands/flow.ts";
 import { syncCommentAnchors } from "../../../src/core/text/anchors.ts";
 import { harness, runConfined } from "../../application/session-fakes.ts";
 import { createFlowLoadRuntime, expectedHeadingWhitespaceOnReload } from "./load.ts";
@@ -40,7 +40,7 @@ test("reference sequences: 60 varied headings retain six successive inserts, whi
       const before = h.session.held() as FlowDoc;
       const piece = [{ text, marks: {} }];
       const expected = referenceReplacement(before, selection, piece, rt.ports, true);
-      const out = runConfined(h.session, flowCommand("sequence", current => {
+      const out = runConfined(h.session, standaloneFlowCommand("sequence", current => {
         const result = flow.replaceRange(current, selection, piece, rt.ports);
         assert.ok(result && "rows" in result, "sequence seed=" + seed);
         selection = result.selection;
@@ -114,7 +114,7 @@ test("reload stability: all 21 flow transformations retain complete documents th
         try {
           const range = { anchor: flow.beatPos("a", 2), head: flow.beatPos("b", 3) };
           let outcome: FlowOutcome = null;
-          const out = runConfined(h.session, flowCommand(name, current => { outcome = run(current, range); return outcome; }, stamps));
+          const out = runConfined(h.session, standaloneFlowCommand(name, current => { outcome = run(current, range); return outcome; }, stamps));
           assert.ok(["applied", "noop", "rejected"].includes(out.kind), name + " seed=" + seed + " " + JSON.stringify(out));
           if (out.kind === "applied") applied.add(name);
           const live = h.session.held() as FlowDoc;
@@ -154,7 +154,7 @@ test("reload stability: all 21 flow transformations retain complete documents th
         const doc = h.session.held() as FlowDoc;
         const clip = flow.copyFlowRange(doc, { anchor: flow.headingPos("s", 0), head: flow.beatPos("b", 6) }, rt.ports);
         const prepared = { ...clip, rows: clip.rows.map(row => ({ ...row, id: "copied-" + row.id })) };
-        const out = runConfined(h.session, flowCommand("pasteFlowRange", current => flow.pasteFlowRange(current,
+        const out = runConfined(h.session, standaloneFlowCommand("pasteFlowRange", current => flow.pasteFlowRange(current,
           flow.caretAt(flow.beatPos("a", 2)), prepared, rt.ports), stamps));
         assert.equal(out.kind, "applied", "paste seed=" + seed);
         const live = h.session.held() as FlowDoc;

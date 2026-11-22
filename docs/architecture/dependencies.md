@@ -46,7 +46,7 @@ resolved edge (static imports, re-exports, literal `require`, literal dynamic
 | `src-unknown` | any other `src/` folder, or a file directly under `src/` | anything, but each file is an `unknown-layer` violation |
 
 Imports of `yjs`, `lib0` and `isomorphic.js`, including types and subpaths, are restricted to
-`src/adapters/collab/` and tests (`collab-import`). This restriction also applies to bootstrap,
+`src/adapters/collab/native/` and tests (`collab-import`). This restriction also applies to bootstrap,
 other adapters, tools, desktop and static server code. The separate collaboration
 server may import Yjs to check the encoded size at admission. Bootstrap may import the
 collaboration adapter, which owns the runtime package imports.

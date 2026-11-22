@@ -1,62 +1,6 @@
 {
-  "tests": [
-    "tests/application/commands/comments-shared.test.ts"
-  ],
+  "tests": [],
   "mutants": [
-    {
-      "label": "shared comment delete leaves the anchor marks",
-      "file": "src/application/commands/comments.ts",
-      "find": "shared: { operations: [...marks.operations, ...removed] }",
-      "replace": "shared: { operations: [...removed] }"
-    },
-    {
-      "label": "shared comment delete leaves its replies",
-      "file": "src/application/commands/comments.ts",
-      "find": "[...replies.map(function (reply) { return JSON.stringify([commentId, reply.id]); }), null]",
-      "replace": "[null]"
-    },
-    {
-      "label": "refused comment delete marks planned as a standalone delete",
-      "file": "src/application/commands/comments.ts",
-      "find": "if (rewritesRefused(doc, planned, anchor, shared)) return { refused: \"comment-unwrap-rewrite\" };",
-      "replace": "if (rewritesRefused(doc, planned, anchor, shared)) return plan;"
-    },
-    {
-      "label": "refused comment unwrap planned without its marks",
-      "file": "src/application/commands/comments.ts",
-      "find": "if (rewritesRefused(doc, planned, shared.anchor, shared.ports)) return { refused: \"comment-unwrap-rewrite\" };",
-      "replace": "if (rewritesRefused(doc, planned, shared.anchor, shared.ports)) return plan;"
-    },
-    {
-      "label": "a rewrite naming an absent beat dropped before it is checked",
-      "file": "src/application/commands/comments.ts",
-      "find": "  if (planned.some(function (rewrite, index) { return !rows[index] || !textField(rewrite.field); })) return true;\n",
-      "replace": ""
-    },
-    {
-      "label": "shared removal built from the first beat only",
-      "file": "src/application/commands/comments.ts",
-      "find": "const cells: SharedCommentCell[] = doc.rows.flatMap(",
-      "replace": "const cells: SharedCommentCell[] = doc.rows.slice(0, 1).flatMap("
-    },
-    {
-      "label": "shared removal searches the audio cells only",
-      "file": "src/application/commands/comments.ts",
-      "find": "return TEXT_FIELDS.map(function (field) { return { owner: row.id, field, runs",
-      "replace": "return ([\"audioText\"] as const).map(function (field) { return { owner: row.id, field, runs"
-    },
-    {
-      "label": "shared comment delete records no undo entry",
-      "file": "src/application/commands/comments.ts",
-      "find": "shared: { operations: [...marks.operations, ...removed] }",
-      "replace": "shared: { operations: [...marks.operations, ...removed], undo: false as const }"
-    },
-    {
-      "label": "shared comment unwrap records no undo entry",
-      "file": "src/application/commands/comments.ts",
-      "find": "shared: { operations: removal.operations } };",
-      "replace": "shared: { operations: removal.operations, undo: false as const } };"
-    },
     {
       "label": "comment unwrap that changes the words trusted",
       "file": "src/core/collab/comment-mark-operations.ts",

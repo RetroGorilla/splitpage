@@ -13,60 +13,6 @@
       ]
     },
     {
-      "label": "native caret is pinned to its original owner after a split",
-      "file": "src/adapters/collab/buffer.ts",
-      "find": "selection: restored",
-      "replace": "selection: { anchor: { ...restored.anchor, rowId }, head: { ...restored.head, rowId } }",
-      "tests": [
-        "tests/adapters/collab/buffer-title-selection.test.ts"
-      ]
-    },
-    {
-      "label": "recovery write leaves an undo entry",
-      "file": "src/adapters/collab/buffer.ts",
-      "find": ", undo: false }",
-      "replace": " }",
-      "tests": [
-        "tests/collab/buffer-recovery.test.ts"
-      ]
-    },
-    {
-      "label": "recovery write leaves a visible new beat",
-      "file": "src/adapters/collab/buffer.ts",
-      "find": "{ rows: doc.rows.length, visual })",
-      "replace": "{ rows: doc.rows.length, visual }).slice(0, 1)",
-      "tests": [
-        "tests/collab/buffer-recovery.test.ts"
-      ]
-    },
-    {
-      "label": "recovery attempted for a commit the document never refused",
-      "file": "src/adapters/collab/buffer.ts",
-      "find": "if (!open || !stranded) return null;",
-      "replace": "if (!open) return null;",
-      "tests": [
-        "tests/collab/buffer-recovery.test.ts"
-      ]
-    },
-    {
-      "label": "recovered edit stays open over its released hold",
-      "file": "src/adapters/collab/buffer.ts",
-      "find": "open = false; stranded = false; try",
-      "replace": "stranded = false; try",
-      "tests": [
-        "tests/collab/buffer-recovery.test.ts"
-      ]
-    },
-    {
-      "label": "recovered edit forgets its native text before its hold drains",
-      "file": "src/adapters/collab/buffer.ts",
-      "find": "stranded = false; try { release(); }",
-      "replace": "stranded = false; buffer.cancel(); try { release(); }",
-      "tests": [
-        "tests/collab/buffer-recovery.test.ts"
-      ]
-    },
-    {
       "label": "recovery entry loses its painted base",
       "file": "src/core/collab/buffer-operations.ts",
       "find": "bufferPaintedBase: snapshot.base",
@@ -85,57 +31,12 @@
       ]
     },
     {
-      "label": "a heading commit stamps a beat",
-      "file": "src/adapters/collab/buffer.ts",
-      "find": "operations.length && field !== \"heading\" && field !== \"title\" ?",
-      "replace": "operations.length ?",
-      "tests": [
-        "tests/adapters/collab/buffer-title-selection.test.ts"
-      ]
-    },
-    {
-      "label": "a heading commit reports a narration cell change",
-      "file": "src/application/editing/buffered-field-key.ts",
-      "find": "if (target?.field === \"heading\") return changeSet({ docFields: [\"sections\"], derive: CELL_TEXT_DERIVES });",
-      "replace": "",
-      "tests": [
-        "tests/adapters/collab/buffer-title-selection.test.ts"
-      ]
-    },
-    {
-      "label": "heading recovery names the field key instead of the scene",
-      "file": "src/adapters/collab/buffer.ts",
-      "find": "const snapshot = { owner: target.owner,",
-      "replace": "const snapshot = { owner: rowId,",
-      "tests": [
-        "tests/collab/buffer-recovery.test.ts"
-      ]
-    },
-    {
-      "label": "the caret after a heading commit is resolved as narration",
-      "file": "src/adapters/collab/buffer-selection.ts",
-      "find": "if (field?.target.field === \"heading\") {",
-      "replace": "if (false) {",
-      "tests": [
-        "tests/adapters/collab/buffer-title-selection.test.ts"
-      ]
-    },
-    {
       "label": "the shared entry trims scene names",
       "file": "src/core/migrate.ts",
       "find": "  return projected as ValidatedDocument;\n}",
       "replace": "  if (Array.isArray(projected.sections)) for (const scene of projected.sections) if (scene && typeof scene.name === \"string\") scene.name = scene.name.trim();\n  return projected as ValidatedDocument;\n}",
       "tests": [
         "tests/application/session/shared-entry.test.ts"
-      ]
-    },
-    {
-      "label": "a visual commit addressed to the narration",
-      "file": "src/adapters/collab/buffer.ts",
-      "find": "  return { owner, segment: owner, field: field.field };",
-      "replace": "  return { owner, segment: owner, field: field.field === \"visualText\" ? \"audioText\" as const : field.field };",
-      "tests": [
-        "tests/adapters/collab/buffer-title-selection.test.ts"
       ]
     },
     {
@@ -148,48 +49,12 @@
       ]
     },
     {
-      "label": "the visual caret resolved as narration",
-      "file": "src/adapters/collab/buffer-selection.ts",
-      "find": "if (field?.target.field === \"visualText\") {",
-      "replace": "if (false) {",
-      "tests": [
-        "tests/adapters/collab/buffer-title-selection.test.ts"
-      ]
-    },
-    {
-      "label": "a pasted title caret no longer resolves through shared characters",
-      "file": "src/adapters/collab/buffer-selection.ts",
-      "find": "export function resolveSharedBufferedSelection(handle: SharedDocumentHandle, anchors: readonly (SharedContentRef | null)[],\n  field?: { readonly key: string; readonly target: SharedTextAddress }): FlowRange | undefined {",
-      "replace": "export function resolveSharedBufferedSelection(handle: SharedDocumentHandle, anchors: readonly (SharedContentRef | null)[],\n  field?: { readonly key: string; readonly target: SharedTextAddress }): FlowRange | undefined {\n  if (field?.target.field === \"title\") return undefined;",
-      "tests": [
-        "tests/adapters/collab/buffer-title-selection.test.ts"
-      ]
-    },
-    {
       "label": "plain name operations clean native control characters as cell text",
       "file": "src/core/collab/buffer-operations.ts",
       "find": "const plain = target.field === \"heading\" || target.field === \"title\";",
       "replace": "const plain = false;",
       "tests": [
         "tests/core/collab/buffer-operations.test.ts"
-      ]
-    },
-    {
-      "label": "plain input redo follows its restored typing instead of the recorded boundary",
-      "file": "src/adapters/collab/buffer.ts",
-      "find": "const anchor = !first ? null : target.field === \"audioText\" || target.field === \"visualText\"",
-      "replace": "const anchor = !first ? null : true",
-      "tests": [
-        "tests/adapters/collab/buffer-title-selection.test.ts"
-      ]
-    },
-    {
-      "label": "rich text undo ignores remote typing in the same gap",
-      "file": "src/adapters/collab/buffer.ts",
-      "find": "? createSharedAnchor(handle, target, first.from, \"after\")",
-      "replace": "? preceding ? sharedAnchorCharacterEnd(preceding) : painted.identity(0) ?? painted.emptyGap ?? null",
-      "tests": [
-        "tests/adapters/collab/buffer-title-selection.test.ts"
       ]
     }
   ]

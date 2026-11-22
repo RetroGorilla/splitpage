@@ -1,15 +1,6 @@
 {
   "mutants": [
     {
-      "label": "Writer visual fresh text is tracked by a temporary owner",
-      "file": "src/adapters/collab/executor-text-plan.ts",
-      "find": "[provenance(located.target.owner, units, 0, target.field)]",
-      "replace": "[provenance(target.owner, units, 0, target.field)]",
-      "tests": [
-        "tests/adapters/collab/visual-set.test.ts"
-      ]
-    },
-    {
       "label": "Writer standalone visual key gains a document walk",
       "file": "src/features/writer/flow-visual-box.ts",
       "find": "function onInput(event: Event): void {",

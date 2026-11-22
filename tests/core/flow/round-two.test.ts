@@ -7,7 +7,7 @@ import { rowSlots } from "../../../src/core/document/gallery.ts";
 import { normalizeScenes } from "../../../src/core/document/scenes.ts";
 import { beatPos, caretAt, deleteForwardAt, enterInHeading, headingPos, joinWithPrevious, replaceRange } from "../../../src/core/flow/flow.ts";
 import type { FlowDoc, FlowEdit, FlowOutcome, FlowPorts } from "../../../src/core/flow/flow.ts";
-import { flowCommand } from "../../../src/application/commands/flow.ts";
+import { standaloneFlowCommand } from "../../../src/application/commands/flow.ts";
 import { jsdomParser } from "../../adapters/richtext/jsdom.mjs";
 import { countingIds, migratedThenSet } from "../migrate-ports.ts";
 import { harness, runConfined } from "../../application/session-fakes.ts";
@@ -29,7 +29,7 @@ const stamps = { clock: { nowIso: () => "2026-11-04T12:00:00Z" }, editor: { name
 function sessionResult(doc: FlowDoc, operation: (current: FlowDoc) => FlowOutcome): FlowDoc {
   const h = harness(undefined, { entry: () => migratedThenSet(JSON.parse(JSON.stringify(doc)) as FlowDoc) });
   h.session.adopt({});
-  const out = runConfined(h.session, flowCommand("round-two", operation, stamps));
+  const out = runConfined(h.session, standaloneFlowCommand("round-two", operation, stamps));
   assert.ok(out.kind === "applied" || out.kind === "noop", JSON.stringify(out));
   const result = JSON.parse(JSON.stringify(h.session.held())) as FlowDoc;
   h.session.dispose();
