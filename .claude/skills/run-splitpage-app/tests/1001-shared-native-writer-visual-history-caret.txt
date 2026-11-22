@@ -32,6 +32,7 @@ type B-roll: Close up
 wait check('Pour the coffee','B-roll: Close up')&&opened('B-roll: Close up')&&caret(visual(),16)
 key Escape
 key ctrl KeyZ
+wait check('Pour the coffee','')&&narrationAt('Pour the coffee',0)
 press x
 wait check('xPour the coffee','')
 expect narrationAt('xPour the coffee',1)
@@ -56,13 +57,55 @@ type B-roll: Close up
 wait check('Pour the coffee','B-roll: Close up')&&opened('B-roll: Close up')&&caret(visual(),16)
 key Escape
 key ctrl KeyZ
-wait check('Pour the coffee','')
+wait check('Pour the coffee','')&&narrationAt('Pour the coffee',0)
 eval W.openVisual('r1');true
 wait opened('')&&caret(visual(),0)
 key ctrl KeyY
+wait check('Pour the coffee','B-roll: Close up')&&opened('B-roll: Close up')&&caret(visual(),16)
 press x
 wait check('Pour the coffee','B-roll: Close upx')
 expect opened('B-roll: Close upx')&&caret(visual(),17)
+expect document.querySelector('#toast-host .toast.warn')===null
+eval window.projection=S.read().app;window.left=S.leave();true
+expect left.ok&&S.read().peer===null&&F.state().docId!==projection.docId&&F.state().docId!==originalId
+expect json({...F.state(),docId:projection.docId,brollShots:projection.brollShots})===json(projection)
+eval openTrace()
+wait F.state().title==="Native Writer Visual exits"&&F.state().rows[0].visualText===""&&F.state().rows[0].audioText==="Pour the coffee"
+eval if(!W.on())document.getElementById("btn-write").click();true
+wait W.on()
+eval window.originalId=F.state().docId;S.enter()
+wait S.read().peer!==null&&check('Pour the coffee','')
+eval W.openVisual('r1');true
+wait opened('')
+type B-roll: Close up
+wait check('Pour the coffee','B-roll: Close up')&&opened('B-roll: Close up')&&caret(visual(),16)
+key Escape
+key ctrl KeyZ
+wait check('Pour the coffee','')&&narrationAt('Pour the coffee',0)
+key ctrl KeyY
+wait check('Pour the coffee','B-roll: Close up')&&narrationAt('Pour the coffee',0)
+press x
+wait check('xPour the coffee','B-roll: Close up')
+expect narrationAt('xPour the coffee',1)
+expect document.querySelector('#toast-host .toast.warn')===null
+eval window.projection=S.read().app;window.left=S.leave();true
+expect left.ok&&S.read().peer===null&&F.state().docId!==projection.docId&&F.state().docId!==originalId
+expect json({...F.state(),docId:projection.docId,brollShots:projection.brollShots})===json(projection)
+eval openTrace()
+wait F.state().title==="Native Writer Visual exits"&&F.state().rows[0].visualText===""&&F.state().rows[0].audioText==="Pour the coffee"
+eval if(!W.on())document.getElementById("btn-write").click();true
+wait W.on()
+eval window.originalId=F.state().docId;S.enter()
+wait S.read().peer!==null&&check('Pour the coffee','')
+eval W.openVisual('r1');true
+wait opened('')
+type B-roll: Close up
+wait check('Pour the coffee','B-roll: Close up')&&opened('B-roll: Close up')&&caret(visual(),16)
+key ctrl KeyZ
+wait check('Pour the coffee','')&&opened('')&&caret(visual(),0)
+press x
+wait check('Pour the coffee','x')
+expect opened('x')&&caret(visual(),1)
 expect document.querySelector('#toast-host .toast.warn')===null
 eval window.projection=S.read().app;window.left=S.leave();true
 expect left.ok&&S.read().peer===null&&F.state().docId!==projection.docId&&F.state().docId!==originalId
