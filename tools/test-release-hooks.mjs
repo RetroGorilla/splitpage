@@ -72,7 +72,8 @@ const RETIRED_SHARED_HOOK_ONLY = Object.freeze([
 ]);
 
 const timingMarks = (seams) => seams.flatMap((seam) => [`measure:${seam}:start`, `measure:${seam}:end`]);
-const TIMING_MARKS = Object.freeze(timingMarks(["document-entry", "render", "input-handler", "input-command"]));
+const TIMING_MARKS = Object.freeze(timingMarks(["document-entry", "render", "input-command"]));
+const RETIRED_TIMING_MARKS = Object.freeze(timingMarks(["input-handler"]));
 const ISOLATED_TIMING_MARKS = Object.freeze(timingMarks(["trial", "live-apply", "mirror-apply", "assembly", "projection-listeners",
   "session-receive", "input-write"]));
 
@@ -126,6 +127,7 @@ eq("it keeps every history fault and distinctive control name", historyTestNames
 eq("it keeps the native shared session hook, its peer and their notices", SHARED_HOOK_ONLY.filter((marker) => !testBuild.includes(marker)), []);
 eq("it leaves out the legacy fixture and its peer", ["__legacySharedTest", ...RETIRED_SHARED_HOOK_ONLY].filter((marker) => testBuild.includes(marker)), []);
 eq("it keeps the remaining timing marks", [...TIMING_MARKS, "marksOn"].filter((mark) => !testBuild.includes(mark)), []);
+eq("it leaves out the retired Writer timing marks", RETIRED_TIMING_MARKS.filter((mark) => testBuild.includes(mark)), []);
 eq("it leaves out the isolated adapter timing marks", ISOLATED_TIMING_MARKS.filter((mark) => testBuild.includes(mark)), []);
 
 eq("the release build excludes the legacy fixture hook", ["__legacySharedTest"].filter((marker) => release.includes(marker)), []);
