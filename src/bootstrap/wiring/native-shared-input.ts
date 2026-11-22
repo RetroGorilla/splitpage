@@ -32,7 +32,7 @@ import { writerControls, writerFlowPorts } from "./writer.ts";
 import { currentWhoList } from "./who-list.ts";
 
 interface NativeInputPorts {
-  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "resolveTextSelection" | "isClosingOrClosed" | "subscribe" | "revision" | "hasBeatMarker">;
+  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "resolveTextSelection" | "captureTextIdentity" | "isClosingOrClosed" | "subscribe" | "revision" | "hasBeatMarker">;
   readonly session: Pick<SharedDocumentSession, "admit" | "refuse" | "run" | "subscribe">;
   readonly editAttribution: () => NativeEditStamp;
   readonly now?: () => number;
@@ -87,6 +87,7 @@ interface Draft {
   readonly marks: Marks;
   composing: boolean;
   readonly composition: boolean;
+  compositionIdentity?: (() => boolean) | null;
   readonly paint: TrackedPaint | null;
   text: string;
   units: number;
@@ -452,6 +453,30 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     buffered.cell.innerHTML = buffered.html;
     if (document.activeElement === buffered.cell || buffered.cell.closest("#writer-doc") === document.activeElement) {
       setCellSelection(buffered.cell, buffered.selection.from, buffered.selection.to);
+    }
+  }
+
+  function settleLeave(): string | null {
+    if (stopped !== "missing" || !draft?.composition || draft.composing || uncertain || !draft.range) return finish();
+    const { beat, field, range, selection: { from, to } } = draft;
+    const visual = field === "visualText";
+    if (range.target.beat !== beat || range.target.cell !== (visual ? "visual" : "narration")) return stopped;
+    const original = documentReader.read(doc => doc?.rows.find(row => row.id === beat)?.[field]);
+    const live = visual ? native.document().rows.find(row => row.id === beat)?.visualText : native.narrationHtml(beat);
+    if (original == null || original !== live || (from !== to && !draft.compositionIdentity?.())) return stopped;
+    const resolved = native.resolveTextSelection(range);
+    const start = visual ? { beat, offset: from } : native.narrationCaret(beat, from, from !== to);
+    const end = from === to ? start : visual ? { beat, offset: to } : native.narrationCaret(beat, to);
+    if (!resolved || start?.beat !== beat || end?.beat !== beat || resolved.anchor.target.beat !== beat ||
+      resolved.head.target.beat !== beat || resolved.anchor.target.cell !== range.target.cell ||
+      resolved.head.target.cell !== range.target.cell || resolved.anchor.offset !== start.offset ||
+      resolved.head.offset !== end.offset) return stopped;
+    const buffered = draft;
+    stopped = null;
+    try {
+      return finish(undefined, true, true);
+    } finally {
+      if (draft === buffered && !stopped) stopped = "missing";
     }
   }
 
@@ -1020,6 +1045,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (reason || !cell.isConnected) { session.refuse(STALE); event.preventDefault(); return; }
       const anchored = anchor(begin(cell, selection, true, ""));
       if (typeof anchored === "string") { session.refuse(anchored); event.preventDefault(); return; }
+      if (anchored.range && selection.from !== selection.to) anchored.compositionIdentity = native.captureTextIdentity(anchored.range);
       draft = anchored;
       return;
     }
@@ -1492,6 +1518,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   }
   return {
     finish,
+    settleLeave,
     beforePress,
     refuseCommand,
     currentCaret,

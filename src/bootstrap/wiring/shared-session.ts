@@ -103,7 +103,7 @@ export interface SharedEditorBackend {
   readonly undo: (admission: Pick<SharedDocumentSession, "admit">) => SharedUndoRoute;
   readonly bind: (session: SharedDocumentSession) => void;
   readonly unbind: () => void;
-  readonly settle: () => string | null;
+  readonly settle: (explicitLeave?: boolean) => string | null;
   readonly captureSelection?: (entering: boolean) => { readonly dispose: () => void; readonly restore: () => void } | null;
   readonly abandon?: () => void;
   readonly drop?: () => void;
@@ -359,24 +359,24 @@ function sameDocument(landed: ValidatedDocument): boolean {
   return current !== null && JSON.stringify(current) === JSON.stringify(landed);
 }
 
-export function leaveRunningSharedSession(): SharedSwitchOutcome {
-  return running ? leaveSharedSession(running.ports) : { ok: false, reason: SHARED_NOT_RUNNING };
+export function leaveRunningSharedSession(explicitLeave = true): SharedSwitchOutcome {
+  return running ? leaveSharedSession(running.ports, true, explicitLeave) : { ok: false, reason: SHARED_NOT_RUNNING };
 }
 
-export function leaveSharedSession(ports: SharedSwitchPorts, preserveSelection = true): SharedSwitchOutcome {
+export function leaveSharedSession(ports: SharedSwitchPorts, preserveSelection = true, explicitLeave = false): SharedSwitchOutcome {
   const holdReason = sessionEntryRefusal();
   if (holdReason) return { ok: false, reason: holdReason };
   const release = holdSessionCommands(SHARED_SWITCHING, "entries");
-  try { return leaveAvailableSession(ports, preserveSelection); } finally { release(); }
+  try { return leaveAvailableSession(ports, preserveSelection, explicitLeave); } finally { release(); }
 }
 
-function leaveAvailableSession(ports: SharedSwitchPorts, preserveSelection: boolean): SharedSwitchOutcome {
+function leaveAvailableSession(ports: SharedSwitchPorts, preserveSelection: boolean, explicitLeave: boolean): SharedSwitchOutcome {
   const now = running;
   if (!now) return { ok: false, reason: SHARED_NOT_RUNNING };
   ports = now.ports;
   const faults = new Faults();
   let holding: string | null = null;
-  if (!faults.attempt(() => { holding = now.backend.settle(); })) return failed(ports, faults, SHARED_LEAVE_FAILED);
+  if (!faults.attempt(() => { holding = now.backend.settle(explicitLeave); })) return failed(ports, faults, SHARED_LEAVE_FAILED);
   if (holding) return { ok: false, reason: holding };
   const selection = preserveSelection ? captureSelection(now.backend, faults, false) : null;
   const holds: { session: (() => void) | null; commands: (() => void) | null } = { session: null, commands: null };

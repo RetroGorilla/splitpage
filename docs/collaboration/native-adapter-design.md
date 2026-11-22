@@ -994,3 +994,9 @@ Requirements from the outside review of this note, added to the build order (sec
   untouched by the draft, keeps the preview visible, and stops input with a refusal. Writer close preserves a
   stopped draft on screen. Plain Visual typing settles in the input event, and the tests cover stale paint across
   the same four peer changes. The target-state matrix is covered for the input routes that can remain pending.
+  After a completed composition is refused because its beat is missing, restoring the beat does not retry
+  the write. Explicit Leave retries once if the retained range still resolves to the original offsets in
+  the same beat and field, the field content matches the original paint, and any selected units still
+  have their original identities. A successful write lands the complete document under a fresh ID.
+  An unavailable or ambiguous target keeps its local preview and the session open. Further Leave attempts
+  report the refusal and emit no writes while the range remains invalid.

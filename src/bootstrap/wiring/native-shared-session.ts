@@ -139,7 +139,7 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
       input = null;
       try { unmountRecords?.(); } finally { unmountInput?.dispose(); }
     },
-    settle: () => input?.finish() ?? null,
+    settle: explicitLeave => explicitLeave ? input?.settleLeave() ?? null : input?.finish() ?? null,
     captureSelection: entering => native.isClosingOrClosed() ? null
       : captureNativeSwitchSelection(native, entering, () => !native.isClosingOrClosed() && published === native.revision()),
     abandon: () => { input?.abandonComposition(); },

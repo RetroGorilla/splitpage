@@ -7,7 +7,7 @@ import { entryCapabilities } from "./capabilities.ts";
 export const documentEntry: DocumentEntryAdmission = { before: () => {
   const permission = entryCapabilities.documentEntry();
   if (permission.allowed && !sharedSession()) return null;
-  const result = permission.allowed ? leaveRunningSharedSession() : { ok: false, reason: permission.reason } as const;
+  const result = permission.allowed ? leaveRunningSharedSession(false) : { ok: false, reason: permission.reason } as const;
   if (result.ok) return null;
   notices.show("This is not available in a shared session yet.", "warn");
   return { refused: result.reason };
