@@ -365,17 +365,19 @@ export function captureNativeTextIdentity(script: NativeScript, range: NativeTex
   };
 }
 
-export function captureNativeCompositionCaret(script: NativeScript, range: NativeTextRange) {
+export function captureNativeCompositionCaret(script: NativeScript, range: NativeTextRange,
+  subscribe: (observe: (transaction: Y.Transaction) => void) => () => void) {
   if (!authoredRanges.get(script.doc)?.has(range)) return null;
   const checked = nativeRangeSnapshot(range);
   if (!checked || checked.to) return null;
   const original = nativeLiveRange(script, checked);
   if (typeof original === "string" || original.pieces.length !== 1) return null;
+  const target = checked.target;
   const text = original.text, offset = original.from - original.start;
   const content = storedText(original.items);
   const boundary = (live: NativeLiveRange, length: number) => [
-    live.from > live.start ? undoEndpoint(checked.target, live.text, live.from, -1).position : null,
-    live.from - live.start < length ? undoEndpoint(checked.target, live.text, live.from, 0).position : null
+    live.from > live.start ? undoEndpoint(target, live.text, live.from, -1).position : null,
+    live.from - live.start < length ? undoEndpoint(target, live.text, live.from, 0).position : null
   ] as const;
   const sameSide = (saved: PlainPosition | null, live: PlainPosition | null) =>
     saved === null ? live === null : live !== null && Y.compareIDs(saved.item, live.item);
@@ -386,12 +388,10 @@ export function captureNativeCompositionCaret(script: NativeScript, range: Nativ
     return typeof live !== "string" && live.pieces.length === 1 && live.text === text &&
       live.from - live.start === offset ? live : null;
   };
-  const track = checked.target.cell === "narration" && units.length > 0;
   let removed = false;
-  const dispose = () => { if (track) script.doc.off("afterTransaction", observe); };
-  const observe = (transaction: Y.Transaction) => {
+  function observe(transaction: Y.Transaction): void {
     try {
-      const present = !!script.reader.beatBoundary(checked.target.beat);
+      const present = !!script.reader.beatBoundary(target.beat);
       if (!removed) {
         if (present) {
           if (units.some(side => unitGone(side, script.doc))) dispose();
@@ -413,8 +413,8 @@ export function captureNativeCompositionCaret(script: NativeScript, range: Nativ
     } catch {
       dispose();
     }
-  };
-  if (track) script.doc.on("afterTransaction", observe);
+  }
+  const dispose = target.cell === "narration" && units.length > 0 ? subscribe(observe) : () => {};
   return {
     intact: () => {
       const live = point();

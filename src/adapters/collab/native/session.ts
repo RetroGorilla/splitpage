@@ -94,10 +94,7 @@ function openSessionScript(
     const undo = openNativeUndo({ ...script, sizeRefusal });
     const { guardSharedCallback } = script;
     const publishUpdate = (update: Uint8Array, _origin: unknown, _doc: Y.Doc, transaction: Y.Transaction) =>
-      guardSharedCallback(() => {
-        if (!transaction.local) journal?.peer();
-        updated(update, transaction);
-      });
+      guardSharedCallback(() => updated(update, transaction));
     doc.on("update", publishUpdate);
     return { script, size, undo, publishUpdate, journal };
   } catch (error) {
@@ -111,6 +108,7 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
   const { actor, sanitize } = options;
   const listeners = new Set<ChangeListener>();
   const localUpdates = new Set<(update: Uint8Array) => void>();
+  let caretObservers: Set<(transaction: Y.Transaction) => void> | undefined;
   const body = { sanitize };
   let active = false, scheduled = false, publishing = false, changed = false, holds = 0;
   let closing: CloseReason | null = null, revision = 0;
@@ -130,6 +128,9 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
   }
 
   function updated(update: Uint8Array, transaction: Y.Transaction): void {
+    // why: successive peer updates can remove and restore a caret before publication's microtask
+    caretObservers?.forEach(observe => script.guardSharedCallback(() => observe(transaction)));
+    if (!transaction.local) journal?.peer();
     revision++;
     changed = true;
     size.recordUpdate(update.byteLength, transaction.deleteSet.clients.size > 0);
@@ -167,6 +168,8 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
   function finishClose(reason: CloseReason): void {
     const state = Y.encodeStateAsUpdate(doc);
     doc.off("update", publishUpdate);
+    caretObservers?.clear();
+    caretObservers = undefined;
     undo.destroy();
     script.close();
     try { doc.destroy(); } catch {
@@ -356,7 +359,14 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
       const capturedAt = revision;
       return intact && (() => !refusal() && (capturedAt === revision || intact()));
     },
-    captureCompositionCaret: (range: NativeTextRange) => refusal() ? null : captureNativeCompositionCaret(script, range),
+    captureCompositionCaret: (range: NativeTextRange) => refusal() ? null : captureNativeCompositionCaret(script, range, observe => {
+      const observers = caretObservers ??= new Set();
+      observers.add(observe);
+      return () => {
+        observers.delete(observe);
+        if (observers === caretObservers && !observers.size) caretObservers = undefined;
+      };
+    }),
     resolveTextSelection: (range: NativeTextRange) => { const anchor = snapshotNativeUndoAnchor(script, range); return anchor && resolveNativeUndoSelection(script, anchor); },
     narrationCaret: (row: string, offset: number, right?: boolean) => script.reader.narrationCaret(row, offset, right),
     readBeat: (beat: string) => script.reader.noticeBeat(beat),
