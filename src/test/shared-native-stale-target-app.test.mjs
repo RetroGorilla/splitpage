@@ -58,7 +58,10 @@ async function enter(t, view, field, state = "live", failLanding = false) {
   const refuse = t.mock.fn();
   const ports = { ...fixture.ports, commandRefused: refuse };
   let landingError;
-  const rows = state === "empty visual" ? source.map(row => row.id === "r2" ? { ...row, visualText: "" } : row) : source;
+  const rows = state === "drained fixture" ? [
+    { id: "r1", audioText: "abcdef", visualText: "abcdef" },
+    { id: "r2", audioText: "other", visualText: "other" }
+  ] : state === "empty visual" ? source.map(row => row.id === "r2" ? { ...row, visualText: "" } : row) : source;
   adoptReplacement(migrateRows({ schema: 2, title: "Stale targets", rows }));
   let native;
   assert.deepEqual(await enterSharedSession(ports, (doc, failed) => {
@@ -82,7 +85,7 @@ async function enter(t, view, field, state = "live", failLanding = false) {
     controls.closeWriter();
   });
   const peer = clone(native, t);
-  const id = state === "hidden" ? split(peer, "r2", 0) : "r2";
+  const id = state === "hidden" ? split(peer, "r2", 0) : state === "drained fixture" ? "r1" : "r2";
   if (state === "hidden") {
     const visual = clone(peer, t);
     const at = visual.commands.anchorText({ beat: id, cell: "visual" }, 0);
@@ -357,6 +360,118 @@ function rejectCompositionLeave(t, f, preview, offset) {
     assert.equal(f.editor().innerHTML, preview);
     assert.equal(document.activeElement, f.editor());
     assert.deepEqual(cellSelection(f.editor()), { from: offset, to: offset });
+  }
+}
+
+function peerPackets(native, write) {
+  const updates = [];
+  const stop = native.subscribeLocalUpdates(bytes => updates.push(bytes));
+  try { write(); } finally { stop(); }
+  return updates;
+}
+
+function applyPackets(native, packets, order) {
+  for (const bytes of order === "reverse" ? packets.toReversed() : packets) {
+    assert.equal(applyNativePeerUpdate(native, bytes), true);
+  }
+}
+
+function peerType(native, beat, offset, value) {
+  const at = native.commands.anchorText({ beat, cell: "narration" }, offset);
+  assert.equal(at.kind, "anchored");
+  written(native.commands.typeText(at.range, value, {}));
+}
+
+for (const [field, offset] of [["narration", 3], ["narration", 6], ["visual", 3]]) {
+  for (const order of ["forward", "reverse"]) {
+    test(`Split drained ${field} at ${offset}: directional ${order}, duplicate replay and restored Leave`, async t => {
+      const f = await enter(t, "Split", field, "drained fixture");
+      t.after(() => { assert.equal(f.native.isClosingOrClosed(), true); });
+      const prefix = peerPackets(f.peer, () => {
+        peerType(f.peer, "r2", 0, "P");
+        peerType(f.peer, "r2", 1, "Q");
+      });
+      assert.equal(prefix.length, 2);
+      applyPackets(f.native, prefix, order);
+      await tick();
+      const base = currentDocument(), standing = clone(f.native, t), other = clone(f.native, t);
+      assert.deepEqual(base, f.peer.document());
+      assert.deepEqual(shape(base), [["r1", "abcdef", "abcdef"], ["r2", "PQother", "other"]]);
+      const local = [];
+      t.after(f.native.subscribeLocalUpdates(bytes => local.push(bytes)));
+      setCellSelection(f.editor(), offset);
+      beginComposition(f.target, "X");
+      const preview = "abcdef".slice(0, offset) + "X" + "abcdef".slice(offset);
+      const removed = peerPackets(f.peer, () => written(f.peer.commands.removeRows([f.id])));
+      const surviving = peerPackets(other, () => peerType(other, "r2", 0, "Z"));
+      assert.deepEqual([removed.length, surviving.length], [1, 1]);
+      const packets = [...removed, ...surviving];
+      applyPackets(f.native, packets, order);
+      applyPackets(f.peer, surviving, order);
+      applyPackets(other, removed, order);
+      await tick();
+      assert.deepEqual(reasons(f), []);
+      assert.deepEqual(currentDocument(), base);
+      assert.equal(text(f.editor()), preview);
+      assert.deepEqual(cellSelection(f.editor()), { from: offset + 1, to: offset + 1 });
+      composition(f.target, "update", "X");
+      f.target.dispatchEvent(new window.InputEvent("input", {
+        bubbles: true, inputType: "insertCompositionText", data: "X", isComposing: true
+      }));
+      composition(f.target, "end", "X");
+      for (let replay = 0; replay < 2; replay++) applyPackets(f.native, packets, order);
+      await tick();
+      const committed = f.native.document(), fresh = clone(f.native, t);
+      assert.deepEqual(shape(committed), [["r2", "ZPQother", "other"]]);
+      assert.deepEqual(fresh.document(), committed);
+      assert.deepEqual(other.document(), committed);
+      assert.deepEqual(standing.document(), base);
+      send(f.native, standing);
+      assert.deepEqual(standing.document(), committed);
+      rejectCompositionLeave(t, f, preview, offset + 1);
+      assert.deepEqual(local, []);
+
+      const restore = peerPackets(f.peer, () => written(f.peer.commands.undo()));
+      assert.equal(restore.length, 1);
+      applyPackets(f.native, restore, order);
+      applyPackets(other, restore, order);
+      await tick();
+      const restored = f.native.document();
+      assert.deepEqual(shape(restored), [["r1", "abcdef", "abcdef"], ["r2", "ZPQother", "other"]]);
+      assert.deepEqual(f.peer.document(), restored);
+      assert.deepEqual(other.document(), restored);
+      assert.deepEqual(clone(f.peer, t).document(), restored);
+      assert.deepEqual(standing.document(), committed);
+      assert.deepEqual(currentDocument(), base);
+      assert.deepEqual(local, []);
+      assert.deepEqual(reasons(f), ["missing"]);
+      if (field === "narration" && offset === 3) {
+        rejectCompositionLeave(t, f, preview, offset + 1);
+        return;
+      }
+      assert.equal(text(f.editor()), preview);
+      assert.equal(document.activeElement, f.editor());
+      assert.deepEqual(cellSelection(f.editor()), { from: offset + 1, to: offset + 1 });
+      assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+      assert.equal(local.length, 1);
+      applyPackets(f.peer, local, order);
+      applyPackets(other, local, order);
+      send(f.peer, standing);
+      const full = f.peer.document(), landed = currentDocument();
+      assert.deepEqual(standing.document(), full);
+      assert.deepEqual(other.document(), full);
+      assert.deepEqual(shape(full), [["r1", field === "narration" ? preview : "abcdef",
+        field === "visual" ? preview : "abcdef"], ["r2", "ZPQother", "other"]]);
+      assert.notEqual(landed.docId, base.docId);
+      assert.deepEqual(landed, { ...full, docId: landed.docId });
+      assert.equal(f.native.isClosingOrClosed(), true);
+      assert.equal(sharedSession(), false);
+      assert.equal(text(f.editor()), preview);
+      assert.equal(document.activeElement, f.editor());
+      assert.deepEqual(cellSelection(f.editor()), { from: offset + 1, to: offset + 1 });
+      assert.deepEqual(reasons(f), ["missing"]);
+      assert.deepEqual(f.errors, []);
+    });
   }
 }
 
