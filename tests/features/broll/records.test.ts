@@ -2,6 +2,7 @@ import { deriveDocumentNumbering } from "../../../src/core/document/numbering.ts
 import "../../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
+import { createSessionCapabilities } from "../../../src/application/session/capabilities.ts";
 import type { CellEdit } from "../../../src/application/editing/cell-editing.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
@@ -13,7 +14,7 @@ import { cellOf, inertBody, sanitizeHtml } from "../../../src/bootstrap/richtext
 import { fakeMigration } from "../../core/migrate-ports.ts";
 import { fakeEdits, fakeStandaloneRecords } from "../fakes.ts";
 
-function setup(doc: ValidatedDocument | null) {
+function setup(doc: ValidatedDocument | null, shared: BrollRecordsPorts["shared"] = fakeStandaloneRecords()) {
   const edits = fakeEdits({ kind: "applied", generation: 1, changes: { whole: false, cells: [], rowsInserted: [], rowsRemoved: [], rowsMoved: false, runsMoved: false, docFields: [], derive: [], saveNow: false } });
   const cellEdits: CellEdit[] = [];
   const refreshes: string[] = [];
@@ -22,7 +23,7 @@ function setup(doc: ValidatedDocument | null) {
   const ports: BrollRecordsPorts = {
     document: { numbering: () => deriveDocumentNumbering(doc ?? { rows: [] }), current: () => doc, read: (select) => select(doc) },
     edits: { ...edits.edits, text: { ...edits.edits.stamps, cells: (html: string) => cellOf(html) } },
-    shared: fakeStandaloneRecords(),
+    shared,
     cells: { edit: (cell, change) => { cellEdits.push(change); return cell; } },
     paint: { whileShown: (edit) => edit() },
     text: { cellOf, inertBody, sanitizeHtml, htmlToPlainText, productionReaders },
@@ -94,4 +95,16 @@ test("b-roll records: with no document there are no entries and nothing by prop"
   const { owner } = setup(null);
   assert.deepEqual(owner.brollEntries(), []);
   assert.deepEqual(Object.keys(owner.brollShotsByProp()), []);
+});
+
+test("adding a shot prop plans the shared registration through isolated feature ports", () => {
+  const script = doc([{ id: "bs1", name: "Gulls" }]);
+  const shared = { author: () => ({ id: "editor_1", by: "Adam" }), ranks: () => [], heads: () => [] };
+  const { edits, owner } = setup(script, { ports: () => shared, refused: () => assert.fail("prop write was refused") });
+  assert.deepEqual(owner.addBrollProp("bs1", "Kite"), { changed: true, held: false });
+  const [command] = edits.ran;
+  const capabilities = createSessionCapabilities("shared", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) });
+  const plan = command?.plan(script, capabilities);
+  assert.ok(plan && !("refused" in plan) && plan.shared);
+  assert.deepEqual(plan.shared.operations.map(operation => operation.kind), ["record-create", "record-set"]);
 });

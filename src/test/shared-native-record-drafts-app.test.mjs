@@ -744,3 +744,24 @@ test("a held comment resolve warns once without writing", async t => {
   release();
   assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
 });
+
+test("B-roll bulk Mark filmed keeps the selected shot on refusal and saves on retry", async t => {
+  const show = await enter(t);
+  openShot();
+  selectShot("b1");
+  const button = '#broll-panel [data-action="broll-bulk-shot"]';
+  assert.deepEqual(window.__brollTest.selected(), ["b1"]);
+  const release = hold(t);
+  const before = hook.read();
+  click(button);
+  runBrollRefresh();
+  assert.deepEqual(window.__brollTest.selected(), ["b1"]);
+  assert.deepEqual(hook.read(), before);
+  assert.deepEqual(warnings(show), [refused]);
+  release();
+  click(button);
+  await update();
+  copies(doc => doc.brollShots.map(shot => shot.status), ["shot", "unshot"]);
+  assert.equal(hook.nativePeer.step("undo").kind, "written");
+  assert.equal(hook.nativePeer.step("undo").kind, "unchanged");
+});

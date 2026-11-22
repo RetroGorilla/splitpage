@@ -57,7 +57,7 @@
     {
       "label": "adding a prop to a shot still calls the standalone command in a shared session",
       "tests": [
-        "src/test/shared-split-records-literals-broll-app.test.mjs"
+        "tests/features/broll/records.test.ts"
       ],
       "file": "src/features/broll/records.ts",
       "find": "addShotPropCommand(shotId, rawName, shared)",
@@ -66,7 +66,7 @@
     {
       "label": "the b-roll status toggle still calls the standalone command in a shared session",
       "tests": [
-        "src/test/shared-split-records-literals-broll-app.test.mjs"
+        "src/test/shared-native-registries-app.test.mjs"
       ],
       "file": "src/features/broll/panel.ts",
       "find": "  return !setShots([(id as string)], fields).held;",
@@ -75,7 +75,7 @@
     {
       "label": "the b-roll bulk update still calls the standalone command in a shared session",
       "tests": [
-        "src/test/shared-split-records-literals-broll-app.test.mjs"
+        "src/test/shared-native-record-drafts-app.test.mjs"
       ],
       "file": "src/features/broll/panel.ts",
       "find": "  const run = n ? setShots(ids, fields, owner, quiet) : { changed: false, held: false };",
@@ -84,7 +84,7 @@
     {
       "label": "the b-roll bulk assign to a new person still calls the standalone command in a shared session",
       "tests": [
-        "src/test/shared-split-records-literals-broll-app.test.mjs"
+        "src/test/shared-native-record-drafts-app.test.mjs"
       ],
       "file": "src/features/broll/panel.ts",
       "find": "  const run = setShots(ids, {}, { name }, quiet);",
@@ -93,7 +93,7 @@
     {
       "label": "the b-roll delete still calls the standalone command in a shared session",
       "tests": [
-        "src/test/shared-split-records-literals-broll-app.test.mjs"
+        "src/test/shared-native-registries-app.test.mjs"
       ],
       "file": "src/features/broll/panel.ts",
       "find": "  const removed = (ports as PanelPortUse).shared.native?.()?.removeShot(e.id) ?? editShots(shared => deleteShotCommand(e.id, shared));",
@@ -102,7 +102,7 @@
     {
       "label": "the b-roll new person for a shot still calls the standalone command in a shared session",
       "tests": [
-        "src/test/shared-split-records-literals-broll-app.test.mjs"
+        "src/test/shared-native-registries-app.test.mjs"
       ],
       "file": "src/features/broll/panel.ts",
       "find": "    const run = setShots([id], {}, { name: text }, quiet);",
@@ -111,7 +111,7 @@
     {
       "label": "adding a shot from the b-roll panel still calls the standalone command in a shared session",
       "tests": [
-        "src/test/shared-split-records-literals-broll-app.test.mjs"
+        "tests/application/commands/production-actions.test.ts"
       ],
       "file": "src/application/commands/production-actions.ts",
       "find": "return runRecord(ports, shared => addShotCommand(rec, shared)) ? rec : null;",
@@ -120,7 +120,7 @@
     {
       "label": "removing a prop from a shot still calls the standalone command in a shared session",
       "tests": [
-        "src/test/shared-split-records-literals-broll-app.test.mjs"
+        "tests/application/commands/production-actions.test.ts"
       ],
       "file": "src/application/commands/production-actions.ts",
       "find": "return runRecord(ports, shared => removeShotPropCommand(shotId, ref, shared));",
@@ -462,7 +462,7 @@
     {
       "label": "a refused bulk Mark filmed drops the selection",
       "tests": [
-        "src/test/shared-split-records-held-broll-app.test.mjs"
+        "src/test/shared-native-record-drafts-app.test.mjs"
       ],
       "file": "src/features/broll/panel.ts",
       "find": "  if (run.held) return run;\n  closing();\n  if (!quiet) renderBrollViews();\n  if (run.changed)",
@@ -489,7 +489,7 @@
     {
       "label": "creating a person while assigning creates nobody",
       "tests": [
-        "src/test/shared-split-records-literals-broll-app.test.mjs"
+        "tests/application/commands/records-shared.test.ts"
       ],
       "file": "src/application/commands/production-records.ts",
       "find": "  if (\"name\" in owner) return addPerson(live, owner.name, ids);",
