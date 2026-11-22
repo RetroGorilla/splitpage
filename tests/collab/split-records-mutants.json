@@ -246,7 +246,7 @@
     {
       "label": "a refused record command shows no notice",
       "tests": [
-        "src/test/shared-split-records-owners-app.test.mjs"
+        "tests/application/commands/shared-refusals.test.ts"
       ],
       "file": "src/application/commands/shared-records.ts",
       "find": "  records.refused(outcome);\n",
@@ -255,7 +255,7 @@
     {
       "label": "a shared record command runs through the silent edit that drops its refusal",
       "tests": [
-        "src/test/shared-split-records-refusals-app.test.mjs"
+        "tests/application/commands/shared-refusals.test.ts"
       ],
       "file": "src/application/commands/shared-records.ts",
       "find": "  const outcome = edits.run(build(shared));",
@@ -291,7 +291,7 @@
     {
       "label": "a refused record command reports nothing held, so its caller closes and clears as if it had saved",
       "tests": [
-        "src/test/shared-split-records-refusals-app.test.mjs"
+        "tests/application/commands/shared-refusals.test.ts"
       ],
       "file": "src/application/commands/shared-records.ts",
       "find": "  records.refused(outcome);\n  return { changed: false, held: true };",
@@ -300,7 +300,7 @@
     {
       "label": "a shared record command that changes nothing reports itself held, so its caller keeps the box open instead of cleaning up",
       "tests": [
-        "src/test/shared-split-records-standalone-app.test.mjs"
+        "tests/application/commands/shared-refusals.test.ts"
       ],
       "file": "src/application/commands/shared-records.ts",
       "find": "outcome.kind === \"committed\", held: false };",

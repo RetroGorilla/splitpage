@@ -18,6 +18,7 @@ import { documentIdStamp, editStamp } from "../../../src/application/commands/sa
 import { flowCommand, initializeFlowParagraphs, standaloneFlowCommand } from "../../../src/application/commands/flow.ts";
 import { rewriteCellsCommand } from "../../../src/application/commands/document-edit.ts";
 import { deleteTagsCommand, gearQuickAddCommand, retagCommand, tagCellsCommand } from "../../../src/application/commands/production-records.ts";
+import { recordCommandRun } from "../../../src/application/commands/shared-records.ts";
 import { sharedRecordPorts } from "../../collab/editor-ports/shared-records.ts";
 import { SHARED_SESSION_DISABLED } from "../../../src/application/session/ports.ts";
 import { changeSet } from "../../../src/application/session/change-set.ts";
@@ -191,5 +192,30 @@ test("served flow commands still write, and an executor refusal is visible", () 
     assert.equal(h.session.run({ name: "move", needs: "edit", plan: () => ({ changes: changeSet({}), apply: () => { assert.fail(); }, shared: { operations: [move] } }) }).kind, "rejected");
     assert.deepEqual(encodeSharedState(set.a), before);
     assert.deepEqual(notices.shown.map(item => [item.message, item.kind]), [["This is not available in a shared session yet.", "warn"]]);
+  } finally { h.session.dispose(); set.close(); }
+});
+
+test("held and no-op record commands use the isolated shared runner and report only refusal", () => {
+  const set = replicas(), notices = fakeNotices();
+  const h = sharedHarness(adapterReplica(set.a));
+  const refusal = sharedCommandRefusalNotice(notices.notices);
+  const author = sharedAuthorPort({ handle: () => set.a, name: stamps.editor.name });
+  const recordPorts = sharedRecordPorts({ handle: () => set.a, author: author.next, stamps });
+  const records = { ports: () => recordPorts, refused: outcome => {
+    if (outcome.kind === "rejected") refusal(outcome.reason);
+  } } satisfies Parameters<typeof recordCommandRun<typeof recordPorts>>[1];
+  const edits = { run: h.session.run, edit: () => assert.fail("record command used the silent edit route") };
+  try {
+    const before = encodeSharedState(set.a);
+    const noOp = { name: "No record change", needs: "edit", plan: () => null } as const;
+    assert.deepEqual(recordCommandRun(edits, records, () => noOp), { changed: false, held: false });
+    assert.deepEqual(notices.shown, []);
+    const release = h.session.beforeCommand(() => false);
+    try {
+      assert.deepEqual(recordCommandRun(edits, records, () => noOp), { changed: false, held: true });
+    } finally { release(); }
+    assert.deepEqual(notices.shown.map(({ message, kind }) => [message, kind]), [["This is not available in a shared session yet.", "warn"]]);
+    assert.deepEqual(encodeSharedState(set.a), before);
+    assert.deepEqual([h.undo, h.executed, h.published], [[], [], []]);
   } finally { h.session.dispose(); set.close(); }
 });
