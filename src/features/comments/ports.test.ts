@@ -45,7 +45,7 @@ function fixture() {
   const ports: CommentStatePorts = {
     sort: { current: () => "position", choose: (value) => value === "recent" ? "recent" : "position" },
     document: { numbering: () => deriveDocumentNumbering({ rows: [] }), current: () => null, read: (select) => select(null) },
-    edits: { edit: () => { calls.push("edit"); return true; }, run: () => { throw new Error("a standalone caller ran a shared command"); },
+    edits: { edit: () => { calls.push("edit"); return true; },
       stamps: { clock, editor: { name: () => "Ada" } } },
     notices: { show: () => { calls.push("notice"); return { isConnected: false, dismiss: () => {}, removeEventListener: () => {} }; } },
     preferences: {
@@ -74,7 +74,6 @@ function fixture() {
     shots: { reveal: () => {} },
     pictures: { imgHtml: () => "" },
     clearDraftUndo: () => {},
-    shared: { ports: () => null, refused: () => { throw new Error("a standalone caller reported a shared refusal"); } }
   };
   return { ports, calls };
 }

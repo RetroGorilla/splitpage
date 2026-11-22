@@ -15,13 +15,12 @@ import type { ShotHiding } from "../../application/shot-hiding.ts";
 import type { TextServices } from "../../application/text/services.ts";
 import type { HistoryPort } from "../../application/transitions/ports.ts";
 import type { Clock, IdSource } from "../../core/document/ports.ts";
-import type { CommentRecordWriter, SharedCommentPorts } from "../../application/commands/comments.ts";
-import type { SharedRecordCommands } from "../../application/commands/shared-records.ts";
+import type { CommentRecordWriter } from "../../application/commands/comments.ts";
 
 export interface CommentStatePorts {
   readonly sort: CommentSorting;
   readonly document: Pick<DocumentReader, "current" | "read" | "numbering">;
-  readonly edits: Pick<DocumentEdits, "edit" | "run" | "stamps">;
+  readonly edits: Pick<DocumentEdits, "edit" | "stamps">;
   readonly notices: Pick<NoticePort, "show">;
   readonly preferences: Pick<Preferences, "clock" | "commentAuthor" | "rememberCommentAuthor" | "commentsSort" | "setCommentsSort" | "commentFilter" | "setCommentFilter" | "taggingHelpShown" | "taggingHelpDismissed">;
   readonly changes: PreferenceChanges;
@@ -38,6 +37,5 @@ export interface CommentStatePorts {
   readonly shots: Pick<ShotHiding, "reveal">;
   readonly pictures: Pick<PictureStore, "imgHtml">;
   readonly clearDraftUndo: (box: HTMLElement) => void;
-  readonly shared: SharedRecordCommands<SharedCommentPorts>;
   readonly nativeComments?: () => Pick<CommentRecordWriter, "author" | "add" | "cancel" | "reply" | "body" | "resolve" | "remove"> | null;
 }

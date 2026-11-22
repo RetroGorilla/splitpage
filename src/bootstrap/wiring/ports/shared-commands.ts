@@ -1,7 +1,5 @@
-import type { SharedCommentPorts } from "../../../application/commands/comments.ts";
 import type { SharedGalleryCommands } from "../../../application/commands/gallery.ts";
 import type { EditorRegistryCommands } from "../../../application/commands/registry-editor.ts";
-import type { SharedRecordCommands } from "../../../application/commands/shared-records.ts";
 import type { SharedBeatField } from "../../../application/commands/shared-values.ts";
 import type { CommandOutcome } from "../../../application/session/document-session.ts";
 import type { UndoControl } from "../../../application/editing/undo-control.ts";
@@ -26,11 +24,6 @@ export const sharedRecordCommands: EditorRegistryCommands = {
 
 export const sharedGalleryCommands: SharedGalleryCommands = {
   editNative: (...args) => nativeEditorRecords()?.gallery(...args) ?? null
-};
-
-export const sharedCommentCommands: SharedRecordCommands<SharedCommentPorts> = {
-  ports: () => null,
-  refused
 };
 
 // why: while shared the standalone owner refuses its held document, so a control's own Ctrl+Z steps the shared owner

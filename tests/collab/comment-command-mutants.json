@@ -1,7 +1,6 @@
 {
   "tests": [
-    "tests/application/commands/comments-shared.test.ts",
-    "tests/features/comments/shared-ports.test.ts"
+    "tests/application/commands/comments-shared.test.ts"
   ],
   "mutants": [
     {
@@ -63,48 +62,54 @@
       "file": "src/core/collab/comment-mark-operations.ts",
       "find": "return rest(was) !== rest(now) || anchors(now)",
       "replace": "return anchors(now)",
-      "tests": ["tests/core/collab/comment-mark-operations.test.ts"]
+      "tests": [
+        "tests/core/collab/comment-mark-operations.test.ts"
+      ]
     },
     {
       "label": "comment unwrap that adds an anchor trusted",
       "file": "src/core/collab/comment-mark-operations.ts",
       "find": "anchors(now).some(id => !anchors(was).includes(id)) || ",
       "replace": "",
-      "tests": ["tests/core/collab/comment-mark-operations.test.ts"]
+      "tests": [
+        "tests/core/collab/comment-mark-operations.test.ts"
+      ]
     },
     {
       "label": "comment unwrap that takes away another comment's mark trusted",
       "file": "src/core/collab/comment-mark-operations.ts",
       "find": " || anchors(was).some(id => id !== anchor && !anchors(now).includes(id));",
       "replace": ";",
-      "tests": ["tests/core/collab/comment-mark-operations.test.ts"]
+      "tests": [
+        "tests/core/collab/comment-mark-operations.test.ts"
+      ]
     },
     {
       "label": "a token compared with its comment anchors",
       "file": "src/core/collab/comment-mark-operations.ts",
       "find": "JSON.stringify(sorted({ ...char.atom, marks: withoutAnchors(char.atom.marks) }))",
       "replace": "JSON.stringify(sorted(char.atom))",
-      "tests": ["tests/core/collab/comment-mark-operations.test.ts"]
+      "tests": [
+        "tests/core/collab/comment-mark-operations.test.ts"
+      ]
     },
     {
       "label": "a token's comment mark not seen",
       "file": "src/core/collab/comment-mark-operations.ts",
       "find": "(\"atom\" in char && char.atom ? char.atom.marks : ",
       "replace": "(\"atom\" in char && char.atom ? undefined : ",
-      "tests": ["tests/core/collab/comment-mark-operations.test.ts"]
+      "tests": [
+        "tests/core/collab/comment-mark-operations.test.ts"
+      ]
     },
     {
       "label": "comment anchor offsets joined across a gap",
       "file": "src/core/collab/comment-mark-operations.ts",
       "find": "while (end < offsets.length && offsets[end] === (offsets[i] as number) + end - i) end++;",
       "replace": "while (end < offsets.length) end++;",
-      "tests": ["tests/core/collab/comment-mark-operations.test.ts"]
-    },
-    {
-      "label": "comment feature passes no shared ports",
-      "file": "src/features/comments/comments.ts",
-      "find": "return recordCommandRun((ports as CommentsRuntimePorts).edits, quiet ? { ports: shared.ports, refused: () => {} } : shared, build);",
-      "replace": "return recordCommandRun((ports as CommentsRuntimePorts).edits, { ports: () => null, refused: shared.refused }, build);"
+      "tests": [
+        "tests/core/collab/comment-mark-operations.test.ts"
+      ]
     }
   ]
 }

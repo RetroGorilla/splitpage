@@ -7,9 +7,9 @@ import type { Command, DocumentView } from "../../application/session/document-s
 import type { OperationContext } from "../../application/session/operation.ts";
 import type { SessionChange } from "../../application/session/change-set.ts";
 import type { CommentFilter } from "../../application/preferences/preferences.ts";
-import type { ConflictValue, SharedCommentPorts } from "../../application/commands/comments.ts";
+import type { ConflictValue } from "../../application/commands/comments.ts";
 import type { RewritePlanner } from "../../application/commands/document-edit.ts";
-import { recordCommandRun } from "../../application/commands/shared-records.ts";
+import type { RecordCommandRun } from "../../application/commands/shared-records.ts";
 import { createTypedDrafts, heldWrite, typedOrphansHtml } from "../common/typed-drafts.ts";
 import type { TypedDraft, TypedDrafts, TypedSave } from "../common/typed-drafts.ts";
 
@@ -329,7 +329,7 @@ function commentAssigneeCandidates() {
 export function setCommentAssignee(id: string | null, name: string | null) {
   const idx = findCommentIndex(id);
   if (idx === -1) return;
-  editComments(shared => setCommentAssigneeCommand(id as string, name, (ports as CommentsRuntimePorts).edits.stamps.clock, shared));
+  editComment(setCommentAssigneeCommand(id as string, name, (ports as CommentsRuntimePorts).edits.stamps.clock));
 }
 
 function commentAssigneeOptionsHtml(current: string | undefined) {
@@ -476,9 +476,8 @@ function anchorLiveText(cmtId: string) {
   return anchorTextFromState(cmtId);
 }
 
-function editComments(build: (shared?: SharedCommentPorts) => Command, quiet = false) {
-  const shared = (ports as CommentsRuntimePorts).shared;
-  return recordCommandRun((ports as CommentsRuntimePorts).edits, quiet ? { ports: shared.ports, refused: () => {} } : shared, build);
+function editComment(command: Command): RecordCommandRun {
+  return { changed: (ports as CommentsRuntimePorts).edits.edit(command), held: false };
 }
 
 const COMMENT_BOXES = ["comment-body-editable", "reply-composer", "comment-body-editor"];
@@ -490,7 +489,7 @@ let bodyEdit: { id: string; reply: string | undefined; record: string; original:
 
 function nativeComments() { return ports?.nativeComments?.() ?? null; }
 
-function commentLife() { return nativeComments() ?? (ports as CommentsRuntimePorts).shared.ports(); }
+function commentLife() { return nativeComments(); }
 
 function typed(): TypedDrafts {
   return drafts as TypedDrafts;
@@ -676,7 +675,7 @@ export function closeCommentComposer(cancelled?: boolean) {
   if (cancelled && pendingComment) {
     const pending = pendingComment;
     if (native) native.cancel(pending.id);
-    else if (editComments(shared => unwrapCommentAnchorCommand(anchorUnwrapped(pending.rowId, pending.field, pending.id), shared && { ports: shared, anchor: pending.id })).held) return;
+    else editComment(unwrapCommentAnchorCommand(anchorUnwrapped(pending.rowId, pending.field, pending.id)));
     drafts?.drop("comment-body-editable", pending.id);
   }
   if (!standalone) { composerVersion++; (document.getElementById("comment-modal") as HTMLElement).hidden = true; }
@@ -711,7 +710,7 @@ export function postComment() {
 }
 
 function commentSave(pending: PendingCommentContext, author: string): TypedSave {
-  return (body, quiet) => {
+  return body => {
     const doc = (ports as CommentsRuntimePorts).document.current();
     const shared = commentLife() !== null;
     if (shared && pending.field !== "title" && (!doc || rowIndexOf(doc, pending.rowId) === -1)) return "gone";
@@ -732,7 +731,7 @@ function commentSave(pending: PendingCommentContext, author: string): TypedSave 
       kind: "anchor",
       replies: []
     };
-    const run = nativeComments()?.add(comment) ?? editComments(shared => addCommentCommand(comment, shared), quiet);
+    const run = nativeComments()?.add(comment) ?? editComment(addCommentCommand(comment));
     if (run.held) return heldWrite(run);
     if (pendingComment?.id === pending.id) {
       const bodyEl = (document.getElementById("comment-body-editable") as HTMLElement);
@@ -772,7 +771,7 @@ export function openCommentsPanel() {
 export function toggleResolve(id: string | null) {
   const native = nativeComments(), comment = ports?.document.current()?.comments.find(item => item.id === id);
   if (native && id && comment) { native.resolve(id, !comment.resolved); return; }
-  editComments(shared => toggleResolveCommand(id as string, (ports as CommentsRuntimePorts).edits.stamps, shared));
+  editComment(toggleResolveCommand(id as string, (ports as CommentsRuntimePorts).edits.stamps));
 }
 
 function deleteComment(id: string | null) {
@@ -783,7 +782,7 @@ function deleteComment(id: string | null) {
   const c = doc.comments[idx] as CommentRenderRecord;
   const native = nativeComments(), standalone = !commentLife();
   if (standalone) dropCommentState(id, true);
-  if ((native?.remove(c.id) ?? editComments(build => deleteCommentCommand(id as string, anchorUnwrapped(c.rowId, c.field, c.anchorId), build))).held) return;
+  if ((native?.remove(c.id) ?? editComment(deleteCommentCommand(id as string, anchorUnwrapped(c.rowId, c.field, c.anchorId)))).held) return;
   if (!standalone) dropCommentState(id, true);
 }
 
@@ -841,12 +840,12 @@ export function postReply(id: string | null) {
 }
 
 function replySave(id: string, author: string): TypedSave {
-  return (body, quiet) => {
+  return body => {
     if (findCommentIndex(id) === -1) { dropCommentState(id, false); return "gone"; }
     const standalone = !commentLife();
     if (standalone) dropCommentState(id, false);
     const reply = { id: (ports as CommentsRuntimePorts).ids.id("rp"), author: author, body: body, createdAt: (ports as CommentsRuntimePorts).clock.nowIso() };
-    const run = nativeComments()?.reply(id, reply) ?? editComments(build => addReplyCommand(id, reply, (ports as CommentsRuntimePorts).edits.stamps.clock, build), quiet);
+    const run = nativeComments()?.reply(id, reply) ?? editComment(addReplyCommand(id, reply, (ports as CommentsRuntimePorts).edits.stamps.clock));
     if (run.held) return heldWrite(run);
     if (!standalone) dropCommentState(id, false);
     sendNow();
