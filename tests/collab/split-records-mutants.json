@@ -24,7 +24,7 @@
       "find": "  if (cancelled && pendingComment) {\n    const pending = pendingComment;",
       "replace": "  if (cancelled && pendingComment) {\n    (document.getElementById(\"comment-body-editable\") as HTMLElement).innerHTML = \"\";\n    const pending = pendingComment;",
       "tests": [
-        "tests/features/comments/shared-ports.test.ts"
+        "src/features/comments/ports.test.ts"
       ]
     },
     {
@@ -190,31 +190,22 @@
       "replace": "    const native = null;"
     },
     {
-      "label": "assigning a comment still calls the standalone command in a shared session",
-      "tests": [
-        "tests/features/comments/shared-ports.test.ts"
-      ],
-      "file": "src/features/comments/comments.ts",
-      "find": "setCommentAssigneeCommand(id as string, name, (ports as CommentsRuntimePorts).edits.stamps.clock, shared)",
-      "replace": "setCommentAssigneeCommand(id as string, name, (ports as CommentsRuntimePorts).edits.stamps.clock)"
-    },
-    {
       "label": "cancelling a comment still calls the standalone unwrap in a shared session",
       "tests": [
         "tests/features/comments/shared-ports.test.ts"
       ],
       "file": "src/features/comments/comments.ts",
-      "find": "shared && { ports: shared, anchor: pending.id }",
-      "replace": "undefined"
+      "find": "if (native) native.cancel(pending.id);",
+      "replace": "if (false && native) native.cancel(pending.id);"
     },
     {
       "label": "posting a comment still calls the standalone command in a shared session",
       "tests": [
-        "src/test/shared-native-typed-boxes-mapped-app.test.mjs"
+        "tests/features/comments/shared-ports.test.ts"
       ],
       "file": "src/features/comments/comments.ts",
-      "find": "    const run = nativeComments()?.add(comment) ?? editComments(shared => addCommentCommand(comment, shared), quiet);",
-      "replace": "    const run = editComments(() => addCommentCommand(comment), quiet);"
+      "find": "nativeComments()?.add(comment) ?? editComment(addCommentCommand(comment))",
+      "replace": "editComment(addCommentCommand(comment))"
     },
     {
       "label": "resolving a comment still calls the standalone command in a shared session",
@@ -222,8 +213,8 @@
         "tests/features/comments/shared-ports.test.ts"
       ],
       "file": "src/features/comments/comments.ts",
-      "find": "toggleResolveCommand(id as string, (ports as CommentsRuntimePorts).edits.stamps, shared)",
-      "replace": "toggleResolveCommand(id as string, (ports as CommentsRuntimePorts).edits.stamps)"
+      "find": "if (native && id && comment) { native.resolve(id, !comment.resolved); return; }",
+      "replace": ""
     },
     {
       "label": "deleting a comment still calls the standalone command in a shared session",
@@ -231,8 +222,8 @@
         "tests/features/comments/shared-ports.test.ts"
       ],
       "file": "src/features/comments/comments.ts",
-      "find": "deleteCommentCommand(id as string, anchorUnwrapped(c.rowId, c.field, c.anchorId), build)",
-      "replace": "deleteCommentCommand(id as string, anchorUnwrapped(c.rowId, c.field, c.anchorId))"
+      "find": "native?.remove(c.id) ?? editComment(deleteCommentCommand",
+      "replace": "editComment(deleteCommentCommand"
     },
     {
       "label": "replying to a comment still calls the standalone command in a shared session",
@@ -240,8 +231,8 @@
         "tests/features/comments/shared-ports.test.ts"
       ],
       "file": "src/features/comments/comments.ts",
-      "find": "addReplyCommand(id, reply, (ports as CommentsRuntimePorts).edits.stamps.clock, build)",
-      "replace": "addReplyCommand(id, reply, (ports as CommentsRuntimePorts).edits.stamps.clock)"
+      "find": "nativeComments()?.reply(id, reply) ?? editComment(addReplyCommand",
+      "replace": "editComment(addReplyCommand"
     },
     {
       "label": "a refused record command shows no notice",
@@ -366,17 +357,8 @@
         "src/test/shared-native-record-drafts-app.test.mjs"
       ],
       "file": "src/features/comments/comments.ts",
-      "find": "  if (standalone) dropCommentState(id, true);\n  if ((native?.remove(c.id) ?? editComments(build => deleteCommentCommand(",
-      "replace": "  dropCommentState(id, true);\n  if ((native?.remove(c.id) ?? editComments(build => deleteCommentCommand("
-    },
-    {
-      "label": "a refused comment cancel closes the composer",
-      "tests": [
-        "tests/features/comments/shared-ports.test.ts"
-      ],
-      "file": "src/features/comments/comments.ts",
-      "find": "pending.id })).held) return;",
-      "replace": "pending.id })).held && false) return;"
+      "find": "  if (standalone) dropCommentState(id, true);\n  if ((native?.remove(c.id) ?? editComment(deleteCommentCommand(",
+      "replace": "  dropCommentState(id, true);\n  if ((native?.remove(c.id) ?? editComment(deleteCommentCommand("
     },
     {
       "label": "a refused shot add clears the typed name and announces success",

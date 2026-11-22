@@ -6,7 +6,7 @@ import type { CommentStatePorts } from "../../../src/features/comments/ports.ts"
 import type { Command } from "../../../src/application/session/document-session.ts";
 import { createSessionCapabilities } from "../../../src/application/session/capabilities.ts";
 import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
-import { armDeleteComment, closeCommentComposer, openCommentComposer, setCommentAssignee, startComments, toggleResolve } from "../../../src/features/comments/comments.ts";
+import { armDeleteComment, closeCommentComposer, openCommentComposer, postComment, postReply, setCommentAssignee, startComments, toggleResolve } from "../../../src/features/comments/comments.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
 
@@ -74,5 +74,36 @@ test("D26: standalone comment controls plan resolve, assignment, removal and unw
   try {
     drive();
     assert.deepEqual(planned(fake.commands), [undefined, undefined, undefined, undefined]);
+  } finally { owner.dispose(); }
+});
+
+test("the native comment owner receives each edit without calling a standalone command", () => {
+  const fake = fixture(), calls: unknown[] = [];
+  const changed = { changed: true, held: false };
+  const owner = startComments({ ...fake.ports, nativeComments: () => ({
+    author: "Ada",
+    add: comment => { calls.push(["add", comment.body]); return changed; },
+    cancel: id => { calls.push(["cancel", id]); },
+    reply: (id, reply) => { calls.push(["reply", id, reply.body]); return changed; },
+    body: () => { assert.fail("unexpected body edit"); },
+    resolve: (id, resolved) => { calls.push(["resolve", id, resolved]); return changed; },
+    remove: id => { calls.push(["remove", id]); return changed; }
+  }) });
+  try {
+    toggleResolve("C1");
+    armDeleteComment(document.createElement("button"), "C1");
+    openCommentComposer({ id: "C1", rowId: "R1", field: "audioText", quotedText: "bc" });
+    closeCommentComposer(true);
+    openCommentComposer({ id: "C1", rowId: "R1", field: "audioText", quotedText: "bc" });
+    const body = document.getElementById("comment-body-editable");
+    assert.ok(body);
+    body.textContent = "New note";
+    postComment();
+    const panel = document.getElementById("comments-panel");
+    assert.ok(panel);
+    panel.innerHTML = '<div class="reply-composer" data-for="C1"><input class="reply-name-input" value="Ada"><div class="cell-editable">First</div></div>';
+    postReply("C1");
+    assert.deepEqual(calls, [["resolve", "C1", true], ["remove", "C1"], ["cancel", "C1"], ["add", "New note"], ["reply", "C1", "First"]]);
+    assert.deepEqual(fake.commands, []);
   } finally { owner.dispose(); }
 });
