@@ -1,3 +1,4 @@
+import { enterLegacySharedSession } from "./legacy-shared-switch-support.ts";
 import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
 import { bootApp, closeApp } from "../../src/test/_app-boot.mjs";
@@ -5,7 +6,7 @@ import { stopApp } from "../../src/bootstrap/app.ts";
 import { documentTransitions } from "../../src/bootstrap/wiring/transition-owners.ts";
 import { openingStatus } from "../../src/bootstrap/wiring/ports/transitions.ts";
 import { currentCapabilities, currentDocument, runCommand, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
-import { enterSharedSession, leaveRunningSharedSession, sharedSessionParts } from "../../src/bootstrap/wiring/shared-session.ts";
+import { leaveRunningSharedSession, sharedSessionParts } from "../../src/bootstrap/wiring/shared-session.ts";
 import type { SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
 import { mountRowsRenderFeature, stopRowsRenderFeature } from "../../src/bootstrap/wiring/render.ts";
 import { confirmSavedNow } from "../../src/bootstrap/wiring/save-owners.ts";
@@ -34,7 +35,7 @@ async function roundTrip(audioText: string) {
   setHome("none"); confirmSavedNow(); stopRowsRenderFeature();
   const original = currentDocument()?.rows.map(row => row.audioText), errors: unknown[] = [];
   try {
-    assert.deepEqual(await enterSharedSession(ports(errors)), { ok: true });
+    assert.deepEqual(await enterLegacySharedSession(ports(errors)), { ok: true });
     const parts = sharedSessionParts(); assert.ok(parts);
     assert.deepEqual(currentDocument()?.rows.map(row => row.audioText), original);
     const length = audioText.length;

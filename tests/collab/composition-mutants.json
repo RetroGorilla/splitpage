@@ -200,7 +200,7 @@
     },
     {
       "label": "author ids without the replica's client number",
-      "file": "src/bootstrap/wiring/ports/shared-author.ts",
+      "file": "tests/collab/editor-ports/shared-author.ts",
       "find": "\"w\" + String(collabState(handle).doc.clientID) + \"_\" + String(++serial)",
       "replace": "\"w_\" + String(++serial)",
       "tests": [
@@ -209,7 +209,7 @@
     },
     {
       "label": "author port answers in a standalone session",
-      "file": "src/bootstrap/wiring/ports/shared-author.ts",
+      "file": "tests/collab/editor-ports/shared-author.ts",
       "find": "by: source.name() } : null;",
       "replace": "by: source.name() } : { id: \"w0_\" + String(++serial), by: source.name() };",
       "tests": [
@@ -361,7 +361,7 @@
     },
     {
       "label": "the shared undo owner swallows a callback's failure during undo",
-      "file": "src/bootstrap/wiring/ports/shared-undo.ts",
+      "file": "tests/collab/editor-ports/shared-undo.ts",
       "find": "        report(error);\n",
       "replace": "",
       "tests": [
@@ -488,7 +488,7 @@
     },
     {
       "label": "a throwing destroy listener keeps the handle's observers",
-      "file": "src/bootstrap/wiring/shared-session.ts",
+      "file": "tests/bootstrap/legacy-shared-switch-support.ts",
       "find": "  if (!attempt(() => { destroySharedDocument(handle); })) attempt(() => { destroySharedDocument(handle); });",
       "replace": "  attempt(() => { destroySharedDocument(handle); });",
       "tests": [

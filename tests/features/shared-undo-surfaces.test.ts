@@ -19,7 +19,7 @@ import type { SharedDocumentSession } from "../../src/application/session/shared
 import { headingFieldKey, TITLE_FIELD_KEY } from "../../src/application/editing/buffered-field-key.ts";
 import { bufferedFieldKey } from "../../src/core/collab/buffer.ts";
 import { stepSharedUndo } from "../../src/bootstrap/wiring/undo.ts";
-import { sharedUndoOwner } from "../../src/bootstrap/wiring/ports/shared-undo.ts";
+import { sharedUndoOwner } from "../collab/editor-ports/shared-undo.ts";
 import { sharedWriterVisualBox } from "./writer/visual-undo-support.ts";
 import { bufferReaders, bufferStamps } from "../collab/buffer-readers.ts";
 import { edgeInput } from "./edge-input.ts";

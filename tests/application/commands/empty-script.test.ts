@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { emptyScriptCommand } from "../../../src/application/commands/empty-script.ts";
 import { readSharedContentRef } from "../../../src/core/collab/read-operation.ts";
 import { registerSharedOperationFamilies } from "../../../src/adapters/collab/operation-families.ts";
-import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
+import { sharedUndoOwner } from "../../collab/editor-ports/shared-undo.ts";
 import { encodeSharedState, applySharedUpdate, destroySharedDocument } from "../../../src/adapters/collab/document.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import { replicas } from "../../adapters/collab/executor-support.ts";

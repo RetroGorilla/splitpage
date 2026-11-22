@@ -1,14 +1,7 @@
-import { collabState } from "../../../adapters/collab/state.ts";
-import type { SharedDocumentHandle } from "../../../adapters/collab/types.ts";
+import { collabState } from "../../../src/adapters/collab/state.ts";
+import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 
-export interface SharedWriterAuthor {
-  readonly id: string;
-  readonly by: string;
-}
-
-export interface SharedAuthorPort {
-  readonly next: () => SharedWriterAuthor | null;
-}
+import type { SharedAuthorPort } from "../../../src/bootstrap/wiring/shared-session.ts";
 
 export function sharedAuthorPort(source: { readonly handle: () => SharedDocumentHandle | null; readonly name: () => string }): SharedAuthorPort {
   let serial = 0;

@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { createFlowWriter } from "../../../src/features/writer/flow-writer.ts";
 import { writerFlowCommands } from "../../../src/bootstrap/wiring/ports/writer-flow.ts";
-import { sharedAuthorPort } from "../../../src/bootstrap/wiring/ports/shared-author.ts";
+import { sharedAuthorPort } from "../../collab/editor-ports/shared-author.ts";
 import { replicas } from "../../adapters/collab/executor-support.ts";
 import { sharedHarness } from "../../application/session/shared-session-support.ts";
 import { adapterReplica } from "../../application/session/legacy-shared-session-support.ts";

@@ -1,3 +1,4 @@
+import { enterLegacySharedSession } from "../../tests/bootstrap/legacy-shared-switch-support.ts";
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
@@ -5,7 +6,7 @@ import { assertReplicasAgree } from "../../tests/collab/agreement.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { sharedSplitBindings } from "../bootstrap/wiring/shared-split.ts";
 import { adoptReplacement, currentDocument, sharedSession } from "../bootstrap/wiring/session-owner.ts";
-import { enterSharedSession, leaveSharedSession, sharedSessionParts } from "../bootstrap/wiring/shared-session.ts";
+import { leaveSharedSession, sharedSessionParts } from "../bootstrap/wiring/shared-session.ts";
 import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { createSessionCapabilities } from "../application/session/capabilities.ts";
@@ -108,7 +109,7 @@ async function enter(audio = "abcdef", visual = "abcdef") {
   adoptReplacement(migrateRows({ schema: 2, title: "Shared Split", paragraphsDecided: true, rows: [
     { id: "r1", audioText: audio, visualText: visual, status: "todo" }, { id: "r2", audioText: "Other", visualText: "Wide", status: "todo" }
   ] }));
-  assert.deepEqual(await enterSharedSession(ports), { ok: true }, errors.map(error => error.stack).join("\n"));
+  assert.deepEqual(await enterLegacySharedSession(ports), { ok: true }, errors.map(error => error.stack).join("\n"));
   const parts = sharedSessionParts(); assert.ok(parts); assert.equal(screenIsStale(), false);
   const peer = createSharedDocument(); registerSharedOperationFamilies(peer, { cells: html => fromHtml(html) });
   assert.equal(applySharedUpdate(peer, encodeSharedState(parts.handle)).ok, true);
@@ -300,7 +301,7 @@ test("C7 lifecycle: failed entry releases the real binding and restores the kept
     sawMounted = sharedCellSpaceForm(cellOf("audioText")) === "Word " && !!document.querySelector("[data-shared-cell-space]");
     throw failure;
   };
-  try { assert.deepEqual(await enterSharedSession(ports), { ok: false, reason: "enter-failed" }); }
+  try { assert.deepEqual(await enterLegacySharedSession(ports), { ok: false, reason: "enter-failed" }); }
   finally { ports.detach = previousDetach; }
   assert.equal(sawMounted, true);
   assert.deepEqual(errors, [failure]);

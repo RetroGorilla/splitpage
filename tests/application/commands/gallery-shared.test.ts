@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { galleryCommand } from "../../../src/application/commands/gallery.ts";
 import type { GalleryEdit } from "../../../src/application/commands/gallery.ts";
 import { sharedGalleryPorts } from "./legacy-gallery-ports.ts";
-import { sharedAuthorPort } from "../../../src/bootstrap/wiring/ports/shared-author.ts";
+import { sharedAuthorPort } from "../../collab/editor-ports/shared-author.ts";
 import { registerSharedOperationFamilies } from "../../../src/adapters/collab/operation-families.ts";
 import { createSharedDocument, applySharedUpdate, destroySharedDocument, encodeSharedState, readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";

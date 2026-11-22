@@ -9,7 +9,7 @@ import { galleryCommand } from "../../../src/application/commands/gallery.ts";
 import type { GalleryEdit } from "../../../src/application/commands/gallery.ts";
 import { addGalleryPicture, addGalleryVideo, moveGallerySlot, removeGallerySlot } from "../../../src/core/document/gallery.ts";
 import { sharedGalleryPorts } from "./legacy-gallery-ports.ts";
-import { sharedAuthorPort } from "../../../src/bootstrap/wiring/ports/shared-author.ts";
+import { sharedAuthorPort } from "../../collab/editor-ports/shared-author.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { importRowsCommand } from "../../../src/application/commands/import-rows.ts";
 import { restoreConflictCommand } from "../../../src/application/commands/comments.ts";
@@ -200,7 +200,7 @@ test("held and no-op record commands use the isolated shared runner and report o
   const h = sharedHarness(adapterReplica(set.a));
   const refusal = sharedCommandRefusalNotice(notices.notices);
   const author = sharedAuthorPort({ handle: () => set.a, name: stamps.editor.name });
-  const recordPorts = sharedRecordPorts({ handle: () => set.a, author: author.next, stamps });
+  const recordPorts = sharedRecordPorts({ handle: () => set.a, author: author.next });
   const records = { ports: () => recordPorts, refused: outcome => {
     if (outcome.kind === "rejected") refusal(outcome.reason);
   } } satisfies Parameters<typeof recordCommandRun<typeof recordPorts>>[1];

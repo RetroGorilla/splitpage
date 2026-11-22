@@ -1,3 +1,4 @@
+import { enterLegacySharedSession } from "./legacy-shared-switch-support.ts";
 import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
 import { bootApp, closeApp } from "../../src/test/_app-boot.mjs";
@@ -6,7 +7,7 @@ import { documentOpenings, documentSources, documentTransitions, openDocument } 
 import { documentEntry } from "../../src/bootstrap/wiring/ports/document-entry.ts";
 import { openingStatus } from "../../src/bootstrap/wiring/ports/transitions.ts";
 import { currentCapabilities, currentDocument, liveSession, runCommand, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
-import { enterSharedSession, leaveRunningSharedSession, sharedSessionParts } from "../../src/bootstrap/wiring/shared-session.ts";
+import { leaveRunningSharedSession, sharedSessionParts } from "../../src/bootstrap/wiring/shared-session.ts";
 import type { SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
 import { mountRowsRenderFeature, stopRowsRenderFeature } from "../../src/bootstrap/wiring/render.ts";
 import { confirmSavedNow, unsavedChanges } from "../../src/bootstrap/wiring/save-owners.ts";
@@ -60,7 +61,7 @@ function reset() {
 
 async function share() {
   reset(); const s = switcher(); stopRowsRenderFeature();
-  assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+  assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
   const parts = sharedSessionParts(); assert.ok(parts);
   return { ...s, parts };
 }
@@ -73,7 +74,7 @@ function close() {
 async function refusedDuringOpening(s: ReturnType<typeof switcher>) {
   const doc = currentDocument(), epoch = liveSession().epoch(), generation = liveSession().generation();
   assert.equal(documentOpenings.openingPending(), true);
-  assert.deepEqual(await enterSharedSession(s.ports), { ok: false, reason: "opening-pending" });
+  assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: false, reason: "opening-pending" });
   assert.equal(currentDocument() === doc, true);
   assert.deepEqual([liveSession().epoch(), liveSession().generation(), sharedSession(), sharedSessionParts(), s.log, s.errors], [epoch, generation, false, null, [], []]);
 }
@@ -81,7 +82,7 @@ async function refusedDuringOpening(s: ReturnType<typeof switcher>) {
 async function enterAfterLanding(s: ReturnType<typeof switcher>, title: string) {
   assert.equal(documentOpenings.openingPending(), false); assert.equal(sharedSession(), false); assert.equal(currentDocument()?.title, title);
   (document.activeElement as HTMLElement | null)?.blur();
-  stopRowsRenderFeature(); assert.deepEqual(await enterSharedSession(s.ports), { ok: true }); assert.deepEqual(s.errors, []);
+  stopRowsRenderFeature(); assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true }); assert.deepEqual(s.errors, []);
 }
 
 function heldFile(name: string) {

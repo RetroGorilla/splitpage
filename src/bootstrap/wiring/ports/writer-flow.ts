@@ -3,7 +3,7 @@ import type { FlowCommandSource } from "../../../application/commands/flow.ts";
 import type { FlowOutcome, FlowPorts, FlowPos, FlowRange } from "../../../core/flow/flow.ts";
 import type { FlowOperationRequest } from "../../../core/flow/operations.ts";
 import type { SharedContentRef, SharedOperation } from "../../../core/collab/operations.ts";
-import type { SharedAuthorPort } from "./shared-author.ts";
+import type { SharedAuthorPort } from "../shared-session.ts";
 import { sharedBeatStamp } from "../../../adapters/collab/stamp.ts";
 import { sharedStructureIdentity } from "../../../adapters/collab/structure-identity.ts";
 import { sharedFlowPaste } from "../../../application/commands/flow-paste.ts";

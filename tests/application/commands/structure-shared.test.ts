@@ -7,9 +7,9 @@ import { removeSceneCommand } from "../../../src/application/commands/scenes.ts"
 import type { SharedStructurePorts } from "../../../src/application/commands/shared-structure.ts";
 import type { Command } from "../../../src/application/session/document-session.ts";
 import type { StampPorts } from "../../../src/application/session/ports.ts";
-import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
+import { sharedUndoOwner } from "../../collab/editor-ports/shared-undo.ts";
 import { sharedStructurePorts } from "../../collab/editor-ports/shared-values.ts";
-import { sharedAuthorPort } from "../../../src/bootstrap/wiring/ports/shared-author.ts";
+import { sharedAuthorPort } from "../../collab/editor-ports/shared-author.ts";
 import { registerSharedOperationFamilies } from "../../../src/adapters/collab/operation-families.ts";
 import { createSharedDocument, applySharedUpdate, destroySharedDocument, encodeSharedState, readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";

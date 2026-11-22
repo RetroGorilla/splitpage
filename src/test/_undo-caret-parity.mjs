@@ -1,3 +1,4 @@
+import { enterLegacySharedSession } from "../../tests/bootstrap/legacy-shared-switch-support.ts";
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import { after } from "node:test";
 import assert from "node:assert/strict";
@@ -11,7 +12,7 @@ const { writerControls } = await import("../bootstrap/wiring/writer.ts");
 const { adoptReplacement, currentDocument } = await import("../bootstrap/wiring/session-owner.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
-const { enterSharedSession, leaveSharedSession, sharedSessionParts } = await import("../bootstrap/wiring/shared-session.ts");
+const { leaveSharedSession, sharedSessionParts } = await import("../bootstrap/wiring/shared-session.ts");
 const { sharedWriterBindings } = await import("../bootstrap/wiring/shared-writer.ts");
 const { createSessionCapabilities } = await import("../application/session/capabilities.ts");
 const { fromHtml } = await import("../bootstrap/richtext.ts");
@@ -197,7 +198,7 @@ async function runShared(row, view, order) {
   const shared = row.shared ?? {};
   seedDocument(shared.seed ?? row.seed, row.written);
   reported.length = 0;
-  assert.deepEqual(await enterSharedSession(view === "split" ? splitPorts : writerPorts), { ok: true }, String(reported.map(error => error?.stack ?? JSON.stringify(error))));
+  assert.deepEqual(await enterLegacySharedSession(view === "split" ? splitPorts : writerPorts), { ok: true }, String(reported.map(error => error?.stack ?? JSON.stringify(error))));
   const handle = sharedSessionParts().handle, other = createSharedDocument();
   try {
     registerSharedOperationFamilies(other, { cells: html => fromHtml(html) });

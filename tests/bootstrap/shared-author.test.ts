@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { sharedAuthorPort } from "../../src/bootstrap/wiring/ports/shared-author.ts";
+import { sharedAuthorPort } from "../collab/editor-ports/shared-author.ts";
 import { replicas } from "../adapters/collab/executor-support.ts";
 import { registerSharedOperationFamilies } from "../../src/adapters/collab/operation-families.ts";
 import { collabState } from "../../src/adapters/collab/state.ts";

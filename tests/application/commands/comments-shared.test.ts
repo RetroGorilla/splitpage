@@ -6,8 +6,8 @@ import type { SharedCommentPorts } from "../../../src/application/commands/comme
 import type { RewritePlanner } from "../../../src/application/commands/document-edit.ts";
 import type { Command } from "../../../src/application/session/document-session.ts";
 import { sharedCommentPorts } from "../../collab/editor-ports/shared-comments.ts";
-import { sharedAuthorPort } from "../../../src/bootstrap/wiring/ports/shared-author.ts";
-import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
+import { sharedAuthorPort } from "../../collab/editor-ports/shared-author.ts";
+import { sharedUndoOwner } from "../../collab/editor-ports/shared-undo.ts";
 import { registerSharedOperationFamilies } from "../../../src/adapters/collab/operation-families.ts";
 import { createSharedDocument, applySharedUpdate, destroySharedDocument, encodeSharedState, readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";

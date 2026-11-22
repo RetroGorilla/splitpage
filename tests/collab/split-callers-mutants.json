@@ -183,11 +183,11 @@
     },
     {
       "label": "author operation id repeats across commands",
-      "file": "src/bootstrap/wiring/ports/shared-author.ts",
+      "file": "tests/collab/editor-ports/shared-author.ts",
       "find": "String(++serial)",
       "replace": "String(serial + 1)",
       "tests": [
-        "src/test/shared-split-callers-literals-app.test.mjs"
+        "tests/bootstrap/shared-author.test.ts"
       ]
     },
     {

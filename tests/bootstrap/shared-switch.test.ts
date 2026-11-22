@@ -1,3 +1,4 @@
+import { enterLegacySharedSession } from "./legacy-shared-switch-support.ts";
 import "../../src/test/_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -17,7 +18,7 @@ import {
 } from "../../src/bootstrap/wiring/session-owner.ts";
 import { routeUndoReplays, sharedUndoRoute, startUndo, stepSharedUndo, undoOwner, undoPorts, undoSessionPort } from "../../src/bootstrap/wiring/undo.ts";
 import {
-  enterSharedSession, forceLeaveSharedSession, leaveSharedSession, leaveRunningSharedSession, sharedSessionParts, SHARED_ALREADY, SHARED_ENTER_FAILED,
+  forceLeaveSharedSession, leaveSharedSession, leaveRunningSharedSession, sharedSessionParts, SHARED_ALREADY, SHARED_ENTER_FAILED,
   SHARED_LEAVE_FAILED, SHARED_NOT_RUNNING, SHARED_SWITCHING
 } from "../../src/bootstrap/wiring/shared-session.ts";
 import type { SharedSessionParts, SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
@@ -146,7 +147,7 @@ test("command refusals reach the supplied callback once while entry refusal is c
     commandRefused: reason => { refusals.push(reason); }
   };
   try {
-    assert.deepEqual(await enterSharedSession(ports), { ok: true });
+    assert.deepEqual(await enterLegacySharedSession(ports), { ok: true });
     assert.equal(entries, 2);
     assert.deepEqual(s.entered().session.run({ name: "refused-command", needs: "edit", plan: () => ({ refused: "command-refused" }) }),
       { kind: "rejected", reason: "command-refused", notified: true });
@@ -191,9 +192,9 @@ test("C8 entry-only holds admit settlement commands and retain an enclosing comm
 
 test("C8 a nested switch refuses through the same entry hold and cannot replace its scope", async () => {
   const s = start(); let nested: Promise<unknown> | null = null, entered = false;
-  s.onSettle(() => { if (!entered) { entered = true; nested = enterSharedSession(s.ports); } });
+  s.onSettle(() => { if (!entered) { entered = true; nested = enterLegacySharedSession(s.ports); } });
   try {
-    assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
     assert.ok(nested); assert.deepEqual(await nested, { ok: false, reason: SHARED_SWITCHING });
     const outcomes: unknown[] = []; let leaving = false;
     s.onLeave(() => { if (!leaving) { leaving = true; outcomes.push(leaveSharedSession(s.ports)); } });
@@ -209,7 +210,7 @@ test("C8 no-argument leave equals the entry-owned explicit leave step for step",
     const s = start();
     try {
       assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: SHARED_NOT_RUNNING });
-      assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+      assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
       s.log.length = 0;
       const result = implicit ? leaveRunningSharedSession() : leaveSharedSession(s.ports);
       results.push([result, [...s.log], currentDocument(), state(), s.reported]);
@@ -222,7 +223,7 @@ test("C8 no-argument leave equals the entry-owned explicit leave step for step",
 test("C8 foreign leave ports cannot replace the mounted bindings or retained migration and identity", async () => {
   const s = start();
   try {
-    assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
     const wrong = (): never => { assert.fail("foreign switch ports were used"); };
     const foreign: SharedSwitchPorts = { ...s.ports, bindings: { enter: wrong, settle: wrong, leave: wrong }, migrate: wrong, docId: wrong, report: wrong };
     assert.deepEqual(leaveSharedSession(foreign), { ok: true });
@@ -234,9 +235,9 @@ test("C8 rolled-back entry and a completed leave with a callback fault retain no
   const s = start();
   try {
     s.arm("detach");
-    assert.deepEqual(await enterSharedSession(s.ports), { ok: false, reason: SHARED_ENTER_FAILED });
+    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: false, reason: SHARED_ENTER_FAILED });
     assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: SHARED_NOT_RUNNING });
-    assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
     s.arm("destroy");
     assert.deepEqual(leaveRunningSharedSession(), { ok: true });
     assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: SHARED_NOT_RUNNING });
@@ -246,22 +247,22 @@ test("C8 rolled-back entry and a completed leave with a callback fault retain no
 test("C8 a later shared session leaves through its own ports", async () => {
   const s = start();
   try {
-    assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
     assert.deepEqual(leaveRunningSharedSession(), { ok: true });
     let settled = 0, left = 0;
     const next: SharedSwitchPorts = { ...s.ports, bindings: { enter: () => {}, settle: () => { settled++; return null; }, leave: () => { left++; } }, docId: () => newId(99) };
-    assert.deepEqual(await enterSharedSession(next), { ok: true });
+    assert.deepEqual(await enterLegacySharedSession(next), { ok: true });
     assert.deepEqual(leaveRunningSharedSession(), { ok: true });
     assert.deepEqual([settled, left, currentDocument()?.docId], [1, 1, newId(99)]);
   } finally { s.stop(); }
 });
 
 async function roundTrip(s: Switch, title: string): Promise<void> {
-  assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+  assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
   assert.deepEqual(state(), [true, true, true, title]);
   assert.deepEqual(leaveSharedSession(s.ports), { ok: true });
   assert.deepEqual(state(), [false, false, false, title]);
-  assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+  assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
   assert.deepEqual(leaveSharedSession(s.ports), { ok: true });
 }
 
@@ -274,7 +275,7 @@ test("entering settles, waits a microtask, routes undo before the owner is seen,
     const lifetime = undoOwner().lifetime();
     const seen: unknown[] = [];
     s.onReplaced(() => { seen.push([sharedSession(), sharedUndoRoute() !== null]); });
-    const entering = enterSharedSession(s.ports);
+    const entering = enterLegacySharedSession(s.ports);
     assert.deepEqual([s.log, sharedSession()], [["settle"], false]);
     assert.deepEqual(await entering, { ok: true });
     assert.deepEqual(s.log, ["settle", "bindings.enter:true", "detach", "undo.reset"]);
@@ -291,12 +292,12 @@ test("each refusal of step 1 changes nothing and settles nothing, and so does en
   try {
     for (const reason of ["startup-not-settled", "composition", "draft-restore-pending"]) {
       s.refuse(reason);
-      assert.deepEqual(await enterSharedSession(s.ports), { ok: false, reason });
+      assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: false, reason });
       assert.deepEqual([s.log, sharedSession(), currentDocument()?.docId], [[], false, START_ID]);
     }
     s.refuse(null);
-    assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
-    assert.deepEqual(await enterSharedSession(s.ports), { ok: false, reason: SHARED_ALREADY });
+    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
+    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: false, reason: SHARED_ALREADY });
   } finally { s.stop(); }
 });
 
@@ -305,7 +306,7 @@ for (const duringSettle of [false, true]) test("C8 opening admission " + (during
   const ports = { ...s.ports, opening: { openingPending: () => pending } };
   try {
     if (duringSettle) s.onSettle(() => { pending = true; });
-    assert.deepEqual(await enterSharedSession(ports), { ok: false, reason: "opening-pending" });
+    assert.deepEqual(await enterLegacySharedSession(ports), { ok: false, reason: "opening-pending" });
     assert.deepEqual([s.log, sharedSession(), currentDocument()?.docId, sharedSessionParts(), s.reported],
       [duringSettle ? ["settle"] : [], false, START_ID, null, []]);
   } finally { s.stop(); }
@@ -315,7 +316,7 @@ test("a refusal that arises while entering waits for the microtask is honoured a
   const s = start();
   try {
     s.onSettle(() => { void Promise.resolve().then(() => { s.refuse("composition"); }); });
-    assert.deepEqual(await enterSharedSession(s.ports), { ok: false, reason: "composition" });
+    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: false, reason: "composition" });
     assert.deepEqual([s.log, sharedSession(), currentDocument()?.docId], [["settle"], false, START_ID]);
   } finally { s.stop(); }
 });
@@ -327,7 +328,7 @@ test("a standalone undo note queued while settling flushes before the owner swap
   process.on("unhandledRejection", caught);
   try {
     s.onSettle(() => { undoOwner().noteEdit(); });
-    assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
     await new Promise(resolve => { setTimeout(resolve, 0); });
     assert.deepEqual(escaped, []);
   } finally { process.off("unhandledRejection", caught); s.stop(); }
@@ -337,7 +338,7 @@ test("class A, a replacement listener throwing while the shared owner is adopted
   const s = start();
   try {
     s.arm("replaced-while-shared");
-    assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
     assert.deepEqual([state(), s.reported], [[true, true, true, "Pilot"], ["Error: fault at replaced-while-shared"]]);
     assert.equal(runCommand(lengthCommand()).kind, "applied");
     assert.deepEqual(leaveSharedSession(s.ports), { ok: true });
@@ -359,7 +360,7 @@ for (const fault of ENTER_FAULTS_A) {
       const history = undoOwner().sizes(), lifetime = undoOwner().lifetime();
       assert.equal(history.undo > 0, true);
       s.arm(fault);
-      assert.deepEqual(await enterSharedSession(s.ports), { ok: false, reason: SHARED_ENTER_FAILED });
+      assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: false, reason: SHARED_ENTER_FAILED });
       assert.deepEqual([state(), currentDocument()?.docId, mergeBase() === base, s.reported[0], currentCapabilities().comment()],
         [[false, false, false, "Pilot"], START_ID, true, "Error: fault at " + fault, { allowed: true }]);
       assert.deepEqual([undoOwner().sizes(), undoOwner().lifetime(), s.log.includes("undo.reset")], [history, lifetime, false], "a failed entry keeps the standalone undo history");
@@ -380,7 +381,7 @@ test("a standalone undo reset that clears the history and then throws rolls entr
     assert.equal(runCommand(textCommand("abc")).kind, "applied");
     undoOwner().flush();
     s.arm("undo.reset");
-    assert.deepEqual(await enterSharedSession(s.ports), { ok: false, reason: SHARED_ENTER_FAILED });
+    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: false, reason: SHARED_ENTER_FAILED });
     assert.deepEqual([state(), currentDocument()?.docId, s.reported[0], s.log.filter(line => line === "undo.reset" || line === "reattach")],
       [[false, false, false, "Pilot"], START_ID, "Error: fault at undo.reset", ["undo.reset", "reattach"]]);
     const before = undoOwner().sizes().undo;
@@ -399,7 +400,7 @@ for (const fault of ROLLBACK_FAULTS_B) {
     const s = start();
     try {
       s.arm("hydration", fault);
-      assert.deepEqual(await enterSharedSession(s.ports), { ok: false, reason: SHARED_ENTER_FAILED });
+      assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: false, reason: SHARED_ENTER_FAILED });
       assert.deepEqual([sharedSession(), currentDocument()?.docId, currentDocument()?.title, s.reported[0], sharedSessionParts()],
         [false, START_ID, "Pilot", "Error: fault at hydration", null]);
       assert.equal(collabState(s.entered().handle).destroyed, true);
@@ -413,7 +414,7 @@ test("class B, a listener error collected before hydration fails: the step failu
   const s = start();
   try {
     s.arm("replaced-while-shared", "hydration");
-    assert.deepEqual(await enterSharedSession(s.ports), { ok: false, reason: SHARED_ENTER_FAILED });
+    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: false, reason: SHARED_ENTER_FAILED });
     assert.deepEqual([s.reported.slice(0, 2), state()], [["Error: fault at hydration", "Error: fault at replaced-while-shared"], [false, false, false, "Pilot"]]);
     standaloneUsable();
     await roundTrip(s, "Again");
@@ -426,7 +427,7 @@ for (const fault of LEAVE_FAULTS_A_KEPT) {
   test(`class A, leaving with one fault at ${fault}: the shared session stays the one session, whole and routed, its bindings back, and it can be left again`, async () => {
     const s = start();
     try {
-      assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+      assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
       const parts = s.entered();
       s.log.length = 0;
       s.arm(fault);
@@ -449,7 +450,7 @@ for (const fault of LEAVE_FAULTS_A_LANDED) {
   test(`class ${fault === "report" ? "B" : "A"}, leaving with ${fault === "report" ? "a throwing destroy listener and a throwing report" : "one callback fault at " + fault} after the copy has landed: leaving completes, the shared parts are gone, and the error is reported`, async () => {
     const s = start();
     try {
-      assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+      assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
       const parts = s.entered();
       assert.equal(runCommand(lengthCommand()).kind, "applied");
       s.arm(fault);
@@ -466,7 +467,7 @@ for (const fault of LEAVE_FAULTS_A_LANDED) {
 test("class B, a failed leave whose restoring bindings also fail: the shared session still holds the document and can be left", async () => {
   const s = start();
   try {
-    assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
     s.arm("bindings.leave", "bindings.enter");
     assert.deepEqual(leaveSharedSession(s.ports), { ok: false, reason: SHARED_LEAVE_FAILED });
     assert.deepEqual([state(), s.reported[0]], [[true, true, true, "Pilot"], "Error: fault at bindings.leave"]);
@@ -479,7 +480,7 @@ for (const where of ["docId", "migrate"] as const) {
   test(`C: a command and an undo issued from inside leaving's ${where} are refused by name, and the landed copy is the captured projection`, async () => {
     const s = start();
     try {
-      assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+      assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
       assert.equal(runCommand(lengthCommand()).kind, "applied");
       const outcomes: unknown[] = [];
       const inside = (): void => {
@@ -498,12 +499,12 @@ for (const where of ["docId", "migrate"] as const) {
 test("leaving copies the projection after the bindings settle on restart: an edit and an undo accepted then both land", async () => {
   const s = start();
   try {
-    assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
     s.onLeave(() => { assert.equal(runCommand(lengthCommand()).kind, "applied"); });
     assert.deepEqual(leaveSharedSession(s.ports), { ok: true });
     assert.equal(length(), 7);
     s.onLeave(() => {});
-    assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
     assert.equal(runCommand(lengthCommand(9)).kind, "applied");
     s.onLeave(() => { const route = sharedUndoRoute(); assert.ok(route); assert.equal(stepSharedUndo(route, "undo", () => {}).ok, true); });
     assert.deepEqual(leaveSharedSession(s.ports), { ok: true });
@@ -518,7 +519,7 @@ for (const where of ["docId", "migrate"] as const) {
       const outcomes: unknown[] = [];
       const inside = (): void => { if (!sharedSession()) outcomes.push(runCommand(lengthCommand(9))); };
       if (where === "docId") s.onDocId(inside); else s.onMigrate(inside);
-      assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+      assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
       assert.deepEqual([outcomes[0], length()], [{ kind: "rejected", reason: SHARED_SWITCHING }, 3]);
     } finally { s.stop(); }
   });
@@ -527,7 +528,7 @@ for (const where of ["docId", "migrate"] as const) {
 test("Ctrl+Z while shared reaches the shared undo owner: a shared command is recorded and undone, with no warning", async () => {
   const s = start();
   try {
-    assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
     assert.equal(runCommand(lengthCommand()).kind, "applied");
     assert.deepEqual([length(), s.entered().undo.sizes().undo], [7, 1]);
     const route = sharedUndoRoute();
@@ -541,7 +542,7 @@ test("Ctrl+Z while shared reaches the shared undo owner: a shared command is rec
 test("leaving restarts the bindings, clears the author's handle before the owner swap and the route after it, and lands a standalone copy under a new id", async () => {
   const s = start();
   try {
-    assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
     const parts = s.entered();
     s.hold("buffer-composition");
     assert.deepEqual(leaveSharedSession(s.ports), { ok: false, reason: "buffer-composition" });
@@ -567,7 +568,7 @@ for (const [name, leave] of Object.entries(WAYS_OUT)) {
   test(`${name} lands the copy and then runs the boundary's left step once, with nothing shared left`, async () => {
     const s = start();
     try {
-      assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+      assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
       const parts = s.entered();
       assert.equal(runCommand(lengthCommand()).kind, "applied");
       s.log.length = 0;
@@ -587,7 +588,7 @@ for (const [name, leave] of Object.entries(WAYS_OUT)) {
 test("a forced leave that still cannot land ends the session without a copy: no shared parts, no route, left(false) once, and the reason reported", async () => {
   const s = start();
   try {
-    assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
     const parts = s.entered();
     s.log.length = 0;
     s.hold("buffer-stuck");
@@ -616,7 +617,7 @@ test("entry runs the boundary's preparation after settling and a microtask, befo
           if (outcome === "thrown") throw new Error("prepare failed");
           return outcome === "refused" ? "draft-not-kept" : null;
         } };
-      const entering = enterSharedSession(ports);
+      const entering = enterLegacySharedSession(ports);
       assert.deepEqual(order, ["refusal", "settle"]);
       const result = await entering;
       assert.deepEqual(result, outcome === "passed" ? { ok: true } : { ok: false, reason: outcome === "refused" ? "draft-not-kept" : SHARED_ENTER_FAILED });
@@ -634,7 +635,7 @@ test("a failed detach whose reattachment also fails still rolls back, reports th
   const s = start();
   try {
     s.arm("detach", "reattach");
-    assert.deepEqual(await enterSharedSession(s.ports), { ok: false, reason: SHARED_ENTER_FAILED });
+    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: false, reason: SHARED_ENTER_FAILED });
     assert.deepEqual([state(), currentDocument()?.docId, s.reported.slice(0, 2)], [[false, false, false, "Pilot"], START_ID, ["Error: fault at detach", "Error: fault at reattach"]]);
     await roundTrip(s, "Pilot");
   } finally { s.stop(); }
@@ -649,7 +650,7 @@ for (const where of ["docId", "migrate"] as const) {
       const outcomes: unknown[] = [];
       const inside = (): void => { if (!sharedSession()) outcomes.push(undoOwner().undo()); };
       if (where === "docId") s.onDocId(inside); else s.onMigrate(inside);
-      assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+      assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
       assert.equal(outcomes.length, 1);
       assert.equal((outcomes[0] as { ok?: boolean }).ok, false, JSON.stringify(outcomes[0]));
       assert.deepEqual([currentDocument()?.title, sharedSession()], ["Pilot 2", true]);
@@ -662,7 +663,7 @@ test("class A, leaving with a throwing timers.stop: no shared refresh reaches th
   const heard: string[][] = [];
   const unhear = onRefresh(jobs => { heard.push([...jobs]); });
   try {
-    assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
     liveSession().refresh("probe");
     s.arm("timers.stop");
     assert.deepEqual(leaveSharedSession(s.ports), { ok: true });
@@ -687,14 +688,14 @@ function followsLive(parts: SharedSessionParts): boolean {
 test("entry starts one trial replica that follows hydration and bridge commands, leave releases it, and a new entry starts a fresh one", async () => {
   const s = start(), open = openSharedTrialReplicas();
   try {
-    assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
     const first = s.entered(), trial = runningTrial(first), replica = trial.replica;
     assert.deepEqual([openSharedTrialReplicas() - open, followsLive(first)], [1, true]);
     assert.equal(runCommand(lengthCommand()).kind, "applied");
     assert.deepEqual([length(), followsLive(first)], [7, true]);
     assert.deepEqual(leaveSharedSession(s.ports), { ok: true });
     assert.deepEqual([openSharedTrialReplicas() - open, collabState(first.handle).trial, replica.isDestroyed], [0, null, true]);
-    assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
     const second = s.entered();
     assert.notEqual(runningTrial(second), trial);
     assert.deepEqual([openSharedTrialReplicas() - open, followsLive(second)], [1, true]);
@@ -708,7 +709,7 @@ test("a failed entry, before or after hydration, releases the trial replica it s
     const s = start(), open = openSharedTrialReplicas();
     try {
       s.arm(fault);
-      assert.deepEqual(await enterSharedSession(s.ports), { ok: false, reason: SHARED_ENTER_FAILED });
+      assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: false, reason: SHARED_ENTER_FAILED });
       const parts = s.entered();
       assert.deepEqual([fault, openSharedTrialReplicas() - open, collabState(parts.handle).trial], [fault, 0, null]);
     } finally { s.stop(); }
@@ -718,7 +719,7 @@ test("a failed entry, before or after hydration, releases the trial replica it s
 test("a forced leave that ends the session during a buffer hold with a held update releases the trial replica and every observer", async () => {
   const s = start(), open = openSharedTrialReplicas();
   try {
-    assert.deepEqual(await enterSharedSession(s.ports), { ok: true });
+    assert.deepEqual(await enterLegacySharedSession(s.ports), { ok: true });
     const parts = s.entered(), trial = runningTrial(parts), sender = createSharedDocument();
     assert.deepEqual(applySharedUpdate(sender, encodeSharedState(parts.handle)), { ok: true });
     const vector = encodeSharedStateVector(sender);

@@ -49,7 +49,6 @@ export function nativeEntrySwitchFixture() {
   return {
     ports,
     errors,
-    enter: () => enterSharedSession(ports),
     enterNative: (customPorts: SharedSwitchPorts = ports) => {
       const opened: { value?: ReturnType<typeof openNativeEditor> } = {};
       return enterSharedSession(customPorts, (doc, failed) => {

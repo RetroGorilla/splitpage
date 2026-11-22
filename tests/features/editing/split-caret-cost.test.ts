@@ -83,9 +83,10 @@ test("legacy Split enter and dispose keep unchanged stored space forms and resto
       assert.deepEqual(counts, { mapping: 0, paint: 0, reading: 0 });
     }
     const { splitSpaceSwitch } = await import("./src/test/_shared-split-space.mjs");
-    const { enterSharedSession, leaveSharedSession } = await import("./src/bootstrap/wiring/shared-session.ts");
+    const { leaveSharedSession } = await import("./src/bootstrap/wiring/shared-session.ts");
+    const { enterLegacySharedSession } = await import("./tests/bootstrap/legacy-shared-switch-support.ts");
     const { ports } = splitSpaceSwitch();
-    assert.deepEqual(await enterSharedSession(ports), { ok: true });
+    assert.deepEqual(await enterLegacySharedSession(ports), { ok: true });
     assert.ok(document.querySelector("[data-shared-cell-space]"));
     counts.paint = 0;
     render(); renderRow("r0");

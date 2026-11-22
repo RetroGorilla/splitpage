@@ -5,7 +5,7 @@ import { addPersonCommand, deletePersonCommand, deleteTagsCommand, gearQuickAddC
 import type { SharedRecordPorts } from "../../../src/application/commands/shared-records.ts";
 import type { Command } from "../../../src/application/session/document-session.ts";
 import { sharedRecordPorts } from "../../collab/editor-ports/shared-records.ts";
-import { sharedAuthorPort } from "../../../src/bootstrap/wiring/ports/shared-author.ts";
+import { sharedAuthorPort } from "../../collab/editor-ports/shared-author.ts";
 import { registerSharedOperationFamilies } from "../../../src/adapters/collab/operation-families.ts";
 import { createSharedDocument, applySharedUpdate, destroySharedDocument, encodeSharedState, readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";

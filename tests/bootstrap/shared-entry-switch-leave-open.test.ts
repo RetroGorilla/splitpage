@@ -1,8 +1,9 @@
+import { enterLegacySharedSession } from "./legacy-shared-switch-support.ts";
 import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
 import { bootEntrySwitchFixture, stopEntrySwitchFixture, entrySwitchFixture, attemptSwitchEntry } from "./shared-entry-switch-support.ts";
 import { currentDocument, onDocumentReplaced, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
-import { enterSharedSession, leaveRunningSharedSession, sharedSessionParts, SHARED_SWITCHING } from "../../src/bootstrap/wiring/shared-session.ts";
+import { leaveRunningSharedSession, sharedSessionParts, SHARED_SWITCHING } from "../../src/bootstrap/wiring/shared-session.ts";
 import { sharedUndoRoute } from "../../src/bootstrap/wiring/undo.ts";
 import { collabState } from "../../src/adapters/collab/state.ts";
 
@@ -17,7 +18,7 @@ for (const phase of ["replacement", "settle", "restart"] as const) {
     const ports = { ...f.ports, bindings: { ...f.ports.bindings,
       settle: () => { if (phase === "settle") attempt(); return null; }, leave: () => { if (phase === "restart") attempt(); } } };
     try {
-      assert.deepEqual(await enterSharedSession(ports), { ok: true });
+      assert.deepEqual(await enterLegacySharedSession(ports), { ok: true });
       const parts = sharedSessionParts(); assert.ok(parts);
       const result = leaveRunningSharedSession();
       assert.deepEqual(observed, [{ refused: SHARED_SWITCHING }]);

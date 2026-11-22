@@ -1,9 +1,9 @@
-import { reverseSharedUndoRecord, supportsSharedUndoPart } from "../../../adapters/collab/undo-executor.ts";
-import type { SharedDocumentHandle } from "../../../adapters/collab/types.ts";
-import { createSharedUndo } from "../../../application/editing/undo/shared-undo.ts";
-import type { SharedUndo, SharedUndoReversal } from "../../../application/editing/undo/shared-undo.ts";
-import type { SharedUndoRecord } from "../../../core/collab/undo-record.ts";
-import { timingMarks } from "../../../../shared/timing-marks.ts";
+import { reverseSharedUndoRecord, supportsSharedUndoPart } from "../../../src/adapters/collab/undo-executor.ts";
+import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
+import { createSharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
+import type { SharedUndo, SharedUndoReversal } from "../../../src/application/editing/undo/shared-undo.ts";
+import type { SharedUndoRecord } from "../../../src/core/collab/undo-record.ts";
+import { timingMarks } from "../../../shared/timing-marks.ts";
 
 declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 

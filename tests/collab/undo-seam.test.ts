@@ -13,7 +13,7 @@ import { sharedUndoActions } from "../../src/application/editing/undo/shared-und
 import { changeSet } from "../../src/application/session/change-set.ts";
 import type { Command } from "../../src/application/session/document-session.ts";
 import { readOperation } from "../../src/core/collab/read-operation.ts";
-import { sharedUndoOwner } from "../../src/bootstrap/wiring/ports/shared-undo.ts";
+import { sharedUndoOwner } from "./editor-ports/shared-undo.ts";
 import { bufferReaders, bufferStamps } from "./buffer-readers.ts";
 
 const ORDERS = ["D1", "rev", "dup"] as const;

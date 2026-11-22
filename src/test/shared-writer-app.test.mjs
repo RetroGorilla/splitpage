@@ -1,3 +1,4 @@
+import { enterLegacySharedSession } from "../../tests/bootstrap/legacy-shared-switch-support.ts";
 import { bootApp, closeApp } from "./_app-boot.mjs";
 import { test, after } from "node:test";
 import assert from "node:assert/strict";
@@ -11,7 +12,7 @@ const { writerControls } = await import("../bootstrap/wiring/writer.ts");
 const { adoptReplacement, currentDocument, sharedSession } = await import("../bootstrap/wiring/session-owner.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { undoOwner } = await import("../bootstrap/wiring/undo.ts");
-const { enterSharedSession, leaveSharedSession, sharedSessionParts } = await import("../bootstrap/wiring/shared-session.ts");
+const { leaveSharedSession, sharedSessionParts } = await import("../bootstrap/wiring/shared-session.ts");
 const { sharedWriterBindings } = await import("../bootstrap/wiring/shared-writer.ts");
 const { createSessionCapabilities } = await import("../application/session/capabilities.ts");
 const { fromHtml } = await import("../bootstrap/richtext.ts");
@@ -118,7 +119,7 @@ const audio = () => currentDocument()?.rows[0]?.audioText;
 test("in the real app, a shared Writer types through the buffers, shows another writer's text, and Ctrl+Z takes back only its own typing", async () => {
   adoptReplacement(migrateRows({ title: "Shared Writer", rows: [{ id: "r1", audioText: "Hello", visualText: "", status: "todo" }] }));
   undoOwner().flush();
-  assert.deepEqual(await enterSharedSession(ports), { ok: true }, errors.map(error => error.stack).join("\n"));
+  assert.deepEqual(await enterLegacySharedSession(ports), { ok: true }, errors.map(error => error.stack).join("\n"));
   const parts = sharedSessionParts();
   assert.ok(parts);
   const other = createSharedDocument();
@@ -147,7 +148,7 @@ for (const [side, merged, caret] of [["lower", "abYx", 3], ["higher", "abxY", 2]
   writerControls().closeWriter();
   adoptReplacement(migrateRows({ rows: [{ id: "r1", audioText: "ab", visualText: "", status: "todo" }] }));
   undoOwner().flush();
-  assert.deepEqual(await enterSharedSession(ports), { ok: true });
+  assert.deepEqual(await enterLegacySharedSession(ports), { ok: true });
   const parts = sharedSessionParts(), other = createSharedDocument();
   try {
     collabState(other).doc.clientID = collabState(parts.handle).doc.clientID + (side === "lower" ? -1 : 1);
@@ -171,7 +172,7 @@ test("shared Writer undo of identical retyped text leaves the caret after remote
   writerControls().closeWriter();
   adoptReplacement(migrateRows({ rows: [{ id: "r1", audioText: "the the", visualText: "", status: "todo" }] }));
   undoOwner().flush();
-  assert.deepEqual(await enterSharedSession(ports), { ok: true });
+  assert.deepEqual(await enterLegacySharedSession(ports), { ok: true });
   const parts = sharedSessionParts(), other = createSharedDocument();
   try {
     collabState(other).doc.clientID = collabState(parts.handle).doc.clientID - 1;
@@ -195,7 +196,7 @@ test("shared Writer visual typing undo reopens the visual box and restores its c
   writerControls().closeWriter();
   adoptReplacement(migrateRows({ rows: [{ id: "r1", audioText: "Hello", visualText: "ab", status: "todo" }] }));
   undoOwner().flush();
-  assert.deepEqual(await enterSharedSession(ports), { ok: true });
+  assert.deepEqual(await enterLegacySharedSession(ports), { ok: true });
   try {
     writerControls().openWriter();
     writerControls().writerFlowControl().openVisual("r1");
@@ -217,7 +218,7 @@ for (const offset of [3, 5]) test(`an already open Writer enters shared mode, ke
   undoOwner().flush();
   writerControls().openWriter();
   writerControls().writerFlowControl().place(caretAt(beatPos("r1", offset)));
-  assert.deepEqual(await enterSharedSession(ports), { ok: true });
+  assert.deepEqual(await enterLegacySharedSession(ports), { ok: true });
   assert.equal(document.getElementById("writer").hidden, false);
   assert.equal(beat("r1").textContent, "Hello");
   assert.deepEqual(writerControls().writerFlowControl().selection(), caretAt(beatPos("r1", offset)));
@@ -247,13 +248,13 @@ test("failed entry before hydration restores the open standalone Writer and perm
   const fault = new Error("binding entry failed"), faults = [];
   const failedPorts = { ...ports, report: error => { faults.push(error); }, bindings: { ...ports.bindings,
     enter: parts => { ports.bindings.enter(parts); throw fault; } } };
-  assert.deepEqual(await enterSharedSession(failedPorts), { ok: false, reason: "enter-failed" });
+  assert.deepEqual(await enterLegacySharedSession(failedPorts), { ok: false, reason: "enter-failed" });
   assert.deepEqual(faults, [fault]);
   assert.equal(sharedSession(), false);
   assert.equal(document.getElementById("writer").hidden, false);
   assert.equal(beat("r1").textContent, "Hello");
   assert.deepEqual(writerControls().writerFlowControl().selection(), caretAt(beatPos("r1", 3)));
-  assert.deepEqual(await enterSharedSession(ports), { ok: true });
+  assert.deepEqual(await enterLegacySharedSession(ports), { ok: true });
   assert.deepEqual(leaveSharedSession(ports), { ok: true });
   assert.deepEqual([errors, reports], [[], []]);
 });
@@ -285,11 +286,11 @@ for (const registration of ["onReplaced", "onChange"]) {
       };
     }
     try {
-      assert.deepEqual(await enterSharedSession(switched), { ok: false, reason: "enter-failed" });
+      assert.deepEqual(await enterLegacySharedSession(switched), { ok: false, reason: "enter-failed" });
       assert.deepEqual(faults, [fault]);
       assert.deepEqual({ ...listeners }, { onChange: 0, onReplaced: 0 });
       writerControls().writerFlowControl().place(caretAt(beatPos("r1", 1)));
-      assert.deepEqual(await enterSharedSession(switched), { ok: true });
+      assert.deepEqual(await enterLegacySharedSession(switched), { ok: true });
       assert.deepEqual(writerControls().writerFlowControl().selection(), caretAt(beatPos("r1", 1)));
       abandoned?.();
       assert.deepEqual(writerControls().writerFlowControl().selection(), caretAt(beatPos("r1", 1)));
@@ -315,7 +316,7 @@ test("known wrong, #1600: the shared Writer's Enter over cXd deletes a peer's Z 
   writerControls().closeWriter();
   adoptReplacement(migrateRows({ rows: [{ id: "r1", audioText: "abcdef", visualText: "", status: "todo" }, { id: "r2", audioText: "Other", visualText: "", status: "todo" }] }));
   undoOwner().flush();
-  assert.deepEqual(await enterSharedSession(ports), { ok: true });
+  assert.deepEqual(await enterLegacySharedSession(ports), { ok: true });
   const parts = sharedSessionParts(), other = createSharedDocument();
   try {
     registerSharedOperationFamilies(other, { cells: html => fromHtml(html) });

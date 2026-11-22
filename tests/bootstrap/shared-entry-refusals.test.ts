@@ -1,8 +1,9 @@
+import { enterLegacySharedSession } from "./legacy-shared-switch-support.ts";
 import { after, before, test } from "node:test";
 import assert from "node:assert/strict";
 import { bootApp, closeApp } from "../../src/test/_app-boot.mjs";
 import { stopApp } from "../../src/bootstrap/app.ts";
-import { enterSharedSession, leaveSharedSession, sharedSessionParts } from "../../src/bootstrap/wiring/shared-session.ts";
+import { leaveSharedSession, sharedSessionParts } from "../../src/bootstrap/wiring/shared-session.ts";
 import type { SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
 import { currentCapabilities, currentDocument, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
 import { documentTransitions } from "../../src/bootstrap/wiring/transition-owners.ts";
@@ -44,7 +45,7 @@ async function share() {
   };
   // why: C7 has not replaced Split's standalone undo tracking; these entry tests mount only the shared owners.
   stopRowsRenderFeature();
-  assert.deepEqual(await enterSharedSession(ports), { ok: true });
+  assert.deepEqual(await enterLegacySharedSession(ports), { ok: true });
   const parts = sharedSessionParts(); assert.ok(parts);
   assert.deepEqual(errors, []);
   return { parts, close: () => { assert.deepEqual(leaveSharedSession(ports), { ok: true }); assert.deepEqual(errors, []); mountRowsRenderFeature(); } };

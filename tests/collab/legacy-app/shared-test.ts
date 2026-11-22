@@ -1,10 +1,11 @@
+import { enterLegacySharedSession } from "../../bootstrap/legacy-shared-switch-support.ts";
 import { exposeTestHook } from "../../../src/features/common/test-hooks.ts";
 import { mintDocId } from "../../../src/adapters/identity/ids.ts";
 import { startupReady } from "../../../src/application/startup-signal.ts";
 import { migrateRows } from "../../../src/bootstrap/document-ports.ts";
 import { fromHtml } from "../../../src/bootstrap/richtext.ts";
 import { currentCapabilities, sharedSession } from "../../../src/bootstrap/wiring/session-owner.ts";
-import { SHARED_ALREADY, SHARED_NOT_RUNNING, SHARED_SWITCHING, enterSharedSession, forceLeaveSharedSession, leaveRunningSharedSession,
+import { SHARED_ALREADY, SHARED_NOT_RUNNING, SHARED_SWITCHING, forceLeaveSharedSession, leaveRunningSharedSession,
   sharedSessionParts } from "../../../src/bootstrap/wiring/shared-session.ts";
 import type { SharedSwitchOutcome, SharedSwitchPorts } from "../../../src/bootstrap/wiring/shared-session.ts";
 import type { Home } from "../../../src/application/location/document-location.ts";
@@ -127,7 +128,7 @@ function startSharedTestHook(): () => void {
         now: () => Date.now(),
         opening: openingStatus
       };
-      const result = await enterSharedSession(entering);
+      const result = await enterLegacySharedSession(entering);
       const parts = sharedSessionParts();
       if (result.ok && parts) { peer = createSharedTestPeer(parts, entering); return result; }
       if (result.ok) return { ok: false, reason: APP_STOPPED };

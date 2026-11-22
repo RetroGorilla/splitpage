@@ -4,7 +4,7 @@ import assert from "node:assert/strict";
 import { createFlowWriter } from "../../../src/features/writer/flow-writer.ts";
 import { writerVisualBuffer } from "../../../src/bootstrap/wiring/ports/writer-visual-buffer.ts";
 import { writerFlowCommands } from "../../../src/bootstrap/wiring/ports/writer-flow.ts";
-import { sharedAuthorPort } from "../../../src/bootstrap/wiring/ports/shared-author.ts";
+import { sharedAuthorPort } from "../../collab/editor-ports/shared-author.ts";
 import { sharedBufferPorts } from "../../../src/bootstrap/wiring/ports/shared-buffer.ts";
 import { createPaintGuard } from "../../../src/application/editing/paint-guard.ts";
 import { createEditorSelection } from "../../../src/application/editing/selection.ts";
@@ -35,7 +35,7 @@ import type { FlowDoc, FlowOutcome, FlowPorts } from "../../../src/core/flow/flo
 import type { DeliveryOrder } from "../../collab/delivery.ts";
 import { deliveryReplica } from "../../adapters/collab/helpers.ts";
 import { createFlowVisualBox } from "../../../src/features/writer/flow-visual-box.ts";
-import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
+import { sharedUndoOwner } from "../../collab/editor-ports/shared-undo.ts";
 import { sharedUndoActions } from "../../../src/application/editing/undo/shared-undo-actions.ts";
 
 const changed = { updatedAt: "2026-11-12T10:00:00.000Z", updatedBy: "Alice" };

@@ -6,8 +6,8 @@ import type { SharedRewritePorts } from "../../../src/application/commands/docum
 import type { CommonDocumentSession } from "../../../src/application/session/document-session.ts";
 import type { StampPorts } from "../../../src/application/session/ports.ts";
 import { sharedBeatStamp } from "../../../src/adapters/collab/stamp.ts";
-import { sharedAuthorPort } from "../../../src/bootstrap/wiring/ports/shared-author.ts";
-import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
+import { sharedAuthorPort } from "../../collab/editor-ports/shared-author.ts";
+import { sharedUndoOwner } from "../../collab/editor-ports/shared-undo.ts";
 import { sharedCommandGuard, sharedCommandRefusalNotice } from "../../../src/bootstrap/wiring/ports/shared-command-notices.ts";
 import { registerSharedOperationFamilies } from "../../../src/adapters/collab/operation-families.ts";
 import { applySharedUpdate, createSharedDocument, destroySharedDocument, encodeSharedState, readSharedRevision } from "../../../src/adapters/collab/document.ts";

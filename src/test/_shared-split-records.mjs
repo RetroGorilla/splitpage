@@ -1,9 +1,10 @@
+import { enterLegacySharedSession } from "../../tests/bootstrap/legacy-shared-switch-support.ts";
 import assert from "node:assert/strict";
 import { assertReplicasAgree } from "../../tests/collab/agreement.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { sharedSplitBindings } from "../bootstrap/wiring/shared-split.ts";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
-import { enterSharedSession, leaveSharedSession, sharedSessionParts } from "../bootstrap/wiring/shared-session.ts";
+import { leaveSharedSession, sharedSessionParts } from "../bootstrap/wiring/shared-session.ts";
 import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { sharedCommandRefusalNotice } from "../bootstrap/wiring/ports/shared-command-notices.ts";
@@ -52,7 +53,7 @@ export const ORDERS = ["local-first", "remote-first"];
 export async function enter(source = SOURCE, adopting = true) {
   reports.length = 0; errors.length = 0; clearWarnings(); noticeCalls.length = 0;
   if (adopting) adopt(source);
-  assert.deepEqual(await enterSharedSession(ports), { ok: true }, errors.map(error => error.stack).join("\n"));
+  assert.deepEqual(await enterLegacySharedSession(ports), { ok: true }, errors.map(error => error.stack).join("\n"));
   const parts = sharedSessionParts(); assert.ok(parts); assert.equal(screenIsStale(), false);
   const peer = createSharedDocument(); registerSharedOperationFamilies(peer, { cells: html => fromHtml(html) });
   assert.equal(applySharedUpdate(peer, encodeSharedState(parts.handle)).ok, true);

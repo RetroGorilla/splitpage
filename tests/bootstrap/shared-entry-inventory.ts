@@ -1,3 +1,4 @@
+import { enterLegacySharedSession } from "./legacy-shared-switch-support.ts";
 import assert from "node:assert/strict";
 import { currentDocument, liveSession, onDocumentReplaced, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
 import { documentTransitions, openDocument, documentOpenings } from "../../src/bootstrap/wiring/transition-owners.ts";
@@ -20,7 +21,7 @@ import { startDesktopView } from "../../src/features/desktop/desktop.ts";
 import type { DesktopPorts } from "../../src/features/desktop/ports.ts";
 import type { DesktopOpenedFile } from "../../src/application/desktop/shell.ts";
 import { migrateRows } from "../../src/bootstrap/document-ports.ts";
-import { enterSharedSession, leaveRunningSharedSession, sharedSessionParts } from "../../src/bootstrap/wiring/shared-session.ts";
+import { leaveRunningSharedSession, sharedSessionParts } from "../../src/bootstrap/wiring/shared-session.ts";
 import { sharedUndoRoute } from "../../src/bootstrap/wiring/undo.ts";
 import { collabState } from "../../src/adapters/collab/state.ts";
 import { entrySwitchFixture } from "./shared-entry-switch-support.ts";
@@ -160,7 +161,7 @@ export async function exerciseHeldEntry(entry: EntryCase, phase: "enter" | "leav
   const ports = { ...f.ports, docId: () => { if (phase === "enter") attempt(); return f.ports.docId(); } };
   try {
     if (phase === "enter") entry.prepare?.(context);
-    const entered = await enterSharedSession(ports);
+    const entered = await enterLegacySharedSession(ports);
     const parts = sharedSessionParts(); assert.ok(parts);
     let left: unknown = null;
     if (phase === "leave") { entry.prepare?.(context); left = leaveRunningSharedSession(); }

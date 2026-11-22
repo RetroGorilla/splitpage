@@ -7,7 +7,7 @@ import { bufferedWriter } from "./buffer-support.ts";
 import { registerSharedUndoOperationHandlers } from "../../../src/adapters/collab/undo-handlers.ts";
 import type { SharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
 import { sharedUndoActions } from "../../../src/application/editing/undo/shared-undo-actions.ts";
-import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
+import { sharedUndoOwner } from "../../collab/editor-ports/shared-undo.ts";
 
 function writerWithUndo(text = "ab") {
   const held: { owner: SharedUndo | null } = { owner: null };

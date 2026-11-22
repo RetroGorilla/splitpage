@@ -9,7 +9,7 @@ import { pasteFlowClipboard, pasteSharedFlowClipboard } from "../../../src/featu
 import { standaloneFlowCommand } from "../../../src/application/commands/flow.ts";
 import { createSessionCapabilities } from "../../../src/application/session/capabilities.ts";
 import { writerFlowCommands } from "../../../src/bootstrap/wiring/ports/writer-flow.ts";
-import { sharedAuthorPort } from "../../../src/bootstrap/wiring/ports/shared-author.ts";
+import { sharedAuthorPort } from "../../collab/editor-ports/shared-author.ts";
 import { registerSharedOperationFamilies } from "../../../src/adapters/collab/operation-families.ts";
 import { applySharedUpdate, destroySharedDocument, encodeSharedState, readSharedRevision } from "../../../src/adapters/collab/document.ts";
 import { createMonitoredSharedDocument } from "../../adapters/collab/helpers.ts";
