@@ -15,6 +15,7 @@ import { closeNativeScript } from "../../../../src/adapters/collab/native/script
 import type { NativeScript } from "../../../../src/adapters/collab/native/script.ts";
 import { anchorNativeText, deleteNativeText, replaceNativeText, typeNativeText } from "../../../../src/adapters/collab/native/text-commands.ts";
 import type { NativeTextRange, NativeTextTarget } from "../../../../src/adapters/collab/native/text-commands.ts";
+import { openNativeUndo } from "../../../../src/adapters/collab/native/undo-commands.ts";
 import { printCell, readCell } from "./format-harness.ts";
 import { ScriptNet, cells, convertedScript, joinedScript } from "./helpers.ts";
 
@@ -595,5 +596,27 @@ test("review round 1, pin 8, as built: two untags at once over crossing letters 
     sync();
     for (const doc of docs) assert.equal(printCell(readCell(doc.getText("t").toDelta() as NativeDeltaItem[])), "ab[cd|A,B]", `raw Yjs, clients ${clients.join(",")}, reverse ${reverse}`);
     for (const doc of docs) doc.destroy();
+  }
+});
+
+test("concurrent full-beat bold and end-of-beat typing follow standard Yjs mark inheritance in both client orders", () => {
+  for (const [clients, expected] of [
+    [[2, 3], "<strong>Hello!</strong>"],
+    [[3, 2], "<strong>Hello</strong>!"]
+  ] as const) {
+    for (const order of ["forward", "reverse", "twice"] as const) {
+      const [net, typer, formatter] = pair(source({ R1: "Hello", R2: "World" }, { R1: "Look" }), 1, clients);
+      const formatterUndo = openNativeUndo(formatter);
+      assert.equal(typer.doc.clientID < formatter.doc.clientID, clients[0] < clients[1]);
+      assert.equal(format(formatter, NARRATION("R1"), 0, 5, BOLD), "written");
+      assert.equal(typeNativeText(typer, range(typer, NARRATION("R1"), 5, 5), "!", {}).kind, "written");
+      net.settle(order);
+      assert.deepEqual(net.agree(), [`R1: ${expected} / Look`, "R2: World / "], `clients ${clients.join(",")}, ${order}`);
+      assert.equal(formatterUndo.undo().kind, "written");
+      net.settle(order);
+      assert.deepEqual(net.agree(), ["R1: Hello! / Look", "R2: World / "], `undo clients ${clients.join(",")}, ${order}`);
+      assert.equal(formatterUndo.undo().kind, "unchanged");
+      formatterUndo.destroy();
+    }
   }
 });
