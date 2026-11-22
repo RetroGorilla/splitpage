@@ -748,7 +748,9 @@ test("a held comment resolve warns once without writing", async t => {
 test("B-roll bulk Mark filmed keeps the selected shot on refusal and saves on retry", async t => {
   const show = await enter(t);
   openShot();
-  selectShot("b1");
+  const selected = window.__brollTest.selected();
+  for (const id of selected) if (id !== "b1") selectShot(id);
+  if (!selected.includes("b1")) selectShot("b1");
   const button = '#broll-panel [data-action="broll-bulk-shot"]';
   assert.deepEqual(window.__brollTest.selected(), ["b1"]);
   const release = hold(t);

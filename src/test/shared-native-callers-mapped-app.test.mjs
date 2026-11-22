@@ -5,6 +5,7 @@ import { bootApp, closeApp } from "./_app-boot.mjs";
 import { applyNativePeerUpdate } from "../adapters/collab/native/peer-update.ts";
 import { openNativeSession } from "../adapters/collab/native/session.ts";
 import { createSessionCapabilities } from "../application/session/capabilities.ts";
+import { SHARED_ADMISSION_ANNOUNCED } from "../application/session/shared-session.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { sanitizeHtml } from "../bootstrap/richtext.ts";
 import { openNativeEditor } from "../bootstrap/wiring/native-shared-session.ts";
@@ -126,7 +127,7 @@ async function enter(t, { rows = source, people = [], sections = [], wordsPerMin
   const show = renderNotices ? t.mock.method(notices, "show") : t.mock.method(notices, "show", () => {});
   const ports = { ...fixture.ports, commandRefused: sharedCommandRefusalNotice(notices) };
   const writer = writerControls();
-  let native;
+  let native, commandSession;
   const root = () => document.getElementById("writer-doc");
   const cell = (id = "r1", field = "audioText") => document.querySelector(view === "Split"
     ? `#rows .cell-editable[data-id="${id}"][data-field="${field}"]`
@@ -143,7 +144,10 @@ async function enter(t, { rows = source, people = [], sections = [], wordsPerMin
   assert.deepEqual(await enterSharedSession(ports, (script, failed) => {
     const opened = openNativeEditor(ports, script, failed);
     native = opened.native;
-    return opened.backend;
+    return { ...opened.backend, bind: session => {
+      commandSession = session;
+      opened.backend.bind(session);
+    } };
   }), { ok: true });
   t.after(() => {
     try {
@@ -168,7 +172,8 @@ async function enter(t, { rows = source, people = [], sections = [], wordsPerMin
     }
     return calls;
   };
-  return { native, peer, cell, place, root, writer, baseline, errors: fixture.errors, notices: readNotices };
+  return { native, peer, cell, place, root, writer, baseline, errors: fixture.errors, notices: readNotices,
+    beforeCommand: listener => commandSession.beforeCommand(listener) };
 }
 
 function agree(f, expected) {
@@ -483,6 +488,69 @@ function splitPeer(peer, id, offset) {
 }
 
 const removeButton = id => document.querySelector(`#rows .row[data-id="${id}"] [data-action="delete-row"]`);
+
+for (const alreadyAnnounced of [false, true]) {
+  test(`Split: Remove confirmation admits the command once and warns once, already announced=${alreadyAnnounced}`, async t => {
+    const f = await enter(t, { renderNotices: true });
+    const before = structuredClone(app()), nativeBefore = f.native.encodeState(), peerBefore = f.peer.encodeState();
+    const standaloneHistory = undoOwner().sizes();
+    const button = removeButton("r2");
+    assert.deepEqual(cells(app())[1], ["r2", "Other", "Scene"]);
+    button.click();
+    assert.equal(button.classList.contains("armed"), true);
+    assert.deepEqual(f.notices(), []);
+    let admitted = 0;
+    const stop = f.beforeCommand(() => {
+      admitted++;
+      if (!alreadyAnnounced) return false;
+      notices.show(...warning);
+      return SHARED_ADMISSION_ANNOUNCED;
+    });
+    try {
+      button.click();
+      await Promise.resolve();
+      assert.equal(admitted, 1);
+      assert.deepEqual(f.notices(), [warning]);
+      assert.deepEqual(app(), before);
+      assert.deepEqual(f.native.document(), before);
+      assert.deepEqual(f.peer.document(), before);
+      assert.deepEqual(f.native.encodeState(), nativeBefore);
+      assert.deepEqual(f.peer.encodeState(), peerBefore);
+      assert.deepEqual(undoOwner().sizes(), standaloneHistory);
+    } finally { stop(); }
+    for (const copy of [f.native, f.peer]) {
+      assert.deepEqual(copy.commands.undo(), { kind: "unchanged" });
+      assert.deepEqual(copy.commands.redo(), { kind: "unchanged" });
+    }
+  });
+}
+
+test("Split: a peer picture before a local deletion stays in the original beat through Undo and Redo", async t => {
+  const f = await enter(t, { rows: [{ id: "R1", audioText: "abcdef" }] });
+  const ref = { sha256: "c".repeat(64), width: 3, height: 3, mime: "image/png" };
+  const at = f.peer.commands.anchorText({ beat: "R1", cell: "narration" }, 2);
+  assert.equal(at.kind, "anchored");
+  written(f.peer.commands.replaceText(at.range, [{ atom: "image", ref, text: "", marks: {} }]));
+  send(f.peer, f.native);
+  await Promise.resolve();
+  const picture = f.cell("R1").querySelector("img");
+  assert.ok(picture);
+  const original = app().rows[0].audioText;
+  assert.equal(text(f.cell("R1")), "abcdef");
+  assert.equal(input(f.place("R1", 4, 5), "deleteContentBackward"), true);
+  flush();
+  const deleted = app().rows[0].audioText;
+  assert.equal(text(f.cell("R1")), "abcef");
+  history(f.cell("R1"));
+  agree(f, [original]);
+  assert.ok(f.cell("R1").querySelector("img"));
+  caret(f, "R1", 4, 5);
+  history(f.cell("R1"), true);
+  agree(f, [deleted]);
+  assert.ok(f.cell("R1").querySelector("img"));
+  caret(f, "R1", 4);
+  assert.deepEqual(f.notices(), []);
+});
 
 for (const operation of ["insert", "join"]) {
   test(`Split: Remove arms before draining a held peer ${operation} and checks the beat on confirmation`, async t => {
