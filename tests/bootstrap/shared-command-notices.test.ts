@@ -4,7 +4,8 @@ import { sharedCommandRefusalNotice, sharedCommandReport } from "../../src/boots
 import { sharedBufferPorts } from "../../src/bootstrap/wiring/ports/shared-buffer.ts";
 import { encodeSharedState } from "../../src/adapters/collab/document.ts";
 import { replicas } from "../adapters/collab/executor-support.ts";
-import { adapterReplica, sharedHarness } from "../application/session/shared-session-support.ts";
+import { sharedHarness } from "../application/session/shared-session-support.ts";
+import { adapterReplica } from "../application/session/legacy-shared-session-support.ts";
 import { fakeNotices, fakeWriterBufferEffects } from "../features/fakes.ts";
 import { bufferReaders, bufferStamps } from "../collab/buffer-readers.ts";
 

@@ -23,7 +23,8 @@ import { owned } from "../../../src/features/routing/owned.ts";
 import { deriveDocumentNumbering } from "../../../src/core/document/numbering.ts";
 import { sharedCommandGuard } from "../../../src/bootstrap/wiring/ports/shared-command-notices.ts";
 import { replicas } from "../../adapters/collab/executor-support.ts";
-import { adapterReplica, sharedHarness } from "../../application/session/shared-session-support.ts";
+import { sharedHarness } from "../../application/session/shared-session-support.ts";
+import { adapterReplica } from "../../application/session/legacy-shared-session-support.ts";
 import { encodeSharedState } from "../../../src/adapters/collab/document.ts";
 
 const win = jsdomWindow() as unknown as Window & typeof globalThis;

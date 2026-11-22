@@ -1,24 +1,21 @@
-import { bootApp, closeApp } from "./_app-boot.mjs";
-import { after } from "node:test";
 import assert from "node:assert/strict";
 import { assertReplicasAgree } from "../../tests/collab/agreement.ts";
 import { migrateRows } from "../bootstrap/document-ports.ts";
 import { sharedSplitBindings } from "../bootstrap/wiring/shared-split.ts";
-import { adoptReplacement, currentDocument } from "../bootstrap/wiring/session-owner.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { enterSharedSession, leaveSharedSession, sharedSessionParts } from "../bootstrap/wiring/shared-session.ts";
 import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { sharedCommandRefusalNotice } from "../bootstrap/wiring/ports/shared-command-notices.ts";
 import { openingStatus } from "../bootstrap/wiring/ports/transitions.ts";
-import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { currentBrollRecords } from "../bootstrap/wiring/broll.ts";
 import { cellEditing } from "../bootstrap/wiring/editor-owners.ts";
 import { clearProductionSelection, selectedKeys } from "../bootstrap/wiring/production-editing-owners.ts";
 import { sharedGalleryCommands } from "../bootstrap/wiring/ports/shared-commands.ts";
 import { findOrAddPerson, registerProductionTag } from "../features/tags/production-tags.ts";
-import { addPersonForTag, applyGearQuickAdd, changeProductionOutline, clickProductionOutline, armDeleteTag, armPersonDelete, armRemoveTag, bulkDeleteSelected, openGearPanel, openProductionPanel, renderProduction, saveTagRename, setTagOwner, setTagStatus, toggleCardSelection } from "../features/tags/panels.ts";
+import { addPersonForTag, applyGearQuickAdd, changeProductionOutline, clickProductionOutline, armDeleteTag, armPersonDelete, armRemoveTag, bulkDeleteSelected, openProductionPanel, renderProduction, saveTagRename, setTagOwner, setTagStatus, toggleCardSelection } from "../features/tags/panels.ts";
 import { openBrollPanel } from "../features/broll/panel.ts";
-import { armDeleteComment, closeCommentComposer, openCommentComposer, openCommentsPanel, postComment, postReply, setCommentAssignee, toggleReplyComposer, toggleResolve } from "../features/comments/comments.ts";
+import { armDeleteComment, closeCommentComposer, openCommentComposer, openCommentsPanel, postReply, setCommentAssignee, toggleReplyComposer, toggleResolve } from "../features/comments/comments.ts";
 import { moveGallerySlot, removeGallerySlot } from "../core/document/gallery.ts";
 import { tagKey } from "../core/document/tags.ts";
 import { createSessionCapabilities } from "../application/session/capabilities.ts";
@@ -32,28 +29,13 @@ import { readSharedPaintedText } from "../adapters/collab/paint-base.ts";
 import { sharedBufferedTarget } from "../adapters/collab/buffer.ts";
 import { bufferedFieldKey } from "../core/collab/buffer.ts";
 import { readOperation } from "../core/collab/read-operation.ts";
+import {
+  $, ADMISSION_HELD, B1, DRONE, FIRE, M, MUG, REFUSED, SOURCE, adopt, brollBulkNew, brollButton, brollOpen, brollSelect,
+  choose, clearWarnings, commentState, composer, expandedCard, galleryState, gearOpen, noticeCalls, post, press,
+  productionCards, productionPick, shape, tidyStandalone, toastHost, twice, typeIn
+} from "./_standalone-records.mjs";
 
-window.Element.prototype.scrollBy = () => {};
-
-window.Element.prototype.scrollIntoView = () => {};
-
-localStorage.setItem("splitpage-onboarding", JSON.stringify({ v: 1, done: true, skipped: true }));
-
-await bootApp();
-
-after(closeApp);
-
-export const reports = [], errors = [], noticeCalls = [], actualShow = notices.show;
-
-notices.show = (...args) => { noticeCalls.push(args); return actualShow(...args); };
-
-after(() => { notices.show = actualShow; });
-
-export const toastHost = () => { const host = document.getElementById("toast-host"); assert.ok(host); return host; };
-
-export const warnings = () => [...toastHost().querySelectorAll(".toast.warn")].map(el => el.firstChild.textContent);
-
-export const clearWarnings = () => { toastHost().replaceChildren(); };
+export const reports = [], errors = [];
 
 export const allowed = { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) };
 
@@ -69,30 +51,6 @@ export const ports = {
 };
 
 export const ORDERS = ["local-first", "remote-first"];
-
-export const ref = letter => ({ sha256: letter.repeat(64), width: 10, height: 10, mime: "image/png" });
-
-export const anchor = (id, text) => '<span class="cmt-anchor" data-cmt="' + id + '">' + text + "</span>";
-
-export const D = "t_i9fk0si5uyzl", M = "t_1okou1ndmeusp";
-
-export const SOURCE = { schema: 2, title: "Shared records", paragraphsDecided: true, wordsPerMinute: 150,
-  rows: [
-    { id: "r1", audioText: "a" + anchor("C1", "bc") + "def", visualText: "x" + anchor("C9", "yz"), status: "todo",
-      imageRef: ref("a"), imageName: "One", moreImages: [{ imageRef: ref("b"), name: "Two" }, { imageRef: ref("c"), name: "Three" }] },
-    { id: "r2", audioText: "Other", visualText: 'A <span class="tag-anchor" data-tag-cat="prop" data-tag-name="Mug" contenteditable="false">Mug</span>', status: "todo" }
-  ],
-  comments: [{ id: "C1", author: "Ann", createdAt: "2026-11-13T10:00:00.000Z", rowId: "r1", field: "audioText", anchorId: "C1", body: "note",
-    quotedText: "bc", resolved: false, resolvedAt: null, resolvedBy: null, replies: [] }],
-  people: [{ id: "p1", name: "Ann" }, { id: "p2", name: "Bob" }],
-  productionTags: [{ id: D, cat: "gear", name: "Drone", owner: "p1", notes: "", status: "needed" }, { id: M, cat: "prop", name: "Mug", owner: "", notes: "", status: "needed" }],
-  brollShots: [{ id: "b1", name: "City", desc: "", status: "unshot", reshoot: false, notes: "", owner: "p1", audioRef: "", location: "", props: [{ id: M, name: "Mug" }], origin: "list" }]
-};
-
-export function adopt(source) {
-  writerControls().closeWriter();
-  adoptReplacement(migrateRows(structuredClone(source)));
-}
 
 export async function enter(source = SOURCE, adopting = true) {
   reports.length = 0; errors.length = 0; clearWarnings(); noticeCalls.length = 0;
@@ -119,17 +77,6 @@ export function exchange(f, order) {
   if (order === "local-first") { toPeer(); toLocal(); } else { toLocal(); toPeer(); }
 }
 
-export function shape(doc) {
-  const person = id => doc.people.find(p => p.id === id)?.name ?? "";
-  return {
-    rows: doc.rows.map(r => [r.id, r.audioText, r.visualText, [r.imageRef?.sha256?.[0] ?? null, ...(r.moreImages ?? []).map(m => m.imageRef?.sha256?.[0] ?? null)]]),
-    comments: doc.comments.map(c => [c.id, c.resolved, c.assignee ?? "", (c.replies ?? []).map(reply => reply.body)]),
-    people: doc.people.map(p => p.name),
-    tags: doc.productionTags.filter(Boolean).map(t => [t.cat, t.name, person(t.owner), t.status]),
-    shots: doc.brollShots.map(s => [s.name, s.status, person(s.owner), !!s.reshoot, (s.props ?? []).map(p => p.name)])
-  };
-}
-
 export function agree(f, expected) {
   const late = createSharedDocument(); registerSharedOperationFamilies(late, { cells: html => fromHtml(html) });
   try {
@@ -141,12 +88,6 @@ export function agree(f, expected) {
     assert.deepEqual(shape(currentDocument()), expected);
     assert.deepEqual([reports, errors], [[], []]);
   } finally { destroySharedDocument(late); }
-}
-
-export function press(target, key, modifiers = {}) {
-  const handled = !target.dispatchEvent(new window.KeyboardEvent("keydown", { key, bubbles: true, cancelable: true, ...modifiers }));
-  target.dispatchEvent(new window.KeyboardEvent("keyup", { key, bubbles: true, ...modifiers }));
-  return handled;
 }
 
 export const cellOf = (field, rowId) => {
@@ -162,24 +103,6 @@ export function undoOnce(f, order) {
 export const withZ = s => ({ ...s, rows: s.rows.map(r => r[0] === "r2" ? [r[0], "Z" + r[1], ...r.slice(2)] : r) });
 
 export const edit = (s, change) => { const next = structuredClone(s); change(next); return next; };
-
-export function brollButton(action, id, extra = "") {
-  const button = document.querySelector(`#broll-panel [data-action="${action}"][data-id="${id}"]${extra}`);
-  assert.ok(button, action + " " + id); return button;
-}
-
-export function brollOpen(id) {
-  openBrollPanel();
-  if (!document.querySelector(`#broll-panel [data-action="broll-person-new"][data-id="${id}"]`)) brollButton("broll-expand", id).click();
-}
-
-export function brollSelect(id) {
-  openBrollPanel();
-  document.querySelector('#broll-panel [data-action="broll-bulk-clear"]')?.click();
-  brollButton("broll-expand", id).dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true }));
-}
-
-export const twice = (arm, ...args) => { const button = document.createElement("button"); arm(button, ...args); arm(button, ...args); };
 
 export const selectOnly = key => { openProductionPanel(); clearProductionSelection(); toggleCardSelection(key); assert.deepEqual(selectedKeys(), [key]); };
 
@@ -274,22 +197,12 @@ export const served = [
   }, after: s => edit(s, n => { n.rows[0][2] = "xyz"; }) }
 ];
 
-export const REFUSED = "This is not available in a shared session yet.";
-
-export const ADMISSION_HELD = "held-for-test";
-
 export const reply = name => {
   openCommentsPanel();
   if (!document.querySelector('.reply-composer[data-for="C1"]')) toggleReplyComposer("C1");
   const card = document.querySelector('.reply-composer[data-for="C1"]'); assert.ok(card);
   card.querySelector(".reply-name-input").value = name; card.querySelector(".cell-editable").innerHTML = "ok";
   postReply("C1");
-};
-
-export const post = name => {
-  openCommentComposer({ id: "C9", rowId: "r1", field: "visualText", quotedText: "yz" });
-  document.getElementById("comment-name").value = name; document.getElementById("comment-body-editable").innerHTML = "new";
-  postComment();
 };
 
 export const composerKept = (name, body) => () => {
@@ -337,31 +250,12 @@ export function refusedOnce(f, order, act, kept) {
 }
 
 export function tidy(f) {
-  closeCommentComposer();
-  clearProductionSelection();
-  document.querySelector('#broll-panel [data-action="broll-bulk-clear"]')?.click();
-  if (galleryState().open) $("#gallery-close").click();
+  tidyStandalone();
   f.close();
   document.activeElement?.blur?.();
 }
 
-export const $ = selector => { const el = document.querySelector(selector); assert.ok(el, selector); return el; };
-
-export const typeIn = (selector, text, range) => { const box = $(selector); box.focus(); box.value = text; box.setSelectionRange(...range); };
-
-export const choose = (selector, value) => { const box = $(selector); box.focus(); box.value = value; };
-
 export const optionNamed = (selector, name) => [...$(selector).options].find(o => o.textContent === name).value;
-
-export const ctrlClick = selector => { $(selector).dispatchEvent(new window.MouseEvent("click", { bubbles: true, cancelable: true, ctrlKey: true })); };
-
-export const FIRE = {
-  click: el => { el.click(); },
-  enter: el => { press(el, "Enter"); },
-  change: el => { el.dispatchEvent(new window.Event("change", { bubbles: true })); },
-  blur: el => { el.dispatchEvent(new window.FocusEvent("focusout", { bubbles: true })); },
-  pick: el => { el.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertReplacementText" })); }
-};
 
 export function focused() {
   const active = document.activeElement;
@@ -384,39 +278,9 @@ export const tagState = () => ({
   selected: [...selectedKeys()], boxes: [...textBoxes("#production-panel"), ...textBoxes("#gear-panel")]
 });
 
-export const commentState = () => ({
-  composer: [document.getElementById("comment-modal").hidden, document.getElementById("comment-name").value, document.getElementById("comment-body-editable").innerHTML],
-  replies: [...document.querySelectorAll(".reply-composer")].map(card => [card.getAttribute("data-for"), card.querySelector(".reply-name-input").value, card.querySelector(".cell-editable").innerHTML]),
-  menu: [...document.querySelectorAll('#comments-panel [data-action="delete-comment"]')].map(el => el.getAttribute("data-id"))
-});
-
-export const galleryState = () => ({
-  open: [...document.querySelectorAll(".scene-gallery-remove")].filter(el => !el.closest("[hidden]")).length,
-  selected: [...document.querySelectorAll(".scene-gallery-grid-tile.is-selected")].map(el => el.getAttribute("data-slot"))
-});
-
-export const B1 = '[data-id="b1"]', MUG = '[data-key="prop mug"]', DRONE = '[data-key="gear drone"]';
-
 export function brollMenu() { brollOpen("b1"); if (!document.querySelector(`#broll-panel [data-action="broll-delete"]${B1}`)) brollButton("broll-menu", "b1").click(); }
 
-export function brollBulkNew(kind) { brollSelect("b1"); choose(`#broll-bulk-${kind}`, "__new__"); FIRE.change($(`#broll-bulk-${kind}`)); }
-
-export function productionCards() { openProductionPanel(); $('#production-modes [data-group="cat"]').click(); }
-
-export function expandedCard(panel, key) {
-  if (!document.querySelector(`${panel} .tag-entity.is-expanded[data-key="${key}"]`)) $(`${panel} [data-action="tag-expand"][data-key="${key}"]`).click();
-}
-
 export function tagPersonBox(panel, key) { expandedCard(panel, key); $(`${panel} [data-action="tag-person-new"][data-key="${key}"]`).click(); typeIn(`${panel} .tag-person-input[data-key="${key}"]`, "Cy", [1, 2]); }
-
-export function productionPick(key) { productionCards(); clearProductionSelection(); openProductionPanel(); ctrlClick(`#production-panel .tag-entity[data-key="${key}"] .tag-entity-row`); assert.deepEqual(selectedKeys(), [key]); }
-
-export function gearOpen() { openGearPanel(); }
-
-export function composer(id) {
-  openCommentComposer({ id, rowId: "r1", field: "visualText", quotedText: "yz" });
-  document.getElementById("comment-name").value = "Alice"; document.getElementById("comment-body-editable").innerHTML = "new";
-}
 
 export function replyOpen() {
   openCommentsPanel();
@@ -510,13 +374,9 @@ export const HELD_OWNER_CALLS = [
 ];
 
 export const doc = () => currentDocument();
-
 export const shotB1 = () => doc().brollShots.find(s => s.id === "b1");
-
 export const tagById = id => doc().productionTags.find(t => t?.id === id);
-
 export const blurOut = el => { el.focus(); el.blur(); };
-
 export const NOTES = `#broll-panel .broll-notes-input${B1}`;
 
 export const PREP_CHOICES = [
@@ -532,50 +392,13 @@ export const PREP_CHOICES = [
   } }
 ];
 
-export const NOOPS = [
-  { name: "the b-roll shot person box naming the owner it already has closes the box",
-    act: () => { brollOpen("b1"); brollButton("broll-person-new", "b1").click(); typeIn(`#broll-panel .broll-person-input${B1}`, "Ann", [3, 3]); FIRE.enter($(`#broll-panel .broll-person-input${B1}`)); },
-    cleaned: () => { assert.equal(document.querySelector(`#broll-panel .broll-person-input${B1}`), null); } },
-  { name: "the b-roll prop box naming a prop the shot already has empties the box and keeps it focused",
-    act: () => { brollOpen("b1"); typeIn(`#broll-panel .broll-prop-input${B1}`, "mug", [3, 3]); FIRE.enter($(`#broll-panel .broll-prop-input${B1}`)); },
-    cleaned: () => { const box = $(`#broll-panel .broll-prop-input${B1}`); assert.equal(box.value, ""); assert.equal(document.activeElement, box); } },
-  { name: "the gear tag person box naming the owner it already has closes the box and focuses Add person",
-    act: () => { gearOpen(); expandedCard("#gear-panel", "gear drone"); $(`#gear-panel [data-action="tag-person-new"]${DRONE}`).click();
-      typeIn(`#gear-panel .tag-person-input${DRONE}`, "Ann", [3, 3]); FIRE.enter($(`#gear-panel .tag-person-input${DRONE}`)); },
-    cleaned: () => {
-      assert.equal(document.querySelector(`#gear-panel .tag-person-input${DRONE}`), null);
-      assert.equal(document.activeElement, $(`#gear-panel [data-action="tag-person-new"]${DRONE}`));
-    } },
-  { name: "the comment Cancel button after a peer removed the anchor closes the composer",
-    act: () => { composer("C8"); $("#comment-cancel").click(); },
-    cleaned: () => { const [hidden, , body] = commentState().composer; assert.deepEqual([hidden, body], [true, ""]); } },
-  { name: "a picture edit that changes nothing",
-    act: () => { assert.deepEqual(cellEditing().editGallery("r1", "Made the cover", row => moveGallerySlot(row, 0, 0)), { changed: false, held: false }); },
-    cleaned: () => {} }
-];
-
-export function noopOnce(act, cleaned, written) {
-  const start = shape(currentDocument()), before = written();
-  noticeCalls.length = 0;
-  act();
-  assert.deepEqual(noticeCalls, []);
-  assert.deepEqual(written(), before);
-  assert.deepEqual(shape(currentDocument()), start);
-  cleaned();
-}
-
 export const tagAnchor = name => '<span class="tag-anchor" data-tag-cat="prop" data-tag-name="' + name + '" contenteditable="false">' + name + "</span>";
-
 export const LAMP = "t_3lampxyzq0abc";
-
 export const SCENED = { ...SOURCE, sections: [{ id: "H1", name: "Open", firstSceneId: "r1" }, { id: "H2", name: "Close", firstSceneId: "r2" }],
   rows: [{ ...SOURCE.rows[0], visualText: SOURCE.rows[0].visualText + " " + tagAnchor("Mug") }, { ...SOURCE.rows[1], visualText: SOURCE.rows[1].visualText + " " + tagAnchor("Lamp") }],
   productionTags: [...SOURCE.productionTags, { id: LAMP, cat: "prop", name: "Lamp", owner: "", notes: "", status: "needed" }] };
-
 export const OTHER = { ...SOURCE, title: "Other script", brollShots: [{ ...SOURCE.brollShots[0], name: "Harbour", props: [] }] };
-
 export const PROP = `#broll-panel .broll-prop-input${B1}`;
-
 export const shownValue = selector => document.querySelector(selector)?.value ?? "";
 
 export async function refusedNotes() {

@@ -4,7 +4,8 @@ import { destroySharedDocument } from "../../../src/adapters/collab/document.ts"
 import { hydrateSharedDocument } from "../../../src/adapters/collab/hydrate.ts";
 import { projectSharedDocument } from "../../../src/adapters/collab/project.ts";
 import { createMonitoredSharedDocument, validatedFixture } from "./helpers.ts";
-import { adapterReplica, registerSplits, sharedHarness } from "../../application/session/shared-session-support.ts";
+import { sharedHarness } from "../../application/session/shared-session-support.ts";
+import { adapterReplica, registerSplits } from "../../application/session/legacy-shared-session-support.ts";
 
 const RUN = 2000, RUNS = 150;
 const mixed = (size: number) => Array.from({ length: RUNS }, (_, index) => index % 2 ? "y".repeat(size) : "<b>" + "z".repeat(size) + "</b>").join("");

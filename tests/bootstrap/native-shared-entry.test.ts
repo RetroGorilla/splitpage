@@ -3,9 +3,12 @@ import { test, before, after } from "node:test";
 import { openNativeEditor } from "../../src/bootstrap/wiring/native-shared-session.ts";
 import { adoptReplacement, currentDocument, liveSession, mergeBase, onDocumentReplaced, onRefresh, onSessionChange, runCommand, sessionEntryRefusal, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
 import { enterSharedSession, forceLeaveSharedSession, leaveRunningSharedSession, leaveSharedSession,
-  nativeEditorActive, nativeEditorRecords, sharedSessionParts } from "../../src/bootstrap/wiring/shared-session.ts";
+  nativeEditorActive, nativeEditorRecords, sharedSessionParts, SHARED_NOT_RUNNING, SHARED_SWITCHING } from "../../src/bootstrap/wiring/shared-session.ts";
 import type { SharedEditorBackend, SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
-import { bootEntrySwitchFixture, entrySwitchFixture, stopEntrySwitchFixture } from "./shared-entry-switch-support.ts";
+import { attemptNativeSwitchEntry, bootNativeEntrySwitchFixture as bootEntrySwitchFixture,
+  nativeEntrySwitchFixture as entrySwitchFixture, stopNativeEntrySwitchFixture as stopEntrySwitchFixture } from "./native-entry-switch-support.ts";
+import { titleCommand } from "../../src/application/commands/title.ts";
+import { draftSource } from "../../src/bootstrap/wiring/drafts.ts";
 import { notices } from "../../src/bootstrap/wiring/ports/effects.ts";
 import { sharedUndoRoute, stepSharedUndo } from "../../src/bootstrap/wiring/undo.ts";
 import { build } from "esbuild";
@@ -687,3 +690,149 @@ test("native adoption and leave callbacks report errors without undoing the land
   await Promise.resolve();
   assert.equal(native.ydoc.isDestroyed, true);
 });
+
+test("no-argument native leave uses the running session and its original ports", async t => {
+  const fixture = entrySwitchFixture();
+  t.after(fixture.close);
+  assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: SHARED_NOT_RUNNING });
+  let ids = 0;
+  const left = t.mock.fn((landed: boolean) => landed);
+  const ports: SharedSwitchPorts = { ...fixture.ports, left, docId: () => "d" + String(100 + ++ids).padStart(32, "0") };
+  const native = await nativeEntry({ ...fixture, ports });
+  const peer = createNativeTestPeer(native);
+  t.after(peer.dispose);
+  assert.equal(peer.type("R1", 0, "Via ").kind, "written");
+  assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+  assert.equal(sharedSession(), false);
+  assert.equal(nativeEditorActive(), false);
+  assert.equal(sharedUndoRoute(), null);
+  assert.equal(currentDocument()?.rows[0]?.audioText, "Via Captured words");
+  assert.equal(currentDocument()?.docId, "d" + "102".padStart(32, "0"));
+  assert.deepEqual(left.mock.calls.map(call => call.arguments), [[true]]);
+  assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: SHARED_NOT_RUNNING });
+  await Promise.resolve();
+  assert.equal(native.ydoc.isDestroyed, true);
+});
+
+test("foreign leave ports remain unused when leaving a native session", async t => {
+  const fixture = entrySwitchFixture();
+  t.after(fixture.close);
+  let ids = 0;
+  const left = t.mock.fn((landed: boolean) => landed);
+  const ports: SharedSwitchPorts = { ...fixture.ports, left, docId: () => "d" + String(200 + ++ids).padStart(32, "0") };
+  const native = await nativeEntry({ ...fixture, ports });
+  const wrong = (): never => { assert.fail("foreign switch ports were used"); };
+  const foreign: SharedSwitchPorts = {
+    ...fixture.ports,
+    bindings: { enter: wrong, settle: wrong, leave: wrong },
+    migrate: wrong, docId: wrong, left: wrong, report: wrong
+  };
+  assert.deepEqual(leaveSharedSession(foreign), { ok: true });
+  assert.equal(sharedSession(), false);
+  assert.equal(nativeEditorActive(), false);
+  assert.equal(currentDocument()?.docId, "d" + "202".padStart(32, "0"));
+  assert.deepEqual(left.mock.calls.map(call => call.arguments), [[true]]);
+  assert.deepEqual(fixture.errors, []);
+  await Promise.resolve();
+  assert.equal(native.ydoc.isDestroyed, true);
+});
+
+for (const duringSettle of [false, true]) {
+  test(`native entry refuses when opening is pending ${duringSettle ? "during settlement" : "before entry"}`, async t => {
+    const fixture = entrySwitchFixture(), before = currentDocument(), epoch = liveSession().epoch();
+    t.after(fixture.close);
+    let pending = !duringSettle;
+    const open = t.mock.fn(() => assert.fail("opening-pending must not open the native factory"));
+    const ports: SharedSwitchPorts = {
+      ...fixture.ports,
+      opening: { openingPending: () => pending },
+      settle: () => { if (duringSettle) pending = true; }
+    };
+    assert.deepEqual(await enterSharedSession(ports, open), { ok: false, reason: "opening-pending" });
+    assert.equal(open.mock.callCount(), 0);
+    assert.equal(currentDocument(), before);
+    assert.equal(liveSession().epoch(), epoch);
+    assert.equal(sharedSession(), false);
+    assert.equal(nativeEditorActive(), false);
+    assert.deepEqual(fixture.errors, []);
+  });
+}
+
+for (const kind of ["open", "startNew"] as const) {
+  test(`native entry settlement holds direct ${kind} and recursive entry while permitting settlement commands`, async t => {
+    const fixture = entrySwitchFixture(), observed: unknown[] = [], nested: Promise<unknown>[] = [];
+    t.after(fixture.close);
+    let settledCommand: unknown = null;
+    const ports: SharedSwitchPorts = {
+      ...fixture.ports,
+      settle: () => {
+        observed.push(attemptNativeSwitchEntry(kind));
+        nested.push(enterSharedSession(fixture.ports, () => assert.fail("recursive open")));
+        settledCommand = runCommand(titleCommand("Settled during native entry"));
+      }
+    };
+    const native = await nativeEntry({ ...fixture, ports });
+    assert.deepEqual(observed, [{ refused: SHARED_SWITCHING }]);
+    assert.deepEqual(await Promise.all(nested), [{ ok: false, reason: SHARED_SWITCHING }]);
+    assert.equal((settledCommand as { kind?: string } | null)?.kind, "applied");
+    assert.equal(sessionEntryRefusal(), null);
+    assert.equal(currentDocument()?.title, "Settled during native entry");
+    assert.equal(native.document().title, "Settled during native entry");
+    assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+  });
+
+  for (const phase of ["settle", "unbind", "replacement"] as const) {
+    test(`native leave ${phase} holds direct ${kind} until copy and draft ownership settle`, async t => {
+      const fixture = entrySwitchFixture(), observed: unknown[] = [];
+      t.after(fixture.close);
+      let once = true;
+      const attempt = () => { if (once) { once = false; observed.push(attemptNativeSwitchEntry(kind)); } };
+      const stop = onDocumentReplaced(() => { if (phase === "replacement" && !sharedSession()) attempt(); });
+      t.after(stop);
+      let native: ReturnType<typeof openNativeEditor>["native"] | undefined;
+      assert.deepEqual(await enterSharedSession(fixture.ports, (doc, failed) => {
+        const opened = openNativeEditor(fixture.ports, doc, failed);
+        native = opened.native;
+        const { backend } = opened;
+        return {
+          ...backend,
+          settle: explicit => { if (phase === "settle") attempt(); return backend.settle(explicit); },
+          unbind: () => { if (phase === "unbind") attempt(); backend.unbind(); }
+        };
+      }), { ok: true });
+      assert.ok(native);
+      assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+      assert.deepEqual(observed, [{ refused: SHARED_SWITCHING }]);
+      assert.equal(sharedSession(), false);
+      assert.equal(nativeEditorActive(), false);
+      assert.equal(sharedUndoRoute(), null);
+      assert.equal(currentDocument()?.title, "Captured script");
+      assert.equal(draftSource.detachRefusal(), null);
+      assert.deepEqual(fixture.errors, []);
+      await Promise.resolve();
+      assert.equal(native.ydoc.isDestroyed, true);
+      stop();
+      assert.deepEqual(attemptNativeSwitchEntry(kind), { accepted: "Replacement script" });
+    });
+  }
+
+  test(`native leave-first ${kind} blocks a nested replacement during continuation and lands cleanly`, async t => {
+    const fixture = entrySwitchFixture(), observed: unknown[] = [];
+    t.after(fixture.close);
+    const native = await nativeEntry(fixture);
+    let once = true;
+    const stop = onDocumentReplaced(() => {
+      if (!sharedSession() && once) { once = false; observed.push(attemptNativeSwitchEntry(kind)); }
+    });
+    t.after(stop);
+    assert.deepEqual(attemptNativeSwitchEntry(kind), { accepted: "Replacement script" });
+    assert.deepEqual(observed, [{ refused: SHARED_SWITCHING }]);
+    assert.equal(sharedSession(), false);
+    assert.equal(nativeEditorActive(), false);
+    assert.equal(sharedUndoRoute(), null);
+    assert.equal(currentDocument()?.title, "Replacement script");
+    assert.deepEqual(fixture.errors, []);
+    await Promise.resolve();
+    assert.equal(native.ydoc.isDestroyed, true);
+  });
+}

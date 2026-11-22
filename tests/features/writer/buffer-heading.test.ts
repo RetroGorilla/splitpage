@@ -11,7 +11,8 @@ import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/
 import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/removal-executor.ts";
 import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
 import { sharedBufferedTarget } from "../../../src/adapters/collab/buffer.ts";
-import { registerSplits, sharedCommand } from "../../application/session/shared-session-support.ts";
+import { sharedCommand } from "../../application/session/shared-session-support.ts";
+import { registerSplits } from "../../application/session/legacy-shared-session-support.ts";
 import { operation, ref } from "../../adapters/collab/executor-support.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { beatPos, headingPos } from "../../../src/core/flow/flow.ts";

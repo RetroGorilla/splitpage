@@ -21,7 +21,7 @@ import { openNativeSession } from "../adapters/collab/native/session.ts";
 import { applyNativePeerUpdate } from "../adapters/collab/native/peer-update.ts";
 import { createNativeTestPeer } from "../bootstrap/wiring/shared-native-test-peer.ts";
 import { sanitizeHtml } from "../bootstrap/richtext.ts";
-import { entrySwitchFixture } from "../../tests/bootstrap/shared-entry-switch-support.ts";
+import { nativeEntrySwitchFixture as entrySwitchFixture } from "../../tests/bootstrap/native-entry-switch-support.ts";
 import { setCellSelection } from "../features/common/cell-selection.ts";
 import { posToDom } from "../features/common/cell-dom.ts";
 

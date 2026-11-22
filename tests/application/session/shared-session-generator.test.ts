@@ -15,7 +15,8 @@ import { createMonitoredSharedDocument, deliveryReplica } from "../../adapters/c
 import { recordReplicas } from "../../adapters/collab/record-support.ts";
 import { writesOutside } from "../session-fakes.ts";
 import { namesUnchanged } from "./change-set-checks.ts";
-import { adapterReplica, registerSplits, sharedCommand, sharedHarness } from "./shared-session-support.ts";
+import { sharedCommand, sharedHarness } from "./shared-session-support.ts";
+import { adapterReplica, registerSplits } from "./legacy-shared-session-support.ts";
 import { enterSharedDocument } from "../../../src/core/migrate.ts";
 import type { SharedHarness } from "./shared-session-support.ts";
 

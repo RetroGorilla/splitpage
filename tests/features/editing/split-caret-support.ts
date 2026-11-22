@@ -1,18 +1,16 @@
 import "../../../src/test/_dom.mjs";
 import assert from "node:assert/strict";
-import { Stage1ExecutorHarness } from "../../adapters/collab/stage1-executor-support.ts";
-import { adapterReplica, sharedHarness } from "../../application/session/shared-session-support.ts";
-import { operation, ref } from "../../adapters/collab/executor-support.ts";
-import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
-import { readSharedRevision } from "../../../src/adapters/collab/document.ts";
+import { seedPaintedSelectionHarness } from "../../adapters/collab/painted-selection-support.ts";
+import type { PaintedSelectionField } from "../../adapters/collab/painted-selection-support.ts";
+import { sharedHarness } from "../../application/session/shared-session-support.ts";
+import { adapterReplica } from "../../application/session/legacy-shared-session-support.ts";
 import { readSharedPaintedText } from "../../../src/adapters/collab/paint-base.ts";
 import { captureSharedTextRange } from "../../../src/adapters/collab/executor-references.ts";
 import { registerSharedJoinHandlers } from "../../../src/adapters/collab/join-executor.ts";
 import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-executor.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
-import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { editorKeys } from "../../../src/core/text/selection.ts";
-import { bufferedFieldKey, readBufferedFieldKey } from "../../../src/core/collab/buffer.ts";
+import { readBufferedFieldKey } from "../../../src/core/collab/buffer.ts";
 import { deriveDocumentNumbering } from "../../../src/core/document/numbering.ts";
 import { createEditorSelection } from "../../../src/application/editing/selection.ts";
 import { createPaintGuard, createUndoGuard } from "../../../src/application/editing/paint-guard.ts";
@@ -27,21 +25,13 @@ import { readSelection, placeSelection, posToDom } from "../../../src/features/c
 import { ensureTrailingCaretSpot } from "../../../src/features/common/dom.ts";
 import { fakeTextServices, fakeNotices, fakePictures, fakeWriterBufferEffects } from "../fakes.ts";
 import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
-import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import type { DeliveryOrder } from "../../collab/delivery.ts";
 
-type Field = "audioText" | "visualText";
+type Field = PaintedSelectionField;
 
 export function splitCaretPage(text = "abcdef", second = "uvwx") {
-  const h = new Stage1ExecutorHarness([{ id: "R1", text }, { id: "R2", text: second }]);
+  const { h, target, execute, key } = seedPaintedSelectionHarness(text, second);
   let serial = 0;
-  const target = (row: string, field: Field) => ({ owner: ref(row), segment: ref(row), field });
-  function execute(handle: SharedDocumentHandle, ops: unknown[]): void {
-    assert.deepEqual(executeSharedOperations(handle, ops.map(operation), { base: readSharedRevision(handle) }), { ok: true });
-  }
-  execute(h.a, ["R1", "R2"].map(row => ({ kind: "text-insert", id: "seed_" + row, by: "Alice", target: target(row, "visualText"),
-    at: { left: null, right: flowBaseReference(row, "visualText", 0), affinity: "before" }, content: [{ value: row === "R1" ? text : second, marks: [] }] })));
-  h.queue.flush("D1");
   for (const handle of [h.a, h.b]) registerSharedJoinHandlers(handle);
   const a = sharedHarness(adapterReplica(h.a)), guard = createPaintGuard(), { effects, reports, missing, recovered } = fakeWriterBufferEffects();
   const current = () => a.session.read(doc => doc);
@@ -115,6 +105,6 @@ export function splitCaretPage(text = "abcdef", second = "uvwx") {
   }
   return { h, a, root, render, buffer, painted, cell, select, points, remote, write, deliver, join, split, type, reports, missing, recovered,
     defer: () => { deferred = true; }, flush: () => { const tasks = pending.splice(0); for (const task of tasks) task(); },
-    key: (field: Field, row = "R1") => bufferedFieldKey(row, field),
+    key,
     close: () => { stop(); buffer.dispose(); render.dispose(); a.session.dispose(); h.destroy(); document.body.innerHTML = ""; } };
 }

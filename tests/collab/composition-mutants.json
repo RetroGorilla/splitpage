@@ -408,7 +408,7 @@
     {
       "label": "leaving clears the author only after the owner swap",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "  now.live(false);\n  let swap: OwnerSwap;\n",
+      "find": "  now.backend.live(false);\n  let swap: OwnerSwap;\n",
       "replace": "  let swap: OwnerSwap;\n",
       "tests": [
         "tests/bootstrap/shared-switch.test.ts"
@@ -435,7 +435,7 @@
     {
       "label": "entry unwinding leaves the shared bindings on",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "    if (made.bound) faults.attempt(() => { ports.bindings.leave(); });\n",
+      "find": "    if (made.bound) faults.attempt(backend.unbind);\n",
       "replace": "",
       "tests": [
         "tests/bootstrap/shared-switch.test.ts"
@@ -453,16 +453,17 @@
     {
       "label": "failed leaving leaves the bindings off",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "    faults.attempt(() => { ports.bindings.enter(now.parts); });\n",
+      "find": "    faults.attempt(() => { now.backend.bind(now.session); });\n",
       "replace": "",
       "tests": [
-        "tests/bootstrap/shared-switch.test.ts"
+        "tests/bootstrap/shared-switch.test.ts",
+        "tests/bootstrap/native-shared-entry.test.ts"
       ]
     },
     {
       "label": "leaving lands a copy taken before the bindings restarted",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "    const current = currentDocument();\n    landed = ports.migrate",
+      "find": "    const current = now.backend.landing();\n    landed = ports.migrate",
       "replace": "    const current = null;\n    landed = ports.migrate",
       "tests": [
         "tests/bootstrap/shared-switch.test.ts"
@@ -471,8 +472,8 @@
     {
       "label": "the undo route arrives only after the shared owner is seen",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "    made.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup, replayed: undo.replayed });\n    made.swap = collectReplacementErrors(faults.errors, () => adoptShared(owner => {\n      const session = createSharedSession({\n        replica: replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: jobs => { if (alive) owner.refresh(jobs); } },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after, refused: ports.commandRefused\n      });\n      made.session = session;\n      made.releaseSession = session.hold(SHARED_SWITCHING);\n      return session;\n    }, createSessionCapabilities(\"shared\", ports.common)));\n",
-      "replace": "    made.swap = collectReplacementErrors(faults.errors, () => adoptShared(owner => {\n      const session = createSharedSession({\n        replica: replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: jobs => { if (alive) owner.refresh(jobs); } },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after, refused: ports.commandRefused\n      });\n      made.session = session;\n      made.releaseSession = session.hold(SHARED_SWITCHING);\n      return session;\n    }, createSessionCapabilities(\"shared\", ports.common)));\n    made.stopRoute = routeSharedUndo({ actions: sharedUndoActions(admission, undo), breakGroup: undo.breakGroup, replayed: undo.replayed });\n",
+      "find": "    made.stopRoute = routeSharedUndo(backend.undo(admission));\n    made.swap = collectReplacementErrors(faults.errors, () => adoptShared(owner => {\n      const shared = createSharedSession({\n        replica: backend.replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: jobs => { if (alive) owner.refresh(jobs); } },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after, refused: ports.commandRefused,\n        ...(backend.unsupportedCommands ? { unsupportedCommands: backend.unsupportedCommands } : {})\n      });\n      const route = backend.structure;\n      const session = route ? { ...shared,\n        run: (command: Parameters<SharedDocumentSession[\"run\"]>[0]) => command.structure ? route(command.structure) : shared.run(command)\n      } : shared;\n      made.session = session;\n      made.releaseSession = session.hold(SHARED_SWITCHING);\n      return session;\n    }, createSessionCapabilities(\"shared\", ports.common)));\n",
+      "replace": "    made.swap = collectReplacementErrors(faults.errors, () => adoptShared(owner => {\n      const shared = createSharedSession({\n        replica: backend.replica, entry: owner.entry, undo: { record: () => {} },\n        effects: { dirty: () => {}, draft: () => {}, save: () => {}, refresh: jobs => { if (alive) owner.refresh(jobs); } },\n        capability: owner.capability, report: ports.report, timers: ports.timers, after: owner.after, refused: ports.commandRefused,\n        ...(backend.unsupportedCommands ? { unsupportedCommands: backend.unsupportedCommands } : {})\n      });\n      const route = backend.structure;\n      const session = route ? { ...shared,\n        run: (command: Parameters<SharedDocumentSession[\"run\"]>[0]) => command.structure ? route(command.structure) : shared.run(command)\n      } : shared;\n      made.session = session;\n      made.releaseSession = session.hold(SHARED_SWITCHING);\n      return session;\n    }, createSessionCapabilities(\"shared\", ports.common)));\n    made.stopRoute = routeSharedUndo(backend.undo(admission));\n",
       "tests": [
         "tests/bootstrap/shared-switch.test.ts"
       ]
@@ -480,8 +481,8 @@
     {
       "label": "a failed entry resets the standalone undo",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "    ports.detach();\n    // why: the D34 reset belongs to a successful entry, so a failed one keeps the standalone history\n    undoOwner().adopt(null);\n",
-      "replace": "    undoOwner().adopt(null);\n    ports.detach();\n",
+      "find": "    ports.detach();\n    if (entrySettled) {\n      await entrySettled;\n      if (failedDuringEntry) throw new Error(\"The native session closed during entry\");\n    }\n    // why: the D34 reset belongs to a successful entry, so a failed one keeps the standalone history\n    undoOwner().adopt(null);\n",
+      "replace": "    undoOwner().adopt(null);\n    ports.detach();\n    if (entrySettled) {\n      await entrySettled;\n      if (failedDuringEntry) throw new Error(\"The native session closed during entry\");\n    }\n",
       "tests": [
         "tests/bootstrap/shared-switch.test.ts"
       ]
@@ -498,7 +499,7 @@
     {
       "label": "entry unwinding keeps the shared handle",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "    destroy(faults, handle);\n    releaseCommands();\n",
+      "find": "    backend.dispose(step => faults.attempt(step));\n    releaseCommands();\n",
       "replace": "    releaseCommands();\n",
       "tests": [
         "tests/bootstrap/shared-switch.test.ts"
@@ -507,8 +508,8 @@
     {
       "label": "a throwing destroy listener keeps the handle's observers",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "  if (!faults.attempt(() => { destroySharedDocument(handle); })) faults.attempt(() => { destroySharedDocument(handle); });",
-      "replace": "  faults.attempt(() => { destroySharedDocument(handle); });",
+      "find": "  if (!attempt(() => { destroySharedDocument(handle); })) attempt(() => { destroySharedDocument(handle); });",
+      "replace": "  attempt(() => { destroySharedDocument(handle); });",
       "tests": [
         "tests/bootstrap/shared-switch.test.ts"
       ]
@@ -516,7 +517,7 @@
     {
       "label": "leaving accepts commands between the capture and the landing",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "  holds.session = now.parts.session.hold(SHARED_SWITCHING);\n  holds.commands = holdSessionCommands(SHARED_SWITCHING);\n",
+      "find": "  holds.session = now.session.hold(SHARED_SWITCHING);\n  holds.commands = holdSessionCommands(SHARED_SWITCHING);\n",
       "replace": "  holds.session = () => {};\n  holds.commands = () => {};\n",
       "tests": [
         "tests/bootstrap/shared-switch.test.ts"
@@ -525,8 +526,8 @@
     {
       "label": "entering accepts commands between the capture and the landing",
       "file": "src/bootstrap/wiring/shared-session.ts",
-      "find": "  const releaseCommands = holdSessionCommands(SHARED_SWITCHING);\n  const prepared",
-      "replace": "  const releaseCommands = (): void => {};\n  const prepared",
+      "find": "  const releaseCommands = holdSessionCommands(SHARED_SWITCHING);\n  let kept: Record<string, unknown>, hydration: ValidatedDocument;",
+      "replace": "  const releaseCommands = (): void => {};\n  let kept: Record<string, unknown>, hydration: ValidatedDocument;",
       "tests": [
         "tests/bootstrap/shared-switch.test.ts"
       ]
@@ -777,7 +778,7 @@
     {
       "label": "route: a leave-first entry goes ahead without leaving",
       "file": "src/bootstrap/wiring/ports/document-entry.ts",
-      "find": "const result = permission.allowed ? leaveRunningSharedSession() :",
+      "find": "const result = permission.allowed ? leaveRunningSharedSession(false) :",
       "replace": "const result = permission.allowed ? { ok: true } as const :",
       "tests": [
         "src/test/shared-native-handoff-app.test.mjs"
@@ -790,7 +791,8 @@
       "replace": "",
       "tests": [
         "src/test/shared-hook-routes-app.test.mjs",
-        "tests/bootstrap/shared-switch.test.ts"
+        "tests/bootstrap/shared-switch.test.ts",
+        "tests/bootstrap/native-shared-entry.test.ts"
       ]
     },
     {
@@ -799,7 +801,8 @@
       "find": "  const first = leaveSharedSession(now.ports, false);\n  if (first.ok || running !== now) return first;\n",
       "replace": "",
       "tests": [
-        "src/test/shared-hook-routes-app.test.mjs"
+        "src/test/shared-hook-routes-app.test.mjs",
+        "tests/bootstrap/native-shared-entry.test.ts"
       ]
     },
     {
@@ -827,7 +830,8 @@
       "replace": "",
       "tests": [
         "src/test/shared-native-handoff-app.test.mjs",
-        "tests/bootstrap/shared-switch.test.ts"
+        "tests/bootstrap/shared-switch.test.ts",
+        "tests/bootstrap/native-shared-entry.test.ts"
       ]
     },
     {
@@ -864,7 +868,8 @@
       "replace": "",
       "tests": [
         "tests/bootstrap/shared-switch.test.ts",
-        "src/test/shared-native-handoff-app.test.mjs"
+        "src/test/shared-native-handoff-app.test.mjs",
+        "tests/bootstrap/native-shared-entry.test.ts"
       ]
     },
     {

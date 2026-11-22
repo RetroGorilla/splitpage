@@ -15,7 +15,8 @@ import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { nativeText } from "./incremental-support.ts";
-import { adapterReplica, sharedHarness } from "../../application/session/shared-session-support.ts";
+import { sharedHarness } from "../../application/session/shared-session-support.ts";
+import { adapterReplica } from "../../application/session/legacy-shared-session-support.ts";
 
 const fresh = "structure_1_00730070006c00690074_beat_0";
 for (const split of [false, true]) test("Writer buffered target paints and edits the entire joined row, split=" + split, () => {

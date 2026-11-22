@@ -19,7 +19,7 @@ import { openCommentsPanel } from "../features/comments/comments.ts";
 import { addGalleryPicture, moveGallerySlot, replaceGalleryPicture } from "../core/document/gallery.ts";
 import { enterSharedSession, forceLeaveSharedSession, nativeEditorActive, nativeEditorRecords } from "../bootstrap/wiring/shared-session.ts";
 import { openNativeEditor } from "../bootstrap/wiring/native-shared-session.ts";
-import { entrySwitchFixture } from "../../tests/bootstrap/shared-entry-switch-support.ts";
+import { nativeEntrySwitchFixture as entrySwitchFixture } from "../../tests/bootstrap/native-entry-switch-support.ts";
 import { setTimeout as delay } from "node:timers/promises";
 import { Doc, encodeStateAsUpdate } from "yjs";
 import { applyNativePeerUpdate } from "../adapters/collab/native/peer-update.ts";
@@ -230,7 +230,7 @@ test("a complete stored native script opens with empty undo and redo", async t =
 test("native stored entry rejects old and malformed state and retains the four original beats", async () => {
   const doc = migrateRows({ title: "Formats", rows: ["one", "two", "three", "four"].map((audioText, index) => ({ id: "r" + index, audioText })) });
   adoptReplacement(doc);
-  const oldState = readFileSync(new URL("../../tests/collab/legacy-app/four-beat-state.base64", import.meta.url), "utf8").trim();
+  const oldState = readFileSync(new URL("../../tests/adapters/collab/native/fixtures/legacy-four-beat-state.base64", import.meta.url), "utf8").trim();
   const malformed = nativeBytes(doc, undefined, ydoc => {
     const segments = ydoc.getMap("segments");
     for (const name of segments.keys()) segments.delete(name);

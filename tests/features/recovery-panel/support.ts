@@ -10,7 +10,8 @@ import { prepareSharedMarkRecord, writeSharedMarkRecord } from "../../../src/ada
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
-import { adapterReplica, sharedHarness } from "../../application/session/shared-session-support.ts";
+import { sharedHarness } from "../../application/session/shared-session-support.ts";
+import { adapterReplica } from "../../application/session/legacy-shared-session-support.ts";
 import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
 import { recoveryPanelPorts } from "../../../src/bootstrap/wiring/recovery-panel.ts";
 import { createRecoveryPanel } from "../../../src/features/recovery-panel/mount.ts";

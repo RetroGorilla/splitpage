@@ -8,7 +8,8 @@ import { sharedAuthorPort } from "../../../src/bootstrap/wiring/ports/shared-aut
 import { registerSharedOperationFamilies } from "../../../src/adapters/collab/operation-families.ts";
 import { applySharedUpdate, encodeSharedState } from "../../../src/adapters/collab/document.ts";
 import { replicas } from "../../adapters/collab/executor-support.ts";
-import { sharedHarness, adapterReplica } from "../session/shared-session-support.ts";
+import { sharedHarness } from "../session/shared-session-support.ts";
+import { adapterReplica } from "../session/legacy-shared-session-support.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { assertReplicasAgree } from "../../collab/agreement.ts";
 import { setVisualForRange } from "../../../src/core/flow/visual.ts";

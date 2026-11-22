@@ -26,7 +26,6 @@ const { readOperation } = await import("../core/collab/read-operation.ts");
 const { beatPos } = await import("../core/flow/flow.ts");
 const { cellSelection, setCellSelection } = await import("../features/common/cell-selection.ts");
 const { splitSpaceSwitch } = await import("./_shared-split-space.mjs");
-const { cellCaretAfterStep } = await import("../bootstrap/wiring/editor.ts");
 
 after(closeApp);
 
@@ -276,4 +275,4 @@ export async function checkCaret(row, view, sharedOrder) {
   assert.ok(currentDocument());
 }
 
-export { peer, runShared, cellCaretAfterStep };
+export { peer, runShared };

@@ -1,7 +1,8 @@
 import "../../../src/test/_dom.mjs";
 import assert from "node:assert/strict";
 import { Stage1ExecutorHarness } from "../../adapters/collab/stage1-executor-support.ts";
-import { adapterReplica, sharedHarness } from "../../application/session/shared-session-support.ts";
+import { sharedHarness } from "../../application/session/shared-session-support.ts";
+import { adapterReplica } from "../../application/session/legacy-shared-session-support.ts";
 import { sharedBufferPorts } from "../../../src/bootstrap/wiring/ports/shared-buffer.ts";
 import { createSurface } from "../../../src/features/writer/flow-surface.ts";
 import type { SurfacePorts } from "../../../src/features/writer/flow-surface.ts";

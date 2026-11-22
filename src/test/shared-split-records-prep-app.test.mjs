@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { openProductionPanel } from "../features/tags/panels.ts";
-import { noticeCalls, toastHost, clearWarnings, ORDERS, enter, remoteInsert, exchange, shape, agree, withZ, edit, ADMISSION_HELD, refusedOnce, tidy, PREP_CHOICES } from "./_shared-split-records.mjs";
+import { ORDERS, enter, remoteInsert, exchange, agree, withZ, edit, refusedOnce, tidy, PREP_CHOICES } from "./_shared-split-records.mjs";
+import { noticeCalls, toastHost, clearWarnings, shape, ADMISSION_HELD } from "./_standalone-records.mjs";
 
 for (const choice of PREP_CHOICES) for (const order of ORDERS) test(`C7 record held: ${choice.name} refused at admission by a session hold shows the refusal once and no success notice, ${order}`, async () => {
   const f = await enter();

@@ -7,8 +7,8 @@ import { clearProductionSelection } from "../bootstrap/wiring/production-editing
 import { closeBrollPage, openBrollPage, openBrollPanel, runBrollRefresh } from "../features/broll/panel.ts";
 import { openGearPanel, renderProduction } from "../features/tags/panels.ts";
 import { closeCommentComposer, openCommentComposer, openCommentsPanel, postReply, renderComments, toggleReplyComposer } from "../features/comments/comments.ts";
-import { $, ADMISSION_HELD, REFUSED, SOURCE, adopt, brollBulkNew, brollButton, brollOpen, enter, expandedCard, noticeCalls, press,
-  productionCards, productionPick, tidy } from "./_shared-split-records.mjs";
+import { enter, tidy } from "./_shared-split-records.mjs";
+import { $, ADMISSION_HELD, REFUSED, SOURCE, adopt, brollBulkNew, brollButton, brollOpen, expandedCard, noticeCalls, press, productionCards, productionPick } from "./_standalone-records.mjs";
 
 const ESCAPE_SOURCE = { ...SOURCE,
   rows: [...SOURCE.rows, { id: "r3", audioText: "Three", visualText: '<span class="broll-key" data-broll-id="bs1" contenteditable="false">B-roll:</span> Pier', status: "todo" }],

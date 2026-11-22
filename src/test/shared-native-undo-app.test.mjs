@@ -14,7 +14,7 @@ import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { enterSharedSession, forceLeaveSharedSession } from "../bootstrap/wiring/shared-session.ts";
 import { openNativeEditor } from "../bootstrap/wiring/native-shared-session.ts";
 import { applyNativePeerUpdate } from "../adapters/collab/native/peer-update.ts";
-import { entrySwitchFixture } from "../../tests/bootstrap/shared-entry-switch-support.ts";
+import { nativeEntrySwitchFixture as entrySwitchFixture } from "../../tests/bootstrap/native-entry-switch-support.ts";
 import { Doc, encodeStateAsUpdate } from "yjs";
 import { breakUndoGroup } from "../bootstrap/wiring/undo.ts";
 import { mountNativeSharedInput } from "../bootstrap/wiring/native-shared-input.ts";

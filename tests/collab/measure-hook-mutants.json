@@ -13,133 +13,171 @@
       "file": "src/adapters/collab/document.ts",
       "find": "SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:trial:end\");",
       "replace": "SPLITPAGE_TEST_HOOKS) || timingMarks.marksOn) performance.mark(\"measure:trial:end\");",
-      "tests": ["tests/adapters/collab/timing-marks.test.ts"]
+      "tests": [
+        "tests/adapters/collab/timing-marks.test.ts"
+      ]
     },
     {
       "label": "release build keeps the render mark",
       "file": "src/bootstrap/wiring/session-owner.ts",
       "find": "      if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:render:start\");",
       "replace": "      if (timingMarks.marksOn) performance.mark(\"measure:render:start\");",
-      "tests": ["tests/bootstrap/timing-marks-release.test.ts"]
+      "tests": [
+        "tests/bootstrap/timing-marks-release.test.ts"
+      ]
     },
     {
       "label": "the live apply closes only after its write frame, so a thrown listener leaves it open",
       "file": "src/adapters/collab/state.ts",
       "find": "    try { runCollabTransaction(state, \"remote\", change, recordFailure); }\n    finally { if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:live-apply:end\"); }\n  });\n",
       "replace": "    runCollabTransaction(state, \"remote\", change, recordFailure);\n  });\n  if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:live-apply:end\");\n",
-      "tests": ["tests/adapters/collab/timing-marks.test.ts"]
+      "tests": [
+        "tests/adapters/collab/timing-marks.test.ts"
+      ]
     },
     {
       "label": "an open-gate live apply spans the updates its frame drains",
       "file": "src/adapters/collab/document.ts",
       "find": "        applyAdmittedUpdate(state, update, apply => transactRemoteCollabState(state, apply));",
       "replace": "        if (timingMarks.marksOn) performance.mark(\"measure:live-apply:start\"); try { applyAdmittedUpdate(state, update, apply => transactCollabState(state, \"remote\", apply)); } finally { if (timingMarks.marksOn) performance.mark(\"measure:live-apply:end\"); }",
-      "tests": ["tests/adapters/collab/timing-marks.test.ts"]
+      "tests": [
+        "tests/adapters/collab/timing-marks.test.ts"
+      ]
     },
     {
       "label": "a failed publication leaves its assembly open",
       "file": "src/adapters/collab/incremental-project.ts",
       "find": "      pending = null;\n    } finally { if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:assembly:end\"); }",
       "replace": "      pending = null;\n      if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:assembly:end\");\n    } finally {}",
-      "tests": ["tests/adapters/collab/timing-marks.test.ts"]
+      "tests": [
+        "tests/adapters/collab/timing-marks.test.ts"
+      ]
     },
     {
       "label": "a projection failure is delivered outside a listener span",
       "file": "src/adapters/collab/incremental-project.ts",
       "find": "      if (!failureListeners.size) throw error;\n      if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:projection-listeners:start\");\n      try { for (const listener of failureListeners) guardSharedCallback(state, () => listener(error, origin)); }\n      finally { if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:projection-listeners:end\"); }\n",
       "replace": "      if (!failureListeners.size) throw error;\n      for (const listener of failureListeners) guardSharedCallback(state, () => listener(error, origin));\n",
-      "tests": ["tests/adapters/collab/timing-marks.test.ts"]
+      "tests": [
+        "tests/adapters/collab/timing-marks.test.ts"
+      ]
     },
     {
       "label": "the parts count each seam's whole span",
       "file": "tests/collab/measure/mark-parts.mjs",
       "find": "duration - span.nested;",
       "replace": "duration;",
-      "tests": ["tests/collab/measure/mark-parts.test.mjs"]
+      "tests": [
+        "tests/collab/measure/mark-parts.test.mjs"
+      ]
     },
     {
       "label": "the cell refresh counts as input instead of rendering",
       "file": "tests/collab/measure/mark-parts.mjs",
       "find": "  rendering: Object.freeze([\"render\", \"cell-refresh\"]),\n  input: Object.freeze([\"input-handler\", \"input-command\", \"input-write\"])",
       "replace": "  rendering: Object.freeze([\"render\"]),\n  input: Object.freeze([\"input-handler\", \"input-command\", \"input-write\", \"cell-refresh\"])",
-      "tests": ["tests/collab/measure/mark-parts.test.mjs"]
+      "tests": [
+        "tests/collab/measure/mark-parts.test.mjs"
+      ]
     },
     {
       "label": "the outer total counts only the parts inside it",
       "file": "tests/collab/measure/mark-parts.mjs",
       "find": "      if (!opened) outer += duration;",
       "replace": "      if (!opened) outer += span.nested;",
-      "tests": ["tests/collab/measure/mark-parts.test.mjs"]
+      "tests": [
+        "tests/collab/measure/mark-parts.test.mjs"
+      ]
     },
     {
       "label": "unattributed time is reported as zero",
       "file": "tests/collab/measure/mark-parts.mjs",
       "find": "unattributed: outer - attributed",
       "replace": "unattributed: 0",
-      "tests": ["tests/collab/measure/mark-parts.test.mjs"]
+      "tests": [
+        "tests/collab/measure/mark-parts.test.mjs"
+      ]
     },
     {
       "label": "an outer span nested in a part counts as that part's nested time",
       "file": "tests/collab/measure/mark-parts.mjs",
       "find": "      if (parent) parent.nested += span.nested;",
       "replace": "      if (parent) parent.nested += duration;",
-      "tests": ["tests/collab/measure/mark-parts.test.mjs"]
+      "tests": [
+        "tests/collab/measure/mark-parts.test.mjs"
+      ]
     },
     {
       "label": "a part outside every outer span is accepted",
       "file": "tests/collab/measure/mark-parts.mjs",
       "find": "      if (!bounding && !opened) throw new Error(\"Timing mark outside every outer span: \" + name);\n",
       "replace": "",
-      "tests": ["tests/collab/measure/mark-parts.test.mjs"]
+      "tests": [
+        "tests/collab/measure/mark-parts.test.mjs"
+      ]
     },
     {
       "label": "nested outer spans each add to the outer total",
       "file": "tests/collab/measure/mark-parts.mjs",
       "find": "      if (!opened) outer += duration;",
       "replace": "      outer += duration;",
-      "tests": ["tests/collab/measure/mark-parts.test.mjs"]
+      "tests": [
+        "tests/collab/measure/mark-parts.test.mjs"
+      ]
     },
     {
       "label": "entering from a stored state enters the open script instead",
       "file": "src/bootstrap/wiring/shared-test.ts",
       "find": "enter(sharedTestBytes(state))",
       "replace": "enter()",
-      "tests": ["src/test/shared-native-measure-undo-mapped-app.test.mjs"]
+      "tests": [
+        "src/test/shared-native-measure-undo-mapped-app.test.mjs"
+      ]
     },
     {
       "label": "an incomplete stored state is accepted",
       "file": "src/adapters/collab/native/session.ts",
       "find": "  if (!Y.snapshotContainsUpdate(Y.snapshot(doc), bytes)) {\n    throw new Error(\"The stored state is missing a Yjs update\");\n  }\n",
       "replace": "",
-      "tests": ["src/test/shared-native-entry-gap-app.test.mjs"]
+      "tests": [
+        "src/test/shared-native-entry-gap-app.test.mjs"
+      ]
     },
     {
       "label": "a stored state without a script is entered",
       "file": "src/bootstrap/wiring/native-shared-session.ts",
       "find": "    if (stored && !native.isStoredScript()) throw new Error(\"The stored state does not hold a well-formed native script\");\n",
       "replace": "",
-      "tests": ["src/test/shared-native-measure-undo-mapped-app.test.mjs"]
+      "tests": [
+        "src/test/shared-native-measure-undo-mapped-app.test.mjs"
+      ]
     },
     {
       "label": "native peer delivery drops the held update",
       "file": "src/bootstrap/wiring/shared-native-test-peer.ts",
-      "find": "      applyNativePeerUpdate(app, peer.encodeState());",
+      "find": "      applyUpdate(app, peer.encodeState());",
       "replace": "      void peer.encodeState();",
-      "tests": ["src/test/shared-native-measure-undo-mapped-app.test.mjs"]
+      "tests": [
+        "src/test/shared-native-measure-undo-mapped-app.test.mjs"
+      ]
     },
     {
       "label": "native history changes the script without replaying selection",
       "file": "src/bootstrap/wiring/native-shared-undo.ts",
       "find": "        if (selection) input()?.show(selection);",
       "replace": "        void selection;",
-      "tests": ["src/test/shared-native-measure-undo-mapped-app.test.mjs"]
+      "tests": [
+        "src/test/shared-native-measure-undo-mapped-app.test.mjs"
+      ]
     },
     {
       "label": "native Find refuses every single replacement",
       "file": "src/bootstrap/wiring/native-shared-find.ts",
       "find": "            if (source.text.slice(start, end) !== hit.text ||",
       "replace": "            if (index !== null || source.text.slice(start, end) !== hit.text ||",
-      "tests": ["src/test/shared-native-measure-undo-mapped-app.test.mjs"]
+      "tests": [
+        "src/test/shared-native-measure-undo-mapped-app.test.mjs"
+      ]
     }
   ]
 }

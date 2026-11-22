@@ -1,7 +1,8 @@
 import "../../../src/test/_dom.mjs";
 import assert from "node:assert/strict";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
-import { adapterReplica, sharedHarness } from "../../application/session/shared-session-support.ts";
+import { sharedHarness } from "../../application/session/shared-session-support.ts";
+import { adapterReplica } from "../../application/session/legacy-shared-session-support.ts";
 import { sharedBufferPorts } from "../../../src/bootstrap/wiring/ports/shared-buffer.ts";
 import { createFlowWriter } from "../../../src/features/writer/flow-writer.ts";
 import { createEditorSelection } from "../../../src/application/editing/selection.ts";

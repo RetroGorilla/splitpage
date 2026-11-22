@@ -8,7 +8,8 @@ import type { FindPorts } from "./ports.ts";
 import { startFind, findQueryChanged, runBulkTag, replaceAll } from "./find.ts";
 import { sharedCommandGuard } from "../../bootstrap/wiring/ports/shared-command-notices.ts";
 import { replicas } from "../../../tests/adapters/collab/executor-support.ts";
-import { adapterReplica, sharedHarness } from "../../../tests/application/session/shared-session-support.ts";
+import { sharedHarness } from "../../../tests/application/session/shared-session-support.ts";
+import { adapterReplica } from "../../../tests/application/session/legacy-shared-session-support.ts";
 import { encodeSharedState } from "../../adapters/collab/document.ts";
 
 test("rules 73 and 88: Find bulk tagging and Split replace-all refuse once before standalone work", () => {

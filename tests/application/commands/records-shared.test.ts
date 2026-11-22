@@ -21,7 +21,8 @@ import { sharedRegistryOperations } from "../../../src/core/collab/record-operat
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { planQuickAdd } from "../../../src/core/production/tags.ts";
 import { replicas, operation } from "../../adapters/collab/executor-support.ts";
-import { sharedHarness, adapterReplica } from "../session/shared-session-support.ts";
+import { sharedHarness } from "../session/shared-session-support.ts";
+import { adapterReplica } from "../session/legacy-shared-session-support.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { assertReplicasAgree } from "../../collab/agreement.ts";
 
