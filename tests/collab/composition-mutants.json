@@ -329,7 +329,7 @@
       "find": "  if (!attempt(() => { destroySharedDocument(handle); })) attempt(() => { destroySharedDocument(handle); });",
       "replace": "  attempt(() => { destroySharedDocument(handle); });",
       "tests": [
-        "tests/bootstrap/shared-switch.test.ts"
+        "tests/bootstrap/legacy-shared-switch.test.ts"
       ]
     },
     {
