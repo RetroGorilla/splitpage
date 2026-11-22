@@ -1,7 +1,7 @@
 import "../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { Stage1ExecutorHarness } from "../adapters/collab/stage1-executor-support.ts";
+import type { Stage1ExecutorHarness } from "../adapters/collab/stage1-executor-support.ts";
 import { sharedHarness } from "../application/session/shared-session-support.ts";
 import { adapterReplica } from "../application/session/legacy-shared-session-support.ts";
 import { bufferedWriter } from "./writer/buffer-support.ts";
