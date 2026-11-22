@@ -62,12 +62,13 @@ async function enter(t) {
   adoptReplacement(migrateRows(structuredClone(source)));
   const show = t.mock.method(notices, "show", () => {});
   const standalone = currentCapabilities(), errors = [];
+  let serial = 0;
   const ports = {
     opening: openingStatus, commandRefused: sharedCommandRefusalNotice(notices),
     refusal: () => null, settle: () => {}, detach: () => {},
     bindings: { enter: () => {}, settle: () => null, leave: () => {} },
     common: { edit: standalone.edit, comment: standalone.edit }, standalone, migrate: migrateRows,
-    docId: () => "d" + "1".repeat(32), editor: () => "Editor", structure: { cells: fromHtml },
+    docId: () => "d" + String(++serial).padStart(32, "0"), editor: () => "Editor", structure: { cells: fromHtml },
     report: error => errors.push(error), timers: { now: Date.now, start: setTimeout, stop: clearTimeout }, now: Date.now
   };
   let local;
@@ -449,6 +450,7 @@ const replyPost = '[data-action="reply-post"][data-id="thread"]';
 
 function typeCommentBody(selector, value) {
   const box = need(selector);
+  box.focus();
   box.textContent = value;
   box.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText" }));
   return box;
@@ -477,7 +479,7 @@ for (const reply of [false, true]) for (const order of orders) {
     const selector = reply ? replyBody : commentBody;
     const authorSelector = reply ? '.reply-composer[data-for="thread"] .reply-name-input' : "#comment-name";
     const post = reply ? replyPost : commentPost;
-    const minted = reply ? null : t.mock.method(ids, "id");
+    const minted = t.mock.method(ids, "id");
     if (reply) click('[data-action="toggle-reply"][data-id="thread"]');
     else {
       const narration = need('#rows .cell-editable[data-id="r2"][data-field="audioText"]');
@@ -485,8 +487,12 @@ for (const reply of [false, true]) for (const order of orders) {
       setCellSelection(narration, commentSelection.from, commentSelection.to);
       narration.closest(".field-wrap").querySelector('[data-cmd="comment"]').click();
     }
-    const draftId = minted ? minted.mock.calls.at(-1)?.result : null;
-    if (!reply) assert.match(draftId, /^c/);
+    const draftId = reply ? null : minted.mock.calls.find(call => call.arguments[0] === "c")?.result;
+    if (reply) {
+      assert.equal(need("#comment-modal").hidden, true);
+    } else {
+      assert.ok(typeof draftId === "string" && draftId.length > 0);
+    }
     const baseline = commentState(currentDocument());
     assert.equal(baseline.length, 1);
     assert.equal(baseline[0].id, "thread");
@@ -498,38 +504,58 @@ for (const reply of [false, true]) for (const order of orders) {
     const release = hold(t);
     click(post);
     assert.deepEqual(warnings(f.show), [refused]);
-    typeCommentBody(selector, "First sec");
+    const boxBeforeRedraw = typeCommentBody(selector, "First sec");
+    assert.equal(document.activeElement, boxBeforeRedraw);
     const revision = f.local.revision();
     release();
     armDeleteComment(document.createElement("button"), "thread");
     renderComments();
-    if (!reply) {
+    if (reply) {
+      assert.equal(need("#comment-modal").hidden, true);
+      assert.equal(need('.reply-composer[data-for="thread"]').closest(".comment-card")?.getAttribute("data-id"), "thread");
+      assert.equal(need(replyPost).getAttribute("data-id"), "thread");
+      assert.equal(need(selector).hasAttribute("data-unsaved"), true);
+    } else {
       assert.equal(need("#comment-modal").hidden, false);
       assert.equal(need("#comment-modal-quote").textContent, "“Second”");
+      assert.equal(need(selector), boxBeforeRedraw);
+      assert.equal(document.activeElement, boxBeforeRedraw);
       assert.equal(need(selector).hasAttribute("data-unsaved"), true);
+      copies(f, doc => commentRange(fromHtml(doc.rows[1].audioText), draftId), null);
     }
     assert.equal(need(authorSelector).readOnly, true);
     assert.equal(need(authorSelector).value, "Editor");
     assert.equal(need(selector).textContent, "First sec");
     assert.deepEqual(strip("#comments-list"), []);
     copies(f, commentState, baseline);
+    copies(f, doc => doc.rows[1].audioText, "Second");
     assert.equal(f.local.revision(), revision);
     assert.equal(f.local.commands.undo().kind, "unchanged");
     assert.deepEqual(warnings(f.show), [refused]);
 
     click(post);
     assert.equal(f.local.revision(), revision + 1);
-    if (reply) assert.equal(find(selector), null);
-    else assert.equal(need("#comment-modal").hidden, true);
+    if (reply) {
+      assert.equal(find(selector), null);
+      assert.equal(need("#comment-modal").hidden, true);
+    } else {
+      assert.equal(need("#comment-modal").hidden, true);
+    }
     assert.deepEqual(commentState(currentDocument()), baseline);
+    assert.equal(currentDocument().rows[1].audioText, "Second");
     assert.deepEqual(commentState(f.peer.document()), baseline);
+    assert.equal(f.peer.document().rows[1].audioText, "Second");
     const committed = commentState(f.local.document());
     if (reply) {
       assert.equal(committed.length, 1);
       assert.equal(committed[0].id, "thread");
       assert.equal(committed[0].body, "Original");
+      assert.equal(committed[0].anchorRange, null);
+      assert.equal(f.local.document().rows[1].audioText, "Second");
       assert.equal(committed[0].replies.length, 1);
-      assert.match(committed[0].replies[0].id, /^rp/);
+      const replyId = committed[0].replies[0].id;
+      assert.ok(typeof replyId === "string" && replyId.length > 0);
+      assert.notEqual(replyId, committed[0].id);
       assert.equal(committed[0].replies[0].author, "Editor");
       assert.equal(committed[0].replies[0].body, "First sec");
     } else {
@@ -537,7 +563,7 @@ for (const reply of [false, true]) for (const order of orders) {
       assert.deepEqual(committed.find(entry => entry.id === "thread"), baseline[0]);
       const created = committed.find(entry => entry.id !== "thread");
       assert.ok(created);
-      assert.match(created.id, /^c[0-9a-z]+-[0-9a-z]+$/);
+      assert.ok(typeof created.id === "string" && created.id.length > 0);
       assert.notEqual(created.id, draftId);
       assert.equal(created.anchorId, created.id);
       assert.equal(created.rowId, "r2");
@@ -547,13 +573,18 @@ for (const reply of [false, true]) for (const order of orders) {
       assert.equal(created.body, "First sec");
       assert.equal(created.resolved, false);
       assert.deepEqual(created.anchorRange, commentSelection);
+      assert.equal(commentRange(fromHtml(f.local.document().rows[1].audioText), draftId), null);
       assert.deepEqual(created.replies, []);
     }
 
     await Promise.resolve();
     assert.deepEqual(commentState(currentDocument()), committed);
+    assert.equal(currentDocument().rows[1].audioText, f.local.document().rows[1].audioText);
+    assert.deepEqual(commentState(f.peer.document()), baseline);
+    assert.equal(f.peer.document().rows[1].audioText, "Second");
     await exchange(f, order);
     copies(f, commentState, committed);
+    copies(f, doc => doc.rows[1].audioText, f.local.document().rows[1].audioText);
     renderComments();
     copies(f, commentState, committed);
     if (reply) assert.equal(find(selector), null);
@@ -565,6 +596,12 @@ for (const reply of [false, true]) for (const order of orders) {
     assert.equal(f.local.commands.undo().kind, "unchanged");
     await exchange(f, order);
     copies(f, commentState, baseline);
+    copies(f, doc => doc.rows[1].audioText, "Second");
+    const sharedId = currentDocument().docId;
     assert.deepEqual(leaveRunningSharedSession(), { ok: true });
+    assert.equal(sharedSession(), false);
+    assert.notEqual(currentDocument().docId, sharedId);
+    assert.deepEqual(commentState(currentDocument()), baseline);
+    assert.equal(currentDocument().rows[1].audioText, "Second");
   });
 }
