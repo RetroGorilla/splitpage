@@ -25,7 +25,7 @@ import { createSessionCapabilities } from "../../../src/application/session/capa
 import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import type { SharedOperation } from "../../../src/core/collab/operations.ts";
+import type { SharedContentRef, SharedOperation } from "../../../src/core/collab/operations.ts";
 import type { SharedUndoRecord } from "../../../src/core/collab/undo-record.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { toPlainText } from "../../../src/core/text/projections.ts";
@@ -740,4 +740,11 @@ for (const order of ORDERS) test(`undo restores selected narration into the beat
     flush(h.queue, order);
     assert.deepEqual(narration("undo moves the restored text to the surviving beat"), ["abZdefX", "Other"]);
   } finally { a.session.dispose(); h.close(); }
+});
+
+test("the structure port reports the canonical beat id for a creation operation", () => {
+  const set = setup();
+  try {
+    assert.equal(ports(set.a, stampsOf("Alice", 5)).createdBeat("w1_1_o_0" as SharedContentRef), ADD_A);
+  } finally { set.close(); }
 });

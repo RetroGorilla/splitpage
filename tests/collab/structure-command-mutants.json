@@ -81,7 +81,7 @@
     },
     {
       "label": "structure ports answer without a handle",
-      "file": "src/bootstrap/wiring/ports/shared-values.ts",
+      "file": "tests/collab/editor-ports/shared-values.ts",
       "find": "const values = sharedValuePorts(source);",
       "replace": "const values = sharedValuePorts({ ...source, handle: () => source.handle() ?? {} as SharedDocumentHandle });"
     }

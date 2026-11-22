@@ -53,7 +53,7 @@
     },
     {
       "label": "value ports answer in a standalone session",
-      "file": "src/bootstrap/wiring/ports/shared-values.ts",
+      "file": "tests/collab/editor-ports/shared-values.ts",
       "find": "return () => source.handle() ? {",
       "replace": "return () => source.handle() !== undefined ? {"
     }
