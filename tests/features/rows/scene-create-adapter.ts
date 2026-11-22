@@ -1,10 +1,10 @@
-import type { SharedDocumentHandle } from "../../../adapters/collab/types.ts";
-import { collabState } from "../../../adapters/collab/state.ts";
-import type { SharedDocumentSession } from "../../../application/session/shared-session.ts";
-import { sharedSceneCommand } from "../../../application/commands/shared-scenes.ts";
-import type { SharedSceneCreation } from "../../../application/commands/shared-scenes.ts";
-import { sharedStructureKey } from "../../../core/collab/structure-key.ts";
-import { holdSharedBuffer } from "../../../adapters/collab/ingress.ts";
+import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
+import { collabState } from "../../../src/adapters/collab/state.ts";
+import type { SharedDocumentSession } from "../../../src/application/session/shared-session.ts";
+import { sharedSceneCommand } from "../../../src/application/commands/shared-scenes.ts";
+import type { SharedSceneCreation } from "../../../src/application/commands/shared-scenes.ts";
+import { sharedStructureKey } from "../../../src/core/collab/structure-key.ts";
+import { holdSharedBuffer } from "../../../src/adapters/collab/ingress.ts";
 
 export function sharedSceneCreation(handle: SharedDocumentHandle, session: Pick<SharedDocumentSession, "run" | "beforeCommand">,
   author: () => { readonly id: string; readonly by: string }): SharedSceneCreation {

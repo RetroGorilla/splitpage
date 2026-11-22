@@ -29,7 +29,6 @@ import type { RowsEditorPorts } from "../../features/rows/editor.ts";
 import { mountRowRoutes } from "../../features/rows/routes.ts";
 import type { RowRoutePorts } from "../../features/rows/routes.ts";
 import { mountTitleRoutes } from "../../features/title/routes.ts";
-import type { BufferedInputPorts } from "../../features/common/buffered-input.ts";
 import type { Run } from "../../core/text/runs.ts";
 import { caretAfterStep, replayPlacement } from "../../features/undo/caret.ts";
 import type { PlacedReplayStep } from "../../features/undo/caret.ts";
@@ -684,12 +683,11 @@ function settleEndedComposition(e: RootInput): void {
 
 const titleRoutes = owned<ReturnType<typeof mountTitleRoutes>>();
 
-export function mountTitlesFeature(shared?: BufferedInputPorts): ReturnType<typeof mountTitleRoutes> {
+export function mountTitlesFeature(): ReturnType<typeof mountTitleRoutes> {
   return titleRoutes.replace(function () {
     return mountTitleRoutes({
       main: document.getElementById("doc-title") as HTMLInputElement,
       writer: document.getElementById("writer-title") as HTMLInputElement,
-      ...shared ? { shared } : {},
       ports: {
         run: function (command) { return paintGuard().whileShown(function () { return runCommand(command); }); },
         current: function () {

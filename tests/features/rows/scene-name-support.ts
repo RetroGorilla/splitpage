@@ -20,7 +20,7 @@ import { edgeInput } from "../edge-input.ts";
 import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
 import { sharedBufferedInputHistory } from "../../../src/bootstrap/wiring/buffered-input.ts";
 import { registerSharedUndoOperationHandlers } from "../../../src/adapters/collab/undo-handlers.ts";
-import { sharedSceneCreation } from "../../../src/bootstrap/wiring/ports/shared-scenes.ts";
+import { sharedSceneCreation } from "./scene-create-adapter.ts";
 import { registerSharedHeadingHandlers } from "../../../src/adapters/collab/heading-executor.ts";
 
 export type RenamePage = ReturnType<typeof sharedRename>;

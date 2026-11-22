@@ -3,8 +3,6 @@ import { removeSceneCommand } from "../../application/commands/scenes.ts";
 import { sceneGroups, soleBeatSceneMovedBy } from "../../core/document/scenes.ts";
 import { mountSceneBoundary } from "../../features/editing/scene-boundary.ts";
 import { mountSceneControls } from "../../features/rows/scene-controls.ts";
-import type { BufferedInputPorts } from "../../features/common/buffered-input.ts";
-import type { SharedSceneCreation } from "../../application/commands/shared-scenes.ts";
 import { documentReader } from "./ports/document.ts";
 import { edits } from "./ports/editing.ts";
 import { notices } from "./ports/effects.ts";
@@ -14,11 +12,10 @@ import { focusMemory, rowDrag, sceneView } from "./editor-owners.ts";
 import { stopDragScroll, updateDragScroll } from "./rows.ts";
 import { breakUndoGroup } from "./undo.ts";
 
-export function mountSceneHeaders(sharedNames?: BufferedInputPorts, sharedScenes?: SharedSceneCreation): { confirmMove: (rowId: string, dir: -1 | 1) => boolean; dispose: () => void } {
+export function mountSceneHeaders(): { confirmMove: (rowId: string, dir: -1 | 1) => boolean; dispose: () => void } {
   const controls = mountSceneControls(window, {
     document: documentReader, edits, scenes: sceneView(), focus: focusMemory(),
-    drag: rowDrag(), ids, notices, scroll: updateDragScroll, stopScroll: stopDragScroll, structure: sharedStructureCommands,
-    ...sharedNames ? { sharedNames } : {}, ...sharedScenes ? { sharedScenes } : {}
+    drag: rowDrag(), ids, notices, scroll: updateDragScroll, stopScroll: stopDragScroll, structure: sharedStructureCommands
   });
   const boundary = createSceneBoundaryRemoval({
     timers: {

@@ -4,7 +4,8 @@ import { cellOf, inertBody, sanitizeHtml, scriptCellOf } from "../../../src/boot
 import { findQueryChanged, mountFindEvents, startFind } from "../../../src/features/find/find.ts";
 import type { SharedRewritePorts } from "../../../src/application/commands/document-edit.ts";
 import type { CommonDocumentSession } from "../../../src/application/session/document-session.ts";
-import { sharedRewritePorts } from "../../../src/bootstrap/wiring/ports/shared-rewrites.ts";
+import type { StampPorts } from "../../../src/application/session/ports.ts";
+import { sharedBeatStamp } from "../../../src/adapters/collab/stamp.ts";
 import { sharedAuthorPort } from "../../../src/bootstrap/wiring/ports/shared-author.ts";
 import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo.ts";
 import { sharedCommandGuard, sharedCommandRefusalNotice } from "../../../src/bootstrap/wiring/ports/shared-command-notices.ts";
@@ -21,6 +22,16 @@ import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { assertReplicasAgree } from "../../collab/agreement.ts";
 import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
 import type { fakeNotices } from "../fakes.ts";
+
+export function sharedRewritePorts(source: { readonly handle: () => SharedDocumentHandle | null; readonly author: SharedRewritePorts["author"]; readonly stamps: StampPorts;
+  readonly cells: SharedRewritePorts["cells"]; readonly readers: SharedRewritePorts["readers"] }): () => SharedRewritePorts | null {
+  return () => source.handle() ? {
+    author: source.author,
+    beatStamp: (beat, author) => sharedBeatStamp(beat, author, source.stamps),
+    cells: source.cells,
+    readers: source.readers
+  } : null;
+}
 
 export const FIND_ORDERS = ["D1", "rev", "dup"] as const;
 export type FindOrder = typeof FIND_ORDERS[number];
