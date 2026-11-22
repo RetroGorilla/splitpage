@@ -12,7 +12,7 @@ import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { sharedRecoverySession } from "../bootstrap/wiring/session-owner.ts";
 import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { removeGallerySlot } from "../core/document/gallery.ts";
-import { openCommentsPanel } from "../features/comments/comments.ts";
+import { openCommentsPanel, setCommentFilterMode } from "../features/comments/comments.ts";
 import { selectedKeys } from "../bootstrap/wiring/production-editing-owners.ts";
 import {
   addPersonForTag, applyGearQuickAdd, armDeleteTag, armPersonDelete, armRemoveTag, bulkDeleteSelected, openGearPanel,
@@ -31,8 +31,8 @@ const menu = '[data-action="comment-menu"][data-id="C1"]';
 const remove = '[data-action="delete-comment"][data-id="C1"]';
 const resolve = '[data-action="toggle-resolve"][data-id="C1"]';
 
-async function enter(t) {
-  adopt(SOURCE);
+async function enter(t, source = SOURCE) {
+  adopt(source);
   assert.deepEqual(await hook.enter(), { ok: true });
   t.after(() => {
     tidyStandalone();
@@ -148,10 +148,15 @@ for (const order of ["forward", "reverse"]) {
     await exhausted(session);
   });
 
-  for (const action of ["resolve", "delete", "assign"]) {
+  for (const action of ["resolve", "reopen", "delete", "assign"]) {
     test("Native comment " + action + " isolates admission and history, " + order, async t => {
-      const { start, standalone, session } = await enter(t);
+      const source = structuredClone(SOURCE);
+      if (action === "reopen") {
+        Object.assign(source.comments[0], { resolved: true, resolvedBy: "Ann", resolvedAt: source.comments[0].createdAt });
+      }
+      const { start, standalone, session } = await enter(t, source);
       openCommentsPanel();
+      setCommentFilterMode(action === "reopen" ? "resolved" : "open");
       if (action === "delete") armDelete();
       const act = () => $(action === "delete" ? remove : resolve).click();
       const before = snapshot(session);
@@ -190,7 +195,10 @@ for (const order of ["forward", "reverse"]) {
       assert.deepEqual(peer.release(order).map(packet => packet.to), order === "forward" ? ["app", "peer"] : ["peer", "app"]);
       expected.rows[1][1] += "?";
       const restored = structuredClone(expected);
-      if (action === "resolve") expected.comments[0][1] = true;
+      if (action === "resolve" || action === "reopen") {
+        assert.equal(start.comments[0][1], action === "reopen");
+        expected.comments[0][1] = action === "resolve";
+      }
       if (action === "delete") {
         expected.comments = [];
         assert.match(start.rows[0][1], /data-cmt="C1"/);
