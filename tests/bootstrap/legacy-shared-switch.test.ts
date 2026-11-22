@@ -18,7 +18,7 @@ import {
 } from "../../src/bootstrap/wiring/session-owner.ts";
 import { routeUndoReplays, sharedUndoRoute, startUndo, undoOwner, undoPorts, undoSessionPort } from "../../src/bootstrap/wiring/undo.ts";
 import {
-  leaveSharedSession, SHARED_ENTER_FAILED,
+  leaveSharedSession,
 } from "../../src/bootstrap/wiring/shared-session.ts";
 import { fakeMigration } from "../core/migrate-ports.ts";
 import { createFlowLoadRuntime } from "../core/flow/load.ts";

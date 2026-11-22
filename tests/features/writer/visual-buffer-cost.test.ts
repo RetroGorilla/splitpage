@@ -8,17 +8,13 @@ test("standalone Writer visual key builds no shared buffer and keeps the same wo
     import assert from "node:assert/strict";
     import { mock } from "node:test";
     import { pathToFileURL } from "node:url";
-    const field = await import("./src/application/editing/buffered-field.ts");
-    const painted = await import("./src/application/editing/painted-beats.ts");
     const rich = await import("./src/bootstrap/richtext.ts");
-    let built = 0, records = 0, decodes = 0;
-    mock.module(pathToFileURL("src/application/editing/buffered-field.ts").href, { namedExports: { createBufferedField: (...args) => { built++; return field.createBufferedField(...args); } } });
-    mock.module(pathToFileURL("src/application/editing/painted-beats.ts").href, { namedExports: { createPaintedBeats: (...args) => { records++; return painted.createPaintedBeats(...args); } } });
+    let decodes = 0;
     mock.module(pathToFileURL("src/bootstrap/richtext.ts").href, { namedExports: { ...rich, fromHtml: (...args) => { decodes++; return rich.fromHtml(...args); } } });
     const { writerFor } = await import("./tests/features/writer/painted-base-support.ts");
     const counts = [];
     for (const size of [2, 200]) {
-      const page = writerFor(undefined, size);
+      const page = writerFor(size);
       page.doc.rows[0].visualText = "Wide";
       page.writer.repaint(); page.writer.openVisual("a");
       const cell = document.querySelector(".wr-flow-visual-text"); assert.ok(cell);
@@ -37,7 +33,6 @@ test("standalone Writer visual key builds no shared buffer and keeps the same wo
       assert.equal(page.writer.settle, undefined);
       page.writer.dispose();
     }
-    assert.deepEqual({ built, records }, { built: 0, records: 0 });
     console.log(JSON.stringify(counts));
   `;
   const result = spawnSync(process.execPath, ["--experimental-test-module-mocks", "--input-type=module", "--eval", script],

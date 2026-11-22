@@ -85,15 +85,6 @@
       ]
     },
     {
-      "label": "a faulted typing buffer claims to have announced a refusal it never reported",
-      "file": "src/application/editing/buffered-field.ts",
-      "find": "return finish() || (reported === before ? false : SHARED_ADMISSION_ANNOUNCED);",
-      "replace": "return finish() || SHARED_ADMISSION_ANNOUNCED;",
-      "tests": [
-        "tests/application/editing/buffered-field.test.ts"
-      ]
-    },
-    {
       "label": "the standalone delete button syncs its cells before it reads the row index",
       "file": "src/features/rows/beats.ts",
       "find": "  const idx = (ports as BeatPortUse).document.read(function (doc) { return rowIndexOf(doc, id); });\n  const rowEl = rowElement(id);\n  if (rowEl) rowEl.querySelectorAll(\".cell-editable\").forEach(function (cellEl) { (ports as BeatPortUse).cells.sync(cellEl); });",

@@ -12,12 +12,8 @@ test("standalone Split keystroke: no cell buffer, binding or painted record is b
     import { mock } from "node:test";
     import { pathToFileURL } from "node:url";
     const url = path => pathToFileURL(path).href;
-    const field = await import("./src/application/editing/buffered-field.ts");
-    const beats = await import("./src/application/editing/painted-beats.ts");
     const rich = await import("./src/bootstrap/richtext.ts");
-    let built = 0, records = 0, decodes = 0;
-    mock.module(url("src/application/editing/buffered-field.ts"), { namedExports: { createBufferedField: (...args) => { built++; return field.createBufferedField(...args); } } });
-    mock.module(url("src/application/editing/painted-beats.ts"), { namedExports: { createPaintedBeats: (...args) => { records++; return beats.createPaintedBeats(...args); } } });
+    let decodes = 0;
     mock.module(url("src/bootstrap/richtext.ts"), { namedExports: { ...rich, fromHtml: (...args) => { decodes++; return rich.fromHtml(...args); } } });
     const { bootApp, closeApp } = await import("./src/test/_app-boot.mjs");
     window.Element.prototype.scrollBy = function () {};
@@ -56,14 +52,14 @@ test("standalone Split keystroke: no cell buffer, binding or painted record is b
       }
     }
     stopCheck();
-    console.log(JSON.stringify({ counts, built, records }));
+    console.log(JSON.stringify({ counts }));
     await closeApp();
   `;
   const result = spawnSync(process.execPath, ["--experimental-test-module-mocks", "--input-type=module", "--eval", script],
     { cwd: REPO, encoding: "utf8", windowsHide: true });
   assert.equal(result.status, 0, result.stdout + result.stderr);
   const line = result.stdout.trim().split("\n").at(-1) ?? "";
-  assert.deepEqual(JSON.parse(line), { counts: [[2, "audioText", ["edit"], 1, 0, 0, 0], [2, "visualText", ["edit"], 1, 0, 0, 0], [50, "audioText", ["edit"], 1, 0, 0, 0], [50, "visualText", ["edit"], 1, 0, 0, 0]], built: 0, records: 0 });
+  assert.deepEqual(JSON.parse(line), { counts: [[2, "audioText", ["edit"], 1, 0, 0, 0], [2, "visualText", ["edit"], 1, 0, 0, 0], [50, "audioText", ["edit"], 1, 0, 0, 0], [50, "visualText", ["edit"], 1, 0, 0, 0]] });
   context.diagnostic("2 and 50 rows, narration and visual: one edit, one decode, no paint check and no repaint per native key; no buffered field, painted record or cell buffer");
 });
 

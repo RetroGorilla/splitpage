@@ -8,13 +8,6 @@ const REPO = fileURLToPath(new URL("../../", import.meta.url));
 
 const HOLDS = [/\.beforeCommand\(/, /\bcreateBufferedField\(/, /\bbufferedText\.open\(/];
 
-type Row = { readonly registers: string } | { readonly holdsNothing: string } | { readonly notSharedYet: string };
-
-const SURFACES: Readonly<Record<string, Row>> = {
-  "application/editing/buffered-field.ts": { registers: "const stopAbandonment = ports.abandonment?.(abandon);" },
-  "features/writer/flow-buffer.ts": { registers: "createBufferedField(ports" }
-};
-
 function modules(path = ""): string[] {
   return readdirSync(join(REPO, "src", path), { withFileTypes: true }).flatMap(entry => {
     const inner = path ? path + "/" + entry.name : entry.name;
@@ -25,14 +18,6 @@ function modules(path = ""): string[] {
 
 const source = (path: string): string => readFileSync(join(REPO, "src", path), "utf8");
 
-test("every surface that can hold an uncommitted shared edit or composition has an abandonment row, and every registered row registers", () => {
-  const holders = modules().filter(path => HOLDS.some(pattern => pattern.test(source(path)))).sort();
-  assert.deepEqual(holders, Object.keys(SURFACES).sort(),
-    "a surface that admits shared commands or holds a buffered edit must register for abandonment and add its row here");
-  for (const [path, row] of Object.entries(SURFACES)) {
-    if ("registers" in row) assert.ok(source(path).includes(row.registers), path + " registers its abandon step");
-    if ("notSharedYet" in row) {
-      assert.equal(/abandonment/.test(source(path)), false, path + " is listed as not shared yet; once " + row.notSharedYet + " mounts it in a shared session, register it and move its row");
-    }
-  }
+test("production surfaces have no legacy buffered field registration", () => {
+  assert.deepEqual(modules().filter(path => HOLDS.some(pattern => pattern.test(source(path)))).sort(), []);
 });

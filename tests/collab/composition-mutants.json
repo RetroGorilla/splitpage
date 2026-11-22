@@ -3,9 +3,7 @@
     "tests/adapters/collab/operation-families.test.ts",
     "tests/bootstrap/shared-author.test.ts",
     "tests/collab/undo-seam.test.ts",
-    "tests/features/writer/buffer-undo.test.ts",
-    "tests/bootstrap/shared-switch.test.ts",
-    "tests/features/shared-undo-surfaces.test.ts"
+    "tests/bootstrap/shared-switch.test.ts"
   ],
   "mutants": [
     {
@@ -57,8 +55,7 @@
       "label": "flow command drops the planner operation list",
       "replace": "...[], ...[...stamped]",
       "tests": [
-        "tests/application/commands/flow-shared.test.ts",
-        "tests/features/writer/flow-command-ports.test.ts"
+        "tests/application/commands/flow-shared.test.ts"
       ],
       "file": "src/application/commands/flow.ts",
       "find": "...result.ops, ...[...stamped]"
@@ -67,28 +64,16 @@
       "label": "flow command never stamps inserted beats",
       "replace": ".concat([])",
       "tests": [
-        "tests/application/commands/flow-shared.test.ts",
-        "tests/features/writer/flow-command-ports.test.ts"
+        "tests/application/commands/flow-shared.test.ts"
       ],
       "file": "src/application/commands/flow.ts",
       "find": ".concat(plan.changes.rowsInserted)"
     },
     {
-      "label": "Writer ignores its shared command builder",
-      "replace": "const commit = commitStandalone;",
-      "tests": [
-        "tests/application/commands/flow-shared.test.ts",
-        "tests/features/writer/flow-command-ports.test.ts"
-      ],
-      "file": "src/features/writer/flow-writer.ts",
-      "find": "const commit = commands ? commitShared : commitStandalone;"
-    },
-    {
       "label": "Writer author refusal becomes a request",
       "replace": "const request = source.author.next() ?? { id: \"forbidden\", by: \"Forbidden\" };",
       "tests": [
-        "tests/application/commands/flow-shared.test.ts",
-        "tests/features/writer/flow-command-ports.test.ts"
+        "tests/application/commands/flow-shared.test.ts"
       ],
       "file": "tests/collab/editor-ports/writer-flow.ts",
       "find": "const request = source.author.next();"
@@ -97,8 +82,7 @@
       "label": "Writer planner never receives the author request",
       "replace": "operations = undefined;",
       "tests": [
-        "tests/application/commands/flow-shared.test.ts",
-        "tests/features/writer/flow-command-ports.test.ts"
+        "tests/application/commands/flow-shared.test.ts"
       ],
       "file": "tests/collab/editor-ports/writer-flow.ts",
       "find": "operations = request ?? undefined;"
@@ -107,8 +91,7 @@
       "label": "flow stamp uses a different command identity",
       "replace": "sharedBeatStamp(beat, { ...by, id: \"wrong\" }, stamps)",
       "tests": [
-        "tests/application/commands/flow-shared.test.ts",
-        "tests/features/writer/flow-command-ports.test.ts"
+        "tests/application/commands/flow-shared.test.ts"
       ],
       "file": "tests/collab/editor-ports/writer-flow.ts",
       "find": "sharedBeatStamp(beat, by, stamps)"
@@ -119,8 +102,7 @@
       "find": "if (!plan && !result.ops.length) return null;",
       "replace": "if (!plan) return null;",
       "tests": [
-        "tests/application/commands/flow-shared.test.ts",
-        "tests/features/writer/flow-command-ports.test.ts"
+        "tests/application/commands/flow-shared.test.ts"
       ]
     },
     {
@@ -129,8 +111,7 @@
       "find": "...result.ops, ...[...stamped].map",
       "replace": "...result.ops, ...[].map",
       "tests": [
-        "tests/application/commands/flow-shared.test.ts",
-        "tests/features/writer/flow-command-ports.test.ts"
+        "tests/application/commands/flow-shared.test.ts"
       ]
     },
     {
@@ -139,7 +120,7 @@
       "find": "rowId: beats.get(pos.rowId) ?? pos.rowId",
       "replace": "rowId: pos.rowId",
       "tests": [
-        "tests/features/writer/flow-command-ports.test.ts"
+        "tests/application/commands/flow-shared.test.ts"
       ]
     },
     {
@@ -533,15 +514,6 @@
       ]
     },
     {
-      "label": "route: a Writer composition is not abandoned at stop",
-      "file": "src/application/editing/buffered-field.ts",
-      "find": "  const stopAbandonment = ports.abandonment?.(abandon);",
-      "replace": "  const stopAbandonment = ports.abandonment?.(() => {});",
-      "tests": [
-        "tests/features/writer/buffer-binding.test.ts"
-      ]
-    },
-    {
       "label": "route: a dropped session never hands the hook its way out",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "  if (left) faults.attempt(() => { left(false); });\n",
@@ -570,15 +542,6 @@
         "tests/bootstrap/shared-switch.test.ts",
         "src/test/shared-native-handoff-app.test.mjs",
         "tests/bootstrap/native-shared-entry.test.ts"
-      ]
-    },
-    {
-      "label": "drop: a released buffered field still refuses to finish",
-      "file": "src/application/editing/buffered-field.ts",
-      "find": "    if (released) return true;\n",
-      "replace": "",
-      "tests": [
-        "tests/application/editing/buffered-field.test.ts"
       ]
     }
   ]

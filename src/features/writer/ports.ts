@@ -1,3 +1,4 @@
+import type { WholeFieldTextCommit } from "../../application/editing/ports.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
 import type { PaintGuard } from "../../application/editing/paint-guard.ts";
 import type { EditorSelection } from "../../application/editing/selection.ts";
@@ -10,12 +11,10 @@ import type { DocumentReader } from "../../application/session/document-reader.t
 import type { SidePanels } from "../../application/side-panels.ts";
 import type { TextServices } from "../../application/text/services.ts";
 import type { ScreenState } from "../../application/screen.ts";
-import type { PaintedTextSource, WholeFieldTextCommit } from "../../application/editing/ports.ts";
 import type { CellRange } from "../../application/editing/cell-editing.ts";
 import type { PictureStore } from "../../application/media/picture-store.ts";
 import type { Command, CommonDocumentSession } from "../../application/session/document-session.ts";
 import type { CellTextPorts } from "../../application/session/ports.ts";
-import type { FlowCommandSource } from "../../application/commands/flow.ts";
 import type { FlowDoc, FlowPorts, FlowRange, FlowRow, FlowSelectionPair } from "../../core/flow/flow.ts";
 import type { Run } from "../../core/text/runs.ts";
 import type { SurfacePorts } from "./flow-surface.ts";
@@ -59,7 +58,6 @@ export interface FlowUndoPorts extends Pick<Undo, "flush" | "breakCoalescing" | 
 }
 
 export interface FlowWriterPorts {
-  readonly commands?: FlowCommandSource;
   readonly openFind?: () => void;
   readonly closeFind?: () => void;
   readonly pictures?: Pick<PictureStore, "imgHtml">;
@@ -68,9 +66,7 @@ export interface FlowWriterPorts {
   readonly visualLeave?: (cell: HTMLElement) => void;
   readonly visualKeydown?: (event: KeyboardEvent, cell: HTMLElement) => boolean;
   readonly clipboard?: SurfacePorts["clipboard"];
-  readonly paintedText?: PaintedTextSource;
   readonly nativeHeadingCandidate?: (beat: string) => boolean;
-  readonly bufferedText?: SurfacePorts["bufferedText"];
   readonly lifetime: Pick<CommonDocumentSession, "epoch">;
   readonly heldSelection: Pick<EditorSelection<object, unknown, unknown>, "rememberFlow" | "resolveFlow" | "forget">;
   readonly root: HTMLElement;

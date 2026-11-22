@@ -8,7 +8,6 @@ import { fromHtml } from "../../../src/bootstrap/richtext.ts";
 import { swapBeatsCommand } from "../../../src/application/commands/rows.ts";
 import { createEditorSelection } from "../../../src/application/editing/selection.ts";
 import { createWholeFieldTextCommit } from "../../../src/application/editing/whole-field-text.ts";
-import type { PaintedTextSource } from "../../../src/application/editing/ports.ts";
 import type { Command, CommandOutcome } from "../../../src/application/session/document-session.ts";
 
 export function writerPage(): HTMLElement {
@@ -26,7 +25,7 @@ export function typeInto(root: HTMLElement, beat: HTMLElement, text: string): vo
   root.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: text }));
 }
 
-export function writerFor(source?: PaintedTextSource, rowCount = 2, sections?: readonly Record<string, unknown>[]) {
+export function writerFor(rowCount = 2, sections?: readonly Record<string, unknown>[]) {
   const root = writerPage();
   const doc = migrateRows({ ...sections ? { sections } : {}, rows: [{ id: "a", audioText: "Alpha" }, { id: "b", audioText: "Bravo" },
     ...Array.from({ length: rowCount - 2 }, (_, index) => ({ id: "r" + index, audioText: "Charlie" }))] }, fakeMigration().ports);
@@ -38,7 +37,6 @@ export function writerFor(source?: PaintedTextSource, rowCount = 2, sections?: r
     return { kind: "applied", generation: 1, changes: plan.changes };
   };
   const writer = createFlowWriter({
-    ...(source ? { paintedText: source } : {}),
     root, doc: () => doc, lifetime: { epoch: () => 1 },
     heldSelection: createEditorSelection({ epoch: () => 1, order: () => [], keys: () => null }),
     flow: { cells: html => fromHtml(html ?? ""), newId: () => "new", hasVisual: () => false },

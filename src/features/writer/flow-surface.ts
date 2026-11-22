@@ -13,17 +13,9 @@ import { hasSetLength } from "../../core/document/timing.ts";
 import { formatDuration } from "../../core/production/timing.ts";
 import type { MarkName, Marks, Run } from "../../core/text/runs.ts";
 import { domKeys, domToPos, posToDom } from "../common/cell-dom.ts";
-import { timingMarks } from "../../../shared/timing-marks.ts";
 import { createFlowBeatMenu } from "./flow-beat-menu.ts";
-import { createPaintedBeats } from "../../application/editing/painted-beats.ts";
-import { createWriterBuffer } from "./flow-buffer.ts";
-import { bufferedFieldTarget, headingFieldKey, unsettledHeading } from "../../application/editing/buffered-field-key.ts";
-import type { BufferedFieldPorts } from "../../application/editing/buffered-field.ts";
-import type { PaintedText, PaintedTextSource } from "../../application/editing/ports.ts";
 import type { EditorSelection } from "../../application/editing/selection.ts";
 import type { CommonDocumentSession } from "../../application/session/document-session.ts";
-
-declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 const ZWSP = String.fromCharCode(0x200B);
 const ZWSP_ALL = new RegExp(ZWSP, "g");
@@ -37,9 +29,7 @@ export interface SurfacePorts {
     readonly copy: (range: FlowRange, data: DataTransfer, cut: boolean) => void;
     readonly paste: (range: FlowRange, data: Pick<DataTransfer, "getData">) => FlowOutcome | undefined;
   };
-  readonly paintedText?: PaintedTextSource;
   readonly nativeHeadingCandidate?: (beat: string) => boolean;
-  readonly bufferedText?: BufferedFieldPorts;
   readonly lifetime: Pick<CommonDocumentSession, "epoch">;
   readonly heldSelection: Pick<EditorSelection<object, unknown, unknown>, "rememberFlow" | "resolveFlow" | "forget">;
   readonly root: HTMLElement;
@@ -74,7 +64,6 @@ export interface SurfaceSettings {
 }
 
 export interface Surface {
-  readonly settle?: () => boolean;
   readonly finish: () => FlowRange | null;
   readonly paint: () => void;
   readonly repaint: (restore?: boolean) => void;
@@ -90,7 +79,6 @@ export interface Surface {
   readonly toOwnBeat: (range: FlowRange) => string | null;
   readonly domRange: (range: FlowRange) => Range | null;
   readonly domCheck: () => string[];
-  readonly paintedBase: (rowId: string) => PaintedText | null;
   readonly setSelectionListener: (active: boolean) => void;
   readonly dispose: () => void;
 }
@@ -120,12 +108,10 @@ function beatHtml(runs: readonly Run[]): string {
   return /<br\s*\/?>$/.test(html) ? html + ZWSP : html;
 }
 
-export function createSurface(inputPorts: SurfacePorts): Surface {
-  const ports: SurfacePorts = inputPorts.bufferedText ? { ...inputPorts, syncBeat: () => {} } : inputPorts;
+export function createSurface(ports: SurfacePorts): Surface {
   const root = ports.root;
   const epoch = ports.lifetime.epoch();
   let rendered = new WeakMap<HTMLElement, string>();
-  const paintedBeats = ports.paintedText ? createPaintedBeats(ports.paintedText) : null;
   let composing = false;
   const queuedPastes: Pick<DataTransfer, "getData">[] = [];
   let mouseDown = false;
@@ -311,9 +297,6 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     keptHeads.forEach(el => { if (el.isConnected) el.remove(); });
     painting = false;
     // why: the base is what this pass showed, so it is read here; a later read could describe text nobody saw
-    if (paintedBeats) paintedBeats.record([...doc.rows.map(row => ({ id: row.id, text: projection(cellOf(row)) })),
-      ...flowOf(doc).flatMap(block => block.kind === "heading" ? [{ id: headingFieldKey(block.scene.id), text: emptyHeadings.get(block.scene.id) ?? block.scene.name }] : [])],
-    entry => entry.text);
   }
 
   function posFromDom(node: Node, offset: number): FlowPos | null {
@@ -487,14 +470,7 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     else root.focus({ preventScroll: true });
   }
 
-  function endsHold(): boolean {
-    // why: a write aimed at a held empty heading would land on the name the person did not see; it only ends the hold
-    if (!buffered?.held()) return false;
-    buffered.finish(); return true;
-  }
-
   function apply(name: string, operation: (doc: FlowDoc) => FlowOutcome, before: FlowRange | null, focus = true): FlowOutcome {
-    if (endsHold()) return null;
     const outcome = ports.commit(name, operation, before ?? selection());
     if (!outcome) return null;
     if ("refused" in outcome) { ports.notice(outcome.refused); return outcome; }
@@ -956,12 +932,12 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     const ctrl = event.ctrlKey || event.metaKey;
     if (ctrl && !event.altKey && (key === "z" || key === "Z")) {
       event.preventDefault();
-      if (!endsHold()) ports.undo(event.shiftKey ? "redo" : "undo");
+      ports.undo(event.shiftKey ? "redo" : "undo");
       return;
     }
     if (ctrl && !event.altKey && (key === "y" || key === "Y")) {
       event.preventDefault();
-      if (!endsHold()) ports.undo("redo");
+      ports.undo("redo");
       return;
     }
     if (ctrl && !event.altKey && (key === "f" || key === "F")) {
@@ -1276,135 +1252,36 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
     return problems;
   }
 
-  function sceneOf(sceneId: string): { readonly name: string } | null {
-    const doc = ports.doc();
-    for (const block of flowOf(doc)) if (block.kind === "heading" && block.scene.id === sceneId) return { name: block.scene.name };
-    return null;
-  }
-
-  const buffered = ports.bufferedText ? createWriterBuffer(ports.bufferedText, {
-    root, base: rowId => paintedBeats?.base(rowId) ?? null,
-    painted: rowId => paintedBeats?.text(rowId),
-    normalize: () => {
-      const focus = elementOf(window.getSelection()?.focusNode ?? null);
-      repairOrphans(focus?.closest<HTMLElement>(".wr-beat") ?? null);
-    },
-    reset: rowId => {
-      const heading = bufferedFieldTarget(rowId);
-      if (heading?.field === "heading") {
-        const el = headingEl(heading.owner), scene = sceneOf(heading.owner);
-        if (el && scene) { el.textContent = scene.name; paintedBeats?.field(rowId, scene.name); }
-        return;
-      }
-      const el = beatEl(rowId), row = ports.doc().rows.find(row => row.id === rowId);
-      if (!el) return;
-      if (!row) { el.remove(); return; }
-      const runs = cellOf(row), html = beatHtml(runs);
-      el.innerHTML = html; rendered.set(el, html);
-      decorate(el, row, el.getAttribute("data-num") ?? "");
-      paintedBeats?.field(rowId, projection(runs));
-    },
-    runs: beat => beat.classList.contains("wr-heading") ? [{ text: (beat.textContent ?? "").replace(ZWSP_ALL, ""), marks: {} }]
-      : ports.decode(ports.storedHtml(beat.innerHTML.replace(ZWSP_ALL, ""))),
-    selection: () => selection(true), repaint: rowId => {
-      const el = beatEl(rowId); if (el) rendered.delete(el);
-      repaint();
-    },
-    unsettled: (key, text) => bufferedFieldTarget(key)?.field !== "heading" ? null : unsettledHeading(text),
-    composition: value => { if (value !== undefined) composing = value; return composing; },
-    restore: (rowId, offsets) => {
-      const heading = bufferedFieldTarget(rowId);
-      const exists = heading?.field === "heading" ? sceneOf(heading.owner) !== null : ports.doc().rows.some(row => row.id === rowId);
-      if (offsets) place(offsets);
-      else if (!exists) {
-        const first = ports.doc().rows[0];
-        if (first) place(caretAt(beatPos(first.id, 0)));
-      }
-    },
-    changed: ports.changed
-  }) : null;
-  const ready = (event: Event): boolean => !buffered || buffered.settledFor(event);
-  const clipboardActions = {
-    copy: buffered ? (event: ClipboardEvent) => {
-      if (composing) {
-        const range = selection(true), selected = range && domRange(range);
-        if (selected && event.clipboardData) { event.preventDefault(); event.clipboardData.setData("text/plain", selected.toString()); }
-      } else if (ready(event)) onCopy(event);
-    } : onCopy,
-    cut: buffered ? (event: ClipboardEvent) => { if (ready(event)) onCut(event); } : onCut,
-    paste: buffered ? (event: ClipboardEvent) => { if (ready(event)) onPaste(event); } : onPaste
-  };
   const listeners: [EventTarget, string, EventListener][] = [
-    [root, "beforeinput", buffered ? event => {
-      const input = event as InputEvent, native = typeof input.getTargetRanges === "function" ? range0(input) : null;
-      if (!buffered.beforeInput(input, selection(true), native)) onBeforeInput(event);
-    } : onBeforeInput],
-    [root, "input", buffered ? event => {
-      buffered.input();
-      const input = event as InputEvent;
-      if (!buffered.dirty() && input.inputType === "insertText" && input.data && /[*~]$/.test(input.data)) maybeInlineMarkdown();
-      if (!buffered.dirty()) noteSelection();
-    } : onInput],
-    [root, "keydown", buffered ? event => {
-      const key = event as KeyboardEvent;
-      if (composing || key.isComposing || key.keyCode === 229) {
-        const range = selection(true), at = range?.head;
-        const beat = at?.kind === "beat" ? beatEl(at.rowId) : null;
-        const boundary = at?.kind === "beat" && (key.key === "Backspace" && at.offset === 0
-          || key.key === "Delete" && beat !== null && at.offset === domKeys(beat).length);
-        const command = key.key === "Tab" || key.key === "Enter" && !key.isComposing && key.keyCode !== 229
-          || (key.ctrlKey || key.metaKey) && /^[zybiuvx]$/i.test(key.key)
-          || key.altKey && ["ArrowUp", "ArrowDown", "Backspace"].includes(key.key) || boundary;
-        if (composing && command) ready(event);
-        return;
-      }
-      buffered.keydown(key);
-      // why: a held empty heading ends on what the key does (input, command, selection, focus), never on the keydown
-      if (buffered.held() || ready(event)) onKeydown(key);
-    } : onKeydown as EventListener],
+    [root, "beforeinput", onBeforeInput],
+    [root, "input", onInput],
+    [root, "keydown", onKeydown as EventListener],
     ...ports.clipboard ? [] : [
-      [root, "copy", clipboardActions.copy as EventListener] as [EventTarget, string, EventListener],
-      [root, "cut", clipboardActions.cut as EventListener] as [EventTarget, string, EventListener],
-      [root, "paste", clipboardActions.paste as EventListener] as [EventTarget, string, EventListener]
+      [root, "copy", onCopy as EventListener] as [EventTarget, string, EventListener],
+      [root, "cut", onCut as EventListener] as [EventTarget, string, EventListener],
+      [root, "paste", onPaste as EventListener] as [EventTarget, string, EventListener]
     ],
-    [root, "compositionstart", buffered ? event => { buffered.start(event, selection(true)); } : onCompositionStart],
-    [root, "compositionend", buffered ? event => { buffered.end(event as CompositionEvent); } : onCompositionEnd],
+    [root, "compositionstart", onCompositionStart],
+    [root, "compositionend", onCompositionEnd],
     [root, "mousedown", onMouseDown],
-    [root, "focusout", buffered ? event => { if (!composing && buffered.finish()) onHostBlur(event); } : onHostBlur],
-    ...buffered ? [[root, "drop", ((event: Event) => { ready(event); event.preventDefault(); }) as EventListener] as [EventTarget, string, EventListener],
-      [root, "focusin", (() => {}) as EventListener] as [EventTarget, string, EventListener]] : [],
-    [window, "mouseup", buffered ? () => { if (buffered.held()) buffered.moved(selection(true)); onMouseUp(); } : onMouseUp]
+    [root, "focusout", onHostBlur],
+    [window, "mouseup", onMouseUp]
   ];
-  const guardListener = (handler: EventListener): EventListener => buffered ? event => {
-    if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:start");
-    try { buffered.native(event, () => handler(event)); }
-    finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-handler:end"); }
-  } : handler;
-  const guarded = buffered ? listeners.map(([target, name, handler]) => [target, name, guardListener(handler)] as const) : listeners;
-  const selectionChanged = guardListener(buffered ? () => {
-    if (buffered.held()) buffered.moved(selection(true));
-    if (!buffered.dirty()) onSelectionChange();
-  } : onSelectionChange);
+  const selectionChanged = onSelectionChange;
   const setSelectionListener = (active: boolean): void => {
     if (active) document.addEventListener("selectionchange", selectionChanged);
     else document.removeEventListener("selectionchange", selectionChanged);
   };
-  guarded.forEach(([target, name, handler]) => target.addEventListener(name, handler));
+  listeners.forEach(([target, name, handler]) => target.addEventListener(name, handler));
   setSelectionListener(true);
-  const clipboardHandlers = buffered ? {
-    copy: (event: ClipboardEvent) => { buffered.native(event, () => clipboardActions.copy(event)); },
-    cut: (event: ClipboardEvent) => { buffered.native(event, () => clipboardActions.cut(event)); },
-    paste: (event: ClipboardEvent) => { buffered.native(event, () => clipboardActions.paste(event)); }
-  } : clipboardActions;
-  const stopClipboard = ports.clipboard?.mount(clipboardHandlers);
+  const stopClipboard = ports.clipboard?.mount({ copy: onCopy, cut: onCut, paste: onPaste });
 
   return {
-    ...(buffered ? { settle: buffered.finish } : {}),
-    finish: buffered ? () => buffered.finish() ? finish() : selection(true) : finish,
-    paint: buffered ? () => { if (buffered.canPaint()) paint(); } : paint,
-    repaint: buffered ? () => { if (buffered.canPaint()) repaint(); } : repaint,
+    finish,
+    paint,
+    repaint,
     refreshBeat: rowId => {
-      if (composing || syncingComposition || buffered && !buffered.canPaint()) { repaintOwed = true; return; }
+      if (composing || syncingComposition) { repaintOwed = true; return; }
       const el = beatEl(rowId);
       const row = ports.doc().rows.find(beat => beat.id === rowId);
       if (el && row) decorate(el, row, el.getAttribute("data-num") ?? "");
@@ -1421,23 +1298,20 @@ export function createSurface(inputPorts: SurfacePorts): Surface {
       place(range, true);
     },
     prepareVisual,
-    format: buffered ? mark => { if (buffered.finish()) format(mark); } : format,
+    format,
     pendingMarks: () => pending ? pending.marks : null,
-    apply: buffered ? (name, operation, before) => buffered.finish() ? apply(name, operation, before) : null : apply,
+    apply,
     toOwnBeat,
     domRange,
     domCheck,
-    paintedBase: rowId => buffered?.base(rowId) ?? (paintedBeats ? paintedBeats.base(rowId) : null),
     setSelectionListener,
     dispose: () => {
-      if (buffered && !buffered.dispose()) return;
       stopClipboard?.();
       beatMenu.dispose();
-      paintedBeats?.clear();
       if (ports.lifetime.epoch() === epoch) ports.heldSelection.forget();
       compositionTargets.clear();
       queuedPastes.length = 0;
-      guarded.forEach(([target, name, handler]) => target.removeEventListener(name, handler));
+      listeners.forEach(([target, name, handler]) => target.removeEventListener(name, handler));
       setSelectionListener(false);
     }
   };

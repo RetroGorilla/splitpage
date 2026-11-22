@@ -1,455 +1,196 @@
 {
-  "tests": ["tests/features/writer/buffer-binding.test.ts","tests/features/writer/buffer-review.test.ts","tests/features/writer/buffer-invariants.test.ts"],
+  "tests": [
+    "tests/features/writer/buffer-review.test.ts"
+  ],
   "mutants": [
-              {
-    "label": "local command admitted before dirty native typing",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "const stopAdmission = ports.beforeCommand(() => {",
-    "replace": "const stopAdmission = () => {}; void (() => {"
-  },
-              {
-    "label": "native cut and drag bypass delegated refusal",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "type === \"deleteByCut\" || type === \"deleteByDrag\" || ",
-    "replace": ""
-  },
-              {
-    "label": "ordinary cross-beat input never reaches its command port",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "ends[0] && ends[1] && ends[0] !== ends[1])",
-    "replace": "false)"
-  },
-              {
-    "label": "refused cross-beat composition permits native mutation",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "if (refusedComposition && (event.isComposing || /^(insert|delete)/.test(type))) { refuse(event, \"buffer-unsupported-target\"); return true; }",
-    "replace": "if (refusedComposition && (event.isComposing || /^(insert|delete)/.test(type))) return true;"
-  },
-              {
-    "label": "native boundary deletion never reaches its structural command",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "if (type === \"deleteContentBackward\" && offset === 0 || type === \"deleteContentForward\" && offset === length)",
-    "replace": "if (false)"
-  },
-              {
-    "label": "mounted clipboard captures selection before settling typing",
-    "file": "src/features/writer/flow-surface.ts",
-    "find": "ports.clipboard?.mount(clipboardHandlers)",
-    "replace": "ports.clipboard?.mount({ copy: onCopy, cut: onCut, paste: onPaste })"
-  },
-              {
-    "label": "native input accepted without a painted base",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "event.preventDefault(); ports.missingBase(rowId);",
-    "replace": "ports.missingBase(rowId);"
-  },
-              {
-    "label": "dirty paint replaces native DOM from the model",
-    "file": "src/features/writer/flow-surface.ts",
-    "find": "paint: buffered ? () => { if (buffered.canPaint()) paint(); } : paint,",
-    "replace": "paint: buffered ? () => { const held = composing; composing = false; for (const beat of root.querySelectorAll(\".wr-beat\")) rendered.delete(beat as HTMLElement); paint(); composing = held; } : paint,"
-  },
-              {
-    "label": "disposal unmounts a refused native buffer",
-    "file": "src/features/writer/flow-surface.ts",
-    "find": "if (buffered && !buffered.dispose()) return;",
-    "replace": "buffered?.dispose();"
-  },
-              {
-    "label": "cancel trusts the old render cache",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "if (!event.data) {",
-    "replace": "if (!event.data) { const closed = active; active = null; target = null; closed.edit.cancel(); return;"
-  },
-              {
-    "label": "shared native input uses whole-field synchronization",
-    "file": "src/features/writer/flow-surface.ts",
-    "find": "      buffered.input();",
-    "replace": "      onInput(event);"
-  },
-              {
-    "label": "standalone keystroke gains a row walk",
-    "file": "src/features/writer/flow-surface.ts",
-    "find": "function onInput(event: Event): void {",
-    "replace": "function onInput(event: Event): void { ports.doc().rows.forEach(row => row.id);",
-    "tests": ["tests/features/writer/buffer-cost.test.ts"]
-  },
-              {
-    "label": "native caret is pinned to its original owner after a split",
-    "file": "src/adapters/collab/buffer.ts",
-    "find": "selection: restored",
-    "replace": "selection: { anchor: { ...restored.anchor, rowId }, head: { ...restored.head, rowId } }"
-  },
-              {
-    "label": "composing keys settle and enter Writer commands",
-    "file": "src/features/writer/flow-surface.ts",
-    "find": "      if (composing || key.isComposing || key.keyCode === 229) {",
-    "replace": "      composing = false; if (false) {"
-  },
-              {
-    "label": "failed acquisition leaves native mutation allowed",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "catch (error) { event.preventDefault(); ports.report({ kind: \"failed\", error }); return false; }",
-    "replace": "catch (error) { ports.report({ kind: \"failed\", error }); return false; }"
-  },
-              {
-    "label": "drain failure leaves the surface attached to its closed edit",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "if (held.edit.isOpen()) return recover(held, outcome, selection);",
-    "replace": "if (outcome.kind === \"failed\") { ports.report(outcome); return false; } if (held.edit.isOpen()) return recover(held, outcome, selection);"
-  },
-              {
-    "label": "recovered typing is not announced",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "surface.changed();\n    ports.recovered(held.rowId);",
-    "replace": "surface.changed(); void held.rowId;",
-    "tests": ["tests/features/writer/buffer-recovery.test.ts"]
-  },
-              {
-    "label": "recovered field keeps its native text",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "surface.repaint(held.rowId); const shown",
-    "replace": "const shown",
-    "tests": ["tests/features/writer/buffer-recovery.test.ts"]
-  },
-              {
-    "label": "refused recovery discards the native edit",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "if (held.edit.isOpen()) { ports.report(kept ?? refusal); return false; }",
-    "replace": "if (held.edit.isOpen()) { ports.report(kept ?? refusal); held.edit.cancel(); }"
-  },
-              {
-    "label": "recovery write leaves an undo entry",
-    "file": "src/adapters/collab/buffer.ts",
-    "find": ", undo: false }",
-    "replace": " }",
-    "tests": ["tests/collab/buffer-recovery.test.ts"]
-  },
-              {
-    "label": "recovery write leaves a visible new beat",
-    "file": "src/adapters/collab/buffer.ts",
-    "find": "{ rows: doc.rows.length, visual })",
-    "replace": "{ rows: doc.rows.length, visual }).slice(0, 1)",
-    "tests": ["tests/collab/buffer-recovery.test.ts"]
-  },
-              {
-    "label": "recovery attempted for a commit the document never refused",
-    "file": "src/adapters/collab/buffer.ts",
-    "find": "if (!open || !stranded) return null;",
-    "replace": "if (!open) return null;",
-    "tests": ["tests/collab/buffer-recovery.test.ts"]
-  },
-              {
-    "label": "recovered edit stays open over its released hold",
-    "file": "src/adapters/collab/buffer.ts",
-    "find": "open = false; stranded = false; try",
-    "replace": "stranded = false; try",
-    "tests": ["tests/collab/buffer-recovery.test.ts"]
-  },
-              {
-    "label": "recovered edit forgets its native text before its hold drains",
-    "file": "src/adapters/collab/buffer.ts",
-    "find": "stranded = false; try { release(); }",
-    "replace": "stranded = false; buffer.cancel(); try { release(); }",
-    "tests": ["tests/features/writer/buffer-recovery.test.ts"]
-  },
-              {
-    "label": "recovery entry loses its painted base",
-    "file": "src/core/collab/buffer-operations.ts",
-    "find": "bufferPaintedBase: snapshot.base",
-    "replace": "bufferPaintedBase: observed.rows",
-    "tests": ["tests/core/collab/buffer-operations.test.ts"]
-  },
-              {
-    "label": "input entry skips the ownership invariant",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "native: (event, dispatch) => {",
-    "replace": "native: (event, dispatch) => { if (event.type === \"input\") { dispatch(); return; }"
-  },
-              {
-    "label": "settlement caller clears composition before the gate",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "return checked.ok && settle();",
-    "replace": "surface.composition(false); return checked.ok && settle();"
-  },
-              {
-    "label": "the Writer folds the space form",
-    "file": "src/features/writer/flow-buffer.ts",
-    "find": "    ...surface,",
-    "replace": "    ...surface, foldSpaceForm: true,"
-  },
-              {
-    "label": "space form beside the native target compared exactly",
-    "file": "src/core/collab/buffer.ts",
-    "find": "!sameUpToSpaceForm(after.slice(0, from), before.slice(0, from))",
-    "replace": "after.slice(0, from) !== before.slice(0, from)",
-    "tests": ["tests/application/editing/buffered-field.test.ts"]
-  },
-              {
-    "label": "text typed over a selected space keeps the stored space form",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "surface.foldSpaceForm && typed !== null && sameUpToSpaceForm(typed, kept) ? typed : kept",
-    "replace": "kept",
-    "tests": ["tests/application/editing/buffered-field.test.ts"]
-  },
-              {
-    "label": "closed edit compared with the shown field exactly",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "!active.edit.isOpen() && same(next, active.edit.text())",
-    "replace": "!active.edit.isOpen() && next === active.edit.text()",
-    "tests": ["tests/application/editing/buffered-field.test.ts"]
-  },
-              {
-    "label": "adoption settles over a pending native target",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "if ((before.adopted || after.adopted) && !surface.composition() && !target && !holding()) settle();",
-    "replace": "if ((before.adopted || after.adopted) && !surface.composition() && !holding()) settle();",
-    "tests": ["tests/features/writer/buffer-binding.test.ts","tests/features/writer/buffer-invariants.test.ts"]
-  },
-              {
-    "label": "Writer heading positions get no field key",
-    "file": "src/features/writer/flow-buffer.ts",
-    "find": "key: pos => pos.kind === \"beat\" ? pos.rowId : headingFieldKey(pos.sceneId),",
-    "replace": "key: pos => pos.kind === \"beat\" ? pos.rowId : null,",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "the heading painted base is never read",
-    "file": "tests/collab/editor-ports/shared-buffer.ts",
-    "find": "read: (key, field) => field === bufferedFieldTarget(key)?.field ? readSharedPaintedText",
-    "replace": "read: (key, field) => field !== \"heading\" && field === bufferedFieldTarget(key)?.field ? readSharedPaintedText",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "an emptied heading settles at once",
-    "file": "src/application/editing/buffered-field-key.ts",
-    "find": "{ reason: \"buffer-heading-empty\", hold: true }",
-    "replace": "{ reason: \"buffer-heading-empty\", hold: false }",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "an emptied heading is written empty",
-    "file": "src/application/editing/buffered-field-key.ts",
-    "find": "if (!cappedText(text, SCENE_NAME_MAX)) return",
-    "replace": "if (false) return",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "a heading over 200 characters settles",
-    "file": "src/application/editing/buffered-field-key.ts",
-    "find": "Array.from(text).length > SCENE_NAME_MAX ?",
-    "replace": "false ?",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "an unsettled edit is committed anyway",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "const unsettled = surface.unsettled?.(held.rowId, held.edit.text());",
-    "replace": "const unsettled = null;",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "a heading commit stamps a beat",
-    "file": "src/adapters/collab/buffer.ts",
-    "find": "operations.length && field !== \"heading\" && field !== \"title\" ?",
-    "replace": "operations.length ?",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "a heading commit reports a narration cell change",
-    "file": "src/application/editing/buffered-field-key.ts",
-    "find": "if (target?.field === \"heading\") return changeSet({ docFields: [\"sections\"], derive: CELL_TEXT_DERIVES });",
-    "replace": "",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "heading recovery names the field key instead of the scene",
-    "file": "src/adapters/collab/buffer.ts",
-    "find": "const snapshot = { owner: target.owner,",
-    "replace": "const snapshot = { owner: rowId,",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "the caret after a heading commit is resolved as narration",
-    "file": "src/adapters/collab/buffer-selection.ts",
-    "find": "if (field?.target.field === \"heading\") {",
-    "replace": "if (false) {",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "a keydown settles a heading held empty",
-    "file": "src/features/writer/flow-surface.ts",
-    "find": "if (buffered.held() || ready(event)) onKeydown(key);",
-    "replace": "if (ready(event)) onKeydown(key);",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "a selection leaving a heading held empty keeps the hold",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "moved: range => { if (active && holding() && !surface.composition() && one(range) !== active.rowId) finish(); },",
-    "replace": "moved: () => {},",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "a selection inside a heading held empty ends the hold",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "&& one(range) !== active.rowId) finish(); },",
-    "replace": ") finish(); },",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "a mouseup landing outside a heading held empty is not checked",
-    "file": "src/features/writer/flow-surface.ts",
-    "find": "buffered ? () => { if (buffered.held()) buffered.moved(selection(true)); onMouseUp(); } : onMouseUp",
-    "replace": "onMouseUp",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "an adopted emptying change settles at once",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "!surface.composition() && !target && !holding()) settle();",
-    "replace": "!surface.composition() && !target) settle();",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "an emptying change found by a paint settles at once",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "if (checked.adopted && !surface.composition() && !holding()) settle();",
-    "replace": "if (checked.adopted && !surface.composition()) settle();",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "a composition begun in a heading held empty is not recorded",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "if (begin(event, range)) composedFromHold = hold?.reason ?? null;",
-    "replace": "begin(event, range);",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "a cancelled composition begun in a held heading ends it without telling the person",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "if (heldReason !== null) ports.report({ kind: \"rejected\", reason: heldReason });",
-    "replace": "",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "every cancelled heading composition reports an empty heading",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "if (heldReason !== null) ports.report({ kind: \"rejected\", reason: heldReason });",
-    "replace": "if (surface.unsettled) ports.report({ kind: \"rejected\", reason: heldReason ?? \"buffer-heading-empty\" });",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "input that ends a held heading still acts",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "if (finish() && !held) return true;",
-    "replace": "if (finish()) return true;",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "clipboard in a held heading ends the hold and still acts",
-    "file": "src/features/writer/flow-surface.ts",
-    "find": "const ready = (event: Event): boolean => !buffered || buffered.settledFor(event);",
-    "replace": "const ready = (event: Event): boolean => !buffered || buffered.finish();",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "a Writer command aimed at a held heading still runs",
-    "file": "src/features/writer/flow-surface.ts",
-    "find": "if (endsHold()) return null;",
-    "replace": "",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "the undo shortcut runs in a held heading",
-    "file": "src/features/writer/flow-surface.ts",
-    "find": "if (!endsHold()) ports.undo(event.shiftKey ? \"redo\" : \"undo\");",
-    "replace": "ports.undo(event.shiftKey ? \"redo\" : \"undo\");",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "the redo shortcut runs in a held heading",
-    "file": "src/features/writer/flow-surface.ts",
-    "find": "if (!endsHold()) ports.undo(\"redo\");",
-    "replace": "ports.undo(\"redo\");",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "the shared entry trims scene names",
-    "file": "src/core/migrate.ts",
-    "find": "  return projected as ValidatedDocument;\n}",
-    "replace": "  if (Array.isArray(projected.sections)) for (const scene of projected.sections) if (scene && typeof scene.name === \"string\") scene.name = scene.name.trim();\n  return projected as ValidatedDocument;\n}",
-    "tests": ["tests/application/session/shared-entry.test.ts"]
-  },
-              {
-    "label": "a key repeating on a held field ends the hold",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "      if (event.repeat && holding()) { event.preventDefault(); return true; }\n",
-    "replace": "",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "a key repeating on a held field still reaches the browser",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "if (event.repeat && holding()) { event.preventDefault(); return true; }",
-    "replace": "if (event.repeat && holding()) return true;",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-              {
-    "label": "a fresh press on a held field is consumed like a repeat",
-    "file": "src/application/editing/buffered-field.ts",
-    "find": "if (event.repeat && holding())",
-    "replace": "if (holding())",
-    "tests": ["tests/features/writer/buffer-heading.test.ts"]
-  },
-                          {
-    "label": "a visual commit addressed to the narration",
-    "file": "src/adapters/collab/buffer.ts",
-    "find": "  return { owner, segment: owner, field: field.field };",
-    "replace": "  return { owner, segment: owner, field: field.field === \"visualText\" ? \"audioText\" as const : field.field };",
-    "tests": ["tests/adapters/collab/buffer-title-selection.test.ts"]
-  },
-              {
-    "label": "a visual recovery draft written to the narration",
-    "file": "src/core/collab/buffer-operations.ts",
-    "find": "fields: { [snapshot.field ?? \"audioText\"]: snapshot.html,",
-    "replace": "fields: { audioText: snapshot.html,",
-    "tests": ["tests/core/collab/buffer-operations.test.ts"]
-  },
-              {
-    "label": "the visual caret resolved as narration",
-    "file": "src/adapters/collab/buffer-selection.ts",
-    "find": "if (field?.target.field === \"visualText\") {",
-    "replace": "if (false) {",
-    "tests": ["tests/adapters/collab/buffer-title-selection.test.ts"]
-  },
-              {
-    "label": "a pasted title caret no longer resolves through shared characters",
-    "file": "src/adapters/collab/buffer-selection.ts",
-    "find": "export function resolveSharedBufferedSelection(handle: SharedDocumentHandle, anchors: readonly (SharedContentRef | null)[],\n  field?: { readonly key: string; readonly target: SharedTextAddress }): FlowRange | undefined {",
-    "replace": "export function resolveSharedBufferedSelection(handle: SharedDocumentHandle, anchors: readonly (SharedContentRef | null)[],\n  field?: { readonly key: string; readonly target: SharedTextAddress }): FlowRange | undefined {\n  if (field?.target.field === \"title\") return undefined;",
-    "tests": ["tests/adapters/collab/buffer-title-selection.test.ts"]
-  },
-              {
-    "label": "plain name operations clean native control characters as cell text",
-    "file": "src/core/collab/buffer-operations.ts",
-    "find": "const plain = target.field === \"heading\" || target.field === \"title\";",
-    "replace": "const plain = false;",
-    "tests": ["tests/core/collab/buffer-operations.test.ts"]
-  },
-              {
-    "label": "plain input redo follows its restored typing instead of the recorded boundary",
-    "file": "src/adapters/collab/buffer.ts",
-    "find": "const anchor = !first ? null : target.field === \"audioText\" || target.field === \"visualText\"",
-    "replace": "const anchor = !first ? null : true",
-    "tests": ["tests/adapters/collab/buffer-title-selection.test.ts"]
-  },
-              {
-    "label": "rich text undo ignores remote typing in the same gap",
-    "file": "src/adapters/collab/buffer.ts",
-    "find": "? createSharedAnchor(handle, target, first.from, \"after\")",
-    "replace": "? preceding ? sharedAnchorCharacterEnd(preceding) : painted.identity(0) ?? painted.emptyGap ?? null",
-    "tests": ["tests/features/writer/buffer-undo.test.ts"]
-  }
-            ]
+    {
+      "label": "standalone keystroke gains a row walk",
+      "file": "src/features/writer/flow-surface.ts",
+      "find": "function onInput(event: Event): void {",
+      "replace": "function onInput(event: Event): void { ports.doc().rows.forEach(row => row.id);",
+      "tests": [
+        "tests/features/writer/buffer-cost.test.ts"
+      ]
+    },
+    {
+      "label": "native caret is pinned to its original owner after a split",
+      "file": "src/adapters/collab/buffer.ts",
+      "find": "selection: restored",
+      "replace": "selection: { anchor: { ...restored.anchor, rowId }, head: { ...restored.head, rowId } }",
+      "tests": [
+        "tests/adapters/collab/buffer-title-selection.test.ts"
+      ]
+    },
+    {
+      "label": "recovery write leaves an undo entry",
+      "file": "src/adapters/collab/buffer.ts",
+      "find": ", undo: false }",
+      "replace": " }",
+      "tests": [
+        "tests/collab/buffer-recovery.test.ts"
+      ]
+    },
+    {
+      "label": "recovery write leaves a visible new beat",
+      "file": "src/adapters/collab/buffer.ts",
+      "find": "{ rows: doc.rows.length, visual })",
+      "replace": "{ rows: doc.rows.length, visual }).slice(0, 1)",
+      "tests": [
+        "tests/collab/buffer-recovery.test.ts"
+      ]
+    },
+    {
+      "label": "recovery attempted for a commit the document never refused",
+      "file": "src/adapters/collab/buffer.ts",
+      "find": "if (!open || !stranded) return null;",
+      "replace": "if (!open) return null;",
+      "tests": [
+        "tests/collab/buffer-recovery.test.ts"
+      ]
+    },
+    {
+      "label": "recovered edit stays open over its released hold",
+      "file": "src/adapters/collab/buffer.ts",
+      "find": "open = false; stranded = false; try",
+      "replace": "stranded = false; try",
+      "tests": [
+        "tests/collab/buffer-recovery.test.ts"
+      ]
+    },
+    {
+      "label": "recovered edit forgets its native text before its hold drains",
+      "file": "src/adapters/collab/buffer.ts",
+      "find": "stranded = false; try { release(); }",
+      "replace": "stranded = false; buffer.cancel(); try { release(); }",
+      "tests": [
+        "tests/collab/buffer-recovery.test.ts"
+      ]
+    },
+    {
+      "label": "recovery entry loses its painted base",
+      "file": "src/core/collab/buffer-operations.ts",
+      "find": "bufferPaintedBase: snapshot.base",
+      "replace": "bufferPaintedBase: observed.rows",
+      "tests": [
+        "tests/core/collab/buffer-operations.test.ts"
+      ]
+    },
+    {
+      "label": "space form beside the native target compared exactly",
+      "file": "src/core/collab/buffer.ts",
+      "find": "!sameUpToSpaceForm(after.slice(0, from), before.slice(0, from))",
+      "replace": "after.slice(0, from) !== before.slice(0, from)",
+      "tests": [
+        "tests/core/collab/buffer.test.ts"
+      ]
+    },
+    {
+      "label": "a heading commit stamps a beat",
+      "file": "src/adapters/collab/buffer.ts",
+      "find": "operations.length && field !== \"heading\" && field !== \"title\" ?",
+      "replace": "operations.length ?",
+      "tests": [
+        "tests/adapters/collab/buffer-title-selection.test.ts"
+      ]
+    },
+    {
+      "label": "a heading commit reports a narration cell change",
+      "file": "src/application/editing/buffered-field-key.ts",
+      "find": "if (target?.field === \"heading\") return changeSet({ docFields: [\"sections\"], derive: CELL_TEXT_DERIVES });",
+      "replace": "",
+      "tests": [
+        "tests/adapters/collab/buffer-title-selection.test.ts"
+      ]
+    },
+    {
+      "label": "heading recovery names the field key instead of the scene",
+      "file": "src/adapters/collab/buffer.ts",
+      "find": "const snapshot = { owner: target.owner,",
+      "replace": "const snapshot = { owner: rowId,",
+      "tests": [
+        "tests/collab/buffer-recovery.test.ts"
+      ]
+    },
+    {
+      "label": "the caret after a heading commit is resolved as narration",
+      "file": "src/adapters/collab/buffer-selection.ts",
+      "find": "if (field?.target.field === \"heading\") {",
+      "replace": "if (false) {",
+      "tests": [
+        "tests/adapters/collab/buffer-title-selection.test.ts"
+      ]
+    },
+    {
+      "label": "the shared entry trims scene names",
+      "file": "src/core/migrate.ts",
+      "find": "  return projected as ValidatedDocument;\n}",
+      "replace": "  if (Array.isArray(projected.sections)) for (const scene of projected.sections) if (scene && typeof scene.name === \"string\") scene.name = scene.name.trim();\n  return projected as ValidatedDocument;\n}",
+      "tests": [
+        "tests/application/session/shared-entry.test.ts"
+      ]
+    },
+    {
+      "label": "a visual commit addressed to the narration",
+      "file": "src/adapters/collab/buffer.ts",
+      "find": "  return { owner, segment: owner, field: field.field };",
+      "replace": "  return { owner, segment: owner, field: field.field === \"visualText\" ? \"audioText\" as const : field.field };",
+      "tests": [
+        "tests/adapters/collab/buffer-title-selection.test.ts"
+      ]
+    },
+    {
+      "label": "a visual recovery draft written to the narration",
+      "file": "src/core/collab/buffer-operations.ts",
+      "find": "fields: { [snapshot.field ?? \"audioText\"]: snapshot.html,",
+      "replace": "fields: { audioText: snapshot.html,",
+      "tests": [
+        "tests/core/collab/buffer-operations.test.ts"
+      ]
+    },
+    {
+      "label": "the visual caret resolved as narration",
+      "file": "src/adapters/collab/buffer-selection.ts",
+      "find": "if (field?.target.field === \"visualText\") {",
+      "replace": "if (false) {",
+      "tests": [
+        "tests/adapters/collab/buffer-title-selection.test.ts"
+      ]
+    },
+    {
+      "label": "a pasted title caret no longer resolves through shared characters",
+      "file": "src/adapters/collab/buffer-selection.ts",
+      "find": "export function resolveSharedBufferedSelection(handle: SharedDocumentHandle, anchors: readonly (SharedContentRef | null)[],\n  field?: { readonly key: string; readonly target: SharedTextAddress }): FlowRange | undefined {",
+      "replace": "export function resolveSharedBufferedSelection(handle: SharedDocumentHandle, anchors: readonly (SharedContentRef | null)[],\n  field?: { readonly key: string; readonly target: SharedTextAddress }): FlowRange | undefined {\n  if (field?.target.field === \"title\") return undefined;",
+      "tests": [
+        "tests/adapters/collab/buffer-title-selection.test.ts"
+      ]
+    },
+    {
+      "label": "plain name operations clean native control characters as cell text",
+      "file": "src/core/collab/buffer-operations.ts",
+      "find": "const plain = target.field === \"heading\" || target.field === \"title\";",
+      "replace": "const plain = false;",
+      "tests": [
+        "tests/core/collab/buffer-operations.test.ts"
+      ]
+    },
+    {
+      "label": "plain input redo follows its restored typing instead of the recorded boundary",
+      "file": "src/adapters/collab/buffer.ts",
+      "find": "const anchor = !first ? null : target.field === \"audioText\" || target.field === \"visualText\"",
+      "replace": "const anchor = !first ? null : true",
+      "tests": [
+        "tests/adapters/collab/buffer-title-selection.test.ts"
+      ]
+    },
+    {
+      "label": "rich text undo ignores remote typing in the same gap",
+      "file": "src/adapters/collab/buffer.ts",
+      "find": "? createSharedAnchor(handle, target, first.from, \"after\")",
+      "replace": "? preceding ? sharedAnchorCharacterEnd(preceding) : painted.identity(0) ?? painted.emptyGap ?? null",
+      "tests": [
+        "tests/adapters/collab/buffer-title-selection.test.ts"
+      ]
+    }
+  ]
 }

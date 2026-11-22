@@ -1,7 +1,7 @@
 {
   "tests": ["tests/application/commands/shared-refusals.test.ts"],
   "mutants": [
-    {"label":"Writer repeats a refusal the session already displayed","file":"src/features/writer/flow-writer.ts","find":"outcome.kind === \"rejected\" && !outcome.notified","replace":"outcome.kind === \"rejected\"","tests":["tests/features/writer/flow-command-ports.test.ts"]},
+    {"label":"Writer repeats a refusal the session already displayed","file":"src/features/writer/flow-writer.ts","find":"outcome.kind === \"rejected\" && !outcome.notified","replace":"outcome.kind === \"rejected\"","tests":["tests/features/writer/flow-writer.test.ts"]},
     {"label":"a missing shared form becomes a silent no-op","file":"src/application/session/shared-session.ts","find":"if (!plan.shared) return { kind: \"rejected\", reason: NOT_SHARED };","replace":"if (!plan.shared) return { kind: \"noop\" };"},
     {"label":"the session drops its refusal notice","file":"src/application/session/shared-session.ts","find":"ports.refused?.(reason);","replace":"void reason;"},
     {"label":"move beat does not ask moves","file":"src/application/commands/rows.ts","find":"const can = capability.moves();\n      if (!can.allowed) return { refused: can.reason };\n      const from","replace":"const can = capability.edit();\n      if (!can.allowed) return { refused: can.reason };\n      const from"},

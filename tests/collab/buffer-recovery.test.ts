@@ -1,11 +1,13 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { Stage1ExecutorHarness } from "../adapters/collab/stage1-executor-support.ts";
+import * as Y from "yjs";
+import { headingFieldKey } from "../../src/application/editing/buffered-field-key.ts";
 import { operation } from "../adapters/collab/executor-support.ts";
 import { sharedHarness } from "../application/session/shared-session-support.ts";
 import { adapterReplica, registerSplits } from "../application/session/legacy-shared-session-support.ts";
 import type { SharedHarnessHooks } from "../application/session/shared-session-support.ts";
-import { createSharedBufferedText } from "../../src/adapters/collab/buffer.ts";
+import { createSharedBufferedText, sharedBufferedTarget } from "../../src/adapters/collab/buffer.ts";
 import { bufferReaders, bufferStamps } from "./buffer-readers.ts";
 import { readSharedPaintedText } from "../../src/adapters/collab/paint-base.ts";
 import { executeSharedOperations } from "../../src/adapters/collab/execute.ts";
@@ -203,3 +205,38 @@ for (const order of ["D1", "rev", "dup", "late-C"] as const) {
     } finally { a.session.dispose(); h.destroy(); }
   });
 }
+
+test("a recovery drain can still read the native text until the hold completes", () => {
+  const run = new Stage1ExecutorHarness([{ id: "R1", text: "abcd" }, { id: "R2", text: "next" }]);
+  const a = editing(run);
+  try {
+    const remote = collabState(run.b).roots.beats.get("R2");
+    assert.ok(remote instanceof Y.Map);
+    transactSharedDocument(run.b, "local-command", () => remote.set("lengthSeconds", 9));
+    run.queue.deliverFrom("B", "D1");
+    assert.equal(collabState(run.a).ingress.held.length, 1);
+    a.edit.replace(1, 3, "Z");
+    stale(run);
+    assert.deepEqual(a.edit.commit(typed), { kind: "rejected", reason: "stale-base" });
+    const drained: string[] = [];
+    const stop = a.session.subscribe(() => { if (!a.edit.isOpen()) drained.push(a.edit.text()); });
+    try { assert.equal(a.edit.recover(typed)?.kind, "applied"); } finally { stop(); }
+    assert.deepEqual(drained, ["aZd"]);
+    assert.equal(collabState(run.a).ingress.held.length, 0);
+  } finally { a.session.dispose(); run.destroy(); }
+});
+
+test("heading recovery records the scene as the owner", () => {
+  const run = new Stage1ExecutorHarness([{ id: "R1", text: "ab" }], { sections: [{ id: "H1", name: "Scene", firstSceneId: "R1" }] });
+  const a = editing(run, { before: () => ({ row: headingFieldKey("H1"), target: sharedBufferedTarget(run.a, headingFieldKey("H1")) }) });
+  try {
+    a.edit.replace(5, 5, "s");
+    stale(run);
+    const runs = [{ text: "Scenes", marks: {} }];
+    assert.deepEqual(a.edit.commit(runs), { kind: "rejected", reason: "stale-base" });
+    assert.equal(a.edit.recover(runs)?.kind, "applied");
+    assert.deepEqual(read(run.a).recovery.map(entry => [entry.text, entry.buffer]), [["Scenes", [{
+      beat: BEAT, metadata: { bufferSourceOwner: "H1", bufferPaintedBase: 7 }
+    }]]]);
+  } finally { a.session.dispose(); run.destroy(); }
+});
