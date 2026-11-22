@@ -10,6 +10,9 @@ import { sanitizeHtml } from "../bootstrap/richtext.ts";
 import { openNativeEditor } from "../bootstrap/wiring/native-shared-session.ts";
 import { appActions } from "../bootstrap/wiring/ports/actions.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
+import { setBeatLength } from "../features/rows/read-time.ts";
+import { undoOwner } from "../bootstrap/wiring/undo.ts";
+import { sharedStructureCommands, sharedValueCommands } from "../bootstrap/wiring/ports/shared-commands.ts";
 import { sharedCommandRefusalNotice } from "../bootstrap/wiring/ports/shared-command-notices.ts";
 import { adoptReplacement, currentDocument, sharedSession } from "../bootstrap/wiring/session-owner.ts";
 import { enterSharedSession, forceLeaveSharedSession, leaveRunningSharedSession } from "../bootstrap/wiring/shared-session.ts";
@@ -978,4 +981,35 @@ for (const order of exchanges) test(`Split settled prefix: Alt+Enter leaves Zab 
   settledAgreement(f, order, [narrationOf(first, "Zab"), freshBeat(f, f.native, app().rows[1].id, "ef"), other, last]);
   assert.deepEqual(f.notices(), []);
   leaveSettled(f);
+});
+
+test("Read-time Ctrl+Z undoes a native length edit and leaves standalone history alone", async t => {
+  const f = await enter(t);
+  const length = doc => doc.rows.find(row => row.id === "r1").lengthSeconds;
+  const before = length(app());
+  const standalone = undoOwner().sizes();
+  assert.equal(setBeatLength("r1", 42), true);
+  await Promise.resolve();
+  assert.equal(length(app()), 42);
+  const button = document.querySelector('#rows .row-read[data-id="r1"]');
+  assert.ok(button);
+  button.focus();
+  assert.equal(key(button, "z", { ctrlKey: true }), true);
+  await Promise.resolve();
+  send(f.native, f.peer);
+  assert.deepEqual([length(app()), length(f.peer.document())], [before, before]);
+  assert.deepEqual(undoOwner().sizes(), standalone);
+  assert.deepEqual(f.notices(), []);
+});
+
+test("Command refusal notices distinguish silent, previously announced and no-op outcomes", async t => {
+  const f = await enter(t);
+  for (const commands of [sharedStructureCommands, sharedValueCommands]) {
+    const before = f.notices().length;
+    commands.refused({ kind: "rejected", reason: "buffer-pending", notified: true });
+    commands.refused({ kind: "noop" });
+    assert.deepEqual(f.notices().slice(before), []);
+    commands.refused({ kind: "rejected", reason: "buffer-pending" });
+    assert.deepEqual(f.notices().slice(before), [warning]);
+  }
 });

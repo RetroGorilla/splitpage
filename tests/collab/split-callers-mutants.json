@@ -207,7 +207,7 @@
       "find": "outcome.kind === \"rejected\" && !outcome.notified",
       "replace": "outcome.kind === \"rejected\"",
       "tests": [
-        "src/test/shared-split-callers-notices-app.test.mjs"
+        "src/test/shared-native-callers-mapped-app.test.mjs"
       ]
     },
     {
@@ -216,7 +216,7 @@
       "find": "return route ? stepSharedUndo(route, \"undo\"",
       "replace": "return false ? stepSharedUndo(route, \"undo\"",
       "tests": [
-        "src/test/shared-split-callers-literals-app.test.mjs"
+        "src/test/shared-native-callers-mapped-app.test.mjs"
       ]
     },
     {
@@ -261,7 +261,7 @@
       "find": "  if (outcome.kind === \"rejected\" && !outcome.notified) refuse(outcome.reason);",
       "replace": "  if (outcome.kind === \"rejected\" && !outcome.notified && outcome.reason !== \"buffer-pending\") refuse(outcome.reason);",
       "tests": [
-        "src/test/shared-split-callers-notices-app.test.mjs"
+        "src/test/shared-native-callers-mapped-app.test.mjs"
       ]
     },
     {
@@ -270,7 +270,7 @@
       "find": "  if (outcome.kind === \"rejected\" && !outcome.notified) refuse(outcome.reason);",
       "replace": "  if (outcome.kind === \"rejected\") refuse(outcome.reason);",
       "tests": [
-        "src/test/shared-split-callers-notices-app.test.mjs"
+        "src/test/shared-native-callers-mapped-app.test.mjs"
       ]
     },
     {
@@ -279,7 +279,7 @@
       "find": "...(answer === SHARED_ADMISSION_ANNOUNCED ? { notified: true as const } : {})",
       "replace": "...({})",
       "tests": [
-        "src/test/shared-split-callers-notices-app.test.mjs"
+        "tests/application/session/shared-admission.test.ts"
       ]
     },
     {
