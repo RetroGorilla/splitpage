@@ -126,8 +126,6 @@ eq("it leaves out the legacy fixture and its peer", ["__legacySharedTest", ...RE
 eq("it keeps the remaining timing marks", [...TIMING_MARKS, "marksOn"].filter((mark) => !testBuild.includes(mark)), []);
 eq("it leaves out the retired trial timing marks", RETIRED_TIMING_MARKS.filter((mark) => testBuild.includes(mark)), []);
 
-const legacyTestBuild = appJs(true, true);
-eq("the legacy fixture page keeps its explicit hook and native entry", ["__legacySharedTest", "__sharedTest"].filter((marker) => !legacyTestBuild.includes(marker)), []);
 eq("the release build excludes the legacy fixture hook", ["__legacySharedTest"].filter((marker) => release.includes(marker)), []);
 
 console.log(`\n${passed} passed, ${failures.length} failed\n`);

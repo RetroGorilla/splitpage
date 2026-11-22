@@ -1,4 +1,4 @@
-import { existsSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { existsSync, readFileSync, writeFileSync } from "node:fs";
 import { createHash } from "node:crypto";
 import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
@@ -19,11 +19,9 @@ const src = (name) => readFileSync(join(ROOT, "src", name), "utf8");
 
 const chomp = (text) => (text.endsWith("\n") ? text.slice(0, -1) : text);
 
-export function appJs(testHooks, legacySharedTests = false) {
+export function appJs(testHooks) {
   const result = esbuild.buildSync({
-    entryPoints: [testHooks && legacySharedTests
-      ? join(ROOT, "tests", "collab", "legacy-app", "browser.ts")
-      : join(ROOT, "src", "bootstrap", "main.ts")],
+    entryPoints: [join(ROOT, "src", "bootstrap", "main.ts")],
     bundle: true,
     format: "iife",
     banner: { js: '"use strict";' },
@@ -297,9 +295,9 @@ function stripHtmlComments(shell) {
     .replace(/<!--[\s\S]*?-->/g, "");
 }
 
-function build(legacySharedTests = false) {
+function build() {
   let html = stripHtmlComments(src("page.html"));
-  for (const [marker, load] of [...PARTS, ["//{{APP_JS}}", () => appJs(TEST_BUILD, legacySharedTests)]]) {
+  for (const [marker, load] of [...PARTS, ["//{{APP_JS}}", () => appJs(TEST_BUILD)]]) {
     if (!html.includes(marker)) throw new Error(`marker ${marker} missing from src/page.html`);
     html = html.split(marker).join(chomp(load()));
   }
@@ -345,10 +343,7 @@ function main() {
     process.exit(stale ? 1 : 0);
   }
 
-  const legacyFixture = join(ROOT, "_legacy-shared-tests.html");
-  if (!TEST_BUILD) rmSync(legacyFixture, { force: true });
   writeFileSync(out, built);
-  if (TEST_BUILD) writeFileSync(legacyFixture, build(true));
   console.log("wrote index.html (" + VARIANT + ", " + Buffer.byteLength(built) + " bytes)");
   writeFileSync(swOut, swBuilt);
   console.log("wrote sw.js (cache " + swCacheName(swBuilt) + ")");

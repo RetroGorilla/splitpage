@@ -531,9 +531,7 @@ node tools/run-suites.mjs ../splitpage-runs/autosave '^18[5-7]-'                
 node tools/run-suites.mjs ../splitpage-runs/one --lanes 1 --timeout 900 '^01-core'
 ```
 
-The test build also writes `_legacy-shared-tests.html` for the retained old
-collaboration suites. Those suites open that page explicitly and use
-`__legacySharedTest`. The standard test page uses native-only `__sharedTest`.
+The test page exposes the native collaboration hook `__sharedTest`.
 
 Filter by full filename: numeric prefixes can repeat (`280` names two
 suites). Flags `--lanes` (default 6), `--port-base` (offset for a second
