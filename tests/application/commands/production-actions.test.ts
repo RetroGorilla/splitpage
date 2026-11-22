@@ -199,7 +199,7 @@ test("isolated production actions plan shared writes for shot creation and prop 
   const h = opened({ brollShots: [{ id: "bs1", name: "Pier", props: [{ name: "Mug" }] }] });
   const r = rig(h);
   const capabilities = createSessionCapabilities("shared", { edit: () => ({ allowed: true }), comment: () => ({ allowed: true }) });
-  const shared = { author: () => ({ id: "editor_1", by: "Adam" }), ranks: () => [], heads: () => [] };
+  const shared = { author: () => ({ id: "editor_1", by: "Fixture Editor" }), ranks: () => [], heads: () => [] };
   const planned: string[][] = [];
   const ports: NewBrollPorts = { ...r.ports, run: () => { assert.fail("shared action used the standalone route"); },
     edit: build => h.session.read(doc => {

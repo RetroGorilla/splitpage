@@ -99,7 +99,7 @@ test("b-roll records: with no document there are no entries and nothing by prop"
 
 test("adding a shot prop plans the shared registration through isolated feature ports", () => {
   const script = doc([{ id: "bs1", name: "Gulls" }]);
-  const shared = { author: () => ({ id: "editor_1", by: "Adam" }), ranks: () => [], heads: () => [] };
+  const shared = { author: () => ({ id: "editor_1", by: "Fixture Editor" }), ranks: () => [], heads: () => [] };
   const { edits, owner } = setup(script, { ports: () => shared, refused: () => assert.fail("prop write was refused") });
   assert.deepEqual(owner.addBrollProp("bs1", "Kite"), { changed: true, held: false });
   const [command] = edits.ran;
