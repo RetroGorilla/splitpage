@@ -24,6 +24,10 @@ localStorage.setItem("splitpage-onboarding", JSON.stringify({ v: 1, done: true, 
 const listenerInventory = trackGlobalListeners();
 await bootApp();
 after(closeApp);
+const eventErrors = [];
+const onError = event => { eventErrors.push(event.error); event.preventDefault(); };
+window.addEventListener("error", onError);
+after(() => { window.removeEventListener("error", onError); });
 
 const source = [
   { id: "r1", audioText: "abcdef", visualText: "abcdef" },
@@ -179,6 +183,8 @@ function expectation(route, state) {
       return { ...result(typed, 0), rows: [["r1", typed, "abcdef"], ["new", "", ""], baseRows[1]], focus: "new" };
     case "altKeyEnter":
       return { ...result(typed, 0), rows: [["r1", typed.slice(0, from), "abcdef"], ["new", typed.slice(to), ""], baseRows[1]], focus: "new" };
+    case "altKeyArrowUp":
+      return pending ? result(typed, 4, 0) : { ...base, warnings: [] };
     case "altKeyArrowDown":
       return { ...result(typed, from), to, rows: [baseRows[1], ["r1", typed, "abcdef"]] };
     case "historyUndo":
@@ -190,7 +196,7 @@ function expectation(route, state) {
   if (mark && state === "selection") {
     return { ...result("ab<" + mark + ">cd</" + mark + ">ef", 2), to: 4 };
   }
-  if (mark && pending) return { ...base, rows: typedRows, steps: 1 };
+  if (mark && pending) return { ...base, rows: typedRows, packets: 1, steps: 1 };
   return base;
 }
 
@@ -261,40 +267,74 @@ async function checkHistory(f, steps, before, settled) {
   }
 }
 
+async function checkPeerUndoIsolation(f, settled, from, to) {
+  const peerUpdates = [];
+  const stop = f.peer.subscribeLocalUpdates(bytes => peerUpdates.push(bytes));
+  try {
+    assert.equal(f.peer.commands.undo().kind, "written");
+    assert.equal(peerUpdates.length, 1);
+    for (const bytes of peerUpdates.splice(0)) {
+      assert.ok(bytes.length > 0);
+      assert.equal(applyNativePeerUpdate(f.native, bytes), true);
+    }
+    await tick();
+    const withoutPeer = expectedDocument(settled, settled.rows.map(row => [row.id, row.id === "r2" ? "other" : row.audioText, row.visualText]));
+    assertDocument(f, withoutPeer);
+    assertPaint();
+    assertCaret("r1", from, to);
+    assert.equal(f.peer.commands.undo().kind, "unchanged");
+    assert.deepEqual(peerUpdates, []);
+    assert.equal(f.peer.commands.redo().kind, "written");
+    assert.equal(peerUpdates.length, 1);
+    for (const bytes of peerUpdates.splice(0)) {
+      assert.ok(bytes.length > 0);
+      assert.equal(applyNativePeerUpdate(f.native, bytes), true);
+    }
+    await tick();
+    assertDocument(f, settled);
+    assertPaint();
+    assertCaret("r1", from, to);
+    assert.equal(f.peer.commands.redo().kind, "unchanged");
+    assert.deepEqual(peerUpdates, []);
+  } finally { stop(); }
+}
+
 for (const order of ["forward", "reverse"]) {
   test("Split Audio refusal table, " + order + " delivery", async t => {
-    let mapped = 0, retained = 0;
+    let mapped = 0;
     for (const route of routes) for (const state of states) for (const elsewhere of route.type === "drop" ? [false, true] : [false]) {
-      if (route.name === "altKeyArrowUp" && state !== "composition") {
-        retained++;
-        continue;
-      }
       await t.test(route.name + "/" + state + "/other=" + elsewhere, async sub => {
+        eventErrors.length = 0;
         const f = await enter(sub, order);
         const node = cell();
         select(node, state === "selection" ? 2 : 3, state === "selection" ? 4 : 3);
         if (state === "pending" || state === "composition") preview(node, state === "composition");
+        assert.deepEqual(rows(app()), baseRows);
+        assert.deepEqual(f.native.document(), app());
+        assert.deepEqual(f.outgoing, []);
         const before = { doc: app(), bytes: f.native.encodeState(), peerBytes: f.peer.encodeState(), selection: selection(node) };
         const standalone = undoOwner();
         const hooks = Object.keys(standalone).filter(name => typeof standalone[name] === "function")
           .map(name => sub.mock.method(standalone, name, () => assert.fail("Split Audio reached standalone Undo: " + name)));
         const access = [];
         const expected = expectation(route, state);
-        const pendingFormat = state === "pending" && marks.has(route.name);
         let made;
         try {
           assert.equal(dispatch(route, elsewhere ? cell("r2") : node, access), true);
           assert.deepEqual(f.show.mock.calls.map(call => call.arguments), expected.warnings);
-          await tick();
-          assert.deepEqual(f.show.mock.calls.map(call => call.arguments), expected.warnings);
           assert.deepEqual(access, route.type === "paste" ? ["text/plain"] : []);
           assert.deepEqual(f.peer.encodeState(), before.peerBytes);
           assert.deepEqual(f.peer.document(), before.doc);
-          if (!pendingFormat) assert.equal(f.outgoing.length, expected.packets);
-          if (!pendingFormat && !expected.packets) {
+          assert.equal(f.outgoing.length, expected.packets);
+          const captured = f.outgoing.map(bytes => Uint8Array.from(bytes));
+          for (const packet of captured) assert.ok(packet.length > 0);
+          if (!expected.packets) {
             assert.deepEqual(app(), before.doc);
+            assert.deepEqual(f.native.document(), before.doc);
             assert.deepEqual(f.native.encodeState(), before.bytes);
             assert.deepEqual(selection(node), before.selection);
+          } else {
+            assert.notDeepEqual(f.native.encodeState(), before.bytes);
           }
           if (expected.focus === "new") {
             const ids = app().rows.map(row => row.id).filter(id => id !== "r1" && id !== "r2");
@@ -303,10 +343,19 @@ for (const order of ["forward", "reverse"]) {
             assert.match(made, new RegExp("^r" + f.native.ydoc.clientID.toString(36) + "-[0-9a-z]+$"));
           }
           const afterGesture = expectedDocument(before.doc, expected.rows, made, route.name === "ctrlKeyEnter");
-          if (!pendingFormat) {
-            assert.deepEqual(withoutEditStamps(app()), withoutEditStamps(afterGesture));
-            assertCaret(made ?? "r1", expected.from, expected.to);
-          }
+          assert.deepEqual(withoutEditStamps(app()), withoutEditStamps(afterGesture));
+          assert.deepEqual(f.native.document(), app());
+          assertCaret(made ?? "r1", expected.from, expected.to);
+          await tick();
+          assert.deepEqual(f.show.mock.calls.map(call => call.arguments), expected.warnings);
+          assert.deepEqual(f.peer.encodeState(), before.peerBytes);
+          assert.deepEqual(f.peer.document(), before.doc);
+          assert.deepEqual(f.outgoing, captured);
+          assert.deepEqual(withoutEditStamps(app()), withoutEditStamps(afterGesture));
+          assert.deepEqual(f.native.document(), app());
+          assertCaret(made ?? "r1", expected.from, expected.to);
+          const bytesAfterGesture = f.native.encodeState();
+          const docAfterGesture = app();
           if (state === "composition") {
             node.dispatchEvent(new window.CompositionEvent("compositionend", { bubbles: true, data: "" }));
           }
@@ -314,6 +363,12 @@ for (const order of ["forward", "reverse"]) {
           await tick();
           const buffered = state === "pending" && !expected.packets;
           const typed = expectedDocument(before.doc, typedRows);
+          if (expected.packets) {
+            assert.deepEqual(f.outgoing, captured);
+            assert.deepEqual(f.native.encodeState(), bytesAfterGesture);
+            assert.deepEqual(app(), docAfterGesture);
+            assertCaret(made ?? "r1", expected.from, expected.to);
+          }
           if (buffered) {
             assertCaret("r1", 4);
             assert.equal(f.outgoing.length, 1);
@@ -328,6 +383,9 @@ for (const order of ["forward", "reverse"]) {
           const settled = buffered ? typed : afterGesture;
           assertDocument(f, settled);
           assertPaint();
+          if (route.name === "altKeyArrowUp" && state !== "composition" || marks.has(route.name) && state === "pending") {
+            await checkPeerUndoIsolation(f, settled, expected.from, expected.to);
+          }
           if (route.name === "historyUndo" && state === "pending") {
             assert.equal(dispatch({ type: "beforeinput", inputType: "historyRedo" }, document.activeElement, []), true);
             await tick();
@@ -342,6 +400,7 @@ for (const order of ["forward", "reverse"]) {
           }
           assert.deepEqual(f.show.mock.calls.map(call => call.arguments), expected.warnings);
           assert.deepEqual(f.errors, []);
+          assert.deepEqual(eventErrors, []);
         } finally {
           for (const hook of hooks) hook.mock.restore();
         }
@@ -354,9 +413,10 @@ for (const order of ["forward", "reverse"]) {
         assert.deepEqual(app(), migrateRows({ ...structuredClone(landed), docId: app().docId }));
         assert.deepEqual(listenerInventory(), f.baseline);
         assert.deepEqual(f.errors, []);
+        assert.deepEqual(eventErrors, []);
       });
       mapped++;
     }
-    assert.deepEqual([mapped, retained], [101, 3]);
+    assert.equal(mapped, 104);
   });
 }
