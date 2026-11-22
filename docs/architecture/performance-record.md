@@ -439,7 +439,7 @@ No case is slower than its spread. For every row, the head p50 sits inside the r
 
 ## Collaboration legacy adapter removal (Slice 8), 5fceae0c2 to 0b7102f6a
 
-Recorded 2026-11-22 on Windows with Edge 158 and Node 24.22.1 by `node tools/perf-ab.mjs 5fceae0c2 0b7102f6a --only short,long --rounds 3`, running base then head in each round. Latency is measured from keydown through the task after the next animation frame. The range covers the full legacy shared-adapter removal across stages 1–3 ([#1746](https://github.com/RetroGorilla/splitpage/pull/1746), [#1747](https://github.com/RetroGorilla/splitpage/pull/1747), [#1750](https://github.com/RetroGorilla/splitpage/pull/1750)): 494 tracked deletions (187 `src/`, 303 `tests/`, 4 `tools/`), 1 relocated fixture and 17 additions. Shared-mode cases and the image-heavy fixture were outside this run.
+Recorded 2026-11-22 on Windows with Edge 158 and Node 24.22.1 using exact commit archives, matching installed dependencies, and the head recorder and browser driver. The run followed the `perf-ab.mjs --only short,long --rounds 3` procedure, measuring base then head in each round. Latency is measured from keydown through the task after the next animation frame. The range covers the full legacy shared-adapter removal across stages 1–3 ([#1746](https://github.com/RetroGorilla/splitpage/pull/1746), [#1747](https://github.com/RetroGorilla/splitpage/pull/1747), [#1750](https://github.com/RetroGorilla/splitpage/pull/1750)): 494 tracked deletions (187 `src/`, 303 `tests/`, 4 `tools/`), 1 relocated fixture and 17 additions. Shared-mode cases and the image-heavy fixture were outside this run.
 
 ### Input latency, median of 3 rounds (ms)
 
@@ -448,7 +448,7 @@ Recorded 2026-11-22 on Windows with Edge 158 and Node 24.22.1 by `node tools/per
 | short typing | 3.0 | 2.8 | 14.6 | 16.1 | 8 |
 | long typing | 3.5 | 3.1 | 13.5 | 15.2 | 8 |
 | long undo the delete | 29.8 | 33.1 | 29.8 | 33.1 | 70 |
-| long hide shot scenes | 14.7 | 16.1 | — | — | 65 |
+| long hide shot scenes | 14.7 | 16.1 | 23.6 | 22.2 | 65 |
 
 Additional tail observations: long Split open tag name p95 moved from 3.7 to 8.2 ms, and short Writer open tag name p95 moved from 3.9 to 10.5 ms. Long bulk-delete Undo runs spanned 28.6–30.8 ms in base and 31–38 ms in head. No case crossed its p50 budget, zero long tasks fired, and layout read counts were unchanged.
 

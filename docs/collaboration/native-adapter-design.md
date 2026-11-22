@@ -10,7 +10,7 @@ pictures and screen design are out of scope.
 
 ## Build status
 
-Slices 1 to 8 are complete on `main` at `0b7102f6a` ([#1745](https://github.com/RetroGorilla/splitpage/pull/1745),
+Slice 7 still has open acceptance cases listed in section 11. The Slice 8 adapter removal landed on `main` at `0b7102f6a` ([#1745](https://github.com/RetroGorilla/splitpage/pull/1745),
 [#1746](https://github.com/RetroGorilla/splitpage/pull/1746),
 [#1747](https://github.com/RetroGorilla/splitpage/pull/1747),
 [#1750](https://github.com/RetroGorilla/splitpage/pull/1750)). The native session runs Split and Writer with buffered
