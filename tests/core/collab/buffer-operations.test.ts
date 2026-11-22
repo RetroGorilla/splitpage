@@ -63,3 +63,22 @@ test("prepared native units keep the existing surrogate-pair slicing policy", ()
   const operations = bufferedTextOperations(buffer.plan(), painted, target, [{ text: "\ud83c\ude00", marks: {} }], { id: "pair", by: "Alice" });
   assert.deepEqual(operations[0]?.kind === "text-insert" && operations[0].content, [{ value: "\ud83c\ude00", marks: [] }]);
 });
+
+test("plain heading buffers preserve control characters in an insertion", () => {
+  const buffer = createSharedTextBuffer(1, "ab");
+  const inserted = "\t\u0001";
+  buffer.replace(1, 1, inserted);
+  const painted = { revision: 1, text: "ab", identity: (offset: number) => ref("character-" + offset) };
+  const heading = { owner: ref("H1"), segment: ref("h:H1"), field: "heading" as const };
+  let operations: ReturnType<typeof bufferedTextOperations> = [];
+  assert.doesNotThrow(() => { operations = bufferedTextOperations(buffer.plan(), painted, heading, [{ text: "a" + inserted + "b", marks: {} }], { id: "name", by: "Alice" }); });
+  assert.deepEqual(operations.map(operation => operation.kind === "text-insert" && operation.content), [[{ value: inserted, marks: [] }]]);
+});
+
+test("a recovered visual is placed in the draft visual field without adding narration", () => {
+  const operations = bufferedRecoveryOperations({ owner: "R1", base: 7, html: "Wide", units: 4, segment: "b:R1", field: "visualText" },
+    { id: "draft", by: "Alice" }, { rows: 1, visual: "v" });
+  const created = operations[0];
+  assert.ok(created?.kind === "segment-create");
+  assert.deepEqual(created.fields, { visualText: "Wide", bufferSourceOwner: "R1", bufferPaintedBase: 7 });
+});

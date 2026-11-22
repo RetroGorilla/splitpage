@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { flowCommand } from "../../../src/application/commands/flow.ts";
+import { standaloneFlowCommand } from "../../../src/application/commands/flow.ts";
 import { beatPos, caretAt, headingPos, insertBeats, joinWithPrevious, renameHeading, replaceRange } from "../../../src/core/flow/flow.ts";
 import type { FlowDoc, FlowEdit, FlowOutcome, FlowRow } from "../../../src/core/flow/flow.ts";
 import { rowSlots } from "../../../src/core/document/gallery.ts";
@@ -40,7 +40,7 @@ test("R4 property 1: 60 shrink-pad-blank rename sequences retain later edits and
       for (const step of steps) {
         const before = JSON.stringify(h.session.held());
         const blank = "rename" in step && !step.rename?.trim();
-        const out = runConfined(h.session, flowCommand("rename-sequence", doc => {
+        const out = runConfined(h.session, standaloneFlowCommand("rename-sequence", doc => {
           const result = "rename" in step ? renameHeading(doc, "s", step.rename as string, (step.rename as string).length)
             : replaceRange(doc, selection, [{ text: step.text as string, marks: {} }], rt.ports);
           if (result && "rows" in result) selection = result.selection;
@@ -107,7 +107,7 @@ test("R4 property 3: 120 supplied-row flag combinations persist only literal tru
       { id: "z", audioText: "Last", paragraphStart: other }] as unknown as FlowRow[];
     try {
       const offset = seed % 2 ? 2 : 0;
-      assert.equal(runConfined(h.session, flowCommand("flag-fuzz", doc => insertBeats(doc, beatPos("a", offset), supplied, rt.ports), stamps)).kind, "applied");
+      assert.equal(runConfined(h.session, standaloneFlowCommand("flag-fuzz", doc => insertBeats(doc, beatPos("a", offset), supplied, rt.ports), stamps)).kind, "applied");
       const live = h.session.held() as FlowDoc;
       const byId = new Map(live.rows.map(row => [row.id, row]));
       assert.equal(byId.get("x")?.paragraphStart, offset === 0 ? true : undefined, "first boundary seed=" + seed);

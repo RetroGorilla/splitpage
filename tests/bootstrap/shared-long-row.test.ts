@@ -1,22 +1,18 @@
-import { legacySessionParts } from "./legacy-shared-switch-support.ts";
-import type { LegacySharedSwitchPorts } from "./legacy-shared-switch-support.ts";
-import { enterLegacySharedSession } from "./legacy-shared-switch-support.ts";
 import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
 import { bootApp, closeApp } from "../../src/test/_app-boot.mjs";
 import { stopApp } from "../../src/bootstrap/app.ts";
 import { documentTransitions } from "../../src/bootstrap/wiring/transition-owners.ts";
 import { openingStatus } from "../../src/bootstrap/wiring/ports/transitions.ts";
-import { currentCapabilities, currentDocument, runCommand, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
-import { leaveRunningSharedSession } from "../../src/bootstrap/wiring/shared-session.ts";
+import { currentCapabilities, currentDocument, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
+import { openNativeEditor } from "../../src/bootstrap/wiring/native-shared-session.ts";
+import { sharedUndoRoute, stepSharedUndo } from "../../src/bootstrap/wiring/undo.ts";
+import { enterSharedSession, leaveRunningSharedSession } from "../../src/bootstrap/wiring/shared-session.ts";
+import type { SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
 import { mountRowsRenderFeature, stopRowsRenderFeature } from "../../src/bootstrap/wiring/render.ts";
 import { confirmSavedNow } from "../../src/bootstrap/wiring/save-owners.ts";
 import { setHome } from "../../src/bootstrap/wiring/location-owner.ts";
-import { writerFlowCommands } from "../collab/editor-ports/writer-flow.ts";
 import { migrateRows } from "../../src/bootstrap/document-ports.ts";
-import { fromHtml } from "../../src/bootstrap/richtext.ts";
-import { collabState } from "../../src/adapters/collab/state.ts";
-import * as flow from "../../src/core/flow/flow.ts";
 import { fakeClock } from "../application/session-fakes.ts";
 
 const LONG = 130000;
@@ -24,11 +20,11 @@ const SOURCE = { schema: 2, docId: "d" + "1".repeat(32), title: "Entry source", 
 before(async () => { await bootApp(JSON.stringify(SOURCE)); });
 after(() => { stopApp(); closeApp(); });
 
-function ports(errors: unknown[]): LegacySharedSwitchPorts {
+function ports(errors: unknown[]): SharedSwitchPorts {
   const standalone = currentCapabilities();
   return { opening: openingStatus, commandRefused: undefined, refusal: () => null, settle: () => {}, detach: () => { setHome("none"); },
-    bindings: { enter: () => {}, settle: () => null, leave: () => {} }, common: standalone, standalone, migrate: migrateRows,
-    docId: () => "d" + "2".repeat(32), editor: () => "Editor", structure: { cells: fromHtml }, report: error => { errors.push(error); }, timers: fakeClock(), now: () => 0 };
+    common: standalone, standalone, migrate: migrateRows,
+    docId: () => "d" + "2".repeat(32), editor: () => "Editor", report: error => { errors.push(error); }, timers: fakeClock(), now: () => 0 };
 }
 
 async function roundTrip(audioText: string) {
@@ -36,18 +32,24 @@ async function roundTrip(audioText: string) {
   setHome("none"); confirmSavedNow(); stopRowsRenderFeature();
   const original = currentDocument()?.rows.map(row => row.audioText), errors: unknown[] = [];
   try {
-    assert.deepEqual(await enterLegacySharedSession(ports(errors)), { ok: true });
-    const parts = legacySessionParts(); assert.ok(parts);
+    const entryPorts = ports(errors);
+    const opened: { native?: ReturnType<typeof openNativeEditor>["native"] } = {};
+    assert.deepEqual(await enterSharedSession(entryPorts, (doc, failed) => {
+      const { backend, native } = openNativeEditor(entryPorts, doc, failed);
+      opened.native = native;
+      return backend;
+    }), { ok: true });
+    const native = opened.native;
+    assert.ok(native);
     assert.deepEqual(currentDocument()?.rows.map(row => row.audioText), original);
-    const length = audioText.length;
-    const commands = writerFlowCommands({ cells: fromHtml, newId: () => "new", hasVisual: () => false },
-      { author: parts.author, writer: () => String(collabState(parts.handle).doc.clientID), handle: () => parts.handle });
-    const at = flow.caretAt(flow.beatPos("R1", length));
-    const typing = commands.commands.prepare("typing", doc => flow.replaceRange(doc, at, [{ text: "X", marks: {} }], commands.flow),
-      { clock: { nowIso: () => "2026-11-14T00:00:00.000Z" }, editor: { name: () => "Editor" } }, at);
-    assert.equal(runCommand(typing.command).kind, "applied");
+    const at = native.commands.anchorText({ beat: "R1", cell: "narration" }, audioText.length);
+    assert.ok(at.kind === "anchored");
+    assert.equal(native.commands.typeText(at.range, "X", {}).kind, "written");
+    await Promise.resolve();
     const typed = currentDocument()?.rows[0]?.audioText;
-    assert.deepEqual([parts.undo.undo()].map(outcome => outcome.ok && outcome.effective), [true]);
+    const route = sharedUndoRoute();
+    assert.ok(route);
+    assert.deepEqual(stepSharedUndo(route, "undo", assert.fail), { ok: true, effective: true, label: "undo", selection: null });
     const undone = currentDocument()?.rows.map(row => row.audioText);
     assert.deepEqual(leaveRunningSharedSession(), { ok: true });
     assert.deepEqual(errors, []);

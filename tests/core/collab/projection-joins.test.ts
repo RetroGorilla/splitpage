@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { projectSharedJoinGroups, projectSharedSections } from "../../../src/core/collab/projection/joins.ts";
+import { projectSharedJoinedFields, projectSharedJoinedUnits, projectSharedJoinGroups, projectSharedSections } from "../../../src/core/collab/projection/joins.ts";
 
 test("join selection uses UTF-16 ids before following the graph, without changing inputs", () => {
   const beats = [{ id: "R1", removed: false, joins: [] }, { id: "R2", removed: false, joins: [
@@ -18,6 +18,34 @@ test("a dangling smallest join retains its source and a self-cycle retains its o
     { id: "R2", removed: false, joins: [{ id: "a", into: "missing", glue: " " }, { id: "z", into: "R1", glue: " " }] }]), [
     { root: "R1", removed: false, cyclic: true, members: [{ id: "R1", glue: "" }] },
     { root: "R2", removed: false, cyclic: false, members: [{ id: "R2", glue: "" }] }
+  ]);
+});
+
+test("a join cycle chooses the first live root and keeps the other live members together", () => {
+  const joins = (into: string) => [{ id: "join", into, glue: " " as const }];
+  assert.deepEqual(projectSharedJoinGroups([
+    { id: "Removed", removed: true, joins: joins("First") },
+    { id: "First", removed: false, joins: joins("Last") },
+    { id: "Last", removed: false, joins: joins("Removed") }
+  ]), [
+    { root: "Removed", removed: true, cyclic: false, members: [{ id: "Removed", glue: "" }] },
+    { root: "First", removed: false, cyclic: true, members: [{ id: "First", glue: "" }, { id: "Last", glue: " " }] }
+  ]);
+});
+
+test("joined fields keep the root's duration and select the status across members", () => {
+  const root = { id: "First", lengthSeconds: 12, status: "ready" };
+  const child = { id: "Last", lengthSeconds: 25, status: "shot" };
+  assert.deepEqual(projectSharedJoinedFields(root, [root, child], []), {
+    row: { id: "First", lengthSeconds: 12, status: "shot" }, overflow: []
+  });
+});
+
+test("the synthetic join space carries the stored formats", () => {
+  assert.deepEqual(projectSharedJoinedUnits([
+    { units: [{ value: "A", marks: [] }], glue: "" }, { units: [{ value: "B", marks: [] }], glue: " ", formats: ["b", "i"] }
+  ], [], false), [
+    { value: "A", marks: [] }, { value: " ", marks: [{ kind: "b", value: true }, { kind: "i", value: true }] }, { value: "B", marks: [] }
   ]);
 });
 

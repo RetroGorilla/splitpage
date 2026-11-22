@@ -45,7 +45,7 @@ function fixture() {
   const ports: CommentStatePorts = {
     sort: { current: () => "position", choose: (value) => value === "recent" ? "recent" : "position" },
     document: { numbering: () => deriveDocumentNumbering({ rows: [] }), current: () => null, read: (select) => select(null) },
-    edits: { edit: () => { calls.push("edit"); return true; }, run: () => { throw new Error("a standalone caller ran a shared command"); },
+    edits: { edit: () => { calls.push("edit"); return true; },
       stamps: { clock, editor: { name: () => "Ada" } } },
     notices: { show: () => { calls.push("notice"); return { isConnected: false, dismiss: () => {}, removeEventListener: () => {} }; } },
     preferences: {
@@ -74,7 +74,6 @@ function fixture() {
     shots: { reveal: () => {} },
     pictures: { imgHtml: () => "" },
     clearDraftUndo: () => {},
-    shared: { ports: () => null, refused: () => { throw new Error("a standalone caller reported a shared refusal"); } }
   };
   return { ports, calls };
 }
@@ -121,16 +120,21 @@ test("standalone reply removes composer state before synchronous repaint and sen
   } finally { owner.dispose(); }
 });
 
-test("standalone comment cancellation hides the modal before editing the anchor, as on main", () => {
+test("standalone comment cancellation hides the modal before editing the anchor and clears its draft afterward", () => {
   const fake = fixture();
   const calls: unknown[] = [];
   const owner = startComments({ ...fake.ports, edits: { ...fake.ports.edits, edit: () => {
-    calls.push(["edit", document.getElementById("comment-modal")?.hidden]); return true;
+    calls.push(["edit", document.getElementById("comment-modal")?.hidden, document.getElementById("comment-body-editable")?.textContent]);
+    return true;
   } } });
   try {
     openCommentComposer({ id: "C1", rowId: "r1", field: "audioText", quotedText: "Words" });
+    const body = document.getElementById("comment-body-editable");
+    assert.ok(body);
+    body.textContent = "Draft";
     closeCommentComposer(true);
-    assert.deepEqual(calls, [["edit", true]]);
+    assert.deepEqual(calls, [["edit", true, "Draft"]]);
+    assert.equal(body.textContent, "");
   } finally { owner.dispose(); }
 });
 

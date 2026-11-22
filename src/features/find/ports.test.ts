@@ -7,24 +7,21 @@ import { migrateRows } from "../../core/migrate.ts";
 import type { FindPorts } from "./ports.ts";
 import { startFind, findQueryChanged, runBulkTag, replaceAll } from "./find.ts";
 import { sharedCommandGuard } from "../../bootstrap/wiring/ports/shared-command-notices.ts";
-import { replicas } from "../../../tests/adapters/collab/executor-support.ts";
-import { sharedHarness } from "../../../tests/application/session/shared-session-support.ts";
-import { adapterReplica } from "../../../tests/application/session/legacy-shared-session-support.ts";
-import { encodeSharedState } from "../../adapters/collab/document.ts";
+import { fakeReplica, sharedHarness } from "../../../tests/application/session/shared-session-support.ts";
 
 test("rules 73 and 88: Find bulk tagging and Split replace-all refuse once before standalone work", () => {
   const win = jsdomWindow() as unknown as Window & typeof globalThis;
   const realm = globalThis as unknown as Record<string, unknown>;
   realm.window = win; realm.document = win.document; realm.CSS = win.CSS;
   win.document.body.innerHTML = '<input id="find-input" value="Cup"><input id="replace-input" value="Mug">';
-  const set = replicas();
-  const shared = sharedHarness(adapterReplica(set.a));
+  const replica = fakeReplica({ rows: [{ id: "R1", audioText: "Cup" }] });
+  const shared = sharedHarness(replica.port);
   const notices = fakeNotices();
   const fail = () => { assert.fail("bulk tagging reached standalone work"); };
   const mounted = startFind({
     sharedCommands: sharedCommandGuard(() => shared.session.read(doc => doc !== null), notices.notices),
     document: { current: () => shared.session.read(doc => doc), read: shared.session.read, onChange: shared.session.subscribe },
-    edits: { edit: fail, run: fail, stamps: { clock: { nowIso: () => "now" }, editor: { name: () => "Editor" } } },
+    edits: { edit: fail, stamps: { clock: { nowIso: () => "now" }, editor: { name: () => "Editor" } } },
     text: { cellOf: () => [], inertBody: () => win.document.body, sanitizeHtml: String },
     shotHiding: () => ({ reveal: fail }), undo: { breakCoalescing: fail }, notices: notices.notices,
     flags: { setFindOpen: () => {} }, options: { matchesCase: () => false }, bulkTag: fail, present: fakeFindPresent().present
@@ -32,13 +29,14 @@ test("rules 73 and 88: Find bulk tagging and Split replace-all refuse once befor
   try {
     for (const run of [runBulkTag, replaceAll]) {
       notices.shown.length = 0;
-      const before = encodeSharedState(set.a);
+      const before = replica.port.project();
       run();
       assert.deepEqual(notices.shown.map(item => [item.message, item.kind]), [["This is not available in a shared session yet.", "warn"]]);
-      assert.deepEqual(encodeSharedState(set.a), before);
+      assert.deepEqual(replica.port.project(), before);
       assert.deepEqual(shared.undo, []);
+      assert.deepEqual(shared.executed, []);
     }
-  } finally { mounted.dispose(); shared.session.dispose(); set.close(); win.close(); }
+  } finally { mounted.dispose(); shared.session.dispose(); win.close(); }
 });
 
 test("find uses owner ports to reveal matches", () => {
@@ -58,7 +56,7 @@ test("find uses owner ports to reveal matches", () => {
     sharedCommands: fakeSharedCommands(),
     native: native.native,
     document: reader.document,
-    edits: { edit: () => true, run: () => ({ kind: "noop" }), stamps: { clock: { nowIso: () => "2026-10-23T00:00:00.000Z" }, editor: { name: () => "Test" } } },
+    edits: { edit: () => true, stamps: { clock: { nowIso: () => "2026-10-23T00:00:00.000Z" }, editor: { name: () => "Test" } } },
     text: {
       cellOf: (html) => [{ text: String(html || ""), marks: {} }],
       inertBody: () => win.document.body,

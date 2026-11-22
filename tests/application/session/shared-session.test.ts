@@ -1,10 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { NOT_SHARED, ORIGIN_KINDS, REENTERED } from "../../../src/application/session/shared-session.ts";
+import { NOT_SHARED, ORIGIN_KINDS, REENTERED, WHOLE_PROJECTION } from "../../../src/application/session/shared-session.ts";
 import type { ReplicaOrigin } from "../../../src/application/session/shared-session.ts";
 import { DISPOSED, NO_DOCUMENT } from "../../../src/application/session/document-session.ts";
 import type { Command, CommandOutcome } from "../../../src/application/session/document-session.ts";
 import { changeSet } from "../../../src/application/session/change-set.ts";
+import type { SharedRecoveryEntry } from "../../../src/core/collab/recovery.ts";
 import type { SharedOperation } from "../../../src/core/collab/operations.ts";
 import { readOperation } from "../../../src/core/collab/read-operation.ts";
 import type { FlowSelectionPair } from "../../../src/core/flow/flow.ts";
@@ -435,4 +436,55 @@ test("refresh jobs coalesce in the idle window and can be cancelled, as in a sta
   h.session.cancelRefresh(["broll"]);
   h.clock.advance(180);
   assert.deepEqual(h.refreshes, [["production"]]);
+});
+
+test("recovery and the held revision stay paired across a failed projection and disposal", () => {
+  const replica = fakeReplica(script());
+  let entries: readonly SharedRecoveryEntry[] = [];
+  const h = sharedHarness({ ...replica.port, recovery: () => entries });
+  const removed = (id: string, audioText: string): SharedRecoveryEntry =>
+    ({ kind: "removed-beat", row: { id, audioText }, members: [id] });
+  const held = () => [h.session.readAt((doc, revision) => [revision, doc?.rows.map(row => row.id)]), h.session.recovery()];
+  try {
+    assert.deepEqual(held(), [[1, ["R1", "R2"]], []]);
+    const first = removed("R1", "ab");
+    entries = Object.freeze([first]);
+    replica.write("remote", script({ rows: [{ id: "R2", audioText: "cd" }] }));
+    assert.deepEqual(held(), [[2, ["R2"]], [first]]);
+    assert.equal(Object.isFrozen(h.session.recovery()), true);
+
+    const error = new Error("projection");
+    const second = removed("R2", "cd");
+    entries = Object.freeze([first, second]);
+    replica.fail(error);
+    replica.write("remote", script({ rows: [] }));
+    assert.deepEqual(held(), [[2, ["R2"]], [first]]);
+    assert.deepEqual(h.reported, [error]);
+
+    replica.fail(null);
+    replica.write("remote", script({ rows: [] }));
+    assert.deepEqual(held(), [[4, []], [first, second]]);
+    h.session.dispose();
+    assert.deepEqual([h.session.read(doc => doc), h.session.recovery()], [null, []]);
+  } finally { h.session.dispose(); }
+});
+
+test("a local write whose projection had to retry publishes once, reports its error and marks the rows whole", () => {
+  const replica = fakeReplica(timed(3)), h = sharedHarness(replica.port);
+  const broken = new Error("retry projection"), rows: unknown[] = [];
+  h.session.subscribeRows(changed => { rows.push(changed); });
+  replica.script(() => {
+    replica.write("local-command", timed(7), { error: broken });
+    return { ok: true };
+  });
+  assert.deepEqual(h.session.run(sharedCommand("length", [LENGTH])),
+    { kind: "committed", generation: 1, changes: LENGTH_CELL, errors: [broken] });
+  assert.deepEqual(h.reported, [broken]);
+  assert.deepEqual(rows, [WHOLE_PROJECTION]);
+  assert.equal(h.session.read(doc => doc?.rows[0]?.lengthSeconds), 7);
+  assert.equal(h.undo.length, 1);
+  replica.write("remote", timed(8));
+  assert.deepEqual(rows, [WHOLE_PROJECTION, { whole: false, added: [], removed: [], moved: [], changed: [{ id: "R1", fields: ["lengthSeconds"] }], fields: [] }]);
+  assert.equal(h.published.length, 2);
+  h.session.dispose();
 });

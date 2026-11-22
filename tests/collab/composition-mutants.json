@@ -1,11 +1,6 @@
 {
   "tests": [
-    "tests/adapters/collab/operation-families.test.ts",
-    "tests/bootstrap/shared-author.test.ts",
-    "tests/collab/undo-seam.test.ts",
-    "tests/features/writer/buffer-undo.test.ts",
-    "tests/bootstrap/shared-switch.test.ts",
-    "tests/features/shared-undo-surfaces.test.ts"
+    "tests/bootstrap/shared-switch.test.ts"
   ],
   "mutants": [
     {
@@ -14,330 +9,7 @@
       "find": "const notice = sharedUndoNotice(outcome, direction);",
       "replace": "const notice = !outcome.ok ? sharedUndoNotice(outcome, direction) : null;",
       "tests": [
-        "tests/features/shared-undo-surfaces.test.ts"
-      ]
-    },
-    {
-      "label": "concurrent pastes mint separate people",
-      "file": "src/application/commands/flow-paste.ts",
-      "find": "existing?.id ?? personIdentity(person.name)",
-      "replace": "existing?.id ?? id(\"person\", index)",
-      "tests": [
-        "tests/application/commands/flow-paste-shared.test.ts"
-      ]
-    },
-    {
-      "label": "drawn picture marks keep noncanonical keys",
-      "file": "src/application/commands/flow-paste.ts",
-      "find": "slot.annotation.marks.map(markFields)",
-      "replace": "slot.annotation.marks",
-      "tests": [
-        "tests/application/commands/flow-paste-shared.test.ts"
-      ]
-    },
-    {
-      "label": "heading-only paste loses its temporary marker",
-      "file": "src/application/commands/flow-paste.ts",
-      "find": "markers.has(op.beat) ?",
-      "replace": "false ?",
-      "tests": [
-        "tests/application/commands/flow-paste-shared.test.ts"
-      ]
-    },
-    {
-      "label": "heading-only paste removes a nonexistent marker gallery",
-      "file": "src/application/commands/flow-paste.ts",
-      "find": "op.gallery.filter(ref => !markerGalleries.has(ref)).map(named)",
-      "replace": "op.gallery.map(named)",
-      "tests": [
-        "tests/application/commands/flow-paste-shared.test.ts"
-      ]
-    },
-    {
-      "label": "whole paste bypasses record family field validation",
-      "file": "src/application/commands/flow-paste.ts",
-      "find": "if (!Object.entries(fields).every(([field, value]) => ports.recordField(collection, field, value)))",
-      "replace": "if (false)",
-      "tests": [
-        "tests/application/commands/flow-paste-shared.test.ts"
-      ]
-    },
-    {
-      "label": "whole paste keeps positional references to existing text",
-      "file": "src/application/commands/flow-paste.ts",
-      "find": "if (!reference.startsWith('[\"flow-base\",')) return [reference];",
-      "replace": "if (true) return [reference];",
-      "tests": [
-        "tests/application/commands/flow-paste-shared.test.ts"
-      ]
-    },
-    {
-      "label": "whole paste accepts foreign reply authors",
-      "file": "src/application/commands/flow-paste.ts",
-      "find": "        if (reply.author !== author.by) throw new FlowPasteRefusal(\"paste-replies-foreign-author\");\n",
-      "replace": "",
-      "tests": [
-        "tests/application/commands/flow-paste-shared.test.ts"
-      ]
-    },
-    {
-      "label": "whole clipboard move is copied in a shared session",
-      "file": "src/features/clipboard/flow-clip.ts",
-      "find": "  if (clip && isMove(clip, doc)) return { refused: \"move-in-shared-session\" };\n",
-      "replace": "",
-      "tests": [
-        "tests/application/commands/flow-paste-shared.test.ts"
-      ]
-    },
-    {
-      "label": "changed flow plan with empty operations is admitted",
-      "file": "src/application/commands/flow.ts",
-      "find": "      if (plan && !result.ops.length) return { refused: \"flow-operations-empty\" };\n",
-      "replace": "",
-      "tests": [
-        "tests/application/commands/flow-shared.test.ts"
-      ]
-    },
-    {
-      "label": "whole paste skips shared record preparation",
-      "file": "tests/collab/editor-ports/writer-flow.ts",
-      "find": "request && original && \"rows\" in original && original.clipboard ? sharedFlowPaste",
-      "replace": "false && original && \"rows\" in original && original.clipboard ? sharedFlowPaste",
-      "tests": [
-        "tests/application/commands/flow-paste-shared.test.ts"
-      ]
-    },
-    {
-      "label": "whole paste drops carried records",
-      "file": "src/application/commands/flow-paste.ts",
-      "find": "ops: [...records, ...operations, ...pictures]",
-      "replace": "ops: [...operations, ...pictures]",
-      "tests": [
-        "tests/application/commands/flow-paste-shared.test.ts"
-      ]
-    },
-    {
-      "label": "whole paste drops gallery records",
-      "file": "src/application/commands/flow-paste.ts",
-      "find": "ops: [...records, ...operations, ...pictures]",
-      "replace": "ops: [...records, ...operations]",
-      "tests": [
-        "tests/application/commands/flow-paste-shared.test.ts"
-      ]
-    },
-    {
-      "label": "whole paste leaves temporary beat ids",
-      "file": "src/application/commands/flow-paste.ts",
-      "find": "beats.get(value) ?? headings.get(value)",
-      "replace": "headings.get(value)",
-      "tests": [
-        "tests/application/commands/flow-paste-shared.test.ts"
-      ]
-    },
-    {
-      "label": "whole paste loses initial formatted text",
-      "file": "src/application/commands/flow-paste.ts",
-      "find": "audioText: html(original.audioText), visualText: html(original.visualText)",
-      "replace": "audioText: \"\", visualText: html(original.visualText)",
-      "tests": [
-        "tests/application/commands/flow-paste-shared.test.ts"
-      ]
-    },
-    {
-      "label": "whole paste loses initial visual text",
-      "file": "src/application/commands/flow-paste.ts",
-      "find": "visualText: html(original.visualText)",
-      "replace": "visualText: \"\"",
-      "tests": [
-        "tests/application/commands/flow-paste-shared.test.ts"
-      ]
-    },
-    {
-      "label": "whole paste loses shot owner reference",
-      "file": "src/application/commands/flow-paste.ts",
-      "find": "...shot, owner: owner(shot.owner), props:",
-      "replace": "...shot, owner: \"\", props:",
-      "tests": [
-        "tests/application/commands/flow-paste-shared.test.ts"
-      ]
-    },
-    {
-      "label": "whole paste accepts foreign comment authors",
-      "file": "src/application/commands/flow-paste.ts",
-      "find": "      if (comment.author !== author.by) throw new FlowPasteRefusal(\"paste-comments-foreign-author\");\n",
-      "replace": "",
-      "tests": [
-        "tests/application/commands/flow-paste-shared.test.ts"
-      ]
-    },
-    {
-      "label": "whole paste accepts old embedded images",
-      "file": "src/features/clipboard/flow-clip.ts",
-      "find": "if (Array.isArray(rows) && rows.some",
-      "replace": "if (false && rows.some",
-      "tests": [
-        "tests/application/commands/flow-paste-shared.test.ts"
-      ]
-    },
-    {
-      "label": "whole paste retains empty heading creation",
-      "file": "src/application/commands/flow-paste.ts",
-      "find": "        const scene = edited.sections?.find",
-      "replace": "        operations.push(op); continue; const scene = edited.sections?.find",
-      "tests": [
-        "tests/application/commands/flow-paste-shared.test.ts"
-      ]
-    },
-    {
-      "label": "one family left out of the composition",
-      "file": "src/adapters/collab/operation-families.ts",
-      "find": "  registerSharedJoinHandlers(handle);\n",
-      "replace": "",
-      "tests": [
-        "tests/adapters/collab/operation-families.test.ts"
-      ]
-    },
-    {
-      "label": "author ids without the replica's client number",
-      "file": "tests/collab/editor-ports/shared-author.ts",
-      "find": "\"w\" + String(collabState(handle).doc.clientID) + \"_\" + String(++serial)",
-      "replace": "\"w_\" + String(++serial)",
-      "tests": [
-        "tests/bootstrap/shared-author.test.ts"
-      ]
-    },
-    {
-      "label": "author port answers in a standalone session",
-      "file": "tests/collab/editor-ports/shared-author.ts",
-      "find": "by: source.name() } : null;",
-      "replace": "by: source.name() } : { id: \"w0_\" + String(++serial), by: source.name() };",
-      "tests": [
-        "tests/bootstrap/shared-author.test.ts"
-      ]
-    },
-    {
-      "label": "flow command drops the planner operation list",
-      "replace": "...[], ...[...stamped]",
-      "tests": [
-        "tests/application/commands/flow-shared.test.ts",
-        "tests/features/writer/flow-command-ports.test.ts"
-      ],
-      "file": "src/application/commands/flow.ts",
-      "find": "...result.ops, ...[...stamped]"
-    },
-    {
-      "label": "flow command never stamps inserted beats",
-      "replace": ".concat([])",
-      "tests": [
-        "tests/application/commands/flow-shared.test.ts",
-        "tests/features/writer/flow-command-ports.test.ts"
-      ],
-      "file": "src/application/commands/flow.ts",
-      "find": ".concat(plan.changes.rowsInserted)"
-    },
-    {
-      "label": "Writer ignores its shared command builder",
-      "replace": "const commit = commitStandalone;",
-      "tests": [
-        "tests/application/commands/flow-shared.test.ts",
-        "tests/features/writer/flow-command-ports.test.ts"
-      ],
-      "file": "src/features/writer/flow-writer.ts",
-      "find": "const commit = commands ? commitShared : commitStandalone;"
-    },
-    {
-      "label": "Writer author refusal becomes a request",
-      "replace": "const request = source.author.next() ?? { id: \"forbidden\", by: \"Forbidden\" };",
-      "tests": [
-        "tests/application/commands/flow-shared.test.ts",
-        "tests/features/writer/flow-command-ports.test.ts"
-      ],
-      "file": "tests/collab/editor-ports/writer-flow.ts",
-      "find": "const request = source.author.next();"
-    },
-    {
-      "label": "Writer planner never receives the author request",
-      "replace": "operations = undefined;",
-      "tests": [
-        "tests/application/commands/flow-shared.test.ts",
-        "tests/features/writer/flow-command-ports.test.ts"
-      ],
-      "file": "tests/collab/editor-ports/writer-flow.ts",
-      "find": "operations = request ?? undefined;"
-    },
-    {
-      "label": "flow stamp uses a different command identity",
-      "replace": "sharedBeatStamp(beat, { ...by, id: \"wrong\" }, stamps)",
-      "tests": [
-        "tests/application/commands/flow-shared.test.ts",
-        "tests/features/writer/flow-command-ports.test.ts"
-      ],
-      "file": "tests/collab/editor-ports/writer-flow.ts",
-      "find": "sharedBeatStamp(beat, by, stamps)"
-    },
-    {
-      "label": "flow drops identical-text replacement intent",
-      "file": "src/application/commands/flow.ts",
-      "find": "if (!plan && !result.ops.length) return null;",
-      "replace": "if (!plan) return null;",
-      "tests": [
-        "tests/application/commands/flow-shared.test.ts",
-        "tests/features/writer/flow-command-ports.test.ts"
-      ]
-    },
-    {
-      "label": "flow omits beat stamps",
-      "file": "src/application/commands/flow.ts",
-      "find": "...result.ops, ...[...stamped].map",
-      "replace": "...result.ops, ...[].map",
-      "tests": [
-        "tests/application/commands/flow-shared.test.ts",
-        "tests/features/writer/flow-command-ports.test.ts"
-      ]
-    },
-    {
-      "label": "flow leaves the caret on a temporary beat identity",
-      "file": "tests/collab/editor-ports/writer-flow.ts",
-      "find": "rowId: beats.get(pos.rowId) ?? pos.rowId",
-      "replace": "rowId: pos.rowId",
-      "tests": [
-        "tests/features/writer/flow-command-ports.test.ts"
-      ]
-    },
-    {
-      "label": "flow leaves the caret on a temporary heading identity",
-      "file": "tests/collab/editor-ports/writer-flow.ts",
-      "find": "sceneId: headings.get(pos.sceneId) ?? pos.sceneId",
-      "replace": "sceneId: pos.sceneId",
-      "tests": [
-        "tests/application/commands/flow-shared.test.ts"
-      ]
-    },
-    {
-      "label": "flow silently drops clipboard registry changes",
-      "file": "src/application/commands/flow.ts",
-      "find": "if (clipboard && ([\"comments\", \"people\", \"productionTags\", \"brollShots\"] as const).some",
-      "replace": "if (false && ([\"comments\", \"people\", \"productionTags\", \"brollShots\"] as const).some",
-      "tests": [
-        "tests/application/commands/flow-shared.test.ts"
-      ]
-    },
-    {
-      "label": "the replica drops the command's undo record",
-      "file": "src/adapters/collab/replica.ts",
-      "find": "          kept = done.result.ok ? done.record : null;",
-      "replace": "          kept = null;",
-      "tests": [
-        "tests/collab/undo-seam.test.ts"
-      ]
-    },
-    {
-      "label": "the replica hands one record to the undo owner twice",
-      "file": "src/adapters/collab/replica.ts",
-      "find": "        return kept;\n      });\n",
-      "replace": "        Object.assign(failed, { kept: kept });\n        return kept;\n      });\n      undo.perform(() => (failed as unknown as { kept: SharedUndoRecord | null }).kept);\n",
-      "tests": [
-        "tests/collab/undo-seam.test.ts"
+        "tests/application/editing/undo/shared-undo-notice.test.ts"
       ]
     },
     {
@@ -346,25 +18,7 @@
       "find": "    const refused = session.admit();",
       "replace": "    const refused = null as ReturnType<typeof session.admit>;",
       "tests": [
-        "tests/collab/undo-seam.test.ts"
-      ]
-    },
-    {
-      "label": "a callback failing after the commit loses the command's record",
-      "file": "src/adapters/collab/replica.ts",
-      "find": "      } catch (error) { failed.thrown = true; failed.error = error; }",
-      "replace": "      } catch (error) { failed.thrown = true; failed.error = error; kept = null; }",
-      "tests": [
-        "tests/collab/undo-seam.test.ts"
-      ]
-    },
-    {
-      "label": "the shared undo owner swallows a callback's failure during undo",
-      "file": "tests/collab/editor-ports/shared-undo.ts",
-      "find": "        report(error);\n",
-      "replace": "",
-      "tests": [
-        "tests/collab/undo-seam.test.ts"
+        "tests/bootstrap/shared-switch.test.ts"
       ]
     },
     {
@@ -481,15 +135,6 @@
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "    backend.dispose(step => faults.attempt(step));\n    releaseCommands();\n",
       "replace": "    releaseCommands();\n",
-      "tests": [
-        "tests/bootstrap/shared-switch.test.ts"
-      ]
-    },
-    {
-      "label": "a throwing destroy listener keeps the handle's observers",
-      "file": "tests/bootstrap/legacy-shared-switch-support.ts",
-      "find": "  if (!attempt(() => { destroySharedDocument(handle); })) attempt(() => { destroySharedDocument(handle); });",
-      "replace": "  attempt(() => { destroySharedDocument(handle); });",
       "tests": [
         "tests/bootstrap/shared-switch.test.ts"
       ]
@@ -695,15 +340,6 @@
       ]
     },
     {
-      "label": "route: a Writer composition is not abandoned at stop",
-      "file": "src/application/editing/buffered-field.ts",
-      "find": "  const stopAbandonment = ports.abandonment?.(abandon);",
-      "replace": "  const stopAbandonment = ports.abandonment?.(() => {});",
-      "tests": [
-        "tests/features/writer/buffer-binding.test.ts"
-      ]
-    },
-    {
       "label": "route: a dropped session never hands the hook its way out",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "  if (left) faults.attempt(() => { left(false); });\n",
@@ -724,24 +360,6 @@
       ]
     },
     {
-      "label": "abandonment: the selection-visual edit is not registered",
-      "file": "tests/collab/editor-ports/writer-visual-buffer.ts",
-      "find": "    const stopAbandonment = shared.bufferedText.abandonment?.(abandon);",
-      "replace": "    const stopAbandonment = shared.bufferedText.abandonment?.(() => {});",
-      "tests": [
-        "tests/features/writer/visual-buffer.test.ts"
-      ]
-    },
-    {
-      "label": "abandonment: an abandoned selection-visual box still saves on close",
-      "file": "src/features/writer/flow-visual-box.ts",
-      "find": "      if (binding?.discarded?.()) return null;\n",
-      "replace": "",
-      "tests": [
-        "tests/features/writer/visual-buffer.test.ts"
-      ]
-    },
-    {
       "label": "drop: a dropped session never releases its surfaces",
       "file": "src/bootstrap/wiring/shared-session.ts",
       "find": "  faults.attempt(() => { now.backend.drop?.(); });\n",
@@ -750,15 +368,6 @@
         "tests/bootstrap/shared-switch.test.ts",
         "src/test/shared-native-handoff-app.test.mjs",
         "tests/bootstrap/native-shared-entry.test.ts"
-      ]
-    },
-    {
-      "label": "drop: a released buffered field still refuses to finish",
-      "file": "src/application/editing/buffered-field.ts",
-      "find": "    if (released) return true;\n",
-      "replace": "",
-      "tests": [
-        "tests/application/editing/buffered-field.test.ts"
       ]
     }
   ]

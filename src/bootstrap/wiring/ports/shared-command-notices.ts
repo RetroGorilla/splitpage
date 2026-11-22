@@ -1,7 +1,7 @@
 import type { NoticePort } from "../../../application/effects/ports.ts";
 import type { SharedSessionPorts } from "../../../application/session/shared-session.ts";
 import type { SharedCommandGuard } from "../../../application/session/document-edits.ts";
-import type { BufferedFieldPorts } from "../../../application/editing/buffered-field.ts";
+import type { CommandOutcome } from "../../../application/session/document-session.ts";
 import { SHARED_SESSION_DISABLED } from "../../../application/session/ports.ts";
 import { REWRITE_CELL_CHANGED } from "../../../application/commands/document-edit.ts";
 
@@ -15,7 +15,7 @@ export function sharedCommandRefusalNotice(notices: Pick<NoticePort, "show">): N
   };
 }
 
-export function sharedCommandReport(notices: Pick<NoticePort, "show">, report: BufferedFieldPorts["report"]): BufferedFieldPorts["report"] {
+export function sharedCommandReport(notices: Pick<NoticePort, "show">, report: (outcome: CommandOutcome) => void): (outcome: CommandOutcome) => void {
   const refuse = sharedCommandRefusalNotice(notices);
   return outcome => {
     if (outcome.kind !== "rejected") { report(outcome); return; }

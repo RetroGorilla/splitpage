@@ -7,7 +7,7 @@ import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { currentBrollRecords } from "../bootstrap/wiring/broll.ts";
 import { cellEditing } from "../bootstrap/wiring/editor-owners.ts";
 import { clearProductionSelection } from "../bootstrap/wiring/production-editing-owners.ts";
-import { sharedCommentCommands, sharedRecordCommands } from "../bootstrap/wiring/ports/shared-commands.ts";
+import { sharedRecordCommands } from "../bootstrap/wiring/ports/shared-commands.ts";
 import { findOrAddPerson, registerProductionTag } from "../features/tags/production-tags.ts";
 import { armRemoveTag, openProductionPanel, saveTagRename } from "../features/tags/panels.ts";
 import { closeCommentComposer, toggleResolve } from "../features/comments/comments.ts";
@@ -50,7 +50,6 @@ test("C7 record standalone: the record, picture and comment callers read no shar
   adoptReplacement(migrateRows(structuredClone(SOURCE)));
   assert.equal(sharedSession(), false);
   assert.equal(sharedRecordCommands.ports(), null);
-  assert.equal(sharedCommentCommands.ports(), null);
   clearWarnings();
   assert.equal(registerProductionTag("location", "Park"), true);
   assert.notEqual(findOrAddPerson("Cy"), "");

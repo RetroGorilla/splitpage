@@ -1,10 +1,9 @@
 import assert from "node:assert/strict";
-import { mkdirSync, mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
-import { abbaOrder, parseArgs, placeTools, toolRevision, waitForMemory, writeRecord } from "./perf-ab.mjs";
-import { parsePairedArgs, pairedSummary, parseRound } from "./measure-shared-paired.mjs";
+import { abbaOrder, parseArgs, toolRevision, waitForMemory, writeRecord } from "./perf-ab.mjs";
 import { PROBE, parsePerf } from "./perf-record.mjs";
 import { PERCENTILE_RULE, latencyFigures, median, nearestRank } from "./perf-stats.mjs";
 import { TASK_RECORD, TRACE_CATEGORIES, traceRecords } from "./perf-trace.mjs";
@@ -60,15 +59,11 @@ test("a receive or drain span is no boundary of its own: marks with no browser s
 });
 
 
-test("arguments: standalone and paired adapter comparisons", () => {
+test("arguments for standalone comparison", () => {
   for (const args of [["base", "--shared"], ["base", "--dry-run"], ["base", "--out", "x.json"]]) {
     assert.throws(() => parseArgs(args), /unknown option/);
   }
   assert.deepEqual(parseArgs(["base"]), { base: "base", head: "HEAD", rounds: 3, only: "short,long,images" });
-  const paired = parsePairedArgs(["base"]);
-  assert.deepEqual([paired.rounds, paired.only, paired.dryRun], [5, "short,long,large", false]);
-  assert.equal(parsePairedArgs(["base", "head", "--rounds", "1", "--only", "short", "--dry-run"]).rounds, 1);
-  for (const args of [[], ["base", "--rounds", "2"], ["base", "--only", "edited"], ["base", "--bogus"]]) assert.throws(() => parsePairedArgs(args));
 });
 
 test("both comparisons write their records into one results file, each under its own kind", () => {
@@ -109,23 +104,6 @@ test("both trees measure with the running checkout's tools, and a real run refus
   await assert.rejects(toolRevision(git(" M tools/perf-ab.mjs\n?? tools/new.mjs\n"), ["tools"], false), /commit the measuring tools before a real run; changed: 2 path\(s\) under tools/);
 });
 
-test("a revision without the standing trial replica gets the copy-per-update method module, one with it keeps the checkout's", () => {
-  const root = mkdtempSync(join(tmpdir(), "perf-place-"));
-  try {
-    const measure = join("tests", "collab", "measure");
-    const checkout = join(root, "checkout"), older = join(root, "older"), newer = join(root, "newer");
-    for (const dir of [checkout, older, newer]) mkdirSync(join(dir, measure), { recursive: true });
-    writeFileSync(join(checkout, measure, "trial-method.mjs"), "standing");
-    writeFileSync(join(checkout, measure, "trial-method-copy.mjs"), "copy");
-    mkdirSync(join(newer, "src", "adapters", "collab"), { recursive: true });
-    writeFileSync(join(newer, "src", "adapters", "collab", "trial-replica.ts"), "");
-    for (const dir of [older, newer]) placeTools(checkout, dir, ["tests/collab/measure"]);
-    assert.equal(readFileSync(join(older, measure, "trial-method.mjs"), "utf8"), "copy");
-    assert.equal(readFileSync(join(newer, measure, "trial-method.mjs"), "utf8"), "standing");
-    assert.equal(readFileSync(join(checkout, measure, "trial-method.mjs"), "utf8"), "standing", "the checkout itself is never changed");
-  } finally { rmSync(root, { recursive: true, force: true }); }
-});
-
 test("rounds run in ABBA order and wait for free memory before each one", async () => {
   assert.deepEqual([1, 2, 3, 4].map(abbaOrder), [["base", "head"], ["head", "base"], ["base", "head"], ["head", "base"]]);
   const seen = [2000, 2500, 3200];
@@ -133,19 +111,4 @@ test("rounds run in ABBA order and wait for free memory before each one", async 
   assert.equal(await waitForMemory(3000, { free: () => seen.shift(), sleep: async () => { slept++; }, pollMs: 10, waitMs: 1000 }), 3200);
   assert.equal(slept, 2);
   await assert.rejects(waitForMemory(3000, { free: () => 100, sleep: async () => {}, pollMs: 10, waitMs: 30 }), /stayed under 3000 MB/);
-});
-
-test("the paired summary reports the base, head and difference per case", () => {
-  const revisions = { tool: { commit: "c".repeat(40), changed: false }, base: { commit: "a".repeat(40) }, head: { commit: "b".repeat(40) } };
-  const run = (p50) => ({ current: { single: { p50, p95: p50 }, 1000: { total: p50 } }, direct: { single: { p50 }, 1000: { total: p50 } } });
-  const parts = (validation, rebuild) => ({ validation: { p50: validation, total: validation * 500 }, rebuild: { p50: 0, total: rebuild } });
-  const paired = pairedSummary({ dryRun: false, revisions, rounds: [
-    { side: "base", rows: [{ name: "short", phase: "fresh", trial: "copy per update", run: run(1), parts: parts(0.5, 0) }] },
-    { side: "head", rows: [{ name: "short", phase: "fresh", trial: "standing replica", run: run(2), parts: parts(0.25, 3) }] }] });
-  assert.match(paired, /\| short \/ fresh \| 1 \/ 2 \/ \+1 \|/);
-  assert.match(paired, /\| 0\.5 \/ 0\.25 \/ -0\.25 \| 250 \/ 125 \/ -125 \| 0 \/ 3 \/ \+3 \|$/m, "validation and the rebuild are their own columns");
-  assert.match(paired, /Trial before admission: base copy per update, head standing replica\. Tools from cccccccc in both trees\./);
-  assert.ok(paired.includes(PERCENTILE_RULE), "the paired summary states the percentile rule");
-  assert.deepEqual(parseRound('noise\nROUND [{"name":"short"}]\n'), [{ name: "short" }]);
-  assert.throws(() => parseRound("nothing"));
 });

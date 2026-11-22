@@ -24,3 +24,21 @@ for (const damaged of [null, { ...binding, end: { segment: "missing", offset: 1 
     { root: "R1", members: ["R1"], fields: ["R1"] }, { root: "fresh", members: ["fresh"], fields: ["fresh"] }, { root: "R2", members: ["R2"], fields: ["R2"] }
   ]);
 });
+
+test("a joined source keeps the following split fragment in the bound source span", () => {
+  const splitBlocks = [
+    { id: "R1", segment: "one", from: 0, to: 1 },
+    { id: "R2", segment: "two", from: 0, to: 1 },
+    { id: "Other", segment: "three", from: 0, to: 1 },
+    { id: "N", segment: "two", from: 2, to: 3 }
+  ];
+  const layout = projectSharedJoinedLayout(splitBlocks, [
+    { id: "R1", removed: false, joins: [] },
+    { id: "R2", removed: false, joins: [{ id: "join", into: "R1", glue: " ", binding: {
+      end: { segment: "one", offset: 1 }, start: { segment: "two", offset: 0 }, stop: { segment: "two", offset: 3 }
+    } }] },
+    { id: "N", removed: false, joins: [] }, { id: "Other", removed: false, joins: [] }
+  ]);
+  assert.deepEqual(layout.map(row => [row.root, row.members.map(part => part.id), row.fields]),
+    [["R1", ["R1", "R2"], ["R1", "R2"]], ["N", ["N"], ["N"]], ["Other", ["Other"], ["Other"]]]);
+});

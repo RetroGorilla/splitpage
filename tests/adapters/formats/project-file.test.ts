@@ -1,10 +1,13 @@
 import "../../../src/test/_dom.mjs";
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { applyMarkdownProject, parseProjectFileState } from "../../../src/adapters/formats/project-file.ts";
+import { applyMarkdownProject, buildSplitpageFile, parseProjectFileState } from "../../../src/adapters/formats/project-file.ts";
 import type { MarkdownProject } from "../../../src/adapters/formats/project-file.ts";
 import type { InertElement, MarkdownRowChoice, ProjectFileServices } from "../../../src/application/formats/project-file-services.ts";
 import type { DocumentOrigin } from "../../../src/core/migrate.ts";
+import { editStamp } from "../../../src/application/commands/save-stamps.ts";
+import { buildExportDocument } from "../../../src/core/document/export-document.ts";
+import type { ValidatedDocument } from "../../../src/core/document/validated.ts";
 import { migrateRows } from "../../../src/bootstrap/document-ports.ts";
 
 interface Calls {
@@ -101,4 +104,57 @@ test("#1049: accepting the same hand-added Markdown scenes twice preserves their
   assert.deepEqual(first.rows, second.rows);
   assert.deepEqual(first.rows.map(r => [r.visualText, r.audioText]), [["v", "a"], ["new", "added"]]);
   assert.deepEqual(calls.asked, [[0, 2], [0, 2]]);
+});
+
+function saveCapturedProject(source: ValidatedDocument) {
+  const exported = buildExportDocument(source, "2026-01-01T00:00:00Z", { production: [], commentNumbers: {}, broll: [] });
+  return parseSavedProject(buildSplitpageFile(exported, fakes().services));
+}
+
+function parseSavedProject(json: string): Record<string, unknown> & { rows: Record<string, unknown>[] } {
+  return JSON.parse(json) as Record<string, unknown> & { rows: Record<string, unknown>[] };
+}
+
+test("project capture preserves legacy attribution values and their explicit assignment order", () => {
+  for (const value of [null, 123, "2026-01-02T03:04:05Z", true, [1, null], { legacy: 2 }]) {
+    const source = migrateRows({ rows: [{ id: "R1", updatedAt: value, updatedBy: "Row editor" }], lastEditedAt: value });
+    const saved = saveCapturedProject(source);
+    assert.equal(Object.hasOwn(saved, "lastEditedAt"), true);
+    assert.deepEqual(saved.lastEditedAt, value);
+    assert.deepEqual(saveCapturedProject(migrateRows(saved)).lastEditedAt, value);
+    assert.deepEqual(saved.rows[0]?.updatedAt, value ?? "");
+    assert.equal(saved.rows[0]?.updatedBy, "Row editor");
+  }
+
+  const source = migrateRows({ rows: [{ id: "R1" }] });
+  const plan = editStamp({ rev: 7, lastEditedBy: "Editor", lastEditedAt: "2026-01-02T03:04:05Z" }).plan(source);
+  assert.ok(plan);
+  plan.apply(source);
+  const saved = saveCapturedProject(source);
+  assert.deepEqual(Object.keys(saved).filter(key => ["rev", "lastEditedBy", "lastEditedAt"].includes(key)),
+    ["rev", "lastEditedBy", "lastEditedAt"]);
+  assert.deepEqual([saved.rev, saved.lastEditedBy, saved.lastEditedAt], [7, "Editor", "2026-01-02T03:04:05Z"]);
+});
+
+test("project capture normalizes scalar boundaries and preserves absent fields", () => {
+  const docId = "d" + "1".repeat(32);
+  const keys = ["rev", "lastEditedBy", "lastEditedAt", "personColors", "titleOrigin", "titleVersion", "wordsPerMinute",
+    "targetSeconds", "paragraphsDecided", "schema", "docId"];
+  const rowKeys = ["lengthSeconds", "paragraphStart", "updatedAt", "updatedBy"];
+  const pick = (record: Record<string, unknown>, fields: string[]) =>
+    Object.fromEntries(fields.filter(key => Object.hasOwn(record, key)).map(key => [key, record[key]]));
+  const normalized = saveCapturedProject(migrateRows({ docId, rev: -1.5, lastEditedBy: " Editor ", personColors: { Editor: "#80bdfb" },
+    titleOrigin: "file", titleVersion: "V12", wordsPerMinute: "222.6", targetSeconds: 1.6, paragraphsDecided: true,
+    rows: [{ id: "R1", lengthSeconds: 1.6, paragraphStart: true }] }));
+  assert.deepEqual(pick(normalized, keys), { docId, schema: 2, rev: -1.5, lastEditedBy: "Editor", personColors: { Editor: "#80BDFB" },
+    titleOrigin: "file", titleVersion: "v12", wordsPerMinute: 223, targetSeconds: 2, paragraphsDecided: true });
+  assert.ok(normalized.rows[0]);
+  assert.deepEqual(pick(normalized.rows[0], rowKeys), { lengthSeconds: 2, paragraphStart: true, updatedAt: "", updatedBy: null });
+
+  const absent = saveCapturedProject(migrateRows({ docId, rev: null, lastEditedBy: 12, personColors: null, titleOrigin: null,
+    titleVersion: 12, wordsPerMinute: null, targetSeconds: 0, paragraphsDecided: false,
+    rows: [{ id: "R1", lengthSeconds: null, paragraphStart: false }] }));
+  assert.deepEqual(pick(absent, keys), { docId, schema: 2, rev: 0, wordsPerMinute: 150 });
+  assert.ok(absent.rows[0]);
+  assert.deepEqual(pick(absent.rows[0], rowKeys), { updatedAt: "", updatedBy: null });
 });

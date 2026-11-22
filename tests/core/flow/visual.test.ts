@@ -40,6 +40,19 @@ test("a caret visual changes its beat without splitting or changing metadata", (
   assert.deepEqual(result.selection, range);
 });
 
+test("a visual description replaces the old field and emits no operation for unchanged HTML", () => {
+  const ports: FlowPorts = { cells: html => fromHtml(html ?? ""), newId: () => "new", hasVisual: row => !!row.visualText,
+    operations: { id: "visual", by: "Ada" } };
+  const doc: FlowDoc = { rows: [{ id: "a", audioText: "Narration", visualText: "O<strong>ld</strong>" }], comments: [] };
+  const range = caretAt(beatPos("a", 0));
+  const updated = setVisualForRange(doc, range, "<strong>New</strong>", ports);
+  assert.ok(updated && "rows" in updated);
+  assert.deepEqual(updated.ops?.map(operation => operation.kind), ["text-insert", "text-delete"]);
+  const unchanged = setVisualForRange(doc, range, "O<strong>ld</strong>", ports);
+  assert.ok(unchanged && "rows" in unchanged);
+  assert.deepEqual(unchanged.ops, []);
+});
+
 test("a collapsed standalone visual edit reads row ids only for the edit", () => {
   let idReads = 0;
   const rows = Array.from({ length: 1000 }, (_, index) => ({

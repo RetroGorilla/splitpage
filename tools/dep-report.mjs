@@ -649,7 +649,7 @@ export function findViolations(modules) {
         if (!layerAllows(m.layer, targetLayer)) add("layer", m.path, e.target, e.line, `${m.layer} may not import ${targetLayer}`);
       } else if (e.kind === "builtin" || e.kind === "package") {
         if (!platformImportAllowed(m.layer)) add("platform-import", m.path, e.target, e.line, `${m.layer} may not import ${e.target}`);
-        if (["package:yjs", "package:lib0", "package:isomorphic.js"].includes(e.target) && m.layer !== "tests" && !m.path.startsWith("src/adapters/collab/") && !(m.layer === "collab-server" && e.target === "package:yjs")) {
+        if (["package:yjs", "package:lib0", "package:isomorphic.js"].includes(e.target) && m.layer !== "tests" && !m.path.startsWith("src/adapters/collab/native/") && !(m.layer === "collab-server" && e.target === "package:yjs")) {
           add("collab-import", m.path, e.target, e.line, "Collaboration runtime packages belong in their adapter, server or test layer");
         }
         if (e.target === "package:@hocuspocus/provider" && m.layer !== "tests" && !m.path.startsWith("src/adapters/collab/native/")) {

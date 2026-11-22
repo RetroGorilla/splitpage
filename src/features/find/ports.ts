@@ -1,6 +1,5 @@
 import type { UndoControl } from "../../application/editing/undo-control.ts";
 import type { BulkTagRows } from "../../application/commands/bulk-tags.ts";
-import type { SharedRewritePorts } from "../../application/commands/document-edit.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import type { FindOptions } from "../../application/find-options.ts";
 import type { ViewFlags } from "../../application/preferences/view-flags.ts";
@@ -21,11 +20,10 @@ export interface FindNativeAccess {
 
 export interface FindPorts {
   readonly sharedCommands: SharedCommandGuard;
-  readonly shared?: () => SharedRewritePorts | null;
   readonly writer?: () => WriterFindAccess | null;
   readonly native?: () => FindNativeAccess | null;
   readonly document: Pick<DocumentReader, "current" | "read" | "onChange">;
-  readonly edits: Pick<DocumentEdits, "edit" | "run" | "stamps">;
+  readonly edits: Pick<DocumentEdits, "edit" | "stamps">;
   readonly text: Pick<TextServices<HTMLElement>, "cellOf" | "inertBody" | "sanitizeHtml">;
   readonly shotHiding: () => Pick<ShotHiding, "reveal">;
   readonly undo: Pick<UndoControl, "breakCoalescing">;

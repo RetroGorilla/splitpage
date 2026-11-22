@@ -14,7 +14,7 @@ import {
   selectionToOwnBeat, setMarkAcross, startBeat, startParagraph, typeWithMarks
 } from "../../../src/core/flow/flow.ts";
 import type { FlowDoc, FlowOutcome, FlowPorts, FlowPos, FlowRow } from "../../../src/core/flow/flow.ts";
-import { flowCommand } from "../../../src/application/commands/flow.ts";
+import { standaloneFlowCommand } from "../../../src/application/commands/flow.ts";
 import { createUndo } from "../../../src/application/editing/undo/undo.ts";
 import { syncCommentAnchors } from "../../../src/core/text/anchors.ts";
 import { jsdomParser } from "../../adapters/richtext/jsdom.mjs";
@@ -147,7 +147,7 @@ test("seeded flow: 240 documents × 16 operations preserve structure, outside te
         undo.adopt(h.session.held());
         const unroute = undo.routeReplays(h.session.replay, null);
         const before = content(h.session.held());
-        const out = runConfined(h.session, flowCommand("flow-fuzz", run, stamps));
+        const out = runConfined(h.session, standaloneFlowCommand("flow-fuzz", run, stamps));
         assert.ok(["applied", "noop", "rejected"].includes(out.kind), JSON.stringify(out));
         if (out.kind === "applied" && JSON.stringify(content(h.session.held())) !== JSON.stringify(before)) {
           const after = content(h.session.held());

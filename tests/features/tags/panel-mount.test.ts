@@ -23,10 +23,7 @@ import * as commands from "../../../src/application/tag-panel-commands.ts";
 import { owned } from "../../../src/features/routing/owned.ts";
 import { deriveDocumentNumbering } from "../../../src/core/document/numbering.ts";
 import { sharedCommandGuard } from "../../../src/bootstrap/wiring/ports/shared-command-notices.ts";
-import { replicas } from "../../adapters/collab/executor-support.ts";
-import { sharedHarness } from "../../application/session/shared-session-support.ts";
-import { adapterReplica } from "../../application/session/legacy-shared-session-support.ts";
-import { encodeSharedState } from "../../../src/adapters/collab/document.ts";
+import { fakeReplica, sharedHarness } from "../../application/session/shared-session-support.ts";
 
 const win = jsdomWindow() as unknown as Window & typeof globalThis;
 const realm = globalThis as unknown as Record<string, unknown>;
@@ -96,8 +93,8 @@ function fixture(cat = "prop", migration = fakeMigration()) {
 }
 
 test("rule 88: bulk tagging from Production refuses once before scanning, editing or standalone undo", () => {
-  const set = replicas();
-  const shared = sharedHarness(adapterReplica(set.a));
+  const replica = fakeReplica({ rows: [{ id: "R1", audioText: "words" }] });
+  const shared = sharedHarness(replica.port);
   const h = fixture();
   const notices = fakeNotices();
   const owner = startTagPanels({ ...h.ports, notices: notices.notices,
@@ -105,12 +102,12 @@ test("rule 88: bulk tagging from Production refuses once before scanning, editin
     bulkTag: () => { assert.fail("bulk tag scanned"); }
   });
   try {
-    const before = encodeSharedState(set.a);
+    const before = replica.port.project();
     tagAllMentions(tagKey("prop", "Hat"));
     assert.deepEqual(notices.shown.map(item => [item.message, item.kind]), [["This is not available in a shared session yet.", "warn"]]);
-    assert.deepEqual(encodeSharedState(set.a), before);
+    assert.deepEqual(replica.port.project(), before);
     assert.deepEqual([h.calls, h.edits.ran, shared.undo], [[], [], []]);
-  } finally { owner.dispose(); shared.session.dispose(); set.close(); }
+  } finally { owner.dispose(); shared.session.dispose(); }
 });
 
 function prepFixture(focus: string | null = null) {

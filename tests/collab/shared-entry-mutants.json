@@ -64,7 +64,6 @@
       "find": "return running ? leaveSharedSession(running.ports, true, explicitLeave) : { ok: false, reason: SHARED_NOT_RUNNING };",
       "replace": "return { ok: false, reason: SHARED_NOT_RUNNING };",
       "tests": [
-        "tests/bootstrap/shared-switch.test.ts",
         "tests/bootstrap/native-shared-entry.test.ts"
       ]
     },
@@ -74,7 +73,6 @@
       "find": "  ports = now.ports;",
       "replace": "  void now.ports;",
       "tests": [
-        "tests/bootstrap/shared-switch.test.ts",
         "tests/bootstrap/native-shared-entry.test.ts"
       ]
     },
@@ -84,7 +82,6 @@
       "find": "ports.opening.openingPending() ? \"opening-pending\" : ports.refusal()",
       "replace": "ports.refusal()",
       "tests": [
-        "tests/bootstrap/shared-switch.test.ts",
         "tests/bootstrap/native-shared-entry.test.ts"
       ]
     },
@@ -383,7 +380,7 @@
       "find": "if (current.scope === \"all\") return { kind: \"rejected\", reason: current.reason };",
       "replace": "return { kind: \"rejected\", reason: current.reason };",
       "tests": [
-        "tests/bootstrap/shared-switch.test.ts"
+        "tests/bootstrap/native-shared-entry.test.ts"
       ]
     },
     {
@@ -392,7 +389,7 @@
       "find": "current = current.outer",
       "replace": "current = null",
       "tests": [
-        "tests/bootstrap/shared-switch.test.ts"
+        "tests/bootstrap/native-shared-entry.test.ts"
       ]
     },
     {
@@ -431,7 +428,6 @@
       "find": "export async function enterSharedSession(ports: SharedSwitchPorts, open: OpenBackend): Promise<SharedSwitchOutcome> {\n  const holdReason = sessionEntryRefusal();\n  if (holdReason) return { ok: false, reason: holdReason };",
       "replace": "export async function enterSharedSession(ports: SharedSwitchPorts, open: OpenBackend): Promise<SharedSwitchOutcome> {\n  const holdReason = sessionEntryRefusal();\n  void holdReason;",
       "tests": [
-        "tests/bootstrap/shared-switch.test.ts",
         "tests/bootstrap/native-shared-entry.test.ts"
       ]
     },
@@ -441,7 +437,6 @@
       "find": "export function leaveSharedSession(ports: SharedSwitchPorts, preserveSelection = true, explicitLeave = false): SharedSwitchOutcome {\n  const holdReason = sessionEntryRefusal();\n  if (holdReason) return { ok: false, reason: holdReason };",
       "replace": "export function leaveSharedSession(ports: SharedSwitchPorts, preserveSelection = true, explicitLeave = false): SharedSwitchOutcome {\n  const holdReason = sessionEntryRefusal();\n  void holdReason;",
       "tests": [
-        "tests/bootstrap/shared-switch.test.ts",
         "tests/bootstrap/native-shared-entry.test.ts"
       ]
     },

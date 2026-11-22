@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { flowCommand } from "../../../src/application/commands/flow.ts";
+import { standaloneFlowCommand } from "../../../src/application/commands/flow.ts";
 import { beatPos, caretAt, headingPos, insertBeats, joinWithPrevious, replaceRange } from "../../../src/core/flow/flow.ts";
 import type { FlowDoc, FlowEdit, FlowOutcome } from "../../../src/core/flow/flow.ts";
 import { rowSlots } from "../../../src/core/document/gallery.ts";
@@ -33,7 +33,7 @@ test("R3-A session: two real transactions preserve live heading whitespace and f
   h.session.adopt({ rows: [{ id: "a", audioText: "Body" }], sections: [{ id: "s", name: "Title", firstSceneId: "a" }] });
   let selection = caretAt(headingPos("s", 5));
   for (const text of [" ", "X"]) {
-    const out = runConfined(h.session, flowCommand("heading-sequence", doc => {
+    const out = runConfined(h.session, standaloneFlowCommand("heading-sequence", doc => {
       const result = edited(replaceRange(doc, selection, [{ text, marks: {} }], rt.ports));
       selection = result.selection;
       return result;
@@ -71,7 +71,7 @@ test("reload seed 1: inserted partial rows get stored defaults before entering a
   const rt = createFlowLoadRuntime();
   const h = harness(undefined, { entry: rt.load });
   h.session.adopt({ rows: [{ id: "a", audioText: "Body" }] });
-  const out = runConfined(h.session, flowCommand("insert", doc => insertBeats(doc, beatPos("a", 2), [{ id: "inserted", audioText: "New", visualText: "" }], rt.ports), stamps));
+  const out = runConfined(h.session, standaloneFlowCommand("insert", doc => insertBeats(doc, beatPos("a", 2), [{ id: "inserted", audioText: "New", visualText: "" }], rt.ports), stamps));
   assert.equal(out.kind, "applied");
   assert.deepEqual(h.session.held(), rt.load(h.session.held()));
   h.session.dispose();

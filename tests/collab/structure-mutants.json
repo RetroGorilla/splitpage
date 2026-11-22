@@ -1,165 +1,22 @@
 {
-  "mutants": [{
-    "label": "duplicated identity on split",
-    "file": "src/adapters/collab/split-executor.ts",
-    "find": "applySharedTextCreation(handle, description.text); applySharedTextEdit(handle, description.edit);",
-    "replace": "applySharedTextCreation(handle, description.text); applySharedTextEdit(handle, description.edit); applySharedTextEdit(handle, { target: description.edit.target, edit: { type: \"text\", at: 0, value: \"abcd\" }, marks: [] });",
-    "tests": ["tests/adapters/collab/structure-stage1.test.ts"]
-  }, {
-    "label": "omitted initial visual content",
-    "file": "src/adapters/collab/segment-executor.ts",
-    "find": "for (const field of [\"audioText\", \"visualText\"] as const)",
-    "replace": "for (const field of [\"audioText\"] as const)",
-    "tests": ["tests/adapters/collab/structure-create.test.ts"]
-  }, {
-    "label": "inline creation placed after its physical container",
-    "file": "src/adapters/collab/structure-placement.ts",
-    "find": "return { kind: \"inline\" as const, plan, offset };",
-    "replace": "return { kind: \"inline\" as const, plan, offset: plan.units.length };",
-    "tests": ["tests/adapters/collab/structure-create.test.ts"]
-  }, {
-    "label": "scene affinity ignored by placement",
-    "file": "src/adapters/collab/structure-placement.ts",
-    "find": "const locate = (reference: SharedContentRef | null) => {",
-    "replace": "gap = { ...gap, affinity: \"before\" }; const locate = (reference: SharedContentRef | null) => {",
-    "tests": ["tests/adapters/collab/structure-create.test.ts"]
-  }, {
-    "label": "cleaned stored identity collision ignored",
-    "file": "src/adapters/collab/structure-identity.ts",
-    "find": "reserved.has(identity) || ",
-    "replace": "",
-    "tests": ["tests/adapters/collab/structure-identities.test.ts"]
-  }, {
-    "label": "reservation scans existing text items",
-    "file": "src/adapters/collab/structure-reservations.ts",
-    "find": "for (const change of embeds.read(transaction)) {",
-    "replace": "for (const target of transaction.changed.keys()) if (target instanceof Y.Text) for (let old = target._start; old; old = old.right) void old.content; for (const change of embeds.read(transaction)) {",
-    "tests": ["tests/adapters/collab/structure-identities.test.ts"]
-  }, {
-    "label": "reservation repeats production struct traversal",
-    "file": "src/adapters/collab/embed-changes.ts",
-    "find": "const value = readSharedIdentityEmbeds(transaction, inspect);",
-    "replace": "readSharedIdentityEmbeds(transaction, inspect); const value = readSharedIdentityEmbeds(transaction, inspect);",
-    "tests": ["tests/adapters/collab/structure-identities.test.ts"]
-  }, {
-    "label": "repeated head boundary included in write positions",
-    "file": "src/adapters/collab/structure-spans.ts",
-    "find": "return at; })",
-    "replace": "return at; }).map((at, index) => index === 0 ? block.from : at)",
-    "tests": ["tests/adapters/collab/projection-split-recovery.test.ts"]
-  }, {
-    "label": "later cleaned beat identity shown as a second row",
-    "file": "src/core/collab/projection/blocks.ts",
-    "find": "if (!block.reason && beats.has(cleanId(block.id)))",
-    "replace": "if (false && !block.reason && beats.has(cleanId(block.id)))",
-    "tests": ["tests/adapters/collab/structure-identities.test.ts"]
-  }, {
-    "label": "empty cleaned beat identity gets a row",
-    "file": "src/core/collab/projection/blocks.ts",
-    "find": "if (!block.reason && !cleanId(block.id))",
-    "replace": "if (false && !block.reason && !cleanId(block.id))",
-    "tests": ["tests/adapters/collab/structure-identities.test.ts"]
-  }, {
-    "label": "created visual address ignores its record pointer",
-    "file": "src/adapters/collab/text-location.ts",
-    "find": "view.get([\"beats\", owner, \"visual\"]) ?? owner",
-    "replace": "owner",
-    "tests": ["tests/adapters/collab/paint-base-split.test.ts"]
-  }, {
-    "label": "refreshed head skips reused boundary changes",
-    "file": "src/adapters/collab/structure-index.ts",
-    "find": "rescanned.has(change.text)",
-    "replace": "changed.has(key)",
-    "tests": ["tests/adapters/collab/structure-index.test.ts"]
-  }, {
-    "label": "inspection consumer aborts metadata publication",
-    "file": "src/adapters/collab/embed-changes.ts",
-    "find": "guardSharedCallback(state, observer)",
-    "replace": "observer()",
-    "tests": ["tests/adapters/collab/structure-index.test.ts"]
-  }, {
-    "label": "owner resolution walks every beat",
-    "file": "src/adapters/collab/prepare.ts",
-    "find": "ensureOpen(); bindSharedStructurePlan(view, observeSharedStructureIndex(handle));",
-    "replace": "ensureOpen(); for (const value of collabState(handle).roots.beats.values()) void value; bindSharedStructurePlan(view, observeSharedStructureIndex(handle));",
-    "tests": ["tests/adapters/collab/structure-owner.test.ts", "tests/adapters/collab/structure-split.test.ts", "tests/adapters/collab/structure-create.test.ts"]
-  }, {
-    "label": "owner resolution walks the whole order",
-    "file": "src/adapters/collab/prepare.ts",
-    "find": "ensureOpen(); bindSharedStructurePlan(view, observeSharedStructureIndex(handle));",
-    "replace": "ensureOpen(); collabState(handle).roots.order.forEach(() => {}); bindSharedStructurePlan(view, observeSharedStructureIndex(handle));",
-    "tests": ["tests/adapters/collab/structure-owner.test.ts", "tests/adapters/collab/structure-split.test.ts", "tests/adapters/collab/structure-create.test.ts"]
-  }, {
-    "label": "fallback when projected resolution fails",
-    "file": "src/adapters/collab/text-target.ts",
-    "find": "raw.field === \"title\" ? collabPurposeTextTarget(handle, raw, \"opaque-title-label\") : collabProjectedTextTarget(handle, raw)",
-    "replace": "collabProjectedTextTarget(handle, raw) ?? collabPurposeTextTarget(handle, raw, \"stored-anchor-read\")",
-    "tests": ["tests/adapters/collab/native-text-purpose.test.ts"]
-  }, {
-    "label": "painted end gap escapes its projected split fragment",
-    "file": "src/adapters/collab/paint-base.ts",
-    "find": "part.target, part.to, \"before\"",
-    "replace": "part.target, part.text.length, \"before\"",
-    "tests": ["tests/adapters/collab/paint-base-split.test.ts"]
-  }, {
-    "label": "created heading accepts any name",
-    "file": "src/adapters/collab/heading-executor.ts",
-    "find": "return name === null || cappedText(name, 200) ? null : \"invalid-heading-name\";",
-    "replace": "return name === null || name.length >= 0 ? null : \"invalid-heading-name\";",
-    "tests": ["tests/adapters/collab/heading-create.test.ts"]
-  }, {
-    "label": "created heading identity omits the writer",
-    "file": "src/adapters/collab/heading-executor.ts",
-    "find": "const heading = sharedStructureIdentity(view.writer, operation.id, \"heading\"), created =",
-    "replace": "const heading = sharedStructureIdentity(\"0\", operation.id, \"heading\"), created =",
-    "tests": ["tests/adapters/collab/heading-create.test.ts"]
-  }, {
-    "label": "finalized heading accepts any name",
-    "file": "src/adapters/collab/heading-executor.ts",
-    "find": "if (!cappedText(value, 200)) return \"invalid-heading-name\";",
-    "replace": "if (!value.length) return \"invalid-heading-name\";",
-    "tests": ["tests/adapters/collab/heading-finalize.test.ts"]
-  }, {
-    "label": "placement ignores the finalized heading",
-    "file": "src/adapters/collab/structure-placement.ts",
-    "find": "readSharedFinalizedHeading(view, right.span.owner)",
-    "replace": "null",
-    "tests": ["tests/adapters/collab/heading-finalize-flow-agreement.test.ts"]
-  }, {
-    "label": "segment move falls through to the generic unhandled refusal",
-    "file": "src/adapters/collab/move-refusal.ts",
-    "find": "registerSharedOperationHandlers(handle, { \"segment-move\": () => ({ ok: false, reason }) });",
-    "replace": "registerSharedOperationHandlers(handle, {});",
-    "tests": ["tests/adapters/collab/move-refusal.test.ts"]
-  }, {
-    "label": "list note forgets the empty first beat",
-    "file": "src/adapters/collab/operation-list-notes.ts",
-    "find": "emptyFirstBeats.set(beat, operation.target.owner)",
-    "replace": "emptyFirstBeats.delete(beat)",
-    "tests": ["tests/adapters/collab/heading-last-line.test.ts"]
-  }, {
-    "label": "empty first beat moved past a line its left beat does not reach",
-    "file": "src/adapters/collab/structure-placement.ts",
-    "find": "next?.kind === \"b\" && next.id === lineOwner",
-    "replace": "line !== undefined",
-    "tests": ["tests/adapters/collab/heading-last-line.test.ts"]
-  }, {
-    "label": "joined row before a last line counted as separate beats",
-    "file": "src/adapters/collab/structure-placement.ts",
-    "find": "if (block.kind === \"b\" && joined.has(block.id) || block.kind === \"h\" && !heading)",
-    "replace": "if (block.kind === \"h\" && !heading)",
-    "tests": ["tests/adapters/collab/heading-finalize-flow-agreement.test.ts"]
-  }, {
-    "label": "split leaves the new beat without its visual link",
-    "file": "src/adapters/collab/split-executor.ts",
-    "find": "{ kind: \"set\", path: [...path, \"visual\"], value: visual }, ",
-    "replace": "",
-    "tests": ["tests/adapters/collab/split-visual.test.ts","tests/features/editing/cell-buffer-visual.test.ts"]
-  }, {
-    "label": "split creates the visual record without its text",
-    "file": "src/adapters/collab/split-executor.ts",
-    "find": "applySharedTextCreation(handle, description.text); ",
-    "replace": "",
-    "tests": ["tests/adapters/collab/split-visual.test.ts","tests/features/editing/cell-buffer-visual.test.ts"]
-  }]
+  "mutants": [
+    {
+      "label": "later cleaned beat identity shown as a second row",
+      "file": "src/core/collab/projection/blocks.ts",
+      "find": "if (!block.reason && beats.has(cleanId(block.id)))",
+      "replace": "if (false && !block.reason && beats.has(cleanId(block.id)))",
+      "tests": [
+        "tests/core/collab/projection-blocks.test.ts"
+      ]
+    },
+    {
+      "label": "empty cleaned beat identity gets a row",
+      "file": "src/core/collab/projection/blocks.ts",
+      "find": "if (!block.reason && !cleanId(block.id))",
+      "replace": "if (false && !block.reason && !cleanId(block.id))",
+      "tests": [
+        "tests/core/collab/projection-blocks.test.ts"
+      ]
+    }
+  ]
 }

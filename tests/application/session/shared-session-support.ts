@@ -1,6 +1,6 @@
 import { createSharedSession } from "../../../src/application/session/shared-session.ts";
 import { createSessionCapabilities } from "../../../src/application/session/capabilities.ts";
-import type { ReplicaExecution, ReplicaOrigin, ReplicaPort, SharedDocumentSession } from "../../../src/application/session/shared-session.ts";
+import type { ReplicaExecution, ReplicaFailure, ReplicaOrigin, ReplicaPort, SharedDocumentSession } from "../../../src/application/session/shared-session.ts";
 import { changeSet } from "../../../src/application/session/change-set.ts";
 import type { SessionChange } from "../../../src/application/session/change-set.ts";
 import type { Command, SessionCounters } from "../../../src/application/session/document-session.ts";
@@ -69,7 +69,7 @@ export function sharedHarness(replica: ReplicaPort, hooks: SharedHarnessHooks = 
 
 export interface FakeReplica {
   port: ReplicaPort;
-  write: (origin: ReplicaOrigin | null, document: Record<string, unknown>) => void;
+  write: (origin: ReplicaOrigin | null, document: Record<string, unknown>, failure?: ReplicaFailure) => void;
   echo: (origin: ReplicaOrigin | null) => void;
   script: (next: (operations: readonly SharedOperation[]) => ReplicaExecution) => void;
   fail: (error: Error | null) => void;
@@ -77,11 +77,11 @@ export interface FakeReplica {
 }
 
 export function fakeReplica(initial: Record<string, unknown> | null = null): FakeReplica {
-  const listeners = new Set<(origin: ReplicaOrigin | null) => void>();
+  const listeners = new Set<Parameters<ReplicaPort["observe"]>[0]>();
   let revision = initial ? 1 : 0, held: Record<string, unknown> = initial ?? {}, failing: Error | null = null;
   let before: Record<string, unknown> | null = null;
   let script: (operations: readonly SharedOperation[]) => ReplicaExecution = () => ({ ok: true });
-  const tell = (origin: ReplicaOrigin | null): void => { for (const listener of [...listeners]) listener(origin); };
+  const tell = (origin: ReplicaOrigin | null, failure?: ReplicaFailure): void => { for (const listener of [...listeners]) listener(origin, failure); };
   return {
     port: {
       revision: () => revision,
@@ -91,7 +91,7 @@ export function fakeReplica(initial: Record<string, unknown> | null = null): Fak
       execute: (operations, options) => options.base === revision ? script(operations) : { ok: false, reason: "stale-base" },
       observe: listener => { listeners.add(listener); return () => { listeners.delete(listener); }; }
     },
-    write: (origin, document) => { before = revision ? held : null; held = document; revision++; tell(origin); },
+    write: (origin, document, failure) => { before = revision ? held : null; held = document; revision++; tell(origin, failure); },
     echo: tell,
     script: next => { script = next; },
     fail: error => { failing = error; },

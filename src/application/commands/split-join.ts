@@ -9,9 +9,8 @@ import { changeSet } from "../session/change-set.ts";
 import type { ChangeSet } from "../session/change-set.ts";
 import type { Command, DocumentView, Plan, CommandRefusal } from "../session/document-session.ts";
 import type { CellTextPorts } from "../session/ports.ts";
-import type { FlowPorts } from "../../core/flow/flow.ts";
-import { sharedCreatedBeat, sharedMintedBeat, sharedStructureList, sharedStructureTrace } from "./shared-structure.ts";
-import type { CreatedBeatCommand, SharedStructurePorts } from "./shared-structure.ts";
+
+import type { CreatedBeatCommand } from "./rows.ts";
 
 export interface JoinPorts extends CellTextPorts {
   readonly plainText: (html: string | null | undefined) => string;
@@ -91,36 +90,20 @@ function splitChanges(rowId: string, field: string, createdId: string): ChangeSe
   });
 }
 
-function sharedSplit(doc: DocumentView, row: DocumentRow, at: SplitAt, createdId: string, ports: CellTextPorts, shared: SharedStructurePorts | undefined, by: ReturnType<SharedStructurePorts["author"]>, mint: (id: string | null) => void): Pick<Plan, "shared"> {
-  if (!shared || !by) return {};
-  const trace = sharedStructureTrace(doc, shared, by), cell = shared.cells(row.audioText), ranges = cutRanges(at);
-  // why: later ranges go first, so each earlier range keeps the offsets it was read at
-  for (const range of ranges.removed.slice().sort((a, b) => b[0] - a[0])) {
-    const cut = clampRange(cell, range[0], range[1]);
-    trace.delete(row.id, cell, cut.from, cut.to);
-  }
-  trace.split(row.id, clampRange(cell, ranges.at, ranges.at).from, { id: createdId, ...sharedCreatedBeat(ports) });
-  mint(sharedMintedBeat(trace, shared, createdId));
-  return { shared: sharedStructureList(trace, shared, by, [row.id]) };
-}
-
-export function splitBeatCommand(rowId: string, field: string, at: SplitAt, createdId: string, ports: CellTextPorts, shared?: SharedStructurePorts): CreatedBeatCommand {
+export function splitBeatCommand(rowId: string, field: string, at: SplitAt, createdId: string, ports: CellTextPorts): CreatedBeatCommand {
   let created: string | null = null;
   return {
     name: "split-scene",
     needs: "edit",
     created: () => created,
-    plan: function (doc): Plan | CommandRefusal | null {
+    plan: function (doc): Plan | null {
       created = null;
       if (SPLIT_FIELDS.indexOf(field) === -1) return null;
       const row = doc.rows.find(function (r) { return r.id === rowId; });
       if (!row) return null;
-      const by = shared?.author() ?? null;
-      if (by && field !== "audioText") return { refused: "visual-split-in-shared-session" };
       const halves = halvesOf(at, textOf(row[field]), ports);
       created = createdId;
       return {
-        ...sharedSplit(doc, row, at, createdId, ports, shared, by, id => { created = id; }),
         changes: splitChanges(rowId, field, createdId),
         apply: function (live) {
           const target = live.rows.find(function (r) { return r.id === rowId; });
@@ -156,15 +139,7 @@ function joinChanges(prevId: string, curId: string, takesVisual: boolean, raises
   });
 }
 
-function sharedJoin(doc: DocumentView, prevId: string, curId: string, flow: Omit<FlowPorts, "operations">, shared: SharedStructurePorts | undefined): Pick<Plan, "shared"> {
-  const by = shared?.author();
-  if (!shared || !by) return {};
-  const trace = sharedStructureTrace(doc, shared, by);
-  joinWithPrevious(doc, curId, { ...flow, trace });
-  return { shared: sharedStructureList(trace, shared, by, [prevId]) };
-}
-
-export function joinBeatsCommand(intoId: string, ports: JoinPorts, shared?: SharedStructurePorts): Command {
+export function joinBeatsCommand(intoId: string, ports: JoinPorts): Command {
   return {
     name: "join-scenes",
     needs: "edit",
@@ -181,7 +156,6 @@ export function joinBeatsCommand(intoId: string, ports: JoinPorts, shared?: Shar
       if (!joined) return null;
       const raisesStatus = rankOf(cur.status) > rankOf(prev.status);
       return {
-        ...sharedJoin(doc, prev.id, cur.id, flow, shared),
         changes: joinChanges(prev.id, cur.id, curHasVisual, raisesStatus),
         apply: function (live) {
           const target = live.rows.find(function (r) { return r.id === intoId; });

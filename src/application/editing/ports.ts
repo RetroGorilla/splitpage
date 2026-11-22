@@ -19,16 +19,11 @@ export interface BufferedTextEdit {
   readonly isOpen: () => boolean;
   readonly text: () => string;
   readonly replace: (from: number, to: number, insert: string) => void;
-  readonly commit: (runs: readonly Run[], selection?: readonly [number, number], label?: string) => CommandOutcome & { readonly selection?: FlowRange; readonly written?: PaintedText; readonly recovered?: boolean };
+  readonly commit: (runs: readonly Run[], selection?: readonly [number, number]) => CommandOutcome & { readonly selection?: FlowRange; readonly recovered?: boolean };
   readonly recover: (runs: readonly Run[]) => CommandOutcome | null;
   readonly cancel: () => void;
 }
 
 export interface BufferedTextCommit {
   readonly open: (rowId: string, painted: PaintedText) => BufferedTextEdit | null;
-}
-
-export interface PaintedTextSource {
-  readonly documentRevision: () => number;
-  readonly read: (rowId: string, field: string) => PaintedText | null;
 }

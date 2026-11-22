@@ -1,9 +1,11 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
 import { NO_DOCUMENT } from "../../src/application/session/document-session.ts";
+import { createSessionCapabilities } from "../../src/application/session/capabilities.ts";
 import { changeSet } from "../../src/application/session/change-set.ts";
 import type { Command, DocumentView } from "../../src/application/session/document-session.ts";
 import type { IdSource } from "../../src/core/document/ports.ts";
+import type { DocumentShot } from "../../src/core/document/validated.ts";
 import type { StampPorts } from "../../src/application/session/ports.ts";
 import { targetLengthCommand, wordsPerMinuteCommand } from "../../src/application/commands/document-settings.ts";
 import { documentIdStamp, editStamp } from "../../src/application/commands/save-stamps.ts";
@@ -75,6 +77,28 @@ function opened(): Opened {
   h.published.length = 0;
   return h;
 }
+
+test("isolated record plans require an author, preserve their shared form, and refuse mixed tag rewrites", () => {
+  const h = opened();
+  const doc = h.session.read(value => value);
+  assert.ok(doc);
+  const allowed = () => ({ allowed: true }) as const;
+  const capabilities = createSessionCapabilities("standalone", { edit: allowed, comment: allowed });
+  const shared = { author: () => ({ id: "record", by: "Fixture Editor" }), ranks: () => [], heads: () => [] };
+  const shot: DocumentShot = { id: "b2", name: "Close", status: "unshot", origin: "list", props: [] };
+  const clarify = (command: Command) => {
+    const plan = command.plan(doc, capabilities);
+    assert.ok(plan && !("refused" in plan));
+    return plan.shared?.operations;
+  };
+  assert.doesNotThrow(() => assert.equal(clarify(addShotCommand(shot, { ...shared, author: () => null })), undefined));
+  assert.deepEqual(clarify(addShotCommand(shot, shared))?.map(operation => [operation.kind, "target" in operation ? operation.target : null]),
+    [["record-create", { collection: "shots", record: "b2" }]]);
+  assert.deepEqual(clarify(registerTagCommand({ cat: "gear", name: "Lens" }, shared))?.map(operation => operation.kind), ["record-create"]);
+  const removal = deleteTagsCommand([{ cat: "gear", name: "Drone", unlabel: true }],
+    () => [{ rowId: "r1", field: "audioText", html: "Replacement" }], stamps(), shared).plan(doc, capabilities);
+  assert.equal(removal && "refused" in removal ? removal.refused : null, "tag-text-rewrite");
+});
 
 function snapshot(h: Opened): string {
   return h.session.read(function (doc) { return JSON.stringify(doc); });

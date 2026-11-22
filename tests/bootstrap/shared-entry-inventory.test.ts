@@ -1,14 +1,14 @@
 import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
 import ts from "typescript";
-import { bootEntrySwitchFixture, stopEntrySwitchFixture } from "./shared-entry-switch-support.ts";
+import { bootNativeEntrySwitchFixture, stopNativeEntrySwitchFixture } from "./native-entry-switch-support.ts";
 import { OWNER_ENTRY_METHODS, ENTRY_CAPABILITIES, COMMON_CAPABILITIES, ENTRY_CASES } from "./shared-entry-inventory.ts";
 import { documentTransitions } from "../../src/bootstrap/wiring/transition-owners.ts";
 import { capabilities as modeCapabilities, entryCapabilities as capabilities } from "../../src/bootstrap/wiring/ports/capabilities.ts";
 import { holdSessionCommands } from "../../src/bootstrap/wiring/session-owner.ts";
 
-before(bootEntrySwitchFixture);
-after(stopEntrySwitchFixture);
+before(bootNativeEntrySwitchFixture);
+after(stopNativeEntrySwitchFixture);
 
 test("C8 the entry matrix classifies every transition and capability method, including inherited methods", () => {
   const files = ["src/application/transitions/transitions.ts", "src/bootstrap/wiring/ports/capabilities.ts"] as const;

@@ -2,21 +2,11 @@
   "tests": [
     "src/test/shared-native-entry-gap-app.test.mjs",
     "src/test/shared-native-measure-undo-mapped-app.test.mjs",
-    "tests/adapters/collab/timing-marks.test.ts",
     "tests/bootstrap/shared-test-release.test.ts",
     "tests/bootstrap/timing-marks-release.test.ts",
     "tests/collab/measure/mark-parts.test.mjs"
   ],
   "mutants": [
-    {
-      "label": "a mark is written while switched off",
-      "file": "src/adapters/collab/document.ts",
-      "find": "SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:trial:end\");",
-      "replace": "SPLITPAGE_TEST_HOOKS) || timingMarks.marksOn) performance.mark(\"measure:trial:end\");",
-      "tests": [
-        "tests/adapters/collab/timing-marks.test.ts"
-      ]
-    },
     {
       "label": "release build keeps the render mark",
       "file": "src/bootstrap/wiring/session-owner.ts",
@@ -24,42 +14,6 @@
       "replace": "      if (timingMarks.marksOn) performance.mark(\"measure:render:start\");",
       "tests": [
         "tests/bootstrap/timing-marks-release.test.ts"
-      ]
-    },
-    {
-      "label": "the live apply closes only after its write frame, so a thrown listener leaves it open",
-      "file": "src/adapters/collab/state.ts",
-      "find": "    try { runCollabTransaction(state, \"remote\", change, recordFailure); }\n    finally { if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:live-apply:end\"); }\n  });\n",
-      "replace": "    runCollabTransaction(state, \"remote\", change, recordFailure);\n  });\n  if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:live-apply:end\");\n",
-      "tests": [
-        "tests/adapters/collab/timing-marks.test.ts"
-      ]
-    },
-    {
-      "label": "an open-gate live apply spans the updates its frame drains",
-      "file": "src/adapters/collab/document.ts",
-      "find": "        applyAdmittedUpdate(state, update, apply => transactRemoteCollabState(state, apply));",
-      "replace": "        if (timingMarks.marksOn) performance.mark(\"measure:live-apply:start\"); try { applyAdmittedUpdate(state, update, apply => transactCollabState(state, \"remote\", apply)); } finally { if (timingMarks.marksOn) performance.mark(\"measure:live-apply:end\"); }",
-      "tests": [
-        "tests/adapters/collab/timing-marks.test.ts"
-      ]
-    },
-    {
-      "label": "a failed publication leaves its assembly open",
-      "file": "src/adapters/collab/incremental-project.ts",
-      "find": "      pending = null;\n    } finally { if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:assembly:end\"); }",
-      "replace": "      pending = null;\n      if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:assembly:end\");\n    } finally {}",
-      "tests": [
-        "tests/adapters/collab/timing-marks.test.ts"
-      ]
-    },
-    {
-      "label": "a projection failure is delivered outside a listener span",
-      "file": "src/adapters/collab/incremental-project.ts",
-      "find": "      if (!failureListeners.size) throw error;\n      if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:projection-listeners:start\");\n      try { for (const listener of failureListeners) guardSharedCallback(state, () => listener(error, origin)); }\n      finally { if ((typeof SPLITPAGE_TEST_HOOKS === \"undefined\" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark(\"measure:projection-listeners:end\"); }\n",
-      "replace": "      if (!failureListeners.size) throw error;\n      for (const listener of failureListeners) guardSharedCallback(state, () => listener(error, origin));\n",
-      "tests": [
-        "tests/adapters/collab/timing-marks.test.ts"
       ]
     },
     {

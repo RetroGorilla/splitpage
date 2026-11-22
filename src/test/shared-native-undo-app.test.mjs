@@ -566,6 +566,33 @@ function search(t, needle, replacement) {
   return field;
 }
 
+test("Split Find skips an interrupted word and replaces the highlighted match without removing its picture", async t => {
+  const ref = { sha256: "a".repeat(64), width: 10, height: 10, mime: "image/png" };
+  await enter(t, [{ id: "r1", audioText: "cup cup" }], native => {
+    const at = native.commands.anchorText({ beat: "r1", cell: "narration" }, 2);
+    assert.equal(at.kind, "anchored");
+    assert.equal(native.commands.replaceText(at.range, [{ atom: "image", ref, text: "", marks: {} }]).kind, "written");
+  });
+  assert.ok(cell().querySelector("img"));
+  const highlights = new Map();
+  class Highlight {
+    constructor(range) { this.range = range; }
+  }
+  const original = [window.CSS?.highlights, window.Highlight, globalThis.Highlight];
+  window.CSS.highlights = highlights;
+  window.Highlight = globalThis.Highlight = Highlight;
+  t.after(() => { [window.CSS.highlights, window.Highlight, globalThis.Highlight] = original; });
+  search(t, "cup", "mug");
+  assert.equal(document.getElementById("find-count").textContent, "1 of 1");
+  assert.equal(highlights.get("splitpage-find-match")?.range.toString(), "cup");
+  assert.equal(highlights.get("splitpage-find-match")?.range.startOffset, 2);
+  document.getElementById("find-replace").click();
+  await Promise.resolve();
+  assert.equal(cell().textContent, "cup mug");
+  assert.ok(cell().querySelector("img"));
+  assert.deepEqual(hook.read().app, hook.read().peer);
+});
+
 for (const [name, kind] of Object.entries(views)) {
   test(name + ": control-only paste and typing leave the selection intact", async t => {
     adoptReplacement(migrateRows({ title: "Inline", rows: [{ id: "r1", audioText: "Hello" }] }));

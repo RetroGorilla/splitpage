@@ -247,9 +247,21 @@ The [native app test](../../src/test/shared-native-callers-mapped-app.test.mjs) 
 - With the same script, deliver the removal before the buffered `x` is sent. The pending insertion can still use the old shared position. All copies show `abcdefx` on `r1` and the peer's undo puts `Otherx` on `r2`.
 - Start a synthetic composition for `x` at the end of `r2`. Deliver the peer's removal before composition ends. End the composition, then have the peer undo and deliver that update. Before explicit Leave, both native replicas show `r2: Other` and the local preview still shows `Otherx`. Leave retries only if the original range is still valid in that beat and field. A missing or ambiguous target continues to return `missing` and preserves the preview.
 
+## Owner decisions for the remaining editor guards
+
+The owner approved the following native behavior on 2026-11-22. See the [native design](native-adapter-design.md#slice-8-editor-decisions) for the approved contracts.
+
+| Legacy guard | Native disposition and coverage |
+| --- | --- |
+| Resolve and reopen history | Resolve and reopen each create one author-local document Undo step. This supersedes the zero-step rule U35. [Comment admission and history tests](../../src/test/shared-native-record-refusal-parity-app.test.mjs) exercise both directions with keyboard Undo, concurrent peer text, and agreement on both copies and a late reader. |
+| Writer boundary Backspace and replay | Plain Backspace at the start of a beat joins it with the preceding beat. Alt+Backspace warns and refuses. Undo after switching from Writer to Split focuses the edited narration. [Writer boundary and cross-view cases](../../src/test/shared-native-undo-caret-mapped-app.test.mjs) cover both shortcuts, including after an Enter split, and assert exact narration focus and caret. |
+| Imported B-roll labels | When selected or collapsed Backspace would delete a protected imported B-roll label, the edit warns and refuses in Split and Writer. Adjacent ordinary text remains editable. [B-roll atom cases](../../src/test/shared-native-undo-caret-mapped-app.test.mjs) assert the unchanged bytes and noneditable labels, the warning, empty history, and subsequent ordinary typing and Undo. |
+
+[#1748](https://github.com/RetroGorilla/splitpage/issues/1748) and [#1749](https://github.com/RetroGorilla/splitpage/issues/1749) remain separate defects.
+
 ## Not yet removable
 
-All eight approved [Slice 8 editor decisions](native-adapter-design.md#slice-8-editor-decisions) are now complete and verified. All legacy `9xx` shared browser suites (`967`, `968`, `972`, `973`, `974`, `975`, `976`, `978`, `979`, `980`, `981`, `982`) and `src/test/shared-split-records-drafts-app.test.mjs` (0 remaining cases, 0 manifest registrations) are retired. The later Slice 8 cleanup preserves `src/adapters/collab/native/`. It removes the legacy adapter code, the fixture in `tests/collab/legacy-app/`, the generated `_legacy-shared-tests.html` page, and the remaining legacy-only mutation guards and manifests.
+All eleven approved [Slice 8 editor decisions](native-adapter-design.md#slice-8-editor-decisions) are now complete and verified. All legacy `9xx` shared browser suites (`967`, `968`, `972`, `973`, `974`, `975`, `976`, `978`, `979`, `980`, `981`, `982`) and `src/test/shared-split-records-drafts-app.test.mjs` (0 remaining cases, 0 manifest registrations) are retired. The later Slice 8 cleanup preserves `src/adapters/collab/native/`. It removes the legacy adapter code, the fixture in `tests/collab/legacy-app/`, the generated `_legacy-shared-tests.html` page, and the remaining legacy-only mutation guards and manifests.
 
 Every remaining **Retained** row above stays active solely for legacy mutation probes or direct legacy compatibility checks while the old adapter remains in the tree. The standalone undo differential and Split route inventory also continue. Direct Split and Writer fixtures retain their existing binding, Visual close, record, and undo coverage.
 
@@ -268,7 +280,7 @@ Current retained legacy-only guards tracked in this mapping:
 
 The discarded match strings for the rollback reattachment and dropped-surface mutations predate this change. The old strings refer to pre-native rollback and `ports.bindings.drop`, while the current switch uses the recovered-state guard and `now.backend.drop`. The repaired probes are in `tests/collab/composition-mutants.json` and are caught by the surviving `tests/bootstrap/shared-switch.test.ts` assertions.
 
-The Old adapter tests job stays in place. The colocated fixture under `tests/collab/legacy-app/` is built into `_legacy-shared-tests.html` only by the test build. No browser suite opens `_legacy-shared-tests.html` anymore; the fixture page stays until the later legacy-adapter cleanup phase. The standard test and release bundles exclude that fixture.
+The preceding app-test list records the state before [#1747](https://github.com/RetroGorilla/splitpage/pull/1747). That change removed the legacy fixture and its generated test page. The isolated adapter tests now run in the regular root matrix. Their implementation and its tests, including the slow Undo and timing-mark mutations, stay together while the remaining shared-independent checks are extracted. The admission measurement launcher and its tests have no remaining callers. The native entry tests use the native fixture for the entry inventory, reentrant Open and New, and automatic resume. The Find refusal test uses the replica port and retains the no-write and no-history assertions.
 
 ## Legacy adapter removal plan
 

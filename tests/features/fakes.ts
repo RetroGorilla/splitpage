@@ -34,18 +34,13 @@ export function fakeStandaloneGallery(): SharedGalleryCommands {
 }
 import type { SharedGalleryCommands } from "../../src/application/commands/gallery.ts";
 import type { EditorRegistryCommands } from "../../src/application/commands/registry-editor.ts";
-import type { SharedAdmissionAnswer } from "../../src/application/session/shared-session.ts";
 import type { TextServices } from "../../src/application/text/services.ts";
 import type { PrompterFeaturePorts } from "../../src/features/prompter/ports.ts";
 import type { FindPorts } from "../../src/features/find/ports.ts";
 import type { WriterFindAccess } from "../../src/features/common/writer-find.ts";
 import type { FlowWriterPorts, WriterFeaturePorts } from "../../src/features/writer/ports.ts";
-import type { EmptyScriptPorts } from "../../src/features/empty-script/ports.ts";
-import type { BufferedFieldPorts } from "../../src/application/editing/buffered-field.ts";
 import { createFlowWriter } from "../../src/features/writer/flow-writer.ts";
 import { createWholeFieldTextCommit } from "../../src/application/editing/whole-field-text.ts";
-import type { PaintedTextSource } from "../../src/application/editing/ports.ts";
-import { readSharedContentRef } from "../../src/core/collab/read-operation.ts";
 import { createPaintGuard } from "../../src/application/editing/paint-guard.ts";
 import { createEditorSelection } from "../../src/application/editing/selection.ts";
 import type { PrintDialogPort } from "../../src/application/export/print-dialog.ts";
@@ -107,33 +102,15 @@ export function fakePdfPrinter() {
   return { pdfPrinter, pages, pdf };
 }
 
-export function fakeEmptyScriptPorts(initial: DocumentView) {
-  const reader = fakeDocument(initial), notices = fakeNotices(), commands = new Set<() => SharedAdmissionAnswer>();
-  const created: string[] = [], placed: { rowId: string; offset: number }[] = [];
-  const state = { epoch: 1, allowed: true, placeable: true, held: 0, holdRefusal: null as string | null, createRefusal: null as string | null };
-  const ports: EmptyScriptPorts = {
-    host: document.body.appendChild(document.createElement("div")), document: reader.document,
-    lifetime: { epoch: () => state.epoch, beforeCommand: listener => { commands.add(listener); return () => { commands.delete(listener); }; } },
-    edits: { allowed: () => state.allowed }, report: outcome => { notices.notices.show(outcome.kind === "rejected" ? outcome.reason : outcome.kind, "warn"); },
-    hold: () => {
-      if (state.holdRefusal) return { ok: false, reason: state.holdRefusal };
-      state.held++; return { ok: true, release: () => { state.held--; } };
-    },
-    create: text => { created.push(text); return state.createRefusal ? { ok: false, reason: state.createRefusal } : { ok: true, rowId: "created" }; },
-    place: (rowId, offset) => { placed.push({ rowId, offset }); return state.placeable; }
-  };
-  return { ports, state, reader, notices, commands, created, placed };
-}
-
 export function fakeWriterBufferEffects() {
   const reports: CommandOutcome[] = [], missing: string[] = [], recovered: string[] = [];
-  const effects: Pick<BufferedFieldPorts, "missingBase" | "recovered" | "report"> = {
-    missingBase: rowId => { missing.push(rowId); }, recovered: rowId => { recovered.push(rowId); }, report: outcome => { reports.push(outcome); }
+  const effects = {
+    missingBase: (rowId: string) => { missing.push(rowId); }, recovered: (rowId: string) => { recovered.push(rowId); }, report: (outcome: CommandOutcome) => { reports.push(outcome); }
   };
   return { effects, reports, missing, recovered };
 }
 
-export function fakeWriterPorts(initial: DocumentView, visual: Pick<FlowWriterPorts, "visualBuffer"> = {}) {
+export function fakeWriterPorts(initial: DocumentView) {
   const reader = fakeDocument(initial);
   const notices = fakeNotices();
   const editing = fakeEdits();
@@ -143,7 +120,6 @@ export function fakeWriterPorts(initial: DocumentView, visual: Pick<FlowWriterPo
   const state = { open: false, allowed: true, size: null as number | null, lifetime: 1, serial: 0 };
   const ports: WriterFeaturePorts = {
     flow: { prepareSplit: () => {}, splitReady: () => true, create: (root, selectionMoved, step) => createFlowWriter({
-      ...visual,
       root, selectionMoved, doc: () => initial, lifetime: { epoch: () => 0 }, heldSelection: selection,
       flow: { cells: html => [{ text: String(html ?? ""), marks: {} }], newId: () => "new", hasVisual: row => !!row.visualText },
       decode: html => [{ text: html, marks: {} }], storedHtml: html => html, run: editing.edits.run, moveBeat: swapBeatsCommand,
@@ -484,22 +460,6 @@ export function fakeEdits(answer: CommandOutcome = { kind: "noop" }) {
     stamps: { clock: { nowIso: () => "2026-01-01T00:00:00.000Z" }, editor: { name: () => "Tester" } }
   };
   return { edits, ran, answer: (next: CommandOutcome): void => { outcome = next; } };
-}
-
-export type FakePaintedBeat = { readonly revision: number; readonly units: readonly (readonly [identity: string, text: string])[] };
-
-export function fakePaintedText(projected: number, initial: Readonly<Record<string, FakePaintedBeat>>) {
-  const reads: [rowId: string, field: string][] = [];
-  let beats = initial, documentRevision = projected;
-  const paintedText: PaintedTextSource = { documentRevision: () => documentRevision, read: (rowId, field) => {
-    reads.push([rowId, field]);
-    const beat = Object.hasOwn(beats, rowId) ? beats[rowId] : undefined;
-    if (!beat) return null;
-    const identities = beat.units.map(([identity]) => readSharedContentRef(identity));
-    return { revision: beat.revision, text: beat.units.map(([, text]) => text).join(""), identity: index => identities[index] ?? null };
-  } };
-  return { paintedText, reads, show: (next: Readonly<Record<string, FakePaintedBeat>>): void => { beats = next; },
-    project: (revision: number): void => { documentRevision = revision; } };
 }
 
 export function fakeUndo() {

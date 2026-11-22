@@ -4,42 +4,6 @@
   ],
   "mutants": [
     {
-      "label": "the add command reports its list-local id instead of the id the executor mints",
-      "file": "src/application/commands/rows.ts",
-      "find": "  mint(sharedMintedBeat(trace, shared, createdId));",
-      "replace": "  mint(createdId);",
-      "tests": [
-        "tests/application/commands/structure-shared.test.ts"
-      ]
-    },
-    {
-      "label": "the split command reports its list-local id instead of the id the executor mints",
-      "file": "src/application/commands/split-join.ts",
-      "find": "  mint(sharedMintedBeat(trace, shared, createdId));",
-      "replace": "  mint(createdId);",
-      "tests": [
-        "tests/application/commands/structure-shared.test.ts"
-      ]
-    },
-    {
-      "label": "the created beat id is derived for the operation's segment instead of its beat",
-      "file": "tests/collab/editor-ports/shared-values.ts",
-      "find": "operation, \"beat\");",
-      "replace": "operation, \"segment\");",
-      "tests": [
-        "tests/application/commands/structure-shared.test.ts"
-      ]
-    },
-    {
-      "label": "author operation id repeats across commands",
-      "file": "tests/collab/editor-ports/shared-author.ts",
-      "find": "String(++serial)",
-      "replace": "String(serial + 1)",
-      "tests": [
-        "tests/bootstrap/shared-author.test.ts"
-      ]
-    },
-    {
       "label": "a refusal the session already announced is announced again",
       "file": "src/bootstrap/wiring/ports/shared-commands.ts",
       "find": "outcome.kind === \"rejected\" && !outcome.notified",
@@ -82,15 +46,6 @@
       "replace": "...({})",
       "tests": [
         "tests/application/session/shared-admission.test.ts"
-      ]
-    },
-    {
-      "label": "a faulted typing buffer claims to have announced a refusal it never reported",
-      "file": "src/application/editing/buffered-field.ts",
-      "find": "return finish() || (reported === before ? false : SHARED_ADMISSION_ANNOUNCED);",
-      "replace": "return finish() || SHARED_ADMISSION_ANNOUNCED;",
-      "tests": [
-        "tests/application/editing/buffered-field.test.ts"
       ]
     },
     {

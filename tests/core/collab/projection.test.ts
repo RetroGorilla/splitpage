@@ -22,6 +22,10 @@ test("props is opaque JSON on people and tags, and decoded nested membership onl
   assert.deepEqual(projectSharedRegistryFields("shots", { id: "S", props: [{ key: "P", fields: { id: "P", name: "Cup", rank: "0" } }] }), { id: "S", owner: "", props: [{ id: "P", name: "Cup" }] });
 });
 
+test("shot projection cleans its own identifier", () => {
+  assert.deepEqual(projectSharedRegistryFields("shots", { id: "S!1", name: "Cup" }), { id: "S1", name: "Cup", owner: "" });
+});
+
 test("a tag or shot with no stored owner projects as owner \"\", as a migrated document has; a stored owner is kept and people get none", () => {
   assert.deepEqual(projectSharedRegistryFields("tags", { id: "T", owner: "p1" }), { id: "T", owner: "p1" });
   assert.deepEqual(projectSharedRegistryFields("shots", { id: "S", owner: "p1" }), { id: "S", owner: "p1" });

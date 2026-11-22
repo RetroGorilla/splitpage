@@ -72,8 +72,9 @@ const RETIRED_SHARED_HOOK_ONLY = Object.freeze([
 ]);
 
 const timingMarks = (seams) => seams.flatMap((seam) => [`measure:${seam}:start`, `measure:${seam}:end`]);
-const TIMING_MARKS = Object.freeze(timingMarks(["document-entry", "render", "input-handler", "input-command"]));
-const ISOLATED_TIMING_MARKS = Object.freeze(timingMarks(["trial", "live-apply", "mirror-apply", "assembly", "projection-listeners",
+const TIMING_MARKS = Object.freeze(timingMarks(["document-entry", "render", "input-command"]));
+const RETIRED_TIMING_MARKS = Object.freeze(timingMarks(["input-handler"]));
+const RETIRED_ADAPTER_TIMING_MARKS = Object.freeze(timingMarks(["trial", "live-apply", "mirror-apply", "assembly", "projection-listeners",
   "session-receive", "input-write"]));
 
 let passed = 0;
@@ -110,7 +111,7 @@ eq("the fake desktop backend and its fault switches are left out", FAKE_DESKTOP.
 eq("the render counters and blob store controls are left out", HOOK_ONLY.filter((marker) => release.includes(marker)), []);
 eq("history fault queues, controls and inspection code are left out", historyTestNames(release), []);
 eq("the shared session hook, its peer and their notices are left out", [...SHARED_HOOK_ONLY, ...RETIRED_SHARED_HOOK_ONLY].filter((marker) => release.includes(marker)), []);
-eq("no timing mark is left in it", [...TIMING_MARKS, ...ISOLATED_TIMING_MARKS, "marksOn"].filter((mark) => release.includes(mark)), []);
+eq("no timing mark is left in it", [...TIMING_MARKS, ...RETIRED_ADAPTER_TIMING_MARKS, "marksOn"].filter((mark) => release.includes(mark)), []);
 check("no timing mark name of any kind is left in it", !release.includes("measure:"), null);
 
 console.log("\nthe test build (node build.mjs --test):\n");
@@ -126,7 +127,8 @@ eq("it keeps every history fault and distinctive control name", historyTestNames
 eq("it keeps the native shared session hook, its peer and their notices", SHARED_HOOK_ONLY.filter((marker) => !testBuild.includes(marker)), []);
 eq("it leaves out the legacy fixture and its peer", ["__legacySharedTest", ...RETIRED_SHARED_HOOK_ONLY].filter((marker) => testBuild.includes(marker)), []);
 eq("it keeps the remaining timing marks", [...TIMING_MARKS, "marksOn"].filter((mark) => !testBuild.includes(mark)), []);
-eq("it leaves out the isolated adapter timing marks", ISOLATED_TIMING_MARKS.filter((mark) => testBuild.includes(mark)), []);
+eq("it leaves out the retired Writer timing marks", RETIRED_TIMING_MARKS.filter((mark) => testBuild.includes(mark)), []);
+eq("it leaves out the retired adapter timing marks", RETIRED_ADAPTER_TIMING_MARKS.filter((mark) => testBuild.includes(mark)), []);
 
 eq("the release build excludes the legacy fixture hook", ["__legacySharedTest"].filter((marker) => release.includes(marker)), []);
 

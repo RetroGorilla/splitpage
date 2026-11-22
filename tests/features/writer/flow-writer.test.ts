@@ -19,7 +19,7 @@ import { deepFreeze } from "../../../src/core/document/freeze.ts";
 import { acceptTagGhost, maybeAutoTagShortcut, startProductionTags, tagGhost, updateTagGhost } from "../../../src/features/tags/production-tags.ts";
 import { fakeDocument, fakeEdits, fakeNotices } from "../fakes.ts";
 
-function harness(changeBeforePlan = false, refusePaste = false, tagged = false) {
+function harness(changeBeforePlan = false, refusePaste = false, tagged = false, refusal?: Extract<CommandOutcome, { kind: "rejected" }>) {
   Object.assign(globalThis, { MutationObserver: window.MutationObserver, CSS: { escape: (s: string) => s } });
   window.HTMLElement.prototype.scrollIntoView = () => {};
   document.body.innerHTML = '<div id="writer-doc" contenteditable="true"></div>' + (tagged ? '<div id="tag-ghost"></div>' : "");
@@ -33,11 +33,12 @@ function harness(changeBeforePlan = false, refusePaste = false, tagged = false) 
   let breaks = 0;
   const left: string[] = [];
   const leaves: string[] = [];
-  const inputs: string[] = [];
+  const inputs: string[] = [], warnings: string[] = [];
   let recorded: FlowSelectionPair | undefined;
   const guard = createPaintGuard();
   const text = { cells: fromHtml, clock: { nowIso: () => "2026-11-04T12:00:00.000Z" }, editor: { name: () => "Editor" } };
   const run = (command: Command): CommandOutcome => {
+    if (refusal) return refusal;
     if (changeBeforePlan) {
       const [first, second] = doc.rows;
       assert.ok(first && second);
@@ -92,12 +93,12 @@ function harness(changeBeforePlan = false, refusePaste = false, tagged = false) 
     },
     visualLeave: cell => { leaves.push(cell.innerHTML); cells.sync(cell); },
     undo: { step: () => {}, flush: () => {}, breakCoalescing: () => { breaks++; }, last: () => null, nextRedo: () => null },
-    caretAfterStep: () => 0, replayPlacement: () => null, notice: () => {}, changed: () => {}, selectionMoved: () => {},
+    caretAfterStep: () => 0, replayPlacement: () => null, notice: (text, kind) => { if (kind === "warn") warnings.push(text); }, changed: () => {}, selectionMoved: () => {},
     plainVisual: () => "", beatInput: () => {}, typeAtBeatEdge: () => false,
     beatKeydown: () => false, beatSelection: () => {}, leaveBeat: beat => { left.push(beat.dataset.id ?? ""); },
     newCommentId: () => "c", openComment: () => {}
   });
-  return { writer, root, tags, left, leaves, inputs, painting: guard.whilePainting, breaks: () => breaks, doc: () => doc, recorded: () => recorded, replace: () => {
+  return { writer, root, tags, left, leaves, inputs, warnings, painting: guard.whilePainting, breaks: () => breaks, doc: () => doc, recorded: () => recorded, replace: () => {
     epoch++;
     doc = migrateRows({ rows: [{ id: "a", audioText: "Replacement" }] }, fakeMigration().ports);
   } };
@@ -361,5 +362,17 @@ test("Ctrl+Shift+Enter retains the shipped beat split instead of inserting a lin
     assert.deepEqual(h.doc().rows.map(row => row.audioText), ["Al", "pha", "Bravo"]);
     assert.deepEqual(h.writer.selection(), { anchor: beatPos("new", 0), head: beatPos("new", 0) });
     assert.equal(h.breaks(), 1);
+  } finally { h.writer.dispose(); }
+});
+
+test("Writer suppresses a refusal already announced by its session", () => {
+  const h = harness(false, false, false, { kind: "rejected", reason: "read-only", notified: true });
+  try {
+    h.writer.repaint();
+    h.writer.place({ anchor: beatPos("a", 1), head: beatPos("a", 3) });
+    const before = JSON.stringify(h.doc());
+    h.writer.format("bold");
+    assert.deepEqual(h.warnings, []);
+    assert.equal(JSON.stringify(h.doc()), before);
   } finally { h.writer.dispose(); }
 });

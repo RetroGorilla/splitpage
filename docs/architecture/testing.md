@@ -65,10 +65,9 @@ touches. CI classifies paths with `tools/ci-changes.mjs` first: Markdown prose
 skips the code jobs, except `docs/help.md`, which feeds the app build. A prose-only
 PR still runs `changes` and `gate`. No label is needed for that path. For code
 changes CI runs lint, types, the
-dependency and comment gates, the build and the required root test matrices.
+dependency and comment gates, the build and the required root test matrix.
 App-affecting changes also run the smoke, CSP and persistence browser suites.
-Pull requests skip the old-adapter matrix when the filter allows it. Pushes to
-`main` and the nightly root run execute every discovered root test.
+The PR, push to `main` and nightly root matrices cover every discovered root test.
 `--only` selects files for local feedback.
 
 App-affecting changes also require the dev desktop smoke. Test-only changes
@@ -457,13 +456,11 @@ src/test/formats`, `npm run test:all -- --only tools/test-comment-gate`.
 Discovery and its orphan, overlap and empty-group checks still run over
 everything, the selected files are listed, and the run says it is not the
 full gate. A filter that matches nothing exits 2. It is for local feedback
-only. PR CI runs the always-run matrix and includes the old-adapter matrix
-when the filter requires it. Pushes to `main` and nightly run the full set.
+only. The pull request, push to `main` and nightly root matrices cover the full set.
 
 `--shard <index/total>` balances files using the recorded timing weights
-described above. `--suite=always` and `--suite=old-adapter` select disjoint file sets before balancing.
-PR CI uses eight always-run shards and three old-adapter shards when the change
-requires them. The ten unfiltered nightly shards use `--shard 1/10` through
+described above. PR CI uses eight shards. The ten nightly shards use
+`--shard 1/10` through
 `--shard 10/10`. Full discovery, area coverage,
 orphan, overlap, required-group and golden-update guards still run in each
 shard. A group can have no files assigned to one shard, but a shard with no
@@ -579,15 +576,14 @@ final scheme test makes redundant.
 
 ### Collaboration mutants in CI
 
-Every `tests/collab/*-mutants.json` file except `undo-slow-mutants.json` runs
+Every `tests/collab/*-mutants.json` file runs
 nightly in `nightly.yml`, not in pull request CI. "Collaboration mutants
 baseline (fast set)" runs one baseline for the whole set, and "Collaboration
-mutants (fast set)" runs six shards in parallel. Both turn on bash's `extglob`
-first:
+mutants (fast set)" runs six shards in parallel.
 
 ```
-node tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --baseline-only --baseline-timeout 1500
-node tools/mutants.mjs tests/collab/!(undo-slow)-mutants.json --shard K/6 --concurrency 4 --no-baseline --fail-on-survivor
+node tools/mutants.mjs tests/collab/*-mutants.json --baseline-only --baseline-timeout 1500
+node tools/mutants.mjs tests/collab/*-mutants.json --shard K/6 --concurrency 4 --no-baseline --fail-on-survivor
 ```
 
 A survivor, an inconclusive mutant or a mutant that cannot be applied fails its
@@ -608,29 +604,7 @@ took about 19 minutes for 183. Three shards across two pull requests reached
 the limit one to twelve mutants short. Running the baseline once removes that
 repeated work from each shard's time limit.
 
-`tests/collab/undo-slow-mutants.json` runs in the nightly workflow instead, job
-`mutants`, at `--concurrency 2` with a 600 s timeout per mutant. Its entries are
-the undo mutants caught only by the seeded generator histories, which run long
-before the failing seed:
-
-| Mutant | Local, Windows workstation | PR CI shard, 4-core runner |
-| --- | --- | --- |
-| duplicated identity (text restore, model executor, generator) | 169 s | 217 s |
-| duplicated identity (restored beside a visible copy, model executor) | 169 s | over 300 s (timed out) |
-| undo leaves the identical mark that arrives later (model executor, generator) | 171 s | 216 s |
-| scalar undo overwrites a later value (model executor) | 170 s | over 300 s (timed out) |
-| undo of a field change overwrites a later value (generator) | 164 s | over 300 s (timed out) |
-
-In PR CI they finished or timed out depending on how many landed in the same
-shard, and a timeout makes a mutant inconclusive, which fails the shard. The
-next slowest, "a restored character is written behind the whole deleted run
-(generator)", took 125 s locally and 260 s in CI beside three of the five, and
-belongs to the fast set; every other undo mutant took under 100 s locally. The
-sources these five edit are also edited by faster mutants in
-`undo-mutants.json`, which the nightly fast set covers. `tools/test-ci-shards.mjs`
-expands the file arguments of both nightly mutant commands in bash and fails
-unless every mutants file is run by exactly one of them; a new file is run by
-the fast set unless it is named `undo-slow-mutants.json`.
+`tools/test-ci-shards.mjs` expands the nightly file arguments in bash and checks that each collaboration manifest is included exactly once.
 
 A failing nightly mutants run shows as a failed scheduled run of `nightly.yml`
 in the repository's Actions tab, and GitHub notifies the account that last
@@ -825,8 +799,7 @@ to `main` or a `hotfix/` branch. Its jobs call the scripts above and nothing els
 | --- | --- |
 | `changes` | `tools/ci-changes.mjs`: does the diff touch anything but prose? On a push to `main`, `tools/ci-tested-tree.mjs`: did another run already pass this exact tree? ([ci.md](ci.md)) |
 | `checks` | Node from `.nvmrc`: lint, typecheck, check:deps and check:comments for non-prose changes requiring a fresh run; for app-affecting changes, also build, check the `sw.js` stamp, run browser suites 01 and 52, then 21 suites covering save, typing, undo, export, writer position and typing work (the list and the reason for each are in [ci.md](ci.md); about 75 s), and upload the built app |
-| `tests` | Eight always-run root shards, `--shard 1/8` through `8/8`, for fresh root-test changes and every push to `main`. |
-| `old-adapter-tests` | Three shards, `--shard 1/3` through `3/3`, when the [filter](ci.md#old-shared-document-adapter) requires them and on every push to `main`. |
+| `tests` | Eight root shards, `--shard 1/8` through `8/8`, for fresh root-test changes and every push to `main`. |
 | `gate` | Checks expected job results and each required matrix leg before uploading the passed-tree marker. See [CI configuration](ci.md#githubworkflowsciyml). |
 | `desktop-smoke` | Electron dev-target smoke on `ubuntu-latest` under Xvfb, on pull requests and pushes to `main` when `tools/ci-changes.mjs` reports `desktop=true`; about 5.5 min, in parallel with the other jobs |
 

@@ -1,6 +1,6 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { flowCommand, initializeFlowParagraphs } from "../../src/application/commands/flow.ts";
+import { standaloneFlowCommand, initializeFlowParagraphs } from "../../src/application/commands/flow.ts";
 import { beatPos, caretAt, joinWithPrevious, renameHeading, replaceRange } from "../../src/core/flow/flow.ts";
 import type { FlowPorts, FlowSelectionPair } from "../../src/core/flow/flow.ts";
 import { migratedThenSet } from "../core/migrate-ports.ts";
@@ -17,10 +17,10 @@ test("the session records a flow selection only after the command commits", () =
   h.session.adopt({});
   const before = { anchor: beatPos("a", 4), head: beatPos("a", 1) };
   const operation = (doc: Parameters<typeof replaceRange>[0]) => replaceRange(doc, before, [{ text: "Q", marks: {} }], ports);
-  const failed = flowCommand("replace", operation, { ...stamps, clock: { nowIso: () => { throw new Error("clock"); } } }, before);
+  const failed = standaloneFlowCommand("replace", operation, { ...stamps, clock: { nowIso: () => { throw new Error("clock"); } } }, before);
   assert.equal(h.session.run(failed).kind, "failed");
   assert.equal(recorded.length, 0);
-  assert.equal(runConfined(h.session, flowCommand("replace", operation, stamps, before)).kind, "applied");
+  assert.equal(runConfined(h.session, standaloneFlowCommand("replace", operation, stamps, before)).kind, "applied");
   assert.deepEqual(recorded[0], { before, after: caretAt(beatPos("a", 2)) });
   h.session.dispose();
 });
@@ -68,7 +68,7 @@ test("first-open initialization keeps imported paragraph flags and marks an inte
 test("flow operations plan against the current document and publish one command including comments", () => {
   const h = harness(undefined, { entry: () => migratedThenSet(original) });
   h.session.adopt({});
-  const command = flowCommand("flow-replace", current => replaceRange(current, caretAt(beatPos("a", 0)), [{ text: "Q", marks: {} }], ports), stamps);
+  const command = standaloneFlowCommand("flow-replace", current => replaceRange(current, caretAt(beatPos("a", 0)), [{ text: "Q", marks: {} }], ports), stamps);
   assert.equal(runConfined(h.session, command).kind, "applied");
   assert.equal(runConfined(h.session, command).kind, "applied");
   assert.equal(h.session.held()?.rows[0]?.audioText, "QQAlpha");
@@ -83,8 +83,8 @@ test("refused flow commands leave content, generation, undo and effects untouche
   h.session.adopt({});
   h.log.length = 0;
   const before = JSON.stringify(h.session.held());
-  const join = flowCommand("flow-join", current => joinWithPrevious(current, "b", ports), stamps);
-  const heading = flowCommand("flow-heading", current => renameHeading(current, "s", "x".repeat(201), 0), stamps);
+  const join = standaloneFlowCommand("flow-join", current => joinWithPrevious(current, "b", ports), stamps);
+  const heading = standaloneFlowCommand("flow-heading", current => renameHeading(current, "s", "x".repeat(201), 0), stamps);
   assert.equal(runConfined(h.session, join).kind, "rejected");
   assert.equal(runConfined(h.session, heading).kind, "rejected");
   assert.equal(JSON.stringify(h.session.held()), before);
@@ -97,7 +97,7 @@ test("a failed flow timestamp rolls back rows, sections and comment deletion", (
   const h = harness(undefined, { entry: () => migratedThenSet(original) });
   h.session.adopt({});
   const before = JSON.stringify(h.session.held());
-  const command = flowCommand("flow-delete", current => replaceRange(current,
+  const command = standaloneFlowCommand("flow-delete", current => replaceRange(current,
     { anchor: beatPos("a", 0), head: beatPos("b", 5) }, [{ text: "Q", marks: {} }], ports),
   { ...stamps, clock: { nowIso: () => { throw new Error("clock stopped"); } } });
   assert.equal(runConfined(h.session, command).kind, "failed");

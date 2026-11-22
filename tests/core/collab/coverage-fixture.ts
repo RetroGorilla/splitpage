@@ -90,16 +90,6 @@ export const builderOperationCoverage = [
     ["planner unwraps observed comment marks", ["mark"]],
     ["record retained / unstamped capability exception / no rewrites", []]
   ]]),
-  classified("serve", ["sharedBrollKeyingCommand", "text-mark", "text-insert,text-delete,record-create,scalar", [
-    ["key each unkeyed marker line with an atom over its observed marker", ["text-insert", "text-delete"]],
-    ["a shot for each new key, authored by the leaving copy", ["record-create"]],
-    ["beat stamp", ["scalar"]],
-    ["nothing to key / missing row / no author or line identity", []]
-  ]]),
-  classified("serve", ["sharedBrollRepeatCommand", "text-mark", "text-delete", [
-    ["delete a repeated key directly after the key it repeats, with no shot of its own", ["text-delete"]],
-    ["no repeat / missing row / no author", []]
-  ]]),
   classified("refuse", ["restoreConflictCommand", "text-mark", "text-insert,text-delete,mark,scalar,record-create,record-set,record-delete", [
     ["title or cell text replacement", ["text-insert", "text-delete"]],
     ["cell value restores different marks on observed words", ["mark"]],
@@ -165,13 +155,6 @@ export const builderOperationCoverage = [
     ["initial heading name", ["text-insert"]],
     ["empty/overlong name and invalid/duplicate id guards", []]
   ]]),
-  classified("serve", ["emptyScriptCommand", "structure", "segment-create", [
-    ["first native input creates a fresh beat with initial text and stamp", ["segment-create"]],
-    ["empty input is a no-op", []]
-  ]]),
-  classified("serve", ["sharedSceneCommand", "structure", "heading-create,text-insert", [
-    ["first shared name creates its heading before the selected beat and inserts that name in one list", ["heading-create", "text-insert"]]
-  ]]),
   classified("serve", ["removeSceneCommand", "structure", "heading-remove,scalar", [
     ["discard observed header without demotion", ["heading-remove"]],
     ["first beat paragraph flag", ["scalar"]],
@@ -200,17 +183,6 @@ export const builderOperationCoverage = [
     ["standalone paragraph and retained-record fields", ["scalar"]],
     ["shared classification of partial-source/cross-scene clipboard policy", ["move-in-shared-session", "cross-scene-structural-paste"]],
     ["standalone application only; no shared plan, optional selection, null/caret-only/refused/no-change", []]
-  ]]),
-  classified("serve", ["flowCommand", "structure", "text-insert,text-delete,mark,segment-create,split,split-before,join,remove,restore,segment-move,heading-create,heading-finalize,heading-remove,record-create,record-set,scalar | move-in-shared-session,cross-scene-structural-paste", [
-    ["typing and arbitrary range-replacement outcomes", ["text-insert", "text-delete", "segment-create", "remove", "heading-remove"]],
-    ["observed mark and inline-markdown outcomes", ["mark"]],
-    ["ordinary and prefix-isolation split outcomes", ["split", "split-before"]],
-    ["joinWithPrevious outcomes", ["join"]],
-    ["structural clipboard restore/move/header and record outcomes", ["restore", "segment-move", "heading-create", "record-create", "record-set"]],
-    ["heading finalization outcomes", ["heading-finalize"]],
-    ["paragraph/retained-record field edits", ["scalar"]],
-    ["partial-source/cross-scene structural clipboard guards", ["move-in-shared-session", "cross-scene-structural-paste"]],
-    ["removed comment words stay in recovery / optional selection / null/caret-only/refused/no-change", []]
   ]])
 ] as const;
 

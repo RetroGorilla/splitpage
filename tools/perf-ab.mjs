@@ -46,16 +46,6 @@ export function writeRecord(path, record) {
   writeFileSync(path, JSON.stringify({ ...kept, [record.kind]: record }, null, 2) + "\n");
 }
 
-const TRIAL_METHOD_FILE = "tests/collab/measure/trial-method.mjs";
-const TRIAL_COPY_FILE = "tests/collab/measure/trial-method-copy.mjs";
-
-export function placeTools(repo, dir, paths) {
-  for (const path of paths) cpSync(join(repo, path), join(dir, path), { recursive: true });
-  // why: A revision without the standing trial replica is measured with its copy per update; the module is chosen here,
-  // so the measurement imports nothing by a computed name.
-  if (existsSync(join(dir, TRIAL_COPY_FILE)) && !existsSync(join(dir, "src/adapters/collab/trial-replica.ts"))) cpSync(join(dir, TRIAL_COPY_FILE), join(dir, TRIAL_METHOD_FILE));
-}
-
 export async function toolRevision(run, paths, dryRun) {
   const changed = (await run("git", ["status", "--porcelain", "--", ...paths])).trim();
   if (changed && !dryRun) throw new Error(`commit the measuring tools before a real run; changed: ${changed.split("\n").length} path(s) under ${paths.join(", ")}`);
