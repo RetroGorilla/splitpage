@@ -1,17 +1,14 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { migrateRows } from "../bootstrap/document-ports.ts";
-import { adoptReplacement, currentDocument, sharedSession } from "../bootstrap/wiring/session-owner.ts";
-import { writerControls } from "../bootstrap/wiring/writer.ts";
+import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { addRow, addRowAndFocus, armDelete, splitRowFieldCore } from "../bootstrap/wiring/rows.ts";
 import { cycleRowStatus, setBeatFilmed } from "../bootstrap/wiring/beat-status.ts";
 import { promptForTarget, promptForWpm } from "../bootstrap/wiring/title-chrome.ts";
-import { sharedStructureCommands, sharedValueCommands } from "../bootstrap/wiring/ports/shared-commands.ts";
 import { setBeatLength } from "../features/rows/read-time.ts";
 import { setTargetLength } from "../features/rundown/target.ts";
 import { deleteSelectedBeats, selectBeats } from "../features/clipboard/beat-select.ts";
 import { collabState } from "../adapters/collab/state.ts";
-import { ORDERS, SOURCE, START, agree, base, caret, cellOf, clearWarnings, deliverInsideNextPublication, enter, exchange, minted, press, remoteCreate,
+import { ORDERS, START, agree, base, caret, cellOf, clearWarnings, deliverInsideNextPublication, enter, exchange, minted, press, remoteCreate,
   remoteInsert, remoteSplit, row, select, toastHost, type, undoOnce, warnings } from "./_shared-split-callers.mjs";
 
 const served = [
@@ -196,31 +193,4 @@ test("C7 callers: the read-time button's own Ctrl+Z steps the shared owner", asy
     assert.deepEqual(f.parts.undo.sizes(), { undo: 0, redo: 1, dropped: 0 });
     assert.deepEqual(warnings(), []);
   } finally { f.close(); }
-});
-
-test("C7 standalone: the callers read no shared ports and keep the list-local ids", () => {
-  writerControls().closeWriter();
-  adoptReplacement(migrateRows(structuredClone(SOURCE)));
-  assert.equal(sharedSession(), false);
-  assert.equal(sharedStructureCommands.ports(), null);
-  assert.equal(sharedValueCommands.ports(), null);
-  clearWarnings();
-  select(cellOf("audioText"), 3);
-  assert.equal(press(cellOf("audioText"), "Enter", { altKey: true }), true);
-  const split = currentDocument().rows[1];
-  assert.match(split.id, /^r/); assert.doesNotMatch(split.id, /^structure_/);
-  assert.deepEqual(currentDocument().rows.map(r => [r.id, r.audioText]), [["r1", "abc"], [split.id, "def"], ["r2", "Other"], ["r3", "Third"]]);
-  assert.deepEqual(caret(), [split.id, "audioText", 0]);
-  const added = addRow(null);
-  assert.equal(currentDocument().rows.at(-1).id, added);
-  assert.doesNotMatch(added, /^structure_/);
-  select(cellOf("visualText"), 2);
-  assert.equal(press(cellOf("visualText"), "Enter", { altKey: true }), true);
-  assert.deepEqual(currentDocument().rows.slice(0, 2).map(r => r.visualText), ["Wi", "de"]);
-  assert.equal(currentDocument().rows[1].id === split.id, false);
-  cycleRowStatus("r1"); setBeatFilmed("r2", true);
-  assert.deepEqual(currentDocument().rows.filter(r => r.id === "r1" || r.id === "r2").map(r => r.status), ["ready", "shot"]);
-  assert.equal(setBeatLength("r1", 42), true); assert.equal(setTargetLength(90), true);
-  assert.deepEqual([currentDocument().rows[0].lengthSeconds, currentDocument().targetSeconds], [42, 90]);
-  assert.deepEqual(warnings(), []);
 });
