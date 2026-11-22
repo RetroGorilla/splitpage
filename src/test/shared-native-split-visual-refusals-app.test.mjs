@@ -73,6 +73,11 @@ function preview(node) {
   compose(node, "start");
   compose(node, "update", "X");
   const range = document.getSelection().getRangeAt(0);
+  const before = new window.InputEvent("beforeinput", {
+    bubbles: true, cancelable: false, inputType: "insertCompositionText", data: "X", isComposing: true
+  });
+  Object.defineProperty(before, "getTargetRanges", { value: () => [range.cloneRange()] });
+  assert.equal(node.dispatchEvent(before), true);
   const inserted = document.createTextNode("X");
   range.insertNode(inserted);
   document.getSelection().collapse(inserted, 1);
@@ -161,6 +166,22 @@ function expectedNotices(route, state, edit) {
 
 function paint(expected) {
   for (const [id, , html] of cells(expected)) assert.equal(cell(id).innerHTML, html);
+}
+
+function editedDocument(before, edit, route, focusId) {
+  const rows = before.rows.slice();
+  if (edit.added) {
+    const { updatedAt } = currentDocument().rows[1];
+    assert.equal(new Date(updatedAt).toISOString(), updatedAt);
+    rows.splice(1, 0, {
+      id: focusId, audioText: "", visualText: "", status: "todo", updatedAt, updatedBy: "Anonymous"
+    });
+  } else {
+    const writesText = route.name === "paste" || breaks.has(route.name);
+    const attribution = writesText ? { updatedAt: new Date(0).toISOString(), updatedBy: "Editor" } : {};
+    rows[0] = { ...rows[0], visualText: edit.html, ...attribution };
+  }
+  return { ...before, rows };
 }
 
 function coherent(native, peer) {
@@ -253,13 +274,10 @@ for (const order of ["forward", "reverse"]) {
         assert.deepEqual(peer.encodeState(), peerBytes, label);
         assert.deepEqual(peer.document(), before, label);
         if (edit) {
-          const expected = cells(before);
           const focusId = edit.added ? currentDocument().rows[1].id : "r1";
-          if (edit.added) {
-            assert.ok(!before.rows.some(row => row.id === focusId), label);
-            expected.splice(1, 0, [focusId, "", ""]);
-          } else expected[0][2] = edit.html;
-          assert.deepEqual(cells(currentDocument()), expected, label);
+          if (edit.added) assert.ok(!before.rows.some(row => row.id === focusId), label);
+          const expected = editedDocument(before, edit, route, focusId);
+          assert.deepEqual(currentDocument(), expected, label);
           assert.notDeepEqual(native.encodeState(), bytes, label);
           assert.equal(updates.length, 1, label);
           assert.equal(applyNativePeerUpdate(peer, updates[0]), true, label);
@@ -267,7 +285,7 @@ for (const order of ["forward", "reverse"]) {
           assert.deepEqual(currentDocument(), native.document(), label);
           assert.equal(document.activeElement, cell(focusId), label);
           assert.deepEqual(cellSelection(cell(focusId)), { from: edit.from, to: edit.to }, label);
-          paint(currentDocument());
+          paint(expected);
         } else {
           assert.deepEqual(currentDocument(), before, label);
           assert.deepEqual(native.document(), before, label);
