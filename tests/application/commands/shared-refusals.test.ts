@@ -30,7 +30,8 @@ import { readOperation } from "../../../src/core/collab/read-operation.ts";
 import { builderOperationCoverage } from "../../core/collab/coverage-fixture.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { replicas, operation } from "../../adapters/collab/executor-support.ts";
-import { adapterReplica, sharedHarness } from "../session/shared-session-support.ts";
+import { sharedHarness } from "../session/shared-session-support.ts";
+import { adapterReplica } from "../session/legacy-shared-session-support.ts";
 import { fakeNotices } from "../../features/fakes.ts";
 
 const runtime = createFlowLoadRuntime();

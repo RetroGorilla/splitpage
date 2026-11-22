@@ -7,7 +7,7 @@ import { getEditorName } from "../bootstrap/wiring/preferences-owner.ts";
 import { notices } from "../bootstrap/wiring/ports/effects.ts";
 import { enterSharedSession, leaveRunningSharedSession, nativeEditorRecords } from "../bootstrap/wiring/shared-session.ts";
 import { openNativeEditor } from "../bootstrap/wiring/native-shared-session.ts";
-import { entrySwitchFixture } from "../../tests/bootstrap/shared-entry-switch-support.ts";
+import { nativeEntrySwitchFixture as entrySwitchFixture } from "../../tests/bootstrap/native-entry-switch-support.ts";
 import { nativeGalleryOf } from "../adapters/collab/native/values.ts";
 import { pictures } from "../bootstrap/wiring/ports/pictures.ts";
 import { setBeatLength } from "../features/rows/read-time.ts";

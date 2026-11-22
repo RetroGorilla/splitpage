@@ -7,7 +7,8 @@ import { observeSharedTransactions, readSharedRevision, transactSharedDocument }
 import { executeSharedOperations } from "../../../src/adapters/collab/execute.ts";
 import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/removal-executor.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
-import { registerSplits, sharedCommand } from "../../application/session/shared-session-support.ts";
+import { sharedCommand } from "../../application/session/shared-session-support.ts";
+import { registerSplits } from "../../application/session/legacy-shared-session-support.ts";
 import { operation } from "../../adapters/collab/executor-support.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";

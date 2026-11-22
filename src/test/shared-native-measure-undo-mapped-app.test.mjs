@@ -17,7 +17,7 @@ import { enterSharedSession, forceLeaveSharedSession, leaveRunningSharedSession 
 import { createSessionCapabilities } from "../application/session/capabilities.ts";
 import { appActions } from "../bootstrap/wiring/ports/actions.ts";
 import { openNativeEditor } from "../bootstrap/wiring/native-shared-session.ts";
-import { entrySwitchFixture } from "../../tests/bootstrap/shared-entry-switch-support.ts";
+import { nativeEntrySwitchFixture as entrySwitchFixture } from "../../tests/bootstrap/native-entry-switch-support.ts";
 import { render, renderRow } from "../features/rows/render.ts";
 
 window.Element.prototype.scrollBy = () => {};

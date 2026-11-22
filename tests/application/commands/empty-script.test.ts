@@ -7,7 +7,8 @@ import { sharedUndoOwner } from "../../../src/bootstrap/wiring/ports/shared-undo
 import { encodeSharedState, applySharedUpdate, destroySharedDocument } from "../../../src/adapters/collab/document.ts";
 import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/project.ts";
 import { replicas } from "../../adapters/collab/executor-support.ts";
-import { adapterReplica, sharedHarness } from "../session/shared-session-support.ts";
+import { sharedHarness } from "../session/shared-session-support.ts";
+import { adapterReplica } from "../session/legacy-shared-session-support.ts";
 import { createMonitoredSharedDocument } from "../../adapters/collab/helpers.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";

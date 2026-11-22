@@ -1,7 +1,8 @@
 import "../../../src/test/_dom.mjs";
 import assert from "node:assert/strict";
 import { Stage1ExecutorHarness } from "../../adapters/collab/stage1-executor-support.ts";
-import { adapterReplica, sharedHarness } from "../../application/session/shared-session-support.ts";
+import { sharedHarness } from "../../application/session/shared-session-support.ts";
+import { adapterReplica } from "../../application/session/legacy-shared-session-support.ts";
 import type { SharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
 import { sharedBufferPorts } from "../../../src/bootstrap/wiring/ports/shared-buffer.ts";
 import { createBufferedField } from "../../../src/application/editing/buffered-field.ts";
@@ -16,7 +17,7 @@ import { fromHtml } from "../../../src/bootstrap/richtext.ts";
 import { readBufferedFieldKey } from "../../../src/core/collab/buffer.ts";
 import { fakeWriterBufferEffects } from "../fakes.ts";
 import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
-import { registerSplits } from "../../application/session/shared-session-support.ts";
+import { registerSplits } from "../../application/session/legacy-shared-session-support.ts";
 import { registerSharedRemovalHandlers } from "../../../src/adapters/collab/removal-executor.ts";
 
 type Field = "visualText" | "audioText";

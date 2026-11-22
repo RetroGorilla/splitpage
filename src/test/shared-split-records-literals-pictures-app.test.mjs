@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { currentDocument } from "../bootstrap/wiring/session-owner.ts";
 import { undoOwner } from "../bootstrap/wiring/undo.ts";
-import { served as allCases, warnings, ORDERS, enter, remoteInsert, exchange, shape, agree, undoOnce, withZ, tidy } from "./_shared-split-records.mjs";
+import { served as allCases, ORDERS, enter, remoteInsert, exchange, agree, undoOnce, withZ, tidy } from "./_shared-split-records.mjs";
+import { warnings, shape } from "./_standalone-records.mjs";
 
 const served = allCases.filter((_, index) => [20].includes(index));
 

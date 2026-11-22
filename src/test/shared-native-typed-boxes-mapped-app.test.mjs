@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { after, test } from "node:test";
 import { bootApp, closeApp } from "./_app-boot.mjs";
-import { entrySwitchFixture } from "../../tests/bootstrap/shared-entry-switch-support.ts";
+import { nativeEntrySwitchFixture as entrySwitchFixture } from "../../tests/bootstrap/native-entry-switch-support.ts";
 import { assertReplicasAgree } from "../../tests/collab/agreement.ts";
 import { openNativeSession } from "../adapters/collab/native/session.ts";
 import { applyNativePeerUpdate } from "../adapters/collab/native/peer-update.ts";

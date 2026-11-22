@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { warnings, clearWarnings, ORDERS, enter, exchange, agree, withZ, refusals, refusedOnce, tidy } from "./_shared-split-records.mjs";
+import { ORDERS, enter, exchange, agree, withZ, refusals, refusedOnce, tidy } from "./_shared-split-records.mjs";
+import { warnings, clearWarnings } from "./_standalone-records.mjs";
 
 for (const literal of refusals) for (const order of ORDERS) test(`C7 record refusal: ${literal.name} is refused once and writes nothing, ${order}`, async () => {
   const f = await enter();

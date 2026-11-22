@@ -7,14 +7,9 @@ import type { Command, SessionCounters } from "../../../src/application/session/
 import type { Capability } from "../../../src/application/session/ports.ts";
 import type { SharedOperation } from "../../../src/core/collab/operations.ts";
 import type { SharedCommandDescription } from "../../../src/core/collab/undo-record.ts";
-import type { SharedUndo } from "../../../src/application/editing/undo/shared-undo.ts";
 import { enterSharedDocument } from "../../../src/core/migrate.ts";
 import type { FlowSelectionPair } from "../../../src/core/flow/flow.ts";
-import { createSharedReplica } from "../../../src/adapters/collab/replica.ts";
 import { compareSharedProjections } from "../../../src/core/collab/projection/changes.ts";
-import { registerSharedSplitHandlers } from "../../../src/adapters/collab/split-executor.ts";
-import { createFlowLoadRuntime } from "../../core/flow/load.ts";
-import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { fakeClock } from "../session-fakes.ts";
 import type { FakeClock } from "../session-fakes.ts";
 
@@ -37,14 +32,6 @@ export interface SharedHarness {
   reported: unknown[];
   clock: FakeClock;
   deny: (reason: string | null) => void;
-}
-
-export function adapterReplica(handle: SharedDocumentHandle, undo?: Pick<SharedUndo, "perform">): ReplicaPort {
-  return createSharedReplica(handle, undefined, undo);
-}
-
-export function registerSplits(handle: SharedDocumentHandle): void {
-  registerSharedSplitHandlers(handle, { cells: createFlowLoadRuntime().cells });
 }
 
 export function sharedHarness(replica: ReplicaPort, hooks: SharedHarnessHooks = {}): SharedHarness {

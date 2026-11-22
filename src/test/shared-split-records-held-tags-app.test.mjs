@@ -1,6 +1,7 @@
 import { test } from "node:test";
 import assert from "node:assert/strict";
-import { HELD_PATHS as allCases, warnings, clearWarnings, ORDERS, enter, exchange, agree, withZ, ADMISSION_HELD, refusedOnce, tidy, $, FIRE, focused } from "./_shared-split-records.mjs";
+import { HELD_PATHS as allCases, ORDERS, enter, exchange, agree, withZ, refusedOnce, tidy, focused } from "./_shared-split-records.mjs";
+import { warnings, clearWarnings, ADMISSION_HELD, $, FIRE } from "./_standalone-records.mjs";
 
 const HELD_PATHS = allCases.filter((_, index) => [18,19,20,21,22,23,24,25,26,27,28,29,30,31].includes(index));
 

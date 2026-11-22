@@ -17,7 +17,8 @@ import { recordReplicas } from "../../adapters/collab/record-support.ts";
 import { assertReplicasAgree } from "../../collab/agreement.ts";
 import type { ReplicaReading } from "../../collab/agreement.ts";
 import type { DeliveryOrder } from "../../collab/delivery.ts";
-import { adapterReplica, registerSplits, sharedCommand, sharedHarness } from "./shared-session-support.ts";
+import { sharedCommand, sharedHarness } from "./shared-session-support.ts";
+import { adapterReplica, registerSplits } from "./legacy-shared-session-support.ts";
 import type { SharedHarness } from "./shared-session-support.ts";
 
 const NOTHING = { whole: false, cells: [], rowsInserted: [], rowsRemoved: [], rowsMoved: false, runsMoved: false, docFields: [], derive: [], saveNow: false };

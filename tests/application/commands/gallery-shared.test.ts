@@ -21,7 +21,8 @@ import {
   addGalleryPicture, addGalleryVideo, annotateGallerySlot, moveGallerySlot, removeGalleryLink, removeGallerySlot, replaceGalleryPicture, setVideoThumbnail
 } from "../../../src/core/document/gallery.ts";
 import { replicas, operation } from "../../adapters/collab/executor-support.ts";
-import { sharedHarness, adapterReplica } from "../session/shared-session-support.ts";
+import { sharedHarness } from "../session/shared-session-support.ts";
+import { adapterReplica } from "../session/legacy-shared-session-support.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { assertReplicasAgree } from "../../collab/agreement.ts";
 

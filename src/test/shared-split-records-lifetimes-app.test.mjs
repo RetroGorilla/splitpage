@@ -2,7 +2,8 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { openProductionPanel, renderProduction } from "../features/tags/panels.ts";
 import { runBrollRefresh } from "../features/broll/panel.ts";
-import { SOURCE, adopt, enter, brollOpen, tidy, $, typeIn, FIRE, MUG, productionCards, expandedCard, tagPersonBox, shotB1, tagById, blurOut, NOTES, LAMP, SCENED, OTHER, PROP, shownValue, refusedNotes } from "./_shared-split-records.mjs";
+import { enter, tidy, tagPersonBox, shotB1, tagById, blurOut, NOTES, LAMP, SCENED, OTHER, PROP, shownValue, refusedNotes } from "./_shared-split-records.mjs";
+import { SOURCE, adopt, brollOpen, $, typeIn, FIRE, MUG, productionCards, expandedCard } from "./_standalone-records.mjs";
 
 test("C7 record typed text: drafts in two occurrences of one tag in By scene each stay in their own box across a redraw", async () => {
   const f = await enter(SCENED);

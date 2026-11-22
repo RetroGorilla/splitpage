@@ -15,7 +15,7 @@ import { undoOwner } from "../bootstrap/wiring/undo.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { posToDom } from "../features/common/cell-dom.ts";
 import { cellSelection } from "../features/common/cell-selection.ts";
-import { entrySwitchFixture } from "../../tests/bootstrap/shared-entry-switch-support.ts";
+import { nativeEntrySwitchFixture as entrySwitchFixture } from "../../tests/bootstrap/native-entry-switch-support.ts";
 
 window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};

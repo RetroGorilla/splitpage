@@ -14,7 +14,7 @@ import { enterSharedSession, forceLeaveSharedSession, leaveRunningSharedSession 
 import { sharedUndoRoute } from "../bootstrap/wiring/undo.ts";
 import { writerControls } from "../bootstrap/wiring/writer.ts";
 import { setCellSelection } from "../features/common/cell-selection.ts";
-import { entrySwitchFixture } from "../../tests/bootstrap/shared-entry-switch-support.ts";
+import { nativeEntrySwitchFixture as entrySwitchFixture } from "../../tests/bootstrap/native-entry-switch-support.ts";
 
 window.Element.prototype.scrollBy = () => {};
 window.Element.prototype.scrollIntoView = () => {};

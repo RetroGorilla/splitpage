@@ -14,7 +14,8 @@ import { closeCommentComposer, toggleResolve } from "../features/comments/commen
 import { removeGallerySlot } from "../core/document/gallery.ts";
 import { tagKey } from "../core/document/tags.ts";
 import { encodeSharedState } from "../adapters/collab/document.ts";
-import { toastHost, warnings, clearWarnings, SOURCE, enter, shape, brollOpen, twice, post, tidy, $, typeIn, FIRE, B1, NOOPS, noopOnce } from "./_shared-split-records.mjs";
+import { enter, tidy } from "./_shared-split-records.mjs";
+import { toastHost, warnings, clearWarnings, SOURCE, shape, brollOpen, twice, post, $, typeIn, FIRE, B1, NOOPS, noopOnce } from "./_standalone-records.mjs";
 
 for (const noop of NOOPS) test(`C7 record no-op: ${noop.name}, shared and standalone alike, with nothing written and no warning`, async () => {
   const f = await enter();

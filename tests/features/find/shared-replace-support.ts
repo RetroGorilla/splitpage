@@ -15,7 +15,8 @@ import { projectSharedDocumentWithRecovery } from "../../../src/adapters/collab/
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { operation, replicas } from "../../adapters/collab/executor-support.ts";
-import { adapterReplica, sharedHarness } from "../../application/session/shared-session-support.ts";
+import { sharedHarness } from "../../application/session/shared-session-support.ts";
+import { adapterReplica } from "../../application/session/legacy-shared-session-support.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { assertReplicasAgree } from "../../collab/agreement.ts";
 import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";

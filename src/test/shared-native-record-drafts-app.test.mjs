@@ -273,6 +273,7 @@ test("a refused note is cleared on leave and a new native session only saves on 
   blur(type(notes, "Wide take"));
   release();
   assert.deepEqual(hook.leave(), { ok: true });
+  adopt();
   openShot();
   type(notes, "Wide take");
   runBrollRefresh();
@@ -281,9 +282,17 @@ test("a refused note is cleared on leave and a new native session only saves on 
   adopt();
   await start();
   openShot();
+  const releaseSecond = hold(t);
+  blur(type(notes, "Wide take"));
+  releaseSecond();
+  assert.deepEqual(hook.leave(), { ok: true });
+  adopt();
+  await start();
+  openShot();
   assert.equal(need(notes).value, "");
   assert.deepEqual(window.__brollTest.drafts(), []);
   type(notes, "Wide take");
+  runBrollRefresh();
   runBrollRefresh();
   copies(doc => shot(doc).notes, "");
   blur(need(notes));
@@ -315,7 +324,9 @@ test("drafts typed before entry are cleared on the native record panels", async 
   blur(type(shotBox("prop"), "Old standalone prop"));
   await start();
   t.after(() => { if (sharedSession()) assert.deepEqual(hook.leave(), { ok: true }); });
+  renderProduction();
   runBrollRefresh();
+  assert.equal(find(tagBox("person"))?.value ?? "", "");
   assert.equal(need(shotBox("prop")).value, "");
   openTags();
   expandTag();

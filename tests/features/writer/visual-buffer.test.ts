@@ -12,7 +12,8 @@ import { registerSharedOperationFamilies } from "../../../src/adapters/collab/op
 import { applySharedUpdate, destroySharedDocument, encodeSharedState } from "../../../src/adapters/collab/document.ts";
 import { createMonitoredSharedDocument } from "../../adapters/collab/helpers.ts";
 import { replicas } from "../../adapters/collab/executor-support.ts";
-import { adapterReplica, sharedHarness } from "../../application/session/shared-session-support.ts";
+import { sharedHarness } from "../../application/session/shared-session-support.ts";
+import { adapterReplica } from "../../application/session/legacy-shared-session-support.ts";
 import { createFlowLoadRuntime } from "../../core/flow/load.ts";
 import { fakeFlowCommandEffects, fakeWriterBufferEffects } from "../fakes.ts";
 import { bufferReaders, bufferStamps } from "../../collab/buffer-readers.ts";
