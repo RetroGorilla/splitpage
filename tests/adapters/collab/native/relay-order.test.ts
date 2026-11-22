@@ -223,11 +223,13 @@ async function runPair(t: TestContext, pair: Pair, timing: "offline" | "opening"
     if (release) {
       const traffic = "unrelated traffic while request is held";
       reader.session.ydoc.getText("peer-traffic").insert(0, traffic);
-      await signals.until(() => writer.session.ydoc.getText("peer-traffic").toString() === traffic || undefined);
+      await signals.until(() => downloads.includes(messageYjsUpdate) || undefined);
+      assert.equal(writer.session.ydoc.getText("peer-traffic").toString(), "");
       assert.equal(writer.relay.status().connected, true);
       assert.equal(writer.relay.status().firstSyncDone, true);
       assert.deepEqual(bridge.links[1]?.sent, [messageYjsSyncStep1]);
       release();
+      await signals.until(() => writer.session.ydoc.getText("peer-traffic").toString() === traffic || undefined);
     }
   }
   if (timing === "offline") {
