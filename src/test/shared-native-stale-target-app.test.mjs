@@ -231,24 +231,31 @@ for (const scenario of ["restored", "restored selection", "still removed", "chan
   });
 }
 
-for (const [field, offset, priorDelivery] of [
-  ["visual", 0, false], ["visual", 5, false], ["narration", 5, false], ["narration", 5, true]
+for (const [field, offset, timing] of [
+  ["visual", 0, "with restore"], ["visual", 5, "with restore"], ["narration", 5, "with restore"],
+  ["narration", 5, "after restore"], ["narration", 5, "before removal"], ["narration", 5, "with removal"]
 ]) {
-  test(`Split composition Leave refuses an identical ${field} replacement at offset ${offset}, restoration delivered=${priorDelivery}`, async t => {
+  test(`Split composition Leave refuses an identical ${field} replacement at offset ${offset} ${timing}`, async t => {
     const f = await enter(t, "Split", field);
     const originalText = field === "visual" ? "Scene" : "World";
     const preview = originalText.slice(0, offset) + "X" + originalText.slice(offset);
     setCellSelection(f.editor(), offset);
     beginComposition(f.target, "X");
+    const replaceAdjacent = () => {
+      const from = offset === 0 ? 0 : offset - 1;
+      const adjacent = f.peer.commands.anchorText({ beat: f.id, cell: field }, from, from + 1);
+      assert.equal(adjacent.kind, "anchored");
+      written(f.peer.commands.replaceText(adjacent.range, [{ text: originalText[from], marks: {} }]));
+    };
+    const beforeRemoval = timing === "before removal" || timing === "with removal";
+    if (beforeRemoval) replaceAdjacent();
+    if (timing === "before removal") send(f.peer, f.native);
     written(f.peer.commands.removeRows([f.id]));
     send(f.peer, f.native);
     composition(f.target, "end", "X");
     written(f.peer.commands.undo());
-    if (priorDelivery) send(f.peer, f.native);
-    const from = offset === 0 ? 0 : offset - 1;
-    const adjacent = f.peer.commands.anchorText({ beat: f.id, cell: field }, from, from + 1);
-    assert.equal(adjacent.kind, "anchored");
-    written(f.peer.commands.replaceText(adjacent.range, [{ text: originalText[from], marks: {} }]));
+    if (timing === "after restore") send(f.peer, f.native);
+    if (!beforeRemoval) replaceAdjacent();
     send(f.peer, f.native);
     await tick();
     const before = structuredClone(currentDocument()), bytes = f.native.encodeState(), updates = [];
@@ -270,8 +277,8 @@ for (const [field, offset, priorDelivery] of [
   });
 }
 
-for (const [scenario, offset] of [["live", 0], ["empty visual", 0], ["moved", 5]]) {
-  test(`Split composition Leave retains the original Visual caret for a ${scenario} restored field`, async t => {
+for (const [scenario, offset] of [["unchanged", 0], ["empty visual", 0], ["moved", 5]]) {
+  test(`Split composition Leave retains the original Visual caret after restoring the ${scenario} field`, async t => {
     const f = await enter(t, "Split", "visual", scenario);
     const original = currentDocument().docId, updates = [];
     t.after(f.native.subscribeLocalUpdates(update => updates.push(update)));
@@ -309,6 +316,12 @@ test("a successful composition retry emits one update even if the first Leave ca
   written(f.peer.commands.removeRows([f.id]));
   send(f.peer, f.native);
   composition(f.target, "end", "X");
+  for (let attempt = 0; attempt < 2; attempt++) {
+    assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: "missing" });
+    assert.equal(sharedSession(), true);
+    assert.equal(updates.length, 0);
+    assert.deepEqual(reasons(f), ["missing"]);
+  }
   written(f.peer.commands.undo());
   send(f.peer, f.native);
   assert.deepEqual(leaveRunningSharedSession(), { ok: false, reason: "leave-failed" });

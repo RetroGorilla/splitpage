@@ -1000,9 +1000,10 @@ Requirements from the outside review of this note, added to the build order (sec
   its units. A caret must retain its text container and adjacent units at its original gap, including
   the sole neighbor at the start or end of a nonempty field. An empty field uses its original container.
   Peer Undo can recreate deleted Narration units in their original container. The first observed restore
-  may establish new adjacent units only if the original units were gone during removal and the restore
-  brings back the original gap and content without new deletions. A successful write lands the complete
-  document under a fresh ID. If landing fails after a successful write, a later Leave lands that write
+  may establish new adjacent units only after a removal that deleted the original neighbors without
+  inserting replacement units. The restore must bring back the original gap and content without new
+  deletions. A successful write lands the complete document under a fresh ID. If landing fails after
+  a successful write, a later Leave lands that write
   without repeating it.
   An unavailable or ambiguous target keeps its local preview and the session open. Further Leave attempts
   report the refusal and emit no writes while the range remains invalid.

@@ -376,41 +376,53 @@ export function captureNativeCompositionCaret(script: NativeScript, range: Nativ
   const boundary = (live: NativeLiveRange, length: number) => [
     live.from > live.start ? undoEndpoint(checked.target, live.text, live.from, -1).position : null,
     live.from - live.start < length ? undoEndpoint(checked.target, live.text, live.from, 0).position : null
-  ];
+  ] as const;
+  const sameSide = (saved: PlainPosition | null, live: PlainPosition | null) =>
+    saved === null ? live === null : live !== null && Y.compareIDs(saved.item, live.item);
   let expected = boundary(original, content.length);
+  const units = expected.filter(side => side !== null);
   const point = () => {
     const live = nativeLiveRange(script, checked);
     return typeof live !== "string" && live.pieces.length === 1 && live.text === text &&
       live.from - live.start === offset ? live : null;
   };
+  const track = checked.target.cell === "narration" && units.length > 0;
+  let removed = false;
+  const dispose = () => { if (track) script.doc.off("afterTransaction", observe); };
+  const observe = (transaction: Y.Transaction) => {
+    try {
+      const present = !!script.reader.beatBoundary(checked.target.beat);
+      if (!removed) {
+        if (present) {
+          if (units.some(side => unitGone(side, script.doc))) dispose();
+          return;
+        }
+        // why: replacement mixed into removal must not qualify its new units for a later retry
+        removed = !transaction.local && transaction.beforeState.size === transaction.afterState.size &&
+          [...transaction.afterState].every(([client, clock]) => transaction.beforeState.get(client) === clock) &&
+          units.every(side => unitGone(side, script.doc));
+        if (!removed) dispose();
+        return;
+      }
+      if (!present) return;
+      dispose();
+      // why: peer undo recreates removed narration; a restore mixed with new deletions cannot prove the gap
+      if (transaction.local || !Y.equalDeleteSets(transaction.deleteSet, Y.createDeleteSet())) return;
+      const live = point();
+      if (live && storedText(live.items) === content) expected = boundary(live, content.length);
+    } catch {
+      dispose();
+    }
+  };
+  if (track) script.doc.on("afterTransaction", observe);
   return {
     intact: () => {
       const live = point();
-      return !!live && boundary(live, storedText(live.items).length).every((side, i) => {
-        const saved = expected[i];
-        return saved === null ? side === null : !!side && Y.compareIDs(saved.item, side.item);
-      });
+      if (!live) return false;
+      const [left, right] = boundary(live, storedText(live.items).length);
+      return sameSide(expected[0], left) && sameSide(expected[1], right);
     },
-    watchRestoration: () => {
-      const removed = expected.filter(side => side !== null);
-      if (checked.target.cell !== "narration" || nativeLiveRange(script, checked) !== "missing" ||
-        !removed.length || !removed.every(side => unitGone(side, script.doc))) return null;
-      const stop = () => script.doc.off("afterTransaction", restored);
-      const restored = (transaction: Y.Transaction) => {
-        try {
-          if (!script.reader.beatBoundary(checked.target.beat)) return;
-          stop();
-          // why: peer undo recreates removed narration; a restore mixed with new deletions cannot prove the gap
-          if (transaction.local || !Y.equalDeleteSets(transaction.deleteSet, Y.createDeleteSet())) return;
-          const live = point();
-          if (live && storedText(live.items) === content) expected = boundary(live, content.length);
-        } catch {
-          stop();
-        }
-      };
-      script.doc.on("afterTransaction", restored);
-      return stop;
-    }
+    dispose
   };
 }
 

@@ -188,7 +188,6 @@ export function sameNativeInsertPlacement(shown: SceneDocument | null, live: Sce
 export function mountNativeSharedInput({ native, session, editAttribution, now = Date.now, report, paintIsCurrent = () => false,
   paintedJoinSeams = () => null, publish = () => {} }: NativeInputPorts) {
   let draft: Draft | null = null, stopped: string | null = null, uncertain = false;
-  let stopRestoration: (() => void) | null = null;
   let insertMenuSelection: ReturnType<typeof captureInsertMenuSelection> | null = null;
   let lastWriterEnterRefusal: string | null = null;
   let imeTarget: Element | null = null;
@@ -412,7 +411,6 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         const { range, selection: { from, to }, text, composition } = buffered;
         if (result.reason !== "missing" || range?.target.cell !== "narration" ||
           composition || composed || !text || from !== to || native.hasBeatMarker(range.target.beat)) {
-          if (result.reason === "missing") stopRestoration ??= buffered.compositionCaret?.watchRestoration() ?? null;
           return stop(result.reason, quiet);
         }
       }
@@ -481,6 +479,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       return finish(undefined, true, true);
     } finally {
       if (draft === buffered && !stopped) stopped = "missing";
+      if (draft !== buffered) buffered.compositionCaret?.dispose();
     }
   }
 
@@ -1078,6 +1077,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (!text) {
       restore(buffered);
       buffered.paint?.dispose();
+      buffered.compositionCaret?.dispose();
       draft = null;
       clearMovePaint();
       publish();
@@ -1087,6 +1087,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     restore(buffered);
     preview(cell, buffered.selection, text);
     finish();
+    if (draft !== buffered) buffered.compositionCaret?.dispose();
   }
 
   function intercept(event: Event): void {
@@ -1504,7 +1505,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   let stopUnload: (() => void) | undefined;
   const dispose = (): void => {
     clearTimeout(timer);
-    stopRestoration?.();
+    draft?.compositionCaret?.dispose();
     draft?.paint?.dispose();
     draft = null;
     stopWriterPaint?.();
@@ -1551,6 +1552,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (!result || result.kind === "recovery") return null;
       const bytes = reopened.encodeState();
       draft.paint?.dispose();
+      draft.compositionCaret?.dispose();
       draft = null;
       clearMovePaint();
       stopped = null;
