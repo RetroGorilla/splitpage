@@ -76,7 +76,7 @@ export function createSharedBufferedText(
           if (!open) throw new Error("Buffered edit is closed");
           buffer.replace(from, to, insert);
         },
-        commit: (runs, selection, label) => {
+        commit: (runs, selection) => {
           stranded = false;
           if (!open) return { kind: "rejected", reason: "buffer-closed" };
           if (sharedBufferDeliveryBusy(handle)) return { kind: "rejected", reason: "buffer-delivery" };
@@ -95,7 +95,7 @@ export function createSharedBufferedText(
                 changes: bufferedFieldChanges(rowId),
                 apply: () => { throw new Error("A buffered shared command cannot apply a standalone plan"); },
                 shared: { operations: [...operations, ...tags, ...stamp], base: commit.base,
-                  description: label ? { ...typingDescription(handle, target, painted, commit), label, typing: null } : typingDescription(handle, target, painted, commit) }
+                  description: typingDescription(handle, target, painted, commit) }
               };
             } });
           } catch (error) { return { kind: "failed", error }; }
@@ -118,7 +118,7 @@ export function createSharedBufferedText(
             const restored = selection ? resolveSharedBufferedSelection(handle, anchors, target.field === "audioText" ? undefined : { key: rowId, target }) : undefined;
             const recovered = readSharedRevision(handle) !== beforeDrain && (target.field === "audioText" || target.field === "visualText")
               && projectSharedDocumentWithRecovery(handle).recovery.some(entry => entry.kind === "removed-beat" && entry.members.includes(target.owner));
-            return { ...outcome, ...restored ? { selection: restored } : {}, ...local ? { written: local } : {}, ...recovered ? { recovered: true } : {} };
+            return { ...outcome, ...restored ? { selection: restored } : {}, ...recovered ? { recovered: true } : {} };
           }
           return outcome;
         },

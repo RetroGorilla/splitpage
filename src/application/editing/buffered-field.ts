@@ -31,7 +31,6 @@ export interface BufferedFieldBinding {
   readonly beforeInput: (event: BufferedFieldEvent & { readonly inputType: string; readonly isComposing: boolean; readonly data?: string | null },
     range: FlowRange | null, native: FlowRange | null) => boolean;
   readonly input: () => void;
-  readonly discardUnchangedInput: () => void;
   readonly start: (event: BufferedFieldEvent, range: FlowRange | null) => void;
   readonly keydown: (event: BufferedFieldKey) => boolean;
   readonly end: (event: { readonly data: string }) => void;
@@ -43,8 +42,6 @@ export interface BufferedFieldBinding {
   readonly moved: (range: FlowRange | null) => void;
   readonly base: (rowId: string) => PaintedText | null;
   readonly dispose: () => boolean;
-  readonly replace: (text: string, label: string) => boolean;
-  readonly describe: (label: string) => void;
 }
 
 export interface BufferedFieldSurface<E> {
@@ -63,8 +60,6 @@ export interface BufferedFieldSurface<E> {
   readonly repaint: (rowId: string) => void;
   readonly restore: (rowId: string, selection: FlowRange | undefined) => void;
   readonly changed: () => void;
-  readonly write?: (field: E, text: string) => void;
-  readonly committed?: (before: PaintedText, written: PaintedText) => void;
   readonly key?: (pos: FlowPos) => string | null;
   readonly position?: (key: string, offset: number) => FlowPos;
   readonly unsettled?: (key: string, text: string) => { readonly reason: string; readonly hold: boolean } | null;
@@ -76,7 +71,6 @@ export function createBufferedField<E>(given: BufferedFieldPorts, surface: Buffe
   let active: { rowId: string; beat: E; base: PaintedText; edit: BufferedTextEdit; fault: boolean } | null = null;
   let target: readonly [number, number] | null = null;
   let typed: string | null = null;
-  let label: string | undefined;
   const same = surface.foldSpaceForm ? sameUpToSpaceForm : (a: string, b: string) => a === b;
   let ended = false;
   let committing = false;
@@ -176,7 +170,7 @@ export function createBufferedField<E>(given: BufferedFieldPorts, surface: Buffe
     return true;
   }
 
-  function settle(restoring = false): boolean {
+  function settle(): boolean {
     if (surface.composition()) { ports.report({ kind: "rejected", reason: "buffer-composition" }); return false; }
     if (!active) return true;
     reconcile();
@@ -186,9 +180,9 @@ export function createBufferedField<E>(given: BufferedFieldPorts, surface: Buffe
     }
     const held = active, range = surface.selection();
     const selection: readonly [number, number] | undefined = range && one(range) === held.rowId ? [range.anchor.offset, range.head.offset] : undefined;
-    const unsettled = restoring ? null : surface.unsettled?.(held.rowId, held.edit.text());
+    const unsettled = surface.unsettled?.(held.rowId, held.edit.text());
     if (unsettled) {
-      active = null; target = null; label = undefined;
+      active = null; target = null;
       surface.reset(held.rowId);
       try { held.edit.cancel(); } catch (error) { ports.report({ kind: "failed", error }); }
       surface.repaint(held.rowId);
@@ -200,13 +194,11 @@ export function createBufferedField<E>(given: BufferedFieldPorts, surface: Buffe
     committing = true;
     try {
       const runs = surface.runs(held.beat);
-      outcome = held.edit.commit(surface.foldSpaceForm ? alignSpaceForm(runs, held.edit.text()) ?? runs : runs, selection, label);
+      outcome = held.edit.commit(surface.foldSpaceForm ? alignSpaceForm(runs, held.edit.text()) ?? runs : runs, selection);
     }
     catch (error) { outcome = { kind: "failed", error }; }
     finally { committing = false; }
     if (held.edit.isOpen()) return recover(held, outcome, selection);
-    if (outcome.written) surface.committed?.(held.base, outcome.written);
-    label = undefined;
     active = null; target = null;
     surface.repaint(held.rowId); surface.restore(held.rowId, outcome.selection);
     surface.changed();
@@ -242,7 +234,7 @@ export function createBufferedField<E>(given: BufferedFieldPorts, surface: Buffe
   function abandon(final: boolean): void {
     if (final) released = true;
     if (committing) return;
-    surface.composition(false); ended = false; refusedComposition = false; composedFromHold = null; target = null; label = undefined;
+    surface.composition(false); ended = false; refusedComposition = false; composedFromHold = null; target = null;
     const held = active;
     if (!held) return;
     active = null;
@@ -290,7 +282,6 @@ export function createBufferedField<E>(given: BufferedFieldPorts, surface: Buffe
       if (!begin(event, intended) || !intended) return true;
       const from = Math.min(intended.anchor.offset, intended.head.offset), to = Math.max(intended.anchor.offset, intended.head.offset);
       target = [from, to]; typed = event.data ?? null;
-      label = undefined;
       return true;
     },
     input: () => {
@@ -301,11 +292,6 @@ export function createBufferedField<E>(given: BufferedFieldPorts, surface: Buffe
         active.edit.replace(from, to, surface.foldSpaceForm && typed !== null && sameUpToSpaceForm(typed, kept) ? typed : kept); target = null;
       }
       if (!surface.composition() && !holding()) finish();
-    },
-    discardUnchangedInput: () => {
-      if (!target || !active || active.fault || surface.composition() || !same(text(active.beat), active.edit.text())) return;
-      target = null; typed = null;
-      if (!holding()) finish();
     },
     start: (event, range) => {
       ended = false; refusedComposition = false; composedFromHold = null;
@@ -337,16 +323,6 @@ export function createBufferedField<E>(given: BufferedFieldPorts, surface: Buffe
       } else finish();
     },
     finish,
-    describe: value => { label = value; },
-    replace: (value, description) => {
-      if (!surface.write || !finish()) return false;
-      const range = surface.selection();
-      if (!range || !begin(checkpoint("replace"), range) || !active) return false;
-      active.edit.replace(0, active.edit.text().length, value);
-      surface.write(active.beat, value);
-      target = null; label = description;
-      return settle(true);
-    },
     settledFor,
     canPaint: () => {
       const checked = ownership(checkpoint("paint"));

@@ -1,0 +1,31 @@
+{
+  "tests": [
+    "tests/features/rows/scene-name.test.ts"
+  ],
+  "mutants": [
+    {
+      "label": "standalone scene rename loses its text limit",
+      "file": "src/features/rows/scene-controls.ts",
+      "find": "    input.maxLength = 200;",
+      "replace": "    input.maxLength = 201;"
+    },
+    {
+      "label": "standalone scene rename omits the edit",
+      "file": "src/features/rows/scene-controls.ts",
+      "find": "      ports.edits.run(renameSceneCommand(id, name));",
+      "replace": "      void name;"
+    },
+    {
+      "label": "standalone scene rename does not restore focus after repaint",
+      "file": "src/features/rows/scene-controls.ts",
+      "find": "      if (focus) header(id)?.querySelector<HTMLButtonElement>(\".section-name\")?.focus();",
+      "replace": "      void focus;"
+    },
+    {
+      "label": "replacing the scene header does not expire its name field",
+      "file": "src/features/rows/scene-controls.ts",
+      "find": "    const observer = new Observer(() => { if (naming && !liveName()) cancelName(false, false); });",
+      "replace": "    const observer = new Observer(() => {});"
+    }
+  ]
+}

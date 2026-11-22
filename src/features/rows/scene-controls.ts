@@ -7,16 +7,10 @@ import type { NoticePort } from "../../application/effects/ports.ts";
 import type { IdSource } from "../../core/document/ports.ts";
 import { addSceneCommand, moveSceneCommand, removeSceneCommand, renameSceneCommand } from "../../application/commands/scenes.ts";
 import { moveBeatCommand } from "../../application/commands/rows.ts";
-import { sceneBeforeBeat, sceneFirstBeatId, sceneForBeat, sceneGroups, storedSceneName } from "../../core/document/scenes.ts";
+import { sceneBeforeBeat, sceneFirstBeatId, sceneForBeat, sceneGroups } from "../../core/document/scenes.ts";
 import { cssAttr } from "../common/dom.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
-import { NOT_SHARED } from "../../application/session/shared-session.ts";
 import { closeRowMenus } from "./row-menu.ts";
-import { bindBufferedInput } from "../common/buffered-input.ts";
-import type { BufferedInput, BufferedInputPorts } from "../common/buffered-input.ts";
-import { headingFieldKey, unsettledHeading } from "../../application/editing/buffered-field-key.ts";
-import { headingPos } from "../../core/flow/flow.ts";
-import type { SharedSceneCreation } from "../../application/commands/shared-scenes.ts";
 
 export interface SceneControlsPorts {
   readonly document: Pick<DocumentReader, "current" | "numbering">;
@@ -28,8 +22,6 @@ export interface SceneControlsPorts {
   readonly notices: Pick<NoticePort, "show">;
   readonly scroll: (x: number, y: number) => void;
   readonly stopScroll: () => void;
-  readonly sharedNames?: BufferedInputPorts;
-  readonly sharedScenes?: SharedSceneCreation;
 }
 
 export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
@@ -45,7 +37,6 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     readonly line: HTMLFormElement;
     readonly returnTo: HTMLElement | null;
     readonly settle: (focus: boolean) => void;
-    readonly bound: BufferedInput | null;
   } | null = null;
   let pointerAway = false;
   const animations = new Map<HTMLElement, Animation>();
@@ -64,7 +55,6 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     if (naming.sceneId !== null) return sceneGroups(state).some(group => group.scene.id === naming?.sceneId)
       && !!header(naming.sceneId)?.contains(naming.line);
     if (!state.rows.some(row => row.id === naming?.beatId)) return false;
-    if (ports.sharedNames && sceneBeforeBeat(state, naming.beatId)) return false;
     const automatic = naming.line.closest(".section-header");
     return automatic ? automatic === header("") && state.rows[0]?.id === naming.beatId
       : naming.line.nextElementSibling?.getAttribute("data-id") === naming.beatId;
@@ -89,10 +79,7 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     };
   }
   function cancelName(motion = false, restoreFocus = true): void {
-    if (naming?.bound && !naming.bound.dispose()) return;
-    const line = naming?.line, sceneId = naming?.bound ? naming.sceneId : null;
-    const returnTo = sceneId !== null && sceneId !== undefined && !naming?.returnTo?.isConnected
-      ? header(sceneId)?.querySelector<HTMLElement>(".section-name") : naming?.returnTo;
+    const line = naming?.line, returnTo = naming?.returnTo;
     naming = null;
     const restore = (): void => {
       if (restoreFocus && !naming && returnTo?.isConnected &&
@@ -105,32 +92,22 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     }
     if (restoreFocus && returnTo?.isConnected && !motion) returnTo.focus();
   }
-  function nameAt(parent: Element, sceneId: string | null, beatId: string, value: string, save: (name: string, focus: boolean) => void,
-    shared?: BufferedInputPorts): void {
+  function nameAt(parent: Element, sceneId: string | null, beatId: string, value: string, save: (name: string, focus: boolean) => void): void {
     if (!parent.isConnected) return;
     cancelName();
     if (naming) return;
-    const returnTo = doc.activeElement as HTMLElement | null, opening = sceneId === null ? undefined : value;
+    const returnTo = doc.activeElement as HTMLElement | null;
     const made = doc.createElement("form");
     made.className = "section-rename";
     const input = doc.createElement("input");
     input.type = "text"; input.value = value;
-    // why: a shared name refuses its 201st character in the binding; native truncation would drop that input event
-    if (!shared || sceneId === null) input.maxLength = 200;
+    input.maxLength = 200;
     input.setAttribute("aria-label", "Scene name");
     made.append(input);
-    let bound: BufferedInput | null = null, pending: BufferedInput | null = null;
     function settle(focus: boolean): void {
       if (naming?.line !== made) return;
       if (!liveName()) { cancelName(false, false); return; }
-      if (bound) {
-        if (!bound.finish()) return;
-        cancelName(false, false);
-        if (focus && sceneId !== null) header(sceneId)?.querySelector<HTMLButtonElement>(".section-name")?.focus();
-        return;
-      }
       if (!input.value.trim()) { if (!focus) cancelName(true, false); return; }
-      if (shared) return;
       if (!ports.edits.allowed()) return;
       const name = input.value;
       cancelName(false, false);
@@ -146,101 +123,12 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
       if (naming?.line !== made || event.isComposing) return;
       if (event.key === "Escape") {
         event.preventDefault(); event.stopPropagation();
-        if (!bound || bound.revert()) cancelName(true);
+        cancelName(true);
       }
     });
     const heading = parent.matches(".section-header") ? parent.querySelector('[role="heading"]') : null;
     if (heading) heading.append(made); else parent.before(made);
-    const place = (): void => {
-      if (sceneId === null) {
-        const row = doc.querySelector('#rows .row[data-id="' + cssAttr(beatId) + '"]');
-        const at = heading ? header("")?.querySelector('[role="heading"]') : null;
-        if (at && !at.contains(made)) at.append(made);
-        else if (!heading && row && made.nextElementSibling !== row) row.before(made);
-        return;
-      }
-      const at = sceneId !== null ? header(sceneId)?.querySelector('[role="heading"]') : null;
-      if (at && !at.contains(made)) at.append(made);
-    };
-    const name = (): string | null => {
-      const state = ports.document.current();
-      return state && sceneId !== null ? storedSceneName(state, sceneId) : null;
-    };
-    function bind(id: string): void {
-      if (!shared) return;
-      bound = bindBufferedInput({
-        inputs: [input], key: headingFieldKey(id), stored: name, unsettled: unsettledHeading, place, pasteLimit: 200,
-        ...opening === undefined ? {} : { opening },
-        position: offset => headingPos(id, offset), owns: pos => pos.kind === "heading" && pos.sceneId === id
-      }, shared);
-      input.removeAttribute("maxlength");
-    }
-    if (shared && sceneId !== null) bind(sceneId);
-    if (shared && sceneId === null) {
-      let composing = false, creating = false, release: (() => void) | null = null;
-      let caret: readonly [number | null, number | null, "forward" | "backward" | "none"] | null = null;
-      const end = (): void => { const done = release; release = null; done?.(); };
-      const finish = (): boolean => {
-        if (composing) { shared.report({ kind: "rejected", reason: "buffer-composition" }); return false; }
-        end(); return true;
-      };
-      const hold = (): void => { if (!bound && !release) release = ports.sharedScenes?.hold() ?? null; };
-      const stopAdmission = ports.sharedScenes?.beforeCommand(() => creating || finish() || "announced");
-      const stopCheck = shared.beforePaint(() => {
-        if (!composing) end();
-        caret = doc.activeElement === input ? [input.selectionStart, input.selectionEnd, input.selectionDirection ?? "none"] : null;
-      });
-      const stopPainted = shared.onPainted(() => {
-        place();
-        if (caret && input.isConnected) { input.focus({ preventScroll: true }); input.setSelectionRange(...caret); }
-        caret = null;
-      });
-      pending = { held: () => release !== null, finish, revert: finish, dispose: () => {
-        if (!finish()) return false;
-        stopAdmission?.(); stopCheck(); stopPainted(); return true;
-      } };
-      const create = (): void => {
-        if (bound || composing || naming?.line !== made) return;
-        const current = ports.document.current();
-        if (current && sceneBeforeBeat(current, beatId)) { cancelName(false, false); return; }
-        const verdict = unsettledHeading(input.value);
-        if (verdict?.hold) return;
-        if (verdict) { shared.report({ kind: "rejected", reason: verdict.reason }); return; }
-        const from = input.selectionStart, to = input.selectionEnd;
-        shared.shown(() => {
-          creating = true;
-          let result: ReturnType<SharedSceneCreation["create"]> | undefined;
-          try { result = ports.sharedScenes?.create(beatId, input.value); }
-          finally { creating = false; }
-          if (!result?.heading) {
-            shared.report(result?.outcome ?? { kind: "rejected", reason: NOT_SHARED }); return;
-          }
-          sceneId = result.heading;
-          bind(sceneId);
-          naming = { sceneId, beatId, line: made, returnTo, settle, bound };
-          pending?.dispose(); pending = null;
-          shared.repaint();
-          input.setSelectionRange(from, to);
-        });
-      };
-      input.addEventListener("compositionstart", () => { if (!bound) { composing = true; hold(); } });
-      input.addEventListener("compositionend", () => { composing = false; create(); end(); });
-      input.addEventListener("input", () => { create(); if (!composing) end(); });
-      for (const type of ["keydown", "keyup", "blur", "pointerdown", "focus", "cut", "paste", "drop"]) {
-        input.addEventListener(type, () => { if (!composing) end(); });
-      }
-      input.addEventListener("beforeinput", event => {
-        if (bound) return;
-        if (event.inputType === "insertFromDrop" || /^history/.test(event.inputType)) {
-          event.preventDefault(); shared.report({ kind: "rejected", reason: "buffer-unsupported-input" });
-          return;
-        }
-        if (event.inputType === "insertLineBreak") return;
-        if (input.selectionStart === input.selectionEnd && (event.inputType === "deleteByCut" || event.inputType === "insertFromPaste" && !event.data)) return;
-        hold();
-      });
-    }
-    naming = { sceneId, beatId, line: made, returnTo, settle, bound: bound ?? pending };
+    naming = { sceneId, beatId, line: made, returnTo, settle };
     animateName(made, false);
     input.focus(); input.select();
   }
@@ -248,16 +136,10 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
     const state = ports.document.current();
     const scene = state && sceneGroups(state).find(group => group.scene.id === id)?.scene;
     if (!scene) return;
-    const value = ports.sharedNames && state ? storedSceneName(state, id) ?? scene.name : scene.name;
-    nameAt(parent, id, sceneFirstBeatId(scene), value, (name, focus) => {
+    nameAt(parent, id, sceneFirstBeatId(scene), scene.name, (name, focus) => {
       ports.edits.run(renameSceneCommand(id, name));
       if (focus) header(id)?.querySelector<HTMLButtonElement>(".section-name")?.focus();
-    }, ports.sharedNames);
-  }
-  function newScene(): boolean {
-    if (!ports.sharedNames || ports.sharedScenes) return true;
-    ports.sharedNames.report({ kind: "rejected", reason: NOT_SHARED });
-    return false;
+    });
   }
   function reset(): void {
     cancelName();
@@ -318,23 +200,22 @@ export function mountSceneControls(window: Window, ports: SceneControlsPorts): {
       beat?.querySelector<HTMLElement>(".row-more")?.focus();
       const existing = sceneBeforeBeat(state, row.id);
       if (existing) { const parent = header(existing.id); if (parent) rename(existing.id, parent); return; }
-      if (!newScene()) return;
       nameAt(beat ?? add.parentElement ?? add, null, row.id, "", (name, focus) => {
         const created = ports.ids.id("section");
         ports.edits.run(addSceneCommand(row.id, created, name));
         if (focus) header(created)?.querySelector<HTMLButtonElement>(".section-name")?.focus();
-      }, ports.sharedNames);
+      });
       return;
     }
     if (action === "name-automatic" && divider) {
       const automatic = ports.document.numbering().scenes.find(scene => scene.id === null);
       const first = automatic && state.rows[automatic.start];
-      if (!first || !newScene()) return;
+      if (!first) return;
       nameAt(divider, null, first.id, "", (name, focus) => {
         const created = ports.ids.id("section");
         ports.edits.run(addSceneCommand(first.id, created, name));
         if (focus) header(created)?.querySelector<HTMLButtonElement>(".section-name")?.focus();
-      }, ports.sharedNames);
+      });
       return;
     }
     if (!id || !divider) return;

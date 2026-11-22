@@ -369,7 +369,6 @@ const ENGINES: readonly Site[] = [
   ["application/commands/scenes.ts#removeSceneCommand", "Plan.shared (provided) 1", "stated-write"],
   ["application/commands/scenes.ts#sharedHeadingRemoval", "Plan.shared (provided) 1", "stated-write"],
   ["application/commands/shared-records.ts#withSharedRecords", "Plan.shared (provided) 2", "record-stated"],
-  ["application/commands/shared-scenes.ts#sharedSceneCommand", "Plan.shared (provided) 1", "stated-write"],
   ["application/commands/shared-structure.ts#sharedRemoval", "Plan.shared (provided) 1", "stated-write"],
   ["application/commands/split-join.ts#joinBeatsCommand", "Plan.shared (provided) 1", "stated-write", "beat-stamp"],
   ["application/commands/split-join.ts#sharedJoin", "Plan.shared (provided) 1", "stated-write", "beat-stamp"],

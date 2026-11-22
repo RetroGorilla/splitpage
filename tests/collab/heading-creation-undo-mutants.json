@@ -1,8 +1,7 @@
 {
   "tests": [
     "tests/adapters/collab/undo-heading-creation.test.ts",
-    "tests/adapters/collab/undo-heading.test.ts",
-    "tests/features/rows/scene-create.test.ts"
+    "tests/adapters/collab/undo-heading.test.ts"
   ],
   "mutants": [
     {

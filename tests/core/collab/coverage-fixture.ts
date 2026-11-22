@@ -155,9 +155,6 @@ export const builderOperationCoverage = [
     ["initial heading name", ["text-insert"]],
     ["empty/overlong name and invalid/duplicate id guards", []]
   ]]),
-  classified("serve", ["sharedSceneCommand", "structure", "heading-create,text-insert", [
-    ["first shared name creates its heading before the selected beat and inserts that name in one list", ["heading-create", "text-insert"]]
-  ]]),
   classified("serve", ["removeSceneCommand", "structure", "heading-remove,scalar", [
     ["discard observed header without demotion", ["heading-remove"]],
     ["first beat paragraph flag", ["scalar"]],

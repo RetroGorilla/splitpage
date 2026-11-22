@@ -12,6 +12,9 @@ import { applySharedUpdate, encodeSharedState, destroySharedDocument, readShared
 import { createMonitoredSharedDocument } from "./helpers.ts";
 import { flowBaseReference } from "../../../src/core/collab/base-reference.ts";
 import { isSharedCreationRetired, sharedCreationObservationCost } from "../../../src/adapters/collab/creation-retirement.ts";
+import { sharedCreationUndoParts } from "../../../src/adapters/collab/undo-creation.ts";
+import { sharedStructureIdentity } from "../../../src/adapters/collab/structure-identity.ts";
+import type { SharedContentRef } from "../../../src/core/collab/operations.ts";
 import type { SharedUndoPart, SharedUndoRecord } from "../../../src/core/collab/undo-record.ts";
 import type { SharedDocumentHandle } from "../../../src/adapters/collab/types.ts";
 
@@ -304,4 +307,17 @@ for (const length of [1, 200]) test(`heading creation undo and redo stored size:
     t.diagnostic(JSON.stringify({ length, undo: undone - made, redo: redone - undone }));
     assert.deepEqual({ undo: undone - made, redo: redone - undone }, length === 1 ? { undo: 371, redo: -305 } : { undo: 3754, redo: -3687 });
   } finally { h.close(); }
+});
+
+test("rule 204: a pasted beat removed within the same command is skipped when reversing removals", () => {
+  const ref = (value: string) => value as SharedContentRef;
+  const internal = sharedStructureIdentity("1", "inside", "removal");
+  const external = sharedStructureIdentity("1", "outside", "removal");
+  const created: SharedUndoPart = { kind: "beat-create", beat: ref("P0"), writer: "1", retired: false, content: "observed" };
+  const discarded: SharedUndoPart = { kind: "remove", removal: internal, beats: [ref("P0")] };
+  const preexisting: SharedUndoPart = { kind: "remove", removal: external, beats: [ref("R1")] };
+  const remove = (id: string, target: string) => operation({ kind: "remove", id, by: "Alice", removalKind: "beat",
+    targets: [target], observed: [], boundaries: [target], components: [], gallery: [], comments: [], at: 0 });
+  assert.deepEqual(sharedCreationUndoParts([remove("inside", "P0"), remove("outside", "R1")], [created, discarded, preexisting]),
+    [created, preexisting]);
 });
