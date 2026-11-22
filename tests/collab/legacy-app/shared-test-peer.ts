@@ -49,7 +49,6 @@ const WALL_CLOCK: ReplayClock = Object.freeze({ now: () => Date.now(), start: (r
 
 const PEER_LEFT = "The peer has left";
 const NOT_JOINED = "The late joiner has not joined";
-const NAME_TAKEN = "The name is already given to another identity";
 const UNKNOWN_REFUSAL = "There is no refused update of that kind";
 const MEDIA_CELL = Object.freeze({ media: true });
 const QUEUE_FILLER = "€";
