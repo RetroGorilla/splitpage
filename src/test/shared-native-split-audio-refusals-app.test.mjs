@@ -199,6 +199,26 @@ function assertReplicas(f) {
   assert.deepEqual(f.peer.document(), app());
 }
 
+function expectedDocument(before, content, made, blank) {
+  return { ...before, rows: content.map(([id, audioText, visualText]) => id === "new"
+    ? { id: made, audioText, visualText, ...(blank ? { status: "todo" } : {}) }
+    : { ...before.rows.find(row => row.id === id), audioText, visualText }) };
+}
+
+function withoutEditStamps(doc) {
+  const copy = structuredClone(doc);
+  for (const row of copy.rows) {
+    delete row.updatedAt;
+    delete row.updatedBy;
+  }
+  return copy;
+}
+
+function assertDocument(f, expected) {
+  assertReplicas(f);
+  assert.deepEqual(withoutEditStamps(app()), withoutEditStamps(expected));
+}
+
 function sendOutgoing(f) {
   for (const bytes of f.outgoing.splice(0)) {
     assert.ok(bytes.length > 0);
@@ -215,14 +235,14 @@ function assertPaint() {
   }
 }
 
-async function checkHistory(f, steps, pending) {
-  const settled = rows(app());
+async function checkHistory(f, steps, before, settled) {
+  const typed = expectedDocument(before, typedRows);
   for (let step = 1; step <= steps; step++) {
     assert.equal(dispatch({ type: "beforeinput", inputType: "historyUndo" }, document.activeElement, []), true);
     await tick();
     assert.equal(f.outgoing.length, 1);
     sendOutgoing(f);
-    assert.deepEqual(rows(app()), pending && step < steps ? typedRows : baseRows);
+    assertDocument(f, step < steps ? typed : before);
     assertPaint();
   }
   const base = app(), bytes = f.native.encodeState();
@@ -236,7 +256,7 @@ async function checkHistory(f, steps, pending) {
     await tick();
     assert.equal(f.outgoing.length, 1);
     sendOutgoing(f);
-    assert.deepEqual(rows(app()), pending && step < steps ? typedRows : settled);
+    assertDocument(f, step < steps ? typed : settled);
     assertPaint();
   }
 }
@@ -280,9 +300,11 @@ for (const order of ["forward", "reverse"]) {
             const ids = app().rows.map(row => row.id).filter(id => id !== "r1" && id !== "r2");
             assert.equal(ids.length, 1);
             made = ids[0];
+            assert.match(made, new RegExp("^r" + f.native.ydoc.clientID.toString(36) + "-[0-9a-z]+$"));
           }
+          const afterGesture = expectedDocument(before.doc, expected.rows, made, route.name === "ctrlKeyEnter");
           if (!pendingFormat) {
-            assert.deepEqual(rows(app()), expected.rows.map(([id, audio, visual]) => [id === "new" ? made : id, audio, visual]));
+            assert.deepEqual(withoutEditStamps(app()), withoutEditStamps(afterGesture));
             assertCaret(made ?? "r1", expected.from, expected.to);
           }
           if (state === "composition") {
@@ -290,8 +312,9 @@ for (const order of ["forward", "reverse"]) {
           }
           settle();
           await tick();
-          if (pendingFormat) {
-            assert.deepEqual(rows(app()), expected.rows);
+          const buffered = state === "pending" && !expected.packets;
+          const typed = expectedDocument(before.doc, typedRows);
+          if (buffered) {
             assertCaret("r1", 4);
             assert.equal(f.outgoing.length, 1);
           }
@@ -302,23 +325,20 @@ for (const order of ["forward", "reverse"]) {
             assertCaret("r1", 3);
           }
           sendOutgoing(f);
+          const settled = buffered ? typed : afterGesture;
+          assertDocument(f, settled);
           assertPaint();
           if (route.name === "historyUndo" && state === "pending") {
             assert.equal(dispatch({ type: "beforeinput", inputType: "historyRedo" }, document.activeElement, []), true);
             await tick();
             assert.equal(f.outgoing.length, 1);
             sendOutgoing(f);
-            assert.deepEqual(rows(app()), typedRows);
+            assertDocument(f, typed);
             assertCaret("r1", 4);
             assertPaint();
-            await checkHistory(f, 1, true);
+            await checkHistory(f, 1, before.doc, typed);
           } else {
-            const buffered = state === "pending" && !expected.packets;
-            if (buffered && !pendingFormat) {
-              assert.deepEqual(rows(app()), typedRows);
-              assertCaret("r1", 4);
-            }
-            await checkHistory(f, buffered ? 1 : expected.steps, state === "pending");
+            await checkHistory(f, buffered ? 1 : expected.steps, before.doc, settled);
           }
           assert.deepEqual(f.show.mock.calls.map(call => call.arguments), expected.warnings);
           assert.deepEqual(f.errors, []);
