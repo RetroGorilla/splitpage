@@ -3,8 +3,9 @@ import { once } from "node:events";
 import { writeSync } from "node:fs";
 import { Database } from "@hocuspocus/extension-database";
 import { Server } from "@hocuspocus/server";
-import type { Extension } from "@hocuspocus/server";
-import { encodeStateAsUpdate } from "yjs";
+import type { Connection, Document, Extension } from "@hocuspocus/server";
+import { messageYjsSyncStep2, messageYjsUpdate } from "y-protocols/sync";
+import { applyUpdate, Doc, encodeStateAsUpdate, snapshot, snapshotContainsUpdate } from "yjs";
 import { RelayError, relayConfig } from "./config.ts";
 import { claimWriter, openWriter } from "./storage.ts";
 
@@ -19,6 +20,17 @@ function failShutdown(message: string): never {
 
 function digest(token: string): Buffer {
   return createHash("sha256").update(token).digest();
+}
+
+function exceedsMergeLimit(document: Document, update: Uint8Array): boolean {
+  const candidate = new Doc({ gc: document.gc, gcFilter: document.gcFilter });
+  try {
+    applyUpdate(candidate, encodeStateAsUpdate(document));
+    applyUpdate(candidate, update);
+    return encodeStateAsUpdate(candidate).byteLength > DOCUMENT_BYTES;
+  } finally {
+    candidate.destroy();
+  }
 }
 
 export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", extensions: Extension[] = []) {
@@ -58,6 +70,7 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       }
     }
   });
+  const writes = new WeakMap<Document, { connection: Connection; done: Promise<void>; release: () => void }>();
   const relay = new Server({
     address, port, debounce, maxDebounce, quiet: true,
     websocketOptions: {
@@ -70,6 +83,30 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       const live = instance.documents.get(documentName) ?? await instance.loadingDocuments.get(documentName);
       const bytes = live ? encodeStateAsUpdate(live).byteLength : Number(size.get(documentName)?.bytes ?? 0);
       connectionConfig.readOnly = bytes >= DOCUMENT_BYTES;
+    },
+    async beforeSync({ connection, document, type, payload }) {
+      const returning = type === messageYjsSyncStep2 && !(payload.length === 2 && payload[0] === 0 && payload[1] === 0);
+      if (!returning && (type !== messageYjsUpdate || connection.readOnly)) return;
+      // why: the stock receiver awaits this hook before applying, so a second writer could otherwise race the check
+      let active = writes.get(document);
+      while (active) {
+        await active.done;
+        active = writes.get(document);
+      }
+      let release!: () => void;
+      const done = new Promise<void>(resolve => { release = resolve; });
+      writes.set(document, { connection, done, release });
+      if (!returning || snapshotContainsUpdate(snapshot(document), payload)) return;
+      if (connection.readOnly || exceedsMergeLimit(document, payload)) {
+        connection.readOnly = true;
+        connection.sendStateless("merge-too-large");
+      }
+    },
+    async afterHandleMessage({ document, connection }) {
+      const active = writes.get(document);
+      if (active?.connection !== connection) return;
+      writes.delete(document);
+      active.release();
     },
     async onDestroy() {
       closeStorage();

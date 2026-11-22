@@ -1020,13 +1020,20 @@ Requirements from the outside review of this note, added to the build order (sec
 - **First loads** (decision 16): the [relay tests](../../tests/adapters/collab/native/relay.test.ts) pin one restart
   after the stock receive wait and the message after the second timed-out attempt. The speed figures and large
   offline return under stock timers in appendix I are from E13.
-- **Two writers past the size limit:** two offline copies, each under 15 MB, whose merge exceeds it. The test shows
-  where the refusal happens, what each person sees, how refused work is exported, and that retries stop. The plan
-  also requires bounds on total document state checked before an update reaches other clients, explicit handling of legitimate concurrent
-  limit conflicts, never discarding an update while claiming synchronization succeeded, preserving recoverable data,
-  and a test where individually valid edits merge past the limit ("Validation and resource limits"). The relay
-  checks size at connection admission and the session can refuse the next local write after crossing a measured
-  line. The combined offline-writer case and its export and retry outcomes remain open.
+- **Two writers past the size limit:** the [offline return test](../../src/test/shared-native-oversize-relay-app.test.mjs)
+  starts two copies from the same script. Each adds 8 MB of narration offline, and each fits within 15 MB.
+  The relay accepts the first return. For the next return it applies the upload to a temporary Yjs copy
+  before touching the live document, measures the merged encoding, and refuses the upload with a reason.
+  Incoming writes are ordered through application so two returns cannot both pass against the same earlier state.
+  The first writer, an observing peer and the stored relay snapshot retain the first copy.
+  Ordinary incremental updates keep the admission rule in section 8 and take only a constant-time lock when
+  uncontended. Empty replies skip the merge check. The extra encode, apply and encode pass is on nonempty
+  sync replies with new work, including the first upload of a new script.
+- The returning client holds the incoming copy until the upload is acknowledged. On refusal it stops sending
+  and reconnecting, keeps its local script open, and recommends exporting a fresh `.splitpage` project.
+  The test reopens that export and shares it under the new project ID. The new peer receives the full local
+  narration, with fresh Yjs history and an empty Undo stack. The export contains the script as held locally
+  at refusal, so edits the returning copy never received are absent.
 - **Server stops** (decision 19): the [six-row stop table](#server-stop-results-and-backup-runbook) covers clean
   and killed stops before, during and after the store. The plan's receipt checker and kill-before-and-after-receipt
   tests are deferred with the update journal.

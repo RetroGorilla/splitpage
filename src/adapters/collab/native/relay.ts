@@ -17,6 +17,7 @@ export type NativeRelayEvent =
   | { readonly kind: "session-replaced"; readonly session: Session; readonly undoHistory: "fresh" }
   | { readonly kind: "session-reopen-failed"; readonly error: unknown }
   | { readonly kind: "authentication-failed"; readonly reason: string }
+  | { readonly kind: "merge-too-large"; readonly message: string }
   | { readonly kind: "first-load-too-large"; readonly message: string };
 
 export interface NativeRelayOptions {
@@ -39,6 +40,7 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
   const initialStatus: NativeRelayStatus = Object.freeze({ connected: false, firstSyncDone: false, pendingChangeCount: 0 });
   let current = session, status = initialStatus;
   let closing = false;
+  let publicationStopped = false;
   let provider = attach(current);
 
   function emit(event: NativeRelayEvent): void {
@@ -66,9 +68,12 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
     const attached = new StateFirstProvider({
       url, name, token, document: target.ydoc,
       onStatus({ status: socketStatus }) {
+        if (publicationStopped) return;
         const connected = socketStatus === WebSocketStatus.Connected;
         if (connected === status.connected) return;
-        updateStatus({ connected });
+        updateStatus(connected
+          ? { connected, pendingChangeCount: Math.max(1, status.pendingChangeCount) }
+          : { connected });
         if (!connected) {
           const started = downloadStarted;
           downloadStarted = null;
@@ -83,6 +88,18 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
       onAuthenticationFailed({ reason }) {
         emit({ kind: "authentication-failed", reason });
       },
+      onStateless({ payload }) {
+        if (payload !== "merge-too-large" || publicationStopped) return;
+        publicationStopped = true;
+        attached.configuration.websocketProvider.disconnect();
+        attached.destroy();
+        updateStatus({ connected: false, firstSyncDone: false });
+        emit({
+          kind: "merge-too-large",
+          message: "Your changes could not sync because combining the copies would exceed the 15 MB limit. " +
+            "You can still read your local copy. Export it as a fresh .splitpage project to start a new shared session."
+        });
+      },
       onUnsyncedChanges({ number }) {
         updateStatus({ pendingChangeCount: number });
       }
@@ -92,7 +109,7 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
 
   function sessionChanged(change: NativeSessionChange): void {
     if (change.kind !== "closed") return;
-    provider.destroy();
+    if (!publicationStopped) provider.destroy();
     if (closing || change.reason === "requested") {
       updateStatus({ connected: false });
       return;
@@ -119,7 +136,8 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
     if (closing) { session.close(); return; }
     current = session;
     updateStatus(initialStatus);
-    provider = attach(current);
+    if (!publicationStopped) provider = attach(current);
+    else current.subscribe(sessionChanged);
     emit({ kind: "session-replaced", session: current, undoHistory: "fresh" });
   }
 
