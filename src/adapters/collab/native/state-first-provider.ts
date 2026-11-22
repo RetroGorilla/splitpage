@@ -28,7 +28,7 @@ export class StateFirstProvider extends HocuspocusProvider {
 
   override async onOpen(event: Event) {
     this.sentState = false;
-    this.heldSync = null;
+    this.heldSync = [];
     await super.onOpen(event);
   }
 
@@ -60,11 +60,11 @@ export class StateFirstProvider extends HocuspocusProvider {
       const decoder = createDecoder(new Uint8Array(event.data as ArrayBuffer));
       readVarString(decoder);
       const type = readVarUint(decoder);
-      if (type === MessageType.Sync) {
+      if (type === MessageType.Sync && (this.sentState || readVarUint(decoder) !== messageYjsSyncStep1)) {
         this.heldSync.push(event);
         return;
       }
-      if (type === MessageType.SyncStatus && readVarInt(decoder) === 1) {
+      if (this.sentState && type === MessageType.SyncStatus && readVarInt(decoder) === 1) {
         const held = this.heldSync;
         this.heldSync = null;
         super.onMessage(event);
@@ -74,11 +74,14 @@ export class StateFirstProvider extends HocuspocusProvider {
     }
     const sync = this.sentState && !this.awaitingFirstReply ? undefined : relaySyncType(event.data as ArrayBuffer);
     if (!this.sentState && sync === messageYjsSyncStep1) {
+      const earlyFrames = this.heldSync ?? [];
+      this.heldSync = null;
       this.onStateRequest();
       const duringReply: Uint8Array[] = [];
       this.duringReply = duringReply;
       try { super.onMessage(event); } finally { this.duringReply = null; }
       this.sentState = true;
+      for (const frame of earlyFrames) this.onMessage(frame);
       for (const update of duringReply) this.documentUpdateHandler(update, null);
     } else {
       super.onMessage(event);
@@ -88,6 +91,11 @@ export class StateFirstProvider extends HocuspocusProvider {
       this.awaitingFirstReply = false;
       this.onFirstReply();
     }
+  }
+
+  override onClose() {
+    this.heldSync = null;
+    super.onClose();
   }
 
   override destroy() {
