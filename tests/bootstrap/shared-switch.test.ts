@@ -1,7 +1,7 @@
 import type { SharedSessionParts } from "./legacy-shared-switch-support.ts";
 import { legacySessionParts } from "./legacy-shared-switch-support.ts";
 import type { LegacySharedSwitchPorts } from "./legacy-shared-switch-support.ts";
-import { enterLegacySharedSession } from "./legacy-shared-switch-support.ts";
+import { enterLegacySharedSession, withLegacySwitchPorts } from "./legacy-shared-switch-support.ts";
 import "../../src/test/_dom.mjs";
 import test from "node:test";
 import assert from "node:assert/strict";
@@ -27,6 +27,8 @@ import {
 import { fakeMigration } from "../core/migrate-ports.ts";
 import { createFlowLoadRuntime } from "../core/flow/load.ts";
 import { fakeClock } from "../application/session-fakes.ts";
+import { Doc } from "yjs";
+import { bootNativeEntrySwitchFixture, nativeEntrySwitchFixture, stopNativeEntrySwitchFixture } from "./native-entry-switch-support.ts";
 
 const CAN = { edit: () => ({ allowed: true as const }), comment: () => ({ allowed: true as const }) };
 const START_ID = "d" + "1".repeat(32), newId = (n: number): string => "d" + String(n).padStart(32, "0");
@@ -736,4 +738,27 @@ test("a forced leave that ends the session during a buffer hold with a held upda
     sharedGone(parts);
     destroySharedDocument(sender);
   } finally { s.stop(); }
+});
+
+test("legacy setup failure reports before its destroy failure and leaves standalone installed", async t => {
+  await bootNativeEntrySwitchFixture();
+  t.after(stopNativeEntrySwitchFixture);
+  const fixture = nativeEntrySwitchFixture(), original = currentDocument();
+  t.after(fixture.close);
+  const setup = new Error("setup"), destruction = new Error("destroy");
+  const destroy = Doc.prototype.destroy;
+  let live: string | undefined, failedOnce = false;
+  const on = Doc.prototype.on;
+  t.mock.method(Doc.prototype, "on", function (this: Doc, ...args: Parameters<Doc["on"]>) {
+    live ??= this.guid;
+    if (this.guid !== live && args[0] === "beforeTransaction") throw setup;
+    return on.apply(this, args);
+  });
+  t.mock.method(Doc.prototype, "destroy", function (this: Doc) {
+    if (this.guid === live && !failedOnce) { failedOnce = true; throw destruction; }
+    destroy.call(this);
+  });
+  assert.deepEqual(await enterLegacySharedSession(withLegacySwitchPorts(fixture.ports)), { ok: false, reason: "enter-failed" });
+  assert.deepEqual(fixture.errors.slice(0, 2), [setup, destruction]);
+  assert.equal(currentDocument(), original);
 });

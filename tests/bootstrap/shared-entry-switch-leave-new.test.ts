@@ -1,46 +1,50 @@
-import { legacySessionParts } from "./legacy-shared-switch-support.ts";
-import { enterLegacySharedSession } from "./legacy-shared-switch-support.ts";
 import { before, after, test } from "node:test";
 import assert from "node:assert/strict";
-import { bootEntrySwitchFixture, stopEntrySwitchFixture, entrySwitchFixture, attemptSwitchEntry } from "./shared-entry-switch-support.ts";
+import { bootNativeEntrySwitchFixture, stopNativeEntrySwitchFixture, nativeEntrySwitchFixture, attemptNativeSwitchEntry } from "./native-entry-switch-support.ts";
 import { currentDocument, onDocumentReplaced, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
-import { leaveRunningSharedSession, SHARED_SWITCHING } from "../../src/bootstrap/wiring/shared-session.ts";
+import { leaveRunningSharedSession, nativeEditorActive, SHARED_SWITCHING } from "../../src/bootstrap/wiring/shared-session.ts";
 import { sharedUndoRoute } from "../../src/bootstrap/wiring/undo.ts";
-import { collabState } from "../../src/adapters/collab/state.ts";
 
-before(bootEntrySwitchFixture);
-after(stopEntrySwitchFixture);
+before(bootNativeEntrySwitchFixture);
+after(stopNativeEntrySwitchFixture);
 
 for (const phase of ["replacement", "settle", "restart"] as const) {
   test("C8 leave " + phase + " refuses startNew, cleans up and admits the following entry", async () => {
-    const f = entrySwitchFixture(), observed: unknown[] = []; let once = true;
-    const attempt = () => { if (once) { once = false; observed.push(attemptSwitchEntry("startNew")); } };
+    const f = nativeEntrySwitchFixture(), observed: unknown[] = []; let once = true;
+    const attempt = () => { if (once) { once = false; observed.push(attemptNativeSwitchEntry("startNew")); } };
     const stop = onDocumentReplaced(() => { if (phase === "replacement" && !sharedSession()) attempt(); });
-    const ports = { ...f.ports, bindings: { ...f.ports.bindings,
-      settle: () => { if (phase === "settle") attempt(); return null; }, leave: () => { if (phase === "restart") attempt(); } } };
     try {
-      assert.deepEqual(await enterLegacySharedSession(ports), { ok: true });
-      const parts = legacySessionParts(); assert.ok(parts);
+      const { outcome, opened } = await f.enterNative(f.ports, backend => ({ ...backend,
+        settle: explicit => { if (phase === "settle") attempt(); return backend.settle(explicit); },
+        unbind: () => { if (phase === "restart") attempt(); backend.unbind(); }
+      }));
+      assert.deepEqual(outcome, { ok: true });
+      assert.ok(opened);
       const result = leaveRunningSharedSession();
       assert.deepEqual(observed, [{ refused: SHARED_SWITCHING }]);
-      assert.deepEqual([result, legacySessionParts(), sharedUndoRoute(), sharedSession(), collabState(parts.handle).destroyed, currentDocument()?.title, f.errors],
-        [{ ok: true }, null, null, false, true, "Captured script", []]);
-      stop(); assert.deepEqual(attemptSwitchEntry("startNew"), { accepted: "Replacement script" });
+      assert.deepEqual([result, nativeEditorActive(), sharedUndoRoute(), sharedSession(), currentDocument()?.title, f.errors],
+        [{ ok: true }, false, null, false, "Captured script", []]);
+      await Promise.resolve();
+      assert.equal(opened.native.ydoc.isDestroyed, true);
+      stop(); assert.deepEqual(attemptNativeSwitchEntry("startNew"), { accepted: "Replacement script" });
     } finally { stop(); f.close(); }
   });
 }
 
 test("C8 a leave-first startNew resumes after the switch and refuses a nested replacement entry", async () => {
-  const f = entrySwitchFixture(), observed: unknown[] = [];
-  assert.deepEqual(await f.enter(), { ok: true });
-  const parts = legacySessionParts(); assert.ok(parts); let once = true;
+  const f = nativeEntrySwitchFixture(), observed: unknown[] = [];
+  const { outcome, opened } = await f.enterNative();
+  assert.deepEqual(outcome, { ok: true });
+  assert.ok(opened); let once = true;
   const stop = onDocumentReplaced(() => {
-    if (!sharedSession() && once) { once = false; observed.push(attemptSwitchEntry("startNew")); }
+    if (!sharedSession() && once) { once = false; observed.push(attemptNativeSwitchEntry("startNew")); }
   });
   try {
-    assert.deepEqual(attemptSwitchEntry("startNew"), { accepted: "Replacement script" });
+    assert.deepEqual(attemptNativeSwitchEntry("startNew"), { accepted: "Replacement script" });
     assert.deepEqual(observed, [{ refused: SHARED_SWITCHING }]);
-    assert.deepEqual([legacySessionParts(), sharedUndoRoute(), collabState(parts.handle).destroyed, currentDocument()?.title, f.errors],
-      [null, null, true, "Replacement script", []]);
+    assert.deepEqual([nativeEditorActive(), sharedUndoRoute(), currentDocument()?.title, f.errors],
+      [false, null, "Replacement script", []]);
+    await Promise.resolve();
+    assert.equal(opened.native.ydoc.isDestroyed, true);
   } finally { stop(); f.close(); }
 });

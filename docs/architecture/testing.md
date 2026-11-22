@@ -65,10 +65,9 @@ touches. CI classifies paths with `tools/ci-changes.mjs` first: Markdown prose
 skips the code jobs, except `docs/help.md`, which feeds the app build. A prose-only
 PR still runs `changes` and `gate`. No label is needed for that path. For code
 changes CI runs lint, types, the
-dependency and comment gates, the build and the required root test matrices.
+dependency and comment gates, the build and the required root test matrix.
 App-affecting changes also run the smoke, CSP and persistence browser suites.
-Pull requests skip the old-adapter matrix when the filter allows it. Pushes to
-`main` and the nightly root run execute every discovered root test.
+The PR, push to `main` and nightly root matrices cover every discovered root test.
 `--only` selects files for local feedback.
 
 App-affecting changes also require the dev desktop smoke. Test-only changes
@@ -457,13 +456,11 @@ src/test/formats`, `npm run test:all -- --only tools/test-comment-gate`.
 Discovery and its orphan, overlap and empty-group checks still run over
 everything, the selected files are listed, and the run says it is not the
 full gate. A filter that matches nothing exits 2. It is for local feedback
-only. PR CI runs the always-run matrix and includes the old-adapter matrix
-when the filter requires it. Pushes to `main` and nightly run the full set.
+only. The pull request, push to `main` and nightly root matrices cover the full set.
 
 `--shard <index/total>` balances files using the recorded timing weights
-described above. `--suite=always` and `--suite=old-adapter` select disjoint file sets before balancing.
-PR CI uses eight always-run shards and three old-adapter shards when the change
-requires them. The ten unfiltered nightly shards use `--shard 1/10` through
+described above. PR CI uses eight shards. The ten nightly shards use
+`--shard 1/10` through
 `--shard 10/10`. Full discovery, area coverage,
 orphan, overlap, required-group and golden-update guards still run in each
 shard. A group can have no files assigned to one shard, but a shard with no
@@ -825,8 +822,7 @@ to `main` or a `hotfix/` branch. Its jobs call the scripts above and nothing els
 | --- | --- |
 | `changes` | `tools/ci-changes.mjs`: does the diff touch anything but prose? On a push to `main`, `tools/ci-tested-tree.mjs`: did another run already pass this exact tree? ([ci.md](ci.md)) |
 | `checks` | Node from `.nvmrc`: lint, typecheck, check:deps and check:comments for non-prose changes requiring a fresh run; for app-affecting changes, also build, check the `sw.js` stamp, run browser suites 01 and 52, then 21 suites covering save, typing, undo, export, writer position and typing work (the list and the reason for each are in [ci.md](ci.md); about 75 s), and upload the built app |
-| `tests` | Eight always-run root shards, `--shard 1/8` through `8/8`, for fresh root-test changes and every push to `main`. |
-| `old-adapter-tests` | Three shards, `--shard 1/3` through `3/3`, when the [filter](ci.md#old-shared-document-adapter) requires them and on every push to `main`. |
+| `tests` | Eight root shards, `--shard 1/8` through `8/8`, for fresh root-test changes and every push to `main`. |
 | `gate` | Checks expected job results and each required matrix leg before uploading the passed-tree marker. See [CI configuration](ci.md#githubworkflowsciyml). |
 | `desktop-smoke` | Electron dev-target smoke on `ubuntu-latest` under Xvfb, on pull requests and pushes to `main` when `tools/ci-changes.mjs` reports `desktop=true`; about 5.5 min, in parallel with the other jobs |
 

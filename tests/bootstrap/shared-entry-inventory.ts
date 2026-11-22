@@ -1,5 +1,3 @@
-import { legacySessionParts } from "./legacy-shared-switch-support.ts";
-import { enterLegacySharedSession } from "./legacy-shared-switch-support.ts";
 import assert from "node:assert/strict";
 import { currentDocument, liveSession, onDocumentReplaced, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
 import { documentTransitions, openDocument, documentOpenings } from "../../src/bootstrap/wiring/transition-owners.ts";
@@ -22,10 +20,9 @@ import { startDesktopView } from "../../src/features/desktop/desktop.ts";
 import type { DesktopPorts } from "../../src/features/desktop/ports.ts";
 import type { DesktopOpenedFile } from "../../src/application/desktop/shell.ts";
 import { migrateRows } from "../../src/bootstrap/document-ports.ts";
-import { leaveRunningSharedSession } from "../../src/bootstrap/wiring/shared-session.ts";
+import { leaveRunningSharedSession, nativeEditorActive } from "../../src/bootstrap/wiring/shared-session.ts";
 import { sharedUndoRoute } from "../../src/bootstrap/wiring/undo.ts";
-import { collabState } from "../../src/adapters/collab/state.ts";
-import { entrySwitchFixture } from "./shared-entry-switch-support.ts";
+import { nativeEntrySwitchFixture } from "./native-entry-switch-support.ts";
 import { fakeNotices } from "../features/fakes.ts";
 
 export const OWNER_ENTRY_METHODS = { open: "replace", startNew: "replace", recover: "replace", restore: "replace", copyId: "read" } as const;
@@ -142,7 +139,7 @@ export const ENTRY_CASES: readonly EntryCase[] = [
 ];
 
 export async function exerciseHeldEntry(entry: EntryCase, phase: "enter" | "leave") {
-  const f = entrySwitchFixture(), context = setupEntry();
+  const f = nativeEntrySwitchFixture(), context = setupEntry();
   let attempted = false, pending: Promise<unknown> = Promise.resolve(), caught: string | null = null;
   let sameDocument = false, sameRevision = false;
   const attempt = () => {
@@ -162,8 +159,8 @@ export async function exerciseHeldEntry(entry: EntryCase, phase: "enter" | "leav
   const ports = { ...f.ports, docId: () => { if (phase === "enter") attempt(); return f.ports.docId(); } };
   try {
     if (phase === "enter") entry.prepare?.(context);
-    const entered = await enterLegacySharedSession(ports);
-    const parts = legacySessionParts(); assert.ok(parts);
+    const { outcome: entered, opened } = await f.enterNative(ports);
+    assert.ok(opened);
     let left: unknown = null;
     if (phase === "leave") { entry.prepare?.(context); left = leaveRunningSharedSession(); }
     const result = await pending;
@@ -177,8 +174,8 @@ export async function exerciseHeldEntry(entry: EntryCase, phase: "enter" | "leav
     assert.deepEqual(entered, { ok: true });
     assert.deepEqual([currentDocument()?.title, currentDocument()?.rows.map(row => [row.id, row.audioText])], ["Captured script", [["R1", "Captured words"]]]);
     if (phase === "leave") {
-      assert.deepEqual(left, { ok: true }); assert.equal(legacySessionParts() === null, true); assert.equal(sharedUndoRoute() === null, true);
-      assert.equal(collabState(parts.handle).destroyed, true);
+      assert.deepEqual(left, { ok: true }); assert.equal(nativeEditorActive(), false); assert.equal(sharedUndoRoute() === null, true);
+      assert.equal(opened.native.ydoc.isDestroyed, true);
       documentTransitions().startNew(arrival()); assert.equal(currentDocument()?.title, TARGET.title);
     }
     assert.deepEqual(f.errors, []);

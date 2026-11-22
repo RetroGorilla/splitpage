@@ -261,7 +261,7 @@ The owner approved the following native behavior on 2026-11-22. See the [native 
 
 ## Not yet removable
 
-All eight approved [Slice 8 editor decisions](native-adapter-design.md#slice-8-editor-decisions) are now complete and verified. All legacy `9xx` shared browser suites (`967`, `968`, `972`, `973`, `974`, `975`, `976`, `978`, `979`, `980`, `981`, `982`) and `src/test/shared-split-records-drafts-app.test.mjs` (0 remaining cases, 0 manifest registrations) are retired. The later Slice 8 cleanup preserves `src/adapters/collab/native/`. It removes the legacy adapter code, the fixture in `tests/collab/legacy-app/`, the generated `_legacy-shared-tests.html` page, and the remaining legacy-only mutation guards and manifests.
+All eleven approved [Slice 8 editor decisions](native-adapter-design.md#slice-8-editor-decisions) are now complete and verified. All legacy `9xx` shared browser suites (`967`, `968`, `972`, `973`, `974`, `975`, `976`, `978`, `979`, `980`, `981`, `982`) and `src/test/shared-split-records-drafts-app.test.mjs` (0 remaining cases, 0 manifest registrations) are retired. The later Slice 8 cleanup preserves `src/adapters/collab/native/`. It removes the legacy adapter code, the fixture in `tests/collab/legacy-app/`, the generated `_legacy-shared-tests.html` page, and the remaining legacy-only mutation guards and manifests.
 
 Every remaining **Retained** row above stays active solely for legacy mutation probes or direct legacy compatibility checks while the old adapter remains in the tree. The standalone undo differential and Split route inventory also continue. Direct Split and Writer fixtures retain their existing binding, Visual close, record, and undo coverage.
 
@@ -280,7 +280,7 @@ Current retained legacy-only guards tracked in this mapping:
 
 The discarded match strings for the rollback reattachment and dropped-surface mutations predate this change. The old strings refer to pre-native rollback and `ports.bindings.drop`, while the current switch uses the recovered-state guard and `now.backend.drop`. The repaired probes are in `tests/collab/composition-mutants.json` and are caught by the surviving `tests/bootstrap/shared-switch.test.ts` assertions.
 
-The Old adapter tests job stays in place. The colocated fixture under `tests/collab/legacy-app/` is built into `_legacy-shared-tests.html` only by the test build. No browser suite opens `_legacy-shared-tests.html` anymore; the fixture page stays until the later legacy-adapter cleanup phase. The standard test and release bundles exclude that fixture.
+The preceding app-test list records the state before [#1747](https://github.com/RetroGorilla/splitpage/pull/1747). That change removed the legacy fixture and its generated test page. The isolated adapter tests now run in the regular root matrix. Their implementation and its tests, including the slow Undo and timing-mark mutations, stay together while the remaining shared-independent checks are extracted. The admission measurement launcher and its tests have no remaining callers. The native entry tests use the native fixture for the entry inventory, reentrant Open and New, and automatic resume. The Find refusal test uses the replica port and retains the no-write and no-history assertions.
 
 ## Legacy adapter removal plan
 

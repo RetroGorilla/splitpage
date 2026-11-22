@@ -4,7 +4,7 @@ import { stopApp } from "../../src/bootstrap/app.ts";
 import { documentTransitions } from "../../src/bootstrap/wiring/transition-owners.ts";
 import { currentCapabilities, currentDocument, sharedSession } from "../../src/bootstrap/wiring/session-owner.ts";
 import { enterSharedSession, forceLeaveSharedSession, leaveRunningSharedSession } from "../../src/bootstrap/wiring/shared-session.ts";
-import type { SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
+import type { SharedEditorBackend, SharedSwitchPorts } from "../../src/bootstrap/wiring/shared-session.ts";
 import { openNativeEditor } from "../../src/bootstrap/wiring/native-shared-session.ts";
 import { openingStatus } from "../../src/bootstrap/wiring/ports/transitions.ts";
 import { localFilesOwner } from "../../src/bootstrap/wiring/local-files.ts";
@@ -48,11 +48,11 @@ export function nativeEntrySwitchFixture() {
   return {
     ports,
     errors,
-    enterNative: (customPorts: SharedSwitchPorts = ports) => {
+    enterNative: (customPorts: SharedSwitchPorts = ports, wrap?: (backend: SharedEditorBackend) => SharedEditorBackend) => {
       const opened: { value?: ReturnType<typeof openNativeEditor> } = {};
       return enterSharedSession(customPorts, (doc, failed) => {
         opened.value = openNativeEditor(customPorts, doc, failed);
-        return opened.value.backend;
+        return wrap ? wrap(opened.value.backend) : opened.value.backend;
       }).then(outcome => ({ outcome, opened: opened.value }));
     },
     close: () => {

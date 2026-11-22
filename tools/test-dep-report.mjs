@@ -81,7 +81,7 @@ for (const packageName of ["yjs", "lib0", "isomorphic.js"]) {
       `const runtime = require("${specifier}");`,
       `type RuntimeType = import("${specifier}").RuntimeType;`
     ]) {
-      for (const source of ["src/adapters/collab/roots.ts", "src/adapters/collab/nested/probe.ts", "tests/adapters/collab/root-probe.test.ts", "src/core/probe.test.ts"]) {
+      for (const source of ["src/adapters/collab/roots.ts", "src/adapters/collab/nested/probe.ts", "tests/adapters/collab/roots.test.ts", "src/core/probe.test.ts"]) {
         eq(`${source} permits ${statement}`, findViolations(graph({ [source]: statement })), []);
       }
       for (const source of ["src/core/probe.ts", "src/application/probe.ts", "src/features/writer/probe.ts", "shared/probe.ts", "src/bootstrap/probe.ts", "src/adapters/files/probe.ts", "src/adapters/collab-other/probe.ts", "tools/probe.mjs", "server/probe.mjs", "desktop/probe.ts"]) {
