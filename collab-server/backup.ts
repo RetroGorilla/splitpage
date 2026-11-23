@@ -6,7 +6,26 @@ import type { SQLOutputValue } from "node:sqlite";
 import { dataDirectory, RelayError, retentionCount } from "./config.ts";
 import { DB_NAME, verifyDatabase } from "./storage.ts";
 
-const BACKUP_NAME = /^relay-\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d\.\d{3}Z-[a-f0-9-]{36}\.sqlite$/;
+const BACKUP_NAME = /^relay-(\d{4}-\d\d-\d\d)T(\d\d)-(\d\d)-(\d\d)\.(\d{3})Z-[a-f0-9-]{36}\.sqlite$/;
+
+export function lastBackupTime(directory: string): string | null {
+  let entries;
+  try {
+    entries = readdirSync(join(directory, "backups"), { withFileTypes: true });
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+  let latest: string | null = null;
+  for (const entry of entries) {
+    if (!entry.isFile()) continue;
+    const match = BACKUP_NAME.exec(entry.name);
+    if (!match) continue;
+    const iso = `${match[1]}T${match[2]}:${match[3]}:${match[4]}.${match[5]}Z`;
+    if (latest === null || iso > latest) latest = iso;
+  }
+  return latest;
+}
 
 export function verifyCopy(source: DatabaseSync, copy: DatabaseSync): void {
   verifyDatabase(copy);

@@ -8,6 +8,8 @@ let releaseLoad: (() => void) | undefined;
 let heldSyncType: number | undefined;
 let heldTraffic: Promise<void> | undefined;
 let releaseTraffic: (() => void) | undefined;
+let holdUploads = false;
+const heldUploads: (() => void)[] = [];
 process.on("message", message => {
   if (message === "hold") {
     hold = new Promise<void>(resolve => { release = resolve; });
@@ -21,6 +23,13 @@ process.on("message", message => {
   if (message === "hold-load") {
     holdDocumentLoad = true;
     process.send?.("load-armed");
+  }
+  if (message === "hold-uploads") {
+    holdUploads = true;
+    process.send?.("uploads-armed");
+  }
+  if (message === "release-upload") {
+    heldUploads.shift()?.();
   }
   if (typeof message === "object" && message !== null && "holdSyncType" in message && typeof message.holdSyncType === "number") {
     heldSyncType = message.holdSyncType;
@@ -38,6 +47,25 @@ restrictLibraryLogs();
 try {
   const relay = await startRelay(process.env, "127.0.0.1", [{
     priority: 101,
+    async onRequest({ request, response }) {
+      if (!holdUploads || request.method !== "PUT" || !request.url?.startsWith("/api/scripts/")) return;
+      process.send?.("upload-entered");
+      await new Promise<void>(resolve => {
+        let done = false;
+        const finish = () => {
+          if (done) return;
+          done = true;
+          if (!response.writableEnded) {
+            if (!request.complete) response.setHeader("Connection", "close");
+            response.writeHead(201).end();
+          }
+          resolve();
+        };
+        heldUploads.push(finish);
+        response.once("close", finish);
+      });
+      throw undefined;
+    },
     async onAuthenticate() {
       if (releaseLoad) setImmediate(releaseLoad);
     },
