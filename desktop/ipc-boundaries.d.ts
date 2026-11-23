@@ -1,6 +1,7 @@
 import type { DesktopMainTab, DesktopMainWindow, DesktopLookupMap } from "./main-types.d.ts";
 
-import type { App, BrowserWindow, Dialog, IpcMainEvent, IpcMainInvokeEvent, Menu, NativeTheme, Shell } from "electron";
+import type { App, BrowserWindow, Dialog, IpcMainEvent, IpcMainInvokeEvent, Menu, NativeTheme, Shell, WebContents } from "electron";
+import type { NativeReplicaReply } from "../shared/native-replica.d.ts";
 import type { chooseDuplicateLoser } from "../shared/doc-id-policy.ts";
 import type {
   DesktopIpcArgs, DesktopIpcResult, DesktopWireBoot,
@@ -68,6 +69,7 @@ export interface DesktopFileIpcDependencies extends Pick<DesktopMainCommon, "tab
 }
 
 export interface DesktopDocumentIpcDependencies extends Pick<DesktopMainCommon, "tabOf" | "fileIds" | "recents" | "windowsById" | "testMode" | "draftStore" | "draftsPreviousSession"> {
+  nativeReplicaForDevice: (sender: WebContents, request: unknown) => Promise<NativeReplicaReply>;
   unindexTabSource: (tab: DesktopMainTab) => void;
   indexTabSource: (tab: DesktopMainTab) => void;
   applyWindowTitle: (window: DesktopMainWindow) => void;
