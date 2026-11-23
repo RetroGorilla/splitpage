@@ -107,6 +107,12 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
             if (replica.restored && !applyNativePeerUpdate(preview, replica.session.encodeState())) return SHARED_ENTER_FAILED;
             if (!preview.isStoredScript() || !await hydrate({ session: preview }, entry.invitation.token)) return SHARED_ENTER_FAILED;
           } finally { pictures?.stop(); pictures = undefined; preview.close(); }
+          signal?.throwIfAborted();
+          if (!replica.restored && !applyNativePeerUpdate(replica.session, state)) return SHARED_ENTER_FAILED;
+          if (!replica.session.isStoredScript() || (await replica.flush()).kind !== "stored" || replica.hasUnstoredChanges()) {
+            return SHARED_ENTER_FAILED;
+          }
+          signal?.throwIfAborted();
         }
         if (preparePicturesOnCopy) {
           if (!replica.restored && (!state || !applyNativePeerUpdate(replica.session, state))) return SHARED_ENTER_FAILED;
@@ -144,7 +150,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
     const outcome = await enterSharedSession({ ...ports, prepare: () => (preparation = prepare()) }, (_, failedClose) => {
       const { replica, token } = prepared;
       if (!replica || !token) throw new Error("The retained copy was not prepared.");
-      if (staged && entry.invitation && !replica.restored && !preparePicturesOnCopy &&
+      if (staged && entry.invitation && !replica.restored && !pictureOrigin &&
           (!state || !applyNativePeerUpdate(replica.session, state) || !replica.session.isStoredScript())) {
         throw new Error("The invitation did not contain a shared script.");
       }
@@ -160,7 +166,10 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
                 if (event.status.connected && !connected) pictures?.reconnect();
                 connected = event.status.connected;
                 entry.onRelayConnected?.(event.status.connected && event.status.firstSyncDone);
-              } else { pictures?.stop(); entry.onRelayConnected?.(false); }
+              } else {
+                if (event.kind !== "temporary-refusal") pictures?.stop();
+                entry.onRelayConnected?.(false);
+              }
             }
           });
           stopConnection = () => { relay.close(); entry.onRelayConnected?.(false); };

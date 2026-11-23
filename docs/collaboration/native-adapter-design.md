@@ -682,9 +682,13 @@ local bytes and attempt to fetch missing ones when authorized. List the pictures
 capture before presenting the standalone export as complete. Export can finish with that warning even if
 background retries are still pending.
 
-Browser invitation entry hydrates a temporary view of the authenticated snapshot before staging membership or
-applying the snapshot to the retained copy. Once entry commits, the live provider and picture transfers are
-owned by the retained session. The invitation deadline applies to preparation.
+Browser invitation entry hydrates a temporary view of the authenticated snapshot first. A fresh retained copy
+awaits the durable snapshot receipt before staging membership or enabling edits. Once entry commits, the
+live provider and picture transfers are owned by the retained session. The invitation deadline applies to
+preparation. Reopening online resumes pending uploads from the existing local picture store.
+
+Shared exports list the unavailable pictures supported by the chosen output. This includes the script PDF,
+Word, both Markdown layouts, SplitShare and the Splitpage copy.
 
 ## 9. Offline notice
 

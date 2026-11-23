@@ -1,4 +1,5 @@
 import type { DesktopPdfExportPorts } from "./local-files-ports.ts";
+import { sharedMissingPicturesText } from "../../application/export/diagnostics.ts";
 
 export function exportDesktopPdf(
   ports: DesktopPdfExportPorts, kind: string, options: Readonly<Record<string, unknown>> | undefined, alive: () => boolean
@@ -13,10 +14,12 @@ export function exportDesktopPdf(
   const label = kind.toUpperCase();
   return (async () => {
     let pdf: Uint8Array;
+    let omitted = "";
     try {
       pdf = await ports.notices.busy.withBar("Building the " + label + " file…", async () => {
         const assets = await ports.exports.loadExportAssets(request);
         if (!alive()) throw new Error("The local file menu is not started yet");
+        omitted = sharedMissingPicturesText(request, assets, doc, exporter.pictureRefs, filename);
         return ports.pdfPrinter.print(render({ doc, options: capturedOptions, assets }), doc);
       });
     } catch {
@@ -24,6 +27,7 @@ export function exportDesktopPdf(
       return;
     }
     if (!alive()) return;
+    if (omitted) ports.notices.show(omitted, "warn");
     await ports.delivery.deliver(filename, pdf, { savedMsg: "Exported " + filename });
   })();
 }

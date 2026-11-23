@@ -13,11 +13,13 @@ import type { SharedSwitchOutcome } from "../../../../src/bootstrap/wiring/share
 import type { DraftPayload } from "../../../../src/application/recovery/draft-origin.ts";
 import { desktopFixture, desktopTestCipher, replicaFileFaults, replicasAt } from "./desktop-local-store-fixture.ts";
 import { imageRecordOf } from "../../../../src/core/document/media.ts";
-import { createMemoryBackend, setBackend } from "../../../../src/adapters/storage/02c-blobs.ts";
+import { createMemoryBackend, intern, persist, setBackend } from "../../../../src/adapters/storage/02c-blobs.ts";
 import { localFileMenuControls } from "../../../../src/bootstrap/wiring/local-files.ts";
 import { notices } from "../../../../src/bootstrap/wiring/ports/effects.ts";
 import { currentDocument } from "../../../../src/bootstrap/wiring/session-owner.ts";
 import { NAME, serverHarness } from "./server-harness.ts";
+import { StateFirstProvider } from "../../../../src/adapters/collab/native/state-first-provider.ts";
+import { printDialog } from "../../../../src/bootstrap/wiring/ports/printing.ts";
 
 function hook() {
   return (window as unknown as { __sharedTest: {
@@ -111,7 +113,21 @@ test("join uses the current picture references and export lists a later missing 
   const saved = JSON.parse(String(exported.data)) as { rows: { imageRef?: { sha256: string }; visualImage?: string }[] };
   assert.equal(saved.rows[0]?.imageRef?.sha256, abandonedPicture.sha256);
   assert.ok(!saved.rows[0]?.visualImage);
-  assert.ok(warn.mock.calls.some(call => /Pending reference\.png/.test(String(call.arguments[0]))));
+  const warnsAboutPicture = () => warn.mock.calls.some(call => /Pending reference\.png/.test(String(call.arguments[0])));
+  assert.ok(warnsAboutPicture());
+  for (const format of ["html", "docx", "md", "md-table", "csv"]) {
+    warn.mock.resetCalls();
+    await localFileMenuControls().buildFileData(format, "Retained copy");
+    assert.equal(warnsAboutPicture(), format !== "csv", format);
+  }
+  warn.mock.resetCalls();
+  t.mock.method(printDialog, "reserve", () => ({
+    ended: new Promise<never>(() => {}),
+    close() {},
+    print() { assert.ok(warnsAboutPicture()); return Promise.resolve("opened" as const); }
+  }));
+  await localFileMenuControls().runExport("export-pdf");
+  assert.ok(warnsAboutPicture());
   holdDownload = true;
   while (!pendingDownload) await delay(10, undefined, { signal: t.signal });
   assert.equal((await opened.replica().flush()).kind, "stored");
@@ -158,6 +174,121 @@ test("a retained invitation gets its first state from the existing relay provide
   }), ok);
   await connected.promise;
   assert.equal(await currentText(), "word");
+  assert.deepEqual(await hook().leave(), ok);
+});
+
+for (const result of ["delayed", "failed", "cancelled"] as const) {
+  test(`real relay entry waits for its initial write receipt when storage is ${result}`, { timeout: 10_000 }, async t => {
+    const kit = serverHarness(t);
+    kit.seed();
+    const port = await kit.launch().port();
+    const deployment = "initial-" + result, name = deployment + "/" + NAME;
+    const previous = randomBytes(32).toString("base64url");
+    const store = createBrowserNativeLocalStore();
+    const existing = await store.open(name, STORE_OPTIONS);
+    assert.equal(existing.kind, "opened");
+    assert.ok(existing.membership);
+    await existing.membership.join(previous);
+    existing.session.close();
+    await existing.closed;
+    const add = IDBObjectStore.prototype.add;
+    const release = eventResult<undefined>(), reached = eventResult<undefined>(), connected = eventResult<undefined>();
+    const original = JSON.stringify(currentDocument());
+    const cancel = new AbortController();
+    const gate = t.mock.method(IDBObjectStore.prototype, "add", function (this: IDBObjectStore, value: unknown, key?: IDBValidKey) {
+      if (this.name !== REPLICAS) return add.call(this, value, key);
+      if (result === "failed") throw new DOMException("Fixture write failure", "QuotaExceededError");
+      const tx = this.transaction;
+      tx.addEventListener("complete", event => {
+        const complete = tx.oncomplete;
+        tx.oncomplete = null;
+        reached.resolve(undefined);
+        void release.promise.then(() => { complete?.call(tx, event); });
+      });
+      return add.call(this, value, key);
+    });
+    const token = kit.invitation().token;
+    const joining = hook().enterRetained({
+      deployment, script: NAME, relayUrl: "ws://127.0.0.1:" + port, invitation: { token }, signal: cancel.signal,
+      onRelayConnected: ready => { if (ready) connected.resolve(undefined); }
+    });
+    try {
+      if (result !== "failed") {
+        await reached.promise;
+        const database = await idbResult(window.indexedDB.open(DB_NAME));
+        try {
+          const current: unknown = await idbResult(database.transaction("invitations").objectStore("invitations").get(name));
+          assert.equal(current === previous, true);
+        } finally { database.close(); }
+        assert.equal(JSON.stringify(currentDocument()), original);
+        if (result === "cancelled") {
+          cancel.abort();
+          assert.deepEqual(await joining, { ok: false, reason: "opening-pending" });
+        }
+      } else assert.deepEqual(await joining, { ok: false, reason: "enter-failed" });
+    } finally {
+      release.resolve(undefined);
+      gate.mock.restore();
+    }
+    if (result === "delayed") {
+      assert.deepEqual(await joining, ok);
+      await connected.promise;
+      assert.equal(await currentText(), "word");
+      assert.deepEqual(await hook().leave(), ok);
+    } else {
+      const retained = await openAfterCancelledJoin(name, t.signal);
+      assert.equal(retained.kind, "opened");
+      try { assert.equal(await retained.membership?.token() === previous, true); }
+      finally { retained.session.close(); await retained.closed; }
+    }
+  });
+}
+
+test("an online retained reopen resumes a picture upload after temporary refusal and reconnect", { timeout: 20_000 }, async t => {
+  const kit = serverHarness(t);
+  const state = kit.seed();
+  const port = await kit.launch({ SPLITPAGE_MAX_CONNECTIONS_PER_INVITATION: "1" }).port();
+  const token = kit.invitation().token;
+  const entry = { deployment: "resume-upload", script: NAME };
+  const opened = capture();
+  assert.deepEqual(await hook().enterRetained({ ...entry, invitation: { token, state }, connect: opened.connect }), ok);
+  const local = opened.replica();
+  const picture = intern(Uint8Array.from(Buffer.from("89504e470d0a1a0a0000000d494844520000001200000001", "hex")));
+  assert.ok(picture);
+  assert.deepEqual(await persist([picture.sha256]), []);
+  const row = local.session.document().rows[0];
+  assert.ok(row);
+  assert.equal(local.session.commands.setField({ kind: "gallery", id: row.id }, { imageRef: picture }).kind, "written");
+  assert.equal((await local.flush()).kind, "stored");
+  await rewireRunningApp({});
+  await finishStartup();
+  await local.closed;
+
+  const blocker = kit.copy(port);
+  await kit.until(() => blocker.relay.status().firstSyncDone || undefined);
+  const refused = eventResult<undefined>(), delivered = eventResult<undefined>();
+  const attach = StateFirstProvider.prototype.attach;
+  t.mock.method(StateFirstProvider.prototype, "attach", function (this: StateFirstProvider) {
+    this.on("authenticationFailed", () => refused.resolve(undefined));
+    return attach.call(this);
+  });
+  let online = false;
+  const fetchPicture = globalThis.fetch;
+  t.mock.method(globalThis, "fetch", async (url: URL, init?: RequestInit) => {
+    if (init?.method !== "PUT" || !url.pathname.endsWith(picture.sha256)) return fetchPicture(url, init);
+    if (!online) return new Response(null, { status: 503 });
+    const response = await fetchPicture(url, init);
+    if (response.ok) delivered.resolve(undefined);
+    return response;
+  });
+  assert.deepEqual(await hook().enterRetained({
+    ...entry, relayUrl: "ws://127.0.0.1:" + port, onRelayConnected: connected => { online = connected; }
+  }), ok);
+  await refused.promise;
+  assert.equal(online, false);
+  blocker.close();
+  await delivered.promise;
+  assert.equal(online, true);
   assert.deepEqual(await hook().leave(), ok);
 });
 

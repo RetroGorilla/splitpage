@@ -35,7 +35,6 @@ export interface ExportChoice {
 
 export interface ExportDiagnostics {
   readonly imagesLeftOut: number;
-  readonly missingPictures?: readonly string[];
   readonly unshownCharacters?: number;
 }
 
@@ -54,6 +53,7 @@ export interface ExporterDecl<Request = unknown, Doc = unknown> {
   readonly id: string;
   readonly writeback?: boolean;
   readonly bundlesPictures?: boolean;
+  readonly pictureRefs?: (doc: Doc) => readonly string[];
   readonly fileName: (baseName: string, opts: FileNameOptions) => string;
   readonly build?: (request: Request, baseName: string) => ExportProduct | Promise<ExportProduct>;
   readonly printPage?: (request: ExportPrintRequest) => string;

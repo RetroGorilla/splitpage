@@ -15,6 +15,7 @@ const { exportAssetsNow } = await import("../adapters/formats/export-assets.ts")
 const { LONG_DEMO } = await import("../starters/index.ts");
 const { migrateRows } = await import("../bootstrap/document-ports.ts");
 const { loadTestDocument } = await import("./_document.mjs");
+const { notices } = await import("../bootstrap/wiring/ports/effects.ts");
 
 test("all four browser PDF products print without delivery or document save acknowledgements", async () => {
   loadTestDocument(migrateRows(JSON.parse(JSON.stringify(LONG_DEMO.state))));
@@ -49,4 +50,16 @@ test("print providers preserve a captured document, day and options while the li
     assert.deepEqual(providers.map((entry) => entry.printPage(request)), before);
     assert.ok(before.every((html) => !html.includes("Changed after capture")));
   } finally { currentDocument().title = title; }
+});
+
+test("standalone PDF keeps its existing print notices when a referenced picture is unavailable", async t => {
+  loadTestDocument(migrateRows({ title: "Standalone picture", rows: [{
+    id: "r1", imageName: "Unavailable picture.png", imageRef: { sha256: "a".repeat(64), width: 1, height: 1, mime: "image/png" }
+  }] }));
+  const notice = t.mock.method(notices, "show", () => {});
+  const print = t.mock.fn(async () => "opened");
+  t.mock.method(printDialog, "reserve", () => ({ ended: new Promise(() => {}), print, close() {} }));
+  await localFileMenuControls().runExport("export-pdf");
+  assert.equal(print.mock.callCount(), 1);
+  assert.deepEqual(notice.mock.calls.map(call => call.arguments), [["Print request sent to your browser.", "ok"]]);
 });

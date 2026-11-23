@@ -1,5 +1,6 @@
 export interface ExportAssetRequest {
   readonly shas: readonly string[];
+  readonly shared?: true;
 }
 
 export interface ExportPicture {
