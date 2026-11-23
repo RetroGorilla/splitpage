@@ -40,7 +40,7 @@ export function needsDesktopChecks(files) {
 
 export function needsRelayChecks(files) {
   if (files === null || files.length === 0) return true;
-  return files.some((f) => needsChecks([f]) && /^(?:collab-server\/|shared\/blob-policy\.ts$|tests\/adapters\/collab\/native\/server-container-smoke\.ts$|\.github\/workflows\/ci\.yml$)/.test(f));
+  return files.some((f) => needsChecks([f]) && /^(?:collab-server\/|src\/adapters\/collab\/native\/|shared\/blob-policy\.ts$|tests\/adapters\/collab\/native\/(?:server-container-smoke|relay-harness)\.ts$|package(?:-lock)?\.json$|\.nvmrc$|tools\/ci-changes\.mjs$|\.github\/workflows\/ci\.yml$)/.test(f));
 }
 
 export function changedFiles(base, head, repo = REPO) {

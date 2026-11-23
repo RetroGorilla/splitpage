@@ -62,7 +62,12 @@ eq("a smoke change that is not prose runs the smoke although app checks skip it"
 
 console.log("\nneedsRelayChecks():\n");
 
-for (const files of [null, [], ["collab-server/relay.ts"], ["collab-server/Dockerfile"], ["shared/blob-policy.ts"], ["tests/adapters/collab/native/server-container-smoke.ts"], [".github/workflows/ci.yml"]]) {
+for (const files of [
+  null, [], ["collab-server/relay.ts"], ["collab-server/Dockerfile"], ["src/adapters/collab/native/relay.ts"],
+  ["shared/blob-policy.ts"], ["tests/adapters/collab/native/server-container-smoke.ts"],
+  ["tests/adapters/collab/native/relay-harness.ts"], ["package.json"], ["package-lock.json"],
+  [".nvmrc"], ["tools/ci-changes.mjs"], [".github/workflows/ci.yml"]
+]) {
   eq(`the relay container smoke runs for ${JSON.stringify(files)}`, needsRelayChecks(files), true);
 }
 for (const files of [["README.md"], ["src/features/rows/view.ts"], ["tests/core/a.test.ts"], ["desktop/main.ts"]]) {

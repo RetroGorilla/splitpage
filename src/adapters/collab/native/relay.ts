@@ -133,6 +133,7 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
         if (TEMPORARY_REFUSALS.has(event.reason) && !reportedTemporaryClose) {
           reportedTemporaryClose = true;
           updateStatus({ connected: false });
+          attached.configuration.websocketProvider.webSocket?.close();
           emit({ kind: "temporary-refusal", reason: event.reason });
         }
       },

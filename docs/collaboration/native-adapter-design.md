@@ -175,8 +175,28 @@ This runbook applies to the earlier deployed relay that uses one environment acc
 revision `17a57c2e7` and use that image for both startup and restore.
 
 Stage 3 Part 1 introduces versioned SQLite storage for scripts and invitations. Local tests use a fresh
-database because the relay rejects the earlier database version. Owner commands arrive in Part 2.
+database because the relay rejects the earlier database version. The Part 2 relay upgrades Part 1
+databases in place and backs up creation ids with their script records.
 The planned deployment and smoke test are in [Stage 3 Part 8](stage-3-service-plan.md#8-evidence-and-redeploy).
+
+**Manage the Stage 3 relay.** Generate a random 32-byte secret encoded as base64url and keep it in
+the deployment's operator-only host secret storage. Inject it as `SPLITPAGE_MANAGEMENT_SECRET`
+into the relay and the owner command's environment. Keep it out of command arguments, shell
+history and logs. Configure the HTTPS proxy to omit authorization headers and request bodies
+from logging. The owner endpoints refuse requests when the relay has no configured secret.
+
+From `collab-server/`, run `node owner-command.ts <https-origin> issue <script-id> <label>`,
+`list <script-id>`, `revoke <invitation-id>` or `delete <script-id>` with the same command prefix.
+Issue prints the join link once. Use the invitation id from the list to revoke it. The shared test
+harness creates scripts by posting a full Yjs snapshot to `/api/scripts` with a stable
+`Idempotency-Key` header. Reusing a committed key returns the original script id without a body,
+including after deletion.
+
+**Rotate or recover the management secret.** Generate a replacement in the host secret store,
+restart the relay with the updated environment and update the owner command environment. After the
+restart, use the list command to confirm access with the replacement. Follow the same steps if the
+old value is lost. Rotation keeps the database and existing invitations intact. If someone else
+may have used the old secret, review the invitation lists and revoke unfamiliar invitations.
 
 **Start the relay.** From the repository root on the Docker host, replace the placeholder pool directory, editor
 origin and token. Use a directory on the direct local pool. Keep the environment file in host secret storage,
@@ -285,22 +305,25 @@ docker run -d --name splitpage-relay \
   splitpage-relay:current
 ```
 
-- **Runtime limits.** Defaults apply before expensive work for both unauthenticated and admitted clients:
+- **Runtime limits.** Defaults bound traffic for both unauthenticated and admitted clients:
   `SPLITPAGE_MAX_CONNECTIONS` (default `64`), `SPLITPAGE_MAX_CONNECTIONS_PER_INVITATION` (default `8`),
   `SPLITPAGE_MAX_MESSAGES_PER_SECOND` (default `60`) and `SPLITPAGE_MAX_UPLOADS_IN_FLIGHT` (default `4`), alongside
-  the WebSocket and Hocuspocus pre-auth bounds (`maxPayload`, `maxFragments`, `maxBufferedChunks`,
-  `perMessageDeflate: false`, `maxUnauthenticatedQueueSize`, `maxUnauthenticatedQueueMessages`,
-  `maxPendingDocuments`) and Node HTTP header/request timeouts. Temporary refusals (`503` with `Retry-After`,
-  `too-many-connections`, `rate-limited`) stay distinct from permanent refusals (`permission-denied`,
-  `invitation-revoked`, `script-deleted`, `script-unknown`, `unsupported-version`, `access-removed`,
-  `merge-too-large`), and permanent refusals stop reconnecting.
-- **Private status endpoint.** `GET /api/status` requires `Authorization: Bearer <SPLITPAGE_MANAGEMENT_SECRET>`
-  compared in constant time (returning `401` when unset, missing or wrong, with `Cache-Control: no-store`). It
+  the WebSocket and Hocuspocus pre-auth bounds (`maxPayload` 16 MB, `maxFragments` 4,096, `maxBufferedChunks`
+  32,768 so near-15 MB reconnects over small TCP chunks succeed, `perMessageDeflate: false`,
+  `maxUnauthenticatedQueueSize` 256 KiB, `maxUnauthenticatedQueueMessages` 32, `maxPendingDocuments` 4) and Node
+  HTTP header/request timeouts. Temporary refusals (`503` with `Retry-After`, `too-many-connections`,
+  `rate-limited`) stay distinct from permanent refusals (`permission-denied`, `invitation-revoked`,
+  `script-deleted`, `script-unknown`, `unsupported-version`, `access-removed`, `merge-too-large`), and permanent
+  refusals stop reconnecting without closing unrelated documents on a multiplexed WebSocket.
+- **Private status endpoint.** `GET /api/status` shares the constant-time `Authorization: Bearer <SPLITPAGE_MANAGEMENT_SECRET>`
+  check with the owner endpoints (returning `401` when unset, missing or wrong, with `Cache-Control: no-store`). It
   returns JSON with `connections` (`total`, `authenticated`, `documents`), `uploadsInFlight`, `storedBytes`,
-  `pictureBytes`, `lastStorageFailure` and `lastBackupAt`, and omits script names, script content, tokens and paths.
+  `pictureBytes`, sanitized `lastStorageFailure` and `lastBackupAt` (recorded atomically by successful verified
+  backups in `/data/last-backup.json`), and omits script names, script content, tokens and paths.
 - **Read-only container smoke.** On any Docker host, run `node tests/adapters/collab/native/server-container-smoke.ts`
-  to build the current image, start it with the bounded flags above, verify non-root execution and `EROFS` on the
-  container root, exercise sync, limits, status and in-container backup, and confirm log privacy.
+  to build the current image, start it with the bounded flags above, verify non-root execution, `EROFS` on the
+  container root and `ENOSPC` past the 16 MiB `/tmp` tmpfs bound, exercise owner commands, admission, revocation,
+  restart persistence, limits, status and in-container backup, and confirm log privacy.
 
 ## Decisions made
 

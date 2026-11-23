@@ -1,9 +1,9 @@
 import { randomUUID } from "node:crypto";
-import type { IncomingMessage, ServerResponse } from "node:http";
+import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 
-export const MAX_WS_FRAGMENTS = 1024;
-export const MAX_WS_BUFFERED_CHUNKS = 1024;
+export const MAX_WS_FRAGMENTS = 4096;
+export const MAX_WS_BUFFERED_CHUNKS = 32_768;
 export const MAX_UNAUTHENTICATED_QUEUE_BYTES = 262_144;
 export const MAX_UNAUTHENTICATED_QUEUE_MESSAGES = 32;
 export const MAX_PENDING_DOCUMENTS = 4;
@@ -22,40 +22,108 @@ export interface RelayLimitsConfig {
   readonly maxUploadsInFlight: number;
 }
 
+export interface UploadSlotLease {
+  readonly release: () => void;
+}
+
 export function isPictureUpload(request: IncomingMessage): boolean {
   const path = (request.url ?? "").split("?")[0] ?? "";
   return request.method === "PUT" && PICTURE_UPLOAD_PATH.test(path);
 }
 
+interface ReservationRecord {
+  readonly invitationId: string;
+  readonly documentName: string;
+  readonly detachSocket: () => void;
+}
+
 export function createRelayLimits(config: RelayLimitsConfig, now = () => performance.now()) {
   const activeSockets = new Set<Duplex>();
+  const socketsByKey = new Map<string, Set<Duplex>>();
   const byInvitation = new Map<string, Set<string>>();
+  const pendingByDocument = new Map<string, Set<string>>();
+  const reservations = new Map<string, ReservationRecord>();
   const messageWindows = new Map<string, number[]>();
   let inFlightUploads = 0;
 
+  function releaseReservation(reservationId: string): void {
+    const record = reservations.get(reservationId);
+    if (!record) return;
+    reservations.delete(reservationId);
+    record.detachSocket();
+    const inviteSet = byInvitation.get(record.invitationId);
+    if (inviteSet) {
+      inviteSet.delete(reservationId);
+      if (inviteSet.size === 0) byInvitation.delete(record.invitationId);
+    }
+    const pendingSet = pendingByDocument.get(record.documentName);
+    if (pendingSet) {
+      pendingSet.delete(reservationId);
+      if (pendingSet.size === 0) pendingByDocument.delete(record.documentName);
+    }
+  }
+
   return {
-    tryAdmitSocket(socket: Duplex): boolean {
+    tryAdmitSocket(socket: Duplex, websocketKey?: string): boolean {
       if (socket.destroyed || activeSockets.size >= config.maxConnections) return false;
       activeSockets.add(socket);
-      socket.once("close", () => { activeSockets.delete(socket); });
+      if (websocketKey) {
+        const group = socketsByKey.get(websocketKey);
+        if (group) group.add(socket);
+        else socketsByKey.set(websocketKey, new Set([socket]));
+      }
+      socket.once("close", () => {
+        activeSockets.delete(socket);
+        if (websocketKey) {
+          const group = socketsByKey.get(websocketKey);
+          if (group) {
+            group.delete(socket);
+            if (group.size === 0) socketsByKey.delete(websocketKey);
+          }
+        }
+      });
       return true;
     },
     totalSockets(): number {
       return activeSockets.size;
     },
-    tryAdmitInvitation(invitationId: string): string | null {
+    tryAdmitInvitation(invitationId: string, documentName: string, websocketKey: string | null): string | null {
+      const candidates = websocketKey ? socketsByKey.get(websocketKey) : undefined;
+      const socket = candidates?.size === 1 ? candidates.values().next().value : undefined;
+      if (socket?.destroyed) return null;
       const current = byInvitation.get(invitationId);
       if (current && current.size >= config.maxConnectionsPerInvitation) return null;
       const reservationId = randomUUID();
       if (current) current.add(reservationId);
       else byInvitation.set(invitationId, new Set([reservationId]));
+      const pending = pendingByDocument.get(documentName);
+      if (pending) pending.add(reservationId);
+      else pendingByDocument.set(documentName, new Set([reservationId]));
+      let detachSocket = () => undefined;
+      if (socket) {
+        const onSocketClose = () => releaseReservation(reservationId);
+        socket.once("close", onSocketClose);
+        detachSocket = () => { socket.off("close", onSocketClose); };
+      }
+      reservations.set(reservationId, { invitationId, documentName, detachSocket });
       return reservationId;
     },
-    releaseInvitation(invitationId: string, reservationId: string): void {
-      const current = byInvitation.get(invitationId);
-      if (!current) return;
-      current.delete(reservationId);
-      if (current.size === 0) byInvitation.delete(invitationId);
+    activateInvitation(reservationId: string): void {
+      const record = reservations.get(reservationId);
+      if (!record) return;
+      const pending = pendingByDocument.get(record.documentName);
+      if (pending) {
+        pending.delete(reservationId);
+        if (pending.size === 0) pendingByDocument.delete(record.documentName);
+      }
+    },
+    releaseInvitation(reservationId: string): void {
+      releaseReservation(reservationId);
+    },
+    releasePendingForDocument(documentName: string): void {
+      const pending = pendingByDocument.get(documentName);
+      if (!pending) return;
+      for (const reservationId of [...pending]) releaseReservation(reservationId);
     },
     allowMessage(socketId: string): boolean {
       const timestamp = now();
@@ -78,18 +146,17 @@ export function createRelayLimits(config: RelayLimitsConfig, now = () => perform
     clearSocket(socketId: string): void {
       messageWindows.delete(socketId);
     },
-    tryAdmitUpload(response: ServerResponse): boolean {
-      if (inFlightUploads >= config.maxUploadsInFlight) return false;
+    tryAcquireUpload(): UploadSlotLease | null {
+      if (inFlightUploads >= config.maxUploadsInFlight) return null;
       inFlightUploads += 1;
       let released = false;
-      const release = () => {
-        if (released) return;
-        released = true;
-        inFlightUploads -= 1;
+      return {
+        release() {
+          if (released) return;
+          released = true;
+          inFlightUploads -= 1;
+        }
       };
-      response.once("finish", release);
-      response.once("close", release);
-      return true;
     },
     uploadsInFlight(): number {
       return inFlightUploads;

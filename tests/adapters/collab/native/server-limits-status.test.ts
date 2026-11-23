@@ -1,21 +1,25 @@
 import assert from "node:assert/strict";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { mkdirSync, writeFileSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import type { IncomingMessage } from "node:http";
+import { createConnection, createServer } from "node:net";
+import type { AddressInfo, Socket } from "node:net";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import type { TestContext } from "node:test";
-import { HocuspocusProvider, MessageType } from "@hocuspocus/provider";
+import { HocuspocusProvider, HocuspocusProviderWebsocket, MessageType } from "@hocuspocus/provider";
 import { createEncoder, toUint8Array, writeVarString, writeVarUint } from "lib0/encoding";
 import { WebSocket } from "ws";
+import { Doc, encodeStateAsUpdate } from "yjs";
 import { scriptAccess } from "../../../../collab-server/access.ts";
+import { backupRelay } from "../../../../collab-server/backup.ts";
 import { relayConfig } from "../../../../collab-server/config.ts";
 import type { RelayStatusSnapshot } from "../../../../collab-server/status.ts";
 import { DB_NAME, openWriter } from "../../../../collab-server/storage.ts";
-import { appendText, NAME, ORIGIN, serverHarness } from "./server-harness.ts";
+import { appendText, NAME, ORIGIN, serverHarness, storedText } from "./server-harness.ts";
 
 const BACKUP = new URL("../../../../collab-server/backup-command.ts", import.meta.url);
 
@@ -31,6 +35,41 @@ async function expectUpgradeStatus(t: TestContext, port: number, expectedStatus:
   const [, response] = await once(ws, "unexpected-response", { signal: t.signal }) as [unknown, IncomingMessage];
   assert.equal(response.statusCode, expectedStatus);
   return response;
+}
+
+async function openChunkingProxy(t: TestContext, targetPort: number, chunkSize: number): Promise<{ port: number; chunksForwarded: () => number }> {
+  const sockets = new Set<Socket>();
+  let chunks = 0;
+  const server = createServer(client => {
+    const upstream = createConnection({ host: "127.0.0.1", port: targetPort });
+    sockets.add(client);
+    sockets.add(upstream);
+    const cleanup = () => {
+      sockets.delete(client);
+      sockets.delete(upstream);
+      client.destroy();
+      upstream.destroy();
+    };
+    client.on("error", cleanup);
+    upstream.on("error", cleanup);
+    client.once("close", cleanup);
+    upstream.once("close", cleanup);
+    client.on("data", data => {
+      for (let offset = 0; offset < data.length; offset += chunkSize) {
+        chunks += 1;
+        upstream.write(data.subarray(offset, offset + chunkSize));
+      }
+    });
+    upstream.on("data", data => {
+      client.write(data);
+    });
+  });
+  await new Promise<void>(resolve => { server.listen(0, "127.0.0.1", resolve); });
+  t.after(async () => {
+    for (const socket of sockets) socket.destroy();
+    await new Promise<void>(resolve => { server.close(() => resolve()); });
+  });
+  return { port: (server.address() as AddressInfo).port, chunksForwarded: () => chunks };
 }
 
 test("total connection limit refuses excess WebSockets at upgrade with 503 and recovers when a slot frees",
@@ -90,7 +129,94 @@ test("per-invitation connection limit returns a temporary refusal while other in
   }
 );
 
-test("message rate limit closes a flooding client with 4429 before applying excess updates and permits reconnect",
+test("document revocation preserves other logical documents on the same multiplexed WebSocket",
+  { timeout: 30_000 }, async t => {
+    const kit = serverHarness(t);
+    kit.seed(NAME);
+    kit.seed("second-script");
+    const firstInvite = kit.provision(NAME);
+    const secondInvite = kit.provision("second-script");
+    const run = kit.launch();
+    const port = await run.port();
+
+    const sharedSocket = new HocuspocusProviderWebsocket({ url: `ws://127.0.0.1:${port}?wire=1&schema=1` });
+    const events = new EventTarget();
+    let firstClosedReason: string | undefined;
+    let secondClosed = false;
+    const docA = new Doc();
+    const docB = new Doc();
+    const providerA = new HocuspocusProvider({
+      websocketProvider: sharedSocket, name: NAME, token: firstInvite.token, document: docA, awareness: null,
+      onSynced() { events.dispatchEvent(new Event("change")); },
+      onClose({ event }) { firstClosedReason = event.reason; events.dispatchEvent(new Event("change")); }
+    });
+    const providerB = new HocuspocusProvider({
+      websocketProvider: sharedSocket, name: "second-script", token: secondInvite.token, document: docB, awareness: null,
+      onSynced() { events.dispatchEvent(new Event("change")); },
+      onUnsyncedChanges() { events.dispatchEvent(new Event("change")); },
+      onClose() { secondClosed = true; events.dispatchEvent(new Event("change")); }
+    });
+    providerA.attach();
+    providerB.attach();
+    t.after(() => {
+      providerA.destroy();
+      providerB.destroy();
+      sharedSocket.destroy();
+      docA.destroy();
+      docB.destroy();
+    });
+
+    while (!providerA.synced || !providerB.synced) await once(events, "change", { signal: t.signal });
+    const peerB = kit.copy(port, undefined, "second-script", secondInvite.token);
+    await kit.until(() => (peerB.relay.status().firstSyncDone && peerB.text() === "word") || undefined);
+
+    run.send(`revoke:${firstInvite.id}`);
+    while (firstClosedReason === undefined) await once(events, "change", { signal: t.signal });
+    assert.equal(firstClosedReason, "access-removed");
+    assert.equal(secondClosed, false);
+    assert.equal(providerB.isAuthenticated, true);
+
+    docB.getText("mux-check").insert(0, "still-alive");
+    await kit.until(() => peerB.session.ydoc.getText("mux-check").toString() === "still-alive" || undefined);
+    assert.equal(secondClosed, false);
+    assert.deepEqual(await run.stop("clean"), { code: 0, exitSignal: null });
+  }
+);
+
+test("invitation reservations release after injected document load failures and normal socket disconnects",
+  { timeout: 30_000 }, async t => {
+    const kit = serverHarness(t);
+    kit.seed();
+    const invite = kit.provision(NAME);
+    const run = kit.launch({ SPLITPAGE_MAX_CONNECTIONS_PER_INVITATION: "1" });
+    const port = await run.port();
+
+    run.send("fail-next-load");
+    await kit.until(() => run.messages.includes("fail-load-armed") || undefined);
+
+    const events = new EventTarget();
+    let authFailures = 0;
+    const failedDoc = new Doc();
+    const failedProvider = new HocuspocusProvider({
+      url: `ws://127.0.0.1:${port}?wire=1&schema=1`, name: NAME, token: invite.token, document: failedDoc, awareness: null,
+      onAuthenticationFailed() { authFailures += 1; events.dispatchEvent(new Event("change")); }
+    });
+    t.after(() => { failedProvider.destroy(); failedDoc.destroy(); });
+
+    await kit.until(() => run.messages.includes("load-failed") || undefined);
+    while (authFailures === 0) await once(events, "change", { signal: t.signal });
+
+    const recovered = kit.copy(port, undefined, NAME, invite.token);
+    await kit.until(() => (recovered.relay.status().firstSyncDone && recovered.text() === "word") || undefined);
+    recovered.close();
+
+    const reopened = kit.copy(port, undefined, NAME, invite.token);
+    await kit.until(() => (reopened.relay.status().firstSyncDone && reopened.text() === "word") || undefined);
+    assert.deepEqual(await run.stop("clean"), { code: 0, exitSignal: null });
+  }
+);
+
+test("message rate limit closes a flooding client before applying excess updates and permits reconnect",
   { timeout: 30_000 }, async t => {
     const kit = serverHarness(t);
     kit.seed();
@@ -113,13 +239,15 @@ test("message rate limit closes a flooding client with 4429 before applying exce
   }
 );
 
-test("in-flight upload limit refuses excess picture uploads with 503 before running the upload handler",
+test("in-flight upload limit refuses excess picture uploads with 503 and holds slots through cleanup",
   { timeout: 30_000 }, async t => {
     const kit = serverHarness(t);
     const run = kit.launch({ SPLITPAGE_MAX_UPLOADS_IN_FLIGHT: "2" });
     const port = await run.port();
     run.send("hold-uploads");
     await kit.until(() => run.messages.includes("uploads-armed") || undefined);
+    run.send("hold-upload-cleanup");
+    await kit.until(() => run.messages.includes("upload-cleanup-armed") || undefined);
 
     const sha = createHash("sha256").update("picture").digest("hex");
     const uploadUrl = `http://127.0.0.1:${port}/api/scripts/${NAME}/pictures/${sha}`;
@@ -137,6 +265,9 @@ test("in-flight upload limit refuses excess picture uploads with 503 before runn
     t.after(() => { first.req.destroy(); second.req.destroy(); });
     await kit.until(() => enteredCount() === 2 || undefined);
 
+    const statusWhileFull = await (await run.owner("status")).json() as RelayStatusSnapshot;
+    assert.equal(statusWhileFull.uploadsInFlight, 2);
+
     const third = startUpload();
     t.after(() => third.req.destroy());
     const refused = await third.response;
@@ -148,17 +279,27 @@ test("in-flight upload limit refuses excess picture uploads with 503 before runn
     assert.deepEqual(JSON.parse(Buffer.concat(chunks).toString("utf8")), { error: "too-many-uploads" });
     assert.equal(enteredCount(), 2);
 
-    run.send("release-upload");
-    const firstResponse = await first.response;
-    assert.equal(firstResponse.statusCode, 201);
-    firstResponse.resume();
     first.req.destroy();
+    await kit.until(() => run.messages.includes("upload-cleanup-waiting") || undefined);
+    const statusDuringCleanup = await (await run.owner("status")).json() as RelayStatusSnapshot;
+    assert.equal(statusDuringCleanup.uploadsInFlight, 2);
+
+    const duringCleanup = startUpload();
+    t.after(() => duringCleanup.req.destroy());
+    const refusedDuringCleanup = await duringCleanup.response;
+    assert.equal(refusedDuringCleanup.statusCode, 503);
+    refusedDuringCleanup.resume();
+
+    run.send("release-upload-cleanup");
+    await kit.until(() => run.messages.includes("upload-cleanup-done") || undefined);
 
     const fourth = startUpload();
     t.after(() => fourth.req.destroy());
     await kit.until(() => enteredCount() === 3 || undefined);
     run.send("release-upload");
     run.send("release-upload");
+    run.send("release-upload-cleanup");
+    run.send("release-upload-cleanup");
     const [secondResponse, fourthResponse] = await Promise.all([second.response, fourth.response]);
     assert.equal(secondResponse.statusCode, 201);
     assert.equal(fourthResponse.statusCode, 201);
@@ -169,6 +310,46 @@ test("in-flight upload limit refuses excess picture uploads with 503 before runn
     assert.deepEqual(await run.stop("clean"), { code: 0, exitSignal: null });
   }
 );
+
+test("normal near-limit reconnect succeeds over small fragmented TCP chunks", { timeout: 30_000 }, async t => {
+  const kit = serverHarness(t);
+  const baseState = kit.seed();
+  const nearLimit = new Doc();
+  t.after(() => nearLimit.destroy());
+  nearLimit.getMap("fixture").set("payload", new Uint8Array(14_000_000));
+  const combined = new Doc();
+  t.after(() => combined.destroy());
+  {
+    const seedDoc = kit.copy(0, { kind: "state", state: baseState });
+    seedDoc.close();
+  }
+  const largeSession = kit.copy(0, { kind: "state", state: baseState });
+  largeSession.session.ydoc.getMap("fixture").set("payload", new Uint8Array(14_000_000));
+  const largeState = largeSession.session.encodeState();
+  largeSession.close();
+  assert.ok(largeState.byteLength > 14_000_000 && largeState.byteLength < 15_000_000);
+  {
+    using db = openWriter(kit.directory);
+    db.prepare("UPDATE documents SET state = ? WHERE name = ?").run(largeState, NAME);
+  }
+  const run = kit.launch();
+  const relayPort = await run.port();
+  const proxy = await openChunkingProxy(t, relayPort, 4096);
+
+  const client = kit.copy(proxy.port);
+  await kit.until(() => (client.relay.status().firstSyncDone && client.text() === "word") || undefined);
+  appendText(client.session, " near-limit", 4);
+  await kit.until(() => client.pending() === 0 || undefined);
+  client.close();
+
+  const returning = kit.copy(proxy.port, { kind: "state", state: largeState });
+  appendText(returning.session, " reconnected", 4);
+  await kit.until(() => (returning.relay.status().firstSyncDone && returning.pending() === 0) || undefined);
+  assert.ok(proxy.chunksForwarded() > 2000);
+  assert.deepEqual(await run.stop("clean"), { code: 0, exitSignal: null });
+  const finalText = storedText(kit.directory);
+  assert.ok(finalText?.includes("near-limit") && finalText?.includes("reconnected"));
+});
 
 test("unauthenticated queue message limit closes a client before authentication", { timeout: 30_000 }, async t => {
   const kit = serverHarness(t);
@@ -239,10 +420,10 @@ test("permanent refusals stop reconnecting without destroying the local session"
   assert.deepEqual(await run.stop("clean"), { code: 0, exitSignal: null });
 });
 
-test("private status endpoint requires management secret and reports counts, bytes, storage failure and backup time without private data",
+test("private status endpoint shares management auth, uses authoritative backup records and omits private data",
   { timeout: 30_000 }, async t => {
     const kit = serverHarness(t);
-    kit.seed();
+    const state = kit.seed();
     const secret = randomBytes(32).toString("base64url");
     const wrongSecret = randomBytes(32).toString("base64url");
     const { token } = kit.provision(NAME);
@@ -252,14 +433,22 @@ test("private status endpoint requires management secret and reports counts, byt
     const pictureHash = createHash("sha256").update(pictureBytes).digest("hex");
     writeFileSync(join(pictures, pictureHash), pictureBytes);
     writeFileSync(join(pictures, "upload-0"), Buffer.alloc(9999, 1));
+    const backups = join(kit.directory, "backups");
+    mkdirSync(backups, { recursive: true });
+    writeFileSync(join(backups, "relay-2099-01-01T00-00-00.000Z-00000000-0000-4000-8000-000000000000.sqlite"), "unverified");
 
     const run = kit.launch({ SPLITPAGE_MANAGEMENT_SECRET: secret });
     const port = await run.port();
-    const statusUrl = `http://127.0.0.1:${port}/api/status`;
+    const creationId = `creation-${randomUUID()}`;
+    const ownerScript = await run.createScript(creationId, state, secret);
+    const inviteLabel = `private-label-${randomBytes(6).toString("hex")}`;
+    const issuedResponse = await run.owner(`scripts/${ownerScript}/invitations`, { method: "POST", body: inviteLabel }, secret);
+    assert.equal(issuedResponse.status, 201);
+    const issued = await issuedResponse.json() as { id: string; token: string };
 
-    assert.equal((await fetch(statusUrl)).status, 401);
-    assert.equal((await fetch(statusUrl, { headers: { Authorization: `Bearer ${wrongSecret}` } })).status, 401);
-    const disallowed = await fetch(statusUrl, { method: "POST", headers: { Authorization: `Bearer ${secret}` } });
+    assert.equal((await run.owner("status", {}, null)).status, 401);
+    assert.equal((await run.owner("status", {}, wrongSecret)).status, 401);
+    const disallowed = await run.owner("status", { method: "POST" }, secret);
     assert.equal(disallowed.status, 405);
     assert.equal(disallowed.headers.get("allow"), "GET");
     assert.equal(disallowed.headers.get("cache-control"), "no-store");
@@ -268,7 +457,7 @@ test("private status endpoint requires management secret and reports counts, byt
     await kit.until(() => (client.relay.status().firstSyncDone && client.text() === "word") || undefined);
 
     async function readStatus(): Promise<{ raw: string; data: RelayStatusSnapshot }> {
-      const response = await fetch(statusUrl, { headers: { Authorization: `Bearer ${secret}` } });
+      const response = await run.owner("status", {}, secret);
       assert.equal(response.status, 200);
       assert.equal(response.headers.get("cache-control"), "no-store");
       const raw = await response.text();
@@ -285,11 +474,17 @@ test("private status endpoint requires management secret and reports counts, byt
     assert.equal(initial.data.lastStorageFailure, null);
     assert.equal(initial.data.lastBackupAt, null);
 
+    await assert.rejects(backupRelay({ SPLITPAGE_DATA_DIR: kit.directory }, async () => {
+      throw new Error("simulated backup copy failure");
+    }));
+    assert.equal((await readStatus()).data.lastBackupAt, null);
+
     const backupRun = kit.launch({ SPLITPAGE_DATA_DIR: kit.directory }, BACKUP);
     assert.deepEqual(await backupRun.exit, { code: 0, exitSignal: null }, backupRun.errors());
     const afterBackup = await readStatus();
     assert.ok(afterBackup.data.lastBackupAt !== null);
     assert.match(afterBackup.data.lastBackupAt, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
+    assert.equal(afterBackup.data.lastBackupAt.startsWith("2099-"), false);
 
     const sentinel = `private-trigger-${randomBytes(8).toString("hex")}`;
     {
@@ -311,12 +506,15 @@ test("private status endpoint requires management secret and reports counts, byt
       using db = new DatabaseSync(join(kit.directory, DB_NAME));
       db.exec("DROP TRIGGER fail_store");
     }
-    for (const privateValue of [secret, wrongSecret, token, NAME, kit.directory, pictureHash, sentinel, "word", "failing"]) {
+    for (const privateValue of [
+      secret, wrongSecret, token, issued.token, issued.id, inviteLabel,
+      creationId, ownerScript, NAME, kit.directory, pictureHash, sentinel, "word", "failing"
+    ]) {
       assert.equal(afterFailure.raw.includes(privateValue), false);
     }
     assert.deepEqual(await run.stop("clean"), { code: 0, exitSignal: null });
     const logs = run.output() + run.errors();
-    for (const privateValue of [secret, wrongSecret, token, sentinel]) {
+    for (const privateValue of [secret, wrongSecret, token, issued.token, inviteLabel, sentinel]) {
       assert.equal(logs.includes(privateValue), false);
     }
   }

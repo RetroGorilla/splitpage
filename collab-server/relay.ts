@@ -22,6 +22,7 @@ import {
   MAX_WS_FRAGMENTS,
   RETRY_AFTER_SECONDS
 } from "./limits.ts";
+import { ownerRequests } from "./owner-http.ts";
 import { statusRequests } from "./status.ts";
 import type { StorageFailureRecord } from "./status.ts";
 import { claimWriter, openWriter } from "./storage.ts";
@@ -81,15 +82,11 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
   const write = db.prepare("INSERT INTO documents VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET state = excluded.state");
   type Admission = { invitationId: string; reservationId: string };
   const storage = new Database({
-    async fetch({ documentName, context }) {
+    async fetch({ documentName }) {
       try {
         return (load.get(documentName)?.state as Uint8Array | undefined) ?? null;
       } catch (error) {
         lastStorageFailure = { at: new Date().toISOString(), reason: "document-load-failed" };
-        const admission = context as Partial<Admission> | undefined;
-        if (admission?.invitationId && admission.reservationId) {
-          limits.releaseInvitation(admission.invitationId, admission.reservationId);
-        }
         throw error;
       }
     },
@@ -107,31 +104,80 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
   function requireAccess(context: Admission): void {
     if (!access.isValid(context.invitationId)) throw { code: 4403, reason: "access-removed" };
   }
-  const limitsExtension: Extension<Admission> = {
-    priority: 200,
-    async onRequest({ request, response }) {
-      if (!isPictureUpload(request)) return;
-      if (!limits.tryAdmitUpload(response)) {
-        if (!request.complete) response.setHeader("Connection", "close");
-        response.writeHead(503, {
-          "Content-Type": "application/json",
-          "Cache-Control": "no-store",
-          "Retry-After": RETRY_AFTER_SECONDS
-        }).end(JSON.stringify({ error: "too-many-uploads" }));
-        // why: the stock server treats a falsy rejection as an HTTP response handled by the hook
-        throw undefined;
+
+  function closeRemovedAccess(): void {
+    for (const document of relay.hocuspocus.documents.values()) {
+      for (const connection of document.getConnections()) {
+        const context = connection.context as Admission;
+        if (!access.isValid(context.invitationId)) connection.close({ code: 4403, reason: "access-removed" });
       }
-    },
-    async onConnect({ socketId }) {
-      if (!limits.allowMessage(socketId)) throw { reason: "rate-limited" };
     }
-  };
+  }
+
+  function revokeInvitation(id: string): boolean {
+    if (!access.revoke(id)) return false;
+    closeRemovedAccess();
+    return true;
+  }
+
+  function deleteScript(name: string): boolean {
+    if (!access.deleteScript(name)) return false;
+    closeRemovedAccess();
+    return true;
+  }
+
+  const manage = ownerRequests(managementSecret, DOCUMENT_BYTES, {
+    findCreation: access.findCreation, create: access.create, issue: access.issue, list: access.list, revokeInvitation, deleteScript
+  });
   const status = statusRequests(managementSecret, db, directory, {
     totalConnections: () => limits.totalSockets(),
     authenticatedConnections: () => relay.hocuspocus.getConnectionsCount(),
     openDocuments: () => relay.hocuspocus.getDocumentsCount(),
     uploadsInFlight: () => limits.uploadsInFlight(),
     lastStorageFailure: () => lastStorageFailure
+  });
+
+  const watchedLoads = new WeakSet<Promise<Document>>();
+  const limitsExtension: Extension<Admission> = {
+    priority: 200,
+    async onConnect({ socketId }) {
+      if (!limits.allowMessage(socketId)) throw { reason: "rate-limited" };
+    },
+    async onCreateDocument({ documentName, instance }) {
+      const pending = instance.loadingDocuments.get(documentName);
+      if (pending && !watchedLoads.has(pending)) {
+        watchedLoads.add(pending);
+        void pending.catch(() => {
+          limits.releasePendingForDocument(documentName);
+        });
+      }
+    }
+  };
+  const guardedExtensions: Extension[] = extensions.map(extension => {
+    const onRequest = extension.onRequest;
+    if (!onRequest) return extension;
+    return {
+      ...extension,
+      async onRequest(payload) {
+        if (!isPictureUpload(payload.request)) return onRequest.call(extension, payload);
+        const lease = limits.tryAcquireUpload();
+        if (!lease) {
+          if (!payload.request.complete) payload.response.setHeader("Connection", "close");
+          payload.response.writeHead(503, {
+            "Content-Type": "application/json",
+            "Cache-Control": "no-store",
+            "Retry-After": RETRY_AFTER_SECONDS
+          }).end(JSON.stringify({ error: "too-many-uploads" }));
+          // why: the stock server treats a falsy rejection as an HTTP response handled by the hook
+          throw undefined;
+        }
+        try {
+          return await onRequest.call(extension, payload);
+        } finally {
+          lease.release();
+        }
+      }
+    };
   });
 
   const writes = new WeakMap<Document, { connection: Connection; done: Promise<void>; release: () => void }>();
@@ -153,57 +199,61 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
           done(false, 401);
           return;
         }
-        if (!limits.tryAdmitSocket(req.socket)) {
+        const keyHeader = req.headers["sec-websocket-key"];
+        const websocketKey = typeof keyHeader === "string" ? keyHeader : undefined;
+        if (!limits.tryAdmitSocket(req.socket, websocketKey)) {
           done(false, 503, "too-many-connections", { "Retry-After": RETRY_AFTER_SECONDS });
           return;
         }
         done(true);
       }
     },
-    extensions: [limitsExtension, ...extensions, storage],
+    extensions: [limitsExtension, ...guardedExtensions, storage],
     async onRequest({ request, response }) {
-      if (status(request, response)) throw undefined;
+      if (status(request, response) || await manage(request, response)) throw undefined;
     },
-    async onAuthenticate({ token, instance, documentName, connectionConfig, requestParameters }) {
+    async onAuthenticate({ token, instance, documentName, connectionConfig, requestParameters, requestHeaders }) {
       if (requestParameters.getAll("wire").join(",") !== "1" || requestParameters.getAll("schema").join(",") !== "1") {
         throw { reason: "unsupported-version" };
       }
       const invitationId = access.authenticate(documentName, token);
-      const reservationId = limits.tryAdmitInvitation(invitationId);
+      const reservationId = limits.tryAdmitInvitation(invitationId, documentName, requestHeaders.get("sec-websocket-key"));
       if (!reservationId) throw { reason: "too-many-connections" };
       try {
         const loading = instance.loadingDocuments.get(documentName);
+        if (loading && !watchedLoads.has(loading)) {
+          watchedLoads.add(loading);
+          void loading.catch(() => {
+            limits.releasePendingForDocument(documentName);
+          });
+        }
         const live = instance.documents.get(documentName) ?? (loading ? await loading : undefined);
         if (loading) access.authenticate(documentName, token);
         const bytes = live ? encodeStateAsUpdate(live).byteLength : Number(size.get(documentName)?.bytes ?? 0);
         connectionConfig.readOnly = bytes >= DOCUMENT_BYTES;
         return { invitationId, reservationId };
       } catch (error) {
-        limits.releaseInvitation(invitationId, reservationId);
+        limits.releaseInvitation(reservationId);
         throw error;
       }
     },
     async connected({ context, connection }) {
+      limits.activateInvitation(context.reservationId);
       connection.onClose(() => {
-        limits.releaseInvitation(context.invitationId, context.reservationId);
+        limits.releaseInvitation(context.reservationId);
         limits.clearSocket(connection.socketId);
       });
       if (!access.isValid(context.invitationId)) {
         connection.close({ code: 4403, reason: "access-removed" });
-        connection.webSocket.close(4403, "access-removed");
       }
     },
     async onDisconnect({ context, socketId }) {
-      if (context?.invitationId && context?.reservationId) {
-        limits.releaseInvitation(context.invitationId, context.reservationId);
-      }
+      if (context?.reservationId) limits.releaseInvitation(context.reservationId);
       limits.clearSocket(socketId);
     },
-    async beforeHandleMessage({ context, connection, socketId }) {
+    async beforeHandleMessage({ context, socketId }) {
       requireAccess(context);
       if (!limits.allowMessage(socketId)) {
-        connection.close({ code: 4429, reason: "rate-limited" });
-        connection.webSocket.close(4429, "rate-limited");
         throw { code: 4429, reason: "rate-limited" };
       }
     },
@@ -250,28 +300,11 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       relay.listen(),
       once(relay.httpServer, "error", { signal: listening.signal }).then(() => { throw new Error(); })
     ]);
-    function closeRemovedAccess(): void {
-      for (const document of relay.hocuspocus.documents.values()) {
-        for (const connection of document.getConnections()) {
-          const context = connection.context as Admission;
-          if (!access.isValid(context.invitationId)) {
-            connection.close({ code: 4403, reason: "access-removed" });
-            connection.webSocket.close(4403, "access-removed");
-          }
-        }
-      }
-    }
     return Object.assign(relay, {
       registerScript: access.register,
       issueInvitation: access.issue,
-      revokeInvitation(id: string) {
-        access.revoke(id);
-        closeRemovedAccess();
-      },
-      deleteScript(name: string) {
-        access.deleteScript(name);
-        closeRemovedAccess();
-      }
+      revokeInvitation,
+      deleteScript
     });
   } catch {
     closeStorage();

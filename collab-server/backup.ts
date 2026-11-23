@@ -1,34 +1,45 @@
 import { randomUUID } from "node:crypto";
-import { mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync } from "node:fs";
+import { closeSync, fsyncSync, mkdirSync, mkdtempSync, openSync, readdirSync, readFileSync, renameSync, rmSync, writeSync } from "node:fs";
 import { join } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import type { SQLOutputValue } from "node:sqlite";
 import { dataDirectory, RelayError, retentionCount } from "./config.ts";
 import { DB_NAME, verifyDatabase } from "./storage.ts";
 
-const BACKUP_NAME = /^relay-(\d{4}-\d\d-\d\d)T(\d\d)-(\d\d)-(\d\d)\.(\d{3})Z-[a-f0-9-]{36}\.sqlite$/;
+const BACKUP_NAME = /^relay-\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d\.\d{3}Z-[a-f0-9-]{36}\.sqlite$/;
+const LAST_BACKUP_FILE = "last-backup.json";
+const ISO_TIMESTAMP = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
+
+function recordLastBackup(staging: string, directory: string, completedAt: string): void {
+  const pending = join(staging, LAST_BACKUP_FILE);
+  const fd = openSync(pending, "wx", 0o600);
+  try {
+    writeSync(fd, JSON.stringify({ completedAt }) + "\n", undefined, "utf8");
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+  renameSync(pending, join(directory, LAST_BACKUP_FILE));
+}
 
 export function lastBackupTime(directory: string): string | null {
-  let entries;
+  let raw: string;
   try {
-    entries = readdirSync(join(directory, "backups"), { withFileTypes: true });
+    raw = readFileSync(join(directory, LAST_BACKUP_FILE), "utf8");
   } catch (error) {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;
   }
-  let latest: string | null = null;
-  for (const entry of entries) {
-    if (!entry.isFile()) continue;
-    const match = BACKUP_NAME.exec(entry.name);
-    if (!match) continue;
-    const iso = `${match[1]}T${match[2]}:${match[3]}:${match[4]}.${match[5]}Z`;
-    if (latest === null || iso > latest) latest = iso;
-  }
-  return latest;
+  const parsed: unknown = JSON.parse(raw);
+  if (!parsed || typeof parsed !== "object" || !("completedAt" in parsed)) return null;
+  const { completedAt } = parsed as { completedAt: unknown };
+  return typeof completedAt === "string" && ISO_TIMESTAMP.test(completedAt) ? completedAt : null;
 }
 
 export function verifyCopy(source: DatabaseSync, copy: DatabaseSync): void {
-  verifyDatabase(copy);
+  const version = verifyDatabase(copy);
+  if (version !== verifyDatabase(source)) throw new RelayError("Relay backup storage version differs.");
+  if (version === 2) verifyRows(source, copy, "creations", "SELECT id, script FROM creations ORDER BY id");
   verifyRows(source, copy, "documents", "SELECT name, state FROM documents ORDER BY name");
   verifyRows(source, copy, "scripts", "SELECT name, status FROM scripts ORDER BY name");
   verifyRows(source, copy, "invitations", "SELECT id, script, label, token_hash, revoked FROM invitations ORDER BY id");
@@ -73,6 +84,7 @@ export async function backupRelay(env: NodeJS.ProcessEnv, copyDatabase = backup)
     source.exec("COMMIT");
     const name = `relay-${date}-${randomUUID()}.sqlite`;
     renameSync(pending, join(destination, name));
+    recordLastBackup(staging, directory, new Date().toISOString());
     const older = readdirSync(destination, { withFileTypes: true })
       .filter(entry => entry.isFile() && entry.name !== name && BACKUP_NAME.test(entry.name));
     for (const { name: expired } of older.sort((a, b) => b.name.localeCompare(a.name)).slice(keep - 1)) {
