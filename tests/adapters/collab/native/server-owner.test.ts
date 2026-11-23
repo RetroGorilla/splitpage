@@ -133,7 +133,7 @@ for (const version of [1, 2]) {
     assert.deepEqual(storedState(kit.directory, restored), state);
     const currentBackup = await backupRelay(env);
     for (const [file, expectedVersion] of [[previousBackup, version], [currentBackup, 3]] as const) {
-      using copy = new DatabaseSync(join(kit.directory, "backups", file), { readOnly: true });
+      using copy = new DatabaseSync(join(kit.directory, "backups", file, DB_NAME), { readOnly: true });
       assert.equal(verifyDatabase(copy), expectedVersion);
       if (expectedVersion >= 2) {
         assert.equal(copy.prepare("SELECT script FROM creations WHERE id = ?").get(creationId)?.script, restored);
