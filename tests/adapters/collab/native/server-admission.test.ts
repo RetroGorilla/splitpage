@@ -15,6 +15,7 @@ import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import { scriptAccess } from "../../../../collab-server/access.ts";
 import { relayConfig, retentionCount } from "../../../../collab-server/config.ts";
 import { DB_NAME, openWriter, verifyDurability } from "../../../../collab-server/storage.ts";
+import { readInvitationSnapshot } from "../../../../src/adapters/collab/native/invitation-snapshot.ts";
 import { NAME, ORIGIN, serverHarness, storedState } from "./server-harness.ts";
 
 const MAIN = new URL("../../../../collab-server/main.ts", import.meta.url);
@@ -263,6 +264,8 @@ for (const state of ["stored", "live"] as const) {
       assert.equal(writer.client.authorizedScope, "read-write");
       assert.equal(run.messages.includes("store-started"), false);
     }
+    const snapshot = await readInvitationSnapshot(url, NAME, kit.invitation().token, t.signal);
+    assert.ok(Buffer.from(snapshot).equals(fullState), "the bootstrap downloads the complete read-only snapshot");
     const viewer = provider(t, url, kit.invitation().token);
     await viewer.until(() => viewer.client.synced && viewer.client.document.getMap("fixture").has("data"));
     assert.equal(viewer.client.authorizedScope, "readonly");

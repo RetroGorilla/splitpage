@@ -1,6 +1,4 @@
-import { HocuspocusProvider, MessageType } from "@hocuspocus/provider";
-import type { onMessageParameters } from "@hocuspocus/provider";
-import { messageYjsSyncStep2 } from "y-protocols/sync";
+import { HocuspocusProvider } from "@hocuspocus/provider";
 import { Doc, encodeStateAsUpdate } from "yjs";
 
 export async function readInvitationSnapshot(url: string, script: string, token: string, signal?: AbortSignal): Promise<Uint8Array> {
@@ -23,15 +21,11 @@ export async function readInvitationSnapshot(url: string, script: string, token:
       provider = new HocuspocusProvider({
         url: relay.href, name: script, token, document, awareness: null,
         onAuthenticated() { authenticated = true; },
+        onSynced({ state }) {
+          if (authenticated && state) resolve();
+        },
         onAuthenticationFailed: fail,
         onClose: fail
-      });
-      provider.on("message", ({ message }: onMessageParameters) => {
-        message.readVarString();
-        // why: synced also fires for upload acknowledgments, and the message event precedes application.
-        if (authenticated && message.readVarUint() === MessageType.Sync && Number(message.readVarUint()) === messageYjsSyncStep2) {
-          queueMicrotask(resolve);
-        }
       });
     });
     return encodeStateAsUpdate(document);
