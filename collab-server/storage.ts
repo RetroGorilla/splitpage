@@ -5,13 +5,17 @@ import { RelayError } from "./config.ts";
 
 export const DB_NAME = "relay.sqlite";
 const APPLICATION_ID = 0x53504c54;
-const STORAGE_VERSION = 2;
+const STORAGE_VERSION = 3;
 const PICTURE_SCHEMA = "CREATE TABLE script_pictures (script TEXT NOT NULL REFERENCES scripts(name), sha TEXT NOT NULL, bytes INTEGER NOT NULL, mime TEXT NOT NULL, PRIMARY KEY (script, sha)) STRICT";
+const CREATIONS = "CREATE TABLE creations (id TEXT PRIMARY KEY NOT NULL, script TEXT NOT NULL UNIQUE REFERENCES scripts(name)) STRICT";
+const CREATE_PICTURES = PICTURE_SCHEMA + "; CREATE INDEX script_pictures_sha ON script_pictures(sha)";
 const SCHEMAS = {
   documents: "CREATE TABLE documents (name TEXT PRIMARY KEY NOT NULL, state BLOB NOT NULL) STRICT",
   scripts: "CREATE TABLE scripts (name TEXT PRIMARY KEY NOT NULL, status TEXT NOT NULL CHECK (status IN ('pending', 'active', 'deleted'))) STRICT",
   invitations: "CREATE TABLE invitations (id TEXT PRIMARY KEY NOT NULL, script TEXT NOT NULL REFERENCES scripts(name), label TEXT NOT NULL, token_hash BLOB NOT NULL UNIQUE CHECK (length(token_hash) = 32), revoked INTEGER NOT NULL DEFAULT 0 CHECK (revoked IN (0, 1))) STRICT"
 };
+const OWNER_SCHEMAS = { ...SCHEMAS, creations: CREATIONS };
+const CURRENT_SCHEMAS = { ...OWNER_SCHEMAS, script_pictures: PICTURE_SCHEMA };
 
 export function claimWriter(directory: string): DatabaseSync {
   let lock: DatabaseSync | undefined;
@@ -29,13 +33,11 @@ export function claimWriter(directory: string): DatabaseSync {
   }
 }
 
-export function verifyDatabase(db: DatabaseSync): void {
-  verifySchema(db, STORAGE_VERSION, { ...SCHEMAS, script_pictures: PICTURE_SCHEMA });
-}
-
-function verifySchema(db: DatabaseSync, version: number, schemas: Record<string, string>): void {
+export function verifyDatabase(db: DatabaseSync): number {
+  const version = Number(db.prepare("PRAGMA user_version").get()?.user_version);
+  const schemas = version === 1 ? SCHEMAS : version === 2 ? OWNER_SCHEMAS : CURRENT_SCHEMAS;
   if (db.prepare("PRAGMA application_id").get()?.application_id !== APPLICATION_ID ||
-      db.prepare("PRAGMA user_version").get()?.user_version !== version ||
+      (version !== 1 && version !== 2 && version !== STORAGE_VERSION) ||
       Object.entries(schemas).some(([name, schema]) =>
         db.prepare("SELECT sql FROM sqlite_schema WHERE name = ? AND type = 'table'").get(name)?.sql !== schema)) {
     throw new RelayError("Relay database has an unrecognized identity or schema.");
@@ -43,6 +45,7 @@ function verifySchema(db: DatabaseSync, version: number, schemas: Record<string,
   if (db.prepare("PRAGMA quick_check(1)").get()?.quick_check !== "ok") {
     throw new RelayError("Relay database failed its integrity check.");
   }
+  return version;
 }
 
 export function verifyDurability(db: DatabaseSync): void {
@@ -69,18 +72,19 @@ export function openWriter(directory: string): DatabaseSync {
     mkdirSync(directory, { recursive: true, mode: 0o700 });
     const path = join(directory, DB_NAME);
     const created = reserveDatabase(path);
-    let upgrade = false;
+    let version = STORAGE_VERSION;
     if (!created) {
       using existing = new DatabaseSync(path, { readOnly: true, timeout: 5000 });
-      upgrade = existing.prepare("PRAGMA user_version").get()?.user_version === 1;
-      if (upgrade) verifySchema(existing, 1, SCHEMAS);
-      else verifyDatabase(existing);
+      version = verifyDatabase(existing);
     }
     db = new DatabaseSync(path, { timeout: 5000 });
     db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL");
     verifyDurability(db);
-    if (created) db.exec(`BEGIN; PRAGMA application_id=${APPLICATION_ID}; PRAGMA user_version=${STORAGE_VERSION}; ${Object.values(SCHEMAS).join("; ")}; ${PICTURE_SCHEMA}; CREATE INDEX script_pictures_sha ON script_pictures(sha); COMMIT`);
-    if (upgrade) db.exec(`BEGIN; ${PICTURE_SCHEMA}; CREATE INDEX script_pictures_sha ON script_pictures(sha); PRAGMA user_version=${STORAGE_VERSION}; COMMIT`);
+    if (created) {
+      db.exec(`BEGIN; PRAGMA application_id=${APPLICATION_ID}; ${Object.values(OWNER_SCHEMAS).join("; ")}; ${CREATE_PICTURES}; PRAGMA user_version=${STORAGE_VERSION}; COMMIT`);
+    } else if (version < STORAGE_VERSION) {
+      db.exec(`BEGIN; ${version === 1 ? CREATIONS + ";" : ""} ${CREATE_PICTURES}; PRAGMA user_version=${STORAGE_VERSION}; COMMIT`);
+    }
     return db;
   } catch (error) {
     db?.close();
