@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { setTimeout as delay } from "node:timers/promises";
+import { setImmediate as nextTurn, setTimeout as delay } from "node:timers/promises";
 import { refsIn } from "../../../../shared/blob-policy.ts";
 import { sharedPictureHttp } from "../../../../src/adapters/collab/native/picture-http.ts";
 import { startSharedPictures } from "../../../../src/adapters/collab/native/shared-pictures.ts";
@@ -10,6 +10,7 @@ import { buildExportDocument } from "../../../../src/core/document/export-docume
 import { imageRecordOf } from "../../../../src/core/document/media.ts";
 import { enterSharedDocument } from "../../../../src/core/migrate.ts";
 import { NAME, serverHarness } from "./server-harness.ts";
+import { eventResult } from "./indexeddb-fixture.ts";
 
 const png = Uint8Array.from(Buffer.from(
   "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mP8/x8AAwMCAO+/Z7cAAAAASUVORK5CYII=", "base64"
@@ -17,6 +18,41 @@ const png = Uint8Array.from(Buffer.from(
 const picture = imageRecordOf(png);
 assert.ok(picture);
 const pictureHash = picture.sha256;
+
+test("reconnect during a held request preserves one immediate retry before backoff", async t => {
+  t.mock.timers.enable({ apis: ["setTimeout", "Date"], now: 0 });
+  const started = eventResult<undefined>(), held = eventResult<Response>();
+  let calls = 0;
+  const http = sharedPictureHttp("http://127.0.0.1", NAME, "fixture", () => {
+    if (++calls === 1) {
+      started.resolve(undefined);
+      return held.promise;
+    }
+    return Promise.resolve(new Response(null, { status: 503 }));
+  });
+  const worker = startSharedPictures(http, localStore(), () => {});
+  try {
+    worker.track([pictureHash]);
+    t.mock.timers.tick(0);
+    await started.promise;
+    worker.reconnect();
+    worker.reconnect();
+    t.mock.timers.tick(0);
+    assert.equal(calls, 1);
+    held.resolve(new Response(null, { status: 503 }));
+    await nextTurn();
+    t.mock.timers.tick(0);
+    await nextTurn();
+    assert.equal(Date.now(), 0);
+    assert.equal(calls, 2);
+    t.mock.timers.tick(999);
+    await nextTurn();
+    assert.equal(calls, 2);
+    t.mock.timers.tick(1);
+    await nextTurn();
+    assert.equal(calls, 3);
+  } finally { worker.stop(); }
+});
 
 test("download validation refusal suppresses retries until that reference is removed", async () => {
   for (const status of [413, 415, 422]) {

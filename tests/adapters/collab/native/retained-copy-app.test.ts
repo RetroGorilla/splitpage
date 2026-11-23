@@ -20,6 +20,7 @@ import { currentDocument } from "../../../../src/bootstrap/wiring/session-owner.
 import { NAME, serverHarness } from "./server-harness.ts";
 import { StateFirstProvider } from "../../../../src/adapters/collab/native/state-first-provider.ts";
 import { printDialog } from "../../../../src/bootstrap/wiring/ports/printing.ts";
+import { restoreDesktop, useDesktopForTest } from "../../../../src/adapters/desktop/desktop-port.ts";
 
 function hook() {
   return (window as unknown as { __sharedTest: {
@@ -128,6 +129,32 @@ test("join uses the current picture references and export lists a later missing 
   }));
   await localFileMenuControls().runExport("export-pdf");
   assert.ok(warnsAboutPicture());
+  const delivery: string[] = [];
+  useDesktopForTest({
+    async printToPdf(html) {
+      assert.match(html, /id="script"/);
+      delivery.push("print");
+      return new TextEncoder().encode("%PDF-1.7");
+    },
+    async saveFileDialog({ suggestedName }) {
+      assert.ok(suggestedName);
+      assert.ok(warnsAboutPicture(), suggestedName);
+      delivery.push(suggestedName.endsWith(".pdf") ? "choose-pdf" : "choose-file");
+      return { id: "fixture", name: suggestedName };
+    },
+    async writeFile(_id, bytes) {
+      delivery.push("write");
+      return { lastModified: 1, size: bytes.byteLength };
+    }
+  });
+  try {
+    warn.mock.resetCalls();
+    assert.equal(await localFileMenuControls().runExport("export-splitpage"), true);
+    assert.deepEqual(delivery.splice(0), ["choose-file", "write"]);
+    warn.mock.resetCalls();
+    assert.equal(await localFileMenuControls().runExport("export-pdf"), true);
+    assert.deepEqual(delivery, ["print", "choose-pdf", "write"]);
+  } finally { restoreDesktop(); }
   holdDownload = true;
   while (!pendingDownload) await delay(10, undefined, { signal: t.signal });
   assert.equal((await opened.replica().flush()).kind, "stored");
@@ -224,6 +251,7 @@ for (const result of ["delayed", "failed", "cancelled"] as const) {
         if (result === "cancelled") {
           cancel.abort();
           assert.deepEqual(await joining, { ok: false, reason: "opening-pending" });
+          assert.deepEqual(await store.open(name, STORE_OPTIONS), { kind: "failed", reason: "locked" });
         }
       } else assert.deepEqual(await joining, { ok: false, reason: "enter-failed" });
     } finally {
@@ -240,6 +268,13 @@ for (const result of ["delayed", "failed", "cancelled"] as const) {
       assert.equal(retained.kind, "opened");
       try { assert.equal(await retained.membership?.token() === previous, true); }
       finally { retained.session.close(); await retained.closed; }
+      if (result === "cancelled") {
+        const reopened = capture();
+        assert.deepEqual(await hook().enterRetained({ deployment, script: NAME, connect: reopened.connect }), ok);
+        assert.equal(await reopened.replica().membership?.token() === previous, true);
+        assert.equal(await currentText(), "word");
+        assert.deepEqual(await hook().leave(), ok);
+      }
     }
   });
 }

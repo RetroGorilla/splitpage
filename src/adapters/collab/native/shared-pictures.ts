@@ -16,6 +16,7 @@ export function startSharedPictures(http: PictureHttp, store: Pick<BlobStore, "b
   let current = new Set<string>();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let working = false;
+  let reconnectGeneration = 0;
 
   const available = store.isDurable;
 
@@ -86,12 +87,14 @@ export function startSharedPictures(http: PictureHttp, store: Pick<BlobStore, "b
     const entry = [...pending].find(([, item]) => item.due <= Date.now());
     if (!entry) return schedule();
     const [sha, item] = entry;
+    const generation = reconnectGeneration;
     working = true;
     try {
       await process(sha, AbortSignal.any([authorized, item.cancel.signal]));
     } finally {
       if (confirmed.has(sha) && available(sha) && pending.get(sha) === item) pending.delete(sha);
-      item.due = Date.now() + Math.min(30_000, 500 * 2 ** item.attempts++);
+      const backoff = Math.min(30_000, 500 * 2 ** item.attempts++);
+      if (generation === reconnectGeneration) item.due = Date.now() + backoff;
       working = false;
       schedule();
     }
@@ -128,6 +131,7 @@ export function startSharedPictures(http: PictureHttp, store: Pick<BlobStore, "b
       }
     },
     reconnect() {
+      reconnectGeneration++;
       for (const item of pending.values()) item.due = 0;
       schedule();
     },
