@@ -1,15 +1,18 @@
 import assert from "node:assert/strict";
+import { spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { copyFileSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { cpSync, mkdirSync, readdirSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import test from "node:test";
-import { backupRelay, verifyCopy } from "../../../../collab-server/backup.ts";
+import { fileURLToPath } from "node:url";
+import { backupRelay, restoreRelay, verifyCopy } from "../../../../collab-server/backup.ts";
 import { DB_NAME, openWriter } from "../../../../collab-server/storage.ts";
 import { appendText, NAME, serverHarness, storedState, storedText } from "./server-harness.ts";
 import { seedRelaySession } from "./relay-harness.ts";
 
 const BACKUP = new URL("../../../../collab-server/backup-command.ts", import.meta.url);
+const RESTORE = fileURLToPath(new URL("../../../../collab-server/restore-command.ts", import.meta.url));
 
 test("online backup retains verified bytes for each script and restores without edits made afterward", { timeout: 30_000 }, async t => {
   const kit = serverHarness(t);
@@ -22,6 +25,8 @@ test("online backup retains verified bytes for each script and restores without 
   const seed = initial.encodeState();
   initial.close();
   const creationId = randomUUID();
+  const deletedScript = await live.createScript(randomUUID(), seed);
+  assert.equal((await live.owner(`scripts/${deletedScript}`, { method: "DELETE" })).status, 204);
   const createdScript = await live.createScript(creationId, seed);
   const writer = kit.copy(port, { kind: "state", state: seed });
   const second = kit.copy(port, { kind: "state", state: seed }, "second-script");
@@ -44,13 +49,13 @@ test("online backup retains verified bytes for each script and restores without 
   const secondOriginal = storedState(primary, "second-script");
   const backup = kit.launch(settings, BACKUP);
   assert.deepEqual(await backup.exit, { code: 0, exitSignal: null }, backup.errors());
-  const name = /Verified relay backup (relay-.*\.sqlite)\./.exec(backup.output())?.[1];
+  const name = /Verified relay backup (relay-.*\.backup)\./.exec(backup.output())?.[1];
   assert.ok(name);
   assert.deepEqual(readdirSync(paths).sort(), [
     sentinel, "relay-2000-01-02T00-00-00.000Z-00000000-0000-4000-8000-000000000000.sqlite", name
   ]);
-  const saved = join(kit.directory, "off-machine.sqlite");
-  copyFileSync(join(paths, name), saved);
+  const saved = join(kit.directory, "off-machine.backup");
+  cpSync(join(paths, name), saved, { recursive: true });
   const count = live.messages.filter(message => message === "stored").length;
   appendText(writer.session, " then lost", 14);
   await kit.until(() => live.messages.filter(message => message === "stored").length > count || undefined);
@@ -60,10 +65,18 @@ test("online backup retains verified bytes for each script and restores without 
   peer.close();
   second.close();
 
-  rmSync(primary, { recursive: true });
   const freshDirectory = join(kit.directory, "restored-data");
-  mkdirSync(freshDirectory);
-  copyFileSync(saved, join(freshDirectory, DB_NAME));
+  await assert.rejects(restoreRelay(saved, primary), { code: "EEXIST" });
+  const restore = spawnSync(process.execPath, ["--disable-warning=ExperimentalWarning", RESTORE, saved, freshDirectory], {
+    env: {}, encoding: "utf8"
+  });
+  assert.equal(restore.status, 0, restore.stderr);
+  assert.equal(restore.stderr, "");
+  assert.equal(restore.stdout.trim(), "Verified relay restore. All invitations are revoked.");
+  {
+    using archive = new DatabaseSync(join(saved, DB_NAME), { readOnly: true });
+    assert.ok(archive.prepare("SELECT 1 FROM invitations WHERE revoked = 0").get());
+  }
   assert.deepEqual(storedState(freshDirectory, NAME), original);
   assert.deepEqual(storedState(freshDirectory, "second-script"), secondOriginal);
   const restored = kit.launch({ SPLITPAGE_DATA_DIR: freshDirectory });
@@ -73,7 +86,16 @@ test("online backup retains verified bytes for each script and restores without 
   assert.equal(retry.status, 200);
   assert.deepEqual(await retry.json(), { scriptId: createdScript });
   assert.deepEqual(storedState(freshDirectory, createdScript), seed);
-  const fresh = kit.copy(await restored.port());
+  const portAfterRestore = await restored.port();
+  const previous = kit.copy(portAfterRestore);
+  const refusal = await kit.until(() => previous.events.find(event => event.kind === "authentication-failed"));
+  assert.equal(refusal.reason, "invitation-revoked");
+  const issue = { method: "POST", body: "Restore drill" };
+  assert.equal((await restored.owner(`scripts/${deletedScript}/invitations`, issue)).status, 409);
+  const issued = await restored.owner(`scripts/${NAME}/invitations`, issue);
+  assert.equal(issued.status, 201);
+  const { token } = await issued.json() as { token: string };
+  const fresh = kit.copy(portAfterRestore, { kind: "empty" }, NAME, token);
   await kit.until(() => fresh.relay.status().firstSyncDone || undefined);
   assert.equal(fresh.text(), "word backed up");
 });
@@ -167,7 +189,7 @@ test("retention always keeps the just-verified backup and ignores backup-shaped 
   kit.seed("new-script");
   const justMade = await backupRelay(config);
   assert.deepEqual(readdirSync(directory).sort(), [justMade, unrelated].sort());
-  using copy = new DatabaseSync(join(directory, justMade), { readOnly: true });
+  using copy = new DatabaseSync(join(directory, justMade, DB_NAME), { readOnly: true });
   assert.equal(copy.prepare("SELECT count(*) AS count FROM documents").get()?.count, 2);
 });
 
@@ -198,7 +220,7 @@ test("online backup copies the preflight snapshot even when a second connection 
   assert.deepEqual(writer.prepare("SELECT hex(state) AS state FROM documents ORDER BY name").all().map(row => row.state), ["03", "03"]);
   assert.equal(writer.prepare("SELECT status FROM scripts").get()?.status, "deleted");
   assert.equal(writer.prepare("SELECT revoked FROM invitations").get()?.revoked, 1);
-  using copy = new DatabaseSync(join(kit.directory, "backups", name), { readOnly: true });
+  using copy = new DatabaseSync(join(kit.directory, "backups", name, DB_NAME), { readOnly: true });
   assert.deepEqual(copy.prepare("SELECT hex(state) AS state FROM documents ORDER BY name").all().map(row => row.state), ["01", "02"]);
   assert.equal(copy.prepare("SELECT status FROM scripts").get()?.status, "active");
   assert.equal(copy.prepare("SELECT revoked FROM invitations").get()?.revoked, 0);

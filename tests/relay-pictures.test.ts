@@ -3,17 +3,17 @@ import { fork } from "node:child_process";
 import { createHash } from "node:crypto";
 import { once } from "node:events";
 import fs from "node:fs";
-import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
+import { mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { request } from "node:http";
 import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
-import { backupRelay } from "../collab-server/backup.ts";
+import { backupRelay, restoreRelay } from "../collab-server/backup.ts";
 import { fileURLToPath } from "node:url";
 import { startRelay } from "../collab-server/relay.ts";
-import { openWriter } from "../collab-server/storage.ts";
+import { DB_NAME, openWriter } from "../collab-server/storage.ts";
 import { scriptAccess } from "../collab-server/access.ts";
 
 const limit = 16 * 1024 * 1024;
@@ -213,18 +213,31 @@ for (const addingScript of [false, true]) {
   });
 }
 
-test("a database-only backup with picture associations leaves prior backups in place", async () => {
+test("backup and isolated restore verify picture bytes and preserve a prior backup on failure", async () => {
   await using f = await fixture();
   const env = { SPLITPAGE_DATA_DIR: f.directory, SPLITPAGE_BACKUP_KEEP: "1" };
   const previous = await backupRelay(env);
   const backups = join(f.directory, "backups");
-  const previousBytes = await readFile(join(backups, previous));
+  const previousBytes = await readFile(join(backups, previous, DB_NAME));
   assert.equal((await f.put(png)).status, 201);
-  await assert.rejects(backupRelay(env), {
-    message: "Relay backup requires picture files. Keep existing backups and wait for picture backup support."
-  });
+  const sha = hash(png);
+  const livePicture = join(f.pictures, sha);
+  await rm(livePicture);
+  await assert.rejects(backupRelay(env), /missing a picture/);
+  await writeFile(livePicture, Buffer.alloc(png.length));
+  await assert.rejects(backupRelay(env), /picture failed verification/);
   assert.deepEqual(await readdir(backups), [previous]);
-  assert.deepEqual(await readFile(join(backups, previous)), previousBytes);
+  assert.deepEqual(await readFile(join(backups, previous, DB_NAME)), previousBytes);
+  await writeFile(livePicture, png);
+  assert.equal((await f.put(png, sha, f.second.token, "image/png", "second")).status, 201);
+  const archive = join(backups, await backupRelay(env));
+  assert.deepEqual(await readdir(join(archive, "pictures")), [sha]);
+  const restored = join(f.directory, "restored");
+  await restoreRelay(archive, restored);
+  assert.deepEqual(await readFile(join(restored, "pictures", sha)), png);
+  await rm(join(archive, "pictures", sha));
+  await assert.rejects(restoreRelay(archive, join(f.directory, "failed-restore")), /missing a picture/);
+  assert.ok(!(await readdir(f.directory)).includes("failed-restore"));
 });
 
 function partialUpload(url: string, token: string) {

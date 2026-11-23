@@ -171,8 +171,26 @@ installation. See the [Node SQLite API](https://nodejs.org/download/release/v24.
 
 ### Backup runbook
 
-This runbook applies to the earlier deployed relay that uses one environment access token. Build the relay from
-revision `17a57c2e7` and use that image for both startup and restore.
+**Back up the Stage 3 relay.** Run `node backup-command.ts` from `collab-server/` with
+`SPLITPAGE_DATA_DIR` set to the relay data volume. The relay can keep running. The command reports a
+verified `relay-*.backup` directory under `backups/` after it compares the SQLite snapshot with the
+source and checks the size and SHA-256 of every referenced picture. The database and pictures keep
+their ordinary relay layout. Keep the entire reported directory together when copying it off-machine.
+Copy it daily, alert on failures, and confirm the archive copy in an isolated restore drill. A daily
+copy limits backup age to about 24 hours, plus edits still waiting to reach SQLite when the snapshot began.
+Local retention uses `SPLITPAGE_BACKUP_KEEP`. Restrict access to both copies because they contain
+readable scripts and pictures, invitation labels and token hashes. Keep the management secret in
+separately recoverable secret storage.
+
+**Restore the Stage 3 relay in isolation.** From `collab-server/`, run
+`node restore-command.ts <backup> <new-data-directory>` with the archived directory and a destination
+that does not exist. A versioned Stage 3 SQLite-only backup can also be used if it has no picture
+references. Use a writable parent on a separate volume for a container restore. Start a relay pointed
+at the restored directory only after the command succeeds. Keep its port out of the public proxy and
+use a separate management secret. Confirm that an old invitation is refused, deleted scripts remain
+deleted, and fresh invitations open the expected script and pictures. Check that edits made after the
+snapshot are absent. For production recovery from a rollback, recover the selected scripts under
+new identities before reopening access. Keep old client copies available for deliberate recovery.
 
 Stage 3 Part 1 introduces versioned SQLite storage for scripts and invitations. Local tests use a fresh
 database because the relay rejects the earlier database version. The Part 2 relay upgrades Part 1
@@ -197,6 +215,11 @@ restart the relay with the updated environment and update the owner command envi
 restart, use the list command to confirm access with the replacement. Follow the same steps if the
 old value is lost. Rotation keeps the database and existing invitations intact. If someone else
 may have used the old secret, review the invitation lists and revoke unfamiliar invitations.
+
+#### Historical pinned relay instructions
+
+These instructions apply to the earlier deployed relay that uses one environment access token. Build the relay
+from revision `17a57c2e7` and use that image for both startup and restore.
 
 **Start the relay.** From the repository root on the Docker host, replace the placeholder pool directory, editor
 origin and token. Use a directory on the direct local pool. Keep the environment file in host secret storage,

@@ -158,6 +158,6 @@ The relay reserves four 16 MiB upload slots for a 64 MiB staging budget. A full 
 
 Relay startup creates storage version 3 or upgrades the Part 1 and Part 2 schemas in one transaction. The upgrade preserves existing scripts, invitations, document bytes and creation IDs.
 
-The database-only backup command refuses snapshots containing picture associations. Existing backups remain available while part 7 adds picture backups.
+Before Part 7, the database-only backup command refused snapshots containing picture associations.
 
 Build the relay image from the repository root with `docker build -f collab-server/Dockerfile .`. The build context includes the shared picture policy.
