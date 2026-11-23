@@ -483,31 +483,45 @@ below apply only to the Stage 3 relay image built from the current tree.
   name (`splitpage-relay-stage3`), env file (`"$config_dir/relay-stage3.env"`), direct-pool directory and Docker
   volume (`splitpage-relay-stage3-data`). Stop the historical `splitpage-relay` container and keep its data directory
   and `splitpage-relay-data` volume aside untouched; do not delete them and do not mount the legacy directory into
-  Stage 3 (Stage 3 startup refuses the unversioned legacy database and preserves its file). Before launching, verify
-  the intended direct-pool parent directory, exclusively create the new data directory (rejecting any pre-existing
-  path or symlink, including a dangling symlink), apply `chown`/`chmod` only to the directory just created, check
-  privileged `stat` and `ls -A` exit statuses separately from their output, inspect the created Docker volume's actual
-  driver, mount options and bind source, and exclusively create `"$config_dir/relay-stage3.env"` under `umask 077`
-  with `set -C` (populate `SPLITPAGE_MANAGEMENT_SECRET` from host secret storage without echoing it or passing it in
+  Stage 3 (Stage 3 startup refuses the unversioned legacy database and preserves its file). Before launching, confirm
+  the intended direct-pool mount is actually mounted (`mountpoint -q`) and holds the canonical parent directory,
+  exclusively create the new data directory (rejecting any pre-existing path or symlink, including a dangling
+  symlink), apply `chown`/`chmod` only to the directory just created, check privileged `stat` and `ls -A` exit
+  statuses separately from their output, inspect the created Docker volume's actual driver, mount options and bind
+  source, and exclusively create `"$config_dir/relay-stage3.env"` with standalone guards and `set -C` under
+  `umask 077` (populate `SPLITPAGE_MANAGEMENT_SECRET` from host secret storage without echoing it or passing it in
   command arguments):
 
 ```sh
 set -eu
 umask 077
+pool_mount=/REPLACE_WITH_DIRECT_POOL_MOUNT
 pool_parent=/REPLACE_WITH_DIRECT_POOL_PATH
 data_dir="$pool_parent/splitpage-stage3"
 config_dir="$HOME/.config/splitpage-relay"
 env_file="$config_dir/relay-stage3.env"
 volume_name=splitpage-relay-stage3-data
 
-test ! -L "$pool_parent" && test -d "$pool_parent"
+test ! -L "$pool_mount"
+test -d "$pool_mount"
+canon_mount=$(readlink -f -- "$pool_mount")
+test "$canon_mount" = "$pool_mount"
+mountpoint -q -- "$pool_mount"
+test ! -L "$pool_parent"
+test -d "$pool_parent"
 canon_parent=$(readlink -f -- "$pool_parent")
 test "$canon_parent" = "$pool_parent"
-test ! -e "$data_dir" && test ! -L "$data_dir"
+case "$canon_parent" in
+  "$pool_mount"|"$pool_mount"/*) ;;
+  *) exit 1 ;;
+esac
+test ! -e "$data_dir"
+test ! -L "$data_dir"
 sudo mkdir -- "$data_dir"
 sudo chown 1000:1000 -- "$data_dir"
 sudo chmod 0700 -- "$data_dir"
-test ! -L "$data_dir" && test -d "$data_dir"
+test ! -L "$data_dir"
+test -d "$data_dir"
 stat_out=$(sudo stat -c '%u:%g %a' -- "$data_dir")
 test "$stat_out" = "1000:1000 700"
 listing=$(sudo ls -A -- "$data_dir")
@@ -523,8 +537,10 @@ test "$vol_spec" = "local|none|bind|$data_dir"
 
 test ! -L "$config_dir"
 mkdir -p "$config_dir"
-test ! -L "$config_dir" && test -d "$config_dir"
-test ! -e "$env_file" && test ! -L "$env_file"
+test ! -L "$config_dir"
+test -d "$config_dir"
+test ! -e "$env_file"
+test ! -L "$env_file"
 (
   set -C
   umask 077
