@@ -17,6 +17,7 @@ import type { SharedEditorBackend, SharedSwitchOutcome, SharedSwitchPorts } from
 
 type RetainedReplica = Extract<NativeLocalStoreOpen, { kind: "opened" }>;
 type PictureSession = ReturnType<typeof bindSharedPictures>;
+const JOIN_TIMEOUT_MS = 15_000;
 let localCopy: RetainedReplica | null = null;
 const closingCopies = new Map<string, RetainedReplica["closed"]>();
 
@@ -75,6 +76,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
   let active = false;
   let pictures: PictureSession | undefined;
   let stopConnection: (() => void) | undefined;
+  let joinSignal: AbortSignal | undefined;
   function stop() {
     try { stopConnection?.(); }
     catch { throw new Error("The retained connection could not close."); }
@@ -102,14 +104,21 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
         }
         if (!entry.relayUrl && !replica.session.isStoredScript()) return SHARED_ENTER_FAILED;
         token = entry.invitation.token;
-        if (!entry.relayUrl) await membership.join(token);
+        if (!entry.relayUrl && !entry.pictureOrigin) await membership.join(token);
       }
       if (!token || (!entry.relayUrl && !replica.session.isStoredScript())) return SHARED_ENTER_FAILED;
     } catch { return SHARED_ENTER_FAILED; }
     prepared.token = token;
     const preparation = new AbortController();
     const stopReplacement = documentReader.onReplaced(() => preparation.abort());
-    const signal = entry.signal ? AbortSignal.any([entry.signal, preparation.signal]) : preparation.signal;
+    const deadline = ports.timers.start(() => preparation.abort(), JOIN_TIMEOUT_MS);
+    let preparedForCommit = false;
+    const signals = [preparation.signal];
+    if (entry.signal) signals.push(entry.signal);
+    const signal = joinSignal = AbortSignal.any(signals);
+    let cancel = () => {};
+    const cancelled = new Promise<false>(resolve => { cancel = () => resolve(false); });
+    signal.addEventListener("abort", cancel, { once: true });
     try {
       if (signal.aborted) return SHARED_ENTER_FAILED;
       let pictureOrigin = entry.pictureOrigin;
@@ -128,11 +137,19 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
       } else if (pictures) {
         stopConnection = entry.connect?.(replica, token, pictures);
       }
-      if (entry.relayUrl && entry.invitation && !signal.aborted) await membership.join(token);
-      if (pictures && !await pictures.hydrate()) return SHARED_ENTER_FAILED;
-      return signal.aborted ? SHARED_ENTER_FAILED : null;
+      if (pictures && !await pictures.hydrate(cancelled)) return SHARED_ENTER_FAILED;
+      if (signal.aborted) return SHARED_ENTER_FAILED;
+      pictures?.finishPreparation();
+      ports.timers.stop(deadline);
+      preparedForCommit = true;
+      if (pictureOrigin && entry.invitation) await membership.join(token);
+      return null;
     } catch { return SHARED_ENTER_FAILED; }
-    finally { stopReplacement(); }
+    finally {
+      if (!preparedForCommit) ports.timers.stop(deadline);
+      signal.removeEventListener("abort", cancel);
+      stopReplacement();
+    }
   }
   try {
     const outcome = await enterSharedSession({ ...ports, prepare }, (_, failedClose) => {
@@ -193,7 +210,15 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
     return { ok: false, reason: SHARED_ENTER_FAILED };
   } finally {
     if (!active && prepared.replica) {
-      try { stop(); } finally { pictures?.stop(); prepared.replica.session.close(); await prepared.replica.closed; }
+      const replica = prepared.replica;
+      try { stop(); } finally {
+        pictures?.stop();
+        replica.session.close();
+        if (joinSignal?.aborted) {
+          closingCopies.set(name, replica.closed);
+          void replica.closed.then(() => { closingCopies.delete(name); });
+        } else await replica.closed;
+      }
     }
   }
 }

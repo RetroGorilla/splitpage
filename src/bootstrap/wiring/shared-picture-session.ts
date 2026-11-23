@@ -53,21 +53,24 @@ export function bindSharedPictures(copy: Copy, origin: string, script: string, t
   return {
     reconnect: pictures.reconnect,
     stop,
+    finishPreparation() { cancel?.removeEventListener("abort", stop); },
     activate() {
       if (stopped) return;
       hidePending ??= showSharedPicturePending(() => true);
       loadPictures = pictures.prepareExport;
     },
-    async hydrate() {
+    async hydrate(cancelled: Promise<false>) {
       while (!stopped && !pictures.refused()) {
         scan();
+        if (pictures.rejected(required) || pictures.storageFailed(required)) return false;
         if (!pictures.ready(required)) {
           await new Promise<void>(resolve => { changed = resolve; });
           changed = undefined;
           continue;
         }
         const revision = session.revision();
-        if ((await copy.flush()).kind !== "stored") return false;
+        const receipt = await Promise.race([copy.flush(), cancelled]);
+        if (!receipt || receipt.kind !== "stored") return false;
         if (stopped || pictures.refused()) return false;
         if (revision === session.revision()) return true;
       }

@@ -11,10 +11,20 @@ export function startSharedPictures(http: PictureHttp, store: Pick<BlobStore, "b
   const authorized = AbortSignal.any([signal, access.signal]);
   const pending = new Map<string, PendingPicture>();
   const confirmed = new Set<string>();
+  const rejected = new Set<string>();
+  const unstored = new Set<string>();
+  let current = new Set<string>();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let working = false;
 
   const available = store.isDurable;
+
+  async function storePicture(sha: string, requestSignal: AbortSignal) {
+    await store.persist([sha]);
+    if (requestSignal.aborted) return;
+    if (available(sha)) unstored.delete(sha);
+    else unstored.add(sha);
+  }
 
   async function download(sha: string, requestSignal: AbortSignal = authorized) {
     if (requestSignal.aborted) return;
@@ -24,10 +34,16 @@ export function startSharedPictures(http: PictureHttp, store: Pick<BlobStore, "b
       access.abort();
       changed();
     }
+    if (bytes === "rejected" && current.has(sha)) {
+      rejected.add(sha);
+      pending.get(sha)?.cancel.abort();
+      pending.delete(sha);
+      changed();
+    }
     if (!(bytes instanceof Uint8Array)) return;
     store.intern(bytes);
-    await store.persist([sha]);
-    if (!signal.aborted) {
+    await storePicture(sha, requestSignal);
+    if (!requestSignal.aborted) {
       confirmed.add(sha);
       changed();
     }
@@ -43,8 +59,9 @@ export function startSharedPictures(http: PictureHttp, store: Pick<BlobStore, "b
       return;
     }
     if (!available(sha)) {
-      await store.persist([sha]);
+      await storePicture(sha, requestSignal);
       if (requestSignal.aborted) return;
+      if (!available(sha)) changed();
     }
     if (available(sha)) changed();
     if (confirmed.has(sha) || !available(sha)) return;
@@ -82,15 +99,17 @@ export function startSharedPictures(http: PictureHttp, store: Pick<BlobStore, "b
 
   return {
     track(refs: readonly string[]) {
-      const current = new Set(refs);
+      current = new Set(refs);
       for (const sha of confirmed) if (!current.has(sha)) confirmed.delete(sha);
+      for (const sha of rejected) if (!current.has(sha)) rejected.delete(sha);
+      for (const sha of unstored) if (!current.has(sha)) unstored.delete(sha);
       for (const [sha, item] of pending) {
         if (current.has(sha)) continue;
         item.cancel.abort();
         pending.delete(sha);
       }
       for (const sha of current) {
-        if (!pending.has(sha) && !(confirmed.has(sha) && available(sha))) {
+        if (!pending.has(sha) && !rejected.has(sha) && !(confirmed.has(sha) && available(sha))) {
           pending.set(sha, { attempts: 0, due: 0, cancel: new AbortController() });
         }
       }
@@ -98,12 +117,14 @@ export function startSharedPictures(http: PictureHttp, store: Pick<BlobStore, "b
     },
     ready: (refs: readonly string[]) => refs.every(available),
     refused: () => access.signal.aborted,
+    rejected: (refs: readonly string[]) => refs.some(sha => rejected.has(sha) && !available(sha)),
+    storageFailed: (refs: readonly string[]) => refs.some(sha => unstored.has(sha) && !available(sha)),
     async prepareExport(hashes: readonly string[]) {
       const missing = await store.ensureBytes(hashes);
       const requestSignal = AbortSignal.any([authorized, AbortSignal.timeout(5_000)]);
       for (const sha of missing) {
         if (requestSignal.aborted) return;
-        if (!store.bytesFor(sha)) await download(sha, requestSignal);
+        if (!store.bytesFor(sha) && !rejected.has(sha)) await download(sha, requestSignal);
       }
     },
     reconnect() {

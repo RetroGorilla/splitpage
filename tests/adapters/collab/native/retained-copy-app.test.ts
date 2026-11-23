@@ -13,6 +13,7 @@ import type { SharedSwitchOutcome } from "../../../../src/bootstrap/wiring/share
 import type { DraftPayload } from "../../../../src/application/recovery/draft-origin.ts";
 import { desktopFixture, desktopTestCipher, replicaFileFaults, replicasAt } from "./desktop-local-store-fixture.ts";
 import { imageRecordOf } from "../../../../src/core/document/media.ts";
+import { createMemoryBackend, setBackend } from "../../../../src/adapters/storage/02c-blobs.ts";
 import { localFileMenuControls } from "../../../../src/bootstrap/wiring/local-files.ts";
 import { notices } from "../../../../src/bootstrap/wiring/ports/effects.ts";
 import { currentDocument } from "../../../../src/bootstrap/wiring/session-owner.ts";
@@ -75,8 +76,10 @@ test("join uses the current picture references and export lists a later missing 
     return Promise.resolve(new Response(null, { status: 404 }));
   });
   const opened = capture();
+  const joinLifetime = new AbortController();
   const entering = hook().enterRetained({
     ...identity("pictures"), pictureOrigin: window.location.origin, connect: opened.connect,
+    signal: joinLifetime.signal,
     invitation: { state, token: randomBytes(32).toString("base64url") }
   });
   let joined = false;
@@ -88,6 +91,7 @@ test("join uses the current picture references and export lists a later missing 
   assert.equal(joined, false);
   replacementReady = true;
   assert.deepEqual(await entering, ok);
+  joinLifetime.abort();
   t.after(async () => {
     if (!opened.replica().session.isClosingOrClosed()) {
       await opened.replica().flush();
@@ -132,6 +136,15 @@ async function currentText() {
   return currentDocument()?.rows[0]?.audioText ?? "";
 }
 
+async function openAfterCancelledJoin(name: string, signal: AbortSignal) {
+  const store = createBrowserNativeLocalStore();
+  for (;;) {
+    const copy = await store.open(name, STORE_OPTIONS);
+    if (copy.kind !== "failed" || copy.reason !== "locked") return copy;
+    await delay(10, undefined, { signal });
+  }
+}
+
 test("a retained invitation gets its first state from the existing relay provider", { timeout: 10_000 }, async t => {
   const kit = serverHarness(t);
   kit.seed();
@@ -143,6 +156,96 @@ test("a retained invitation gets its first state from the existing relay provide
   }), ok);
   assert.equal(await currentText(), "word");
   assert.deepEqual(await hook().leave(), ok);
+});
+
+test("a stalled first sync can be cancelled without retaining the invitation", { timeout: 10_000 }, async t => {
+  const kit = serverHarness(t);
+  kit.seed();
+  const run = kit.launch();
+  const port = await run.port();
+  run.send("hold-load");
+  await kit.until(() => run.messages.includes("load-armed") || undefined);
+  const cancel = new AbortController();
+  const deployment = "cancelled-first-sync";
+  const joining = hook().enterRetained({
+    deployment, script: NAME, relayUrl: "ws://127.0.0.1:" + port,
+    invitation: { token: kit.invitation().token }, signal: cancel.signal
+  });
+  await kit.until(() => run.messages.includes("loading") || undefined);
+  cancel.abort();
+  assert.deepEqual(await joining, { ok: false, reason: "enter-failed" });
+  const copy = await openAfterCancelledJoin(deployment + "/" + NAME, t.signal);
+  assert.equal(copy.kind, "opened");
+  try { assert.equal(await copy.membership?.token(), null); }
+  finally { copy.session.close(); await copy.closed; }
+});
+
+test("cancelling a real relay join waiting for a picture preserves the previous membership", { timeout: 10_000 }, async t => {
+  const kit = serverHarness(t);
+  kit.seed();
+  const run = kit.launch();
+  const port = await run.port();
+  const writer = kit.copy(port), witness = kit.copy(port);
+  await kit.until(() => writer.relay.status().firstSyncDone && witness.relay.status().firstSyncDone || undefined);
+  const row = writer.session.document().rows[0];
+  assert.ok(row);
+  assert.equal(writer.session.commands.setField({ kind: "gallery", id: row.id }, { imageRef: abandonedPicture }).kind, "written");
+  await kit.until(() => refsIn(witness.session.document()).includes(abandonedPicture.sha256) || undefined);
+
+  const deployment = "cancelled-join";
+  const scope = deployment + "/" + NAME;
+  const store = createBrowserNativeLocalStore();
+  const kept = await store.open(scope, STORE_OPTIONS);
+  assert.equal(kept.kind, "opened");
+  assert.ok(kept.membership);
+  const previous = randomBytes(32).toString("base64url");
+  await kept.membership.join(previous);
+  kept.session.close();
+  await kept.closed;
+
+  const cancel = new AbortController();
+  const request = globalThis.fetch;
+  let wasPending = false;
+  t.mock.method(globalThis, "fetch", async (url: URL, init?: RequestInit) => {
+    const response = await request(url, init);
+    if (url.pathname.endsWith(abandonedPicture.sha256) && response.status === 404) wasPending = true;
+    return response;
+  });
+  const joining = hook().enterRetained({
+    deployment, script: NAME, relayUrl: "ws://127.0.0.1:" + port,
+    invitation: { token: kit.invitation().token }, signal: cancel.signal
+  });
+  while (!wasPending) await delay(10, undefined, { signal: t.signal });
+  cancel.abort();
+  assert.deepEqual(await joining, { ok: false, reason: "enter-failed" });
+  const member = await openAfterCancelledJoin(scope, t.signal);
+  assert.equal(member.kind, "opened");
+  try { assert.equal(await member.membership?.token(), previous); }
+  finally { member.session.close(); await member.closed; }
+});
+
+test("a picture held only in memory cannot complete a retained join", { timeout: 10_000 }, async t => {
+  const source = seedSession({ A: "Retained narration" });
+  const row = source.document().rows[0];
+  assert.ok(row);
+  const png = Uint8Array.from(Buffer.from("89504e470d0a1a0a0000000d494844520000000d00000001", "hex"));
+  const ref = imageRecordOf(png);
+  assert.ok(ref);
+  assert.equal(source.commands.setField({ kind: "gallery", id: row.id }, { imageRef: ref }).kind, "written");
+  const state = source.encodeState();
+  source.close();
+  t.mock.method(globalThis, "fetch", () => Promise.resolve(new Response(png)));
+  setBackend(createMemoryBackend());
+  t.after(() => setBackend(null));
+  const entry = identity("nondurable-picture");
+  const result = await hook().enterRetained({
+    ...entry, pictureOrigin: window.location.origin, invitation: { state, token: randomBytes(32).toString("base64url") }
+  });
+  assert.deepEqual(result, { ok: false, reason: "enter-failed" });
+  const copy = await createBrowserNativeLocalStore().open(scope(entry.script), STORE_OPTIONS);
+  assert.equal(copy.kind, "opened");
+  try { assert.equal(await copy.membership?.token(), null); }
+  finally { copy.session.close(); await copy.closed; }
 });
 
 test("the mounted app reopens the retained script offline after restarting and Leave clears its device state", async () => {

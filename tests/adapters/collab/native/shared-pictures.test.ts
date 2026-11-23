@@ -16,6 +16,36 @@ const png = Uint8Array.from(Buffer.from(
 ));
 const picture = imageRecordOf(png);
 assert.ok(picture);
+const pictureHash = picture.sha256;
+
+test("download validation refusal suppresses retries until that reference is removed", async () => {
+  for (const status of [413, 415, 422]) {
+    const calls: string[] = [];
+    const original = pictureHash, replacement = "f".repeat(64);
+    let settled = () => {};
+    const http = sharedPictureHttp("http://127.0.0.1", NAME, "fixture", async url => {
+      calls.push(String(url).split("/").at(-1) ?? "");
+      return new Response(null, { status });
+    });
+    const worker = startSharedPictures(http, localStore(), () => settled());
+    async function reject(sha: string) {
+      const done = new Promise<void>(resolve => { settled = resolve; });
+      worker.track([sha]);
+      await done;
+      assert.ok(worker.rejected([sha]));
+    }
+    try {
+      await reject(original);
+      worker.reconnect();
+      await worker.prepareExport([original]);
+      assert.deepEqual(calls, [original]);
+      await reject(replacement);
+      assert.equal(worker.rejected([original]), false);
+      await reject(original);
+      assert.deepEqual(calls, [original, replacement, original]);
+    } finally { worker.stop(); }
+  }
+});
 
 function localStore() {
   const store = createBlobStore({
