@@ -22,8 +22,13 @@ import { createNativeTestPeer } from "./shared-native-test-peer.ts";
 import { stopNativeCaretWait } from "./native-switch-caret.ts";
 import { enterRetainedSharedScript, leaveRetainedSharedScript, retainedSharedScriptActive } from "./retained-shared-script.ts";
 import type { RetainedSharedScript } from "./retained-shared-script.ts";
+import { readInvitationSnapshot } from "../../adapters/collab/native/invitation-snapshot.ts";
+import { openNativeRelay } from "../../adapters/collab/native/relay.ts";
+import { sanitizeHtml } from "../richtext.ts";
+import { waitForPendingDocumentOpenings } from "./transition-owners.ts";
 
 declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
+declare let splitpageInvitation: { readonly script: string; readonly token: string } | null;
 
 const DRAFT_NOT_KEPT = "draft-not-kept";
 const DRAFT_NOT_KEPT_NOTICE = "The shared session did not start: your recovery copy could not be saved.";
@@ -155,11 +160,52 @@ function startSharedTestHook(): () => void {
     if (retainedSharedScriptActive()) return leaveRetainedSharedScript().finally(() => { switching = false; });
     try { return leaveRunningSharedSession(); } finally { switching = false; }
   };
+  const invitationLifetime = new AbortController();
+  let invitationConnected = false;
+  async function joinInvitation({ script, token }: NonNullable<typeof splitpageInvitation>): Promise<void> {
+    const signal = invitationLifetime.signal;
+    try {
+      if (location.protocol !== "https:" && location.protocol !== "http:") return;
+      await startupReady();
+      signal.throwIfAborted();
+      const response = await fetch("/index.html", { method: "HEAD", cache: "no-store", redirect: "error",
+        signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]) });
+      const deployment = response.headers.get("Splitpage-Deployment");
+      if (!response.ok || !deployment || !/^[A-Za-z0-9_-]{1,64}$/.test(deployment)) return;
+      const endpoint = new URL("/", location.origin);
+      endpoint.protocol = location.protocol === "https:" ? "wss:" : "ws:";
+      const state = await readInvitationSnapshot(endpoint.href, script, token, signal);
+      await waitForPendingDocumentOpenings();
+      if (signal.aborted) return;
+      const outcome = await enter(undefined, {
+        deployment, script, invitation: { token, state },
+        connect(replica, credential) {
+          const relay = openNativeRelay(replica.session, {
+            url: endpoint.href, name: script, token: credential, reopen: replica.reopen,
+            sessionOptions: { actor: getEditorName(), sanitize: sanitizeHtml },
+            onEvent(event) {
+              if (event.kind === "status") invitationConnected = event.status.connected && event.status.firstSyncDone;
+            }
+          });
+          return () => { relay.close(); invitationConnected = false; };
+        }
+      });
+      if (!outcome.ok) report(new Error("Could not enter the shared invitation."));
+    } catch {
+      if (!signal.aborted) report(new Error("Could not open the shared invitation."));
+    }
+  }
+  if (typeof splitpageInvitation !== "undefined" && splitpageInvitation) {
+    const invitation = splitpageInvitation;
+    splitpageInvitation = null;
+    void joinInvitation(invitation);
+  }
   const hook = {
     enter: () => enter(),
     enterFrom: (state: string | Uint8Array | ArrayBuffer) => enter(sharedTestBytes(state)),
     leave,
     enterRetained: (retained: RetainedSharedScript) => enter(undefined, retained),
+    invitationConnected: () => invitationConnected,
     nativePeer: {
       type: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["type"]>) => nativePeer?.type(...args),
       field: (...args: Parameters<NonNullable<typeof nativePeer>["field"]>) => nativePeer?.field(...args),
@@ -197,6 +243,7 @@ function startSharedTestHook(): () => void {
   exposeTestHook("__sharedTest", () => hook, release => { withdraw = release; });
   return () => {
     live = false;
+    invitationLifetime.abort();
     try { forceLeaveSharedSession(); } finally {
       document.removeEventListener("compositionstart", composition, true);
       document.removeEventListener("compositionend", composition, true);

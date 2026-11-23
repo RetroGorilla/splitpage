@@ -106,6 +106,10 @@ Done:
 - A test loads the app from a local relay, joins through a link, and finds no token in the address, the history entry or the log.
 - The service worker leaves `/api/` and the WebSocket alone.
 
+Run `node --test .claude/skills/run-splitpage-app/relay-invitation.mjs` for the live Chromium relay test.
+It provisions a seeded script and invitation, checks the live connection, and reopens the retained copy
+after navigation. Invitation entry remains gated to the test build.
+
 ### 6 Limits and container
 
 - Limits applied before expensive work, for admitted clients too: connections in total and per invitation, messages per connection per second, uploads in flight. Use the options Hocuspocus and its WebSocket library provide before writing any.
