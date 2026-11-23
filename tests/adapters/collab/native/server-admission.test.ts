@@ -10,6 +10,7 @@ import { HocuspocusProvider, MessageType } from "@hocuspocus/provider";
 import { createDecoder, readVarString, readVarUint } from "lib0/decoding";
 import { createEncoder, toUint8Array, writeVarString, writeVarUint } from "lib0/encoding";
 import { WebSocket } from "ws";
+import { messageYjsUpdate } from "y-protocols/sync";
 import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import { scriptAccess } from "../../../../collab-server/access.ts";
 import { relayConfig, retentionCount } from "../../../../collab-server/config.ts";
@@ -162,7 +163,7 @@ test("revocation discards queued edits and presence, and access removals survive
   const observed = survivor.client.document.getMap("fixture");
   let sawQueuedEdit = false;
   observed.observe(() => { sawQueuedEdit ||= observed.has("queued"); });
-  run.send("hold-traffic");
+  run.send({ holdSyncType: messageYjsUpdate });
   await kit.until(() => run.messages.includes("traffic-armed") || undefined);
   writer.client.document.getMap("fixture").set("queued", "must stay local");
   presence.client.setAwarenessField("reviewPresence", "queued");

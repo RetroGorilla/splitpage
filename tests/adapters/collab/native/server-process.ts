@@ -1,4 +1,3 @@
-import { messageYjsUpdate } from "y-protocols/sync";
 import { reportFailure, restrictLibraryLogs } from "../../../../collab-server/logging.ts";
 import { startRelay } from "../../../../collab-server/relay.ts";
 
@@ -6,6 +5,7 @@ let release: (() => void) | undefined;
 let hold: Promise<void> | undefined;
 let holdDocumentLoad = false;
 let releaseLoad: (() => void) | undefined;
+let heldSyncType: number | undefined;
 let heldTraffic: Promise<void> | undefined;
 let releaseTraffic: (() => void) | undefined;
 process.on("message", message => {
@@ -22,7 +22,8 @@ process.on("message", message => {
     holdDocumentLoad = true;
     process.send?.("load-armed");
   }
-  if (message === "hold-traffic") {
+  if (typeof message === "object" && message !== null && "holdSyncType" in message && typeof message.holdSyncType === "number") {
+    heldSyncType = message.holdSyncType;
     heldTraffic = new Promise<void>(resolve => { releaseTraffic = resolve; });
     process.send?.("traffic-armed");
   }
@@ -51,7 +52,7 @@ try {
       releaseLoad = undefined;
     },
     async beforeSync({ type }) {
-      if (type !== messageYjsUpdate || !heldTraffic) return;
+      if (type !== heldSyncType || !heldTraffic) return;
       process.send?.("edit-queued");
       await heldTraffic;
     },

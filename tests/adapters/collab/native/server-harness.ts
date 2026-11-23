@@ -94,7 +94,7 @@ export function serverHarness(t: TestContext) {
     });
     const run = {
       messages, exit, output: () => output, errors: () => errors,
-      send: (message: string) => child.send(message),
+      send: (message: string | { holdSyncType: number }) => child.send(message),
       async provision(name: string) {
         child.send(`provision:${name}`);
         const invitation = await until(() => messages.find((message): message is { name: string; id: string; token: string } =>
