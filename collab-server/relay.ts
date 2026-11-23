@@ -1,4 +1,3 @@
-import { createHash, timingSafeEqual } from "node:crypto";
 import { once } from "node:events";
 import { writeSync } from "node:fs";
 import { Database } from "@hocuspocus/extension-database";
@@ -7,6 +6,7 @@ import type { Connection, Document, Extension } from "@hocuspocus/server";
 import { messageYjsSyncStep2, messageYjsUpdate } from "y-protocols/sync";
 import { applyUpdate, Doc, encodeStateAsUpdate, snapshot, snapshotContainsUpdate } from "yjs";
 import { RelayError, relayConfig } from "./config.ts";
+import { scriptAccess } from "./access.ts";
 import { claimWriter, openWriter } from "./storage.ts";
 
 const DOCUMENT_BYTES = 15_000_000;
@@ -16,10 +16,6 @@ const STOP_SIGNALS = ["SIGINT", "SIGQUIT", "SIGTERM"] as const;
 function failShutdown(message: string): never {
   writeSync(2, message + "\n");
   process.exit(1);
-}
-
-function digest(token: string): Buffer {
-  return createHash("sha256").update(token).digest();
 }
 
 function exceedsMergeLimit(document: Document, update: Uint8Array): boolean {
@@ -34,8 +30,7 @@ function exceedsMergeLimit(document: Document, update: Uint8Array): boolean {
 }
 
 export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", extensions: Extension[] = []) {
-  const { directory, port, origins, token, debounce, maxDebounce } = relayConfig(env);
-  const expected = digest(token);
+  const { directory, port, origins, debounce, maxDebounce } = relayConfig(env);
   const lock = claimWriter(directory);
   let db: ReturnType<typeof openWriter>;
   try {
@@ -70,21 +65,42 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       }
     }
   });
+  const access = scriptAccess(db);
+  type Admission = { invitationId: string };
+  function requireAccess(context: Admission): void {
+    if (!access.isValid(context.invitationId)) throw { reason: "access-removed" };
+  }
+
   const writes = new WeakMap<Document, { connection: Connection; done: Promise<void>; release: () => void }>();
-  const relay = new Server({
+  const relay = new Server<Admission>({
     address, port, debounce, maxDebounce, quiet: true,
     websocketOptions: {
       maxPayload: MAX_PAYLOAD,
       verifyClient: ({ origin }: { origin: string | undefined }) => origins.has(origin ?? "")
     },
     extensions: [...extensions, storage],
-    async onAuthenticate({ token: supplied, instance, documentName, connectionConfig }) {
-      if (!timingSafeEqual(digest(supplied), expected)) throw { reason: "permission-denied" };
-      const live = instance.documents.get(documentName) ?? await instance.loadingDocuments.get(documentName);
+    async onAuthenticate({ token, instance, documentName, connectionConfig, requestParameters }) {
+      if (requestParameters.getAll("wire").join(",") !== "1" || requestParameters.getAll("schema").join(",") !== "1") {
+        throw { reason: "unsupported-version" };
+      }
+      const invitationId = access.authenticate(documentName, token);
+      const loading = instance.loadingDocuments.get(documentName);
+      const live = instance.documents.get(documentName) ?? (loading ? await loading : undefined);
+      if (loading) access.authenticate(documentName, token);
       const bytes = live ? encodeStateAsUpdate(live).byteLength : Number(size.get(documentName)?.bytes ?? 0);
       connectionConfig.readOnly = bytes >= DOCUMENT_BYTES;
+      return { invitationId };
     },
-    async beforeSync({ connection, document, type, payload }) {
+    async connected({ context, connection }) {
+      if (!access.isValid(context.invitationId)) connection.close({ code: 4403, reason: "access-removed" });
+    },
+    async beforeHandleMessage({ context }) {
+      requireAccess(context);
+    },
+    async beforeHandleAwareness({ context }) {
+      if (context) requireAccess(context);
+    },
+    async beforeSync({ connection, context, document, type, payload }) {
       const returning = type === messageYjsSyncStep2 && !(payload.length === 2 && payload[0] === 0 && payload[1] === 0);
       if (!returning && (type !== messageYjsUpdate || connection.readOnly)) return;
       // why: the stock receiver awaits this hook before applying, so a second writer could otherwise race the check
@@ -93,6 +109,7 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
         await active.done;
         active = writes.get(document);
       }
+      requireAccess(context);
       let release!: () => void;
       const done = new Promise<void>(resolve => { release = resolve; });
       writes.set(document, { connection, done, release });
@@ -119,7 +136,28 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       relay.listen(),
       once(relay.httpServer, "error", { signal: listening.signal }).then(() => { throw new Error(); })
     ]);
-    return relay;
+    function closeRemovedAccess(): void {
+      for (const document of relay.hocuspocus.documents.values()) {
+        for (const connection of document.getConnections()) {
+          const context = connection.context as Admission;
+          if (!access.isValid(context.invitationId)) {
+            connection.close({ code: 4403, reason: "access-removed" });
+          }
+        }
+      }
+    }
+    return Object.assign(relay, {
+      registerScript: access.register,
+      issueInvitation: access.issue,
+      revokeInvitation(id: string) {
+        access.revoke(id);
+        closeRemovedAccess();
+      },
+      deleteScript(name: string) {
+        access.deleteScript(name);
+        closeRemovedAccess();
+      }
+    });
   } catch {
     closeStorage();
     throw new RelayError("Relay could not listen on the configured port.");

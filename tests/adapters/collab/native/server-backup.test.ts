@@ -14,6 +14,7 @@ test("online backup retains verified bytes for each script and restores without 
   const kit = serverHarness(t);
   const primary = join(kit.directory, "primary");
   const settings = { SPLITPAGE_DATA_DIR: primary };
+  kit.provision("second-script", primary);
   const live = kit.launch(settings);
   const port = await live.port();
   const initial = seedRelaySession();
@@ -88,6 +89,37 @@ test("backup verification rejects different names, different bytes, and missing 
   assert.throws(() => verifyCopy(original, foreign), /unrecognized identity or schema/);
 });
 
+test("backup verification rejects changed or missing access records without exposing their values", async t => {
+  const kit = serverHarness(t);
+  const { id } = kit.provision(NAME);
+  kit.provision("second-script");
+  using source = openWriter(kit.directory);
+  const copyDirectory = join(kit.directory, "copy");
+  mkdirSync(copyDirectory);
+  const path = join(copyDirectory, DB_NAME);
+  await backup(source, path);
+  using copy = openWriter(copyDirectory);
+  verifyCopy(source, copy);
+
+  for (const [sql, args, message] of [
+    ["UPDATE scripts SET status = 'deleted' WHERE name = ?", [NAME], "scripts differ"],
+    ["INSERT INTO scripts VALUES (?, 'pending')", ["extra-script"], "scripts differ"],
+    ["UPDATE invitations SET revoked = 1 WHERE id = ?", [id], "invitations differ"],
+    ["UPDATE invitations SET label = 'different' WHERE id = ?", [id], "invitations differ"],
+    ["UPDATE invitations SET script = 'second-script' WHERE id = ?", [id], "invitations differ"],
+    ["UPDATE invitations SET token_hash = randomblob(32) WHERE id = ?", [id], "invitations differ"],
+    ["DELETE FROM invitations", [], "is missing invitations"]
+  ] as const) {
+    copy.exec("BEGIN");
+    try {
+      copy.prepare(sql).run(...args);
+      assert.throws(() => verifyCopy(source, copy), { message: `Relay backup ${message} from the source snapshot.` });
+    } finally {
+      copy.exec("ROLLBACK");
+    }
+  }
+});
+
 test("backup of missing storage fails without creating an empty database or publishing a backup", { timeout: 30_000 }, async t => {
   const kit = serverHarness(t);
   const failed = kit.launch({}, BACKUP);
@@ -144,13 +176,18 @@ test("backup preflight rejects a foreign source before asking SQLite to copy", {
 
 test("online backup copies the preflight snapshot even when a second connection commits before copying", { timeout: 30_000 }, async t => {
   const kit = serverHarness(t);
+  kit.provision("one");
   using writer = openWriter(kit.directory);
   writer.exec("INSERT INTO documents VALUES ('one', X'01'), ('two', X'02')");
   const name = await backupRelay({ SPLITPAGE_DATA_DIR: kit.directory }, async (source, path) => {
-    writer.exec("BEGIN; UPDATE documents SET state = X'03'; COMMIT");
+    writer.exec("BEGIN; UPDATE documents SET state = X'03'; UPDATE scripts SET status = 'deleted'; UPDATE invitations SET revoked = 1; COMMIT");
     return backup(source, path);
   });
   assert.deepEqual(writer.prepare("SELECT hex(state) AS state FROM documents ORDER BY name").all().map(row => row.state), ["03", "03"]);
+  assert.equal(writer.prepare("SELECT status FROM scripts").get()?.status, "deleted");
+  assert.equal(writer.prepare("SELECT revoked FROM invitations").get()?.revoked, 1);
   using copy = new DatabaseSync(join(kit.directory, "backups", name), { readOnly: true });
   assert.deepEqual(copy.prepare("SELECT hex(state) AS state FROM documents ORDER BY name").all().map(row => row.state), ["01", "02"]);
+  assert.equal(copy.prepare("SELECT status FROM scripts").get()?.status, "active");
+  assert.equal(copy.prepare("SELECT revoked FROM invitations").get()?.revoked, 0);
 });

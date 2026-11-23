@@ -171,6 +171,13 @@ installation. See the [Node SQLite API](https://nodejs.org/download/release/v24.
 
 ### Backup runbook
 
+This runbook applies to the earlier deployed relay that uses one environment access token. Build the relay from
+revision `17a57c2e7` and use that image for both startup and restore.
+
+Stage 3 Part 1 introduces versioned SQLite storage for scripts and invitations. Local tests use a fresh
+database because the relay rejects the earlier database version. Owner commands arrive in Part 2.
+The planned deployment and smoke test are in [Stage 3 Part 8](stage-3-service-plan.md#8-evidence-and-redeploy).
+
 **Start the relay.** From the repository root on the Docker host, replace the placeholder pool directory, editor
 origin and token. Use a directory on the direct local pool. Keep the environment file in host secret storage,
 with access limited to the operator. The example exposes the relay only on loopback for the intended tunnel or
@@ -178,7 +185,7 @@ proxy. Set CPU and memory limits for the host. One relay process can own the vol
 
 ```sh
 set -eu
-docker build -t splitpage-relay collab-server
+git archive --format=tar 17a57c2e7c873b32047f9fcfc4323744f79e4a41:collab-server | docker build -t splitpage-relay:17a57c2e7 -
 sudo install -d -m 0700 -o 1000 -g 1000 /REPLACE_WITH_DIRECT_POOL_PATH/splitpage
 docker volume create --driver local --opt type=none --opt o=bind --opt device=/REPLACE_WITH_DIRECT_POOL_PATH/splitpage splitpage-relay-data
 
@@ -195,7 +202,7 @@ SPLITPAGE_STORE_MAX_DEBOUNCE_MS=10000
 SPLITPAGE_BACKUP_KEEP=7
 EOF
 
-docker run -d --name splitpage-relay --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m --stop-timeout 20 --cpus 2 --memory 2g --publish 127.0.0.1:8080:8080 --env-file "$config_dir/relay.env" --mount type=volume,source=splitpage-relay-data,target=/data splitpage-relay
+docker run -d --name splitpage-relay --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m --stop-timeout 20 --cpus 2 --memory 2g --publish 127.0.0.1:8080:8080 --env-file "$config_dir/relay.env" --mount type=volume,source=splitpage-relay-data,target=/data splitpage-relay:17a57c2e7
 docker logs splitpage-relay
 ```
 
@@ -242,8 +249,8 @@ scp -B "REPLACE_WITH_ARCHIVE_USER@REPLACE_WITH_ARCHIVE_HOST:/REPLACE_WITH_ARCHIV
 restore_volume="splitpage-relay-restore-$(date -u +%Y%m%dT%H%M%SZ)"
 if docker volume inspect "$restore_volume" >/dev/null 2>&1; then echo "Choose a new restore volume name." >&2; exit 1; fi
 docker volume create "$restore_volume"
-docker run --rm -i --read-only --mount "type=volume,source=$restore_volume,target=/data" --entrypoint sh splitpage-relay -ec 'contents=$(ls -A /data); test -z "$contents" || { echo "Restore volume is not empty." >&2; exit 1; }; set -C; cat > /data/relay.sqlite' < "$backup_name"
-docker run -d --name splitpage-relay-restore --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m --stop-timeout 20 --cpus 2 --memory 2g --publish 127.0.0.1:8081:8080 --env-file "$config_dir/relay-restore.env" --mount "type=volume,source=$restore_volume,target=/data" splitpage-relay
+docker run --rm -i --read-only --mount "type=volume,source=$restore_volume,target=/data" --entrypoint sh splitpage-relay:17a57c2e7 -ec 'contents=$(ls -A /data); test -z "$contents" || { echo "Restore volume is not empty." >&2; exit 1; }; set -C; cat > /data/relay.sqlite' < "$backup_name"
+docker run -d --name splitpage-relay-restore --read-only --tmpfs /tmp:rw,noexec,nosuid,size=16m --stop-timeout 20 --cpus 2 --memory 2g --publish 127.0.0.1:8081:8080 --env-file "$config_dir/relay-restore.env" --mount "type=volume,source=$restore_volume,target=/data" splitpage-relay:17a57c2e7
 docker logs splitpage-relay-restore
 ```
 

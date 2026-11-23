@@ -8,6 +8,7 @@ import { DatabaseSync } from "node:sqlite";
 import type { TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 import { WebSocket } from "ws";
+import { scriptAccess } from "../../../../collab-server/access.ts";
 import { DB_NAME, openWriter } from "../../../../collab-server/storage.ts";
 import { openNativeRelay } from "../../../../src/adapters/collab/native/relay.ts";
 import type { NativeRelayEvent } from "../../../../src/adapters/collab/native/relay.ts";
@@ -17,12 +18,12 @@ import { seedRelaySession } from "./relay-harness.ts";
 
 export const NAME = "test-script";
 export const ORIGIN = "splitpage://app";
-export const TOKEN = "fixture-access";
 const OPTIONS = { actor: "writer", sanitize: (text: unknown) => typeof text === "string" ? text : "" };
 const ENTRY = new URL("./server-process.ts", import.meta.url);
 
 export function serverHarness(t: TestContext) {
   const directory = mkdtempSync(join(tmpdir(), "splitpage-relay-"));
+  const invitations = new Map<string, { id: string; token: string }>();
   const changed = new EventEmitter();
   const signal = AbortSignal.any([t.signal, AbortSignal.timeout(25_000)]);
   const stopProcesses: (() => Promise<unknown>)[] = [];
@@ -51,13 +52,25 @@ export function serverHarness(t: TestContext) {
     }
   }
 
+  function provision(name: string, target = directory) {
+    using db = openWriter(target);
+    const access = scriptAccess(db);
+    const exists = db.prepare("SELECT 1 FROM scripts WHERE name = ?").get(name);
+    if (!exists) access.register(name, "active");
+    const existing = invitations.get(name);
+    if (exists && existing) return existing;
+    const invitation = access.issue(name, "test invitation");
+    invitations.set(name, invitation);
+    return invitation;
+  }
+
   function launch(settings: NodeJS.ProcessEnv = {}, entry = ENTRY) {
+    if (entry === ENTRY) provision(NAME, settings.SPLITPAGE_DATA_DIR);
     const child = fork(fileURLToPath(entry), {
       env: {
         ...process.env,
         SPLITPAGE_DATA_DIR: directory,
         SPLITPAGE_ALLOWED_ORIGINS: ORIGIN,
-        SPLITPAGE_ACCESS_TOKEN: TOKEN,
         SPLITPAGE_PORT: "0",
         SPLITPAGE_STORE_DEBOUNCE_MS: "40",
         SPLITPAGE_STORE_MAX_DEBOUNCE_MS: "100",
@@ -81,7 +94,14 @@ export function serverHarness(t: TestContext) {
     });
     const run = {
       messages, exit, output: () => output, errors: () => errors,
-      send: (message: string) => child.send(message),
+      send: (message: string | { holdSyncType: number }) => child.send(message),
+      async provision(name: string) {
+        child.send(`provision:${name}`);
+        const invitation = await until(() => messages.find((message): message is { name: string; id: string; token: string } =>
+          !!message && typeof message === "object" && "name" in message && message.name === name &&
+          "id" in message && typeof message.id === "string" && "token" in message && typeof message.token === "string"));
+        invitations.set(name, invitation);
+      },
       async port() {
         return until(() => {
           if (finished) throw new Error(`Relay exited before listening. ${errors}`);
@@ -105,7 +125,7 @@ export function serverHarness(t: TestContext) {
     return run;
   }
 
-  function copy(port: number, source: NativeSessionSource = { kind: "empty" }, name = NAME, token = TOKEN) {
+  function copy(port: number, source: NativeSessionSource = { kind: "empty" }, name = NAME, token = invitations.get(name)?.token ?? "") {
     const session = openNativeSession(source, OPTIONS);
     const events: NativeRelayEvent[] = [];
     session.subscribe(() => changed.emit("change"));
@@ -131,7 +151,13 @@ export function serverHarness(t: TestContext) {
     return state;
   }
 
-  return { directory, launch, copy, seed, until };
+  function invitation(name = NAME) {
+    const result = invitations.get(name);
+    assert.ok(result);
+    return result;
+  }
+
+  return { directory, launch, copy, seed, until, provision, invitation };
 }
 
 export function storedState(directory: string, name = NAME) {

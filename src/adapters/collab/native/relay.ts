@@ -41,6 +41,9 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
   let current = session, status = initialStatus;
   let closing = false;
   let publicationStopped = false;
+  const relayUrl = new URL(url);
+  relayUrl.searchParams.set("wire", "1");
+  relayUrl.searchParams.set("schema", "1");
   let provider = attach(current);
 
   function emit(event: NativeRelayEvent): void {
@@ -66,7 +69,7 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
     // why: the browser sees only complete frames, and the stock server sends this vector before its state reply
     const stateRequest = () => { downloadStarted = now(); };
     const attached = new StateFirstProvider({
-      url, name, token, document: target.ydoc,
+      url: relayUrl.href, name, token, document: target.ydoc,
       onStatus({ status: socketStatus }) {
         if (publicationStopped) return;
         const connected = socketStatus === WebSocketStatus.Connected;
@@ -87,6 +90,11 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
       },
       onAuthenticationFailed({ reason }) {
         emit({ kind: "authentication-failed", reason });
+      },
+      onClose({ event }) {
+        if (event.reason !== "access-removed" || publicationStopped) return;
+        updateStatus({ connected: false, firstSyncDone: false });
+        emit({ kind: "authentication-failed", reason: event.reason });
       },
       onStateless({ payload }) {
         if (payload !== "merge-too-large" || publicationStopped) return;
