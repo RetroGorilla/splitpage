@@ -10,7 +10,8 @@ pictures and screen design are out of scope.
 
 ## Build status
 
-Slice 7 still has open acceptance cases listed in section 11. The Slice 8 adapter removal landed on `main` at `0b7102f6a` ([#1745](https://github.com/RetroGorilla/splitpage/pull/1745),
+Slice 7's open acceptance cases are listed in [appendix O](#o-acceptance-cases-from-the-outside-review). The Slice 8
+adapter removal landed on `main` at `0b7102f6a` ([#1745](https://github.com/RetroGorilla/splitpage/pull/1745),
 [#1746](https://github.com/RetroGorilla/splitpage/pull/1746),
 [#1747](https://github.com/RetroGorilla/splitpage/pull/1747),
 [#1750](https://github.com/RetroGorilla/splitpage/pull/1750)). The native session runs Split and Writer with buffered
@@ -18,12 +19,43 @@ narration and Visual input, composition, local undo and selection replay. The ed
 heading structure, anchored blank-beat insertion, Writer Markdown headings, Find and replacement, plain inline
 formatting, beat status and duration, picture galleries, comment threads and production registries.
 
-The native relay has the reconnect wrapper, size admission, SQLite snapshots and backup and restore commands.
-The session layer has the offline-notice journal and put-back command, and local replica stores with an update
-log, checkpoints and local write receipts in browser IndexedDB and through desktop test IPC
-([#1668](https://github.com/RetroGorilla/splitpage/pull/1668), [#1679](https://github.com/RetroGorilla/splitpage/pull/1679)).
-These components have their own integration tests. The standard shared test hook `__sharedTest` opens only the
-native session.
+Stage 3 Parts 1, 2, 3a, 4, 5, 6 and 7 of the [Stage 3 plan](stage-3-service-plan.md) are on `main` through
+`35fee04ee`:
+
+- **Part 1 ([#1754](https://github.com/RetroGorilla/splitpage/pull/1754)):** versioned SQLite storage, per-script
+  lifecycle (`pending`, `active`, `deleted`), hashed revocable invitations and wire/schema version checks; the
+  environment-wide access token is removed.
+- **Part 2 ([#1757](https://github.com/RetroGorilla/splitpage/pull/1757)):** constant-time management-secret `/api/`
+  owner endpoints (`POST /api/scripts` with `Idempotency-Key`, issue, list, revoke, delete) and
+  `collab-server/owner-command.ts`.
+- **Part 3a ([#1756](https://github.com/RetroGorilla/splitpage/pull/1756)):** authenticated `/api/scripts/<id>/pictures/<sha>`
+  PUT and GET validated through `shared/blob-policy.ts` (16 MiB per picture, 200 MiB per script, four 16 MiB staging
+  slots, storage version 3 upgrade).
+- **Part 4 ([#1755](https://github.com/RetroGorilla/splitpage/pull/1755)):** production desktop `splitpage:native-replica`
+  IPC with OS key store encrypted membership (test-only `splitpage:test-native-replica` channel removed), separate
+  browser IndexedDB invitation store, scoped `enterRetained` entry, one-writable-tab/window enforcement and leave
+  erasure.
+- **Part 5 ([#1758](https://github.com/RetroGorilla/splitpage/pull/1758)):** relay-served release browser shell
+  (`SPLITPAGE_APP_DIR=/app`, `Splitpage-Deployment` header) and `/?join=<id>#<token>` fragment scrubbing before logging.
+- **Part 6 ([#1759](https://github.com/RetroGorilla/splitpage/pull/1759)):** bounded runtime limits (total connections,
+  per-invitation connections, per-socket message rate, in-flight uploads, WebSocket and HTTP bounds), distinct temporary
+  vs permanent refusals, private `GET /api/status` and the read-only container verified in CI (`relay-container-smoke`).
+- **Part 7 ([#1760](https://github.com/RetroGorilla/splitpage/pull/1760)):** consistent verified SQLite + picture bundle
+  backups (`relay-*.backup`), atomic `last-backup.json` marker recorded after sync, and isolated restore revoking every
+  invitation while keeping deleted scripts deleted.
+
+**Pending before Stage 3 closes:**
+
+- **Part 3b ([#1761](https://github.com/RetroGorilla/splitpage/pull/1761)):** client-side picture upload/download,
+  placeholder replacement, missing-picture export reporting, the Part 3b mechanism section and the INV-52 update are
+  in integration and not yet on `main`.
+- **Part 8 evidence and deployment:** see the [Stage 3 evidence status](../COLLABORATION-PLAN.md#stage-3-evidence-status-main-at-35fee04ee)
+  for CI vs nightly/local runs and open gaps. Replacing the owner's relay on an empty database (keeping the old data
+  directory aside), scheduling the daily off-machine backup copy with pictures, running the deployed smoke check and
+  running the isolated restore drill remain pending.
+
+The standard shared test hook `__sharedTest` opens only the native session. There is still no release entry for shared
+mode; release builds omit `__sharedTest` and `?join=` handling.
 
 All legacy shared-adapter code (112 source files outside `src/adapters/collab/native/`), its 183 dedicated test files,
 the legacy app fixture (`tests/collab/legacy-app/`) and generated `_legacy-shared-tests.html` page, 29 legacy
@@ -41,7 +73,7 @@ performance (`5fceae0c2` vs `0b7102f6a`, 3 rounds on Windows/Edge 158) is record
 ([45046093872](https://github.com/RetroGorilla/splitpage/actions/runs/45046093872) vs
 [45078179364](https://github.com/RetroGorilla/splitpage/actions/runs/45078179364)) dropped workflow time from 691 to
 404 s, root wall time from 660 to 379 s, aggregate shard job-seconds from 3,890 to 2,077 s, and test shard jobs from
-11 to 8. There is no release entry for shared mode.
+11 to 8.
 
 A successful native switch restores a Writer or Split selection only when focus stayed in that editor and the
 touched beats, joined narration members and headings keep their identities, order and text. If a captured
@@ -251,17 +283,29 @@ docker run --rm --read-only --network none \
   --mount "type=bind,source=$archive,target=/archive,readonly" \
   --mount "type=bind,source=$restore_parent,target=/recovery" \
   "$image" node --disable-warning=ExperimentalWarning restore-command.ts /archive /recovery/relay-data
-docker run --rm --name splitpage-stage3-restore --read-only \
+docker run --rm --name splitpage-stage3-restore \
+  --read-only \
+  --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+  --cpus 2 \
+  --memory 2g \
+  --pids-limit 128 \
+  --cap-drop ALL \
+  --security-opt no-new-privileges:true \
+  --stop-timeout 20 \
   --publish 127.0.0.1:8081:8080 \
   --env-file /REPLACE_WITH_OPERATOR_ONLY_RESTORE_ENV \
-  --env SPLITPAGE_DATA_DIR=/data --env SPLITPAGE_PORT=8080 \
+  --env SPLITPAGE_DATA_DIR=/data --env SPLITPAGE_PORT=8080 --env TMPDIR=/tmp \
   --mount "type=bind,source=$restore_parent/relay-data,target=/data" \
   "$image"
 ```
 
-Keep the restore port out of the public proxy and
-use a separate management secret. Confirm that an old invitation is refused, deleted scripts remain
-deleted, and fresh invitations open the expected script and pictures. Check that edits made after the
+Keep the restore port out of the public proxy, use a separate management secret and a distinct
+`SPLITPAGE_DEPLOYMENT_ID` in the restore env file (so drill clients do not collide with production retained
+replicas), and list the drill client origin in `SPLITPAGE_ALLOWED_ORIGINS`. Because `owner-command.ts` requires an
+`https:` origin, issue fresh drill invitations against the loopback restore port either through an operator-only
+local HTTPS proxy or by calling the loopback `/api/scripts/<script-id>/invitations` endpoint directly without
+placing the management secret in command arguments, shell history or logs. Confirm that an old invitation is refused,
+deleted scripts remain deleted, and fresh invitations open the expected script and pictures. Check that edits made after the
 snapshot are absent. For production recovery from a rollback, recover the selected scripts under
 new identities before reopening access. Keep old client copies available for deliberate recovery.
 
@@ -388,8 +432,29 @@ below apply only to the Stage 3 relay image built from the current tree.
 
 - **Build context.** Build from the repository root with
   `docker build -f collab-server/Dockerfile -t splitpage-relay:current .` (the image runs from
-  `/service/collab-server` and includes `shared/blob-policy.ts`; Part 5 extends this root-context build with the
-  browser shell).
+  `/service/collab-server`, includes `shared/blob-policy.ts`, and builds and copies the release browser shell into
+  `/app` with `SPLITPAGE_APP_DIR=/app`).
+- **Stage 3 cutover and old-directory retention.** Stop the historical single-token container and keep its data
+  directory aside untouched; do not delete it and do not mount it into Stage 3 (Stage 3 startup refuses the
+  unversioned legacy database and preserves its file). Create a fresh empty direct-pool directory (`0700`, owned by
+  `1000:1000`) and a new Docker volume for Stage 3. Remove `SPLITPAGE_ACCESS_TOKEN` from `relay.env` and provide
+  the Stage 3 environment in operator-only host secret storage (never printed or logged):
+
+```sh
+SPLITPAGE_DATA_DIR=/data
+SPLITPAGE_PORT=8080
+TMPDIR=/tmp
+SPLITPAGE_ALLOWED_ORIGINS=https://REPLACE_WITH_RELAY_HOST,splitpage://app
+SPLITPAGE_DEPLOYMENT_ID=REPLACE_WITH_STABLE_DEPLOYMENT_ID
+SPLITPAGE_MANAGEMENT_SECRET=REPLACE_WITH_BASE64URL_32_BYTE_SECRET
+SPLITPAGE_STORE_DEBOUNCE_MS=2000
+SPLITPAGE_STORE_MAX_DEBOUNCE_MS=10000
+SPLITPAGE_BACKUP_KEEP=7
+```
+
+  Use `owner-command.ts` for `issue`, `list`, `revoke` and `delete`. Until Stage 4 adds script-creation UI, creating
+  a script on the relay uses `POST /api/scripts` with `Authorization: Bearer` and an `Idempotency-Key` header (or the
+  local test-build harness).
 - **Bounded container flags.** Run the image as its built-in non-root `node` user with a read-only root filesystem,
   bounded temporary storage, dropped capabilities, and CPU, memory and process limits:
 
@@ -405,7 +470,7 @@ docker run -d --name splitpage-relay \
   --stop-timeout 20 \
   --publish 127.0.0.1:8080:8080 \
   --env-file "$config_dir/relay.env" \
-  --mount type=volume,source=splitpage-relay-data,target=/data \
+  --mount type=volume,source=splitpage-relay-stage3-data,target=/data \
   splitpage-relay:current
 ```
 
