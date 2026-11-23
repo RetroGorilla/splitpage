@@ -6,8 +6,9 @@ import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { scriptAccess } from "../../../../collab-server/access.ts";
 import { backupRelay } from "../../../../collab-server/backup.ts";
+import type { RelayStatusSnapshot } from "../../../../collab-server/status.ts";
 import { DB_NAME, openWriter, verifyDatabase } from "../../../../collab-server/storage.ts";
-import { serverHarness, storedState } from "./server-harness.ts";
+import { appendText, serverHarness, storedState, storedText } from "./server-harness.ts";
 
 test("owner commands initialize, issue, list, revoke and delete a shared script", { timeout: 25_000 }, async t => {
   const kit = serverHarness(t);
@@ -99,6 +100,142 @@ test("owner commands initialize, issue, list, revoke and delete a shared script"
   for (const process of [run, restarted]) {
     const logs = process.output() + process.errors();
     assert.ok(![secret, wrong, invitation.token, "Reader"].some(value => logs.includes(value)));
+  }
+});
+
+test("rotating the management secret across relay restart rejects the retired secret and preserves data and invitations", { timeout: 30_000 }, async t => {
+  const kit = serverHarness(t);
+  const state = kit.seed();
+  const initialSecret = randomBytes(32).toString("base64url");
+  let replacementSecret = randomBytes(32).toString("base64url");
+  while (replacementSecret === initialSecret) replacementSecret = randomBytes(32).toString("base64url");
+  assert.equal(replacementSecret !== initialSecret, true, "replacement secret must differ from initial secret");
+
+  const initial = kit.launch({ SPLITPAGE_MANAGEMENT_SECRET: initialSecret });
+  const creationId = randomUUID();
+  const scriptId = await initial.createScript(creationId, state, initialSecret);
+  const invitationsPath = `scripts/${scriptId}/invitations`;
+  const issuedInitial = await initial.owner(invitationsPath, { method: "POST", body: "Before Rotation" }, initialSecret);
+  assert.equal(issuedInitial.status, 201);
+  assert.equal(issuedInitial.headers.get("cache-control"), "no-store");
+  const existingInvite = await issuedInitial.json() as { id: string; token: string };
+  assert.equal(/^[a-zA-Z0-9_-]{43}$/.test(existingInvite.token), true, "initial invitation token must match expected format");
+
+  const writer = kit.copy(await initial.port(), { kind: "empty" }, scriptId, existingInvite.token);
+  t.after(writer.session.close);
+  await kit.until(() => (writer.relay.status().firstSyncDone && writer.text() === "word") || undefined);
+  appendText(writer.session, " before-rotation", 4);
+  await kit.until(() => (writer.pending() === 0 && storedText(kit.directory, scriptId) === "word before-rotation") || undefined);
+
+  const picture = Buffer.concat([
+    Buffer.from("89504e470d0a1a0a0000000d494844520000000100000001", "hex"),
+    Buffer.from("secret-rotation-picture", "utf8")
+  ]);
+  const pictureSha = createHash("sha256").update(picture).digest("hex");
+  const picturePath = `scripts/${scriptId}/pictures/${pictureSha}`;
+  const upload = await initial.owner(picturePath, {
+    method: "PUT", headers: { "Content-Type": "image/png" }, body: picture
+  }, existingInvite.token);
+  assert.equal(upload.status, 201);
+
+  assert.equal((await initial.owner("status", {}, replacementSecret)).status, 401);
+  assert.equal((await initial.owner(invitationsPath, {}, replacementSecret)).status, 401);
+  const statusBefore = await initial.owner("status", {}, initialSecret);
+  assert.equal(statusBefore.status, 200);
+  const statusBeforeData = await statusBefore.json() as RelayStatusSnapshot;
+  assert.ok(statusBeforeData.storedBytes > 0);
+  assert.equal(statusBeforeData.pictureBytes, picture.length);
+  const listBefore = await initial.owner(invitationsPath, {}, initialSecret);
+  assert.equal(listBefore.status, 200);
+  assert.deepEqual(await listBefore.json(), [{ id: existingInvite.id, label: "Before Rotation", state: "active" }]);
+
+  writer.close();
+  assert.deepEqual(await initial.stop("clean"), { code: 0, exitSignal: null });
+  const stateBeforeRotation = storedState(kit.directory, scriptId);
+
+  const rotated = kit.launch({ SPLITPAGE_MANAGEMENT_SECRET: replacementSecret });
+  assert.equal((await rotated.owner("status", {}, null)).status, 401);
+  assert.equal((await rotated.owner(invitationsPath, {}, null)).status, 401);
+  assert.equal((await rotated.owner("status", {}, initialSecret)).status, 401);
+  assert.equal((await rotated.owner("scripts", { method: "POST", headers: { "Idempotency-Key": creationId } }, initialSecret)).status, 401);
+  assert.equal((await rotated.owner("scripts", { method: "POST", headers: { "Idempotency-Key": randomUUID() }, body: Buffer.from(state) }, initialSecret)).status, 401);
+  assert.equal((await rotated.owner(invitationsPath, {}, initialSecret)).status, 401);
+  assert.equal((await rotated.owner(invitationsPath, { method: "POST", body: "Retired Attempt" }, initialSecret)).status, 401);
+  assert.equal((await rotated.owner(`invitations/${existingInvite.id}`, { method: "DELETE" }, initialSecret)).status, 401);
+  assert.equal((await rotated.owner(`scripts/${scriptId}`, { method: "DELETE" }, initialSecret)).status, 401);
+
+  const statusAfter = await rotated.owner("status", {}, replacementSecret);
+  assert.equal(statusAfter.status, 200);
+  assert.equal(statusAfter.headers.get("cache-control"), "no-store");
+  const statusAfterRaw = await statusAfter.text();
+  const statusAfterData = JSON.parse(statusAfterRaw) as RelayStatusSnapshot;
+  assert.ok(statusAfterData.storedBytes > 0);
+  assert.equal(statusAfterData.pictureBytes, picture.length);
+  assert.equal(statusAfterData.lastStorageFailure, null);
+
+  const listAfter = await rotated.owner(invitationsPath, {}, replacementSecret);
+  assert.equal(listAfter.status, 200);
+  assert.deepEqual(await listAfter.json(), [{ id: existingInvite.id, label: "Before Rotation", state: "active" }]);
+  const retryAfter = await rotated.owner("scripts", { method: "POST", headers: { "Idempotency-Key": creationId } }, replacementSecret);
+  assert.equal(retryAfter.status, 200);
+  assert.deepEqual(await retryAfter.json(), { scriptId });
+  assert.deepEqual(storedState(kit.directory, scriptId), stateBeforeRotation);
+
+  const issuedAfter = await rotated.owner(invitationsPath, { method: "POST", body: "After Rotation" }, replacementSecret);
+  assert.equal(issuedAfter.status, 201);
+  assert.equal(issuedAfter.headers.get("cache-control"), "no-store");
+  const postInvite = await issuedAfter.json() as { id: string; token: string };
+  assert.equal(/^[a-zA-Z0-9_-]{43}$/.test(postInvite.token), true, "replacement-issued invitation token must match expected format");
+
+  const rotatedPort = await rotated.port();
+  const survivingPeer = kit.copy(rotatedPort, { kind: "empty" }, scriptId, existingInvite.token);
+  const postPeer = kit.copy(rotatedPort, { kind: "empty" }, scriptId, postInvite.token);
+  t.after(() => { survivingPeer.session.close(); postPeer.session.close(); });
+  await kit.until(() => (
+    survivingPeer.relay.status().firstSyncDone && survivingPeer.text() === "word before-rotation" &&
+    postPeer.relay.status().firstSyncDone && postPeer.text() === "word before-rotation"
+  ) || undefined);
+
+  const downloadedBeforeRevoke = await rotated.owner(picturePath, {}, existingInvite.token);
+  assert.equal(downloadedBeforeRevoke.status, 200);
+  assert.deepEqual(Buffer.from(await downloadedBeforeRevoke.arrayBuffer()), picture);
+
+  appendText(survivingPeer.session, " after-rotation", "word before-rotation".length);
+  await kit.until(() => (
+    postPeer.text() === "word before-rotation after-rotation" &&
+    storedText(kit.directory, scriptId) === "word before-rotation after-rotation"
+  ) || undefined);
+
+  assert.equal((await rotated.owner(`invitations/${existingInvite.id}`, { method: "DELETE" }, replacementSecret)).status, 204);
+  const revokedEvent = await kit.until(() => survivingPeer.events.find(event => event.kind === "authentication-failed"));
+  assert.equal(revokedEvent.reason, "access-removed");
+  assert.equal((await rotated.owner(picturePath, {}, existingInvite.token)).status, 403);
+  const downloadedWithPostInvite = await rotated.owner(picturePath, {}, postInvite.token);
+  assert.equal(downloadedWithPostInvite.status, 200);
+  assert.deepEqual(Buffer.from(await downloadedWithPostInvite.arrayBuffer()), picture);
+
+  const expectedList = [
+    { id: existingInvite.id, label: "Before Rotation", state: "revoked" },
+    { id: postInvite.id, label: "After Rotation", state: "active" }
+  ].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  const listFinal = await rotated.owner(invitationsPath, {}, replacementSecret);
+  assert.equal(listFinal.status, 200);
+  assert.deepEqual(await listFinal.json(), expectedList);
+
+  survivingPeer.close();
+  postPeer.close();
+  assert.deepEqual(await rotated.stop("clean"), { code: 0, exitSignal: null });
+  assert.equal(storedText(kit.directory, scriptId), "word before-rotation after-rotation");
+
+  const sensitiveValues = [
+    initialSecret, replacementSecret, existingInvite.token, postInvite.token,
+    "Before Rotation", "After Rotation", "Retired Attempt", pictureSha,
+    "before-rotation", "after-rotation"
+  ];
+  assert.equal(sensitiveValues.some(value => statusAfterRaw.includes(value)), false, "status output must not disclose credentials or private values");
+  for (const process of [initial, rotated]) {
+    const logs = process.output() + process.errors();
+    assert.equal(sensitiveValues.some(value => logs.includes(value)), false, "relay logs must not disclose credentials or private values");
   }
 });
 
