@@ -30,12 +30,19 @@ export interface LegacyOpening {
 export type LegacyDocumentSource = DocumentSource<LegacyOpening>;
 export type LegacyDocumentSources = DocumentSources<LegacyOpening>;
 
+interface PendingOpening {
+  readonly epoch: number;
+  readonly settled: Promise<void>;
+  readonly finish: () => void;
+}
+
 interface Started {
   readonly transitions: Transitions<DocumentDestination>;
   readonly operations: Operations;
   readonly sources: LegacyDocumentSources;
   readonly history: HistoryPort;
-  readonly openings: Set<{ readonly epoch: number }>;
+  readonly openings: Set<PendingOpening>;
+  readonly openingLifetime: { controller: AbortController | null };
 }
 
 let started: Started | null = null;
@@ -91,16 +98,19 @@ export function startTransitions(ports: LegacyTransitionPorts): () => void {
     operations: operations,
     sources: createDocumentSources<LegacyOpening>(),
     history: ports.history,
-    openings: new Set<{ readonly epoch: number }>()
+    openings: new Set<PendingOpening>(),
+    openingLifetime: { controller: null }
   });
   started = mine;
   const releaseEpoch = onDocumentReplaced(() => {
+    invalidateOpeningLifetime(mine);
     const epoch = liveSession().epoch();
-    for (const context of mine.openings) if (context.epoch !== epoch) mine.openings.delete(context);
+    for (const context of mine.openings) if (context.epoch !== epoch) context.finish();
   });
   return function () {
     releaseEpoch();
-    mine.openings.clear();
+    invalidateOpeningLifetime(mine);
+    for (const context of mine.openings) context.finish();
     if (started === mine) started = null;
   };
 }
@@ -128,19 +138,40 @@ export function openDocument(opening: LegacyOpening): Promise<unknown> {
   return documentOpenings.track(() => Promise.resolve(source.open(opening)));
 }
 
+function invalidateOpeningLifetime(owner: Started): void {
+  const previous = owner.openingLifetime.controller;
+  owner.openingLifetime.controller = null;
+  previous?.abort();
+}
+
+export function captureDocumentOpeningLifetime(): { readonly signal: AbortSignal; readonly settled: Promise<unknown> } {
+  const owner = running();
+  const controller = owner.openingLifetime.controller ??= new AbortController();
+  return {
+    signal: controller.signal,
+    settled: Promise.all(Array.from(owner.openings, context => context.settled))
+  };
+}
+
 export const documentOpenings: DocumentOpeningActivity = {
   openingPending: () => started !== null && started.openings.size > 0,
   track: work => {
-    const mine = running(), context = { epoch: liveSession().epoch() };
+    const mine = running();
+    let resolveOpening = (): void => {};
+    const settled = new Promise<void>(resolve => { resolveOpening = resolve; });
+    const context: PendingOpening = {
+      epoch: liveSession().epoch(), settled,
+      finish: () => { mine.openings.delete(context); resolveOpening(); }
+    };
     mine.openings.add(context);
-    const close = () => { mine.openings.delete(context); };
+    invalidateOpeningLifetime(mine);
     try {
       const result = work();
       const pending = result !== null && (typeof result === "object" || typeof result === "function") && "then" in result && typeof result.then === "function";
-      if (pending) void Promise.resolve(result).then(close, close);
-      else close();
+      if (pending) void Promise.resolve(result).then(context.finish, context.finish);
+      else context.finish();
       return result;
-    } catch (error) { close(); throw error; }
+    } catch (error) { context.finish(); throw error; }
   }
 };
 

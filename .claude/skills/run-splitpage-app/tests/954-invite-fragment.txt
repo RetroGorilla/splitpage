@@ -1,0 +1,14 @@
+open /index.html
+wait navigator.serviceWorker.controller
+eval location.assign('/?join=test-script#'+crypto.randomUUID());true
+wait location.pathname==='/'&&location.search==='?join=test-script'&&location.hash===''
+expect history.state===null
+eval history.back();true
+wait location.pathname==='/index.html'
+eval history.forward();true
+wait location.pathname==='/'&&location.search==='?join=test-script'
+expect location.hash===''&&history.state===null
+wait navigator.serviceWorker.controller
+eval (async()=>{const cache=await caches.open((await caches.keys())[0]);await cache.put('/api/invite-worker-probe',new Response('worker cache'));return true;})()
+eval fetch('/api/invite-worker-probe').then(response=>response.text()).then(body=>{window.apiBypassed=body!=='worker cache';return true;})
+expect window.apiBypassed

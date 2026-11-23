@@ -3,7 +3,8 @@ import { startSharedPictures } from "../../adapters/collab/native/shared-picture
 import { blobStore, repaintSharedPictures, showSharedPicturePending } from "../../adapters/storage/02c-blobs.ts";
 import type { NativeLocalStoreOpen } from "../../adapters/collab/native/local-store.ts";
 
-type Copy = Extract<NativeLocalStoreOpen, { kind: "opened" }>;
+type Copy = Pick<Extract<NativeLocalStoreOpen, { kind: "opened" }>, "session"> &
+  Partial<Pick<Extract<NativeLocalStoreOpen, { kind: "opened" }>, "flush">>;
 let loadPictures: ((hashes: readonly string[]) => Promise<void>) | undefined;
 
 export function loadSharedExportPictures(hashes: readonly string[]) {
@@ -59,7 +60,7 @@ export function bindSharedPictures(copy: Copy, origin: string, script: string, t
       hidePending ??= showSharedPicturePending(() => true);
       loadPictures = pictures.prepareExport;
     },
-    async hydrate(cancelled: Promise<false>) {
+    async hydrate() {
       while (!stopped && !pictures.refused()) {
         scan();
         if (pictures.rejected(required) || pictures.storageFailed(required)) return false;
@@ -69,8 +70,9 @@ export function bindSharedPictures(copy: Copy, origin: string, script: string, t
           continue;
         }
         const revision = session.revision();
-        const receipt = await Promise.race([copy.flush(), cancelled]);
-        if (!receipt || receipt.kind !== "stored") return false;
+        if (copy.flush) {
+          if ((await copy.flush()).kind !== "stored") return false;
+        }
         if (stopped || pictures.refused()) return false;
         if (revision === session.revision()) return true;
       }

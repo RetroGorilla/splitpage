@@ -618,5 +618,5 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 
 - **Behaviour:** An invitation belongs to a deployment and immutable script identity. Desktop stores the invitation in a main-process membership file encrypted with the operating system key store. Browser storage uses an IndexedDB invitation store separate from membership and replica records. Leave clears the local membership, credential and replica.
 - **Boundary:** Connection credentials and their hashes stay out of script content, replica updates, app-data exports, drafts and logs. The renderer uses an invitation only for the connection and credential store. The management secret is outside the app.
-- **Tests:** The local-copy tests reopen offline, verify scope isolation and leave cleanup, and check decoded replica and app-data content for a generated invitation and its hash.
+- **Tests:** The local-copy tests reopen offline, verify scope isolation and leave cleanup, and check decoded replica and app-data content for a generated invitation and its hash. Browser invitation cancellation tests also verify that a refused entry preserves any previous credential and replica and releases the attempted writer lease.
 - **Owner:** Shared editor wiring, the browser local store and the desktop main-process replica handler.

@@ -1,0 +1,276 @@
+import assert from "node:assert/strict";
+import { execFile } from "node:child_process";
+import { randomUUID } from "node:crypto";
+import { once } from "node:events";
+import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
+import { request } from "node:http";
+import { createServer as createHttpsServer } from "node:https";
+import { connect, createServer } from "node:net";
+import { join } from "node:path";
+import process from "node:process";
+import { test } from "node:test";
+import { fileURLToPath, URL } from "node:url";
+import { promisify } from "node:util";
+import { build } from "../../../build.mjs";
+import { ORIGIN, serverHarness } from "../../../tests/adapters/collab/native/server-harness.ts";
+import { seedRelaySession } from "../../../tests/adapters/collab/native/relay-harness.ts";
+import { imageRecordOf } from "../../../src/core/document/media.ts";
+
+const exec = promisify(execFile);
+const driver = fileURLToPath(new URL("./driver.mjs", import.meta.url));
+
+async function freePort() {
+  const listener = createServer().listen(0, "127.0.0.1");
+  await once(listener, "listening");
+  const { port } = listener.address();
+  await new Promise((resolve, reject) => listener.close(error => error ? reject(error) : resolve()));
+  return port;
+}
+
+function retainedEntryOpened(entry) {
+  const browser = globalThis;
+  browser.retainedAttempt ??= browser.__sharedTest.enterRetained(entry).then(result => {
+    if (!result.ok && ["opening-pending", "startup-pending"].includes(result.reason)) {
+      delete browser.retainedAttempt;
+    } else {
+      browser.retainedOpened = result.ok;
+    }
+  });
+  return browser.retainedOpened === true;
+}
+
+async function membershipAbsent(scope) {
+  const idb = globalThis.indexedDB;
+  const name = "splitpage-native-replica-log";
+  if (!(await idb.databases()).some(database => database.name === name)) return true;
+  const read = request => new Promise((resolve, reject) => {
+    request.onsuccess = () => resolve(request.result);
+    request.onerror = () => reject(request.error);
+  });
+  const db = await read(idb.open(name));
+  try {
+    const transaction = db.transaction(["memberships", "invitations"], "readonly");
+    const records = await Promise.all(["memberships", "invitations"].map(store => read(transaction.objectStore(store).count(scope))));
+    return records.every(count => count === 0);
+  } finally {
+    db.close();
+  }
+}
+
+function browserExpression(fn, argument) {
+  return `(${fn.toString().replaceAll(/\s*\r?\n\s*/g, " ")})(${JSON.stringify(argument)})`;
+}
+
+async function tlsIngress(t, port, relayPort) {
+  const [key, cert] = await Promise.all([readFile(process.env.SPLITPAGE_TEST_TLS_KEY), readFile(process.env.SPLITPAGE_TEST_TLS_CERT)]);
+  const proxy = createHttpsServer({ key, cert }, (incoming, outgoing) => {
+    const upstream = request({ host: "127.0.0.1", port: relayPort, path: incoming.url, method: incoming.method,
+      headers: incoming.headers }, response => {
+      outgoing.writeHead(response.statusCode, response.headers);
+      response.pipe(outgoing);
+    });
+    upstream.on("error", () => { outgoing.writeHead(502); outgoing.end(); });
+    incoming.pipe(upstream);
+  });
+  const upgrades = new Set();
+  proxy.on("upgrade", (incoming, client, head) => {
+    const upstream = connect(relayPort, "127.0.0.1");
+    upgrades.add(client);
+    client.on("close", () => { upgrades.delete(client); upstream.destroy(); });
+    client.on("error", () => upstream.destroy());
+    upstream.on("error", () => client.destroy());
+    upstream.on("close", () => client.destroy());
+    const headers = [];
+    for (let i = 0; i < incoming.rawHeaders.length; i += 2) headers.push(incoming.rawHeaders[i] + ": " + incoming.rawHeaders[i + 1]);
+    upstream.write([incoming.method + " " + incoming.url + " HTTP/1.1", ...headers, "", ""].join("\r\n"));
+    upstream.write(head);
+    upstream.pipe(client).pipe(upstream);
+  });
+  t.after(() => {
+    for (const socket of upgrades) socket.destroy();
+    proxy.closeAllConnections();
+    return new Promise(resolve => proxy.close(resolve));
+  });
+  proxy.listen(port, "127.0.0.1");
+  await once(proxy, "listening");
+}
+
+for (const variant of ["accepted", "refused", "pictures", "replacement"]) test(variant === "replacement"
+  ? "replacing an invited script stops its pending picture download"
+  : variant === "pictures"
+  ? "a relay invitation hydrates initial pictures and keeps active transfers independent of entry"
+  : variant === "accepted"
+  ? "a browser joins a seeded relay invitation and reopens its retained copy"
+  : "a browser scrubs a rejected invitation without retaining membership", { timeout: 65_000 }, async t => {
+  const accepted = variant !== "refused";
+  const pictures = variant === "pictures" || variant === "replacement" ? [1, 2, 3, 4].map(suffix => {
+    const bytes = Buffer.concat([Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", "base64"), Buffer.from([suffix])]);
+    const ref = imageRecordOf(bytes);
+    assert.ok(ref);
+    return { ref, bytes };
+  }) : [];
+  const kit = serverHarness(t);
+  const port = await freePort();
+  const tls = Boolean(process.env.SPLITPAGE_TEST_TLS_KEY);
+  const relayPort = tls ? await freePort() : port;
+  const origin = (tls ? "https" : "http") + "://127.0.0.1:" + port;
+  const deployment = randomUUID();
+  const shell = join(kit.directory, "shell");
+  const fixture = join(kit.directory, "browser");
+  await Promise.all([mkdir(shell), mkdir(fixture)]);
+  await writeFile(join(shell, "index.html"), build(true));
+  for (const file of ["sw.js", "manifest.webmanifest", "icon.svg", "icon-maskable.svg"]) {
+    await copyFile(new URL("../../../" + file, import.meta.url), join(shell, file));
+  }
+  let state = kit.seed();
+  if (pictures.length) {
+    const source = seedRelaySession();
+    try {
+      const id = source.document().rows[0].id;
+      assert.equal(source.commands.setField({ kind: "gallery", id }, { imageRef: pictures[0].ref }).kind, "written");
+      state = source.encodeState();
+    } finally { source.close(); }
+  }
+  const run = kit.launch({
+    SPLITPAGE_PORT: String(relayPort), SPLITPAGE_ALLOWED_ORIGINS: [origin, ORIGIN].join(","),
+    SPLITPAGE_DEPLOYMENT_ID: deployment, SPLITPAGE_APP_DIR: shell, SPLITPAGE_TEST_REPORT_AUTH: "1"
+  });
+  const script = await run.createScript(randomUUID(), state);
+  const invitation = await run.owner(`scripts/${script}/invitations`, { method: "POST", body: "Browser fixture" });
+  assert.equal(invitation.status, 201);
+  const { id, token } = await invitation.json();
+  if (!accepted) assert.equal((await run.owner("invitations/" + id, { method: "DELETE" })).status, 204);
+  if (tls) await tlsIngress(t, port, relayPort);
+  const target = origin + "/?join=" + script;
+  await writeFile(join(fixture, "invite.html"), `<!doctype html><title>Invitation fixture</title><a id="invite" href="${target}#${token}">Open invitation</a>`);
+  const exactUrl = `location.href===${JSON.stringify(target)}`;
+  const seeded = 'window.__sharedTest?.read().app?.rows[0]?.audioText==="word"';
+  const entry = { deployment, script };
+  const suite = join(kit.directory, "join.txt");
+  const pictureUrl = index => origin + "/api/scripts/" + script + "/pictures/" + pictures[index].ref.sha256;
+  const resources = index => `performance.getEntriesByName(${JSON.stringify(pictureUrl(index))})`;
+  const pending = index => resources(index) + ".some(entry=>entry.responseStatus===404)";
+  const rendered = index => `document.querySelector('#rows .visual-media img[data-blob="${pictures[index].ref.sha256}"]')?.naturalWidth===1`;
+  const replace = `window.__splitpageFormats.openFile(new File([JSON.stringify({schema:2,title:"Separate script",paragraphsDecided:true,rows:[{id:"separate",audioText:"Separate narration"}]})],"separate.splitpage"))`;
+  const reenter = ["open /invite.html", "click #invite", "wait " + exactUrl];
+  const delay = ms => `eval new Promise(resolve=>setTimeout(()=>resolve(true),${ms}))`;
+  const pictureSteps = variant === "replacement" ? [
+    ...reenter,
+    "wait " + pending(0),
+    'eval "publish-initial"',
+    "wait window.__sharedTest.invitationConnected()", "wait " + rendered(0),
+    'eval "show-replacement-reference"',
+    "wait " + pending(3), "eval " + replace,
+    "wait !window.__sharedTest.invitationConnected()&&window.__splitpageFormats.state().title==='Separate script'",
+    "eval window.getCount=" + resources(3) + ".length;true",
+    delay(1_750),
+    "expect window.getCount===" + resources(3) + ".length"
+  ] : variant === "pictures" ? [
+    "open /invite.html", "click #invite", "wait " + exactUrl,
+    "wait " + pending(0),
+    "expect !window.__sharedTest.invitationSettled()&&!(" + seeded + ")",
+    "eval " + replace,
+    "wait window.__sharedTest.invitationSettled()",
+    "expect " + browserExpression(membershipAbsent, deployment + "/" + script),
+    ...reenter,
+    "wait " + pending(0),
+    'eval "publish-initial"',
+    "wait " + seeded, "wait window.__sharedTest.invitationConnected()", "wait " + rendered(0),
+    'eval "verify-single-provider"',
+    delay(15_250),
+    'eval "show-late-reference"',
+    "wait " + pending(1),
+    `wait document.querySelector('#rows .visual-media img[data-blob="${pictures[1]?.ref.sha256}"]')?.alt==="Picture not uploaded yet"`,
+    'eval "publish-late"',
+    "wait " + rendered(1),
+    'eval "show-leave-reference"',
+    "wait " + pending(2),
+    "eval window.__sharedTest.leave()",
+    "wait !window.__sharedTest.invitationConnected()",
+    "expect " + browserExpression(membershipAbsent, deployment + "/" + script),
+    "eval window.getCount=" + resources(2) + ".length;true",
+    delay(1_750),
+    "expect window.getCount===" + resources(2) + ".length"
+  ] : null;
+  await writeFile(suite, (pictureSteps ?? [
+    "open /invite.html",
+    "click #invite",
+    "wait " + exactUrl,
+    "expect history.state===null&&history.length===3",
+    "wait window.__sharedTest?.invitationSettled()",
+    ...(accepted ? ["wait " + seeded, "wait window.__sharedTest.invitationConnected()"] : [
+      "expect !(" + seeded + ")&&!window.__sharedTest.invitationConnected()",
+      "expect " + browserExpression(membershipAbsent, deployment + "/" + script)
+    ]),
+    "eval history.back();true",
+    'wait location.pathname==="/invite.html"',
+    "eval history.forward();true",
+    "wait " + exactUrl,
+    "expect history.state===null",
+    ...(accepted ? [
+      "eval location.reload();true",
+      "wait " + exactUrl + "&&!!window.__sharedTest&&!(" + seeded + ")",
+      "wait " + browserExpression(retainedEntryOpened, entry),
+      "expect " + seeded
+    ] : ["expect " + browserExpression(membershipAbsent, deployment + "/" + script)])
+  ]).join("\n"));
+  let peer;
+  const writeRef = async index => {
+    peer ??= kit.copy(relayPort, undefined, script, token);
+    await kit.until(() => peer.relay.status().firstSyncDone || undefined);
+    const id = peer.session.document().rows[0].id;
+    assert.equal(peer.session.commands.setField({ kind: "gallery", id }, { imageRef: pictures[index].ref }).kind, "written");
+  };
+  const publish = async index => {
+    const response = await fetch(pictureUrl(index), {
+      method: "PUT", headers: { Authorization: "Bearer " + token, "Content-Type": pictures[index].ref.mime },
+      body: new Uint8Array(pictures[index].bytes)
+    });
+    assert.equal(response.status, 201);
+  };
+  const actions = new Map([
+    ["publish-initial", () => publish(0)], ["show-late-reference", () => writeRef(1)],
+    ["publish-late", () => publish(1)], ["show-leave-reference", () => writeRef(2)],
+    ["show-replacement-reference", () => writeRef(3)],
+    ["verify-single-provider", async () => {
+      const status = await (await run.owner("status")).json();
+      assert.equal(status.connections.authenticated, 1);
+    }]
+  ]);
+  for (const marker of actions.keys()) if (!pictureSteps?.includes(`eval "${marker}"`)) actions.delete(marker);
+  let result;
+  let actionFailure;
+  try {
+    const running = exec(process.execPath, [driver, "--script", suite, "--port", "0", "--cdp-port", String(await freePort()),
+      "--root", fixture, "--shot-dir", kit.directory, "--log-console"], { timeout: 55_000, signal: t.signal });
+    let updates = Promise.resolve();
+    let seen = "";
+    running.child.stdout.on("data", chunk => {
+      if (!pictures.length) return;
+      seen += chunk;
+      for (const [marker, action] of actions) {
+        if (!seen.split(/\r?\n/).includes(marker)) continue;
+        actions.delete(marker);
+        updates = updates.then(action);
+        void updates.catch(error => { actionFailure = error; running.child.kill(); });
+      }
+    });
+    result = await running;
+    await updates;
+    if (pictures.length) assert.equal(actions.size, 0);
+  } catch (error) {
+    result = error;
+  }
+  let logs;
+  try {
+    await run.stop("clean");
+  } finally {
+    logs = [result.stdout, result.stderr, run.output(), run.errors()].join("\n");
+    assert.equal(logs.includes(token), false, "captured browser and relay logs exclude the token");
+  }
+  if (actionFailure) throw actionFailure;
+  assert.ok(!result.code && !result.killed, logs);
+  assert.match(result.stdout, /RESULT: \d+\/\d+ checks passed/);
+  assert.ok(run.messages.filter(message => message === "authentication-attempted").length >= (accepted ? 2 : 1));
+  if (!accepted) assert.match(result.stdout, /Could not open the shared invitation/);
+});

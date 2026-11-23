@@ -34,6 +34,7 @@ function parseArgs(argv) {
       case "chrome": out.chrome = argv[++i]; break;
       case "bind": out.bind = argv[++i]; break;
       case "headed": out.headed = true; break;
+      case "log-console": out.logConsole = true; break;
       case "freezecaches": case "freeze-caches": out.freezeCaches = true; break;
       case "documentguard": case "document-guard": out.documentGuard = true; break;
       case "h": case "help":
@@ -251,6 +252,7 @@ let ws = null;
 let msgId = 0;
 const pending = new Map();
 const consoleLines = [];
+const capturedConsole = [];
 
 async function connectCdp() {
   if (ws) return;
@@ -282,11 +284,14 @@ async function connectCdp() {
       return;
     }
     if (msg.method === "Runtime.consoleAPICalled") {
+      if (opts.logConsole) capturedConsole.push(JSON.stringify(msg.params));
       const a = (msg.params.args || []).map((x) => (x.value !== undefined ? String(x.value) : x.description)).join(" ");
       consoleLines.push(`${msg.params.type}: ${a}`);
     } else if (msg.method === "Runtime.exceptionThrown") {
+      if (opts.logConsole) capturedConsole.push(JSON.stringify(msg.params));
       consoleLines.push(`exception: ${msg.params.exceptionDetails?.exception?.description}`);
     } else if (msg.method === "Log.entryAdded") {
+      if (opts.logConsole) capturedConsole.push(JSON.stringify(msg.params));
       consoleLines.push(`${msg.params.entry.level}: ${msg.params.entry.text}`);
     } else if (msg.method === "Tracing.dataCollected" && tracing) {
       for (const event of msg.params.value) tracing.events.push(event);
@@ -759,6 +764,7 @@ async function main() {
     out1(`ERROR: ${e.message}`);
     exit = 1;
   } finally {
+    if (opts.logConsole) for (const line of capturedConsole) out1(line);
     try { ws?.close(); } catch {}
     if (browserProc) { try { browserProc.kill("SIGKILL"); } catch {} }
     sweepBrowsers(userDataDir);

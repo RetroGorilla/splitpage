@@ -57,6 +57,7 @@ async function main(): Promise<void> {
   const temp = mkdtempSync(join(tmpdir(), "splitpage-relay-smoke-"));
   const managementSecret = randomBytes(32).toString("base64url");
   const wrongSecret = randomBytes(32).toString("base64url");
+  const deployment = randomUUID();
   const envFile = join(temp, "relay.env");
   const relays: ReturnType<typeof openNativeRelay>[] = [];
   const sockets: WebSocket[] = [];
@@ -107,6 +108,7 @@ async function main(): Promise<void> {
       "TMPDIR=/tmp",
       `SPLITPAGE_ALLOWED_ORIGINS=${ORIGIN}`,
       `SPLITPAGE_MANAGEMENT_SECRET=${managementSecret}`,
+      `SPLITPAGE_DEPLOYMENT_ID=${deployment}`,
       "SPLITPAGE_STORE_DEBOUNCE_MS=40",
       "SPLITPAGE_STORE_MAX_DEBOUNCE_MS=100",
       "SPLITPAGE_BACKUP_KEEP=2",
@@ -137,6 +139,33 @@ async function main(): Promise<void> {
 
     const baseHttpA = `http://127.0.0.1:${portA}`;
     const wsUrlA = `ws://127.0.0.1:${portA}`;
+    const shell = await fetch(baseHttpA + "/");
+    assert.equal(shell.status, 200);
+    assert.equal(shell.headers.get("content-type"), "text/html; charset=utf-8");
+    assert.equal(shell.headers.get("splitpage-deployment"), deployment);
+    assert.equal(shell.headers.get("cache-control"), "no-cache");
+    const html = await shell.text();
+    assert.match(html, /<title>Splitpage<\/title>/i);
+    assert.match(html, /id="state-data"/);
+    assert.equal(html.includes("{{SEED_STATE}}"), false);
+    const shellHead = await fetch(baseHttpA + "/index.html", { method: "HEAD" });
+    assert.equal(shellHead.status, 200);
+    assert.equal(shellHead.headers.get("splitpage-deployment"), deployment);
+    assert.equal(Number(shellHead.headers.get("content-length")), Buffer.byteLength(html));
+    assert.equal(await shellHead.text(), "");
+
+    for (const [path, contentType, marker] of [
+      ["/sw.js", "text/javascript; charset=utf-8", /splitpage-\d/],
+      ["/manifest.webmanifest", "application/manifest+json", /"name"\s*:\s*"Splitpage"/i],
+      ["/icon.svg", "image/svg+xml", /<svg\b/],
+      ["/icon-maskable.svg", "image/svg+xml", /<svg\b/]
+    ] as const) {
+      const asset = await fetch(baseHttpA + path);
+      assert.equal(asset.status, 200, path);
+      assert.equal(asset.headers.get("content-type"), contentType, path);
+      assert.equal(asset.headers.get("splitpage-deployment"), null, path);
+      assert.match(await asset.text(), marker, path);
+    }
 
     async function ownerFetch(baseHttp: string, path: string, init: RequestInit = {}, secret: string | null = managementSecret) {
       const headers = new Headers(init.headers);

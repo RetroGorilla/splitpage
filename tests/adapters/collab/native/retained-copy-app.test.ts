@@ -6,7 +6,7 @@ import { IDBObjectStore } from "fake-indexeddb";
 import { refsIn } from "../../../../shared/blob-policy.ts";
 import { bootApp, closeApp, rewireRunningApp } from "../../../../src/test/_app-boot.mjs";
 import { DB_NAME, REPLICAS, seedSession, STORE_OPTIONS, storedEntries, typeAt, type OpenReplica } from "./local-store-fixture.ts";
-import { idbResult } from "./indexeddb-fixture.ts";
+import { eventResult, idbResult } from "./indexeddb-fixture.ts";
 import { createBrowserNativeLocalStore } from "../../../../src/adapters/collab/native/browser-local-store.ts";
 import type { RetainedSharedScript } from "../../../../src/bootstrap/wiring/retained-shared-script.ts";
 import type { SharedSwitchOutcome } from "../../../../src/bootstrap/wiring/shared-session.ts";
@@ -21,7 +21,7 @@ import { NAME, serverHarness } from "./server-harness.ts";
 
 function hook() {
   return (window as unknown as { __sharedTest: {
-    enterRetained: (entry: RetainedSharedScript) => Promise<SharedSwitchOutcome>;
+    enterRetained: (entry: RetainedSharedScript, signal?: AbortSignal) => Promise<SharedSwitchOutcome>;
     leave: () => SharedSwitchOutcome | Promise<SharedSwitchOutcome>;
   } }).__sharedTest;
 }
@@ -150,10 +150,13 @@ test("a retained invitation gets its first state from the existing relay provide
   kit.seed();
   const port = await kit.launch().port();
   const token = kit.invitation().token;
+  const connected = eventResult<undefined>();
   assert.deepEqual(await hook().enterRetained({
     deployment: "live-relay", script: NAME,
-    relayUrl: "ws://127.0.0.1:" + port, invitation: { token }, signal: t.signal
+    relayUrl: "ws://127.0.0.1:" + port, invitation: { token }, signal: t.signal,
+    onRelayConnected: ready => { if (ready) connected.resolve(undefined); }
   }), ok);
+  await connected.promise;
   assert.equal(await currentText(), "word");
   assert.deepEqual(await hook().leave(), ok);
 });
@@ -173,7 +176,7 @@ test("a stalled first sync can be cancelled without retaining the invitation", {
   });
   await kit.until(() => run.messages.includes("loading") || undefined);
   cancel.abort();
-  assert.deepEqual(await joining, { ok: false, reason: "enter-failed" });
+  assert.deepEqual(await joining, { ok: false, reason: "opening-pending" });
   const copy = await openAfterCancelledJoin(deployment + "/" + NAME, t.signal);
   assert.equal(copy.kind, "opened");
   try { assert.equal(await copy.membership?.token(), null); }
@@ -217,7 +220,7 @@ test("cancelling a real relay join waiting for a picture preserves the previous 
   });
   while (!wasPending) await delay(10, undefined, { signal: t.signal });
   cancel.abort();
-  assert.deepEqual(await joining, { ok: false, reason: "enter-failed" });
+  assert.deepEqual(await joining, { ok: false, reason: "opening-pending" });
   const member = await openAfterCancelledJoin(scope, t.signal);
   assert.equal(member.kind, "opened");
   try { assert.equal(await member.membership?.token(), previous); }
@@ -361,6 +364,192 @@ test("a refused entry leaves storage untouched and an interrupted membership tra
   assert.deepEqual(await hook().enterRetained({ ...entry, invitation: credential }), ok);
   assert.deepEqual(await hook().leave(), ok);
 });
+
+test("a competing opening settles an invitation while draft flush is held", { timeout: 5000 }, async t => {
+  const { draftRecoveryPorts } = await import("../../../../src/bootstrap/wiring/drafts.ts");
+  const { documentSources, openDocument } = await import("../../../../src/bootstrap/wiring/transition-owners.ts");
+  const { sessionEntryRefusal } = await import("../../../../src/bootstrap/wiring/session-owner.ts");
+  const reached = eventResult<undefined>(), release = eventResult<{ ok: true }>();
+  const flush = t.mock.method(draftRecoveryPorts().drafts, "flush", () => {
+    reached.resolve(undefined);
+    return release.promise;
+  });
+  const entry = identity("cancel-flush");
+  const connect = t.mock.fn(() => () => {});
+  const pending = hook().enterRetained({ ...entry, invitation: invitation(), connect });
+  await reached.promise;
+  const unregister = documentSources().register({ id: "cancel-invitation", takes: opening => opening.kind === "cancel-invitation", open: () => true });
+  try { assert.equal(await openDocument({ kind: "cancel-invitation" }), true); }
+  finally { unregister(); }
+  assert.equal((await pending).ok, false);
+  assert.equal(sessionEntryRefusal(), null);
+  flush.mock.restore();
+  assert.deepEqual(await hook().enterRetained({ ...entry, invitation: invitation() }), ok);
+  release.resolve({ ok: true });
+  assert.deepEqual(await hook().leave(), ok);
+  assert.equal(connect.mock.callCount(), 0);
+});
+
+test("stopping the app settles entry while storage opens and the late lease closes independently", { timeout: 5000 }, async t => {
+  const entry = identity("cancel-open");
+  const factory = window.indexedDB, open = factory.open.bind(factory);
+  const reached = eventResult<undefined>(), release = eventResult<undefined>();
+  const gate = t.mock.method(factory, "open", (name: string, version?: number) => {
+    const request = open(name, version);
+    if (name === DB_NAME) request.addEventListener("success", event => {
+      const success = request.onsuccess;
+      request.onsuccess = null;
+      reached.resolve(undefined);
+      void release.promise.then(() => { success?.call(request, event); });
+    });
+    return request;
+  });
+  const connect = t.mock.fn(() => () => {});
+  const pending = hook().enterRetained({ ...entry, invitation: invitation(), connect });
+  await reached.promise;
+  gate.mock.restore();
+  await rewireRunningApp({});
+  await finishStartup();
+  assert.equal((await pending).ok, false);
+  const next = identity("entry-after-stop");
+  assert.deepEqual(await hook().enterRetained({ ...next, invitation: invitation() }), ok);
+  release.resolve(undefined);
+  const name = scope(entry.script);
+  await navigator.locks.request(DB_NAME + ":" + name, () => {});
+  assert.equal(connect.mock.callCount(), 0);
+  assert.deepEqual(await storedEntries(factory, name), []);
+  const replica = await createBrowserNativeLocalStore().open(name, STORE_OPTIONS);
+  assert.equal(replica.kind, "opened");
+  assert.equal(await replica.membership?.token(), null);
+  replica.session.close();
+  await replica.closed;
+  assert.deepEqual(await hook().leave(), ok);
+});
+
+for (const phase of ["success", "complete"] as const) test(`cancellation at membership ${phase} leaves no credential`, { timeout: 5000 }, async t => {
+  const entry = identity("cancel-write");
+  const cancellation = new AbortController();
+  const put = IDBObjectStore.prototype.put;
+  const reached = eventResult<undefined>();
+  const gate = t.mock.method(IDBObjectStore.prototype, "put", function (this: IDBObjectStore, value: unknown, key?: IDBValidKey) {
+    const request = put.call(this, value, key);
+    const target = phase === "success" ? request : this.transaction;
+    if (this.name === "invitations" && key === scope(entry.script)) target.addEventListener(phase, () => {
+      reached.resolve(undefined);
+      cancellation.abort();
+    });
+    return request;
+  });
+  const connect = t.mock.fn(() => () => {});
+  const pending = hook().enterRetained({ ...entry, invitation: invitation(), connect }, cancellation.signal);
+  await reached.promise;
+  assert.equal((await pending).ok, false);
+  gate.mock.restore();
+  assert.equal((await hook().enterRetained(entry)).ok, false);
+  assert.deepEqual(await storedEntries(window.indexedDB, scope(entry.script)), []);
+  assert.equal(connect.mock.callCount(), 0);
+});
+
+test("a cancelled invitation waiting for the previous writer to close leaves that writer's data intact", { timeout: 5000 }, async t => {
+  const entry = identity("cancel-prior-close"), credential = invitation(), opened = capture();
+  assert.deepEqual(await hook().enterRetained({ ...entry, invitation: credential, connect: opened.connect }), ok);
+  const replica = opened.replica();
+  await replica.flush();
+  const reached = eventResult<undefined>(), release = eventResult<undefined>();
+  const add = IDBObjectStore.prototype.add;
+  const gate = t.mock.method(IDBObjectStore.prototype, "add", function (this: IDBObjectStore, value: unknown, key?: IDBValidKey) {
+    const request = add.call(this, value, key);
+    if (this.name === REPLICAS) {
+      const tx = this.transaction;
+      tx.addEventListener("complete", event => {
+        const complete = tx.oncomplete;
+        tx.oncomplete = null;
+        reached.resolve(undefined);
+        void release.promise.then(() => { complete?.call(tx, event); });
+      });
+    }
+    return request;
+  });
+  typeAt(replica.session, 0, "Finishing writer: ");
+  await reached.promise;
+  gate.mock.restore();
+  await rewireRunningApp({});
+  await finishStartup();
+  assert.deepEqual(await createBrowserNativeLocalStore().open(scope(entry.script), STORE_OPTIONS), { kind: "failed", reason: "locked" });
+  const connect = t.mock.fn(() => () => {});
+  const deadline = AbortSignal.timeout(10);
+  const keepClockRunning = setTimeout(() => {}, 100);
+  try {
+    assert.equal((await hook().enterRetained({ ...entry, invitation: invitation(), connect }, deadline)).ok, false);
+    assert.equal(deadline.aborted, true);
+  } finally {
+    clearTimeout(keepClockRunning);
+    release.resolve(undefined);
+  }
+  await replica.closed;
+  const reopened = capture();
+  assert.deepEqual(await hook().enterRetained({ ...entry, connect: reopened.connect }), ok);
+  assert.equal((await reopened.replica().membership?.token()) === credential.token, true);
+  assert.match(await currentText(), /Finishing writer: Retained narration/);
+  assert.equal(connect.mock.callCount(), 0);
+  assert.deepEqual(await hook().leave(), ok);
+});
+
+for (const retained of [false, true]) {
+  test(`cancellation during membership preparation preserves the ${retained ? "retained" : "fresh"} copy`, { timeout: 5000 }, async t => {
+    const entry = identity(retained ? "cancel-retained" : "cancel-fresh");
+    const original = invitation(), incoming = invitation();
+    const store = createBrowserNativeLocalStore();
+    const name = scope(entry.script);
+    if (retained) {
+      const opened = capture();
+      assert.deepEqual(await hook().enterRetained({ ...entry, invitation: original, connect: opened.connect }), ok);
+      typeAt(opened.replica().session, 0, "Previous writer: ");
+      await opened.replica().flush();
+      await rewireRunningApp({});
+      await finishStartup();
+      await opened.replica().closed;
+    }
+    const previous = await storedEntries(window.indexedDB, name);
+    const reached = eventResult<undefined>(), release = eventResult<undefined>();
+    const get = IDBObjectStore.prototype.get;
+    const gate = t.mock.method(IDBObjectStore.prototype, "get", function (this: IDBObjectStore, key: IDBValidKey | IDBKeyRange) {
+      const request = get.call(this, key);
+      if (this.name === "invitations" && key === name) {
+        const tx = this.transaction;
+        tx.addEventListener("complete", event => {
+          const complete = tx.oncomplete;
+          tx.oncomplete = null;
+          reached.resolve(undefined);
+          void release.promise.then(() => { complete?.call(tx, event); });
+        });
+      }
+      return request;
+    });
+    const cancellation = new AbortController();
+    const connect = t.mock.fn(() => () => {});
+    const pending = hook().enterRetained({ ...entry, invitation: incoming, connect }, cancellation.signal);
+    await reached.promise;
+    cancellation.abort();
+    assert.equal((await pending).ok, false);
+    gate.mock.restore();
+    release.resolve(undefined);
+    const database = await idbResult(window.indexedDB.open(DB_NAME));
+    try {
+      const tx = database.transaction(["memberships", "invitations"]);
+      const [member, token] = await Promise.all(["memberships", "invitations"].map(key => idbResult(tx.objectStore(key).get(name))));
+      assert.equal(member, retained ? true : undefined);
+      assert.equal(token === (retained ? original.token : undefined), true);
+    } finally { database.close(); }
+    assert.deepEqual(await storedEntries(window.indexedDB, name), previous);
+    assert.equal(connect.mock.callCount(), 0);
+    if (!retained) assert.equal((await hook().enterRetained(entry)).ok, false);
+    assert.deepEqual(await hook().enterRetained(retained ? entry : { ...entry, invitation: original }), ok);
+    assert.match(await currentText(), retained ? /Previous writer: Retained narration/ : /Retained narration/);
+    assert.deepEqual(await hook().leave(), ok);
+    assert.deepEqual(await store.delete(name), { kind: "stored" });
+  });
+}
 
 for (const target of ["browser", "desktop"] as const) {
   test("persistent " + target + " storage failure keeps editing, switch and close safe", async t => {
