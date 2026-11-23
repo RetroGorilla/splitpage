@@ -1,4 +1,5 @@
 import { stopNativeCaretWait } from "./native-switch-caret.ts";
+import { waitDuringLifetime } from "../startup/page-lifetime.ts";
 import type { CommandOutcome, DocumentStructureIntent } from "../../application/session/document-session.ts";
 import { createSessionCapabilities } from "../../application/session/capabilities.ts";
 import type { CapabilityPort, ReportPort, TimerPort } from "../../application/session/ports.ts";
@@ -139,14 +140,18 @@ function failed(ports: SharedSwitchPorts, faults: Faults, reason: string): Share
   return { ok: false, reason };
 }
 
-export async function enterSharedSession(ports: SharedSwitchPorts, open: OpenBackend): Promise<SharedSwitchOutcome> {
+export async function enterSharedSession(ports: SharedSwitchPorts, open: OpenBackend, signal?: AbortSignal): Promise<SharedSwitchOutcome> {
   const holdReason = sessionEntryRefusal();
   if (holdReason) return { ok: false, reason: holdReason };
-  const release = holdSessionCommands(SHARED_SWITCHING, "entries");
-  try { return await enterAvailableSession(ports, release, open); } finally { release(); }
+  // why: document opening must remain available during invitation preparation so it can supersede the invitation
+  let release = signal ? undefined : holdSessionCommands(SHARED_SWITCHING, "entries");
+  const releaseEntries = () => { release?.(); };
+  const holdEntries = () => { release ??= holdSessionCommands(SHARED_SWITCHING, "entries"); };
+  try { return await enterAvailableSession(ports, releaseEntries, open, signal, holdEntries); } finally { releaseEntries(); }
 }
 
-async function enterAvailableSession(ports: SharedSwitchPorts, releaseEntries: () => void, open: OpenBackend): Promise<SharedSwitchOutcome> {
+async function enterAvailableSession(ports: SharedSwitchPorts, releaseEntries: () => void, open: OpenBackend,
+  signal: AbortSignal | undefined, holdEntries: () => void): Promise<SharedSwitchOutcome> {
   const faults = new Faults();
   const first = refusedNow(ports, faults);
   if (first) return failed(ports, faults, first);
@@ -155,9 +160,20 @@ async function enterAvailableSession(ports: SharedSwitchPorts, releaseEntries: (
   await Promise.resolve();
   if (ports.prepare) {
     let prepared: string | null;
-    try { prepared = await ports.prepare(); } catch (error) { faults.errors.push(error); return failed(ports, faults, SHARED_ENTER_FAILED); }
+    try {
+      signal?.throwIfAborted();
+      const work = ports.prepare();
+      prepared = await (signal ? waitDuringLifetime(work, signal) : work);
+    } catch (error) {
+      if (signal?.aborted) return { ok: false, reason: "opening-pending" };
+      faults.errors.push(error);
+      return failed(ports, faults, SHARED_ENTER_FAILED);
+    }
     if (prepared) return failed(ports, faults, prepared);
   }
+  if (signal?.aborted) return { ok: false, reason: "opening-pending" };
+  if (signal && sessionEntryRefusal()) return { ok: false, reason: SHARED_SWITCHING };
+  holdEntries();
   const second = refusedNow(ports, faults);
   if (second) return failed(ports, faults, second);
   const current = currentDocument();

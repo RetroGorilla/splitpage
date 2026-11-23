@@ -58,6 +58,12 @@ export interface NativeLocalStore {
 export interface NativeReplicaMembership {
   readonly token: () => Promise<string | null>;
   readonly join: (token: string) => Promise<void>;
+  readonly stageInvitation?: (token: string, previous: string | null, signal: AbortSignal) => Promise<NativeInvitationStage>;
+}
+
+export interface NativeInvitationStage {
+  readonly commit: () => void;
+  readonly rollback: () => Promise<void>;
 }
 
 export interface NativeReplicaConnection {

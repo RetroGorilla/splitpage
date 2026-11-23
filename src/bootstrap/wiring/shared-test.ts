@@ -27,6 +27,7 @@ import { openNativeRelay } from "../../adapters/collab/native/relay.ts";
 import { sanitizeHtml } from "../richtext.ts";
 import { captureDocumentOpeningLifetime } from "./transition-owners.ts";
 import { waitDuringLifetime } from "../startup/page-lifetime.ts";
+import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 
 declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 declare let splitpageInvitation: { readonly script: string; readonly token: string } | null;
@@ -135,7 +136,7 @@ function startSharedTestHook(): () => void {
         opening: openingStatus
       };
       const opened: { session?: ReturnType<typeof openNativeEditor>["native"] } = {};
-      const result = retained ? await enterRetainedSharedScript(entering, retained) : await enterSharedSession(entering, (doc, failedClose) => {
+      const result = retained ? await enterRetainedSharedScript(entering, retained, signal) : await enterSharedSession(entering, (doc, failedClose) => {
         const { backend, native } = openNativeEditor(entering, doc, failedClose, stored);
         opened.session = native;
         return backend;
@@ -211,7 +212,13 @@ function startSharedTestHook(): () => void {
     enter: () => enter(),
     enterFrom: (state: string | Uint8Array | ArrayBuffer) => enter(sharedTestBytes(state)),
     leave,
-    enterRetained: (retained: RetainedSharedScript) => enter(undefined, retained),
+    enterRetained: (retained: RetainedSharedScript, cancellation?: AbortSignal) => {
+      if (!live || desktopPort()) return enter(undefined, retained);
+      const opening = captureDocumentOpeningLifetime();
+      return enter(undefined, retained, AbortSignal.any([
+        invitationLifetime.signal, opening.signal, ...(cancellation ? [cancellation] : [])
+      ]));
+    },
     invitationConnected: () => invitationConnected,
     invitationSettled: () => invitationSettled,
     nativePeer: {

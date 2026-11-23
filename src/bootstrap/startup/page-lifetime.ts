@@ -1,15 +1,16 @@
 export const SERVICE_WORKER_URL = "sw.js";
 
-export async function waitDuringLifetime(work: PromiseLike<unknown>, signal: AbortSignal): Promise<void> {
-  signal.throwIfAborted();
+export async function waitDuringLifetime<T>(work: PromiseLike<T>, signal: AbortSignal): Promise<T> {
   let cancel = (): void => {};
   const stopped = new Promise<never>((_, reject) => {
     cancel = () => { reject(new Error("The operation was cancelled.")); };
     signal.addEventListener("abort", cancel, { once: true });
   });
   try {
-    await Promise.race([work, stopped]);
+    if (signal.aborted) cancel();
+    const result = await Promise.race([work, stopped]);
     signal.throwIfAborted();
+    return result;
   } finally {
     signal.removeEventListener("abort", cancel);
   }
