@@ -20,6 +20,8 @@ import { currentHome, documentLocation, setHome } from "./location-owner.ts";
 import { openNativeEditor } from "./native-shared-session.ts";
 import { createNativeTestPeer } from "./shared-native-test-peer.ts";
 import { stopNativeCaretWait } from "./native-switch-caret.ts";
+import { enterRetainedSharedScript, leaveRetainedSharedScript, retainedSharedScriptActive } from "./retained-shared-script.ts";
+import type { RetainedSharedScript } from "./retained-shared-script.ts";
 
 declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
@@ -87,7 +89,7 @@ function startSharedTestHook(): () => void {
     const marks = landed && kept ? [() => { noteSaveChange(); }, () => { noteDraftChange(); }] : [];
     runEvery([() => { ending?.dispose(); }, ...(kept ? [() => { draftSource.resumeWriting(); }] : []), ...marks]);
   };
-  const enter = async (stored?: Uint8Array): Promise<SharedSwitchOutcome> => {
+  const enter = async (stored?: Uint8Array, retained?: RetainedSharedScript): Promise<SharedSwitchOutcome> => {
     if (!live) return { ok: false, reason: APP_STOPPED };
     if (switching) return { ok: false, reason: SHARED_SWITCHING };
     if (sharedSession()) return { ok: false, reason: SHARED_ALREADY };
@@ -126,13 +128,13 @@ function startSharedTestHook(): () => void {
         opening: openingStatus
       };
       const opened: { session?: ReturnType<typeof openNativeEditor>["native"] } = {};
-      const result = await enterSharedSession(entering, (doc, failedClose) => {
+      const result = retained ? await enterRetainedSharedScript(entering, retained) : await enterSharedSession(entering, (doc, failedClose) => {
         const { backend, native } = openNativeEditor(entering, doc, failedClose, stored);
         opened.session = native;
         return backend;
       });
-      if (result.ok && opened.session && sharedSession()) {
-        nativePeer = createNativeTestPeer(opened.session);
+      if (result.ok && sharedSession()) {
+        if (opened.session) nativePeer = createNativeTestPeer(opened.session);
         return result;
       }
       if (result.ok) return { ok: false, reason: APP_STOPPED };
@@ -145,16 +147,19 @@ function startSharedTestHook(): () => void {
       return result;
     } finally { switching = false; }
   };
-  const leave = (): SharedSwitchOutcome => {
+  const leave = (): SharedSwitchOutcome | Promise<SharedSwitchOutcome> => {
+    if (!live) return { ok: false, reason: APP_STOPPED };
     if (switching) return { ok: false, reason: SHARED_SWITCHING };
     if (!sharedSession()) return { ok: false, reason: SHARED_NOT_RUNNING };
     switching = true;
+    if (retainedSharedScriptActive()) return leaveRetainedSharedScript().finally(() => { switching = false; });
     try { return leaveRunningSharedSession(); } finally { switching = false; }
   };
   const hook = {
     enter: () => enter(),
     enterFrom: (state: string | Uint8Array | ArrayBuffer) => enter(sharedTestBytes(state)),
     leave,
+    enterRetained: (retained: RetainedSharedScript) => enter(undefined, retained),
     nativePeer: {
       type: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["type"]>) => nativePeer?.type(...args),
       field: (...args: Parameters<NonNullable<typeof nativePeer>["field"]>) => nativePeer?.field(...args),

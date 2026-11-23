@@ -135,6 +135,8 @@ const CALLS: Partial<Record<DesktopMember, Call>> = {
   blobGet: { args: ["sha"], direction: "invoke", channel: "splitpage:blob-get" },
   blobMissing: { args: [["a", "b"]], direction: "invoke", channel: "splitpage:blob-missing" },
   printToPdf: { args: ["<!doctype html>"], direction: "invoke", channel: "splitpage:print-to-pdf" },
+  nativeReplica: { args: [["write", "deployment/script", "a".repeat(32), 1, false, new Uint8Array([0, 0])]],
+    direction: "invoke", channel: "splitpage:native-replica" },
   getSessionInfo: { args: [], direction: "invoke", channel: "splitpage:get-session-info" },
   openExternal: { args: ["https://example.com/"], direction: "send", channel: "splitpage:open-external" },
   setTheme: { args: ["dark"], direction: "send", channel: "splitpage:set-theme" },

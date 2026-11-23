@@ -114,8 +114,14 @@ function connectionFor(
   return {
     forget: () => erase(database, name),
     membership: {
-      token: () => transaction(database, [INVITATIONS], "readonly", tx => tx.objectStore(INVITATIONS).get(name))
-        .then(token => typeof token === "string" ? token : null),
+      async token() {
+        let member: IDBRequest | undefined;
+        const token: unknown = await transaction(database, [MEMBERSHIPS, INVITATIONS], "readonly", tx => {
+          member = tx.objectStore(MEMBERSHIPS).get(name);
+          return tx.objectStore(INVITATIONS).get(name);
+        });
+        return member?.result === true && typeof token === "string" ? token : null;
+      },
       async join(token) {
         await transaction(database, [MEMBERSHIPS, INVITATIONS], "readwrite", tx => {
           tx.objectStore(MEMBERSHIPS).put(true, name);

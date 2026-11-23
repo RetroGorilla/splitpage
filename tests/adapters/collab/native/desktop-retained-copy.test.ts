@@ -1,27 +1,16 @@
 
 import assert from "node:assert/strict";
-import { createCipheriv, createDecipheriv, createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { readFile, readdir } from "node:fs/promises";
 import { join } from "node:path";
 import { test } from "node:test";
-import { desktopFixture, replicasAt } from "./desktop-local-store-fixture.ts";
+import { desktopFixture, desktopTestCipher, replicaFileFaults, replicasAt } from "./desktop-local-store-fixture.ts";
 import { seedReplica, STORE_OPTIONS } from "./local-store-fixture.ts";
 
 test("desktop keeps encrypted membership with its scoped replica across a restart and removes both on leave", async t => {
   const { directory } = await desktopFixture(t);
   const key = randomBytes(32);
-  const cipher = {
-    encrypt(token: string) {
-      const iv = randomBytes(12);
-      const encryption = createCipheriv("aes-256-gcm", key, iv);
-      return Buffer.concat([iv, encryption.update(token, "utf8"), encryption.final(), encryption.getAuthTag()]);
-    },
-    decrypt(bytes: Buffer) {
-      const decryption = createDecipheriv("aes-256-gcm", key, bytes.subarray(0, 12));
-      decryption.setAuthTag(bytes.subarray(-16));
-      return Buffer.concat([decryption.update(bytes.subarray(12, -16)), decryption.final()]).toString("utf8");
-    }
-  };
+  const cipher = desktopTestCipher(key);
   const main = replicasAt(directory, undefined, cipher);
   const first = main.window().store, second = main.window().store;
   const name = "deployment/script";
@@ -61,4 +50,34 @@ test("desktop keeps encrypted membership with its scoped replica across a restar
   assert.deepEqual(kept.session.encodeState(), replacementState);
   kept.session.close();
   await kept.closed;
+});
+
+test("interrupted desktop membership replacement and erase preserve the previous copy", async t => {
+  const { directory } = await desktopFixture(t);
+  const disk = replicaFileFaults();
+  const cipher = desktopTestCipher(randomBytes(32));
+  const name = "deployment/interrupted-script";
+  const original = randomBytes(32).toString("base64url");
+  const store = replicasAt(directory, disk.fileSystem, cipher).window().store;
+  const first = await store.open(name, STORE_OPTIONS);
+  assert.equal(first.kind, "opened");
+  assert.ok(first.membership);
+  await first.membership.join(original);
+  seedReplica(first.session, { A: "Kept copy" });
+  assert.equal((await first.flush()).kind, "stored");
+  const state = first.session.encodeState();
+  disk.intercept("membership.new:rename", async () => { throw new Error("interrupted"); });
+  await assert.rejects(first.membership.join(randomBytes(32).toString("base64url")), /Could not save shared membership/);
+  const hash = createHash("sha256").update(name).digest("hex");
+  disk.intercept(hash + ":rename", async () => { throw new Error("interrupted"); });
+  const discarded = first.discardOnClose?.();
+  first.session.close();
+  assert.equal(await discarded, false);
+  const restarted = replicasAt(directory, undefined, cipher).window().store;
+  const copy = await restarted.open(name, STORE_OPTIONS);
+  assert.equal(copy.kind, "opened");
+  try {
+    assert.equal((await copy.membership?.token()) === original, true);
+    assert.deepEqual(copy.session.encodeState(), state);
+  } finally { copy.session.close(); await copy.closed; }
 });

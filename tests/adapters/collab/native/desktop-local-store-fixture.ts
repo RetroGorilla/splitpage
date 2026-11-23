@@ -1,3 +1,4 @@
+import { createCipheriv, createDecipheriv, randomBytes } from "node:crypto";
 import assert from "node:assert/strict";
 import { EventEmitter } from "node:events";
 import * as disk from "node:fs/promises";
@@ -15,6 +16,21 @@ const { createNativeReplicaIpc }: { createNativeReplicaIpc: typeof CreateReplica
 
 class Renderer extends EventEmitter {
   isDestroyed(): boolean { return false; }
+}
+
+export function desktopTestCipher(key: Buffer) {
+  return {
+    encrypt(token: string) {
+      const iv = randomBytes(12);
+      const encryption = createCipheriv("aes-256-gcm", key, iv);
+      return Buffer.concat([iv, encryption.update(token, "utf8"), encryption.final(), encryption.getAuthTag()]);
+    },
+    decrypt(bytes: Buffer) {
+      const decryption = createDecipheriv("aes-256-gcm", key, bytes.subarray(0, 12));
+      decryption.setAuthTag(bytes.subarray(-16));
+      return Buffer.concat([decryption.update(bytes.subarray(12, -16)), decryption.final()]).toString("utf8");
+    }
+  };
 }
 
 export function replicasAt(userData: string, fs?: NativeReplicaFileSystem, cipher?: Parameters<typeof createNativeReplicaIpc>[2]) {

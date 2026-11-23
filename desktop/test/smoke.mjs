@@ -2825,6 +2825,55 @@ async function caseDuplicateDocIdAcrossTabs(target, fixturesDir) {
   }
 }
 
+async function caseNativeReplicaKeyStore(target) {
+  const tag = target.name + " native replica OS key store";
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-replica-"));
+  const name = "local-fixture/key-store";
+  const credential = crypto.randomBytes(32).toString("base64url");
+  const digest = crypto.createHash("sha256").update(credential).digest();
+  const directory = path.join(userDataDir, "native-replicas", crypto.createHash("sha256").update(name).digest("hex"));
+  let app;
+  const logs = [];
+  async function call(action) {
+    const expression = "(async function (name, credential) { try { " +
+      "const invoke = request => window.splitpageDesktop.nativeReplica(request); " +
+      "const opened = await invoke(['open', name]); if (opened.kind !== 'opened') return false; " +
+      "const lease = opened.lease; try { " + action +
+      " } finally { await invoke(['close', name, lease]); } " +
+      "} catch { return false; } })(" + JSON.stringify(name) + ", " + JSON.stringify(credential) + ")";
+    return evalPage(app.cdp, expression);
+  }
+  try {
+    app = await launchApp(target, { label: "native-replica-first", userDataDir });
+    await waitForRows(app.cdp);
+    const joined = await call("return (await invoke(['join', name, lease, credential])).kind === 'stored' && " +
+      "(await invoke(['write', name, lease, 1, false, new Uint8Array([0, 0])])).kind === 'stored';");
+    record(tag + ": production IPC writes membership and replica", joined === true);
+    if (!joined) return;
+    const encrypted = fs.readFileSync(path.join(directory, "membership"));
+    record(tag + ": membership file contains ciphertext", !encrypted.includes(credential) && !encrypted.includes(digest));
+    await teardown(app, tag + " first quit", { expectExitCode: 0 });
+    logs.push(app.getStdout(), app.getStderr());
+    app = null;
+    app = await launchApp(target, { label: "native-replica-reopen", userDataDir });
+    await waitForRows(app.cdp);
+    const reopened = await call("const membership = await invoke(['membership', name, lease]); " +
+      "const replica = await invoke(['read', name, lease, null]); " +
+      "return membership.kind === 'membership' && membership.token === credential && replica.kind === 'read' && " +
+      "replica.entries.length === 1 && replica.entries[0].generation === 1 && " +
+      "(await invoke(['forget', name, lease])).kind === 'stored';");
+    record(tag + ": restart decrypts and restores, then erases under the writer lease", reopened === true && !fs.existsSync(directory));
+  } finally {
+    if (app) {
+      await teardown(app, tag + " final quit", { expectExitCode: 0 });
+      logs.push(app.getStdout(), app.getStderr());
+    }
+    record(tag + ": shell logs exclude the credential and its hash",
+      !logs.some(log => [credential, digest.toString("hex"), digest.toString("base64url")].some(secret => log.includes(secret))));
+    rmrf(userDataDir);
+  }
+}
+
 async function caseHistoryEditorRestoreRelaunch(target, fixturesDir) {
   const tag = target.name + " history: editor save, panel restore, quit and relaunch";
   const fixture = writeFixture(fixturesDir, "history-editor.splitpage", "History editor", [["Visual", "Original narration"]]);
@@ -6466,6 +6515,7 @@ async function runTargetSuite(target, groupFilter) {
     ["close check: tabs moved out during a window close's check stay as they were, and the saved layout follows them (#509, #531)", () => caseTabsMovedOutDuringWindowClose(target, fixturesDir)],
     ["close check: a tab edited during a window close's copy wait is asked about again (#532)", () => caseTabEditedDuringCloseCheck(target, fixturesDir, "window close")],
     ["close check: a tab edited during a quit's copy wait is asked about again (#532)", () => caseTabEditedDuringCloseCheck(target, fixturesDir, "quit")],
+    ["native replica OS key store", () => caseNativeReplicaKeyStore(target), { hookFree, windowsOnly: "Windows key store smoke" }],
     ["draft: power-cut mid-write keeps the first generation", () => caseDraftCrashMidWrite(target)],
     ["draft: both generations corrupt -> quarantined, seed boot", () => caseDraftCorrupt(target)],
     ["draft: ENOSPC pauses writes, one sticky toast, then resumes", () => caseDraftDiskFull(target)],

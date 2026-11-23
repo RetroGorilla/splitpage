@@ -11,6 +11,12 @@ import { currentHome } from "./location-owner.ts";
 
 let started: DesktopDocumentStateOwner | null = null;
 let handOff: DesktopHandOff | null = null;
+let sharedUnsaved: (() => boolean) | null = null;
+
+export function trackSharedDesktopUnsaved(read: () => boolean): () => void {
+  sharedUnsaved = read;
+  return () => { if (sharedUnsaved === read) sharedUnsaved = null; };
+}
 
 export function legacyDesktopDocumentPorts(history: Pick<HistoryOwner, "isPristineSeedDocument">): DesktopDocumentStatePorts {
   return Object.freeze({
@@ -18,7 +24,7 @@ export function legacyDesktopDocumentPorts(history: Pick<HistoryOwner, "isPristi
       running: presence.running,
       document: function () { return documentReader.current(); },
       restoring: function () { return recoveryStarted() && draftResume().restorePending(); },
-      unsaved: function () { return unsavedChanges(); },
+      unsaved: function () { return unsavedChanges() || (sharedUnsaved?.() ?? false); },
       pristine: function () { return history.isPristineSeedDocument(); },
       fileId: function (): string | null {
         const home = currentHome();

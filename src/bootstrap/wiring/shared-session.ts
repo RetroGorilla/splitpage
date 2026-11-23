@@ -64,6 +64,7 @@ export interface SharedEditorBackend {
   readonly bind: (session: SharedDocumentSession) => void;
   readonly unbind: () => void;
   readonly settle: (explicitLeave?: boolean) => string | null;
+  readonly beforeDocumentSwitch?: () => string | null;
   readonly captureSelection?: (entering: boolean) => { readonly dispose: () => void; readonly restore: () => void } | null;
   readonly abandon?: () => void;
   readonly drop?: () => void;
@@ -280,17 +281,17 @@ function sameDocument(landed: ValidatedDocument): boolean {
 }
 
 export function leaveRunningSharedSession(explicitLeave = true): SharedSwitchOutcome {
-  return running ? leaveSharedSession(running.ports, true, explicitLeave) : { ok: false, reason: SHARED_NOT_RUNNING };
+  return running ? leaveSharedSession(running.ports, true, explicitLeave, !explicitLeave) : { ok: false, reason: SHARED_NOT_RUNNING };
 }
 
-export function leaveSharedSession(ports: SharedSwitchPorts, preserveSelection = true, explicitLeave = false): SharedSwitchOutcome {
+export function leaveSharedSession(ports: SharedSwitchPorts, preserveSelection = true, explicitLeave = false, documentSwitch = false): SharedSwitchOutcome {
   const holdReason = sessionEntryRefusal();
   if (holdReason) return { ok: false, reason: holdReason };
   const release = holdSessionCommands(SHARED_SWITCHING, "entries");
-  try { return leaveAvailableSession(ports, preserveSelection, explicitLeave); } finally { release(); }
+  try { return leaveAvailableSession(ports, preserveSelection, explicitLeave, documentSwitch); } finally { release(); }
 }
 
-function leaveAvailableSession(ports: SharedSwitchPorts, preserveSelection: boolean, explicitLeave: boolean): SharedSwitchOutcome {
+function leaveAvailableSession(ports: SharedSwitchPorts, preserveSelection: boolean, explicitLeave: boolean, documentSwitch: boolean): SharedSwitchOutcome {
   const now = running;
   if (!now) return { ok: false, reason: SHARED_NOT_RUNNING };
   ports = now.ports;
@@ -298,6 +299,10 @@ function leaveAvailableSession(ports: SharedSwitchPorts, preserveSelection: bool
   let holding: string | null = null;
   if (!faults.attempt(() => { holding = now.backend.settle(explicitLeave); })) return failed(ports, faults, SHARED_LEAVE_FAILED);
   if (holding) return { ok: false, reason: holding };
+  if (documentSwitch) {
+    if (!faults.attempt(() => { holding = now.backend.beforeDocumentSwitch?.() ?? null; })) return failed(ports, faults, SHARED_LEAVE_FAILED);
+    if (holding) return { ok: false, reason: holding };
+  }
   const selection = preserveSelection ? captureSelection(now.backend, faults, false) : null;
   const holds: { session: (() => void) | null; commands: (() => void) | null } = { session: null, commands: null };
   let resumeIngress: (() => void) | undefined;

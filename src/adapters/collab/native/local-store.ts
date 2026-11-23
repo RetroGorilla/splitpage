@@ -40,6 +40,7 @@ export type NativeLocalStoreOpen = NativeLocalStoreFailure | {
   readonly restored: boolean;
   readonly membership?: NativeReplicaMembership;
   readonly discardOnClose?: () => Promise<boolean>;
+  readonly hasUnstoredChanges: () => boolean;
   readonly generation: number;
   readonly session: ReturnType<typeof openNativeSession>;
   readonly persistent: Promise<boolean>;
@@ -278,6 +279,7 @@ export async function attachNativeLocalStore(
     persistent: persistent(),
     ...(membership && { membership }),
     ...(forget && { discardOnClose: () => discard?.promise ?? (released ? Promise.resolve(false) : (discard = deferred<boolean>()).promise) }),
+    hasUnstoredChanges: () => next > committed || recovery !== undefined,
     flush: () => session.isClosingOrClosed() ? drained.promise : flush(),
     reopen,
     subscribe(listener) {
