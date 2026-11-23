@@ -38,6 +38,11 @@ export function needsDesktopChecks(files) {
   return needsAppChecks(files) || files.some((f) => needsChecks([f]) && /^desktop\/test\//.test(f));
 }
 
+export function needsRelayChecks(files) {
+  if (files === null || files.length === 0) return true;
+  return files.some((f) => needsChecks([f]) && /^(?:collab-server\/|src\/adapters\/collab\/native\/|shared\/blob-policy\.ts$|tests\/adapters\/collab\/native\/(?:server-container-smoke|relay-harness)\.ts$|package(?:-lock)?\.json$|\.nvmrc$|tools\/ci-changes\.mjs$|\.github\/workflows\/ci\.yml$)/.test(f));
+}
+
 export function changedFiles(base, head, repo = REPO) {
   if (!base || /^0+$/.test(base) || !head) return null;
   try {
@@ -54,10 +59,12 @@ if (isMain(import.meta.url)) {
   const code = needsChecks(files);
   const app = needsAppChecks(files);
   const desktop = needsDesktopChecks(files);
+  const relay = needsRelayChecks(files);
   console.log(files === null ? "ci-changes: no usable diff, running every check" : `ci-changes: ${files.length} files changed`);
   for (const f of files ?? []) console.log(`  ${f}`);
   console.log(`ci-changes: code=${code}`);
   console.log(`ci-changes: app=${app}`);
   console.log(`ci-changes: desktop=${desktop}`);
-  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `code=${code}\napp=${app}\ndesktop=${desktop}\n`);
+  console.log(`ci-changes: relay=${relay}`);
+  if (process.env.GITHUB_OUTPUT) appendFileSync(process.env.GITHUB_OUTPUT, `code=${code}\napp=${app}\ndesktop=${desktop}\nrelay=${relay}\n`);
 }

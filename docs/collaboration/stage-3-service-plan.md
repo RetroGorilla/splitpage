@@ -108,18 +108,19 @@ Done:
 
 ### 6 Limits and container
 
-- Limits applied before expensive work, for admitted clients too: connections in total and per invitation, messages per connection per second, uploads in flight. Use the options Hocuspocus and its WebSocket library provide before writing any.
-- A temporary refusal and a permanent one stay distinct to the client. A permanent refusal never causes a reconnect loop.
+- Limits applied before expensive work, for admitted clients too: connections in total and per invitation, messages per connection per second, uploads in flight (configurable `1`–`4`, preserving the 64 MiB staging maximum). Use the options Hocuspocus and its WebSocket library provide before writing any.
+- Approved transport decisions: authenticated message rate limiting uses stock `@hocuspocus/server` 4.8.0's processing-time `beforeHandleMessage` hook alongside the configured pre-auth queue and WebSocket frame bounds (queued messages may accumulate during processing stalls). Total connection capacity is refused before WebSocket upgrade (`503` with `Retry-After`); a browser treats the opaque upgrade failure as temporary and retries with backoff without a relay-full reason, while permanent access refusals stay distinct after upgrade and never cause a reconnect loop.
 - The container runs with a read-only root filesystem, bounded temporary storage and memory and CPU limits. It already runs as a non-root user.
-- A status endpoint behind the management secret reports connection counts, stored bytes, picture bytes, the last storage failure and the last backup time. It reports no script content, token or path.
+- A status endpoint behind the management secret reports connection counts, stored bytes, picture bytes, the last storage failure and the last backup time (published only after a verified backup is durably published, syncing parent directories on POSIX; Windows does not support directory-descriptor fsync). It reports no script content, token or path.
 
 Done:
-- Tests reach each limit and see the stated refusal.
+- Tests reach each limit and see the stated refusal, including normal-client recovery after capacity frees and sibling continuity on multiplexed transports.
 - The image starts and passes the relay tests with a read-only root filesystem.
 
 ### 7 Backup and restore
 
 - A backup contains the scripts, their lifecycle records, the invitation records and the picture files, taken consistently. It verifies that every recorded picture is present and matches its hash.
+- Set Part 6's `lastBackupAt` only after `backupRelay` returns successfully. A directory can appear under its final name before publication has been synced, so its presence alone is insufficient evidence of completion.
 - Restore goes into an isolated directory. A restored relay starts with every invitation revoked and deleted scripts still deleted; the owner issues new invitations.
 - The runbook in the note is updated.
 
@@ -160,6 +161,6 @@ The relay reserves four 16 MiB upload slots for a 64 MiB staging budget. A full 
 
 Relay startup creates storage version 3 or upgrades the Part 1 and Part 2 schemas in one transaction. The upgrade preserves existing scripts, invitations, document bytes and creation IDs.
 
-The database-only backup command refuses snapshots containing picture associations. Existing backups remain available while part 7 adds picture backups.
+Before Part 7, the database-only backup command refused snapshots containing picture associations.
 
 Build the relay image from the repository root with `docker build -f collab-server/Dockerfile .`. The build context includes the shared picture policy.
