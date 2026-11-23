@@ -22,6 +22,7 @@ export function pictureApi(
   db: DatabaseSync,
   directory: string,
   access: ReturnType<typeof scriptAccess>,
+  origins: ReadonlySet<string>,
   maxUploads = UPLOAD_SLOTS
 ) {
   const pictures = join(directory, "pictures");
@@ -123,6 +124,19 @@ export function pictureApi(
     if (request.method === "PUT") response.setHeader("Connection", "close");
     if (!isSha256Hex(sha)) {
       respond(response, 400);
+      return true;
+    }
+    const origin = request.headers.origin;
+    response.setHeader("Cache-Control", "no-store");
+    response.setHeader("Vary", "Origin");
+    if (origin && origins.has(origin)) response.setHeader("Access-Control-Allow-Origin", origin);
+    if (request.method === "OPTIONS") {
+      const method = request.headers["access-control-request-method"];
+      if (origin && origins.has(origin) && (method === "GET" || method === "PUT")) {
+        response.setHeader("Access-Control-Allow-Methods", "GET, PUT");
+        response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+        respond(response, 204);
+      } else respond(response, 403);
       return true;
     }
     if (closed) {

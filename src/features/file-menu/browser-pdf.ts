@@ -1,5 +1,6 @@
 import type { PrintDialogJob } from "../../application/export/print-dialog.ts";
 import type { BrowserPdfExportPorts } from "./local-files-ports.ts";
+import { sharedMissingPicturesText } from "../../application/export/diagnostics.ts";
 
 export function exportBrowserPdf(
   ports: BrowserPdfExportPorts, kind: string, options: Readonly<Record<string, unknown>> | undefined, alive: () => boolean
@@ -26,6 +27,8 @@ export function exportBrowserPdf(
         if (!assets) return;
         if (!alive()) { held.close(); return; }
         const html = render({ doc, options: capturedOptions, assets });
+        const omitted = sharedMissingPicturesText(request, assets, doc, exporter.pictureRefs, exporter.name ?? "PDF");
+        if (omitted) ports.notices.show(omitted, "warn");
         const result = await held.print(html);
         if (alive() && result === "opened") {
           ports.notices.show("Print request sent to your browser.", "ok");

@@ -1,7 +1,9 @@
 ﻿import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import { after, before, test } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { IDBObjectStore } from "fake-indexeddb";
+import { refsIn } from "../../../../shared/blob-policy.ts";
 import { bootApp, closeApp, rewireRunningApp } from "../../../../src/test/_app-boot.mjs";
 import { DB_NAME, REPLICAS, seedSession, STORE_OPTIONS, storedEntries, typeAt, type OpenReplica } from "./local-store-fixture.ts";
 import { eventResult, idbResult } from "./indexeddb-fixture.ts";
@@ -10,6 +12,15 @@ import type { RetainedSharedScript } from "../../../../src/bootstrap/wiring/reta
 import type { SharedSwitchOutcome } from "../../../../src/bootstrap/wiring/shared-session.ts";
 import type { DraftPayload } from "../../../../src/application/recovery/draft-origin.ts";
 import { desktopFixture, desktopTestCipher, replicaFileFaults, replicasAt } from "./desktop-local-store-fixture.ts";
+import { imageRecordOf } from "../../../../src/core/document/media.ts";
+import { createMemoryBackend, intern, persist, setBackend } from "../../../../src/adapters/storage/02c-blobs.ts";
+import { localFileMenuControls } from "../../../../src/bootstrap/wiring/local-files.ts";
+import { notices } from "../../../../src/bootstrap/wiring/ports/effects.ts";
+import { currentDocument } from "../../../../src/bootstrap/wiring/session-owner.ts";
+import { NAME, serverHarness } from "./server-harness.ts";
+import { StateFirstProvider } from "../../../../src/adapters/collab/native/state-first-provider.ts";
+import { printDialog } from "../../../../src/bootstrap/wiring/ports/printing.ts";
+import { restoreDesktop, useDesktopForTest } from "../../../../src/adapters/desktop/desktop-port.ts";
 
 function hook() {
   return (window as unknown as { __sharedTest: {
@@ -36,6 +47,120 @@ function capture() {
 const identity = (script: string) => ({ deployment: "local-fixture", script });
 const scope = (script: string) => "local-fixture/" + script;
 const ok = { ok: true };
+const abandonedPicture = { sha256: "f".repeat(64), width: 1, height: 1, mime: "image/png" };
+
+test("join uses the current picture references and export lists a later missing picture", { timeout: 10_000 }, async t => {
+  const source = seedSession({ A: "Retained narration" });
+  const row = source.document().rows[0];
+  assert.ok(row);
+  const target = { kind: "gallery", id: row.id } as const;
+  assert.equal(source.commands.setField(target, { imageRef: abandonedPicture }).kind, "written");
+  const state = source.encodeState();
+  source.close();
+  const png = Uint8Array.from(Buffer.from("89504e470d0a1a0a0000000d494844520000000100000001", "hex"));
+  const replacement = imageRecordOf(png);
+  assert.ok(replacement);
+  let sawInitial = false, sawReplacement = false, replacementReady = false;
+  let holdDownload = false, pendingDownload: AbortSignal | undefined;
+  t.mock.method(globalThis, "fetch", (url: URL, init?: RequestInit) => {
+    if (url.pathname.endsWith(replacement.sha256)) {
+      sawReplacement = true;
+      if (replacementReady) return Promise.resolve(new Response(png));
+    } else {
+      sawInitial = true;
+      if (holdDownload && init?.signal) {
+        pendingDownload = init.signal;
+        const signal = pendingDownload;
+        return new Promise<Response>(resolve => {
+          signal.addEventListener("abort", () => resolve(new Response(null, { status: 404 })), { once: true });
+        });
+      }
+    }
+    return Promise.resolve(new Response(null, { status: 404 }));
+  });
+  const opened = capture();
+  const joinLifetime = new AbortController();
+  const entering = hook().enterRetained({
+    ...identity("pictures"), pictureOrigin: window.location.origin, connect: opened.connect,
+    signal: joinLifetime.signal,
+    invitation: { state, token: randomBytes(32).toString("base64url") }
+  });
+  let joined = false;
+  void entering.then(() => { joined = true; });
+  while (!sawInitial) await delay(10, undefined, { signal: t.signal });
+  assert.equal(joined, false);
+  assert.equal(opened.replica().session.commands.setField(target, { imageRef: replacement }).kind, "written");
+  while (!sawReplacement) await delay(10, undefined, { signal: t.signal });
+  assert.equal(joined, false);
+  replacementReady = true;
+  assert.deepEqual(await entering, ok);
+  joinLifetime.abort();
+  t.after(async () => {
+    if (!opened.replica().session.isClosingOrClosed()) {
+      await opened.replica().flush();
+      await hook().leave();
+    }
+  });
+
+  assert.equal(opened.replica().session.commands.setField(target, {
+    imageRef: abandonedPicture, imageName: "Pending reference.png"
+  }).kind, "written");
+  while (!refsIn(currentDocument()).includes(abandonedPicture.sha256)) {
+    await delay(10, undefined, { signal: t.signal });
+  }
+  const warn = t.mock.method(notices, "show", () => {});
+  const exported = await localFileMenuControls().buildFileData("splitpage", "Retained copy");
+  assert.equal(typeof exported.data, "string");
+  const saved = JSON.parse(String(exported.data)) as { rows: { imageRef?: { sha256: string }; visualImage?: string }[] };
+  assert.equal(saved.rows[0]?.imageRef?.sha256, abandonedPicture.sha256);
+  assert.ok(!saved.rows[0]?.visualImage);
+  const warnsAboutPicture = () => warn.mock.calls.some(call => /Pending reference\.png/.test(String(call.arguments[0])));
+  assert.ok(warnsAboutPicture());
+  for (const format of ["html", "docx", "md", "md-table", "csv"]) {
+    warn.mock.resetCalls();
+    await localFileMenuControls().buildFileData(format, "Retained copy");
+    assert.equal(warnsAboutPicture(), format !== "csv", format);
+  }
+  warn.mock.resetCalls();
+  t.mock.method(printDialog, "reserve", () => ({
+    ended: new Promise<never>(() => {}),
+    close() {},
+    print() { assert.ok(warnsAboutPicture()); return Promise.resolve("opened" as const); }
+  }));
+  await localFileMenuControls().runExport("export-pdf");
+  assert.ok(warnsAboutPicture());
+  const delivery: string[] = [];
+  useDesktopForTest({
+    async printToPdf(html) {
+      assert.match(html, /id="script"/);
+      delivery.push("print");
+      return new TextEncoder().encode("%PDF-1.7");
+    },
+    async saveFileDialog({ suggestedName }) {
+      assert.ok(suggestedName);
+      assert.ok(warnsAboutPicture(), suggestedName);
+      delivery.push(suggestedName.endsWith(".pdf") ? "choose-pdf" : "choose-file");
+      return { id: "fixture", name: suggestedName };
+    },
+    async writeFile(_id, bytes) {
+      delivery.push("write");
+      return { lastModified: 1, size: bytes.byteLength };
+    }
+  });
+  try {
+    warn.mock.resetCalls();
+    assert.equal(await localFileMenuControls().runExport("export-splitpage"), true);
+    assert.deepEqual(delivery.splice(0), ["choose-file", "write"]);
+    warn.mock.resetCalls();
+    assert.equal(await localFileMenuControls().runExport("export-pdf"), true);
+    assert.deepEqual(delivery, ["print", "choose-pdf", "write"]);
+  } finally { restoreDesktop(); }
+  holdDownload = true;
+  while (!pendingDownload) await delay(10, undefined, { signal: t.signal });
+  assert.equal((await opened.replica().flush()).kind, "stored");
+  assert.deepEqual(await hook().leave(), ok);
+  assert.equal(pendingDownload.aborted, true);
+});
 
 async function finishStartup() {
   const { localFilesOwner } = await import("../../../../src/bootstrap/wiring/local-files.ts");
@@ -53,6 +178,244 @@ async function currentText() {
   const { currentDocument } = await import("../../../../src/bootstrap/wiring/session-owner.ts");
   return currentDocument()?.rows[0]?.audioText ?? "";
 }
+
+async function openAfterCancelledJoin(name: string, signal: AbortSignal) {
+  const store = createBrowserNativeLocalStore();
+  for (;;) {
+    const copy = await store.open(name, STORE_OPTIONS);
+    if (copy.kind !== "failed" || copy.reason !== "locked") return copy;
+    await delay(10, undefined, { signal });
+  }
+}
+
+test("a retained invitation gets its first state from the existing relay provider", { timeout: 10_000 }, async t => {
+  const kit = serverHarness(t);
+  kit.seed();
+  const port = await kit.launch().port();
+  const token = kit.invitation().token;
+  const connected = eventResult<undefined>();
+  assert.deepEqual(await hook().enterRetained({
+    deployment: "live-relay", script: NAME,
+    relayUrl: "ws://127.0.0.1:" + port, invitation: { token }, signal: t.signal,
+    onRelayConnected: ready => { if (ready) connected.resolve(undefined); }
+  }), ok);
+  await connected.promise;
+  assert.equal(await currentText(), "word");
+  assert.deepEqual(await hook().leave(), ok);
+});
+
+for (const result of ["delayed", "failed", "cancelled"] as const) {
+  test(`real relay entry waits for its initial write receipt when storage is ${result}`, { timeout: 10_000 }, async t => {
+    const kit = serverHarness(t);
+    kit.seed();
+    const port = await kit.launch().port();
+    const deployment = "initial-" + result, name = deployment + "/" + NAME;
+    const previous = randomBytes(32).toString("base64url");
+    const store = createBrowserNativeLocalStore();
+    const existing = await store.open(name, STORE_OPTIONS);
+    assert.equal(existing.kind, "opened");
+    assert.ok(existing.membership);
+    await existing.membership.join(previous);
+    existing.session.close();
+    await existing.closed;
+    const add = IDBObjectStore.prototype.add;
+    const release = eventResult<undefined>(), reached = eventResult<undefined>(), connected = eventResult<undefined>();
+    const original = JSON.stringify(currentDocument());
+    const cancel = new AbortController();
+    const gate = t.mock.method(IDBObjectStore.prototype, "add", function (this: IDBObjectStore, value: unknown, key?: IDBValidKey) {
+      if (this.name !== REPLICAS) return add.call(this, value, key);
+      if (result === "failed") throw new DOMException("Fixture write failure", "QuotaExceededError");
+      const tx = this.transaction;
+      tx.addEventListener("complete", event => {
+        const complete = tx.oncomplete;
+        tx.oncomplete = null;
+        reached.resolve(undefined);
+        void release.promise.then(() => { complete?.call(tx, event); });
+      });
+      return add.call(this, value, key);
+    });
+    const token = kit.invitation().token;
+    const joining = hook().enterRetained({
+      deployment, script: NAME, relayUrl: "ws://127.0.0.1:" + port, invitation: { token }, signal: cancel.signal,
+      onRelayConnected: ready => { if (ready) connected.resolve(undefined); }
+    });
+    try {
+      if (result !== "failed") {
+        await reached.promise;
+        const database = await idbResult(window.indexedDB.open(DB_NAME));
+        try {
+          const current: unknown = await idbResult(database.transaction("invitations").objectStore("invitations").get(name));
+          assert.equal(current === previous, true);
+        } finally { database.close(); }
+        assert.equal(JSON.stringify(currentDocument()), original);
+        if (result === "cancelled") {
+          cancel.abort();
+          assert.deepEqual(await joining, { ok: false, reason: "opening-pending" });
+          assert.deepEqual(await store.open(name, STORE_OPTIONS), { kind: "failed", reason: "locked" });
+        }
+      } else assert.deepEqual(await joining, { ok: false, reason: "enter-failed" });
+    } finally {
+      release.resolve(undefined);
+      gate.mock.restore();
+    }
+    if (result === "delayed") {
+      assert.deepEqual(await joining, ok);
+      await connected.promise;
+      assert.equal(await currentText(), "word");
+      assert.deepEqual(await hook().leave(), ok);
+    } else {
+      const retained = await openAfterCancelledJoin(name, t.signal);
+      assert.equal(retained.kind, "opened");
+      try { assert.equal(await retained.membership?.token() === previous, true); }
+      finally { retained.session.close(); await retained.closed; }
+      if (result === "cancelled") {
+        const reopened = capture();
+        assert.deepEqual(await hook().enterRetained({ deployment, script: NAME, connect: reopened.connect }), ok);
+        assert.equal(await reopened.replica().membership?.token() === previous, true);
+        assert.equal(await currentText(), "word");
+        assert.deepEqual(await hook().leave(), ok);
+      }
+    }
+  });
+}
+
+test("an online retained reopen resumes a picture upload after temporary refusal and reconnect", { timeout: 20_000 }, async t => {
+  const kit = serverHarness(t);
+  const state = kit.seed();
+  const port = await kit.launch({ SPLITPAGE_MAX_CONNECTIONS_PER_INVITATION: "1" }).port();
+  const token = kit.invitation().token;
+  const entry = { deployment: "resume-upload", script: NAME };
+  const opened = capture();
+  assert.deepEqual(await hook().enterRetained({ ...entry, invitation: { token, state }, connect: opened.connect }), ok);
+  const local = opened.replica();
+  const picture = intern(Uint8Array.from(Buffer.from("89504e470d0a1a0a0000000d494844520000001200000001", "hex")));
+  assert.ok(picture);
+  assert.deepEqual(await persist([picture.sha256]), []);
+  const row = local.session.document().rows[0];
+  assert.ok(row);
+  assert.equal(local.session.commands.setField({ kind: "gallery", id: row.id }, { imageRef: picture }).kind, "written");
+  assert.equal((await local.flush()).kind, "stored");
+  await rewireRunningApp({});
+  await finishStartup();
+  await local.closed;
+
+  const blocker = kit.copy(port);
+  await kit.until(() => blocker.relay.status().firstSyncDone || undefined);
+  const refused = eventResult<undefined>(), delivered = eventResult<undefined>();
+  const attach = StateFirstProvider.prototype.attach;
+  t.mock.method(StateFirstProvider.prototype, "attach", function (this: StateFirstProvider) {
+    this.on("authenticationFailed", () => refused.resolve(undefined));
+    return attach.call(this);
+  });
+  let online = false;
+  const fetchPicture = globalThis.fetch;
+  t.mock.method(globalThis, "fetch", async (url: URL, init?: RequestInit) => {
+    if (init?.method !== "PUT" || !url.pathname.endsWith(picture.sha256)) return fetchPicture(url, init);
+    if (!online) return new Response(null, { status: 503 });
+    const response = await fetchPicture(url, init);
+    if (response.ok) delivered.resolve(undefined);
+    return response;
+  });
+  assert.deepEqual(await hook().enterRetained({
+    ...entry, relayUrl: "ws://127.0.0.1:" + port, onRelayConnected: connected => { online = connected; }
+  }), ok);
+  await refused.promise;
+  assert.equal(online, false);
+  blocker.close();
+  await delivered.promise;
+  assert.equal(online, true);
+  assert.deepEqual(await hook().leave(), ok);
+});
+
+test("a stalled first sync can be cancelled without retaining the invitation", { timeout: 10_000 }, async t => {
+  const kit = serverHarness(t);
+  kit.seed();
+  const run = kit.launch();
+  const port = await run.port();
+  run.send("hold-load");
+  await kit.until(() => run.messages.includes("load-armed") || undefined);
+  const cancel = new AbortController();
+  const deployment = "cancelled-first-sync";
+  const joining = hook().enterRetained({
+    deployment, script: NAME, relayUrl: "ws://127.0.0.1:" + port,
+    invitation: { token: kit.invitation().token }, signal: cancel.signal
+  });
+  await kit.until(() => run.messages.includes("loading") || undefined);
+  cancel.abort();
+  assert.deepEqual(await joining, { ok: false, reason: "opening-pending" });
+  const copy = await openAfterCancelledJoin(deployment + "/" + NAME, t.signal);
+  assert.equal(copy.kind, "opened");
+  try { assert.equal(await copy.membership?.token(), null); }
+  finally { copy.session.close(); await copy.closed; }
+});
+
+test("cancelling a real relay join waiting for a picture preserves the previous membership", { timeout: 10_000 }, async t => {
+  const kit = serverHarness(t);
+  kit.seed();
+  const run = kit.launch();
+  const port = await run.port();
+  const writer = kit.copy(port), witness = kit.copy(port);
+  await kit.until(() => writer.relay.status().firstSyncDone && witness.relay.status().firstSyncDone || undefined);
+  const row = writer.session.document().rows[0];
+  assert.ok(row);
+  assert.equal(writer.session.commands.setField({ kind: "gallery", id: row.id }, { imageRef: abandonedPicture }).kind, "written");
+  await kit.until(() => refsIn(witness.session.document()).includes(abandonedPicture.sha256) || undefined);
+
+  const deployment = "cancelled-join";
+  const scope = deployment + "/" + NAME;
+  const store = createBrowserNativeLocalStore();
+  const kept = await store.open(scope, STORE_OPTIONS);
+  assert.equal(kept.kind, "opened");
+  assert.ok(kept.membership);
+  const previous = randomBytes(32).toString("base64url");
+  await kept.membership.join(previous);
+  kept.session.close();
+  await kept.closed;
+
+  const cancel = new AbortController();
+  const request = globalThis.fetch;
+  let wasPending = false;
+  t.mock.method(globalThis, "fetch", async (url: URL, init?: RequestInit) => {
+    const response = await request(url, init);
+    if (url.pathname.endsWith(abandonedPicture.sha256) && response.status === 404) wasPending = true;
+    return response;
+  });
+  const joining = hook().enterRetained({
+    deployment, script: NAME, relayUrl: "ws://127.0.0.1:" + port,
+    invitation: { token: kit.invitation().token }, signal: cancel.signal
+  });
+  while (!wasPending) await delay(10, undefined, { signal: t.signal });
+  cancel.abort();
+  assert.deepEqual(await joining, { ok: false, reason: "opening-pending" });
+  const member = await openAfterCancelledJoin(scope, t.signal);
+  assert.equal(member.kind, "opened");
+  try { assert.equal(await member.membership?.token(), previous); }
+  finally { member.session.close(); await member.closed; }
+});
+
+test("a picture held only in memory cannot complete a retained join", { timeout: 10_000 }, async t => {
+  const source = seedSession({ A: "Retained narration" });
+  const row = source.document().rows[0];
+  assert.ok(row);
+  const png = Uint8Array.from(Buffer.from("89504e470d0a1a0a0000000d494844520000000d00000001", "hex"));
+  const ref = imageRecordOf(png);
+  assert.ok(ref);
+  assert.equal(source.commands.setField({ kind: "gallery", id: row.id }, { imageRef: ref }).kind, "written");
+  const state = source.encodeState();
+  source.close();
+  t.mock.method(globalThis, "fetch", () => Promise.resolve(new Response(png)));
+  setBackend(createMemoryBackend());
+  t.after(() => setBackend(null));
+  const entry = identity("nondurable-picture");
+  const result = await hook().enterRetained({
+    ...entry, pictureOrigin: window.location.origin, invitation: { state, token: randomBytes(32).toString("base64url") }
+  });
+  assert.deepEqual(result, { ok: false, reason: "enter-failed" });
+  const copy = await createBrowserNativeLocalStore().open(scope(entry.script), STORE_OPTIONS);
+  assert.equal(copy.kind, "opened");
+  try { assert.equal(await copy.membership?.token(), null); }
+  finally { copy.session.close(); await copy.closed; }
+});
 
 test("the mounted app reopens the retained script offline after restarting and Leave clears its device state", async () => {
   const entry = identity("restart"), opened = capture(), credential = invitation();

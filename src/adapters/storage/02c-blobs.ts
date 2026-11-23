@@ -186,6 +186,8 @@ export function missingInlineImages(s: unknown) {
 }
 
 const BLOB_MISSING_TEXT = "Image unavailable";
+const SHARED_PICTURE_PENDING = "Picture not uploaded yet";
+let sharedPicturePending: ((sha: string) => boolean) | null = null;
 const hydrateQueued: Record<string, boolean> = {};
 let hydrateScheduled = false;
 let hydrateObserver: MutationObserver | null = null;
@@ -202,6 +204,25 @@ function collectBlobImgs(node: Node | null, into: Element[]) {
 function needsHydrating(img: Element) {
   return img.isConnected && !img.getAttribute("src") && img.getAttribute("data-blob-state") !== "missing" &&
     isSha256Hex(img.getAttribute("data-blob"));
+}
+
+export function showSharedPicturePending(read: (sha: string) => boolean): () => void {
+  sharedPicturePending = read;
+  return () => { if (sharedPicturePending === read) sharedPicturePending = null; };
+}
+
+export function repaintSharedPictures() {
+  const images: Element[] = [];
+  collectBlobImgs(document.documentElement, images);
+  for (const img of images) {
+    if (img.getAttribute("alt") !== SHARED_PICTURE_PENDING) continue;
+    const url = urlForSync(img.getAttribute("data-blob"));
+    if (!url) continue;
+    img.removeAttribute("data-blob-state");
+    img.removeAttribute("title");
+    img.setAttribute("alt", "");
+    img.setAttribute("src", url);
+  }
 }
 
 function fillBlobImgs(imgs: Element[]) {
@@ -230,8 +251,9 @@ export function hydrateBlobImages(root?: Element | null) {
     again.forEach(function (img) {
       if (!needsHydrating(img) || missing.indexOf(img.getAttribute("data-blob") as string) === -1) return;
       img.setAttribute("data-blob-state", "missing");
-      img.setAttribute("alt", BLOB_MISSING_TEXT);
-      img.setAttribute("title", BLOB_MISSING_TEXT);
+      const text = sharedPicturePending?.(img.getAttribute("data-blob") as string) ? SHARED_PICTURE_PENDING : BLOB_MISSING_TEXT;
+      img.setAttribute("alt", text);
+      img.setAttribute("title", text);
     });
     return missing;
   });

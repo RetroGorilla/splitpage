@@ -2,7 +2,7 @@ import type { BusyBarArguments } from "../../application/effects/ports.ts";
 import type { LocalFileMenuPorts, LocalFileMenuControls } from "./local-files-ports.ts";
 import { formatTimestamp } from "../common/comment-time.ts";
 import { exportToggleOptions } from "../../application/export/registry.ts";
-import { unshownCharactersText } from "../../application/export/diagnostics.ts";
+import { sharedMissingPicturesText, unshownCharactersText } from "../../application/export/diagnostics.ts";
 import { slugify } from "../../../shared/text.ts";
 
 let mounted: LocalFileMenuControls | null = null;
@@ -112,8 +112,10 @@ async function buildFileData(kind: string, baseName: string, opts?: Readonly<Rec
   const filename = registered
     ? (exporter as NonNullable<typeof exporter>).fileName(baseName, { imageBundle: !!made.imageBundle })
     : baseName + "." + kind;
+  const omitted = sharedMissingPicturesText(request.assets, assets, request.doc, exporter?.pictureRefs, filename);
+  if (omitted) showToast(omitted, "warn");
   if (made.diagnostics) {
-    warnImagesLeftOut(made.diagnostics.imagesLeftOut, filename);
+    if (!omitted) warnImagesLeftOut(made.diagnostics.imagesLeftOut, filename);
     if (made.diagnostics.unshownCharacters) showToast(unshownCharactersText(made.diagnostics.unshownCharacters), "warn");
   }
   return { data: made.data, filename: filename, withFiles: made.withFiles ? { scriptName: made.withFiles.scriptName, script } : null };

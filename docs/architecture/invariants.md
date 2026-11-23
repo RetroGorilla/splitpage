@@ -496,16 +496,13 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 - **Acceptance:** the suites pass. Application test with a fake clock: after a recovery adoption or a `noAutoSave` merge, no automatic write is scheduled until an explicit Save; with autosave off, none is scheduled at all.
 - **Milestone 4 (4.22):** held. `autoSaveWhere` and `autoSaveMay` (`src/application/save/autosave.ts`) are pure and tested (`tests/application/save-status.test.ts`, "INV-51 where…"), and a restore schedules no automatic write (T5). The halt state and the idle and max timers are in `createAutoSavePolicy()` (`src/application/save/autosave.ts`, `schedule()` at line 114); `src/bootstrap/wiring/save-owners.ts` builds it with its timer port (saving.md §8). `docs/HANDOFF.md` §5.51 points here.
 
-### INV-52 — No durable record names a blob its store lacks
+### INV-52 — Persist local pictures before writing their references
 
-- **Behaviour:** An image is uploaded and made durable before any record naming its sha is written, and `refsIn()` is always the list of what a record names.
-  - **Server:** it refuses a document or comment that names missing blobs (422 `missing-blobs`). `acceptMissing` lets a document name a sha known to be lost for good; comments cannot use it. A pre-#82 client cannot save over a document that names blobs (426).
-  - **Client:** history, drafts and app-data import await `persist()` before they write.
-- **Tests:** server checks were removed with the collaboration server; no test holds this today for the server half. The rebuild is planned in [COLLABORATION-PLAN.md](../COLLABORATION-PLAN.md). Client: `src/test/blob-store.test.mjs` ("persist resolves only once the backend has stored the bytes"); `src/test/blob-policy.test.mjs` (`refsIn`); browser `65-blobs.txt`, `26-desktop-drafts.txt`, `27-app-data.txt` (case 16).
-- **Owner:** `src/application` (save coordinator: blob transfer before the write), `server/` · **Milestone:** 4 · **Class:** keep
-- **Replacement:** — (M4: one transport instance owns both the blob transfer and the write that follows).
-- **Acceptance:** M4 race matrix: when a blob upload fails or is cancelled, no record is written. The server checks are unchanged.
-- **As built:** the collaboration server and its 422 `missing-blobs`, `acceptMissing` and 426 checks were removed. `server/server.ts` serves static files only; `tools/test-server.mjs` checks that `api/blobs/missing` is not served. The server half above remains a requirement for the rebuild in [COLLABORATION-PLAN.md](../COLLABORATION-PLAN.md).
+- **Standalone:** history, drafts and app-data import await `persist()` before writing a record that depends on local picture bytes. `refsIn()` lists the pictures an ordinary document capture names.
+- **Shared:** an insertion persists its picture locally before publishing the reference. The relay and remote replicas may store the reference while the bytes are pending. A copy missing the bytes keeps the reference and shows a placeholder. A join completes after its current required pictures are verified and stored locally. A standalone export reports any missing pictures from its capture.
+- **Relay:** a successful picture PUT means verified bytes are durable and associated with the script. A GET requires a valid invitation and that script's association.
+- **Tests:** `src/test/blob-store.test.mjs`, `src/test/blob-policy.test.mjs`, `tests/relay-pictures.test.ts`, `tests/adapters/collab/native/shared-pictures.test.ts`, and browser suites `65-blobs.txt`, `26-desktop-drafts.txt`, `27-app-data.txt` (case 16) and `1010-shared-picture-availability.txt`.
+- **Owner:** local save and picture stores, retained shared session and `collab-server/`.
 
 ### INV-53 — Every edit is recorded once; nothing else is recorded
 

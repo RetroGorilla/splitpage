@@ -14,7 +14,7 @@ import { standaloneHtmlFor } from "../../../adapters/page/standalone-html.ts";
 import { desktopPort } from "../../../adapters/desktop/desktop-port.ts";
 import { presence } from "./desktop-presence.ts";
 import { capabilities, entryCapabilities } from "./capabilities.ts";
-import { noteAbsorbedDirty, noteReload } from "../session-owner.ts";
+import { noteAbsorbedDirty, noteReload, sharedSession } from "../session-owner.ts";
 import { amendHome, fileHome, importHome, setHome } from "../location-owner.ts";
 import { unsavedFor, requestSave } from "../save-owners.ts";
 import { warnImagesLeftOut } from "../effects-owner.ts";
@@ -40,6 +40,13 @@ import { exportBrowserPdf } from "../../../features/file-menu/browser-pdf.ts";
 import { exportDesktopPdf } from "../../../features/file-menu/desktop-pdf.ts";
 import { exportScriptWithFiles } from "../gallery.ts";
 import { documentEntry } from "./document-entry.ts";
+import type { ExportDocument } from "../../../core/document/export-document.ts";
+import type { ExportAssetRequest } from "../../../application/export/assets.ts";
+
+function fileExportAssets(doc: ExportDocument): ExportAssetRequest {
+  const request = exportAssetsRequest(doc);
+  return sharedSession() ? Object.freeze({ ...request, shared: true }) : request;
+}
 
 export function localFilesOwnerPorts(menu: () => LocalFileMenuControls): LocalFilesOwnerPorts {
   const files: LocalFileAccess = localFileAccess(window);
@@ -101,7 +108,7 @@ export function localFileMenuPorts(menu: () => LocalFileMenuControls): LocalFile
     place,
     exports: { captureExportDocument, loadExportAssets },
     formats,
-    assets: { request: exportAssetsRequest },
+    assets: { request: fileExportAssets },
     standaloneHtml: standaloneHtmlFor,
     imagesLeftOut: warnImagesLeftOut,
     brollView,
@@ -110,10 +117,10 @@ export function localFileMenuPorts(menu: () => LocalFileMenuControls): LocalFile
     scriptFiles: { export: exportScriptWithFiles },
     merge: { offer: offerFileMerge, reset: resetMergeOffer },
     pdfPrint: { export: (kind, options, alive) => exportBrowserPdf({
-      exports: { captureExportDocument, loadExportAssets }, formats, assets: { request: exportAssetsRequest },
+      exports: { captureExportDocument, loadExportAssets }, formats, assets: { request: fileExportAssets },
       brollView, notices, desktop: presence.running, printDialog
     }, kind, options, alive) ?? exportDesktopPdf({
-      exports: { captureExportDocument, loadExportAssets }, formats, assets: { request: exportAssetsRequest },
+      exports: { captureExportDocument, loadExportAssets }, formats, assets: { request: fileExportAssets },
       brollView, notices, delivery: fileDelivery, desktop: presence.running, pdfPrinter,
       baseName: () => menu().exportBaseName()
     }, kind, options, alive) },

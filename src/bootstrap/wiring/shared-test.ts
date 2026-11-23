@@ -23,8 +23,6 @@ import { stopNativeCaretWait } from "./native-switch-caret.ts";
 import { enterRetainedSharedScript, leaveRetainedSharedScript, retainedSharedScriptActive } from "./retained-shared-script.ts";
 import type { RetainedSharedScript } from "./retained-shared-script.ts";
 import { readInvitationSnapshot } from "../../adapters/collab/native/invitation-snapshot.ts";
-import { openNativeRelay } from "../../adapters/collab/native/relay.ts";
-import { sanitizeHtml } from "../richtext.ts";
 import { captureDocumentOpeningLifetime } from "./transition-owners.ts";
 import { waitDuringLifetime } from "../startup/page-lifetime.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
@@ -184,17 +182,8 @@ function startSharedTestHook(): () => void {
       const state = await readInvitationSnapshot(endpoint.href, script, token, signal);
       if (signal.aborted) return;
       const outcome = await enter(undefined, {
-        deployment, script, invitation: { token, state },
-        connect(replica, credential) {
-          const relay = openNativeRelay(replica.session, {
-            url: endpoint.href, name: script, token: credential, reopen: replica.reopen,
-            sessionOptions: { actor: getEditorName(), sanitize: sanitizeHtml },
-            onEvent(event) {
-              if (event.kind === "status") invitationConnected = event.status.connected && event.status.firstSyncDone;
-            }
-          });
-          return () => { relay.close(); invitationConnected = false; };
-        }
+        deployment, script, invitation: { token, state }, relayUrl: endpoint.href,
+        onRelayConnected: connected => { invitationConnected = connected; }
       }, signal);
       if (!outcome.ok) report(new Error("Could not enter the shared invitation."));
     } catch {
@@ -211,6 +200,7 @@ function startSharedTestHook(): () => void {
   const hook = {
     enter: () => enter(),
     enterFrom: (state: string | Uint8Array | ArrayBuffer) => enter(sharedTestBytes(state)),
+    snapshot: () => nativePeer?.snapshot(),
     leave,
     enterRetained: (retained: RetainedSharedScript, cancellation?: AbortSignal) => {
       if (!live || desktopPort()) return enter(undefined, retained);

@@ -2,17 +2,22 @@ import { createBrowserNativeLocalStore } from "../../adapters/collab/native/brow
 import { createDesktopNativeLocalStore } from "../../adapters/collab/native/desktop-local-store.ts";
 import type { NativeInvitationStage, NativeLocalStoreOpen } from "../../adapters/collab/native/local-store.ts";
 import { applyNativePeerUpdate } from "../../adapters/collab/native/peer-update.ts";
+import { openNativeSession } from "../../adapters/collab/native/session.ts";
+import { openNativeRelay } from "../../adapters/collab/native/relay.ts";
+import { readInvitationSnapshot } from "../../adapters/collab/native/invitation-snapshot.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { sanitizeHtml } from "../richtext.ts";
 import { guardUnload, waitDuringLifetime } from "../startup/page-lifetime.ts";
 import { notifyDesktopDocumentState, trackSharedDesktopUnsaved } from "./desktop-owners.ts";
 import { notices } from "./ports/effects.ts";
 import { bindNativeEditor } from "./native-shared-session.ts";
+import { bindSharedPictures } from "./shared-picture-session.ts";
 import { sharedSession } from "./session-owner.ts";
 import { enterSharedSession, leaveRunningSharedSession, SHARED_ALREADY, SHARED_ENTER_FAILED, SHARED_NOT_RUNNING } from "./shared-session.ts";
 import type { SharedEditorBackend, SharedSwitchOutcome, SharedSwitchPorts } from "./shared-session.ts";
 
 type RetainedReplica = Extract<NativeLocalStoreOpen, { kind: "opened" }>;
+const JOIN_TIMEOUT_MS = 15_000;
 let localCopy: RetainedReplica | null = null;
 const closingCopies = new Map<string, RetainedReplica["closed"]>();
 
@@ -26,11 +31,15 @@ function trackClosing(name: string, replica: RetainedReplica): void {
 export interface RetainedSharedScript {
   readonly deployment: string;
   readonly script: string;
-  readonly invitation?: { readonly token: string; readonly state: Uint8Array };
+  readonly invitation?: { readonly token: string; readonly state?: Uint8Array };
+  readonly relayUrl?: string;
+  readonly pictureOrigin?: string;
+  readonly signal?: AbortSignal;
+  readonly onRelayConnected?: (connected: boolean) => void;
   readonly connect?: (replica: RetainedReplica, token: string) => () => void;
 }
 
-export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry: RetainedSharedScript, signal?: AbortSignal): Promise<SharedSwitchOutcome> {
+export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry: RetainedSharedScript, cancellation?: AbortSignal): Promise<SharedSwitchOutcome> {
   if (sharedSession()) return { ok: false, reason: SHARED_ALREADY };
   const identity = /^[A-Za-z0-9_-]{1,64}(?![\s\S])/;
   if (!identity.test(entry.deployment) || !identity.test(entry.script)) return { ok: false, reason: SHARED_ENTER_FAILED };
@@ -42,10 +51,33 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
   let preparation: Promise<string | null> | undefined;
   let active = false;
   let stopConnection: (() => void) | undefined;
+  let pictures: ReturnType<typeof bindSharedPictures> | undefined;
+  let state = entry.invitation?.state;
+  const preparePicturesOnCopy = !!entry.pictureOrigin && !entry.relayUrl;
+  let pictureOrigin = entry.pictureOrigin;
+  if (entry.relayUrl) {
+    try {
+      const endpoint = new URL(entry.relayUrl);
+      if (endpoint.protocol !== "ws:" && endpoint.protocol !== "wss:") return { ok: false, reason: SHARED_ENTER_FAILED };
+      endpoint.protocol = endpoint.protocol === "wss:" ? "https:" : "http:";
+      pictureOrigin = endpoint.origin;
+    } catch { return { ok: false, reason: SHARED_ENTER_FAILED }; }
+  }
+  const deadline = new AbortController();
+  const timed = !!(entry.relayUrl || entry.pictureOrigin);
+  const timer = timed ? ports.timers.start(() => deadline.abort(), JOIN_TIMEOUT_MS) : undefined;
+  const signals = [cancellation, entry.signal, timed ? deadline.signal : undefined].filter(s => s !== undefined);
+  const signal = signals.length ? AbortSignal.any(signals) : undefined;
   function stop() {
     try { stopConnection?.(); }
     catch { throw new Error("The retained connection could not close."); }
     stopConnection = undefined;
+    pictures?.stop();
+  }
+  async function hydrate(copy: Parameters<typeof bindSharedPictures>[0], token: string) {
+    if (!pictureOrigin || !signal) return true;
+    pictures = bindSharedPictures(copy, pictureOrigin, entry.script, token, signal);
+    return waitDuringLifetime(pictures.hydrate(), signal);
   }
   async function prepare(): Promise<string | null> {
     const refusal = await ports.prepare?.();
@@ -68,11 +100,33 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
       token = await (signal ? waitDuringLifetime(saved, signal) : saved);
       signal?.throwIfAborted();
       if (entry.invitation) {
-        if (signal) {
-          if (!membership.stageInvitation || (replica.restored && !replica.session.isStoredScript())) return SHARED_ENTER_FAILED;
+        if (entry.relayUrl) {
+          state ??= await readInvitationSnapshot(entry.relayUrl, entry.script, entry.invitation.token, signal);
+          const preview = openNativeSession({ kind: "stored-script", state }, { actor: ports.editor(), sanitize: sanitizeHtml });
+          try {
+            if (replica.restored && !applyNativePeerUpdate(preview, replica.session.encodeState())) return SHARED_ENTER_FAILED;
+            if (!preview.isStoredScript() || !await hydrate({ session: preview }, entry.invitation.token)) return SHARED_ENTER_FAILED;
+          } finally { pictures?.stop(); pictures = undefined; preview.close(); }
+          signal?.throwIfAborted();
+          if (!replica.restored && !applyNativePeerUpdate(replica.session, state)) return SHARED_ENTER_FAILED;
+          if (!replica.session.isStoredScript() || (await replica.flush()).kind !== "stored" || replica.hasUnstoredChanges()) {
+            return SHARED_ENTER_FAILED;
+          }
+          signal?.throwIfAborted();
+        }
+        if (preparePicturesOnCopy) {
+          if (!replica.restored && (!state || !applyNativePeerUpdate(replica.session, state))) return SHARED_ENTER_FAILED;
+          if (!replica.session.isStoredScript()) return SHARED_ENTER_FAILED;
+          stopConnection = entry.connect?.(replica, entry.invitation.token);
+          if (!await hydrate(replica, entry.invitation.token)) return SHARED_ENTER_FAILED;
+        }
+        if (signal && membership.stageInvitation) {
+          if (replica.restored && !replica.session.isStoredScript()) return SHARED_ENTER_FAILED;
           staged = await membership.stageInvitation(entry.invitation.token, token, signal);
+        } else if (cancellation) {
+          return SHARED_ENTER_FAILED;
         } else {
-          if (!replica.restored && !applyNativePeerUpdate(replica.session, entry.invitation.state)) return SHARED_ENTER_FAILED;
+          if (!replica.restored && (!state || !applyNativePeerUpdate(replica.session, state))) return SHARED_ENTER_FAILED;
           if (!replica.session.isStoredScript()) return SHARED_ENTER_FAILED;
           await membership.join(entry.invitation.token);
         }
@@ -96,12 +150,36 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
     const outcome = await enterSharedSession({ ...ports, prepare: () => (preparation = prepare()) }, (_, failedClose) => {
       const { replica, token } = prepared;
       if (!replica || !token) throw new Error("The retained copy was not prepared.");
-      if (signal && entry.invitation && !replica.restored &&
-          (!applyNativePeerUpdate(replica.session, entry.invitation.state) || !replica.session.isStoredScript())) {
+      if (staged && entry.invitation && !replica.restored && !pictureOrigin &&
+          (!state || !applyNativePeerUpdate(replica.session, state) || !replica.session.isStoredScript())) {
         throw new Error("The invitation did not contain a shared script.");
       }
-      try { stopConnection = entry.connect?.(replica, token); }
+      try {
+        if (entry.relayUrl && pictureOrigin) {
+          pictures = bindSharedPictures(replica, pictureOrigin, entry.script, token);
+          let connected = false;
+          const relay = openNativeRelay(replica.session, {
+            url: entry.relayUrl, name: entry.script, token, reopen: replica.reopen,
+            sessionOptions: { actor: ports.editor(), sanitize: sanitizeHtml },
+            onEvent(event) {
+              if (event.kind === "status") {
+                if (event.status.connected && !connected) pictures?.reconnect();
+                connected = event.status.connected;
+                entry.onRelayConnected?.(event.status.connected && event.status.firstSyncDone);
+              } else {
+                if (event.kind !== "temporary-refusal") pictures?.stop();
+                entry.onRelayConnected?.(false);
+              }
+            }
+          });
+          stopConnection = () => { relay.close(); entry.onRelayConnected?.(false); };
+        } else {
+          if (!pictures && pictureOrigin) pictures = bindSharedPictures(replica, pictureOrigin, entry.script, token);
+          stopConnection ??= entry.connect?.(replica, token);
+        }
+      }
       catch { throw new Error("The retained connection could not start."); }
+      pictures?.finishPreparation();
       const { backend } = bindNativeEditor(ports, replica.session, failedClose);
       const pending = () => {
         if (!replica.hasUnstoredChanges()) return false;
@@ -122,6 +200,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
         beforeDocumentSwitch: () => pending() ? "shared-copy-unsaved" : null,
         beforeExplicitLeave: stop,
         start() {
+          pictures?.activate();
           backend.start();
           stopUnload = guardUnload(window, pending);
           if (desktop) {
@@ -154,6 +233,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
   } catch {
     return { ok: false, reason: SHARED_ENTER_FAILED };
   } finally {
+    if (timed) ports.timers.stop(timer);
     if (!active) {
       if (signal?.aborted && preparation) {
         if (prepared.replica) trackClosing(name, prepared.replica);

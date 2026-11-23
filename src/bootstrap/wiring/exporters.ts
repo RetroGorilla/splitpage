@@ -7,7 +7,7 @@ import { zipWrite } from "../../adapters/formats/zip.ts";
 import { tagCategory } from "../../core/production/looks.ts";
 import { preferences } from "./preferences-owner.ts";
 import { exportServices } from "../../application/export/services.ts";
-import { exportBrollBeats, exportDay, exportFacts } from "../../adapters/formats/export-kit.ts";
+import { exportBrollBeats, exportComments, exportDay, exportFacts } from "../../adapters/formats/export-kit.ts";
 import {
   exportMetaLine,
   htmlToPlainScript,
@@ -30,12 +30,24 @@ import { presence } from "./ports/desktop-presence.ts";
 import { captureExportDocument } from "./export-capture.ts";
 import { exportFilesPlan } from "./gallery.ts";
 import { fileHome } from "./location-owner.ts";
+import { morePictureRefs } from "../../core/document/gallery.ts";
+import { rowImage } from "../../core/document/media.ts";
+import { refsIn } from "../../../shared/blob-policy.ts";
 
 export interface ExportBuild extends ExportPrintRequest {
   readonly ports: { readonly standaloneHtml: (doc: ExportDocument, meta: { title: string; description: string }, assets: ExportAssets) => string };
 }
 
 type BuiltInExporter = ExporterDecl<ExportBuild, ExportDocument>;
+
+const documentPictures = (doc: ExportDocument) => refsIn(doc.document);
+const primaryPictures = (doc: ExportDocument) => doc.beats.flatMap(row => rowImage(row)?.ref?.sha256 ?? []);
+const galleryPictures = (doc: ExportDocument) => [...primaryPictures(doc), ...doc.beats.flatMap(row => morePictureRefs(row).map(ref => ref.sha256))];
+function scriptPictures(doc: ExportDocument) {
+  const comments = exportComments(doc, { pieces: true }, exportServices());
+  const pieces = comments.flatMap(comment => [comment, ...comment.replies]).flatMap(body => body.pieces ?? []);
+  return [...galleryPictures(doc), ...pieces.flatMap(piece => piece.image ?? [])];
+}
 
 export function narrationIncludesDirections(): boolean {
   return preferences().exportDirections();
@@ -119,13 +131,13 @@ const CARDS: readonly ExportCardDecl[] = [
 ];
 
 const EXPORTERS: readonly BuiltInExporter[] = [
-  { id: "pdf", action: "export-pdf", card: "pdf", name: "PDF", menuLabel: "PDF (.pdf)",
+  { id: "pdf", action: "export-pdf", card: "pdf", name: "PDF", menuLabel: "PDF (.pdf)", pictureRefs: scriptPictures,
     words: "pdf print", fileName: suffixed(".pdf"),
     printPage: (ctx) => buildScriptWithListsPrintPage({ doc: ctx.doc, assets: ctx.assets, services: exportServices() }) },
-  { id: "docx", action: "export-docx", card: "docx", name: "Word", menuLabel: "Word (.docx)",
+  { id: "docx", action: "export-docx", card: "docx", name: "Word", menuLabel: "Word (.docx)", pictureRefs: scriptPictures,
     words: "word docx document google docs", writeback: true, fileName: suffixed(".docx"),
     build: (ctx) => product(buildDocx(ctx.doc, ctx.assets)) },
-  { id: "md", action: "export-md", card: "md", choice: { value: "stacked", label: "Stacked" },
+  { id: "md", action: "export-md", card: "md", choice: { value: "stacked", label: "Stacked" }, pictureRefs: galleryPictures,
     name: "Markdown", menuLabel: "Markdown (.md)", words: "markdown md text stacked",
     writeback: true, bundlesPictures: true,
     fileName: (base, opts) => opts && opts.imageBundle ? base + " (with images).zip" : base + ".md",
@@ -140,7 +152,7 @@ const EXPORTERS: readonly BuiltInExporter[] = [
       }
       return product(toMarkdownDoc(ctx.doc, { assets: ctx.assets }, exportServices()));
     } },
-  { id: "md-table", action: "export-md-table", card: "md", choice: { value: "table", label: "Two columns" },
+  { id: "md-table", action: "export-md-table", card: "md", choice: { value: "table", label: "Two columns" }, pictureRefs: primaryPictures,
     name: "Markdown, two columns", menuLabel: "Markdown, two columns (.md)",
     words: "markdown md table two columns side by side", fileName: suffixed(" - two column.md"),
     build: (ctx) => product(toMarkdownTableDoc(ctx.doc, { export: true, assets: ctx.assets }, exportServices())) },
@@ -152,7 +164,7 @@ const EXPORTERS: readonly BuiltInExporter[] = [
     name: "CSV", menuLabel: "Spreadsheet (.csv)", words: "spreadsheet csv excel sheets table",
     writeback: true, fileName: suffixed(".csv"),
     build: (ctx) => product(buildCsv(ctx.doc, exportServices())) },
-  { id: "html", action: "export-html", card: "html", name: "SplitShare", menuLabel: "SplitShare (.html)",
+  { id: "html", action: "export-html", card: "html", name: "SplitShare", menuLabel: "SplitShare (.html)", pictureRefs: documentPictures,
     words: "splitshare share standalone page html web browser send any device app",
     fileName: suffixed(" - SplitShare.html"),
     build: (ctx) => {
@@ -164,7 +176,7 @@ const EXPORTERS: readonly BuiltInExporter[] = [
         diagnostics: { imagesLeftOut: ctx.assets.missing.length }
       };
     } },
-  { id: "splitpage", action: "export-splitpage", card: "splitpage", name: "Splitpage script", menuLabel: "Splitpage script (.splitpage)",
+  { id: "splitpage", action: "export-splitpage", card: "splitpage", name: "Splitpage script", menuLabel: "Splitpage script (.splitpage)", pictureRefs: documentPictures,
     words: "splitpage script project copy share send zip bundle files videos folder",
     fileName: (base) => withScriptFiles() ? base + " (with files).zip" : base + ".splitpage",
     build: (ctx, base) => {

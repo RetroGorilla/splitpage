@@ -87,6 +87,20 @@ test("picture upload validates size, hash, type and dimensions before recording"
 
 test("completed pictures are scoped to a script and an active invitation", async () => {
   await using f = await fixture();
+  const allowed = "http://localhost";
+  const preflight = (origin: string, method: string) => fetch(f.url(), {
+    method: "OPTIONS", headers: { origin, "access-control-request-method": method }
+  });
+  const ready = await preflight(allowed, "PUT");
+  assert.equal(ready.status, 204);
+  assert.equal(ready.headers.get("access-control-allow-origin"), allowed);
+  assert.equal(ready.headers.get("access-control-allow-headers"), "Authorization, Content-Type");
+  assert.equal((await preflight(allowed, "DELETE")).status, 403);
+  assert.equal((await preflight(new URL(f.url()).origin, "GET")).status, 403);
+  const refused = await fetch(f.url(), { headers: { origin: allowed } });
+  assert.equal(refused.status, 403);
+  assert.equal(refused.headers.get("access-control-allow-origin"), allowed);
+
   assert.equal((await f.put(png)).status, 201);
   assert.equal((await f.put(png)).status, 204);
   const downloaded = await f.get("first", f.first.token);
