@@ -30,6 +30,8 @@ import { presence } from "./ports/desktop-presence.ts";
 import { captureExportDocument } from "./export-capture.ts";
 import { exportFilesPlan } from "./gallery.ts";
 import { fileHome } from "./location-owner.ts";
+import { rowSlots } from "../../core/document/gallery.ts";
+import { sharedSession } from "./session-owner.ts";
 
 export interface ExportBuild extends ExportPrintRequest {
   readonly ports: { readonly standaloneHtml: (doc: ExportDocument, meta: { title: string; description: string }, assets: ExportAssets) => string };
@@ -169,7 +171,11 @@ const EXPORTERS: readonly BuiltInExporter[] = [
     fileName: (base) => withScriptFiles() ? base + " (with files).zip" : base + ".splitpage",
     build: (ctx, base) => {
       const body = buildSplitpageCopy(ctx.doc);
-      const diagnostics = { imagesLeftOut: fileImagesMissing(ctx.doc).length };
+      const missing = fileImagesMissing(ctx.doc);
+      const slots = sharedSession() && missing.length ? ctx.doc.beats.flatMap(rowSlots) : null;
+      const diagnostics = { imagesLeftOut: missing.length, ...(slots ? {
+        missingPictures: missing.map(sha => slots.find(slot => slot.ref?.sha256 === sha)?.name || sha)
+      } : {}) };
       return ctx.options.files ? { data: body, diagnostics, withFiles: { scriptName: base + ".splitpage" } } : { data: body, diagnostics };
     } },
   { id: "narration-docx", action: "export-narration-docx", card: "narration",

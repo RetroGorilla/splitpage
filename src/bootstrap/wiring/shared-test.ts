@@ -77,6 +77,7 @@ function startSharedTestHook(): () => void {
   let detached: Detached | null = null;
   let nativePeer: ReturnType<typeof createNativeTestPeer> | null = null;
   let switching = false, composing = false, live = true, detachRefused: string | null = null;
+  const lifetime = new AbortController();
   let withdraw = (): void => {};
   const report = (error: unknown): void => { console.error(error); };
   const composition = (event: Event): void => { composing = event.type === "compositionstart"; };
@@ -128,7 +129,8 @@ function startSharedTestHook(): () => void {
         opening: openingStatus
       };
       const opened: { session?: ReturnType<typeof openNativeEditor>["native"] } = {};
-      const result = retained ? await enterRetainedSharedScript(entering, retained) : await enterSharedSession(entering, (doc, failedClose) => {
+      const signal = retained?.signal ? AbortSignal.any([retained.signal, lifetime.signal]) : lifetime.signal;
+      const result = retained ? await enterRetainedSharedScript(entering, { ...retained, signal }) : await enterSharedSession(entering, (doc, failedClose) => {
         const { backend, native } = openNativeEditor(entering, doc, failedClose, stored);
         opened.session = native;
         return backend;
@@ -160,6 +162,7 @@ function startSharedTestHook(): () => void {
     enterFrom: (state: string | Uint8Array | ArrayBuffer) => enter(sharedTestBytes(state)),
     leave,
     enterRetained: (retained: RetainedSharedScript) => enter(undefined, retained),
+    snapshot: () => nativePeer?.snapshot(),
     nativePeer: {
       type: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["type"]>) => nativePeer?.type(...args),
       field: (...args: Parameters<NonNullable<typeof nativePeer>["field"]>) => nativePeer?.field(...args),
@@ -197,6 +200,7 @@ function startSharedTestHook(): () => void {
   exposeTestHook("__sharedTest", () => hook, release => { withdraw = release; });
   return () => {
     live = false;
+    lifetime.abort();
     try { forceLeaveSharedSession(); } finally {
       document.removeEventListener("compositionstart", composition, true);
       document.removeEventListener("compositionend", composition, true);

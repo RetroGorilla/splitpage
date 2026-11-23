@@ -1,7 +1,9 @@
 ﻿import assert from "node:assert/strict";
 import { createHash, randomBytes } from "node:crypto";
 import { after, before, test } from "node:test";
+import { setTimeout as delay } from "node:timers/promises";
 import { IDBObjectStore } from "fake-indexeddb";
+import { refsIn } from "../../../../shared/blob-policy.ts";
 import { bootApp, closeApp, rewireRunningApp } from "../../../../src/test/_app-boot.mjs";
 import { DB_NAME, REPLICAS, seedSession, STORE_OPTIONS, storedEntries, typeAt, type OpenReplica } from "./local-store-fixture.ts";
 import { idbResult } from "./indexeddb-fixture.ts";
@@ -10,6 +12,11 @@ import type { RetainedSharedScript } from "../../../../src/bootstrap/wiring/reta
 import type { SharedSwitchOutcome } from "../../../../src/bootstrap/wiring/shared-session.ts";
 import type { DraftPayload } from "../../../../src/application/recovery/draft-origin.ts";
 import { desktopFixture, desktopTestCipher, replicaFileFaults, replicasAt } from "./desktop-local-store-fixture.ts";
+import { imageRecordOf } from "../../../../src/core/document/media.ts";
+import { localFileMenuControls } from "../../../../src/bootstrap/wiring/local-files.ts";
+import { notices } from "../../../../src/bootstrap/wiring/ports/effects.ts";
+import { currentDocument } from "../../../../src/bootstrap/wiring/session-owner.ts";
+import { NAME, serverHarness } from "./server-harness.ts";
 
 function hook() {
   return (window as unknown as { __sharedTest: {
@@ -36,6 +43,77 @@ function capture() {
 const identity = (script: string) => ({ deployment: "local-fixture", script });
 const scope = (script: string) => "local-fixture/" + script;
 const ok = { ok: true };
+const abandonedPicture = { sha256: "f".repeat(64), width: 1, height: 1, mime: "image/png" };
+
+test("join uses the current picture references and export lists a later missing picture", { timeout: 10_000 }, async t => {
+  const source = seedSession({ A: "Retained narration" });
+  const row = source.document().rows[0];
+  assert.ok(row);
+  const target = { kind: "gallery", id: row.id } as const;
+  assert.equal(source.commands.setField(target, { imageRef: abandonedPicture }).kind, "written");
+  const state = source.encodeState();
+  source.close();
+  const png = Uint8Array.from(Buffer.from("89504e470d0a1a0a0000000d494844520000000100000001", "hex"));
+  const replacement = imageRecordOf(png);
+  assert.ok(replacement);
+  let sawInitial = false, sawReplacement = false, replacementReady = false;
+  let holdDownload = false, pendingDownload: AbortSignal | undefined;
+  t.mock.method(globalThis, "fetch", (url: URL, init?: RequestInit) => {
+    if (url.pathname.endsWith(replacement.sha256)) {
+      sawReplacement = true;
+      if (replacementReady) return Promise.resolve(new Response(png));
+    } else {
+      sawInitial = true;
+      if (holdDownload && init?.signal) {
+        pendingDownload = init.signal;
+        const signal = pendingDownload;
+        return new Promise<Response>(resolve => {
+          signal.addEventListener("abort", () => resolve(new Response(null, { status: 404 })), { once: true });
+        });
+      }
+    }
+    return Promise.resolve(new Response(null, { status: 404 }));
+  });
+  const opened = capture();
+  const entering = hook().enterRetained({
+    ...identity("pictures"), pictureOrigin: window.location.origin, connect: opened.connect,
+    invitation: { state, token: randomBytes(32).toString("base64url") }
+  });
+  let joined = false;
+  void entering.then(() => { joined = true; });
+  while (!sawInitial) await delay(10, undefined, { signal: t.signal });
+  assert.equal(joined, false);
+  assert.equal(opened.replica().session.commands.setField(target, { imageRef: replacement }).kind, "written");
+  while (!sawReplacement) await delay(10, undefined, { signal: t.signal });
+  assert.equal(joined, false);
+  replacementReady = true;
+  assert.deepEqual(await entering, ok);
+  t.after(async () => {
+    if (!opened.replica().session.isClosingOrClosed()) {
+      await opened.replica().flush();
+      await hook().leave();
+    }
+  });
+
+  assert.equal(opened.replica().session.commands.setField(target, {
+    imageRef: abandonedPicture, imageName: "Pending reference.png"
+  }).kind, "written");
+  while (!refsIn(currentDocument()).includes(abandonedPicture.sha256)) {
+    await delay(10, undefined, { signal: t.signal });
+  }
+  const warn = t.mock.method(notices, "show", () => {});
+  const exported = await localFileMenuControls().buildFileData("splitpage", "Retained copy");
+  assert.equal(typeof exported.data, "string");
+  const saved = JSON.parse(String(exported.data)) as { rows: { imageRef?: { sha256: string }; visualImage?: string }[] };
+  assert.equal(saved.rows[0]?.imageRef?.sha256, abandonedPicture.sha256);
+  assert.ok(!saved.rows[0]?.visualImage);
+  assert.ok(warn.mock.calls.some(call => /Pending reference\.png/.test(String(call.arguments[0]))));
+  holdDownload = true;
+  while (!pendingDownload) await delay(10, undefined, { signal: t.signal });
+  assert.equal((await opened.replica().flush()).kind, "stored");
+  assert.deepEqual(await hook().leave(), ok);
+  assert.equal(pendingDownload.aborted, true);
+});
 
 async function finishStartup() {
   const { localFilesOwner } = await import("../../../../src/bootstrap/wiring/local-files.ts");
@@ -53,6 +131,19 @@ async function currentText() {
   const { currentDocument } = await import("../../../../src/bootstrap/wiring/session-owner.ts");
   return currentDocument()?.rows[0]?.audioText ?? "";
 }
+
+test("a retained invitation gets its first state from the existing relay provider", { timeout: 10_000 }, async t => {
+  const kit = serverHarness(t);
+  kit.seed();
+  const port = await kit.launch().port();
+  const token = kit.invitation().token;
+  assert.deepEqual(await hook().enterRetained({
+    deployment: "live-relay", script: NAME,
+    relayUrl: "ws://127.0.0.1:" + port, invitation: { token }, signal: t.signal
+  }), ok);
+  assert.equal(await currentText(), "word");
+  assert.deepEqual(await hook().leave(), ok);
+});
 
 test("the mounted app reopens the retained script offline after restarting and Leave clears its device state", async () => {
   const entry = identity("restart"), opened = capture(), credential = invitation();

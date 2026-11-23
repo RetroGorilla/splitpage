@@ -35,6 +35,7 @@ export interface ExportChoice {
 
 export interface ExportDiagnostics {
   readonly imagesLeftOut: number;
+  readonly missingPictures?: readonly string[];
   readonly unshownCharacters?: number;
 }
 

@@ -2,25 +2,66 @@ import { createBrowserNativeLocalStore } from "../../adapters/collab/native/brow
 import { createDesktopNativeLocalStore } from "../../adapters/collab/native/desktop-local-store.ts";
 import type { NativeLocalStoreOpen } from "../../adapters/collab/native/local-store.ts";
 import { applyNativePeerUpdate } from "../../adapters/collab/native/peer-update.ts";
+import { openNativeRelay } from "../../adapters/collab/native/relay.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { sanitizeHtml } from "../richtext.ts";
 import { guardUnload } from "../startup/page-lifetime.ts";
 import { notifyDesktopDocumentState, trackSharedDesktopUnsaved } from "./desktop-owners.ts";
 import { notices } from "./ports/effects.ts";
+import { documentReader } from "./ports/document.ts";
 import { bindNativeEditor } from "./native-shared-session.ts";
+import { bindSharedPictures } from "./shared-picture-session.ts";
 import { sharedSession } from "./session-owner.ts";
 import { enterSharedSession, leaveRunningSharedSession, SHARED_ALREADY, SHARED_ENTER_FAILED, SHARED_NOT_RUNNING } from "./shared-session.ts";
 import type { SharedEditorBackend, SharedSwitchOutcome, SharedSwitchPorts } from "./shared-session.ts";
 
 type RetainedReplica = Extract<NativeLocalStoreOpen, { kind: "opened" }>;
+type PictureSession = ReturnType<typeof bindSharedPictures>;
 let localCopy: RetainedReplica | null = null;
 const closingCopies = new Map<string, RetainedReplica["closed"]>();
 
 export interface RetainedSharedScript {
   readonly deployment: string;
   readonly script: string;
-  readonly invitation?: { readonly token: string; readonly state: Uint8Array };
-  readonly connect?: (replica: RetainedReplica, token: string) => () => void;
+  readonly invitation?: { readonly token: string; readonly state?: Uint8Array };
+  readonly relayUrl?: string;
+  readonly pictureOrigin?: string;
+  readonly signal?: AbortSignal;
+  readonly connect?: (replica: RetainedReplica, token: string, pictures?: {
+    readonly reconnect: () => void;
+    readonly stop: () => void;
+  }) => () => void;
+}
+
+function connectRetainedRelay(replica: RetainedReplica, url: string, name: string, token: string,
+  actor: string, pictures: PictureSession | undefined, signal: AbortSignal) {
+  let loaded: (ready: boolean) => void = () => {};
+  const ready = new Promise<boolean>(resolve => { loaded = resolve; });
+  const cancel = () => loaded(false);
+  let connected = false;
+  const relay = openNativeRelay(replica.session, {
+    url, name, token, reopen: replica.reopen,
+    sessionOptions: { actor, sanitize: sanitizeHtml },
+    onEvent(event) {
+      if (event.kind === "status") {
+        if (event.status.connected && !connected) pictures?.reconnect();
+        connected = event.status.connected;
+        if (event.status.firstSyncDone) loaded(true);
+      } else {
+        pictures?.stop();
+        cancel();
+      }
+    }
+  });
+  signal.addEventListener("abort", cancel, { once: true });
+  return {
+    ready,
+    stop() {
+      signal.removeEventListener("abort", cancel);
+      cancel();
+      relay.close();
+    }
+  };
 }
 
 export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry: RetainedSharedScript): Promise<SharedSwitchOutcome> {
@@ -32,11 +73,13 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
   const store = desktop ? createDesktopNativeLocalStore(desktop.nativeReplica) : createBrowserNativeLocalStore();
   const prepared: { replica?: RetainedReplica; token?: string } = {};
   let active = false;
+  let pictures: PictureSession | undefined;
   let stopConnection: (() => void) | undefined;
   function stop() {
     try { stopConnection?.(); }
     catch { throw new Error("The retained connection could not close."); }
     stopConnection = undefined;
+    pictures?.stop();
   }
   async function prepare(): Promise<string | null> {
     const refusal = await ports.prepare?.();
@@ -48,28 +91,57 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
       return replica.reason;
     }
     prepared.replica = replica;
+    const membership = replica.membership;
+    if (!membership) return SHARED_ENTER_FAILED;
     let token: string | null;
     try {
-      const membership = replica.membership;
-      if (!membership) return SHARED_ENTER_FAILED;
       token = await membership.token();
       if (entry.invitation) {
-        if (!replica.restored && !applyNativePeerUpdate(replica.session, entry.invitation.state)) return SHARED_ENTER_FAILED;
-        if (!replica.session.isStoredScript()) return SHARED_ENTER_FAILED;
+        if (!replica.restored && entry.invitation.state && !applyNativePeerUpdate(replica.session, entry.invitation.state)) {
+          return SHARED_ENTER_FAILED;
+        }
+        if (!entry.relayUrl && !replica.session.isStoredScript()) return SHARED_ENTER_FAILED;
         token = entry.invitation.token;
-        await membership.join(token);
+        if (!entry.relayUrl) await membership.join(token);
       }
-      if (!token || !replica.session.isStoredScript()) return SHARED_ENTER_FAILED;
+      if (!token || (!entry.relayUrl && !replica.session.isStoredScript())) return SHARED_ENTER_FAILED;
     } catch { return SHARED_ENTER_FAILED; }
     prepared.token = token;
-    return null;
+    const preparation = new AbortController();
+    const stopReplacement = documentReader.onReplaced(() => preparation.abort());
+    const signal = entry.signal ? AbortSignal.any([entry.signal, preparation.signal]) : preparation.signal;
+    try {
+      if (signal.aborted) return SHARED_ENTER_FAILED;
+      let pictureOrigin = entry.pictureOrigin;
+      if (entry.relayUrl) {
+        const url = new URL(entry.relayUrl);
+        if (url.protocol !== "ws:" && url.protocol !== "wss:") return SHARED_ENTER_FAILED;
+        url.protocol = url.protocol === "wss:" ? "https:" : "http:";
+        pictureOrigin = url.href;
+      }
+      if (pictureOrigin) pictures = bindSharedPictures(replica, pictureOrigin, entry.script, token, signal);
+      if (entry.relayUrl) {
+        const connection = connectRetainedRelay(replica, entry.relayUrl, entry.script, token, ports.editor(), pictures, signal);
+        stopConnection = connection.stop;
+        if ((!replica.restored || entry.invitation) && !await connection.ready) return SHARED_ENTER_FAILED;
+        if (!replica.session.isStoredScript()) return SHARED_ENTER_FAILED;
+      } else if (pictures) {
+        stopConnection = entry.connect?.(replica, token, pictures);
+      }
+      if (entry.relayUrl && entry.invitation && !signal.aborted) await membership.join(token);
+      if (pictures && !await pictures.hydrate()) return SHARED_ENTER_FAILED;
+      return signal.aborted ? SHARED_ENTER_FAILED : null;
+    } catch { return SHARED_ENTER_FAILED; }
+    finally { stopReplacement(); }
   }
   try {
     const outcome = await enterSharedSession({ ...ports, prepare }, (_, failedClose) => {
       const { replica, token } = prepared;
       if (!replica || !token) throw new Error("The retained copy was not prepared.");
-      try { stopConnection = entry.connect?.(replica, token); }
-      catch { throw new Error("The retained connection could not start."); }
+      if (!entry.relayUrl && !pictures) {
+        try { stopConnection = entry.connect?.(replica, token); }
+        catch { throw new Error("The retained connection could not start."); }
+      }
       const { backend } = bindNativeEditor(ports, replica.session, failedClose);
       const pending = () => {
         if (!replica.hasUnstoredChanges()) return false;
@@ -90,6 +162,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
         beforeDocumentSwitch: () => pending() ? "shared-copy-unsaved" : null,
         beforeExplicitLeave: stop,
         start() {
+          pictures?.activate();
           backend.start();
           stopUnload = guardUnload(window, pending);
           if (desktop) {
@@ -120,7 +193,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
     return { ok: false, reason: SHARED_ENTER_FAILED };
   } finally {
     if (!active && prepared.replica) {
-      try { stop(); } finally { prepared.replica.session.close(); await prepared.replica.closed; }
+      try { stop(); } finally { pictures?.stop(); prepared.replica.session.close(); await prepared.replica.closed; }
     }
   }
 }

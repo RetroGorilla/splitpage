@@ -1,0 +1,16 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;F.openFile(new File([JSON.stringify({schema:2,title:'Shared picture',paragraphsDecided:true,rows:[{id:'r1',audioText:'Picture on the way'}]})],'picture.splitpage'))
+wait F.state().title === 'Shared picture'
+eval S.enter()
+eval window.snapshot=S.snapshot();S.leave()
+eval (async()=>{const canvas=document.createElement('canvas');canvas.width=180;canvas.height=50;const ctx=canvas.getContext('2d');ctx.fillStyle='red';ctx.fillRect(0,0,180,50);const bytes=Uint8Array.from(atob(canvas.toDataURL().split(',')[1]),c=>c.charCodeAt(0));window.hashBytes=async bytes=>Array.from(new Uint8Array(await crypto.subtle.digest('SHA-256',bytes)),b=>b.toString(16).padStart(2,'0')).join('');const sha256=await hashBytes(bytes);window.picture={sha256,width:180,height:50,mime:'image/png'};window.pictureReady=false;const request=window.fetch;window.fetch=(url,options)=>{if(options?.method==='PUT'&&window.onPictureUpload)return onPictureUpload(url,options);return new URL(url,location.href).pathname.endsWith('/pictures/'+sha256)?Promise.resolve(pictureReady?new Response(bytes):new Response(null,{status:404})):request(url,options)};return S.enterRetained({deployment:'picture-suite',script:'late-picture',pictureOrigin:location.origin,invitation:{token:crypto.randomUUID(),state:snapshot},connect(copy){window.copy=copy;return()=>{window.fetch=request}}})})()
+eval copy.session.commands.setField({kind:'gallery',id:'r1'},{imageRef:picture})
+eval window.pictureElement=()=>document.querySelector('#rows .visual-media img[data-blob="'+picture.sha256+'"]');true
+wait pictureElement()?.alt === 'Picture not uploaded yet' && !pictureElement().hasAttribute('src')
+eval window.pictureReady=true
+wait pictureElement()?.naturalWidth === 180 && pictureElement().alt === ''
+eval window.onPictureUpload=async(url,options)=>{const hash=await hashBytes(options.body);window.upload={matches:String(url).endsWith('/pictures/'+hash),hasReference:S.read().app.rows[0].moreImages?.some(image=>image.imageRef.sha256===hash),durable:window.__blobsTest.isDurableSync(hash)};return new Response(null,{status:201})};true
+eval (()=>{const canvas=document.createElement('canvas');canvas.width=40;canvas.height=25;canvas.getContext('2d').fillRect(0,0,40,25);canvas.toBlob(blob=>{const clipboard=new DataTransfer();clipboard.items.add(new File([blob],'new-picture.png',{type:'image/png'}));const cell=document.querySelector('#rows .cell-editable[data-id="r1"][data-field="visualText"]');cell.focus();cell.dispatchEvent(new ClipboardEvent('paste',{bubbles:true,cancelable:true,clipboardData:clipboard}));});return true})()
+wait upload?.matches && upload.hasReference && upload.durable
+eval S.leave()

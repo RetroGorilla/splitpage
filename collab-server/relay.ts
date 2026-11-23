@@ -40,7 +40,7 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
   try {
     db = openWriter(directory);
     access = scriptAccess(db);
-    pictures = pictureApi(db, directory, access);
+    pictures = pictureApi(db, directory, access, origins);
   } catch (error) {
     db?.close();
     lock.close();

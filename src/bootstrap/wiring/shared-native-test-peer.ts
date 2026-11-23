@@ -86,6 +86,7 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>, 
     },
     deliverToReader: (source: "app" | "peer") =>
       reader !== null && applyUpdate(reader, replica(source).encodeState()),
+    snapshot: () => app.encodeState(),
     freshSnapshot: (source: "app" | "peer") => {
       const fresh = openReader(source);
       try {

@@ -1,4 +1,5 @@
 import * as Y from "yjs";
+import { refsIn } from "../../../../shared/blob-policy.ts";
 import { normalizeNativeGallery, readNativeGallery } from "./gallery.ts";
 import { projectSharedJoinedFields } from "../../../core/collab/projection/joins.ts";
 import type { DocumentShape } from "../../../core/document/validated.ts";
@@ -297,6 +298,7 @@ export class NativeScriptReader {
   private headingPlaces = new Map<string, NativeSpanPlace>();
   private candidates: UnplacedRef[] = [];
   private readonly rowCache = new Map<string, NativeReadRow>();
+  private pictureRefsByRow?: WeakMap<NativeReadRow, readonly string[]>;
   private readonly seamsByRow = new Map<string, NativeNarrationSeams>();
   private registryCache: { readonly records: Registries; readonly inputs: NativeRegistryRowInputs } | null = null;
   private readonly anchorsByRow = new Map<string, Set<string>>();
@@ -1129,6 +1131,27 @@ export class NativeScriptReader {
     const { people, productionTags, brollShots } = snapshot;
     this.registryCache = { inputs, records: deepFrozen({ people, productionTags, brollShots }) };
     return deepFrozen(snapshot);
+  }
+
+  pictureReferences() {
+    const byRow = this.pictureRefsByRow ??= new WeakMap();
+    const required = new Set(refsIn({ comments: this.collect(null).comments }));
+    for (const row of this.rows()) {
+      let refs = byRow.get(row);
+      if (!refs) {
+        refs = refsIn({ rows: [{ ...row.fields, visualText: row.visualText, audioText: row.audioText }] });
+        byRow.set(row, refs);
+      }
+      for (const sha of refs) required.add(sha);
+    }
+    const rows = Array.from(this.roots.beats.values(), beat =>
+      beat instanceof Y.Map ? readNativeGallery(beat.get(NATIVE_GALLERY_KEY)) : null);
+    const comments = Array.from(this.roots.comments, ([id, record]) =>
+      record instanceof Y.Map ? fileFields(record, "comments/" + id, null) : null);
+    const replies = Array.from(this.roots.replies, ([id, record]) =>
+      record instanceof Y.Map ? fileFields(record, "replies/" + id, null) : null);
+    const retained = refsIn({ rows, comments: [...comments, { replies }] });
+    return { required: [...required], tracked: [...new Set([...required, ...retained])] };
   }
 }
 

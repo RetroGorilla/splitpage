@@ -141,6 +141,22 @@ test("the IndexedDB backend stores a picture as a Blob record and reads the same
   await assert.rejects(createIdbBlobBackend(() => null, () => now).open(), /no-indexeddb/);
 });
 
+test("verified bytes replace a damaged IndexedDB picture after a failed read", async () => {
+  const factory = new IDBFactory();
+  const idb = createIdbBlobBackend(() => factory as unknown as IDBFactory, () => 1);
+  const backend = await idb.open();
+  const good = image("png", 16, 2), bad = image("png", 16, 3);
+  await backend.put(good.sha256, bad.bytes as Uint8Array, "image/png");
+  const store = createBlobStore(hostWith(idb).host);
+  assert.deepEqual(await store.ensureBytes([good.sha256]), [good.sha256]);
+  assert.equal(store.has(bad.sha256), false);
+  store.intern(good.bytes);
+  assert.deepEqual(await store.persist([good.sha256]), []);
+  const reopened = createBlobStore(hostWith(idb).host);
+  assert.deepEqual(await reopened.ensureBytes([good.sha256]), []);
+  assert.equal(reopened.isDurable(good.sha256), true);
+});
+
 test("adopt keeps what an ingestion handed over as it is, in order, and checks anything else by hashing it (#320)", () => {
   const rec = hostWith(null);
   const store = createBlobStore(rec.host);

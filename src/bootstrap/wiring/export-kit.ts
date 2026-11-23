@@ -8,6 +8,7 @@ import { assetPorts } from "../../adapters/formats/export-assets.ts";
 import { startExportKit } from "./export-capture.ts";
 import { documentReader } from "./ports/document.ts";
 import { preferenceValues } from "./ports/preferences.ts";
+import { loadSharedExportPictures } from "./shared-picture-session.ts";
 
 export function wireExportKit(entry: DocumentEntry): { readonly owner: ExportKit; readonly stop: () => void } {
   const made = createExportKit({
@@ -17,7 +18,7 @@ export function wireExportKit(entry: DocumentEntry): { readonly owner: ExportKit
     ids: randomIds,
     services: () => exportServices() as ExportServices<ExportAnchorBody>,
     entry,
-    assets: assetPorts,
+    assets: { ...assetPorts, load: hashes => loadSharedExportPictures(hashes) ?? assetPorts.load(hashes) },
     following: Node.DOCUMENT_POSITION_FOLLOWING
   });
   return { owner: made, stop: startExportKit(made) };

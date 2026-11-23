@@ -113,7 +113,11 @@ async function buildFileData(kind: string, baseName: string, opts?: Readonly<Rec
     ? (exporter as NonNullable<typeof exporter>).fileName(baseName, { imageBundle: !!made.imageBundle })
     : baseName + "." + kind;
   if (made.diagnostics) {
-    warnImagesLeftOut(made.diagnostics.imagesLeftOut, filename);
+    if (made.diagnostics.missingPictures?.length) {
+      showToast("Pictures left out of " + filename + " — " + made.diagnostics.missingPictures.join(", "), "warn");
+    } else {
+      warnImagesLeftOut(made.diagnostics.imagesLeftOut, filename);
+    }
     if (made.diagnostics.unshownCharacters) showToast(unshownCharactersText(made.diagnostics.unshownCharacters), "warn");
   }
   return { data: made.data, filename: filename, withFiles: made.withFiles ? { scriptName: made.withFiles.scriptName, script } : null };

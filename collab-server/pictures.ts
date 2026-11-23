@@ -17,7 +17,7 @@ function respond(response: ServerResponse, status: number): void {
   if (!response.destroyed) response.writeHead(status).end();
 }
 
-export function pictureApi(db: DatabaseSync, directory: string, access: ReturnType<typeof scriptAccess>) {
+export function pictureApi(db: DatabaseSync, directory: string, access: ReturnType<typeof scriptAccess>, origins: ReadonlySet<string>) {
   const pictures = join(directory, "pictures");
   mkdirSync(pictures, { recursive: true, mode: 0o700 });
   const find = db.prepare("SELECT bytes, mime FROM script_pictures WHERE script = ? AND sha = ?");
@@ -114,6 +114,19 @@ export function pictureApi(db: DatabaseSync, directory: string, access: ReturnTy
     if (request.method === "PUT") response.setHeader("Connection", "close");
     if (!isSha256Hex(sha)) {
       respond(response, 400);
+      return true;
+    }
+    const origin = request.headers.origin;
+    response.setHeader("Cache-Control", "no-store");
+    response.setHeader("Vary", "Origin");
+    if (origin && origins.has(origin)) response.setHeader("Access-Control-Allow-Origin", origin);
+    if (request.method === "OPTIONS") {
+      const method = request.headers["access-control-request-method"];
+      if (origin && origins.has(origin) && (method === "GET" || method === "PUT")) {
+        response.setHeader("Access-Control-Allow-Methods", "GET, PUT");
+        response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+        respond(response, 204);
+      } else respond(response, 403);
       return true;
     }
     if (closed) {

@@ -12,7 +12,7 @@ export interface BlobBackend {
   name?: string;
   persistent?: boolean;
   get: (sha: string, options?: { strict?: boolean }) => Promise<StoredBlob | null>;
-  put: (sha: string, bytes: Uint8Array, mime: string) => Promise<unknown>;
+  put: (sha: string, bytes: Uint8Array, mime: string, replaceDamaged?: boolean) => Promise<unknown>;
   missing: (shas: string[]) => Promise<string[]>;
 }
 
@@ -82,6 +82,7 @@ export function createBlobStore(host: BlobStoreHost): BlobStore {
   let durable: Record<string, boolean> = Object.create(null);
   let persisting: Map<string, Promise<boolean>> = new Map();
   let loading: Map<string, Promise<void>> = new Map();
+  const damaged = new Set<string>();
 
   let backend: BlobBackend | null = null;
   let backendPromise: Promise<BlobBackend> | null = null;
@@ -192,6 +193,7 @@ export function createBlobStore(host: BlobStoreHost): BlobStore {
     if (next) unavailableFallbacks.delete(next);
     backendPromise = null;
     durable = Object.create(null);
+    damaged.clear();
     persisting = new Map();
     loading = new Map();
   }
@@ -239,12 +241,16 @@ export function createBlobStore(host: BlobStoreHost): BlobStore {
     const gen = backendGen;
     const p: Promise<void> = Promise.resolve().then(function () { return from.get(sha, { strict: true }); }).then(function (r) {
       if (!r || !r.bytes || entries[sha]) return;
-      const rec = intern(r.bytes);
-      if (!rec) return;
-      if (rec.sha256 !== sha) {
+      const rec = imageRecordOf(r.bytes);
+      if (!rec || rec.sha256 !== sha) {
+        if (gen === backendGen) {
+          Reflect.deleteProperty(durable, sha);
+          damaged.add(sha);
+        }
         host.warn("Image store: blob " + sha + " failed its hash check");
         return;
       }
+      keep(rec, new Uint8Array(r.bytes));
       if (gen === backendGen) durable[sha] = true;
     }).finally(function () {
       if (loading.get(sha) === p) loading.delete(sha);
@@ -271,10 +277,13 @@ export function createBlobStore(host: BlobStoreHost): BlobStore {
     const gen = backendGen;
     const e = entries[sha];
     const p: Promise<boolean> = Promise.resolve().then(function () {
-      if (e) return to.put(sha, e.bytes.slice(), e.record.mime).then(function () { return true; });
+      if (e) return to.put(sha, e.bytes.slice(), e.record.mime, damaged.has(sha)).then(function () { return true; });
       return to.missing([sha]).then(function (m) { return Array.isArray(m) && m.indexOf(sha) === -1; });
     }).then(function (ok) {
-      if (ok && gen === backendGen) durable[sha] = true;
+      if (ok && gen === backendGen) {
+        durable[sha] = true;
+        damaged.delete(sha);
+      }
       return !!ok;
     }, function (err: unknown) {
       host.warn("Image store: could not store blob " + sha, err);
@@ -321,9 +330,9 @@ export function createMemoryBlobBackend(): BlobBackend {
       const r = isSha256Hex(sha) ? kept[sha] : null;
       return Promise.resolve(r ? { bytes: r.bytes.slice(), mime: r.mime } : null);
     },
-    put: function (sha, bytes, mime) {
+    put: function (sha, bytes, mime, replaceDamaged) {
       if (!isSha256Hex(sha)) return Promise.reject(new Error("bad sha"));
-      if (!kept[sha]) kept[sha] = { bytes: bytes.slice(), mime: mime };
+      if (replaceDamaged || !kept[sha]) kept[sha] = { bytes: bytes.slice(), mime: mime };
       return Promise.resolve();
     },
     missing: function (shas) {
@@ -444,14 +453,14 @@ export function createIdbBlobBackend(factory: () => IDBFactory | null, now: () =
         return blobToBytes(rec.bytes).then(function (bytes) { return { bytes: bytes, mime: rec.mime }; });
       });
     },
-    put: function (sha, bytes, mime) {
+    put: function (sha, bytes, mime, replaceDamaged) {
       if (!isSha256Hex(sha)) return Promise.reject(new Error("bad sha"));
       return tx<never>("readwrite", function (store) {
         const req = store.get(sha);
         req.onsuccess = function () {
           const at = now();
           const rec = req.result as IdbBlobRecord | undefined;
-          if (rec && rec.bytes instanceof Blob) {
+          if (!replaceDamaged && rec && rec.bytes instanceof Blob) {
             if (!(at - (rec.usedAt || 0) < BLOB_TOUCH_MS)) {
               rec.usedAt = at;
               store.put(rec, sha);
