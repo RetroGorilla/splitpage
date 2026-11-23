@@ -8,7 +8,14 @@ import { DB_NAME, verifyDatabase } from "./storage.ts";
 
 const BACKUP_NAME = /^relay-\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d\.\d{3}Z-[a-f0-9-]{36}\.sqlite$/;
 
+function requireDatabaseOnlyBackup(source: DatabaseSync): void {
+  if (source.prepare("SELECT 1 FROM script_pictures LIMIT 1").get()) {
+    throw new RelayError("Relay backup requires picture files. Keep existing backups and wait for picture backup support.");
+  }
+}
+
 export function verifyCopy(source: DatabaseSync, copy: DatabaseSync): void {
+  requireDatabaseOnlyBackup(source);
   verifyDatabase(copy);
   verifyRows(source, copy, "documents", "SELECT name, state FROM documents ORDER BY name");
   verifyRows(source, copy, "scripts", "SELECT name, status FROM scripts ORDER BY name");
@@ -42,6 +49,7 @@ export async function backupRelay(env: NodeJS.ProcessEnv, copyDatabase = backup)
   using source = new DatabaseSync(join(directory, DB_NAME), { readOnly: true, timeout: 5000 });
   source.exec("BEGIN");
   verifyDatabase(source);
+  requireDatabaseOnlyBackup(source);
   mkdirSync(destination, { recursive: true, mode: 0o700 });
   const staging = mkdtempSync(join(destination, ".backup-"));
   const pending = join(staging, DB_NAME);

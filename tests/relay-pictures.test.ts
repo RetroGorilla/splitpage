@@ -1,13 +1,20 @@
 import assert from "node:assert/strict";
+import { fork } from "node:child_process";
 import { createHash } from "node:crypto";
 import { once } from "node:events";
-import { mkdtemp, readdir, rm, stat } from "node:fs/promises";
+import fs from "node:fs";
+import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
 import { request } from "node:http";
+import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
+import { backupRelay } from "../collab-server/backup.ts";
+import { fileURLToPath } from "node:url";
 import { startRelay } from "../collab-server/relay.ts";
+import { openWriter } from "../collab-server/storage.ts";
+import { scriptAccess } from "../collab-server/access.ts";
 
 const limit = 16 * 1024 * 1024;
 const png = Buffer.alloc(24);
@@ -33,7 +40,7 @@ async function fixture() {
       fetch(url(script, sha), { method: "PUT", headers: { authorization: "Bearer " + token, "content-type": type }, body: new Uint8Array(bytes) });
     const get = (script: string, token: string) => fetch(url(script), { headers: { authorization: "Bearer " + token } });
     return {
-      first, second, put, get, url, pictures, relay,
+      first, second, put, get, url, pictures, relay, directory,
       async [Symbol.asyncDispose]() {
         await relay.destroy();
         await rm(directory, { recursive: true });
@@ -63,8 +70,7 @@ test("picture upload validates size, hash, type and dimensions before recording"
   });
   const received = once(stream, "response");
   stream.write(Buffer.alloc(limit));
-  for (let i = 0; i < 100 && !await stat(join(f.pictures, "upload-0")).then(s => s.size === limit, () => false); i++) await delay(10);
-  assert.equal((await stat(join(f.pictures, "upload-0"))).size, limit);
+  await waitForStagedBytes(f.pictures, 0, limit);
   stream.end(Buffer.alloc(1));
   const [response] = await received;
   assert.equal(response.statusCode, 413);
@@ -93,6 +99,12 @@ test("completed pictures are scoped to a script and an active invitation", async
   assert.equal((await f.put(png)).status, 403);
 });
 
+async function waitForStagedBytes(directory: string, slot: number, bytes: number) {
+  const path = join(directory, "upload-" + slot);
+  for (let i = 0; i < 100 && !await stat(path).then(s => s.size === bytes, () => false); i++) await delay(10);
+  assert.equal((await stat(path)).size, bytes);
+}
+
 test("interrupted uploads release temporary storage and can be retried", async () => {
   await using f = await fixture();
   const partial = request(f.url(), {
@@ -102,8 +114,7 @@ test("interrupted uploads release temporary storage and can be retried", async (
   partial.on("error", () => {});
   partial.write(png.subarray(0, 12));
   try {
-    for (let i = 0; i < 100 && !await stat(join(f.pictures, "upload-0")).then(s => s.size > 0, () => false); i++) await delay(10);
-    assert.equal((await stat(join(f.pictures, "upload-0"))).size, 12);
+    await waitForStagedBytes(f.pictures, 0, 12);
   } finally {
     partial.destroy();
   }
@@ -121,7 +132,152 @@ test("picture storage enforces the per-script quota", async () => {
     picture[24] = i;
     assert.equal((await f.put(picture)).status, 201);
   }
-  picture[24] = 12;
-  assert.equal((await f.put(picture)).status, 413);
-  assert.equal((await f.put(picture, hash(picture), f.second.token, "image/png", "second")).status, 201);
+  const left = Buffer.from(picture.subarray(0, limit / 2));
+  left[24] = 12;
+  const right = Buffer.from(left);
+  right[24] = 13;
+  const statuses = (await Promise.all([f.put(left), f.put(right)])).map(response => response.status);
+  assert.deepEqual(statuses.toSorted(), [201, 413]);
+  assert.equal((await f.put(statuses[0] === 201 ? right : left)).status, 413);
+  assert.equal((await f.put(left, hash(left), f.second.token, "image/png", "second")).status, 201);
+});
+
+test("a retry or a second script's upload restores a missing picture body", async () => {
+  await using f = await fixture();
+  const body = join(f.pictures, hash(png));
+  assert.equal((await f.put(png)).status, 201);
+  await rm(body);
+  assert.equal((await f.put(png)).status, 204);
+  let downloaded = await f.get("first", f.first.token);
+  assert.equal(downloaded.status, 200);
+  assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()), png);
+  await rm(body);
+  assert.equal((await f.put(png, hash(png), f.second.token, "image/png", "second")).status, 201);
+  for (const [script, token] of [["first", f.first.token], ["second", f.second.token]] as const) {
+    downloaded = await f.get(script, token);
+    assert.equal(downloaded.status, 200);
+    assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()), png);
+  }
+});
+
+test("a database-only backup with picture associations leaves prior backups in place", async () => {
+  await using f = await fixture();
+  const env = { SPLITPAGE_DATA_DIR: f.directory, SPLITPAGE_BACKUP_KEEP: "1" };
+  const previous = await backupRelay(env);
+  const backups = join(f.directory, "backups");
+  const previousBytes = await readFile(join(backups, previous));
+  assert.equal((await f.put(png)).status, 201);
+  await assert.rejects(backupRelay(env), {
+    message: "Relay backup requires picture files. Keep existing backups and wait for picture backup support."
+  });
+  assert.deepEqual(await readdir(backups), [previous]);
+  assert.deepEqual(await readFile(join(backups, previous)), previousBytes);
+});
+
+function partialUpload(url: string, token: string) {
+  const partial = request(url, {
+    method: "PUT",
+    headers: { authorization: "Bearer " + token, "content-type": "image/png", "content-length": png.length }
+  });
+  partial.write(png.subarray(0, 12));
+  return partial;
+}
+
+test("an inactive staging slot is reclaimed after a transient cleanup failure", async (t) => {
+  await using f = await fixture();
+  const active = partialUpload(f.url(), f.first.token);
+  const response = once(active, "response");
+  const dirty = join(f.pictures, "upload-1");
+  const original = fs.rmSync;
+  let cleanupFailed!: () => void;
+  const failed = new Promise<void>(resolve => { cleanupFailed = resolve; });
+  let blocked = true;
+  const cleanup = t.mock.method(fs, "rmSync", (path: fs.PathLike, options?: fs.RmOptions) => {
+    if (path === dirty && blocked) {
+      cleanupFailed();
+      throw Object.assign(new Error(), { code: "EBUSY" });
+    }
+    original(path, options);
+  });
+  syncBuiltinESMExports();
+  try {
+    await waitForStagedBytes(f.pictures, 0, 12);
+    assert.equal((await f.put(png, "a".repeat(64))).status, 422);
+    await failed;
+    assert.deepEqual(await readFile(dirty), png);
+    assert.equal((await f.put(png, "b".repeat(64))).status, 422);
+    assert.deepEqual(await readFile(dirty), png);
+    blocked = false;
+    assert.equal((await f.put(png)).status, 201);
+    assert.equal((await stat(join(f.pictures, "upload-0"))).size, 12);
+    await assert.rejects(stat(dirty), { code: "ENOENT" });
+    active.end(png.subarray(12));
+    const [result] = await response;
+    assert.equal(result.statusCode, 204);
+    result.resume();
+  } finally {
+    cleanup.mock.restore();
+    syncBuiltinESMExports();
+    active.destroy();
+  }
+});
+
+function seedInvitation(directory: string, script: string) {
+  using db = openWriter(directory);
+  const access = scriptAccess(db);
+  access.register(script, "active");
+  return access.issue(script, "test invitation");
+}
+
+test("the relay refuses an upload revoked in flight and keeps private HTTP values out of logs", async (t) => {
+  const directory = await mkdtemp(join(tmpdir(), "relay-picture-logs-"));
+  const script = "private-picture-script";
+  const { id, token } = seedInvitation(directory, script);
+  const entry = new URL("./adapters/collab/native/server-process.ts", import.meta.url);
+  const child = fork(fileURLToPath(entry), {
+    env: { SPLITPAGE_DATA_DIR: directory, SPLITPAGE_ALLOWED_ORIGINS: "http://localhost", SPLITPAGE_PORT: "0" },
+    execArgv: [], stdio: ["ignore", "pipe", "pipe", "ipc"]
+  });
+  const signal = AbortSignal.timeout(10_000);
+  const stopped = once(child, "close");
+  t.after(async () => {
+    child.kill();
+    await stopped;
+    await rm(directory, { recursive: true });
+  });
+  let logs = "";
+  child.stdout?.setEncoding("utf8").on("data", (chunk: string) => { logs += chunk; });
+  child.stderr?.setEncoding("utf8").on("data", (chunk: string) => { logs += chunk; });
+  const [port] = await once(child, "message", { signal });
+  assert.equal(typeof port, "number");
+  const bytes = Buffer.concat([png, Buffer.from("private-picture-body")]);
+  const sha = hash(bytes);
+  const url = "http://127.0.0.1:" + port + "/api/scripts/" + script + "/pictures/" + sha;
+  const upload = request(url, {
+    method: "PUT",
+    headers: { authorization: "Bearer " + token, "content-type": "image/png", "content-length": bytes.length }
+  });
+  const response = once(upload, "response");
+  try {
+    upload.write(bytes.subarray(0, 12));
+    await waitForStagedBytes(join(directory, "pictures"), 0, 12);
+    const revoked = once(child, "message", { signal });
+    child.send("revoke:" + id);
+    const [revocation] = await revoked;
+    assert.equal(revocation, "revoked");
+    upload.end(bytes.subarray(12));
+    const [rejected] = await response;
+    assert.equal(rejected.statusCode, 403);
+    rejected.resume();
+    const refused = await fetch(url, { headers: { authorization: "Bearer " + token } });
+    assert.equal(refused.status, 403);
+    child.send("stop");
+    assert.deepEqual(await stopped, [0, null]);
+    assert.deepEqual(await readdir(join(directory, "pictures")), []);
+    for (const value of [script, token, sha, "private-picture-body"]) {
+      assert.equal(logs.includes(value), false);
+    }
+  } finally {
+    upload.destroy();
+  }
 });

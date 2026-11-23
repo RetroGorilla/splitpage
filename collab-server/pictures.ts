@@ -1,5 +1,5 @@
 import { createHash } from "node:crypto";
-import { closeSync, createReadStream, fsyncSync, mkdirSync, openSync, readdirSync, renameSync, rmSync } from "node:fs";
+import { closeSync, createReadStream, fsyncSync, mkdirSync, openSync, readdirSync, renameSync, rmSync, statSync } from "node:fs";
 import { open, readFile } from "node:fs/promises";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { join } from "node:path";
@@ -29,16 +29,28 @@ export function pictureApi(db: DatabaseSync, directory: string, access: ReturnTy
       rmSync(join(pictures, entry.name));
     }
   }
-  const slots = Array.from({ length: UPLOAD_SLOTS }, () => false);
+  const slots = Array.from({ length: UPLOAD_SLOTS }, (_, index) => ({
+    path: join(pictures, "upload-" + index), active: false, needsCleanup: false
+  }));
   const uploads = new Map<IncomingMessage, Promise<void>>();
   let closed = false;
 
+  function cleanSlot(slot: (typeof slots)[number]): boolean {
+    try {
+      rmSync(slot.path, { force: true });
+      slot.needsCleanup = false;
+    } catch {
+      slot.needsCleanup = true;
+    }
+    return !slot.needsCleanup;
+  }
+
   async function upload(request: IncomingMessage, response: ServerResponse, script: string, sha: string, invitation: string) {
     if (Number(request.headers["content-length"]) > PICTURE_BYTES) return respond(response, 413);
-    const slot = slots.indexOf(false);
-    if (slot < 0) return respond(response, 503);
-    slots[slot] = true;
-    const temporary = join(pictures, "upload-" + slot);
+    const slot = slots.find(slot => !slot.active && (!slot.needsCleanup || cleanSlot(slot)));
+    if (!slot) return respond(response, 503);
+    slot.active = true;
+    const temporary = slot.path;
     const timeout = setTimeout(() => request.destroy(), UPLOAD_TIMEOUT_MS);
     try {
       const hash = createHash("sha256");
@@ -66,10 +78,11 @@ export function pictureApi(db: DatabaseSync, directory: string, access: ReturnTy
       const mime = sniffImageMime(data);
       if (!mime || mime !== request.headers["content-type"] || !imageDims(data)) return respond(response, 415);
       if (!access.isValid(invitation)) return respond(response, 403);
-      if (find.get(script, sha)) return respond(response, 204);
-      if (Number(total.get(script)?.bytes) + bytes > SCRIPT_BYTES) return respond(response, 413);
-      const needsFile = !referenced.get(sha);
+      const existing = find.get(script, sha);
+      if (!existing && Number(total.get(script)?.bytes) + bytes > SCRIPT_BYTES) return respond(response, 413);
       const destination = join(pictures, sha);
+      const alreadyReferenced = existing || referenced.get(sha);
+      const needsFile = !statSync(destination, { throwIfNoEntry: false });
       if (needsFile) renameSync(temporary, destination);
       try {
         if (needsFile && process.platform !== "win32") {
@@ -80,16 +93,16 @@ export function pictureApi(db: DatabaseSync, directory: string, access: ReturnTy
             closeSync(folder);
           }
         }
-        record.run(script, sha, bytes, mime);
+        if (!existing) record.run(script, sha, bytes, mime);
       } catch (error) {
-        if (needsFile) rmSync(destination, { force: true });
+        if (needsFile && !alreadyReferenced) rmSync(destination, { force: true });
         throw error;
       }
-      respond(response, 201);
+      respond(response, existing ? 204 : 201);
     } finally {
       clearTimeout(timeout);
-      rmSync(temporary, { force: true });
-      slots[slot] = false;
+      cleanSlot(slot);
+      slot.active = false;
     }
   }
 

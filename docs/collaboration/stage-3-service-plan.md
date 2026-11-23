@@ -156,4 +156,6 @@ Use `PUT` and `GET` on `/api/scripts/<encoded-script-id>/pictures/<lowercase-sha
 
 The relay reserves four 16 MiB upload slots for a 64 MiB staging budget. A full staging area returns 503, and an upload that takes more than 60 seconds is disconnected. The relay removes abandoned staging files at startup while it holds the writer lock. SQLite accounts for each script's pictures even when multiple scripts share the same validated bytes.
 
+The database-only backup command refuses snapshots containing picture associations. Existing backups remain available while part 7 adds picture backups.
+
 Build the relay image from the repository root with `docker build -f collab-server/Dockerfile .`. The build context includes the shared picture policy.
