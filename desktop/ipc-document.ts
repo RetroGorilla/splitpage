@@ -19,9 +19,10 @@ function createDocumentIpc({
   tabOf, fileIds, unindexTabSource, indexTabSource, recents, windowsById, applyWindowTitle,
   pushShellState, persistShellState, docClaims, testMode: TEST_MODE, flushPendingPayload, restoreNotice,
   routeOpenPath, draftStore, draftFiniteNumber, draftBodyTooLarge, buildDraftHeader, draftsPreviousSession,
-  pendingDraftFlushes
+  pendingDraftFlushes, nativeReplicaForDevice
 }: DesktopDocumentIpcDependencies) {
   function registerDocumentIpc({ ipcHandle, ipcOn }: Parameters<DesktopRegisterIpcGroup>[0]) {
+    ipcHandle("splitpage:native-replica", (event, request) => nativeReplicaForDevice(event.sender, request));
     ipcOn("splitpage:set-document-state", (event, docState) => {
       const tab = tabOf(event);
       if (!tab) return;

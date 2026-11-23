@@ -31,6 +31,7 @@ interface Lease {
   readonly id: string;
   readonly replica: Promise<Replica>;
   done: Promise<unknown>;
+  forgotten?: boolean;
   close?: Promise<void>;
   detach?: () => void;
 }
@@ -45,7 +46,8 @@ function isRequest(value: unknown): value is NativeReplicaRequest {
   if (typeof name !== "string" || !SCRIPT_ID.test(name)) return false;
   if (op === "open" || op === "delete") return value.length === 2;
   if (typeof lease !== "string" || !LEASE_ID.test(lease)) return false;
-  if (op === "close") return value.length === 3;
+  if (op === "join") return value.length === 4 && typeof through === "string" && through.length > 0;
+  if (op === "membership" || op === "forget" || op === "close") return value.length === 3;
   if (op === "read") return value.length === 4 && (through === null || generation(through, 0));
   return op === "write" && value.length === 6 && generation(through, 1) && typeof checkpoint === "boolean"
     && bytes instanceof Uint8Array && bytes.byteLength > 0 && bytes.buffer instanceof ArrayBuffer;
@@ -56,7 +58,12 @@ function failure(error: unknown): NativeReplicaReply {
   return { kind: "failed", reason: code === "ENOSPC" || code === "EDQUOT" ? "quota" : "io" };
 }
 
-function createNativeReplicaIpc(userData: string, disk?: NativeReplicaFileSystem) {
+interface CredentialCipher {
+  readonly encrypt: (token: string) => Buffer;
+  readonly decrypt: (bytes: Buffer) => string;
+}
+
+function createNativeReplicaIpc(userData: string, disk?: NativeReplicaFileSystem, cipher?: CredentialCipher) {
   const files = filesModule.createNativeReplicaFiles(userData, disk);
   const leases = new Map<string, Lease | null>();
 
@@ -113,6 +120,22 @@ function createNativeReplicaIpc(userData: string, disk?: NativeReplicaFileSystem
     const operation = lease.done.then(async (): Promise<NativeReplicaReply> => {
       const replica = await lease.replica;
       if (request[0] === "read") return { kind: "read", entries: replica.read(request[3]) };
+      if (lease.forgotten) return CLOSED;
+      if (request[0] === "forget") {
+        await files.remove(name);
+        lease.forgotten = true;
+        return STORED;
+      }
+      if (request[0] === "membership") {
+        const bytes = await replica.readMembership();
+        if (bytes && !cipher) return { kind: "failed", reason: "io" };
+        return { kind: "membership", token: bytes && cipher ? cipher.decrypt(bytes) : null };
+      }
+      if (request[0] === "join") {
+        if (!cipher) return { kind: "failed", reason: "io" };
+        await replica.writeMembership(cipher.encrypt(request[3]));
+        return STORED;
+      }
       if (request[0] !== "write") return CLOSED;
       const [, , , generation, checkpoint, bytes] = request;
       await replica.write({ generation, checkpoint, bytes });

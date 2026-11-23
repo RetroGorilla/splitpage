@@ -17,8 +17,8 @@ class Renderer extends EventEmitter {
   isDestroyed(): boolean { return false; }
 }
 
-export function replicasAt(userData: string, fs?: NativeReplicaFileSystem) {
-  const handle = createNativeReplicaIpc(userData, fs);
+export function replicasAt(userData: string, fs?: NativeReplicaFileSystem, cipher?: Parameters<typeof createNativeReplicaIpc>[2]) {
+  const handle = createNativeReplicaIpc(userData, fs, cipher);
   return {
     window() {
       const sender = new Renderer();

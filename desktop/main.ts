@@ -34,6 +34,7 @@ import type * as IpcHistoryBlob from "./ipc-history-blob.ts";
 import type * as IpcTabstrip from "./ipc-tabstrip.ts";
 import type * as IpcTestMode from "./ipc-test-mode.ts";
 import type * as IpcPrint from "./ipc-print.ts";
+import type { createNativeReplicaIpc as CreateNativeReplicaIpc } from "./native-replica-ipc.ts";
 import type * as PrintPdf from "./print-pdf.ts";
 import type * as HistoryPolicy from "../shared/history-policy.ts";
 import type * as HistoryStore from "../shared/history-store.ts";
@@ -63,7 +64,7 @@ type NativeMainElectron = Omit<typeof Electron, "dialog" | "BrowserWindow" | "Me
 
 const {
   app, BrowserWindow, WebContentsView, Menu, protocol, net, ipcMain, dialog, shell,
-  session, nativeTheme, screen
+  session, nativeTheme, screen, safeStorage
 }: NativeMainElectron = require("electron");
 const path: DesktopNativePath = require("node:path");
 const fs: DesktopNativeFs = require("node:fs");
@@ -1862,11 +1863,29 @@ const { registerShellIpc } = createShellIpc({
   voiceHelperInstance: voice.voiceHelperInstance
 });
 
+const { createNativeReplicaIpc }: { createNativeReplicaIpc: typeof CreateNativeReplicaIpc } = require("./native-replica-ipc.ts");
+let handleReplica: ReturnType<typeof createNativeReplicaIpc> | undefined;
+function nativeReplicaForDevice(sender: Electron.WebContents, request: unknown) {
+  if (!Array.isArray(request) || typeof request[1] !== "string" || !request[1].includes("/")) {
+    throw new TypeError("Native replica requests require deployment and script identities.");
+  }
+  handleReplica ??= createNativeReplicaIpc(app.getPath("userData"), undefined, {
+    encrypt(token) {
+      if (!safeStorage.isEncryptionAvailable() || safeStorage.getSelectedStorageBackend?.() === "basic_text") {
+        throw new Error("The operating system key store is unavailable.");
+      }
+      return safeStorage.encryptString(token);
+    },
+    decrypt: bytes => safeStorage.decryptString(bytes)
+  });
+  return handleReplica(sender, request);
+}
+
 const { registerDocumentIpc } = createDocumentIpc({
   tabOf, fileIds, unindexTabSource, indexTabSource, recents, windowsById, applyWindowTitle,
   pushShellState, persistShellState, docClaims, testMode: TEST_MODE, flushPendingPayload, restoreNotice,
   routeOpenPath, draftStore: () => draftStore, draftFiniteNumber, draftBodyTooLarge, buildDraftHeader,
-  draftsPreviousSession: () => draftsPreviousSession, pendingDraftFlushes
+  draftsPreviousSession: () => draftsPreviousSession, pendingDraftFlushes, nativeReplicaForDevice
 });
 
 const { registerHistoryBlobIpc } = createHistoryBlobIpc({

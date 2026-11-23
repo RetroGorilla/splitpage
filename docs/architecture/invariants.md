@@ -454,6 +454,7 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
   retry without offering partial delivery. An unavailable store or an empty remainder offers no choice. Exports
   run one at a time; newer attempts invalidate older prompts. Expired intact Older entries are not omissions.
 - **Behaviour:** Before any byte of an app-data export is written, the bundle is checked for keys matching `/token|api[-_]?key|client[-_]?id|secret|password|\bpin\b/i`, and it must contain none. An import carrying such a key is refused. Image bytes count toward the 200 MB export cap. Images whose bytes could not be read are listed in `missingBlobs`, and the export warns about them.
+- **Shared local copies:** The export key walk still applies. The app-data test stores a generated invitation and checks that the decoded bundle contains neither the invitation nor its hash and that the bundle is identical to the baseline.
 - **Tests:** browser `27-app-data.txt` (case 2, the "invariant #48" key walk; case 7, a bundle carrying `apiKey`; cases 14, 15 and 19); `34-desktop-app-data-export.txt`.
 - **Owner:** app-data bundle codec under `src/features/settings/app-data.ts` · **Milestone:** 6 · **Class:** keep
 - **Replacement:** —
@@ -616,18 +617,9 @@ No test coverage found: INV-08, INV-50. Partial coverage: INV-05, INV-11, INV-12
 - **Replacement:** —
 - **Acceptance:** both pass. New unit test: text extracted from a PDF export contains no footer text.
 
-### INV-62 — Collaborate credentials stay in this browser, per server
+### INV-62 — Shared script invitations stay in device credential storage
 
-Retired 2026-10-28: feature removed.
-
-- **Behaviour:**
-  - **Owner key:** typed, posted to `/api/join` and never stored.
-  - **Owner token:** kept in the tab (`splitpage-server-token`) and, when remembered, in the per-server map `splitpage-server-tokens`.
-  - **Link key:** kept in the link and the tab (`splitpage-review-key`). It is stored on the device (`splitpage-invites`) only when the server reports `linksPersist: true`, and it leaves the address bar as soon as it is read.
-  - **Link token:** the tab's alone. It never enters the owner's map.
-  - **Excluded:** none of them ever enters `state`, a file, an export, the app-data bundle, `desktop-state.json`, a draft header, the browser draft store, or any URL other than the link itself.
-- **Tests:** `src/test/collaborate.test.mjs` and browser suites `260-collaborate-local.txt`, `261-collaborate-links.txt` and `263-collaborate-guest.txt` were removed with the feature; no test holds this today. The rebuild is planned in [COLLABORATION-PLAN.md](../COLLABORATION-PLAN.md).
-- **Owner:** `src/application` (connection and authority) over browser storage adapters in `src/adapters/` · **Milestone:** 4 · **Class:** keep
-- **Replacement:** — (plan §6: credentials and invitation fragments never enter exports or recovery metadata).
-- **Acceptance:** the suites pass after collaboration moves behind application interfaces. Application test: serialising any session to a project, export or recovery record yields no token or key.
-- **Milestone 4 (4.22):** held. The authority model (`src/application/collaboration/authority.ts`, 4.16) derives who may edit from the connection's token, role and scope and stores no credential; credentials stay per server in this browser. Tests: `src/test/collaboration-authority.test.mjs` and the Collaborate suites above, re-run at the gate. `docs/HANDOFF.md` §5.62 points here.
+- **Behaviour:** An invitation belongs to a deployment and immutable script identity. Desktop stores the invitation in a main-process membership file encrypted with the operating system key store. Browser storage uses an IndexedDB invitation store separate from membership and replica records. Leave clears the local membership, credential and replica.
+- **Boundary:** Connection credentials and their hashes stay out of script content, replica updates, app-data exports, drafts and logs. The renderer uses an invitation only for the connection and credential store. The management secret is outside the app.
+- **Tests:** The local-copy tests reopen offline, verify scope isolation and leave cleanup, and check decoded replica and app-data content for a generated invitation and its hash.
+- **Owner:** Shared editor wiring, the browser local store and the desktop main-process replica handler.

@@ -73,7 +73,7 @@ const REGISTERED_BEFORE_SPLIT = [
   "splitpage:update-check invoke", "splitpage:update-download invoke", "splitpage:update-install invoke",
   "splitpage:prompter-open-in-browser invoke", "splitpage:prompter-open-in-chromium invoke",
   "splitpage:voice-status invoke", "splitpage:voice-start invoke", "splitpage:voice-microphones invoke", "splitpage:voice-stop invoke",
-  "splitpage:set-document-state send", "splitpage:renderer-ready send", "splitpage:route-open invoke",
+  "splitpage:native-replica invoke", "splitpage:set-document-state send", "splitpage:renderer-ready send", "splitpage:route-open invoke",
   "splitpage:draft-write invoke", "splitpage:draft-discard invoke", "splitpage:draft-take invoke",
   "splitpage:draft-restore-done send", "splitpage:draft-flushed send", "splitpage:history-put invoke",
   "splitpage:history-list invoke", "splitpage:history-get invoke", "splitpage:history-copy invoke",
@@ -81,7 +81,7 @@ const REGISTERED_BEFORE_SPLIT = [
   "splitpage:blob-get invoke", "splitpage:blob-missing invoke", "splitpage:tabstrip-window-id-sync sendSync",
   "splitpage:tabstrip-get-state invoke", "splitpage:tabstrip-new-tab send", "splitpage:tabstrip-activate send",
   "splitpage:tabstrip-close send", "splitpage:tabstrip-reorder send", "splitpage:tabstrip-move-here send",
-  "splitpage:tabstrip-tear-off send", "splitpage:is-test-mode-sync sendSync", "splitpage:test-native-replica invoke",
+  "splitpage:tabstrip-tear-off send", "splitpage:is-test-mode-sync sendSync",
   "splitpage:test-request-close send",
   "splitpage:test-request-close-tab send", "splitpage:test-request-quit send", "splitpage:test-draft-status invoke",
   "splitpage:test-crash-renderer send", "splitpage:test-dup-loser invoke", "splitpage:test-shell invoke"
@@ -265,7 +265,7 @@ test("neither preload can reach the other's channels", () => {
   }
 });
 
-test("the app preload exposes the native replica invoke only in test mode and passes the typed bytes through", async () => {
+test("the app preload exposes the native replica invoke in production and passes the typed bytes through", async () => {
   for (const testMode of [false, true]) {
     let bridge;
     const invocations = [];
@@ -290,12 +290,10 @@ test("the app preload exposes the native replica invoke only in test mode and pa
       process: { platform: "win32" }
     });
     assert.ok(bridge);
-    assert.equal(Object.hasOwn(bridge, "__testNativeReplica"), testMode);
-    if (testMode) {
-      const request = ["write", "scope/script", "a".repeat(32), 1, false, new Uint8Array([0, 0])];
-      assert.deepEqual(await bridge.__testNativeReplica(request), { kind: "stored" });
-      assert.deepEqual(invocations, [["splitpage:test-native-replica", request]]);
-    }
+    assert.equal(typeof bridge.nativeReplica, "function");
+    const request = ["write", "scope/script", "a".repeat(32), 1, false, new Uint8Array([0, 0])];
+    assert.deepEqual(await bridge.nativeReplica(request), { kind: "stored" });
+    assert.deepEqual(invocations, [["splitpage:native-replica", request]]);
   }
 });
 
@@ -356,7 +354,7 @@ test("in test mode, main.ts's real groups register every pair in the pinned orde
 test("outside test mode, main.ts's real groups register the same pairs in order, minus every test-only channel", () => {
   const seen = registerThroughMain({ testMode: false });
   const expected = [...REGISTERED_BEFORE_SPLIT, ...REGISTERED_AFTER_SPLIT].filter((pair) => !pair.startsWith("splitpage:test-"));
-  assert.equal(expected.length, 65);
+  assert.equal(expected.length, 66);
   assert.deepEqual(seen, expected);
   for (const pair of seen) {
     const [name, direction] = pair.split(" ");

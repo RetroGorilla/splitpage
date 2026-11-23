@@ -38,6 +38,8 @@ export type NativeLocalStoreClose = NativeLocalStoreReceipt & { readonly state: 
 export type NativeLocalStoreOpen = NativeLocalStoreFailure | {
   readonly kind: "opened";
   readonly restored: boolean;
+  readonly membership?: NativeReplicaMembership;
+  readonly discardOnClose?: () => Promise<boolean>;
   readonly generation: number;
   readonly session: ReturnType<typeof openNativeSession>;
   readonly persistent: Promise<boolean>;
@@ -52,7 +54,14 @@ export interface NativeLocalStore {
   readonly delete: (name: string) => Promise<{ readonly kind: "stored" } | NativeLocalStoreFailure>;
 }
 
+export interface NativeReplicaMembership {
+  readonly token: () => Promise<string | null>;
+  readonly join: (token: string) => Promise<void>;
+}
+
 export interface NativeReplicaConnection {
+  readonly membership?: NativeReplicaMembership;
+  readonly forget?: () => Promise<void>;
   readonly read: (through?: number) => Promise<readonly NativeReplicaEntry[]>;
   readonly write: (entry: NativeReplicaEntry) => Promise<void>;
   readonly release: () => Promise<void>;
@@ -90,7 +99,7 @@ function replicaState(entries: readonly NativeReplicaEntry[]): Uint8Array {
 }
 
 export async function attachNativeLocalStore(
-  { read, write, release, persistent, onStop }: NativeReplicaConnection, options: NativeSessionOptions
+  { read, write, release, persistent, onStop, membership, forget }: NativeReplicaConnection, options: NativeSessionOptions
 ): Promise<NativeLocalStoreOpen> {
   let stopped: NativeLocalStoreFailure | undefined;
   let disconnect: (() => void) | undefined;
@@ -107,6 +116,8 @@ export async function attachNativeLocalStore(
   let session = openNativeSession(entries.length ? { kind: "state", state: replicaState(entries) } : { kind: "empty" }, options);
   const listeners = new Set<(receipt: NativeLocalStoreReceipt) => void>();
   const closed = deferred<NativeLocalStoreClose>();
+  let discard: ReturnType<typeof deferred<boolean>> | undefined;
+  let released = false;
   let drained = deferred<NativeLocalStoreClose>();
   let recovering = false, handoff: ReturnType<typeof deferred<Session>> | undefined;
   let recovery: Uint8Array | undefined;
@@ -226,14 +237,17 @@ export async function attachNativeLocalStore(
         return;
       } catch (error) { requested.reject(error); }
     }
+    const discarded = discard && forget ? await forget().then(() => true, () => false) : false;
     try { await release(); }
     catch (error) {
       if (result.kind === "stored") result = { ...nativeLocalStoreFailure(error), generation: next, committed };
     }
     listeners.clear();
     const outcome = { ...result, state };
+    released = true;
     finished.resolve(outcome);
     closed.resolve(outcome);
+    discard?.resolve(discarded);
   }
 
   function bind(): void {
@@ -262,6 +276,8 @@ export async function attachNativeLocalStore(
   return {
     kind: "opened", restored: entries.length > 0, generation, get session() { return session; },
     persistent: persistent(),
+    ...(membership && { membership }),
+    ...(forget && { discardOnClose: () => discard?.promise ?? (released ? Promise.resolve(false) : (discard = deferred<boolean>()).promise) }),
     flush: () => session.isClosingOrClosed() ? drained.promise : flush(),
     reopen,
     subscribe(listener) {

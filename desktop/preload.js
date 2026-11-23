@@ -263,6 +263,8 @@ if (location.origin === "splitpage://app") {
       return invoke("splitpage:print-to-pdf", html).then((bytes) => new Uint8Array(bytes));
     },
 
+    nativeReplica: (...args                                            ) => invoke("splitpage:native-replica", ...args),
+
     getSessionInfo() {
       return invoke("splitpage:get-session-info");
     },
@@ -400,9 +402,6 @@ if (location.origin === "splitpage://app") {
   };
 
   if (testMode) {
-    Object.assign(bridge, {
-      __testNativeReplica: (...args                                                 ) => invoke("splitpage:test-native-replica", ...args)
-    });
     bridge.__testRequestClose = () => send("splitpage:test-request-close");
     bridge.__testRequestQuit = () => send("splitpage:test-request-quit");
     bridge.__testRequestCloseTab = () => send("splitpage:test-request-close-tab");
