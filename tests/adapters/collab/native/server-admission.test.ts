@@ -407,7 +407,7 @@ test("startup explicitly sets FULL and rejects a writer connection that still re
   assert.throws(() => openWriter(kit.directory).close(), /requires WAL and synchronous=FULL/);
 });
 
-test("simulated decoder refusal at beforeHandleMessage drops queued edits, preserves multiplexed siblings and releases invitation capacity",
+test("synthetic beforeHandleMessage throw resets the connection, preserves multiplexed siblings and releases invitation capacity",
   { timeout: 30_000 }, async t => {
     const kit = serverHarness(t);
     kit.seed(NAME);
@@ -520,7 +520,7 @@ test("simulated decoder refusal at beforeHandleMessage drops queued edits, prese
 );
 
 for (const mode of ["update", "returning-sync"] as const) {
-  test(`simulated decoder refusal at beforeSync after write-lock acquisition rejects ${mode} without deadlocking later writers`,
+  test(`synthetic beforeSync throw on ${mode} resets the connection and leaves later writers unblocked`,
     { timeout: 30_000 }, async t => {
       const kit = serverHarness(t);
       const seededState = kit.seed(NAME);

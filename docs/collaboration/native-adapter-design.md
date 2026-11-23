@@ -22,7 +22,7 @@ formatting, beat status and duration, picture galleries, comment threads and pro
 Stage 3 Parts 1, 2, 3a, 3b, 4, 5, 6 and 7 of the [Stage 3 plan](stage-3-service-plan.md) are on `main` through
 `5a066c535`, alongside Part 8 evidence/runbook preparation ([#1762](https://github.com/RetroGorilla/splitpage/pull/1762)),
 management-secret rotation coverage ([#1763](https://github.com/RetroGorilla/splitpage/pull/1763)) and this branch's
-processing-boundary decoder-refusal regression:
+synthetic hook-throw boundary regression:
 
 - **Part 1 ([#1754](https://github.com/RetroGorilla/splitpage/pull/1754)):** versioned SQLite storage, per-script
   lifecycle (`pending`, `active`, `deleted`), hashed revocable invitations and wire/schema version checks; the
@@ -61,22 +61,23 @@ processing-boundary decoder-refusal regression:
   backups (`relay-*.backup`), atomic `last-backup.json` marker recorded after sync, and isolated restore revoking every
   invitation while keeping deleted scripts deleted.
 - **Part 8 evidence and runbook prep ([#1762](https://github.com/RetroGorilla/splitpage/pull/1762),
-  [#1763](https://github.com/RetroGorilla/splitpage/pull/1763)):** fail-closed cutover recipe, independent off-machine
-  archive publication tracking, operator-only loopback verification proxy, management-secret rotation regression in CI
-  (PR CI [`45115423148`](https://github.com/RetroGorilla/splitpage/actions/runs/45115423148) and `main` push
-  [`45116283823`](https://github.com/RetroGorilla/splitpage/actions/runs/45116283823) green), and processing-boundary
-  decoder-refusal regressions in `tests/adapters/collab/native/server-admission.test.ts` (with the residual wire-level
-  decoding note recorded in the evidence table).
+  [#1763](https://github.com/RetroGorilla/splitpage/pull/1763)):** fail-closed cutover recipe (final 13 cutover fixture
+  checks on `#1762`), runbook archive-publication record and loopback verification proxy, management-secret rotation
+  regression in CI (PR CI [`45115423148`](https://github.com/RetroGorilla/splitpage/actions/runs/45115423148) and `main`
+  push [`45116283823`](https://github.com/RetroGorilla/splitpage/actions/runs/45116283823) green; closing local gate hit
+  a Windows cleanup `EPERM`, then focused rerun passed), and synthetic hook-throw boundary regressions in
+  `tests/adapters/collab/native/server-admission.test.ts` (valid provider traffic with synthetic throws; actual
+  invalid-frame runtime outcome/state remains unverified, as noted in the evidence table).
 
 **Pending before Stage 3 closes:**
 
 - **Part 8 deployment and drills:** see the
   [Stage 3 evidence status](../COLLABORATION-PLAN.md#stage-3-evidence-status-main-at-5a066c535) for exact CI vs local
-  runs, verified behavior, residual wire-level note and optional depth. Replacing the owner's relay with a distinct
-  Stage 3 container on a verified empty direct-pool volume (keeping the old data directory aside), confirming live host
-  WAL+`FULL` durability, scheduling the daily off-machine backup copy with pictures and independent archive publication
-  recording, running the deployed smoke check via the operator-only verification proxy, and running the isolated
-  restore drill remain pending.
+  runs, directly observed vs source-inferred behavior, residual wire-level note and optional depth. Plan-mandated
+  outcomes still pending: replacing the owner's relay with a distinct Stage 3 container on a fresh empty direct-pool
+  volume (keeping the old data directory aside; startup self-checks WAL+`FULL` readback), daily off-machine backup
+  copy including pictures, deployed smoke check and isolated restore drill (supported by the runbook's loopback
+  verification proxy and `last-archive-copy.json` procedures).
 
 The standard shared test hook `__sharedTest` opens only the native session. There is still no release entry for shared
 mode; release builds (`node build.mjs`) omit `__sharedTest`, `?join=` handling and fragment scrubbing.
