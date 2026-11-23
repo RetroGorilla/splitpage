@@ -29,6 +29,7 @@ jobs:
       tested: ${{ steps.tested.outputs.tested }}
       app: ${{ steps.classify.outputs.app }}
       desktop: ${{ steps.classify.outputs.desktop }}
+      relay: ${{ steps.classify.outputs.relay }}
       root_due: ${{ (github.event_name == 'push' && github.ref == 'refs/heads/main') || (steps.classify.outputs.code == 'true' && steps.tested.outputs.tested != 'true') }}
     steps:
       - uses: actions/checkout@v7
@@ -207,7 +208,7 @@ jobs:
         run: npm run test:all -- --shard "${{ matrix.shard }}/8"
 
   gate:
-    needs: [changes, checks, tests, desktop-smoke]
+    needs: [changes, checks, tests, desktop-smoke, relay-container-smoke]
     if: always()
     runs-on: ${{ contains(github.event.pull_request.labels.*.name, 'ci-github') && 'ubuntu-latest' || vars.CI_RUNNER || 'ubuntu-latest' }}
     timeout-minutes: 2
@@ -216,7 +217,7 @@ jobs:
     steps:
       - name: Every required job passed, or the change was prose only
         run: |
-          echo "changes=$CHANGES code=$CODE root_due=$ROOT_DUE tested=$TESTED desktop=$DESKTOP checks=$CHECKS tests=$TESTS smoke=$SMOKE"
+          echo "changes=$CHANGES code=$CODE root_due=$ROOT_DUE tested=$TESTED desktop=$DESKTOP relay=$RELAY checks=$CHECKS tests=$TESTS smoke=$SMOKE relay_smoke=$RELAY_SMOKE"
           [ "$CHANGES" = success ] || exit 1
           want_tests=skipped
           if [ "$ROOT_DUE" = true ]; then want_tests=success; fi
@@ -224,9 +225,11 @@ jobs:
           if [ "$CODE" = true ] && [ "$TESTED" != true ]; then
             want_smoke=skipped
             if [ "$DESKTOP" = true ]; then want_smoke=success; fi
-            [ "$CHECKS" = success ] && [ "$SMOKE" = "$want_smoke" ]
+            want_relay=skipped
+            if [ "$RELAY" = true ]; then want_relay=success; fi
+            [ "$CHECKS" = success ] && [ "$SMOKE" = "$want_smoke" ] && [ "$RELAY_SMOKE" = "$want_relay" ]
           else
-            [ "$CHECKS" = skipped ] && [ "$SMOKE" = skipped ]
+            [ "$CHECKS" = skipped ] && [ "$SMOKE" = skipped ] && [ "$RELAY_SMOKE" = skipped ]
           fi
         env:
           CHANGES: ${{ needs.changes.result }}
@@ -234,9 +237,11 @@ jobs:
           ROOT_DUE: ${{ needs.changes.outputs.root_due }}
           TESTED: ${{ needs.changes.outputs.tested }}
           DESKTOP: ${{ needs.changes.outputs.desktop }}
+          RELAY: ${{ needs.changes.outputs.relay }}
           CHECKS: ${{ needs.checks.result }}
           TESTS: ${{ needs.tests.result }}
           SMOKE: ${{ needs.desktop-smoke.result }}
+          RELAY_SMOKE: ${{ needs.relay-container-smoke.result }}
 
       - name: Every required matrix shard passed
         if: needs.changes.outputs.root_due == 'true'
@@ -267,19 +272,41 @@ jobs:
           ROOT_SHARDS: '8'
 
       - name: Write the passed tree's marker
-        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && needs.changes.outputs.tree != ''
+        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && (needs.relay-container-smoke.result == 'success' || needs.relay-container-smoke.result == 'skipped') && needs.changes.outputs.tree != ''
         run: echo "$TREE" > "$RUNNER_TEMP/passed-tree.txt"
         env:
           TREE: ${{ needs.changes.outputs.tree }}
 
       - name: Upload the passed tree's marker
-        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && needs.changes.outputs.tree != ''
+        if: needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && (needs.relay-container-smoke.result == 'success' || needs.relay-container-smoke.result == 'skipped') && needs.changes.outputs.tree != ''
         uses: actions/upload-artifact@v7
         with:
           name: ci-passed-tree-${{ needs.changes.outputs.tree }}
           path: ${{ runner.temp }}/passed-tree.txt
           if-no-files-found: error
           retention-days: 30
+
+  relay-container-smoke:
+    needs: changes
+    if: needs.changes.outputs.relay == 'true' && needs.changes.outputs.tested != 'true'
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v7
+
+      - uses: actions/setup-node@v7
+        with:
+          node-version-file: .nvmrc
+          cache: npm
+          cache-dependency-path: |
+            package-lock.json
+            collab-server/package-lock.json
+
+      - name: Install tooling
+        run: npm ci --ignore-scripts && npm ci --ignore-scripts --prefix collab-server
+
+      - name: Build and verify the read-only relay container
+        run: node tests/adapters/collab/native/server-container-smoke.ts
 
   desktop-smoke:
     needs: changes

@@ -1,5 +1,5 @@
 import { createHash, randomUUID } from "node:crypto";
-import { closeSync, constants, copyFileSync, fsyncSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, renameSync, rmSync } from "node:fs";
+import { closeSync, constants, copyFileSync, fsyncSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, renameSync, rmSync, writeSync } from "node:fs";
 import { dirname, join, resolve } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import type { SQLOutputValue } from "node:sqlite";
@@ -8,6 +8,45 @@ import { dataDirectory, RelayError, retentionCount } from "./config.ts";
 import { DB_NAME, verifyDatabase } from "./storage.ts";
 
 const BACKUP_NAME = /^relay-\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d\.\d{3}Z-[a-f0-9-]{36}\.(sqlite|backup)$/;
+const LAST_BACKUP_FILE = "last-backup.json";
+const ISO_TIMESTAMP = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
+
+function recordLastBackup(directory: string, completedAt: string, syncDirectory: ((path: string) => void) | null): void {
+  const pending = join(directory, `.last-backup-${randomUUID()}.tmp`);
+  try {
+    const fd = openSync(pending, "wx", 0o600);
+    try {
+      writeSync(fd, JSON.stringify({ completedAt }) + "\n", undefined, "utf8");
+      fsyncSync(fd);
+    } finally {
+      closeSync(fd);
+    }
+    renameSync(pending, join(directory, LAST_BACKUP_FILE));
+    syncDirectory?.(directory);
+  } catch (error) {
+    rmSync(pending, { force: true });
+    throw error;
+  }
+}
+
+export function lastBackupTime(directory: string): string | null {
+  let raw: string;
+  try {
+    raw = readFileSync(join(directory, LAST_BACKUP_FILE), "utf8");
+  } catch (error) {
+    if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
+    throw error;
+  }
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
+  if (!parsed || typeof parsed !== "object" || !("completedAt" in parsed)) return null;
+  const { completedAt } = parsed as { completedAt: unknown };
+  return typeof completedAt === "string" && ISO_TIMESTAMP.test(completedAt) ? completedAt : null;
+}
 
 function claimBackup(lock: DatabaseSync): void {
   try {
@@ -138,7 +177,10 @@ export async function backupRelay(
     syncBundle(staging, syncDirectory);
     const published = join(destination, name);
     renameSync(staging, published);
-    if (!syncDirectory) return name;
+    if (!syncDirectory) {
+      recordLastBackup(directory, new Date().toISOString(), null);
+      return name;
+    }
     try {
       syncDirectory(destination);
       syncDirectory(directory);
@@ -146,6 +188,7 @@ export async function backupRelay(
       renameSync(published, staging);
       throw error;
     }
+    recordLastBackup(directory, new Date().toISOString(), syncDirectory);
     for (const expired of older.slice(keep - 1)) {
       rmSync(join(destination, expired), { recursive: true, force: true });
     }

@@ -1,8 +1,8 @@
-import { createHash, timingSafeEqual } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import type { scriptAccess } from "./access.ts";
 import { RelayError } from "./config.ts";
+import { managementAuthorizer } from "./management-auth.ts";
 
 type Commands = Pick<ReturnType<typeof scriptAccess>, "findCreation" | "create" | "issue" | "list"> & {
   revokeInvitation: (id: string) => boolean;
@@ -16,10 +16,6 @@ class RequestError extends Error {
     super();
     this.status = status;
   }
-}
-
-function digest(value: string): Buffer {
-  return createHash("sha256").update(value).digest();
 }
 
 async function body(request: IncomingMessage, limit: number): Promise<Buffer> {
@@ -47,7 +43,7 @@ function checkState(bytes: Buffer, limit: number): void {
 }
 
 export function ownerRequests(secret: string | undefined, limit: number, commands: Commands) {
-  const expected = secret?.trim() ? digest(`Bearer ${secret}`) : undefined;
+  const authorize = managementAuthorizer(secret);
   return async (request: IncomingMessage, response: ServerResponse): Promise<boolean> => {
     const path = request.url?.split("?")[0] ?? "";
     const script = /^\/api\/scripts\/([a-zA-Z0-9_-]{1,128})(\/invitations)?$/.exec(path);
@@ -59,7 +55,7 @@ export function ownerRequests(secret: string | undefined, limit: number, command
       response.end(data === undefined ? undefined : JSON.stringify(data));
     }
     try {
-      if (!expected || !timingSafeEqual(digest(request.headers.authorization ?? ""), expected)) {
+      if (!authorize(request)) {
         throw new RequestError(401);
       }
       const method = request.method;

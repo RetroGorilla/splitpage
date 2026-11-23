@@ -4,6 +4,7 @@ import { startRelay } from "../../../../collab-server/relay.ts";
 let release: (() => void) | undefined;
 let hold: Promise<void> | undefined;
 let holdDocumentLoad = false;
+let failNextLoad = false;
 let releaseLoad: (() => void) | undefined;
 let heldSyncType: number | undefined;
 let heldTraffic: Promise<void> | undefined;
@@ -21,6 +22,10 @@ process.on("message", message => {
   if (message === "hold-load") {
     holdDocumentLoad = true;
     process.send?.("load-armed");
+  }
+  if (message === "fail-next-load") {
+    failNextLoad = true;
+    process.send?.("fail-load-armed");
   }
   if (typeof message === "object" && message !== null && "holdSyncType" in message && typeof message.holdSyncType === "number") {
     heldSyncType = message.holdSyncType;
@@ -42,6 +47,11 @@ try {
       if (releaseLoad) setImmediate(releaseLoad);
     },
     async onLoadDocument({ document }) {
+      if (failNextLoad) {
+        failNextLoad = false;
+        process.send?.("load-failed");
+        throw new Error("injected load failure");
+      }
       if (!holdDocumentLoad) return;
       holdDocumentLoad = false;
       document.getMap("fixture").set("data", new Uint8Array(15_000_000));

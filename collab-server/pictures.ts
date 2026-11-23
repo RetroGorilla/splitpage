@@ -7,6 +7,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { pipeline } from "node:stream/promises";
 import { imageDims, isSha256Hex, sniffImageMime } from "../shared/blob-policy.ts";
 import type { scriptAccess } from "./access.ts";
+import { RETRY_AFTER_SECONDS } from "./limits.ts";
 
 const PICTURE_BYTES = 16 * 1024 * 1024;
 const SCRIPT_BYTES = 200 * 1024 * 1024;
@@ -17,7 +18,12 @@ function respond(response: ServerResponse, status: number): void {
   if (!response.destroyed) response.writeHead(status).end();
 }
 
-export function pictureApi(db: DatabaseSync, directory: string, access: ReturnType<typeof scriptAccess>) {
+export function pictureApi(
+  db: DatabaseSync,
+  directory: string,
+  access: ReturnType<typeof scriptAccess>,
+  maxUploads = UPLOAD_SLOTS
+) {
   const pictures = join(directory, "pictures");
   mkdirSync(pictures, { recursive: true, mode: 0o700 });
   const find = db.prepare("SELECT bytes, mime FROM script_pictures WHERE script = ? AND sha = ?");
@@ -25,11 +31,11 @@ export function pictureApi(db: DatabaseSync, directory: string, access: ReturnTy
   const referenced = db.prepare("SELECT 1 FROM script_pictures WHERE sha = ? LIMIT 1");
   const record = db.prepare("INSERT INTO script_pictures VALUES (?, ?, ?, ?)");
   for (const entry of readdirSync(pictures, { withFileTypes: true })) {
-    if (entry.isFile() && (/^upload-[0-3]$/.test(entry.name) || (isSha256Hex(entry.name) && !referenced.get(entry.name)))) {
+    if (entry.isFile() && (/^upload-\d+$/.test(entry.name) || (isSha256Hex(entry.name) && !referenced.get(entry.name)))) {
       rmSync(join(pictures, entry.name));
     }
   }
-  const slots = Array.from({ length: UPLOAD_SLOTS }, (_, index) => ({
+  const slots = Array.from({ length: maxUploads }, (_, index) => ({
     path: join(pictures, "upload-" + index), active: false, needsCleanup: false
   }));
   const uploads = new Map<IncomingMessage, Promise<void>>();
@@ -48,7 +54,10 @@ export function pictureApi(db: DatabaseSync, directory: string, access: ReturnTy
   async function upload(request: IncomingMessage, response: ServerResponse, script: string, sha: string, invitation: string) {
     if (Number(request.headers["content-length"]) > PICTURE_BYTES) return respond(response, 413);
     const slot = slots.find(slot => !slot.active && (!slot.needsCleanup || cleanSlot(slot)));
-    if (!slot) return respond(response, 503);
+    if (!slot) {
+      response.setHeader("Retry-After", RETRY_AFTER_SECONDS);
+      return respond(response, 503);
+    }
     slot.active = true;
     const temporary = slot.path;
     const timeout = setTimeout(() => request.destroy(), UPLOAD_TIMEOUT_MS);
@@ -117,6 +126,7 @@ export function pictureApi(db: DatabaseSync, directory: string, access: ReturnTy
       return true;
     }
     if (closed) {
+      response.setHeader("Retry-After", RETRY_AFTER_SECONDS);
       respond(response, 503);
       return true;
     }
@@ -160,6 +170,13 @@ export function pictureApi(db: DatabaseSync, directory: string, access: ReturnTy
 
   return {
     handle,
+    inFlight() {
+      let count = 0;
+      for (const slot of slots) {
+        if (slot.active || slot.needsCleanup) count += 1;
+      }
+      return count;
+    },
     async close() {
       closed = true;
       for (const request of uploads.keys()) request.destroy();

@@ -373,6 +373,59 @@ docker logs splitpage-relay-restore
 Open the recovered scripts with fresh copies. Check that they match the backup and that changes made after it
 are absent. Decide how to recover those changes before allowing old copies to reconnect.
 
+#### Stage 3 bounded container, limits and status endpoint
+
+The historical runbook above stays pinned to `17a57c2e7` for the legacy single-token deployment. The instructions
+below apply only to the Stage 3 relay image built from the current tree.
+
+- **Build context.** Build from the repository root with
+  `docker build -f collab-server/Dockerfile -t splitpage-relay:current .` (the image runs from
+  `/service/collab-server` and includes `shared/blob-policy.ts`; Part 5 extends this root-context build with the
+  browser shell).
+- **Bounded container flags.** Run the image as its built-in non-root `node` user with a read-only root filesystem,
+  bounded temporary storage, dropped capabilities, and CPU, memory and process limits:
+
+```sh
+docker run -d --name splitpage-relay \
+  --read-only \
+  --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+  --cpus 2 \
+  --memory 2g \
+  --pids-limit 128 \
+  --cap-drop ALL \
+  --security-opt no-new-privileges:true \
+  --stop-timeout 20 \
+  --publish 127.0.0.1:8080:8080 \
+  --env-file "$config_dir/relay.env" \
+  --mount type=volume,source=splitpage-relay-data,target=/data \
+  splitpage-relay:current
+```
+
+- **Runtime limits.** Defaults bound traffic for both unauthenticated and admitted clients:
+  `SPLITPAGE_MAX_CONNECTIONS` (default `64`), `SPLITPAGE_MAX_CONNECTIONS_PER_INVITATION` (default `8`),
+  `SPLITPAGE_MAX_MESSAGES_PER_SECOND` (default `60`) and `SPLITPAGE_MAX_UPLOADS_IN_FLIGHT` (default `4`, range `1`–`4`
+  to preserve the 64 MiB staging maximum), alongside the WebSocket and Hocuspocus pre-auth bounds (`maxPayload` 16 MB,
+  `maxFragments` 4,096, `maxBufferedChunks` 32,768 so near-15 MB reconnects over small TCP chunks succeed,
+  `perMessageDeflate: false`, `maxUnauthenticatedQueueSize` 256 KiB, `maxUnauthenticatedQueueMessages` 32,
+  `maxPendingDocuments` 4) and Node HTTP header/request timeouts. Per maintainer-approved transport decisions,
+  authenticated rate limiting uses stock `@hocuspocus/server` 4.8.0's processing-time `beforeHandleMessage` hook
+  (queued messages may accumulate during processing stalls), and total connection capacity is refused before upgrade
+  (`503` with `Retry-After`, which browsers observe as an opaque temporary failure and retry with backoff without a
+  relay-full reason). Temporary refusals (`503` with `Retry-After`, `too-many-connections`, `rate-limited`) stay
+  distinct from permanent refusals (`permission-denied`, `invitation-revoked`, `script-deleted`, `script-unknown`,
+  `unsupported-version`, `access-removed`, `merge-too-large`), and permanent refusals stop reconnecting without
+  closing unrelated documents on a multiplexed WebSocket.
+- **Private status endpoint.** `GET /api/status` shares the constant-time `Authorization: Bearer <SPLITPAGE_MANAGEMENT_SECRET>`
+  check with the owner endpoints (returning `401` when unset, missing or wrong, with `Cache-Control: no-store`). It
+  returns JSON with `connections` (`total`, `authenticated`, `documents`), `uploadsInFlight`, `storedBytes`,
+  `pictureBytes`, sanitized `lastStorageFailure` and `lastBackupAt` (recorded atomically in `/data/last-backup.json`
+  only after a verified backup is fsynced and published; POSIX hosts fsync both `backups/` and `/data`, whereas
+  Windows cannot open directory descriptors for fsync), and omits script names, script content, tokens and paths.
+- **Read-only container smoke.** On any Docker host, run `node tests/adapters/collab/native/server-container-smoke.ts`
+  to build the current image, start it with the bounded flags above, verify non-root execution, `EROFS` on the
+  container root and `ENOSPC` past the 16 MiB `/tmp` tmpfs bound, exercise owner commands, admission, revocation,
+  restart persistence, limits, status and in-container backup, and confirm log privacy.
+
 ## Decisions made
 
 Decided by the owner: rows 1 to 13 on 2026-11-18; row 4's new form and rows 14 to 19 on 2026-11-19.

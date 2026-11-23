@@ -1,6 +1,6 @@
 import assert from "node:assert/strict";
 import { fork } from "node:child_process";
-import { createHash } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { once } from "node:events";
 import fs from "node:fs";
 import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
@@ -21,13 +21,14 @@ const png = Buffer.alloc(24);
 Buffer.from("89504e470d0a1a0a0000000d494844520000000100000001", "hex").copy(png);
 const hash = (bytes: Buffer) => createHash("sha256").update(bytes).digest("hex");
 
-async function fixture() {
+async function fixture(extraEnv: Record<string, string> = {}) {
   const directory = await mkdtemp(join(tmpdir(), "relay-pictures-"));
   try {
     const relay = await startRelay({
       SPLITPAGE_DATA_DIR: directory,
       SPLITPAGE_ALLOWED_ORIGINS: "http://localhost",
-      SPLITPAGE_PORT: "0"
+      SPLITPAGE_PORT: "0",
+      ...extraEnv
     }, "127.0.0.1");
     relay.registerScript("first", "active");
     relay.registerScript("second", "active");
@@ -299,7 +300,7 @@ test("backup syncs verified contents and publication before pruning at retention
     events.length = 0;
     failing = undefined;
     const replacement = await backupRelay(env, undefined, syncDirectory);
-    assert.deepEqual(events, expected);
+    assert.deepEqual(events, [...expected, "data"]);
     assert.deepEqual(await readdir(backups), [replacement]);
   } finally {
     openMock.mock.restore();
@@ -349,6 +350,62 @@ test("an inactive staging slot is reclaimed after a transient cleanup failure", 
     const [result] = await response;
     assert.equal(result.statusCode, 204);
     result.resume();
+  } finally {
+    cleanup.mock.restore();
+    syncBuiltinESMExports();
+    active.destroy();
+  }
+});
+
+test("a slot awaiting cleanup stays counted in upload limits and status until cleanup succeeds", async (t) => {
+  const secret = randomBytes(32).toString("base64url");
+  await using f = await fixture({
+    SPLITPAGE_MANAGEMENT_SECRET: secret,
+    SPLITPAGE_MAX_UPLOADS_IN_FLIGHT: "2"
+  });
+  const statusUrl = "http://" + f.relay.URL + "/api/status";
+  async function readStatus() {
+    const response = await fetch(statusUrl, { headers: { authorization: "Bearer " + secret } });
+    assert.equal(response.status, 200);
+    return await response.json() as { uploadsInFlight: number; pictureBytes: number };
+  }
+  const active = partialUpload(f.url(), f.first.token);
+  const response = once(active, "response");
+  const dirty = join(f.pictures, "upload-1");
+  const original = fs.rmSync;
+  let cleanupFailed!: () => void;
+  const failed = new Promise<void>(resolve => { cleanupFailed = resolve; });
+  let blocked = true;
+  const cleanup = t.mock.method(fs, "rmSync", (path: fs.PathLike, options?: fs.RmOptions) => {
+    if (path === dirty && blocked) {
+      cleanupFailed();
+      throw Object.assign(new Error(), { code: "EBUSY" });
+    }
+    original(path, options);
+  });
+  syncBuiltinESMExports();
+  try {
+    await waitForStagedBytes(f.pictures, 0, 12);
+    assert.equal((await f.put(png, "a".repeat(64))).status, 422);
+    await failed;
+    assert.equal((await readStatus()).uploadsInFlight, 2);
+
+    const refused = await f.put(png, "b".repeat(64));
+    assert.equal(refused.status, 503);
+    assert.equal(refused.headers.get("retry-after"), "5");
+    assert.equal(refused.headers.get("cache-control"), "no-store");
+
+    blocked = false;
+    assert.equal((await f.put(png)).status, 201);
+    const afterCommit = await readStatus();
+    assert.equal(afterCommit.uploadsInFlight, 1);
+    assert.equal(afterCommit.pictureBytes, png.length);
+
+    active.end(png.subarray(12));
+    const [result] = await response;
+    assert.equal(result.statusCode, 204);
+    result.resume();
+    assert.equal((await readStatus()).uploadsInFlight, 0);
   } finally {
     cleanup.mock.restore();
     syncBuiltinESMExports();

@@ -2,12 +2,13 @@ import assert from "node:assert/strict";
 import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { cpSync, existsSync, mkdirSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import fs, { cpSync, existsSync, mkdirSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import { join } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
-import { backupRelay, restoreRelay, verifyCopy } from "../../../../collab-server/backup.ts";
+import { backupRelay, lastBackupTime, restoreRelay, verifyCopy } from "../../../../collab-server/backup.ts";
 import { DB_NAME, openWriter } from "../../../../collab-server/storage.ts";
 import { appendText, NAME, serverHarness, storedState, storedText } from "./server-harness.ts";
 import { seedRelaySession } from "./relay-harness.ts";
@@ -342,3 +343,66 @@ test("online backup copies the preflight snapshot even when a second connection 
   assert.equal(copy.prepare("SELECT status FROM scripts").get()?.status, "active");
   assert.equal(copy.prepare("SELECT revoked FROM invitations").get()?.revoked, 0);
 });
+
+
+test("backup publishes marker only after durable bundle sync, fails safely on marker write errors and ignores malformed markers",
+  { timeout: 30_000 }, async t => {
+    const kit = serverHarness(t);
+    kit.seed();
+    const config = { SPLITPAGE_DATA_DIR: kit.directory, SPLITPAGE_BACKUP_KEEP: "1" };
+    const backupsDir = join(kit.directory, "backups");
+    const markerPath = join(kit.directory, "last-backup.json");
+    const events: string[] = [];
+    let failBundleSync = true;
+    let failMarkerWrite = false;
+    const originalOpen = fs.openSync;
+    const originalRename = fs.renameSync;
+    const openMock = t.mock.method(fs, "openSync", (path: fs.PathLike, flags: fs.OpenMode = "r", mode?: fs.Mode) => {
+      const text = String(path);
+      if (failMarkerWrite && text.includes(".last-backup-")) {
+        throw Object.assign(new Error("simulated marker write failure"), { code: "EIO" });
+      }
+      return originalOpen(path, flags, mode);
+    });
+    const renameMock = t.mock.method(fs, "renameSync", (from: fs.PathLike, to: fs.PathLike) => {
+      if (String(to) === markerPath) events.push("marker-rename");
+      originalRename(from, to);
+    });
+    syncBuiltinESMExports();
+    const syncSpy = (path: string) => {
+      events.push(`sync:${path}`);
+      if (failBundleSync && path === backupsDir) {
+        throw Object.assign(new Error("simulated bundle sync failure"), { code: "EIO" });
+      }
+    };
+    try {
+      await assert.rejects(backupRelay(config, backup, syncSpy), { code: "EIO" });
+      assert.equal(lastBackupTime(kit.directory), null);
+
+      failBundleSync = false;
+      events.length = 0;
+      const first = await backupRelay(config, backup, syncSpy);
+      const firstTimestamp = lastBackupTime(kit.directory);
+      assert.ok(firstTimestamp !== null);
+      const backupsSyncIndex = events.indexOf(`sync:${backupsDir}`);
+      const markerRenameIndex = events.indexOf("marker-rename");
+      const parentSyncAfterMarker = events.lastIndexOf(`sync:${kit.directory}`);
+      assert.ok(backupsSyncIndex >= 0);
+      assert.ok(markerRenameIndex > backupsSyncIndex);
+      assert.ok(parentSyncAfterMarker > markerRenameIndex);
+
+      failMarkerWrite = true;
+      await assert.rejects(backupRelay(config, backup, syncSpy), { code: "EIO" });
+      assert.equal(lastBackupTime(kit.directory), firstTimestamp);
+      assert.ok(readdirSync(backupsDir).includes(first));
+      assert.equal(readdirSync(kit.directory).some(name => name.startsWith(".last-backup-")), false);
+    } finally {
+      openMock.mock.restore();
+      renameMock.mock.restore();
+      syncBuiltinESMExports();
+    }
+
+    writeFileSync(markerPath, "{malformed");
+    assert.equal(lastBackupTime(kit.directory), null);
+  }
+);

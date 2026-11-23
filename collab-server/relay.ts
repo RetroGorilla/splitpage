@@ -1,14 +1,30 @@
 import { once } from "node:events";
 import { writeSync } from "node:fs";
+import type { IncomingMessage } from "node:http";
 import { Database } from "@hocuspocus/extension-database";
 import { Server } from "@hocuspocus/server";
 import type { Connection, Document, Extension } from "@hocuspocus/server";
 import { messageYjsSyncStep2, messageYjsUpdate } from "y-protocols/sync";
 import { applyUpdate, Doc, encodeStateAsUpdate, snapshot, snapshotContainsUpdate } from "yjs";
-import { RelayError, relayConfig } from "./config.ts";
-import { pictureApi } from "./pictures.ts";
 import { scriptAccess } from "./access.ts";
+import { RelayError, relayConfig } from "./config.ts";
+import {
+  createRelayLimits,
+  HTTP_HEADERS_TIMEOUT_MS,
+  HTTP_KEEP_ALIVE_TIMEOUT_MS,
+  HTTP_MAX_HEADERS_COUNT,
+  HTTP_REQUEST_TIMEOUT_MS,
+  MAX_PENDING_DOCUMENTS,
+  MAX_UNAUTHENTICATED_QUEUE_BYTES,
+  MAX_UNAUTHENTICATED_QUEUE_MESSAGES,
+  MAX_WS_BUFFERED_CHUNKS,
+  MAX_WS_FRAGMENTS,
+  RETRY_AFTER_SECONDS
+} from "./limits.ts";
 import { ownerRequests } from "./owner-http.ts";
+import { pictureApi } from "./pictures.ts";
+import { statusRequests } from "./status.ts";
+import type { StorageFailureRecord } from "./status.ts";
 import { claimWriter, openWriter } from "./storage.ts";
 
 const DOCUMENT_BYTES = 15_000_000;
@@ -32,7 +48,10 @@ function exceedsMergeLimit(document: Document, update: Uint8Array): boolean {
 }
 
 export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", extensions: Extension[] = []) {
-  const { directory, port, origins, debounce, maxDebounce } = relayConfig(env);
+  const {
+    directory, port, origins, debounce, maxDebounce, managementSecret,
+    maxConnections, maxConnectionsPerInvitation, maxMessagesPerSecond, maxUploadsInFlight
+  } = relayConfig(env);
   const lock = claimWriter(directory);
   let db: ReturnType<typeof openWriter> | undefined;
   let pictures: ReturnType<typeof pictureApi>;
@@ -40,13 +59,14 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
   try {
     db = openWriter(directory);
     access = scriptAccess(db);
-    pictures = pictureApi(db, directory, access);
+    pictures = pictureApi(db, directory, access, maxUploadsInFlight);
   } catch (error) {
     db?.close();
     lock.close();
     throw error;
   }
   let shutdown: NodeJS.Timeout | undefined;
+  let lastStorageFailure: StorageFailureRecord | null = null;
   function beginShutdown(): void {
     shutdown ??= setTimeout(() => failShutdown("Relay shutdown timed out. Some edits may not have been stored."), 15_000);
   }
@@ -56,25 +76,36 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
     db?.close();
     lock.close();
   }
+  const limits = createRelayLimits({
+    maxConnections,
+    maxConnectionsPerInvitation,
+    maxMessagesPerSecond
+  });
   const load = db.prepare("SELECT state FROM documents WHERE name = ?");
   const size = db.prepare("SELECT length(state) AS bytes FROM documents WHERE name = ?");
   const write = db.prepare("INSERT INTO documents VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET state = excluded.state");
+  type Admission = { invitationId: string; reservationId?: string };
   const storage = new Database({
     async fetch({ documentName }) {
-      return (load.get(documentName)?.state as Uint8Array | undefined) ?? null;
+      try {
+        return (load.get(documentName)?.state as Uint8Array | undefined) ?? null;
+      } catch (error) {
+        lastStorageFailure = { at: new Date().toISOString(), reason: "document-load-failed" };
+        throw error;
+      }
     },
     async store({ documentName, state }) {
       try {
         write.run(documentName, state);
       } catch (error) {
+        lastStorageFailure = { at: new Date().toISOString(), reason: "document-store-failed" };
         if (shutdown) failShutdown("Relay shutdown failed. The last edits were not stored.");
         throw error;
       }
     }
   });
-  type Admission = { invitationId: string };
   function requireAccess(context: Admission): void {
-    if (!access.isValid(context.invitationId)) throw { reason: "access-removed" };
+    if (!access.isValid(context.invitationId)) throw { code: 4403, reason: "access-removed" };
   }
 
   function closeRemovedAccess(): void {
@@ -98,27 +129,65 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
     return true;
   }
 
-  const manage = ownerRequests(env.SPLITPAGE_MANAGEMENT_SECRET, DOCUMENT_BYTES, {
+  const manage = ownerRequests(managementSecret, DOCUMENT_BYTES, {
     findCreation: access.findCreation, create: access.create, issue: access.issue, list: access.list,
     revokeInvitation, deleteScript
   });
+  const status = statusRequests(managementSecret, db, directory, {
+    totalConnections: () => limits.totalSockets(),
+    authenticatedConnections: () => relay.hocuspocus.getConnectionsCount(),
+    openDocuments: () => relay.hocuspocus.getDocumentsCount(),
+    uploadsInFlight: () => pictures.inFlight(),
+    lastStorageFailure: () => lastStorageFailure
+  });
+
+  const limitsExtension: Extension<Admission> = {
+    priority: 200,
+    async onConnect({ socketId, requestHeaders }) {
+      limits.bindSocket(socketId, requestHeaders.get("sec-websocket-key"));
+      if (!limits.allowMessage(socketId)) throw { reason: "rate-limited" };
+    }
+  };
+
   const writes = new WeakMap<Document, { connection: Connection; done: Promise<void>; release: () => void }>();
   const relay = new Server<Admission>({
     address, port, debounce, maxDebounce, quiet: true,
+    maxUnauthenticatedQueueSize: MAX_UNAUTHENTICATED_QUEUE_BYTES,
+    maxUnauthenticatedQueueMessages: MAX_UNAUTHENTICATED_QUEUE_MESSAGES,
+    maxPendingDocuments: MAX_PENDING_DOCUMENTS,
     websocketOptions: {
       maxPayload: MAX_PAYLOAD,
-      verifyClient: ({ origin }: { origin: string | undefined }) => origins.has(origin ?? "")
+      maxFragments: MAX_WS_FRAGMENTS,
+      maxBufferedChunks: MAX_WS_BUFFERED_CHUNKS,
+      perMessageDeflate: false,
+      verifyClient(
+        { origin, req }: { origin: string | undefined; req: IncomingMessage },
+        done: (verified: boolean, code?: number, message?: string, headers?: Record<string, string>) => void
+      ) {
+        if (!origins.has(origin ?? "")) {
+          done(false, 401);
+          return;
+        }
+        const keyHeader = req.headers["sec-websocket-key"];
+        const websocketKey = typeof keyHeader === "string" ? keyHeader : undefined;
+        if (!limits.tryAdmitSocket(req.socket, websocketKey)) {
+          done(false, 503, "too-many-connections", { "Retry-After": RETRY_AFTER_SECONDS });
+          return;
+        }
+        done(true);
+      }
     },
-    extensions: [...extensions, storage],
+    extensions: [limitsExtension, ...extensions, storage],
     async onRequest({ request, response }) {
       // why: the stock server treats a falsy rejection as an HTTP response handled by the hook
-      if (await manage(request, response) || await pictures.handle(request, response)) throw null;
+      if (status(request, response) || await manage(request, response) || await pictures.handle(request, response)) throw null;
     },
     async onAuthenticate({ token, instance, documentName, connectionConfig, requestParameters }) {
       if (requestParameters.getAll("wire").join(",") !== "1" || requestParameters.getAll("schema").join(",") !== "1") {
         throw { reason: "unsupported-version" };
       }
       const invitationId = access.authenticate(documentName, token);
+      if (!limits.hasInvitationCapacity(invitationId)) throw { reason: "too-many-connections" };
       const loading = instance.loadingDocuments.get(documentName);
       const live = instance.documents.get(documentName) ?? (loading ? await loading : undefined);
       if (loading) access.authenticate(documentName, token);
@@ -127,10 +196,27 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       return { invitationId };
     },
     async connected({ context, connection }) {
-      if (!access.isValid(context.invitationId)) connection.close({ code: 4403, reason: "access-removed" });
+      const reservationId = limits.tryAdmitInvitation(context.invitationId);
+      if (!reservationId) {
+        connection.close({ code: 4429, reason: "too-many-connections" });
+        return;
+      }
+      context.reservationId = reservationId;
+      connection.onClose(() => {
+        limits.releaseInvitation(reservationId);
+      });
+      if (!access.isValid(context.invitationId)) {
+        connection.close({ code: 4403, reason: "access-removed" });
+      }
     },
-    async beforeHandleMessage({ context }) {
+    async onDisconnect({ context }) {
+      if (context?.reservationId) limits.releaseInvitation(context.reservationId);
+    },
+    async beforeHandleMessage({ context, socketId }) {
       requireAccess(context);
+      if (!limits.allowMessage(socketId)) {
+        throw { code: 4429, reason: "rate-limited" };
+      }
     },
     async beforeHandleAwareness({ context }) {
       if (context) requireAccess(context);
@@ -165,6 +251,10 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       closeStorage();
     }
   });
+  relay.httpServer.headersTimeout = HTTP_HEADERS_TIMEOUT_MS;
+  relay.httpServer.keepAliveTimeout = HTTP_KEEP_ALIVE_TIMEOUT_MS;
+  relay.httpServer.requestTimeout = HTTP_REQUEST_TIMEOUT_MS;
+  relay.httpServer.maxHeadersCount = HTTP_MAX_HEADERS_COUNT;
   const listening = new AbortController();
   try {
     for (const signal of STOP_SIGNALS) process.prependListener(signal, beginShutdown);
