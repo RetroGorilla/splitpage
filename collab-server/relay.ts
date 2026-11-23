@@ -7,6 +7,7 @@ import { messageYjsSyncStep2, messageYjsUpdate } from "y-protocols/sync";
 import { applyUpdate, Doc, encodeStateAsUpdate, snapshot, snapshotContainsUpdate } from "yjs";
 import { RelayError, relayConfig } from "./config.ts";
 import { scriptAccess } from "./access.ts";
+import { ownerRequests } from "./owner-http.ts";
 import { claimWriter, openWriter } from "./storage.ts";
 
 const DOCUMENT_BYTES = 15_000_000;
@@ -71,6 +72,30 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
     if (!access.isValid(context.invitationId)) throw { reason: "access-removed" };
   }
 
+  function closeRemovedAccess(): void {
+    for (const document of relay.hocuspocus.documents.values()) {
+      for (const connection of document.getConnections()) {
+        const context = connection.context as Admission;
+        if (!access.isValid(context.invitationId)) connection.close({ code: 4403, reason: "access-removed" });
+      }
+    }
+  }
+
+  function revokeInvitation(id: string): boolean {
+    if (!access.revoke(id)) return false;
+    closeRemovedAccess();
+    return true;
+  }
+
+  function deleteScript(name: string): boolean {
+    if (!access.deleteScript(name)) return false;
+    closeRemovedAccess();
+    return true;
+  }
+
+  const manage = ownerRequests(env.SPLITPAGE_MANAGEMENT_SECRET, DOCUMENT_BYTES, {
+    create: access.create, issue: access.issue, list: access.list, revokeInvitation, deleteScript
+  });
   const writes = new WeakMap<Document, { connection: Connection; done: Promise<void>; release: () => void }>();
   const relay = new Server<Admission>({
     address, port, debounce, maxDebounce, quiet: true,
@@ -79,6 +104,9 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       verifyClient: ({ origin }: { origin: string | undefined }) => origins.has(origin ?? "")
     },
     extensions: [...extensions, storage],
+    async onRequest({ request, response }) {
+      if (await manage(request, response)) throw undefined;
+    },
     async onAuthenticate({ token, instance, documentName, connectionConfig, requestParameters }) {
       if (requestParameters.getAll("wire").join(",") !== "1" || requestParameters.getAll("schema").join(",") !== "1") {
         throw { reason: "unsupported-version" };
@@ -136,27 +164,11 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       relay.listen(),
       once(relay.httpServer, "error", { signal: listening.signal }).then(() => { throw new Error(); })
     ]);
-    function closeRemovedAccess(): void {
-      for (const document of relay.hocuspocus.documents.values()) {
-        for (const connection of document.getConnections()) {
-          const context = connection.context as Admission;
-          if (!access.isValid(context.invitationId)) {
-            connection.close({ code: 4403, reason: "access-removed" });
-          }
-        }
-      }
-    }
     return Object.assign(relay, {
       registerScript: access.register,
       issueInvitation: access.issue,
-      revokeInvitation(id: string) {
-        access.revoke(id);
-        closeRemovedAccess();
-      },
-      deleteScript(name: string) {
-        access.deleteScript(name);
-        closeRemovedAccess();
-      }
+      revokeInvitation,
+      deleteScript
     });
   } catch {
     closeStorage();

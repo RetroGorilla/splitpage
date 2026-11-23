@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { fork } from "node:child_process";
 import { EventEmitter, once } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -23,6 +24,7 @@ const ENTRY = new URL("./server-process.ts", import.meta.url);
 
 export function serverHarness(t: TestContext) {
   const directory = mkdtempSync(join(tmpdir(), "splitpage-relay-"));
+  const managementSecret = randomBytes(32).toString("base64url");
   const invitations = new Map<string, { id: string; token: string }>();
   const changed = new EventEmitter();
   const signal = AbortSignal.any([t.signal, AbortSignal.timeout(25_000)]);
@@ -75,6 +77,7 @@ export function serverHarness(t: TestContext) {
         SPLITPAGE_STORE_DEBOUNCE_MS: "40",
         SPLITPAGE_STORE_MAX_DEBOUNCE_MS: "100",
         SPLITPAGE_BACKUP_KEEP: "2",
+        SPLITPAGE_MANAGEMENT_SECRET: managementSecret,
         ...settings
       },
       stdio: ["ignore", "pipe", "pipe", "ipc"], execArgv: []
@@ -95,6 +98,20 @@ export function serverHarness(t: TestContext) {
     const run = {
       messages, exit, output: () => output, errors: () => errors,
       send: (message: string | { holdSyncType: number }) => child.send(message),
+      async owner(path: string, init: RequestInit = {}, secret: string | null = managementSecret) {
+        const headers = new Headers(init.headers);
+        if (secret !== null) headers.set("Authorization", `Bearer ${secret}`);
+        return fetch(`http://127.0.0.1:${await run.port()}/api/${path}`, { ...init, headers, signal });
+      },
+      async createScript(creationId: string, state: Uint8Array, secret = managementSecret) {
+        const reply = await run.owner("scripts", {
+          method: "POST", headers: { "Idempotency-Key": creationId }, body: Buffer.from(state)
+        }, secret);
+        assert.equal(reply.status, 200);
+        const { scriptId } = await reply.json() as { scriptId: string };
+        assert.match(scriptId, /^[a-f0-9-]{36}$/);
+        return scriptId;
+      },
       async provision(name: string) {
         child.send(`provision:${name}`);
         const invitation = await until(() => messages.find((message): message is { name: string; id: string; token: string } =>

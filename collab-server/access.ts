@@ -15,7 +15,33 @@ export function scriptAccess(db: DatabaseSync) {
   const issue = db.prepare("INSERT INTO invitations (id, script, label, token_hash) VALUES (?, ?, ?, ?)");
   const revoke = db.prepare("UPDATE invitations SET revoked = 1 WHERE id = ?");
   const remove = db.prepare("UPDATE scripts SET status = 'deleted' WHERE name = ?");
+  const creation = db.prepare("SELECT script FROM creations WHERE id = ?");
+  const recordCreation = db.prepare("INSERT INTO creations VALUES (?, ?)");
+  const initialize = db.prepare("INSERT INTO documents VALUES (?, ?)");
+  const activate = db.prepare("UPDATE scripts SET status = 'active' WHERE name = ?");
+  const list = db.prepare("SELECT id, label, revoked FROM invitations WHERE script = ? ORDER BY id");
   return {
+    create(creationId: string, bytes: Uint8Array): string {
+      const existing = creation.get(creationId)?.script;
+      if (typeof existing === "string") return existing;
+      const name = randomUUID();
+      db.exec("BEGIN");
+      try {
+        register.run(name, "pending");
+        recordCreation.run(creationId, name);
+        initialize.run(name, bytes);
+        activate.run(name);
+        db.exec("COMMIT");
+        return name;
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
+    },
+    list(name: string) {
+      if (!state.get(name)) return undefined;
+      return list.all(name).map(({ id, label, revoked }) => ({ id, label, state: revoked ? "revoked" : "active" }));
+    },
     register(name: string, status: "pending" | "active"): void {
       register.run(name, status);
     },
@@ -39,11 +65,11 @@ export function scriptAccess(db: DatabaseSync) {
       issue.run(id, name, label, tokenHash(token));
       return { id, token };
     },
-    revoke(id: string): void {
-      revoke.run(id);
+    revoke(id: string): boolean {
+      return revoke.run(id).changes !== 0;
     },
-    deleteScript(name: string): void {
-      remove.run(name);
+    deleteScript(name: string): boolean {
+      return remove.run(name).changes !== 0;
     }
   };
 }

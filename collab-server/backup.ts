@@ -9,7 +9,9 @@ import { DB_NAME, verifyDatabase } from "./storage.ts";
 const BACKUP_NAME = /^relay-\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d\.\d{3}Z-[a-f0-9-]{36}\.sqlite$/;
 
 export function verifyCopy(source: DatabaseSync, copy: DatabaseSync): void {
-  verifyDatabase(copy);
+  const version = verifyDatabase(copy);
+  if (version !== verifyDatabase(source)) throw new RelayError("Relay backup storage version differs.");
+  if (version === 2) verifyRows(source, copy, "creations", "SELECT id, script FROM creations ORDER BY id");
   verifyRows(source, copy, "documents", "SELECT name, state FROM documents ORDER BY name");
   verifyRows(source, copy, "scripts", "SELECT name, status FROM scripts ORDER BY name");
   verifyRows(source, copy, "invitations", "SELECT id, script, label, token_hash, revoked FROM invitations ORDER BY id");
