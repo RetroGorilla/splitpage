@@ -94,7 +94,8 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
   }
 
   const manage = ownerRequests(env.SPLITPAGE_MANAGEMENT_SECRET, DOCUMENT_BYTES, {
-    create: access.create, issue: access.issue, list: access.list, revokeInvitation, deleteScript
+    findCreation: access.findCreation, create: access.create, issue: access.issue, list: access.list,
+    revokeInvitation, deleteScript
   });
   const writes = new WeakMap<Document, { connection: Connection; done: Promise<void>; release: () => void }>();
   const relay = new Server<Admission>({

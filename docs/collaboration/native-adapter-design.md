@@ -188,8 +188,9 @@ from logging. The owner endpoints refuse requests when the relay has no configur
 From `collab-server/`, run `node owner-command.ts <https-origin> issue <script-id> <label>`,
 `list <script-id>`, `revoke <invitation-id>` or `delete <script-id>` with the same command prefix.
 Issue prints the join link once. Use the invitation id from the list to revoke it. The shared test
-harness creates scripts by posting raw Yjs state to `/api/scripts` with a stable
-`Idempotency-Key` header. Reusing the key returns the original script id, including after deletion.
+harness creates scripts by posting a full Yjs snapshot to `/api/scripts` with a stable
+`Idempotency-Key` header. Reusing a committed key returns the original script id without a body,
+including after deletion.
 
 **Rotate or recover the management secret.** Generate a replacement in the host secret store,
 restart the relay with the updated environment and update the owner command environment. After the

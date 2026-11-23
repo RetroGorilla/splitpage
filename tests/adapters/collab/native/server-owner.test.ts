@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { randomBytes, randomUUID } from "node:crypto";
+import { request } from "node:http";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
@@ -19,11 +20,41 @@ test("owner commands initialize, issue, list, revoke and delete a shared script"
   const create = { method: "POST", headers: { "Idempotency-Key": randomUUID() }, body: Buffer.from(state) };
   assert.equal((await run.owner("scripts", create, null)).status, 401);
   assert.equal((await run.owner("scripts", create, wrong)).status, 401);
+  assert.equal((await run.owner("scripts", { ...create, body: null }, secret)).status, 400);
   assert.equal((await run.owner("scripts", { ...create, body: Uint8Array.of(255) }, secret)).status, 400);
   assert.equal((await run.owner("scripts", { ...create, body: Buffer.alloc(15_000_001) }, secret)).status, 413);
   const id = create.headers["Idempotency-Key"];
   const [script, retry] = await Promise.all([run.createScript(id, state, secret), run.createScript(id, state, secret)]);
   assert.equal(script, retry);
+  assert.deepEqual(storedState(kit.directory, script), state);
+  const ownerPort = await run.port();
+  const expectRetries = async () => {
+    for (const body of [null, Uint8Array.of(255)]) {
+      const response = await run.owner("scripts", { ...create, body }, secret);
+      assert.equal(response.status, 200);
+      assert.deepEqual(await response.json(), { scriptId: script });
+    }
+    const oversized = await new Promise<{ status: number | undefined; connection: string | undefined; body: string }>((resolve, reject) => {
+      const upload = request({
+        hostname: "127.0.0.1", port: ownerPort, path: "/api/scripts", method: "POST",
+        headers: { ...create.headers, Authorization: `Bearer ${secret}`, "Content-Length": "15000001" },
+        signal: t.signal
+      }, async response => {
+        try {
+          let body = "";
+          response.setEncoding("utf8");
+          for await (const chunk of response) body += chunk;
+          resolve({ status: response.statusCode, connection: response.headers.connection, body });
+        } catch (error) {
+          reject(error);
+        }
+      });
+      upload.on("error", reject);
+      upload.flushHeaders();
+    });
+    assert.deepEqual(oversized, { status: 200, connection: "close", body: JSON.stringify({ scriptId: script }) });
+  };
+  await expectRetries();
   assert.deepEqual(storedState(kit.directory, script), state);
 
   const path = `scripts/${script}/invitations`;
@@ -35,6 +66,9 @@ test("owner commands initialize, issue, list, revoke and delete a shared script"
   assert.equal(issued.headers.get("cache-control"), "no-store");
   const invitation = await issued.json() as { id: string; token: string };
   assert.ok(/^[a-zA-Z0-9_-]{43}$/.test(invitation.token));
+  const fresh = kit.copy(await run.port(), { kind: "empty" }, script, invitation.token);
+  t.after(fresh.session.close);
+  await kit.until(() => fresh.relay.status().firstSyncDone && fresh.text() === "word" || undefined);
   const list = async (state: string) => {
     const reply = await run.owner(path, {}, secret);
     assert.equal(reply.status, 200);
@@ -45,6 +79,7 @@ test("owner commands initialize, issue, list, revoke and delete a shared script"
   await list("revoked");
   assert.equal((await run.owner(`scripts/${script}`, remove, secret)).status, 204);
   assert.equal((await run.owner(path, issue, secret)).status, 409);
+  await expectRetries();
   await run.stop("clean");
   const restarted = kit.launch({ SPLITPAGE_MANAGEMENT_SECRET: secret });
   assert.equal(await restarted.createScript(id, state, secret), script);

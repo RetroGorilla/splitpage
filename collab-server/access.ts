@@ -20,13 +20,21 @@ export function scriptAccess(db: DatabaseSync) {
   const initialize = db.prepare("INSERT INTO documents VALUES (?, ?)");
   const activate = db.prepare("UPDATE scripts SET status = 'active' WHERE name = ?");
   const list = db.prepare("SELECT id, label, revoked FROM invitations WHERE script = ? ORDER BY id");
+  function findCreation(creationId: string): string | undefined {
+    const name = creation.get(creationId)?.script;
+    return typeof name === "string" ? name : undefined;
+  }
   return {
+    findCreation,
     create(creationId: string, bytes: Uint8Array): string {
-      const existing = creation.get(creationId)?.script;
-      if (typeof existing === "string") return existing;
       const name = randomUUID();
       db.exec("BEGIN");
       try {
+        const existing = findCreation(creationId);
+        if (existing !== undefined) {
+          db.exec("COMMIT");
+          return existing;
+        }
         register.run(name, "pending");
         recordCreation.run(creationId, name);
         initialize.run(name, bytes);

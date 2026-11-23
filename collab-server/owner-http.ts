@@ -4,7 +4,7 @@ import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import type { scriptAccess } from "./access.ts";
 import { RelayError } from "./config.ts";
 
-type Commands = Pick<ReturnType<typeof scriptAccess>, "create" | "issue" | "list"> & {
+type Commands = Pick<ReturnType<typeof scriptAccess>, "findCreation" | "create" | "issue" | "list"> & {
   revokeInvitation: (id: string) => boolean;
   deleteScript: (name: string) => boolean;
 };
@@ -54,6 +54,7 @@ export function ownerRequests(secret: string | undefined, limit: number, command
     const invitation = /^\/api\/invitations\/([a-zA-Z0-9_-]{1,128})$/.exec(path);
     if (path !== "/api/scripts" && !script && !invitation) return false;
     function reply(status: number, data?: unknown): void {
+      if (!request.complete) response.setHeader("Connection", "close");
       response.writeHead(status, { "Content-Type": "application/json", "Cache-Control": "no-store" });
       response.end(data === undefined ? undefined : JSON.stringify(data));
     }
@@ -65,6 +66,11 @@ export function ownerRequests(secret: string | undefined, limit: number, command
       if (method === "POST" && path === "/api/scripts") {
         const id = request.headers["idempotency-key"];
         if (typeof id !== "string" || !/^[a-zA-Z0-9_-]{1,128}$/.test(id)) throw new RequestError(400);
+        const existing = commands.findCreation(id);
+        if (existing !== undefined) {
+          reply(200, { scriptId: existing });
+          return true;
+        }
         const bytes = await body(request, limit);
         checkState(bytes, limit);
         reply(200, { scriptId: commands.create(id, bytes) });
@@ -86,7 +92,6 @@ export function ownerRequests(secret: string | undefined, limit: number, command
         reply(404);
       }
     } catch (error) {
-      if (!request.complete) response.setHeader("Connection", "close");
       reply(error instanceof RequestError ? error.status : error instanceof RelayError ? 409 : 500);
     }
     return true;
