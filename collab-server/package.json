@@ -8,7 +8,8 @@
   },
   "scripts": {
     "start": "node main.ts",
-    "backup": "node backup-command.ts"
+    "backup": "node backup-command.ts",
+    "restore": "node restore-command.ts"
   },
   "dependencies": {
     "@hocuspocus/extension-database": "4.8.0",

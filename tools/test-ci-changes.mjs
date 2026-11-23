@@ -2,7 +2,7 @@ import { spawnSync } from "node:child_process";
 import { mkdtempSync, mkdirSync, renameSync, writeFileSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { tmpdir } from "node:os";
-import { needsChecks, needsAppChecks, needsDesktopChecks, changedFiles } from "./ci-changes.mjs";
+import { needsChecks, needsAppChecks, needsDesktopChecks, needsRelayChecks, changedFiles } from "./ci-changes.mjs";
 import { isScanned, canScan } from "./comment-gate.mjs";
 import { listRepoFiles } from "./source-scan.mjs";
 
@@ -59,6 +59,20 @@ for (const files of [["README.md"], ["tests/application/session.test.ts"], ["src
   eq(`the desktop smoke skips ${JSON.stringify(files)}`, needsDesktopChecks(files), false);
 }
 eq("a smoke change that is not prose runs the smoke although app checks skip it", [needsAppChecks(["desktop/test/smoke.mjs"]), needsDesktopChecks(["desktop/test/smoke.mjs"])], [false, true]);
+
+console.log("\nneedsRelayChecks():\n");
+
+for (const files of [
+  null, [], ["collab-server/relay.ts"], ["collab-server/Dockerfile"], ["src/adapters/collab/native/relay.ts"],
+  ["shared/blob-policy.ts"], ["tests/adapters/collab/native/server-container-smoke.ts"],
+  ["tests/adapters/collab/native/relay-harness.ts"], ["package.json"], ["package-lock.json"],
+  [".nvmrc"], ["tools/ci-changes.mjs"], [".github/workflows/ci.yml"]
+]) {
+  eq(`the relay container smoke runs for ${JSON.stringify(files)}`, needsRelayChecks(files), true);
+}
+for (const files of [["README.md"], ["src/features/rows/view.ts"], ["tests/core/a.test.ts"], ["desktop/main.ts"]]) {
+  eq(`the relay container smoke skips ${JSON.stringify(files)}`, needsRelayChecks(files), false);
+}
 
 for (const path of ["tests/collab/fixtures/projection-reference.json", "tests/collab/fixtures/projection/supplement.splitpage", "tests/collab/fixtures/projection/experiment-reference.json"]) {
   eq(`shared projection fixture ${path} runs root tests and skips app checks`, [needsChecks([path]), needsAppChecks([path])], [true, false]);

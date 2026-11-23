@@ -17,6 +17,7 @@ export type NativeRelayEvent =
   | { readonly kind: "session-replaced"; readonly session: Session; readonly undoHistory: "fresh" }
   | { readonly kind: "session-reopen-failed"; readonly error: unknown }
   | { readonly kind: "authentication-failed"; readonly reason: string }
+  | { readonly kind: "temporary-refusal"; readonly reason: string }
   | { readonly kind: "merge-too-large"; readonly message: string }
   | { readonly kind: "first-load-too-large"; readonly message: string };
 
@@ -32,6 +33,18 @@ export interface NativeRelayOptions {
 
 const FIRST_LOAD_RESTARTS = 1;
 const FIRST_LOAD_MARGIN_MS = 100;
+const PERMANENT_REFUSALS = new Set([
+  "permission-denied",
+  "invitation-revoked",
+  "script-deleted",
+  "script-unknown",
+  "unsupported-version",
+  "access-removed"
+]);
+const TEMPORARY_REFUSALS = new Set([
+  "too-many-connections",
+  "rate-limited"
+]);
 
 export function openNativeRelay(session: Session, { url, name, token, sessionOptions, onEvent, reopen, now = () => performance.now() }: NativeRelayOptions) {
   if (session.isClosingOrClosed()) throw new Error("Cannot open a relay for a closing or closed session.");
@@ -63,13 +76,23 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
   function attach(target: Session): StateFirstProvider {
     let restarts = 0;
     let downloadStarted: number | null = null;
+    let reportedTemporaryClose = false;
     target.subscribe(sessionChanged);
     // why: stock synced also fires on an upload acknowledgement before the download can have arrived
     const firstReply = () => updateStatus({ firstSyncDone: true });
     // why: the browser sees only complete frames, and the stock server sends this vector before its state reply
     const stateRequest = () => { downloadStarted = now(); };
+    function stopPermanently(): void {
+      publicationStopped = true;
+      attached.configuration.websocketProvider.disconnect();
+      attached.destroy();
+      updateStatus({ connected: false, firstSyncDone: false });
+    }
     const attached = new StateFirstProvider({
       url: relayUrl.href, name, token, document: target.ydoc,
+      onOpen() {
+        reportedTemporaryClose = false;
+      },
       onStatus({ status: socketStatus }) {
         if (publicationStopped) return;
         const connected = socketStatus === WebSocketStatus.Connected;
@@ -89,19 +112,34 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
         }
       },
       onAuthenticationFailed({ reason }) {
+        if (publicationStopped) return;
+        if (TEMPORARY_REFUSALS.has(reason)) {
+          reportedTemporaryClose = true;
+          updateStatus({ connected: false });
+          attached.configuration.websocketProvider.webSocket?.close();
+          emit({ kind: "temporary-refusal", reason });
+          return;
+        }
+        if (PERMANENT_REFUSALS.has(reason)) stopPermanently();
         emit({ kind: "authentication-failed", reason });
       },
       onClose({ event }) {
-        if (event.reason !== "access-removed" || publicationStopped) return;
-        updateStatus({ connected: false, firstSyncDone: false });
-        emit({ kind: "authentication-failed", reason: event.reason });
+        if (publicationStopped) return;
+        if (event.reason === "access-removed") {
+          stopPermanently();
+          emit({ kind: "authentication-failed", reason: event.reason });
+          return;
+        }
+        if (TEMPORARY_REFUSALS.has(event.reason) && !reportedTemporaryClose) {
+          reportedTemporaryClose = true;
+          updateStatus({ connected: false });
+          attached.configuration.websocketProvider.webSocket?.close();
+          emit({ kind: "temporary-refusal", reason: event.reason });
+        }
       },
       onStateless({ payload }) {
         if (payload !== "merge-too-large" || publicationStopped) return;
-        publicationStopped = true;
-        attached.configuration.websocketProvider.disconnect();
-        attached.destroy();
-        updateStatus({ connected: false, firstSyncDone: false });
+        stopPermanently();
         emit({
           kind: "merge-too-large",
           message: "Your changes could not sync because combining the copies would exceed the 15 MB limit. " +

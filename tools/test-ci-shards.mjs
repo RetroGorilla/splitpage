@@ -92,7 +92,7 @@ const fastMutants = fastJob.steps.find((s) => s.run?.includes("tools/mutants.mjs
 assert.equal(fastMutants, 'node tools/mutants.mjs tests/collab/*-mutants.json --shard "${{ matrix.shard }}/6" --concurrency 4 --no-baseline --fail-on-survivor\n');
 assert.deepEqual(fastReport.needs, ["mutants-fast-baseline", "mutants-fast"]);
 assert.equal(fastReport.if, "failure()");
-assert.deepEqual(gate.needs, ["changes", "checks", "tests", "desktop-smoke"]);
+assert.deepEqual(gate.needs, ["changes", "checks", "tests", "desktop-smoke", "relay-container-smoke"]);
 assert.equal(gate.if, "always()");
 assert.deepEqual(gate.permissions, { actions: "read" });
 const step = gate.steps[0];
@@ -105,6 +105,8 @@ assert.deepEqual(individual.env, {
 });
 assert.equal(step.env.SMOKE, "${{ needs.desktop-smoke.result }}");
 assert.equal(step.env.DESKTOP, "${{ needs.changes.outputs.desktop }}");
+assert.equal(step.env.RELAY_SMOKE, "${{ needs.relay-container-smoke.result }}");
+assert.equal(step.env.RELAY, "${{ needs.changes.outputs.relay }}");
 assert.equal(step.env.TESTS, "${{ needs.tests.result }}");
 assert.equal(step.env.CHECKS, "${{ needs.checks.result }}");
 assert.equal(step.env.CHANGES, "${{ needs.changes.result }}");
@@ -118,7 +120,7 @@ assert.equal(changes.outputs.tree, "${{ steps.tested.outputs.tree }}");
 assert.equal(changes.permissions.actions, "read");
 const lookup = changes.steps.find((s) => s.id === "tested");
 assert.equal(lookup.run, "node tools/ci-tested-tree.mjs ${{ github.event_name == 'push' && github.ref == 'refs/heads/main' && '--lookup' || '' }}");
-const ran = "needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && needs.changes.outputs.tree != ''";
+const ran = "needs.checks.result == 'success' && needs.tests.result == 'success' && (needs.desktop-smoke.result == 'success' || needs.desktop-smoke.result == 'skipped') && (needs.relay-container-smoke.result == 'success' || needs.relay-container-smoke.result == 'skipped') && needs.changes.outputs.tree != ''";
 const upload = gate.steps.find((s) => s.uses?.startsWith("actions/upload-artifact@"));
 assert.equal(upload.with.name, "ci-passed-tree-${{ needs.changes.outputs.tree }}");
 assert.equal(upload.if, ran);
@@ -140,7 +142,12 @@ for (const change of bash ? results : []) {
           for (const test of others) {
             for (const smokeResult of others) {
               const result = spawnSync(bash, ["-e", "-c", step.run], {
-                env: { ...process.env, CHANGES: change, CODE: code, ROOT_DUE: String(code === "true" && tested !== "true"), TESTED: tested, DESKTOP: desktop, CHECKS: check, TESTS: test, SMOKE: smokeResult },
+                env: {
+                  ...process.env,
+                  CHANGES: change, CODE: code, ROOT_DUE: String(code === "true" && tested !== "true"),
+                  TESTED: tested, DESKTOP: desktop, RELAY: "false", CHECKS: check, TESTS: test,
+                  SMOKE: smokeResult, RELAY_SMOKE: "skipped"
+                },
                 encoding: "utf8",
                 timeout: 5000
               });
@@ -153,7 +160,32 @@ for (const change of bash ? results : []) {
           }
         }
       }
+    }
   }
+}
+for (const code of bash ? ["true", "false"] : []) {
+  for (const tested of ["true", "false", ""]) {
+    for (const relay of ["true", "false"]) {
+      for (const relaySmokeResult of results) {
+        const ranFresh = code === "true" && tested !== "true";
+        const result = spawnSync(bash, ["-e", "-c", step.run], {
+          env: {
+            ...process.env,
+            CHANGES: "success", CODE: code, ROOT_DUE: String(ranFresh), TESTED: tested,
+            DESKTOP: "false", RELAY: relay,
+            CHECKS: ranFresh ? "success" : "skipped",
+            TESTS: ranFresh ? "success" : "skipped",
+            SMOKE: "skipped",
+            RELAY_SMOKE: relaySmokeResult
+          },
+          encoding: "utf8",
+          timeout: 5000
+        });
+        const wantRelay = ranFresh && relay === "true" ? "success" : "skipped";
+        assert.equal(result.status === 0, relaySmokeResult === wantRelay, JSON.stringify({ code, tested, relay, relaySmoke: relaySmokeResult, error: result.error?.message }));
+        cases++;
+      }
+    }
   }
 }
 if (bash) {

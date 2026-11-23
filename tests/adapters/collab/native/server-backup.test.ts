@@ -1,15 +1,134 @@
 import assert from "node:assert/strict";
+import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { copyFileSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { once } from "node:events";
+import fs, { cpSync, existsSync, mkdirSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import { join } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import test from "node:test";
-import { backupRelay, verifyCopy } from "../../../../collab-server/backup.ts";
+import { fileURLToPath } from "node:url";
+import { backupRelay, lastBackupTime, restoreRelay, verifyCopy } from "../../../../collab-server/backup.ts";
 import { DB_NAME, openWriter } from "../../../../collab-server/storage.ts";
 import { appendText, NAME, serverHarness, storedState, storedText } from "./server-harness.ts";
 import { seedRelaySession } from "./relay-harness.ts";
 
 const BACKUP = new URL("../../../../collab-server/backup-command.ts", import.meta.url);
+const RESTORE = fileURLToPath(new URL("../../../../collab-server/restore-command.ts", import.meta.url));
+
+test("an interrupted backup releases ownership without risking the only retained bundle", { timeout: 30_000 }, async t => {
+  const kit = serverHarness(t);
+  kit.seed();
+  const directory = kit.directory;
+  const backups = join(directory, "backups");
+  const settings = { SPLITPAGE_DATA_DIR: directory, SPLITPAGE_BACKUP_KEEP: "1" };
+  const syncDirectory = process.platform === "win32" ? () => {} : undefined;
+  const prior = await backupRelay(settings, backup, syncDirectory);
+  const moduleUrl = new URL("../../../../collab-server/backup.ts", import.meta.url);
+  const child = spawn(process.execPath, ["--input-type=module", "-e", `
+    import { backup } from "node:sqlite";
+    import { backupRelay } from ${JSON.stringify(moduleUrl.href)};
+    const syncDirectory = process.platform === "win32" ? () => {} : undefined;
+    await backupRelay(process.env, async (source, pending) => {
+      await backup(source, pending);
+      setInterval(() => {}, 1000);
+      process.stdout.write("staged");
+      await new Promise(() => {});
+    }, syncDirectory);
+  `], { env: settings, stdio: ["ignore", "pipe", "ignore"] });
+  const exit = once(child, "exit");
+  try {
+    const checkpoint = await Promise.race([
+      once(child.stdout, "data").then(([chunk]) => String(chunk)), exit.then(() => "child exited")
+    ]);
+    assert.equal(checkpoint, "staged");
+    const contender = kit.launch(settings, BACKUP);
+    assert.deepEqual(await contender.exit, { code: 1, exitSignal: null });
+    assert.match(contender.errors(), /A relay backup is already running/);
+    assert.equal(contender.output(), "");
+    assert.deepEqual(readdirSync(backups).filter(name => name.endsWith(".backup")), [prior]);
+  } finally {
+    child.kill("SIGKILL");
+    await exit;
+  }
+  const beforeRetry = join(directory, "before-retry");
+  await restoreRelay(join(backups, prior), beforeRetry);
+  assert.equal(storedText(beforeRetry), "word");
+  const replacement = await backupRelay(settings, backup, syncDirectory);
+  assert.deepEqual(readdirSync(backups), [replacement]);
+  const restored = join(directory, "after-retry");
+  await restoreRelay(join(backups, replacement), restored);
+  assert.equal(storedText(restored), "word");
+});
+
+test("backup without directory sync refuses full retention before copying and accepts manual rotation", async t => {
+  const kit = serverHarness(t);
+  kit.seed();
+  const settings = { SPLITPAGE_DATA_DIR: kit.directory, SPLITPAGE_BACKUP_KEEP: "1" };
+  const backups = join(kit.directory, "backups");
+  const syncDirectory = process.platform === "win32" ? undefined : null;
+  const prior = await backupRelay(settings, backup, syncDirectory);
+  let copied = false;
+  await assert.rejects(backupRelay(settings, async () => {
+    copied = true;
+    return 0;
+  }, syncDirectory), /retention is full.*Verify an off-machine copy.*then retry/);
+  assert.equal(copied, false);
+  assert.deepEqual(readdirSync(backups), [prior]);
+  const rotated = join(kit.directory, "rotated.backup");
+  renameSync(join(backups, prior), rotated);
+  const replacement = await backupRelay(settings, backup, syncDirectory);
+  assert.deepEqual(readdirSync(backups), [replacement]);
+  const restored = join(kit.directory, "rotated-restore");
+  await restoreRelay(rotated, restored);
+  assert.equal(storedText(restored), "word");
+});
+
+test("interrupted restore keeps its target absent and concurrent restores publish only once", { timeout: 30_000 }, async t => {
+  const kit = serverHarness(t);
+  kit.seed();
+  const archive = join(kit.directory, "backups", await backupRelay({ SPLITPAGE_DATA_DIR: kit.directory }));
+  const target = join(kit.directory, "recovered");
+  const empty = join(kit.directory, "empty");
+  mkdirSync(empty);
+  await assert.rejects(restoreRelay(archive, empty), /requires a new data directory/);
+  assert.deepEqual(readdirSync(empty), []);
+  const claimed = join(kit.directory, "claimed");
+  await assert.rejects(restoreRelay(archive, claimed, async (source, pending) => {
+    const pages = await backup(source, pending);
+    mkdirSync(claimed);
+    return pages;
+  }), /requires a new data directory/);
+  assert.deepEqual(readdirSync(claimed), []);
+
+  const moduleUrl = new URL("../../../../collab-server/backup.ts", import.meta.url);
+  const child = spawn(process.execPath, ["--input-type=module", "-e", `
+    import { backup } from "node:sqlite";
+    import { restoreRelay } from ${JSON.stringify(moduleUrl.href)};
+    await restoreRelay(process.argv[1], process.argv[2], async (source, pending) => {
+      await backup(source, pending);
+      setInterval(() => {}, 1000);
+      process.stdout.write("staged");
+      await new Promise(() => {});
+    });
+  `, archive, target], { env: {}, stdio: ["ignore", "pipe", "ignore"] });
+  const exit = once(child, "exit");
+  try {
+    const checkpoint = await Promise.race([
+      once(child.stdout, "data").then(([chunk]) => String(chunk)), exit.then(() => "child exited")
+    ]);
+    assert.equal(checkpoint, "staged");
+    assert.equal(existsSync(target), false);
+  } finally {
+    child.kill("SIGKILL");
+    await exit;
+  }
+  assert.equal(existsSync(target), false);
+
+  const results = await Promise.allSettled([restoreRelay(archive, target), restoreRelay(archive, target)]);
+  assert.deepEqual(results.map(result => result.status).sort(), ["fulfilled", "rejected"]);
+  assert.equal(storedText(target), "word");
+});
 
 test("online backup retains verified bytes for each script and restores without edits made afterward", { timeout: 30_000 }, async t => {
   const kit = serverHarness(t);
@@ -22,6 +141,8 @@ test("online backup retains verified bytes for each script and restores without 
   const seed = initial.encodeState();
   initial.close();
   const creationId = randomUUID();
+  const deletedScript = await live.createScript(randomUUID(), seed);
+  assert.equal((await live.owner(`scripts/${deletedScript}`, { method: "DELETE" })).status, 204);
   const createdScript = await live.createScript(creationId, seed);
   const writer = kit.copy(port, { kind: "state", state: seed });
   const second = kit.copy(port, { kind: "state", state: seed }, "second-script");
@@ -42,15 +163,17 @@ test("online backup retains verified bytes for each script and restores without 
   }
   const original = storedState(primary);
   const secondOriginal = storedState(primary, "second-script");
-  const backup = kit.launch(settings, BACKUP);
+  const backup = kit.launch({ ...settings, SPLITPAGE_BACKUP_KEEP: process.platform === "win32" ? "3" : "2" }, BACKUP);
   assert.deepEqual(await backup.exit, { code: 0, exitSignal: null }, backup.errors());
-  const name = /Verified relay backup (relay-.*\.sqlite)\./.exec(backup.output())?.[1];
+  const name = /Verified relay backup (relay-.*\.backup)\./.exec(backup.output())?.[1];
   assert.ok(name);
   assert.deepEqual(readdirSync(paths).sort(), [
-    sentinel, "relay-2000-01-02T00-00-00.000Z-00000000-0000-4000-8000-000000000000.sqlite", name
+    sentinel,
+    ...(process.platform === "win32" ? ["relay-2000-01-01T00-00-00.000Z-00000000-0000-4000-8000-000000000000.sqlite"] : []),
+    "relay-2000-01-02T00-00-00.000Z-00000000-0000-4000-8000-000000000000.sqlite", name
   ]);
-  const saved = join(kit.directory, "off-machine.sqlite");
-  copyFileSync(join(paths, name), saved);
+  const saved = join(kit.directory, "off-machine.backup");
+  cpSync(join(paths, name), saved, { recursive: true });
   const count = live.messages.filter(message => message === "stored").length;
   appendText(writer.session, " then lost", 14);
   await kit.until(() => live.messages.filter(message => message === "stored").length > count || undefined);
@@ -60,10 +183,18 @@ test("online backup retains verified bytes for each script and restores without 
   peer.close();
   second.close();
 
-  rmSync(primary, { recursive: true });
   const freshDirectory = join(kit.directory, "restored-data");
-  mkdirSync(freshDirectory);
-  copyFileSync(saved, join(freshDirectory, DB_NAME));
+  await assert.rejects(restoreRelay(saved, primary), /requires a new data directory/);
+  const restore = spawnSync(process.execPath, ["--disable-warning=ExperimentalWarning", RESTORE, saved, freshDirectory], {
+    env: {}, encoding: "utf8"
+  });
+  assert.equal(restore.status, 0, restore.stderr);
+  assert.equal(restore.stderr, "");
+  assert.equal(restore.stdout.trim(), "Verified relay restore. All invitations are revoked.");
+  {
+    using archive = new DatabaseSync(join(saved, DB_NAME), { readOnly: true });
+    assert.ok(archive.prepare("SELECT 1 FROM invitations WHERE revoked = 0").get());
+  }
   assert.deepEqual(storedState(freshDirectory, NAME), original);
   assert.deepEqual(storedState(freshDirectory, "second-script"), secondOriginal);
   const restored = kit.launch({ SPLITPAGE_DATA_DIR: freshDirectory });
@@ -73,7 +204,16 @@ test("online backup retains verified bytes for each script and restores without 
   assert.equal(retry.status, 200);
   assert.deepEqual(await retry.json(), { scriptId: createdScript });
   assert.deepEqual(storedState(freshDirectory, createdScript), seed);
-  const fresh = kit.copy(await restored.port());
+  const portAfterRestore = await restored.port();
+  const previous = kit.copy(portAfterRestore);
+  const refusal = await kit.until(() => previous.events.find(event => event.kind === "authentication-failed"));
+  assert.equal(refusal.reason, "invitation-revoked");
+  const issue = { method: "POST", body: "Restore drill" };
+  assert.equal((await restored.owner(`scripts/${deletedScript}/invitations`, issue)).status, 409);
+  const issued = await restored.owner(`scripts/${NAME}/invitations`, issue);
+  assert.equal(issued.status, 201);
+  const { token } = await issued.json() as { token: string };
+  const fresh = kit.copy(portAfterRestore, { kind: "empty" }, NAME, token);
   await kit.until(() => fresh.relay.status().firstSyncDone || undefined);
   assert.equal(fresh.text(), "word backed up");
 });
@@ -144,13 +284,13 @@ test("a changed copy fails verification before it can be published or prune a pr
   const kit = serverHarness(t);
   kit.seed();
   const config = { SPLITPAGE_DATA_DIR: kit.directory, SPLITPAGE_BACKUP_KEEP: "1" };
-  const previous = await backupRelay(config);
+  const previous = await backupRelay(config, backup, () => {});
   await assert.rejects(backupRelay(config, async (source, path) => {
     const pages = await backup(source, path);
     using db = new DatabaseSync(path);
     db.exec("UPDATE documents SET state = X'00'");
     return pages;
-  }), /documents differ/);
+  }, () => {}), /documents differ/);
   assert.deepEqual(readdirSync(join(kit.directory, "backups")), [previous]);
 });
 
@@ -165,9 +305,9 @@ test("retention always keeps the just-verified backup and ignores backup-shaped 
   renameSync(join(directory, first), join(directory, future));
   mkdirSync(join(directory, unrelated));
   kit.seed("new-script");
-  const justMade = await backupRelay(config);
+  const justMade = await backupRelay(config, backup, () => {});
   assert.deepEqual(readdirSync(directory).sort(), [justMade, unrelated].sort());
-  using copy = new DatabaseSync(join(directory, justMade), { readOnly: true });
+  using copy = new DatabaseSync(join(directory, justMade, DB_NAME), { readOnly: true });
   assert.equal(copy.prepare("SELECT count(*) AS count FROM documents").get()?.count, 2);
 });
 
@@ -198,8 +338,71 @@ test("online backup copies the preflight snapshot even when a second connection 
   assert.deepEqual(writer.prepare("SELECT hex(state) AS state FROM documents ORDER BY name").all().map(row => row.state), ["03", "03"]);
   assert.equal(writer.prepare("SELECT status FROM scripts").get()?.status, "deleted");
   assert.equal(writer.prepare("SELECT revoked FROM invitations").get()?.revoked, 1);
-  using copy = new DatabaseSync(join(kit.directory, "backups", name), { readOnly: true });
+  using copy = new DatabaseSync(join(kit.directory, "backups", name, DB_NAME), { readOnly: true });
   assert.deepEqual(copy.prepare("SELECT hex(state) AS state FROM documents ORDER BY name").all().map(row => row.state), ["01", "02"]);
   assert.equal(copy.prepare("SELECT status FROM scripts").get()?.status, "active");
   assert.equal(copy.prepare("SELECT revoked FROM invitations").get()?.revoked, 0);
 });
+
+
+test("backup publishes marker only after durable bundle sync, fails safely on marker write errors and ignores malformed markers",
+  { timeout: 30_000 }, async t => {
+    const kit = serverHarness(t);
+    kit.seed();
+    const config = { SPLITPAGE_DATA_DIR: kit.directory, SPLITPAGE_BACKUP_KEEP: "1" };
+    const backupsDir = join(kit.directory, "backups");
+    const markerPath = join(kit.directory, "last-backup.json");
+    const events: string[] = [];
+    let failBundleSync = true;
+    let failMarkerWrite = false;
+    const originalOpen = fs.openSync;
+    const originalRename = fs.renameSync;
+    const openMock = t.mock.method(fs, "openSync", (path: fs.PathLike, flags: fs.OpenMode = "r", mode?: fs.Mode) => {
+      const text = String(path);
+      if (failMarkerWrite && text.includes(".last-backup-")) {
+        throw Object.assign(new Error("simulated marker write failure"), { code: "EIO" });
+      }
+      return originalOpen(path, flags, mode);
+    });
+    const renameMock = t.mock.method(fs, "renameSync", (from: fs.PathLike, to: fs.PathLike) => {
+      if (String(to) === markerPath) events.push("marker-rename");
+      originalRename(from, to);
+    });
+    syncBuiltinESMExports();
+    const syncSpy = (path: string) => {
+      events.push(`sync:${path}`);
+      if (failBundleSync && path === backupsDir) {
+        throw Object.assign(new Error("simulated bundle sync failure"), { code: "EIO" });
+      }
+    };
+    try {
+      await assert.rejects(backupRelay(config, backup, syncSpy), { code: "EIO" });
+      assert.equal(lastBackupTime(kit.directory), null);
+
+      failBundleSync = false;
+      events.length = 0;
+      const first = await backupRelay(config, backup, syncSpy);
+      const firstTimestamp = lastBackupTime(kit.directory);
+      assert.ok(firstTimestamp !== null);
+      const backupsSyncIndex = events.indexOf(`sync:${backupsDir}`);
+      const markerRenameIndex = events.indexOf("marker-rename");
+      const parentSyncAfterMarker = events.lastIndexOf(`sync:${kit.directory}`);
+      assert.ok(backupsSyncIndex >= 0);
+      assert.ok(markerRenameIndex > backupsSyncIndex);
+      assert.ok(parentSyncAfterMarker > markerRenameIndex);
+
+      failMarkerWrite = true;
+      await assert.rejects(backupRelay(config, backup, syncSpy), { code: "EIO" });
+      assert.equal(lastBackupTime(kit.directory), firstTimestamp);
+      assert.ok(readdirSync(backupsDir).includes(first));
+      assert.equal(readdirSync(kit.directory).some(name => name.startsWith(".last-backup-")), false);
+    } finally {
+      openMock.mock.restore();
+      renameMock.mock.restore();
+      syncBuiltinESMExports();
+    }
+
+    writeFileSync(markerPath, "{malformed");
+    assert.equal(lastBackupTime(kit.directory), null);
+  }
+);
