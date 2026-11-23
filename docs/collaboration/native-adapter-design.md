@@ -501,6 +501,30 @@ A connection already admitted as writable keeps that access if the script crosse
 additions at 15 MB, with a 105% ceiling (#1667), and the server still caps each WebSocket payload at
 16,000,000 bytes. The admission tests pin both outcomes.
 
+### Picture availability (Stage 3 Part 3b)
+
+Store and verify inserted bytes in the existing IndexedDB or desktop picture store, then synchronize the
+reference immediately. Upload in the background using the [picture PUT and GET endpoints](stage-3-service-plan.md#part-3a-picture-http-api)
+and the current script invitation. Deduplicate uploads by script and hash. Retry transient failures with
+backoff and resume when the script reconnects. On reopen, rebuild pending upload work from retained references
+with verified local bytes. An idempotent PUT can confirm a previously completed upload. Stop retrying access
+and validation refusals until the relevant input changes.
+
+When a reference arrives, check the local picture store first. If bytes are missing, show “Picture not uploaded
+yet” and try an authenticated GET. An uncached GET returning 404 leaves the reference pending. Retry pending
+hashes with capped backoff and bounded concurrency while the script is open, with an immediate retry on
+reconnect. A verified GET response is the availability signal, including when the uploader closed after the
+relay committed the bytes. Check the hash and picture policy before storing and displaying the bytes. Discard
+damaged bytes and retry the fetch. If no copy ever uploads the bytes, the placeholder stays until someone
+replaces or removes the reference. Track retained references needed for recovery and undo as well as live ones.
+
+On join, hydrate from the synchronized references using the same local lookup and fetch. Placeholders may
+render during hydration. Complete the join and enable edits only once the initial replica and its required
+pictures are stored locally. For export, capture one document revision and its picture references, use verified
+local bytes and attempt to fetch missing ones when authorized. List the pictures still missing from that
+capture before presenting the standalone export as complete. Export can finish with that warning even if
+background retries are still pending.
+
 ## 9. Offline notice
 
 On reconnecting, a copy compares its own state with the merged result, per beat, and lists beats it changed that
