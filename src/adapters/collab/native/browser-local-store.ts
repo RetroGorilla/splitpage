@@ -62,13 +62,22 @@ function openDatabase(factory: IDBFactory): Promise<IDBDatabase | NativeLocalSto
   });
 }
 
-function transaction<T>(database: IDBDatabase, stores: string[], mode: "readonly" | "readwrite", run: (tx: IDBTransaction) => IDBRequest<T>): Promise<T> {
+function transaction<T>(database: IDBDatabase, stores: string[], mode: "readonly" | "readwrite", run: (tx: IDBTransaction) => IDBRequest<T>, signal?: AbortSignal): Promise<T> {
   return new Promise((resolve, reject) => {
+    signal?.throwIfAborted();
     const tx = database.transaction(stores, mode, { durability: "strict" });
+    const cancel = () => {
+      try { tx.abort(); } catch (error) {
+        if (!(error instanceof DOMException && error.name === "InvalidStateError")) throw error;
+      }
+    };
+    const settled = () => { signal?.removeEventListener("abort", cancel); };
     try {
       const request = run(tx);
-      tx.oncomplete = () => resolve(request.result);
-      tx.onabort = () => reject(tx.error ?? request.error);
+      tx.oncomplete = () => { settled(); resolve(request.result); };
+      tx.onabort = () => { settled(); reject(tx.error ?? request.error); };
+      signal?.addEventListener("abort", cancel, { once: true });
+      if (signal?.aborted) cancel();
     } catch (error) {
       // why: a synchronous put failure must roll back a checkpoint's earlier delete request
       tx.abort();
@@ -111,6 +120,20 @@ function erase(database: IDBDatabase, name: string): Promise<undefined> {
 function connectionFor(
   database: IDBDatabase, name: string, release: () => Promise<void>, storage: BrowserLocalStorePorts["storage"]
 ): NativeReplicaConnection {
+  let staged: Promise<undefined> | undefined;
+  async function writeMembership(token: string | null, signal?: AbortSignal): Promise<void> {
+    if (token === null) {
+      await transaction(database, [MEMBERSHIPS, INVITATIONS], "readwrite", tx => {
+        tx.objectStore(MEMBERSHIPS).delete(name);
+        return tx.objectStore(INVITATIONS).delete(name);
+      });
+      return;
+    }
+    await transaction(database, [MEMBERSHIPS, INVITATIONS], "readwrite", tx => {
+      tx.objectStore(MEMBERSHIPS).put(true, name);
+      return tx.objectStore(INVITATIONS).put(token, name);
+    }, signal);
+  }
   return {
     forget: () => erase(database, name),
     membership: {
@@ -122,16 +145,26 @@ function connectionFor(
         });
         return member?.result === true && typeof token === "string" ? token : null;
       },
-      async join(token) {
-        await transaction(database, [MEMBERSHIPS, INVITATIONS], "readwrite", tx => {
-          tx.objectStore(MEMBERSHIPS).put(true, name);
-          return tx.objectStore(INVITATIONS).put(token, name);
-        });
+      join: writeMembership,
+      async stageInvitation(token, previous, signal) {
+        const disposition = deferred<undefined>();
+        staged = disposition.promise;
+        const commit = () => { disposition.resolve(undefined); };
+        try { await writeMembership(token, signal); }
+        catch (error) { commit(); throw error; }
+        return {
+          commit,
+          async rollback() {
+            try { await writeMembership(previous); }
+            finally { commit(); }
+          }
+        };
       }
     },
     read: through => read(database, name, through),
     write: async entry => { await write(database, { ...entry, name }); },
-    async release() { database.close(); await release(); },
+    // why: a refused entry may close the session before its membership has been restored under the writer lease
+    async release() { await staged; database.close(); await release(); },
     persistent: () => requestPersistence(storage),
     onStop(stop) {
       database.onversionchange = () => { database.close(); stop("version"); };

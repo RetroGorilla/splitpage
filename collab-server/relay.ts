@@ -7,6 +7,7 @@ import type { Connection, Document, Extension } from "@hocuspocus/server";
 import { messageYjsSyncStep2, messageYjsUpdate } from "y-protocols/sync";
 import { applyUpdate, Doc, encodeStateAsUpdate, snapshot, snapshotContainsUpdate } from "yjs";
 import { scriptAccess } from "./access.ts";
+import { appShell } from "./app-shell.ts";
 import { RelayError, relayConfig } from "./config.ts";
 import {
   createRelayLimits,
@@ -49,7 +50,7 @@ function exceedsMergeLimit(document: Document, update: Uint8Array): boolean {
 
 export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", extensions: Extension[] = []) {
   const {
-    directory, port, origins, debounce, maxDebounce, managementSecret,
+    directory, deployment, port, origins, debounce, maxDebounce, managementSecret,
     maxConnections, maxConnectionsPerInvitation, maxMessagesPerSecond, maxUploadsInFlight
   } = relayConfig(env);
   const lock = claimWriter(directory);
@@ -177,7 +178,7 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
         done(true);
       }
     },
-    extensions: [limitsExtension, ...extensions, storage],
+    extensions: [limitsExtension, ...extensions, ...(env.SPLITPAGE_APP_DIR ? [appShell(env.SPLITPAGE_APP_DIR, deployment)] : []), storage],
     async onRequest({ request, response }) {
       // why: the stock server treats a falsy rejection as an HTTP response handled by the hook
       if (status(request, response) || await manage(request, response) || await pictures.handle(request, response)) throw null;

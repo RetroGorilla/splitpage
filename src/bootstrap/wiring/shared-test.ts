@@ -22,8 +22,15 @@ import { createNativeTestPeer } from "./shared-native-test-peer.ts";
 import { stopNativeCaretWait } from "./native-switch-caret.ts";
 import { enterRetainedSharedScript, leaveRetainedSharedScript, retainedSharedScriptActive } from "./retained-shared-script.ts";
 import type { RetainedSharedScript } from "./retained-shared-script.ts";
+import { readInvitationSnapshot } from "../../adapters/collab/native/invitation-snapshot.ts";
+import { openNativeRelay } from "../../adapters/collab/native/relay.ts";
+import { sanitizeHtml } from "../richtext.ts";
+import { captureDocumentOpeningLifetime } from "./transition-owners.ts";
+import { waitDuringLifetime } from "../startup/page-lifetime.ts";
+import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 
 declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
+declare let splitpageInvitation: { readonly script: string; readonly token: string } | null;
 
 const DRAFT_NOT_KEPT = "draft-not-kept";
 const DRAFT_NOT_KEPT_NOTICE = "The shared session did not start: your recovery copy could not be saved.";
@@ -89,7 +96,7 @@ function startSharedTestHook(): () => void {
     const marks = landed && kept ? [() => { noteSaveChange(); }, () => { noteDraftChange(); }] : [];
     runEvery([() => { ending?.dispose(); }, ...(kept ? [() => { draftSource.resumeWriting(); }] : []), ...marks]);
   };
-  const enter = async (stored?: Uint8Array, retained?: RetainedSharedScript): Promise<SharedSwitchOutcome> => {
+  const enter = async (stored?: Uint8Array, retained?: RetainedSharedScript, signal?: AbortSignal): Promise<SharedSwitchOutcome> => {
     if (!live) return { ok: false, reason: APP_STOPPED };
     if (switching) return { ok: false, reason: SHARED_SWITCHING };
     if (sharedSession()) return { ok: false, reason: SHARED_ALREADY };
@@ -101,7 +108,8 @@ function startSharedTestHook(): () => void {
       await Promise.resolve();
       const standalone = currentCapabilities();
       const common = { edit: standalone.edit, comment: standalone.edit };
-      const refusal = (): string | null => (!live ? APP_STOPPED : null) ?? sharedEntryRefusal(ready, composing);
+      const refusal = (): string | null => (!live ? APP_STOPPED : null)
+        ?? (signal?.aborted ? "opening-pending" : null) ?? sharedEntryRefusal(ready, composing);
       const entering: SharedSwitchPorts = {
         refusal, commandRefused: sharedCommandRefusalNotice(notices),
         settle: () => {
@@ -128,7 +136,7 @@ function startSharedTestHook(): () => void {
         opening: openingStatus
       };
       const opened: { session?: ReturnType<typeof openNativeEditor>["native"] } = {};
-      const result = retained ? await enterRetainedSharedScript(entering, retained) : await enterSharedSession(entering, (doc, failedClose) => {
+      const result = retained ? await enterRetainedSharedScript(entering, retained, signal) : await enterSharedSession(entering, (doc, failedClose) => {
         const { backend, native } = openNativeEditor(entering, doc, failedClose, stored);
         opened.session = native;
         return backend;
@@ -155,11 +163,64 @@ function startSharedTestHook(): () => void {
     if (retainedSharedScriptActive()) return leaveRetainedSharedScript().finally(() => { switching = false; });
     try { return leaveRunningSharedSession(); } finally { switching = false; }
   };
+  const invitationLifetime = new AbortController();
+  let invitationConnected = false;
+  let invitationSettled = false;
+  async function joinInvitation({ script, token }: NonNullable<typeof splitpageInvitation>): Promise<void> {
+    const lifetime = AbortSignal.any([invitationLifetime.signal, AbortSignal.timeout(15_000)]);
+    try {
+      if (location.protocol !== "https:" && location.protocol !== "http:") return;
+      const ready = startupReady();
+      if (!ready) return;
+      await waitDuringLifetime(ready, lifetime);
+      const opening = captureDocumentOpeningLifetime();
+      const signal = AbortSignal.any([lifetime, opening.signal]);
+      await waitDuringLifetime(opening.settled, signal);
+      const response = await fetch("/index.html", { method: "HEAD", cache: "no-store", redirect: "error", signal });
+      const deployment = response.headers.get("Splitpage-Deployment");
+      if (!response.ok || !deployment || !/^[A-Za-z0-9_-]{1,64}$/.test(deployment)) return;
+      const endpoint = new URL("/", location.origin);
+      endpoint.protocol = location.protocol === "https:" ? "wss:" : "ws:";
+      const state = await readInvitationSnapshot(endpoint.href, script, token, signal);
+      if (signal.aborted) return;
+      const outcome = await enter(undefined, {
+        deployment, script, invitation: { token, state },
+        connect(replica, credential) {
+          const relay = openNativeRelay(replica.session, {
+            url: endpoint.href, name: script, token: credential, reopen: replica.reopen,
+            sessionOptions: { actor: getEditorName(), sanitize: sanitizeHtml },
+            onEvent(event) {
+              if (event.kind === "status") invitationConnected = event.status.connected && event.status.firstSyncDone;
+            }
+          });
+          return () => { relay.close(); invitationConnected = false; };
+        }
+      }, signal);
+      if (!outcome.ok) report(new Error("Could not enter the shared invitation."));
+    } catch {
+      if (!invitationLifetime.signal.aborted) report(new Error("Could not open the shared invitation."));
+    } finally {
+      invitationSettled = true;
+    }
+  }
+  if (typeof splitpageInvitation !== "undefined" && splitpageInvitation) {
+    const invitation = splitpageInvitation;
+    splitpageInvitation = null;
+    void joinInvitation(invitation);
+  }
   const hook = {
     enter: () => enter(),
     enterFrom: (state: string | Uint8Array | ArrayBuffer) => enter(sharedTestBytes(state)),
     leave,
-    enterRetained: (retained: RetainedSharedScript) => enter(undefined, retained),
+    enterRetained: (retained: RetainedSharedScript, cancellation?: AbortSignal) => {
+      if (!live || desktopPort()) return enter(undefined, retained);
+      const opening = captureDocumentOpeningLifetime();
+      return enter(undefined, retained, AbortSignal.any([
+        invitationLifetime.signal, opening.signal, ...(cancellation ? [cancellation] : [])
+      ]));
+    },
+    invitationConnected: () => invitationConnected,
+    invitationSettled: () => invitationSettled,
     nativePeer: {
       type: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["type"]>) => nativePeer?.type(...args),
       field: (...args: Parameters<NonNullable<typeof nativePeer>["field"]>) => nativePeer?.field(...args),
@@ -197,6 +258,7 @@ function startSharedTestHook(): () => void {
   exposeTestHook("__sharedTest", () => hook, release => { withdraw = release; });
   return () => {
     live = false;
+    invitationLifetime.abort();
     try { forceLeaveSharedSession(); } finally {
       document.removeEventListener("compositionstart", composition, true);
       document.removeEventListener("compositionend", composition, true);

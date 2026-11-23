@@ -106,6 +106,12 @@ Done:
 - A test loads the app from a local relay, joins through a link, and finds no token in the address, the history entry or the log.
 - The service worker leaves `/api/` and the WebSocket alone.
 
+Run `node --test .claude/skills/run-splitpage-app/relay-invitation.mjs` for the live Chromium relay test.
+It provisions a seeded script and invitations, checks the live connection, reopens the retained copy
+after navigation, and verifies that revocation leaves no membership. Set `SPLITPAGE_TEST_TLS_KEY` and
+`SPLITPAGE_TEST_TLS_CERT` to PEM files trusted by the test browser to exercise the same routes over HTTPS
+and WSS. Invitation entry remains gated to the test build.
+
 ### 6 Limits and container
 
 - Limits applied before expensive work, for admitted clients too: connections in total and per invitation, messages per connection per second, uploads in flight (configurable `1`–`4`, preserving the 64 MiB staging maximum). Use the options Hocuspocus and its WebSocket library provide before writing any.

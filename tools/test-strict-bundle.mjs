@@ -34,7 +34,7 @@ function unwrap(expression) {
   return ts.isParenthesizedExpression(expression) ? unwrap(expression.expression) : expression;
 }
 
-function assertStrict(script) {
+function assertStrict(script, context) {
   const parsed = ts.createSourceFile("app.js", script, ts.ScriptTarget.Latest, true, ts.ScriptKind.JS);
   const statement = parsed.statements.find((s) => ts.isExpressionStatement(s) && ts.isCallExpression(unwrap(s.expression)));
   assert.ok(statement, "the bundled app has an immediately invoked wrapper");
@@ -46,9 +46,10 @@ function assertStrict(script) {
   const at = start.getStart(parsed);
   let result;
   try {
-    runInNewContext(script.slice(0, at) + probe + script.slice(at), {}, { timeout: 1000 });
+    runInNewContext(script.slice(0, at) + probe + script.slice(at), context, { timeout: 1000 });
     assert.fail("the runtime probe did not execute inside the bundle");
   } catch (error) {
+    if (!error || !Object.hasOwn(error, "receiver")) throw error;
     result = error;
   }
   assert.equal(result.receiver, undefined, "a plain bundled function keeps undefined this");
@@ -61,13 +62,14 @@ function assertStrict(script) {
 }
 
 function checkPage(html) {
-  const dom = new JSDOM(html);
+  const dom = new JSDOM(html, { url: "https://example.test/" });
   try {
     const scripts = [...dom.window.document.scripts];
     assert.equal(scripts.length, 2);
     assert.equal(scripts.filter((s) => s.type === "application/json").length, 1);
     const app = dom.window.document.getElementById("app-logic");
-    assertStrict(app.textContent);
+    const { URL, location, history } = dom.window;
+    assertStrict(app.textContent, { URL, location, history });
     const hash = createHash("sha256").update(app.textContent, "utf8").digest("base64");
     assert.ok(dom.window.document.querySelector('meta[http-equiv="Content-Security-Policy"]').content.includes("'sha256-" + hash + "'"));
     return app.textContent;

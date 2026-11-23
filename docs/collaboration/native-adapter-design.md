@@ -270,6 +270,14 @@ database because the relay rejects the earlier database version. The Part 2 rela
 databases in place and backs up creation ids with their script records.
 The planned deployment and smoke test are in [Stage 3 Part 8](stage-3-service-plan.md#8-evidence-and-redeploy).
 
+For a current checkout with the bundled browser shell, build from the repository root with
+`docker build -f collab-server/Dockerfile -t splitpage-relay .`. The image contains the release shell built from
+that checkout. List the relay's public origin and `splitpage://app` in `SPLITPAGE_ALLOWED_ORIGINS`.
+Set `SPLITPAGE_DEPLOYMENT_ID` to a stable public identifier of 1 to 64 ASCII letters, digits, underscores
+or hyphens. Keep it across updates and use a different identifier for an independent deployment.
+The shell exposes it in the `Splitpage-Deployment` response header.
+The pinned command below reproduces the historical service image.
+
 **Manage the Stage 3 relay.** Generate a random 32-byte secret encoded as base64url and keep it in
 the deployment's operator-only host secret storage. Inject it as `SPLITPAGE_MANAGEMENT_SECRET`
 into the relay and the owner command's environment. Keep it out of command arguments, shell

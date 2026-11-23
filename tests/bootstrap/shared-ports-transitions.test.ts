@@ -7,7 +7,8 @@ import { NO_DESTINATION } from "../../src/application/transitions/ports.ts";
 
 import { migrateRows } from "../../src/bootstrap/document-ports.ts";
 import { currentDocument, liveDocumentPort } from "../../src/bootstrap/wiring/session-owner.ts";
-import { documentOpenings, documentSources, documentTransitions, startTransitions } from "../../src/bootstrap/wiring/transition-owners.ts";
+import { captureDocumentOpeningLifetime, documentOpenings, documentSources, documentTransitions, startTransitions } from "../../src/bootstrap/wiring/transition-owners.ts";
+import { waitDuringLifetime } from "../../src/bootstrap/startup/page-lifetime.ts";
 import { startTestSession, unwiredSessionDeps } from "../../src/test/_session.mjs";
 import { fakeTransitions } from "../features/fakes.ts";
 
@@ -45,6 +46,41 @@ test("the transitions port reaches the running transitions when called, and refu
     stop();
   }
   assert.throws(() => transitions.copyId(), /not started yet/);
+});
+
+test("a stalled opening cannot outlive the invitation deadline, and a new opening, replacement or stop cancels entry", async () => {
+  const stop = startTransitions({ live: liveDocumentPort,
+    destination: { set: () => {}, confirm: () => {} },
+    identity: { mint: () => "d" + "9".repeat(32), writtenOut: () => false, markWrittenOut: () => {} }, history: { keep: () => null } });
+  try {
+    const wait = () => {
+      const opening = captureDocumentOpeningLifetime();
+      return waitDuringLifetime(opening.settled, opening.signal);
+    };
+    documentOpenings.track(() => new Promise<void>(() => {}));
+    const stalled = captureDocumentOpeningLifetime();
+    const deadline = AbortSignal.timeout(5);
+    const keepClockRunning = setTimeout(() => {}, 50);
+    try { await assert.rejects(waitDuringLifetime(stalled.settled, deadline), /cancelled|aborted/i); }
+    finally { clearTimeout(keepClockRunning); }
+    assert.equal(documentOpenings.openingPending(), true);
+    const page = new AbortController();
+    const pageWait = waitDuringLifetime(stalled.settled, AbortSignal.any([stalled.signal, page.signal]));
+    page.abort();
+    await assert.rejects(pageWait, /cancelled/);
+    assert.equal(stalled.signal.aborted, false);
+    const duringNewOpening = wait();
+    documentOpenings.track(() => 7);
+    await assert.rejects(duringNewOpening, /cancelled/);
+    const duringReplacement = wait();
+    documentTransitions().startNew({ from: { document: script("Replacement") }, reason: "new script" });
+    await assert.rejects(duringReplacement, /cancelled/);
+    assert.equal(documentOpenings.openingPending(), false);
+    documentOpenings.track(() => new Promise<void>(() => {}));
+    const duringStop = wait();
+    stop();
+    await assert.rejects(duringStop, /cancelled/);
+  } finally { stop(); }
 });
 
 test("no destination is one frozen value", () => {
