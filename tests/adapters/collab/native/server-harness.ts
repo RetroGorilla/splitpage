@@ -25,6 +25,7 @@ const ENTRY = new URL("./server-process.ts", import.meta.url);
 export function serverHarness(t: TestContext) {
   const directory = mkdtempSync(join(tmpdir(), "splitpage-relay-"));
   const managementSecret = randomBytes(32).toString("base64url");
+  const sensitiveValues = new Set<string>([managementSecret]);
   const invitations = new Map<string, { id: string; token: string }>();
   const changed = new EventEmitter();
   const signal = AbortSignal.any([t.signal, AbortSignal.timeout(25_000)]);
@@ -46,6 +47,25 @@ export function serverHarness(t: TestContext) {
     }
   });
 
+  function redact(...values: (string | undefined | null)[]): void {
+    for (const value of values) {
+      if (typeof value === "string" && value.length > 0) sensitiveValues.add(value);
+    }
+  }
+
+  function sanitizeDiagnostic(text: string): string {
+    let safe = text;
+    for (const value of sensitiveValues) safe = safe.replaceAll(value, "[redacted]");
+    return safe;
+  }
+
+  function containsSensitive(text: string): boolean {
+    for (const value of sensitiveValues) {
+      if (text.includes(value)) return true;
+    }
+    return false;
+  }
+
   async function until<T>(read: () => T | undefined): Promise<T> {
     for (;;) {
       const value = read();
@@ -62,11 +82,13 @@ export function serverHarness(t: TestContext) {
     const existing = invitations.get(name);
     if (exists && existing) return existing;
     const invitation = access.issue(name, "test invitation");
+    redact(invitation.token);
     invitations.set(name, invitation);
     return invitation;
   }
 
   function launch(settings: NodeJS.ProcessEnv = {}, entry = ENTRY) {
+    redact(settings.SPLITPAGE_MANAGEMENT_SECRET);
     if (entry === ENTRY) provision(NAME, settings.SPLITPAGE_DATA_DIR);
     const child = fork(fileURLToPath(entry), {
       env: {
@@ -99,6 +121,7 @@ export function serverHarness(t: TestContext) {
       messages, exit, output: () => output, errors: () => errors,
       send: (message: string | { holdSyncType: number }) => child.send(message),
       async owner(path: string, init: RequestInit = {}, secret: string | null = managementSecret) {
+        redact(secret);
         const headers = new Headers(init.headers);
         if (secret !== null) headers.set("Authorization", `Bearer ${secret}`);
         return fetch(`http://127.0.0.1:${await run.port()}/api/${path}`, { ...init, headers, signal });
@@ -108,20 +131,40 @@ export function serverHarness(t: TestContext) {
           method: "POST", headers: { "Idempotency-Key": creationId }, body: Buffer.from(state)
         }, secret);
         assert.equal(reply.status, 200);
-        const { scriptId } = await reply.json() as { scriptId: string };
-        assert.match(scriptId, /^[a-f0-9-]{36}$/);
-        return scriptId;
+        const raw = await reply.text();
+        assert.equal(containsSensitive(raw), false, "script creation response must not disclose credentials");
+        let parsed: unknown;
+        try {
+          parsed = JSON.parse(raw);
+        } catch {
+          assert.fail("script creation response must be valid JSON");
+        }
+        const record = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
+          ? parsed as Record<string, unknown>
+          : null;
+        const keys = record ? Object.keys(record) : [];
+        const scriptId = record?.scriptId;
+        assert.equal(
+          keys.length === 1 && keys[0] === "scriptId" && typeof scriptId === "string" && /^[a-f0-9-]{36}$/.test(scriptId),
+          true,
+          "script creation response must contain only a valid scriptId"
+        );
+        return scriptId as string;
       },
       async provision(name: string) {
         child.send(`provision:${name}`);
         const invitation = await until(() => messages.find((message): message is { name: string; id: string; token: string } =>
           !!message && typeof message === "object" && "name" in message && message.name === name &&
           "id" in message && typeof message.id === "string" && "token" in message && typeof message.token === "string"));
+        redact(invitation.token);
         invitations.set(name, invitation);
       },
       async port() {
         return until(() => {
-          if (finished) throw new Error(`Relay exited before listening. ${errors}`);
+          if (finished) {
+            const safeErrors = sanitizeDiagnostic(errors);
+            throw new Error(safeErrors ? `Relay exited before listening. ${safeErrors}` : "Relay exited before listening.");
+          }
           return messages.find((message): message is number => typeof message === "number");
         });
       },
@@ -143,6 +186,7 @@ export function serverHarness(t: TestContext) {
   }
 
   function copy(port: number, source: NativeSessionSource = { kind: "empty" }, name = NAME, token = invitations.get(name)?.token ?? "") {
+    redact(token);
     const session = openNativeSession(source, OPTIONS);
     const events: NativeRelayEvent[] = [];
     session.subscribe(() => changed.emit("change"));
@@ -174,7 +218,7 @@ export function serverHarness(t: TestContext) {
     return result;
   }
 
-  return { directory, launch, copy, seed, until, provision, invitation };
+  return { directory, launch, copy, seed, until, provision, invitation, redact };
 }
 
 export function storedState(directory: string, name = NAME) {
