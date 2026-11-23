@@ -6,6 +6,7 @@ import type { Connection, Document, Extension } from "@hocuspocus/server";
 import { messageYjsSyncStep2, messageYjsUpdate } from "y-protocols/sync";
 import { applyUpdate, Doc, encodeStateAsUpdate, snapshot, snapshotContainsUpdate } from "yjs";
 import { RelayError, relayConfig } from "./config.ts";
+import { pictureApi } from "./pictures.ts";
 import { scriptAccess } from "./access.ts";
 import { appShell } from "./app-shell.ts";
 import { ownerRequests } from "./owner-http.ts";
@@ -34,10 +35,15 @@ function exceedsMergeLimit(document: Document, update: Uint8Array): boolean {
 export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", extensions: Extension[] = []) {
   const { directory, deployment, port, origins, debounce, maxDebounce } = relayConfig(env);
   const lock = claimWriter(directory);
-  let db: ReturnType<typeof openWriter>;
+  let db: ReturnType<typeof openWriter> | undefined;
+  let pictures: ReturnType<typeof pictureApi>;
+  let access: ReturnType<typeof scriptAccess>;
   try {
     db = openWriter(directory);
+    access = scriptAccess(db);
+    pictures = pictureApi(db, directory, access);
   } catch (error) {
+    db?.close();
     lock.close();
     throw error;
   }
@@ -48,7 +54,7 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
   function closeStorage(): void {
     clearTimeout(shutdown);
     for (const signal of STOP_SIGNALS) process.removeListener(signal, beginShutdown);
-    db.close();
+    db?.close();
     lock.close();
   }
   const load = db.prepare("SELECT state FROM documents WHERE name = ?");
@@ -67,7 +73,6 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       }
     }
   });
-  const access = scriptAccess(db);
   type Admission = { invitationId: string };
   function requireAccess(context: Admission): void {
     if (!access.isValid(context.invitationId)) throw { reason: "access-removed" };
@@ -107,7 +112,8 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
     },
     extensions: [...extensions, ...(env.SPLITPAGE_APP_DIR ? [appShell(env.SPLITPAGE_APP_DIR, deployment)] : []), storage],
     async onRequest({ request, response }) {
-      if (await manage(request, response)) throw undefined;
+      // why: the stock server treats a falsy rejection as an HTTP response handled by the hook
+      if (await manage(request, response) || await pictures.handle(request, response)) throw null;
     },
     async onAuthenticate({ token, instance, documentName, connectionConfig, requestParameters }) {
       if (requestParameters.getAll("wire").join(",") !== "1" || requestParameters.getAll("schema").join(",") !== "1") {
@@ -156,6 +162,7 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       active.release();
     },
     async onDestroy() {
+      await pictures.close();
       closeStorage();
     }
   });

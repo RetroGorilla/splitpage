@@ -66,6 +66,7 @@ check("bootstrap may import anything", layerAllows("bootstrap", "features/rows")
 check("production code may not import tests", !layerAllows("application", "tests") && !layerAllows("server", "tests"));
 check("tools may import tests", layerAllows("tools", "tests"));
 check("the collaboration service has its own layer", layerOf("collab-server/main.ts") === "collab-server");
+check("the collaboration service can import shared picture policy", layerAllows("collab-server", "shared"));
 check("the collaboration service cannot import the app", !layerAllows("collab-server", "adapters"));
 check("the app cannot import the collaboration service", !layerAllows("bootstrap", "collab-server"));
 check("tests can import the collaboration service", layerAllows("tests", "collab-server"));

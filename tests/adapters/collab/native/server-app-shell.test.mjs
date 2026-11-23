@@ -38,6 +38,9 @@ test("the relay serves the shell and the gated app replaces the invite history e
     assert.equal((await globalThis.fetch(origin + "/" + file)).status, 200);
   }
   assert.equal(await (await globalThis.fetch(origin + "/api/index.html")).text(), "Welcome to Hocuspocus!");
+  const picture = origin + "/api/scripts/" + scriptId + "/pictures/" + "0".repeat(64);
+  assert.equal((await globalThis.fetch(picture)).status, 403);
+  assert.equal((await globalThis.fetch(picture, { headers: { Authorization: "Bearer " + token } })).status, 404);
 
   const browserLogs = [];
   const virtualConsole = new VirtualConsole();

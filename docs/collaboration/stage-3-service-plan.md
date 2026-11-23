@@ -149,3 +149,15 @@ Part 1 first. Parts 2, 3a, 5 and 6 start when part 1 has merged; part 4 does not
 - Presence (Stage 5).
 - The public hostname, the release entry point for shared mode and the hands-on IME check, which are the owner's.
 - Issues [#1748](https://github.com/RetroGorilla/splitpage/issues/1748) and [#1749](https://github.com/RetroGorilla/splitpage/issues/1749).
+
+## Part 3a picture HTTP API
+
+Use `PUT` and `GET` on `/api/scripts/<encoded-script-id>/pictures/<lowercase-sha256>` with the script invitation in the `Authorization: Bearer` header. A PUT sends raw image bytes and the detected image MIME type as `Content-Type`. It returns 201 for a new picture association or 204 for a retry. Invalid access returns 403. GET returns 404 when the authenticated script has no record for the hash. PUT returns 413 for either size limit, 415 for invalid type or dimensions, and 422 for a hash mismatch.
+
+The relay reserves four 16 MiB upload slots for a 64 MiB staging budget. A full staging area returns 503, and an upload that takes more than 60 seconds is disconnected. The relay removes abandoned staging files at startup while it holds the writer lock. SQLite accounts for each script's pictures even when multiple scripts share the same validated bytes.
+
+Relay startup creates storage version 3 or upgrades the Part 1 and Part 2 schemas in one transaction. The upgrade preserves existing scripts, invitations, document bytes and creation IDs.
+
+The database-only backup command refuses snapshots containing picture associations. Existing backups remain available while part 7 adds picture backups.
+
+Build the relay image from the repository root with `docker build -f collab-server/Dockerfile .`. The build context includes the shared picture policy.
