@@ -171,6 +171,13 @@ installation. See the [Node SQLite API](https://nodejs.org/download/release/v24.
 
 ### Backup runbook
 
+This runbook applies to the earlier deployed relay that uses one environment access token. Keep using
+the earlier deployment when following these commands.
+
+Stage 3 Part 1 introduces versioned SQLite storage for scripts and invitations. Local tests use a fresh
+database because the relay rejects the earlier database version. Owner commands arrive in Part 2.
+The planned deployment and smoke test are in [Stage 3 Part 8](stage-3-service-plan.md#8-evidence-and-redeploy).
+
 **Start the relay.** From the repository root on the Docker host, replace the placeholder pool directory, editor
 origin and token. Use a directory on the direct local pool. Keep the environment file in host secret storage,
 with access limited to the operator. The example exposes the relay only on loopback for the intended tunnel or

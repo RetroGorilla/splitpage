@@ -2,6 +2,7 @@ import { randomUUID } from "node:crypto";
 import { mkdirSync, mkdtempSync, readdirSync, renameSync, rmSync } from "node:fs";
 import { join } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
+import type { SQLOutputValue } from "node:sqlite";
 import { dataDirectory, RelayError, retentionCount } from "./config.ts";
 import { DB_NAME, verifyDatabase } from "./storage.ts";
 
@@ -9,17 +10,25 @@ const BACKUP_NAME = /^relay-\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d\.\d{3}Z-[a-f0-9-]{36}
 
 export function verifyCopy(source: DatabaseSync, copy: DatabaseSync): void {
   verifyDatabase(copy);
-  const query = "SELECT name, state FROM documents ORDER BY name";
+  verifyRows(source, copy, "documents", "SELECT name, state FROM documents ORDER BY name");
+  verifyRows(source, copy, "scripts", "SELECT name, status FROM scripts ORDER BY name");
+  verifyRows(source, copy, "invitations", "SELECT id, script, label, token_hash, revoked FROM invitations ORDER BY id");
+}
+
+function valuesMatch(left: SQLOutputValue, right: SQLOutputValue | undefined): boolean {
+  return left instanceof Uint8Array && right instanceof Uint8Array ? Buffer.compare(left, right) === 0 : left === right;
+}
+
+function verifyRows(source: DatabaseSync, copy: DatabaseSync, table: string, query: string): void {
   const expected = source.prepare(query).iterate();
   try {
-    for (const { name, state } of copy.prepare(query).iterate()) {
+    for (const row of copy.prepare(query).iterate()) {
       const original = expected.next().value;
-      if (!original || original.name !== name ||
-          Buffer.compare(state as Uint8Array, original.state as Uint8Array) !== 0) {
-        throw new RelayError("Relay backup documents differ from the source snapshot.");
+      if (!original || Object.entries(row).some(([column, value]) => !valuesMatch(value, original[column]))) {
+        throw new RelayError(`Relay backup ${table} differ from the source snapshot.`);
       }
     }
-    if (!expected.next().done) throw new RelayError("Relay backup is missing documents from the source snapshot.");
+    if (!expected.next().done) throw new RelayError(`Relay backup is missing ${table} from the source snapshot.`);
   } finally {
     expected.return?.();
   }

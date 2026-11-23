@@ -11,6 +11,7 @@ import { createDecoder, readVarString, readVarUint } from "lib0/decoding";
 import { createEncoder, toUint8Array, writeVarString, writeVarUint } from "lib0/encoding";
 import { WebSocket } from "ws";
 import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
+import { scriptAccess } from "../../../../collab-server/access.ts";
 import { relayConfig, retentionCount } from "../../../../collab-server/config.ts";
 import { DB_NAME, openWriter, verifyDurability } from "../../../../collab-server/storage.ts";
 import { NAME, ORIGIN, serverHarness, storedState } from "./server-harness.ts";
@@ -24,12 +25,12 @@ function socket(t: TestContext, port: number, origin?: string) {
   return ws;
 }
 
-function provider(t: TestContext, url: string, token: string, doc = new Doc()) {
+function provider(t: TestContext, url: string, token: string, doc = new Doc(), presence = false) {
   const events = new EventTarget();
   let rejectedWrite = false;
   let closeReason: string | undefined;
   const client = new HocuspocusProvider({
-    url: url + "?wire=1&schema=1", name: NAME, token, document: doc, awareness: null,
+    url: url + "?wire=1&schema=1", name: NAME, token, document: doc, ...(presence ? {} : { awareness: null }),
     onAuthenticated() { events.dispatchEvent(new Event("change")); },
     onSynced() { events.dispatchEvent(new Event("change")); },
     onUnsyncedChanges() { events.dispatchEvent(new Event("change")); },
@@ -127,6 +128,82 @@ test("script and invitation refusals are observable without disclosing private d
   using db = openWriter(kit.directory);
   assert.equal(db.prepare("SELECT count(*) AS count FROM scripts").get()?.count, 4);
   assert.equal(db.prepare("SELECT count(*) AS count FROM documents").get()?.count, 1);
+});
+
+test("revocation discards queued edits and presence, and access removals survive restart", { timeout: 30_000 }, async t => {
+  const kit = serverHarness(t);
+  kit.seed();
+  const revoked = kit.provision(NAME);
+  let remainingToken: string;
+  {
+    using db = openWriter(kit.directory);
+    remainingToken = scriptAccess(db).issue(NAME, "remaining invitation").token;
+  }
+  const run = kit.launch();
+  const url = `ws://127.0.0.1:${await run.port()}`;
+  const writer = provider(t, url, revoked.token);
+  const presence = provider(t, url, revoked.token, new Doc(), true);
+  const survivor = provider(t, url, remainingToken, new Doc(), true);
+  for (const peer of [writer, presence, survivor]) await peer.until(() => peer.client.synced);
+
+  function seesPresence(value: string): boolean {
+    const state = survivor.client.awareness?.getStates().get(presence.client.document.clientID) as Record<string, unknown> | undefined;
+    return state?.reviewPresence === value;
+  }
+  const presenceChanged = new EventTarget();
+  let sawQueuedPresence = false;
+  survivor.client.awareness?.on("change", () => {
+    sawQueuedPresence ||= seesPresence("queued");
+    presenceChanged.dispatchEvent(new Event("change"));
+  });
+  presence.client.setAwarenessField("reviewPresence", "visible");
+  while (!seesPresence("visible")) await once(presenceChanged, "change", { signal: t.signal });
+
+  const observed = survivor.client.document.getMap("fixture");
+  let sawQueuedEdit = false;
+  observed.observe(() => { sawQueuedEdit ||= observed.has("queued"); });
+  run.send("hold-traffic");
+  await kit.until(() => run.messages.includes("traffic-armed") || undefined);
+  writer.client.document.getMap("fixture").set("queued", "must stay local");
+  presence.client.setAwarenessField("reviewPresence", "queued");
+  await kit.until(() => run.messages.includes("edit-queued") && run.messages.includes("presence-queued") || undefined);
+  run.send(`revoke:${revoked.id}`);
+  for (const peer of [writer, presence]) {
+    await peer.until(() => peer.closeReason() !== undefined);
+    assert.equal(peer.closeReason(), "access-removed");
+  }
+  run.send("release-traffic");
+  await kit.until(() => run.messages.includes("traffic-released") || undefined);
+  observed.set("authorized", "still writing");
+  await survivor.until(() => survivor.client.unsyncedChanges === 0);
+  assert.equal(survivor.client.isAuthenticated, true);
+  assert.equal(sawQueuedEdit, false);
+  assert.equal(sawQueuedPresence, false);
+  assert.deepEqual(await run.stop("clean"), { code: 0, exitSignal: null });
+
+  async function expectRefusal(port: number, token: string, reason: string) {
+    const copy = kit.copy(port, undefined, NAME, token);
+    const event = await kit.until(() => copy.events.find(event => event.kind === "authentication-failed"));
+    assert.equal(event.reason, reason);
+    assert.equal(copy.relay.status().firstSyncDone, false);
+  }
+  const restarted = kit.launch();
+  const port = await restarted.port();
+  await expectRefusal(port, revoked.token, "invitation-revoked");
+  const active = kit.copy(port, undefined, NAME, remainingToken);
+  await kit.until(() => active.relay.status().firstSyncDone || undefined);
+  assert.equal(active.session.ydoc.getMap("fixture").has("queued"), false);
+  assert.equal(active.session.ydoc.getMap("fixture").get("authorized"), "still writing");
+  restarted.send(`delete:${NAME}`);
+  const closed = await kit.until(() => active.events.find(event => event.kind === "authentication-failed"));
+  assert.equal(closed.reason, "access-removed");
+  assert.equal(active.relay.status().connected, false);
+  await expectRefusal(port, remainingToken, "script-deleted");
+  assert.deepEqual(await restarted.stop("clean"), { code: 0, exitSignal: null });
+
+  const afterDelete = await kit.launch().port();
+  await expectRefusal(afterDelete, remainingToken, "script-deleted");
+  await expectRefusal(afterDelete, revoked.token, "script-deleted");
 });
 
 test("oversized WebSocket payload closes before protocol processing", { timeout: 30_000 }, async t => {
