@@ -306,7 +306,11 @@ async function main(): Promise<void> {
         }
       });
       req.on("error", () => undefined);
-      const response = once(req, "response").then(([res]) => res as IncomingMessage);
+      const response = new Promise<IncomingMessage>((resolve, reject) => {
+        req.once("response", resolve);
+        req.once("error", reject);
+      });
+      response.catch(() => undefined);
       req.write(picture.bytes.subarray(0, 12));
       return { req, response };
     }

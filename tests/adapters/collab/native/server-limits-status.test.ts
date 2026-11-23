@@ -13,7 +13,7 @@ import type { TestContext } from "node:test";
 import { HocuspocusProvider, HocuspocusProviderWebsocket, MessageType } from "@hocuspocus/provider";
 import { createEncoder, toUint8Array, writeVarString, writeVarUint } from "lib0/encoding";
 import { WebSocket } from "ws";
-import { Doc } from "yjs";
+import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import { scriptAccess } from "../../../../collab-server/access.ts";
 import { backupRelay } from "../../../../collab-server/backup.ts";
 import { relayConfig } from "../../../../collab-server/config.ts";
@@ -271,7 +271,11 @@ test("in-flight upload limit refuses excess picture uploads with 503 and tracks 
         }
       });
       req.on("error", () => undefined);
-      const response = once(req, "response", { signal: t.signal }).then(([res]) => res as IncomingMessage);
+      const response = new Promise<IncomingMessage>((resolve, reject) => {
+        req.once("response", resolve);
+        req.once("error", reject);
+      });
+      response.catch(() => undefined);
       req.write(picture.bytes.subarray(0, 12));
       return { req, response };
     }
@@ -285,13 +289,16 @@ test("in-flight upload limit refuses excess picture uploads with 503 and tracks 
     const first = startUpload(pngA);
     const second = startUpload(pngB);
     t.after(() => { first.req.destroy(); second.req.destroy(); });
-    await kit.until(() => {
+    let bothStaged = false;
+    for (let attempt = 0; attempt < 100 && !bothStaged; attempt++) {
       try {
-        return (statSync(join(pictures, "upload-0")).size === 12 && statSync(join(pictures, "upload-1")).size === 12) || undefined;
+        bothStaged = statSync(join(pictures, "upload-0")).size === 12 && statSync(join(pictures, "upload-1")).size === 12;
       } catch {
-        return undefined;
+        bothStaged = false;
       }
-    });
+      if (!bothStaged) await new Promise(resolve => setTimeout(resolve, 25));
+    }
+    assert.equal(bothStaged, true);
 
     const statusWhileFull = await readStatus();
     assert.equal(statusWhileFull.uploadsInFlight, 2);
@@ -336,15 +343,12 @@ test("in-flight upload limit refuses excess picture uploads with 503 and tracks 
 test("normal near-limit reconnect succeeds over small fragmented TCP chunks", { timeout: 30_000 }, async t => {
   const kit = serverHarness(t);
   const baseState = kit.seed();
-  const largeSession = kit.copy(0, { kind: "state", state: baseState });
-  largeSession.session.ydoc.getMap("fixture").set("payload", new Uint8Array(14_000_000));
-  const largeState = largeSession.session.encodeState();
-  largeSession.close();
+  const largeDoc = new Doc();
+  t.after(() => largeDoc.destroy());
+  applyUpdate(largeDoc, baseState);
+  largeDoc.getMap("fixture").set("payload", new Uint8Array(14_000_000));
+  const largeState = encodeStateAsUpdate(largeDoc);
   assert.ok(largeState.byteLength > 14_000_000 && largeState.byteLength < 15_000_000);
-  {
-    using db = openWriter(kit.directory);
-    db.prepare("UPDATE documents SET state = ? WHERE name = ?").run(largeState, NAME);
-  }
   const run = kit.launch();
   const relayPort = await run.port();
   const proxy = await openChunkingProxy(t, relayPort, 4096);
