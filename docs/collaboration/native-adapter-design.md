@@ -256,15 +256,23 @@ docker cp "$container:/data/backups/$name" "$staging/$name"
 ssh -o BatchMode=yes "$archive_host" "umask 077; mkdir -- '$archive_root/.incoming-$name'"
 scp -B -r "$staging/$name" "$archive_host:$archive_root/.incoming-$name/"
 ssh -o BatchMode=yes "$archive_host" "set -eu; cd '$archive_root'; mv -T --no-clobber -- '.incoming-$name/$name' '$name'; rmdir -- '.incoming-$name'"
-printf 'Archived relay backup %s.\n' "$name"
+archived_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+record_tmp=$(mktemp "$lock_dir/.last-archive-copy.XXXXXX")
+printf '{"backup":"%s","archivedAt":"%s"}\n' "$name" "$archived_at" > "$record_tmp"
+mv -f -- "$record_tmp" "$lock_dir/last-archive-copy.json"
+printf 'Archived relay backup %s at %s.\n' "$name" "$archived_at"
 ```
 
 Use cron with failure mail or a scheduler that alerts on nonzero exit. For example, add
 `15 2 * * * /bin/sh /REPLACE_WITH_SCRIPT_PATH/stage3-relay-backup.sh`. The local lock covers the
-backup and transfer. On the archive machine, a completed transfer is renamed within the archive
-filesystem. Interrupted transfers may leave a hidden `.incoming-*` directory for the operator to
-inspect and remove. If archive-host power-loss durability is required, configure and verify it
-separately on that host.
+backup and transfer. `GET /api/status`'s `lastBackupAt` is written by `backup-command.ts` inside `/data`
+before transfer starts and confirms only local verified backup publication; archive publication is recorded
+independently in `"$lock_dir/last-archive-copy.json"` only after the remote `mv -T --no-clobber` succeeds.
+Monitor both exit status and `"$lock_dir/last-archive-copy.json"` alongside `lastBackupAt` so a failed
+off-machine transfer is never masked by a fresh local backup. On the archive machine, a completed transfer
+is renamed within the archive filesystem. Interrupted transfers may leave a hidden `.incoming-*` directory
+for the operator to inspect and remove. If archive-host power-loss durability is required, configure and
+verify it separately on that host.
 
 **Restore the Stage 3 relay in isolation.** From `collab-server/`, run
 `node restore-command.ts <backup> <new-data-directory>` with the archived directory and a destination
@@ -307,17 +315,20 @@ docker run --rm --name splitpage-stage3-restore \
 
 Keep the restore port out of the public proxy, use a separate management secret and a distinct
 `SPLITPAGE_DEPLOYMENT_ID` in the restore env file (so drill clients do not collide with production retained
-replicas), and list the drill client's exact origin in `SPLITPAGE_ALLOWED_ORIGINS`. Because `owner-command.ts`
-requires an `https:` origin, issue fresh drill invitations against the loopback restore port either through an
-operator-only local HTTPS proxy or by calling `POST http://127.0.0.1:8081/api/scripts/<script-id>/invitations`
-directly while passing the `Authorization: Bearer` header via stdin or an operator-only `0600` config file (for
-example `curl -K -`), never in command arguments, shell history or logs; keep the returned token and join URL out of
-terminal transcripts and logs.
+replicas), and list the verification proxy's exact origin (for example `https://127.0.0.1:8443`) in
+`SPLITPAGE_ALLOWED_ORIGINS`. Because `owner-command.ts` requires an `https:` origin, issue fresh drill
+invitations against `127.0.0.1:8081` either through the operator-only local HTTPS verification proxy below
+(with the local CA trusted via `NODE_EXTRA_CA_CERTS` and `SPLITPAGE_MANAGEMENT_SECRET` injected from the
+restore env file, never argv) or via `POST http://127.0.0.1:8081/api/scripts/<script-id>/invitations` passing
+the `Authorization: Bearer` header via stdin or an operator-only `0600` config file (such as `curl -K -`),
+never in command arguments, shell history or logs; keep returned tokens and join URLs out of terminal
+transcripts and logs.
 
 Because the container serves the gated release browser shell (which omits `?join=`, fragment scrubbing and
-`__sharedTest` until Stage 4), run the restore drill verification with a **separately controlled supported client**
-whose origin is listed in `SPLITPAGE_ALLOWED_ORIGINS` (for example, a local test-build client built from the same
-commit with `node build.mjs --test` or the native client/relay harness). Verify all four outcomes:
+`__sharedTest` until Stage 4) and the test-build invitation bootstrap reads `HEAD /index.html`
+(`Splitpage-Deployment`) and opens its WebSocket against `location.origin`, verify the restored relay using
+the **operator-only same-origin verification proxy** below pointed at `VERIFY_TARGET_ORIGIN=http://127.0.0.1:8081`
+and `VERIFY_UPSTREAM_ORIGIN=https://127.0.0.1:8443`. Verify all four outcomes:
 1. An invitation that was valid at backup time is refused (`invitation-revoked` on WebSocket and `403` on picture
    endpoints).
 2. Deleted scripts remain deleted (`409` on invitation issue and `script-deleted` on WebSocket).
@@ -468,31 +479,56 @@ below apply only to the Stage 3 relay image built from the current tree.
   `docker build -f collab-server/Dockerfile -t splitpage-relay:current .` (the image runs from
   `/service/collab-server`, includes `shared/blob-policy.ts`, and builds and copies the **release** browser shell
   into `/app` with `SPLITPAGE_APP_DIR=/app`).
-- **Stage 3 cutover, volume verification and old-directory retention.** Use a distinct Stage 3 container name
-  (`splitpage-relay-stage3`), env file (`"$config_dir/relay-stage3.env"`), direct-pool directory and Docker volume
-  (`splitpage-relay-stage3-data`). Stop the historical `splitpage-relay` container and keep its data directory and
-  `splitpage-relay-data` volume aside untouched; do not delete them and do not mount the legacy directory into Stage 3
-  (Stage 3 startup refuses the unversioned legacy database and preserves its file). Before launching, create the fresh
-  direct-pool directory, explicitly verify its ownership (`1000:1000`), mode (`700`) and emptiness, bind the Docker
-  volume to that exact direct-pool path, and populate `"$config_dir/relay-stage3.env"` under `umask 077` without
-  `SPLITPAGE_ACCESS_TOKEN` (populate `SPLITPAGE_MANAGEMENT_SECRET` from host secret storage without echoing it or
-  passing it in command arguments):
+- **Stage 3 cutover, fail-closed volume verification and old-directory retention.** Use a distinct Stage 3 container
+  name (`splitpage-relay-stage3`), env file (`"$config_dir/relay-stage3.env"`), direct-pool directory and Docker
+  volume (`splitpage-relay-stage3-data`). Stop the historical `splitpage-relay` container and keep its data directory
+  and `splitpage-relay-data` volume aside untouched; do not delete them and do not mount the legacy directory into
+  Stage 3 (Stage 3 startup refuses the unversioned legacy database and preserves its file). Before launching, verify
+  the intended direct-pool parent directory, exclusively create the new data directory (rejecting any pre-existing
+  path or symlink, including a dangling symlink), apply `chown`/`chmod` only to the directory just created, check
+  privileged `stat` and `ls -A` exit statuses separately from their output, inspect the created Docker volume's actual
+  driver, mount options and bind source, and exclusively create `"$config_dir/relay-stage3.env"` under `umask 077`
+  with `set -C` (populate `SPLITPAGE_MANAGEMENT_SECRET` from host secret storage without echoing it or passing it in
+  command arguments):
 
 ```sh
 set -eu
 umask 077
-data_dir=/REPLACE_WITH_DIRECT_POOL_PATH/splitpage-stage3
+pool_parent=/REPLACE_WITH_DIRECT_POOL_PATH
+data_dir="$pool_parent/splitpage-stage3"
 config_dir="$HOME/.config/splitpage-relay"
-mkdir -p "$config_dir"
-sudo install -d -m 0700 -o 1000 -g 1000 "$data_dir"
-test "$(stat -c '%u:%g %a' "$data_dir")" = "1000:1000 700"
-test -z "$(ls -A "$data_dir")"
-if docker volume inspect splitpage-relay-stage3-data >/dev/null 2>&1; then
-  echo "Volume splitpage-relay-stage3-data already exists; verify or choose a fresh name." >&2
+env_file="$config_dir/relay-stage3.env"
+volume_name=splitpage-relay-stage3-data
+
+test ! -L "$pool_parent" && test -d "$pool_parent"
+canon_parent=$(readlink -f -- "$pool_parent")
+test "$canon_parent" = "$pool_parent"
+test ! -e "$data_dir" && test ! -L "$data_dir"
+sudo mkdir -- "$data_dir"
+sudo chown 1000:1000 -- "$data_dir"
+sudo chmod 0700 -- "$data_dir"
+test ! -L "$data_dir" && test -d "$data_dir"
+stat_out=$(sudo stat -c '%u:%g %a' -- "$data_dir")
+test "$stat_out" = "1000:1000 700"
+listing=$(sudo ls -A -- "$data_dir")
+test -z "$listing"
+
+if docker volume inspect "$volume_name" >/dev/null 2>&1; then
+  echo "Volume $volume_name already exists; verify or choose a fresh name." >&2
   exit 1
 fi
-docker volume create --driver local --opt type=none --opt o=bind --opt device="$data_dir" splitpage-relay-stage3-data
-cat > "$config_dir/relay-stage3.env" <<'EOF'
+docker volume create --driver local --opt type=none --opt o=bind --opt device="$data_dir" "$volume_name"
+vol_spec=$(docker volume inspect --format '{{.Driver}}|{{index .Options "type"}}|{{index .Options "o"}}|{{index .Options "device"}}' "$volume_name")
+test "$vol_spec" = "local|none|bind|$data_dir"
+
+test ! -L "$config_dir"
+mkdir -p "$config_dir"
+test ! -L "$config_dir" && test -d "$config_dir"
+test ! -e "$env_file" && test ! -L "$env_file"
+(
+  set -C
+  umask 077
+  cat > "$env_file" <<'EOF'
 SPLITPAGE_DATA_DIR=/data
 SPLITPAGE_PORT=8080
 TMPDIR=/tmp
@@ -503,6 +539,7 @@ SPLITPAGE_STORE_DEBOUNCE_MS=2000
 SPLITPAGE_STORE_MAX_DEBOUNCE_MS=10000
 SPLITPAGE_BACKUP_KEEP=7
 EOF
+)
 ```
 
 - **Bounded container flags.** Run the Stage 3 image as its built-in non-root `node` user with a read-only root
@@ -524,15 +561,125 @@ docker run -d --name splitpage-relay-stage3 \
   splitpage-relay:current
 ```
 
-- **Deployed smoke while the release shell stays gated.** The container serves the release build (`node build.mjs`),
-  which intentionally omits `?join=`, fragment scrubbing and `__sharedTest` until Stage 4. Until Stage 4 adds the
-  product join screen, run the deployed smoke check using `POST /api/scripts` (initial snapshot with `Idempotency-Key`),
-  `owner-command.ts` (`issue`, `list`, `revoke`, `delete`), and a **separately controlled supported client** (such as a
-  local test-build client built from the same commit with `node build.mjs --test` or the native client/relay harness)
-  whose origin is listed in `SPLITPAGE_ALLOWED_ORIGINS`. Confirm synchronized script content on a second client,
-  verified picture PUT/GET bytes (SHA-256 match), immediate live revocation (`access-removed`) and post-revocation
-  refusal (`invitation-revoked` on WebSocket, `403` on picture endpoints), and `GET /api/status` reporting expected
-  counts and `lastBackupAt` after running `stage3-relay-backup.sh`.
+- **Operator-only verification proxy for deployed smoke and isolated restore drills.** The public relay container
+  serves the release build (`node build.mjs`), which intentionally omits `?join=`, fragment scrubbing and
+  `__sharedTest` until Stage 4. Never expose a test build through the public release endpoint. Because the test-build
+  invitation bootstrap reads `HEAD /index.html` (`Splitpage-Deployment`) and connects its WebSocket and `/api/`
+  picture traffic to `location.origin`, verify both a deployed second-device join and an isolated restore drill
+  through one reproducible operator-only loopback HTTPS proxy bound strictly to `127.0.0.1`:
+  1. On each operator device used for the drill, build the gated test shell from the same commit into a private
+     scratch directory (`node build.mjs --test`, copying `index.html`, `sw.js`, `manifest.webmanifest`, `icon.svg`,
+     `icon-maskable.svg`), and prepare an operator-local TLS certificate/key for `127.0.0.1` (`umask 077`).
+  2. Start the loopback proxy below with `VERIFY_SHELL_DIR`, `VERIFY_TLS_KEY`, `VERIFY_TLS_CERT`, `VERIFY_PORT` (for
+     example `8443`), `VERIFY_TARGET_ORIGIN` (`https://REPLACE_WITH_RELAY_HOST` for deployed smoke, or
+     `http://127.0.0.1:8081` for an isolated restore drill), and `VERIFY_UPSTREAM_ORIGIN` (an exact origin listed in
+     the selected target's `SPLITPAGE_ALLOWED_ORIGINS`: `https://REPLACE_WITH_RELAY_HOST` for deployed smoke without
+     widening production origins, or `https://127.0.0.1:8443` for the isolated restore drill). The proxy enforces
+     exact browser origin `https://127.0.0.1:<VERIFY_PORT>`, reads `Splitpage-Deployment` live from
+     `HEAD <VERIFY_TARGET_ORIGIN>/index.html` (failing closed with `502` if missing or invalid), serves the local
+     test shell with `Cache-Control: no-store`, forwards `/api/*` (including `/api/scripts/<id>/pictures/<sha>`) and
+     WebSocket upgrades (`/`) over verified TLS (or loopback HTTP for the local restore target), and logs no headers,
+     tokens, URL fragments or bodies.
+
+```js
+import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { request as httpRequest } from "node:http";
+import { createServer, request as httpsRequest } from "node:https";
+import { connect as netConnect } from "node:net";
+import { join } from "node:path";
+import { connect as tlsConnect } from "node:tls";
+
+const shellDir = process.env.VERIFY_SHELL_DIR;
+const target = new URL(process.env.VERIFY_TARGET_ORIGIN);
+const upstreamOrigin = process.env.VERIFY_UPSTREAM_ORIGIN;
+const port = Number(process.env.VERIFY_PORT || "8443");
+const proxyOrigin = `https://127.0.0.1:${port}`;
+const staticFiles = new Map([
+  ["/", ["index.html", "text/html; charset=utf-8"]],
+  ["/index.html", ["index.html", "text/html; charset=utf-8"]],
+  ["/sw.js", ["sw.js", "text/javascript; charset=utf-8"]],
+  ["/manifest.webmanifest", ["manifest.webmanifest", "application/manifest+json"]],
+  ["/icon.svg", ["icon.svg", "image/svg+xml"]],
+  ["/icon-maskable.svg", ["icon-maskable.svg", "image/svg+xml"]]
+]);
+
+async function targetDeployment() {
+  try {
+    const res = await fetch(new URL("/index.html", target), { method: "HEAD", cache: "no-store", redirect: "error" });
+    const id = res.headers.get("splitpage-deployment");
+    return res.ok && id && /^[A-Za-z0-9_-]{1,64}$/.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+const server = createServer(
+  { key: readFileSync(process.env.VERIFY_TLS_KEY), cert: readFileSync(process.env.VERIFY_TLS_CERT) },
+  async (req, res) => {
+    const pathname = (req.url || "/").split("?", 1)[0];
+    const reqOrigin = req.headers.origin;
+    if (reqOrigin && reqOrigin !== proxyOrigin) { res.writeHead(403).end(); return; }
+    if (pathname.startsWith("/api/")) {
+      const headers = { ...req.headers, host: target.host, ...(reqOrigin ? { origin: upstreamOrigin } : {}) };
+      const forward = target.protocol === "https:" ? httpsRequest : httpRequest;
+      const up = forward(new URL(req.url, target), { method: req.method, headers }, upRes => {
+        res.writeHead(upRes.statusCode || 502, upRes.headers);
+        upRes.pipe(res);
+      });
+      up.on("error", () => { if (!res.headersSent) res.writeHead(502); res.end(); });
+      req.pipe(up);
+      return;
+    }
+    const asset = staticFiles.get(pathname);
+    if (!asset || (req.method !== "GET" && req.method !== "HEAD")) { res.writeHead(404).end(); return; }
+    const [file, contentType] = asset;
+    const extra = file === "index.html" ? { "Splitpage-Deployment": await targetDeployment() } : {};
+    if (file === "index.html" && !extra["Splitpage-Deployment"]) { res.writeHead(502).end(); return; }
+    const body = await readFile(join(shellDir, file)).catch(() => null);
+    if (!body) { res.writeHead(503).end(); return; }
+    res.writeHead(200, { "Content-Type": contentType, "Content-Length": body.byteLength, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", ...extra });
+    res.end(req.method === "HEAD" ? undefined : body);
+  }
+);
+
+server.on("upgrade", (req, client, head) => {
+  if (req.headers.origin !== proxyOrigin) { client.end("HTTP/1.1 403 Forbidden\r\n\r\n"); return; }
+  const portNum = Number(target.port || (target.protocol === "https:" ? 443 : 80));
+  const up = target.protocol === "https:"
+    ? tlsConnect({ host: target.hostname, port: portNum, servername: target.hostname })
+    : netConnect({ host: target.hostname, port: portNum });
+  const lines = [`${req.method} ${req.url} HTTP/1.1`];
+  for (let i = 0; i < req.rawHeaders.length; i += 2) {
+    const k = req.rawHeaders[i], lower = k.toLowerCase();
+    if (lower === "host") lines.push(`Host: ${target.host}`);
+    else if (lower === "origin") lines.push(`Origin: ${upstreamOrigin}`);
+    else lines.push(`${k}: ${req.rawHeaders[i + 1]}`);
+  }
+  up.once(target.protocol === "https:" ? "secureConnect" : "connect", () => {
+    up.write(lines.join("\r\n") + "\r\n\r\n");
+    if (head.length) up.write(head);
+    up.pipe(client).pipe(up);
+  });
+  up.on("error", () => client.destroy());
+  up.on("close", () => client.destroy());
+  client.on("error", () => up.destroy());
+  client.on("close", () => up.destroy());
+});
+
+server.listen(port, "127.0.0.1");
+```
+
+  3. For the **deployed smoke check**, create a script via `POST /api/scripts` (with `Authorization: Bearer` passed via
+     `0600` config/stdin and an `Idempotency-Key`), issue an invitation with `owner-command.ts issue`, open
+     `https://127.0.0.1:8443/?join=<script-id>#<token>` on a second operator device running the same loopback proxy
+     (keeping the join URL out of logs and transcripts), confirm synchronized script content and verified picture
+     `PUT`/`GET` bytes (exact SHA-256), revoke the invitation with `owner-command.ts revoke` and confirm live close
+     (`access-removed`) plus post-revocation refusal (`invitation-revoked` on WebSocket, `403` on picture endpoints).
+     Then run `stage3-relay-backup.sh` and confirm both `GET /api/status` (`lastBackupAt` for the local verified
+     backup) and `"$lock_dir/last-archive-copy.json"` plus the archive host directory (confirming off-machine archive
+     publication independently of `lastBackupAt`). Stop the local proxy and delete the temporary test shell directory
+     as soon as the drill finishes.
 
 - **Runtime limits.** Defaults bound traffic for both unauthenticated and admitted clients:
   `SPLITPAGE_MAX_CONNECTIONS` (default `64`), `SPLITPAGE_MAX_CONNECTIONS_PER_INVITATION` (default `8`),
