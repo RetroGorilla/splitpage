@@ -160,6 +160,59 @@ test("a retry or a second script's upload restores a missing picture body", asyn
   }
 });
 
+for (const addingScript of [false, true]) {
+  test(addingScript ? "repair sync precedes a second script association" : "repair sync precedes acknowledgment of a retry", async t => {
+    await using f = await fixture();
+    const sha = hash(png);
+    const body = join(f.pictures, sha);
+    assert.equal((await f.put(png)).status, 201);
+    await rm(body);
+
+    const platform = Object.getOwnPropertyDescriptor(process, "platform");
+    assert.ok(platform);
+    const openSync = fs.openSync;
+    const fsyncSync = fs.fsyncSync;
+    let directoryFd: number | undefined;
+    let syncs = 0;
+    const open = t.mock.method(fs, "openSync", (path: fs.PathLike, flags: fs.OpenMode = "r", mode?: fs.Mode) => {
+      if (path !== f.pictures) return openSync(path, flags, mode);
+      // why: Windows cannot open a directory descriptor, so use the repaired body to exercise ordering there.
+      directoryFd = platform.value === "win32" ? openSync(body, "r+") : openSync(path, flags, mode);
+      return directoryFd;
+    });
+    const sync = t.mock.method(fs, "fsyncSync", (fd: number) => {
+      assert.equal(fd, directoryFd);
+      syncs += 1;
+      if (syncs <= 2) throw Object.assign(new Error(), { code: "EIO" });
+      fsyncSync(fd);
+    });
+    if (platform.value === "win32") Object.defineProperty(process, "platform", { ...platform, value: "linux" });
+    syncBuiltinESMExports();
+    try {
+      const [script, token] = addingScript ? ["second", f.second.token] : ["first", f.first.token];
+      const put = () => f.put(png, sha, token, "image/png", script);
+      assert.equal((await put()).status, 500);
+      assert.deepEqual(await readFile(body), png);
+      assert.equal(syncs, 1);
+
+      assert.equal((await put()).status, 500);
+      assert.equal(syncs, 2);
+      if (addingScript) assert.equal((await f.get(script, token)).status, 404);
+
+      assert.equal((await put()).status, addingScript ? 201 : 204);
+      assert.equal(syncs, 3);
+      const downloaded = await f.get(script, token);
+      assert.equal(downloaded.status, 200);
+      assert.deepEqual(Buffer.from(await downloaded.arrayBuffer()), png);
+    } finally {
+      open.mock.restore();
+      sync.mock.restore();
+      Object.defineProperty(process, "platform", platform);
+      syncBuiltinESMExports();
+    }
+  });
+}
+
 test("a database-only backup with picture associations leaves prior backups in place", async () => {
   await using f = await fixture();
   const env = { SPLITPAGE_DATA_DIR: f.directory, SPLITPAGE_BACKUP_KEEP: "1" };

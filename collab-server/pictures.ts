@@ -85,7 +85,7 @@ export function pictureApi(db: DatabaseSync, directory: string, access: ReturnTy
       const needsFile = !statSync(destination, { throwIfNoEntry: false });
       if (needsFile) renameSync(temporary, destination);
       try {
-        if (needsFile && process.platform !== "win32") {
+        if (process.platform !== "win32") {
           const folder = openSync(pictures, "r");
           try {
             fsyncSync(folder);
