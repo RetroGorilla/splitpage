@@ -6,11 +6,11 @@ import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
 import type { TestContext } from "node:test";
-import { HocuspocusProvider, MessageType } from "@hocuspocus/provider";
+import { HocuspocusProvider, HocuspocusProviderWebsocket, MessageType } from "@hocuspocus/provider";
 import { createDecoder, readVarString, readVarUint } from "lib0/decoding";
 import { createEncoder, toUint8Array, writeVarString, writeVarUint } from "lib0/encoding";
 import { WebSocket } from "ws";
-import { messageYjsUpdate } from "y-protocols/sync";
+import { messageYjsSyncStep2, messageYjsUpdate } from "y-protocols/sync";
 import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import { scriptAccess } from "../../../../collab-server/access.ts";
 import { relayConfig, retentionCount } from "../../../../collab-server/config.ts";
@@ -406,3 +406,221 @@ test("startup explicitly sets FULL and rejects a writer connection that still re
   forceMismatch = true;
   assert.throws(() => openWriter(kit.directory).close(), /requires WAL and synchronous=FULL/);
 });
+
+test("simulated decoder refusal at beforeHandleMessage drops queued edits, preserves multiplexed siblings and releases invitation capacity",
+  { timeout: 30_000 }, async t => {
+    const kit = serverHarness(t);
+    kit.seed(NAME);
+    kit.seed("sibling-script");
+    const failing = kit.provision(NAME);
+    const siblingInvite = kit.provision("sibling-script");
+    let healthyToken: string;
+    let siblingPeerToken: string;
+    {
+      using db = openWriter(kit.directory);
+      healthyToken = scriptAccess(db).issue(NAME, "healthy observer").token;
+      siblingPeerToken = scriptAccess(db).issue("sibling-script", "sibling observer").token;
+    }
+    kit.redact(healthyToken, siblingPeerToken);
+    const run = kit.launch({ SPLITPAGE_MAX_CONNECTIONS_PER_INVITATION: "1" });
+    const port = await run.port();
+    const url = `ws://127.0.0.1:${port}`;
+
+    const sharedSocket = new HocuspocusProviderWebsocket({ url: `${url}?wire=1&schema=1` });
+    const events = new EventTarget();
+    let senderCloseReason: string | undefined;
+    let siblingClosed = false;
+    const senderDoc = new Doc();
+    const siblingDoc = new Doc();
+    const sender = new HocuspocusProvider({
+      websocketProvider: sharedSocket, name: NAME, token: failing.token, document: senderDoc, awareness: null,
+      onSynced() { events.dispatchEvent(new Event("change")); },
+      onClose({ event }) {
+        senderCloseReason = event.reason;
+        sender.detach();
+        sender.destroy();
+        events.dispatchEvent(new Event("change"));
+      }
+    });
+    const sibling = new HocuspocusProvider({
+      websocketProvider: sharedSocket, name: "sibling-script", token: siblingInvite.token, document: siblingDoc, awareness: null,
+      onSynced() { events.dispatchEvent(new Event("change")); },
+      onClose() { siblingClosed = true; events.dispatchEvent(new Event("change")); }
+    });
+    sender.attach();
+    sibling.attach();
+    t.after(() => {
+      sender.destroy();
+      sibling.destroy();
+      sharedSocket.destroy();
+      senderDoc.destroy();
+      siblingDoc.destroy();
+    });
+
+    const peer = provider(t, url, healthyToken);
+    const siblingPeer = kit.copy(port, undefined, "sibling-script", siblingPeerToken);
+    while (!sender.synced || !sibling.synced) await once(events, "change", { signal: t.signal });
+    await peer.until(() => peer.client.synced);
+    await kit.until(() => siblingPeer.relay.status().firstSyncDone || undefined);
+
+    const storedBefore = storedState(kit.directory, NAME);
+    const storesBefore = run.messages.filter(message => message === `store-started:${NAME}`).length;
+    const refusedValue = `refused-${randomBytes(12).toString("hex")}`;
+    const errorDetail = `detail-${randomBytes(12).toString("hex")}`;
+    kit.redact(refusedValue, errorDetail);
+    let peerUpdatesDuringRefusal = 0;
+    const countPeerUpdates = () => { peerUpdatesDuringRefusal += 1; };
+    peer.client.document.on("update", countPeerUpdates);
+
+    run.send({ refuseDecode: { stage: "beforeHandleMessage", invitationId: failing.id, detail: errorDetail } });
+    await kit.until(() => run.messages.includes("decoder-refusal-armed") || undefined);
+
+    senderDoc.getMap("fixture").set("refused", refusedValue);
+    senderDoc.getMap("fixture").set("queued-after-refusal", refusedValue);
+    while (senderCloseReason === undefined) await once(events, "change", { signal: t.signal });
+    assert.equal(senderCloseReason, "Reset Connection");
+    assert.equal(run.messages.includes("decoder-refused:beforeHandleMessage"), true);
+
+    assert.equal(siblingClosed, false);
+    assert.equal(sibling.isAuthenticated, true);
+    siblingDoc.getMap("fixture").set("sibling-after", "kept");
+    await kit.until(() => siblingPeer.session.ydoc.getMap("fixture").get("sibling-after") === "kept" || undefined);
+
+    peer.client.document.off("update", countPeerUpdates);
+    assert.equal(peerUpdatesDuringRefusal, 0);
+    assert.equal(peer.client.document.getMap("fixture").has("refused"), false);
+    assert.equal(peer.client.document.getMap("fixture").has("queued-after-refusal"), false);
+    assert.equal(run.messages.filter(message => message === `store-started:${NAME}`).length, storesBefore);
+    assert.equal(Buffer.from(storedState(kit.directory, NAME)).equals(Buffer.from(storedBefore)), true);
+
+    const storesBeforeHealthy = run.messages.filter(message => message === `stored:${NAME}`).length;
+    peer.client.document.getMap("fixture").set("healthy-after", "accepted");
+    await peer.until(() => peer.client.unsyncedChanges === 0);
+    await kit.until(() => run.messages.filter(message => message === `stored:${NAME}`).length > storesBeforeHealthy || undefined);
+
+    const fresh = provider(t, url, failing.token);
+    await fresh.until(() => fresh.client.synced && fresh.client.document.getMap("fixture").get("healthy-after") === "accepted");
+    assert.equal(fresh.client.document.getMap("fixture").has("refused"), false);
+    assert.equal(fresh.client.document.getMap("fixture").has("queued-after-refusal"), false);
+
+    assert.deepEqual(await run.stop("clean"), { code: 0, exitSignal: null });
+    const persisted = new Doc();
+    t.after(() => persisted.destroy());
+    applyUpdate(persisted, storedState(kit.directory, NAME));
+    assert.equal(persisted.getMap("fixture").get("healthy-after"), "accepted");
+    assert.equal(persisted.getMap("fixture").has("refused"), false);
+    assert.equal(persisted.getMap("fixture").has("queued-after-refusal"), false);
+
+    const logs = run.output() + run.errors();
+    assert.match(run.errors(), /Relay library error/);
+    for (const privateValue of [failing.token, healthyToken, siblingInvite.token, siblingPeerToken, NAME, "sibling-script", refusedValue, errorDetail]) {
+      assert.equal(logs.includes(privateValue), false);
+    }
+  }
+);
+
+for (const mode of ["update", "returning-sync"] as const) {
+  test(`simulated decoder refusal at beforeSync after write-lock acquisition rejects ${mode} without deadlocking later writers`,
+    { timeout: 30_000 }, async t => {
+      const kit = serverHarness(t);
+      const seededState = kit.seed(NAME);
+      const failing = kit.provision(NAME);
+      let healthyToken: string;
+      {
+        using db = openWriter(kit.directory);
+        healthyToken = scriptAccess(db).issue(NAME, "healthy writer").token;
+      }
+      kit.redact(healthyToken);
+      const run = kit.launch({ SPLITPAGE_MAX_CONNECTIONS_PER_INVITATION: "1" });
+      const url = `ws://127.0.0.1:${await run.port()}`;
+
+      const peer = provider(t, url, healthyToken);
+      await peer.until(() => peer.client.synced);
+      const storedBefore = storedState(kit.directory, NAME);
+      const storesBefore = run.messages.filter(message => message === `store-started:${NAME}`).length;
+      const refusedValue = `refused-${mode}-${randomBytes(12).toString("hex")}`;
+      const errorDetail = `detail-${mode}-${randomBytes(12).toString("hex")}`;
+      kit.redact(refusedValue, errorDetail);
+      const targetSyncType = mode === "update" ? messageYjsUpdate : messageYjsSyncStep2;
+
+      const senderDoc = new Doc();
+      if (mode === "returning-sync") {
+        applyUpdate(senderDoc, seededState);
+        senderDoc.getMap("fixture").set("refused", refusedValue);
+      }
+      const events = new EventTarget();
+      let senderCloseReason: string | undefined;
+      let peerUpdatesDuringRefusal = 0;
+      const countPeerUpdates = () => { peerUpdatesDuringRefusal += 1; };
+
+      if (mode === "returning-sync") {
+        peer.client.document.on("update", countPeerUpdates);
+        run.send({
+          refuseDecode: {
+            stage: "beforeSync",
+            invitationId: failing.id,
+            syncType: targetSyncType,
+            skipEmptyPayload: true,
+            detail: errorDetail
+          }
+        });
+        await kit.until(() => run.messages.includes("decoder-refusal-armed") || undefined);
+      }
+
+      const sender: HocuspocusProvider = new HocuspocusProvider({
+        url: `${url}?wire=1&schema=1`, name: NAME, token: failing.token, document: senderDoc, awareness: null,
+        onSynced() { events.dispatchEvent(new Event("change")); },
+        onClose({ event }) {
+          senderCloseReason = event.reason;
+          sender.destroy();
+          events.dispatchEvent(new Event("change"));
+        }
+      });
+      t.after(() => { sender.destroy(); senderDoc.destroy(); });
+
+      if (mode === "update") {
+        while (!sender.synced) await once(events, "change", { signal: t.signal });
+        peer.client.document.on("update", countPeerUpdates);
+        run.send({ refuseDecode: { stage: "beforeSync", invitationId: failing.id, syncType: targetSyncType, detail: errorDetail } });
+        await kit.until(() => run.messages.includes("decoder-refusal-armed") || undefined);
+        senderDoc.getMap("fixture").set("refused", refusedValue);
+        senderDoc.getMap("fixture").set("queued-after-refusal", refusedValue);
+      }
+
+      while (senderCloseReason === undefined) await once(events, "change", { signal: t.signal });
+      assert.equal(senderCloseReason, "Reset Connection");
+      assert.equal(run.messages.includes(`decoder-refused:beforeSync:${targetSyncType}`), true);
+
+      peer.client.document.off("update", countPeerUpdates);
+      assert.equal(peerUpdatesDuringRefusal, 0);
+      assert.equal(peer.client.document.getMap("fixture").has("refused"), false);
+      assert.equal(peer.client.document.getMap("fixture").has("queued-after-refusal"), false);
+      assert.equal(run.messages.filter(message => message === `store-started:${NAME}`).length, storesBefore);
+      assert.equal(Buffer.from(storedState(kit.directory, NAME)).equals(Buffer.from(storedBefore)), true);
+
+      const storesBeforeHealthy = run.messages.filter(message => message === `stored:${NAME}`).length;
+      peer.client.document.getMap("fixture").set("after-refusal", mode);
+      await peer.until(() => peer.client.unsyncedChanges === 0);
+      await kit.until(() => run.messages.filter(message => message === `stored:${NAME}`).length > storesBeforeHealthy || undefined);
+
+      const fresh = provider(t, url, failing.token);
+      await fresh.until(() => fresh.client.synced && fresh.client.document.getMap("fixture").get("after-refusal") === mode);
+      assert.equal(fresh.client.document.getMap("fixture").has("refused"), false);
+      assert.equal(fresh.client.document.getMap("fixture").has("queued-after-refusal"), false);
+
+      assert.deepEqual(await run.stop("clean"), { code: 0, exitSignal: null });
+      const persisted = new Doc();
+      t.after(() => persisted.destroy());
+      applyUpdate(persisted, storedState(kit.directory, NAME));
+      assert.equal(persisted.getMap("fixture").get("after-refusal"), mode);
+      assert.equal(persisted.getMap("fixture").has("refused"), false);
+      assert.equal(persisted.getMap("fixture").has("queued-after-refusal"), false);
+
+      const logs = run.output() + run.errors();
+      assert.match(run.errors(), /Relay library error/);
+      for (const privateValue of [failing.token, healthyToken, NAME, refusedValue, errorDetail]) {
+        assert.equal(logs.includes(privateValue), false);
+      }
+    }
+  );
+}

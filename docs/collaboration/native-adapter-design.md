@@ -19,19 +19,32 @@ narration and Visual input, composition, local undo and selection replay. The ed
 heading structure, anchored blank-beat insertion, Writer Markdown headings, Find and replacement, plain inline
 formatting, beat status and duration, picture galleries, comment threads and production registries.
 
-Stage 3 Parts 1, 2, 3a, 4, 5, 6 and 7 of the [Stage 3 plan](stage-3-service-plan.md) are on `main` through
-`35fee04ee`:
+Stage 3 Parts 1, 2, 3a, 3b, 4, 5, 6 and 7 of the [Stage 3 plan](stage-3-service-plan.md) are on `main` through
+`5a066c535`, alongside Part 8 evidence/runbook preparation ([#1762](https://github.com/RetroGorilla/splitpage/pull/1762)),
+management-secret rotation coverage ([#1763](https://github.com/RetroGorilla/splitpage/pull/1763)) and this branch's
+processing-boundary decoder-refusal regression:
 
 - **Part 1 ([#1754](https://github.com/RetroGorilla/splitpage/pull/1754)):** versioned SQLite storage, per-script
   lifecycle (`pending`, `active`, `deleted`), hashed revocable invitations and wire/schema version checks; the
   environment-wide access token is removed.
 - **Part 2 ([#1757](https://github.com/RetroGorilla/splitpage/pull/1757)):** constant-time management-secret `/api/`
   owner HTTP endpoints (`POST /api/scripts` with `Idempotency-Key`, issue, list, revoke, delete — covered by HTTP
-  tests) and the `collab-server/owner-command.ts` CLI (`issue`, `list`, `revoke`, `delete` over `https:`; CLI wrapper
-  not yet covered by automated tests).
+  tests, plus clean-restart management-secret rotation in `server-owner.test.ts` via
+  [#1763](https://github.com/RetroGorilla/splitpage/pull/1763)) and the `collab-server/owner-command.ts` CLI (`issue`,
+  `list`, `revoke`, `delete` over `https:`; CLI wrapper not yet covered by automated tests).
 - **Part 3a ([#1756](https://github.com/RetroGorilla/splitpage/pull/1756)):** authenticated `/api/scripts/<id>/pictures/<sha>`
   PUT and GET validated through `shared/blob-policy.ts` (16 MiB per picture, 200 MiB per script, four 16 MiB staging
   slots, storage version 3 upgrade).
+- **Part 3b ([#1761](https://github.com/RetroGorilla/splitpage/pull/1761)):** client-side shared picture upload and
+  download retries using existing IndexedDB and desktop picture stores, placeholder rendering and replacement,
+  required-picture join hydration, missing-picture export reporting across shared file and PDF formats,
+  [Picture availability (Stage 3 Part 3b)](#picture-availability-stage-3-part-3b) and the updated
+  [INV-52](../architecture/invariants.md#inv-52--persist-local-pictures-before-writing-their-references) (PR CI
+  [`45113976544`](https://github.com/RetroGorilla/splitpage/actions/runs/45113976544) passed `checks`, all 8 `Tests`
+  shards, `relay-container-smoke` and `desktop-smoke`; `main` push
+  [`45114718488`](https://github.com/RetroGorilla/splitpage/actions/runs/45114718488) passed all 8 `Tests` shards;
+  browser suites `03`, `384`, `954`, `1010` and `relay-invitation.mjs` passed locally on `#1761`, with scheduled
+  nightly execution of `1010` still pending).
 - **Part 4 ([#1755](https://github.com/RetroGorilla/splitpage/pull/1755)):** production desktop `splitpage:native-replica`
   IPC with OS key store encrypted membership (test-only `splitpage:test-native-replica` channel removed), separate
   browser IndexedDB invitation store, scoped `enterRetained` entry, one-writable-tab/window enforcement and leave
@@ -47,17 +60,23 @@ Stage 3 Parts 1, 2, 3a, 4, 5, 6 and 7 of the [Stage 3 plan](stage-3-service-plan
 - **Part 7 ([#1760](https://github.com/RetroGorilla/splitpage/pull/1760)):** consistent verified SQLite + picture bundle
   backups (`relay-*.backup`), atomic `last-backup.json` marker recorded after sync, and isolated restore revoking every
   invitation while keeping deleted scripts deleted.
+- **Part 8 evidence and runbook prep ([#1762](https://github.com/RetroGorilla/splitpage/pull/1762),
+  [#1763](https://github.com/RetroGorilla/splitpage/pull/1763)):** fail-closed cutover recipe, independent off-machine
+  archive publication tracking, operator-only loopback verification proxy, management-secret rotation regression in CI
+  (PR CI [`45115423148`](https://github.com/RetroGorilla/splitpage/actions/runs/45115423148) and `main` push
+  [`45116283823`](https://github.com/RetroGorilla/splitpage/actions/runs/45116283823) green), and processing-boundary
+  decoder-refusal regressions in `tests/adapters/collab/native/server-admission.test.ts` (with the residual wire-level
+  decoding note recorded in the evidence table).
 
 **Pending before Stage 3 closes:**
 
-- **Part 3b ([#1761](https://github.com/RetroGorilla/splitpage/pull/1761)):** client-side picture upload/download,
-  placeholder replacement, missing-picture export reporting, the Part 3b mechanism section and the INV-52 update are
-  in integration and not yet on `main`.
-- **Part 8 evidence and deployment:** see the [Stage 3 evidence status](../COLLABORATION-PLAN.md#stage-3-evidence-status-main-at-35fee04ee)
-  for CI eligibility vs skips, required gaps and optional depth. Replacing the owner's relay with a distinct Stage 3
-  container on a verified empty direct-pool volume (keeping the old data directory aside), scheduling the daily
-  off-machine backup copy with pictures, running the deployed smoke check via a separately controlled supported client,
-  and running the isolated restore drill remain pending.
+- **Part 8 deployment and drills:** see the
+  [Stage 3 evidence status](../COLLABORATION-PLAN.md#stage-3-evidence-status-main-at-5a066c535) for exact CI vs local
+  runs, verified behavior, residual wire-level note and optional depth. Replacing the owner's relay with a distinct
+  Stage 3 container on a verified empty direct-pool volume (keeping the old data directory aside), confirming live host
+  WAL+`FULL` durability, scheduling the daily off-machine backup copy with pictures and independent archive publication
+  recording, running the deployed smoke check via the operator-only verification proxy, and running the isolated
+  restore drill remain pending.
 
 The standard shared test hook `__sharedTest` opens only the native session. There is still no release entry for shared
 mode; release builds (`node build.mjs`) omit `__sharedTest`, `?join=` handling and fragment scrubbing.

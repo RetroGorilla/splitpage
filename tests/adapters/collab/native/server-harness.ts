@@ -119,7 +119,15 @@ export function serverHarness(t: TestContext) {
     });
     const run = {
       messages, exit, output: () => output, errors: () => errors,
-      send: (message: string | { holdSyncType: number }) => child.send(message),
+      send: (message: string | { holdSyncType: number } | {
+        refuseDecode: {
+          stage: "beforeHandleMessage" | "beforeSync";
+          invitationId: string;
+          syncType?: number;
+          skipEmptyPayload?: boolean;
+          detail: string;
+        };
+      }) => child.send(message),
       async owner(path: string, init: RequestInit = {}, secret: string | null = managementSecret) {
         redact(secret);
         const headers = new Headers(init.headers);
