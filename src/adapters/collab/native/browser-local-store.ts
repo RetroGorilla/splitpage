@@ -4,6 +4,8 @@ import type { NativeLocalStore, NativeLocalStoreFailure, NativeLocalStoreOpen, N
 
 const DATABASE = "splitpage-native-replica-log";
 const REPLICAS = "replicas";
+const MEMBERSHIPS = "memberships";
+const INVITATIONS = "invitations";
 const OPEN_TIMEOUT_MS = 2000;
 interface BrowserLocalStorePorts {
   readonly indexedDB?: IDBFactory;
@@ -35,7 +37,7 @@ function acquire(locks: Pick<LockManager, "request">, name: string): Promise<(()
 
 function openDatabase(factory: IDBFactory): Promise<IDBDatabase | NativeLocalStoreFailure> {
   return new Promise((resolve, reject) => {
-    const request = factory.open(DATABASE, 1);
+    const request = factory.open(DATABASE, 2);
     let refused = false;
     // why: an open queued behind another connection's blocked upgrade or delete gets no blocked event of its own
     const timer = setTimeout(refuse, OPEN_TIMEOUT_MS);
@@ -45,9 +47,11 @@ function openDatabase(factory: IDBFactory): Promise<IDBDatabase | NativeLocalSto
       resolve({ kind: "failed", reason: "blocked" });
     }
     request.onblocked = refuse;
-    request.onupgradeneeded = () => {
-      if (refused) request.transaction?.abort();
-      else request.result.createObjectStore(REPLICAS, { keyPath: ["name", "generation"] });
+    request.onupgradeneeded = event => {
+      if (refused) { request.transaction?.abort(); return; }
+      if (event.oldVersion === 0) request.result.createObjectStore(REPLICAS, { keyPath: ["name", "generation"] });
+      request.result.createObjectStore(MEMBERSHIPS);
+      request.result.createObjectStore(INVITATIONS);
     };
     request.onerror = () => { clearTimeout(timer); reject(request.error); };
     request.onsuccess = () => {
@@ -58,11 +62,11 @@ function openDatabase(factory: IDBFactory): Promise<IDBDatabase | NativeLocalSto
   });
 }
 
-function transact<T>(database: IDBDatabase, mode: "readonly" | "readwrite", run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+function transaction<T>(database: IDBDatabase, stores: string[], mode: "readonly" | "readwrite", run: (tx: IDBTransaction) => IDBRequest<T>): Promise<T> {
   return new Promise((resolve, reject) => {
-    const tx = database.transaction(REPLICAS, mode, { durability: "strict" });
+    const tx = database.transaction(stores, mode, { durability: "strict" });
     try {
-      const request = run(tx.objectStore(REPLICAS));
+      const request = run(tx);
       tx.oncomplete = () => resolve(request.result);
       tx.onabort = () => reject(tx.error ?? request.error);
     } catch (error) {
@@ -71,6 +75,10 @@ function transact<T>(database: IDBDatabase, mode: "readonly" | "readwrite", run:
       reject(error);
     }
   });
+}
+
+function transact<T>(database: IDBDatabase, mode: "readonly" | "readwrite", run: (store: IDBObjectStore) => IDBRequest<T>): Promise<T> {
+  return transaction(database, [REPLICAS], mode, tx => run(tx.objectStore(REPLICAS)));
 }
 
 function replicaRange(name: string, through = Number.MAX_SAFE_INTEGER): IDBKeyRange {
@@ -92,10 +100,35 @@ async function requestPersistence(storage: BrowserLocalStorePorts["storage"]): P
   try { return await storage?.persist() ?? false; } catch { return false; }
 }
 
+function erase(database: IDBDatabase, name: string): Promise<undefined> {
+  return transaction(database, [REPLICAS, MEMBERSHIPS, INVITATIONS], "readwrite", tx => {
+    tx.objectStore(MEMBERSHIPS).delete(name);
+    tx.objectStore(INVITATIONS).delete(name);
+    return tx.objectStore(REPLICAS).delete(replicaRange(name));
+  });
+}
+
 function connectionFor(
   database: IDBDatabase, name: string, release: () => Promise<void>, storage: BrowserLocalStorePorts["storage"]
 ): NativeReplicaConnection {
   return {
+    forget: () => erase(database, name),
+    membership: {
+      async token() {
+        let member: IDBRequest | undefined;
+        const token: unknown = await transaction(database, [MEMBERSHIPS, INVITATIONS], "readonly", tx => {
+          member = tx.objectStore(MEMBERSHIPS).get(name);
+          return tx.objectStore(INVITATIONS).get(name);
+        });
+        return member?.result === true && typeof token === "string" ? token : null;
+      },
+      async join(token) {
+        await transaction(database, [MEMBERSHIPS, INVITATIONS], "readwrite", tx => {
+          tx.objectStore(MEMBERSHIPS).put(true, name);
+          return tx.objectStore(INVITATIONS).put(token, name);
+        });
+      }
+    },
     read: through => read(database, name, through),
     write: async entry => { await write(database, { ...entry, name }); },
     async release() { database.close(); await release(); },
@@ -135,7 +168,7 @@ export function createBrowserNativeLocalStore(ports: BrowserLocalStorePorts = {
   return {
     open: (name, options) => useDatabase(name, (database, release) => attachNativeLocalStore(connectionFor(database, name, release, storage), options)),
     delete: name => useDatabase(name, async database => {
-      await transact(database, "readwrite", store => store.delete(replicaRange(name)));
+      await erase(database, name);
       return { kind: "stored" } as const;
     })
   };

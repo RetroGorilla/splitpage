@@ -50,6 +50,11 @@ export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocu
   try {
     if (stored && !native.isStoredScript()) throw new Error("The stored state does not hold a well-formed native script");
   } catch (error) { native.close(); throw error; }
+  return bindNativeEditor(ports, native, failedClose, actor);
+}
+
+export function bindNativeEditor(ports: SharedSwitchPorts, native: ReturnType<typeof openNativeSession>, failedClose: () => boolean, actor = ports.editor()) {
+  const options = { actor, sanitize: sanitizeHtml };
   const publication = nativePublication();
   const editAttribution = () => ({ at: new Date(ports.now()).toISOString(), by: actor });
   let input: ReturnType<typeof mountNativeSharedInput> | null = null, terminal: Uint8Array | null = null;

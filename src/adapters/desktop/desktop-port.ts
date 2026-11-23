@@ -1,6 +1,7 @@
 import type { HistoryDesktopPort } from "../../application/recovery/history-ports.ts";
 import type { DesktopDocumentState } from "../../application/desktop/document-state.ts";
 import type { DesktopIpcArgs, DesktopIpcContract, DesktopIpcReceiveArgs, DesktopIpcResult } from "../../../shared/desktop-contract.d.ts";
+import type { NativeReplicaInvoke } from "../../../shared/native-replica.d.ts";
 
 export type Listener<T> = (value: T) => void;
 
@@ -25,6 +26,7 @@ export type DesktopVideoGrant = Extract<DesktopIpcResult<"splitpage:video-file-g
 export type DesktopBundleProgress = Pick<DesktopIpcArgs<"splitpage:bundle-progress">[0], "done" | "total">;
 
 export interface DesktopPort extends HistoryDesktopPort {
+  readonly nativeReplica: NativeReplicaInvoke;
   readonly isDesktop: true;
   readonly platform: string;
   readonly appVersion: DesktopIpcResult<"splitpage:get-app-version-sync">;
@@ -116,7 +118,7 @@ export const DESKTOP_PORT_MEMBERS = [
   "writeDraft", "discardDraft", "takeDraft", "draftRestoreDone", "onDraftFlush",
   "historyPut", "historyList", "historyGet", "historyCopy", "historyTouch", "historyListDocs",
   "blobPut", "blobGet", "blobMissing", "printToPdf",
-  "getSessionInfo", "openExternal", "setTheme",
+  "nativeReplica", "getSessionInfo", "openExternal", "setTheme",
   "grantVideoFile", "openVideoFile", "videoFilePath", "openVideoPath",
   "bundleVideoFile", "moveVideoFile", "planCreateBundle", "bundlePath", "onBundleCarry", "cancelBundle", "openBundledFile", "planBundleSave", "chooseBundleSave",
   "planBundleExport", "exportBundle", "videoThumbnail",
@@ -127,7 +129,7 @@ export const DESKTOP_PORT_MEMBERS = [
 
 export const UNUSED_DESKTOP_MEMBERS = [
   "__testRequestClose", "__testRequestQuit", "__testRequestCloseTab", "__testShell",
-  "__testDupLoser", "__testDraftStatus", "__testCrashRenderer", "__testNativeReplica"
+  "__testDupLoser", "__testDraftStatus", "__testCrashRenderer"
 ] as const;
 
 let attached: DesktopPort | null = null;

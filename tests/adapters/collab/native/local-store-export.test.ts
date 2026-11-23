@@ -1,3 +1,4 @@
+import { createHash, randomBytes } from "node:crypto";
 import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createBrowserNativeLocalStore } from "../../../../src/adapters/collab/native/browser-local-store.ts";
@@ -32,9 +33,20 @@ test("existing app-data export leaves native replicas outside its bundle", { tim
   const replica = await store.open(name, STORE_OPTIONS);
   assert.equal(replica.kind, "opened");
   try {
+    const invitation = randomBytes(32).toString("base64url");
+    assert.ok(replica.membership);
+    await replica.membership.join(invitation);
     seedReplica(replica.session, { A: "Offline narration" });
     assert.deepEqual(await replica.flush(), stored(1));
-    assert.deepEqual(await exportAppData(), before);
+    const bundle = await exportAppData();
+    const digest = createHash("sha256").update(invitation).digest();
+    for (const value of [bundle, replica.session.document(), replica.session.ydoc.toJSON()]) {
+      const decoded = JSON.stringify(value);
+      assert.equal(decoded.includes(invitation), false);
+      assert.equal(decoded.includes(digest.toString("hex")), false);
+      assert.equal(decoded.includes(digest.toString("base64url")), false);
+    }
+    assert.deepEqual(bundle, before);
     assert.deepEqual(await storedBytes(factory, name), replica.session.encodeState());
   } finally { replica.session.close(); await replica.closed; }
 });
