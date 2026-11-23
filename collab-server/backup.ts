@@ -12,6 +12,7 @@ export function verifyCopy(source: DatabaseSync, copy: DatabaseSync): void {
   verifyDatabase(copy);
   verifyRows(source, copy, "documents", "SELECT name, state FROM documents ORDER BY name");
   verifyRows(source, copy, "scripts", "SELECT name, status FROM scripts ORDER BY name");
+  verifyRows(source, copy, "script pictures", "SELECT script, sha, bytes, mime FROM script_pictures ORDER BY script, sha");
   verifyRows(source, copy, "invitations", "SELECT id, script, label, token_hash, revoked FROM invitations ORDER BY id");
 }
 

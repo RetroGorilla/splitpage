@@ -5,7 +5,8 @@ import { RelayError } from "./config.ts";
 
 export const DB_NAME = "relay.sqlite";
 const APPLICATION_ID = 0x53504c54;
-const STORAGE_VERSION = 1;
+const STORAGE_VERSION = 2;
+const PICTURE_SCHEMA = "CREATE TABLE script_pictures (script TEXT NOT NULL REFERENCES scripts(name), sha TEXT NOT NULL, bytes INTEGER NOT NULL, mime TEXT NOT NULL, PRIMARY KEY (script, sha)) STRICT";
 const SCHEMAS = {
   documents: "CREATE TABLE documents (name TEXT PRIMARY KEY NOT NULL, state BLOB NOT NULL) STRICT",
   scripts: "CREATE TABLE scripts (name TEXT PRIMARY KEY NOT NULL, status TEXT NOT NULL CHECK (status IN ('pending', 'active', 'deleted'))) STRICT",
@@ -29,9 +30,13 @@ export function claimWriter(directory: string): DatabaseSync {
 }
 
 export function verifyDatabase(db: DatabaseSync): void {
+  verifySchema(db, STORAGE_VERSION, { ...SCHEMAS, script_pictures: PICTURE_SCHEMA });
+}
+
+function verifySchema(db: DatabaseSync, version: number, schemas: Record<string, string>): void {
   if (db.prepare("PRAGMA application_id").get()?.application_id !== APPLICATION_ID ||
-      db.prepare("PRAGMA user_version").get()?.user_version !== STORAGE_VERSION ||
-      Object.entries(SCHEMAS).some(([name, schema]) =>
+      db.prepare("PRAGMA user_version").get()?.user_version !== version ||
+      Object.entries(schemas).some(([name, schema]) =>
         db.prepare("SELECT sql FROM sqlite_schema WHERE name = ? AND type = 'table'").get(name)?.sql !== schema)) {
     throw new RelayError("Relay database has an unrecognized identity or schema.");
   }
@@ -64,14 +69,18 @@ export function openWriter(directory: string): DatabaseSync {
     mkdirSync(directory, { recursive: true, mode: 0o700 });
     const path = join(directory, DB_NAME);
     const created = reserveDatabase(path);
+    let upgrade = false;
     if (!created) {
       using existing = new DatabaseSync(path, { readOnly: true, timeout: 5000 });
-      verifyDatabase(existing);
+      upgrade = existing.prepare("PRAGMA user_version").get()?.user_version === 1;
+      if (upgrade) verifySchema(existing, 1, SCHEMAS);
+      else verifyDatabase(existing);
     }
     db = new DatabaseSync(path, { timeout: 5000 });
     db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL");
     verifyDurability(db);
-    if (created) db.exec(`BEGIN; PRAGMA application_id=${APPLICATION_ID}; PRAGMA user_version=${STORAGE_VERSION}; ${Object.values(SCHEMAS).join("; ")}; COMMIT`);
+    if (created) db.exec(`BEGIN; PRAGMA application_id=${APPLICATION_ID}; PRAGMA user_version=${STORAGE_VERSION}; ${Object.values(SCHEMAS).join("; ")}; ${PICTURE_SCHEMA}; CREATE INDEX script_pictures_sha ON script_pictures(sha); COMMIT`);
+    if (upgrade) db.exec(`BEGIN; ${PICTURE_SCHEMA}; CREATE INDEX script_pictures_sha ON script_pictures(sha); PRAGMA user_version=${STORAGE_VERSION}; COMMIT`);
     return db;
   } catch (error) {
     db?.close();
