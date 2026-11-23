@@ -32,7 +32,7 @@ function exceedsMergeLimit(document: Document, update: Uint8Array): boolean {
 }
 
 export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", extensions: Extension[] = []) {
-  const { directory, port, origins, debounce, maxDebounce } = relayConfig(env);
+  const { directory, deployment, port, origins, debounce, maxDebounce } = relayConfig(env);
   const lock = claimWriter(directory);
   let db: ReturnType<typeof openWriter>;
   try {
@@ -105,7 +105,7 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       maxPayload: MAX_PAYLOAD,
       verifyClient: ({ origin }: { origin: string | undefined }) => origins.has(origin ?? "")
     },
-    extensions: [...extensions, ...(env.SPLITPAGE_APP_DIR ? [appShell(env.SPLITPAGE_APP_DIR)] : []), storage],
+    extensions: [...extensions, ...(env.SPLITPAGE_APP_DIR ? [appShell(env.SPLITPAGE_APP_DIR, deployment)] : []), storage],
     async onRequest({ request, response }) {
       if (await manage(request, response)) throw undefined;
     },

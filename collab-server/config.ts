@@ -22,6 +22,10 @@ export function dataDirectory(env: NodeJS.ProcessEnv): string {
 }
 
 export function relayConfig(env: NodeJS.ProcessEnv) {
+  const deployment = env.SPLITPAGE_DEPLOYMENT_ID;
+  if (deployment !== undefined && !/^[A-Za-z0-9_-]{1,64}(?![\s\S])/.test(deployment)) {
+    throw new RelayError("SPLITPAGE_DEPLOYMENT_ID must be 1 to 64 ASCII letters, digits, underscores or hyphens.");
+  }
   const debounce = integer(env, "SPLITPAGE_STORE_DEBOUNCE_MS", 2000, 0, 2_147_483_647);
   const maxDebounce = integer(env, "SPLITPAGE_STORE_MAX_DEBOUNCE_MS", 10000, debounce, 2_147_483_647);
   const origins = required(env, "SPLITPAGE_ALLOWED_ORIGINS").split(",").map(origin => origin.trim());
@@ -30,6 +34,7 @@ export function relayConfig(env: NodeJS.ProcessEnv) {
   }
   return {
     directory: dataDirectory(env),
+    deployment,
     port: integer(env, "SPLITPAGE_PORT", 8080, 0, 65535),
     origins: new Set(origins),
     debounce,

@@ -321,6 +321,9 @@ test("missing configuration or out-of-range settings fail without including thei
     assert.throws(() => relayConfig({ ...valid, [key]: "" }), new RegExp(`Set ${key}`));
   }
   assert.throws(() => relayConfig({ ...valid, SPLITPAGE_ALLOWED_ORIGINS: "*" }), /exact origins/);
+  for (const deployment of ["", "too/long", "line\n", "x".repeat(65)]) {
+    assert.throws(() => relayConfig({ ...valid, SPLITPAGE_DEPLOYMENT_ID: deployment }), /SPLITPAGE_DEPLOYMENT_ID must be/);
+  }
   assert.throws(() => relayConfig({ ...valid, SPLITPAGE_PORT: "65536" }), /SPLITPAGE_PORT must be an integer/);
   assert.throws(() => relayConfig({ ...valid, SPLITPAGE_PORT: "1.5" }), /SPLITPAGE_PORT must be an integer/);
   assert.throws(() => relayConfig({ ...valid, SPLITPAGE_STORE_DEBOUNCE_MS: "-1" }), /DEBOUNCE_MS must be an integer/);

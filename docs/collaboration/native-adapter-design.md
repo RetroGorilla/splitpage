@@ -182,6 +182,9 @@ The planned deployment and smoke test are in [Stage 3 Part 8](stage-3-service-pl
 For a current checkout with the bundled browser shell, build from the repository root with
 `docker build -f collab-server/Dockerfile -t splitpage-relay .`. The image contains the release shell built from
 that checkout. List the relay's public origin and `splitpage://app` in `SPLITPAGE_ALLOWED_ORIGINS`.
+Set `SPLITPAGE_DEPLOYMENT_ID` to a stable public identifier of 1 to 64 ASCII letters, digits, underscores
+or hyphens. Keep it across updates and use a different identifier for an independent deployment.
+The shell exposes it in the `Splitpage-Deployment` response header.
 The pinned command below reproduces the historical service image.
 
 **Manage the Stage 3 relay.** Generate a random 32-byte secret encoded as base64url and keep it in

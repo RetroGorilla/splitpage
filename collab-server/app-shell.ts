@@ -11,7 +11,7 @@ const files = new Map<string, readonly [string, string]>([
   ["/icon-maskable.svg", ["icon-maskable.svg", "image/svg+xml"]]
 ]);
 
-export function appShell(directory: string): Extension {
+export function appShell(directory: string, deployment?: string): Extension {
   return {
     async onRequest({ request, response }) {
       const pathname = request.url?.split("?", 1)[0] ?? "";
@@ -27,6 +27,7 @@ export function appShell(directory: string): Extension {
           "Content-Type": type,
           "Content-Length": body.byteLength,
           "Cache-Control": "no-cache",
+          ...(name === "index.html" && deployment !== undefined ? { "Splitpage-Deployment": deployment } : {}),
           "X-Content-Type-Options": "nosniff"
         });
         response.end(request.method === "HEAD" ? undefined : body);
