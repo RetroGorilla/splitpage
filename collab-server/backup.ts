@@ -10,6 +10,26 @@ const BACKUP_NAME = /^relay-\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d\.\d{3}Z-[a-f0-9-]{36}
 const LAST_BACKUP_FILE = "last-backup.json";
 const ISO_TIMESTAMP = /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/;
 
+function syncDirectory(directory: string): void {
+  // why: Windows cannot open a directory descriptor for fsync; POSIX hosts sync parent directories
+  if (process.platform === "win32") return;
+  const folder = openSync(directory, "r");
+  try {
+    fsyncSync(folder);
+  } finally {
+    closeSync(folder);
+  }
+}
+
+function syncFile(path: string): void {
+  const fd = openSync(path, "r+");
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+}
+
 function recordLastBackup(staging: string, directory: string, completedAt: string): void {
   const pending = join(staging, LAST_BACKUP_FILE);
   const fd = openSync(pending, "wx", 0o600);
@@ -20,6 +40,7 @@ function recordLastBackup(staging: string, directory: string, completedAt: strin
     closeSync(fd);
   }
   renameSync(pending, join(directory, LAST_BACKUP_FILE));
+  syncDirectory(directory);
 }
 
 export function lastBackupTime(directory: string): string | null {
@@ -30,7 +51,12 @@ export function lastBackupTime(directory: string): string | null {
     if ((error as NodeJS.ErrnoException).code === "ENOENT") return null;
     throw error;
   }
-  const parsed: unknown = JSON.parse(raw);
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(raw);
+  } catch {
+    return null;
+  }
   if (!parsed || typeof parsed !== "object" || !("completedAt" in parsed)) return null;
   const { completedAt } = parsed as { completedAt: unknown };
   return typeof completedAt === "string" && ISO_TIMESTAMP.test(completedAt) ? completedAt : null;
@@ -90,8 +116,10 @@ export async function backupRelay(env: NodeJS.ProcessEnv, copyDatabase = backup)
       verifyCopy(source, copy);
     }
     source.exec("COMMIT");
+    syncFile(pending);
     const name = `relay-${date}-${randomUUID()}.sqlite`;
     renameSync(pending, join(destination, name));
+    syncDirectory(destination);
     recordLastBackup(staging, directory, new Date().toISOString());
     const older = readdirSync(destination, { withFileTypes: true })
       .filter(entry => entry.isFile() && entry.name !== name && BACKUP_NAME.test(entry.name));

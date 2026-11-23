@@ -92,6 +92,10 @@ test("total connection limit refuses excess WebSockets at upgrade with 503 and r
     assert.equal(refused.headers["retry-after"], "5");
 
     const queued = kit.copy(port);
+    await new Promise(resolve => setTimeout(resolve, 150));
+    assert.equal(queued.relay.status().connected, false);
+    assert.equal(queued.relay.status().firstSyncDone, false);
+    assert.equal(queued.events.some(event => event.kind === "authentication-failed"), false);
     first.close();
     await once(first, "close", { signal: t.signal });
     await kit.until(() => (queued.relay.status().firstSyncDone && queued.text() === "word") || undefined);
@@ -185,6 +189,73 @@ test("document revocation preserves other logical documents on the same multiple
     docB.getText("mux-check").insert(0, "still-alive");
     await kit.until(() => peerB.session.ydoc.getText("mux-check").toString() === "still-alive" || undefined);
     assert.equal(secondClosed, false);
+    assert.deepEqual(await run.stop("clean"), { code: 0, exitSignal: null });
+  }
+);
+
+test("disconnecting one multiplexed document preserves sibling continuity and shared transport rate window",
+  { timeout: 30_000 }, async t => {
+    const kit = serverHarness(t);
+    kit.seed(NAME);
+    kit.seed("second-script");
+    const firstInvite = kit.provision(NAME);
+    const secondInvite = kit.provision("second-script");
+    let peerBInvite: { id: string; token: string };
+    {
+      using db = openWriter(kit.directory);
+      peerBInvite = scriptAccess(db).issue("second-script", "peer b");
+    }
+    const run = kit.launch({
+      SPLITPAGE_MAX_CONNECTIONS_PER_INVITATION: "1",
+      SPLITPAGE_MAX_MESSAGES_PER_SECOND: "16"
+    });
+    const port = await run.port();
+
+    const sharedSocket = new HocuspocusProviderWebsocket({ url: `ws://127.0.0.1:${port}?wire=1&schema=1` });
+    const events = new EventTarget();
+    let secondClosedReason: string | undefined;
+    const docA = new Doc();
+    const docB = new Doc();
+    const providerA = new HocuspocusProvider({
+      websocketProvider: sharedSocket, name: NAME, token: firstInvite.token, document: docA, awareness: null,
+      onSynced() { events.dispatchEvent(new Event("change")); }
+    });
+    const providerB = new HocuspocusProvider({
+      websocketProvider: sharedSocket, name: "second-script", token: secondInvite.token, document: docB, awareness: null,
+      onSynced() { events.dispatchEvent(new Event("change")); },
+      onClose({ event }) { secondClosedReason = event.reason; events.dispatchEvent(new Event("change")); }
+    });
+    providerA.attach();
+    providerB.attach();
+    t.after(() => {
+      providerA.destroy();
+      providerB.destroy();
+      sharedSocket.destroy();
+      docA.destroy();
+      docB.destroy();
+    });
+
+    while (!providerA.synced || !providerB.synced) await once(events, "change", { signal: t.signal });
+    const peerB = kit.copy(port, undefined, "second-script", peerBInvite.token);
+    await kit.until(() => (peerB.relay.status().firstSyncDone && peerB.text() === "word") || undefined);
+
+    await new Promise(resolve => setTimeout(resolve, 1100));
+
+    for (let i = 0; i < 9; i++) docA.getArray("mux-a").push([i]);
+    providerA.detach();
+    providerA.destroy();
+
+    docB.getText("sibling-live").insert(0, "kept");
+    await kit.until(() => peerB.session.ydoc.getText("sibling-live").toString() === "kept" || undefined);
+    assert.equal(secondClosedReason, undefined);
+    assert.equal(providerB.isAuthenticated, true);
+
+    for (let i = 0; i < 8; i++) docB.getArray("mux-b").push([i]);
+    while (secondClosedReason === undefined) await once(events, "change", { signal: t.signal });
+    assert.equal(secondClosedReason, "rate-limited");
+
+    const replacementA = kit.copy(port, undefined, NAME, firstInvite.token);
+    await kit.until(() => (replacementA.relay.status().firstSyncDone && replacementA.text() === "word") || undefined);
     assert.deepEqual(await run.stop("clean"), { code: 0, exitSignal: null });
   }
 );
@@ -552,12 +623,15 @@ test("status endpoint refuses all requests when management secret is unset, and 
     assert.equal(defaults.maxMessagesPerSecond, 60);
     assert.equal(defaults.maxUploadsInFlight, 4);
     assert.equal(defaults.managementSecret, undefined);
+    for (const allowed of ["1", "2", "3", "4"]) {
+      assert.equal(relayConfig({ ...valid, SPLITPAGE_MAX_UPLOADS_IN_FLIGHT: allowed }).maxUploadsInFlight, Number(allowed));
+    }
     for (const [key, value] of [
       ["SPLITPAGE_MAX_CONNECTIONS", "0"],
       ["SPLITPAGE_MAX_CONNECTIONS_PER_INVITATION", "0"],
       ["SPLITPAGE_MAX_MESSAGES_PER_SECOND", "0"],
       ["SPLITPAGE_MAX_UPLOADS_IN_FLIGHT", "0"],
-      ["SPLITPAGE_MAX_UPLOADS_IN_FLIGHT", "101"]
+      ["SPLITPAGE_MAX_UPLOADS_IN_FLIGHT", "5"]
     ] as const) {
       assert.throws(() => relayConfig({ ...valid, [key]: value }), new RegExp(`${key} must be an integer`));
     }

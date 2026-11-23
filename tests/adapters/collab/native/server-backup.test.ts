@@ -1,10 +1,11 @@
 import assert from "node:assert/strict";
 import { randomUUID } from "node:crypto";
-import { copyFileSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import fs, { copyFileSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
+import { syncBuiltinESMExports } from "node:module";
 import { join } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import test from "node:test";
-import { backupRelay, verifyCopy } from "../../../../collab-server/backup.ts";
+import { backupRelay, lastBackupTime, verifyCopy } from "../../../../collab-server/backup.ts";
 import { DB_NAME, openWriter } from "../../../../collab-server/storage.ts";
 import { appendText, NAME, serverHarness, storedState, storedText } from "./server-harness.ts";
 import { seedRelaySession } from "./relay-harness.ts";
@@ -203,3 +204,65 @@ test("online backup copies the preflight snapshot even when a second connection 
   assert.equal(copy.prepare("SELECT status FROM scripts").get()?.status, "active");
   assert.equal(copy.prepare("SELECT revoked FROM invitations").get()?.revoked, 0);
 });
+
+
+test("backup syncs published snapshot and marker parent directory, fails safely on marker write errors and ignores malformed markers",
+  { timeout: 30_000 }, async t => {
+    const kit = serverHarness(t);
+    kit.seed();
+    const config = { SPLITPAGE_DATA_DIR: kit.directory, SPLITPAGE_BACKUP_KEEP: "1" };
+    const backupsDir = join(kit.directory, "backups");
+    const markerPath = join(kit.directory, "last-backup.json");
+    const platform = Object.getOwnPropertyDescriptor(process, "platform");
+    assert.ok(platform);
+    const originalOpen = fs.openSync;
+    const originalFsync = fs.fsyncSync;
+    const fdTargets = new Map<number, string>();
+    const syncedTargets: string[] = [];
+    let failMarkerWrite = false;
+    const openMock = t.mock.method(fs, "openSync", (path: fs.PathLike, flags: fs.OpenMode = "r", mode?: fs.Mode) => {
+      const text = String(path);
+      if (failMarkerWrite && text.endsWith("last-backup.json")) {
+        throw Object.assign(new Error("simulated marker write failure"), { code: "EIO" });
+      }
+      const isDir = text === backupsDir || text === kit.directory;
+      // why: Windows cannot open a directory descriptor, so open the database file to exercise sync ordering there
+      const fd = isDir && platform.value === "win32"
+        ? originalOpen(join(kit.directory, DB_NAME), "r+")
+        : originalOpen(path, flags, mode);
+      fdTargets.set(fd, text);
+      return fd;
+    });
+    const fsyncMock = t.mock.method(fs, "fsyncSync", (fd: number) => {
+      const target = fdTargets.get(fd);
+      if (target) syncedTargets.push(target);
+      originalFsync(fd);
+    });
+    if (platform.value === "win32") Object.defineProperty(process, "platform", { ...platform, value: "linux" });
+    syncBuiltinESMExports();
+    try {
+      const first = await backupRelay(config);
+      const firstTimestamp = lastBackupTime(kit.directory);
+      assert.ok(firstTimestamp !== null);
+      const backupsSyncIndex = syncedTargets.indexOf(backupsDir);
+      const markerSyncIndex = syncedTargets.findIndex(target => target.endsWith("last-backup.json"));
+      const parentSyncIndex = syncedTargets.lastIndexOf(kit.directory);
+      assert.ok(backupsSyncIndex >= 0);
+      assert.ok(markerSyncIndex > backupsSyncIndex);
+      assert.ok(parentSyncIndex > markerSyncIndex);
+
+      failMarkerWrite = true;
+      await assert.rejects(backupRelay(config), { code: "EIO" });
+      assert.equal(lastBackupTime(kit.directory), firstTimestamp);
+      assert.ok(readdirSync(backupsDir).includes(first));
+    } finally {
+      openMock.mock.restore();
+      fsyncMock.mock.restore();
+      Object.defineProperty(process, "platform", platform);
+      syncBuiltinESMExports();
+    }
+
+    writeFileSync(markerPath, "{malformed");
+    assert.equal(lastBackupTime(kit.directory), null);
+  }
+);

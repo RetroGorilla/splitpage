@@ -18,34 +18,22 @@ export interface RelayLimitsConfig {
   readonly maxMessagesPerSecond: number;
 }
 
-interface ReservationRecord {
-  readonly invitationId: string;
-  readonly documentName: string;
-  readonly detachSocket: () => void;
-}
-
 export function createRelayLimits(config: RelayLimitsConfig, now = () => performance.now()) {
   const activeSockets = new Set<Duplex>();
   const socketsByKey = new Map<string, Set<Duplex>>();
+  const socketIdsBySocket = new Map<Duplex, Set<string>>();
   const byInvitation = new Map<string, Set<string>>();
-  const pendingByDocument = new Map<string, Set<string>>();
-  const reservations = new Map<string, ReservationRecord>();
+  const reservations = new Map<string, string>();
   const messageWindows = new Map<string, number[]>();
 
   function releaseReservation(reservationId: string): void {
-    const record = reservations.get(reservationId);
-    if (!record) return;
+    const invitationId = reservations.get(reservationId);
+    if (!invitationId) return;
     reservations.delete(reservationId);
-    record.detachSocket();
-    const inviteSet = byInvitation.get(record.invitationId);
+    const inviteSet = byInvitation.get(invitationId);
     if (inviteSet) {
       inviteSet.delete(reservationId);
-      if (inviteSet.size === 0) byInvitation.delete(record.invitationId);
-    }
-    const pendingSet = pendingByDocument.get(record.documentName);
-    if (pendingSet) {
-      pendingSet.delete(reservationId);
-      if (pendingSet.size === 0) pendingByDocument.delete(record.documentName);
+      if (inviteSet.size === 0) byInvitation.delete(invitationId);
     }
   }
 
@@ -67,49 +55,40 @@ export function createRelayLimits(config: RelayLimitsConfig, now = () => perform
             if (group.size === 0) socketsByKey.delete(websocketKey);
           }
         }
+        const boundIds = socketIdsBySocket.get(socket);
+        if (boundIds) {
+          for (const socketId of boundIds) messageWindows.delete(socketId);
+          socketIdsBySocket.delete(socket);
+        }
       });
       return true;
+    },
+    bindSocket(socketId: string, websocketKey: string | null): void {
+      const candidates = websocketKey ? socketsByKey.get(websocketKey) : undefined;
+      const socket = candidates?.size === 1 ? candidates.values().next().value : undefined;
+      if (!socket || socket.destroyed) return;
+      const boundIds = socketIdsBySocket.get(socket);
+      if (boundIds) boundIds.add(socketId);
+      else socketIdsBySocket.set(socket, new Set([socketId]));
     },
     totalSockets(): number {
       return activeSockets.size;
     },
-    tryAdmitInvitation(invitationId: string, documentName: string, websocketKey: string | null): string | null {
-      const candidates = websocketKey ? socketsByKey.get(websocketKey) : undefined;
-      const socket = candidates?.size === 1 ? candidates.values().next().value : undefined;
-      if (socket?.destroyed) return null;
+    hasInvitationCapacity(invitationId: string): boolean {
+      const current = byInvitation.get(invitationId);
+      return !current || current.size < config.maxConnectionsPerInvitation;
+    },
+    tryAdmitInvitation(invitationId: string): string | null {
       const current = byInvitation.get(invitationId);
       if (current && current.size >= config.maxConnectionsPerInvitation) return null;
       const reservationId = randomUUID();
       if (current) current.add(reservationId);
       else byInvitation.set(invitationId, new Set([reservationId]));
-      const pending = pendingByDocument.get(documentName);
-      if (pending) pending.add(reservationId);
-      else pendingByDocument.set(documentName, new Set([reservationId]));
-      let detachSocket = () => undefined;
-      if (socket) {
-        const onSocketClose = () => releaseReservation(reservationId);
-        socket.once("close", onSocketClose);
-        detachSocket = () => { socket.off("close", onSocketClose); };
-      }
-      reservations.set(reservationId, { invitationId, documentName, detachSocket });
+      reservations.set(reservationId, invitationId);
       return reservationId;
-    },
-    activateInvitation(reservationId: string): void {
-      const record = reservations.get(reservationId);
-      if (!record) return;
-      const pending = pendingByDocument.get(record.documentName);
-      if (pending) {
-        pending.delete(reservationId);
-        if (pending.size === 0) pendingByDocument.delete(record.documentName);
-      }
     },
     releaseInvitation(reservationId: string): void {
       releaseReservation(reservationId);
-    },
-    releasePendingForDocument(documentName: string): void {
-      const pending = pendingByDocument.get(documentName);
-      if (!pending) return;
-      for (const reservationId of [...pending]) releaseReservation(reservationId);
     },
     allowMessage(socketId: string): boolean {
       const timestamp = now();
@@ -128,9 +107,6 @@ export function createRelayLimits(config: RelayLimitsConfig, now = () => perform
       entries.push(timestamp);
       messageWindows.set(socketId, entries);
       return true;
-    },
-    clearSocket(socketId: string): void {
-      messageWindows.delete(socketId);
     }
   };
 }

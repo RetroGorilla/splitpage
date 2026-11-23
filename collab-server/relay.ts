@@ -84,7 +84,7 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
   const load = db.prepare("SELECT state FROM documents WHERE name = ?");
   const size = db.prepare("SELECT length(state) AS bytes FROM documents WHERE name = ?");
   const write = db.prepare("INSERT INTO documents VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET state = excluded.state");
-  type Admission = { invitationId: string; reservationId: string };
+  type Admission = { invitationId: string; reservationId?: string };
   const storage = new Database({
     async fetch({ documentName }) {
       try {
@@ -141,20 +141,11 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
     lastStorageFailure: () => lastStorageFailure
   });
 
-  const watchedLoads = new WeakSet<Promise<Document>>();
   const limitsExtension: Extension<Admission> = {
     priority: 200,
-    async onConnect({ socketId }) {
+    async onConnect({ socketId, requestHeaders }) {
+      limits.bindSocket(socketId, requestHeaders.get("sec-websocket-key"));
       if (!limits.allowMessage(socketId)) throw { reason: "rate-limited" };
-    },
-    async onCreateDocument({ documentName, instance }) {
-      const pending = instance.loadingDocuments.get(documentName);
-      if (pending && !watchedLoads.has(pending)) {
-        watchedLoads.add(pending);
-        void pending.catch(() => {
-          limits.releasePendingForDocument(documentName);
-        });
-      }
     }
   };
 
@@ -191,44 +182,35 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       // why: the stock server treats a falsy rejection as an HTTP response handled by the hook
       if (status(request, response) || await manage(request, response) || await pictures.handle(request, response)) throw null;
     },
-    async onAuthenticate({ token, instance, documentName, connectionConfig, requestParameters, requestHeaders }) {
+    async onAuthenticate({ token, instance, documentName, connectionConfig, requestParameters }) {
       if (requestParameters.getAll("wire").join(",") !== "1" || requestParameters.getAll("schema").join(",") !== "1") {
         throw { reason: "unsupported-version" };
       }
       const invitationId = access.authenticate(documentName, token);
-      const reservationId = limits.tryAdmitInvitation(invitationId, documentName, requestHeaders.get("sec-websocket-key"));
-      if (!reservationId) throw { reason: "too-many-connections" };
-      try {
-        const loading = instance.loadingDocuments.get(documentName);
-        if (loading && !watchedLoads.has(loading)) {
-          watchedLoads.add(loading);
-          void loading.catch(() => {
-            limits.releasePendingForDocument(documentName);
-          });
-        }
-        const live = instance.documents.get(documentName) ?? (loading ? await loading : undefined);
-        if (loading) access.authenticate(documentName, token);
-        const bytes = live ? encodeStateAsUpdate(live).byteLength : Number(size.get(documentName)?.bytes ?? 0);
-        connectionConfig.readOnly = bytes >= DOCUMENT_BYTES;
-        return { invitationId, reservationId };
-      } catch (error) {
-        limits.releaseInvitation(reservationId);
-        throw error;
-      }
+      if (!limits.hasInvitationCapacity(invitationId)) throw { reason: "too-many-connections" };
+      const loading = instance.loadingDocuments.get(documentName);
+      const live = instance.documents.get(documentName) ?? (loading ? await loading : undefined);
+      if (loading) access.authenticate(documentName, token);
+      const bytes = live ? encodeStateAsUpdate(live).byteLength : Number(size.get(documentName)?.bytes ?? 0);
+      connectionConfig.readOnly = bytes >= DOCUMENT_BYTES;
+      return { invitationId };
     },
     async connected({ context, connection }) {
-      limits.activateInvitation(context.reservationId);
+      const reservationId = limits.tryAdmitInvitation(context.invitationId);
+      if (!reservationId) {
+        connection.close({ code: 4429, reason: "too-many-connections" });
+        return;
+      }
+      context.reservationId = reservationId;
       connection.onClose(() => {
-        limits.releaseInvitation(context.reservationId);
-        limits.clearSocket(connection.socketId);
+        limits.releaseInvitation(reservationId);
       });
       if (!access.isValid(context.invitationId)) {
         connection.close({ code: 4403, reason: "access-removed" });
       }
     },
-    async onDisconnect({ context, socketId }) {
+    async onDisconnect({ context }) {
       if (context?.reservationId) limits.releaseInvitation(context.reservationId);
-      limits.clearSocket(socketId);
     },
     async beforeHandleMessage({ context, socketId }) {
       requireAccess(context);

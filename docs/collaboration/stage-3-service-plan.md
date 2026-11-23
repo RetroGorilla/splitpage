@@ -108,13 +108,13 @@ Done:
 
 ### 6 Limits and container
 
-- Limits applied before expensive work, for admitted clients too: connections in total and per invitation, messages per connection per second, uploads in flight. Use the options Hocuspocus and its WebSocket library provide before writing any.
-- A temporary refusal and a permanent one stay distinct to the client. A permanent refusal never causes a reconnect loop.
+- Limits applied before expensive work, for admitted clients too: connections in total and per invitation, messages per connection per second, uploads in flight (configurable `1`–`4`, preserving the 64 MiB staging maximum). Use the options Hocuspocus and its WebSocket library provide before writing any.
+- Approved transport decisions: authenticated message rate limiting uses stock `@hocuspocus/server` 4.8.0's processing-time `beforeHandleMessage` hook alongside the configured pre-auth queue and WebSocket frame bounds (queued messages may accumulate during processing stalls). Total connection capacity is refused before WebSocket upgrade (`503` with `Retry-After`); a browser treats the opaque upgrade failure as temporary and retries with backoff without a relay-full reason, while permanent access refusals stay distinct after upgrade and never cause a reconnect loop.
 - The container runs with a read-only root filesystem, bounded temporary storage and memory and CPU limits. It already runs as a non-root user.
-- A status endpoint behind the management secret reports connection counts, stored bytes, picture bytes, the last storage failure and the last backup time. It reports no script content, token or path.
+- A status endpoint behind the management secret reports connection counts, stored bytes, picture bytes, the last storage failure and the last backup time (published only after a verified backup is durably published, syncing parent directories on POSIX; Windows does not support directory-descriptor fsync). It reports no script content, token or path.
 
 Done:
-- Tests reach each limit and see the stated refusal.
+- Tests reach each limit and see the stated refusal, including normal-client recovery after capacity frees and sibling continuity on multiplexed transports.
 - The image starts and passes the relay tests with a read-only root filesystem.
 
 ### 7 Backup and restore

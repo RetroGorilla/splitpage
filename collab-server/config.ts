@@ -38,7 +38,7 @@ export function relayConfig(env: NodeJS.ProcessEnv) {
     maxConnections: integer(env, "SPLITPAGE_MAX_CONNECTIONS", 64, 1, 10_000),
     maxConnectionsPerInvitation: integer(env, "SPLITPAGE_MAX_CONNECTIONS_PER_INVITATION", 8, 1, 10_000),
     maxMessagesPerSecond: integer(env, "SPLITPAGE_MAX_MESSAGES_PER_SECOND", 60, 1, 10_000),
-    maxUploadsInFlight: integer(env, "SPLITPAGE_MAX_UPLOADS_IN_FLIGHT", 4, 1, 100)
+    maxUploadsInFlight: integer(env, "SPLITPAGE_MAX_UPLOADS_IN_FLIGHT", 4, 1, 4)
   };
 }
 
