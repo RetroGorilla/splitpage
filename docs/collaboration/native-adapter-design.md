@@ -10,7 +10,8 @@ pictures and screen design are out of scope.
 
 ## Build status
 
-Slice 7 still has open acceptance cases listed in section 11. The Slice 8 adapter removal landed on `main` at `0b7102f6a` ([#1745](https://github.com/RetroGorilla/splitpage/pull/1745),
+Slice 7's open acceptance cases are listed in [appendix O](#o-acceptance-cases-from-the-outside-review). The Slice 8
+adapter removal landed on `main` at `0b7102f6a` ([#1745](https://github.com/RetroGorilla/splitpage/pull/1745),
 [#1746](https://github.com/RetroGorilla/splitpage/pull/1746),
 [#1747](https://github.com/RetroGorilla/splitpage/pull/1747),
 [#1750](https://github.com/RetroGorilla/splitpage/pull/1750)). The native session runs Split and Writer with buffered
@@ -18,12 +19,48 @@ narration and Visual input, composition, local undo and selection replay. The ed
 heading structure, anchored blank-beat insertion, Writer Markdown headings, Find and replacement, plain inline
 formatting, beat status and duration, picture galleries, comment threads and production registries.
 
-The native relay has the reconnect wrapper, size admission, SQLite snapshots and backup and restore commands.
-The session layer has the offline-notice journal and put-back command, and local replica stores with an update
-log, checkpoints and local write receipts in browser IndexedDB and through desktop test IPC
-([#1668](https://github.com/RetroGorilla/splitpage/pull/1668), [#1679](https://github.com/RetroGorilla/splitpage/pull/1679)).
-These components have their own integration tests. The standard shared test hook `__sharedTest` opens only the
-native session.
+Stage 3 Parts 1, 2, 3a, 4, 5, 6 and 7 of the [Stage 3 plan](stage-3-service-plan.md) are on `main` through
+`35fee04ee`:
+
+- **Part 1 ([#1754](https://github.com/RetroGorilla/splitpage/pull/1754)):** versioned SQLite storage, per-script
+  lifecycle (`pending`, `active`, `deleted`), hashed revocable invitations and wire/schema version checks; the
+  environment-wide access token is removed.
+- **Part 2 ([#1757](https://github.com/RetroGorilla/splitpage/pull/1757)):** constant-time management-secret `/api/`
+  owner HTTP endpoints (`POST /api/scripts` with `Idempotency-Key`, issue, list, revoke, delete — covered by HTTP
+  tests) and the `collab-server/owner-command.ts` CLI (`issue`, `list`, `revoke`, `delete` over `https:`; CLI wrapper
+  not yet covered by automated tests).
+- **Part 3a ([#1756](https://github.com/RetroGorilla/splitpage/pull/1756)):** authenticated `/api/scripts/<id>/pictures/<sha>`
+  PUT and GET validated through `shared/blob-policy.ts` (16 MiB per picture, 200 MiB per script, four 16 MiB staging
+  slots, storage version 3 upgrade).
+- **Part 4 ([#1755](https://github.com/RetroGorilla/splitpage/pull/1755)):** production desktop `splitpage:native-replica`
+  IPC with OS key store encrypted membership (test-only `splitpage:test-native-replica` channel removed), separate
+  browser IndexedDB invitation store, scoped `enterRetained` entry, one-writable-tab/window enforcement and leave
+  erasure.
+- **Part 5 ([#1758](https://github.com/RetroGorilla/splitpage/pull/1758)):** relay-served release browser shell
+  (`SPLITPAGE_APP_DIR=/app`, `Splitpage-Deployment` header) and test-build-gated (`node build.mjs --test`)
+  `/?join=<id>#<token>` fragment scrubbing before logging. Release builds (`node build.mjs`, including the shell
+  bundled in `collab-server/Dockerfile`) omit `?join=` handling, fragment scrubbing and `__sharedTest` until Stage 4.
+- **Part 6 ([#1759](https://github.com/RetroGorilla/splitpage/pull/1759)):** bounded runtime limits (total connections,
+  per-invitation connections, per-socket message rate, in-flight uploads, WebSocket and HTTP bounds), distinct temporary
+  vs permanent refusals, private `GET /api/status` and the read-only container verified in CI `relay-container-smoke`
+  when relay-affecting paths change.
+- **Part 7 ([#1760](https://github.com/RetroGorilla/splitpage/pull/1760)):** consistent verified SQLite + picture bundle
+  backups (`relay-*.backup`), atomic `last-backup.json` marker recorded after sync, and isolated restore revoking every
+  invitation while keeping deleted scripts deleted.
+
+**Pending before Stage 3 closes:**
+
+- **Part 3b ([#1761](https://github.com/RetroGorilla/splitpage/pull/1761)):** client-side picture upload/download,
+  placeholder replacement, missing-picture export reporting, the Part 3b mechanism section and the INV-52 update are
+  in integration and not yet on `main`.
+- **Part 8 evidence and deployment:** see the [Stage 3 evidence status](../COLLABORATION-PLAN.md#stage-3-evidence-status-main-at-35fee04ee)
+  for CI eligibility vs skips, required gaps and optional depth. Replacing the owner's relay with a distinct Stage 3
+  container on a verified empty direct-pool volume (keeping the old data directory aside), scheduling the daily
+  off-machine backup copy with pictures, running the deployed smoke check via a separately controlled supported client,
+  and running the isolated restore drill remain pending.
+
+The standard shared test hook `__sharedTest` opens only the native session. There is still no release entry for shared
+mode; release builds (`node build.mjs`) omit `__sharedTest`, `?join=` handling and fragment scrubbing.
 
 All legacy shared-adapter code (112 source files outside `src/adapters/collab/native/`), its 183 dedicated test files,
 the legacy app fixture (`tests/collab/legacy-app/`) and generated `_legacy-shared-tests.html` page, 29 legacy
@@ -41,7 +78,7 @@ performance (`5fceae0c2` vs `0b7102f6a`, 3 rounds on Windows/Edge 158) is record
 ([45046093872](https://github.com/RetroGorilla/splitpage/actions/runs/45046093872) vs
 [45078179364](https://github.com/RetroGorilla/splitpage/actions/runs/45078179364)) dropped workflow time from 691 to
 404 s, root wall time from 660 to 379 s, aggregate shard job-seconds from 3,890 to 2,077 s, and test shard jobs from
-11 to 8. There is no release entry for shared mode.
+11 to 8.
 
 A successful native switch restores a Writer or Split selection only when focus stayed in that editor and the
 touched beats, joined narration members and headings keep their identities, order and text. If a captured
@@ -193,16 +230,17 @@ readable scripts and pictures, invitation labels and token hashes. Keep the mana
 separately recoverable secret storage.
 
 **Schedule the off-machine copy.** On the Linux Docker host, save the following as
-`stage3-relay-backup.sh`. Replace the container name, SSH destination and archive root. Create the
-archive root with operator-only permissions on the archive machine. Run every scheduled and manual
-backup through this wrapper under the same operator account and lock path. It requires `flock` on the
-Docker host and GNU `mv` on the archive machine.
+`stage3-relay-backup.sh`. Keep `container` aligned with the distinct Stage 3 container name
+(`splitpage-relay-stage3`, never the historical `splitpage-relay` container) and replace the SSH destination and
+archive root. Create the archive root with operator-only permissions on the archive machine. Run every scheduled and
+manual backup through this wrapper under the same operator account and lock path. It requires `flock` on the Docker
+host and GNU `mv` on the archive machine.
 
 ```sh
 #!/bin/sh
 set -eu
 umask 077
-container=REPLACE_WITH_RELAY_CONTAINER
+container=splitpage-relay-stage3
 archive_host=REPLACE_WITH_USER@REPLACE_WITH_ARCHIVE_HOST
 archive_root=/REPLACE_WITH_ARCHIVE_ROOT
 lock_dir="$HOME/.config/splitpage-relay"
@@ -218,15 +256,23 @@ docker cp "$container:/data/backups/$name" "$staging/$name"
 ssh -o BatchMode=yes "$archive_host" "umask 077; mkdir -- '$archive_root/.incoming-$name'"
 scp -B -r "$staging/$name" "$archive_host:$archive_root/.incoming-$name/"
 ssh -o BatchMode=yes "$archive_host" "set -eu; cd '$archive_root'; mv -T --no-clobber -- '.incoming-$name/$name' '$name'; rmdir -- '.incoming-$name'"
-printf 'Archived relay backup %s.\n' "$name"
+archived_at=$(date -u +%Y-%m-%dT%H:%M:%SZ)
+record_tmp=$(mktemp "$lock_dir/.last-archive-copy.XXXXXX")
+printf '{"backup":"%s","archivedAt":"%s"}\n' "$name" "$archived_at" > "$record_tmp"
+mv -f -- "$record_tmp" "$lock_dir/last-archive-copy.json"
+printf 'Archived relay backup %s at %s.\n' "$name" "$archived_at"
 ```
 
 Use cron with failure mail or a scheduler that alerts on nonzero exit. For example, add
 `15 2 * * * /bin/sh /REPLACE_WITH_SCRIPT_PATH/stage3-relay-backup.sh`. The local lock covers the
-backup and transfer. On the archive machine, a completed transfer is renamed within the archive
-filesystem. Interrupted transfers may leave a hidden `.incoming-*` directory for the operator to
-inspect and remove. If archive-host power-loss durability is required, configure and verify it
-separately on that host.
+backup and transfer. `GET /api/status`'s `lastBackupAt` is written by `backup-command.ts` inside `/data`
+before transfer starts and confirms only local verified backup publication; archive publication is recorded
+independently in `"$lock_dir/last-archive-copy.json"` only after the remote `mv -T --no-clobber` succeeds.
+Monitor both exit status and `"$lock_dir/last-archive-copy.json"` alongside `lastBackupAt` so a failed
+off-machine transfer is never masked by a fresh local backup. On the archive machine, a completed transfer
+is renamed within the archive filesystem. Interrupted transfers may leave a hidden `.incoming-*` directory
+for the operator to inspect and remove. If archive-host power-loss durability is required, configure and
+verify it separately on that host.
 
 **Restore the Stage 3 relay in isolation.** From `collab-server/`, run
 `node restore-command.ts <backup> <new-data-directory>` with the archived directory and a destination
@@ -251,19 +297,48 @@ docker run --rm --read-only --network none \
   --mount "type=bind,source=$archive,target=/archive,readonly" \
   --mount "type=bind,source=$restore_parent,target=/recovery" \
   "$image" node --disable-warning=ExperimentalWarning restore-command.ts /archive /recovery/relay-data
-docker run --rm --name splitpage-stage3-restore --read-only \
+docker run --rm --name splitpage-stage3-restore \
+  --read-only \
+  --tmpfs /tmp:rw,noexec,nosuid,size=16m \
+  --cpus 2 \
+  --memory 2g \
+  --pids-limit 128 \
+  --cap-drop ALL \
+  --security-opt no-new-privileges:true \
+  --stop-timeout 20 \
   --publish 127.0.0.1:8081:8080 \
   --env-file /REPLACE_WITH_OPERATOR_ONLY_RESTORE_ENV \
-  --env SPLITPAGE_DATA_DIR=/data --env SPLITPAGE_PORT=8080 \
+  --env SPLITPAGE_DATA_DIR=/data --env SPLITPAGE_PORT=8080 --env TMPDIR=/tmp \
   --mount "type=bind,source=$restore_parent/relay-data,target=/data" \
   "$image"
 ```
 
-Keep the restore port out of the public proxy and
-use a separate management secret. Confirm that an old invitation is refused, deleted scripts remain
-deleted, and fresh invitations open the expected script and pictures. Check that edits made after the
-snapshot are absent. For production recovery from a rollback, recover the selected scripts under
-new identities before reopening access. Keep old client copies available for deliberate recovery.
+Keep the restore port out of the public proxy, use a separate management secret and a distinct
+`SPLITPAGE_DEPLOYMENT_ID` in the restore env file (so drill clients do not collide with production retained
+replicas), and list the verification proxy's exact origin (for example `https://127.0.0.1:8443`) in
+`SPLITPAGE_ALLOWED_ORIGINS`. Because `owner-command.ts` requires an `https:` origin, issue fresh drill
+invitations against `127.0.0.1:8081` either through the operator-only local HTTPS verification proxy below
+(with the local CA trusted via `NODE_EXTRA_CA_CERTS` and `SPLITPAGE_MANAGEMENT_SECRET` injected from the
+restore env file, never argv) or via `POST http://127.0.0.1:8081/api/scripts/<script-id>/invitations` passing
+the `Authorization: Bearer` header via stdin or an operator-only `0600` config file (such as `curl -K -`),
+never in command arguments, shell history or logs; keep returned tokens and join URLs out of terminal
+transcripts and logs.
+
+Because the container serves the gated release browser shell (which omits `?join=`, fragment scrubbing and
+`__sharedTest` until Stage 4) and the test-build invitation bootstrap reads `HEAD /index.html`
+(`Splitpage-Deployment`) and opens its WebSocket against `location.origin`, verify the restored relay using
+the **operator-only same-origin verification proxy** below pointed at `VERIFY_TARGET_ORIGIN=http://127.0.0.1:8081`
+and `VERIFY_UPSTREAM_ORIGIN=https://127.0.0.1:8443`. Verify all four outcomes:
+1. An invitation that was valid at backup time is refused (`invitation-revoked` on WebSocket and `403` on picture
+   endpoints).
+2. Deleted scripts remain deleted (`409` on invitation issue and `script-deleted` on WebSocket).
+3. A fresh invitation opens the expected script content (`firstSyncDone`, matching text, post-backup edits absent) and
+   downloads every referenced picture from `/api/scripts/<script-id>/pictures/<sha>` with matching bytes and SHA-256.
+4. Revoking that drill invitation immediately closes the active connection (`access-removed`) and refuses subsequent
+   WebSocket joins (`invitation-revoked`) and picture HTTP requests (`403`).
+
+For production recovery from a rollback, recover the selected scripts under new identities before reopening access.
+Keep old client copies available for deliberate recovery.
 
 Stage 3 Part 1 introduces versioned SQLite storage for scripts and invitations. Local tests use a fresh
 database because the relay rejects the earlier database version. The Part 2 relay upgrades Part 1
@@ -278,24 +353,38 @@ or hyphens. Keep it across updates and use a different identifier for an indepen
 The shell exposes it in the `Splitpage-Deployment` response header.
 The pinned command below reproduces the historical service image.
 
-**Manage the Stage 3 relay.** Generate a random 32-byte secret encoded as base64url and keep it in
-the deployment's operator-only host secret storage. Inject it as `SPLITPAGE_MANAGEMENT_SECRET`
-into the relay and the owner command's environment. Keep it out of command arguments, shell
-history and logs. Configure the HTTPS proxy to omit authorization headers and request bodies
-from logging. The owner endpoints refuse requests when the relay has no configured secret.
+**Manage the Stage 3 relay.** Generate a random 32-byte secret encoded as base64url under `umask 077` and keep it in
+the deployment's operator-only host secret storage (`0600`). Inject it as `SPLITPAGE_MANAGEMENT_SECRET` into the relay
+container env file (`"$config_dir/relay-stage3.env"`) and the owner command's environment. Never pass the secret or
+an invitation token in command-line arguments (such as `curl -H "Authorization: Bearer ..."`), shell history, process
+listings or logs; when calling `/api/` HTTP endpoints directly, read credentials from an operator-only `0600` file or
+stdin (such as `curl -K -`). Configure the HTTPS proxy to omit authorization headers and request bodies from logging.
+The owner and status endpoints refuse requests (`401`) when the relay has no configured secret.
 
-From `collab-server/`, run `node owner-command.ts <https-origin> issue <script-id> <label>`,
-`list <script-id>`, `revoke <invitation-id>` or `delete <script-id>` with the same command prefix.
-Issue prints the join link once. Use the invitation id from the list to revoke it. The shared test
-harness creates scripts by posting a full Yjs snapshot to `/api/scripts` with a stable
-`Idempotency-Key` header. Reusing a committed key returns the original script id without a body,
-including after deletion.
+The CLI (`collab-server/owner-command.ts`) covers `issue`, `list`, `revoke` and `delete` over an `https:` origin only:
+from `collab-server/`, run `node owner-command.ts <https-origin> issue <script-id> <label>`, `list <script-id>`,
+`revoke <invitation-id>` or `delete <script-id>`. `issue` prints the bearer join link
+`https://<host>/?join=<script-id>#<token>` once to stdout: treat that output as a live capability, keep it out of
+terminal transcripts, log files and shared channels, and deliver it directly to the intended recipient. Use the
+invitation id from `list` to revoke it. The HTTP API additionally exposes `GET /api/status` (private status) and
+`POST /api/scripts` (script creation, posting a full Yjs snapshot with a stable `Idempotency-Key` header; reusing a
+committed key returns the original script id without a body, including after deletion).
 
-**Rotate or recover the management secret.** Generate a replacement in the host secret store,
-restart the relay with the updated environment and update the owner command environment. After the
-restart, use the list command to confirm access with the replacement. Follow the same steps if the
-old value is lost. Rotation keeps the database and existing invitations intact. If someone else
-may have used the old secret, review the invitation lists and revoke unfamiliar invitations.
+**Rotate or recover the management secret.** `docker restart` reuses a container's existing environment and does not
+reload `--env-file`. Rotate by recreating the Stage 3 container against the **same** Stage 3 volume:
+
+1. Generate a replacement 32-byte base64url secret into operator-only host secret storage (`umask 077`, never printed
+   or placed in command arguments) and update `"$config_dir/relay-stage3.env"` while keeping `SPLITPAGE_DEPLOYMENT_ID`
+   and `SPLITPAGE_ALLOWED_ORIGINS` unchanged.
+2. Stop and remove `splitpage-relay-stage3`, then launch a replacement `splitpage-relay-stage3` container with the
+   updated `--env-file "$config_dir/relay-stage3.env"` mounted against the **same** `splitpage-relay-stage3-data`
+   volume (do not create a new empty volume).
+3. Update the owner command environment and verify both directions: confirm the **old** secret is refused (`401` on
+   `GET /api/status` or `owner-command.ts list`), and confirm the **new** secret succeeds (`200` on `GET /api/status`
+   and `owner-command.ts list`) with existing scripts, pictures and invitations intact.
+
+Follow the same recreate-against-same-volume steps if the old secret is lost. If someone else may have used the old
+secret, review the invitation lists and revoke unfamiliar invitations.
 
 #### Historical pinned relay instructions
 
@@ -388,13 +477,92 @@ below apply only to the Stage 3 relay image built from the current tree.
 
 - **Build context.** Build from the repository root with
   `docker build -f collab-server/Dockerfile -t splitpage-relay:current .` (the image runs from
-  `/service/collab-server` and includes `shared/blob-policy.ts`; Part 5 extends this root-context build with the
-  browser shell).
-- **Bounded container flags.** Run the image as its built-in non-root `node` user with a read-only root filesystem,
-  bounded temporary storage, dropped capabilities, and CPU, memory and process limits:
+  `/service/collab-server`, includes `shared/blob-policy.ts`, and builds and copies the **release** browser shell
+  into `/app` with `SPLITPAGE_APP_DIR=/app`).
+- **Stage 3 cutover, fail-closed volume verification and old-directory retention.** Use a distinct Stage 3 container
+  name (`splitpage-relay-stage3`), env file (`"$config_dir/relay-stage3.env"`), direct-pool directory and Docker
+  volume (`splitpage-relay-stage3-data`). Stop the historical `splitpage-relay` container and keep its data directory
+  and `splitpage-relay-data` volume aside untouched; do not delete them and do not mount the legacy directory into
+  Stage 3 (Stage 3 startup refuses the unversioned legacy database and preserves its file). Before launching, confirm
+  the intended direct-pool mount is actually mounted (`mountpoint -q`) and holds the canonical parent directory,
+  exclusively create the new data directory (rejecting any pre-existing path or symlink, including a dangling
+  symlink), apply `chown`/`chmod` only to the directory just created, check privileged `stat` and `ls -A` exit
+  statuses separately from their output, inspect the created Docker volume's actual driver, mount options and bind
+  source, and exclusively create `"$config_dir/relay-stage3.env"` with standalone guards and `set -C` under
+  `umask 077` (populate `SPLITPAGE_MANAGEMENT_SECRET` from host secret storage without echoing it or passing it in
+  command arguments):
 
 ```sh
-docker run -d --name splitpage-relay \
+set -eu
+umask 077
+pool_mount=/REPLACE_WITH_DIRECT_POOL_MOUNT
+pool_parent=/REPLACE_WITH_DIRECT_POOL_PATH
+data_dir="$pool_parent/splitpage-stage3"
+config_dir="$HOME/.config/splitpage-relay"
+env_file="$config_dir/relay-stage3.env"
+volume_name=splitpage-relay-stage3-data
+
+test ! -L "$pool_mount"
+test -d "$pool_mount"
+canon_mount=$(readlink -f -- "$pool_mount")
+test "$canon_mount" = "$pool_mount"
+mountpoint -q -- "$pool_mount"
+test ! -L "$pool_parent"
+test -d "$pool_parent"
+canon_parent=$(readlink -f -- "$pool_parent")
+test "$canon_parent" = "$pool_parent"
+case "$canon_parent" in
+  "$pool_mount"|"$pool_mount"/*) ;;
+  *) exit 1 ;;
+esac
+test ! -e "$data_dir"
+test ! -L "$data_dir"
+sudo mkdir -- "$data_dir"
+sudo chown 1000:1000 -- "$data_dir"
+sudo chmod 0700 -- "$data_dir"
+test ! -L "$data_dir"
+test -d "$data_dir"
+stat_out=$(sudo stat -c '%u:%g %a' -- "$data_dir")
+test "$stat_out" = "1000:1000 700"
+listing=$(sudo ls -A -- "$data_dir")
+test -z "$listing"
+
+if docker volume inspect "$volume_name" >/dev/null 2>&1; then
+  echo "Volume $volume_name already exists; verify or choose a fresh name." >&2
+  exit 1
+fi
+docker volume create --driver local --opt type=none --opt o=bind --opt device="$data_dir" "$volume_name"
+vol_spec=$(docker volume inspect --format '{{.Driver}}|{{index .Options "type"}}|{{index .Options "o"}}|{{index .Options "device"}}' "$volume_name")
+test "$vol_spec" = "local|none|bind|$data_dir"
+
+test ! -L "$config_dir"
+mkdir -p "$config_dir"
+test ! -L "$config_dir"
+test -d "$config_dir"
+test ! -e "$env_file"
+test ! -L "$env_file"
+(
+  set -C
+  umask 077
+  cat > "$env_file" <<'EOF'
+SPLITPAGE_DATA_DIR=/data
+SPLITPAGE_PORT=8080
+TMPDIR=/tmp
+SPLITPAGE_ALLOWED_ORIGINS=https://REPLACE_WITH_RELAY_HOST,splitpage://app
+SPLITPAGE_DEPLOYMENT_ID=REPLACE_WITH_STABLE_DEPLOYMENT_ID
+SPLITPAGE_MANAGEMENT_SECRET=REPLACE_WITH_BASE64URL_32_BYTE_SECRET
+SPLITPAGE_STORE_DEBOUNCE_MS=2000
+SPLITPAGE_STORE_MAX_DEBOUNCE_MS=10000
+SPLITPAGE_BACKUP_KEEP=7
+EOF
+)
+```
+
+- **Bounded container flags.** Run the Stage 3 image as its built-in non-root `node` user with a read-only root
+  filesystem, bounded temporary storage, dropped capabilities, and CPU, memory and process limits:
+
+```sh
+docker run -d --name splitpage-relay-stage3 \
   --read-only \
   --tmpfs /tmp:rw,noexec,nosuid,size=16m \
   --cpus 2 \
@@ -404,10 +572,130 @@ docker run -d --name splitpage-relay \
   --security-opt no-new-privileges:true \
   --stop-timeout 20 \
   --publish 127.0.0.1:8080:8080 \
-  --env-file "$config_dir/relay.env" \
-  --mount type=volume,source=splitpage-relay-data,target=/data \
+  --env-file "$config_dir/relay-stage3.env" \
+  --mount type=volume,source=splitpage-relay-stage3-data,target=/data \
   splitpage-relay:current
 ```
+
+- **Operator-only verification proxy for deployed smoke and isolated restore drills.** The public relay container
+  serves the release build (`node build.mjs`), which intentionally omits `?join=`, fragment scrubbing and
+  `__sharedTest` until Stage 4. Never expose a test build through the public release endpoint. Because the test-build
+  invitation bootstrap reads `HEAD /index.html` (`Splitpage-Deployment`) and connects its WebSocket and `/api/`
+  picture traffic to `location.origin`, verify both a deployed second-device join and an isolated restore drill
+  through one reproducible operator-only loopback HTTPS proxy bound strictly to `127.0.0.1`:
+  1. On each operator device used for the drill, build the gated test shell from the same commit into a private
+     scratch directory (`node build.mjs --test`, copying `index.html`, `sw.js`, `manifest.webmanifest`, `icon.svg`,
+     `icon-maskable.svg`), and prepare an operator-local TLS certificate/key for `127.0.0.1` (`umask 077`).
+  2. Start the loopback proxy below with `VERIFY_SHELL_DIR`, `VERIFY_TLS_KEY`, `VERIFY_TLS_CERT`, `VERIFY_PORT` (for
+     example `8443`), `VERIFY_TARGET_ORIGIN` (`https://REPLACE_WITH_RELAY_HOST` for deployed smoke, or
+     `http://127.0.0.1:8081` for an isolated restore drill), and `VERIFY_UPSTREAM_ORIGIN` (an exact origin listed in
+     the selected target's `SPLITPAGE_ALLOWED_ORIGINS`: `https://REPLACE_WITH_RELAY_HOST` for deployed smoke without
+     widening production origins, or `https://127.0.0.1:8443` for the isolated restore drill). The proxy enforces
+     exact browser origin `https://127.0.0.1:<VERIFY_PORT>`, reads `Splitpage-Deployment` live from
+     `HEAD <VERIFY_TARGET_ORIGIN>/index.html` (failing closed with `502` if missing or invalid), serves the local
+     test shell with `Cache-Control: no-store`, forwards `/api/*` (including `/api/scripts/<id>/pictures/<sha>`) and
+     WebSocket upgrades (`/`) over verified TLS (or loopback HTTP for the local restore target), and logs no headers,
+     tokens, URL fragments or bodies.
+
+```js
+import { readFileSync } from "node:fs";
+import { readFile } from "node:fs/promises";
+import { request as httpRequest } from "node:http";
+import { createServer, request as httpsRequest } from "node:https";
+import { connect as netConnect } from "node:net";
+import { join } from "node:path";
+import { connect as tlsConnect } from "node:tls";
+
+const shellDir = process.env.VERIFY_SHELL_DIR;
+const target = new URL(process.env.VERIFY_TARGET_ORIGIN);
+const upstreamOrigin = process.env.VERIFY_UPSTREAM_ORIGIN;
+const port = Number(process.env.VERIFY_PORT || "8443");
+const proxyOrigin = `https://127.0.0.1:${port}`;
+const staticFiles = new Map([
+  ["/", ["index.html", "text/html; charset=utf-8"]],
+  ["/index.html", ["index.html", "text/html; charset=utf-8"]],
+  ["/sw.js", ["sw.js", "text/javascript; charset=utf-8"]],
+  ["/manifest.webmanifest", ["manifest.webmanifest", "application/manifest+json"]],
+  ["/icon.svg", ["icon.svg", "image/svg+xml"]],
+  ["/icon-maskable.svg", ["icon-maskable.svg", "image/svg+xml"]]
+]);
+
+async function targetDeployment() {
+  try {
+    const res = await fetch(new URL("/index.html", target), { method: "HEAD", cache: "no-store", redirect: "error" });
+    const id = res.headers.get("splitpage-deployment");
+    return res.ok && id && /^[A-Za-z0-9_-]{1,64}$/.test(id) ? id : null;
+  } catch {
+    return null;
+  }
+}
+
+const server = createServer(
+  { key: readFileSync(process.env.VERIFY_TLS_KEY), cert: readFileSync(process.env.VERIFY_TLS_CERT) },
+  async (req, res) => {
+    const pathname = (req.url || "/").split("?", 1)[0];
+    const reqOrigin = req.headers.origin;
+    if (reqOrigin && reqOrigin !== proxyOrigin) { res.writeHead(403).end(); return; }
+    if (pathname.startsWith("/api/")) {
+      const headers = { ...req.headers, host: target.host, ...(reqOrigin ? { origin: upstreamOrigin } : {}) };
+      const forward = target.protocol === "https:" ? httpsRequest : httpRequest;
+      const up = forward(new URL(req.url, target), { method: req.method, headers }, upRes => {
+        res.writeHead(upRes.statusCode || 502, upRes.headers);
+        upRes.pipe(res);
+      });
+      up.on("error", () => { if (!res.headersSent) res.writeHead(502); res.end(); });
+      req.pipe(up);
+      return;
+    }
+    const asset = staticFiles.get(pathname);
+    if (!asset || (req.method !== "GET" && req.method !== "HEAD")) { res.writeHead(404).end(); return; }
+    const [file, contentType] = asset;
+    const extra = file === "index.html" ? { "Splitpage-Deployment": await targetDeployment() } : {};
+    if (file === "index.html" && !extra["Splitpage-Deployment"]) { res.writeHead(502).end(); return; }
+    const body = await readFile(join(shellDir, file)).catch(() => null);
+    if (!body) { res.writeHead(503).end(); return; }
+    res.writeHead(200, { "Content-Type": contentType, "Content-Length": body.byteLength, "Cache-Control": "no-store", "X-Content-Type-Options": "nosniff", ...extra });
+    res.end(req.method === "HEAD" ? undefined : body);
+  }
+);
+
+server.on("upgrade", (req, client, head) => {
+  if (req.headers.origin !== proxyOrigin) { client.end("HTTP/1.1 403 Forbidden\r\n\r\n"); return; }
+  const portNum = Number(target.port || (target.protocol === "https:" ? 443 : 80));
+  const up = target.protocol === "https:"
+    ? tlsConnect({ host: target.hostname, port: portNum, servername: target.hostname })
+    : netConnect({ host: target.hostname, port: portNum });
+  const lines = [`${req.method} ${req.url} HTTP/1.1`];
+  for (let i = 0; i < req.rawHeaders.length; i += 2) {
+    const k = req.rawHeaders[i], lower = k.toLowerCase();
+    if (lower === "host") lines.push(`Host: ${target.host}`);
+    else if (lower === "origin") lines.push(`Origin: ${upstreamOrigin}`);
+    else lines.push(`${k}: ${req.rawHeaders[i + 1]}`);
+  }
+  up.once(target.protocol === "https:" ? "secureConnect" : "connect", () => {
+    up.write(lines.join("\r\n") + "\r\n\r\n");
+    if (head.length) up.write(head);
+    up.pipe(client).pipe(up);
+  });
+  up.on("error", () => client.destroy());
+  up.on("close", () => client.destroy());
+  client.on("error", () => up.destroy());
+  client.on("close", () => up.destroy());
+});
+
+server.listen(port, "127.0.0.1");
+```
+
+  3. For the **deployed smoke check**, create a script via `POST /api/scripts` (with `Authorization: Bearer` passed via
+     `0600` config/stdin and an `Idempotency-Key`), issue an invitation with `owner-command.ts issue`, open
+     `https://127.0.0.1:8443/?join=<script-id>#<token>` on a second operator device running the same loopback proxy
+     (keeping the join URL out of logs and transcripts), confirm synchronized script content and verified picture
+     `PUT`/`GET` bytes (exact SHA-256), revoke the invitation with `owner-command.ts revoke` and confirm live close
+     (`access-removed`) plus post-revocation refusal (`invitation-revoked` on WebSocket, `403` on picture endpoints).
+     Then run `stage3-relay-backup.sh` and confirm both `GET /api/status` (`lastBackupAt` for the local verified
+     backup) and `"$lock_dir/last-archive-copy.json"` plus the archive host directory (confirming off-machine archive
+     publication independently of `lastBackupAt`). Stop the local proxy and delete the temporary test shell directory
+     as soon as the drill finishes.
 
 - **Runtime limits.** Defaults bound traffic for both unauthenticated and admitted clients:
   `SPLITPAGE_MAX_CONNECTIONS` (default `64`), `SPLITPAGE_MAX_CONNECTIONS_PER_INVITATION` (default `8`),
