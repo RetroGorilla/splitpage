@@ -175,8 +175,28 @@ This runbook applies to the earlier deployed relay that uses one environment acc
 revision `17a57c2e7` and use that image for both startup and restore.
 
 Stage 3 Part 1 introduces versioned SQLite storage for scripts and invitations. Local tests use a fresh
-database because the relay rejects the earlier database version. Owner commands arrive in Part 2.
+database because the relay rejects the earlier database version. The Part 2 relay upgrades Part 1
+databases in place and backs up creation ids with their script records.
 The planned deployment and smoke test are in [Stage 3 Part 8](stage-3-service-plan.md#8-evidence-and-redeploy).
+
+**Manage the Stage 3 relay.** Generate a random 32-byte secret encoded as base64url and keep it in
+the deployment's operator-only host secret storage. Inject it as `SPLITPAGE_MANAGEMENT_SECRET`
+into the relay and the owner command's environment. Keep it out of command arguments, shell
+history and logs. Configure the HTTPS proxy to omit authorization headers and request bodies
+from logging. The owner endpoints refuse requests when the relay has no configured secret.
+
+From `collab-server/`, run `node owner-command.ts <https-origin> issue <script-id> <label>`,
+`list <script-id>`, `revoke <invitation-id>` or `delete <script-id>` with the same command prefix.
+Issue prints the join link once. Use the invitation id from the list to revoke it. The shared test
+harness creates scripts by posting a full Yjs snapshot to `/api/scripts` with a stable
+`Idempotency-Key` header. Reusing a committed key returns the original script id without a body,
+including after deletion.
+
+**Rotate or recover the management secret.** Generate a replacement in the host secret store,
+restart the relay with the updated environment and update the owner command environment. After the
+restart, use the list command to confirm access with the replacement. Follow the same steps if the
+old value is lost. Rotation keeps the database and existing invitations intact. If someone else
+may have used the old secret, review the invitation lists and revoke unfamiliar invitations.
 
 **Start the relay.** From the repository root on the Docker host, replace the placeholder pool directory, editor
 origin and token. Use a directory on the direct local pool. Keep the environment file in host secret storage,

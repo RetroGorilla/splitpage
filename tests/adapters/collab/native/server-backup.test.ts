@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { randomUUID } from "node:crypto";
 import { copyFileSync, mkdirSync, readdirSync, renameSync, rmSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
@@ -20,6 +21,8 @@ test("online backup retains verified bytes for each script and restores without 
   const initial = seedRelaySession();
   const seed = initial.encodeState();
   initial.close();
+  const creationId = randomUUID();
+  const createdScript = await live.createScript(creationId, seed);
   const writer = kit.copy(port, { kind: "state", state: seed });
   const second = kit.copy(port, { kind: "state", state: seed }, "second-script");
   const peer = kit.copy(port);
@@ -64,6 +67,12 @@ test("online backup retains verified bytes for each script and restores without 
   assert.deepEqual(storedState(freshDirectory, NAME), original);
   assert.deepEqual(storedState(freshDirectory, "second-script"), secondOriginal);
   const restored = kit.launch({ SPLITPAGE_DATA_DIR: freshDirectory });
+  const retry = await restored.owner("scripts", {
+    method: "POST", headers: { "Idempotency-Key": creationId }
+  });
+  assert.equal(retry.status, 200);
+  assert.deepEqual(await retry.json(), { scriptId: createdScript });
+  assert.deepEqual(storedState(freshDirectory, createdScript), seed);
   const fresh = kit.copy(await restored.port());
   await kit.until(() => fresh.relay.status().firstSyncDone || undefined);
   assert.equal(fresh.text(), "word backed up");
@@ -94,6 +103,7 @@ test("backup verification rejects changed or missing access records without expo
   const { id } = kit.provision(NAME);
   kit.provision("second-script");
   using source = openWriter(kit.directory);
+  source.prepare("INSERT INTO creations VALUES (?, ?)").run(randomUUID(), NAME);
   const copyDirectory = join(kit.directory, "copy");
   mkdirSync(copyDirectory);
   const path = join(copyDirectory, DB_NAME);
@@ -108,6 +118,8 @@ test("backup verification rejects changed or missing access records without expo
     ["UPDATE invitations SET label = 'different' WHERE id = ?", [id], "invitations differ"],
     ["UPDATE invitations SET script = 'second-script' WHERE id = ?", [id], "invitations differ"],
     ["UPDATE invitations SET token_hash = randomblob(32) WHERE id = ?", [id], "invitations differ"],
+    ["UPDATE creations SET script = 'second-script'", [], "creations differ"],
+    ["DELETE FROM creations", [], "is missing creations"],
     ["DELETE FROM invitations", [], "is missing invitations"]
   ] as const) {
     copy.exec("BEGIN");
