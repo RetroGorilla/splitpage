@@ -36,12 +36,20 @@ export function lastBackupTime(directory: string): string | null {
   return typeof completedAt === "string" && ISO_TIMESTAMP.test(completedAt) ? completedAt : null;
 }
 
+function requireDatabaseOnlyBackup(source: DatabaseSync, version: number): void {
+  if (version >= 3 && source.prepare("SELECT 1 FROM script_pictures LIMIT 1").get()) {
+    throw new RelayError("Relay backup requires picture files. Keep existing backups and wait for picture backup support.");
+  }
+}
+
 export function verifyCopy(source: DatabaseSync, copy: DatabaseSync): void {
   const version = verifyDatabase(copy);
   if (version !== verifyDatabase(source)) throw new RelayError("Relay backup storage version differs.");
-  if (version === 2) verifyRows(source, copy, "creations", "SELECT id, script FROM creations ORDER BY id");
+  requireDatabaseOnlyBackup(source, version);
+  if (version >= 2) verifyRows(source, copy, "creations", "SELECT id, script FROM creations ORDER BY id");
   verifyRows(source, copy, "documents", "SELECT name, state FROM documents ORDER BY name");
   verifyRows(source, copy, "scripts", "SELECT name, status FROM scripts ORDER BY name");
+  if (version >= 3) verifyRows(source, copy, "script pictures", "SELECT script, sha, bytes, mime FROM script_pictures ORDER BY script, sha");
   verifyRows(source, copy, "invitations", "SELECT id, script, label, token_hash, revoked FROM invitations ORDER BY id");
 }
 
@@ -70,7 +78,7 @@ export async function backupRelay(env: NodeJS.ProcessEnv, copyDatabase = backup)
   const destination = join(directory, "backups");
   using source = new DatabaseSync(join(directory, DB_NAME), { readOnly: true, timeout: 5000 });
   source.exec("BEGIN");
-  verifyDatabase(source);
+  requireDatabaseOnlyBackup(source, verifyDatabase(source));
   mkdirSync(destination, { recursive: true, mode: 0o700 });
   const staging = mkdtempSync(join(destination, ".backup-"));
   const pending = join(staging, DB_NAME);

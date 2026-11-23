@@ -9,10 +9,6 @@ let releaseLoad: (() => void) | undefined;
 let heldSyncType: number | undefined;
 let heldTraffic: Promise<void> | undefined;
 let releaseTraffic: (() => void) | undefined;
-let holdUploads = false;
-let holdUploadCleanup = false;
-const heldUploads: (() => void)[] = [];
-const heldCleanups: (() => void)[] = [];
 process.on("message", message => {
   if (message === "hold") {
     hold = new Promise<void>(resolve => { release = resolve; });
@@ -31,20 +27,6 @@ process.on("message", message => {
     failNextLoad = true;
     process.send?.("fail-load-armed");
   }
-  if (message === "hold-uploads") {
-    holdUploads = true;
-    process.send?.("uploads-armed");
-  }
-  if (message === "hold-upload-cleanup") {
-    holdUploadCleanup = true;
-    process.send?.("upload-cleanup-armed");
-  }
-  if (message === "release-upload") {
-    heldUploads.shift()?.();
-  }
-  if (message === "release-upload-cleanup") {
-    heldCleanups.shift()?.();
-  }
   if (typeof message === "object" && message !== null && "holdSyncType" in message && typeof message.holdSyncType === "number") {
     heldSyncType = message.holdSyncType;
     heldTraffic = new Promise<void>(resolve => { releaseTraffic = resolve; });
@@ -61,33 +43,6 @@ restrictLibraryLogs();
 try {
   const relay = await startRelay(process.env, "127.0.0.1", [{
     priority: 101,
-    async onRequest({ request, response }) {
-      if (!holdUploads || request.method !== "PUT" || !request.url?.startsWith("/api/scripts/")) return;
-      process.send?.("upload-entered");
-      try {
-        await new Promise<void>(resolve => {
-          let done = false;
-          const finish = () => {
-            if (done) return;
-            done = true;
-            if (!response.writableEnded) {
-              if (!request.complete) response.setHeader("Connection", "close");
-              response.writeHead(201).end();
-            }
-            resolve();
-          };
-          heldUploads.push(finish);
-          response.once("close", finish);
-        });
-      } finally {
-        if (holdUploadCleanup) {
-          process.send?.("upload-cleanup-waiting");
-          await new Promise<void>(resolve => { heldCleanups.push(resolve); });
-          process.send?.("upload-cleanup-done");
-        }
-      }
-      throw undefined;
-    },
     async onAuthenticate() {
       if (releaseLoad) setImmediate(releaseLoad);
     },

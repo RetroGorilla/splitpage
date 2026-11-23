@@ -2,10 +2,9 @@ import { readdirSync, statSync } from "node:fs";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { join } from "node:path";
 import type { DatabaseSync } from "node:sqlite";
+import { isSha256Hex } from "../shared/blob-policy.ts";
 import { lastBackupTime } from "./backup.ts";
 import { managementAuthorizer } from "./management-auth.ts";
-
-const SHA256_HEX = /^[0-9a-f]{64}$/;
 
 export interface StorageFailureRecord {
   readonly at: string;
@@ -44,7 +43,7 @@ function measurePictureBytes(directory: string): number {
   }
   let total = 0;
   for (const entry of entries) {
-    if (!entry.isFile() || !SHA256_HEX.test(entry.name)) continue;
+    if (!entry.isFile() || !isSha256Hex(entry.name)) continue;
     try {
       total += statSync(join(pictures, entry.name)).size;
     } catch (error) {

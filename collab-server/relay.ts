@@ -14,7 +14,6 @@ import {
   HTTP_KEEP_ALIVE_TIMEOUT_MS,
   HTTP_MAX_HEADERS_COUNT,
   HTTP_REQUEST_TIMEOUT_MS,
-  isPictureUpload,
   MAX_PENDING_DOCUMENTS,
   MAX_UNAUTHENTICATED_QUEUE_BYTES,
   MAX_UNAUTHENTICATED_QUEUE_MESSAGES,
@@ -23,6 +22,7 @@ import {
   RETRY_AFTER_SECONDS
 } from "./limits.ts";
 import { ownerRequests } from "./owner-http.ts";
+import { pictureApi } from "./pictures.ts";
 import { statusRequests } from "./status.ts";
 import type { StorageFailureRecord } from "./status.ts";
 import { claimWriter, openWriter } from "./storage.ts";
@@ -53,10 +53,15 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
     maxConnections, maxConnectionsPerInvitation, maxMessagesPerSecond, maxUploadsInFlight
   } = relayConfig(env);
   const lock = claimWriter(directory);
-  let db: ReturnType<typeof openWriter>;
+  let db: ReturnType<typeof openWriter> | undefined;
+  let pictures: ReturnType<typeof pictureApi>;
+  let access: ReturnType<typeof scriptAccess>;
   try {
     db = openWriter(directory);
+    access = scriptAccess(db);
+    pictures = pictureApi(db, directory, access, maxUploadsInFlight);
   } catch (error) {
+    db?.close();
     lock.close();
     throw error;
   }
@@ -68,14 +73,13 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
   function closeStorage(): void {
     clearTimeout(shutdown);
     for (const signal of STOP_SIGNALS) process.removeListener(signal, beginShutdown);
-    db.close();
+    db?.close();
     lock.close();
   }
   const limits = createRelayLimits({
     maxConnections,
     maxConnectionsPerInvitation,
-    maxMessagesPerSecond,
-    maxUploadsInFlight
+    maxMessagesPerSecond
   });
   const load = db.prepare("SELECT state FROM documents WHERE name = ?");
   const size = db.prepare("SELECT length(state) AS bytes FROM documents WHERE name = ?");
@@ -100,7 +104,6 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       }
     }
   });
-  const access = scriptAccess(db);
   function requireAccess(context: Admission): void {
     if (!access.isValid(context.invitationId)) throw { code: 4403, reason: "access-removed" };
   }
@@ -127,13 +130,14 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
   }
 
   const manage = ownerRequests(managementSecret, DOCUMENT_BYTES, {
-    findCreation: access.findCreation, create: access.create, issue: access.issue, list: access.list, revokeInvitation, deleteScript
+    findCreation: access.findCreation, create: access.create, issue: access.issue, list: access.list,
+    revokeInvitation, deleteScript
   });
   const status = statusRequests(managementSecret, db, directory, {
     totalConnections: () => limits.totalSockets(),
     authenticatedConnections: () => relay.hocuspocus.getConnectionsCount(),
     openDocuments: () => relay.hocuspocus.getDocumentsCount(),
-    uploadsInFlight: () => limits.uploadsInFlight(),
+    uploadsInFlight: () => pictures.inFlight(),
     lastStorageFailure: () => lastStorageFailure
   });
 
@@ -153,32 +157,6 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       }
     }
   };
-  const guardedExtensions: Extension[] = extensions.map(extension => {
-    const onRequest = extension.onRequest;
-    if (!onRequest) return extension;
-    return {
-      ...extension,
-      async onRequest(payload) {
-        if (!isPictureUpload(payload.request)) return onRequest.call(extension, payload);
-        const lease = limits.tryAcquireUpload();
-        if (!lease) {
-          if (!payload.request.complete) payload.response.setHeader("Connection", "close");
-          payload.response.writeHead(503, {
-            "Content-Type": "application/json",
-            "Cache-Control": "no-store",
-            "Retry-After": RETRY_AFTER_SECONDS
-          }).end(JSON.stringify({ error: "too-many-uploads" }));
-          // why: the stock server treats a falsy rejection as an HTTP response handled by the hook
-          throw undefined;
-        }
-        try {
-          return await onRequest.call(extension, payload);
-        } finally {
-          lease.release();
-        }
-      }
-    };
-  });
 
   const writes = new WeakMap<Document, { connection: Connection; done: Promise<void>; release: () => void }>();
   const relay = new Server<Admission>({
@@ -208,9 +186,10 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
         done(true);
       }
     },
-    extensions: [limitsExtension, ...guardedExtensions, storage],
+    extensions: [limitsExtension, ...extensions, storage],
     async onRequest({ request, response }) {
-      if (status(request, response) || await manage(request, response)) throw undefined;
+      // why: the stock server treats a falsy rejection as an HTTP response handled by the hook
+      if (status(request, response) || await manage(request, response) || await pictures.handle(request, response)) throw null;
     },
     async onAuthenticate({ token, instance, documentName, connectionConfig, requestParameters, requestHeaders }) {
       if (requestParameters.getAll("wire").join(",") !== "1" || requestParameters.getAll("schema").join(",") !== "1") {
@@ -286,6 +265,7 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       active.release();
     },
     async onDestroy() {
+      await pictures.close();
       closeStorage();
     }
   });

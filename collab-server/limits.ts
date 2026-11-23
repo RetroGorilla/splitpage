@@ -1,5 +1,4 @@
 import { randomUUID } from "node:crypto";
-import type { IncomingMessage } from "node:http";
 import type { Duplex } from "node:stream";
 
 export const MAX_WS_FRAGMENTS = 4096;
@@ -13,22 +12,10 @@ export const HTTP_REQUEST_TIMEOUT_MS = 60_000;
 export const HTTP_MAX_HEADERS_COUNT = 64;
 export const RETRY_AFTER_SECONDS = "5";
 
-const PICTURE_UPLOAD_PATH = /^\/api\/scripts\/[^/?]+\/pictures\/[^/?]+$/;
-
 export interface RelayLimitsConfig {
   readonly maxConnections: number;
   readonly maxConnectionsPerInvitation: number;
   readonly maxMessagesPerSecond: number;
-  readonly maxUploadsInFlight: number;
-}
-
-export interface UploadSlotLease {
-  readonly release: () => void;
-}
-
-export function isPictureUpload(request: IncomingMessage): boolean {
-  const path = (request.url ?? "").split("?")[0] ?? "";
-  return request.method === "PUT" && PICTURE_UPLOAD_PATH.test(path);
 }
 
 interface ReservationRecord {
@@ -44,7 +31,6 @@ export function createRelayLimits(config: RelayLimitsConfig, now = () => perform
   const pendingByDocument = new Map<string, Set<string>>();
   const reservations = new Map<string, ReservationRecord>();
   const messageWindows = new Map<string, number[]>();
-  let inFlightUploads = 0;
 
   function releaseReservation(reservationId: string): void {
     const record = reservations.get(reservationId);
@@ -145,21 +131,6 @@ export function createRelayLimits(config: RelayLimitsConfig, now = () => perform
     },
     clearSocket(socketId: string): void {
       messageWindows.delete(socketId);
-    },
-    tryAcquireUpload(): UploadSlotLease | null {
-      if (inFlightUploads >= config.maxUploadsInFlight) return null;
-      inFlightUploads += 1;
-      let released = false;
-      return {
-        release() {
-          if (released) return;
-          released = true;
-          inFlightUploads -= 1;
-        }
-      };
-    },
-    uploadsInFlight(): number {
-      return inFlightUploads;
     }
   };
 }

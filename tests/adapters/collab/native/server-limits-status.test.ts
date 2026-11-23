@@ -1,7 +1,7 @@
 import assert from "node:assert/strict";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { once } from "node:events";
-import { mkdirSync, writeFileSync } from "node:fs";
+import { mkdirSync, readdirSync, statSync, writeFileSync } from "node:fs";
 import { request as httpRequest } from "node:http";
 import type { IncomingMessage } from "node:http";
 import { createConnection, createServer } from "node:net";
@@ -13,7 +13,7 @@ import type { TestContext } from "node:test";
 import { HocuspocusProvider, HocuspocusProviderWebsocket, MessageType } from "@hocuspocus/provider";
 import { createEncoder, toUint8Array, writeVarString, writeVarUint } from "lib0/encoding";
 import { WebSocket } from "ws";
-import { Doc, encodeStateAsUpdate } from "yjs";
+import { Doc } from "yjs";
 import { scriptAccess } from "../../../../collab-server/access.ts";
 import { backupRelay } from "../../../../collab-server/backup.ts";
 import { relayConfig } from "../../../../collab-server/config.ts";
@@ -22,6 +22,12 @@ import { DB_NAME, openWriter } from "../../../../collab-server/storage.ts";
 import { appendText, NAME, ORIGIN, serverHarness, storedText } from "./server-harness.ts";
 
 const BACKUP = new URL("../../../../collab-server/backup-command.ts", import.meta.url);
+
+function makePng(tag: string): { bytes: Buffer; sha: string } {
+  const header = Buffer.from("89504e470d0a1a0a0000000d494844520000000100000001", "hex");
+  const bytes = Buffer.concat([header, Buffer.from(tag, "utf8")]);
+  return { bytes, sha: createHash("sha256").update(bytes).digest("hex") };
+}
 
 function connectSocket(t: TestContext, port: number, origin = ORIGIN) {
   const ws = new WebSocket(`ws://127.0.0.1:${port}`, { origin });
@@ -239,74 +245,90 @@ test("message rate limit closes a flooding client before applying excess updates
   }
 );
 
-test("in-flight upload limit refuses excess picture uploads with 503 and holds slots through cleanup",
+test("in-flight upload limit refuses excess picture uploads with 503 and tracks real staging slots",
   { timeout: 30_000 }, async t => {
     const kit = serverHarness(t);
-    const run = kit.launch({ SPLITPAGE_MAX_UPLOADS_IN_FLIGHT: "2" });
+    kit.seed();
+    const { token } = kit.provision(NAME);
+    const secret = randomBytes(32).toString("base64url");
+    const run = kit.launch({
+      SPLITPAGE_MANAGEMENT_SECRET: secret,
+      SPLITPAGE_MAX_UPLOADS_IN_FLIGHT: "2"
+    });
     const port = await run.port();
-    run.send("hold-uploads");
-    await kit.until(() => run.messages.includes("uploads-armed") || undefined);
-    run.send("hold-upload-cleanup");
-    await kit.until(() => run.messages.includes("upload-cleanup-armed") || undefined);
+    const pictures = join(kit.directory, "pictures");
+    const pngA = makePng("upload-limit-a");
+    const pngB = makePng("upload-limit-b");
+    const pngC = makePng("upload-limit-c");
 
-    const sha = createHash("sha256").update("picture").digest("hex");
-    const uploadUrl = `http://127.0.0.1:${port}/api/scripts/${NAME}/pictures/${sha}`;
-    function startUpload() {
-      const req = httpRequest(uploadUrl, { method: "PUT", headers: { "content-type": "image/png" } });
+    function startUpload(picture: { bytes: Buffer; sha: string }) {
+      const req = httpRequest(`http://127.0.0.1:${port}/api/scripts/${NAME}/pictures/${picture.sha}`, {
+        method: "PUT",
+        headers: {
+          authorization: `Bearer ${token}`,
+          "content-type": "image/png",
+          "content-length": String(picture.bytes.length)
+        }
+      });
       req.on("error", () => undefined);
       const response = once(req, "response", { signal: t.signal }).then(([res]) => res as IncomingMessage);
-      req.write(Buffer.from([1, 2, 3, 4]));
+      req.write(picture.bytes.subarray(0, 12));
       return { req, response };
     }
 
-    const enteredCount = () => run.messages.filter(message => message === "upload-entered").length;
-    const first = startUpload();
-    const second = startUpload();
+    async function readStatus(): Promise<RelayStatusSnapshot> {
+      const response = await run.owner("status", {}, secret);
+      assert.equal(response.status, 200);
+      return await response.json() as RelayStatusSnapshot;
+    }
+
+    const first = startUpload(pngA);
+    const second = startUpload(pngB);
     t.after(() => { first.req.destroy(); second.req.destroy(); });
-    await kit.until(() => enteredCount() === 2 || undefined);
+    await kit.until(() => {
+      try {
+        return (statSync(join(pictures, "upload-0")).size === 12 && statSync(join(pictures, "upload-1")).size === 12) || undefined;
+      } catch {
+        return undefined;
+      }
+    });
 
-    const statusWhileFull = await (await run.owner("status")).json() as RelayStatusSnapshot;
+    const statusWhileFull = await readStatus();
     assert.equal(statusWhileFull.uploadsInFlight, 2);
+    assert.equal(statusWhileFull.pictureBytes, 0);
 
-    const third = startUpload();
+    const third = startUpload(pngC);
     t.after(() => third.req.destroy());
     const refused = await third.response;
     assert.equal(refused.statusCode, 503);
     assert.equal(refused.headers["retry-after"], "5");
     assert.equal(refused.headers["cache-control"], "no-store");
-    const chunks: Buffer[] = [];
-    for await (const chunk of refused) chunks.push(chunk as Buffer);
-    assert.deepEqual(JSON.parse(Buffer.concat(chunks).toString("utf8")), { error: "too-many-uploads" });
-    assert.equal(enteredCount(), 2);
+    refused.resume();
+    assert.deepEqual(readdirSync(pictures).sort(), ["upload-0", "upload-1"]);
 
     first.req.destroy();
-    await kit.until(() => run.messages.includes("upload-cleanup-waiting") || undefined);
-    const statusDuringCleanup = await (await run.owner("status")).json() as RelayStatusSnapshot;
-    assert.equal(statusDuringCleanup.uploadsInFlight, 2);
+    let released = false;
+    for (let attempt = 0; attempt < 50 && !released; attempt++) {
+      if ((await readStatus()).uploadsInFlight === 1) released = true;
+      else await new Promise(resolve => setTimeout(resolve, 40));
+    }
+    assert.equal(released, true);
 
-    const duringCleanup = startUpload();
-    t.after(() => duringCleanup.req.destroy());
-    const refusedDuringCleanup = await duringCleanup.response;
-    assert.equal(refusedDuringCleanup.statusCode, 503);
-    refusedDuringCleanup.resume();
+    const fourth = await fetch(`http://127.0.0.1:${port}/api/scripts/${NAME}/pictures/${pngC.sha}`, {
+      method: "PUT",
+      headers: { authorization: `Bearer ${token}`, "content-type": "image/png" },
+      body: new Uint8Array(pngC.bytes)
+    });
+    assert.equal(fourth.status, 201);
 
-    run.send("release-upload-cleanup");
-    await kit.until(() => run.messages.includes("upload-cleanup-done") || undefined);
-
-    const fourth = startUpload();
-    t.after(() => fourth.req.destroy());
-    await kit.until(() => enteredCount() === 3 || undefined);
-    run.send("release-upload");
-    run.send("release-upload");
-    run.send("release-upload-cleanup");
-    run.send("release-upload-cleanup");
-    const [secondResponse, fourthResponse] = await Promise.all([second.response, fourth.response]);
+    second.req.end(pngB.bytes.subarray(12));
+    const secondResponse = await second.response;
     assert.equal(secondResponse.statusCode, 201);
-    assert.equal(fourthResponse.statusCode, 201);
     secondResponse.resume();
-    fourthResponse.resume();
-    second.req.destroy();
-    fourth.req.destroy();
+
+    const finalStatus = await readStatus();
+    assert.equal(finalStatus.uploadsInFlight, 0);
+    assert.equal(finalStatus.pictureBytes, pngB.bytes.length + pngC.bytes.length);
     assert.deepEqual(await run.stop("clean"), { code: 0, exitSignal: null });
   }
 );
@@ -314,15 +336,6 @@ test("in-flight upload limit refuses excess picture uploads with 503 and holds s
 test("normal near-limit reconnect succeeds over small fragmented TCP chunks", { timeout: 30_000 }, async t => {
   const kit = serverHarness(t);
   const baseState = kit.seed();
-  const nearLimit = new Doc();
-  t.after(() => nearLimit.destroy());
-  nearLimit.getMap("fixture").set("payload", new Uint8Array(14_000_000));
-  const combined = new Doc();
-  t.after(() => combined.destroy());
-  {
-    const seedDoc = kit.copy(0, { kind: "state", state: baseState });
-    seedDoc.close();
-  }
   const largeSession = kit.copy(0, { kind: "state", state: baseState });
   largeSession.session.ydoc.getMap("fixture").set("payload", new Uint8Array(14_000_000));
   const largeState = largeSession.session.encodeState();
@@ -427,12 +440,6 @@ test("private status endpoint shares management auth, uses authoritative backup 
     const secret = randomBytes(32).toString("base64url");
     const wrongSecret = randomBytes(32).toString("base64url");
     const { token } = kit.provision(NAME);
-    const pictures = join(kit.directory, "pictures");
-    mkdirSync(pictures, { recursive: true });
-    const pictureBytes = Buffer.alloc(1234, 7);
-    const pictureHash = createHash("sha256").update(pictureBytes).digest("hex");
-    writeFileSync(join(pictures, pictureHash), pictureBytes);
-    writeFileSync(join(pictures, "upload-0"), Buffer.alloc(9999, 1));
     const backups = join(kit.directory, "backups");
     mkdirSync(backups, { recursive: true });
     writeFileSync(join(backups, "relay-2099-01-01T00-00-00.000Z-00000000-0000-4000-8000-000000000000.sqlite"), "unverified");
@@ -470,7 +477,7 @@ test("private status endpoint shares management auth, uses authoritative backup 
     assert.equal(initial.data.connections.documents, 1);
     assert.equal(initial.data.uploadsInFlight, 0);
     assert.ok(initial.data.storedBytes > 0);
-    assert.equal(initial.data.pictureBytes, 1234);
+    assert.equal(initial.data.pictureBytes, 0);
     assert.equal(initial.data.lastStorageFailure, null);
     assert.equal(initial.data.lastBackupAt, null);
 
@@ -485,6 +492,17 @@ test("private status endpoint shares management auth, uses authoritative backup 
     assert.ok(afterBackup.data.lastBackupAt !== null);
     assert.match(afterBackup.data.lastBackupAt, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
     assert.equal(afterBackup.data.lastBackupAt.startsWith("2099-"), false);
+
+    const uploaded = makePng("status-picture-bytes");
+    const uploadResponse = await fetch(`http://127.0.0.1:${port}/api/scripts/${NAME}/pictures/${uploaded.sha}`, {
+      method: "PUT",
+      headers: { authorization: `Bearer ${token}`, "content-type": "image/png" },
+      body: new Uint8Array(uploaded.bytes)
+    });
+    assert.equal(uploadResponse.status, 201);
+    const afterPicture = await readStatus();
+    assert.equal(afterPicture.data.pictureBytes, uploaded.bytes.length);
+    assert.equal(afterPicture.data.uploadsInFlight, 0);
 
     const sentinel = `private-trigger-${randomBytes(8).toString("hex")}`;
     {
@@ -508,13 +526,13 @@ test("private status endpoint shares management auth, uses authoritative backup 
     }
     for (const privateValue of [
       secret, wrongSecret, token, issued.token, issued.id, inviteLabel,
-      creationId, ownerScript, NAME, kit.directory, pictureHash, sentinel, "word", "failing"
+      creationId, ownerScript, NAME, kit.directory, uploaded.sha, sentinel, "word", "failing"
     ]) {
       assert.equal(afterFailure.raw.includes(privateValue), false);
     }
     assert.deepEqual(await run.stop("clean"), { code: 0, exitSignal: null });
     const logs = run.output() + run.errors();
-    for (const privateValue of [secret, wrongSecret, token, issued.token, inviteLabel, sentinel]) {
+    for (const privateValue of [secret, wrongSecret, token, issued.token, inviteLabel, uploaded.sha, sentinel]) {
       assert.equal(logs.includes(privateValue), false);
     }
   }

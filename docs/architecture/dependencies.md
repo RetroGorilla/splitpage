@@ -41,7 +41,7 @@ resolved edge (static imports, re-exports, literal `require`, literal dynamic
 | `shared` | `shared/` | itself |
 | `tests` | `src/test/`, `tests/`, `*.test.*` | anything |
 | `tools` | `tools/` | anything |
-| `collab-server` | `collab-server/` | itself, Node and service packages, including Yjs. Only tests and tools may import it |
+| `collab-server` | `collab-server/` | itself, shared, Node and service packages, including Yjs. Shared supplies picture type and dimension validation. Only tests and tools may import it |
 | `server`, `desktop` | `server/`, `desktop/` | anything except tests |
 | `src-unknown` | any other `src/` folder, or a file directly under `src/` | anything, but each file is an `unknown-layer` violation |
 

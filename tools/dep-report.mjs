@@ -91,7 +91,7 @@ function isCore(layer) {
 
 export function layerAllows(source, target) {
   if (source === target) return true;
-  if (source === "collab-server") return target === "collab-server";
+  if (source === "collab-server") return target === "collab-server" || target === "shared";
   if (target === "collab-server") return source === "tests" || source === "tools";
   if (target === "tests") return ["tools", "other"].includes(source);
   if (isCore(source)) {

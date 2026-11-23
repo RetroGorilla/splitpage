@@ -282,10 +282,10 @@ are absent. Decide how to recover those changes before allowing old copies to re
 The historical runbook above stays pinned to `17a57c2e7` for the legacy single-token deployment. The instructions
 below apply only to the Stage 3 relay image built from the current tree.
 
-- **Build context.** Once Part 3a/Part 5 land, build from the repository root with
+- **Build context.** Build from the repository root with
   `docker build -f collab-server/Dockerfile -t splitpage-relay:current .` (the image runs from
-  `/service/collab-server` and includes `shared/blob-policy.ts` and the built browser app). Before Part 3a lands,
-  build from `collab-server/` with `docker build -t splitpage-relay:current collab-server`.
+  `/service/collab-server` and includes `shared/blob-policy.ts`; Part 5 extends this root-context build with the
+  browser shell).
 - **Bounded container flags.** Run the image as its built-in non-root `node` user with a read-only root filesystem,
   bounded temporary storage, dropped capabilities, and CPU, memory and process limits:
 

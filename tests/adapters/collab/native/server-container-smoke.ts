@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
 import { execFileSync } from "node:child_process";
-import { randomBytes, randomUUID } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { EventEmitter, once } from "node:events";
-import { mkdtempSync, readFileSync, rmSync, writeFileSync } from "node:fs";
+import { mkdtempSync, rmSync, writeFileSync } from "node:fs";
+import { request as httpRequest } from "node:http";
 import type { IncomingMessage } from "node:http";
 import { tmpdir } from "node:os";
 import { dirname, join, resolve } from "node:path";
@@ -20,6 +21,12 @@ const REPO = resolve(dirname(fileURLToPath(import.meta.url)), "../../../..");
 const ORIGIN = "splitpage://app";
 const SESSION_OPTIONS = { actor: "writer", sanitize: (text: unknown) => typeof text === "string" ? text : "" };
 
+function makePng(tag: string): { bytes: Buffer; sha: string } {
+  const header = Buffer.from("89504e470d0a1a0a0000000d494844520000000100000001", "hex");
+  const bytes = Buffer.concat([header, Buffer.from(tag, "utf8")]);
+  return { bytes, sha: createHash("sha256").update(bytes).digest("hex") };
+}
+
 function docker(args: string[], options: { cwd?: string; input?: string } = {}): string {
   return execFileSync("docker", args, {
     cwd: options.cwd ?? REPO,
@@ -27,11 +34,6 @@ function docker(args: string[], options: { cwd?: string; input?: string } = {}):
     input: options.input,
     stdio: ["pipe", "pipe", "pipe"]
   }).trim();
-}
-
-function usesRootBuildContext(): boolean {
-  const dockerfile = readFileSync(join(REPO, "collab-server", "Dockerfile"), "utf8");
-  return /\bCOPY\s+collab-server\//.test(dockerfile);
 }
 
 async function waitFor<T>(label: string, read: () => Promise<T | undefined> | T | undefined, timeoutMs = 20_000): Promise<T> {
@@ -96,10 +98,7 @@ async function main(): Promise<void> {
   }
 
   try {
-    const buildArgs = usesRootBuildContext()
-      ? ["build", "-f", "collab-server/Dockerfile", "-t", image, "."]
-      : ["build", "-t", image, "collab-server"];
-    docker(buildArgs);
+    docker(["build", "-f", "collab-server/Dockerfile", "-t", image, "."]);
     docker(["volume", "create", volume]);
 
     writeFileSync(envFile, [
@@ -113,7 +112,8 @@ async function main(): Promise<void> {
       "SPLITPAGE_BACKUP_KEEP=2",
       "SPLITPAGE_MAX_CONNECTIONS=4",
       "SPLITPAGE_MAX_CONNECTIONS_PER_INVITATION=2",
-      "SPLITPAGE_MAX_MESSAGES_PER_SECOND=6"
+      "SPLITPAGE_MAX_MESSAGES_PER_SECOND=6",
+      "SPLITPAGE_MAX_UPLOADS_IN_FLIGHT=2"
     ].join("\n") + "\n", { mode: 0o600 });
 
     startContainer(containerA);
@@ -293,10 +293,64 @@ async function main(): Promise<void> {
     const backupOutput = docker(["exec", containerA, "node", "backup-command.ts"]);
     assert.match(backupOutput, /^Verified relay backup relay-.*\.sqlite\.$/);
 
+    const smokePngA = makePng("container-smoke-a");
+    const smokePngB = makePng("container-smoke-b");
+    const smokePngC = makePng("container-smoke-c");
+    function startPictureUpload(picture: { bytes: Buffer; sha: string }) {
+      const req = httpRequest(`${baseHttpA}/api/scripts/${scriptId}/pictures/${picture.sha}`, {
+        method: "PUT",
+        headers: {
+          authorization: `Bearer ${secondInvite.token}`,
+          "content-type": "image/png",
+          "content-length": String(picture.bytes.length)
+        }
+      });
+      req.on("error", () => undefined);
+      const response = once(req, "response").then(([res]) => res as IncomingMessage);
+      req.write(picture.bytes.subarray(0, 12));
+      return { req, response };
+    }
+    const uploadA = startPictureUpload(smokePngA);
+    const uploadB = startPictureUpload(smokePngB);
+    try {
+      await waitFor("two in-flight picture uploads", async () => {
+        const { data } = await readStatus(baseHttpA);
+        return data.uploadsInFlight === 2 ? true : undefined;
+      });
+      const uploadC = startPictureUpload(smokePngC);
+      try {
+        const uploadRefused = await uploadC.response;
+        assert.equal(uploadRefused.statusCode, 503);
+        assert.equal(uploadRefused.headers["retry-after"], "5");
+        assert.equal(uploadRefused.headers["cache-control"], "no-store");
+        uploadRefused.resume();
+      } finally {
+        uploadC.req.destroy();
+      }
+      uploadA.req.destroy();
+      uploadB.req.end(smokePngB.bytes.subarray(12));
+      const uploadBReply = await uploadB.response;
+      assert.equal(uploadBReply.statusCode, 201);
+      uploadBReply.resume();
+    } finally {
+      uploadA.req.destroy();
+      uploadB.req.destroy();
+    }
+    await waitFor("picture upload settled", async () => {
+      const { data } = await readStatus(baseHttpA);
+      return data.uploadsInFlight === 0 && data.pictureBytes === smokePngB.bytes.length ? true : undefined;
+    });
+    const downloadedA = await fetch(`${baseHttpA}/api/scripts/${scriptId}/pictures/${smokePngB.sha}`, {
+      headers: { authorization: `Bearer ${secondInvite.token}` }
+    });
+    assert.equal(downloadedA.status, 200);
+    assert.deepEqual(Buffer.from(await downloadedA.arrayBuffer()), smokePngB.bytes);
+
     const { raw: statusAfterRaw, data: afterData } = await readStatus(baseHttpA);
     assert.ok(afterData.lastBackupAt !== null);
     assert.match(afterData.lastBackupAt, /^\d{4}-\d\d-\d\dT\d\d:\d\d:\d\d\.\d{3}Z$/);
-    for (const secretValue of [managementSecret, wrongSecret, firstInvite.token, secondInvite.token, scriptId, creationId, "Smoke One", "word container"]) {
+    assert.equal(afterData.pictureBytes, smokePngB.bytes.length);
+    for (const secretValue of [managementSecret, wrongSecret, firstInvite.token, secondInvite.token, scriptId, creationId, smokePngB.sha, "Smoke One", "word container"]) {
       assert.equal(statusAfterRaw.includes(secretValue), false);
     }
 
@@ -318,6 +372,12 @@ async function main(): Promise<void> {
 
     const afterRestartStatus = await readStatus(baseHttpB);
     assert.equal(afterRestartStatus.data.lastBackupAt, afterData.lastBackupAt);
+    assert.equal(afterRestartStatus.data.pictureBytes, smokePngB.bytes.length);
+    const downloadedB = await fetch(`${baseHttpB}/api/scripts/${scriptId}/pictures/${smokePngB.sha}`, {
+      headers: { authorization: `Bearer ${secondInvite.token}` }
+    });
+    assert.equal(downloadedB.status, 200);
+    assert.deepEqual(Buffer.from(await downloadedB.arrayBuffer()), smokePngB.bytes);
 
     const revokedAfterRestart = openCopy(wsUrlB, scriptId, firstInvite.token);
     const revokedAfterRestartEvent = await waitFor("revoked refusal after restart", () =>
@@ -347,7 +407,7 @@ async function main(): Promise<void> {
 
     for (const name of [containerA, containerB]) {
       const logs = docker(["logs", name]);
-      for (const secretValue of [managementSecret, wrongSecret, firstInvite.token, secondInvite.token, "private-unauth-", "Smoke One", "word container"]) {
+      for (const secretValue of [managementSecret, wrongSecret, firstInvite.token, secondInvite.token, smokePngB.sha, "private-unauth-", "Smoke One", "word container"]) {
         assert.equal(logs.includes(secretValue), false);
       }
     }
