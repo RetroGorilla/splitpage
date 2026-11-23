@@ -24,7 +24,7 @@ export function appJs(testHooks) {
     entryPoints: [join(ROOT, "src", "bootstrap", "main.ts")],
     bundle: true,
     format: "iife",
-    banner: { js: '"use strict";' },
+    banner: { js: testHooks ? '"use strict";\n' + scrubInvitationFragment : '"use strict";' },
     minify: true,
     charset: "utf8",
     legalComments: "none",
@@ -40,6 +40,14 @@ export function appJs(testHooks) {
   if (/<\/script/i.test(code)) throw new Error("the bundle contains a literal </script");
   return code;
 }
+
+const scrubInvitationFragment = `{
+  const url = new URL(location.href);
+  if (url.searchParams.has("join") && url.hash) {
+    url.hash = "";
+    history.replaceState(history.state, "", url.href);
+  }
+}`;
 
 function escapeHtml(text) {
   return text.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;");
@@ -295,9 +303,9 @@ function stripHtmlComments(shell) {
     .replace(/<!--[\s\S]*?-->/g, "");
 }
 
-function build() {
+export function build(testHooks = TEST_BUILD) {
   let html = stripHtmlComments(src("page.html"));
-  for (const [marker, load] of [...PARTS, ["//{{APP_JS}}", () => appJs(TEST_BUILD)]]) {
+  for (const [marker, load] of [...PARTS, ["//{{APP_JS}}", () => appJs(testHooks)]]) {
     if (!html.includes(marker)) throw new Error(`marker ${marker} missing from src/page.html`);
     html = html.split(marker).join(chomp(load()));
   }

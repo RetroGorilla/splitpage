@@ -178,6 +178,11 @@ Stage 3 Part 1 introduces versioned SQLite storage for scripts and invitations. 
 database because the relay rejects the earlier database version. Owner commands arrive in Part 2.
 The planned deployment and smoke test are in [Stage 3 Part 8](stage-3-service-plan.md#8-evidence-and-redeploy).
 
+For a current checkout with the bundled browser shell, build from the repository root with
+`docker build -f collab-server/Dockerfile -t splitpage-relay .`. The image contains the release shell built from
+that checkout. List the relay's public origin and `splitpage://app` in `SPLITPAGE_ALLOWED_ORIGINS`.
+The pinned command below reproduces the historical service image.
+
 **Start the relay.** From the repository root on the Docker host, replace the placeholder pool directory, editor
 origin and token. Use a directory on the direct local pool. Keep the environment file in host secret storage,
 with access limited to the operator. The example exposes the relay only on loopback for the intended tunnel or

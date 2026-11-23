@@ -7,6 +7,7 @@ import { messageYjsSyncStep2, messageYjsUpdate } from "y-protocols/sync";
 import { applyUpdate, Doc, encodeStateAsUpdate, snapshot, snapshotContainsUpdate } from "yjs";
 import { RelayError, relayConfig } from "./config.ts";
 import { scriptAccess } from "./access.ts";
+import { appShell } from "./app-shell.ts";
 import { claimWriter, openWriter } from "./storage.ts";
 
 const DOCUMENT_BYTES = 15_000_000;
@@ -78,7 +79,7 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       maxPayload: MAX_PAYLOAD,
       verifyClient: ({ origin }: { origin: string | undefined }) => origins.has(origin ?? "")
     },
-    extensions: [...extensions, storage],
+      extensions: [...extensions, ...(env.SPLITPAGE_APP_DIR ? [appShell(env.SPLITPAGE_APP_DIR)] : []), storage],
     async onAuthenticate({ token, instance, documentName, connectionConfig, requestParameters }) {
       if (requestParameters.getAll("wire").join(",") !== "1" || requestParameters.getAll("schema").join(",") !== "1") {
         throw { reason: "unsupported-version" };
