@@ -1,6 +1,14 @@
 import { reportFailure, restrictLibraryLogs } from "../../../../collab-server/logging.ts";
 import { startRelay } from "../../../../collab-server/relay.ts";
 
+interface DecoderRefusalRule {
+  readonly stage: "beforeHandleMessage" | "beforeSync";
+  readonly invitationId: string;
+  readonly syncType?: number;
+  readonly skipEmptyPayload?: boolean;
+  readonly detail: string;
+}
+
 let release: (() => void) | undefined;
 let hold: Promise<void> | undefined;
 let holdDocumentLoad = false;
@@ -9,6 +17,7 @@ let releaseLoad: (() => void) | undefined;
 let heldSyncType: number | undefined;
 let heldTraffic: Promise<void> | undefined;
 let releaseTraffic: (() => void) | undefined;
+let decoderRefusal: DecoderRefusalRule | undefined;
 process.on("message", message => {
   if (message === "hold") {
     hold = new Promise<void>(resolve => { release = resolve; });
@@ -32,6 +41,26 @@ process.on("message", message => {
     heldTraffic = new Promise<void>(resolve => { releaseTraffic = resolve; });
     process.send?.("traffic-armed");
   }
+  if (typeof message === "object" && message !== null && "refuseDecode" in message) {
+    const candidate = (message as { refuseDecode?: unknown }).refuseDecode;
+    if (
+      typeof candidate === "object" && candidate !== null &&
+      "stage" in candidate && (candidate.stage === "beforeHandleMessage" || candidate.stage === "beforeSync") &&
+      "invitationId" in candidate && typeof candidate.invitationId === "string" &&
+      "detail" in candidate && typeof candidate.detail === "string"
+    ) {
+      const syncType = "syncType" in candidate && typeof candidate.syncType === "number" ? candidate.syncType : undefined;
+      const skipEmptyPayload = "skipEmptyPayload" in candidate && candidate.skipEmptyPayload === true;
+      decoderRefusal = {
+        stage: candidate.stage,
+        invitationId: candidate.invitationId,
+        detail: candidate.detail,
+        ...(syncType === undefined ? {} : { syncType }),
+        ...(skipEmptyPayload ? { skipEmptyPayload: true } : {})
+      };
+      process.send?.("decoder-refusal-armed");
+    }
+  }
   if (message === "release-traffic") {
     releaseTraffic?.();
     heldTraffic = undefined;
@@ -46,6 +75,14 @@ try {
     async onAuthenticate() {
       if (process.env.SPLITPAGE_TEST_REPORT_AUTH) process.send?.("authentication-attempted");
       if (releaseLoad) setImmediate(releaseLoad);
+    },
+    async beforeHandleMessage({ context }) {
+      const invitationId = (context as { invitationId?: string } | undefined)?.invitationId;
+      if (decoderRefusal?.stage !== "beforeHandleMessage" || invitationId !== decoderRefusal.invitationId) return;
+      const rule = decoderRefusal;
+      decoderRefusal = undefined;
+      process.send?.("decoder-refused:beforeHandleMessage");
+      throw new RangeError(`Unexpected end of array (${rule.detail})`);
     },
     async onLoadDocument({ document }) {
       if (failNextLoad) {
@@ -72,14 +109,29 @@ try {
       process.send?.("presence-queued");
       await heldTraffic;
     },
-    async onStoreDocument() {
+    async onStoreDocument({ documentName }) {
       process.send?.("store-started");
+      process.send?.(`store-started:${documentName}`);
       await hold;
     },
-    async afterStoreDocument() {
+    async afterStoreDocument({ documentName }) {
       process.send?.("stored");
+      process.send?.(`stored:${documentName}`);
     }
   }]);
+  // why: push after startRelay so this test hook runs after relay.ts acquires its per-document write lock
+  relay.hocuspocus.configuration.extensions.push({
+    async beforeSync({ context, type, payload }) {
+      const invitationId = (context as { invitationId?: string } | undefined)?.invitationId;
+      if (decoderRefusal?.stage !== "beforeSync" || invitationId !== decoderRefusal.invitationId) return;
+      if (decoderRefusal.syncType !== undefined && type !== decoderRefusal.syncType) return;
+      if (decoderRefusal.skipEmptyPayload && payload.length === 2 && payload[0] === 0 && payload[1] === 0) return;
+      const rule = decoderRefusal;
+      decoderRefusal = undefined;
+      process.send?.(`decoder-refused:beforeSync:${type}`);
+      throw new RangeError(`Unexpected end of array (${rule.detail})`);
+    }
+  });
   process.on("message", message => {
     if (typeof message === "string" && message.startsWith("revoke:")) {
       relay.revokeInvitation(message.slice("revoke:".length));
