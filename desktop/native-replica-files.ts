@@ -200,7 +200,14 @@ function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSyste
       await syncLogEntry();
     }
 
+    const membership = join(dir, "membership");
     return {
+      readMembership: () => read(membership),
+      async writeMembership(bytes: Uint8Array): Promise<void> {
+        await initialize();
+        await replace(membership, bytes);
+        await syncEntry(membership, dir);
+      },
       read(through: number | null) {
         return (checkpoint ? [checkpoint, ...tail] : tail.slice()).filter(entry => through === null || entry.generation <= through);
       },

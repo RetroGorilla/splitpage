@@ -6,7 +6,6 @@ import type { DesktopIpcArgs, DesktopWireTestShellResult } from "../shared/deskt
 
 import type { DesktopTestModeIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
 import type { TAB_OR_WINDOW_ID_RE as DesktopStateIdPattern } from "./desktop-state.ts";
-import type { createNativeReplicaIpc } from "./native-replica-ipc.ts";
 
 const { TAB_OR_WINDOW_ID_RE }: { TAB_OR_WINDOW_ID_RE: typeof DesktopStateIdPattern } = require("./desktop-state.ts");
 
@@ -20,10 +19,6 @@ function createTestModeIpc({
 }: DesktopTestModeIpcDependencies) {
   function registerTestModeIpc({ ipcHandle, ipcOn }: Parameters<DesktopRegisterIpcGroup>[0]) {
     if (TEST_MODE) {
-      const replicaIpc: { createNativeReplicaIpc: typeof createNativeReplicaIpc } = require("./native-replica-ipc.ts");
-      const handleReplica = replicaIpc.createNativeReplicaIpc(app.getPath("userData"));
-      ipcHandle("splitpage:test-native-replica", (event, request) => handleReplica(event.sender, request));
-
       ipcOn("splitpage:test-request-close", (event) => {
         const tab = tabOf(event);
         const w = tab ? windowsById.get(tab.windowId) : null;

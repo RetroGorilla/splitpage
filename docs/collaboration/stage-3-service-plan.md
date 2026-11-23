@@ -89,6 +89,8 @@ Done:
 - One writable tab on desktop: the main process refuses a second window on the same shared script with an explanation, as the browser lock already does.
 - Leave, as a command without a screen: closes the connection and removes the token, the membership and the replica on this device.
 
+The gated shared app entry accepts `enterRetained({ deployment, script, invitation?, connect? })`. Both identities use 1–64 ASCII letters, digits, underscores or hyphens. Deployment is the stable identity of the service and script is its immutable server-assigned identity. An invitation carries the token and already authenticated native state bytes. A new local replica applies those bytes before joining; an existing replica reopens its stored state. The optional connection factory receives the open replica and token, connects the same session the editor binds, and returns its disconnect function. Offline reopen supplies only the two identities. The existing gated `leave()` command awaits erasure for a retained session. A failed erase ends that writer's command; a later command must originate from a newly opened copy.
+
 Done:
 - Tests: reopen offline after a restart, a full disk or quota failure keeps the in-memory script, an interrupted write, a second tab, two scripts open together without mixing, leave removes all three things.
 - The test-only channel is gone, with no re-export left behind.
