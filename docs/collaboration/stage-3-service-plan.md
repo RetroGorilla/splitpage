@@ -120,6 +120,7 @@ Done:
 ### 7 Backup and restore
 
 - A backup contains the scripts, their lifecycle records, the invitation records and the picture files, taken consistently. It verifies that every recorded picture is present and matches its hash.
+- Set Part 6's `lastBackupAt` only after `backupRelay` returns successfully. A directory can appear under its final name before publication has been synced, so its presence alone is insufficient evidence of completion.
 - Restore goes into an isolated directory. A restored relay starts with every invitation revoked and deleted scripts still deleted; the owner issues new invitations.
 - The runbook in the note is updated.
 
@@ -160,6 +161,6 @@ The relay reserves four 16 MiB upload slots for a 64 MiB staging budget. A full 
 
 Relay startup creates storage version 3 or upgrades the Part 1 and Part 2 schemas in one transaction. The upgrade preserves existing scripts, invitations, document bytes and creation IDs.
 
-The database-only backup command refuses snapshots containing picture associations. Existing backups remain available while part 7 adds picture backups.
+Before Part 7, the database-only backup command refused snapshots containing picture associations.
 
 Build the relay image from the repository root with `docker build -f collab-server/Dockerfile .`. The build context includes the shared picture policy.

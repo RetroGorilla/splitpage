@@ -3,17 +3,17 @@ import { fork } from "node:child_process";
 import { createHash, randomBytes } from "node:crypto";
 import { once } from "node:events";
 import fs from "node:fs";
-import { mkdtemp, readFile, readdir, rm, stat } from "node:fs/promises";
+import { mkdir, mkdtemp, readFile, readdir, rm, stat, writeFile } from "node:fs/promises";
 import { request } from "node:http";
 import { syncBuiltinESMExports } from "node:module";
 import { tmpdir } from "node:os";
-import { join } from "node:path";
+import { basename, join } from "node:path";
 import { test } from "node:test";
 import { setTimeout as delay } from "node:timers/promises";
-import { backupRelay } from "../collab-server/backup.ts";
+import { backupRelay, restoreRelay } from "../collab-server/backup.ts";
 import { fileURLToPath } from "node:url";
 import { startRelay } from "../collab-server/relay.ts";
-import { openWriter } from "../collab-server/storage.ts";
+import { DB_NAME, openWriter } from "../collab-server/storage.ts";
 import { scriptAccess } from "../collab-server/access.ts";
 
 const limit = 16 * 1024 * 1024;
@@ -214,18 +214,99 @@ for (const addingScript of [false, true]) {
   });
 }
 
-test("a database-only backup with picture associations leaves prior backups in place", async () => {
+test("backup and isolated restore verify picture bytes and preserve a prior backup on failure", async () => {
   await using f = await fixture();
-  const env = { SPLITPAGE_DATA_DIR: f.directory, SPLITPAGE_BACKUP_KEEP: "1" };
+  const env = { SPLITPAGE_DATA_DIR: f.directory, SPLITPAGE_BACKUP_KEEP: "2" };
   const previous = await backupRelay(env);
   const backups = join(f.directory, "backups");
-  const previousBytes = await readFile(join(backups, previous));
+  const previousBytes = await readFile(join(backups, previous, DB_NAME));
   assert.equal((await f.put(png)).status, 201);
-  await assert.rejects(backupRelay(env), {
-    message: "Relay backup requires picture files. Keep existing backups and wait for picture backup support."
-  });
+  const sha = hash(png);
+  const livePicture = join(f.pictures, sha);
+  await rm(livePicture);
+  await assert.rejects(backupRelay(env), /missing a picture/);
+  await writeFile(livePicture, Buffer.alloc(png.length));
+  await assert.rejects(backupRelay(env), /picture failed verification/);
   assert.deepEqual(await readdir(backups), [previous]);
-  assert.deepEqual(await readFile(join(backups, previous)), previousBytes);
+  assert.deepEqual(await readFile(join(backups, previous, DB_NAME)), previousBytes);
+  await writeFile(livePicture, png);
+  assert.equal((await f.put(png, sha, f.second.token, "image/png", "second")).status, 201);
+  const archive = join(backups, await backupRelay(env));
+  assert.deepEqual(await readdir(join(archive, "pictures")), [sha]);
+  const restored = join(f.directory, "restored");
+  await restoreRelay(archive, restored);
+  assert.deepEqual(await readFile(join(restored, "pictures", sha)), png);
+  await rm(join(archive, "pictures", sha));
+  await assert.rejects(restoreRelay(archive, join(f.directory, "failed-restore")), /missing a picture/);
+  assert.ok(!(await readdir(f.directory)).includes("failed-restore"));
+});
+
+test("backup syncs verified contents and publication before pruning at retention one", async t => {
+  const directory = await mkdtemp(join(tmpdir(), "relay-backup-sync-"));
+  t.after(() => rm(directory, { recursive: true }));
+  const pictures = join(directory, "pictures");
+  await mkdir(pictures);
+  await writeFile(join(pictures, hash(png)), png);
+  {
+    using db = openWriter(directory);
+    scriptAccess(db).register("first", "active");
+    db.prepare("INSERT INTO script_pictures VALUES (?, ?, ?, ?)").run("first", hash(png), png.length, "image/png");
+  }
+  const env = { SPLITPAGE_DATA_DIR: directory, SPLITPAGE_BACKUP_KEEP: "1" };
+  const backups = join(directory, "backups");
+  const previous = await backupRelay(env);
+  const prior = join(backups, previous, DB_NAME);
+  const priorBytes = await readFile(prior);
+  const events: string[] = [];
+  const descriptors = new Map<number, string>();
+  const open = fs.openSync;
+  const sync = fs.fsyncSync;
+  let failing: string | undefined;
+  const checkpoint = (event: string) => {
+    assert.ok(fs.existsSync(prior));
+    events.push(event);
+    if (event === failing) throw new Error("injected sync failure");
+  };
+  const openMock = t.mock.method(fs, "openSync", (path: string, flags: string) => {
+    const fd = open(path, flags);
+    if (flags === "r+") descriptors.set(fd, basename(path));
+    return fd;
+  });
+  const syncMock = t.mock.method(fs, "fsyncSync", (fd: number) => {
+    const file = descriptors.get(fd);
+    if (file) {
+      descriptors.delete(fd);
+      checkpoint(file);
+    }
+    sync(fd);
+  });
+  syncBuiltinESMExports();
+  const syncDirectory = (path: string) => {
+    const published = fs.readdirSync(backups).filter(name => name.endsWith(".backup"));
+    const publication = path === backups || path === directory;
+    assert.equal(published.length, publication ? 2 : 1);
+    checkpoint(path === directory ? "data" : basename(path).replace(/^\.backup-.+$/, "staging"));
+  };
+  try {
+    const expected = [hash(png), "pictures", DB_NAME, "staging", "backups", "data"];
+    for (const failure of expected) {
+      events.length = 0;
+      failing = failure;
+      await assert.rejects(backupRelay(env, undefined, syncDirectory), /injected sync failure/);
+      assert.deepEqual(events, expected.slice(0, expected.indexOf(failure) + 1));
+      assert.deepEqual(await readdir(backups), [previous]);
+      assert.deepEqual(await readFile(prior), priorBytes);
+    }
+    events.length = 0;
+    failing = undefined;
+    const replacement = await backupRelay(env, undefined, syncDirectory);
+    assert.deepEqual(events, [...expected, "data"]);
+    assert.deepEqual(await readdir(backups), [replacement]);
+  } finally {
+    openMock.mock.restore();
+    syncMock.mock.restore();
+    syncBuiltinESMExports();
+  }
 });
 
 function partialUpload(url: string, token: string) {

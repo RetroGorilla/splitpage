@@ -290,9 +290,6 @@ async function main(): Promise<void> {
     assert.equal(beforeData.lastStorageFailure, null);
     assert.equal(beforeData.lastBackupAt, null);
 
-    const backupOutput = docker(["exec", containerA, "node", "backup-command.ts"]);
-    assert.match(backupOutput, /^Verified relay backup relay-.*\.sqlite\.$/);
-
     const smokePngA = makePng("container-smoke-a");
     const smokePngB = makePng("container-smoke-b");
     const smokePngC = makePng("container-smoke-c");
@@ -349,6 +346,10 @@ async function main(): Promise<void> {
     });
     assert.equal(downloadedA.status, 200);
     assert.deepEqual(Buffer.from(await downloadedA.arrayBuffer()), smokePngB.bytes);
+    assert.equal((await readStatus(baseHttpA)).data.lastBackupAt, null);
+
+    const backupOutput = docker(["exec", containerA, "node", "backup-command.ts"]);
+    assert.match(backupOutput, /^Verified relay backup relay-.*\.backup\.$/);
 
     const { raw: statusAfterRaw, data: afterData } = await readStatus(baseHttpA);
     assert.ok(afterData.lastBackupAt !== null);
