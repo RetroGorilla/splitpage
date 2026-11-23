@@ -46,6 +46,17 @@ try {
       process.send?.("stored");
     }
   }]);
+  process.on("message", message => {
+    if (typeof message === "string" && message.startsWith("revoke:")) {
+      relay.revokeInvitation(message.slice("revoke:".length));
+      process.send?.("revoked");
+    }
+    if (typeof message === "string" && message.startsWith("provision:")) {
+      const name = message.slice("provision:".length);
+      relay.registerScript(name, "active");
+      process.send?.({ name, ...relay.issueInvitation(name, "test invitation") });
+    }
+  });
   process.on("SIGTERM", () => process.send?.("stopping"));
   process.send?.(relay.address.port);
 } catch (error) {

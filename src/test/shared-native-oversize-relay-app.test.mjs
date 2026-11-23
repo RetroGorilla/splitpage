@@ -9,7 +9,7 @@ import { openDocument } from "../bootstrap/wiring/transition-owners.ts";
 import { buildSplitpageCopy } from "../adapters/formats/project-file.ts";
 import { openNativeSession } from "../adapters/collab/native/session.ts";
 import { cells } from "../../tests/adapters/collab/native/helpers.ts";
-import { appendText, serverHarness, storedState, TOKEN } from "../../tests/adapters/collab/native/server-harness.ts";
+import { appendText, serverHarness, storedState } from "../../tests/adapters/collab/native/server-harness.ts";
 
 await bootApp();
 after(closeApp);
@@ -19,6 +19,7 @@ test("an oversized offline merge preserves the refused script for export and a f
   const base = kit.seed();
   const run = kit.launch();
   const port = await run.port();
+  const token = kit.invitation().token;
   const options = { actor: "writer", sanitize: text => typeof text === "string" ? text : "" };
   const firstText = " first " + "a".repeat(8_000_000);
   const secondText = " second " + "b".repeat(8_000_000);
@@ -63,12 +64,13 @@ test("an oversized offline merge preserves the refused script for export and a f
   assert.deepEqual(witness.session.encodeState(), prior);
 
   const bytes = buildSplitpageCopy(exportDocumentOf(second.session.document()));
-  assert.equal(new RegExp(TOKEN + "| first ").test(bytes), false);
+  assert.equal(new RegExp(token + "| first ").test(bytes), false);
   assert.equal("docId" in JSON.parse(bytes), false);
   await openDocument({ kind: "file", file: new File([bytes], "local-copy.splitpage"), handle: null });
   const reopened = currentDocument();
   assert.ok(reopened.rows[0].audioText === "word" + secondText);
   assert.notEqual(reopened.docId, second.session.document().docId);
+  await run.provision(reopened.docId);
   const fresh = kit.copy(port, {
     kind: "document", document: reopened,
     conversion: { cells, creation: reopened.docId, at: "2026-11-19T00:00:00Z", by: "writer" }
@@ -85,5 +87,5 @@ test("an oversized offline merge preserves the refused script for export and a f
   assert.equal(second.events.filter(event => event.kind === "merge-too-large").length, 1);
   assert.deepEqual(await run.stop("clean"), { code: 0, exitSignal: null });
   assert.deepEqual(storedState(kit.directory), prior);
-  assert.doesNotMatch(run.errors() + run.output(), new RegExp(TOKEN + "|word (first|second)"));
+  assert.equal(new RegExp(token + "|word (first|second)").test(run.errors() + run.output()), false);
 });

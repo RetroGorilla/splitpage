@@ -32,7 +32,6 @@ export function relayConfig(env: NodeJS.ProcessEnv) {
     directory: dataDirectory(env),
     port: integer(env, "SPLITPAGE_PORT", 8080, 0, 65535),
     origins: new Set(origins),
-    token: required(env, "SPLITPAGE_ACCESS_TOKEN"),
     debounce,
     maxDebounce
   };

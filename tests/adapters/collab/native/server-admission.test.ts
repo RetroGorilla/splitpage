@@ -1,5 +1,6 @@
 import assert from "node:assert/strict";
 import { once } from "node:events";
+import { randomBytes } from "node:crypto";
 import { readFileSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -12,7 +13,7 @@ import { WebSocket } from "ws";
 import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import { relayConfig, retentionCount } from "../../../../collab-server/config.ts";
 import { DB_NAME, openWriter, verifyDurability } from "../../../../collab-server/storage.ts";
-import { NAME, ORIGIN, TOKEN, serverHarness, storedState } from "./server-harness.ts";
+import { NAME, ORIGIN, serverHarness, storedState } from "./server-harness.ts";
 
 const MAIN = new URL("../../../../collab-server/main.ts", import.meta.url);
 
@@ -23,14 +24,19 @@ function socket(t: TestContext, port: number, origin?: string) {
   return ws;
 }
 
-function provider(t: TestContext, url: string, doc = new Doc()) {
+function provider(t: TestContext, url: string, token: string, doc = new Doc()) {
   const events = new EventTarget();
   let rejectedWrite = false;
+  let closeReason: string | undefined;
   const client = new HocuspocusProvider({
-    url, name: NAME, token: TOKEN, document: doc, awareness: null,
+    url: url + "?wire=1&schema=1", name: NAME, token, document: doc, awareness: null,
     onAuthenticated() { events.dispatchEvent(new Event("change")); },
     onSynced() { events.dispatchEvent(new Event("change")); },
-    onUnsyncedChanges() { events.dispatchEvent(new Event("change")); }
+    onUnsyncedChanges() { events.dispatchEvent(new Event("change")); },
+    onClose({ event }) {
+      closeReason = event.reason;
+      events.dispatchEvent(new Event("change"));
+    }
   });
   client.on("message", ({ event }: { event: MessageEvent }) => {
     const decoder = createDecoder(new Uint8Array(event.data as ArrayBuffer));
@@ -42,10 +48,10 @@ function provider(t: TestContext, url: string, doc = new Doc()) {
   async function until(predicate: () => boolean) {
     while (!predicate()) await once(events, "change", { signal: t.signal });
   }
-  return { client, until, rejected: () => rejectedWrite };
+  return { client, until, rejected: () => rejectedWrite, closeReason: () => closeReason };
 }
 
-test("only listed origins can upgrade, and only the shared token can load a script", { timeout: 30_000 }, async t => {
+test("only listed origins can upgrade, and only a valid invitation can load a script", { timeout: 30_000 }, async t => {
   const kit = serverHarness(t);
   kit.seed();
   const run = kit.launch({ SPLITPAGE_ALLOWED_ORIGINS: `https://editor.example.test, ${ORIGIN}` });
@@ -56,7 +62,8 @@ test("only listed origins can upgrade, and only the shared token can load a scri
   }
   const otherAllowed = socket(t, port, "https://editor.example.test");
   await once(otherAllowed, "open", { signal: t.signal });
-  const wrong = kit.copy(port, undefined, NAME, "wrong-token");
+  const wrongToken = randomBytes(32).toString("base64url");
+  const wrong = kit.copy(port, undefined, NAME, wrongToken);
   await kit.until(() => wrong.events.some(event => event.kind === "authentication-failed") || undefined);
   assert.equal(wrong.relay.status().firstSyncDone, false);
   assert.equal(wrong.text(), undefined);
@@ -64,7 +71,62 @@ test("only listed origins can upgrade, and only the shared token can load a scri
   await kit.until(() => right.relay.status().firstSyncDone || undefined);
   assert.equal(right.text(), "word");
   assert.deepEqual(await run.stop("clean"), { code: 0, exitSignal: null });
-  assert.doesNotMatch(run.errors() + run.output(), /fixture-access|wrong-token/);
+  assert.equal((run.errors() + run.output()).includes(wrongToken), false);
+});
+
+test("script and invitation refusals are observable without disclosing private data in logs", { timeout: 30_000 }, async t => {
+  const kit = serverHarness(t);
+  const { token, id } = kit.provision(NAME);
+  const other = kit.provision("other-script");
+  const privateText = randomBytes(24).toString("hex");
+  const doc = new Doc();
+  doc.getMap("fixture").set("private", privateText);
+  {
+    using db = openWriter(kit.directory);
+    db.prepare("INSERT INTO documents VALUES (?, ?)").run(NAME, encodeStateAsUpdate(doc));
+    db.exec("INSERT INTO scripts VALUES ('pending-script', 'pending'), ('deleted-script', 'deleted')");
+  }
+  doc.destroy();
+  const run = kit.launch();
+  const port = await run.port();
+  const url = `ws://127.0.0.1:${port}`;
+  const first = provider(t, url, token);
+  const second = provider(t, url, token);
+  for (const connected of [first, second]) {
+    await connected.until(() => connected.client.synced && connected.client.document.getMap("fixture").has("private"));
+  }
+  async function refused(name: string, credential: string, reason: string) {
+    const copy = kit.copy(port, undefined, name, credential);
+    const failure = await kit.until(() => copy.events.find(event => event.kind === "authentication-failed"));
+    assert.equal(failure.reason, reason);
+    assert.equal(copy.relay.status().firstSyncDone, false);
+  }
+  await refused(NAME, other.token, "permission-denied");
+  await refused("unknown-script", token, "script-unknown");
+  await refused("pending-script", token, "script-pending");
+  await refused("deleted-script", token, "script-deleted");
+  const authEvents = new EventTarget();
+  const incompatible = new HocuspocusProvider({
+    url: url + "?wire=1&schema=99", name: NAME, token, awareness: null,
+    onAuthenticationFailed({ reason }) { authEvents.dispatchEvent(new CustomEvent("refused", { detail: reason })); }
+  });
+  t.after(() => { incompatible.destroy(); incompatible.document.destroy(); });
+  const [failure] = await once(authEvents, "refused", { signal: t.signal });
+  assert.equal(failure.detail, "unsupported-version");
+  assert.equal(incompatible.synced, false);
+
+  run.send(`revoke:${id}`);
+  for (const connected of [first, second]) {
+    await connected.until(() => connected.closeReason() !== undefined);
+    assert.equal(connected.closeReason(), "access-removed");
+  }
+  await refused(NAME, token, "invitation-revoked");
+  assert.deepEqual(await run.stop("clean"), { code: 0, exitSignal: null });
+  const logs = run.errors() + run.output();
+  for (const privateValue of [token, other.token, privateText]) assert.equal(logs.includes(privateValue), false);
+  using db = openWriter(kit.directory);
+  assert.equal(db.prepare("SELECT count(*) AS count FROM scripts").get()?.count, 4);
+  assert.equal(db.prepare("SELECT count(*) AS count FROM documents").get()?.count, 1);
 });
 
 test("oversized WebSocket payload closes before protocol processing", { timeout: 30_000 }, async t => {
@@ -118,12 +180,12 @@ for (const state of ["stored", "live"] as const) {
     const run = kit.launch({ SPLITPAGE_STORE_DEBOUNCE_MS: "60000", SPLITPAGE_STORE_MAX_DEBOUNCE_MS: "60000" });
     const url = `ws://127.0.0.1:${await run.port()}`;
     if (state === "live") {
-      const writer = provider(t, url, full);
+      const writer = provider(t, url, kit.invitation().token, full);
       await writer.until(() => writer.client.synced && writer.client.unsyncedChanges === 0);
       assert.equal(writer.client.authorizedScope, "read-write");
       assert.equal(run.messages.includes("store-started"), false);
     }
-    const viewer = provider(t, url);
+    const viewer = provider(t, url, kit.invitation().token);
     await viewer.until(() => viewer.client.synced && viewer.client.document.getMap("fixture").has("data"));
     assert.equal(viewer.client.authorizedScope, "readonly");
     viewer.client.document.getMap("fixture").set("blocked", "do not persist");
@@ -141,9 +203,9 @@ test("a join waits for the in-progress document before deciding 15 MB access", {
   const url = `ws://127.0.0.1:${await run.port()}`;
   run.send("hold-load");
   await kit.until(() => run.messages.includes("load-armed") || undefined);
-  const first = provider(t, url);
+  const first = provider(t, url, kit.invitation().token);
   await kit.until(() => run.messages.includes("loading") || undefined);
-  const joining = provider(t, url);
+  const joining = provider(t, url, kit.invitation().token);
   await joining.until(() => joining.client.synced && joining.client.document.getMap("fixture").has("data"));
   assert.equal(first.client.authorizedScope, "read-write");
   assert.equal(joining.client.authorizedScope, "readonly");
@@ -152,7 +214,7 @@ test("a join waits for the in-progress document before deciding 15 MB access", {
 test("an existing writer can cross 15 MB and keep writing", { timeout: 30_000 }, async t => {
   const kit = serverHarness(t);
   const run = kit.launch({ SPLITPAGE_STORE_DEBOUNCE_MS: "60000", SPLITPAGE_STORE_MAX_DEBOUNCE_MS: "60000" });
-  const writer = provider(t, `ws://127.0.0.1:${await run.port()}`);
+  const writer = provider(t, `ws://127.0.0.1:${await run.port()}`, kit.invitation().token);
   await writer.until(() => writer.client.synced && writer.client.unsyncedChanges === 0);
   assert.equal(writer.client.authorizedScope, "read-write");
   const data = writer.client.document.getMap("fixture");
@@ -174,7 +236,7 @@ test("an existing writer can cross 15 MB and keep writing", { timeout: 30_000 },
 
 test("missing configuration or out-of-range settings fail without including their values", t => {
   const kit = serverHarness(t);
-  const valid = { SPLITPAGE_DATA_DIR: kit.directory, SPLITPAGE_ALLOWED_ORIGINS: ORIGIN, SPLITPAGE_ACCESS_TOKEN: TOKEN };
+  const valid = { SPLITPAGE_DATA_DIR: kit.directory, SPLITPAGE_ALLOWED_ORIGINS: ORIGIN };
   assert.equal(relayConfig(valid).debounce, 2000);
   assert.equal(relayConfig(valid).maxDebounce, 10000);
   for (const key of Object.keys(valid)) {
@@ -207,7 +269,7 @@ test("a relay fails cleanly when the configured listener is taken", { timeout: 3
   assert.match(blocked.errors(), /Relay could not listen on the configured port/);
 });
 
-for (const damage of ["foreign", "empty", "corrupt", "wrong identity", "wrong schema", "failed integrity"] as const) {
+for (const damage of ["foreign", "empty", "corrupt", "wrong identity", "wrong schema", "wrong version", "failed integrity"] as const) {
   test(`${damage} database fails startup and its file is preserved`, { timeout: 30_000 }, async t => {
     const kit = serverHarness(t);
     const path = join(kit.directory, DB_NAME);
@@ -216,9 +278,9 @@ for (const damage of ["foreign", "empty", "corrupt", "wrong identity", "wrong sc
       db.exec("CREATE TABLE other (content TEXT)");
     } else if (damage === "empty" || damage === "corrupt") {
       writeFileSync(path, damage === "empty" ? "" : "not a database");
-    } else if (damage === "wrong identity" || damage === "wrong schema") {
+    } else if (damage === "wrong identity" || damage === "wrong schema" || damage === "wrong version") {
       using db = openWriter(kit.directory);
-      db.exec(damage === "wrong identity" ? "PRAGMA application_id=0" : "ALTER TABLE documents RENAME TO other");
+      db.exec(damage === "wrong identity" ? "PRAGMA application_id=0" : damage === "wrong version" ? "PRAGMA user_version=99" : "ALTER TABLE documents RENAME TO other");
     } else {
       let offset: number;
       {

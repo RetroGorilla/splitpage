@@ -172,7 +172,7 @@ async function runPair(t: TestContext, pair: Pair, timing: "offline" | "opening"
   if (timing === "closing") {
     const send = HocuspocusProviderWebsocket.prototype.send;
     t.mock.method(HocuspocusProviderWebsocket.prototype, "send", function (this: HocuspocusProviderWebsocket, frame: Uint8Array) {
-      sockets.set(this.url, this);
+      sockets.set(new URL(this.url).origin, this);
       send.call(this, frame);
     });
   }
@@ -284,7 +284,7 @@ async function writeDuringReply(t: TestContext, closeDuringReply: boolean) {
   const send = HocuspocusProviderWebsocket.prototype.send;
   let wrote = false;
   t.mock.method(HocuspocusProviderWebsocket.prototype, "send", function (this: HocuspocusProviderWebsocket, frame: Uint8Array) {
-    if (!wrote && this.url === address && relayFrameType(Buffer.from(frame)) === messageYjsSyncStep2) {
+    if (!wrote && new URL(this.url).origin === address && relayFrameType(Buffer.from(frame)) === messageYjsSyncStep2) {
       wrote = true;
       const writerProvider = providers.get(writer.session.ydoc);
       assert(writerProvider);

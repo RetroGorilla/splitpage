@@ -5,7 +5,12 @@ import { RelayError } from "./config.ts";
 
 export const DB_NAME = "relay.sqlite";
 const APPLICATION_ID = 0x53504c54;
-const SCHEMA = "CREATE TABLE documents (name TEXT PRIMARY KEY NOT NULL, state BLOB NOT NULL) STRICT";
+const STORAGE_VERSION = 1;
+const SCHEMAS = {
+  documents: "CREATE TABLE documents (name TEXT PRIMARY KEY NOT NULL, state BLOB NOT NULL) STRICT",
+  scripts: "CREATE TABLE scripts (name TEXT PRIMARY KEY NOT NULL, status TEXT NOT NULL CHECK (status IN ('pending', 'active', 'deleted'))) STRICT",
+  invitations: "CREATE TABLE invitations (id TEXT PRIMARY KEY NOT NULL, script TEXT NOT NULL REFERENCES scripts(name), label TEXT NOT NULL, token_hash BLOB NOT NULL UNIQUE CHECK (length(token_hash) = 32), revoked INTEGER NOT NULL DEFAULT 0 CHECK (revoked IN (0, 1))) STRICT"
+};
 
 export function claimWriter(directory: string): DatabaseSync {
   let lock: DatabaseSync | undefined;
@@ -25,7 +30,9 @@ export function claimWriter(directory: string): DatabaseSync {
 
 export function verifyDatabase(db: DatabaseSync): void {
   if (db.prepare("PRAGMA application_id").get()?.application_id !== APPLICATION_ID ||
-      db.prepare("SELECT sql FROM sqlite_schema WHERE name = 'documents' AND type = 'table'").get()?.sql !== SCHEMA) {
+      db.prepare("PRAGMA user_version").get()?.user_version !== STORAGE_VERSION ||
+      Object.entries(SCHEMAS).some(([name, schema]) =>
+        db.prepare("SELECT sql FROM sqlite_schema WHERE name = ? AND type = 'table'").get(name)?.sql !== schema)) {
     throw new RelayError("Relay database has an unrecognized identity or schema.");
   }
   if (db.prepare("PRAGMA quick_check(1)").get()?.quick_check !== "ok") {
@@ -64,7 +71,7 @@ export function openWriter(directory: string): DatabaseSync {
     db = new DatabaseSync(path, { timeout: 5000 });
     db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL");
     verifyDurability(db);
-    if (created) db.exec(`BEGIN; PRAGMA application_id=${APPLICATION_ID}; ${SCHEMA}; COMMIT`);
+    if (created) db.exec(`BEGIN; PRAGMA application_id=${APPLICATION_ID}; PRAGMA user_version=${STORAGE_VERSION}; ${Object.values(SCHEMAS).join("; ")}; COMMIT`);
     return db;
   } catch (error) {
     db?.close();

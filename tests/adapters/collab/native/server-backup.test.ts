@@ -14,6 +14,7 @@ test("online backup retains verified bytes for each script and restores without 
   const kit = serverHarness(t);
   const primary = join(kit.directory, "primary");
   const settings = { SPLITPAGE_DATA_DIR: primary };
+  kit.provision("second-script", primary);
   const live = kit.launch(settings);
   const port = await live.port();
   const initial = seedRelaySession();
