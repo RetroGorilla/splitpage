@@ -118,6 +118,7 @@ Done:
 ### 7 Backup and restore
 
 - A backup contains the scripts, their lifecycle records, the invitation records and the picture files, taken consistently. It verifies that every recorded picture is present and matches its hash.
+- Set Part 6's `lastBackupAt` only after `backupRelay` returns successfully. A directory can appear under its final name before publication has been synced, so its presence alone is insufficient evidence of completion.
 - Restore goes into an isolated directory. A restored relay starts with every invitation revoked and deleted scripts still deleted; the owner issues new invitations.
 - The runbook in the note is updated.
 

@@ -180,9 +180,14 @@ Copy it daily, alert on failures, and confirm the archive copy in an isolated re
 copy limits backup age to about 24 hours, plus edits still waiting to reach SQLite when the snapshot began.
 On filesystems that support directory sync, the command syncs the database and pictures, the bundle
 directories, and the publication directory and its parent before applying `SPLITPAGE_BACKUP_KEEP`.
-A failed sync prevents pruning. On Windows, the command syncs files and publishes by rename, but
-the Node filesystem API cannot sync the directory entries there. Automatic pruning is disabled on
-Windows. These guarantees depend on the filesystem and storage device honoring sync operations.
+A failed sync prevents pruning. The command holds an exclusive SQLite lock on the data volume
+through verification, publication and retention. A competing command exits with a retry message.
+Process exit releases the lock, and the next backup clears interrupted backup staging directories.
+On Windows, the command syncs files and publishes by rename. Directory sync is unavailable through
+Node there, so the command stops before staging when the retained archive count reaches
+`SPLITPAGE_BACKUP_KEEP`. Verify an off-machine copy and move a retained bundle out of the local
+backup directory before retrying. These guarantees depend on the filesystem and storage device
+honoring sync operations.
 Restrict access to both copies because they contain
 readable scripts and pictures, invitation labels and token hashes. Keep the management secret in
 separately recoverable secret storage.

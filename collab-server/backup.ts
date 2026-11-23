@@ -9,6 +9,28 @@ import { DB_NAME, verifyDatabase } from "./storage.ts";
 
 const BACKUP_NAME = /^relay-\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d\.\d{3}Z-[a-f0-9-]{36}\.(sqlite|backup)$/;
 
+function claimBackup(lock: DatabaseSync): void {
+  try {
+    lock.exec("BEGIN EXCLUSIVE");
+  } catch (error) {
+    if ((error as { errcode?: number }).errcode === 5) {
+      throw new RelayError("A relay backup is already running. Retry once it finishes.");
+    }
+    throw error;
+  }
+}
+
+function existingBackups(directory: string): string[] {
+  return readdirSync(directory, { withFileTypes: true })
+    .filter(entry => BACKUP_NAME.test(entry.name) && (
+      entry.isFile() && entry.name.endsWith(".sqlite") ||
+      entry.isDirectory() && entry.name.endsWith(".backup") &&
+      lstatSync(join(directory, entry.name, DB_NAME), { throwIfNoEntry: false })?.isFile()
+    ))
+    .map(entry => entry.name)
+    .sort((a, b) => b.localeCompare(a));
+}
+
 function syncPath(path: string, flags = "r"): void {
   const fd = openSync(path, flags);
   try {
@@ -18,7 +40,7 @@ function syncPath(path: string, flags = "r"): void {
   }
 }
 
-function syncBundle(directory: string, syncDirectory: ((path: string) => void) | undefined): void {
+function syncBundle(directory: string, syncDirectory: ((path: string) => void) | null): void {
   const pictures = join(directory, "pictures");
   if (lstatSync(pictures, { throwIfNoEntry: false })) {
     for (const name of readdirSync(pictures)) syncPath(join(pictures, name), "r+");
@@ -80,15 +102,26 @@ function verifyRows(source: DatabaseSync, copy: DatabaseSync, table: string, que
 export async function backupRelay(
   env: NodeJS.ProcessEnv,
   copyDatabase = backup,
-  syncDirectory = process.platform === "win32" ? undefined : syncPath
+  syncDirectory = process.platform === "win32" ? null : syncPath
 ): Promise<string> {
   const directory = dataDirectory(env);
   const keep = retentionCount(env);
   const destination = join(directory, "backups");
   using source = new DatabaseSync(join(directory, DB_NAME), { readOnly: true, timeout: 5000 });
+  using ownership = new DatabaseSync(join(directory, "relay-backup-lock.sqlite"));
+  claimBackup(ownership);
   source.exec("BEGIN");
   const version = verifyDatabase(source);
   mkdirSync(destination, { recursive: true, mode: 0o700 });
+  for (const entry of readdirSync(destination, { withFileTypes: true })) {
+    if (entry.isDirectory() && /^\.backup-[a-zA-Z0-9]{6}$/.test(entry.name)) {
+      rmSync(join(destination, entry.name), { recursive: true, force: true });
+    }
+  }
+  const older = existingBackups(destination);
+  if (!syncDirectory && older.length >= keep) {
+    throw new RelayError("Relay backup retention is full and directory sync is unavailable. Verify an off-machine copy and move an archived backup out of local retention, then retry.");
+  }
   const staging = mkdtempSync(join(destination, ".backup-"));
   const pending = join(staging, DB_NAME);
   try {
@@ -113,13 +146,7 @@ export async function backupRelay(
       renameSync(published, staging);
       throw error;
     }
-    const older = readdirSync(destination, { withFileTypes: true })
-      .filter(entry => entry.name !== name && BACKUP_NAME.test(entry.name) && (
-        entry.isFile() && entry.name.endsWith(".sqlite") ||
-        entry.isDirectory() && entry.name.endsWith(".backup") &&
-        lstatSync(join(destination, entry.name, DB_NAME), { throwIfNoEntry: false })?.isFile()
-      ));
-    for (const { name: expired } of older.sort((a, b) => b.name.localeCompare(a.name)).slice(keep - 1)) {
+    for (const expired of older.slice(keep - 1)) {
       rmSync(join(destination, expired), { recursive: true, force: true });
     }
     return name;

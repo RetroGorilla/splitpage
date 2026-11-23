@@ -15,6 +15,74 @@ import { seedRelaySession } from "./relay-harness.ts";
 const BACKUP = new URL("../../../../collab-server/backup-command.ts", import.meta.url);
 const RESTORE = fileURLToPath(new URL("../../../../collab-server/restore-command.ts", import.meta.url));
 
+test("an interrupted backup releases ownership without risking the only retained bundle", { timeout: 30_000 }, async t => {
+  const kit = serverHarness(t);
+  kit.seed();
+  const directory = kit.directory;
+  const backups = join(directory, "backups");
+  const settings = { SPLITPAGE_DATA_DIR: directory, SPLITPAGE_BACKUP_KEEP: "1" };
+  const syncDirectory = process.platform === "win32" ? () => {} : undefined;
+  const prior = await backupRelay(settings, backup, syncDirectory);
+  const moduleUrl = new URL("../../../../collab-server/backup.ts", import.meta.url);
+  const child = spawn(process.execPath, ["--input-type=module", "-e", `
+    import { backup } from "node:sqlite";
+    import { backupRelay } from ${JSON.stringify(moduleUrl.href)};
+    const syncDirectory = process.platform === "win32" ? () => {} : undefined;
+    await backupRelay(process.env, async (source, pending) => {
+      await backup(source, pending);
+      setInterval(() => {}, 1000);
+      process.stdout.write("staged");
+      await new Promise(() => {});
+    }, syncDirectory);
+  `], { env: settings, stdio: ["ignore", "pipe", "ignore"] });
+  const exit = once(child, "exit");
+  try {
+    const checkpoint = await Promise.race([
+      once(child.stdout, "data").then(([chunk]) => String(chunk)), exit.then(() => "child exited")
+    ]);
+    assert.equal(checkpoint, "staged");
+    const contender = kit.launch(settings, BACKUP);
+    assert.deepEqual(await contender.exit, { code: 1, exitSignal: null });
+    assert.match(contender.errors(), /A relay backup is already running/);
+    assert.equal(contender.output(), "");
+    assert.deepEqual(readdirSync(backups).filter(name => name.endsWith(".backup")), [prior]);
+  } finally {
+    child.kill("SIGKILL");
+    await exit;
+  }
+  const beforeRetry = join(directory, "before-retry");
+  await restoreRelay(join(backups, prior), beforeRetry);
+  assert.equal(storedText(beforeRetry), "word");
+  const replacement = await backupRelay(settings, backup, syncDirectory);
+  assert.deepEqual(readdirSync(backups), [replacement]);
+  const restored = join(directory, "after-retry");
+  await restoreRelay(join(backups, replacement), restored);
+  assert.equal(storedText(restored), "word");
+});
+
+test("backup without directory sync refuses full retention before copying and accepts manual rotation", async t => {
+  const kit = serverHarness(t);
+  kit.seed();
+  const settings = { SPLITPAGE_DATA_DIR: kit.directory, SPLITPAGE_BACKUP_KEEP: "1" };
+  const backups = join(kit.directory, "backups");
+  const syncDirectory = process.platform === "win32" ? undefined : null;
+  const prior = await backupRelay(settings, backup, syncDirectory);
+  let copied = false;
+  await assert.rejects(backupRelay(settings, async () => {
+    copied = true;
+    return 0;
+  }, syncDirectory), /retention is full.*Verify an off-machine copy.*then retry/);
+  assert.equal(copied, false);
+  assert.deepEqual(readdirSync(backups), [prior]);
+  const rotated = join(kit.directory, "rotated.backup");
+  renameSync(join(backups, prior), rotated);
+  const replacement = await backupRelay(settings, backup, syncDirectory);
+  assert.deepEqual(readdirSync(backups), [replacement]);
+  const restored = join(kit.directory, "rotated-restore");
+  await restoreRelay(rotated, restored);
+  assert.equal(storedText(restored), "word");
+});
+
 test("interrupted restore keeps its target absent and concurrent restores publish only once", { timeout: 30_000 }, async t => {
   const kit = serverHarness(t);
   kit.seed();
@@ -94,7 +162,7 @@ test("online backup retains verified bytes for each script and restores without 
   }
   const original = storedState(primary);
   const secondOriginal = storedState(primary, "second-script");
-  const backup = kit.launch(settings, BACKUP);
+  const backup = kit.launch({ ...settings, SPLITPAGE_BACKUP_KEEP: process.platform === "win32" ? "3" : "2" }, BACKUP);
   assert.deepEqual(await backup.exit, { code: 0, exitSignal: null }, backup.errors());
   const name = /Verified relay backup (relay-.*\.backup)\./.exec(backup.output())?.[1];
   assert.ok(name);
@@ -215,13 +283,13 @@ test("a changed copy fails verification before it can be published or prune a pr
   const kit = serverHarness(t);
   kit.seed();
   const config = { SPLITPAGE_DATA_DIR: kit.directory, SPLITPAGE_BACKUP_KEEP: "1" };
-  const previous = await backupRelay(config);
+  const previous = await backupRelay(config, backup, () => {});
   await assert.rejects(backupRelay(config, async (source, path) => {
     const pages = await backup(source, path);
     using db = new DatabaseSync(path);
     db.exec("UPDATE documents SET state = X'00'");
     return pages;
-  }), /documents differ/);
+  }, () => {}), /documents differ/);
   assert.deepEqual(readdirSync(join(kit.directory, "backups")), [previous]);
 });
 

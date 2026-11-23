@@ -215,7 +215,7 @@ for (const addingScript of [false, true]) {
 
 test("backup and isolated restore verify picture bytes and preserve a prior backup on failure", async () => {
   await using f = await fixture();
-  const env = { SPLITPAGE_DATA_DIR: f.directory, SPLITPAGE_BACKUP_KEEP: "1" };
+  const env = { SPLITPAGE_DATA_DIR: f.directory, SPLITPAGE_BACKUP_KEEP: "2" };
   const previous = await backupRelay(env);
   const backups = join(f.directory, "backups");
   const previousBytes = await readFile(join(backups, previous, DB_NAME));
