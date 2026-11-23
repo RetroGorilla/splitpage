@@ -470,6 +470,8 @@ Keep the public hostname stable where possible. If it changes, define credential
 ## 11 Implementation stages
 
 > Superseded on 2026-11-19: the build order is the note's eight slices (note section 11).
+>
+> Stage 3 is split into parts in the [Stage 3 plan](collaboration/stage-3-service-plan.md), approved on 2026-11-22.
 
 | Stage | Deliverable | Exit condition |
 | --- | --- | --- |
