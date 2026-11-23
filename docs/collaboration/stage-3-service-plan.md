@@ -107,8 +107,10 @@ Done:
 - The service worker leaves `/api/` and the WebSocket alone.
 
 Run `node --test .claude/skills/run-splitpage-app/relay-invitation.mjs` for the live Chromium relay test.
-It provisions a seeded script and invitation, checks the live connection, and reopens the retained copy
-after navigation. Invitation entry remains gated to the test build.
+It provisions a seeded script and invitations, checks the live connection, reopens the retained copy
+after navigation, and verifies that revocation leaves no membership. Set `SPLITPAGE_TEST_TLS_KEY` and
+`SPLITPAGE_TEST_TLS_CERT` to PEM files trusted by the test browser to exercise the same routes over HTTPS
+and WSS. Invitation entry remains gated to the test build.
 
 ### 6 Limits and container
 

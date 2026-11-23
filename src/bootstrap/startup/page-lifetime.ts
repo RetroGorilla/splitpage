@@ -1,5 +1,20 @@
 export const SERVICE_WORKER_URL = "sw.js";
 
+export async function waitDuringLifetime(work: PromiseLike<unknown>, signal: AbortSignal): Promise<void> {
+  signal.throwIfAborted();
+  let cancel = (): void => {};
+  const stopped = new Promise<never>((_, reject) => {
+    cancel = () => { reject(new Error("The operation was cancelled.")); };
+    signal.addEventListener("abort", cancel, { once: true });
+  });
+  try {
+    await Promise.race([work, stopped]);
+    signal.throwIfAborted();
+  } finally {
+    signal.removeEventListener("abort", cancel);
+  }
+}
+
 export function watchHistoryMigration(win: Window, snapshotKey: string, migrate: () => void): () => void {
   const onStorage = (e: StorageEvent): void => {
     if (e.key === snapshotKey && e.newValue) migrate();

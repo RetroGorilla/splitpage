@@ -39,6 +39,7 @@ try {
   const relay = await startRelay(process.env, "127.0.0.1", [{
     priority: 101,
     async onAuthenticate() {
+      if (process.env.SPLITPAGE_TEST_REPORT_AUTH) process.send?.("authentication-attempted");
       if (releaseLoad) setImmediate(releaseLoad);
     },
     async onLoadDocument({ document }) {

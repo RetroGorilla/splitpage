@@ -42,6 +42,7 @@ interface Started {
   readonly sources: LegacyDocumentSources;
   readonly history: HistoryPort;
   readonly openings: Set<PendingOpening>;
+  readonly openingLifetime: { controller: AbortController | null };
 }
 
 let started: Started | null = null;
@@ -97,15 +98,18 @@ export function startTransitions(ports: LegacyTransitionPorts): () => void {
     operations: operations,
     sources: createDocumentSources<LegacyOpening>(),
     history: ports.history,
-    openings: new Set<PendingOpening>()
+    openings: new Set<PendingOpening>(),
+    openingLifetime: { controller: null }
   });
   started = mine;
   const releaseEpoch = onDocumentReplaced(() => {
+    invalidateOpeningLifetime(mine);
     const epoch = liveSession().epoch();
     for (const context of mine.openings) if (context.epoch !== epoch) context.finish();
   });
   return function () {
     releaseEpoch();
+    invalidateOpeningLifetime(mine);
     for (const context of mine.openings) context.finish();
     if (started === mine) started = null;
   };
@@ -134,8 +138,19 @@ export function openDocument(opening: LegacyOpening): Promise<unknown> {
   return documentOpenings.track(() => Promise.resolve(source.open(opening)));
 }
 
-export async function waitForPendingDocumentOpenings(): Promise<void> {
-  await Promise.all(Array.from(started?.openings ?? [], context => context.settled));
+function invalidateOpeningLifetime(owner: Started): void {
+  const previous = owner.openingLifetime.controller;
+  owner.openingLifetime.controller = null;
+  previous?.abort();
+}
+
+export function captureDocumentOpeningLifetime(): { readonly signal: AbortSignal; readonly settled: Promise<unknown> } {
+  const owner = running();
+  const controller = owner.openingLifetime.controller ??= new AbortController();
+  return {
+    signal: controller.signal,
+    settled: Promise.all(Array.from(owner.openings, context => context.settled))
+  };
 }
 
 export const documentOpenings: DocumentOpeningActivity = {
@@ -149,6 +164,7 @@ export const documentOpenings: DocumentOpeningActivity = {
       finish: () => { mine.openings.delete(context); resolveOpening(); }
     };
     mine.openings.add(context);
+    invalidateOpeningLifetime(mine);
     try {
       const result = work();
       const pending = result !== null && (typeof result === "object" || typeof result === "function") && "then" in result && typeof result.then === "function";

@@ -25,7 +25,8 @@ import type { RetainedSharedScript } from "./retained-shared-script.ts";
 import { readInvitationSnapshot } from "../../adapters/collab/native/invitation-snapshot.ts";
 import { openNativeRelay } from "../../adapters/collab/native/relay.ts";
 import { sanitizeHtml } from "../richtext.ts";
-import { waitForPendingDocumentOpenings } from "./transition-owners.ts";
+import { captureDocumentOpeningLifetime } from "./transition-owners.ts";
+import { waitDuringLifetime } from "../startup/page-lifetime.ts";
 
 declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 declare let splitpageInvitation: { readonly script: string; readonly token: string } | null;
@@ -94,7 +95,7 @@ function startSharedTestHook(): () => void {
     const marks = landed && kept ? [() => { noteSaveChange(); }, () => { noteDraftChange(); }] : [];
     runEvery([() => { ending?.dispose(); }, ...(kept ? [() => { draftSource.resumeWriting(); }] : []), ...marks]);
   };
-  const enter = async (stored?: Uint8Array, retained?: RetainedSharedScript): Promise<SharedSwitchOutcome> => {
+  const enter = async (stored?: Uint8Array, retained?: RetainedSharedScript, signal?: AbortSignal): Promise<SharedSwitchOutcome> => {
     if (!live) return { ok: false, reason: APP_STOPPED };
     if (switching) return { ok: false, reason: SHARED_SWITCHING };
     if (sharedSession()) return { ok: false, reason: SHARED_ALREADY };
@@ -106,7 +107,8 @@ function startSharedTestHook(): () => void {
       await Promise.resolve();
       const standalone = currentCapabilities();
       const common = { edit: standalone.edit, comment: standalone.edit };
-      const refusal = (): string | null => (!live ? APP_STOPPED : null) ?? sharedEntryRefusal(ready, composing);
+      const refusal = (): string | null => (!live ? APP_STOPPED : null)
+        ?? (signal?.aborted ? "opening-pending" : null) ?? sharedEntryRefusal(ready, composing);
       const entering: SharedSwitchPorts = {
         refusal, commandRefused: sharedCommandRefusalNotice(notices),
         settle: () => {
@@ -162,20 +164,23 @@ function startSharedTestHook(): () => void {
   };
   const invitationLifetime = new AbortController();
   let invitationConnected = false;
+  let invitationSettled = false;
   async function joinInvitation({ script, token }: NonNullable<typeof splitpageInvitation>): Promise<void> {
-    const signal = invitationLifetime.signal;
+    const lifetime = AbortSignal.any([invitationLifetime.signal, AbortSignal.timeout(15_000)]);
     try {
       if (location.protocol !== "https:" && location.protocol !== "http:") return;
-      await startupReady();
-      signal.throwIfAborted();
-      const response = await fetch("/index.html", { method: "HEAD", cache: "no-store", redirect: "error",
-        signal: AbortSignal.any([signal, AbortSignal.timeout(10_000)]) });
+      const ready = startupReady();
+      if (!ready) return;
+      await waitDuringLifetime(ready, lifetime);
+      const opening = captureDocumentOpeningLifetime();
+      const signal = AbortSignal.any([lifetime, opening.signal]);
+      await waitDuringLifetime(opening.settled, signal);
+      const response = await fetch("/index.html", { method: "HEAD", cache: "no-store", redirect: "error", signal });
       const deployment = response.headers.get("Splitpage-Deployment");
       if (!response.ok || !deployment || !/^[A-Za-z0-9_-]{1,64}$/.test(deployment)) return;
       const endpoint = new URL("/", location.origin);
       endpoint.protocol = location.protocol === "https:" ? "wss:" : "ws:";
       const state = await readInvitationSnapshot(endpoint.href, script, token, signal);
-      await waitForPendingDocumentOpenings();
       if (signal.aborted) return;
       const outcome = await enter(undefined, {
         deployment, script, invitation: { token, state },
@@ -189,10 +194,12 @@ function startSharedTestHook(): () => void {
           });
           return () => { relay.close(); invitationConnected = false; };
         }
-      });
+      }, signal);
       if (!outcome.ok) report(new Error("Could not enter the shared invitation."));
     } catch {
-      if (!signal.aborted) report(new Error("Could not open the shared invitation."));
+      if (!invitationLifetime.signal.aborted) report(new Error("Could not open the shared invitation."));
+    } finally {
+      invitationSettled = true;
     }
   }
   if (typeof splitpageInvitation !== "undefined" && splitpageInvitation) {
@@ -206,6 +213,7 @@ function startSharedTestHook(): () => void {
     leave,
     enterRetained: (retained: RetainedSharedScript) => enter(undefined, retained),
     invitationConnected: () => invitationConnected,
+    invitationSettled: () => invitationSettled,
     nativePeer: {
       type: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["type"]>) => nativePeer?.type(...args),
       field: (...args: Parameters<NonNullable<typeof nativePeer>["field"]>) => nativePeer?.field(...args),
