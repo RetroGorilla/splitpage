@@ -77,6 +77,34 @@ test("the mounted app reopens the retained script offline after restarting and L
   assert.equal((await hook().enterRetained(entry)).ok, false);
 });
 
+test("Leave keeps the writer and its copy when disconnect throws, then retries that disconnect before erasing", async t => {
+  const entry = identity("disconnect-retry"), credential = invitation(), opened = capture();
+  const log = t.mock.method(console, "error", () => {});
+  let attempts = 0;
+  const disconnect = t.mock.fn(() => {
+    if (++attempts === 1) throw new Error(credential.token);
+  });
+  assert.deepEqual(await hook().enterRetained({ ...entry, invitation: credential, connect(replica, token) {
+    opened.connect(replica, token);
+    return disconnect;
+  } }), ok);
+  const copy = opened.replica();
+  assert.equal((await copy.flush()).kind, "stored");
+  assert.deepEqual(await hook().leave(), { ok: false, reason: "leave-failed" });
+  assert.equal(disconnect.mock.callCount(), 1);
+  assert.equal((await copy.membership?.token()) === credential.token, true);
+  assert.deepEqual(await createBrowserNativeLocalStore().open(scope(entry.script), STORE_OPTIONS), { kind: "failed", reason: "locked" });
+  assert.equal((await storedEntries(window.indexedDB, scope(entry.script))).length, 1);
+  typeAt(copy.session, 0, "Still editing: ");
+  assert.match(await currentText(), /Still editing/);
+  assert.equal(JSON.stringify(log.mock.calls.map(call => call.arguments.map(String))).includes(credential.token), false);
+  assert.deepEqual(await hook().leave(), ok);
+  assert.equal(disconnect.mock.callCount(), 2);
+  assert.match(await currentText(), /Still editing/);
+  assert.deepEqual(await storedEntries(window.indexedDB, scope(entry.script)), []);
+  assert.equal((await hook().enterRetained(entry)).ok, false);
+});
+
 test("an interrupted Leave cannot erase the next tab's saved copy even if the old command is repeated", async t => {
   const entry = identity("interrupted-erase"), credential = invitation(), opened = capture();
   let disconnected = false;

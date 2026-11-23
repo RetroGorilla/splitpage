@@ -34,10 +34,9 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
   let active = false;
   let stopConnection: (() => void) | undefined;
   function stop() {
-    const disconnect = stopConnection;
-    stopConnection = undefined;
-    try { disconnect?.(); }
+    try { stopConnection?.(); }
     catch { throw new Error("The retained connection could not close."); }
+    stopConnection = undefined;
   }
   async function prepare(): Promise<string | null> {
     const refusal = await ports.prepare?.();
@@ -89,6 +88,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
       };
       const retained: SharedEditorBackend = { ...backend,
         beforeDocumentSwitch: () => pending() ? "shared-copy-unsaved" : null,
+        beforeExplicitLeave: stop,
         start() {
           backend.start();
           stopUnload = guardUnload(window, pending);

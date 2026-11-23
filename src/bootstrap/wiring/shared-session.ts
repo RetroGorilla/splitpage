@@ -65,6 +65,7 @@ export interface SharedEditorBackend {
   readonly unbind: () => void;
   readonly settle: (explicitLeave?: boolean) => string | null;
   readonly beforeDocumentSwitch?: () => string | null;
+  readonly beforeExplicitLeave?: () => void;
   readonly captureSelection?: (entering: boolean) => { readonly dispose: () => void; readonly restore: () => void } | null;
   readonly abandon?: () => void;
   readonly drop?: () => void;
@@ -326,6 +327,7 @@ function leaveAvailableSession(ports: SharedSwitchPorts, preserveSelection: bool
     // why: the copy is taken after the bindings settled on restart, and admission stays closed until it has landed
     const current = now.backend.landing();
     landed = ports.migrate({ ...(current ? copyOf(current) : now.kept), docId: ports.docId() });
+    if (explicitLeave) now.backend.beforeExplicitLeave?.();
   } catch (error) { return keep(error); }
   now.backend.live(false);
   let swap: OwnerSwap;
