@@ -1,6 +1,6 @@
 import { createHash, randomUUID } from "node:crypto";
-import { constants, copyFileSync, lstatSync, mkdirSync, mkdtempSync, readFileSync, readdirSync, renameSync, rmSync } from "node:fs";
-import { join, resolve } from "node:path";
+import { closeSync, constants, copyFileSync, fsyncSync, lstatSync, mkdirSync, mkdtempSync, openSync, readFileSync, readdirSync, renameSync, rmSync } from "node:fs";
+import { dirname, join, resolve } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import type { SQLOutputValue } from "node:sqlite";
 import { isSha256Hex } from "../shared/blob-policy.ts";
@@ -8,6 +8,25 @@ import { dataDirectory, RelayError, retentionCount } from "./config.ts";
 import { DB_NAME, verifyDatabase } from "./storage.ts";
 
 const BACKUP_NAME = /^relay-\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d\.\d{3}Z-[a-f0-9-]{36}\.(sqlite|backup)$/;
+
+function syncPath(path: string, flags = "r"): void {
+  const fd = openSync(path, flags);
+  try {
+    fsyncSync(fd);
+  } finally {
+    closeSync(fd);
+  }
+}
+
+function syncBundle(directory: string, syncDirectory: ((path: string) => void) | undefined): void {
+  const pictures = join(directory, "pictures");
+  if (lstatSync(pictures, { throwIfNoEntry: false })) {
+    for (const name of readdirSync(pictures)) syncPath(join(pictures, name), "r+");
+    syncDirectory?.(pictures);
+  }
+  syncPath(join(directory, DB_NAME), "r+");
+  syncDirectory?.(directory);
+}
 
 function copyPictures(db: DatabaseSync, version: number, source: string, destination: string): void {
   if (version < 3) return;
@@ -58,7 +77,11 @@ function verifyRows(source: DatabaseSync, copy: DatabaseSync, table: string, que
   }
 }
 
-export async function backupRelay(env: NodeJS.ProcessEnv, copyDatabase = backup): Promise<string> {
+export async function backupRelay(
+  env: NodeJS.ProcessEnv,
+  copyDatabase = backup,
+  syncDirectory = process.platform === "win32" ? undefined : syncPath
+): Promise<string> {
   const directory = dataDirectory(env);
   const keep = retentionCount(env);
   const destination = join(directory, "backups");
@@ -72,13 +95,24 @@ export async function backupRelay(env: NodeJS.ProcessEnv, copyDatabase = backup)
     const date = new Date().toISOString().replaceAll(":", "-");
     await copyDatabase(source, pending);
     {
-      using copy = new DatabaseSync(pending, { readOnly: true });
+      using copy = new DatabaseSync(pending);
+      copy.exec("PRAGMA journal_mode=DELETE");
       verifyCopy(source, copy);
       copyPictures(copy, version, directory, staging);
     }
     source.exec("COMMIT");
     const name = `relay-${date}-${randomUUID()}.backup`;
-    renameSync(staging, join(destination, name));
+    syncBundle(staging, syncDirectory);
+    const published = join(destination, name);
+    renameSync(staging, published);
+    if (!syncDirectory) return name;
+    try {
+      syncDirectory(destination);
+      syncDirectory(directory);
+    } catch (error) {
+      renameSync(published, staging);
+      throw error;
+    }
     const older = readdirSync(destination, { withFileTypes: true })
       .filter(entry => entry.name !== name && BACKUP_NAME.test(entry.name) && (
         entry.isFile() && entry.name.endsWith(".sqlite") ||
@@ -94,8 +128,15 @@ export async function backupRelay(env: NodeJS.ProcessEnv, copyDatabase = backup)
   }
 }
 
-export async function restoreRelay(archive: string, target: string): Promise<void> {
+function requireUnusedTarget(directory: string): void {
+  if (lstatSync(directory, { throwIfNoEntry: false })) {
+    throw new RelayError("Relay restore requires a new data directory.");
+  }
+}
+
+export async function restoreRelay(archive: string, target: string, copyDatabase = backup): Promise<void> {
   const directory = resolve(target);
+  requireUnusedTarget(directory);
   const bundled = lstatSync(archive).isDirectory();
   using source = new DatabaseSync(bundled ? join(archive, DB_NAME) : archive, { readOnly: true, timeout: 5000 });
   source.exec("BEGIN");
@@ -103,20 +144,19 @@ export async function restoreRelay(archive: string, target: string): Promise<voi
   if (!bundled && version >= 3 && source.prepare("SELECT 1 FROM script_pictures LIMIT 1").get()) {
     throw new RelayError("Relay restore requires a backup directory with picture files.");
   }
-  mkdirSync(directory, { mode: 0o700 });
-  let completed = false;
+  const staging = mkdtempSync(join(dirname(directory), ".restore-"));
   try {
-    const pending = join(directory, ".restore.sqlite");
-    await backup(source, pending);
+    const pending = join(staging, DB_NAME);
+    await copyDatabase(source, pending);
     {
       using copy = new DatabaseSync(pending);
       verifyCopy(source, copy);
-      copyPictures(copy, version, archive, directory);
+      copyPictures(copy, version, archive, staging);
       copy.exec("PRAGMA journal_mode=DELETE; PRAGMA synchronous=FULL; UPDATE invitations SET revoked = 1 WHERE revoked = 0");
     }
-    renameSync(pending, join(directory, DB_NAME));
-    completed = true;
+    requireUnusedTarget(directory);
+    renameSync(staging, directory);
   } finally {
-    if (!completed) rmSync(directory, { recursive: true, force: true });
+    rmSync(staging, { recursive: true, force: true });
   }
 }

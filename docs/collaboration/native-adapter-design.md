@@ -178,15 +178,83 @@ source and checks the size and SHA-256 of every referenced picture. The database
 their ordinary relay layout. Keep the entire reported directory together when copying it off-machine.
 Copy it daily, alert on failures, and confirm the archive copy in an isolated restore drill. A daily
 copy limits backup age to about 24 hours, plus edits still waiting to reach SQLite when the snapshot began.
-Local retention uses `SPLITPAGE_BACKUP_KEEP`. Restrict access to both copies because they contain
+On filesystems that support directory sync, the command syncs the database and pictures, the bundle
+directories, and the publication directory and its parent before applying `SPLITPAGE_BACKUP_KEEP`.
+A failed sync prevents pruning. On Windows, the command syncs files and publishes by rename, but
+the Node filesystem API cannot sync the directory entries there. Automatic pruning is disabled on
+Windows. These guarantees depend on the filesystem and storage device honoring sync operations.
+Restrict access to both copies because they contain
 readable scripts and pictures, invitation labels and token hashes. Keep the management secret in
 separately recoverable secret storage.
+
+**Schedule the off-machine copy.** On the Linux Docker host, save the following as
+`stage3-relay-backup.sh`. Replace the container name, SSH destination and archive root. Create the
+archive root with operator-only permissions on the archive machine. Run every scheduled and manual
+backup through this wrapper under the same operator account and lock path. It requires `flock` on the
+Docker host and GNU `mv` on the archive machine.
+
+```sh
+#!/bin/sh
+set -eu
+umask 077
+container=REPLACE_WITH_RELAY_CONTAINER
+archive_host=REPLACE_WITH_USER@REPLACE_WITH_ARCHIVE_HOST
+archive_root=/REPLACE_WITH_ARCHIVE_ROOT
+lock_dir="$HOME/.config/splitpage-relay"
+mkdir -p "$lock_dir"
+exec 9>"$lock_dir/stage3-backup.lock"
+flock -x 9
+staging=$(mktemp -d)
+trap 'status=$?; rm -rf -- "$staging"; if [ "$status" -ne 0 ]; then echo "Stage 3 relay backup transfer failed." >&2; fi; exit "$status"' EXIT
+output=$(docker exec "$container" node --disable-warning=ExperimentalWarning backup-command.ts)
+name=$(printf '%s\n' "$output" | sed -nE 's/^Verified relay backup (relay-[0-9TZ.-]+-[a-f0-9-]{36}\.backup)\.$/\1/p')
+test -n "$name"
+docker cp "$container:/data/backups/$name" "$staging/$name"
+ssh -o BatchMode=yes "$archive_host" "umask 077; mkdir -- '$archive_root/.incoming-$name'"
+scp -B -r "$staging/$name" "$archive_host:$archive_root/.incoming-$name/"
+ssh -o BatchMode=yes "$archive_host" "set -eu; cd '$archive_root'; mv -T --no-clobber -- '.incoming-$name/$name' '$name'; rmdir -- '.incoming-$name'"
+printf 'Archived relay backup %s.\n' "$name"
+```
+
+Use cron with failure mail or a scheduler that alerts on nonzero exit. For example, add
+`15 2 * * * /bin/sh /REPLACE_WITH_SCRIPT_PATH/stage3-relay-backup.sh`. The local lock covers the
+backup and transfer. On the archive machine, a completed transfer is renamed within the archive
+filesystem. Interrupted transfers may leave a hidden `.incoming-*` directory for the operator to
+inspect and remove. If archive-host power-loss durability is required, configure and verify it
+separately on that host.
 
 **Restore the Stage 3 relay in isolation.** From `collab-server/`, run
 `node restore-command.ts <backup> <new-data-directory>` with the archived directory and a destination
 that does not exist. A versioned Stage 3 SQLite-only backup can also be used if it has no picture
 references. Use a writable parent on a separate volume for a container restore. Start a relay pointed
-at the restored directory only after the command succeeds. Keep its port out of the public proxy and
+at the restored directory only after the command succeeds. The command stages the restore in a sibling
+directory and publishes it in one rename. Use an operator-controlled parent and reserve the target
+name for the restore command. An interrupted restore can leave a hidden `.restore-*` sibling, with
+the target name still available for a retry if publication had yet to occur.
+
+For a container drill on Linux, first bring a completed archive copy to the drill machine and prepare
+an operator-controlled writable parent on a separate volume. The parent must be writable by the
+relay image's UID 1000. Replace the image tag with the Stage 3 build under test. Fetch or build that
+image before running the commands.
+
+```sh
+set -eu
+image=REPLACE_WITH_STAGE3_IMAGE_TAG
+archive=/REPLACE_WITH_ABSOLUTE_PATH_TO_COMPLETED_BACKUP_DIRECTORY
+restore_parent=/REPLACE_WITH_ABSOLUTE_PATH_TO_WRITABLE_RESTORE_PARENT
+docker run --rm --read-only --network none \
+  --mount "type=bind,source=$archive,target=/archive,readonly" \
+  --mount "type=bind,source=$restore_parent,target=/recovery" \
+  "$image" node --disable-warning=ExperimentalWarning restore-command.ts /archive /recovery/relay-data
+docker run --rm --name splitpage-stage3-restore --read-only \
+  --publish 127.0.0.1:8081:8080 \
+  --env-file /REPLACE_WITH_OPERATOR_ONLY_RESTORE_ENV \
+  --env SPLITPAGE_DATA_DIR=/data --env SPLITPAGE_PORT=8080 \
+  --mount "type=bind,source=$restore_parent/relay-data,target=/data" \
+  "$image"
+```
+
+Keep the restore port out of the public proxy and
 use a separate management secret. Confirm that an old invitation is refused, deleted scripts remain
 deleted, and fresh invitations open the expected script and pictures. Check that edits made after the
 snapshot are absent. For production recovery from a rollback, recover the selected scripts under

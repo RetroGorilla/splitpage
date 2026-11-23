@@ -1,7 +1,8 @@
 import assert from "node:assert/strict";
-import { spawnSync } from "node:child_process";
+import { spawn, spawnSync } from "node:child_process";
 import { randomUUID } from "node:crypto";
-import { cpSync, mkdirSync, readdirSync, renameSync, writeFileSync } from "node:fs";
+import { once } from "node:events";
+import { cpSync, existsSync, mkdirSync, readdirSync, renameSync, writeFileSync } from "node:fs";
 import { join } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import test from "node:test";
@@ -13,6 +14,52 @@ import { seedRelaySession } from "./relay-harness.ts";
 
 const BACKUP = new URL("../../../../collab-server/backup-command.ts", import.meta.url);
 const RESTORE = fileURLToPath(new URL("../../../../collab-server/restore-command.ts", import.meta.url));
+
+test("interrupted restore keeps its target absent and concurrent restores publish only once", { timeout: 30_000 }, async t => {
+  const kit = serverHarness(t);
+  kit.seed();
+  const archive = join(kit.directory, "backups", await backupRelay({ SPLITPAGE_DATA_DIR: kit.directory }));
+  const target = join(kit.directory, "recovered");
+  const empty = join(kit.directory, "empty");
+  mkdirSync(empty);
+  await assert.rejects(restoreRelay(archive, empty), /requires a new data directory/);
+  assert.deepEqual(readdirSync(empty), []);
+  const claimed = join(kit.directory, "claimed");
+  await assert.rejects(restoreRelay(archive, claimed, async (source, pending) => {
+    const pages = await backup(source, pending);
+    mkdirSync(claimed);
+    return pages;
+  }), /requires a new data directory/);
+  assert.deepEqual(readdirSync(claimed), []);
+
+  const moduleUrl = new URL("../../../../collab-server/backup.ts", import.meta.url);
+  const child = spawn(process.execPath, ["--input-type=module", "-e", `
+    import { backup } from "node:sqlite";
+    import { restoreRelay } from ${JSON.stringify(moduleUrl.href)};
+    await restoreRelay(process.argv[1], process.argv[2], async (source, pending) => {
+      await backup(source, pending);
+      setInterval(() => {}, 1000);
+      process.stdout.write("staged");
+      await new Promise(() => {});
+    });
+  `, archive, target], { env: {}, stdio: ["ignore", "pipe", "ignore"] });
+  const exit = once(child, "exit");
+  try {
+    const checkpoint = await Promise.race([
+      once(child.stdout, "data").then(([chunk]) => String(chunk)), exit.then(() => "child exited")
+    ]);
+    assert.equal(checkpoint, "staged");
+    assert.equal(existsSync(target), false);
+  } finally {
+    child.kill("SIGKILL");
+    await exit;
+  }
+  assert.equal(existsSync(target), false);
+
+  const results = await Promise.allSettled([restoreRelay(archive, target), restoreRelay(archive, target)]);
+  assert.deepEqual(results.map(result => result.status).sort(), ["fulfilled", "rejected"]);
+  assert.equal(storedText(target), "word");
+});
 
 test("online backup retains verified bytes for each script and restores without edits made afterward", { timeout: 30_000 }, async t => {
   const kit = serverHarness(t);
@@ -52,7 +99,9 @@ test("online backup retains verified bytes for each script and restores without 
   const name = /Verified relay backup (relay-.*\.backup)\./.exec(backup.output())?.[1];
   assert.ok(name);
   assert.deepEqual(readdirSync(paths).sort(), [
-    sentinel, "relay-2000-01-02T00-00-00.000Z-00000000-0000-4000-8000-000000000000.sqlite", name
+    sentinel,
+    ...(process.platform === "win32" ? ["relay-2000-01-01T00-00-00.000Z-00000000-0000-4000-8000-000000000000.sqlite"] : []),
+    "relay-2000-01-02T00-00-00.000Z-00000000-0000-4000-8000-000000000000.sqlite", name
   ]);
   const saved = join(kit.directory, "off-machine.backup");
   cpSync(join(paths, name), saved, { recursive: true });
@@ -66,7 +115,7 @@ test("online backup retains verified bytes for each script and restores without 
   second.close();
 
   const freshDirectory = join(kit.directory, "restored-data");
-  await assert.rejects(restoreRelay(saved, primary), { code: "EEXIST" });
+  await assert.rejects(restoreRelay(saved, primary), /requires a new data directory/);
   const restore = spawnSync(process.execPath, ["--disable-warning=ExperimentalWarning", RESTORE, saved, freshDirectory], {
     env: {}, encoding: "utf8"
   });
@@ -187,7 +236,7 @@ test("retention always keeps the just-verified backup and ignores backup-shaped 
   renameSync(join(directory, first), join(directory, future));
   mkdirSync(join(directory, unrelated));
   kit.seed("new-script");
-  const justMade = await backupRelay(config);
+  const justMade = await backupRelay(config, backup, () => {});
   assert.deepEqual(readdirSync(directory).sort(), [justMade, unrelated].sort());
   using copy = new DatabaseSync(join(directory, justMade, DB_NAME), { readOnly: true });
   assert.equal(copy.prepare("SELECT count(*) AS count FROM documents").get()?.count, 2);
