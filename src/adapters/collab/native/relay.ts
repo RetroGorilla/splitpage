@@ -20,7 +20,8 @@ export type NativeRelayEvent =
   | { readonly kind: "authentication-failed"; readonly reason: string }
   | { readonly kind: "temporary-refusal"; readonly reason: string }
   | { readonly kind: "merge-too-large"; readonly message: string }
-  | { readonly kind: "first-load-too-large"; readonly message: string };
+  | { readonly kind: "first-load-too-large"; readonly message: string }
+  | { readonly kind: "synced" };
 
 export interface NativeRelayOptions {
   readonly url: string;
@@ -51,6 +52,8 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
   const relayUrl = new URL(url);
   relayUrl.searchParams.set("wire", "1");
   relayUrl.searchParams.set("schema", "1");
+  let stopSettled: (() => void) | undefined;
+  let releaseGate: () => void = () => {};
   let provider = attach(current);
 
   function emit(event: NativeRelayEvent): void {
@@ -71,6 +74,39 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
     let restarts = 0;
     let downloadStarted: number | null = null;
     let reportedTemporaryClose = false;
+    type PendingSend =
+      | { readonly kind: "reconnect" }
+      | { readonly kind: "noop" }
+      | { readonly kind: "pending-update"; readonly beforeThrough: number }
+      | { readonly kind: "update"; readonly through: number };
+    const pendingSends: PendingSend[] = [];
+    const journal = target.pendingEdits;
+    let offlineThrough = journal?.hasPending() ? journal.through() : 0;
+    let maxBlockedConfirmation = 0;
+    releaseGate = () => {
+      const gate = Math.max(offlineThrough, maxBlockedConfirmation);
+      if (gate <= 0) return;
+      offlineThrough = 0;
+      maxBlockedConfirmation = 0;
+      journal?.clearThrough(gate);
+      if (journal?.hasPending() && pendingSends.some(item => item.kind === "update")) {
+        journal.confirmationPoint();
+      }
+    };
+    stopSettled?.();
+    stopSettled = target.subscribeCommandSettled(() => {
+      if (!journal || !pendingSends.length) return;
+      for (let index = 0; index < pendingSends.length; index++) {
+        const item = pendingSends[index];
+        if (item?.kind !== "pending-update") continue;
+        if (journal.through() > item.beforeThrough) {
+          journal.confirmationPoint();
+          pendingSends[index] = { kind: "update", through: journal.through() };
+        } else {
+          pendingSends[index] = { kind: "noop" };
+        }
+      }
+    });
     target.subscribe(sessionChanged);
     // why: stock synced also fires on an upload acknowledgement before the download can have arrived
     const firstReply = () => updateStatus({ firstSyncDone: true });
@@ -78,10 +114,51 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
     const stateRequest = () => { downloadStarted = now(); };
     function stopPermanently(): void {
       publicationStopped = true;
+      stopSettled?.();
+      stopSettled = undefined;
       attached.configuration.websocketProvider.disconnect();
       attached.destroy();
       status = Object.freeze({ ...status, connected: false, firstSyncDone: false });
     }
+    const confirmations = journal ? {
+      onReset() {
+        pendingSends.length = 0;
+      },
+      onSyncReplySent() {
+        if (journal.hasPending()) offlineThrough = Math.max(offlineThrough, journal.through());
+        pendingSends.push({ kind: "reconnect" });
+      },
+      onConnectedUpdateSent() {
+        if (target.inCommand()) {
+          pendingSends.push({ kind: "pending-update", beforeThrough: journal.through() });
+        } else if (journal.hasPending()) {
+          journal.confirmationPoint();
+          pendingSends.push({ kind: "update", through: journal.through() });
+        } else {
+          pendingSends.push({ kind: "noop" });
+        }
+      },
+      onSyncStatus(applied: boolean) {
+        const entry = pendingSends.shift();
+        if (!applied || !entry || entry.kind !== "update") return;
+        if (offlineThrough > 0) {
+          if (journal.hasPendingThrough(offlineThrough)) {
+            maxBlockedConfirmation = Math.max(maxBlockedConfirmation, entry.through);
+            return;
+          }
+          offlineThrough = 0;
+          maxBlockedConfirmation = 0;
+        }
+        journal.clearThrough(entry.through);
+        const nextUpdate = pendingSends.find(item => item.kind === "update");
+        if (nextUpdate && journal.hasPending()) {
+          journal.confirmationPoint();
+        }
+      },
+      onSynced() {
+        emit({ kind: "synced" });
+      }
+    } : undefined;
     const attached = new StateFirstProvider({
       url: relayUrl.href, name, token, document: target.ydoc,
       onOpen() {
@@ -143,12 +220,14 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
         if (publicationStopped) return;
         updateStatus({ pendingChangeCount: number });
       }
-    }, firstReply, stateRequest, target.checkPeerDelivery);
+    }, firstReply, stateRequest, target.checkPeerDelivery, confirmations);
     return attached;
   }
 
   function sessionChanged(change: NativeSessionChange): void {
     if (change.kind !== "closed") return;
+    stopSettled?.();
+    stopSettled = undefined;
     if (!publicationStopped) provider.destroy();
     if (closing || change.reason === "requested") {
       if (publicationStopped) status = Object.freeze({ ...status, connected: false });
@@ -159,7 +238,13 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
       if (publicationStopped) status = Object.freeze({ ...status, connected: false });
       else updateStatus({ connected: false });
       void reopenStored(current, reopen);
-    } else replace(openNativeSession({ kind: "state", state: change.state }, sessionOptions));
+    } else {
+      const savedJournal = current.pendingEdits?.data();
+      replace(openNativeSession(
+        { kind: "state", state: change.state },
+        savedJournal ? { ...sessionOptions, noticeJournal: savedJournal } : sessionOptions
+      ));
+    }
   }
 
   async function reopenStored(failed: Session, open: NonNullable<NativeRelayOptions["reopen"]>): Promise<void> {
@@ -188,5 +273,5 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
     current.close();
   }
 
-  return Object.freeze({ session: () => current, status: () => status, close });
+  return Object.freeze({ session: () => current, status: () => status, releaseOfflineGate: () => releaseGate(), close });
 }

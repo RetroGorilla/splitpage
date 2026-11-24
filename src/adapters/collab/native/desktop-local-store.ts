@@ -23,11 +23,26 @@ export function createDesktopNativeLocalStore(invoke: NativeReplicaInvoke): Nati
                 reply.kind === "failed" && reply.reason === "closed" ? "InvalidStateError" : "UnknownError");
             },
             async write(entry) {
-              const reply = await invoke(["write", name, lease, entry.generation, entry.checkpoint, entry.bytes]);
+              const reply = await invoke(entry.journal
+                ? ["write", name, lease, entry.generation, entry.checkpoint, entry.bytes, entry.journal]
+                : ["write", name, lease, entry.generation, entry.checkpoint, entry.bytes]);
               if (reply.kind === "stored") return;
               if (reply.kind === "failed" && reply.reason === "quota") throw new DOMException("Native replica is out of space", "QuotaExceededError");
               if (reply.kind === "failed" && reply.reason === "closed") throw new DOMException("Native replica lease was closed", "InvalidStateError");
               throw new Error("Native replica write failed");
+            },
+            async readJournal() {
+              const reply = await invoke(["read-journal", name, lease]);
+              if (reply.kind === "journal") return reply.bytes;
+              throw new DOMException("Native replica journal read failed",
+                reply.kind === "failed" && reply.reason === "closed" ? "InvalidStateError" : "UnknownError");
+            },
+            async writeJournal(bytes) {
+              const reply = await invoke(["write-journal", name, lease, bytes]);
+              if (reply.kind === "stored") return;
+              if (reply.kind === "failed" && reply.reason === "quota") throw new DOMException("Native replica is out of space", "QuotaExceededError");
+              if (reply.kind === "failed" && reply.reason === "closed") throw new DOMException("Native replica lease was closed", "InvalidStateError");
+              throw new Error("Native replica journal write failed");
             },
             async forget() {
               const reply = await invoke(["forget", name, lease]);

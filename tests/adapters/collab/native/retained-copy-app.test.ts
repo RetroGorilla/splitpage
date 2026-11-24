@@ -420,20 +420,26 @@ test("a picture held only in memory cannot complete a retained join", { timeout:
 test("the mounted app reopens the retained script offline after restarting and Leave clears its device state", async () => {
   const entry = identity("restart"), opened = capture(), credential = invitation();
   assert.deepEqual(await hook().enterRetained({ ...entry, invitation: credential, connect: opened.connect }), ok);
+  assert.ok(opened.replica().session.pendingEdits);
+  typeAt(opened.replica().session, 0, "Offline ", "A");
   assert.equal((await opened.replica().flush()).kind, "stored");
+  const journalBeforeRestart = opened.replica().session.pendingEdits?.data();
+  assert.equal(journalBeforeRestart?.entries.length, 1);
   const oldHook = hook();
   await rewireRunningApp({});
   await finishStartup();
   await opened.replica().closed;
   assert.notEqual(hook(), oldHook);
   assert.deepEqual(await oldHook.enterRetained(entry), { ok: false, reason: "app-stopped" });
-  assert.deepEqual(await hook().enterRetained(entry), ok);
-  assert.match(await currentText(), /Retained narration/);
+  const reopened = capture();
+  assert.deepEqual(await hook().enterRetained({ ...entry, connect: reopened.connect }), ok);
+  assert.deepEqual(reopened.replica().session.pendingEdits?.data(), journalBeforeRestart);
+  assert.match(await currentText(), /Offline Retained narration/);
   assert.deepEqual(await hook().leave(), ok);
   assert.deepEqual(await storedEntries(window.indexedDB, scope(entry.script)), []);
   const database = await idbResult(window.indexedDB.open(DB_NAME));
   try {
-    for (const store of ["memberships", "invitations"]) {
+    for (const store of ["memberships", "invitations", "journals"]) {
       assert.equal((await idbResult(database.transaction(store).objectStore(store).get(scope(entry.script)))) === undefined, true);
     }
   } finally { database.close(); }
@@ -788,3 +794,43 @@ for (const target of ["browser", "desktop"] as const) {
     } finally { if (target === "desktop") restoreDesktop(); }
   });
 }
+
+test("retained-shared-script delivers offline notice clashes before releasing the relay offline gate", { timeout: 20_000 }, async t => {
+  const kit = serverHarness(t);
+  const state = kit.seed();
+  const port = await kit.launch().port();
+  const token = kit.invitation().token;
+  const entry = { deployment: "offline-gate", script: NAME };
+  const opened = capture();
+  const first = await hook().enterRetained({ ...entry, invitation: { token, state }, connect: opened.connect });
+  assert.deepEqual(first, ok);
+  const local = opened.replica();
+  const row = local.session.document().rows[0];
+  assert.ok(row);
+  typeAt(local.session, 0, "offline ", row.id);
+  assert.equal(local.session.pendingEdits?.data().entries.length, 1);
+  assert.equal((await local.flush()).kind, "stored");
+  await rewireRunningApp({});
+  await finishStartup();
+  await local.closed;
+
+  const peer = kit.copy(port);
+  await kit.until(() => peer.relay.status().firstSyncDone || undefined);
+  assert.equal(peer.session.commands.removeRows([row.id]).kind, "written");
+  await kit.until(() => peer.relay.status().pendingChangeCount === 0 || undefined);
+
+  const observed: string[][] = [];
+  const gateReached = eventResult<undefined>();
+  const entered = await hook().enterRetained({
+    ...entry,
+    relayUrl: "ws://127.0.0.1:" + port,
+    onOfflineNotice(clashes) {
+      observed.push(clashes.map(clash => clash.id));
+      gateReached.resolve(undefined);
+    }
+  });
+  assert.deepEqual(entered, ok);
+  await gateReached.promise;
+  assert.deepEqual(observed, [[row.id]]);
+  assert.deepEqual(await hook().leave(), ok);
+});

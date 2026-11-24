@@ -1,10 +1,13 @@
 import * as Y from "yjs";
 import type { NativeReplicaEntry } from "../../../../shared/native-replica.d.ts";
+import { decodeNativePendingEdits, encodeNativePendingEdits } from "./pending-edits.ts";
+import type { NativePendingEditsData } from "./pending-edits.ts";
 import { nativeCallbackGuard } from "./script.ts";
 import { openNativeSession, type NativeSessionOptions } from "./session.ts";
 
 const CHECKPOINT_EVERY = 512;
 const MAX_TAIL = 4 * CHECKPOINT_EVERY;
+const MAX_REPLICA_JOURNAL_BYTES = 16_000_000;
 type Session = ReturnType<typeof openNativeSession>;
 type StoreReopen = (failed: Session) => Promise<Session>;
 let openers: WeakMap<Session, StoreReopen> | null = null;
@@ -71,6 +74,8 @@ export interface NativeReplicaConnection {
   readonly forget?: () => Promise<void>;
   readonly read: (through?: number) => Promise<readonly NativeReplicaEntry[]>;
   readonly write: (entry: NativeReplicaEntry) => Promise<void>;
+  readonly readJournal?: () => Promise<Uint8Array | null>;
+  readonly writeJournal?: (bytes: Uint8Array) => Promise<void>;
   readonly release: () => Promise<void>;
   readonly persistent: () => Promise<boolean>;
   readonly onStop?: (stop: (reason: "closed" | "version") => void) => void;
@@ -105,8 +110,17 @@ function replicaState(entries: readonly NativeReplicaEntry[]): Uint8Array {
   } finally { doc.destroy(); }
 }
 
+type PendingWrite =
+  | { readonly kind: "entry"; readonly generation: number; readonly checkpoint: boolean; readonly bytes: Uint8Array; journal?: Uint8Array; journalDirty?: boolean }
+  | { readonly kind: "journal"; bytes?: Uint8Array; journalDirty?: boolean };
+
+interface RecoveryState {
+  readonly state: Uint8Array;
+  readonly journal?: Uint8Array;
+}
+
 export async function attachNativeLocalStore(
-  { read, write, release, persistent, onStop, membership, forget }: NativeReplicaConnection, options: NativeSessionOptions
+  { read, write, readJournal, writeJournal, release, persistent, onStop, membership, forget }: NativeReplicaConnection, options: NativeSessionOptions
 ): Promise<NativeLocalStoreOpen> {
   let stopped: NativeLocalStoreFailure | undefined;
   let disconnect: (() => void) | undefined;
@@ -120,15 +134,41 @@ export async function attachNativeLocalStore(
   });
   if (stopped) return stopped;
 
-  let session = openNativeSession(entries.length ? { kind: "state", state: replicaState(entries) } : { kind: "empty" }, options);
+  let initialJournal: NativeSessionOptions["noticeJournal"] = options.noticeJournal;
+  let journalCorrupt = false;
+  if (options.noticeJournal) {
+    const rawJournal = await readJournal?.().catch(error => {
+      if (!stopped) throw error;
+      return null;
+    });
+    if (stopped) return stopped;
+    if (rawJournal) {
+      try { initialJournal = decodeNativePendingEdits(rawJournal); }
+      catch (error) {
+        if (error instanceof DOMException && error.name === "VersionError") throw error;
+        journalCorrupt = true;
+      }
+    }
+  }
+  const initialOptions: NativeSessionOptions = initialJournal !== undefined ? { ...options, noticeJournal: initialJournal } : options;
+  let session: Session;
+  try {
+    session = openNativeSession(entries.length ? { kind: "state", state: replicaState(entries) } : { kind: "empty" }, initialOptions);
+  } catch (error) {
+    if (initialJournal === options.noticeJournal || (error instanceof DOMException && error.name === "VersionError")) throw error;
+    journalCorrupt = true;
+    session = openNativeSession(entries.length ? { kind: "state", state: replicaState(entries) } : { kind: "empty" }, options);
+  }
   const listeners = new Set<(receipt: NativeLocalStoreReceipt) => void>();
   const closed = deferred<NativeLocalStoreClose>();
   let discard: ReturnType<typeof deferred<boolean>> | undefined;
   let released = false;
   let drained = deferred<NativeLocalStoreClose>();
   let recovering = false, handoff: ReturnType<typeof deferred<Session>> | undefined;
-  let recovery: Uint8Array | undefined;
-  const pending: NativeReplicaEntry[] = [];
+  let recovery: RecoveryState | undefined;
+  const pending: PendingWrite[] = [];
+  let inFlight: PendingWrite | undefined;
+  let lastJournalRevision = session.pendingEdits?.revision() ?? 0;
   const generation = entries.at(-1)?.generation ?? 0;
   let committed = generation, next = generation;
   let checkpoint = entries[0]?.checkpoint ? entries[0].generation : 0;
@@ -157,7 +197,7 @@ export async function attachNativeLocalStore(
         // why: the live session may already contain changes beyond the committed generation
         const entries = await read(through);
         const queued = pending.at(-1);
-        if (through < checkpoint || (queued?.checkpoint && through < queued.generation)) return undefined;
+        if (through < checkpoint || (queued?.kind === "entry" && queued.checkpoint && through < queued.generation)) return undefined;
         const bytes = replicaState(entries);
         await write({ generation: through, bytes, checkpoint: true });
         checkpoint = through;
@@ -183,26 +223,62 @@ export async function attachNativeLocalStore(
     return result;
   }
 
+  function encodeBoundedJournal(): Uint8Array | undefined {
+    const edits = session.pendingEdits;
+    if (!edits) return undefined;
+    const bytes = encodeNativePendingEdits(edits.data());
+    if (bytes.byteLength > MAX_REPLICA_JOURNAL_BYTES) {
+      return encodeNativePendingEdits({ through: edits.through(), entries: [] });
+    }
+    return bytes;
+  }
+
   async function drain(): Promise<NativeLocalStoreReceipt> {
     while (!stopped) {
       if (!pending.length && recovery) {
-        pending.push({ generation: ++next, bytes: recovery, checkpoint: true });
+        pending.push({
+          kind: "entry", generation: ++next, bytes: recovery.state, checkpoint: true,
+          ...(recovery.journal && { journal: recovery.journal })
+        });
         recovery = undefined;
       }
-      const entry = pending[0];
-      if (!entry) break;
-      if (!entry.checkpoint && committed - checkpoint >= MAX_TAIL) {
+      const item = pending[0];
+      if (!item) break;
+      if (item.kind === "journal") {
+        if (!writeJournal) { pending.shift(); continue; }
+        const bytes = item.bytes ?? (item.journalDirty ? encodeBoundedJournal() : undefined);
+        if (!bytes) { pending.shift(); publish({ kind: "stored", generation: committed }); continue; }
+        inFlight = item;
+        try { await writeJournal(bytes); }
+        catch (error) {
+          inFlight = undefined;
+          return failedWrite({ ...nativeLocalStoreFailure(error), generation: committed, committed });
+        }
+        inFlight = undefined;
+        pending.shift();
+        publish({ kind: "stored", generation: committed });
+        continue;
+      }
+      if (!item.checkpoint && committed - checkpoint >= MAX_TAIL) {
         const failed = await compact();
-        if (failed) return failedWrite({ ...failed, generation: entry.generation });
+        if (failed) return failedWrite({ ...failed, generation: item.generation });
         if (stopped) break;
       }
-      try { await write(entry); }
-      catch (error) {
-        return failedWrite({ ...nativeLocalStoreFailure(error), generation: entry.generation, committed });
+      const journal = item.journal ?? (item.journalDirty ? encodeBoundedJournal() : undefined);
+      inFlight = item;
+      try {
+        await write({
+          generation: item.generation, checkpoint: item.checkpoint, bytes: item.bytes,
+          ...(journal && { journal })
+        });
+      } catch (error) {
+        inFlight = undefined;
+        return failedWrite({ ...nativeLocalStoreFailure(error), generation: item.generation, committed });
       }
+      inFlight = undefined;
       pending.shift();
-      committed = entry.generation;
-      if (entry.checkpoint) checkpoint = committed;
+      committed = item.generation;
+      if (item.checkpoint) checkpoint = committed;
       publish({ kind: "stored", generation: committed });
     }
     active = undefined;
@@ -216,11 +292,35 @@ export async function attachNativeLocalStore(
   }
 
   function saveUpdate(bytes: Uint8Array): void {
-    pending.push({ generation: ++next, bytes: new Uint8Array(bytes), checkpoint: false });
+    let journalDirty = false;
+    const edits = session.pendingEdits;
+    if (edits && !session.inCommand()) {
+      const rev = edits.revision();
+      if (rev !== lastJournalRevision) {
+        lastJournalRevision = rev;
+        journalDirty = true;
+      }
+    }
+    pending.push({ kind: "entry", generation: ++next, bytes: new Uint8Array(bytes), checkpoint: false, ...(journalDirty && { journalDirty: true }) });
     void flush();
   }
 
-  async function finish(state: Uint8Array): Promise<void> {
+  function saveJournal(): void {
+    const edits = session.pendingEdits;
+    if (!edits) return;
+    const rev = edits.revision();
+    if (rev === lastJournalRevision) return;
+    lastJournalRevision = rev;
+    const tail = pending.at(-1);
+    if (tail && tail !== inFlight) {
+      if (tail.kind === "journal") { tail.journalDirty = true; return; }
+      if (tail.kind === "entry" && !tail.checkpoint) { tail.journalDirty = true; return; }
+    }
+    pending.push({ kind: "journal", journalDirty: true });
+    void flush();
+  }
+
+  async function finish(state: Uint8Array, savedJournal?: NativePendingEditsData): Promise<void> {
     const inProgress = active, finished = drained;
     let result = await flush();
     if (inProgress && result.kind === "failed") result = await flush();
@@ -236,7 +336,10 @@ export async function attachNativeLocalStore(
     if (requested) {
       try {
         if (result.kind === "failed") throw result;
-        session = openNativeSession({ kind: "state", state }, options);
+        const reopenedOptions: NativeSessionOptions = savedJournal
+          ? { ...options, noticeJournal: savedJournal }
+          : options;
+        session = openNativeSession({ kind: "state", state }, reopenedOptions);
         drained = deferred<NativeLocalStoreClose>();
         bind();
         finished.resolve({ ...result, state });
@@ -259,18 +362,26 @@ export async function attachNativeLocalStore(
 
   function bind(): void {
     markNativeStoreSession(session, reopen);
+    lastJournalRevision = journalCorrupt ? -1 : (session.pendingEdits?.revision() ?? 0);
+    journalCorrupt = false;
     const doc = session.ydoc, guardSharedCallback = nativeCallbackGuard(doc);
     const updated = (bytes: Uint8Array) => guardSharedCallback(() => saveUpdate(bytes));
+    const stopJournal = session.pendingEdits?.subscribe(saveJournal);
     doc.on("update", updated);
     session.subscribe(change => {
       if (change.kind !== "closed") return;
       const state = new Uint8Array(change.state);
+      const savedJournal = session.pendingEdits?.data();
       doc.off("update", updated);
+      stopJournal?.();
       recovering = !stopped && change.reason === "failed";
-      if (recovering) recovery = state;
-      void finish(state);
+      if (recovering) {
+        const journal = savedJournal ? encodeNativePendingEdits(savedJournal) : undefined;
+        recovery = { state, ...(journal && journal.byteLength <= MAX_REPLICA_JOURNAL_BYTES && { journal }) };
+      }
+      void finish(state, savedJournal);
     });
-    disconnect = () => { cancelTimer(); doc.off("update", updated); session.close(); };
+    disconnect = () => { cancelTimer(); doc.off("update", updated); stopJournal?.(); session.close(); };
   }
 
   function reopen(failed: Session): Promise<Session> {
@@ -285,7 +396,7 @@ export async function attachNativeLocalStore(
     persistent: persistent(),
     ...(membership && { membership }),
     ...(forget && { discardOnClose: () => discard?.promise ?? (released ? Promise.resolve(false) : (discard = deferred<boolean>()).promise) }),
-    hasUnstoredChanges: () => next > committed || recovery !== undefined,
+    hasUnstoredChanges: () => next > committed || pending.length > 0 || recovery !== undefined,
     flush: () => session.isClosingOrClosed() ? drained.promise : flush(),
     reopen,
     subscribe(listener) {

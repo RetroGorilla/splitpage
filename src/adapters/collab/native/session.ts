@@ -82,14 +82,15 @@ function openSessionScript(
   updated: (update: Uint8Array, transaction: Y.Transaction) => void,
   publishRecovery: () => void,
   sizeRefusal: NonNullable<NativeScript["sizeRefusal"]>,
-  saved?: NativeSessionOptions["noticeJournal"]
+  saved?: NativeSessionOptions["noticeJournal"],
+  onJournalChange?: () => void
 ) {
   const doc = new Y.Doc(), script = openNativeScript(doc);
   try {
     if (source.kind === "stored-script") applyStoredState(doc, source.state);
     else if (source.kind === "state") Y.applyUpdate(doc, source.state);
     else if (source.kind === "document") convertToNativeScript(script, source.document, source.conversion);
-    const journal = saved ? openNativePendingEdits(script.reader, saved === true ? undefined : saved) : null;
+    const journal = saved ? openNativePendingEdits(script.reader, saved === true ? undefined : saved, onJournalChange) : null;
     const size = createNativeSizeTracker(doc, sizeOptions, publishRecovery);
     const undo = openNativeUndo({ ...script, sizeRefusal });
     const { guardSharedCallback } = script;
@@ -108,12 +109,21 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
   const { actor, sanitize } = options;
   const listeners = new Set<ChangeListener>();
   const localUpdates = new Set<(update: Uint8Array) => void>();
+  const journalListeners = new Set<() => void>();
+  const commandSettledListeners = new Set<() => void>();
   let caretObservers: Set<(transaction: Y.Transaction) => void> | undefined;
   const body = { sanitize };
-  let active = false, scheduled = false, publishing = false, changed = false, holds = 0;
+  let active = false, runningCommand = false, scheduled = false, publishing = false, changed = false, holds = 0;
   let closing: CloseReason | null = null, revision = 0;
   let group: CaptureGroup | null = null;
-  const { script, size, undo, publishUpdate, journal } = openSessionScript(source, sizeOptions, updated, schedule, sizeRefusal, options.noticeJournal);
+  function notifySet(subscribers: ReadonlySet<() => void>): void {
+    for (const listener of [...subscribers]) {
+      try { listener(); } catch { continue; }
+    }
+  }
+  const { script, size, undo, publishUpdate, journal } = openSessionScript(
+    source, sizeOptions, updated, schedule, sizeRefusal, options.noticeJournal, () => notifySet(journalListeners)
+  );
   const doc = script.doc;
   let reportedSize: NativeSessionSize = size.state;
   const writing = { ...script, sizeRefusal };
@@ -178,6 +188,8 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     emit(listeners, { kind: "closed", reason, state });
     listeners.clear();
     localUpdates.clear();
+    journalListeners.clear();
+    commandSettledListeners.clear();
   }
 
   function perform<T>(run: () => T): T {
@@ -232,13 +244,30 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
           undo.stopCapturing();
         }
         if (journalMode !== "none") journal?.sync();
-        const result = capture ? capture(prepareWrite => {
-          if (!selectionRefusal) return command({ ...commandScript, prepareWrite }, ...args);
-          return withNativeCommand(commandScript, prepareWrite) ? command(commandScript, ...args) : selectionRefusal();
-        })
-          : command(commandScript, ...args);
-        if (journalMode !== "none") journal?.sync(result.created ? { created: result.created, split: journalMode === "split" } : {});
-        return result;
+        if (journalMode !== "none") runningCommand = true;
+        let synced = false;
+        try {
+          const result = capture ? capture(prepareWrite => {
+            if (!selectionRefusal) return command({ ...commandScript, prepareWrite }, ...args);
+            return withNativeCommand(commandScript, prepareWrite) ? command(commandScript, ...args) : selectionRefusal();
+          })
+            : command(commandScript, ...args);
+          if (journalMode !== "none") {
+            synced = true;
+            journal?.sync(result.created ? { created: result.created, split: journalMode === "split" } : {});
+          }
+          return result;
+        } finally {
+          if (journalMode !== "none") {
+            if (!synced) {
+              try { journal?.sync({}); } catch {
+                // why: journal sync must not mask the command failure that triggered close
+              }
+            }
+            runningCommand = false;
+            notifySet(commandSettledListeners);
+          }
+        }
       });
     }
     return {
@@ -281,9 +310,22 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     return perform(() => {
       group = null;
       journal?.sync();
-      const result = undo[direction]();
-      journal?.sync({ press: direction });
-      return result;
+      runningCommand = true;
+      let synced = false;
+      try {
+        const result = undo[direction]();
+        synced = true;
+        journal?.sync({ press: direction });
+        return result;
+      } finally {
+        if (!synced) {
+          try { journal?.sync({ press: direction }); } catch {
+            // why: journal sync must not mask the command failure that triggered close
+          }
+        }
+        runningCommand = false;
+        notifySet(commandSettledListeners);
+      }
     });
   }
 
@@ -446,9 +488,17 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
       return () => { if (held) { held = false; holds--; } };
     },
     acceptsPeerUpdate: () => refusal() === null,
+    inCommand: () => runningCommand,
     encodeState: () => Y.encodeStateAsUpdate(doc),
     pendingEdits: journal && Object.freeze({
-      data: journal.data, confirmationPoint: journal.confirmationPoint, clearThrough: journal.clearThrough
+      data: journal.data, confirmationPoint: journal.confirmationPoint, clearThrough: journal.clearThrough,
+      revision: journal.revision, through: journal.through, hasPending: journal.hasPending,
+      hasPendingThrough: journal.hasPendingThrough,
+      subscribe(listener: () => void): () => void {
+        if (closing) return () => undefined;
+        journalListeners.add(listener);
+        return () => { journalListeners.delete(listener); };
+      }
     }),
     offlineNotice: (connection: "returning" | "online") =>
       connection === "returning" && journal ? compareNativeOfflineNotice(journal.pending(), script.reader) : [],
@@ -461,6 +511,11 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
       if (closing) return () => undefined;
       localUpdates.add(listener);
       return () => { localUpdates.delete(listener); };
+    },
+    subscribeCommandSettled(listener: () => void): () => void {
+      if (closing) return () => undefined;
+      commandSettledListeners.add(listener);
+      return () => { commandSettledListeners.delete(listener); };
     },
     close(): void {
       if (closing) return;

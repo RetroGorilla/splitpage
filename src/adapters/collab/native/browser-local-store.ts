@@ -3,9 +3,11 @@ import { attachNativeLocalStore, nativeLocalStoreFailure } from "./local-store.t
 import type { NativeLocalStore, NativeLocalStoreFailure, NativeLocalStoreOpen, NativeReplicaConnection } from "./local-store.ts";
 
 const DATABASE = "splitpage-native-replica-log";
+const DATABASE_VERSION = 3;
 const REPLICAS = "replicas";
 const MEMBERSHIPS = "memberships";
 const INVITATIONS = "invitations";
+const JOURNALS = "journals";
 const OPEN_TIMEOUT_MS = 2000;
 interface BrowserLocalStorePorts {
   readonly indexedDB?: IDBFactory;
@@ -37,7 +39,7 @@ function acquire(locks: Pick<LockManager, "request">, name: string): Promise<(()
 
 function openDatabase(factory: IDBFactory): Promise<IDBDatabase | NativeLocalStoreFailure> {
   return new Promise((resolve, reject) => {
-    const request = factory.open(DATABASE, 2);
+    const request = factory.open(DATABASE, DATABASE_VERSION);
     let refused = false;
     // why: an open queued behind another connection's blocked upgrade or delete gets no blocked event of its own
     const timer = setTimeout(refuse, OPEN_TIMEOUT_MS);
@@ -49,9 +51,12 @@ function openDatabase(factory: IDBFactory): Promise<IDBDatabase | NativeLocalSto
     request.onblocked = refuse;
     request.onupgradeneeded = event => {
       if (refused) { request.transaction?.abort(); return; }
-      if (event.oldVersion === 0) request.result.createObjectStore(REPLICAS, { keyPath: ["name", "generation"] });
-      request.result.createObjectStore(MEMBERSHIPS);
-      request.result.createObjectStore(INVITATIONS);
+      if (event.oldVersion < 1) request.result.createObjectStore(REPLICAS, { keyPath: ["name", "generation"] });
+      if (event.oldVersion < 2) {
+        request.result.createObjectStore(MEMBERSHIPS);
+        request.result.createObjectStore(INVITATIONS);
+      }
+      if (event.oldVersion < 3) request.result.createObjectStore(JOURNALS);
     };
     request.onerror = () => { clearTimeout(timer); reject(request.error); };
     request.onsuccess = () => {
@@ -95,9 +100,18 @@ function replicaRange(name: string, through = Number.MAX_SAFE_INTEGER): IDBKeyRa
 }
 
 function write(database: IDBDatabase, entry: ReplicaEntry): Promise<IDBValidKey> {
+  const { journal, ...storedEntry } = entry;
+  if (journal) {
+    return transaction(database, [REPLICAS, JOURNALS], "readwrite", tx => {
+      const store = tx.objectStore(REPLICAS);
+      if (storedEntry.checkpoint) store.delete(replicaRange(storedEntry.name, storedEntry.generation));
+      tx.objectStore(JOURNALS).put(journal, storedEntry.name);
+      return storedEntry.checkpoint ? store.put(storedEntry) : store.add(storedEntry);
+    });
+  }
   return transact(database, "readwrite", store => {
-    if (entry.checkpoint) store.delete(replicaRange(entry.name, entry.generation));
-    return entry.checkpoint ? store.put(entry) : store.add(entry);
+    if (storedEntry.checkpoint) store.delete(replicaRange(storedEntry.name, storedEntry.generation));
+    return storedEntry.checkpoint ? store.put(storedEntry) : store.add(storedEntry);
   });
 }
 
@@ -105,14 +119,26 @@ async function read(database: IDBDatabase, name: string, through?: number): Prom
   return await transact(database, "readonly", store => store.getAll(replicaRange(name, through))) as ReplicaEntry[];
 }
 
+async function readJournal(database: IDBDatabase, name: string): Promise<Uint8Array | null> {
+  const value: unknown = await transaction(database, [JOURNALS], "readonly", tx => tx.objectStore(JOURNALS).get(name));
+  if (value === undefined) return null;
+  if (value instanceof Uint8Array) return value;
+  throw new TypeError("Invalid pending edits journal");
+}
+
+function writeJournal(database: IDBDatabase, name: string, bytes: Uint8Array): Promise<IDBValidKey> {
+  return transaction(database, [JOURNALS], "readwrite", tx => tx.objectStore(JOURNALS).put(bytes, name));
+}
+
 async function requestPersistence(storage: BrowserLocalStorePorts["storage"]): Promise<boolean> {
   try { return await storage?.persist() ?? false; } catch { return false; }
 }
 
 function erase(database: IDBDatabase, name: string): Promise<undefined> {
-  return transaction(database, [REPLICAS, MEMBERSHIPS, INVITATIONS], "readwrite", tx => {
+  return transaction(database, [REPLICAS, MEMBERSHIPS, INVITATIONS, JOURNALS], "readwrite", tx => {
     tx.objectStore(MEMBERSHIPS).delete(name);
     tx.objectStore(INVITATIONS).delete(name);
+    tx.objectStore(JOURNALS).delete(name);
     return tx.objectStore(REPLICAS).delete(replicaRange(name));
   });
 }
@@ -163,6 +189,8 @@ function connectionFor(
     },
     read: through => read(database, name, through),
     write: async entry => { await write(database, { ...entry, name }); },
+    readJournal: () => readJournal(database, name),
+    writeJournal: async bytes => { await writeJournal(database, name, bytes); },
     // why: a refused entry may close the session before its membership has been restored under the writer lease
     async release() { await staged; database.close(); await release(); },
     persistent: () => requestPersistence(storage),

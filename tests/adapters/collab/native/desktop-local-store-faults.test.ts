@@ -7,6 +7,7 @@ import { test, type TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 import { promisify } from "node:util";
 import type { NativeReplicaInvoke } from "../../../../shared/native-replica.d.ts";
+import { applyNativePeerUpdate } from "../../../../src/adapters/collab/native/peer-update.ts";
 import { desktopFixture } from "./desktop-local-store-fixture.ts";
 import { eventResult } from "./indexeddb-fixture.ts";
 import { STORE_OPTIONS, STORED, seedSession, stored, typeAt } from "./local-store-fixture.ts";
@@ -325,3 +326,103 @@ for (const fault of ["middle length", "middle payload", "final payload"] as cons
     await expectCopy(fixture, name, 3, "ABstart");
   });
 }
+
+test("a failed journal.new rename after log append retries cleanly with the same generation", async t => {
+  const fixture = await desktopFixture(t), updates = commands(t), name = "journal-retry";
+  const opened = await fixture.first.invoke(["open", name]);
+  assert.equal(opened.kind, "opened");
+  const { lease } = opened;
+  const firstJournal = new TextEncoder().encode('{"version":1,"data":{"through":1,"entries":[]}}');
+  const secondJournal = new TextEncoder().encode('{"version":1,"data":{"through":2,"entries":[]}}');
+  assert.deepEqual(await fixture.first.invoke(["write", name, lease, 1, true, updates.initial, firstJournal]), STORED);
+
+  let injected = false;
+  fixture.intercept("journal.new:rename", async () => {
+    injected = true;
+    const error = Object.assign(new Error("EPERM: operation not permitted"), { code: "EPERM" });
+    throw error;
+  });
+  assert.deepEqual(await fixture.first.invoke(["write", name, lease, 2, false, updates.a, secondJournal]), { kind: "failed", reason: "io" });
+  assert.equal(injected, true);
+  assert.deepEqual(await fixture.first.invoke(["write", name, lease, 2, false, updates.a, secondJournal]), STORED);
+  assert.deepEqual(await fixture.first.invoke(["write", name, lease, 3, false, updates.b]), STORED);
+  assert.deepEqual(await fixture.first.invoke(["close", name, lease]), STORED);
+
+  const reopened = fixture.restart();
+  const next = await reopened.invoke(["open", name]);
+  assert.equal(next.kind, "opened");
+  try {
+    assert.deepEqual(await reopened.invoke(["read-journal", name, next.lease]), { kind: "journal", bytes: secondJournal });
+  } finally {
+    assert.deepEqual(await reopened.invoke(["close", name, next.lease]), STORED);
+  }
+  await expectCopy(fixture, name, 3, "ABstart");
+});
+
+test("store flush retries cleanly after journal.new rename fails mid-write", async t => {
+  const fixture = await desktopFixture(t), name = "journal-store-retry";
+  const opened = await fixture.first.store.open(name, { ...STORE_OPTIONS, noticeJournal: true });
+  assert.equal(opened.kind, "opened");
+  try {
+    const initial = commands(t).initial;
+    assert.equal(applyNativePeerUpdate(opened.session, initial), true);
+    assert.deepEqual(await opened.flush(), stored(1));
+
+    let failedOnce = false;
+    fixture.intercept("journal.new:rename", async () => {
+      failedOnce = true;
+      throw Object.assign(new Error("EBUSY: resource busy"), { code: "EBUSY" });
+    });
+    typeAt(opened.session, 0, "A");
+    const first = await opened.flush();
+    assert.equal(first.kind, "failed");
+    assert.equal(failedOnce, true);
+
+    assert.deepEqual(await opened.flush(), stored(2));
+    typeAt(opened.session, 1, "B");
+    assert.deepEqual(await opened.flush(), stored(3));
+    const expected = opened.session.pendingEdits?.data();
+    opened.session.close();
+    await opened.closed;
+
+    const reopened = await fixture.restart().store.open(name, { ...STORE_OPTIONS, noticeJournal: true });
+    assert.equal(reopened.kind, "opened");
+    try {
+      assert.equal(reopened.session.document().rows[0]?.audioText, "ABstart");
+      assert.deepEqual(reopened.session.pendingEdits?.data(), expected);
+    } finally { reopened.session.close(); await reopened.closed; }
+  } finally {
+    if (!opened.session.isClosingOrClosed()) { opened.session.close(); await opened.closed; }
+  }
+});
+
+test("a torn journal.new write preserves the previous replica and journal", async t => {
+  const fixture = await desktopFixture(t), updates = commands(t), name = "torn-journal";
+  const opened = await fixture.first.invoke(["open", name]);
+  assert.equal(opened.kind, "opened");
+  const { lease } = opened;
+  const firstJournal = new TextEncoder().encode('{"version":1,"data":{"through":1,"entries":[]}}');
+  const secondJournal = new TextEncoder().encode('{"version":1,"data":{"through":2,"entries":[]}}');
+  assert.deepEqual(await fixture.first.invoke(["write", name, lease, 1, true, updates.initial, firstJournal]), STORED);
+
+  let reached = false;
+  fixture.intercept("journal.new:write", async (_perform, partial) => {
+    reached = true;
+    assert.ok(partial);
+    await partial();
+    throw new Error("injected torn journal write");
+  });
+  assert.deepEqual(await fixture.first.invoke(["write", name, lease, 2, false, updates.a, secondJournal]), { kind: "failed", reason: "io" });
+  assert.equal(reached, true);
+  assert.deepEqual(await fixture.first.invoke(["close", name, lease]), STORED);
+
+  const reopened = fixture.restart();
+  const next = await reopened.invoke(["open", name]);
+  assert.equal(next.kind, "opened");
+  try {
+    assert.deepEqual(await reopened.invoke(["read-journal", name, next.lease]), { kind: "journal", bytes: firstJournal });
+  } finally {
+    assert.deepEqual(await reopened.invoke(["close", name, next.lease]), STORED);
+  }
+  await expectCopy(fixture, name, 2, "Astart");
+});

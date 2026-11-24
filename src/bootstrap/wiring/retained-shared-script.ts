@@ -41,6 +41,7 @@ export interface RetainedSharedScript {
   readonly pictureOrigin?: string;
   readonly signal?: AbortSignal;
   readonly onRelayConnected?: (connected: boolean) => void;
+  readonly onOfflineNotice?: (clashes: ReturnType<ReturnType<typeof openNativeSession>["offlineNotice"]>) => void;
   readonly connect?: (replica: RetainedReplica, token: string) => () => void;
 }
 
@@ -132,6 +133,8 @@ export function createRetainedPictureBinding(options: {
         if (!permanentlyStopped) {
           attach(bindSharedPictures({ session: event.session }, options.pictureOrigin, options.script, options.token));
         }
+      } else if (event.kind === "synced") {
+        return;
       } else {
         permanentlyStopped = true;
         detach();
@@ -190,7 +193,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
     signal?.throwIfAborted();
     await closingCopies.get(name);
     signal?.throwIfAborted();
-    const replica = await store.open(name, { actor: ports.editor(), sanitize: sanitizeHtml });
+    const replica = await store.open(name, { actor: ports.editor(), sanitize: sanitizeHtml, noticeJournal: true });
     if (replica.kind === "opened") prepared.replica = replica;
     signal?.throwIfAborted();
     if (replica.kind === "failed") {
@@ -280,8 +283,21 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
           pictureBinding.bindCopy(replica);
           const relay = openNativeRelay(replica.session, {
             url: entry.relayUrl, name: entry.script, token, reopen: replica.reopen,
-            sessionOptions: { actor: ports.editor(), sanitize: sanitizeHtml },
-            onEvent: pictureBinding.onRelayEvent
+            sessionOptions: { actor: ports.editor(), sanitize: sanitizeHtml, noticeJournal: true },
+            onEvent(event) {
+              if (event.kind === "synced") {
+                if (sessionCurrent()) {
+                  try {
+                    const clashes = relay.session().offlineNotice("returning");
+                    entry.onOfflineNotice?.(clashes);
+                  } finally {
+                    relay.releaseOfflineGate();
+                  }
+                }
+                return;
+              }
+              pictureBinding.onRelayEvent(event);
+            }
           });
           stopConnection = () => { relay.close(); entry.onRelayConnected?.(false); };
         } else {

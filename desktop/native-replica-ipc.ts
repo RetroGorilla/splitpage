@@ -6,8 +6,11 @@ import type { NativeReplicaReply, NativeReplicaRequest } from "../shared/native-
 import type { createNativeReplicaFiles, NativeReplicaFileSystem } from "./native-replica-files.ts";
 
 const { randomBytes }: typeof NodeCrypto = require("node:crypto");
-const filesModule: { createNativeReplicaFiles: typeof createNativeReplicaFiles; MAX_REPLICA_UPDATE_BYTES: number } =
-  require("./native-replica-files.ts");
+const filesModule: {
+  createNativeReplicaFiles: typeof createNativeReplicaFiles;
+  MAX_REPLICA_UPDATE_BYTES: number;
+  MAX_REPLICA_JOURNAL_BYTES: number;
+} = require("./native-replica-files.ts");
 
 const SCRIPT_ID = /^[A-Za-z0-9_-]{1,64}(?:\/[A-Za-z0-9_-]{1,64})?(?![\s\S])/;
 const LEASE_ID = /^[a-f0-9]{32}(?![\s\S])/;
@@ -40,17 +43,22 @@ function generation(value: unknown, minimum: number): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= minimum;
 }
 
+function isPayload(value: unknown): value is Uint8Array {
+  return value instanceof Uint8Array && value.byteLength > 0 && value.buffer instanceof ArrayBuffer;
+}
+
 function isRequest(value: unknown): value is NativeReplicaRequest {
   if (!Array.isArray(value)) return false;
-  const [op, name, lease, through, checkpoint, bytes]: unknown[] = value;
+  const [op, name, lease, through, checkpoint, bytes, journal]: unknown[] = value;
   if (typeof name !== "string" || !SCRIPT_ID.test(name)) return false;
   if (op === "open" || op === "delete") return value.length === 2;
   if (typeof lease !== "string" || !LEASE_ID.test(lease)) return false;
   if (op === "join") return value.length === 4 && typeof through === "string" && through.length > 0;
-  if (op === "membership" || op === "forget" || op === "close") return value.length === 3;
+  if (op === "membership" || op === "forget" || op === "close" || op === "read-journal") return value.length === 3;
+  if (op === "write-journal") return value.length === 4 && isPayload(through);
   if (op === "read") return value.length === 4 && (through === null || generation(through, 0));
-  return op === "write" && value.length === 6 && generation(through, 1) && typeof checkpoint === "boolean"
-    && bytes instanceof Uint8Array && bytes.byteLength > 0 && bytes.buffer instanceof ArrayBuffer;
+  return op === "write" && (value.length === 6 || value.length === 7) && generation(through, 1)
+    && typeof checkpoint === "boolean" && isPayload(bytes) && (value.length === 6 || isPayload(journal));
 }
 
 function failure(error: unknown): NativeReplicaReply {
@@ -100,9 +108,19 @@ function createNativeReplicaIpc(userData: string, disk?: NativeReplicaFileSystem
 
   async function handle(owner: Renderer, request: unknown): Promise<NativeReplicaReply> {
     if (!isRequest(request)) throw new TypeError("Invalid native replica request");
-    if (request[0] === "write" && request[5].buffer.byteLength > filesModule.MAX_REPLICA_UPDATE_BYTES) {
-      if (request[4]) return { kind: "failed", reason: "quota" };
-      throw new TypeError("Invalid native replica request");
+    if (request[0] === "write") {
+      if (request[5].buffer.byteLength > filesModule.MAX_REPLICA_UPDATE_BYTES) {
+        if (request[4]) return { kind: "failed", reason: "quota" };
+        throw new TypeError("Invalid native replica request");
+      }
+      if (request.length === 7) {
+        if (request[6].byteLength > filesModule.MAX_REPLICA_JOURNAL_BYTES) return { kind: "failed", reason: "quota" };
+        if (request[6].buffer.byteLength > filesModule.MAX_REPLICA_JOURNAL_BYTES) throw new TypeError("Invalid native replica request");
+      }
+    }
+    if (request[0] === "write-journal") {
+      if (request[3].byteLength > filesModule.MAX_REPLICA_JOURNAL_BYTES) return { kind: "failed", reason: "quota" };
+      if (request[3].buffer.byteLength > filesModule.MAX_REPLICA_JOURNAL_BYTES) throw new TypeError("Invalid native replica request");
     }
     const [op, name, id] = request;
     if (op === "open") return open(name, owner);
@@ -121,6 +139,11 @@ function createNativeReplicaIpc(userData: string, disk?: NativeReplicaFileSystem
       const replica = await lease.replica;
       if (request[0] === "read") return { kind: "read", entries: replica.read(request[3]) };
       if (lease.forgotten) return CLOSED;
+      if (request[0] === "read-journal") return { kind: "journal", bytes: replica.readJournal() };
+      if (request[0] === "write-journal") {
+        await replica.writeJournal(request[3]);
+        return STORED;
+      }
       if (request[0] === "forget") {
         await files.remove(name);
         lease.forgotten = true;
@@ -137,8 +160,8 @@ function createNativeReplicaIpc(userData: string, disk?: NativeReplicaFileSystem
         return STORED;
       }
       if (request[0] !== "write") return CLOSED;
-      const [, , , generation, checkpoint, bytes] = request;
-      await replica.write({ generation, checkpoint, bytes });
+      const [, , , generation, checkpoint, bytes, journal] = request;
+      await replica.write({ generation, checkpoint, bytes, ...(journal && { journal }) });
       return STORED;
     }).catch(failure);
     lease.done = operation;

@@ -479,7 +479,7 @@ test("a version change closes the old session before an active append can releas
   assert.equal(watcher.mock.callCount(), 1);
   assertClosed(database);
   assert.deepEqual(await storedBytes(factory, "version"), active);
-  const upgraded = await idbResult(factory.open(DB_NAME, 3));
+  const upgraded = await idbResult(factory.open(DB_NAME, 4));
   upgraded.close();
   const old = await store.open("version", STORE_OPTIONS);
   assert.equal(old.kind, "failed");

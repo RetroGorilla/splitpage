@@ -39,6 +39,8 @@ interface EncodedPendingEdit extends Omit<NativePendingEdit, "after"> {
   }) | null;
 }
 
+export const NATIVE_PENDING_EDITS_SCHEMA_VERSION = 1;
+
 export interface NativePendingEditsData {
   readonly through: number;
   readonly entries: readonly EncodedPendingEdit[];
@@ -47,6 +49,97 @@ export interface NativePendingEditsData {
     readonly through: number;
     readonly beats: readonly (readonly [string, NativeReadBeat | null])[];
   };
+}
+
+const textEncoder = new TextEncoder();
+const textDecoder = new TextDecoder("utf-8", { fatal: true });
+
+function isRecord(value: unknown): value is Record<string, unknown> {
+  return !!value && typeof value === "object" && !Array.isArray(value);
+}
+
+function isNonNegativeInt(value: unknown): value is number {
+  return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
+}
+
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+function isReadBeat(value: unknown): value is NativeReadBeat {
+  return isRecord(value)
+    && typeof value.id === "string"
+    && typeof value.row === "string"
+    && Array.isArray(value.narration)
+    && Array.isArray(value.visual)
+    && isRecord(value.fields)
+    && isNullableString(value.joined);
+}
+
+function isPeriods(value: unknown): value is NativeNoticePeriods {
+  return isRecord(value)
+    && (value.start === undefined || isNonNegativeInt(value.start))
+    && (value.settled === undefined || isNonNegativeInt(value.settled))
+    && (value.prefix === undefined || isNonNegativeInt(value.prefix))
+    && (value.peer === undefined || isNonNegativeInt(value.peer));
+}
+
+function isEncodedPlacement(value: unknown, orderCount: number): boolean {
+  return isRecord(value)
+    && isNullableString(value.scene)
+    && isNullableString(value.left)
+    && isNullableString(value.right)
+    && isNonNegativeInt(value.order)
+    && value.order < orderCount;
+}
+
+export function encodeNativePendingEdits(data: NativePendingEditsData): Uint8Array {
+  return textEncoder.encode(JSON.stringify({ version: NATIVE_PENDING_EDITS_SCHEMA_VERSION, data }));
+}
+
+export function decodeNativePendingEdits(bytes: Uint8Array): NativePendingEditsData {
+  if (!(bytes instanceof Uint8Array) || bytes.byteLength === 0) throw new TypeError("Invalid pending edits journal");
+  let parsed: unknown;
+  try { parsed = JSON.parse(textDecoder.decode(bytes)); }
+  catch { throw new TypeError("Invalid pending edits journal"); }
+  if (!isRecord(parsed) || !isNonNegativeInt(parsed.version) || parsed.version < 1) {
+    throw new TypeError("Invalid pending edits journal");
+  }
+  if (parsed.version !== NATIVE_PENDING_EDITS_SCHEMA_VERSION) {
+    throw new DOMException(`Unsupported pending edits journal version: ${parsed.version}`, "VersionError");
+  }
+  const { data } = parsed;
+  if (!isRecord(data) || !isNonNegativeInt(data.through) || !Array.isArray(data.entries)) {
+    throw new TypeError("Invalid pending edits journal");
+  }
+  if (data.orders !== undefined && (!Array.isArray(data.orders)
+    || data.orders.some(order => !Array.isArray(order) || order.some(id => typeof id !== "string")))) {
+    throw new TypeError("Invalid pending edits journal");
+  }
+  const orderCount = Array.isArray(data.orders) ? data.orders.length : 0;
+  for (const entry of data.entries) {
+    if (!isRecord(entry) || typeof entry.id !== "string" || !isNonNegativeInt(entry.first)
+      || !isNonNegativeInt(entry.last) || typeof entry.peer !== "boolean"
+      || (entry.before !== null && !isReadBeat(entry.before))
+      || (entry.after !== null && (!isRecord(entry.after) || !isEncodedPlacement(entry.after["placement"], orderCount) || !isReadBeat(entry.after)))
+      || (entry.landing !== null && !isReadBeat(entry.landing))
+      || (entry.split !== undefined && (!isRecord(entry.split) || typeof entry.split.parent !== "string"
+        || !isNonNegativeInt(entry.split.at)))
+      || (entry.created !== undefined && !isNonNegativeInt(entry.created))
+      || (entry.restored !== undefined && !isNonNegativeInt(entry.restored))
+      || (entry.landingId !== undefined && typeof entry.landingId !== "string")
+      || (entry.heading !== undefined && entry.heading !== true)
+      || (entry.periods !== undefined && !isPeriods(entry.periods))) {
+      throw new TypeError("Invalid pending edits journal");
+    }
+  }
+  if (data.checkpoint !== undefined && (!isRecord(data.checkpoint) || !isNonNegativeInt(data.checkpoint.through)
+    || !Array.isArray(data.checkpoint.beats)
+    || data.checkpoint.beats.some(pair => !Array.isArray(pair) || pair.length !== 2
+      || typeof pair[0] !== "string" || (pair[1] !== null && !isReadBeat(pair[1]))))) {
+    throw new TypeError("Invalid pending edits journal");
+  }
+  return data as unknown as NativePendingEditsData;
 }
 
 interface NativeJournalCommand {
@@ -85,9 +178,10 @@ function placementOf(reader: NativeScriptReader) {
   return { placements, headings };
 }
 
-export function openNativePendingEdits(reader: NativeScriptReader, saved?: NativePendingEditsData) {
+export function openNativePendingEdits(reader: NativeScriptReader, saved?: NativePendingEditsData, onChange?: () => void) {
   const restored = deepFrozen(structuredClone(saved));
   let through = restored?.through ?? 0, checkpoint = restored?.checkpoint;
+  let journalRevision = 0;
   let { placements, headings } = placementOf(reader);
   const beats = new Map<string, NativeReadBeat>();
   const entries = new Map<string, PendingBeat>(), held = new Map<string, Reading>();
@@ -176,14 +270,35 @@ export function openNativePendingEdits(reader: NativeScriptReader, saved?: Nativ
       else delete entry.landingId;
       edited = true;
     }
-    if (edited) through++;
+    if (edited) {
+      through++;
+      journalRevision++;
+      onChange?.();
+    }
   }
 
   return Object.freeze({
     sync,
     pending,
+    revision: () => journalRevision,
+    through: () => through,
+    hasPending: () => entries.size > 0,
+    hasPendingThrough(limit: number): boolean {
+      for (const entry of entries.values()) if (entry.first <= limit) return true;
+      return false;
+    },
     peer(): void {
-      for (const [key, entry] of entries) if (!held.has(key)) held.set(key, reading(entry));
+      let changed = false;
+      for (const [key, entry] of entries) {
+        if (!held.has(key)) {
+          held.set(key, reading(entry));
+          changed = true;
+        }
+      }
+      if (changed) {
+        journalRevision++;
+        onChange?.();
+      }
     },
     data(): NativePendingEditsData {
       const indexes = new Map<string, number>(), orders: (readonly string[])[] = [];
@@ -207,21 +322,30 @@ export function openNativePendingEdits(reader: NativeScriptReader, saved?: Nativ
     },
     confirmationPoint(): number {
       if (!entries.size) return through;
-      if (!checkpoint) checkpoint = { through, beats: [...entries].map(([key, entry]) => {
-        const after = (held.get(key) ?? reading(entry)).after;
-        if (!after) return [key, null] as const;
-        const { id, row, narration, visual, fields, joined } = after;
-        return [key, { id, row, narration, visual, fields, joined }] as const;
-      }) };
+      if (!checkpoint) {
+        checkpoint = { through, beats: [...entries].map(([key, entry]) => {
+          const after = (held.get(key) ?? reading(entry)).after;
+          if (!after) return [key, null] as const;
+          const { id, row, narration, visual, fields, joined } = after;
+          return [key, { id, row, narration, visual, fields, joined }] as const;
+        }) };
+        journalRevision++;
+        onChange?.();
+      }
       return checkpoint.through;
     },
     clearThrough(confirmed: number): void {
+      let changed = false;
       const confirmedBeats = new Map(checkpoint && confirmed >= checkpoint.through ? checkpoint.beats : []);
-      if (checkpoint && confirmed >= checkpoint.through) checkpoint = undefined;
+      if (checkpoint && confirmed >= checkpoint.through) {
+        checkpoint = undefined;
+        changed = true;
+      }
       for (const [key, entry] of entries) {
         if (entry.last <= confirmed) {
           entries.delete(key);
           held.delete(key);
+          changed = true;
         } else if (entry.first <= confirmed) {
           entry.first = confirmed + 1;
           if (confirmedBeats.has(key)) {
@@ -234,7 +358,12 @@ export function openNativePendingEdits(reader: NativeScriptReader, saved?: Nativ
           if (entry.split && entry.split.at <= confirmed) delete entry.split;
           if (entry.created !== undefined && entry.created <= confirmed) delete entry.created;
           if (entry.restored !== undefined && entry.restored <= confirmed) delete entry.restored;
+          changed = true;
         }
+      }
+      if (changed) {
+        journalRevision++;
+        onChange?.();
       }
     }
   });
