@@ -385,23 +385,51 @@ test("desktop keeps updates log bounded across 600+ commands with a large stuck 
 });
 
 for (const kind of ["browser", "desktop"] as const) {
-  test(`${kind}: oversized >16MB journal does not block edit persistence`, { timeout: 30_000 }, async t => {
+  test(`${kind}: oversized >16MB journal clears stale stored journal without blocking edit persistence`, { timeout: 30_000 }, async t => {
     const backend = await createBackend(t, kind);
     const name = `deployment/oversized-${kind}`;
     const replica = await backend.open(name);
     assert.equal(replica.kind, "opened");
-    seedReplica(replica.session, { A: "a".repeat(8_500_000) });
+    seedReplica(replica.session, { A: "a".repeat(8_500_000), B: "small" });
     assert.deepEqual(await replica.flush(), stored(1));
 
-    typeAt(replica.session, 0, "prefix ", "A");
+    typeAt(replica.session, 0, "stale ", "B");
     assert.deepEqual(await replica.flush(), stored(2));
+
+    typeAt(replica.session, 0, "prefix ", "A");
+    assert.deepEqual(await replica.flush(), stored(3));
     replica.session.close();
     await replica.closed;
 
     const reopened = await backend.restart().open(name, JOURNAL_OPTIONS);
     assert.equal(reopened.kind, "opened");
     assert.equal(reopened.session.document().rows[0]?.audioText?.startsWith("prefix "), true);
+    assert.deepEqual(reopened.session.pendingEdits?.data().entries, []);
     reopened.session.close();
     await reopened.closed;
   });
 }
+
+test("desktop falls back to an empty journal when an oversized >16MB journal file is on disk", async t => {
+  const { writeFile } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const { createHash } = await import("node:crypto");
+  const desktop = await desktopFixture(t, false);
+  const name = "deployment/oversized-on-disk";
+  const replica = await desktop.store.open(name, JOURNAL_OPTIONS);
+  assert.equal(replica.kind, "opened");
+  seedReplica(replica.session, { A: "kept" });
+  assert.deepEqual(await replica.flush(), stored(1));
+  replica.session.close();
+  await replica.closed;
+
+  const folder = join(desktop.directory, "native-replicas", createHash("sha256").update(name).digest("hex"));
+  await writeFile(join(folder, "journal"), Buffer.alloc(16_000_001, 0x20));
+
+  const reopened = await desktop.restart().store.open(name, JOURNAL_OPTIONS);
+  assert.equal(reopened.kind, "opened");
+  try {
+    assert.equal(reopened.session.document().rows[0]?.audioText, "kept");
+    assert.deepEqual(reopened.session.pendingEdits?.data(), { through: 0, entries: [] });
+  } finally { reopened.session.close(); await reopened.closed; }
+});

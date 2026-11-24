@@ -27,7 +27,7 @@ function relayFrameHeader(data: ArrayBuffer): FrameHeader | undefined {
 function encoderHead(encoder: Encoder): Uint8Array {
   if (encoder.bufs.length === 0) return encoder.cbuf.subarray(0, encoder.cpos);
   const first = encoder.bufs[0];
-  if (first && first.length >= 512) return first.subarray(0, 512);
+  if (first && first.length >= 512) return first;
   return toUint8Array(encoder);
 }
 

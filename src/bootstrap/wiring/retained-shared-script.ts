@@ -287,9 +287,12 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
             onEvent(event) {
               if (event.kind === "synced") {
                 if (sessionCurrent()) {
-                  const clashes = relay.session().offlineNotice("returning");
-                  entry.onOfflineNotice?.(clashes);
-                  relay.releaseOfflineGate();
+                  try {
+                    const clashes = relay.session().offlineNotice("returning");
+                    entry.onOfflineNotice?.(clashes);
+                  } finally {
+                    relay.releaseOfflineGate();
+                  }
                 }
                 return;
               }

@@ -227,7 +227,9 @@ export async function attachNativeLocalStore(
     const edits = session.pendingEdits;
     if (!edits) return undefined;
     const bytes = encodeNativePendingEdits(edits.data());
-    if (bytes.byteLength > MAX_REPLICA_JOURNAL_BYTES) return undefined;
+    if (bytes.byteLength > MAX_REPLICA_JOURNAL_BYTES) {
+      return encodeNativePendingEdits({ through: edits.through(), entries: [] });
+    }
     return bytes;
   }
 
