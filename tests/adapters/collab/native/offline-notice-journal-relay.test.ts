@@ -61,6 +61,7 @@ for (const backend of ["browser", "desktop"] as const) {
 
         const offline = await stores.open(scriptScope);
         assert.equal(offline.kind, "opened");
+        offline.session.ydoc.clientID = 2;
         assert.equal(offline.session.commands.setField({ kind: "beat", id: "B", field: "status" }, "ready").kind, "written");
         typeAt(offline.session, 0, "local ", "B");
         assert.equal((await offline.flush()).kind, "stored");
@@ -68,6 +69,7 @@ for (const backend of ["browser", "desktop"] as const) {
         offline.session.close();
         await offline.closed;
 
+        peer.session.ydoc.clientID = 3;
         if (peerAction === "edit") {
           assert.equal(peer.session.commands.setField({ kind: "beat", id: "B", field: "status" }, "shot").kind, "written");
         } else {
@@ -77,6 +79,7 @@ for (const backend of ["browser", "desktop"] as const) {
 
         const returned = await stores.open(scriptScope);
         assert.equal(returned.kind, "opened");
+        returned.session.subscribe(() => signals.notify());
         const returnedRelay = openNativeRelay(returned.session, {
           url, name: "relay-script", token: "test-token", sessionOptions: JOURNAL_OPTIONS,
           reopen: returned.reopen,
@@ -118,6 +121,8 @@ test("reconnect does not clear offline edits even when onUnsyncedChanges hits ze
 
     const peer = kit.copy();
     const writer = openNativeSession({ kind: "empty" }, JOURNAL_OPTIONS);
+    writer.subscribe(() => signals.notify());
+    writer.pendingEdits?.subscribe(() => signals.notify());
     const events: NativeRelayEvent[] = [];
     const relay = openNativeRelay(writer, {
       url: address, name: "relay-script", token: "test-token", sessionOptions: JOURNAL_OPTIONS,
@@ -168,7 +173,7 @@ test("reconnect does not clear offline edits even when onUnsyncedChanges hits ze
     writer.pendingEdits?.clearThrough(1);
     assert.deepEqual(writer.offlineNotice("returning"), []);
     typeAt(writer, 0, "clean ", "A");
-    await signals.until(() => peer.session.document().rows.some(row => row.audioText === "clean alpha")
+    await signals.until(() => peer.session.document().rows.some(row => row.id === "A" && row.audioText === "clean alphaoffline ")
       && relay.status().pendingChangeCount === 0 || undefined);
     await signals.until(() => writer.pendingEdits?.data().entries.length === 0 || undefined);
     assert.deepEqual(writer.pendingEdits?.data().entries, []);
@@ -185,6 +190,8 @@ test("connected sends clear confirmed journal entries on applied confirmation an
     const peer = kit.copy();
     const replica = await store.open(scriptScope, JOURNAL_OPTIONS);
     assert.equal(replica.kind, "opened");
+    replica.session.subscribe(() => signals.notify());
+    replica.session.pendingEdits?.subscribe(() => signals.notify());
     const relay = openNativeRelay(replica.session, {
       url, name: "relay-script", token: "test-token", sessionOptions: JOURNAL_OPTIONS,
       reopen: replica.reopen,
@@ -231,6 +238,8 @@ test("an online send dropped on a dead socket stays in the journal and clashes a
 
     const peer = kit.copy();
     const writer = openNativeSession({ kind: "empty" }, JOURNAL_OPTIONS);
+    writer.subscribe(() => signals.notify());
+    writer.pendingEdits?.subscribe(() => signals.notify());
     const relay = openNativeRelay(writer, {
       url: address, name: "relay-script", token: "test-token", sessionOptions: JOURNAL_OPTIONS,
       onEvent() { signals.notify(); }

@@ -30,7 +30,7 @@ export function seedSession(rows: Record<string, string>) {
   }, STORE_OPTIONS);
 }
 
-export function seedReplica(session: StoreSession, rows = { A: "start" }): void {
+export function seedReplica(session: StoreSession, rows: Record<string, string> = { A: "start" }): void {
   const source = seedSession(rows);
   try { Y.applyUpdate(session.ydoc, source.encodeState(), "initial copy"); }
   finally { source.close(); }

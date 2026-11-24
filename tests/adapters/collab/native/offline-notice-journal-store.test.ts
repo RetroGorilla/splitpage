@@ -10,6 +10,7 @@ import {
   encodeNativePendingEdits
 } from "../../../../src/adapters/collab/native/pending-edits.ts";
 import { applyNativePeerUpdate } from "../../../../src/adapters/collab/native/peer-update.ts";
+import { openNativeSession } from "../../../../src/adapters/collab/native/session.ts";
 import { desktopFixture, desktopTestCipher, replicasAt } from "./desktop-local-store-fixture.ts";
 import { eventResult, failNextIdbWrite, idbDone, idbResult } from "./indexeddb-fixture.ts";
 import { DB_NAME, REPLICAS, STORE_OPTIONS, fixture, seedReplica, seedSession, stored, typeAt } from "./local-store-fixture.ts";
@@ -203,6 +204,7 @@ for (const kind of ["browser", "desktop"] as const) {
       const replica = await backend.open(name);
       assert.equal(replica.kind, "opened");
       seedReplica(replica.session, { A: "alpha", B: "beta" });
+      const seededState = replica.session.encodeState();
       assert.deepEqual(await replica.flush(), stored(1));
 
       typeAt(replica.session, 0, "one ", "A");
@@ -265,7 +267,7 @@ for (const kind of ["browser", "desktop"] as const) {
       assert.equal(afterCompactRestart.kind, "opened");
       assert.deepEqual(afterCompactRestart.session.pendingEdits?.data(), beforeCompact);
 
-      const peer = seedSession({ A: "alpha", B: "beta" });
+      const peer = openNativeSession({ kind: "state", state: seededState }, STORE_OPTIONS);
       t.after(() => peer.close());
       assert.equal(peer.commands.removeRows(["A"]).kind, "written");
       assert.equal(applyNativePeerUpdate(afterCompactRestart.session, peer.encodeState()), true);
