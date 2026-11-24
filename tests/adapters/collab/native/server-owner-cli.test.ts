@@ -1,6 +1,8 @@
 import assert from "node:assert/strict";
 import { spawnSync } from "node:child_process";
 import { randomBytes, randomUUID } from "node:crypto";
+import { symlinkSync } from "node:fs";
+import { dirname, join } from "node:path";
 import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { runOwnerCommand } from "../../../../collab-server/owner-command.ts";
@@ -138,4 +140,40 @@ test("owner CLI enforces https origin, secret presence, valid role and argument 
     }),
     /Relay refused the command \(HTTP 401\)\./
   );
+});
+
+test("spawned owner CLI executes through both direct and symlinked paths", { timeout: 30_000 }, async t => {
+  const kit = serverHarness(t);
+  const state = kit.seed();
+  const secret = randomBytes(32).toString("base64url");
+  kit.redact(secret);
+  const run = kit.launch({ SPLITPAGE_MANAGEMENT_SECRET: secret });
+  const port = await run.port();
+  const created = await run.createScriptWithCredentials(randomUUID(), state, secret);
+
+  const bridgeCode = `const orig = globalThis.fetch;
+globalThis.fetch = (input, init) => {
+  const url = input instanceof URL ? input : new URL(String(input));
+  if (url.origin !== ${JSON.stringify(REMOTE)}) throw new Error("unexpected origin " + url.origin);
+  return orig(new URL(url.pathname + url.search, "http://127.0.0.1:${port}"), init);
+};`;
+  const bridgeUrl = `data:text/javascript;base64,${Buffer.from(bridgeCode, "utf8").toString("base64")}`;
+
+  const linkDir = join(kit.directory, "linked-collab-server");
+  symlinkSync(dirname(CLI), linkDir, process.platform === "win32" ? "junction" : "dir");
+  const linkedCli = join(linkDir, "owner-command.ts");
+
+  for (const entrypoint of [CLI, linkedCli]) {
+    const result = spawnSync(process.execPath, ["--import", bridgeUrl, entrypoint, REMOTE, "scripts"], {
+      env: { SPLITPAGE_MANAGEMENT_SECRET: secret },
+      encoding: "utf8"
+    });
+    assert.equal(result.status, 0, result.stderr);
+    assert.equal(result.stderr, "");
+    const listed = JSON.parse(result.stdout) as { id: string; status: string }[];
+    assert.equal(listed.some(entry => entry.id === created.scriptId && entry.status === "active"), true);
+    assert.equal(result.stdout.includes(secret), false);
+  }
+
+  assert.deepEqual(await run.stop("clean"), { code: 0, exitSignal: null });
 });

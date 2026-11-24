@@ -1,5 +1,5 @@
-import { resolve } from "node:path";
-import { pathToFileURL } from "node:url";
+import { realpathSync } from "node:fs";
+import { fileURLToPath } from "node:url";
 
 const usage = "Usage: node owner-command.ts <https-origin> scripts | issue <script-id> <owner|guest> <label> | list <script-id> | reset <script-id> | revoke <invitation-id> | delete <script-id>";
 
@@ -97,9 +97,16 @@ export async function runOwnerCommand(
   }
 }
 
-const entry = process.argv[1];
-const isEntrypoint = typeof entry === "string" && entry.length > 0 && pathToFileURL(resolve(entry)).href === import.meta.url;
-if (isEntrypoint) {
+function isEntrypoint(entry: string | undefined): boolean {
+  if (!entry) return false;
+  try {
+    return realpathSync(entry) === realpathSync(fileURLToPath(import.meta.url));
+  } catch {
+    return false;
+  }
+}
+
+if (isEntrypoint(process.argv[1])) {
   await runOwnerCommand(process.argv.slice(2), process.env).catch(error => {
     console.error(error instanceof Error ? error.message : "Owner command failed.");
     process.exitCode = 1;

@@ -10,7 +10,7 @@ import test from "node:test";
 import { fileURLToPath } from "node:url";
 import { backupRelay, lastBackupTime, restoreRelay, verifyCopy } from "../../../../collab-server/backup.ts";
 import { DB_NAME, openWriter } from "../../../../collab-server/storage.ts";
-import { appendText, contentHash, NAME, serverHarness, storedState, storedText } from "./server-harness.ts";
+import { appendText, NAME, serverHarness, storedState, storedText } from "./server-harness.ts";
 import { seedRelaySession } from "./relay-harness.ts";
 
 const BACKUP = new URL("../../../../collab-server/backup-command.ts", import.meta.url);
@@ -143,7 +143,9 @@ test("online backup retains verified bytes for each script and restores without 
   const creationId = randomUUID();
   const deletedScript = await live.createScript(randomUUID(), seed);
   assert.equal((await live.owner(`scripts/${deletedScript}`, { method: "DELETE" })).status, 204);
-  const createdScript = await live.createScript(creationId, seed);
+  const createdBeforeBackup = await live.createScriptWithCredentials(creationId, seed);
+  assert.ok(createdBeforeBackup.owner && createdBeforeBackup.guest);
+  const createdScript = createdBeforeBackup.scriptId;
   const writer = kit.copy(port, { kind: "state", state: seed });
   const second = kit.copy(port, { kind: "state", state: seed }, "second-script");
   const peer = kit.copy(port);
@@ -198,16 +200,22 @@ test("online backup retains verified bytes for each script and restores without 
   assert.deepEqual(storedState(freshDirectory, NAME), original);
   assert.deepEqual(storedState(freshDirectory, "second-script"), secondOriginal);
   const restored = kit.launch({ SPLITPAGE_DATA_DIR: freshDirectory });
-  const retry = await restored.owner("scripts", {
-    method: "POST",
-    headers: { "Idempotency-Key": creationId, "Splitpage-Content-SHA256": contentHash(seed) },
-    body: Buffer.from(seed)
-  });
-  assert.equal(retry.status, 200);
-  const retryPayload = await retry.json() as { scriptId: string };
+  const retryPayload = await restored.createScriptWithCredentials(creationId, seed);
   assert.equal(retryPayload.scriptId, createdScript);
+  assert.ok(retryPayload.owner && retryPayload.guest);
+  assert.notEqual(retryPayload.owner.id, createdBeforeBackup.owner.id);
+  assert.notEqual(retryPayload.owner.token, createdBeforeBackup.owner.token);
+  assert.notEqual(retryPayload.guest.id, createdBeforeBackup.guest.id);
+  assert.notEqual(retryPayload.guest.token, createdBeforeBackup.guest.token);
   assert.deepEqual(storedState(freshDirectory, createdScript), seed);
   const portAfterRestore = await restored.port();
+  const retriedGuest = kit.copy(portAfterRestore, { kind: "empty" }, createdScript, retryPayload.guest.token);
+  await kit.until(() => (retriedGuest.relay.status().firstSyncDone && retriedGuest.text() === "word") || undefined);
+  retriedGuest.close();
+  const previousCreated = kit.copy(portAfterRestore, { kind: "empty" }, createdScript, createdBeforeBackup.guest.token);
+  const previousCreatedRefusal = await kit.until(() => previousCreated.events.find(event => event.kind === "authentication-failed"));
+  assert.equal(previousCreatedRefusal.reason, "invitation-revoked");
+  previousCreated.close();
   const previous = kit.copy(portAfterRestore);
   const refusal = await kit.until(() => previous.events.find(event => event.kind === "authentication-failed"));
   assert.equal(refusal.reason, "invitation-revoked");

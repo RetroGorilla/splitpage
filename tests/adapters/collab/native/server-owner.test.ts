@@ -841,6 +841,7 @@ test("creation retry, untouched rules, different-hash refusal, abandon and secon
     const untouchedId = randomUUID();
     const first = await run.createScriptWithCredentials(untouchedId, state1, secret);
     assert.ok(first.owner && first.guest);
+    const invitationsBeforeMismatch = await (await run.owner(`scripts/${first.scriptId}/invitations`, {}, secret)).json();
 
     const mismatchedHash = await run.owner("scripts", {
       method: "POST",
@@ -849,6 +850,10 @@ test("creation retry, untouched rules, different-hash refusal, abandon and secon
     }, secret);
     assert.equal(mismatchedHash.status, 409);
     assert.deepEqual(storedState(kit.directory, first.scriptId), state1);
+    assert.deepEqual(
+      await (await run.owner(`scripts/${first.scriptId}/invitations`, {}, secret)).json(),
+      invitationsBeforeMismatch
+    );
 
     assert.equal((await run.owner(`scripts/${first.scriptId}/reset`, { method: "POST" }, first.guest.token)).status, 403);
 
@@ -868,6 +873,7 @@ test("creation retry, untouched rules, different-hash refusal, abandon and secon
     await kit.until(() => (wsTouched.relay.status().firstSyncDone && wsTouched.text() === "word") || undefined);
     const afterWsRetry = await run.createScriptWithCredentials(untouchedId, state1, secret);
     assert.deepEqual(afterWsRetry, { scriptId: first.scriptId });
+    assert.equal((await run.owner(`creations/${untouchedId}`, { method: "DELETE" }, secret)).status, 409);
     assert.equal(wsTouched.relay.status().connected, true);
 
     const httpTouchId = randomUUID();
@@ -876,6 +882,10 @@ test("creation retry, untouched rules, different-hash refusal, abandon and secon
     const picCheck = await run.owner(`scripts/${httpCreated.scriptId}/pictures/${"0".repeat(64)}`, {}, httpCreated.guest.token);
     assert.equal(picCheck.status, 404);
     assert.deepEqual(await run.createScriptWithCredentials(httpTouchId, state1, secret), { scriptId: httpCreated.scriptId });
+    assert.equal((await run.owner(`creations/${httpTouchId}`, { method: "DELETE" }, secret)).status, 409);
+    const afterHttpAbandon = kit.copy(port, { kind: "empty" }, httpCreated.scriptId, httpCreated.guest.token);
+    await kit.until(() => (afterHttpAbandon.relay.status().firstSyncDone && afterHttpAbandon.text() === "word") || undefined);
+    afterHttpAbandon.close();
 
     const extraInviteId = randomUUID();
     const extraCreated = await run.createScriptWithCredentials(extraInviteId, state1, secret);
