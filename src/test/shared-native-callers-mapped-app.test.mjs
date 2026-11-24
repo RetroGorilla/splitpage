@@ -616,6 +616,7 @@ const refusalGestures = [
 const nativeCallerWrites = new Map([
   ["Ctrl+Enter", () => assert.deepEqual(audio(app()), ["abcdef", "", "Other", "Third"])],
   ["Alt+Enter", () => assert.deepEqual(audio(app()), ["abc", "def", "Other", "Third"])],
+  ["add bar", () => assert.deepEqual(audio(app()), ["abcdef", "Other", "Third", ""])],
   ["scene menu", () => assert.equal(app().sections, undefined)],
   ["status chip", () => assert.equal(app().rows[0].status, "ready")],
   ["Filmed", () => assert.equal(app().rows[0].status, "shot")],

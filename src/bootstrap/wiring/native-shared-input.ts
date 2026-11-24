@@ -32,7 +32,7 @@ import { writerControls, writerFlowPorts } from "./writer.ts";
 import { currentWhoList } from "./who-list.ts";
 
 interface NativeInputPorts {
-  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "resolveTextSelection" | "captureTextIdentity" | "captureCompositionCaret" | "isClosingOrClosed" | "subscribe" | "revision" | "hasBeatMarker">;
+  readonly native: Pick<ReturnType<typeof openNativeSession>, "commands" | "document" | "endTypingGroup" | "endDeletionGroup" | "narrationCaret" | "narrationHtml" | "narrationOffset" | "trackNarrationPaint" | "titleOffset" | "trackTitlePaint" | "resolveTextSelection" | "captureTextIdentity" | "captureCompositionCaret" | "isClosingOrClosed" | "subscribe" | "revision" | "hasBeatMarker">;
   readonly session: Pick<SharedDocumentSession, "admit" | "refuse" | "run" | "subscribe">;
   readonly editAttribution: () => NativeEditStamp;
   readonly now?: () => number;
@@ -49,7 +49,7 @@ const HISTORY = /^history(Undo|Redo)$/;
 const FORMAT_MARKS = new Map<string, NativePlainMark>([
   ["bold", "b"], ["italic", "i"], ["underline", "u"], ["strikeThrough", "s"], ["highlight", "hl"], ["direction", "dir"]
 ]);
-const EVENTS = ["beforeinput", "input", "compositionstart", "compositionupdate", "compositionend", "paste", "cut", "drop", "keydown", "click", "pointerdown", "focusout"] as const;
+const EVENTS = ["beforeinput", "input", "compositionstart", "compositionupdate", "compositionend", "paste", "cut", "drop", "keydown", "click", "pointerdown", "focusin", "focusout"] as const;
 const UNSUPPORTED = "native-input-unavailable";
 const STALE = "native-selection-stale";
 const PENDING = "native-input-pending";
@@ -76,7 +76,7 @@ interface Draft {
   readonly beat: string;
   readonly cell: Element;
   readonly surface: NativeTextSurface;
-  readonly field: "audioText" | "visualText";
+  readonly field: "audioText" | "visualText" | "title";
   readonly range: NativeTextRange | null;
   readonly deletion: { readonly direction: -1 | 1; readonly at: number } | null;
   readonly before: NativeTextRange | null;
@@ -93,6 +93,68 @@ interface Draft {
   text: string;
   units: number;
   previewCaret: number;
+}
+
+const titleTextSurface: NativeTextSurface = Object.freeze({
+  cellAt: (target: Element) => target instanceof HTMLInputElement && (target.id === "doc-title" || target.id === "writer-title") ? target : null,
+  cell: () => document.getElementById(writerControls()?.writerFlowControl() ? "writer-title" : "doc-title"),
+  painted: () => true,
+  mayRestore: (old: Element, fresh: Element) => document.activeElement === document.body || document.activeElement === old || document.activeElement === fresh,
+  place: (cell: HTMLElement, _beat: string, anchor: number, head: number) => {
+    if (!(cell instanceof HTMLInputElement)) return;
+    cell.focus({ preventScroll: true });
+    cell.setSelectionRange(Math.min(anchor, head), Math.max(anchor, head), anchor > head ? "backward" : "forward");
+  }
+});
+
+function titleInputOf(cell: Element | null): HTMLInputElement | null {
+  return cell instanceof HTMLInputElement && (cell.id === "doc-title" || cell.id === "writer-title") ? cell : null;
+}
+
+function titleSelection(input: HTMLInputElement): CellRange | null {
+  return input.selectionStart !== null && input.selectionEnd !== null
+    ? { from: input.selectionStart, to: input.selectionEnd } : null;
+}
+
+function readCellSelection(cell: Element): CellRange | null {
+  return cell instanceof HTMLInputElement ? titleSelection(cell) : cellSelection(cell);
+}
+
+function stepCodePoint(value: string, at: number, dir: -1 | 1): number {
+  if (dir === -1) {
+    if (at <= 0) return 0;
+    return at >= 2 && /[\ud800-\udbff]/.test(value.charAt(at - 2)) && /[\udc00-\udfff]/.test(value.charAt(at - 1)) ? at - 2 : at - 1;
+  }
+  if (at >= value.length) return value.length;
+  return at + 1 < value.length && /[\ud800-\udbff]/.test(value.charAt(at)) && /[\udc00-\udfff]/.test(value.charAt(at + 1)) ? at + 2 : at + 1;
+}
+
+function stepWord(value: string, at: number, dir: -1 | 1): number {
+  let index = at;
+  if (dir === -1) {
+    while (index > 0 && /\s/.test(value.charAt(index - 1))) index--;
+    const word = index > 0 && /\w/.test(value.charAt(index - 1));
+    while (index > 0 && !/\s/.test(value.charAt(index - 1)) && /\w/.test(value.charAt(index - 1)) === word) index--;
+    return index;
+  }
+  while (index < value.length && /\s/.test(value.charAt(index))) index++;
+  const word = index < value.length && /\w/.test(value.charAt(index));
+  while (index < value.length && !/\s/.test(value.charAt(index)) && /\w/.test(value.charAt(index)) === word) index++;
+  return index;
+}
+
+function titleInputRange(input: InputEvent, el: HTMLInputElement): CellRange | "boundary" | null {
+  const selection = titleSelection(el);
+  if (!selection) return null;
+  if (selection.from !== selection.to || !input.inputType.startsWith("delete")) return selection;
+  const { from } = selection, value = el.value;
+  if (input.inputType === "deleteContentBackward") return from > 0 ? { from: stepCodePoint(value, from, -1), to: from } : "boundary";
+  if (input.inputType === "deleteContentForward") return from < value.length ? { from, to: stepCodePoint(value, from, 1) } : "boundary";
+  if (input.inputType === "deleteWordBackward") return from > 0 ? { from: stepWord(value, from, -1), to: from } : "boundary";
+  if (input.inputType === "deleteWordForward") return from < value.length ? { from, to: stepWord(value, from, 1) } : "boundary";
+  if (input.inputType === "deleteSoftLineBackward" || input.inputType === "deleteHardLineBackward") return from > 0 ? { from: 0, to: from } : "boundary";
+  if (input.inputType === "deleteSoftLineForward" || input.inputType === "deleteHardLineForward") return from < value.length ? { from, to: value.length } : "boundary";
+  return null;
 }
 
 function insideDraft(draft: Draft, cell: Element, { from, to }: CellRange): boolean {
@@ -129,6 +191,12 @@ function touchesProtectedText(cell: Element, { from, to }: CellRange): boolean {
 }
 
 function preview(cell: Element, { from, to }: CellRange, text: string): void {
+  if (cell instanceof HTMLInputElement) {
+    cell.value = cell.value.slice(0, from) + text + cell.value.slice(to);
+    const caret = from + text.length;
+    cell.setSelectionRange(caret, caret);
+    return;
+  }
   const start = posToDom(cell, from), end = posToDom(cell, to), range = document.createRange();
   range.setStart(start.node, start.offset);
   range.setEnd(end.node, end.offset);
@@ -199,21 +267,65 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   let placement: { readonly buffered: Draft; readonly caret: RelativePoint | number } | null = null;
   let lastWrite: number | null = null;
   let stopWriterPaint: (() => void) | null = null;
+  let emptyWriter: {
+    readonly paint: () => void;
+    readonly composing: () => boolean;
+    readonly hasText: () => boolean;
+    readonly commit: (quiet?: boolean) => string | null;
+    readonly abandon: () => void;
+    readonly dispose: () => void;
+  } | null = null;
   const movePaint = new Map<Element, TrackedPaint>();
+  let titleTrack: { readonly input: HTMLInputElement; readonly paint: ReturnType<NativeInputPorts["native"]["trackTitlePaint"]> } | null = null;
+  function clearTitleTrack(): void {
+    titleTrack?.paint.dispose();
+    titleTrack = null;
+  }
+  function syncTitleTrack(input: Element | null = document.activeElement): void {
+    if (!(input instanceof HTMLInputElement) || input.id !== "doc-title" && input.id !== "writer-title") {
+      clearTitleTrack();
+      return;
+    }
+    if (draft?.cell === input || !paintIsCurrent()) return;
+    clearTitleTrack();
+    titleTrack = { input, paint: native.trackTitlePaint() };
+  }
   const stopSize = native.subscribe(event => {
     if (event.kind === "size" && event.state !== "full") fullRefused = false;
   });
   const stopPaint = session.subscribe(() => {
     writerControls()?.renderWriter();
+    const title = documentReader.current()?.title ?? "";
+    for (const id of ["doc-title", "writer-title"]) {
+      const input = document.getElementById(id);
+      if (!(input instanceof HTMLInputElement) || draft?.cell === input) continue;
+      const focused = document.activeElement === input;
+      if (input.value !== title) {
+        const start = input.selectionStart, end = input.selectionEnd, direction = input.selectionDirection ?? undefined;
+        const tracked = focused && titleTrack?.input === input ? titleTrack.paint : null;
+        const startPoint = tracked && start !== null ? tracked.point(start, 0) : null;
+        const endPoint = tracked && end !== null ? (end === start ? startPoint : tracked.point(end, 0)) : null;
+        const nextStart = startPoint ? native.titleOffset({ from: startPoint }, 0) : null;
+        const nextEnd = endPoint ? (endPoint === startPoint ? nextStart : native.titleOffset({ from: endPoint }, 0)) : null;
+        input.value = title;
+        if (focused && !placement && start !== null && end !== null) {
+          input.setSelectionRange(nextStart ?? Math.min(start, title.length), nextEnd ?? Math.min(end, title.length), direction);
+        }
+      }
+      if (focused) syncTitleTrack(input);
+    }
+    emptyWriter?.paint();
     const placed = placement;
     placement = null;
     if (!placed) {
       if (currentWhoList()?.isOpen()) currentWhoList()?.refresh();
       return;
     }
-    const { beat, cell, surface } = placed.buffered, fresh = surface.cell(beat);
+    const { beat, cell, surface, field } = placed.buffered, fresh = surface.cell(beat);
     if (!fresh || !surface.mayRestore(cell, fresh)) return;
-    const offset = typeof placed.caret === "number" ? placed.caret : native.narrationOffset(beat, { from: placed.caret }, -1);
+    const offset = typeof placed.caret === "number" ? placed.caret
+      : field === "title" ? native.titleOffset({ from: placed.caret }, -1)
+      : native.narrationOffset(beat, { from: placed.caret }, -1);
     if (offset === null) return;
     surface.place(fresh, beat, offset, offset, false);
   });
@@ -268,8 +380,171 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     }
   }
 
+  function mountEmptyWriter(root: HTMLElement) {
+    const area = root.ownerDocument.createElement("div");
+    area.className = "empty-script";
+    const input = area.appendChild(root.ownerDocument.createElement("textarea"));
+    input.className = "empty-script-input";
+    input.rows = 2;
+    input.placeholder = "Start writing";
+    input.setAttribute("aria-label", "Start writing");
+    input.dataset.undoOwner = "document";
+    root.before(area);
+    let composing = false, beforeComposition = "", committing = false, disposed = false;
+
+    const isEmpty = () => (documentReader.current()?.rows.length ?? 0) === 0;
+
+    function paint(): void {
+      if (disposed) return;
+      area.hidden = !isEmpty() && !composing && !input.value;
+      input.disabled = !editAllowed();
+    }
+
+    function commit(quiet = false): string | null {
+      if (disposed || committing) return null;
+      if (composing) {
+        if (!quiet) refuseCommand(PENDING);
+        return PENDING;
+      }
+      if (!input.value) { paint(); return null; }
+      const refusal = admissionRefusal();
+      if (refusal) {
+        if (!quiet) refuseCommand(refusal);
+        return refusal;
+      }
+      const normalized = input.value.replace(/\r\n?/g, "\n");
+      if (cleanText(normalized) !== normalized) {
+        if (!quiet) refuseCommand(UNSUPPORTED);
+        return UNSUPPORTED;
+      }
+      committing = true;
+      try {
+        let step = native.commands.createFirstBeat.withSelection(null, normalized, editAttribution());
+        if (step.result.kind === "unchanged") {
+          const first = native.document().rows.find(row => native.hasBeatMarker(row.id))?.id;
+          if (first) step = native.commands.insertAdjacentBeat.withSelection(null, first, "above", editAttribution(), false, normalized);
+        }
+        if (step.result.kind === "refused") {
+          if (!quiet) refuseCommand(step.result.reason);
+          return step.result.reason;
+        }
+        if (step.result.kind !== "written") return null;
+        const created = step.result.created;
+        const offset = cellLength(scriptCellOf(native.narrationHtml(created) ?? ""));
+        step.recordAfter(caretAnchor(created, offset));
+        input.value = "";
+        paint();
+        publish();
+        const fresh = writerNarration.cell(created);
+        if (fresh) writerNarration.place(fresh, created, offset, offset, true);
+        return null;
+      } catch (error) {
+        report(error);
+        if (!quiet) refuseCommand(UNSUPPORTED);
+        return UNSUPPORTED;
+      } finally {
+        committing = false;
+      }
+    }
+
+    const onKeydown = (event: Event): void => {
+      const key = event as KeyboardEvent;
+      const undoing = undoGesture(key);
+      if (!undoing) return;
+      key.preventDefault();
+      key.stopImmediatePropagation();
+      if (composing || input.value) {
+        if (!stopped) refuseCommand(PENDING);
+        return;
+      }
+      sharedUndoRoute()?.replay?.(undoing);
+    };
+
+    const onBeforeInput = (event: Event): void => {
+      const change = event as InputEvent;
+      if (HISTORY.test(change.inputType)) {
+        event.preventDefault();
+        event.stopImmediatePropagation();
+        if (composing || input.value) {
+          if (!stopped) refuseCommand(PENDING);
+          return;
+        }
+        sharedUndoRoute()?.replay?.(change.inputType === "historyUndo" ? "undo" : "redo");
+        return;
+      }
+      if (!editAllowed() || !isEmpty() && !composing && !input.value) {
+        event.preventDefault();
+        if (!editAllowed()) refuseCommand(UNSUPPORTED);
+      }
+    };
+
+    const onCompositionStart = (event: Event): void => {
+      const refusal = admissionRefusal();
+      if (refusal) { refuseCommand(refusal); event.preventDefault(); return; }
+      if (finish()) { event.preventDefault(); return; }
+      composing = true;
+      beforeComposition = input.value;
+    };
+
+    const onCompositionEnd = (event: Event): void => {
+      if (!composing) return;
+      composing = false;
+      const data = (event as CompositionEvent).data;
+      if (!data) {
+        input.value = beforeComposition;
+        if (!input.value) {
+          publish();
+          paint();
+          return;
+        }
+      } else if (input.value === beforeComposition) {
+        input.value = beforeComposition + data;
+      }
+      commit();
+    };
+
+    const onInput = (event: Event): void => {
+      if (composing || (event as InputEvent).isComposing) return;
+      commit();
+    };
+
+    const onBlur = (): void => {
+      if (!composing && input.value) commit();
+    };
+
+    const listeners: readonly (readonly [string, EventListener])[] = [
+      ["keydown", onKeydown], ["beforeinput", onBeforeInput],
+      ["compositionstart", onCompositionStart], ["compositionend", onCompositionEnd],
+      ["input", onInput], ["blur", onBlur]
+    ];
+    for (const [name, listener] of listeners) input.addEventListener(name, listener);
+    paint();
+
+    return {
+      paint,
+      composing: () => composing,
+      hasText: () => input.value.length > 0,
+      commit,
+      abandon: () => {
+        if (!composing) return;
+        composing = false;
+        input.value = beforeComposition;
+        paint();
+      },
+      dispose: () => {
+        if (disposed) return;
+        disposed = true;
+        composing = false;
+        for (const [name, listener] of listeners) input.removeEventListener(name, listener);
+        area.remove();
+      }
+    };
+  }
+
   function bindWriterPaint(root: HTMLElement) {
     stopWriterPaint?.();
+    const empty = mountEmptyWriter(root);
+    emptyWriter = empty;
     const down = () => { draggingHeading = true; };
     const up = () => {
       draggingHeading = false;
@@ -278,6 +553,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const stop = () => {
       if (stopWriterPaint !== stop) return;
       stopWriterPaint = null;
+      if (emptyWriter === empty) emptyWriter = null;
+      empty.dispose();
       root.ownerDocument.removeEventListener("selectionchange", trackMovePaint);
       root.removeEventListener("focusout", clearMovePaint);
       root.removeEventListener("mousedown", down);
@@ -295,8 +572,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     window.addEventListener("mouseup", up);
     return {
       headingCandidate: (beat: string) => headingCandidates.has(beat),
-      settle: () => !draft?.cell.closest("#writer") || !finish(),
-      finish: () => { if (!finish(undefined, true, true)) leaveHeadingLine(true); },
+      settle: () => !empty.composing() && (!empty.hasText() || !empty.commit()) && (!draft?.cell.closest("#writer") || !finish()),
+      finish: () => { if (!empty.commit(true) && !finish(undefined, true, true)) leaveHeadingLine(true); },
       dispose: stop
     };
   }
@@ -338,6 +615,11 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   }
 
   function begin(cell: Element, selection: CellRange, composing: boolean, text: string, deletion: Draft["deletion"] = null): Draft {
+    if (cell instanceof HTMLInputElement) {
+      return { beat: "", cell, surface: titleTextSurface, field: "title", selection, composing, composition: composing, text,
+        units: Math.max(text.length, selection.to - selection.from), previewCaret: selection.from + text.length, range: null, deletion,
+        before: null, after: null, endsGroup: false, paint: null, html: cell.value, marks: {} };
+    }
     const beat = cell.getAttribute("data-id") ?? "";
     const { from, to } = selection;
     const marks = !text && !composing ? {} : typingMarks(scriptCellOf(cell.innerHTML), from === to ? from : from + 1);
@@ -350,6 +632,19 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
 
   function anchor(next: Draft): Draft | string {
     const { beat, cell, selection, field } = next;
+    if (field === "title") {
+      const shownTitle = documentReader.current()?.title ?? "";
+      const liveTitle = native.document().title;
+      if (!(cell instanceof HTMLInputElement) || cell.value !== shownTitle || shownTitle !== liveTitle) return STALE;
+      const target = { beat: "", cell: "title" } as const;
+      const anchored = native.commands.anchorText(target, selection.from, selection.to);
+      if (anchored.kind === "refused") return anchored.reason;
+      const end = next.composition || selection.from !== selection.to ? native.commands.anchorText(target, selection.to) : null;
+      const after = end?.kind === "anchored" ? end.range : null, { range } = anchored;
+      const before = next.deletion?.direction === -1 ? after
+        : next.deletion?.direction === 1 ? { target: range.target, from: range.from, to: range.from } : range;
+      return { ...next, range, before, after, paint: native.trackTitlePaint() };
+    }
     const shown = documentReader.read(doc => doc?.rows.find(row => row.id === beat));
     const visual = field === "visualText";
     const live = visual ? native.document().rows.find(row => row.id === beat)?.visualText : native.narrationHtml(beat);
@@ -379,9 +674,24 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   }
 
   function commit(buffered: Draft, target: NativeInputPorts["native"], places?: NativeTextPlacement, recorded = false) {
-    const { range, text, selection, composition, marks } = buffered;
+    const { range, text, selection, composition, marks, field } = buffered;
     if (!range) return null;
-    const attribution = editAttribution(), typing = !composition && selection.from === selection.to;
+    const typing = !composition && selection.from === selection.to;
+    if (field === "title") {
+      if (!recorded) {
+        if (typing) return target.commands.typeTitle(range, text, places);
+        if (!text) return target.commands.deleteTitle(range, places);
+        return target.commands.replaceTitle(range, text, places);
+      }
+      const { before, deletion } = buffered;
+      const step = typing ? target.commands.typeTitle.withSelection(before, range, text, places)
+        : deletion ? target.commands.deleteTitleInRun.withSelection(before, range, deletion.direction, deletion.at, places)
+        : !text ? target.commands.deleteTitle.withSelection(before, range, places)
+        : target.commands.replaceTitle.withSelection(before, range, text, places);
+      if (step.result.kind === "written") step.recordAfter(typing ? undefined : buffered.after);
+      return step.result;
+    }
+    const attribution = editAttribution();
     if (!recorded) {
       if (typing) return target.commands.typeText(range, text, marks, attribution, places);
       if (!text) return target.commands.deleteText(range, attribution, places);
@@ -400,7 +710,15 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     clearTimeout(timer);
     timer = undefined;
     const buffered = draft;
-    if (stopped || !buffered) return stopped;
+    if (stopped) return stopped;
+    if (!buffered) {
+      if (emptyWriter?.composing()) {
+        if (!quiet) refuseCommand(PENDING);
+        return PENDING;
+      }
+      if (emptyWriter?.hasText()) return emptyWriter.commit(quiet);
+      return null;
+    }
     if (buffered.composing) return PENDING;
     const refusal = admissionRefusal();
     if (refusal) return stop(refusal, quiet);
@@ -423,6 +741,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     }
     try {
       if (!result) return stop(STALE, quiet);
+      if (result.kind === "refused") return stop(result.reason, quiet);
       if (result.kind === "recovery") {
         const { range, selection: { from, to }, text, composition } = buffered;
         if (result.reason !== "missing" || range?.target.cell !== "narration" ||
@@ -430,7 +749,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
           return stop(result.reason, quiet);
         }
       }
-      if (result.kind === "recovery" || result.kind === "written" && result.stray) {
+      if (result.kind === "recovery" || result.kind === "written" && "stray" in result && result.stray) {
         const removed = result.kind === "recovery" ? "discarded" : "written";
         draft = null;
         if (selection) selection.removed = removed;
@@ -467,6 +786,11 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   }
 
   function restore(buffered: Pick<Draft, "cell" | "selection" | "html">): void {
+    if (buffered.cell instanceof HTMLInputElement) {
+      buffered.cell.value = buffered.html;
+      if (document.activeElement === buffered.cell) buffered.cell.setSelectionRange(buffered.selection.from, buffered.selection.to);
+      return;
+    }
     buffered.cell.innerHTML = buffered.html;
     if (document.activeElement === buffered.cell || buffered.cell.closest("#writer-doc") === document.activeElement) {
       setCellSelection(buffered.cell, buffered.selection.from, buffered.selection.to);
@@ -474,7 +798,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   }
 
   function settleLeave(): string | null {
-    if (stopped !== "missing" || !draft?.composition || draft.composing || uncertain || !draft.range) return finish();
+    if (stopped !== "missing" || !draft?.composition || draft.composing || uncertain || !draft.range || draft.field === "title") return finish();
     const { beat, field, range, selection: { from, to } } = draft;
     const visual = field === "visualText";
     if (range.target.beat !== beat || range.target.cell !== (visual ? "visual" : "narration")) return stopped;
@@ -546,8 +870,8 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     return { point: buffered.paint?.point(original, assoc) ?? null, index: bound ? (assoc === 0 ? 0 : buffered.text.length) : null, bound };
   }
 
-  function resolveDraftEndpoint(beat: string, endpoint: ReturnType<typeof draftEndpoint>, inserted: RelativePoint | null | undefined, assoc: 0 | -1) {
-    const resolve = (point: RelativePoint) => native.narrationOffset(beat, { from: point }, assoc);
+  function resolveDraftEndpoint(beat: string, field: Draft["field"], endpoint: ReturnType<typeof draftEndpoint>, inserted: RelativePoint | null | undefined, assoc: 0 | -1) {
+    const resolve = (point: RelativePoint) => field === "title" ? native.titleOffset({ from: point }, assoc) : native.narrationOffset(beat, { from: point }, assoc);
     if (!endpoint.bound) {
       const point = endpoint.point ?? inserted;
       return point ? resolve(point) : null;
@@ -560,8 +884,19 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   function flushForInput(cell: Element, selection: CellRange, keepPreview = true, moveCaret = true): { cell: Element; selection: CellRange; stale?: true } | null {
     const buffered = draft;
     if (!buffered) return { cell, selection };
-    const oldHtml = cell.innerHTML;
+    const oldHtml = cell instanceof HTMLInputElement ? cell.value : cell.innerHTML;
     if (buffered.cell !== cell) {
+      if (cell instanceof HTMLInputElement) {
+        const shown = () => documentReader.current()?.title ?? "";
+        const original = shown();
+        if (buffered.composing) settleBlur(buffered);
+        if (finish(undefined, moveCaret)) return null;
+        const fresh = titleTextSurface.cell("");
+        if (!fresh) { session.refuse(STALE); return null; }
+        if (original === shown()) return { cell: fresh, selection };
+        if (keepPreview && fresh instanceof HTMLInputElement) fresh.value = oldHtml;
+        return { cell: fresh, selection, stale: true };
+      }
       const beat = cell.getAttribute("data-id") ?? "";
       const visual = visualTextSurface.cellAt(cell) === cell;
       const shown = () => documentReader.read(doc => doc?.rows.find(row => row.id === beat)?.[visual ? "visualText" : "audioText"]);
@@ -580,10 +915,13 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     if (finish(capture, moveCaret) || capture.removed) return null;
     const fresh = buffered.surface.cell(buffered.beat);
     if (!fresh) { session.refuse(STALE); return null; }
-    const from = resolveDraftEndpoint(buffered.beat, start, capture.inserted?.[0], 0);
-    const to = resolveDraftEndpoint(buffered.beat, end, capture.inserted?.[1], -1);
+    const from = resolveDraftEndpoint(buffered.beat, buffered.field, start, capture.inserted?.[0], 0);
+    const to = resolveDraftEndpoint(buffered.beat, buffered.field, end, capture.inserted?.[1], -1);
     if (from != null && to != null && from <= to) return { cell: fresh, selection: { from, to } };
-    if (keepPreview) fresh.innerHTML = oldHtml;
+    if (keepPreview) {
+      if (fresh instanceof HTMLInputElement) fresh.value = oldHtml;
+      else fresh.innerHTML = oldHtml;
+    }
     return { cell: fresh, selection, stale: true };
   }
 
@@ -1005,10 +1343,15 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   function write(input: InputEvent, cell: Element): void {
     const deletion = /^delete(Content|Word|SoftLine|HardLine)(Backward|Forward)$/.test(input.inputType);
     const text = input.data ?? "";
-    if (input.isComposing || !(deletion || input.inputType === "insertText" && text && cleanText(text) === text)) { refuseCommand(UNSUPPORTED); return; }
+    const isTitle = cell instanceof HTMLInputElement;
+    const insertAllowed = (input.inputType === "insertText" || isTitle && input.inputType === "insertReplacementText")
+      && text && cleanText(text) === text && (!isTitle || !/[\r\n]/.test(text));
+    if (input.isComposing || !(deletion || insertAllowed)) { refuseCommand(UNSUPPORTED); return; }
     const refusal = admissionRefusal();
     if (refusal) { refuseCommand(refusal); return; }
-    const selection = inputRange(input, cell);
+    const ranged = isTitle ? titleInputRange(input, cell) : inputRange(input, cell);
+    if (ranged === "boundary") return;
+    const selection = ranged;
     if (!selection || deletion && selection.from === selection.to) { session.refuse(deletion ? UNSUPPORTED : STALE); return; }
     const buffered = draft;
     if (buffered && !buffered.deletion && insideDraft(buffered, cell, selection)) {
@@ -1017,10 +1360,10 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (atBatchBoundary(buffered)) finish();
       return;
     }
-    if (touchesProtectedText(cell, selection)) { session.refuse(UNSUPPORTED); return; }
-    const shown = deletion ? cellSelection(cell) : null;
+    if (!isTitle && touchesProtectedText(cell, selection)) { session.refuse(UNSUPPORTED); return; }
+    const shown = deletion ? readCellSelection(cell) : null;
     const gesture = shown && shown.from === shown.to ? { direction: input.inputType.endsWith("Backward") ? -1 : 1, at: now() } as const : null;
-    const seams = selection.from === selection.to ? null : joinSeams(cell);
+    const seams = isTitle || selection.from === selection.to ? null : joinSeams(cell);
     if (crossesJoin(cell, selection, seams)) { refuseJoinedEdit(cell); return; }
     const joinedDeletion = deletion && seams !== null;
     const current = flushForInput(cell, selection, !joinedDeletion);
@@ -1041,19 +1384,58 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       }
     }
     else timer = setTimeout(() => {
-      const shown = cellSelection(anchored.cell);
+      const shown = readCellSelection(anchored.cell);
       finish(undefined, shown?.from === anchored.previewCaret && shown.to === anchored.previewCaret || !anchored.cell.isConnected);
     }, BATCH_MS);
   }
 
+  function transferTitle(input: HTMLInputElement, text: string, cutData?: DataTransfer | null): void {
+    if (stopped || draft?.composing) { beforePress(); return; }
+    if (text && (/[\r\n]/.test(text) || cleanText(text) !== text)) { refuseCommand(UNSUPPORTED); return; }
+    const refusal = admissionRefusal();
+    if (refusal) { refuseCommand(refusal); return; }
+    const selection = titleSelection(input);
+    if (!selection) { session.refuse(STALE); return; }
+    if (cutData && selection.from === selection.to) return;
+    const backward = input.selectionDirection === "backward";
+    const current = flushForInput(input, selection, false);
+    if (!current || !(current.cell instanceof HTMLInputElement)) return;
+    const liveEl = current.cell;
+    const shownTitle = documentReader.current()?.title ?? "";
+    const liveTitle = native.document().title;
+    if (current.stale || liveEl.value !== shownTitle || shownTitle !== liveTitle) { session.refuse(STALE); return; }
+    const { from, to } = current.selection;
+    if (cutData) {
+      if (from === to) return;
+      cutData.setData("text/plain", liveTitle.slice(from, to));
+    }
+    const target = { beat: "", cell: "title" } as const;
+    const anchored = native.commands.anchorText(target, from, to);
+    if (anchored.kind === "refused") { session.refuse(anchored.reason); return; }
+    const start = native.commands.anchorText(target, from), end = from === to ? start : native.commands.anchorText(target, to);
+    if (start.kind === "refused" || end.kind === "refused") { session.refuse(STALE); return; }
+    const before = backward && from !== to ? { anchor: end.range, head: start.range } : anchored.range;
+    const step = text ? native.commands.replaceTitle.withSelection(before, anchored.range, text)
+      : native.commands.deleteTitle.withSelection(before, anchored.range);
+    if (step.result.kind === "refused") { refuseCommand(step.result.reason); return; }
+    if (step.result.kind === "unchanged") return;
+    const landing = from + text.length;
+    const after = native.commands.anchorText(target, landing);
+    if (after.kind === "anchored") step.recordAfter(after.range);
+    publish();
+    const fresh = titleTextSurface.cell("");
+    if (fresh) titleTextSurface.place(fresh, "", landing, landing, false);
+  }
+
   function composition(event: CompositionEvent, cell: Element): void {
+    const isTitle = cell instanceof HTMLInputElement;
     if (event.type === "compositionstart") {
       const refusal = admissionRefusal();
       if (refusal) { refuseCommand(refusal); event.preventDefault(); return; }
-      const selection = cellSelection(cell);
-      if (!selection || touchesProtectedText(cell, selection)) { session.refuse(STALE); event.preventDefault(); return; }
+      const selection = readCellSelection(cell);
+      if (!selection || !isTitle && touchesProtectedText(cell, selection)) { session.refuse(STALE); event.preventDefault(); return; }
       if (draft?.composing) { event.preventDefault(); return; }
-      if (selection.from !== selection.to && crossesJoin(cell, selection, joinSeams(cell))) {
+      if (!isTitle && selection.from !== selection.to && crossesJoin(cell, selection, joinSeams(cell))) {
         refusedJoinComposition = { cell, selection, html: cell.innerHTML, revision: !draft && paintIsCurrent() ? native.revision() : null };
         refuseJoinedEdit(cell);
         event.preventDefault();
@@ -1063,7 +1445,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       compositionRefused = false;
       if (draft && !draft.deletion && insideDraft(draft, cell, selection)) {
         clearTimeout(timer);
-        composingInside = { cell, selection, html: cell.innerHTML };
+        composingInside = { cell, selection, html: isTitle ? cell.value : cell.innerHTML };
         draft.composing = true;
         return;
       }
@@ -1073,8 +1455,9 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       const anchored = anchor(begin(cell, selection, true, ""));
       if (typeof anchored === "string") { session.refuse(anchored); event.preventDefault(); return; }
       if (anchored.range) {
-        if (selection.from === selection.to) anchored.compositionCaret = native.captureCompositionCaret(anchored.range);
-        else anchored.compositionIdentity = native.captureTextIdentity(anchored.range);
+        if (selection.from === selection.to) {
+          if (!isTitle) anchored.compositionCaret = native.captureCompositionCaret(anchored.range);
+        } else anchored.compositionIdentity = native.captureTextIdentity(anchored.range);
       }
       draft = anchored;
       return;
@@ -1124,7 +1507,9 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const narration = button?.closest("#writer") ? shownNarrationSurface().cellAt(document.querySelector("#writer-doc") ?? button)
       : target && cell ? narrationAt(target, cell) : null;
     const visual = cell && visualTextSurface.cellAt(cell);
+    const titleInput = titleInputOf(cell);
     const editableText = narration ?? visual;
+    const bufferedTarget = editableText ?? titleInput;
     const heading = headingAt(cell ?? null);
     const removeHeading = heading && joinDirection(event, heading) === -1;
     const joining = narration && joinDirection(event, narration);
@@ -1155,7 +1540,12 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       }
       if (event.type === "compositionstart" || input) refusedJoinComposition = null;
     }
+    if (event.type === "focusin") {
+      if (titleInput) syncTitleTrack(titleInput);
+      return;
+    }
     if (event.type === "focusout") {
+      if (titleInput && titleTrack?.input === titleInput) clearTitleTrack();
       if (imeTarget === cell) imeTarget = null;
       const next = (event as FocusEvent).relatedTarget;
       if (cell && next instanceof Element && next.closest(ROW_MENU_BUTTON)) {
@@ -1192,7 +1582,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         event.stopImmediatePropagation();
         return;
       }
-      if ((editableText || heading || cell?.id === "writer-doc") && (draft?.composing || imeKey)) {
+      if ((bufferedTarget || heading || cell?.id === "writer-doc") && (draft?.composing || imeKey)) {
         event.stopImmediatePropagation();
         if (undoing || adding || draft?.composing && (splitting || joining || removeHeading || moving || mark || line)) {
           event.preventDefault();
@@ -1200,13 +1590,20 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         }
         return;
       }
-      if (undoing && visual?.closest("#writer")) {
+      if (undoing && (visual?.closest("#writer") || titleInput)) {
         event.preventDefault();
         event.stopImmediatePropagation();
         sharedUndoRoute()?.replay?.(undoing);
         return;
       }
       if (undoing && cell?.matches(UNDO_SURFACES)) return;
+      if (titleInput) {
+        if (key.key === "Enter" || key.key.startsWith("Arrow") || key.key === "Home" || key.key === "End" || key.key === "Tab") {
+          finish();
+          native.endDeletionGroup();
+        }
+        return;
+      }
       if (key.key === "Tab" && visual?.closest("#rows")
         && currentWhoList()?.keydown(key, visual, () => refuseCommand(UNSUPPORTED))) {
         event.stopImmediatePropagation();
@@ -1230,14 +1627,14 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         return;
       }
     }
-    if (editableText && !stopped) {
+    if (bufferedTarget && !stopped) {
       if (event.type.startsWith("composition")) {
         event.stopImmediatePropagation();
-        try { composition(event as CompositionEvent, editableText); }
+        try { composition(event as CompositionEvent, bufferedTarget); }
         catch (error) { report(error); stop(PENDING); }
         return;
       }
-      if (draft?.composing && draft.cell === editableText && (event.type === "beforeinput" || event.type === "input")) {
+      if (draft?.composing && draft.cell === bufferedTarget && (event.type === "beforeinput" || event.type === "input")) {
         const change = event as InputEvent;
         if (event.type === "beforeinput" && !change.isComposing && !change.inputType.includes("Composition")) {
           event.preventDefault();
@@ -1251,15 +1648,15 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         event.stopImmediatePropagation();
         return;
       }
-      if (event.type === "input" && draft?.cell === editableText) {
+      if (event.type === "input" && draft?.cell === bufferedTarget) {
         event.stopImmediatePropagation();
         uncertain = true;
         stop(PENDING);
         return;
       }
     }
-    if (inputType && cell?.matches(UNDO_SURFACES) && HISTORY.test(inputType)) {
-      if (visual?.closest("#writer")) {
+    if (inputType && (cell?.matches(UNDO_SURFACES) || titleInput) && HISTORY.test(inputType)) {
+      if (visual?.closest("#writer") || titleInput) {
         event.preventDefault();
         event.stopImmediatePropagation();
         sharedUndoRoute()?.replay?.(inputType === "historyUndo" ? "undo" : "redo");
@@ -1270,9 +1667,30 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     event.stopImmediatePropagation();
     try {
       if (native.isClosingOrClosed()) return;
-      if (stopped && (editableText || heading || writer)) {
-        if (stopped !== "full" && narration && !splitting && !joining && !moving && !mark && !line && !adding
+      if (stopped && (bufferedTarget || heading || writer)) {
+        if (stopped !== "full" && (narration || titleInput) && !splitting && !joining && !moving && !mark && !line && !adding
           && event.type !== "paste" && !inputType?.startsWith("delete")) session.refuse(stopped);
+        return;
+      }
+      if (titleInput) {
+        if (event.type === "paste") {
+          const data = (event as ClipboardEvent).clipboardData;
+          const text = data?.getData("text/plain") ?? "";
+          if (text && !/[\r\n]/.test(text) && cleanText(text) === text) {
+            transferTitle(titleInput, text);
+            return;
+          }
+        }
+        if (event.type === "cut") {
+          const data = (event as ClipboardEvent).clipboardData;
+          if (data) {
+            transferTitle(titleInput, "", data);
+            return;
+          }
+        }
+        if (event.type === "beforeinput" && event.cancelable) { write(event as InputEvent, titleInput); return; }
+        if (event.type === "input") restoreUnsupportedInput(titleInput);
+        session.refuse(UNSUPPORTED);
         return;
       }
       if (adding && editableText) {
@@ -1365,6 +1783,14 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   }
 
   function show(selection: NativeUndoSelection): void {
+    if (selection.head.target.cell === "title") {
+      const fresh = titleTextSurface.cell("");
+      if (!fresh) return;
+      const anchor = selection.anchor.target.cell === "title" ? selection.anchor.offset : selection.head.offset;
+      titleTextSurface.place(fresh, "", anchor, selection.head.offset, false);
+      syncTitleTrack(fresh);
+      return;
+    }
     if (selection.head.target.cell === "visual") {
       const { beat } = selection.head.target;
       if (document.activeElement?.id === "writer-doc" && document.querySelector(".wr-flow-visual-box[hidden]")) {
@@ -1404,7 +1830,14 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
 
   function beforePress(): string | null {
     if (native.isClosingOrClosed()) return "closed";
-    if (stopped || !draft) return stopped;
+    if (stopped) return stopped;
+    if (!draft) {
+      if (emptyWriter?.composing()) {
+        refuseCommand(PENDING);
+        return PENDING;
+      }
+      return emptyWriter?.hasText() ? emptyWriter.commit(true) : null;
+    }
     if (!draft.composing) {
       const selection: SelectionCapture = { indices: [null, null] };
       return finish(selection, true, true) ?? (selection.removed === "discarded" ? NATIVE_REMOVED_TYPING : null);
@@ -1495,7 +1928,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       const { beat, preview } = point, html = native.narrationHtml(beat);
       const cell = writerNarration.cell(beat), row = documentReader.read(doc => doc?.rows.find(item => item.id === beat));
       if (!cell || !row || !writerNarration.painted(cell, row) || row.audioText !== html) return null;
-      const rebased = preview ? resolveDraftEndpoint(beat, preview, selection.inserted?.[index], assoc)
+      const rebased = preview ? resolveDraftEndpoint(beat, "audioText", preview, selection.inserted?.[index], assoc)
         : point.point ? native.narrationOffset(beat, { from: point.point }, assoc) : point.offset ?? null;
       return rebased === null ? null : native.narrationCaret(beat, rebased, assoc === 0);
     }
@@ -1532,6 +1965,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   let stopUnload: (() => void) | undefined;
   const dispose = (): void => {
     clearTimeout(timer);
+    clearTitleTrack();
     draft?.compositionCaret?.dispose();
     draft?.paint?.dispose();
     draft = null;
@@ -1570,14 +2004,17 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (draft) draft.endsGroup = true;
       else native.endTypingGroup();
     },
-    buffered: () => draft !== null,
-    abandonComposition: () => { if (draft?.composing && !stopped) endComposition(draft, ""); },
+    buffered: () => draft !== null || (emptyWriter?.composing() ?? false),
+    abandonComposition: () => {
+      emptyWriter?.abandon();
+      if (draft?.composing && !stopped) endComposition(draft, "");
+    },
     hasWriterPreview: (beat: string) => draft?.surface === writerNarration && draft.beat === beat,
     stop: () => { if (!stopped) stop(PENDING); },
     recover: (reopened: ReturnType<typeof openNativeSession>): Uint8Array | null => {
       if (!draft || draft.composing || uncertain || !draft.range) return null;
       const result = commit(draft, reopened);
-      if (!result || result.kind === "recovery") return null;
+      if (!result || result.kind === "recovery" || result.kind === "refused") return null;
       const bytes = reopened.encodeState();
       draft.paint?.dispose();
       draft.compositionCaret?.dispose();
@@ -1591,5 +2028,5 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
 }
 
 export function keepNativeFieldPaint(buffered: Pick<Draft, "cell" | "beat" | "field">, row: Parameters<typeof noteFieldPainted>[2] | undefined): void {
-  if (row?.[buffered.field] === buffered.cell.innerHTML) noteFieldPainted(buffered.cell, buffered.field, row);
+  if (buffered.field !== "title" && row?.[buffered.field] === buffered.cell.innerHTML) noteFieldPainted(buffered.cell, buffered.field, row);
 }

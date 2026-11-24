@@ -102,7 +102,7 @@ test("out-of-scope input stays refused on the native path", async t => {
   visual.focus();
   setCellSelection(visual, 2);
   assert.equal(beforeInput(visual, "insertFromDrop", "x"), true);
-  assert.equal(beforeInput(title, "insertText", "x"), true);
+  assert.equal(beforeInput(title, "insertFromDrop", "x"), true);
   await Promise.resolve();
   assert.deepEqual(hook.read(), before);
   assert.equal(show.mock.callCount(), 5);

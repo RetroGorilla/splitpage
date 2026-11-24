@@ -44,7 +44,10 @@ jsclick #rows .row[data-id="r1"] .audio-cell button[data-cmd="bold"]
 expect warn() && JSON.stringify(S.read()) === window.before
 eval clear()
 jsclick .add-row-btn
-expect warn() && JSON.stringify(S.read()) === window.before
+wait S.read().app.rows.length === 3 && S.read().peer.rows.length === 3
+expect !warn() && S.read().app.rows[2].audioText === ''
+eval S.nativePeer.step('undo')
+wait JSON.stringify(S.read()) === window.before
 eval clear()
 jsclick #rows .row[data-id="r1"] [data-action="cycle-status"]
 wait S.read().app.rows[0].status === 'ready' && S.read().peer.rows[0].status === 'ready'
@@ -60,9 +63,13 @@ wait JSON.stringify(S.read()) === window.before
 eval clear();at('audioText',3);window.composed=new CompositionEvent('compositionstart',{bubbles:true,cancelable:true});Q('audioText').dispatchEvent(window.composed);true
 expect !window.composed.defaultPrevented && !warn() && JSON.stringify(S.read()) === window.before
 eval Q('audioText').dispatchEvent(new CompositionEvent('compositionend',{bubbles:true,data:''}));true
-eval clear();document.getElementById('doc-title').focus();true
+eval clear();document.getElementById('doc-title').focus();document.getElementById('doc-title').setSelectionRange(13,13);true
 press q
-expect warn() && document.getElementById('doc-title').value === 'Native editor' && JSON.stringify(S.read()) === window.before
+wait S.read().app.title === 'Native editorq' && S.read().peer.title === 'Native editorq'
+expect !warn() && document.getElementById('doc-title').value === 'Native editorq'
+key ctrl KeyZ
+wait S.read().app.title === 'Native editor' && S.read().peer.title === 'Native editor'
+expect !warn() && document.getElementById('doc-title').value === 'Native editor' && JSON.stringify(S.read()) === window.before
 click #btn-write
 eval window.writerText=function(){return document.querySelector('#writer-doc .wr-beat[data-id="r1"]')?.textContent.replace(/\u200b/g,'')};true
 wait writerText() === 'Hexllo'
