@@ -330,7 +330,78 @@ for (const kind of ["browser", "desktop"] as const) {
 
       await backend.writeRawJournal(name, new TextEncoder().encode("{not-valid"));
       const corrupt = await backend.restart().open(name, JOURNAL_OPTIONS);
-      assert.equal(corrupt.kind, "failed");
-      assert.equal(corrupt.reason, "io");
+      assert.equal(corrupt.kind, "opened");
+      assert.equal(corrupt.session.document().rows[0]?.audioText, "second first start");
+      assert.deepEqual(corrupt.session.pendingEdits?.data(), { through: 0, entries: [] });
+      corrupt.session.close();
+      await corrupt.closed;
+
+      const wrongShape = new TextEncoder().encode(JSON.stringify({
+        version: NATIVE_PENDING_EDITS_SCHEMA_VERSION,
+        data: { through: 1, entries: [{ id: "A", first: 1, last: 1, peer: false, before: "bad", after: null, landing: null }] }
+      }));
+      await backend.writeRawJournal(name, wrongShape);
+      const shaped = await backend.restart().open(name, JOURNAL_OPTIONS);
+      assert.equal(shaped.kind, "opened");
+      assert.deepEqual(shaped.session.pendingEdits?.data(), { through: 0, entries: [] });
+      typeAt(shaped.session, 0, "clean ", "A");
+      await shaped.flush();
+      shaped.session.close();
+      await shaped.closed;
+
+      const recovered = await backend.restart().open(name, JOURNAL_OPTIONS);
+      assert.equal(recovered.kind, "opened");
+      assert.equal(recovered.session.pendingEdits?.data().entries.length, 1);
+      recovered.session.close();
+      await recovered.closed;
     });
+}
+
+test("desktop keeps updates log bounded across 600+ commands with a large stuck journal", { timeout: 30_000 }, async t => {
+  const { stat } = await import("node:fs/promises");
+  const { join } = await import("node:path");
+  const { createHash } = await import("node:crypto");
+  const desktop = await desktopFixture(t, false);
+  const name = "deployment/bounded-600";
+  const replica = await desktop.store.open(name, JOURNAL_OPTIONS);
+  assert.equal(replica.kind, "opened");
+  seedReplica(replica.session, { A: "x".repeat(60_000), B: "beta" });
+  assert.deepEqual(await replica.flush(), stored(1));
+
+  typeAt(replica.session, 0, "stuck ", "A");
+  for (let i = 0; i < 605; i++) {
+    typeAt(replica.session, 0, "a", "B");
+  }
+  const result = await replica.flush();
+  assert.equal(result.kind, "stored");
+  replica.session.close();
+  await replica.closed;
+
+  const folder = join(desktop.directory, "native-replicas", createHash("sha256").update(name).digest("hex"));
+  const updatesStat = await stat(join(folder, "updates"));
+  const journalStat = await stat(join(folder, "journal"));
+  assert.equal(updatesStat.size < 256_000, true, `updates size ${updatesStat.size} should stay bounded`);
+  assert.equal(journalStat.size > 100_000 && journalStat.size < 256_000, true, `journal size ${journalStat.size} should hold one copy`);
+});
+
+for (const kind of ["browser", "desktop"] as const) {
+  test(`${kind}: oversized >16MB journal does not block edit persistence`, { timeout: 30_000 }, async t => {
+    const backend = await createBackend(t, kind);
+    const name = `deployment/oversized-${kind}`;
+    const replica = await backend.open(name);
+    assert.equal(replica.kind, "opened");
+    seedReplica(replica.session, { A: "a".repeat(8_500_000) });
+    assert.deepEqual(await replica.flush(), stored(1));
+
+    typeAt(replica.session, 0, "prefix ", "A");
+    assert.deepEqual(await replica.flush(), stored(2));
+    replica.session.close();
+    await replica.closed;
+
+    const reopened = await backend.restart().open(name, JOURNAL_OPTIONS);
+    assert.equal(reopened.kind, "opened");
+    assert.equal(reopened.session.document().rows[0]?.audioText?.startsWith("prefix "), true);
+    reopened.session.close();
+    await reopened.closed;
+  });
 }

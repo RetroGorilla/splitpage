@@ -794,3 +794,43 @@ for (const target of ["browser", "desktop"] as const) {
     } finally { if (target === "desktop") restoreDesktop(); }
   });
 }
+
+test("retained-shared-script delivers offline notice clashes before releasing the relay offline gate", { timeout: 20_000 }, async t => {
+  const kit = serverHarness(t);
+  const state = kit.seed();
+  const port = await kit.launch().port();
+  const token = kit.invitation().token;
+  const entry = { deployment: "offline-gate", script: NAME };
+  const opened = capture();
+  const first = await hook().enterRetained({ ...entry, invitation: { token, state }, connect: opened.connect });
+  assert.deepEqual(first, ok);
+  const local = opened.replica();
+  const row = local.session.document().rows[0];
+  assert.ok(row);
+  typeAt(local.session, 0, "offline ", row.id);
+  assert.equal(local.session.pendingEdits?.data().entries.length, 1);
+  assert.equal((await local.flush()).kind, "stored");
+  await rewireRunningApp({});
+  await finishStartup();
+  await local.closed;
+
+  const peer = kit.copy(port);
+  await kit.until(() => peer.relay.status().firstSyncDone || undefined);
+  assert.equal(peer.session.commands.removeRows([row.id]).kind, "written");
+  await kit.until(() => peer.relay.status().pendingChangeCount === 0 || undefined);
+
+  const observed: string[][] = [];
+  const gateReached = eventResult<undefined>();
+  const entered = await hook().enterRetained({
+    ...entry,
+    relayUrl: "ws://127.0.0.1:" + port,
+    onOfflineNotice(clashes) {
+      observed.push(clashes.map(clash => clash.id));
+      gateReached.resolve(undefined);
+    }
+  });
+  assert.deepEqual(entered, ok);
+  await gateReached.promise;
+  assert.deepEqual(observed, [[row.id]]);
+  assert.deepEqual(await hook().leave(), ok);
+});

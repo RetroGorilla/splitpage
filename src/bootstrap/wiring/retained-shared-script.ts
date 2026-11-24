@@ -41,6 +41,7 @@ export interface RetainedSharedScript {
   readonly pictureOrigin?: string;
   readonly signal?: AbortSignal;
   readonly onRelayConnected?: (connected: boolean) => void;
+  readonly onOfflineNotice?: (clashes: ReturnType<ReturnType<typeof openNativeSession>["offlineNotice"]>) => void;
   readonly connect?: (replica: RetainedReplica, token: string) => () => void;
 }
 
@@ -132,6 +133,8 @@ export function createRetainedPictureBinding(options: {
         if (!permanentlyStopped) {
           attach(bindSharedPictures({ session: event.session }, options.pictureOrigin, options.script, options.token));
         }
+      } else if (event.kind === "synced") {
+        return;
       } else {
         permanentlyStopped = true;
         detach();
@@ -281,7 +284,17 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
           const relay = openNativeRelay(replica.session, {
             url: entry.relayUrl, name: entry.script, token, reopen: replica.reopen,
             sessionOptions: { actor: ports.editor(), sanitize: sanitizeHtml, noticeJournal: true },
-            onEvent: pictureBinding.onRelayEvent
+            onEvent(event) {
+              if (event.kind === "synced") {
+                if (sessionCurrent()) {
+                  const clashes = relay.session().offlineNotice("returning");
+                  entry.onOfflineNotice?.(clashes);
+                  relay.releaseOfflineGate();
+                }
+                return;
+              }
+              pictureBinding.onRelayEvent(event);
+            }
           });
           stopConnection = () => { relay.close(); entry.onRelayConnected?.(false); };
         } else {

@@ -20,7 +20,8 @@ export type NativeRelayEvent =
   | { readonly kind: "authentication-failed"; readonly reason: string }
   | { readonly kind: "temporary-refusal"; readonly reason: string }
   | { readonly kind: "merge-too-large"; readonly message: string }
-  | { readonly kind: "first-load-too-large"; readonly message: string };
+  | { readonly kind: "first-load-too-large"; readonly message: string }
+  | { readonly kind: "synced" };
 
 export interface NativeRelayOptions {
   readonly url: string;
@@ -52,6 +53,7 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
   relayUrl.searchParams.set("wire", "1");
   relayUrl.searchParams.set("schema", "1");
   let stopSettled: (() => void) | undefined;
+  let releaseGate: () => void = () => {};
   let provider = attach(current);
 
   function emit(event: NativeRelayEvent): void {
@@ -80,6 +82,17 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
     const pendingSends: PendingSend[] = [];
     const journal = target.pendingEdits;
     let offlineThrough = journal?.hasPending() ? journal.through() : 0;
+    let maxBlockedConfirmation = 0;
+    releaseGate = () => {
+      const gate = Math.max(offlineThrough, maxBlockedConfirmation);
+      if (gate <= 0) return;
+      offlineThrough = 0;
+      maxBlockedConfirmation = 0;
+      journal?.clearThrough(gate);
+      if (journal?.hasPending() && pendingSends.some(item => item.kind === "update")) {
+        journal.confirmationPoint();
+      }
+    };
     stopSettled?.();
     stopSettled = target.subscribeCommandSettled(() => {
       if (!journal || !pendingSends.length) return;
@@ -129,14 +142,21 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
         const entry = pendingSends.shift();
         if (!applied || !entry || entry.kind !== "update") return;
         if (offlineThrough > 0) {
-          if (journal.hasPendingThrough(offlineThrough)) return;
+          if (journal.hasPendingThrough(offlineThrough)) {
+            maxBlockedConfirmation = Math.max(maxBlockedConfirmation, entry.through);
+            return;
+          }
           offlineThrough = 0;
+          maxBlockedConfirmation = 0;
         }
         journal.clearThrough(entry.through);
         const nextUpdate = pendingSends.find(item => item.kind === "update");
         if (nextUpdate && journal.hasPending()) {
           journal.confirmationPoint();
         }
+      },
+      onSynced() {
+        emit({ kind: "synced" });
       }
     } : undefined;
     const attached = new StateFirstProvider({
@@ -253,5 +273,5 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
     current.close();
   }
 
-  return Object.freeze({ session: () => current, status: () => status, close });
+  return Object.freeze({ session: () => current, status: () => status, releaseOfflineGate: () => releaseGate(), close });
 }

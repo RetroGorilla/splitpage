@@ -314,3 +314,104 @@ test("relay session replacement preserves the pending edits journal without a lo
   assert.equal(replaced.session.document().rows[1]?.audioText, "kept beta");
   assert.deepEqual(replaced.session.pendingEdits?.data().entries.map(entry => entry.id), ["B"]);
 });
+
+test("releaseOfflineGate retains online acks until offline notice runs and then clears both", { timeout: 20_000 }, async t => {
+  const state = seedTwoBeats();
+  const kit = await openRelayFixture(t, { async onLoadDocument() { return state; } });
+  const { signals, url } = kit;
+
+  const writer = openNativeSession({ kind: "state", state }, JOURNAL_OPTIONS);
+  typeAt(writer, 0, "offline ", "A");
+  assert.equal(writer.pendingEdits?.through(), 1);
+
+  const peer = openNativeSession({ kind: "empty" }, JOURNAL_OPTIONS);
+  const peerRelay = openNativeRelay(peer, {
+    url, name: "relay-script", token: "test-token", sessionOptions: JOURNAL_OPTIONS,
+    onEvent() { signals.notify(); }
+  });
+  t.after(() => peerRelay.close());
+  await signals.until(() => peerRelay.status().firstSyncDone || undefined);
+  assert.equal(peer.commands.removeRows(["A"]).kind, "written");
+  await signals.until(() => peerRelay.status().pendingChangeCount === 0 || undefined);
+
+  const events: NativeRelayEvent[] = [];
+  const relay = openNativeRelay(writer, {
+    url, name: "relay-script", token: "test-token", sessionOptions: JOURNAL_OPTIONS,
+    onEvent(event) { events.push(event); signals.notify(); }
+  });
+  t.after(() => relay.close());
+  await signals.until(() => events.some(event => event.kind === "synced") || undefined);
+
+  typeAt(writer, 0, "online ", "B");
+  await signals.until(() => relay.status().pendingChangeCount === 0 || undefined);
+  assert.equal(writer.pendingEdits?.hasPendingThrough(1), true);
+  assert.deepEqual(writer.pendingEdits?.data().entries.map(entry => entry.id), ["A", "B"]);
+
+  const clashes = writer.offlineNotice("returning");
+  assert.deepEqual(clashes.map(clash => clash.id), ["A"]);
+  relay.releaseOfflineGate();
+  assert.equal(writer.pendingEdits?.hasPending(), false);
+  assert.deepEqual(writer.offlineNotice("returning"), []);
+});
+
+test("post-clear checkpoint refresh tracks remaining in-flight edits and clears on their ack", { timeout: 20_000 }, async t => {
+  const state = seedTwoBeats();
+  const kit = await openRelayFixture(t, { async onLoadDocument() { return state; } });
+  const { signals, url } = kit;
+  const writer = openNativeSession({ kind: "empty" }, JOURNAL_OPTIONS);
+  const relay = openNativeRelay(writer, {
+    url, name: "relay-script", token: "test-token", sessionOptions: JOURNAL_OPTIONS,
+    onEvent() { signals.notify(); }
+  });
+  t.after(() => relay.close());
+  await signals.until(() => relay.status().firstSyncDone && relay.status().pendingChangeCount === 0 || undefined);
+
+  typeAt(writer, 0, "one ", "A");
+  typeAt(writer, 0, "two ", "A");
+  assert.equal(writer.pendingEdits?.data().entries.length, 1);
+
+  await signals.until(() => {
+    const checkpoint = writer.pendingEdits?.data().checkpoint;
+    if (checkpoint && checkpoint.through >= 2) return true;
+    return !writer.pendingEdits?.hasPending() || undefined;
+  });
+  await signals.until(() => !writer.pendingEdits?.hasPending() || undefined);
+  assert.deepEqual(writer.offlineNotice("returning"), []);
+});
+
+test("undo and redo press updates ack through relay and throwing commands do not wedge confirmations", { timeout: 20_000 }, async t => {
+  const state = seedTwoBeats();
+  const kit = await openRelayFixture(t, { async onLoadDocument() { return state; } });
+  const { signals, url } = kit;
+  const writer = openNativeSession({ kind: "empty" }, JOURNAL_OPTIONS);
+  const events: NativeRelayEvent[] = [];
+  const relay = openNativeRelay(writer, {
+    url, name: "relay-script", token: "test-token", sessionOptions: JOURNAL_OPTIONS,
+    onEvent(event) { events.push(event); signals.notify(); }
+  });
+  t.after(() => relay.close());
+  await signals.until(() => relay.status().firstSyncDone && relay.status().pendingChangeCount === 0 || undefined);
+
+  typeAt(writer, 0, "typed ", "A");
+  await signals.until(() => !writer.pendingEdits?.hasPending() || undefined);
+
+  assert.equal(writer.commands.undo().kind, "written");
+  assert.equal(writer.document().rows[0]?.audioText, "alpha");
+  await signals.until(() => !writer.pendingEdits?.hasPending() || undefined);
+
+  assert.equal(writer.commands.redo().kind, "written");
+  assert.equal(writer.document().rows[0]?.audioText, "typed alpha");
+  await signals.until(() => !writer.pendingEdits?.hasPending() || undefined);
+
+  const error = new Error("mid-command throw");
+  writer.ydoc.once("afterTransactionCleanup", () => { throw error; });
+  assert.throws(() => typeAt(writer, 0, "boom ", "B"), error);
+  assert.equal(writer.inCommand(), false);
+  const replaced = await signals.until(() => events.find(event => event.kind === "session-replaced"));
+  await signals.until(() => relay.status().firstSyncDone && relay.status().pendingChangeCount === 0 || undefined);
+  relay.releaseOfflineGate();
+
+  typeAt(replaced.session, 0, "after ", "B");
+  await signals.until(() => !replaced.session.pendingEdits?.hasPending() || undefined);
+  assert.equal(replaced.session.document().rows[1]?.audioText, "after boom beta");
+});

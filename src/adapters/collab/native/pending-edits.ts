@@ -62,6 +62,37 @@ function isNonNegativeInt(value: unknown): value is number {
   return typeof value === "number" && Number.isSafeInteger(value) && value >= 0;
 }
 
+function isNullableString(value: unknown): value is string | null {
+  return value === null || typeof value === "string";
+}
+
+function isReadBeat(value: unknown): value is NativeReadBeat {
+  return isRecord(value)
+    && typeof value.id === "string"
+    && typeof value.row === "string"
+    && Array.isArray(value.narration)
+    && Array.isArray(value.visual)
+    && isRecord(value.fields)
+    && isNullableString(value.joined);
+}
+
+function isPeriods(value: unknown): value is NativeNoticePeriods {
+  return isRecord(value)
+    && (value.start === undefined || isNonNegativeInt(value.start))
+    && (value.settled === undefined || isNonNegativeInt(value.settled))
+    && (value.prefix === undefined || isNonNegativeInt(value.prefix))
+    && (value.peer === undefined || isNonNegativeInt(value.peer));
+}
+
+function isEncodedPlacement(value: unknown, orderCount: number): boolean {
+  return isRecord(value)
+    && isNullableString(value.scene)
+    && isNullableString(value.left)
+    && isNullableString(value.right)
+    && isNonNegativeInt(value.order)
+    && value.order < orderCount;
+}
+
 export function encodeNativePendingEdits(data: NativePendingEditsData): Uint8Array {
   return textEncoder.encode(JSON.stringify({ version: NATIVE_PENDING_EDITS_SCHEMA_VERSION, data }));
 }
@@ -81,18 +112,31 @@ export function decodeNativePendingEdits(bytes: Uint8Array): NativePendingEditsD
   if (!isRecord(data) || !isNonNegativeInt(data.through) || !Array.isArray(data.entries)) {
     throw new TypeError("Invalid pending edits journal");
   }
-  for (const entry of data.entries) {
-    if (!isRecord(entry) || typeof entry.id !== "string" || !isNonNegativeInt(entry.first)
-      || !isNonNegativeInt(entry.last) || typeof entry.peer !== "boolean") {
-      throw new TypeError("Invalid pending edits journal");
-    }
-  }
   if (data.orders !== undefined && (!Array.isArray(data.orders)
     || data.orders.some(order => !Array.isArray(order) || order.some(id => typeof id !== "string")))) {
     throw new TypeError("Invalid pending edits journal");
   }
+  const orderCount = Array.isArray(data.orders) ? data.orders.length : 0;
+  for (const entry of data.entries) {
+    if (!isRecord(entry) || typeof entry.id !== "string" || !isNonNegativeInt(entry.first)
+      || !isNonNegativeInt(entry.last) || typeof entry.peer !== "boolean"
+      || (entry.before !== null && !isReadBeat(entry.before))
+      || (entry.after !== null && (!isRecord(entry.after) || !isEncodedPlacement(entry.after["placement"], orderCount) || !isReadBeat(entry.after)))
+      || (entry.landing !== null && !isReadBeat(entry.landing))
+      || (entry.split !== undefined && (!isRecord(entry.split) || typeof entry.split.parent !== "string"
+        || !isNonNegativeInt(entry.split.at)))
+      || (entry.created !== undefined && !isNonNegativeInt(entry.created))
+      || (entry.restored !== undefined && !isNonNegativeInt(entry.restored))
+      || (entry.landingId !== undefined && typeof entry.landingId !== "string")
+      || (entry.heading !== undefined && entry.heading !== true)
+      || (entry.periods !== undefined && !isPeriods(entry.periods))) {
+      throw new TypeError("Invalid pending edits journal");
+    }
+  }
   if (data.checkpoint !== undefined && (!isRecord(data.checkpoint) || !isNonNegativeInt(data.checkpoint.through)
-    || !Array.isArray(data.checkpoint.beats))) {
+    || !Array.isArray(data.checkpoint.beats)
+    || data.checkpoint.beats.some(pair => !Array.isArray(pair) || pair.length !== 2
+      || typeof pair[0] !== "string" || (pair[1] !== null && !isReadBeat(pair[1]))))) {
     throw new TypeError("Invalid pending edits journal");
   }
   return data as unknown as NativePendingEditsData;
@@ -251,7 +295,10 @@ export function openNativePendingEdits(reader: NativeScriptReader, saved?: Nativ
           changed = true;
         }
       }
-      if (changed) journalRevision++;
+      if (changed) {
+        journalRevision++;
+        onChange?.();
+      }
     },
     data(): NativePendingEditsData {
       const indexes = new Map<string, number>(), orders: (readonly string[])[] = [];
@@ -275,12 +322,16 @@ export function openNativePendingEdits(reader: NativeScriptReader, saved?: Nativ
     },
     confirmationPoint(): number {
       if (!entries.size) return through;
-      if (!checkpoint) checkpoint = { through, beats: [...entries].map(([key, entry]) => {
-        const after = (held.get(key) ?? reading(entry)).after;
-        if (!after) return [key, null] as const;
-        const { id, row, narration, visual, fields, joined } = after;
-        return [key, { id, row, narration, visual, fields, joined }] as const;
-      }) };
+      if (!checkpoint) {
+        checkpoint = { through, beats: [...entries].map(([key, entry]) => {
+          const after = (held.get(key) ?? reading(entry)).after;
+          if (!after) return [key, null] as const;
+          const { id, row, narration, visual, fields, joined } = after;
+          return [key, { id, row, narration, visual, fields, joined }] as const;
+        }) };
+        journalRevision++;
+        onChange?.();
+      }
       return checkpoint.through;
     },
     clearThrough(confirmed: number): void {

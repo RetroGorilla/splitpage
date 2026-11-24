@@ -9,6 +9,7 @@ export interface StateFirstConfirmationHooks {
   readonly onSyncReplySent: () => void;
   readonly onConnectedUpdateSent: () => void;
   readonly onSyncStatus: (applied: boolean) => void;
+  readonly onSynced?: () => void;
 }
 
 type FrameHeader =
@@ -23,8 +24,15 @@ function relayFrameHeader(data: ArrayBuffer): FrameHeader | undefined {
   if (type === MessageType.SyncStatus) return { type, applied: readVarInt(decoder) === 1 };
 }
 
+function encoderHead(encoder: Encoder): Uint8Array {
+  if (encoder.bufs.length === 0) return encoder.cbuf.subarray(0, encoder.cpos);
+  const first = encoder.bufs[0];
+  if (first && first.length >= 512) return first.subarray(0, 512);
+  return toUint8Array(encoder);
+}
+
 function outgoingSyncType(encoder: Encoder): number | undefined {
-  const decoder = createDecoder(toUint8Array(encoder));
+  const decoder = createDecoder(encoderHead(encoder));
   readVarString(decoder);
   if (readVarUint(decoder) === MessageType.Sync) return readVarUint(decoder);
 }
@@ -129,9 +137,12 @@ export class StateFirstProvider extends HocuspocusProvider {
       if (frame?.type === MessageType.SyncStatus) this.confirmations?.onSyncStatus(frame.applied);
     }
     const delivered = this.checkPeerDelivery();
-    if (this.awaitingFirstReply && sync === messageYjsSyncStep2 && delivered) {
-      this.awaitingFirstReply = false;
-      this.onFirstReply();
+    if (sync === messageYjsSyncStep2 && delivered) {
+      if (this.awaitingFirstReply) {
+        this.awaitingFirstReply = false;
+        this.onFirstReply();
+      }
+      this.confirmations?.onSynced?.();
     }
   }
 
