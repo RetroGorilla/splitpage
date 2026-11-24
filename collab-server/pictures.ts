@@ -148,7 +148,7 @@ export function pictureApi(
     let invitation: string;
     try {
       script = decodeURIComponent(encodedScript);
-      invitation = access.authenticate(script, /^Bearer ([A-Za-z0-9_-]+)$/.exec(request.headers.authorization ?? "")?.[1] ?? "");
+      invitation = access.authenticate(script, /^Bearer ([A-Za-z0-9_-]+)$/.exec(request.headers.authorization ?? "")?.[1] ?? "").id;
     } catch {
       respond(response, 403);
       return true;

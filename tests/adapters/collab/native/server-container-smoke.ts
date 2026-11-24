@@ -177,14 +177,24 @@ async function main(): Promise<void> {
     const seedBytes = seed.encodeState();
     seed.close();
     const creationId = randomUUID();
-    assert.equal((await ownerFetch(baseHttpA, "scripts", { method: "POST", headers: { "Idempotency-Key": creationId }, body: Buffer.from(seedBytes) }, null)).status, 401);
-    assert.equal((await ownerFetch(baseHttpA, "scripts", { method: "POST", headers: { "Idempotency-Key": creationId }, body: Buffer.from(seedBytes) }, wrongSecret)).status, 401);
-    const createdReply = await ownerFetch(baseHttpA, "scripts", { method: "POST", headers: { "Idempotency-Key": creationId }, body: Buffer.from(seedBytes) });
+    const seedHash = createHash("sha256").update(seedBytes).digest("hex");
+    const createHeaders = { "Idempotency-Key": creationId, "Splitpage-Content-SHA256": seedHash };
+    assert.equal((await ownerFetch(baseHttpA, "scripts", { method: "POST", headers: createHeaders, body: Buffer.from(seedBytes) }, null)).status, 401);
+    assert.equal((await ownerFetch(baseHttpA, "scripts", { method: "POST", headers: createHeaders, body: Buffer.from(seedBytes) }, wrongSecret)).status, 401);
+    const createdReply = await ownerFetch(baseHttpA, "scripts", { method: "POST", headers: createHeaders, body: Buffer.from(seedBytes) });
     assert.equal(createdReply.status, 200);
     const { scriptId } = await createdReply.json() as { scriptId: string };
 
-    const issueReply1 = await ownerFetch(baseHttpA, `scripts/${scriptId}/invitations`, { method: "POST", body: "Smoke One" });
-    const issueReply2 = await ownerFetch(baseHttpA, `scripts/${scriptId}/invitations`, { method: "POST", body: "Smoke Two" });
+    const issueReply1 = await ownerFetch(baseHttpA, `scripts/${scriptId}/invitations`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: "owner", label: "Smoke One" })
+    });
+    const issueReply2 = await ownerFetch(baseHttpA, `scripts/${scriptId}/invitations`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: "guest", label: "Smoke Two" })
+    });
     assert.equal(issueReply1.status, 201);
     assert.equal(issueReply2.status, 201);
     const firstInvite = await issueReply1.json() as { id: string; token: string };

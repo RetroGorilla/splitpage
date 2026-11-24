@@ -350,7 +350,8 @@ replicas), and list the verification proxy's exact origin (for example `https://
 `SPLITPAGE_ALLOWED_ORIGINS`. Because `owner-command.ts` requires an `https:` origin, issue fresh drill
 invitations against `127.0.0.1:8081` either through the operator-only local HTTPS verification proxy below
 (with the local CA trusted via `NODE_EXTRA_CA_CERTS` and `SPLITPAGE_MANAGEMENT_SECRET` injected from the
-restore env file, never argv) or via `POST http://127.0.0.1:8081/api/scripts/<script-id>/invitations` passing
+restore env file, never argv) or via `POST http://127.0.0.1:8081/api/scripts/<script-id>/invitations` with a
+`Content-Type: application/json` body such as `{"role":"guest","label":"Restore drill"}`, passing
 the `Authorization: Bearer` header via stdin or an operator-only `0600` config file (such as `curl -K -`),
 never in command arguments, shell history or logs; keep returned tokens and join URLs out of terminal
 transcripts and logs.
@@ -392,14 +393,20 @@ listings or logs; when calling `/api/` HTTP endpoints directly, read credentials
 stdin (such as `curl -K -`). Configure the HTTPS proxy to omit authorization headers and request bodies from logging.
 The owner and status endpoints refuse requests (`401`) when the relay has no configured secret.
 
-The CLI (`collab-server/owner-command.ts`) covers `issue`, `list`, `revoke` and `delete` over an `https:` origin only:
-from `collab-server/`, run `node owner-command.ts <https-origin> issue <script-id> <label>`, `list <script-id>`,
-`revoke <invitation-id>` or `delete <script-id>`. `issue` prints the bearer join link
-`https://<host>/?join=<script-id>#<token>` once to stdout: treat that output as a live capability, keep it out of
-terminal transcripts, log files and shared channels, and deliver it directly to the intended recipient. Use the
-invitation id from `list` to revoke it. The HTTP API additionally exposes `GET /api/status` (private status) and
-`POST /api/scripts` (script creation, posting a full Yjs snapshot with a stable `Idempotency-Key` header; reusing a
-committed key returns the original script id without a body, including after deletion).
+The CLI (`collab-server/owner-command.ts`) covers `scripts`, `issue`, `list`, `reset`, `revoke` and `delete` over an
+`https:` origin only: from `collab-server/`, run `node owner-command.ts <https-origin> scripts`,
+`issue <script-id> <owner|guest> <label>`, `list <script-id>`, `reset <script-id>`, `revoke <invitation-id>` or
+`delete <script-id>`. `issue` with `guest` (and `reset`) prints the bearer join link
+`https://<host>/?join=<script-id>#<token>` once to stdout; `issue` with `owner` prints JSON `{ id, role, token }`:
+treat that output as a live capability, keep it out of terminal transcripts, log files and shared channels, and deliver
+it directly to the intended recipient. Use the invitation id from `list` to revoke it. The HTTP API additionally
+exposes `GET /api/status` (private status), `POST /api/scripts` (script creation, posting a full Yjs snapshot with
+`Idempotency-Key` and `Splitpage-Content-SHA256` headers to create the script with initial owner and guest credentials;
+a same-hash retry while untouched replaces only that creation's credentials, a retry once touched returns
+`{ scriptId }`, and a different hash is refused with `409`), `DELETE /api/creations/<creation-id>` (abandon an
+untouched creation), and `POST /api/scripts/<script-id>/reset` (revoke all guest invitations and issue one new guest
+link; both `reset` and `DELETE /api/scripts/<script-id>` accept either the script's owner credential or the management
+secret).
 
 **Rotate or recover the management secret.** `docker restart` reuses a container's existing environment and does not
 reload `--env-file`. Rotate by recreating the Stage 3 container against the **same** Stage 3 volume:
@@ -718,7 +725,8 @@ server.listen(port, "127.0.0.1");
 ```
 
   3. For the **deployed smoke check**, create a script via `POST /api/scripts` (with `Authorization: Bearer` passed via
-     `0600` config/stdin and an `Idempotency-Key`), issue an invitation with `owner-command.ts issue`, open
+     `0600` config/stdin, an `Idempotency-Key`, and `Splitpage-Content-SHA256`), issue an invitation with
+     `owner-command.ts issue <script-id> guest <label>`, open
      `https://127.0.0.1:8443/?join=<script-id>#<token>` on a second operator device running the same loopback proxy
      (keeping the join URL out of logs and transcripts), confirm synchronized script content and verified picture
      `PUT`/`GET` bytes (exact SHA-256), revoke the invitation with `owner-command.ts revoke` and confirm live close
@@ -730,6 +738,7 @@ server.listen(port, "127.0.0.1");
 
 - **Runtime limits.** Defaults bound traffic for both unauthenticated and admitted clients:
   `SPLITPAGE_MAX_CONNECTIONS` (default `64`), `SPLITPAGE_MAX_CONNECTIONS_PER_INVITATION` (default `8`),
+  `SPLITPAGE_MAX_CONNECTIONS_PER_GUEST_INVITATION` (default `24`),
   `SPLITPAGE_MAX_MESSAGES_PER_SECOND` (default `60`) and `SPLITPAGE_MAX_UPLOADS_IN_FLIGHT` (default `4`, range `1`–`4`
   to preserve the 64 MiB staging maximum), alongside the WebSocket and Hocuspocus pre-auth bounds (`maxPayload` 16 MB,
   `maxFragments` 4,096, `maxBufferedChunks` 32,768 so near-15 MB reconnects over small TCP chunks succeed,

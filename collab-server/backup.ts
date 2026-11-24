@@ -112,11 +112,19 @@ function copyPictures(db: DatabaseSync, version: number, source: string, destina
 export function verifyCopy(source: DatabaseSync, copy: DatabaseSync): void {
   const version = verifyDatabase(copy);
   if (version !== verifyDatabase(source)) throw new RelayError("Relay backup storage version differs.");
-  if (version >= 2) verifyRows(source, copy, "creations", "SELECT id, script FROM creations ORDER BY id");
+  if (version >= 4) {
+    verifyRows(source, copy, "creations", "SELECT id, script, content_hash FROM creations ORDER BY id");
+  } else if (version >= 2) {
+    verifyRows(source, copy, "creations", "SELECT id, script FROM creations ORDER BY id");
+  }
   verifyRows(source, copy, "documents", "SELECT name, state FROM documents ORDER BY name");
-  verifyRows(source, copy, "scripts", "SELECT name, status FROM scripts ORDER BY name");
+  verifyRows(source, copy, "scripts", version >= 4
+    ? "SELECT name, status, untouched FROM scripts ORDER BY name"
+    : "SELECT name, status FROM scripts ORDER BY name");
   if (version >= 3) verifyRows(source, copy, "script pictures", "SELECT script, sha, bytes, mime FROM script_pictures ORDER BY script, sha");
-  verifyRows(source, copy, "invitations", "SELECT id, script, label, token_hash, revoked FROM invitations ORDER BY id");
+  verifyRows(source, copy, "invitations", version >= 4
+    ? "SELECT id, script, label, token_hash, revoked, role, creation_id FROM invitations ORDER BY id"
+    : "SELECT id, script, label, token_hash, revoked FROM invitations ORDER BY id");
 }
 
 function valuesMatch(left: SQLOutputValue, right: SQLOutputValue | undefined): boolean {

@@ -1,3 +1,4 @@
+import { createHash } from "node:crypto";
 import { closeSync, mkdirSync, openSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
@@ -5,17 +6,44 @@ import { RelayError } from "./config.ts";
 
 export const DB_NAME = "relay.sqlite";
 const APPLICATION_ID = 0x53504c54;
-const STORAGE_VERSION = 3;
+const STORAGE_VERSION = 4;
+const DOCUMENTS_SCHEMA = "CREATE TABLE documents (name TEXT PRIMARY KEY NOT NULL, state BLOB NOT NULL) STRICT";
+const V1_SCRIPTS_SCHEMA = "CREATE TABLE scripts (name TEXT PRIMARY KEY NOT NULL, status TEXT NOT NULL CHECK (status IN ('pending', 'active', 'deleted'))) STRICT";
+const V4_SCRIPTS_SCHEMA = "CREATE TABLE scripts (name TEXT PRIMARY KEY NOT NULL, status TEXT NOT NULL CHECK (status IN ('pending', 'active', 'deleted')), untouched INTEGER NOT NULL DEFAULT 0 CHECK (untouched IN (0, 1))) STRICT";
+const V1_INVITATIONS_SCHEMA = "CREATE TABLE invitations (id TEXT PRIMARY KEY NOT NULL, script TEXT NOT NULL REFERENCES scripts(name), label TEXT NOT NULL, token_hash BLOB NOT NULL UNIQUE CHECK (length(token_hash) = 32), revoked INTEGER NOT NULL DEFAULT 0 CHECK (revoked IN (0, 1))) STRICT";
+const V4_INVITATIONS_SCHEMA = "CREATE TABLE invitations (id TEXT PRIMARY KEY NOT NULL, script TEXT NOT NULL REFERENCES scripts(name), label TEXT NOT NULL, token_hash BLOB NOT NULL UNIQUE CHECK (length(token_hash) = 32), revoked INTEGER NOT NULL DEFAULT 0 CHECK (revoked IN (0, 1)), role TEXT NOT NULL DEFAULT 'guest' CHECK (role IN ('owner', 'guest')), creation_id TEXT REFERENCES creations(id)) STRICT";
+const V2_CREATIONS_SCHEMA = "CREATE TABLE creations (id TEXT PRIMARY KEY NOT NULL, script TEXT NOT NULL UNIQUE REFERENCES scripts(name)) STRICT";
+const V4_CREATIONS_SCHEMA = "CREATE TABLE creations (id TEXT PRIMARY KEY NOT NULL, script TEXT NOT NULL UNIQUE REFERENCES scripts(name), content_hash BLOB CHECK (content_hash IS NULL OR length(content_hash) = 32)) STRICT";
 const PICTURE_SCHEMA = "CREATE TABLE script_pictures (script TEXT NOT NULL REFERENCES scripts(name), sha TEXT NOT NULL, bytes INTEGER NOT NULL, mime TEXT NOT NULL, PRIMARY KEY (script, sha)) STRICT";
-const CREATIONS = "CREATE TABLE creations (id TEXT PRIMARY KEY NOT NULL, script TEXT NOT NULL UNIQUE REFERENCES scripts(name)) STRICT";
 const CREATE_PICTURES = PICTURE_SCHEMA + "; CREATE INDEX script_pictures_sha ON script_pictures(sha)";
-const SCHEMAS = {
-  documents: "CREATE TABLE documents (name TEXT PRIMARY KEY NOT NULL, state BLOB NOT NULL) STRICT",
-  scripts: "CREATE TABLE scripts (name TEXT PRIMARY KEY NOT NULL, status TEXT NOT NULL CHECK (status IN ('pending', 'active', 'deleted'))) STRICT",
-  invitations: "CREATE TABLE invitations (id TEXT PRIMARY KEY NOT NULL, script TEXT NOT NULL REFERENCES scripts(name), label TEXT NOT NULL, token_hash BLOB NOT NULL UNIQUE CHECK (length(token_hash) = 32), revoked INTEGER NOT NULL DEFAULT 0 CHECK (revoked IN (0, 1))) STRICT"
+const V1_SCHEMAS = { documents: DOCUMENTS_SCHEMA, scripts: V1_SCRIPTS_SCHEMA, invitations: V1_INVITATIONS_SCHEMA };
+const V2_SCHEMAS = { ...V1_SCHEMAS, creations: V2_CREATIONS_SCHEMA };
+const V3_SCHEMAS = { ...V2_SCHEMAS, script_pictures: PICTURE_SCHEMA };
+const CURRENT_SCHEMAS = {
+  documents: DOCUMENTS_SCHEMA,
+  scripts: V4_SCRIPTS_SCHEMA,
+  invitations: V4_INVITATIONS_SCHEMA,
+  creations: V4_CREATIONS_SCHEMA,
+  script_pictures: PICTURE_SCHEMA
 };
-const OWNER_SCHEMAS = { ...SCHEMAS, creations: CREATIONS };
-const CURRENT_SCHEMAS = { ...OWNER_SCHEMAS, script_pictures: PICTURE_SCHEMA };
+
+function schemasFor(version: number): Record<string, string> | undefined {
+  if (version === 1) return V1_SCHEMAS;
+  if (version === 2) return V2_SCHEMAS;
+  if (version === 3) return V3_SCHEMAS;
+  if (version === STORAGE_VERSION) return CURRENT_SCHEMAS;
+  return undefined;
+}
+
+function backfillCreationHashes(db: DatabaseSync): void {
+  const rows = db.prepare("SELECT c.id, d.state FROM creations c JOIN documents d ON d.name = c.script").all();
+  const update = db.prepare("UPDATE creations SET content_hash = ? WHERE id = ?");
+  for (const row of rows) {
+    if (typeof row.id === "string" && row.state instanceof Uint8Array) {
+      update.run(createHash("sha256").update(row.state).digest(), row.id);
+    }
+  }
+}
 
 export function claimWriter(directory: string): DatabaseSync {
   let lock: DatabaseSync | undefined;
@@ -35,9 +63,9 @@ export function claimWriter(directory: string): DatabaseSync {
 
 export function verifyDatabase(db: DatabaseSync): number {
   const version = Number(db.prepare("PRAGMA user_version").get()?.user_version);
-  const schemas = version === 1 ? SCHEMAS : version === 2 ? OWNER_SCHEMAS : CURRENT_SCHEMAS;
+  const schemas = schemasFor(version);
   if (db.prepare("PRAGMA application_id").get()?.application_id !== APPLICATION_ID ||
-      (version !== 1 && version !== 2 && version !== STORAGE_VERSION) ||
+      !schemas ||
       Object.entries(schemas).some(([name, schema]) =>
         db.prepare("SELECT sql FROM sqlite_schema WHERE name = ? AND type = 'table'").get(name)?.sql !== schema)) {
     throw new RelayError("Relay database has an unrecognized identity or schema.");
@@ -81,9 +109,24 @@ export function openWriter(directory: string): DatabaseSync {
     db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL");
     verifyDurability(db);
     if (created) {
-      db.exec(`BEGIN; PRAGMA application_id=${APPLICATION_ID}; ${Object.values(OWNER_SCHEMAS).join("; ")}; ${CREATE_PICTURES}; PRAGMA user_version=${STORAGE_VERSION}; COMMIT`);
+      db.exec(`BEGIN; PRAGMA application_id=${APPLICATION_ID}; ${DOCUMENTS_SCHEMA}; ${V4_SCRIPTS_SCHEMA}; ${V4_CREATIONS_SCHEMA}; ${V4_INVITATIONS_SCHEMA}; ${CREATE_PICTURES}; PRAGMA user_version=${STORAGE_VERSION}; COMMIT`);
     } else if (version < STORAGE_VERSION) {
-      db.exec(`BEGIN; ${version === 1 ? CREATIONS + ";" : ""} ${CREATE_PICTURES}; PRAGMA user_version=${STORAGE_VERSION}; COMMIT`);
+      db.exec("BEGIN IMMEDIATE");
+      try {
+        if (version === 1) db.exec(V4_CREATIONS_SCHEMA);
+        if (version < 3) db.exec(CREATE_PICTURES);
+        db.exec("ALTER TABLE scripts ADD COLUMN untouched INTEGER NOT NULL DEFAULT 0 CHECK (untouched IN (0, 1))");
+        if (version >= 2) {
+          db.exec("ALTER TABLE creations ADD COLUMN content_hash BLOB CHECK (content_hash IS NULL OR length(content_hash) = 32)");
+          backfillCreationHashes(db);
+        }
+        db.exec("ALTER TABLE invitations ADD COLUMN role TEXT NOT NULL DEFAULT 'guest' CHECK (role IN ('owner', 'guest'))");
+        db.exec("ALTER TABLE invitations ADD COLUMN creation_id TEXT REFERENCES creations(id)");
+        db.exec(`PRAGMA user_version=${STORAGE_VERSION}; COMMIT`);
+      } catch (error) {
+        db.exec("ROLLBACK");
+        throw error;
+      }
     }
     return db;
   } catch (error) {
