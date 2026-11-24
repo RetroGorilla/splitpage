@@ -20,7 +20,7 @@ import { currentHome, documentLocation, setHome } from "./location-owner.ts";
 import { openNativeEditor } from "./native-shared-session.ts";
 import { createNativeTestPeer } from "./shared-native-test-peer.ts";
 import { stopNativeCaretWait } from "./native-switch-caret.ts";
-import { stopCollaborationOwner } from "./collaboration-owner.ts";
+import { collaborationState, stopCollaborationOwner } from "./collaboration-owner.ts";
 import { enterRetainedSharedScript, leaveRetainedSharedScript, retainedSharedScriptActive } from "./retained-shared-script.ts";
 import type { RetainedSharedScript } from "./retained-shared-script.ts";
 import { readInvitationSnapshot } from "../../adapters/collab/native/invitation-snapshot.ts";
@@ -246,6 +246,9 @@ function startSharedTestHook(): () => void {
       drain: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["drain"]>) => nativePeer?.drain(...args),
       release: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["release"]>) => nativePeer?.release(...args),
       deliver: () => nativePeer?.deliver(),
+      reviewOfflineChanges: () => {
+        if (nativePeer) collaborationState().setOfflineClashes(nativePeer.offlineNotice());
+      },
       step: (direction: "undo" | "redo") => nativePeer?.step(direction),
       delete: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["delete"]>) => nativePeer?.delete(...args)
     },

@@ -20,7 +20,7 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
   const writerStatus = byId("writer-collab-status");
 
   const anchored: AnchoredBanner[] = [];
-  for (const element of [saveErrorBanner, accessBanner, sizeBanner]) {
+  for (const element of [saveErrorBanner, accessBanner, sizeBanner, byId("collab-offline-banner")]) {
     if (!element?.parentNode) continue;
     const home = document.createTextNode("");
     element.before(home);

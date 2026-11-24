@@ -16,6 +16,7 @@ import { createNativeEditorStructure } from "./native-shared-structure.ts";
 import { nativeUndoRoute } from "./native-shared-undo.ts";
 import { notices } from "./ports/effects.ts";
 import { currentRowsRender } from "./render.ts";
+import { editAllowed } from "./session-owner.ts";
 import type { SharedEditorBackend, SharedSwitchPorts } from "./shared-session.ts";
 
 const UNSUPPORTED = "native-command-unavailable";
@@ -118,6 +119,21 @@ export function bindNativeEditor(ports: SharedSwitchPorts, native: ReturnType<ty
     replica: publication.replica, unsupportedCommands: UNSUPPORTED,
     nativeRecords: records,
     nativeFind: createNativeEditorFind({ native, session: () => commandSession, input: () => input, editAttribution, publish, report: ports.report }),
+    offlineReview: {
+      readBeat: id => native.isClosingOrClosed() ? null : native.readBeat(id),
+      putBack: beat => {
+        if (!commandSession || !input) return false;
+        try {
+          const admission = commandSession.admit();
+          if (admission?.kind === "failed") throw admission.error;
+          if (admission || !editAllowed() || input.beforePress()) return false;
+          return native.commands.putBack(beat).kind === "written";
+        } catch (error) {
+          ports.report(error);
+          return false;
+        }
+      }
+    },
     hasWriterPreview: beat => input?.hasWriterPreview(beat) ?? false,
     bindWriterPaint: root => input?.bindWriterPaint(root),
     structure: createNativeEditorStructure({ native, session: () => commandSession, input: () => input, publish, report: ports.report }),

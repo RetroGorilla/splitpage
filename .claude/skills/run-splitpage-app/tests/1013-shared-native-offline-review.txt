@@ -1,0 +1,37 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.P=S.nativePeer;window.$=selector=>document.querySelector(selector);F.openFile(new File([JSON.stringify({schema:2,title:'Offline review',paragraphsDecided:true,rows:[{id:'r1',audioText:'Start ',visualText:'Desk'},{id:'r2',audioText:'Middle',visualText:'Window'},{id:'r3',audioText:'End',visualText:''}]})],'offline-review.splitpage'))
+wait F.state().title === 'Offline review'
+eval S.enter()
+wait S.read().peer!==null
+caret #rows .cell-editable[data-id="r3"][data-field="audioText"]
+press !
+wait S.read().peer.rows.find(row=>row.id==='r3').audioText==='End!'
+expect $('#collab-offline-banner').hidden
+eval P.hold('updates');true
+caret #rows .cell-editable[data-id="r2"][data-field="audioText"]
+press !
+wait S.read().app.rows.find(row=>row.id==='r2').audioText==='Middle!'
+expect P.removeBeat('r2').kind==='written'
+eval P.release('forward');true
+wait !S.read().app.rows.some(row=>row.id==='r2')
+click #btn-write
+wait !$('#writer').hidden
+eval P.reviewOfflineChanges();true
+wait $('#writer-banners #collab-offline-banner')?.checkVisibility()
+expect $('#collab-offline-summary').textContent==='1 beat to review'
+click #collab-offline-review
+wait $('#offline-review').matches(':modal')
+expect $('#offline-review-title').textContent==='What changed while offline'
+expect $('#offline-review .merge-side:first-child').textContent.includes('Middle!') && $('#offline-review .merge-side:last-child').textContent.includes('Removed while you were offline')
+expect $('#offline-review .jump-link').hidden
+click #offline-review .offline-review-restore
+wait $('#offline-review .offline-review-restore').disabled
+expect S.read().app.rows.length===3 && S.read().app.rows[0].audioText.includes('!') && S.read().app.rows[1].audioText==='Middle!' && S.read().app.rows[1].id!=='r2'
+expect JSON.stringify(S.read().app.rows)===JSON.stringify(S.read().peer.rows)
+key Escape
+wait !$('#offline-review').open
+expect !$('#writer').hidden && document.activeElement===$('#collab-offline-review')
+click #collab-offline-dismiss
+expect $('#collab-offline-banner').hidden
+quit

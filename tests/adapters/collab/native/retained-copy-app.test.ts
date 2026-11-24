@@ -17,6 +17,10 @@ import { createMemoryBackend, intern, persist, setBackend } from "../../../../sr
 import { localFileMenuControls } from "../../../../src/bootstrap/wiring/local-files.ts";
 import { notices } from "../../../../src/bootstrap/wiring/ports/effects.ts";
 import { currentDocument } from "../../../../src/bootstrap/wiring/session-owner.ts";
+import { collaborationSnapshot } from "../../../../src/bootstrap/wiring/collaboration-owner.ts";
+import { actions } from "../../../../src/bootstrap/wiring/ports/actions.ts";
+import { sharedUndoRoute } from "../../../../src/bootstrap/wiring/undo.ts";
+import { openDocument } from "../../../../src/bootstrap/wiring/transition-owners.ts";
 import { NAME, serverHarness } from "./server-harness.ts";
 import { StateFirstProvider } from "../../../../src/adapters/collab/native/state-first-provider.ts";
 import { printDialog } from "../../../../src/bootstrap/wiring/ports/printing.ts";
@@ -832,5 +836,138 @@ test("retained-shared-script delivers offline notice clashes before releasing th
   assert.deepEqual(entered, ok);
   await gateReached.promise;
   assert.deepEqual(observed, [[row.id]]);
+  assert.deepEqual(collaborationSnapshot().offlineClashes.map(clash => clash.id), [row.id]);
+  assert.equal(document.getElementById("collab-offline-banner")?.hidden, false);
   assert.deepEqual(await hook().leave(), ok);
 });
+
+for (const peerAction of ["edit", "remove"] as const) {
+  test(`return after an offline restart reviews a peer ${peerAction} and restores the beat in one undo step`, { timeout: 20_000 }, async t => {
+    const kit = serverHarness(t);
+    kit.seed();
+    const port = await kit.launch().port();
+    const token = kit.invitation().token;
+    const peer = kit.copy(port);
+    await kit.until(() => peer.relay.status().firstSyncDone || undefined);
+    const row = peer.session.document().rows[0];
+    assert.ok(row);
+    const previous = peer.session.commands.insertAdjacentBeat(row.id, "above", undefined, false, "Start ");
+    assert.equal(previous.kind, "written");
+    await kit.until(() => peer.relay.status().pendingChangeCount === 0 || undefined);
+
+    const entry = { deployment: "review-" + peerAction, script: NAME };
+    const opened = capture();
+    assert.deepEqual(await hook().enterRetained({ ...entry, invitation: { token, state: peer.session.encodeState() },
+      connect: opened.connect }), ok);
+    const local = opened.replica();
+    local.session.ydoc.clientID = 2;
+    typeAt(local.session, 0, "offline ", row.id);
+    const status = { kind: "beat", id: row.id, field: "status" } as const;
+    assert.equal(local.session.commands.setField(status, "ready").kind, "written");
+    assert.equal((await local.flush()).kind, "stored");
+    await rewireRunningApp({});
+    await finishStartup();
+    await local.closed;
+
+    peer.session.ydoc.clientID = 3;
+    const changed = peerAction === "edit" ? peer.session.commands.setField(status, "shot")
+      : peer.session.commands.removeRows([row.id]);
+    assert.equal(changed.kind, "written");
+    await kit.until(() => peer.relay.status().pendingChangeCount === 0 || undefined);
+
+    const dialog = document.querySelector<HTMLDialogElement>("#offline-review");
+    const banner = document.getElementById("collab-offline-banner");
+    assert.ok(dialog && banner);
+    Object.assign(dialog, {
+      showModal() { dialog.open = true; },
+      close() { dialog.open = false; }
+    });
+    const click = (selector: string) => {
+      const button = document.querySelector<HTMLButtonElement>(selector);
+      assert.ok(button);
+      button.click();
+      return button;
+    };
+    const observed = eventResult<undefined>();
+    assert.deepEqual(await hook().enterRetained({
+      ...entry, relayUrl: "ws://127.0.0.1:" + port,
+      onOfflineNotice(clashes) {
+        if (!clashes.length) return;
+        assert.deepEqual(clashes.map(clash => clash.id), [row.id]);
+        assert.deepEqual(collaborationSnapshot().offlineClashes.map(clash => clash.id), [row.id]);
+        assert.equal(banner.hidden, false);
+        observed.resolve(undefined);
+      }
+    }), ok);
+    t.after(async () => {
+      if (collaborationSnapshot().active) {
+        while (collaborationSnapshot().localPending) await delay(10);
+        await hook().leave();
+      }
+    });
+    await observed.promise;
+
+    assert.equal(document.getElementById("collab-offline-review")?.textContent, "Review changes");
+    assert.equal(document.getElementById("collab-offline-dismiss")?.textContent, "Dismiss");
+    click("#collab-offline-review");
+    assert.equal(dialog.open, true);
+    const [mine, live] = dialog.querySelectorAll(".merge-side");
+    assert.match(mine?.textContent ?? "", /offline word.*Ready/);
+    if (peerAction === "edit") {
+      assert.match(live?.textContent ?? "", /offline word.*Filmed/);
+      const target = [...document.querySelectorAll("#rows .row")].find(element => element.getAttribute("data-id") === row.id);
+      assert.ok(target);
+      let scrolled = false;
+      Object.assign(target, { scrollIntoView() { scrolled = true; } });
+      const invoke = t.mock.method(actions, "invoke");
+      click("#offline-review .jump-link");
+      assert.equal(dialog.open, false);
+      assert.deepEqual(invoke.mock.calls[0]?.arguments, ["reveal-row", "button", row.id]);
+      assert.equal(scrolled, true);
+      click("#collab-offline-review");
+    } else {
+      assert.match(live?.textContent ?? "", /Removed while you were offline/);
+      assert.equal(dialog.querySelector<HTMLButtonElement>(".jump-link")?.hidden, true);
+      assert.match(currentDocument()?.rows[0]?.audioText ?? "", /offline /);
+    }
+
+    const before = currentDocument()?.rows.map(({ id, audioText }) => ({ id, audioText }));
+    assert.ok(before);
+    const button = click("#offline-review .offline-review-restore");
+    const rendered = dialog.querySelector<HTMLButtonElement>(".offline-review-restore");
+    assert.equal(rendered?.disabled, true);
+    button.click();
+    rendered?.click();
+    await kit.until(() => peer.session.document().rows.length === before.length + 1 || undefined);
+    const after = currentDocument()?.rows ?? [];
+    const fresh = after.filter(beat => !before.some(({ id }) => id === beat.id));
+    assert.equal(after.length, before.length + 1);
+    assert.equal(fresh.length, 1);
+    assert.notEqual(fresh[0]?.id, row.id);
+    assert.equal(fresh[0]?.audioText, "offline word");
+    assert.equal(fresh[0]?.status, "ready");
+    if (peerAction === "remove") assert.match(after[0]?.audioText ?? "", /offline /);
+    const project = (rows: typeof after) => rows.map(({ id, audioText }) => ({ id, audioText }));
+    assert.deepEqual(project(peer.session.document().rows), project(after));
+    assert.equal(sharedUndoRoute()?.actions.undo().ok, true);
+    assert.deepEqual(project(currentDocument()?.rows ?? []), before);
+    await kit.until(() => JSON.stringify(project(peer.session.document().rows)) === JSON.stringify(before) || undefined);
+    assert.deepEqual(sharedUndoRoute()?.actions.undo(), { ok: false, empty: true });
+
+    if (peerAction === "edit") {
+      click("#offline-review-close");
+      click("#collab-offline-dismiss");
+      assert.equal(banner.hidden, true);
+      assert.deepEqual(collaborationSnapshot().offlineClashes, []);
+    } else {
+      while (collaborationSnapshot().localPending) await delay(10, undefined, { signal: t.signal });
+      const rows = [{ id: "r1", audioText: "A new document" }];
+      const file = new File([JSON.stringify({ schema: 2, title: "Replacement", rows })], "replacement.splitpage");
+      await openDocument({ kind: "file", file, handle: null });
+      assert.equal(currentDocument()?.title, "Replacement");
+      assert.equal(dialog.open, false);
+      assert.equal(banner.hidden, true);
+      assert.deepEqual(collaborationSnapshot().offlineClashes, []);
+    }
+  });
+}

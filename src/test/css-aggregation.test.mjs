@@ -99,6 +99,7 @@ test("CSS aggregation preserves listed order, separators and single-file bytes",
     "src/features/panels/styles-open-transition.css",
     "src/features/imports/styles-new-document.css",
     "src/features/file-menu/styles-merge.css",
+    "src/features/collaboration/styles.css",
     "src/styles/overrides.css",
     "src/features/tags/styles-outline.css"
   ]);

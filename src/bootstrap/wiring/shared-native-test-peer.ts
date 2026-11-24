@@ -57,6 +57,7 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>, 
   }
   return {
     read: peer.document,
+    offlineNotice: () => app.offlineNotice("returning"),
     seedReader: () => {
       if (!reader) {
         reader = openReader("app");

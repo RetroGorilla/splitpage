@@ -1,3 +1,5 @@
+import type { OfflineClash, OfflineClashEntry, OfflineSavedBeat } from "./offline-clashes.ts";
+
 export type CollaborationPermanentRefusal =
   | "access-removed"
   | "invitation-revoked"
@@ -32,6 +34,7 @@ export interface CollaborationSnapshot {
   readonly pictures: CollaborationPictureCounts;
   readonly refusal: CollaborationPermanentRefusal | null;
   readonly mergeTooLarge: string | null;
+  readonly offlineClashes: readonly OfflineClashEntry[];
 }
 
 export interface CollaborationReads {
@@ -48,6 +51,9 @@ export interface CollaborationState extends CollaborationReads {
   readonly setPictures: (pictures: CollaborationPictureCounts) => void;
   readonly setRefusal: (reason: CollaborationPermanentRefusal) => void;
   readonly setMergeTooLarge: (message: string) => void;
+  readonly setOfflineClashes: (clashes: readonly OfflineClash[]) => void;
+  readonly dismissOfflineClashes: () => void;
+  readonly restoreOfflineClash: (entry: OfflineClashEntry, write: (beat: OfflineSavedBeat) => boolean) => boolean;
 }
 
 export const PERMANENT_COLLABORATION_REFUSALS: readonly CollaborationPermanentRefusal[] = Object.freeze([
@@ -68,7 +74,8 @@ export const IDLE_COLLABORATION_SNAPSHOT: CollaborationSnapshot = Object.freeze(
   relay: Object.freeze({ connected: false, firstSyncDone: false, pendingChangeCount: 0 }),
   pictures: Object.freeze({ checking: 0, uploading: 0, downloading: 0 }),
   refusal: null,
-  mergeTooLarge: null
+  mergeTooLarge: null,
+  offlineClashes: Object.freeze([])
 });
 
 export function isPermanentCollaborationRefusal(reason: string): reason is CollaborationPermanentRefusal {
@@ -113,7 +120,8 @@ function sameSnapshot(a: CollaborationSnapshot, b: CollaborationSnapshot): boole
     && sameRelay(a.relay, b.relay)
     && samePictures(a.pictures, b.pictures)
     && a.refusal === b.refusal
-    && a.mergeTooLarge === b.mergeTooLarge;
+    && a.mergeTooLarge === b.mergeTooLarge
+    && a.offlineClashes === b.offlineClashes;
 }
 
 function freezeRelay(relay: CollaborationRelayState): CollaborationRelayState {
@@ -142,6 +150,7 @@ function freezeError(error: CollaborationLocalWriteError | null): CollaborationL
 export function createCollaborationState(): CollaborationState {
   let current: CollaborationSnapshot = IDLE_COLLABORATION_SNAPSHOT;
   const listeners = new Set<(snapshot: CollaborationSnapshot) => void>();
+  const restoring = new Set<OfflineClashEntry>();
 
   function update(next: CollaborationSnapshot): void {
     if (sameSnapshot(current, next)) return;
@@ -169,7 +178,8 @@ export function createCollaborationState(): CollaborationState {
         relay: freezeRelay(initial?.relay ?? IDLE_COLLABORATION_SNAPSHOT.relay),
         pictures: freezePictures(initial?.pictures ?? IDLE_COLLABORATION_SNAPSHOT.pictures),
         refusal: initial?.refusal ?? null,
-        mergeTooLarge: initial?.mergeTooLarge ?? null
+        mergeTooLarge: initial?.mergeTooLarge ?? null,
+        offlineClashes: IDLE_COLLABORATION_SNAPSHOT.offlineClashes
       });
     },
     leave() {
@@ -211,6 +221,30 @@ export function createCollaborationState(): CollaborationState {
         pictures: IDLE_COLLABORATION_SNAPSHOT.pictures,
         relay: freezeRelay({ connected: false, firstSyncDone: false, pendingChangeCount: current.relay.pendingChangeCount })
       });
+    },
+    setOfflineClashes(clashes) {
+      if (!current.active || !clashes.length) return;
+      const entries = new Map(current.offlineClashes.map(entry => [entry.id, entry]));
+      for (const { id, mine, near } of clashes) {
+        entries.set(id, Object.freeze({ id, mine, ...(near === undefined ? {} : { near }), restored: false }));
+      }
+      update({ ...current, offlineClashes: Object.freeze([...entries.values()]) });
+    },
+    dismissOfflineClashes() {
+      update({ ...current, offlineClashes: IDLE_COLLABORATION_SNAPSHOT.offlineClashes });
+    },
+    restoreOfflineClash(entry, write) {
+      if (!entry.mine || entry.restored || restoring.has(entry) || !current.offlineClashes.includes(entry)) return false;
+      restoring.add(entry);
+      try {
+        if (!write(entry.mine)) return false;
+        const entries = current.offlineClashes;
+        if (entries.includes(entry)) {
+          const restored = Object.freeze({ ...entry, restored: true });
+          update({ ...current, offlineClashes: Object.freeze(entries.map(item => item === entry ? restored : item)) });
+        }
+        return true;
+      } finally { restoring.delete(entry); }
     }
   };
   return Object.freeze(state);

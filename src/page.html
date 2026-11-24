@@ -303,6 +303,17 @@
     </div>
   </div>
 
+  <div class="notice notice-merge notice-warn" id="collab-offline-banner" hidden>
+    <div class="notice-body" role="status">
+      <strong>Changes while you were offline</strong>
+      <span id="collab-offline-summary"></span>
+    </div>
+    <div class="notice-actions">
+      <button type="button" class="btn btn-accent" id="collab-offline-review">Review changes</button>
+      <button type="button" class="btn" id="collab-offline-dismiss">Dismiss</button>
+    </div>
+  </div>
+
   <div class="notice notice-merge" id="merge-banner" hidden>
     <div class="notice-body">
       <strong>Your changes were merged.</strong>
@@ -676,6 +687,15 @@
     </div>
   </div>
 </div>
+
+<dialog class="modal-panel merge-review-panel" id="offline-review" aria-labelledby="offline-review-title">
+  <div class="modal-header">
+    <h2 id="offline-review-title">What changed while offline</h2>
+    <button type="button" class="modal-close" id="offline-review-close" aria-label="Close" autofocus><svg aria-hidden="true" focusable="false"><use href="#i-close"/></svg></button>
+  </div>
+  <div id="offline-review-list"></div>
+  <p id="offline-review-feedback" class="modal-hint" role="status"></p>
+</dialog>
 
 <div class="modal-backdrop scene-gallery-overlay" id="gallery-modal" hidden>
   <div class="modal-panel scene-gallery-panel" role="dialog" aria-modal="true" aria-labelledby="gallery-title" aria-describedby="gallery-summary">
