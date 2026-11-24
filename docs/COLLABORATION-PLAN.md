@@ -114,6 +114,8 @@ Accounts, verified identity, comment-only permissions, shared video uploads, aut
 
 ## 3 Repository integration
 
+> Stage 4 Part 11a supersedes checkpoint-only history for shared scripts. The relay keeps [version history](collaboration/native-adapter-design.md#relay-version-history-stage-4-part-11a).
+
 Follow [AGENTS.md](../AGENTS.md), [dependencies](architecture/dependencies.md), [feature ports](architecture/feature-ports.md), [saving](architecture/saving.md), [session](architecture/session.md), [invariants](architecture/invariants.md), and the [review policy](architecture/review.md). Reconcile historical architecture descriptions with current code before acting on them.
 
 The existing editor does not already expose a complete CRDT operation stream. `FlowEdit` in `src/core/flow/flow.ts` describes resulting rows and sections. `flowCommand` in `src/application/commands/flow.ts` applies those results to the plain document. Both the flow surface and Split view have paths that reconcile DOM content back into runs, and that includes ordinary typing: input inside one beat goes native and then `syncBeatEl` in `src/features/writer/flow-surface.ts` decodes the whole beat back into runs. Only cross-beat and structural edits arrive as explicit flow outcomes. The integration must preserve edit intent before those paths lose it.
@@ -258,6 +260,8 @@ Select a production schema only after the mandatory traces in section 13 pass, i
 ## 6 Structural conflicts and recovery
 
 > Superseded on 2026-11-19 in part: removed rows keep a hidden record and cell (decision 4). See note sections 5 and 7 and appendix I.
+
+> Stage 4 Part 11a [thins old relay versions on a schedule](collaboration/native-adapter-design.md#relay-version-history-stage-4-part-11a). Live script content and pictures remain outside automatic reclamation.
 
 Each structural operation needs enough retained identity to explain its result after delayed, reordered and duplicated updates. A removed beat's metadata alone does not retain narration that lives elsewhere. A snapshot at deletion alone does not identify later concurrent edits.
 

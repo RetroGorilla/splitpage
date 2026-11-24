@@ -62,7 +62,10 @@ function parseSafeJson(raw: string, sensitiveValues: readonly string[], label: s
 function assertStatusPayload(raw: string, expected: ExpectedStatusValues, sensitiveValues: readonly string[]): void {
   const parsed = parseSafeJson(raw, sensitiveValues, "status response");
   const valid = isPlainObject(parsed) &&
-    hasExactKeys(parsed, ["connections", "uploadsInFlight", "storedBytes", "pictureBytes", "lastStorageFailure", "lastBackupAt"]) &&
+    hasExactKeys(parsed, [
+      "connections", "uploadsInFlight", "storedBytes", "pictureBytes", "lastStorageFailure",
+      "versionBytes", "lastVersionFailure", "lastBackupAt"
+    ]) &&
     isPlainObject(parsed.connections) &&
     hasExactKeys(parsed.connections, ["total", "authenticated", "documents"]) &&
     isNonNegativeInteger(parsed.connections.total) &&
@@ -73,6 +76,8 @@ function assertStatusPayload(raw: string, expected: ExpectedStatusValues, sensit
     parsed.storedBytes > 0 &&
     parsed.pictureBytes === expected.pictureBytes &&
     parsed.lastStorageFailure === null &&
+    isNonNegativeInteger(parsed.versionBytes) &&
+    parsed.lastVersionFailure === null &&
     parsed.lastBackupAt === null;
   assert.equal(valid, true, "status response must match expected snapshot shape and values");
 }
@@ -434,6 +439,8 @@ test("rotation failure diagnostics redact secrets while preserving static payloa
     storedBytes: 128,
     pictureBytes: 42,
     lastStorageFailure: null,
+    versionBytes: 0,
+    lastVersionFailure: null,
     lastBackupAt: null
   };
   const expectedInvite: ExpectedInvitationEntry = { id: "invite-1", label: "Editor", role: "guest", state: "active" };
@@ -561,7 +568,7 @@ test("rotation failure diagnostics redact secrets while preserving static payloa
   assert.equal((safeError as Error).message, "Relay exited before listening. safe-only-startup-error\n");
 });
 
-function seedLegacyDatabase(directory: string, version: 1 | 2 | 3, options: {
+function seedLegacyDatabase(directory: string, version: 1 | 2 | 3 | 4, options: {
   script: string;
   state: Uint8Array;
   invitationId: string;
@@ -602,9 +609,53 @@ function seedLegacyDatabase(directory: string, version: 1 | 2 | 3, options: {
       options.script, options.picture.sha, options.picture.bytes.length
     );
   }
+  if (version === 4) {
+    db.exec(`ALTER TABLE scripts ADD COLUMN untouched INTEGER NOT NULL DEFAULT 0 CHECK (untouched IN (0, 1));
+      ALTER TABLE creations ADD COLUMN content_hash BLOB CHECK (content_hash IS NULL OR length(content_hash) = 32);
+      ALTER TABLE invitations ADD COLUMN role TEXT NOT NULL DEFAULT 'guest' CHECK (role IN ('owner', 'guest'));
+      ALTER TABLE invitations ADD COLUMN creation_id TEXT REFERENCES creations(id)`);
+    db.prepare("UPDATE creations SET content_hash = ? WHERE id = ?")
+      .run(createHash("sha256").update(options.state).digest(), options.creationId);
+    db.prepare("UPDATE invitations SET script = ?, role = 'owner', creation_id = ? WHERE id = ?")
+      .run(options.createdScript ?? options.script, options.creationId, options.invitationId);
+    db.prepare("UPDATE scripts SET untouched = 1 WHERE name = ?").run(options.createdScript ?? options.script);
+  }
   db.exec(`PRAGMA user_version=${version}`);
   assert.equal(verifyDatabase(db), version);
 }
+
+test("storage v4 upgrades all populated tables to v5 atomically", async t => {
+  const kit = serverHarness(t);
+  const state = kit.seed();
+  const dir = join(kit.directory, "atomic-v4");
+  mkdirSync(dir);
+  const picture = Buffer.of(42);
+  const sha = createHash("sha256").update(picture).digest("hex");
+  seedLegacyDatabase(dir, 4, {
+    script: "original", state, invitationId: "owner-link", tokenHash: Buffer.alloc(32, 1),
+    creationId: "creation", createdScript: "created", picture: { sha, bytes: picture }
+  });
+  const backup = await backupRelay({ SPLITPAGE_DATA_DIR: dir });
+  using archive = new DatabaseSync(join(dir, "backups", backup, DB_NAME), { readOnly: true });
+  assert.equal(verifyDatabase(archive), 4);
+  const path = join(dir, DB_NAME);
+  using before = new DatabaseSync(path);
+  before.exec(`INSERT INTO invitations (id, script, label, token_hash) VALUES ('guest-link', 'original', 'Guest', zeroblob(32));
+    CREATE TABLE version_chunks (conflict TEXT)`);
+  const tables = ["invitations", "creations", "scripts", "script_pictures"];
+  const expected = tables.map(table => before.prepare(`SELECT * FROM ${table} ORDER BY 1`).all());
+  assert.throws(() => openWriter(dir).close(), /could not be opened or initialized/);
+  assert.equal(verifyDatabase(before), 4);
+  assert.equal(before.prepare("SELECT sql FROM sqlite_schema WHERE name = 'versions'").get(), undefined);
+  before.exec("DROP TABLE version_chunks");
+  const run = kit.launch({ SPLITPAGE_DATA_DIR: dir }, new URL("./server-process.ts", import.meta.url));
+  await run.port();
+  assert.equal(verifyDatabase(before), 5);
+  assert.deepEqual(tables.map(table => before.prepare(`SELECT * FROM ${table} ORDER BY 1`).all()), expected);
+  assert.deepEqual(storedState(dir, "created"), state);
+  assert.deepEqual(storedState(dir, "original"), state);
+  assert.equal(before.prepare("SELECT count(*) AS count FROM versions").get()?.count, 0);
+});
 
 for (const version of [1, 2, 3] as const) {
   test("the relay upgrades populated storage from version " + version, { timeout: 25_000 }, async t => {
@@ -668,7 +719,7 @@ for (const version of [1, 2, 3] as const) {
     }
     assert.deepEqual(storedState(legacyDir, restored.scriptId), tempSession);
     const currentBackup = await backupRelay(env);
-    for (const [file, expectedVersion] of [[previousBackup, version], [currentBackup, 4]] as const) {
+    for (const [file, expectedVersion] of [[previousBackup, version], [currentBackup, 5]] as const) {
       using copy = new DatabaseSync(join(legacyDir, "backups", file, DB_NAME), { readOnly: true });
       assert.equal(verifyDatabase(copy), expectedVersion);
       if (expectedVersion >= 2) {
@@ -676,7 +727,7 @@ for (const version of [1, 2, 3] as const) {
       }
     }
     using live = new DatabaseSync(join(legacyDir, DB_NAME), { readOnly: true });
-    assert.equal(verifyDatabase(live), 4);
+    assert.equal(verifyDatabase(live), 5);
     assert.equal(live.prepare("SELECT count(*) AS count FROM script_pictures").get()?.count, version === 3 ? 1 : 0);
   });
 }

@@ -28,6 +28,9 @@ import { pictureApi } from "./pictures.ts";
 import { statusRequests } from "./status.ts";
 import type { StorageFailureRecord } from "./status.ts";
 import { claimWriter, openWriter } from "./storage.ts";
+import { versionRequests } from "./version-http.ts";
+import { versionStorage } from "./version-storage.ts";
+import { versionHistory } from "./versions.ts";
 
 const DOCUMENT_BYTES = 15_000_000;
 const MAX_PAYLOAD = 16_000_000;
@@ -52,16 +55,21 @@ function exceedsMergeLimit(document: Document, update: Uint8Array): boolean {
 export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", extensions: Extension[] = []) {
   const {
     directory, deployment, port, origins, debounce, maxDebounce, managementSecret,
-    maxConnections, maxConnectionsPerInvitation, maxConnectionsPerGuestInvitation, maxMessagesPerSecond, maxUploadsInFlight
+    maxConnections, maxConnectionsPerInvitation, maxConnectionsPerGuestInvitation, maxMessagesPerSecond, maxUploadsInFlight,
+    versions: versionOptions
   } = relayConfig(env);
   const lock = claimWriter(directory);
   let db: ReturnType<typeof openWriter> | undefined;
   let pictures: ReturnType<typeof pictureApi>;
   let access: ReturnType<typeof scriptAccess>;
+  let versions: ReturnType<typeof versionStorage>;
+  let history: ReturnType<typeof versionHistory>;
   try {
     db = openWriter(directory);
     access = scriptAccess(db);
     pictures = pictureApi(db, directory, access, origins, maxUploadsInFlight);
+    versions = versionStorage(db);
+    history = versionHistory(versions, directory, versionOptions);
   } catch (error) {
     db?.close();
     lock.close();
@@ -70,11 +78,13 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
   let shutdown: NodeJS.Timeout | undefined;
   let lastStorageFailure: StorageFailureRecord | null = null;
   function beginShutdown(): void {
+    history.stop();
     shutdown ??= setTimeout(() => failShutdown("Relay shutdown timed out. Some edits may not have been stored."), 15_000);
   }
   function closeStorage(): void {
     clearTimeout(shutdown);
     for (const signal of STOP_SIGNALS) process.removeListener(signal, beginShutdown);
+    history.close();
     db?.close();
     lock.close();
   }
@@ -86,7 +96,8 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
   });
   const load = db.prepare("SELECT state FROM documents WHERE name = ?");
   const size = db.prepare("SELECT length(state) AS bytes FROM documents WHERE name = ?");
-  const write = db.prepare("INSERT INTO documents VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET state = excluded.state");
+  const write = db.prepare(`INSERT INTO documents (name, state, version_generation) VALUES (?, ?, 1)
+    ON CONFLICT(name) DO UPDATE SET state = excluded.state, version_generation = documents.version_generation + 1`);
   type Admission = { invitationId: string; role: InvitationRole; reservationId?: string };
   const storage = new Database({
     async fetch({ documentName }) {
@@ -105,6 +116,7 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
         if (shutdown) failShutdown("Relay shutdown failed. The last edits were not stored.");
         throw error;
       }
+      history.changed(documentName);
     }
   });
   function requireAccess(context: Admission): void {
@@ -140,7 +152,11 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
 
   const manage = ownerRequests(managementSecret, DOCUMENT_BYTES, {
     findCreation: access.findCreation,
-    create: access.create,
+    create(creationId, bytes, hash) {
+      const created = access.create(creationId, bytes, hash);
+      if (created.owner) history.changed(created.scriptId);
+      return created;
+    },
     abandonCreation: access.abandon,
     listScripts: access.listScripts,
     issue: access.issue,
@@ -155,8 +171,11 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
     authenticatedConnections: () => relay.hocuspocus.getConnectionsCount(),
     openDocuments: () => relay.hocuspocus.getDocumentsCount(),
     uploadsInFlight: () => pictures.inFlight(),
-    lastStorageFailure: () => lastStorageFailure
+    lastStorageFailure: () => lastStorageFailure,
+    versionBytes: versions.total,
+    lastVersionFailure: history.lastFailure
   });
+  const versionRequest = versionRequests(versions, access, origins);
 
   const limitsExtension: Extension<Admission> = {
     priority: 200,
@@ -197,7 +216,8 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
     extensions: [limitsExtension, ...extensions, ...(env.SPLITPAGE_APP_DIR ? [appShell(env.SPLITPAGE_APP_DIR, deployment)] : []), storage],
     async onRequest({ request, response }) {
       // why: the stock server treats a falsy rejection as an HTTP response handled by the hook
-      if (status(request, response) || await manage(request, response) || await pictures.handle(request, response)) throw null;
+      if (status(request, response) || await versionRequest(request, response) ||
+          await manage(request, response) || await pictures.handle(request, response)) throw null;
     },
     async onAuthenticate({ token, instance, documentName, connectionConfig, requestParameters }) {
       if (requestParameters.getAll("wire").join(",") !== "1" || requestParameters.getAll("schema").join(",") !== "1") {
@@ -264,6 +284,7 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       active.release();
     },
     async onDestroy() {
+      history.stop();
       await pictures.close();
       closeStorage();
     }
@@ -279,7 +300,12 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       relay.listen(),
       once(relay.httpServer, "error", { signal: listening.signal }).then(() => { throw new Error(); })
     ]);
+    const destroy = relay.destroy.bind(relay);
     return Object.assign(relay, {
+      destroy() {
+        history.stop();
+        return destroy();
+      },
       registerScript: access.register,
       issueInvitation: access.issue,
       resetGuests,

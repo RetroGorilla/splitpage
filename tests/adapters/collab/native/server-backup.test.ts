@@ -238,8 +238,8 @@ test("backup verification rejects different names, different bytes, and missing 
   const copyDirectory = join(kit.directory, "copy");
   using original = openWriter(kit.directory);
   using copy = openWriter(copyDirectory);
-  original.exec("INSERT INTO documents VALUES ('one', X'0102')");
-  copy.exec("INSERT INTO documents VALUES ('one', X'0102')");
+  original.exec("INSERT INTO documents (name, state) VALUES ('one', X'0102')");
+  copy.exec("INSERT INTO documents (name, state) VALUES ('one', X'0102')");
   verifyCopy(original, copy);
   copy.exec("UPDATE documents SET state = X'0103'");
   assert.throws(() => verifyCopy(original, copy), /documents differ/);
@@ -247,7 +247,7 @@ test("backup verification rejects different names, different bytes, and missing 
   assert.throws(() => verifyCopy(original, copy), /documents differ/);
   copy.exec("DELETE FROM documents");
   assert.throws(() => verifyCopy(original, copy), /missing documents/);
-  copy.exec("INSERT INTO documents VALUES ('one', X'0102'), ('two', X'0102')");
+  copy.exec("INSERT INTO documents (name, state) VALUES ('one', X'0102'), ('two', X'0102')");
   assert.throws(() => verifyCopy(original, copy), /documents differ/);
   using foreign = new DatabaseSync(":memory:");
   assert.throws(() => verifyCopy(original, foreign), /unrecognized identity or schema/);
@@ -350,7 +350,7 @@ test("online backup copies the preflight snapshot even when a second connection 
   const kit = serverHarness(t);
   kit.provision("one");
   using writer = openWriter(kit.directory);
-  writer.exec("INSERT INTO documents VALUES ('one', X'01'), ('two', X'02')");
+  writer.exec("INSERT INTO documents (name, state) VALUES ('one', X'01'), ('two', X'02')");
   const name = await backupRelay({ SPLITPAGE_DATA_DIR: kit.directory }, async (source, path) => {
     writer.exec("BEGIN; UPDATE documents SET state = X'03'; UPDATE scripts SET status = 'deleted'; UPDATE invitations SET revoked = 1; COMMIT");
     return backup(source, path);

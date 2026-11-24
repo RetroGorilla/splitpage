@@ -5,6 +5,7 @@ import type { DatabaseSync } from "node:sqlite";
 import { isSha256Hex } from "../shared/blob-policy.ts";
 import { lastBackupTime } from "./backup.ts";
 import { managementAuthorizer } from "./management-auth.ts";
+import type { VersionFailureRecord } from "./versions.ts";
 
 export interface StorageFailureRecord {
   readonly at: string;
@@ -20,6 +21,8 @@ export interface RelayStatusSnapshot {
   readonly uploadsInFlight: number;
   readonly storedBytes: number;
   readonly pictureBytes: number;
+  readonly versionBytes: number;
+  readonly lastVersionFailure: VersionFailureRecord | null;
   readonly lastStorageFailure: StorageFailureRecord | null;
   readonly lastBackupAt: string | null;
 }
@@ -30,6 +33,8 @@ export interface RelayStatusSources {
   readonly openDocuments: () => number;
   readonly uploadsInFlight: () => number;
   readonly lastStorageFailure: () => StorageFailureRecord | null;
+  readonly versionBytes: () => number;
+  readonly lastVersionFailure: () => VersionFailureRecord | null;
 }
 
 function measurePictureBytes(directory: string): number {
@@ -79,6 +84,8 @@ export function statusRequests(secret: string | undefined, db: DatabaseSync, dir
         uploadsInFlight: sources.uploadsInFlight(),
         storedBytes: Number(storedBytes.get()?.bytes ?? 0),
         pictureBytes: measurePictureBytes(directory),
+        versionBytes: sources.versionBytes(),
+        lastVersionFailure: sources.lastVersionFailure(),
         lastStorageFailure: sources.lastStorageFailure(),
         lastBackupAt: lastBackupTime(directory)
       };

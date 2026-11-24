@@ -44,7 +44,12 @@ export function relayConfig(env: NodeJS.ProcessEnv) {
     maxConnectionsPerInvitation: integer(env, "SPLITPAGE_MAX_CONNECTIONS_PER_INVITATION", 8, 1, 10_000),
     maxConnectionsPerGuestInvitation: integer(env, "SPLITPAGE_MAX_CONNECTIONS_PER_GUEST_INVITATION", 24, 1, 10_000),
     maxMessagesPerSecond: integer(env, "SPLITPAGE_MAX_MESSAGES_PER_SECOND", 60, 1, 10_000),
-    maxUploadsInFlight: integer(env, "SPLITPAGE_MAX_UPLOADS_IN_FLIGHT", 4, 1, 4)
+    maxUploadsInFlight: integer(env, "SPLITPAGE_MAX_UPLOADS_IN_FLIGHT", 4, 1, 4),
+    versions: {
+      interval: integer(env, "SPLITPAGE_VERSION_INTERVAL_MS", 300_000, 1, 2_147_483_647),
+      thinInterval: integer(env, "SPLITPAGE_VERSION_THIN_INTERVAL_MS", 3_600_000, 1, 2_147_483_647),
+      budget: integer(env, "SPLITPAGE_VERSION_BUDGET_BYTES", 64 * 1024 * 1024, 1, Number.MAX_SAFE_INTEGER)
+    }
   };
 }
 

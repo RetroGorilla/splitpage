@@ -61,7 +61,7 @@ export function scriptAccess(db: DatabaseSync) {
   const creation = db.prepare(`SELECT c.script, c.content_hash, s.status, s.untouched
     FROM creations c JOIN scripts s ON s.name = c.script WHERE c.id = ?`);
   const recordCreation = db.prepare("INSERT INTO creations (id, script, content_hash) VALUES (?, ?, ?)");
-  const initialize = db.prepare("INSERT INTO documents (name, state) VALUES (?, ?)");
+  const initialize = db.prepare("INSERT INTO documents (name, state, version_generation) VALUES (?, ?, 1)");
   const activate = db.prepare("UPDATE scripts SET status = 'active' WHERE name = ?");
   const list = db.prepare("SELECT id, label, role, revoked FROM invitations WHERE script = ? ORDER BY id");
   const listScriptsQuery = db.prepare("SELECT name, status, untouched FROM scripts ORDER BY name");

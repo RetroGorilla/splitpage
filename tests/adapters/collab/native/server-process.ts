@@ -18,6 +18,8 @@ let heldSyncType: number | undefined;
 let heldTraffic: Promise<void> | undefined;
 let releaseTraffic: (() => void) | undefined;
 let decoderRefusal: DecoderRefusalRule | undefined;
+const measureStore = process.env.SPLITPAGE_TEST_MEASURE_STORE === "1";
+let storeStartedAt = 0;
 process.on("message", message => {
   if (message === "hold") {
     hold = new Promise<void>(resolve => { release = resolve; });
@@ -110,11 +112,13 @@ try {
       await heldTraffic;
     },
     async onStoreDocument({ documentName }) {
+      if (measureStore) storeStartedAt = performance.now();
       process.send?.("store-started");
       process.send?.(`store-started:${documentName}`);
       await hold;
     },
     async afterStoreDocument({ documentName }) {
+      if (measureStore) process.send?.(`measured-store:${performance.now() - storeStartedAt}`);
       process.send?.("stored");
       process.send?.(`stored:${documentName}`);
     }
