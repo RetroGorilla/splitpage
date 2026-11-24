@@ -21,8 +21,7 @@ formatting, beat status and duration, picture galleries, comment threads and pro
 
 Stage 3 Parts 1, 2, 3a, 3b, 4, 5, 6 and 7 of the [Stage 3 plan](stage-3-service-plan.md) are on `main` through
 `5a066c535`, alongside Part 8 evidence/runbook preparation ([#1762](https://github.com/RetroGorilla/splitpage/pull/1762)),
-management-secret rotation coverage ([#1763](https://github.com/RetroGorilla/splitpage/pull/1763)) and this branch's
-synthetic hook-throw boundary regression:
+management-secret rotation coverage ([#1763](https://github.com/RetroGorilla/splitpage/pull/1763)) and synthetic hook-throw boundary coverage ([#1764](https://github.com/RetroGorilla/splitpage/pull/1764)):
 
 - **Part 1 ([#1754](https://github.com/RetroGorilla/splitpage/pull/1754)):** versioned SQLite storage, per-script
   lifecycle (`pending`, `active`, `deleted`), hashed revocable invitations and wire/schema version checks; the
@@ -69,15 +68,27 @@ synthetic hook-throw boundary regression:
   `tests/adapters/collab/native/server-admission.test.ts` (valid provider traffic with synthetic throws; actual
   invalid-frame runtime outcome/state remains unverified, as noted in the evidence table).
 
-**Pending before Stage 3 closes:**
+### Stage 3 deployment evidence
 
-- **Part 8 deployment and drills:** see the
-  [Stage 3 evidence status](../COLLABORATION-PLAN.md#stage-3-evidence-status-main-at-5a066c535) for exact CI vs local
-  runs, directly observed vs source-inferred behavior, residual wire-level note and optional depth. Plan-mandated
-  outcomes still pending: replacing the owner's relay with a distinct Stage 3 container on a fresh empty direct-pool
-  volume (keeping the old data directory aside; startup self-checks WAL+`FULL` readback), daily off-machine backup
-  copy including pictures, deployed smoke check and isolated restore drill (supported by the runbook's loopback
-  verification proxy and `last-archive-copy.json` procedures).
+On 2026-11-23, the owner?s relay switched to the image built from `f5918ba78` on a fresh direct-pool volume.
+The legacy relay stopped cleanly and its data directory was kept aside. The new relay passed startup checks,
+served the release shell over HTTPS and refused unauthenticated management requests.
+
+- A disposable script was created through the owner API. The laptop loaded a desktop edit, and an
+  already-connected desktop browser received the laptop edit. A fresh laptop session decoded the 47 ? 29
+  picture uploaded from the desktop editor.
+- Revoking a test invitation disconnected both live browser sessions and refused a fresh join. The temporary
+  laptop invitations were revoked after their checks.
+- An encrypted picture-inclusive backup was uploaded to an off-machine archive and downloaded for SHA-256
+  comparison. The isolated restore contained one document and two pictures with all previous invitations revoked.
+  The restored relay started without external network access, and a fresh invitation downloaded both pictures
+  with matching SHA-256 hashes.
+- A daily backup job was installed with a failure notification. A one-time cron run of the same job verified
+  off-machine publication separately from the local relay backup marker.
+
+The [Stage 3 evidence status](../COLLABORATION-PLAN.md#stage-3-evidence-status-main-at-5a066c535) records the
+remaining wire-level validation gap. CI covers recovery from synthetic hook exceptions with valid provider
+traffic. The runtime outcome of an invalid authenticated WebSocket frame remains unverified.
 
 The standard shared test hook `__sharedTest` opens only the native session. There is still no release entry for shared
 mode; release builds (`node build.mjs`) omit `__sharedTest`, `?join=` handling and fragment scrubbing.
