@@ -112,7 +112,7 @@ test("per-invitation connection limit returns a temporary refusal while other in
     let secondInvite: { id: string; token: string };
     {
       using db = openWriter(kit.directory);
-      secondInvite = scriptAccess(db).issue(NAME, "second invite");
+      secondInvite = scriptAccess(db).issue(NAME, "second invite", "owner");
     }
     const run = kit.launch({
       SPLITPAGE_MAX_CONNECTIONS: "6",
@@ -203,7 +203,7 @@ test("disconnecting one multiplexed document preserves sibling continuity and sh
     let peerBInvite: { id: string; token: string };
     {
       using db = openWriter(kit.directory);
-      peerBInvite = scriptAccess(db).issue("second-script", "peer b");
+      peerBInvite = scriptAccess(db).issue("second-script", "peer b", "owner");
     }
     const run = kit.launch({
       SPLITPAGE_MAX_CONNECTIONS_PER_INVITATION: "1",
@@ -463,8 +463,8 @@ test("permanent refusals stop reconnecting without destroying the local session"
   let activeToken: string;
   {
     using db = openWriter(kit.directory);
-    db.exec("INSERT INTO scripts VALUES ('deleted-script', 'deleted')");
-    activeToken = scriptAccess(db).issue(NAME, "live").token;
+    db.exec("INSERT INTO scripts (name, status) VALUES ('deleted-script', 'deleted')");
+    activeToken = scriptAccess(db).issue(NAME, "live", "owner").token;
   }
   const run = kit.launch();
   const port = await run.port();
@@ -524,7 +524,11 @@ test("private status endpoint shares management auth, uses authoritative backup 
     const creationId = `creation-${randomUUID()}`;
     const ownerScript = await run.createScript(creationId, state, secret);
     const inviteLabel = `private-label-${randomBytes(6).toString("hex")}`;
-    const issuedResponse = await run.owner(`scripts/${ownerScript}/invitations`, { method: "POST", body: inviteLabel }, secret);
+    const issuedResponse = await run.owner(`scripts/${ownerScript}/invitations`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ role: "guest", label: inviteLabel })
+    }, secret);
     assert.equal(issuedResponse.status, 201);
     const issued = await issuedResponse.json() as { id: string; token: string };
 
@@ -620,6 +624,7 @@ test("status endpoint refuses all requests when management secret is unset, and 
     const defaults = relayConfig(valid);
     assert.equal(defaults.maxConnections, 64);
     assert.equal(defaults.maxConnectionsPerInvitation, 8);
+    assert.equal(defaults.maxConnectionsPerGuestInvitation, 24);
     assert.equal(defaults.maxMessagesPerSecond, 60);
     assert.equal(defaults.maxUploadsInFlight, 4);
     assert.equal(defaults.managementSecret, undefined);
@@ -629,6 +634,8 @@ test("status endpoint refuses all requests when management secret is unset, and 
     for (const [key, value] of [
       ["SPLITPAGE_MAX_CONNECTIONS", "0"],
       ["SPLITPAGE_MAX_CONNECTIONS_PER_INVITATION", "0"],
+      ["SPLITPAGE_MAX_CONNECTIONS_PER_GUEST_INVITATION", "0"],
+      ["SPLITPAGE_MAX_CONNECTIONS_PER_GUEST_INVITATION", "10001"],
       ["SPLITPAGE_MAX_MESSAGES_PER_SECOND", "0"],
       ["SPLITPAGE_MAX_UPLOADS_IN_FLIGHT", "0"],
       ["SPLITPAGE_MAX_UPLOADS_IN_FLIGHT", "5"]
@@ -641,5 +648,64 @@ test("status endpoint refuses all requests when management secret is unset, and 
     assert.equal((await fetch(`http://127.0.0.1:${port}/api/status`)).status, 401);
     assert.equal((await fetch(`http://127.0.0.1:${port}/api/status`, { headers: { Authorization: "Bearer anything" } })).status, 401);
     assert.deepEqual(await run.stop("clean"), { code: 0, exitSignal: null });
+  }
+);
+
+test("guest invitations reach their own default connection limit (24) independently of owner invitations (8)",
+  { timeout: 30_000 }, async t => {
+    const kit = serverHarness(t);
+    const state = kit.seed();
+    const run = kit.launch();
+    const created = await run.createScriptWithCredentials(randomUUID(), state);
+    const { owner, guest } = created;
+    assert.ok(owner && guest);
+    const port = await run.port();
+    const url = `ws://127.0.0.1:${port}?wire=1&schema=1`;
+
+    function openGuestProvider(token: string) {
+      const doc = new Doc();
+      const events = new EventTarget();
+      let failedReason: string | undefined;
+      const client = new HocuspocusProvider({
+        url, name: created.scriptId, token, document: doc, awareness: null,
+        onSynced() { events.dispatchEvent(new Event("change")); },
+        onAuthenticationFailed({ reason }) { failedReason = reason; events.dispatchEvent(new Event("change")); }
+      });
+      t.after(() => { client.destroy(); doc.destroy(); });
+      return {
+        client,
+        failedReason: () => failedReason,
+        async until(predicate: () => boolean) {
+          while (!predicate()) await once(events, "change", { signal: t.signal });
+        }
+      };
+    }
+
+    const guests = Array.from({ length: 24 }, () => openGuestProvider(guest.token));
+    await Promise.all(guests.map(entry => entry.until(() => entry.client.synced)));
+
+    const overflowGuest = kit.copy(port, { kind: "empty" }, created.scriptId, guest.token);
+    const guestRefusal = await kit.until(() => overflowGuest.events.find(event => event.kind === "temporary-refusal"));
+    assert.equal(guestRefusal.reason, "too-many-connections");
+    assert.equal(overflowGuest.events.some(event => event.kind === "authentication-failed"), false);
+    assert.equal(overflowGuest.relay.status().firstSyncDone, false);
+
+    const owners = Array.from({ length: 8 }, () => openGuestProvider(owner.token));
+    await Promise.all(owners.map(entry => entry.until(() => entry.client.synced)));
+
+    const overflowOwner = kit.copy(port, { kind: "empty" }, created.scriptId, owner.token);
+    const ownerRefusal = await kit.until(() => overflowOwner.events.find(event => event.kind === "temporary-refusal"));
+    assert.equal(ownerRefusal.reason, "too-many-connections");
+    assert.equal(overflowOwner.events.some(event => event.kind === "authentication-failed"), false);
+
+    guests[0]?.client.destroy();
+    await kit.until(() => (overflowGuest.relay.status().firstSyncDone && overflowGuest.text() === "word") || undefined);
+    owners[0]?.client.destroy();
+    await kit.until(() => (overflowOwner.relay.status().firstSyncDone && overflowOwner.text() === "word") || undefined);
+
+    assert.deepEqual(await run.stop("clean"), { code: 0, exitSignal: null });
+    const logs = run.output() + run.errors();
+    assert.equal(logs.includes(owner.token), false);
+    assert.equal(logs.includes(guest.token), false);
   }
 );

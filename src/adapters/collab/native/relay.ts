@@ -1,3 +1,4 @@
+import { MERGE_TOO_LARGE_MESSAGE, PERMANENT_COLLABORATION_REFUSALS } from "../../../application/collaboration/state.ts";
 import { WebSocketStatus } from "@hocuspocus/provider";
 import { nativeStoreOpener } from "./local-store.ts";
 import { openNativeSession } from "./session.ts";
@@ -33,14 +34,7 @@ export interface NativeRelayOptions {
 
 const FIRST_LOAD_RESTARTS = 1;
 const FIRST_LOAD_MARGIN_MS = 100;
-const PERMANENT_REFUSALS = new Set([
-  "permission-denied",
-  "invitation-revoked",
-  "script-deleted",
-  "script-unknown",
-  "unsupported-version",
-  "access-removed"
-]);
+const PERMANENT_REFUSALS = new Set<string>(PERMANENT_COLLABORATION_REFUSALS);
 const TEMPORARY_REFUSALS = new Set([
   "too-many-connections",
   "rate-limited"
@@ -111,7 +105,7 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
       stopSettled = undefined;
       attached.configuration.websocketProvider.disconnect();
       attached.destroy();
-      updateStatus({ connected: false, firstSyncDone: false });
+      status = Object.freeze({ ...status, connected: false, firstSyncDone: false });
     }
     const confirmations = journal ? {
       onReset() {
@@ -140,7 +134,7 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
         }
         journal.clearThrough(entry.through);
         const nextUpdate = pendingSends.find(item => item.kind === "update");
-        if (nextUpdate && nextUpdate.kind === "update" && nextUpdate.through === journal.through() && journal.hasPending()) {
+        if (nextUpdate && journal.hasPending()) {
           journal.confirmationPoint();
         }
       }
@@ -177,14 +171,14 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
           emit({ kind: "temporary-refusal", reason });
           return;
         }
-        if (PERMANENT_REFUSALS.has(reason)) stopPermanently();
         emit({ kind: "authentication-failed", reason });
+        if (PERMANENT_REFUSALS.has(reason)) stopPermanently();
       },
       onClose({ event }) {
         if (publicationStopped) return;
-        if (event.reason === "access-removed") {
-          stopPermanently();
+        if (PERMANENT_REFUSALS.has(event.reason)) {
           emit({ kind: "authentication-failed", reason: event.reason });
+          stopPermanently();
           return;
         }
         if (TEMPORARY_REFUSALS.has(event.reason) && !reportedTemporaryClose) {
@@ -196,14 +190,14 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
       },
       onStateless({ payload }) {
         if (payload !== "merge-too-large" || publicationStopped) return;
-        stopPermanently();
         emit({
           kind: "merge-too-large",
-          message: "Your changes could not sync because combining the copies would exceed the 15 MB limit. " +
-            "You can still read your local copy. Export it as a fresh .splitpage project to start a new shared session."
+          message: MERGE_TOO_LARGE_MESSAGE
         });
+        stopPermanently();
       },
       onUnsyncedChanges({ number }) {
+        if (publicationStopped) return;
         updateStatus({ pendingChangeCount: number });
       }
     }, firstReply, stateRequest, target.checkPeerDelivery, confirmations);
@@ -216,11 +210,13 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
     stopSettled = undefined;
     if (!publicationStopped) provider.destroy();
     if (closing || change.reason === "requested") {
-      updateStatus({ connected: false });
+      if (publicationStopped) status = Object.freeze({ ...status, connected: false });
+      else updateStatus({ connected: false });
       return;
     }
     if (reopen) {
-      updateStatus({ connected: false });
+      if (publicationStopped) status = Object.freeze({ ...status, connected: false });
+      else updateStatus({ connected: false });
       void reopenStored(current, reopen);
     } else {
       const savedJournal = current.pendingEdits?.data();

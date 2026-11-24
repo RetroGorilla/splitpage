@@ -11,7 +11,7 @@ import { createActionRegistry, registerAll } from "../../../src/application/acti
 import type { DocumentView } from "../../../src/application/session/document-session.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import { fakeCapabilities, fakeNotices, fakeScreen } from "../fakes.ts";
+import { fakeCapabilities, fakeCollaboration, fakeNotices, fakeScreen } from "../fakes.ts";
 
 const win = jsdomWindow() as unknown as Window & typeof globalThis;
 const realm = globalThis as unknown as Record<string, unknown>;
@@ -71,7 +71,8 @@ function harness() {
     ids: { id: (prefix) => { calls.push(["makeId", prefix]); return "r-new"; } },
     prepareDocument: (raw) => { const snapshot: unknown = JSON.parse(JSON.stringify(raw)); calls.push(["migrateRows", snapshot]); return migrateRows(raw, fakeMigration().ports); },
     syncIdentity: () => { calls.push(["syncDocIdentity"]); },
-    longDemo: LONG_DEMO
+    longDemo: LONG_DEMO,
+    collaboration: fakeCollaboration()
   };
   return { ports, state, calls, notices };
 }

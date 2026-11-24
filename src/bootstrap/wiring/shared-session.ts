@@ -1,4 +1,5 @@
 import { stopNativeCaretWait } from "./native-switch-caret.ts";
+import { collaborationState, setSharedRetryLocalWrite } from "./collaboration-owner.ts";
 import { waitDuringLifetime } from "../startup/page-lifetime.ts";
 import type { CommandOutcome, DocumentStructureIntent } from "../../application/session/document-session.ts";
 import { createSessionCapabilities } from "../../application/session/capabilities.ts";
@@ -236,6 +237,7 @@ async function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { reado
     }, createSessionCapabilities("shared", ports.common)));
     if (!made.session) throw new Error("The shared session was not built");
     running = { ports, session: made.session, backend, kept, stopRoute: made.stopRoute, end: () => { alive = false; } };
+    collaborationState().enter();
     holdMergeBase(null);
     made.bound = true;
     backend.bind(made.session);
@@ -255,6 +257,7 @@ async function enter(ports: SharedSwitchPorts, faults: Faults, prepared: { reado
     faults.attempt(stopNativeCaretWait);
     faults.errors.unshift(error);
     running = null;
+    faults.attempt(() => { setSharedRetryLocalWrite(null); collaborationState().leave(); });
     // why: a shared callback whose timer cannot be cancelled must still not act once the session is gone
     alive = false;
     // why: the kept standalone owner comes back first, with no migration, and only then do the shared parts go
@@ -359,6 +362,7 @@ function leaveAvailableSession(ports: SharedSwitchPorts, preserveSelection: bool
   const landedDocument = documentReader.current();
   running = null;
   now.end();
+  faults.attempt(() => { setSharedRetryLocalWrite(null); collaborationState().leave(); });
   faults.attempt(() => { swap.commit(); });
   faults.attempt(now.stopRoute);
   now.backend.dispose(step => faults.attempt(step));
@@ -379,6 +383,7 @@ function dropRunning(now: Running, reason: string): void {
   faults.errors.push(new Error(`The shared session ended without landing a standalone copy: ${reason}`));
   running = null;
   now.end();
+  faults.attempt(() => { setSharedRetryLocalWrite(null); collaborationState().leave(); });
   now.backend.live(false);
   faults.attempt(stopNativeCaretWait);
   // why: a dropped session releases every surface first, so the bindings tear down whatever the surfaces held

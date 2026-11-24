@@ -7,6 +7,7 @@ import type { Connection, Document, Extension } from "@hocuspocus/server";
 import { messageYjsSyncStep2, messageYjsUpdate } from "y-protocols/sync";
 import { applyUpdate, Doc, encodeStateAsUpdate, snapshot, snapshotContainsUpdate } from "yjs";
 import { scriptAccess } from "./access.ts";
+import type { InvitationRole } from "./access.ts";
 import { appShell } from "./app-shell.ts";
 import { RelayError, relayConfig } from "./config.ts";
 import {
@@ -51,7 +52,7 @@ function exceedsMergeLimit(document: Document, update: Uint8Array): boolean {
 export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", extensions: Extension[] = []) {
   const {
     directory, deployment, port, origins, debounce, maxDebounce, managementSecret,
-    maxConnections, maxConnectionsPerInvitation, maxMessagesPerSecond, maxUploadsInFlight
+    maxConnections, maxConnectionsPerInvitation, maxConnectionsPerGuestInvitation, maxMessagesPerSecond, maxUploadsInFlight
   } = relayConfig(env);
   const lock = claimWriter(directory);
   let db: ReturnType<typeof openWriter> | undefined;
@@ -80,12 +81,13 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
   const limits = createRelayLimits({
     maxConnections,
     maxConnectionsPerInvitation,
+    maxConnectionsPerGuestInvitation,
     maxMessagesPerSecond
   });
   const load = db.prepare("SELECT state FROM documents WHERE name = ?");
   const size = db.prepare("SELECT length(state) AS bytes FROM documents WHERE name = ?");
   const write = db.prepare("INSERT INTO documents VALUES (?, ?) ON CONFLICT(name) DO UPDATE SET state = excluded.state");
-  type Admission = { invitationId: string; reservationId?: string };
+  type Admission = { invitationId: string; role: InvitationRole; reservationId?: string };
   const storage = new Database({
     async fetch({ documentName }) {
       try {
@@ -118,6 +120,12 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
     }
   }
 
+  function resetGuests(name: string) {
+    const issued = access.resetGuests(name);
+    if (issued) closeRemovedAccess();
+    return issued;
+  }
+
   function revokeInvitation(id: string): boolean {
     if (!access.revoke(id)) return false;
     closeRemovedAccess();
@@ -131,8 +139,16 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
   }
 
   const manage = ownerRequests(managementSecret, DOCUMENT_BYTES, {
-    findCreation: access.findCreation, create: access.create, issue: access.issue, list: access.list,
-    revokeInvitation, deleteScript
+    findCreation: access.findCreation,
+    create: access.create,
+    abandonCreation: access.abandon,
+    listScripts: access.listScripts,
+    issue: access.issue,
+    list: access.list,
+    authorizeOwner: access.authorizeOwner,
+    resetGuests,
+    revokeInvitation,
+    deleteScript
   });
   const status = statusRequests(managementSecret, db, directory, {
     totalConnections: () => limits.totalSockets(),
@@ -187,17 +203,17 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       if (requestParameters.getAll("wire").join(",") !== "1" || requestParameters.getAll("schema").join(",") !== "1") {
         throw { reason: "unsupported-version" };
       }
-      const invitationId = access.authenticate(documentName, token);
-      if (!limits.hasInvitationCapacity(invitationId)) throw { reason: "too-many-connections" };
+      const { id: invitationId, role } = access.authenticate(documentName, token);
+      if (!limits.hasInvitationCapacity(invitationId, role)) throw { reason: "too-many-connections" };
       const loading = instance.loadingDocuments.get(documentName);
       const live = instance.documents.get(documentName) ?? (loading ? await loading : undefined);
       if (loading) access.authenticate(documentName, token);
       const bytes = live ? encodeStateAsUpdate(live).byteLength : Number(size.get(documentName)?.bytes ?? 0);
       connectionConfig.readOnly = bytes >= DOCUMENT_BYTES;
-      return { invitationId };
+      return { invitationId, role };
     },
     async connected({ context, connection }) {
-      const reservationId = limits.tryAdmitInvitation(context.invitationId);
+      const reservationId = limits.tryAdmitInvitation(context.invitationId, context.role);
       if (!reservationId) {
         connection.close({ code: 4429, reason: "too-many-connections" });
         return;
@@ -266,6 +282,8 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
     return Object.assign(relay, {
       registerScript: access.register,
       issueInvitation: access.issue,
+      resetGuests,
+      abandonCreation: access.abandon,
       revokeInvitation,
       deleteScript
     });

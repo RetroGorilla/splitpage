@@ -229,6 +229,7 @@ export async function attachNativeLocalStore(
         }
         inFlight = undefined;
         pending.shift();
+        publish({ kind: "stored", generation: committed });
         continue;
       }
       if (!item.checkpoint && committed - checkpoint >= MAX_TAIL) {

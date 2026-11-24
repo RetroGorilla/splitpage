@@ -1,5 +1,6 @@
 import { randomUUID } from "node:crypto";
 import type { Duplex } from "node:stream";
+import type { InvitationRole } from "./access.ts";
 
 export const MAX_WS_FRAGMENTS = 4096;
 export const MAX_WS_BUFFERED_CHUNKS = 32_768;
@@ -15,6 +16,7 @@ export const RETRY_AFTER_SECONDS = "5";
 export interface RelayLimitsConfig {
   readonly maxConnections: number;
   readonly maxConnectionsPerInvitation: number;
+  readonly maxConnectionsPerGuestInvitation: number;
   readonly maxMessagesPerSecond: number;
 }
 
@@ -25,6 +27,10 @@ export function createRelayLimits(config: RelayLimitsConfig, now = () => perform
   const byInvitation = new Map<string, Set<string>>();
   const reservations = new Map<string, string>();
   const messageWindows = new Map<string, number[]>();
+
+  function invitationLimit(role: InvitationRole): number {
+    return role === "guest" ? config.maxConnectionsPerGuestInvitation : config.maxConnectionsPerInvitation;
+  }
 
   function releaseReservation(reservationId: string): void {
     const invitationId = reservations.get(reservationId);
@@ -74,13 +80,13 @@ export function createRelayLimits(config: RelayLimitsConfig, now = () => perform
     totalSockets(): number {
       return activeSockets.size;
     },
-    hasInvitationCapacity(invitationId: string): boolean {
+    hasInvitationCapacity(invitationId: string, role: InvitationRole): boolean {
       const current = byInvitation.get(invitationId);
-      return !current || current.size < config.maxConnectionsPerInvitation;
+      return !current || current.size < invitationLimit(role);
     },
-    tryAdmitInvitation(invitationId: string): string | null {
+    tryAdmitInvitation(invitationId: string, role: InvitationRole): string | null {
       const current = byInvitation.get(invitationId);
-      if (current && current.size >= config.maxConnectionsPerInvitation) return null;
+      if (current && current.size >= invitationLimit(role)) return null;
       const reservationId = randomUUID();
       if (current) current.add(reservationId);
       else byInvitation.set(invitationId, new Set([reservationId]));

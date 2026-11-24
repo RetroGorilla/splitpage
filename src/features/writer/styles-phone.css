@@ -1,6 +1,8 @@
 @media (max-width: 760px) {
       .writer-top { padding: var(--space-8) var(--space-12); gap: var(--space-4) var(--space-10); flex-wrap: wrap; }
       .writer-stats { gap: var(--space-10); font-size: 12px; order: 5; flex: 1 1 100%; padding-left: 9px; }
+      .writer-collab-status { max-width: 180px; font-size: 12px; padding: 0 var(--space-6); }
+      .writer-banners { padding: var(--space-8) var(--space-12) 0; }
       .writer-scroll { padding: 18px var(--space-12) 60vh; }
       .writer-bar {
         gap: var(--space-8); padding: var(--space-8) var(--space-10);

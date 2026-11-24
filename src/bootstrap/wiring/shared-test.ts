@@ -20,6 +20,7 @@ import { currentHome, documentLocation, setHome } from "./location-owner.ts";
 import { openNativeEditor } from "./native-shared-session.ts";
 import { createNativeTestPeer } from "./shared-native-test-peer.ts";
 import { stopNativeCaretWait } from "./native-switch-caret.ts";
+import { stopCollaborationOwner } from "./collaboration-owner.ts";
 import { enterRetainedSharedScript, leaveRetainedSharedScript, retainedSharedScriptActive } from "./retained-shared-script.ts";
 import type { RetainedSharedScript } from "./retained-shared-script.ts";
 import { readInvitationSnapshot } from "../../adapters/collab/native/invitation-snapshot.ts";
@@ -270,4 +271,5 @@ export function stopSharedSessionFeature(): void {
   stopHook = null;
   stopNativeCaretWait();
   stop?.();
+  stopCollaborationOwner();
 }

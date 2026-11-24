@@ -140,7 +140,7 @@ try {
     if (typeof message === "string" && message.startsWith("provision:")) {
       const name = message.slice("provision:".length);
       relay.registerScript(name, "active");
-      process.send?.({ name, ...relay.issueInvitation(name, "test invitation") });
+      process.send?.({ name, ...relay.issueInvitation(name, "test invitation", "owner") });
     }
     if (typeof message === "string" && message.startsWith("delete:")) {
       relay.deleteScript(message.slice("delete:".length));

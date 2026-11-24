@@ -4,6 +4,7 @@ import { mountSaveStatus } from "../../features/title/save-status.ts";
 import { showRefusal as showRefusalNotice } from "../../features/title/refusal.ts";
 import type { DocumentIdentitySync, SaveStatusListeners, SaveStatusMount } from "../../features/title/ports.ts";
 import { owned } from "../../features/routing/owned.ts";
+import { collaboration } from "./ports/collaboration.ts";
 import { notices } from "./ports/effects.ts";
 import { place } from "./ports/location.ts";
 import { saveStatusPreferences } from "./ports/preferences.ts";
@@ -20,7 +21,8 @@ export function mountSaveStatusFeature(identity: DocumentIdentitySync = { sync: 
     preferences: saveStatusPreferences,
     notices,
     drafts: draftChanges,
-    identity
+    identity,
+    collaboration
   }));
 }
 
@@ -39,6 +41,7 @@ export function saveStatusListeners(): SaveStatusListeners {
     paint: () => { saveStatus.owner()?.listeners().paint(); },
     save: (change) => { saveStatus.owner()?.listeners().save(change); },
     location: (change) => { saveStatus.owner()?.listeners().location(change); },
-    preference: (change) => { saveStatus.owner()?.listeners().preference(change); }
+    preference: (change) => { saveStatus.owner()?.listeners().preference(change); },
+    collaboration: () => { saveStatus.owner()?.listeners().collaboration(); }
   };
 }
