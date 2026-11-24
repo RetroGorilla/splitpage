@@ -1,0 +1,4 @@
+  #offline-review-feedback:empty { display: none; }
+  .offline-review-beat { margin: 0; font: inherit; }
+  .offline-review-cell { margin-bottom: var(--space-8); min-height: 1.5em; }
+  .offline-review-restore { margin-top: var(--space-8); }

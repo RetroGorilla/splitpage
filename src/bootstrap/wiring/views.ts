@@ -26,6 +26,7 @@ import { mountWriterOpen, mountWriterNavigation, mountWriterClose } from "../../
 import { mountHistoryGallery } from "../../features/gallery/mount.ts";
 import { mountTopbar } from "../../features/title/topbar.ts";
 import { createSharedBanners } from "../../features/title/shared-banners.ts";
+import { mountOfflineReviewFeature } from "./offline-review.ts";
 import type { SharedBannersMount } from "../../features/title/ports.ts";
 import { collaboration } from "./ports/collaboration.ts";
 import { retrySharedLocalWrite } from "./collaboration-owner.ts";
@@ -109,10 +110,12 @@ export function mountSharedBannersFeature(): Disposable {
         });
       }
     });
+    const offlineReview = mountOfflineReviewFeature(window);
     sharedBanners = mounted;
     return {
       dispose: () => {
         if (sharedBanners === mounted) sharedBanners = null;
+        offlineReview.dispose();
         mounted.dispose();
       }
     };

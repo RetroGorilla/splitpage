@@ -123,6 +123,10 @@ const RESOURCE_ROWS = {
     "#collab-size-dismiss click/B", "#collab-size-export click/B", "#collab-size-leave click/B",
     "#writer-collab-status click/B"
   ],
+  offlineReview: [
+    "#collab-offline-review click/B", "#collab-offline-dismiss click/B", "#offline-review-close click/B",
+    "#offline-review click/B", "window keydown/C"
+  ],
   S13: ["#production-list click/C", "#production-list contextmenu/B", "#production-list pointercancel/B", "#production-list pointerdown/B", "#production-list pointermove/B", "#production-list pointerup/B"],
   S26: ["#production-panel change/B", "#production-panel click/B", "#production-panel focusout/B", "#production-panel input/B", "#production-panel keydown/B"],
   S27: ["#gear-panel change/B", "#gear-panel click/B", "#gear-panel focusout/B", "#gear-panel input/B", "#gear-panel keydown/B"],

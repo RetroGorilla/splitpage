@@ -1,5 +1,6 @@
 import { stopNativeCaretWait } from "./native-switch-caret.ts";
 import { collaborationState, setSharedRetryLocalWrite } from "./collaboration-owner.ts";
+import type { OfflineBeatReading, OfflineSavedBeat } from "../../application/collaboration/offline-clashes.ts";
 import { waitDuringLifetime } from "../startup/page-lifetime.ts";
 import type { CommandOutcome, DocumentStructureIntent } from "../../application/session/document-session.ts";
 import { createSessionCapabilities } from "../../application/session/capabilities.ts";
@@ -80,6 +81,10 @@ export interface SharedEditorBackend {
   readonly unsupportedCommands?: string;
   readonly nativeRecords?: NativeEditorRecords;
   readonly nativeFind?: FindNativeAccess;
+  readonly offlineReview?: {
+    readonly readBeat: (id: string) => OfflineBeatReading | null;
+    readonly putBack: (beat: OfflineSavedBeat) => boolean;
+  };
   readonly hasWriterPreview?: (beat: string) => boolean;
   readonly bindWriterPaint?: (root: HTMLElement) => NativeWriterPaintBinding | undefined;
   readonly structure?: (intent: DocumentStructureIntent) => CommandOutcome;
@@ -95,6 +100,10 @@ export function nativeEditorRecords() {
 
 export function nativeEditorFind() {
   return running?.backend.nativeFind ?? null;
+}
+
+export function nativeOfflineReview() {
+  return running?.backend.offlineReview ?? null;
 }
 
 export function nativeEditorActive(): boolean {

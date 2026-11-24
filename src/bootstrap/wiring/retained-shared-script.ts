@@ -289,6 +289,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
                 if (sessionCurrent()) {
                   try {
                     const clashes = relay.session().offlineNotice("returning");
+                    collaborationState().setOfflineClashes(clashes);
                     entry.onOfflineNotice?.(clashes);
                   } finally {
                     relay.releaseOfflineGate();
@@ -296,6 +297,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
                 }
                 return;
               }
+              if (event.kind === "session-replaced" && sessionCurrent()) collaborationState().dismissOfflineClashes();
               pictureBinding.onRelayEvent(event);
             }
           });
