@@ -25,6 +25,11 @@ import { mountImports, mountGdoc } from "../../features/imports/mount.ts";
 import { mountWriterOpen, mountWriterNavigation, mountWriterClose } from "../../features/writer/mount.ts";
 import { mountHistoryGallery } from "../../features/gallery/mount.ts";
 import { mountTopbar } from "../../features/title/topbar.ts";
+import { createSharedBanners } from "../../features/title/shared-banners.ts";
+import type { SharedBannersMount } from "../../features/title/ports.ts";
+import { collaboration } from "./ports/collaboration.ts";
+import { retrySharedLocalWrite } from "./collaboration-owner.ts";
+import { leaveActiveSharedSession } from "./retained-shared-script.ts";
 import { mountCellReach } from "../../features/editing/cell-reach.ts";
 import { mountPhoneBar } from "../../features/notices/phone-bar.ts";
 import { importMode, prompterState } from "./ports/preferences.ts";
@@ -77,9 +82,41 @@ function captureViewDocument(): () => boolean {
 }
 
 let topbar: ReturnType<typeof mountTopbar> | null = null;
+let sharedBanners: SharedBannersMount | null = null;
 
 export function refreshWriterChrome(): void {
   topbar?.refreshWriterChrome();
+}
+
+export function syncSharedBanners(): void {
+  sharedBanners?.sync();
+}
+
+export function openSharedRecoveryBanner(): void {
+  sharedBanners?.openRecovery();
+}
+
+export function mountSharedBannersFeature(): Disposable {
+  return replaceViewMount("mountSharedBanners", function () {
+    const mounted = createSharedBanners(window, {
+      collaboration,
+      exportCopy: () => { void localFileMenuControls().exportAs("splitpage"); },
+      leave: () => {
+        void leaveActiveSharedSession().then(outcome => {
+          if (!outcome.ok && outcome.reason !== "not-shared") {
+            showToast("Could not leave the shared script right now.", "warn");
+          }
+        });
+      }
+    });
+    sharedBanners = mounted;
+    return {
+      dispose: () => {
+        if (sharedBanners === mounted) sharedBanners = null;
+        mounted.dispose();
+      }
+    };
+  });
 }
 
 export function mountTopbarFeature(): Disposable {
@@ -170,8 +207,14 @@ export function mountSaveRecoveryFeature(): ReturnType<typeof mountSaveRecovery>
       hideResumeBanner: (...args: Parameters<ReturnType<typeof localFileMenuControls>["hideResumeBanner"]>) => localFileMenuControls().hideResumeBanner(...args),
       resumeFromHandle: (...args: Parameters<ReturnType<typeof localFilesOwner>["resumeFromHandle"]>) => localFilesOwner().resumeFromHandle(...args),
       showToast: showToast,
-      saveDoc: saveDoc,
-      exportAs: (...args: Parameters<ReturnType<typeof localFileMenuControls>["exportAs"]>) => localFileMenuControls().exportAs(...args),
+      saveDoc: () => {
+        if (collaboration.snapshot().active) void retrySharedLocalWrite();
+        else void saveDoc();
+      },
+      exportAs: (format, ...rest) => localFileMenuControls().exportAs(
+        collaboration.snapshot().active && format === "md" ? "splitpage" : format,
+        ...rest
+      ),
       pendingHandle: function () {
         const handle: ReturnType<SaveRecoveryPorts["pendingHandle"]> = localFileMenuControls().pendingHandle();
         return handle;
@@ -222,7 +265,10 @@ export function mountPanelsFeature(): Disposable {
 export function mountSaveFeature(): ReturnType<typeof mountSave> {
   return replaceViewMount("mountSave", function () {
     const ports: SavePorts = {
-      saveFromButton: saveFromButton,
+      saveFromButton: () => {
+        if (collaboration.snapshot().active) openSharedRecoveryBanner();
+        else saveFromButton();
+      },
       updateSaveStatus: updateSaveStatus
     };
     return mountSave({ window: window, ports: ports });

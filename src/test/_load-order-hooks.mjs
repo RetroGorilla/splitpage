@@ -11,6 +11,7 @@ export const CONFIGURATION = Object.freeze({
   "src/bootstrap/wiring/ports/actions.ts": { functions: ["installAppActions"], facade: { name: "appActions", methods: ["register", "presentRefusals"] } },
   "src/bootstrap/wiring/export-registry.ts": { functions: ["installExportFormats"], facade: { name: "exportFormats", methods: ["defineCard", "register", "onChange"] } },
   "src/bootstrap/wiring/save-owners.ts": { functions: ["startSaves", "onSaveChange"] },
+  "src/bootstrap/wiring/collaboration-owner.ts": { functions: ["onCollaborationChange"] },
   "src/bootstrap/wiring/transition-owners.ts": { functions: ["startTransitions"] },
   "src/bootstrap/wiring/document-identity.ts": { functions: ["mountDocumentIdentityOwner"] },
   "src/application/identity/document-guard.ts": { functions: ["startDocumentGuard", "createDocumentGuard"] },

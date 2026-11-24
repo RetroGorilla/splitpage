@@ -1,3 +1,6 @@
+import { accessRemovedMessage } from "../collaboration/state.ts";
+import type { CollaborationSnapshot } from "../collaboration/state.ts";
+
 export type AutoSaveTarget = "file" | null;
 
 export interface SaveStatusInput {
@@ -70,4 +73,107 @@ export function flowSaveStatus(input: SaveStatusInput): { readonly text: string;
   if (!input.target) return { text: "Not saved yet", actionable: true, problem: false };
   if (!input.autoSaveOn) return { text: "Autosave off", actionable: true, problem: false };
   return { text: input.dirty ? "Unsaved changes" : "Saved", actionable: false, problem: false };
+}
+
+export type SharedSaveBannerKind = "save-error" | "merge-too-large" | "access-removed" | null;
+
+export interface SharedSaveStatusView {
+  readonly label: string;
+  readonly state: "busy" | "ok" | "pending" | "warn";
+  readonly actionable: boolean;
+  readonly title: string;
+  readonly banner: SharedSaveBannerKind;
+  readonly bannerMessage: string;
+}
+
+export function sharedSaveStatus(snapshot: CollaborationSnapshot): SharedSaveStatusView {
+  if (snapshot.localWriteError) {
+    return Object.freeze({
+      label: "Could not save on this device",
+      state: "warn",
+      actionable: true,
+      title: snapshot.localWriteError.message,
+      banner: "save-error",
+      bannerMessage: snapshot.localWriteError.message
+    });
+  }
+  if (snapshot.mergeTooLarge) {
+    return Object.freeze({
+      label: "Too large to sync · local work kept",
+      state: "warn",
+      actionable: true,
+      title: snapshot.mergeTooLarge,
+      banner: "merge-too-large",
+      bannerMessage: snapshot.mergeTooLarge
+    });
+  }
+  if (snapshot.refusal) {
+    const message = accessRemovedMessage(snapshot.refusal);
+    return Object.freeze({
+      label: "Access removed · local work kept",
+      state: "warn",
+      actionable: true,
+      title: message,
+      banner: "access-removed",
+      bannerMessage: message
+    });
+  }
+  if (snapshot.localPending || snapshot.pictures.checking > 0) {
+    return Object.freeze({
+      label: "Saving on this device…",
+      state: "busy",
+      actionable: false,
+      title: "Writing your changes on this device.",
+      banner: null,
+      bannerMessage: ""
+    });
+  }
+  if (!snapshot.relay.connected) {
+    return Object.freeze({
+      label: "Offline · saved on this device",
+      state: "warn",
+      actionable: false,
+      title: "The relay cannot be reached. Editing continues on this device and catches up on reconnect.",
+      banner: null,
+      bannerMessage: ""
+    });
+  }
+  if (!snapshot.relay.firstSyncDone || snapshot.relay.pendingChangeCount > 0) {
+    return Object.freeze({
+      label: "Saved on this device · syncing",
+      state: "pending",
+      actionable: false,
+      title: "Written on this device. Changes are on their way to the relay.",
+      banner: null,
+      bannerMessage: ""
+    });
+  }
+  if (snapshot.pictures.uploading > 0) {
+    return Object.freeze({
+      label: "Saved on this device · uploading pictures",
+      state: "pending",
+      actionable: false,
+      title: "Written on this device. Pictures are still uploading.",
+      banner: null,
+      bannerMessage: ""
+    });
+  }
+  if (snapshot.pictures.downloading > 0) {
+    return Object.freeze({
+      label: "Saved on this device · syncing",
+      state: "pending",
+      actionable: false,
+      title: "Written on this device. Pictures are still downloading.",
+      banner: null,
+      bannerMessage: ""
+    });
+  }
+  return Object.freeze({
+    label: "Saved on this device",
+    state: "ok",
+    actionable: false,
+    title: "Written on this device and in step with the relay.",
+    banner: null,
+    bannerMessage: ""
+  });
 }

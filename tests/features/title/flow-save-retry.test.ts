@@ -3,7 +3,7 @@ import { test } from "node:test";
 import assert from "node:assert/strict";
 import { mountSaveStatus } from "../../../src/features/title/save-status.ts";
 import type { Home } from "../../../src/application/location/document-location.ts";
-import { fakeNotices, fakeSaveState } from "../fakes.ts";
+import { fakeCollaboration, fakeNotices, fakeSaveState } from "../fakes.ts";
 
   test("a failed retry keeps the actionable save problem", () => {
     document.body.innerHTML = '<button id="btn-save"></button><span id="save-status"></span>';
@@ -14,7 +14,8 @@ import { fakeNotices, fakeSaveState } from "../fakes.ts";
       autoSave: { policy: () => ({ halted: () => halted, enabled: () => true }), target: () => "file" },
       place: { home: () => ({ kind: "file", handle: { name: "retry.splitpage" } }) as Home },
       preferences: { clock: () => "24", nameOf: () => "clock" },
-      notices: fakeNotices().notices, drafts: { noteChange: () => {} }, identity: { sync: () => {} }
+      notices: fakeNotices().notices, drafts: { noteChange: () => {} }, identity: { sync: () => {} },
+      collaboration: fakeCollaboration()
     });
     const button = document.getElementById("btn-save") as HTMLButtonElement;
     try {

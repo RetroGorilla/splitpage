@@ -25,7 +25,9 @@
     "src/bootstrap/wiring/ports/identity.ts",
     "src/bootstrap/wiring/ports/shot-hiding.ts",
     "src/bootstrap/wiring/ports/person-colors.ts",
-    "src/bootstrap/wiring/ports/rows.ts"
+    "src/bootstrap/wiring/ports/rows.ts",
+    "src/bootstrap/wiring/ports/collaboration.ts",
+    "src/bootstrap/wiring/collaboration-owner.ts"
   ],
-  "expectedLoads": 26
+  "expectedLoads": 28
 }

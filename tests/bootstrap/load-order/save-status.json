@@ -2,10 +2,12 @@
   "loadOnly": [
     "src/features/title/ports.ts",
     "src/features/title/save-status.ts",
+    "src/features/title/shared-banners.ts",
     "src/features/title/refusal.ts",
     "src/bootstrap/wiring/save-status.ts",
+    "src/application/collaboration/state.ts",
     "src/application/save/session-effects.ts",
     "src/bootstrap/wiring/session-effects.ts"
   ],
-  "expectedLoads": 6
+  "expectedLoads": 8
 }
