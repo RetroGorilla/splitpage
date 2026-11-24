@@ -23,8 +23,8 @@ import type { NativeScript } from "./script.ts";
 import { createNativeSizeTracker, resolveNativeSizeOptions } from "./size.ts";
 import type { NativeSessionSize, NativeSizeOptions } from "./size.ts";
 import { deleteAndSplitNativeRow, finalizeNativeHeading, joinNativeRow, removeNativeRows, splitNativeRow, unjoinNativeRow } from "./structure-commands.ts";
-import { anchorNativeText, captureNativeCompositionCaret, captureNativeTextIdentity, deleteNativeText, replaceAllNativeText, replaceNativeText, resolveNativeTextPoint, resolveNativeUndoSelection, snapshotNativeUndoAnchor, typeNativeText } from "./text-commands.ts";
-import type { NativeEditStamp, NativeTextPlacement, NativeTextRange, NativeTextTarget, NativeUndoSelectionInput } from "./text-commands.ts";
+import { anchorNativeText, captureNativeCompositionCaret, captureNativeTextIdentity, deleteNativeText, editNativeTitle, replaceAllNativeText, replaceNativeText, resolveNativeTextPoint, resolveNativeUndoSelection, snapshotNativeUndoAnchor, typeNativeText } from "./text-commands.ts";
+import type { NativeEditStamp, NativeLiveRange, NativeTextPlacement, NativeTextRange, NativeTextTarget, NativeUndoSelectionInput } from "./text-commands.ts";
 import { openNativeUndo } from "./undo-commands.ts";
 import type { NativeUndoOutcome } from "./undo-commands.ts";
 import { NATIVE_FORMAT_VERSION } from "./roots.ts";
@@ -287,29 +287,42 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     });
   }
 
+  function beforeTyping(target: NativeTextTarget, text: string): void {
+    const previous = group?.kind === "typing" && group.target.beat === target.beat && group.target.cell === target.cell ? group : null;
+    if (!previous || !continuesSharedTypingWord(previous.endsInSpace, text)) undo.stopCapturing();
+    group = { kind: "typing", target, endsInSpace: text ? /\s$/.test(text) : previous?.endsInSpace ?? false };
+  }
+
+  function beforeDeletion(target: NativeTextTarget, live: NativeLiveRange, direction: -1 | 1, at: number): void {
+    const previous = group?.kind === "deletion" && group.target.beat === target.beat && group.target.cell === target.cell
+      && group.direction === direction && at - group.at < DELETE_PAUSE_MS ? group : null;
+    const caret = previous && Y.createAbsolutePositionFromRelativePosition(previous.caret, doc);
+    const edge = direction === -1 ? live.pieces.at(-1) ?? live : live;
+    if (!caret || caret.type !== edge.text || caret.index !== (direction === -1 ? edge.until : edge.from)) undo.stopCapturing();
+    group = { kind: "deletion", target, direction, at, caret: Y.createRelativePositionFromTypeIndex(live.text, live.from, -1) };
+  }
+
   const commands = Object.freeze({
     createFirstBeat: bindCompound(createFirstNativeBeat),
     insertAdjacentBeat: bindCompound(insertNativeBeatAdjacent),
     anchorText: bindCommand(anchorNativeText, script, false, "none").run,
     typeText: bind((script: NativeScript, range: NativeTextRange, text: string, marks: Marks, stamp?: NativeEditStamp, placement?: NativeTextPlacement) =>
-      typeNativeText(script, range, text, marks, stamp, target => {
-        const previous = group?.kind === "typing" && group.target.beat === target.beat && group.target.cell === target.cell ? group : null;
-        if (!previous || !continuesSharedTypingWord(previous.endsInSpace, text)) undo.stopCapturing();
-        group = { kind: "typing", target, endsInSpace: text ? /\s$/.test(text) : previous?.endsInSpace ?? false };
-      }, undo.typingRecorder, placement), writing, false),
+      typeNativeText(script, range, text, marks, stamp, target => beforeTyping(target, text), undo.typingRecorder, placement), writing, false),
     replaceText: bind((script: NativeScript, range: NativeTextRange, runs: readonly Run[], stamp?: NativeEditStamp, placement?: NativeTextPlacement) =>
       replaceNativeText(script, range, runs, stamp, undefined, undefined, undefined, placement), writing),
     replaceAll: bindCompound(replaceAllNativeText),
     deleteText: bind(deleteNativeText, writing),
     deleteTextInRun: bind((script: NativeScript, range: NativeTextRange, direction: -1 | 1, at: number,
-      stamp?: NativeEditStamp, placement?: NativeTextPlacement) => replaceNativeText(script, range, [], stamp, (target, live) => {
-      const previous = group?.kind === "deletion" && group.target.beat === target.beat && group.target.cell === target.cell
-        && group.direction === direction && at - group.at < DELETE_PAUSE_MS ? group : null;
-      const caret = previous && Y.createAbsolutePositionFromRelativePosition(previous.caret, doc);
-      const edge = direction === -1 ? live.pieces.at(-1) ?? live : live;
-      if (!caret || caret.type !== edge.text || caret.index !== (direction === -1 ? edge.until : edge.from)) undo.stopCapturing();
-      group = { kind: "deletion", target, direction, at, caret: Y.createRelativePositionFromTypeIndex(live.text, live.from, -1) };
-    }, false, undefined, placement), writing, false),
+      stamp?: NativeEditStamp, placement?: NativeTextPlacement) => replaceNativeText(script, range, [], stamp,
+      (target, live) => beforeDeletion(target, live, direction, at), false, undefined, placement), writing, false),
+    typeTitle: bind((script: NativeScript, range: NativeTextRange, text: string, placement?: NativeTextPlacement) =>
+      editNativeTitle(script, range, text, target => beforeTyping(target, text), text !== "", undo.typingRecorder, placement), writing, false),
+    replaceTitle: bind((script: NativeScript, range: NativeTextRange, text: string, placement?: NativeTextPlacement) =>
+      editNativeTitle(script, range, text, undefined, undefined, undefined, placement), writing),
+    deleteTitle: bind((script: NativeScript, range: NativeTextRange, placement?: NativeTextPlacement) =>
+      editNativeTitle(script, range, "", undefined, false, undefined, placement), writing),
+    deleteTitleInRun: bind((script: NativeScript, range: NativeTextRange, direction: -1 | 1, at: number, placement?: NativeTextPlacement) =>
+      editNativeTitle(script, range, "", (target, live) => beforeDeletion(target, live, direction, at), false, undefined, placement), writing, false),
     formatText: bind(formatNativeText, adding),
     splitRow: bind(splitNativeRow, adding, true, "split"),
     deleteAndSplit: bindCompound(deleteAndSplitNativeRow, "split"),
@@ -388,6 +401,38 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
       const dispose = beforeNativeWrite(script, () => { retained ??= script.reader.narrationPaint(row, true); });
       return {
         point: (offset: number, assoc: 0 | -1) => (retained ?? script.reader.narrationPaint(row, false))(offset, assoc),
+        dispose
+      };
+    },
+    titleOffset: (range: Pick<NativeTextRange, "from">, assoc: 0 | -1 = 0) => {
+      if (refusal()) return null;
+      return perform(() => {
+        try {
+          const title = script.roots.meta.get("title");
+          if (!(title instanceof Y.Text)) return null;
+          const position = resolveNativeTextPoint(script, range.from, assoc);
+          return position && position.type === title && position.index >= 0 && position.index <= title.length ? position.index : null;
+        } catch { return null; }
+      });
+    },
+    trackTitlePaint: () => {
+      let retained: ((offset: number, assoc: 0 | -1) => Y.RelativePosition | null) | null = null;
+      const capture = (retain: boolean) => {
+        const title = script.roots.meta.get("title");
+        if (!(title instanceof Y.Text)) return () => null;
+        const length = title.length;
+        if (!retain) return (offset: number, assoc: 0 | -1) =>
+          offset >= 0 && offset <= length ? Y.createRelativePositionFromTypeIndex(title, offset, assoc) : null;
+        const starts = new Map<number, Y.RelativePosition>(), ends = new Map<number, Y.RelativePosition>();
+        for (let unit = 0; unit <= length; unit++) {
+          starts.set(unit, Y.createRelativePositionFromTypeIndex(title, unit, 0));
+          ends.set(unit, Y.createRelativePositionFromTypeIndex(title, unit, -1));
+        }
+        return (offset: number, assoc: 0 | -1) => (assoc === 0 ? starts : ends).get(offset) ?? null;
+      };
+      const dispose = beforeNativeWrite(script, () => { retained ??= capture(true); });
+      return {
+        point: (offset: number, assoc: 0 | -1) => (retained ?? capture(false))(offset, assoc),
         dispose
       };
     },

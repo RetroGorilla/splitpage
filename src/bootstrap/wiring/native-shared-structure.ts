@@ -53,7 +53,7 @@ export function createNativeEditorStructure({ native, session, input, publish, r
       const inserting = intent.kind === "insert-beat";
       const shown = moving ? documentReader.read(doc => doc && movePlacement(doc, intent)) : null;
       const shownInsert = inserting ? documentReader.current() : null;
-      const menu = inserting && !intent.focus ? typing.takeInsertMenuSelection() : null;
+      const menu = inserting && !intent.focus && intent.id !== null ? typing.takeInsertMenuSelection() : null;
       const captured = moving || inserting ? menu?.narration ?? typing.captureMoveSelection() : null;
       const admission = owner.admit();
       if (admission?.kind === "failed") throw admission.error;
@@ -69,11 +69,22 @@ export function createNativeEditorStructure({ native, session, input, publish, r
       let step;
       switch (intent.kind) {
         case "insert-beat": {
+          const attribution = { by: sessionStamps.editor.name(), at: sessionStamps.clock.nowIso() };
+          if (intent.id === null) {
+            const target = before.rows.findLast(row => native.hasBeatMarker(row.id))?.id ?? null;
+            if (target) {
+              after ??= anchor(target, 0);
+              step = native.commands.insertAdjacentBeat.withSelection(after, target, "below", attribution);
+            } else {
+              step = native.commands.createFirstBeat.withSelection(null, "", attribution);
+              if (step.result.kind === "written") after = anchor(step.result.created, 0);
+            }
+            break;
+          }
           if (!sameNativeInsertPlacement(shownInsert, before, intent.id, "below")) return owner.refuse(UNAVAILABLE);
           const selection = menu?.visual ?? (intent.focus === "visual" ? typing.visualSelection(intent.id) : after);
           after = selection ?? anchor(intent.id, 0, intent.focus);
-          step = native.commands.insertAdjacentBeat.withSelection(after, intent.id, "below",
-            { by: sessionStamps.editor.name(), at: sessionStamps.clock.nowIso() });
+          step = native.commands.insertAdjacentBeat.withSelection(after, intent.id, "below", attribution);
           if (step.result.kind === "written" && intent.focus) {
             landing = step.result.created;
             after = anchor(landing, 0, intent.focus);

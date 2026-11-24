@@ -301,7 +301,8 @@ const stops = [
   { name: "after a Split Visual edit", field: "visualText" },
   { name: "during Split narration composition", field: "audioText", composing: true },
   { name: "during Split Visual composition", field: "visualText", composing: true },
-  { name: "with an empty Writer", writer: true, empty: true }
+  { name: "with an empty Writer", writer: true, empty: true },
+  { name: "during empty Writer composition", writer: true, empty: true, composing: true }
 ];
 
 for (const { name, field, composing, writer = false, empty, waiting } of stops) test(`native stop ${name} restores the listener inventory after restart`, async t => {
@@ -326,7 +327,15 @@ for (const { name, field, composing, writer = false, empty, waiting } of stops) 
   if (waiting) assert.equal(document.body.hasAttribute("data-native-caret-unplaced"), true);
   if (empty) {
     assert.ok(writerControls().writerFlowControl());
-    assert.equal(document.querySelector(".empty-script-input"), null);
+    const input = document.querySelector(".empty-script-input");
+    assert.ok(input);
+    assert.equal(input.closest(".empty-script").hidden, false);
+    if (composing) {
+      input.focus();
+      input.dispatchEvent(new window.CompositionEvent("compositionstart", { bubbles: true, cancelable: true, data: "" }));
+      input.value = "Draft";
+      input.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertCompositionText", isComposing: true, data: "Draft" }));
+    }
   } else {
     assert.equal(hook.nativePeer.type("r1", 0, "Shared ").kind, "written");
     await Promise.resolve();

@@ -428,15 +428,31 @@ test("ArrowRight on missing native Writer paint leaves both copies unchanged wit
   }
 });
 
-test("an empty native Writer stays open without a first-beat input", async t => {
+test("an empty native Writer shows the first-beat input and places the caret after committed text", async t => {
   await enterHook(t, [], true);
   assert.equal(document.getElementById("writer").hidden, false);
   assert.equal(root().querySelector(".wr-beat"), null);
-  assert.equal(document.querySelector(".empty-script-input"), null);
+  const input = document.querySelector(".empty-script-input");
+  assert.ok(input);
+  assert.equal(input.closest(".empty-script").hidden, false);
   assert.deepEqual(rows(hook().read().app), []);
   assert.deepEqual(rows(hook().read().peer), []);
+  input.focus();
+  input.value = "First line";
+  input.dispatchEvent(new window.InputEvent("input", { bubbles: true, inputType: "insertText", data: "First line" }));
+  await tick();
+  assert.equal(input.closest(".empty-script").hidden, true);
+  assert.equal(rows(hook().read().app).length, 1);
+  assert.equal(rows(hook().read().app)[0][1], "First line");
+  assert.deepEqual(rows(hook().read().peer), rows(hook().read().app));
+  const sel = writerControls().writerFlowControl().selection();
+  assert.equal(sel?.head.kind, "beat");
+  assert.equal(sel?.head.rowId, hook().read().app.rows[0].id);
+  assert.equal(sel?.head.offset, "First line".length);
   assert.deepEqual(hook().leave(), { ok: true });
-  assert.deepEqual(rows(currentDocument()), []);
+  assert.equal(document.querySelector(".empty-script-input"), null);
+  assert.equal(rows(currentDocument()).length, 1);
+  assert.equal(rows(currentDocument())[0][1], "First line");
 });
 
 test("explicit draft flush after native leave writes the peer text and fresh identity at the next sequence", async t => {

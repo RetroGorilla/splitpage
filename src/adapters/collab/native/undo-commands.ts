@@ -23,8 +23,8 @@ export type NativeUndoOutcome =
 const UNCHANGED: NativeUndoOutcome = Object.freeze({ kind: "unchanged" });
 
 export function openNativeUndo(script: NativeScript) {
-  const { order, segments, beats, visuals, headings, names, comments, replies, people, tags, shots } = script.roots;
-  const manager = new Y.UndoManager([order, segments, beats, visuals, headings, names, comments, replies, people, tags, shots], {
+  const { meta, order, segments, beats, visuals, headings, names, comments, replies, people, tags, shots } = script.roots;
+  const manager = new Y.UndoManager([meta, order, segments, beats, visuals, headings, names, comments, replies, people, tags, shots], {
     trackedOrigins: new Set([script.origin]),
     captureTimeout: Infinity
   });

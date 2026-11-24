@@ -133,12 +133,15 @@ function adjacentPlacement(script: NativeScript, order: readonly NativeRankedBlo
 }
 
 export function insertNativeBeatAdjacent(script: NativeScript, beat: string, side: "above" | "below", stamp?: NativeEditStamp,
-  transferParagraphStart = false): NativePutBackOutcome {
+  transferParagraphStart = false, narration = ""): NativePutBackOutcome {
   const unavailable = nativeAvailability(script);
   if (unavailable) return refused(unavailable);
   if (!beat || !nativeWellFormed(beat) || side !== "above" && side !== "below") return refused("missing");
-  return transactPreparedNativeCommand(script, () => encodeNativeEditStamp(stamp), encoded => {
-    if (encoded === null) return refused("text");
+  return transactPreparedNativeCommand(script, () => ({
+    encoded: encodeNativeEditStamp(stamp),
+    audio: typeof narration === "string" ? prepareNativeRuns(narration ? [{ text: narration, marks: {} }] : []) : null
+  }), ({ encoded, audio }) => {
+    if (encoded === null || !audio) return refused("text");
     const order = script.reader.rankedOrder();
     const at = order.findIndex(block => block.kind === "beat" && block.id === beat && block.head === beat);
     if (at < 0 || !script.reader.beatBoundary(beat)) return refused("missing");
@@ -148,7 +151,7 @@ export function insertNativeBeatAdjacent(script: NativeScript, beat: string, sid
     }
     const record = script.roots.beats.get(beat);
     const paragraphStart = side === "above" && transferParagraphStart && decodeNativeValue(record?.get("paragraphStart"))?.value === true;
-    const outcome = insertBeat(script, blankBeat([], paragraphStart ? true : undefined), () => adjacentPlacement(script, order, insertAt), encoded);
+    const outcome = insertBeat(script, blankBeat(audio, paragraphStart ? true : undefined), () => adjacentPlacement(script, order, insertAt), encoded);
     if (outcome.kind === "written" && paragraphStart) record?.delete("paragraphStart");
     return outcome;
   }, refused, () => true, true);
@@ -162,15 +165,17 @@ export function putBackNativeBeat(script: NativeScript, saved: NativePutBackBeat
     plan ? insertBeat(script, plan, () => ({ rank: gap(script.reader.rankedOrder(), plan) })) : refused("text"), refused);
 }
 
-export function createFirstNativeBeat(script: NativeScript, narration = ""): NativePutBackOutcome | { readonly kind: "unchanged" } {
+export function createFirstNativeBeat(script: NativeScript, narration = "", stamp?: NativeEditStamp): NativePutBackOutcome | { readonly kind: "unchanged" } {
   const unavailable = nativeAvailability(script);
   if (unavailable) return refused(unavailable);
-  return transactPreparedNativeCommand(script, () => typeof narration === "string"
-    ? prepareNativeRuns(narration ? [{ text: narration, marks: {} }] : []) : null, audio => {
-    if (!audio) return refused("text");
+  return transactPreparedNativeCommand(script, () => ({
+    audio: typeof narration === "string" ? prepareNativeRuns(narration ? [{ text: narration, marks: {} }] : []) : null,
+    encoded: encodeNativeEditStamp(stamp)
+  }), ({ audio, encoded }) => {
+    if (!audio || encoded === null) return refused("text");
     const order = script.reader.rankedOrder();
     if (order.some(block => block.kind === "beat")) return Object.freeze({ kind: "unchanged" });
     const plan = { ...blankBeat(audio), scene: null, old: [] };
-    return insertBeat(script, plan, () => ({ rank: gap(order, plan) }));
+    return insertBeat(script, plan, () => ({ rank: gap(order, plan) }), encoded);
   }, refused, () => true, true);
 }

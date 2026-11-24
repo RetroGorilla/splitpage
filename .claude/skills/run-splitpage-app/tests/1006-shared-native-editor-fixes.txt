@@ -1,0 +1,76 @@
+open
+wait document.querySelectorAll('#rows .row').length > 0
+eval window.F=window.__splitpageFormats;window.S=window.__sharedTest;window.W=window.__writerFlowTest;F.openFile(new File([JSON.stringify({schema:2,title:'Shared Title',paragraphsDecided:true,rows:[{id:'r1',audioText:'Alpha'},{id:'r2',audioText:'Beta'}],comments:[]})],'editor-fixes.splitpage'))
+wait F.state().title === 'Shared Title'
+eval window.agree=()=>JSON.stringify(S.read().app)===JSON.stringify(S.read().peer);window.warn=()=>document.querySelector('#toast-host .toast.warn:not(.is-leaving)')!==null;window.clear=()=>{document.querySelectorAll('#toast-host .toast').forEach(t=>t.dismiss());return true};window.titles=()=>[S.read().app.title,S.read().peer.title];window.rows=()=>S.read().app.rows.map(r=>r.audioText);true
+eval S.enter()
+wait S.read().peer !== null
+eval clear();S.docTitleEl=document.getElementById('doc-title');S.docTitleEl.focus();S.docTitleEl.setSelectionRange(12,12);true
+press  Act 1
+key Space
+wait S.read().app.title === 'Shared Title Act 1 ' && agree()
+expect !warn() && document.getElementById('doc-title').value === 'Shared Title Act 1 ' && document.title.includes('Shared Title Act 1 ')
+eval S.nativePeer.hold();S.nativePeer.titleType(0,'Ep 1: ');true
+eval S.docTitleEl.focus();S.docTitleEl.setSelectionRange(19,19);true
+press !
+wait S.read().app.title === 'Shared Title Act 1 !'
+eval S.nativePeer.deliver();true
+wait S.read().app.title === 'Ep 1: Shared Title Act 1 !' && agree()
+expect !warn() && document.getElementById('doc-title').value === 'Ep 1: Shared Title Act 1 !'
+key ctrl KeyZ
+wait S.read().app.title === 'Ep 1: Shared Title Act 1 ' && agree()
+expect !warn() && document.activeElement === document.getElementById('doc-title')
+eval S.nativePeer.undoPeer();true
+wait S.read().app.title === 'Shared Title Act 1 ' && agree()
+key ctrl KeyY
+wait S.read().app.title === 'Shared Title Act 1 !' && agree()
+eval S.nativePeer.redoPeer();true
+wait S.read().app.title === 'Ep 1: Shared Title Act 1 !' && agree()
+click #btn-write
+wait W.on()
+eval const wt=document.getElementById('writer-title');wt.focus();wt.setSelectionRange(wt.value.length,wt.value.length);true
+ime set 案
+ime commit 案
+wait S.read().app.title === 'Ep 1: Shared Title Act 1 !案' && agree()
+expect !warn() && document.getElementById('writer-title').value === 'Ep 1: Shared Title Act 1 !案' && document.getElementById('doc-title').value === 'Ep 1: Shared Title Act 1 !案'
+key ctrl KeyZ
+wait S.read().app.title === 'Ep 1: Shared Title Act 1 !' && agree()
+expect !warn() && document.activeElement === document.getElementById('writer-title')
+click #wr-close
+wait !W.on()
+eval clear();S.nativePeer.type('r2',4,' edited');true
+wait S.read().app.rows[1].audioText === 'Beta edited' && agree()
+click .add-row-bar [data-action="add-row"]
+wait S.read().app.rows.length === 3 && agree()
+expect !warn() && S.read().app.rows[2].audioText === ''
+eval S.nativePeer.removeBeat(S.read().app.rows[2].id);S.nativePeer.removeBeat('r2');true
+wait S.read().app.rows.length === 1 && S.read().app.rows[0].id === 'r1' && agree()
+click .add-row-bar [data-action="add-row"]
+wait S.read().app.rows.length === 2 && agree()
+expect !warn() && S.read().app.rows[0].id === 'r1' && S.read().app.rows[1].audioText === ''
+eval S.nativePeer.removeBeat(S.read().app.rows[1].id);S.nativePeer.removeBeat('r1');true
+wait S.read().app.rows.length === 0 && agree() && document.querySelector('.empty-state [data-action="add-row"]') !== null
+click .empty-state [data-action="add-row"]
+wait S.read().app.rows.length === 1 && agree()
+expect !warn() && document.querySelector('.empty-state') === null && S.read().app.rows[0].audioText === ''
+key ctrl KeyZ
+wait S.read().app.rows.length === 0 && agree() && document.querySelector('.empty-state [data-action="add-row"]') !== null
+click #btn-write
+wait W.on() && document.querySelector('.empty-script-input') !== null && !document.querySelector('.empty-script').hidden
+eval clear();document.querySelector('.empty-script-input').focus();true
+press Hello
+wait S.read().app.rows.length === 1 && S.read().app.rows[0].audioText === 'Hello' && agree()
+expect !warn() && document.querySelector('.empty-script').hidden && document.activeElement === document.getElementById('writer-doc') && W.selection()?.head.offset === 5
+key ctrl KeyZ
+wait S.read().app.rows.length === 1 && S.read().app.rows[0].audioText === 'H' && agree()
+key ctrl KeyZ
+wait S.read().app.rows.length === 0 && agree() && !document.querySelector('.empty-script').hidden
+eval document.querySelector('.empty-script-input').focus();true
+ime set 日本語
+expect S.read().app.rows.length === 0 && !document.querySelector('.empty-script').hidden
+ime commit 日本語
+wait S.read().app.rows.length === 1 && S.read().app.rows[0].audioText === '日本語' && agree()
+expect !warn() && document.querySelector('.empty-script').hidden && document.activeElement === document.getElementById('writer-doc') && W.selection()?.head.offset === 3
+eval S.leave()
+wait S.read().peer === null
+expect document.querySelector('.empty-script-input') === null && S.read().app.rows[0].audioText === '日本語'

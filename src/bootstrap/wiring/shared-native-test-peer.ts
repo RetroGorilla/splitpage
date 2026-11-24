@@ -130,9 +130,23 @@ export function createNativeTestPeer(app: ReturnType<typeof openNativeSession>, 
       const at = peer.commands.anchorText({ beat, cell: "narration" }, offset);
       return at.kind === "anchored" ? forward(peer.commands.splitRow(at.range)) : at;
     },
+    createFirstBeat: (narration = "") => forward(peer.commands.createFirstBeat(narration)),
     removeBeat: (id: string) => forward(peer.commands.removeRows([id])),
     replaceAll: (...args: Parameters<typeof peer.commands.replaceAll>) => forward(peer.commands.replaceAll(...args)),
     undoPeer: () => forward(peer.commands.undo()),
+    redoPeer: () => forward(peer.commands.redo()),
+    titleType: (offset: number, text: string) => {
+      const at = peer.commands.anchorText({ beat: "", cell: "title" }, offset);
+      return at.kind === "anchored" ? forward(peer.commands.typeTitle(at.range, text)) : at;
+    },
+    titleDelete: (from: number, to: number) => {
+      const at = peer.commands.anchorText({ beat: "", cell: "title" }, from, to);
+      return at.kind === "anchored" ? forward(peer.commands.deleteTitle(at.range)) : at;
+    },
+    titleReplace: (from: number, to: number, text: string) => {
+      const at = peer.commands.anchorText({ beat: "", cell: "title" }, from, to);
+      return at.kind === "anchored" ? forward(peer.commands.replaceTitle(at.range, text)) : at;
+    },
     moveBeat: (id: string, drop: NativeMoveBlock | null) => forward(peer.commands.moveBlocks([{ kind: "beat", id }], drop)),
     removeComment: (id: string) => forward(peer.commands.removeComment({ comment: id })),
     step: (direction: "undo" | "redo") => app.commands[direction](),

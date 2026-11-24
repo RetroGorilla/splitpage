@@ -12,7 +12,7 @@ import { encodeNativeValue, nativeWellFormed, plainRecordArgument } from "./valu
 
 export interface NativeTextTarget {
   readonly beat: string;
-  readonly cell: "narration" | "visual" | "name";
+  readonly cell: "narration" | "visual" | "name" | "title";
 }
 
 export interface NativeEditStamp {
@@ -74,6 +74,11 @@ export type NativeCommitOutcome =
   | { readonly kind: "unchanged" }
   | { readonly kind: "recovery"; readonly reason: NativeRefusal; readonly runs: readonly Run[] };
 
+export type NativeTitleOutcome =
+  | { readonly kind: "written"; readonly caret?: Y.RelativePosition; readonly selection?: readonly [Y.RelativePosition | null, Y.RelativePosition | null] }
+  | { readonly kind: "unchanged" }
+  | { readonly kind: "refused"; readonly reason: NativeRefusal };
+
 interface LiveCell {
   readonly text: Y.Text;
   readonly start: number;
@@ -108,7 +113,18 @@ export function nativeWriteAvailability(script: NativeScript): "busy" | "closed"
   return nativeAvailability(script) ?? script.sizeRefusal?.() ?? null;
 }
 
+function isPlainCell(cell: NativeTextTarget["cell"]): boolean {
+  return cell === "name" || cell === "title";
+}
+
 function liveCells(script: NativeScript, target: NativeTextTarget, segments: ParsedTextSegments = new Map()): LiveCell[] {
+  if (target.cell === "title") {
+    if (target.beat !== "") return [];
+    const title = script.roots.meta.get("title");
+    if (!(title instanceof Y.Text)) return [];
+    const value = title.toString();
+    return value.length === title.length ? [{ text: title, start: 0, end: title.length, items: [{ insert: value }] }] : [];
+  }
   if (target.cell === "name") {
     const cell = script.roots.names.get(target.beat);
     if (!(cell instanceof Y.Text) || !script.reader.headingBoundary(target.beat, false)) return [];
@@ -142,7 +158,8 @@ function liveCells(script: NativeScript, target: NativeTextTarget, segments: Par
 function readTarget(target: NativeTextTarget): NativeTextTarget | null {
   try {
     const beat: unknown = target.beat, cell: unknown = target.cell;
-    return nativeWellFormed(beat) && (cell === "narration" || cell === "visual" || cell === "name") ? Object.freeze({ beat, cell }) : null;
+    return nativeWellFormed(beat) && (cell === "narration" || cell === "visual" || cell === "name" || cell === "title" && beat === "")
+      ? Object.freeze({ beat, cell }) : null;
   } catch { return null; }
 }
 
@@ -185,7 +202,8 @@ export function anchorNativeText(script: NativeScript, target: NativeTextTarget,
   const cells = liveCells(script, checked);
   if (!cells.length) return { kind: "refused", reason: "missing" };
   if (!Number.isInteger(from) || !Number.isInteger(to) || from < 0 || to < from) return { kind: "refused", reason: "range" };
-  const first = shownPosition(cells, from, checked.cell === "name"), last = from === to ? first : shownPosition(cells, to, checked.cell === "name");
+  const plain = isPlainCell(checked.cell);
+  const first = shownPosition(cells, from, plain), last = from === to ? first : shownPosition(cells, to, plain);
   if (!first || !last) return { kind: "refused", reason: "range" };
   const anchor = undoEndpoint(checked, first.text, first.index, 0);
   const head = from === to ? anchor : undoEndpoint(checked, last.text, last.index, -1);
@@ -447,8 +465,8 @@ function snapshotUndoRange(script: NativeScript, range: NativeTextRange): Native
   const first = plainPosition(from, 0, ids), last = to === from ? first : plainPosition(to, -1, ids);
   if (!target || !first || !last) return null;
   const start = resolve(first, script.doc), end = first === last ? start : resolve(last, script.doc);
-  const cells = liveCells(script, target), name = target.cell === "name";
-  if (!start || !end || memberOffset(cells, start, name) === null || memberOffset(cells, end, name) === null) return null;
+  const cells = liveCells(script, target), plain = isPlainCell(target.cell);
+  if (!start || !end || memberOffset(cells, start, plain) === null || memberOffset(cells, end, plain) === null) return null;
   const anchor = { target, position: first };
   return { anchor, head: first === last ? anchor : { target, position: last } };
 }
@@ -480,10 +498,10 @@ function replayUndoEndpoint(script: NativeScript, { target, position }: UndoEndp
     beat = owner.beat;
   }
   if (cell === "name" && !script.reader.showsHeading(beat)) return null;
-  const current = { beat, cell }, cells = liveCells(script, current);
-  const offset = memberOffset(cells, at, cell === "name");
+  const current = { beat, cell }, cells = liveCells(script, current), plain = isPlainCell(cell);
+  const offset = memberOffset(cells, at, plain);
   if (offset === null) return null;
-  if (cell !== "name" && !cells.some(part => part.items.length)) {
+  if (!plain && !cells.some(part => part.items.length)) {
     const members = script.reader.rowMembers(beat);
     if (members.length > 1 && (members[0]?.id !== beat ||
       members.some(member => liveCells(script, { beat: member.id, cell }).some(part => part.items.length)))) return null;
@@ -531,7 +549,7 @@ export function replaceNativeText(script: NativeScript, range: NativeTextRange, 
     prepared: prepareNativeRuns(runs), encoded: encodeNativeEditStamp(stamp), checked: nativeRangeSnapshot(range), points: capturePlacement(placement)
   }), ({ prepared, encoded, checked, points }) => {
     if (!prepared || encoded === null) return refuse("text", runs);
-    if (!checked || checked.target.cell === "name") return refuse("range", runs);
+    if (!checked || isPlainCell(checked.target.cell)) return refuse("range", runs);
     const addressed = nativeLiveRange(script, checked);
     const stray = addressed === "missing" && typing && prepared.length ? removedTypingRange(script, checked, range) : null;
     const live = stray ?? addressed;
@@ -570,6 +588,43 @@ export function typeNativeText(script: NativeScript, range: NativeTextRange, tex
 
 export function deleteNativeText(script: NativeScript, range: NativeTextRange, stamp?: NativeEditStamp, placement?: NativeTextPlacement): NativeCommitOutcome {
   return replaceNativeText(script, range, [], stamp, undefined, false, undefined, placement);
+}
+
+export function editNativeTitle(
+  script: NativeScript,
+  range: NativeTextRange,
+  text: string,
+  beforeWrite?: (target: NativeTextTarget, live: NativeLiveRange) => void,
+  adds?: boolean,
+  afterWrite?: (anchor: NativeUndoAnchor) => void,
+  placement?: NativeTextPlacement
+): NativeTitleOutcome {
+  const unavailable = nativeAvailability(script);
+  if (unavailable) return Object.freeze({ kind: "refused", reason: unavailable });
+  return transactPreparedNativeCommand(script, () => ({
+    checked: nativeRangeSnapshot(range),
+    valid: typeof text === "string" && nativeWellFormed(text) && !/[\r\n]/.test(text) && (text === "" || nativeTextAllowed(text)),
+    points: capturePlacement(placement)
+  }), ({ checked, valid, points }) => {
+    if (!valid) return Object.freeze({ kind: "refused", reason: "text" });
+    if (!checked || checked.target.cell !== "title") return Object.freeze({ kind: "refused", reason: "range" });
+    const live = nativeLiveRange(script, checked);
+    if (typeof live === "string") return Object.freeze({ kind: "refused", reason: live });
+    if (live.text.toString().slice(live.from, live.until) === text) return UNCHANGED;
+    beforeWrite?.(checked.target, live);
+    if (text) live.text.insert(live.from, text, {});
+    if (live.until > live.from) live.text.delete(live.from + text.length, live.until - live.from);
+    const end = live.from + text.length;
+    if (afterWrite) {
+      const anchor = undoEndpoint(checked.target, live.text, end, 0);
+      afterWrite({ anchor, head: anchor });
+    }
+    if (!points) return WRITTEN;
+    const caret = Y.createRelativePositionFromTypeIndex(live.text, end, -1);
+    const at = (offset: number | null, assoc: 0 | -1) => offset === null ? null
+      : Y.createRelativePositionFromTypeIndex(live.text, live.from + Math.max(0, Math.min(text.length, offset)), assoc);
+    return { kind: "written", caret, selection: [at(points[0], 0), at(points[1], -1)] };
+  }, reason => Object.freeze({ kind: "refused", reason }), () => adds ?? text !== "");
 }
 
 export interface NativeReplaceAllRange {
