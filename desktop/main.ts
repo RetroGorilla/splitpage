@@ -27,6 +27,9 @@ import type * as HistoryFsBackend from "./history-fs-backend.ts";
 import type * as DesktopState from "./desktop-state.ts";
 import type * as UpdateRelease from "./update-release.ts";
 import type * as IpcSetup from "./ipc-setup.ts";
+import type { DesktopChannelModule } from "./ipc-channels.ts";
+import type { createRelayOwner as CreateRelayOwner } from "./relay-owner.ts";
+import type { createRelaySetupWindow as CreateRelaySetupWindow } from "./relay-setup-window.ts";
 import type * as IpcFiles from "./ipc-files.ts";
 import type * as IpcShell from "./ipc-shell.ts";
 import type * as IpcDocument from "./ipc-document.ts";
@@ -172,6 +175,16 @@ const APP_ROOT = app.isPackaged
   ? path.join(process.resourcesPath, "splitpage")
   : path.resolve(__dirname, "..");
 
+const DESKTOP_BUILD = app.isPackaged ? path.join(APP_ROOT, "desktop-build") : path.join(__dirname, ".build");
+const COLLAB_UI = (() => {
+  try {
+    const settingPath = path.join(app.isPackaged ? __dirname : DESKTOP_BUILD, "collaboration.json");
+    const setting = JSON.parse(fs.readFileSync(settingPath, "utf8")) as { collabUi?: unknown } | null;
+    return setting?.collabUi === true;
+  } catch {
+    return false;
+  }
+})();
 const SHARED_ROOT = path.join(APP_ROOT, "shared");
 const historyPolicy: typeof HistoryPolicy = require(path.join(SHARED_ROOT, "history-policy.ts"));
 const { HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE } = historyPolicy;
@@ -989,6 +1002,10 @@ function registerProtocol() {
   protocol.handle("splitpage", async (request) => {
     let url;
     try { url = new URL(request.url); } catch { return new Response("bad url", { status: 400 }); }
+    if (relaySetup && url.hostname !== "app" && url.hostname !== "tabstrip") {
+      const response = await relaySetup.serve(url, request.method);
+      if (response) return response;
+    }
     const pathname = decodeURIComponent(url.pathname);
 
     if (url.hostname === "tabstrip") {
@@ -1179,7 +1196,7 @@ function createTab(windowId: string, opts?: Partial<Pick<DesktopMainTab, "source
 
   const view = new WebContentsView({
     webPreferences: {
-      preload: path.join(__dirname, "preload.js"),
+      preload: path.join(COLLAB_UI ? DESKTOP_BUILD : __dirname, "preload.js"),
       contextIsolation: true,
       sandbox: true,
       nodeIntegration: false,
@@ -1819,8 +1836,6 @@ function buildMenu() {
 }
 
 
-const { registerIpc } = createIpcSetup({ ipcMain, app, testMode: TEST_MODE, windowsById });
-
 function tabStripWindowOf(event: DesktopIpcEvent) {
   for (const w of windowsById.values()) {
     if (!w.win.isDestroyed() && w.win.webContents === event.sender) return w;
@@ -1832,6 +1847,36 @@ function tabOf(event: DesktopIpcEvent) {
   const tabId = webContentsIdToTabId.get(event.sender.id);
   return tabId ? tabs.get(tabId) || null : null;
 }
+
+const relaySetup = COLLAB_UI ? (() => {
+  const root = path.join(DESKTOP_BUILD, "relay-setup");
+  const { RELAY_SETUP_ORIGIN }: DesktopChannelModule = require("./ipc-channels.ts");
+  const { createRelaySetupWindow }: { createRelaySetupWindow: typeof CreateRelaySetupWindow } = require("./relay-setup-window.ts");
+  const { createRelayOwner }: { createRelayOwner: typeof CreateRelayOwner } = require("./relay-owner.ts");
+  const setupWindow = createRelaySetupWindow(BrowserWindow, root, RELAY_SETUP_ORIGIN);
+  const owner = createRelayOwner(app.getPath("userData"), safeStorage);
+  function tabWindow(event: DesktopIpcEvent) {
+    const tab = tabOf(event);
+    if (!tab || event.senderFrame !== event.sender.mainFrame) return null;
+    const win = windowsById.get(tab.windowId)?.win;
+    return win && !win.isDestroyed() ? win : null;
+  }
+  return {
+    serve: setupWindow.serve,
+    trusts: setupWindow.trusts,
+    status: (event: DesktopIpcEvent) => tabWindow(event) ? owner.status() : { address: null },
+    open: async (event: DesktopIpcEvent) => {
+      const parent = tabWindow(event);
+      if (!parent) return false;
+      try { return await setupWindow.open(parent); } catch { return false; }
+    },
+    test: async (event: DesktopIpcEvent) => tabWindow(event) ? owner.testConnection() : "not-configured" as const,
+    clear: (event: DesktopIpcEvent) => !!tabWindow(event) && owner.clear(),
+    save: owner.save
+  };
+})() : undefined;
+
+const { registerIpc } = createIpcSetup({ ipcMain, app, testMode: TEST_MODE, windowsById, relaySetup });
 
 function dialogParentFor(event: DesktopIpcEvent) {
   const tab = tabOf(event);

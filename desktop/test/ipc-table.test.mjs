@@ -5,13 +5,15 @@ import path from "node:path";
 import vm from "node:vm";
 import { stripTypeScriptTypes, createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { parse } from "yaml";
+import { collaborationPreload } from "../../tools/build-preload.mjs";
 
 const require = createRequire(import.meta.url);
 const here = path.dirname(fileURLToPath(import.meta.url));
 const desktop = path.join(here, "..");
 
 const table = require(path.join(desktop, "ipc-channels.ts"));
-const { IPC_CHANNELS, APP_ORIGIN, TABSTRIP_ORIGIN, channelFor, channelsForOrigin, checkArgs } = table;
+const { IPC_CHANNELS, IPC_COLLABORATION_CHANNELS, APP_ORIGIN, TABSTRIP_ORIGIN, RELAY_SETUP_ORIGIN, channelFor, channelsForOrigin, checkArgs } = table;
 
 const read = (name) => {
   const text = fs.readFileSync(path.join(desktop, name), "utf8");
@@ -25,7 +27,9 @@ const SENDERS = [...SOURCES, ["voice-composition.ts", read("voice-composition.ts
 const { createIpcSetup } = require(path.join(desktop, "ipc-setup.ts"));
 const PRELOADS = [
   { file: "preload.js", origin: APP_ORIGIN, src: read("preload.js") },
-  { file: "tabstrip-preload.js", origin: TABSTRIP_ORIGIN, src: read("tabstrip-preload.js") }
+  { file: "tabstrip-preload.js", origin: TABSTRIP_ORIGIN, src: read("tabstrip-preload.js") },
+  { file: "test app preload", origin: APP_ORIGIN, src: collaborationPreload("preload", true), collabUi: true },
+  { file: "test relay setup preload", origin: RELAY_SETUP_ORIGIN, src: collaborationPreload("relay-setup-preload", true), collabUi: true }
 ];
 
 const key = (name, direction) => `${name} (${direction})`;
@@ -153,7 +157,7 @@ function fakeElectron(ipcMain, userData) {
 const REGISTER_IPC_CALL = /\n {2}registerIpc\(\{([^}]*)\}\);/.exec(MAIN);
 const GROUPS_PASSED = REGISTER_IPC_CALL ? REGISTER_IPC_CALL[1].split(",").map((s) => s.trim()).filter(Boolean) : [];
 
-function registerThroughMain({ testMode }) {
+function registerThroughMain({ testMode, collabUi = false }) {
   const ipcMain = fakeIpcMain();
   const userData = fs.mkdtempSync(path.join(os.tmpdir(), "ipc-table-"));
   const electron = fakeElectron(ipcMain, userData);
@@ -165,7 +169,17 @@ function registerThroughMain({ testMode }) {
     `(function (exports, require, module, __filename, __dirname) {${body}\n})`,
     { filename: mainPath }
   );
-  const fakeRequire = (id) => (id === "electron" ? electron : require(id.startsWith(".") ? path.join(desktop, id) : id));
+  const fakeRequire = (id) => {
+    if (id === "electron") return electron;
+    if (id === "node:fs") return {
+      ...fs,
+      readFileSync(file, ...args) {
+        if (file === path.join(desktop, ".build", "collaboration.json")) return JSON.stringify({ collabUi });
+        return fs.readFileSync(file, ...args);
+      }
+    };
+    return require(id.startsWith(".") ? path.join(desktop, id) : id);
+  };
   const saved = { test: process.env.SPLITPAGE_TEST, noUpdate: process.env.SPLITPAGE_NO_UPDATE_CHECK, userData: process.env.SPLITPAGE_USER_DATA };
   const restore = (name, value) => { if (value === undefined) delete process.env[name]; else process.env[name] = value; };
   process.env.SPLITPAGE_TEST = testMode ? "1" : "0";
@@ -188,7 +202,7 @@ const test = (name, fn) => cases.push({ name, fn });
 
 test("the table is frozen all the way down", () => {
   assert.equal(Object.isFrozen(IPC_CHANNELS), true, "the list");
-  for (const c of IPC_CHANNELS) {
+  for (const c of [...IPC_CHANNELS, ...IPC_COLLABORATION_CHANNELS]) {
     assert.equal(Object.isFrozen(c), true, `row ${key(c.name, c.direction)}`);
     assert.equal(Object.isFrozen(c.argsSchema), true, `argsSchema of ${c.name}`);
     assert.equal(Object.isFrozen(c.allowedOrigins), true, `allowedOrigins of ${c.name}`);
@@ -198,13 +212,13 @@ test("the table is frozen all the way down", () => {
 
 test("every row has a name, a direction, a schema and at least one origin", () => {
   const seen = new Set();
-  for (const c of IPC_CHANNELS) {
+  for (const c of [...IPC_CHANNELS, ...IPC_COLLABORATION_CHANNELS]) {
     assert.match(c.name, /^splitpage:[a-z0-9-]+$/, `channel name ${c.name}`);
     assert.ok(["invoke", "send", "sendSync", "receive"].includes(c.direction), `direction of ${c.name}`);
     assert.ok(Array.isArray(c.argsSchema), `argsSchema of ${c.name}`);
     assert.ok(c.allowedOrigins.length > 0, `${c.name} is usable by nobody`);
     for (const o of c.allowedOrigins) {
-      assert.ok([APP_ORIGIN, TABSTRIP_ORIGIN].includes(o), `${c.name} names origin ${o}`);
+      assert.ok([APP_ORIGIN, TABSTRIP_ORIGIN, RELAY_SETUP_ORIGIN].includes(o), `${c.name} names origin ${o}`);
     }
     assert.equal(seen.has(key(c.name, c.direction)), false, `duplicate row ${key(c.name, c.direction)}`);
     seen.add(key(c.name, c.direction));
@@ -229,7 +243,7 @@ for (const preload of PRELOADS) {
   test(`${preload.file}: every channel it calls is in the table for its origin`, () => {
     for (const k of callsIn(preload.src)) {
       const [name, direction] = [k.slice(0, k.indexOf(" (")), k.slice(k.indexOf("(") + 1, -1)];
-      const row = channelFor(name, direction);
+      const row = channelFor(name, direction, preload.collabUi);
       assert.ok(row, `${k} is called by ${preload.file} and is not in the table`);
       assert.ok(
         row.allowedOrigins.includes(preload.origin),
@@ -240,14 +254,14 @@ for (const preload of PRELOADS) {
 
   test(`${preload.file}: every channel string in it is one its origin owns`, () => {
     for (const name of literalsIn(preload.src)) {
-      const rows = IPC_CHANNELS.filter((c) => c.name === name && c.allowedOrigins.includes(preload.origin));
+      const rows = channelsForOrigin(preload.origin, preload.collabUi).filter(c => c.name === name);
       assert.ok(rows.length, `${preload.file} names ${name}, which is not this origin's`);
     }
   });
 
   test(`${preload.file}: every row for its origin is exposed by it`, () => {
     const called = callsIn(preload.src);
-    for (const row of channelsForOrigin(preload.origin)) {
+    for (const row of channelsForOrigin(preload.origin, preload.collabUi)) {
       assert.ok(
         called.has(key(row.name, row.direction)),
         `${key(row.name, row.direction)} is in the table for ${preload.origin} and ${preload.file} never uses it`
@@ -309,14 +323,14 @@ test("main.ts and the ipc-*.ts modules register nothing through ipcMain directly
 
 test("every channel main.ts and the ipc-*.ts modules register is in the table, with that direction", () => {
   for (const r of registrations) {
-    const row = channelFor(r.name, r.direction);
+    const row = channelFor(r.name, r.direction, true);
     assert.ok(row, `${r.file} registers ${key(r.name, r.direction)}, which is not in the table`);
     assert.ok(row.allowedOrigins.length > 0, `${r.name} has no origin`);
   }
 });
 
 test("main.ts and the ipc-*.ts modules register a handler for every inbound row, exactly once", () => {
-  for (const row of IPC_CHANNELS) {
+  for (const row of [...IPC_CHANNELS, ...IPC_COLLABORATION_CHANNELS]) {
     if (row.direction === "receive") continue;
     const hits = registrations.filter((r) => r.name === row.name && r.direction === row.direction);
     assert.equal(hits.length, 1, `${key(row.name, row.direction)} is registered ${hits.length} times in main.ts and the ipc-*.ts modules`);
@@ -349,6 +363,15 @@ test("main.ts passes registerIpc every handler group, and each group's module is
 
 test("in test mode, main.ts's real groups register every pair in the pinned order, then the print channel", () => {
   assert.deepEqual(registerThroughMain({ testMode: true }), [...REGISTERED_BEFORE_SPLIT, ...REGISTERED_AFTER_SPLIT]);
+});
+
+test("the build setting, independently of test mode, registers the five relay setup calls", () => {
+  const ordinary = registerThroughMain({ testMode: false });
+  assert.deepEqual(registerThroughMain({ testMode: false, collabUi: true }), [...ordinary,
+    "splitpage:relay-owner-status invoke", "splitpage:relay-owner-open invoke", "splitpage:relay-owner-test invoke",
+    "splitpage:relay-owner-clear invoke", "splitpage:relay-setup-save invoke"]);
+  assert.equal(channelsForOrigin(RELAY_SETUP_ORIGIN).length, 0);
+  assert.deepEqual(channelsForOrigin(RELAY_SETUP_ORIGIN, true).map(row => row.name), ["splitpage:relay-setup-save"]);
 });
 
 test("outside test mode, main.ts's real groups register the same pairs in order, minus every test-only channel", () => {
@@ -420,7 +443,7 @@ test("a TEST_MODE-only row is registered inside the TEST_MODE block, and nothing
   assert.ok(registerTestModeAt > 0, "registerTestModeIpc() found");
   assert.ok(testModeAt > registerTestModeAt, "the TEST_MODE block inside registerTestModeIpc() found");
   for (const r of registrations) {
-    const row = channelFor(r.name, r.direction);
+    const row = channelFor(r.name, r.direction, true);
     const inTestBlock = r.file === TEST_MODE_FILE && r.at > testModeAt;
     if (row.testOnly) {
       assert.ok(inTestBlock, `${r.name} is testOnly and is registered outside the TEST_MODE block`);
@@ -561,8 +584,16 @@ test("voice-stop scopes cleanup to the sender's tab and forwards the optional se
 });
 
 test("packaging: every ./module main.ts requires, directly or through another module, is in electron-builder.yml's files", () => {
-  const yml = read("electron-builder.yml");
-  const listed = new Set([...yml.matchAll(/^\s*-\s+([A-Za-z0-9_.-]+\.(?:js|ts))\s*$/gm)].map((m) => m[1]));
+  const { files } = parse(read("electron-builder.yml"));
+  const listed = new Set(files.filter(file => typeof file === "string"));
+  const optional = ["relay-owner.ts", "relay-setup-window.ts"];
+  assert.deepEqual(files.filter(file => typeof file === "object"), [
+    { from: ".stage/desktop-code", to: ".", filter: ["*.ts", "collaboration.json"] }
+  ]);
+  for (const file of optional) {
+    assert.ok(!listed.has(file), file + " is enabled through staging only");
+    listed.add(file);
+  }
   const requiredBy = (src) => [...src.matchAll(/require\("\.\/([A-Za-z0-9_-]+)(\.(?:js|ts))?"\)/g)].map((m) => m[1] + (m[2] || ".js"));
   const required = new Set();
   const pending = SOURCES.map(([, src]) => src);

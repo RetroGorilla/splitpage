@@ -1,0 +1,22 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8">
+  <title>Set up relay</title>
+  <link rel="stylesheet" href="setup.css">
+</head>
+<body>
+  <h1>Set up relay</h1>
+  <form autocomplete="off">
+    <label for="relay-address">Relay address</label>
+    <input id="relay-address" type="url" autocomplete="off" spellcheck="false" maxlength="2048" required autofocus>
+    <label for="relay-secret">Management secret</label>
+    <input id="relay-secret" type="password" autocomplete="off" maxlength="4096" required>
+    <p id="feedback" role="status"></p>
+    <div class="actions">
+      <button type="button" id="cancel">Cancel</button>
+      <button type="submit" id="save">Save</button>
+    </div>
+  </form>
+</body>
+</html>

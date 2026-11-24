@@ -113,13 +113,14 @@ export function comparePayloadPeFiles(unpackedDir, extractedDir) {
   return { problems, checked: expected.size };
 }
 
-export async function verifyInstallerPayload(setupExe, unpackedDir, arch) {
+export async function verifyInstallerPayload(setupExe, unpackedDir, arch, verifyApp = () => []) {
   const work = mkdtempSync(join(tmpdir(), "splitpage-verify-dist-"));
   try {
     const archive = extractNsisEmbeddedPayload(setupExe, join(work, "outer"), arch);
     const inner = join(work, "inner");
     await extractPackagedArchive(archive, inner);
-    return comparePayloadPeFiles(unpackedDir, inner);
+    const pe = comparePayloadPeFiles(unpackedDir, inner);
+    return { ...pe, problems: [...pe.problems, ...verifyApp(inner)] };
   } finally {
     rmSync(work, { recursive: true, force: true });
   }

@@ -5,6 +5,7 @@ import type { DesktopChannel } from "./ipc-channels.ts";
 import type { DesktopChannelRow, DesktopIpcArgs, DesktopIpcContract, DesktopIpcReceiveArgs, DesktopIpcResult } from "../shared/desktop-contract.d.ts";
 
 type PreloadChannelName<D extends DesktopChannelRow["direction"]> = Extract<DesktopChannel, { direction: D }>["name"];
+declare const SPLITPAGE_COLLAB_UI: boolean;
 
 interface PreloadElectronBoundary {
   contextBridge: { exposeInMainWorld: (name: string, value: DesktopPort & Partial<PreloadTestHooks>) => void };
@@ -29,6 +30,15 @@ interface PreloadTestHooks {
 
 
 const { contextBridge, ipcRenderer, webUtils }: PreloadElectronBoundary = require("electron");
+
+function reviveFileEntry(entry: DesktopFileEntry): DesktopFileEntry;
+function reviveFileEntry(entry: DesktopFileEntry | null): DesktopFileEntry | null;
+function reviveFileEntry(entry: DesktopFileEntry | null): DesktopFileEntry | null {
+  if (entry && entry.bytes && !(entry.bytes instanceof Uint8Array)) {
+    entry = { ...entry, bytes: new Uint8Array(entry.bytes) };
+  }
+  return entry;
+}
 
 if (location.origin === "splitpage://app") {
   const channelDirections = new Map<keyof DesktopIpcContract, Set<DesktopChannelRow["direction"]>>();
@@ -78,10 +88,10 @@ if (location.origin === "splitpage://app") {
     const cb = payload && bundleProgress.get(payload.job);
     if (cb) cb({ done: payload.done, total: payload.total });
   });
-  function bundleJob<T>(job: string, onProgress: Parameters<DesktopPort["bundleVideoFile"]>[2], run: () => Promise<T>): Promise<T> {
+  const bundleJob = <T>(job: string, onProgress: Parameters<DesktopPort["bundleVideoFile"]>[2], run: () => Promise<T>): Promise<T> => {
     if (typeof onProgress === "function") bundleProgress.set(job, onProgress);
     return run().finally(() => { bundleProgress.delete(job); });
-  }
+  };
   let bundleCarryCallback: Parameters<DesktopPort["onBundleCarry"]>[0] | null = null;
   receive("splitpage:bundle-carry", (_event, payload) => {
     if (bundleCarryCallback && payload) bundleCarryCallback(payload);
@@ -101,15 +111,6 @@ if (location.origin === "splitpage://app") {
         () => reply({ ok: false })
       );
   });
-
-  function reviveFileEntry(entry: DesktopFileEntry): DesktopFileEntry;
-  function reviveFileEntry(entry: DesktopFileEntry | null): DesktopFileEntry | null;
-  function reviveFileEntry(entry: DesktopFileEntry | null): DesktopFileEntry | null {
-    if (entry && entry.bytes && !(entry.bytes instanceof Uint8Array)) {
-      entry = { ...entry, bytes: new Uint8Array(entry.bytes) };
-    }
-    return entry;
-  }
 
   const appVersion = sendSync("splitpage:get-app-version-sync");
 
@@ -411,6 +412,16 @@ if (location.origin === "splitpage://app") {
     bridge.__testCrashRenderer = () => send("splitpage:test-crash-renderer");
   }
 
+  if (SPLITPAGE_COLLAB_UI && channelDirections.has("splitpage:relay-owner-status")) {
+    Object.assign(bridge, {
+      relayOwner: {
+        status: () => invoke("splitpage:relay-owner-status"),
+        open: () => invoke("splitpage:relay-owner-open"),
+        testConnection: () => invoke("splitpage:relay-owner-test"),
+        clear: () => invoke("splitpage:relay-owner-clear")
+      } satisfies NonNullable<DesktopPort["relayOwner"]>
+    });
+  }
   contextBridge.exposeInMainWorld("splitpageDesktop", bridge);
 
 }

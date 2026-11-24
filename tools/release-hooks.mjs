@@ -20,3 +20,12 @@ export function hookNames(text) {
 export function leakedHooks(text) {
   return [...hookNames(text).filter((name) => !STILL_IN_RELEASE.includes(name)), ...historyTestNames(text)].sort();
 }
+
+const COLLABORATION_MARKERS = [
+  "settings-collaboration", "Set up relay…", "splitpageInvitation", "splitpage://relay-setup",
+  "relayOwner", "splitpage:relay-owner-", "splitpage:relay-setup-"
+];
+
+export function leakedCollaboration(text) {
+  return COLLABORATION_MARKERS.filter(marker => text.includes(marker));
+}

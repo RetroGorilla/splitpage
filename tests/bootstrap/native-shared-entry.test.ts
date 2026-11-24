@@ -330,7 +330,7 @@ test("the release hook bundle omits the native editor entry and test peer", asyn
   const result = await build({
     entryPoints: ["src/bootstrap/wiring/shared-test.ts"], absWorkingDir: fileURLToPath(new URL("../../", import.meta.url)),
     bundle: true, write: false, format: "esm", platform: "browser", minify: true,
-    define: { SPLITPAGE_TEST_HOOKS: "false" }, logLevel: "silent"
+    define: { SPLITPAGE_TEST_HOOKS: "false", SPLITPAGE_COLLAB_UI: "false" }, logLevel: "silent"
   });
   const code = result.outputFiles[0]?.text;
   assert.ok(code);

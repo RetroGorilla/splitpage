@@ -4,7 +4,8 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { appCss } from "./tools/css-inputs.mjs";
 import { isMain } from "./tools/main-module.mjs";
-import { leakedHooks } from "./tools/release-hooks.mjs";
+import { leakedCollaboration, leakedHooks } from "./tools/release-hooks.mjs";
+import { writeDesktopBuild } from "./tools/build-preload.mjs";
 
 let esbuild;
 try {
@@ -19,18 +20,18 @@ const src = (name) => readFileSync(join(ROOT, "src", name), "utf8");
 
 const chomp = (text) => (text.endsWith("\n") ? text.slice(0, -1) : text);
 
-export function appJs(testHooks) {
+export function appJs(testHooks, collabUi = testHooks) {
   const result = esbuild.buildSync({
     entryPoints: [join(ROOT, "src", "bootstrap", "main.ts")],
     bundle: true,
     format: "iife",
-    banner: { js: testHooks ? '"use strict";\n' + scrubInvitationFragment : '"use strict";' },
+    banner: { js: collabUi ? '"use strict";\n' + scrubInvitationFragment : '"use strict";' },
     minify: true,
     charset: "utf8",
     legalComments: "none",
     absWorkingDir: ROOT,
     logLevel: "warning",
-    define: { SPLITPAGE_TEST_HOOKS: testHooks ? "true" : "false" },
+    define: { SPLITPAGE_TEST_HOOKS: String(testHooks), SPLITPAGE_COLLAB_UI: String(collabUi) },
     write: false
   });
   if (result.outputFiles.length !== 1) {
@@ -295,7 +296,7 @@ export function buildCsp(html) {
 const SW_CACHE_LINE = /^var CACHE = "(splitpage-[^"]*)";$/m;
 const swCacheName = (text) => SW_CACHE_LINE.exec(text)[1];
 
-function buildSw() {
+export function buildSw() {
   const current = readFileSync(join(ROOT, "sw.js"), "utf8");
   if (!SW_CACHE_LINE.test(current)) {
     throw new Error('sw.js: no `var CACHE = "splitpage-<version>";` line for the build to stamp');
@@ -309,9 +310,9 @@ function stripHtmlComments(shell) {
     .replace(/<!--[\s\S]*?-->/g, "");
 }
 
-export function build(testHooks = TEST_BUILD) {
+export function build(testHooks = TEST_BUILD, collabUi = testHooks) {
   let html = stripHtmlComments(src("page.html"));
-  for (const [marker, load] of [...PARTS, ["//{{APP_JS}}", () => appJs(testHooks)]]) {
+  for (const [marker, load] of [...PARTS, ["//{{APP_JS}}", () => appJs(testHooks, collabUi)]]) {
     if (!html.includes(marker)) throw new Error(`marker ${marker} missing from src/page.html`);
     html = html.split(marker).join(chomp(load()));
   }
@@ -329,6 +330,10 @@ function main() {
   if (leaked.length) {
     console.error("the release build exposes test hooks: " + leaked.join(", ") + " (see tools/release-hooks.mjs)");
     process.exit(1);
+  }
+  const collaborationLeaks = TEST_BUILD ? [] : leakedCollaboration(built);
+  if (collaborationLeaks.length) {
+    throw new Error("The release build exposes collaboration: " + collaborationLeaks.join(", "));
   }
 
   if (process.argv.includes("--check")) {
@@ -359,6 +364,7 @@ function main() {
 
   rmSync(join(ROOT, "_legacy-shared-tests.html"), { force: true });
   writeFileSync(out, built);
+  writeDesktopBuild(join(ROOT, "desktop", ".build"), TEST_BUILD);
   console.log("wrote index.html (" + VARIANT + ", " + Buffer.byteLength(built) + " bytes)");
   writeFileSync(swOut, swBuilt);
   console.log("wrote sw.js (cache " + swCacheName(swBuilt) + ")");

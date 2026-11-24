@@ -29,6 +29,7 @@ import { waitDuringLifetime } from "../startup/page-lifetime.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 
 declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
+declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
 declare let splitpageInvitation: { readonly script: string; readonly token: string } | null;
 
 const DRAFT_NOT_KEPT = "draft-not-kept";
@@ -193,7 +194,8 @@ function startSharedTestHook(): () => void {
       invitationSettled = true;
     }
   }
-  if (typeof splitpageInvitation !== "undefined" && splitpageInvitation) {
+  if (typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI &&
+      typeof splitpageInvitation !== "undefined" && splitpageInvitation) {
     const invitation = splitpageInvitation;
     splitpageInvitation = null;
     void joinInvitation(invitation);
@@ -263,7 +265,8 @@ function startSharedTestHook(): () => void {
   };
 }
 
-const startForTest = typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS ? startSharedTestHook : null;
+const startForTest = typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS ||
+  (typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI) ? startSharedTestHook : null;
 let stopHook: (() => void) | null = null;
 
 export function mountSharedSessionFeature(): void {
