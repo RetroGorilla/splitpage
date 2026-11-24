@@ -87,7 +87,7 @@ test("script and invitation refusals are observable without disclosing private d
   {
     using db = openWriter(kit.directory);
     db.prepare("INSERT INTO documents VALUES (?, ?)").run(NAME, encodeStateAsUpdate(doc));
-    db.exec("INSERT INTO scripts VALUES ('pending-script', 'pending'), ('deleted-script', 'deleted')");
+    db.exec("INSERT INTO scripts (name, status) VALUES ('pending-script', 'pending'), ('deleted-script', 'deleted')");
   }
   doc.destroy();
   const run = kit.launch();
@@ -139,7 +139,7 @@ test("revocation discards queued edits and presence, and access removals survive
   let remainingToken: string;
   {
     using db = openWriter(kit.directory);
-    remainingToken = scriptAccess(db).issue(NAME, "remaining invitation").token;
+    remainingToken = scriptAccess(db).issue(NAME, "remaining invitation", "owner").token;
   }
   const run = kit.launch();
   const url = `ws://127.0.0.1:${await run.port()}`;
@@ -418,8 +418,8 @@ test("synthetic beforeHandleMessage throw resets the connection, preserves multi
     let siblingPeerToken: string;
     {
       using db = openWriter(kit.directory);
-      healthyToken = scriptAccess(db).issue(NAME, "healthy observer").token;
-      siblingPeerToken = scriptAccess(db).issue("sibling-script", "sibling observer").token;
+      healthyToken = scriptAccess(db).issue(NAME, "healthy observer", "owner").token;
+      siblingPeerToken = scriptAccess(db).issue("sibling-script", "sibling observer", "owner").token;
     }
     kit.redact(healthyToken, siblingPeerToken);
     const run = kit.launch({ SPLITPAGE_MAX_CONNECTIONS_PER_INVITATION: "1" });
@@ -528,7 +528,7 @@ for (const mode of ["update", "returning-sync"] as const) {
       let healthyToken: string;
       {
         using db = openWriter(kit.directory);
-        healthyToken = scriptAccess(db).issue(NAME, "healthy writer").token;
+        healthyToken = scriptAccess(db).issue(NAME, "healthy writer", "owner").token;
       }
       kit.redact(healthyToken);
       const run = kit.launch({ SPLITPAGE_MAX_CONNECTIONS_PER_INVITATION: "1" });

@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { randomBytes } from "node:crypto";
+import { createHash, randomBytes } from "node:crypto";
 import { fork } from "node:child_process";
 import { EventEmitter, once } from "node:events";
 import { mkdtempSync, rmSync } from "node:fs";
@@ -10,6 +10,7 @@ import type { TestContext } from "node:test";
 import { fileURLToPath } from "node:url";
 import { WebSocket } from "ws";
 import { scriptAccess } from "../../../../collab-server/access.ts";
+import type { CreatedScript, InvitationRole, IssuedInvitation } from "../../../../collab-server/access.ts";
 import { DB_NAME, openWriter } from "../../../../collab-server/storage.ts";
 import { openNativeRelay } from "../../../../src/adapters/collab/native/relay.ts";
 import type { NativeRelayEvent } from "../../../../src/adapters/collab/native/relay.ts";
@@ -21,6 +22,10 @@ export const NAME = "test-script";
 export const ORIGIN = "splitpage://app";
 const OPTIONS = { actor: "writer", sanitize: (text: unknown) => typeof text === "string" ? text : "" };
 const ENTRY = new URL("./server-process.ts", import.meta.url);
+
+export function contentHash(bytes: Uint8Array): string {
+  return createHash("sha256").update(bytes).digest("hex");
+}
 
 export function serverHarness(t: TestContext) {
   const directory = mkdtempSync(join(tmpdir(), "splitpage-relay-"));
@@ -74,14 +79,14 @@ export function serverHarness(t: TestContext) {
     }
   }
 
-  function provision(name: string, target = directory) {
+  function provision(name: string, target = directory, role: InvitationRole = "owner") {
     using db = openWriter(target);
     const access = scriptAccess(db);
     const exists = db.prepare("SELECT 1 FROM scripts WHERE name = ?").get(name);
     if (!exists) access.register(name, "active");
     const existing = invitations.get(name);
     if (exists && existing) return existing;
-    const invitation = access.issue(name, "test invitation");
+    const invitation = access.issue(name, "test invitation", role);
     redact(invitation.token);
     invitations.set(name, invitation);
     return invitation;
@@ -134,13 +139,15 @@ export function serverHarness(t: TestContext) {
         if (secret !== null) headers.set("Authorization", `Bearer ${secret}`);
         return fetch(`http://127.0.0.1:${await run.port()}/api/${path}`, { ...init, headers, signal });
       },
-      async createScript(creationId: string, state: Uint8Array, secret = managementSecret) {
+      async createScriptWithCredentials(creationId: string, state: Uint8Array, secret = managementSecret): Promise<CreatedScript> {
         const reply = await run.owner("scripts", {
-          method: "POST", headers: { "Idempotency-Key": creationId }, body: Buffer.from(state)
+          method: "POST",
+          headers: { "Idempotency-Key": creationId, "Splitpage-Content-SHA256": contentHash(state) },
+          body: Buffer.from(state)
         }, secret);
         assert.equal(reply.status, 200);
         const raw = await reply.text();
-        assert.equal(containsSensitive(raw), false, "script creation response must not disclose credentials");
+        assert.equal(containsSensitive(raw), false, "script creation response must not disclose prior credentials");
         let parsed: unknown;
         try {
           parsed = JSON.parse(raw);
@@ -150,14 +157,33 @@ export function serverHarness(t: TestContext) {
         const record = typeof parsed === "object" && parsed !== null && !Array.isArray(parsed)
           ? parsed as Record<string, unknown>
           : null;
-        const keys = record ? Object.keys(record) : [];
+        const keys = record ? Object.keys(record).sort() : [];
         const scriptId = record?.scriptId;
+        const hasId = typeof scriptId === "string" && /^[a-f0-9-]{36}$/.test(scriptId);
+        const isIssued = (value: unknown, role: InvitationRole): value is IssuedInvitation => {
+          if (typeof value !== "object" || value === null || Array.isArray(value)) return false;
+          const entry = value as Record<string, unknown>;
+          return Object.keys(entry).sort().join(",") === "id,role,token" &&
+            typeof entry.id === "string" && entry.id.length > 0 &&
+            entry.role === role &&
+            typeof entry.token === "string" && /^[a-zA-Z0-9_-]{43}$/.test(entry.token);
+        };
+        if (keys.join(",") === "scriptId" && hasId) {
+          return { scriptId };
+        }
         assert.equal(
-          keys.length === 1 && keys[0] === "scriptId" && typeof scriptId === "string" && /^[a-f0-9-]{36}$/.test(scriptId),
+          keys.join(",") === "guest,owner,scriptId" && hasId &&
+          isIssued(record?.owner, "owner") && isIssued(record?.guest, "guest"),
           true,
-          "script creation response must contain only a valid scriptId"
+          "script creation response must contain scriptId and optional owner/guest credentials"
         );
-        return scriptId as string;
+        const owner = record?.owner as IssuedInvitation;
+        const guest = record?.guest as IssuedInvitation;
+        redact(owner.token, guest.token);
+        return { scriptId: scriptId as string, owner, guest };
+      },
+      async createScript(creationId: string, state: Uint8Array, secret = managementSecret) {
+        return (await run.createScriptWithCredentials(creationId, state, secret)).scriptId;
       },
       async provision(name: string) {
         child.send(`provision:${name}`);

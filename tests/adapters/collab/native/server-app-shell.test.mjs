@@ -22,7 +22,11 @@ test("the relay serves the shell and the gated app replaces the invite history e
   const run = kit.launch({ SPLITPAGE_APP_DIR: kit.directory, SPLITPAGE_DEPLOYMENT_ID: deployment });
   const origin = "http://127.0.0.1:" + await run.port();
   const scriptId = await run.createScript(randomUUID(), state);
-  const issued = await run.owner(`scripts/${scriptId}/invitations`, { method: "POST", body: "Browser fixture" });
+  const issued = await run.owner(`scripts/${scriptId}/invitations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ role: "guest", label: "Browser fixture" })
+  });
   assert.equal(issued.status, 201);
   const { token } = await issued.json();
   const path = "/?join=" + scriptId;

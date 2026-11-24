@@ -136,7 +136,11 @@ for (const variant of ["accepted", "refused", "pictures", "replacement"]) test(v
     SPLITPAGE_DEPLOYMENT_ID: deployment, SPLITPAGE_APP_DIR: shell, SPLITPAGE_TEST_REPORT_AUTH: "1"
   });
   const script = await run.createScript(randomUUID(), state);
-  const invitation = await run.owner(`scripts/${script}/invitations`, { method: "POST", body: "Browser fixture" });
+  const invitation = await run.owner(`scripts/${script}/invitations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ role: "guest", label: "Browser fixture" })
+  });
   assert.equal(invitation.status, 201);
   const { id, token } = await invitation.json();
   if (!accepted) assert.equal((await run.owner("invitations/" + id, { method: "DELETE" })).status, 204);
