@@ -1,8 +1,8 @@
 import { SAVED_JUST_NOW_MS, savedStatusText, savedWhenText } from "../../../shared/clock.ts";
-import { flowSaveStatus, saveStatus } from "../../application/save/status.ts";
+import { flowSaveStatus, saveStatus, sharedSaveStatus } from "../../application/save/status.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
 import type { SaveStatusPorts, SaveStatusListeners, SaveStatusMount } from "./ports.ts";
-import type { SaveStatusInput, SaveStatusLine } from "../../application/save/status.ts";
+import type { SaveStatusInput, SaveStatusLine, SharedSaveStatusView } from "../../application/save/status.ts";
 import type { LocalFileHandle } from "../../application/files/local-file-access.ts";
 
 type MutableSaveStatusLine = { -readonly [K in keyof SaveStatusLine]: SaveStatusLine[K] };
@@ -44,6 +44,9 @@ function saveStatusListeners(): SaveStatusListeners {
     preference: function (change) {
       const name = (ports as SaveStatusPorts).preferences.nameOf(change.key);
       if (name === "clock" || name === "autosave") updateSaveStatus();
+    },
+    collaboration: function () {
+      updateSaveStatus();
     }
   };
 }
@@ -77,8 +80,76 @@ let savedAt = 0;
 let lastViewText = "";
 let flowProblem = "";
 let justNowTimer: ReturnType<typeof setTimeout> | null = null;
+let wasShared = false;
+let lastSharedViewKey = "";
+
+function paintWriterCollabStatus(shared: SharedSaveStatusView | null) {
+  const wrBtn = document.getElementById("writer-collab-status") as HTMLButtonElement | null;
+  if (!wrBtn) return;
+  wrBtn.hidden = !shared;
+  if (!shared) {
+    wrBtn.removeAttribute("data-status");
+    wrBtn.removeAttribute("data-state");
+    wrBtn.removeAttribute("data-actionable");
+    wrBtn.disabled = true;
+    return;
+  }
+  const labelEl = wrBtn.querySelector(".writer-collab-label");
+  if (labelEl) setText(labelEl, shared.label);
+  else setText(wrBtn, shared.label);
+  wrBtn.setAttribute("data-status", shared.label);
+  wrBtn.setAttribute("data-state", shared.state);
+  wrBtn.setAttribute("data-actionable", String(shared.actionable));
+  wrBtn.disabled = !shared.actionable;
+  wrBtn.setAttribute("aria-label", shared.label + (shared.actionable ? ". Open recovery options" : ""));
+  wrBtn.title = shared.title + (shared.actionable ? " Click to see recovery options." : "");
+}
+
+function paintSharedSaveStatus(shared: SharedSaveStatusView, dirty: boolean) {
+  const viewKey = `${shared.label}\0${shared.state}\0${shared.actionable}\0${shared.title}\0${dirty}`;
+  if (wasShared && viewKey === lastSharedViewKey) return;
+  wasShared = true;
+  lastSharedViewKey = viewKey;
+  if (justNowTimer) {
+    clearTimeout(justNowTimer);
+    justNowTimer = null;
+  }
+  savedAt = 0;
+  lastViewText = shared.label;
+  flowProblem = "";
+  const statusEl = document.getElementById("save-status");
+  if (statusEl) {
+    statusEl.hidden = false;
+    setText(statusEl, shared.label);
+    statusEl.title = shared.title;
+    statusEl.className = "save-status is-" + shared.state;
+  }
+  const btn = document.getElementById("btn-save") as HTMLButtonElement | null;
+  if (btn) {
+    setText(btn, shared.label);
+    btn.setAttribute("data-status", shared.label);
+    btn.setAttribute("data-dirty", String(dirty));
+    btn.setAttribute("data-actionable", String(shared.actionable));
+    btn.setAttribute("data-state", shared.state);
+    btn.setAttribute("data-shared", "true");
+    btn.disabled = !shared.actionable;
+    btn.setAttribute("aria-label", shared.label + (shared.actionable ? ". Open recovery options" : ""));
+    btn.title = shared.title + (shared.actionable ? " Click to see recovery options." : "");
+  }
+  paintWriterCollabStatus(shared);
+}
 
 function updateSaveStatus() {
+  const collab = (ports as SaveStatusPorts).collaboration.snapshot();
+  if (collab.active) {
+    paintSharedSaveStatus(sharedSaveStatus(collab), collab.localPending || collab.localWriteError !== null);
+    return;
+  }
+  if (wasShared) {
+    wasShared = false;
+    lastSharedViewKey = "";
+    paintWriterCollabStatus(null);
+  }
   const input = saveStatusInput();
   const line = saveStatus(input).line;
   const view = line ? Object.assign({}, line) : null;
@@ -98,6 +169,7 @@ function updateSaveStatus() {
   });
   const btn = document.getElementById("btn-save") as HTMLButtonElement | null;
   if (btn) {
+    if (btn.hasAttribute("data-shared")) btn.removeAttribute("data-shared");
     if (!input.busy && !input.dirty) flowProblem = "";
     if (input.halted) flowProblem = input.halted;
     const flow = flowSaveStatus({ ...input, halted: input.halted || flowProblem });
@@ -152,6 +224,8 @@ export function mountSaveStatus(nextPorts: SaveStatusPorts) {
       savedAt = 0;
       lastViewText = "";
       flowProblem = "";
+      wasShared = false;
+      lastSharedViewKey = "";
       ports = null;
     }
   };

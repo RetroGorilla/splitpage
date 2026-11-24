@@ -279,6 +279,30 @@
     </div>
   </div>
 
+  <div class="notice notice-save-error" id="collab-access-banner" hidden>
+    <div class="notice-body">
+      <strong>Access removed.</strong>
+      <span id="collab-access-text"></span>
+    </div>
+    <div class="notice-actions">
+      <button type="button" class="btn btn-accent" id="collab-access-export">Export a copy</button>
+      <button type="button" class="btn" id="collab-access-leave">Leave</button>
+      <button type="button" class="notice-close" id="collab-access-dismiss" aria-label="Dismiss">×</button>
+    </div>
+  </div>
+
+  <div class="notice notice-save-error" id="collab-size-banner" hidden>
+    <div class="notice-body">
+      <strong>Too large to sync.</strong>
+      <span id="collab-size-text"></span>
+    </div>
+    <div class="notice-actions">
+      <button type="button" class="btn btn-accent" id="collab-size-export">Export a copy</button>
+      <button type="button" class="btn" id="collab-size-leave">Leave</button>
+      <button type="button" class="notice-close" id="collab-size-dismiss" aria-label="Dismiss">×</button>
+    </div>
+  </div>
+
   <div class="notice notice-merge" id="merge-banner" hidden>
     <div class="notice-body">
       <strong>Your changes were merged.</strong>
@@ -550,6 +574,7 @@
       <span><b id="wr-words">0</b> words</span>
       <span>⏱ <b id="wr-runtime">0:00</b></span>
     </span>
+    <button class="writer-collab-status" id="writer-collab-status" type="button" hidden><span class="writer-collab-dot" aria-hidden="true"></span><span class="writer-collab-label"></span></button>
     <button class="btn" id="wr-close" type="button" title="Close the writer (Esc)" aria-keyshortcuts="Escape">Close</button>
   </div>
   <div class="writer-bar">

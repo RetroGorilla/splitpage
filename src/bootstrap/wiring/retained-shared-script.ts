@@ -1,13 +1,17 @@
 import { createBrowserNativeLocalStore } from "../../adapters/collab/native/browser-local-store.ts";
 import { createDesktopNativeLocalStore } from "../../adapters/collab/native/desktop-local-store.ts";
-import type { NativeInvitationStage, NativeLocalStoreOpen } from "../../adapters/collab/native/local-store.ts";
+import type { NativeInvitationStage, NativeLocalStoreOpen, NativeLocalStoreReceipt } from "../../adapters/collab/native/local-store.ts";
 import { applyNativePeerUpdate } from "../../adapters/collab/native/peer-update.ts";
 import { openNativeSession } from "../../adapters/collab/native/session.ts";
 import { openNativeRelay } from "../../adapters/collab/native/relay.ts";
+import type { NativeRelayEvent } from "../../adapters/collab/native/relay.ts";
 import { readInvitationSnapshot } from "../../adapters/collab/native/invitation-snapshot.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
+import { isPermanentCollaborationRefusal, localWriteErrorMessage } from "../../application/collaboration/state.ts";
+import type { CollaborationLocalWriteError } from "../../application/collaboration/state.ts";
 import { sanitizeHtml } from "../richtext.ts";
 import { guardUnload, waitDuringLifetime } from "../startup/page-lifetime.ts";
+import { collaborationState, setSharedRetryLocalWrite } from "./collaboration-owner.ts";
 import { notifyDesktopDocumentState, trackSharedDesktopUnsaved } from "./desktop-owners.ts";
 import { notices } from "./ports/effects.ts";
 import { bindNativeEditor } from "./native-shared-session.ts";
@@ -20,6 +24,7 @@ type RetainedReplica = Extract<NativeLocalStoreOpen, { kind: "opened" }>;
 const JOIN_TIMEOUT_MS = 15_000;
 let localCopy: RetainedReplica | null = null;
 const closingCopies = new Map<string, RetainedReplica["closed"]>();
+let activeSessionToken = 0;
 
 function trackClosing(name: string, replica: RetainedReplica): void {
   closingCopies.set(name, replica.closed);
@@ -39,6 +44,103 @@ export interface RetainedSharedScript {
   readonly connect?: (replica: RetainedReplica, token: string) => () => void;
 }
 
+export function createRetainedPictureBinding(options: {
+  readonly pictureOrigin: string;
+  readonly script: string;
+  readonly token: string;
+  readonly sessionCurrent: () => boolean;
+  readonly onLocalError: (error: CollaborationLocalWriteError | null) => void;
+  readonly onRelayConnected?: ((connected: boolean) => void) | undefined;
+}) {
+  let pictures: ReturnType<typeof bindSharedPictures> | undefined;
+  let stopCounts: (() => void) | undefined;
+  let stopStorage: (() => void) | undefined;
+  let started = false;
+  let connected = false;
+  let permanentlyStopped = false;
+
+  function detach(): void {
+    pictures?.stop();
+    pictures = undefined;
+    stopCounts?.();
+    stopStorage?.();
+    stopCounts = undefined;
+    stopStorage = undefined;
+    if (options.sessionCurrent()) options.onLocalError(null);
+  }
+
+  function attach(next: ReturnType<typeof bindSharedPictures>): void {
+    if (!options.sessionCurrent() || permanentlyStopped) {
+      next.stop();
+      return;
+    }
+    pictures = next;
+    stopCounts = next.subscribeCounts(counts => {
+      if (options.sessionCurrent()) collaborationState().setPictures(counts);
+    });
+    stopStorage = next.subscribeStorageError(failed => {
+      if (!options.sessionCurrent()) return;
+      options.onLocalError(failed ? { reason: "io", message: localWriteErrorMessage("io"), code: "io" } : null);
+    });
+    collaborationState().setPictures(next.counts());
+    options.onLocalError(next.storageError() ? { reason: "io", message: localWriteErrorMessage("io"), code: "io" } : null);
+    if (started) next.activate();
+  }
+
+  return {
+    attach,
+    detach,
+    bindCopy(copy: Parameters<typeof bindSharedPictures>[0], signal?: AbortSignal) {
+      const bound = bindSharedPictures(copy, options.pictureOrigin, options.script, options.token, signal);
+      attach(bound);
+      return bound;
+    },
+    activate() {
+      started = true;
+      pictures?.activate();
+      if (pictures && options.sessionCurrent()) collaborationState().setPictures(pictures.counts());
+    },
+    reconnect() { pictures?.reconnect(); },
+    retryStorage() { pictures?.retryStorage(); },
+    finishPreparation() { pictures?.finishPreparation(); },
+    onRelayEvent(event: NativeRelayEvent) {
+      if (!options.sessionCurrent()) return;
+      if (event.kind === "status") {
+        if (permanentlyStopped) return;
+        if (event.status.connected && !connected) pictures?.reconnect();
+        connected = event.status.connected;
+        collaborationState().setRelay(event.status);
+        options.onRelayConnected?.(event.status.connected && event.status.firstSyncDone);
+      } else if (event.kind === "temporary-refusal") {
+        options.onRelayConnected?.(false);
+      } else if (event.kind === "merge-too-large") {
+        permanentlyStopped = true;
+        collaborationState().setMergeTooLarge(event.message);
+        detach();
+        options.onRelayConnected?.(false);
+      } else if (event.kind === "authentication-failed") {
+        const permanent = isPermanentCollaborationRefusal(event.reason);
+        if (permanent) {
+          permanentlyStopped = true;
+          collaborationState().setRefusal(event.reason);
+        }
+        detach();
+        options.onRelayConnected?.(false);
+      } else if (event.kind === "session-replaced") {
+        detach();
+        options.onRelayConnected?.(false);
+        if (!permanentlyStopped) {
+          attach(bindSharedPictures({ session: event.session }, options.pictureOrigin, options.script, options.token));
+        }
+      } else {
+        permanentlyStopped = true;
+        detach();
+        options.onRelayConnected?.(false);
+      }
+    }
+  };
+}
+
 export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry: RetainedSharedScript, cancellation?: AbortSignal): Promise<SharedSwitchOutcome> {
   if (sharedSession()) return { ok: false, reason: SHARED_ALREADY };
   const identity = /^[A-Za-z0-9_-]{1,64}(?![\s\S])/;
@@ -50,6 +152,9 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
   let staged: NativeInvitationStage | undefined;
   let preparation: Promise<string | null> | undefined;
   let active = false;
+  const sessionToken = ++activeSessionToken;
+  let sessionDisposed = false;
+  const sessionCurrent = () => !sessionDisposed && sessionToken === activeSessionToken;
   let stopConnection: (() => void) | undefined;
   let pictures: ReturnType<typeof bindSharedPictures> | undefined;
   let state = entry.invitation?.state;
@@ -154,32 +259,43 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
           (!state || !applyNativePeerUpdate(replica.session, state) || !replica.session.isStoredScript())) {
         throw new Error("The invitation did not contain a shared script.");
       }
+      let docWriteError: CollaborationLocalWriteError | null = null;
+      let pictureWriteError: CollaborationLocalWriteError | null = null;
+      const syncLocalError = () => {
+        if (!sessionCurrent()) return;
+        collaborationState().setLocalWriteError(docWriteError ?? pictureWriteError);
+      };
+      const pictureBinding = pictureOrigin
+        ? createRetainedPictureBinding({
+          pictureOrigin,
+          script: entry.script,
+          token,
+          sessionCurrent,
+          onLocalError: error => { pictureWriteError = error; syncLocalError(); },
+          onRelayConnected: entry.onRelayConnected
+        })
+        : null;
       try {
-        if (entry.relayUrl && pictureOrigin) {
-          pictures = bindSharedPictures(replica, pictureOrigin, entry.script, token);
-          let connected = false;
+        if (entry.relayUrl && pictureBinding) {
+          pictureBinding.bindCopy(replica);
           const relay = openNativeRelay(replica.session, {
             url: entry.relayUrl, name: entry.script, token, reopen: replica.reopen,
             sessionOptions: { actor: ports.editor(), sanitize: sanitizeHtml },
-            onEvent(event) {
-              if (event.kind === "status") {
-                if (event.status.connected && !connected) pictures?.reconnect();
-                connected = event.status.connected;
-                entry.onRelayConnected?.(event.status.connected && event.status.firstSyncDone);
-              } else {
-                if (event.kind !== "temporary-refusal") pictures?.stop();
-                entry.onRelayConnected?.(false);
-              }
-            }
+            onEvent: pictureBinding.onRelayEvent
           });
           stopConnection = () => { relay.close(); entry.onRelayConnected?.(false); };
         } else {
-          if (!pictures && pictureOrigin) pictures = bindSharedPictures(replica, pictureOrigin, entry.script, token);
+          if (pictures && pictureBinding) {
+            pictureBinding.attach(pictures);
+            pictures = undefined;
+          } else if (pictureBinding) {
+            pictureBinding.bindCopy(replica);
+          }
           stopConnection ??= entry.connect?.(replica, token);
         }
       }
       catch { throw new Error("The retained connection could not start."); }
-      pictures?.finishPreparation();
+      pictureBinding?.finishPreparation();
       const { backend } = bindNativeEditor(ports, replica.session, failedClose);
       const pending = () => {
         if (!replica.hasUnstoredChanges()) return false;
@@ -191,34 +307,85 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
       let stopChanges: (() => void) | undefined;
       let stopReceipts: (() => void) | undefined;
       let wasDirty = false;
-      const notify = () => {
+      let pendingSyncQueued = false;
+      const notifyDesktop = () => {
         if (!stopDesktop || wasDirty === replica.hasUnstoredChanges()) return;
         wasDirty = replica.hasUnstoredChanges();
         notifyDesktopDocumentState();
       };
+      const syncLocalPending = () => {
+        pendingSyncQueued = false;
+        if (!sessionCurrent()) return;
+        collaborationState().setLocalPending(replica.hasUnstoredChanges());
+        notifyDesktop();
+      };
+      const handleReceipt = (receipt: NativeLocalStoreReceipt) => {
+        if (!sessionCurrent()) return;
+        if (receipt.kind === "stored") {
+          docWriteError = null;
+          collaborationState().setLocalPending(replica.hasUnstoredChanges());
+          syncLocalError();
+        } else if (receipt.operation !== "compact" || replica.hasUnstoredChanges()) {
+          collaborationState().setLocalPending(replica.hasUnstoredChanges());
+          docWriteError = {
+            reason: receipt.reason,
+            message: localWriteErrorMessage(receipt.reason),
+            code: receipt.reason
+          };
+          syncLocalError();
+        }
+        notifyDesktop();
+      };
+      const stopActive = () => {
+        stop();
+        pictureBinding?.detach();
+      };
       const retained: SharedEditorBackend = { ...backend,
         beforeDocumentSwitch: () => pending() ? "shared-copy-unsaved" : null,
-        beforeExplicitLeave: stop,
+        beforeExplicitLeave: stopActive,
         start() {
-          pictures?.activate();
+          pictureBinding?.activate();
           backend.start();
           stopUnload = guardUnload(window, pending);
-          if (desktop) {
-            stopDesktop = trackSharedDesktopUnsaved(replica.hasUnstoredChanges);
-            stopChanges = replica.session.subscribe(() => { queueMicrotask(notify); });
-            stopReceipts = replica.subscribe(notify);
-            notify();
-          }
+          setSharedRetryLocalWrite(async () => {
+            if (!sessionCurrent() || replica.session.isClosingOrClosed()) return;
+            docWriteError = null;
+            pictureWriteError = null;
+            collaborationState().setLocalWriteError(null);
+            if (replica.hasUnstoredChanges()) {
+              collaborationState().setLocalPending(true);
+              try {
+                handleReceipt(await replica.flush());
+              } catch {
+                if (!sessionCurrent()) return;
+                docWriteError = { reason: "io", message: localWriteErrorMessage("io"), code: "io" };
+                collaborationState().setLocalPending(replica.hasUnstoredChanges());
+                syncLocalError();
+              }
+            }
+            pictureBinding?.retryStorage();
+          });
+          if (desktop) stopDesktop = trackSharedDesktopUnsaved(replica.hasUnstoredChanges);
+          stopChanges = replica.session.subscribe(() => {
+            if (pendingSyncQueued) return;
+            pendingSyncQueued = true;
+            queueMicrotask(syncLocalPending);
+          });
+          stopReceipts = replica.subscribe(handleReceipt);
+          syncLocalPending();
         },
         dispose(attempt) {
+          sessionDisposed = true;
           if (localCopy === replica) localCopy = null;
           trackClosing(name, replica);
+          attempt(() => { if (sessionToken === activeSessionToken) setSharedRetryLocalWrite(null); });
+          attempt(() => pictureBinding?.detach());
           attempt(() => stopUnload?.());
           attempt(() => stopChanges?.());
           attempt(() => stopReceipts?.());
           attempt(() => stopDesktop?.());
           stopDesktop = undefined;
-          attempt(stop);
+          attempt(stopActive);
           backend.dispose(attempt);
         }
       };
@@ -254,4 +421,8 @@ export async function leaveRetainedSharedScript(): Promise<SharedSwitchOutcome> 
 
 export function retainedSharedScriptActive(): boolean {
   return localCopy !== null && sharedSession();
+}
+
+export async function leaveActiveSharedSession(): Promise<SharedSwitchOutcome> {
+  return retainedSharedScriptActive() ? leaveRetainedSharedScript() : leaveRunningSharedSession();
 }

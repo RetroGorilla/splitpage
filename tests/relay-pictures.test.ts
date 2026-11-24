@@ -32,8 +32,8 @@ async function fixture(extraEnv: Record<string, string> = {}) {
     }, "127.0.0.1");
     relay.registerScript("first", "active");
     relay.registerScript("second", "active");
-    const first = relay.issueInvitation("first", "first");
-    const second = relay.issueInvitation("second", "second");
+    const first = relay.issueInvitation("first", "first", "guest");
+    const second = relay.issueInvitation("second", "second", "guest");
     const base = "http://" + relay.URL;
     const pictures = join(directory, "pictures");
     const url = (script = "first", sha = hash(png)) => base + "/api/scripts/" + script + "/pictures/" + sha;
@@ -431,7 +431,7 @@ function seedInvitation(directory: string, script: string) {
   using db = openWriter(directory);
   const access = scriptAccess(db);
   access.register(script, "active");
-  return access.issue(script, "test invitation");
+  return access.issue(script, "test invitation", "guest");
 }
 
 test("the relay refuses an upload revoked in flight and keeps private HTTP values out of logs", async (t) => {

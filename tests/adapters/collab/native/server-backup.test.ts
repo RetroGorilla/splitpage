@@ -143,7 +143,9 @@ test("online backup retains verified bytes for each script and restores without 
   const creationId = randomUUID();
   const deletedScript = await live.createScript(randomUUID(), seed);
   assert.equal((await live.owner(`scripts/${deletedScript}`, { method: "DELETE" })).status, 204);
-  const createdScript = await live.createScript(creationId, seed);
+  const createdBeforeBackup = await live.createScriptWithCredentials(creationId, seed);
+  assert.ok(createdBeforeBackup.owner && createdBeforeBackup.guest);
+  const createdScript = createdBeforeBackup.scriptId;
   const writer = kit.copy(port, { kind: "state", state: seed });
   const second = kit.copy(port, { kind: "state", state: seed }, "second-script");
   const peer = kit.copy(port);
@@ -198,17 +200,30 @@ test("online backup retains verified bytes for each script and restores without 
   assert.deepEqual(storedState(freshDirectory, NAME), original);
   assert.deepEqual(storedState(freshDirectory, "second-script"), secondOriginal);
   const restored = kit.launch({ SPLITPAGE_DATA_DIR: freshDirectory });
-  const retry = await restored.owner("scripts", {
-    method: "POST", headers: { "Idempotency-Key": creationId }
-  });
-  assert.equal(retry.status, 200);
-  assert.deepEqual(await retry.json(), { scriptId: createdScript });
+  const retryPayload = await restored.createScriptWithCredentials(creationId, seed);
+  assert.equal(retryPayload.scriptId, createdScript);
+  assert.ok(retryPayload.owner && retryPayload.guest);
+  assert.notEqual(retryPayload.owner.id, createdBeforeBackup.owner.id);
+  assert.notEqual(retryPayload.owner.token, createdBeforeBackup.owner.token);
+  assert.notEqual(retryPayload.guest.id, createdBeforeBackup.guest.id);
+  assert.notEqual(retryPayload.guest.token, createdBeforeBackup.guest.token);
   assert.deepEqual(storedState(freshDirectory, createdScript), seed);
   const portAfterRestore = await restored.port();
+  const retriedGuest = kit.copy(portAfterRestore, { kind: "empty" }, createdScript, retryPayload.guest.token);
+  await kit.until(() => (retriedGuest.relay.status().firstSyncDone && retriedGuest.text() === "word") || undefined);
+  retriedGuest.close();
+  const previousCreated = kit.copy(portAfterRestore, { kind: "empty" }, createdScript, createdBeforeBackup.guest.token);
+  const previousCreatedRefusal = await kit.until(() => previousCreated.events.find(event => event.kind === "authentication-failed"));
+  assert.equal(previousCreatedRefusal.reason, "invitation-revoked");
+  previousCreated.close();
   const previous = kit.copy(portAfterRestore);
   const refusal = await kit.until(() => previous.events.find(event => event.kind === "authentication-failed"));
   assert.equal(refusal.reason, "invitation-revoked");
-  const issue = { method: "POST", body: "Restore drill" };
+  const issue = {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ role: "guest", label: "Restore drill" })
+  };
   assert.equal((await restored.owner(`scripts/${deletedScript}/invitations`, issue)).status, 409);
   const issued = await restored.owner(`scripts/${NAME}/invitations`, issue);
   assert.equal(issued.status, 201);
@@ -243,7 +258,8 @@ test("backup verification rejects changed or missing access records without expo
   const { id } = kit.provision(NAME);
   kit.provision("second-script");
   using source = openWriter(kit.directory);
-  source.prepare("INSERT INTO creations VALUES (?, ?)").run(randomUUID(), NAME);
+  const creationId = randomUUID();
+  source.prepare("INSERT INTO creations (id, script, content_hash) VALUES (?, ?, ?)").run(creationId, NAME, Buffer.alloc(32, 7));
   const copyDirectory = join(kit.directory, "copy");
   mkdirSync(copyDirectory);
   const path = join(copyDirectory, DB_NAME);
@@ -253,12 +269,16 @@ test("backup verification rejects changed or missing access records without expo
 
   for (const [sql, args, message] of [
     ["UPDATE scripts SET status = 'deleted' WHERE name = ?", [NAME], "scripts differ"],
-    ["INSERT INTO scripts VALUES (?, 'pending')", ["extra-script"], "scripts differ"],
+    ["UPDATE scripts SET untouched = 1 WHERE name = ?", [NAME], "scripts differ"],
+    ["INSERT INTO scripts (name, status) VALUES (?, 'pending')", ["extra-script"], "scripts differ"],
     ["UPDATE invitations SET revoked = 1 WHERE id = ?", [id], "invitations differ"],
     ["UPDATE invitations SET label = 'different' WHERE id = ?", [id], "invitations differ"],
+    ["UPDATE invitations SET role = 'guest' WHERE id = ?", [id], "invitations differ"],
+    ["UPDATE invitations SET creation_id = ? WHERE id = ?", [creationId, id], "invitations differ"],
     ["UPDATE invitations SET script = 'second-script' WHERE id = ?", [id], "invitations differ"],
     ["UPDATE invitations SET token_hash = randomblob(32) WHERE id = ?", [id], "invitations differ"],
     ["UPDATE creations SET script = 'second-script'", [], "creations differ"],
+    ["UPDATE creations SET content_hash = randomblob(32)", [], "creations differ"],
     ["DELETE FROM creations", [], "is missing creations"],
     ["DELETE FROM invitations", [], "is missing invitations"]
   ] as const) {
@@ -406,3 +426,88 @@ test("backup publishes marker only after durable bundle sync, fails safely on ma
     assert.equal(lastBackupTime(kit.directory), null);
   }
 );
+
+test("backup and restore round trip preserves invitation roles and starts with every invitation revoked", { timeout: 30_000 }, async t => {
+  const kit = serverHarness(t);
+  const primary = join(kit.directory, "primary");
+  const live = kit.launch({ SPLITPAGE_DATA_DIR: primary });
+  const seed = seedRelaySession();
+  const state = seed.encodeState();
+  seed.close();
+  const creationId = randomUUID();
+  const created = await live.createScriptWithCredentials(creationId, state);
+  assert.ok(created.owner && created.guest);
+  const secondOwnerReply = await live.owner(`scripts/${created.scriptId}/invitations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ role: "owner", label: "Second Desktop" })
+  });
+  assert.equal(secondOwnerReply.status, 201);
+  const secondOwner = await secondOwnerReply.json() as { id: string; token: string; role: string };
+  assert.equal(secondOwner.role, "owner");
+
+  const archiveName = await backupRelay({ SPLITPAGE_DATA_DIR: primary });
+  const archive = join(primary, "backups", archiveName);
+  assert.deepEqual(await live.stop("clean"), { code: 0, exitSignal: null });
+
+  const restoredDir = join(kit.directory, "restored-roles");
+  await restoreRelay(archive, restoredDir);
+
+  {
+    using restoredDb = new DatabaseSync(join(restoredDir, DB_NAME), { readOnly: true });
+    const rows = restoredDb.prepare(
+      "SELECT id, role, revoked, creation_id FROM invitations WHERE script = ? ORDER BY id"
+    ).all(created.scriptId).map(row => ({
+      id: String(row.id),
+      role: String(row.role),
+      revoked: Number(row.revoked),
+      creation_id: typeof row.creation_id === "string" ? row.creation_id : null
+    }));
+    const byId = new Map(rows.map(row => [row.id, row]));
+    assert.deepEqual(byId.get(created.owner.id), {
+      id: created.owner.id, role: "owner", revoked: 1, creation_id: creationId
+    });
+    assert.deepEqual(byId.get(created.guest.id), {
+      id: created.guest.id, role: "guest", revoked: 1, creation_id: creationId
+    });
+    assert.deepEqual(byId.get(secondOwner.id), {
+      id: secondOwner.id, role: "owner", revoked: 1, creation_id: null
+    });
+  }
+
+  const restored = kit.launch({ SPLITPAGE_DATA_DIR: restoredDir });
+  const listReply = await restored.owner(`scripts/${created.scriptId}/invitations`);
+  assert.equal(listReply.status, 200);
+  const listed = await listReply.json() as { id: string; label: string; role: string; state: string }[];
+  const expected = [
+    { id: created.owner.id, label: "Owner", role: "owner", state: "revoked" },
+    { id: created.guest.id, label: "Guest", role: "guest", state: "revoked" },
+    { id: secondOwner.id, label: "Second Desktop", role: "owner", state: "revoked" }
+  ].sort((a, b) => (a.id < b.id ? -1 : a.id > b.id ? 1 : 0));
+  assert.deepEqual(listed, expected);
+
+  assert.equal((await restored.owner(`scripts/${created.scriptId}/reset`, { method: "POST" }, created.owner.token)).status, 403);
+  assert.equal((await restored.owner(`scripts/${created.scriptId}`, { method: "DELETE" }, secondOwner.token)).status, 403);
+  const port = await restored.port();
+  for (const revokedToken of [created.owner.token, created.guest.token, secondOwner.token]) {
+    const attempt = kit.copy(port, { kind: "empty" }, created.scriptId, revokedToken);
+    const refusal = await kit.until(() => attempt.events.find(event => event.kind === "authentication-failed"));
+    assert.equal(refusal.reason, "invitation-revoked");
+  }
+
+  const freshOwnerReply = await restored.owner(`scripts/${created.scriptId}/invitations`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ role: "owner", label: "Recovered Owner" })
+  });
+  assert.equal(freshOwnerReply.status, 201);
+  const freshOwner = await freshOwnerReply.json() as { id: string; token: string; role: string };
+  assert.equal(freshOwner.role, "owner");
+  const resetAfterRestore = await restored.owner(`scripts/${created.scriptId}/reset`, { method: "POST" }, freshOwner.token);
+  assert.equal(resetAfterRestore.status, 200);
+  const freshGuest = await resetAfterRestore.json() as { id: string; token: string; role: string };
+  assert.equal(freshGuest.role, "guest");
+  const syncedGuest = kit.copy(port, { kind: "empty" }, created.scriptId, freshGuest.token);
+  await kit.until(() => (syncedGuest.relay.status().firstSyncDone && syncedGuest.text() === "word") || undefined);
+  assert.deepEqual(await restored.stop("clean"), { code: 0, exitSignal: null });
+});

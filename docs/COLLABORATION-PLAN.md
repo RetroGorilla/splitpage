@@ -37,6 +37,7 @@ Decision 19 in short: on 2026-11-20 the owner reviewed the server-stop results a
 ## 1 Purpose and decisions
 
 > Superseded in this table on 2026-11-19: *Server storage* (decision 19) and *Narration schema* (decision 1). See the update above.
+> Superseded in this table by Stage 4 decision 2: *Access* — one guest link per script and a separate owner credential replace individually named invitations.
 
 Build collaboration for a trusted group of two to six people. A participant can open a shared script when nobody else is online, edit with others, keep working through a connection outage, and export an independent file. Existing standalone editing and the `.splitpage` format remain supported.
 
@@ -65,6 +66,8 @@ Words follow the [glossary](GLOSSARY.md). A **beat** is a row; a **scene** group
 ## 2 Product contract
 
 ### Participants and ownership
+
+> Superseded in part by Stage 4 decision 2: one guest link per script and a separate owner credential replace individually named invitations; reset and delete also accept the script's owner credential.
 
 Only the deployment owner can create instances, issue or revoke invitations, and delete server copies in v1. Invited participants can edit and export. Display names and existing attribution fields are not verified identities or an audit trail.
 
@@ -382,6 +385,8 @@ Close/quit may proceed with pending server synchronization when the local replic
 ## 9 Access and instance lifecycle
 
 ### Admission and invitations
+
+> Superseded in part by Stage 4 decision 2: one guest link per script and a separate owner credential replace individually named invitations, and reset link replaces per-person revocation.
 
 Authenticate and check protocol compatibility before exchanging document state. Keep a second schema-version check in the document. A compatible network protocol does not imply that an old client can edit a newer schema.
 
