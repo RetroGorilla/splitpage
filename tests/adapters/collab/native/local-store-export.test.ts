@@ -3,7 +3,7 @@ import assert from "node:assert/strict";
 import { test } from "node:test";
 import { createBrowserNativeLocalStore } from "../../../../src/adapters/collab/native/browser-local-store.ts";
 import { bootApp, closeApp } from "../../../../src/test/_app-boot.mjs";
-import { stored, STORE_OPTIONS, seedReplica, storedBytes } from "./local-store-fixture.ts";
+import { stored, STORE_OPTIONS, seedReplica, storedBytes, typeAt } from "./local-store-fixture.ts";
 
 async function exportAppData() {
   const hook = (window as unknown as { __appDataTest: { build: () => Promise<Record<string, unknown>> } }).__appDataTest;
@@ -30,7 +30,7 @@ test("existing app-data export leaves native replicas outside its bundle", { tim
   const before = await exportAppData();
   const store = createBrowserNativeLocalStore({ indexedDB: factory, locks: navigator.locks });
   const name = "deployment/retained-replica";
-  const replica = await store.open(name, STORE_OPTIONS);
+  const replica = await store.open(name, { ...STORE_OPTIONS, noticeJournal: true });
   assert.equal(replica.kind, "opened");
   try {
     const invitation = randomBytes(32).toString("base64url");
@@ -38,6 +38,9 @@ test("existing app-data export leaves native replicas outside its bundle", { tim
     await replica.membership.join(invitation);
     seedReplica(replica.session, { A: "Offline narration" });
     assert.deepEqual(await replica.flush(), stored(1));
+    typeAt(replica.session, 0, "Journaled ", "A");
+    assert.deepEqual(await replica.flush(), stored(2));
+    assert.equal(replica.session.pendingEdits?.data().entries.length, 1);
     const bundle = await exportAppData();
     const digest = createHash("sha256").update(invitation).digest();
     for (const value of [bundle, replica.session.document(), replica.session.ydoc.toJSON()]) {
@@ -46,6 +49,7 @@ test("existing app-data export leaves native replicas outside its bundle", { tim
       assert.equal(decoded.includes(digest.toString("hex")), false);
       assert.equal(decoded.includes(digest.toString("base64url")), false);
     }
+    assert.equal(JSON.stringify(bundle).includes("Journaled "), false);
     assert.deepEqual(bundle, before);
     assert.deepEqual(await storedBytes(factory, name), replica.session.encodeState());
   } finally { replica.session.close(); await replica.closed; }

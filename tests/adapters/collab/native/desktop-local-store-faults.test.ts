@@ -325,3 +325,30 @@ for (const fault of ["middle length", "middle payload", "final payload"] as cons
     await expectCopy(fixture, name, 3, "ABstart");
   });
 }
+
+test("a torn v2 journal record is discarded while preserving the previous replica and journal", async t => {
+  const fixture = await desktopFixture(t), updates = commands(t), name = "torn-journal";
+  const file = logAt(fixture.directory, name);
+  const opened = await fixture.first.invoke(["open", name]);
+  assert.equal(opened.kind, "opened");
+  const { lease } = opened;
+  const firstJournal = new TextEncoder().encode('{"version":1,"data":{"through":1,"entries":[]}}');
+  const secondJournal = new TextEncoder().encode('{"version":1,"data":{"through":2,"entries":[]}}');
+  assert.deepEqual(await fixture.first.invoke(["write", name, lease, 1, true, updates.initial, firstJournal]), STORED);
+  assert.deepEqual(await fixture.first.invoke(["write", name, lease, 2, false, updates.a, firstJournal]), STORED);
+  const prefix = await readFile(file);
+  assert.deepEqual(await fixture.first.invoke(["write", name, lease, 3, false, updates.b, secondJournal]), STORED);
+  assert.deepEqual(await fixture.first.invoke(["close", name, lease]), STORED);
+
+  const full = await readFile(file);
+  await writeFile(file, full.subarray(0, full.length - 2));
+  const reopened = fixture.restart();
+  const next = await reopened.invoke(["open", name]);
+  assert.equal(next.kind, "opened");
+  try {
+    assert.deepEqual(await reopened.invoke(["read-journal", name, next.lease]), { kind: "journal", bytes: firstJournal });
+    assert.deepEqual(await readFile(file), prefix);
+  } finally {
+    assert.deepEqual(await reopened.invoke(["close", name, next.lease]), STORED);
+  }
+});

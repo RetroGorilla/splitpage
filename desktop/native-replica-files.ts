@@ -15,29 +15,67 @@ type NativeReplicaFileSystem = Pick<typeof fs, "mkdir" | "open" | "readFile" | "
   readonly syncDirectory: (dir: string) => Promise<void>;
 };
 const MAX_REPLICA_UPDATE_BYTES = 32_000_000;
+const MAX_REPLICA_JOURNAL_BYTES = 16_000_000;
+const JOURNAL_RECORD_FLAG = 0x80000000;
+const RECORD_FORMAT_V2 = 2;
+const V2_PREFIX_BYTES = 8;
+const MAX_V2_PAYLOAD_BYTES = V2_PREFIX_BYTES + MAX_REPLICA_UPDATE_BYTES + MAX_REPLICA_JOURNAL_BYTES;
 const HEADER_FIELDS_BYTES = 12;
 const HEADER_BYTES = 20;
 const EMPTY = Buffer.alloc(0);
+const EMPTY_BYTES = new Uint8Array(0);
 
-function pack({ generation, bytes }: NativeReplicaEntry): Buffer {
-  const record = Buffer.allocUnsafe(HEADER_BYTES + bytes.byteLength);
-  record.writeUInt32LE(bytes.byteLength, 0);
+interface UnpackedReplicaEntry extends NativeReplicaEntry {
+  readonly totalBytes: number;
+}
+
+function pack({ generation, bytes, journal }: NativeReplicaEntry): Buffer {
+  if (!journal) {
+    const record = Buffer.allocUnsafe(HEADER_BYTES + bytes.byteLength);
+    record.writeUInt32LE(bytes.byteLength, 0);
+    record.writeBigUInt64LE(BigInt(generation), 4);
+    record.writeUInt32LE(crc32(record.subarray(0, HEADER_FIELDS_BYTES)), HEADER_FIELDS_BYTES);
+    record.writeUInt32LE(crc32(bytes), HEADER_FIELDS_BYTES + 4);
+    record.set(bytes, HEADER_BYTES);
+    return record;
+  }
+  const payloadLength = V2_PREFIX_BYTES + bytes.byteLength + journal.byteLength;
+  const record = Buffer.allocUnsafe(HEADER_BYTES + payloadLength);
+  record.writeUInt32LE((payloadLength | JOURNAL_RECORD_FLAG) >>> 0, 0);
   record.writeBigUInt64LE(BigInt(generation), 4);
   record.writeUInt32LE(crc32(record.subarray(0, HEADER_FIELDS_BYTES)), HEADER_FIELDS_BYTES);
-  record.writeUInt32LE(crc32(bytes), HEADER_FIELDS_BYTES + 4);
-  record.set(bytes, HEADER_BYTES);
+  const payload = record.subarray(HEADER_BYTES);
+  payload.writeUInt32LE(RECORD_FORMAT_V2, 0);
+  payload.writeUInt32LE(bytes.byteLength, 4);
+  payload.set(bytes, V2_PREFIX_BYTES);
+  payload.set(journal, V2_PREFIX_BYTES + bytes.byteLength);
+  record.writeUInt32LE(crc32(payload), HEADER_FIELDS_BYTES + 4);
   return record;
 }
 
-function unpack(file: Buffer, offset: number, checkpoint: boolean): NativeReplicaEntry | undefined {
+function unpack(file: Buffer, offset: number, checkpoint: boolean): UnpackedReplicaEntry | undefined {
   if (file.length - offset < HEADER_BYTES) return;
   const header = file.subarray(offset, offset + HEADER_BYTES);
   if (crc32(header.subarray(0, HEADER_FIELDS_BYTES)) !== header.readUInt32LE(HEADER_FIELDS_BYTES)) {
     throw new Error("Invalid native replica record header checksum");
   }
-  const length = header.readUInt32LE(0);
+  const rawLength = header.readUInt32LE(0);
+  const isV2 = rawLength >= JOURNAL_RECORD_FLAG;
+  const length = isV2 ? rawLength - JOURNAL_RECORD_FLAG : rawLength;
   const generation = Number(header.readBigUInt64LE(4));
-  if (!Number.isSafeInteger(generation) || generation < 1 || length < 1 || length > MAX_REPLICA_UPDATE_BYTES) {
+  if (!isV2) {
+    if (!Number.isSafeInteger(generation) || generation < 1 || length < 1 || length > MAX_REPLICA_UPDATE_BYTES) {
+      throw new Error("Invalid native replica record");
+    }
+    const end = offset + HEADER_BYTES + length;
+    if (end > file.length) return;
+    const payload = file.subarray(offset + HEADER_BYTES, end);
+    if (crc32(payload) !== header.readUInt32LE(HEADER_FIELDS_BYTES + 4)) {
+      throw new Error("Invalid native replica record payload checksum");
+    }
+    return { generation, checkpoint, bytes: new Uint8Array(payload), totalBytes: HEADER_BYTES + length };
+  }
+  if (!Number.isSafeInteger(generation) || generation < 0 || length < V2_PREFIX_BYTES + 1 || length > MAX_V2_PAYLOAD_BYTES) {
     throw new Error("Invalid native replica record");
   }
   const end = offset + HEADER_BYTES + length;
@@ -46,7 +84,19 @@ function unpack(file: Buffer, offset: number, checkpoint: boolean): NativeReplic
   if (crc32(payload) !== header.readUInt32LE(HEADER_FIELDS_BYTES + 4)) {
     throw new Error("Invalid native replica record payload checksum");
   }
-  return { generation, checkpoint, bytes: new Uint8Array(payload) };
+  if (payload.readUInt32LE(0) !== RECORD_FORMAT_V2) {
+    throw new Error("Unsupported native replica record format");
+  }
+  const replicaLength = payload.readUInt32LE(4);
+  const journalLength = length - V2_PREFIX_BYTES - replicaLength;
+  if (replicaLength > MAX_REPLICA_UPDATE_BYTES || journalLength < 1 || journalLength > MAX_REPLICA_JOURNAL_BYTES
+    || (checkpoint && (replicaLength < 1 || generation < 1))
+    || (!checkpoint && replicaLength > 0 && generation < 1)) {
+    throw new Error("Invalid native replica record");
+  }
+  const bytes = replicaLength > 0 ? new Uint8Array(payload.subarray(V2_PREFIX_BYTES, V2_PREFIX_BYTES + replicaLength)) : EMPTY_BYTES;
+  const journal = new Uint8Array(payload.subarray(V2_PREFIX_BYTES + replicaLength));
+  return { generation, checkpoint, bytes, journal, totalBytes: HEADER_BYTES + length };
 }
 
 function missing(error: unknown): boolean {
@@ -105,26 +155,51 @@ function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSyste
     const dir = directory(name);
     const snapshot = join(dir, "checkpoint"), log = join(dir, "updates");
     const saved = await read(snapshot);
-    let checkpoint = saved ? unpack(saved, 0, true) : undefined;
-    if (saved && (!checkpoint || saved.length !== HEADER_BYTES + checkpoint.bytes.byteLength)) {
+    const unpackedCheckpoint = saved ? unpack(saved, 0, true) : undefined;
+    if (saved && (!unpackedCheckpoint || saved.length !== unpackedCheckpoint.totalBytes)) {
       throw new Error("Invalid native replica checkpoint");
     }
+    let checkpoint: NativeReplicaEntry | undefined = unpackedCheckpoint
+      ? { generation: unpackedCheckpoint.generation, checkpoint: true, bytes: unpackedCheckpoint.bytes,
+        ...(unpackedCheckpoint.journal && { journal: unpackedCheckpoint.journal }) }
+      : undefined;
     const logContents = await read(log);
     const contents = logContents ?? EMPTY;
     let tail: NativeReplicaEntry[] = [];
     let length = 0;
     let previous = 0;
+    let replicaTailCount = 0;
     const base = checkpoint?.generation ?? 0;
+    let lastReplicaGeneration = base;
+    let journal: Uint8Array | null = checkpoint?.journal ? new Uint8Array(checkpoint.journal) : null;
     while (length < contents.length) {
       const entry = unpack(contents, length, false);
       if (!entry) break;
-      if (previous && entry.generation !== previous + 1) throw new Error("Invalid native replica log order");
-      if (entry.generation > base) {
-        if (tail.length === 0 && entry.generation !== base + 1) throw new Error("Missing native replica log records");
-        tail.push(entry);
+      const storedEntry: NativeReplicaEntry = {
+        generation: entry.generation, checkpoint: false, bytes: entry.bytes,
+        ...(entry.journal && { journal: entry.journal })
+      };
+      if (entry.bytes.byteLength > 0) {
+        if (previous && entry.generation !== previous + 1) throw new Error("Invalid native replica log order");
+        if (entry.generation > base) {
+          if (replicaTailCount === 0 && entry.generation !== base + 1) throw new Error("Missing native replica log records");
+          tail.push(storedEntry);
+          replicaTailCount++;
+        }
+        if (entry.journal && entry.generation >= base) journal = new Uint8Array(entry.journal);
+        previous = entry.generation;
+        if (entry.generation > lastReplicaGeneration) lastReplicaGeneration = entry.generation;
+      } else {
+        if (previous ? entry.generation !== previous : entry.generation > base) {
+          throw new Error("Invalid native replica log order");
+        }
+        if (entry.generation >= base) {
+          tail.push(storedEntry);
+          if (entry.journal) journal = new Uint8Array(entry.journal);
+        }
+        if (previous === 0 && entry.generation > 0) previous = entry.generation;
       }
-      previous = entry.generation;
-      length += HEADER_BYTES + entry.bytes.byteLength;
+      length += entry.totalBytes;
     }
     let repair = length !== contents.length;
     let initialized = false;
@@ -184,14 +259,37 @@ function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSyste
       repair = false;
       length += record.byteLength;
       tail.push(entry);
+      if (entry.bytes.byteLength > 0) lastReplicaGeneration = entry.generation;
+      if (entry.journal) journal = new Uint8Array(entry.journal);
+    }
+
+    function journalAt(generation: number): Uint8Array | undefined {
+      let current = checkpoint?.journal;
+      for (const item of tail) {
+        if (item.generation <= generation && item.journal) current = item.journal;
+      }
+      return current;
+    }
+
+    function refreshJournal(): void {
+      let current = checkpoint?.journal;
+      for (const item of tail) if (item.journal) current = item.journal;
+      journal = current ? new Uint8Array(current) : null;
     }
 
     async function compact(entry: NativeReplicaEntry): Promise<void> {
+      const keptJournal = entry.journal ?? journalAt(entry.generation);
+      const nextCheckpoint: NativeReplicaEntry = {
+        generation: entry.generation, checkpoint: true, bytes: entry.bytes,
+        ...(keptJournal && { journal: keptJournal })
+      };
       // why: the original log must cover the checkpoint until its rename is durable
-      await replace(snapshot, pack(entry));
+      await replace(snapshot, pack(nextCheckpoint));
       await syncEntry(snapshot, dir);
-      checkpoint = entry;
-      tail = tail.filter(item => item.generation > entry.generation);
+      checkpoint = nextCheckpoint;
+      if (nextCheckpoint.generation > lastReplicaGeneration) lastReplicaGeneration = nextCheckpoint.generation;
+      tail = tail.filter(item => item.generation > nextCheckpoint.generation);
+      refreshJournal();
       const keep = Buffer.concat(tail.map(pack));
       await replace(log, keep);
       length = keep.byteLength;
@@ -209,11 +307,18 @@ function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSyste
         await syncEntry(membership, dir);
       },
       read(through: number | null) {
-        return (checkpoint ? [checkpoint, ...tail] : tail.slice()).filter(entry => through === null || entry.generation <= through);
+        return (checkpoint ? [checkpoint, ...tail] : tail.slice())
+          .filter(entry => entry.bytes.byteLength > 0 && (through === null || entry.generation <= through))
+          .map(({ generation, checkpoint: isCheckpoint, bytes }) => ({ generation, checkpoint: isCheckpoint, bytes }));
+      },
+      readJournal: () => journal ? new Uint8Array(journal) : null,
+      async writeJournal(bytes: Uint8Array): Promise<void> {
+        await initialize();
+        await append({ generation: lastReplicaGeneration, checkpoint: false, bytes: EMPTY_BYTES, journal: new Uint8Array(bytes) });
       },
       async write(entry: NativeReplicaEntry): Promise<void> {
         const base = checkpoint?.generation ?? 0;
-        const last = tail.at(-1)?.generation ?? base;
+        const last = lastReplicaGeneration;
         if (entry.checkpoint ? entry.generation < base || entry.generation > last + 1 : entry.generation !== last + 1) {
           throw new Error("Invalid native replica generation");
         }
@@ -237,4 +342,4 @@ function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSyste
 }
 
 export type { createNativeReplicaFiles, NativeReplicaFileSystem };
-module.exports = { createNativeReplicaFiles, MAX_REPLICA_UPDATE_BYTES };
+module.exports = { createNativeReplicaFiles, MAX_REPLICA_UPDATE_BYTES, MAX_REPLICA_JOURNAL_BYTES };

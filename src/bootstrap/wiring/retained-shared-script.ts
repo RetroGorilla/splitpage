@@ -85,7 +85,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
     signal?.throwIfAborted();
     await closingCopies.get(name);
     signal?.throwIfAborted();
-    const replica = await store.open(name, { actor: ports.editor(), sanitize: sanitizeHtml });
+    const replica = await store.open(name, { actor: ports.editor(), sanitize: sanitizeHtml, noticeJournal: true });
     if (replica.kind === "opened") prepared.replica = replica;
     signal?.throwIfAborted();
     if (replica.kind === "failed") {
@@ -160,7 +160,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
           let connected = false;
           const relay = openNativeRelay(replica.session, {
             url: entry.relayUrl, name: entry.script, token, reopen: replica.reopen,
-            sessionOptions: { actor: ports.editor(), sanitize: sanitizeHtml },
+            sessionOptions: { actor: ports.editor(), sanitize: sanitizeHtml, noticeJournal: true },
             onEvent(event) {
               if (event.kind === "status") {
                 if (event.status.connected && !connected) pictures?.reconnect();

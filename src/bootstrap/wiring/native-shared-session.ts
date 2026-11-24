@@ -43,7 +43,7 @@ export function nativePublication() {
 
 export function openNativeEditor(ports: SharedSwitchPorts, source: ValidatedDocument, failedClose: () => boolean, stored?: Uint8Array) {
   const actor = ports.editor(), at = new Date(ports.now()).toISOString();
-  const options = { actor, sanitize: sanitizeHtml };
+  const options = { actor, sanitize: sanitizeHtml, noticeJournal: true as const };
   const native = openNativeSession(stored ? { kind: "stored-script", state: stored } : {
     kind: "document", document: source, conversion: { cells: scriptCellOf, creation: source.docId, at, by: actor }
   }, options);

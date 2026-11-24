@@ -420,20 +420,26 @@ test("a picture held only in memory cannot complete a retained join", { timeout:
 test("the mounted app reopens the retained script offline after restarting and Leave clears its device state", async () => {
   const entry = identity("restart"), opened = capture(), credential = invitation();
   assert.deepEqual(await hook().enterRetained({ ...entry, invitation: credential, connect: opened.connect }), ok);
+  assert.ok(opened.replica().session.pendingEdits);
+  typeAt(opened.replica().session, 0, "Offline ", "A");
   assert.equal((await opened.replica().flush()).kind, "stored");
+  const journalBeforeRestart = opened.replica().session.pendingEdits?.data();
+  assert.equal(journalBeforeRestart?.entries.length, 1);
   const oldHook = hook();
   await rewireRunningApp({});
   await finishStartup();
   await opened.replica().closed;
   assert.notEqual(hook(), oldHook);
   assert.deepEqual(await oldHook.enterRetained(entry), { ok: false, reason: "app-stopped" });
-  assert.deepEqual(await hook().enterRetained(entry), ok);
-  assert.match(await currentText(), /Retained narration/);
+  const reopened = capture();
+  assert.deepEqual(await hook().enterRetained({ ...entry, connect: reopened.connect }), ok);
+  assert.deepEqual(reopened.replica().session.pendingEdits?.data(), journalBeforeRestart);
+  assert.match(await currentText(), /Offline Retained narration/);
   assert.deepEqual(await hook().leave(), ok);
   assert.deepEqual(await storedEntries(window.indexedDB, scope(entry.script)), []);
   const database = await idbResult(window.indexedDB.open(DB_NAME));
   try {
-    for (const store of ["memberships", "invitations"]) {
+    for (const store of ["memberships", "invitations", "journals"]) {
       assert.equal((await idbResult(database.transaction(store).objectStore(store).get(scope(entry.script)))) === undefined, true);
     }
   } finally { database.close(); }
