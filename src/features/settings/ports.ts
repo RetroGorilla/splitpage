@@ -7,6 +7,7 @@ import type { MicrophoneDevices } from "../../application/microphones.ts";
 import type { PreferenceChanges, PreferenceName, Preferences } from "../../application/preferences/preferences.ts";
 import type { ScreenState } from "../../application/screen.ts";
 import type { SettingsControls } from "../../application/settings-actions.ts";
+import type { RelayOwnerControls } from "../../../shared/desktop-contract.d.ts";
 
 export interface SettingsMount extends SettingsControls {
   readonly dispose: () => void;
@@ -17,6 +18,7 @@ export interface SettingsActionPorts {
 }
 
 export interface SettingsPorts {
+  readonly relayOwner?: RelayOwnerControls | null;
   readonly actions: Pick<ActionRegistry, "invoke" | "view">;
   readonly notices: Pick<NoticePort, "show">;
   readonly changes: PreferenceChanges;

@@ -46,10 +46,17 @@ files:
   - restore-notice.ts
   - unsaved-dialog.ts
   - package.json
+  - from: .stage/desktop-code
+    to: .
+    filter:
+      - "*.ts"
+      - collaboration.json
 
 extraResources:
   - from: .stage/splitpage
     to: splitpage
+  - from: .stage/desktop-build
+    to: splitpage/desktop-build
 
 asar: true
 

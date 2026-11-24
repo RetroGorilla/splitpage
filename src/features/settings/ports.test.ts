@@ -1,5 +1,6 @@
 import test from "node:test";
 import assert from "node:assert/strict";
+import { setImmediate as nextTurn } from "node:timers/promises";
 import { jsdomWindow } from "../../../tests/features/editing/jsdom.mjs";
 import { createActionRegistry } from "../../application/actions.ts";
 import { createPreferences } from "../../application/preferences/preferences.ts";
@@ -11,7 +12,8 @@ const win = jsdomWindow() as unknown as Window & typeof globalThis;
 Object.assign(globalThis, { window: win, document: win.document, Event: win.Event });
 win.Element.prototype.scrollIntoView = () => {};
 
-function setup(microphones: SettingsPorts["microphones"] = { support: () => "browser", list: async () => ({ options: [], named: false }), onChange: () => () => {} }) {
+function setup(microphones: SettingsPorts["microphones"] = { support: () => "browser", list: async () => ({ options: [], named: false }), onChange: () => () => {} },
+  relayOwner: SettingsPorts["relayOwner"] = null) {
   win.document.body.innerHTML = '<button id="btn-file">File</button>';
   const storage = new Map<string, string>();
   const hearing = new Set<(change: PreferenceNotice) => void>();
@@ -26,6 +28,7 @@ function setup(microphones: SettingsPorts["microphones"] = { support: () => "bro
   });
   const calls: unknown[][] = [];
   const ports: SettingsPorts = {
+    relayOwner,
     preferences,
     changes: { onChange: (listener) => { hearing.add(listener); return () => { hearing.delete(listener); }; } },
     elsewhere: (listener) => { stored.add(listener); return () => { stored.delete(listener); }; },
@@ -52,6 +55,57 @@ function setup(microphones: SettingsPorts["microphones"] = { support: () => "bro
   const mounted: SettingsMount = mountSettings(ports);
   return { mounted, ports, preferences, calls, hearing, stored, storeWriterSize: (size: number) => { writerSize = size; } };
 }
+
+test("enabled desktop settings show relay state and address and route each control to the owner", async () => {
+  Object.assign(globalThis, { SPLITPAGE_COLLAB_UI: true });
+  let address: string | null = null;
+  let connection: "connected" | "wrong-secret" | "unreachable" = "connected";
+  const calls: string[] = [];
+  const { mounted } = setup(undefined, {
+    status: async () => ({ address }),
+    open: async () => { calls.push("setup"); address = "https://relay.example"; return true; },
+    testConnection: async () => { calls.push("test"); return connection; },
+    clear: async () => { calls.push("clear"); address = null; return true; }
+  });
+  try {
+    mounted.openSettings();
+    await nextTurn();
+    const section = win.document.querySelector<HTMLElement>('section[aria-label="Collaboration"]');
+    assert.ok(section);
+    const getSection = () => win.document.querySelector<HTMLElement>('section[aria-label="Collaboration"]');
+    assert.match(section.textContent ?? "", /No relay configured/);
+    assert.deepEqual([...section.querySelectorAll("button")].map(button => button.textContent), ["Set up relay…", "Test connection", "Clear"]);
+    const click = async (id: string) => {
+      win.document.querySelector<HTMLButtonElement>("#settings-relay-" + id)?.click();
+      await nextTurn();
+    };
+    await click("test");
+    assert.deepEqual(calls, []);
+    await click("setup");
+    assert.match(getSection()?.textContent ?? "", /https:\/\/relay\.example/);
+    await click("test");
+    assert.match(getSection()?.textContent ?? "", /Connected to the relay/);
+    connection = "wrong-secret";
+    await click("test");
+    assert.match(getSection()?.textContent ?? "", /rejected the management secret/);
+    connection = "unreachable";
+    await click("test");
+    assert.match(getSection()?.textContent ?? "", /Could not connect to the relay/);
+    await click("clear");
+    assert.match(getSection()?.textContent ?? "", /No relay configured/);
+    assert.deepEqual(calls, ["setup", "test", "test", "test", "clear"]);
+  } finally {
+    mounted.dispose();
+    const browser = setup();
+    try {
+      browser.mounted.openSettings();
+      assert.equal(win.document.querySelector('section[aria-label="Collaboration"]'), null);
+    } finally {
+      browser.mounted.dispose();
+      Reflect.deleteProperty(globalThis, "SPLITPAGE_COLLAB_UI");
+    }
+  }
+});
 
 function input(id: string): HTMLInputElement {
   const element = win.document.getElementById(id);

@@ -8,8 +8,12 @@ import { applyTagIcons, applyTheme } from "./appearance.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
 import { microphoneChoices } from "../../application/microphones.ts";
 import type { MicrophoneList } from "../../application/microphones.ts";
+import { createRelaySettings } from "./relay-settings.ts";
+
+declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
 
 let ports: SettingsPorts | null = null;
+let relaySettings: ReturnType<typeof createRelaySettings> | null = null;
 const listeners: (() => void)[] = [];
 
 function listen(target: EventTarget, type: string, handler: EventListener) {
@@ -153,6 +157,8 @@ function bodyHtml() {
       '</div>' +
       '<p class="settings-hint">Signs your edits and comments.</p>' +
       (ports as SettingsPorts).identity.swatchesHtml(name, "settings-person-color", "settings-label")) +
+    (typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI && relaySettings
+      ? section("Collaboration", relaySettings.body()) : "") +
     section("Help & tips",
       '<div class="settings-actions">' +
         '<button type="button" class="btn-outline" data-settings-action="tagging-help">Show the tagging reference</button>' +
@@ -234,6 +240,7 @@ export function openSettings(opts?: unknown) {
   renderSettings();
   loadMicrophones();
   m.hidden = false;
+  if (typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI) void relaySettings?.run("refresh");
   const wanted = (opts as { focus?: string }).focus ? document.getElementById((opts as { focus: string }).focus) : null;
   const first = wanted || m.querySelector<HTMLElement>('input[name="settings-theme"]:checked') || m.querySelector<HTMLElement>("input, button");
   if (first) first.focus();
@@ -299,6 +306,11 @@ function applyInput(target: HTMLInputElement) {
 }
 
 function runAction(action: string | null) {
+  if (typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI) {
+    if (action === "relay-setup") { void relaySettings?.run("setup"); return; }
+    if (action === "relay-test") { void relaySettings?.run("test"); return; }
+    if (action === "relay-clear") { void relaySettings?.run("clear"); return; }
+  }
   if (action === "close") { closeSettings(); return; }
   if (action === "scale-reset") { (ports as SettingsPorts).preferences.setScriptScale(1); return; }
   if (action === "tagging-help") {
@@ -359,6 +371,12 @@ function onPrefChanged(key: Parameters<SettingsPorts["elsewhere"]>[0] extends (n
 
 export function startSettings(given: SettingsPorts) {
   ports = given;
+  if (typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI && given.relayOwner) {
+    relaySettings = createRelaySettings(given.relayOwner, () => {
+      if (ports === given && settingsOpen()) renderSettings();
+    });
+    listen(window, "focus", () => { if (settingsOpen()) void relaySettings?.run("refresh"); });
+  }
   const unhear = (ports as SettingsPorts).elsewhere(onPrefChanged);
   const unsubscribe = (ports as SettingsPorts).changes.onChange(function (change) {
     onPrefChanged(change.name);
@@ -385,6 +403,7 @@ export function startSettings(given: SettingsPorts) {
       if (withdrawHook) withdrawHook();
       settingsReturnFocus = null;
       microphoneList = { options: [], named: false };
+      relaySettings = null;
       ports = null;
     }
   };

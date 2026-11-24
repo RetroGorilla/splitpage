@@ -1,8 +1,10 @@
 import { readFileSync, readdirSync, statSync, existsSync, openSync, readSync, closeSync } from "node:fs";
 import { join, dirname, relative, extname } from "node:path";
 import { fileURLToPath } from "node:url";
+import { extractFile, listPackage } from "@electron/asar";
 import { verifyInstallerPayload, requiredSharedFiles, missingSharedFiles } from "./verify-dist-payload.mjs";
 import { leakedHooks } from "../tools/release-hooks.mjs";
+import { releaseCollaborationProblems } from "./release-collaboration.mjs";
 
 const HERE = dirname(fileURLToPath(import.meta.url));
 
@@ -55,6 +57,20 @@ function* walk(dir) {
 }
 
 const failures = [];
+function collaborationProblems(resources) {
+  try {
+    const asar = join(resources, "app.asar");
+    const appRoot = join(resources, "splitpage");
+    return releaseCollaborationProblems({
+      appRoot, desktopBuild: join(appRoot, "desktop-build"),
+      settings: extractFile(asar, "collaboration.json").toString("utf8"),
+      preload: extractFile(asar, "preload.js").toString("utf8"), appFiles: listPackage(asar)
+    });
+  } catch {
+    return ["the app archive or collaboration build setting could not be read"];
+  }
+}
+
 let checks = 0;
 function check(ok, label, detail) {
   checks++;
@@ -100,6 +116,8 @@ for (const arch of ARCHS) {
     const leaked = existsSync(appIndex) ? leakedHooks(readFileSync(appIndex, "utf8")) : null;
     check(leaked !== null && leaked.length === 0, `${arch}: the packaged app is a release build, with no test hook outside the release list`,
       leaked === null ? "resources/splitpage/index.html missing" : leaked.join(", "));
+    const collaboration = collaborationProblems(join(unpacked, "resources"));
+    check(collaboration.length === 0, `${arch}: the packaged release excludes collaboration setup`, collaboration.join("; "));
   }
 
   const setup = join(DIST, `SplitpageDesktopSetup-${VERSION}-${arch}.exe`);
@@ -116,7 +134,8 @@ for (const arch of ARCHS) {
 
     if (existsSync(appExe)) {
       try {
-        const { problems, checked } = await verifyInstallerPayload(setup, unpacked, arch);
+        const { problems, checked } = await verifyInstallerPayload(setup, unpacked, arch,
+          inner => collaborationProblems(join(inner, "resources")));
         check(problems.length === 0,
           `${arch}: installer payload actually extracts with every top-level PE binary intact`,
           problems.length ? problems.join("; ") : `${checked} checked`);

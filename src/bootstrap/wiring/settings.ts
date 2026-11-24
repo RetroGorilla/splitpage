@@ -26,6 +26,8 @@ import { prompterControls } from "./prompter.ts";
 import { preferences } from "./preferences-owner.ts";
 import { setAutoSaveEnabled } from "./save-owners.ts";
 
+declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
+
 function inactiveWriterSize(): void {}
 function writerSizePreference(): number | null { return preferences().writerSize(); }
 
@@ -37,6 +39,7 @@ export function mountSettingsFeature(): SettingsMount {
       writerSize: writerSizePreference, setWriterSize: inactiveWriterSize, hideShot: setHideShotBeats, autoSave: setAutoSaveEnabled
     };
     const ports: SettingsPorts = {
+      ...(typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI ? { relayOwner: desktopPort()?.relayOwner ?? null } : {}),
       actions: portActions,
       notices: portNotices,
       changes: portChanges,

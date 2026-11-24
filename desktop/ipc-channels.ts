@@ -4,6 +4,7 @@ import type { DesktopChannelRow } from "../shared/desktop-contract.d.ts";
 
 const APP_ORIGIN = "splitpage://app";
 const TABSTRIP_ORIGIN = "splitpage://tabstrip";
+const RELAY_SETUP_ORIGIN = "splitpage://relay-setup";
 
 const APP = [APP_ORIGIN];
 const STRIP = [TABSTRIP_ORIGIN];
@@ -36,6 +37,14 @@ const TYPES: Record<string, ((value: unknown) => boolean) | undefined> = {
 };
 
 const NONE: string[] = [];
+
+const COLLABORATION_CHANNELS = [
+  { name: "splitpage:relay-owner-status", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
+  { name: "splitpage:relay-owner-open", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
+  { name: "splitpage:relay-owner-test", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
+  { name: "splitpage:relay-owner-clear", direction: "invoke", argsSchema: NONE, allowedOrigins: APP },
+  { name: "splitpage:relay-setup-save", direction: "invoke", argsSchema: ["string", "string"], allowedOrigins: [RELAY_SETUP_ORIGIN] }
+] satisfies readonly DesktopChannelRow[];
 
 const CHANNELS = [
   { name: "splitpage:ipc-table-sync", direction: "sendSync", argsSchema: NONE, allowedOrigins: BOTH, refusal: null },
@@ -139,7 +148,7 @@ const CHANNELS = [
   { name: "splitpage:test-shell", direction: "invoke", argsSchema: ["string", "object|null"], allowedOrigins: APP, testOnly: true }
 ] satisfies readonly DesktopChannelRow[];
 
-export type DesktopChannel = typeof CHANNELS[number];
+export type DesktopChannel = typeof CHANNELS[number] | typeof COLLABORATION_CHANNELS[number];
 
 function checkArg(descriptor: string, value: unknown, index: number) {
   const optional = descriptor.endsWith("?");
@@ -174,7 +183,9 @@ function deepFreeze<T>(value: T): T {
 
 const byKey = new Map<string, DesktopChannelRow>();
 
-for (const channel of CHANNELS) {
+const collaborationKeys = new Set(COLLABORATION_CHANNELS.map(channel => channel.name + " " + channel.direction));
+
+for (const channel of [...CHANNELS, ...COLLABORATION_CHANNELS]) {
   const key = channel.name + " " + channel.direction;
   if (byKey.has(key)) throw new Error("ipc-channels: duplicate channel " + key);
   if (!["invoke", "send", "sendSync", "receive"].includes(channel.direction)) {
@@ -194,19 +205,24 @@ for (const channel of CHANNELS) {
 }
 
 const IPC_CHANNELS = deepFreeze(CHANNELS);
+const IPC_COLLABORATION_CHANNELS = deepFreeze(COLLABORATION_CHANNELS);
 
-function channelFor(name: string, direction: DesktopChannelRow["direction"]) {
-  return byKey.get(name + " " + direction) || null;
+function channelFor(name: string, direction: DesktopChannelRow["direction"], collabUi = false) {
+  const key = name + " " + direction;
+  return (collabUi || !collaborationKeys.has(key)) ? byKey.get(key) ?? null : null;
 }
 
-function channelsForOrigin(origin: string | null) {
-  return IPC_CHANNELS.filter((c) => (c.allowedOrigins as readonly unknown[]).includes(origin));
+function channelsForOrigin(origin: string | null, collabUi = false) {
+  const channels = collabUi ? [...IPC_CHANNELS, ...IPC_COLLABORATION_CHANNELS] : IPC_CHANNELS;
+  return channels.filter((c) => (c.allowedOrigins as readonly unknown[]).includes(origin));
 }
 
 export type DesktopChannelModule = {
   APP_ORIGIN: typeof APP_ORIGIN;
   TABSTRIP_ORIGIN: typeof TABSTRIP_ORIGIN;
+  RELAY_SETUP_ORIGIN: typeof RELAY_SETUP_ORIGIN;
   IPC_CHANNELS: typeof IPC_CHANNELS;
+  IPC_COLLABORATION_CHANNELS: typeof IPC_COLLABORATION_CHANNELS;
   channelFor: typeof channelFor;
   channelsForOrigin: typeof channelsForOrigin;
   checkArgs: typeof checkArgs;
@@ -215,7 +231,9 @@ export type DesktopChannelModule = {
 module.exports = {
   APP_ORIGIN,
   TABSTRIP_ORIGIN,
+  RELAY_SETUP_ORIGIN,
   IPC_CHANNELS,
+  IPC_COLLABORATION_CHANNELS,
   channelFor,
   channelsForOrigin,
   checkArgs

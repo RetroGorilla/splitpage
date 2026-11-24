@@ -1,0 +1,11 @@
+open /index.html
+wait document.querySelectorAll('#rows .row').length > 0
+expect /script-src [^;]*'sha256-[A-Za-z0-9+/=]{44}'/.test(document.querySelector('meta[http-equiv="Content-Security-Policy"]').content)
+eval (function(){var s=document.createElement('script');s.textContent='window.relaySetupInlineRan=true';document.body.appendChild(s);s.remove();return true;})()
+expect window.relaySetupInlineRan === undefined
+click #btn-file
+click #file-menu [data-file-action="settings"]
+wait document.getElementById('settings-modal')?.hidden === false
+expect document.querySelector('#settings-modal section[aria-label="Collaboration"]') === null
+expect document.querySelector('#settings-relay-setup') === null
+quit

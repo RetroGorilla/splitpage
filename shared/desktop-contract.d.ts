@@ -277,7 +277,22 @@ export type DesktopWireHistoryCopy = { ok: true; copied: number; code?: undefine
 
 type DesktopChannelCall<A extends readonly unknown[], R> = { args: A; result: R };
 
+export type RelayConnectionCheck = "connected" | "wrong-secret" | "unreachable" | "not-configured";
+export type RelaySetupSave = "saved" | "invalid-address" | "invalid-secret" | "key-store-unavailable" | "save-failed";
+
+export interface RelayOwnerControls {
+  readonly status: () => Promise<{ address: string | null }>;
+  readonly open: () => Promise<boolean>;
+  readonly testConnection: () => Promise<RelayConnectionCheck>;
+  readonly clear: () => Promise<boolean>;
+}
+
 export interface DesktopIpcContract {
+  "splitpage:relay-owner-status": DesktopChannelCall<[], Awaited<ReturnType<RelayOwnerControls["status"]>>>;
+  "splitpage:relay-owner-open": DesktopChannelCall<[], boolean>;
+  "splitpage:relay-owner-test": DesktopChannelCall<[], RelayConnectionCheck>;
+  "splitpage:relay-owner-clear": DesktopChannelCall<[], boolean>;
+  "splitpage:relay-setup-save": DesktopChannelCall<[address: string, secret: string], RelaySetupSave>;
   "splitpage:ipc-table-sync": DesktopChannelCall<[], readonly DesktopChannelRow[] | null>;
   "splitpage:open-file-dialog": DesktopChannelCall<[], DesktopWireFile | null>;
   "splitpage:save-file-dialog": DesktopChannelCall<[{ suggestedName?: string; filters?: { name: string; extensions: string[] }[]; script?: boolean; bundleExport?: boolean; exportJob?: string }], { id: string; name: string } | null>;

@@ -2874,6 +2874,67 @@ async function caseNativeReplicaKeyStore(target) {
   }
 }
 
+async function caseRelayOwnerSetup(target) {
+  const tag = target.name + " relay owner setup";
+  const secret = crypto.randomBytes(32).toString("base64url");
+  const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-relay-"));
+  const marker = path.join(DESKTOP_DIR, ".build", "collaboration.json");
+  const enabled = target.kind === "dev" ? fs.existsSync(marker) && JSON.parse(fs.readFileSync(marker, "utf8")).collabUi : target.variant === "test";
+  let authenticated = 0;
+  const relay = http.createServer((request, response) => {
+    const allowed = request.method === "GET" && request.url === "/api/status" && request.headers.authorization === "Bearer " + secret;
+    if (allowed) authenticated++;
+    response.writeHead(allowed ? 200 : 401, { "Content-Type": "application/json" }).end("{}");
+  });
+  await new Promise(resolve => relay.listen(0, "127.0.0.1", resolve));
+  let app;
+  let setup;
+  try {
+    app = await launchApp(target, { label: "relay-setup", userDataDir });
+    await waitForRows(app.cdp);
+    await evalPage(app.cdp, "document.getElementById('btn-file').click(); document.getElementById('menu-settings').click()");
+    await poll(app.cdp, modalShownExpr("settings-modal"));
+    const exposed = await evalPage(app.cdp, "!!window.splitpageDesktop.relayOwner && !!document.querySelector('#settings-collaboration-address')");
+    record(tag + ": Settings and the bridge follow the build setting", exposed === enabled);
+    if (!enabled || !exposed) return;
+    await evalPage(app.cdp, "document.getElementById('settings-relay-setup').click()");
+    const setupTarget = await pollNode(async () => {
+      const { body } = await fetchJson("http://127.0.0.1:" + app.port + "/json");
+      return body.find(item => item.url === "splitpage://relay-setup/index.html" && item.webSocketDebuggerUrl);
+    });
+    setup = await connectTarget(setupTarget);
+    await poll(setup, "document.querySelector('#relay-secret')?.type === 'password'");
+    record(tag + ": setup opens with a blank password and no desktop bridge",
+      await evalPage(setup, "document.querySelector('#relay-secret').value === '' && window.splitpageDesktop === undefined"));
+    const address = "http://127.0.0.1:" + relay.address().port;
+    try {
+      await evalPage(setup, `document.querySelector('#relay-address').value = ${JSON.stringify(address)};
+        document.querySelector('#relay-secret').value = ${JSON.stringify(secret)};
+        document.querySelector('form').requestSubmit(); true`);
+    } catch {
+      record(tag + ": submitted the setup form", false);
+      return;
+    }
+    await poll(app.cdp, "document.querySelector('#settings-collaboration-address')?.textContent.includes(" + JSON.stringify(address) + ")");
+    const encrypted = fs.readFileSync(path.join(userDataDir, "relay-owner.enc"));
+    record(tag + ": the OS key store encrypted the saved settings", !encrypted.includes(secret) && !encrypted.includes(address));
+    await evalPage(app.cdp, "document.getElementById('settings-relay-test').click()");
+    await poll(app.cdp, "document.querySelector('#settings-collaboration-address').parentElement.querySelector('[role=status]').textContent === 'Connected to the relay.'");
+    record(tag + ": main reached the relay with the stored secret", authenticated === 1);
+    await evalPage(app.cdp, "document.getElementById('settings-relay-clear').click()");
+    await poll(app.cdp, "document.querySelector('#settings-collaboration-address').textContent === 'No relay configured.'");
+    record(tag + ": Clear removed the settings", !fs.existsSync(path.join(userDataDir, "relay-owner.enc")));
+  } finally {
+    setup?.close();
+    if (app) {
+      await teardown(app, tag + " quit", { expectExitCode: 0 });
+      record(tag + ": desktop logs exclude the secret", !app.getStdout().includes(secret) && !app.getStderr().includes(secret));
+    }
+    relay.close();
+    rmrf(userDataDir);
+  }
+}
+
 async function caseHistoryEditorRestoreRelaunch(target, fixturesDir) {
   const tag = target.name + " history: editor save, panel restore, quit and relaunch";
   const fixture = writeFixture(fixturesDir, "history-editor.splitpage", "History editor", [["Visual", "Original narration"]]);
@@ -6516,6 +6577,7 @@ async function runTargetSuite(target, groupFilter) {
     ["close check: a tab edited during a window close's copy wait is asked about again (#532)", () => caseTabEditedDuringCloseCheck(target, fixturesDir, "window close")],
     ["close check: a tab edited during a quit's copy wait is asked about again (#532)", () => caseTabEditedDuringCloseCheck(target, fixturesDir, "quit")],
     ["native replica OS key store", () => caseNativeReplicaKeyStore(target), { hookFree, windowsOnly: "Windows key store smoke" }],
+    ["relay owner setup", () => caseRelayOwnerSetup(target), { hookFree, windowsOnly: "Windows key store smoke" }],
     ["draft: power-cut mid-write keeps the first generation", () => caseDraftCrashMidWrite(target)],
     ["draft: both generations corrupt -> quarantined, seed boot", () => caseDraftCorrupt(target)],
     ["draft: ENOSPC pauses writes, one sticky toast, then resumes", () => caseDraftDiskFull(target)],

@@ -23,19 +23,28 @@ interface IpcSetupDependencies {
   app: Pick<App, "getVersion">;
   testMode: boolean;
   windowsById: Map<string, DesktopMainWindow>;
+  relaySetup?: {
+    trusts: (event: DesktopIpcEvent) => boolean;
+    status: (event: DesktopIpcEvent) => DesktopIpcResult<"splitpage:relay-owner-status">;
+    open: (event: DesktopIpcEvent) => Promise<boolean>;
+    test: (event: DesktopIpcEvent) => Promise<DesktopIpcResult<"splitpage:relay-owner-test">>;
+    clear: (event: DesktopIpcEvent) => boolean;
+    save: (...args: DesktopIpcArgs<"splitpage:relay-setup-save">) => DesktopIpcResult<"splitpage:relay-setup-save">;
+  } | undefined;
 }
 
 
 const {
-  APP_ORIGIN, TABSTRIP_ORIGIN, channelFor, channelsForOrigin, checkArgs
+  APP_ORIGIN, TABSTRIP_ORIGIN, RELAY_SETUP_ORIGIN, channelFor, channelsForOrigin, checkArgs
 }: DesktopChannelModule = require("./ipc-channels.ts");
 
-function createIpcSetup({ ipcMain, app, testMode, windowsById }: IpcSetupDependencies) {
+function createIpcSetup({ ipcMain, app, testMode, windowsById, relaySetup }: IpcSetupDependencies) {
   function senderOriginOf(event: DesktopIpcEvent) {
     const url = event.senderFrame && event.senderFrame.url;
     if (typeof url !== "string") return null;
     if (url.startsWith(APP_ORIGIN + "/")) return APP_ORIGIN;
     if (url.startsWith(TABSTRIP_ORIGIN + "/")) return TABSTRIP_ORIGIN;
+    if (relaySetup && url.startsWith(RELAY_SETUP_ORIGIN + "/")) return RELAY_SETUP_ORIGIN;
     return null;
   }
 
@@ -55,7 +64,9 @@ function createIpcSetup({ ipcMain, app, testMode, windowsById }: IpcSetupDepende
     if (!channel) return "unknown channel";
     const origin = senderOriginOf(event);
     if (!origin || !channel.allowedOrigins.includes(origin)) return "untrusted sender";
-    const trusted = origin === APP_ORIGIN ? isTrustedSender(event) : isTrustedTabStripSender(event);
+    const trusted = origin === RELAY_SETUP_ORIGIN
+      ? relaySetup?.trusts(event)
+      : origin === APP_ORIGIN ? isTrustedSender(event) : isTrustedTabStripSender(event);
     if (!trusted) return "untrusted sender";
     const bad = checkArgs(channel.argsSchema, args);
     return bad ? channel.name + ": " + bad : null;
@@ -66,7 +77,7 @@ function createIpcSetup({ ipcMain, app, testMode, windowsById }: IpcSetupDepende
   }
 
   function ipcChannelRow(name: string, direction: DesktopChannelRow["direction"]) {
-    const channel = channelFor(name, direction);
+    const channel = channelFor(name, direction, !!relaySetup);
     if (!channel) throw new Error(`ipc: ${name} (${direction}) is not in desktop/ipc-channels.ts`);
     return channel;
   }
@@ -106,7 +117,7 @@ function createIpcSetup({ ipcMain, app, testMode, windowsById }: IpcSetupDepende
   function registerIpc(groups: Record<"registerFileIpc" | "registerShellIpc" | "registerDocumentIpc" | "registerHistoryBlobIpc" | "registerTabStripIpc" | "registerTestModeIpc" | "registerPrintIpc", DesktopRegisterIpcGroup>) {
     const wrappers = { ipcHandle, ipcOn, ipcOnSync };
 
-    ipcOnSync("splitpage:ipc-table-sync", (event) => channelsForOrigin(senderOriginOf(event)));
+    ipcOnSync("splitpage:ipc-table-sync", (event) => channelsForOrigin(senderOriginOf(event), !!relaySetup));
 
     groups.registerFileIpc(wrappers);
 
@@ -122,6 +133,14 @@ function createIpcSetup({ ipcMain, app, testMode, windowsById }: IpcSetupDepende
     groups.registerTestModeIpc(wrappers);
 
     groups.registerPrintIpc(wrappers);
+
+    if (relaySetup) {
+      ipcHandle("splitpage:relay-owner-status", relaySetup.status);
+      ipcHandle("splitpage:relay-owner-open", relaySetup.open);
+      ipcHandle("splitpage:relay-owner-test", relaySetup.test);
+      ipcHandle("splitpage:relay-owner-clear", relaySetup.clear);
+      ipcHandle("splitpage:relay-setup-save", (_event, address, secret) => relaySetup.save(address, secret));
+    }
   }
 
   return { registerIpc };

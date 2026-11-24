@@ -2,25 +2,28 @@ import assert from "node:assert/strict";
 import fs from "node:fs";
 import path from "node:path";
 import { fileURLToPath } from "node:url";
+import { parse } from "yaml";
 
 const desktop = path.join(path.dirname(fileURLToPath(import.meta.url)), "..");
 const builderConfig = fs.readFileSync(path.join(desktop, "electron-builder.yml"), "utf8");
-const filesBlock = /^files:\r?\n((?:[ \t]+- .+\r?\n)+)/m.exec(builderConfig);
-assert.ok(filesBlock, "electron-builder.yml must list its packaged files");
-
-const packaged = new Set(filesBlock[1].split(/\r?\n/).map((line) => line.replace(/^\s*-\s*/, "").trim()).filter(Boolean));
+const { files } = parse(builderConfig);
+assert.ok(Array.isArray(files), "electron-builder.yml must list its packaged files");
+const packaged = new Set(files.filter(file => typeof file === "string"));
+const optional = ["relay-owner.ts", "relay-setup-window.ts"];
+const collaborationStage = files.filter(file => typeof file === "object");
+assert.deepEqual(collaborationStage, [{ from: ".stage/desktop-code", to: ".", filter: ["*.ts", "collaboration.json"] }]);
 const stagedScript = fs.readFileSync(path.join(desktop, "stage.mjs"), "utf8");
 let checked = 0;
 let sharedChecked = 0;
 
-for (const file of packaged) {
+for (const file of [...packaged, ...optional]) {
   assert.ok(fs.existsSync(path.join(desktop, file)), `electron-builder.yml lists ${file}, which does not exist`);
   if (!/\.(?:ts|js)$/.test(file)) continue;
   const source = fs.readFileSync(path.join(desktop, file), "utf8");
   for (const match of source.matchAll(/\brequire\(\s*["'`](\.[^"'`]+)["'`]\s*\)/g)) {
     checked++;
     assert.ok(
-      packaged.has(path.posix.normalize(match[1])),
+      packaged.has(path.posix.normalize(match[1])) || (file === "main.ts" && optional.includes(path.posix.normalize(match[1]))),
       `${file} requires ${match[1]}, which is not in app.asar. List it in electron-builder.yml, or load shared code through SHARED_ROOT in main.ts.`
     );
   }
