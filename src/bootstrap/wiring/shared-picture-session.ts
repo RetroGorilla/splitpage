@@ -53,6 +53,8 @@ export function bindSharedPictures(copy: Copy, origin: string, script: string, t
 
   return {
     reconnect: pictures.reconnect,
+    counts: pictures.counts,
+    subscribeCounts: pictures.subscribeCounts,
     stop,
     finishPreparation() { cancel?.removeEventListener("abort", stop); },
     activate() {

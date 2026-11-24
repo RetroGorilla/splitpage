@@ -8,6 +8,7 @@ import { startFileMenu as mountFileMenuDropdown } from "../../features/file-menu
 import type { FileMenuDropdownMount, FileMenuDropdownPorts } from "../../features/file-menu/ports.ts";
 import { autoSavePolicy, saveDoc, savesStarted, toggleAutoSave } from "./save-owners.ts";
 import { documentReader } from "./ports/document.ts";
+import { collaboration } from "./ports/collaboration.ts";
 import { recents } from "./ports/desktop.ts";
 import { notices } from "./ports/effects.ts";
 import { capabilities } from "./ports/capabilities.ts";
@@ -49,7 +50,8 @@ export function mountFileMenuDropdownFeature(): FileMenuDropdownMount {
       ids,
       prepareDocument: (raw) => migrateRows(raw),
       syncIdentity: () => { documentIdentity.syncDocIdentity(); },
-      longDemo: LONG_DEMO
+      longDemo: LONG_DEMO,
+      collaboration
     };
     return mountFileMenuDropdown(ports);
   });

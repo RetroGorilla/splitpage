@@ -125,7 +125,7 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
       },
       onClose({ event }) {
         if (publicationStopped) return;
-        if (event.reason === "access-removed") {
+        if (PERMANENT_REFUSALS.has(event.reason)) {
           stopPermanently();
           emit({ kind: "authentication-failed", reason: event.reason });
           return;

@@ -165,3 +165,59 @@ for (const upload of [true, false]) {
       }
     });
 }
+
+test("picture session exposes uploading and downloading counts with change notifications", { timeout: 10_000 }, async t => {
+  const uploadStarted = eventResult<undefined>(), uploadFinish = eventResult<Response>();
+  const uploadStore = localStore();
+  uploadStore.intern(png);
+  assert.deepEqual(await uploadStore.persist([pictureHash]), []);
+  const uploadHttp = sharedPictureHttp("http://127.0.0.1", NAME, "fixture", (_url, init) => {
+    assert.equal(init?.method, "PUT");
+    uploadStarted.resolve(undefined);
+    return uploadFinish.promise;
+  });
+  const uploader = startSharedPictures(uploadHttp, uploadStore, () => {});
+  const uploadSnapshots: { checking: number; uploading: number; downloading: number }[] = [];
+  const stopUploadCounts = uploader.subscribeCounts(counts => uploadSnapshots.push({ ...counts }));
+  try {
+    assert.deepEqual(uploader.counts(), { checking: 0, uploading: 0, downloading: 0 });
+    uploader.track([pictureHash]);
+    assert.deepEqual(uploader.counts(), { checking: 0, uploading: 1, downloading: 0 });
+    await uploadStarted.promise;
+    assert.deepEqual(uploader.counts(), { checking: 0, uploading: 1, downloading: 0 });
+    uploadFinish.resolve(new Response(null, { status: 201 }));
+    while (uploader.counts().uploading > 0) await delay(5, undefined, { signal: t.signal });
+    assert.deepEqual(uploader.counts(), { checking: 0, uploading: 0, downloading: 0 });
+    assert.deepEqual(uploadSnapshots, [
+      { checking: 0, uploading: 1, downloading: 0 },
+      { checking: 0, uploading: 0, downloading: 0 }
+    ]);
+  } finally {
+    stopUploadCounts();
+    uploader.stop();
+  }
+
+  const downloadStarted = eventResult<undefined>(), downloadFinish = eventResult<Response>();
+  const downloadStore = localStore();
+  const downloadHttp = sharedPictureHttp("http://127.0.0.1", NAME, "fixture", (_url, init) => {
+    assert.equal(init?.method ?? "GET", "GET");
+    downloadStarted.resolve(undefined);
+    return downloadFinish.promise;
+  });
+  const downloader = startSharedPictures(downloadHttp, downloadStore, () => {});
+  const downloadSnapshots: { checking: number; uploading: number; downloading: number }[] = [];
+  const stopDownloadCounts = downloader.subscribeCounts(counts => downloadSnapshots.push({ ...counts }));
+  try {
+    downloader.track([pictureHash]);
+    await downloadStarted.promise;
+    assert.deepEqual(downloader.counts(), { checking: 0, uploading: 0, downloading: 1 });
+    downloadFinish.resolve(new Response(png, { status: 200 }));
+    while (downloader.counts().downloading > 0 || downloader.counts().checking > 0) await delay(5, undefined, { signal: t.signal });
+    assert.deepEqual(downloader.counts(), { checking: 0, uploading: 0, downloading: 0 });
+    assert.equal(downloadSnapshots.some(s => s.downloading === 1), true);
+    assert.deepEqual(downloadSnapshots.at(-1), { checking: 0, uploading: 0, downloading: 0 });
+  } finally {
+    stopDownloadCounts();
+    downloader.stop();
+  }
+});

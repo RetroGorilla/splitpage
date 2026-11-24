@@ -1,13 +1,15 @@
 import { createBrowserNativeLocalStore } from "../../adapters/collab/native/browser-local-store.ts";
 import { createDesktopNativeLocalStore } from "../../adapters/collab/native/desktop-local-store.ts";
-import type { NativeInvitationStage, NativeLocalStoreOpen } from "../../adapters/collab/native/local-store.ts";
+import type { NativeInvitationStage, NativeLocalStoreOpen, NativeLocalStoreReceipt } from "../../adapters/collab/native/local-store.ts";
 import { applyNativePeerUpdate } from "../../adapters/collab/native/peer-update.ts";
 import { openNativeSession } from "../../adapters/collab/native/session.ts";
 import { openNativeRelay } from "../../adapters/collab/native/relay.ts";
 import { readInvitationSnapshot } from "../../adapters/collab/native/invitation-snapshot.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
+import { isPermanentCollaborationRefusal, localWriteErrorMessage } from "../../application/collaboration/state.ts";
 import { sanitizeHtml } from "../richtext.ts";
 import { guardUnload, waitDuringLifetime } from "../startup/page-lifetime.ts";
+import { collaborationState, setSharedRetryLocalWrite } from "./collaboration-owner.ts";
 import { notifyDesktopDocumentState, trackSharedDesktopUnsaved } from "./desktop-owners.ts";
 import { notices } from "./ports/effects.ts";
 import { bindNativeEditor } from "./native-shared-session.ts";
@@ -165,9 +167,21 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
               if (event.kind === "status") {
                 if (event.status.connected && !connected) pictures?.reconnect();
                 connected = event.status.connected;
+                collaborationState().setRelay(event.status);
                 entry.onRelayConnected?.(event.status.connected && event.status.firstSyncDone);
+              } else if (event.kind === "temporary-refusal") {
+                collaborationState().setTemporaryRefusal(event.reason);
+                entry.onRelayConnected?.(false);
+              } else if (event.kind === "merge-too-large") {
+                pictures?.stop();
+                collaborationState().setMergeTooLarge(event.message);
+                entry.onRelayConnected?.(false);
+              } else if (event.kind === "authentication-failed") {
+                pictures?.stop();
+                if (isPermanentCollaborationRefusal(event.reason)) collaborationState().setRefusal(event.reason);
+                entry.onRelayConnected?.(false);
               } else {
-                if (event.kind !== "temporary-refusal") pictures?.stop();
+                pictures?.stop();
                 entry.onRelayConnected?.(false);
               }
             }
@@ -190,29 +204,59 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
       let stopDesktop: (() => void) | undefined;
       let stopChanges: (() => void) | undefined;
       let stopReceipts: (() => void) | undefined;
+      let stopPictureCounts: (() => void) | undefined;
       let wasDirty = false;
-      const notify = () => {
+      const notifyDesktop = () => {
         if (!stopDesktop || wasDirty === replica.hasUnstoredChanges()) return;
         wasDirty = replica.hasUnstoredChanges();
         notifyDesktopDocumentState();
+      };
+      const syncLocalPending = () => {
+        collaborationState().setLocalPending(replica.hasUnstoredChanges());
+        notifyDesktop();
+      };
+      const handleReceipt = (receipt: NativeLocalStoreReceipt) => {
+        if (receipt.kind === "stored") {
+          collaborationState().setLocalWriteError(null);
+          collaborationState().setLocalPending(replica.hasUnstoredChanges());
+        } else if (receipt.operation !== "compact" || replica.hasUnstoredChanges()) {
+          collaborationState().setLocalPending(replica.hasUnstoredChanges());
+          collaborationState().setLocalWriteError({
+            reason: receipt.reason,
+            message: localWriteErrorMessage(receipt.reason),
+            code: receipt.reason
+          });
+        }
+        notifyDesktop();
       };
       const retained: SharedEditorBackend = { ...backend,
         beforeDocumentSwitch: () => pending() ? "shared-copy-unsaved" : null,
         beforeExplicitLeave: stop,
         start() {
           pictures?.activate();
+          if (pictures) {
+            stopPictureCounts = pictures.subscribeCounts(counts => { collaborationState().setPictures(counts); });
+            collaborationState().setPictures(pictures.counts());
+          }
           backend.start();
           stopUnload = guardUnload(window, pending);
-          if (desktop) {
-            stopDesktop = trackSharedDesktopUnsaved(replica.hasUnstoredChanges);
-            stopChanges = replica.session.subscribe(() => { queueMicrotask(notify); });
-            stopReceipts = replica.subscribe(notify);
-            notify();
-          }
+          setSharedRetryLocalWrite(async () => {
+            if (replica.session.isClosingOrClosed()) return;
+            collaborationState().setLocalWriteError(null);
+            collaborationState().setLocalPending(true);
+            handleReceipt(await replica.flush());
+          });
+          if (desktop) stopDesktop = trackSharedDesktopUnsaved(replica.hasUnstoredChanges);
+          stopChanges = replica.session.subscribe(() => { queueMicrotask(syncLocalPending); });
+          stopReceipts = replica.subscribe(handleReceipt);
+          syncLocalPending();
         },
         dispose(attempt) {
           if (localCopy === replica) localCopy = null;
           trackClosing(name, replica);
+          attempt(() => { setSharedRetryLocalWrite(null); });
+          attempt(() => stopPictureCounts?.());
+          stopPictureCounts = undefined;
           attempt(() => stopUnload?.());
           attempt(() => stopChanges?.());
           attempt(() => stopReceipts?.());
@@ -254,4 +298,8 @@ export async function leaveRetainedSharedScript(): Promise<SharedSwitchOutcome> 
 
 export function retainedSharedScriptActive(): boolean {
   return localCopy !== null && sharedSession();
+}
+
+export async function leaveActiveSharedSession(): Promise<SharedSwitchOutcome> {
+  return retainedSharedScriptActive() ? leaveRetainedSharedScript() : leaveRunningSharedSession();
 }

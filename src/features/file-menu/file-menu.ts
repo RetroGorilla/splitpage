@@ -3,6 +3,7 @@ import type { DocumentView } from "../../application/session/document-session.ts
 import type { ValidatedDocument } from "../../core/document/validated.ts";
 import { IS_MAC, keyChipWords, keyChipsHtml } from "../common/key-chips.ts";
 import { savedStatusText, savedWhenText } from "../../../shared/clock.ts";
+import { sharedSaveStatus } from "../../application/save/status.ts";
 import { escapeHtml } from "../../core/document/text-policy.ts";
 import { NO_DESTINATION } from "../../application/transitions/ports.ts";
 import { exposeTestHook } from "../common/test-hooks.ts";
@@ -79,7 +80,19 @@ function savedWord(at?: number | null) {
 }
 
 function fileCardView(): { name: string | null | undefined; bits: { text: string | null | undefined; unsaved?: boolean; title?: string }[] } {
-  if (!(ports as FileMenuDropdownPorts).document.current()) return { name: "Loading…", bits: [] };
+  const current = (ports as FileMenuDropdownPorts).document.current();
+  if (!current) return { name: "Loading…", bits: [] };
+  const collab = (ports as FileMenuDropdownPorts).collaboration?.snapshot();
+  if (collab?.active) {
+    const shared = sharedSaveStatus(collab);
+    return {
+      name: current.title || "Untitled Script",
+      bits: [
+        { text: shared.label, unsaved: shared.state === "warn", title: shared.title },
+        { text: "Shared script" }
+      ]
+    };
+  }
   if ((ports as FileMenuDropdownPorts).place.home().kind === "file") {
     return {
       name: (ports as FileMenuDropdownPorts).place.home().name || ((ports as FileMenuDropdownPorts).place.home().handle && ((ports as FileMenuDropdownPorts).place.home().handle as NonNullable<ReturnType<FileMenuDropdownPorts["place"]["home"]>["handle"]>).name) || "Untitled",
@@ -114,8 +127,11 @@ function recentsSupported() {
 }
 
 function refreshFileMenu() {
+  const isShared = !!(ports as FileMenuDropdownPorts).collaboration?.snapshot().active;
+  const autosave = el("menu-autosave");
+  if (autosave) autosave.hidden = isShared;
   const createBundle = document.querySelector<HTMLElement>('#file-menu [data-file-action="create-bundle"]');
-  if (createBundle) createBundle.hidden = !(ports as FileMenuDropdownPorts).desktop();
+  if (createBundle) createBundle.hidden = isShared || !(ports as FileMenuDropdownPorts).desktop();
   const recent = el("menu-recent");
   if (recent) recent.hidden = !recentsSupported();
 

@@ -1,4 +1,5 @@
 import { onSessionChange } from "./session-owner.ts";
+import { onCollaborationChange } from "./collaboration-owner.ts";
 import { documentLocation } from "./location-owner.ts";
 import { onPreferenceChange, viewFlags } from "./preferences-owner.ts";
 import { onSaveChange } from "./save-owners.ts";
@@ -7,13 +8,15 @@ import { saveStatusListeners } from "./save-status.ts";
 import { localFileMenuControls } from "./local-files.ts";
 import { refreshOpenFileMenu } from "./file-menu-controls.ts";
 import { desktopDocumentListeners } from "./desktop-owners.ts";
-import { refreshWriterChrome } from "./views.ts";
+import { mountSharedBannersFeature, refreshWriterChrome, stopViewFeature, syncSharedBanners } from "./views.ts";
 
 let stopChrome: (() => void) | null = null;
 
 export function mountDocumentChromeFeature(): void {
   stopDocumentChromeFeature();
   const stops: (() => void)[] = [];
+  mountSharedBannersFeature();
+  stops.push(() => { stopViewFeature("mountSharedBanners"); });
   for (const refresh of [(...args: Parameters<ReturnType<typeof localFileMenuControls>["updateFileChip"]>) => localFileMenuControls().updateFileChip(...args), refreshOpenFileMenu]) {
     const chip = localFileMenuControls().fileChipListeners(refresh);
     stops.push(
@@ -26,9 +29,15 @@ export function mountDocumentChromeFeature(): void {
   stops.push(
     onSaveChange(status.save),
     documentLocation().onChange(status.location),
-    onPreferenceChange(status.preference)
+    onPreferenceChange(status.preference),
+    onCollaborationChange(() => {
+      status.collaboration?.();
+      refreshOpenFileMenu();
+      syncSharedBanners();
+    })
   );
   status.paint();
+  syncSharedBanners();
   const identity = identityChipListeners();
   const desktop = desktopDocumentListeners();
   stops.push(
@@ -38,7 +47,10 @@ export function mountDocumentChromeFeature(): void {
     documentLocation().onChange(desktop.location),
     onSaveChange(desktop.save),
     viewFlags().onChange((change) => {
-      if (change.flag === "writerOpen") refreshWriterChrome();
+      if (change.flag === "writerOpen") {
+        refreshWriterChrome();
+        syncSharedBanners();
+      }
     })
   );
   stopChrome = () => {

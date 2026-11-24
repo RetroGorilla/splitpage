@@ -1,3 +1,4 @@
+import type { CollaborationReads } from "../../application/collaboration/state.ts";
 import type { SessionListener } from "../../application/session/document-session.ts";
 import type { DocumentEdits } from "../../application/session/document-edits.ts";
 import type { PersonColorLookup } from "../../core/document/person-colors.ts";
@@ -28,6 +29,7 @@ export interface SaveStatusPorts {
   readonly notices: Pick<NoticePort, "show">;
   readonly drafts: Pick<DraftsMount, "noteChange">;
   readonly identity: DocumentIdentitySync;
+  readonly collaboration?: Pick<CollaborationReads, "snapshot">;
 }
 
 export interface SaveStatusListeners {
@@ -35,6 +37,19 @@ export interface SaveStatusListeners {
   readonly save: (change: SaveChange) => void;
   readonly location: (change: LocationChange) => void;
   readonly preference: (change: PreferenceChange) => void;
+  readonly collaboration?: () => void;
+}
+
+export interface SharedBannersPorts {
+  readonly collaboration: Pick<CollaborationReads, "snapshot">;
+  readonly exportCopy: () => void;
+  readonly leave: () => void;
+}
+
+export interface SharedBannersMount {
+  readonly sync: () => void;
+  readonly openRecovery: () => void;
+  readonly dispose: () => void;
 }
 
 export interface SaveStatusMount {

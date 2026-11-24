@@ -1,8 +1,10 @@
+import type { CollaborationPictureCounts } from "../../../application/collaboration/state.ts";
 import type { BlobStore } from "../../storage/blob-store.ts";
 import type { sharedPictureHttp } from "./picture-http.ts";
 
 type PictureHttp = ReturnType<typeof sharedPictureHttp>;
-type PendingPicture = { attempts: number; due: number; cancel: AbortController };
+type PictureTransferKind = "checking" | "uploading" | "downloading";
+type PendingPicture = { attempts: number; due: number; cancel: AbortController; kind: PictureTransferKind };
 
 export function startSharedPictures(http: PictureHttp, store: Pick<BlobStore, "bytesFor" | "ensureBytes" | "intern" | "isDurable" | "persist" | "recordFor">, changed: () => void) {
   const lifetime = new AbortController();
@@ -13,12 +15,50 @@ export function startSharedPictures(http: PictureHttp, store: Pick<BlobStore, "b
   const confirmed = new Set<string>();
   const rejected = new Set<string>();
   const unstored = new Set<string>();
+  const countListeners = new Set<(counts: CollaborationPictureCounts) => void>();
+  let lastCounts: CollaborationPictureCounts = Object.freeze({ checking: 0, uploading: 0, downloading: 0 });
   let current = new Set<string>();
   let timer: ReturnType<typeof setTimeout> | undefined;
   let working = false;
   let reconnectGeneration = 0;
 
   const available = store.isDurable;
+
+  function computeCounts(): CollaborationPictureCounts {
+    if (authorized.aborted) return Object.freeze({ checking: 0, uploading: 0, downloading: 0 });
+    let checking = 0, uploading = 0, downloading = 0;
+    for (const item of pending.values()) {
+      if (item.kind === "checking") checking++;
+      else if (item.kind === "uploading") uploading++;
+      else downloading++;
+    }
+    return Object.freeze({ checking, uploading, downloading });
+  }
+
+  function emitCounts(): void {
+    const next = computeCounts();
+    if (next.checking === lastCounts.checking && next.uploading === lastCounts.uploading && next.downloading === lastCounts.downloading) return;
+    lastCounts = next;
+    for (const listener of [...countListeners]) {
+      try {
+        listener(next);
+      } catch {
+        continue;
+      }
+    }
+  }
+
+  function initialKind(sha: string): PictureTransferKind {
+    if (store.bytesFor(sha) && store.recordFor(sha) && available(sha)) return "uploading";
+    return "checking";
+  }
+
+  function setItemKind(sha: string, kind: PictureTransferKind): void {
+    const item = pending.get(sha);
+    if (!item || item.kind === kind) return;
+    item.kind = kind;
+    emitCounts();
+  }
 
   async function storePicture(sha: string, requestSignal: AbortSignal) {
     await store.persist([sha]);
@@ -29,23 +69,31 @@ export function startSharedPictures(http: PictureHttp, store: Pick<BlobStore, "b
 
   async function download(sha: string, requestSignal: AbortSignal = authorized) {
     if (requestSignal.aborted) return;
+    setItemKind(sha, "downloading");
     const bytes = await http.download(sha, requestSignal).catch(() => "retry" as const);
     if (requestSignal.aborted) return;
     if (bytes === "access") {
       access.abort();
+      emitCounts();
       changed();
     }
     if (bytes === "rejected" && current.has(sha)) {
       rejected.add(sha);
       pending.get(sha)?.cancel.abort();
       pending.delete(sha);
+      emitCounts();
       changed();
     }
     if (!(bytes instanceof Uint8Array)) return;
     store.intern(bytes);
+    setItemKind(sha, "checking");
     await storePicture(sha, requestSignal);
     if (!requestSignal.aborted) {
       confirmed.add(sha);
+      if (available(sha)) {
+        pending.delete(sha);
+        emitCounts();
+      }
       changed();
     }
   }
@@ -60,16 +108,19 @@ export function startSharedPictures(http: PictureHttp, store: Pick<BlobStore, "b
       return;
     }
     if (!available(sha)) {
+      setItemKind(sha, "checking");
       await storePicture(sha, requestSignal);
       if (requestSignal.aborted) return;
       if (!available(sha)) changed();
     }
     if (available(sha)) changed();
     if (confirmed.has(sha) || !available(sha)) return;
+    setItemKind(sha, "uploading");
     const outcome = await http.upload(sha, local, record.mime, requestSignal).catch(() => "retry" as const);
     if (requestSignal.aborted) return;
     if (outcome === "access") {
       access.abort();
+      emitCounts();
       changed();
     }
     if (outcome === "stored" || outcome === "rejected") confirmed.add(sha);
@@ -93,6 +144,7 @@ export function startSharedPictures(http: PictureHttp, store: Pick<BlobStore, "b
       await process(sha, AbortSignal.any([authorized, item.cancel.signal]));
     } finally {
       if (confirmed.has(sha) && available(sha) && pending.get(sha) === item) pending.delete(sha);
+      emitCounts();
       const backoff = Math.min(30_000, 500 * 2 ** item.attempts++);
       if (generation === reconnectGeneration) item.due = Date.now() + backoff;
       working = false;
@@ -113,10 +165,16 @@ export function startSharedPictures(http: PictureHttp, store: Pick<BlobStore, "b
       }
       for (const sha of current) {
         if (!pending.has(sha) && !rejected.has(sha) && !(confirmed.has(sha) && available(sha))) {
-          pending.set(sha, { attempts: 0, due: 0, cancel: new AbortController() });
+          pending.set(sha, { attempts: 0, due: 0, cancel: new AbortController(), kind: initialKind(sha) });
         }
       }
+      emitCounts();
       schedule();
+    },
+    counts: () => lastCounts,
+    subscribeCounts(listener: (counts: CollaborationPictureCounts) => void) {
+      countListeners.add(listener);
+      return () => { countListeners.delete(listener); };
     },
     ready: (refs: readonly string[]) => refs.every(available),
     refused: () => access.signal.aborted,
@@ -139,6 +197,8 @@ export function startSharedPictures(http: PictureHttp, store: Pick<BlobStore, "b
       lifetime.abort();
       clearTimeout(timer);
       pending.clear();
+      emitCounts();
+      countListeners.clear();
     }
   };
 }
