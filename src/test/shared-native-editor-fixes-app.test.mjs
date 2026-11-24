@@ -78,7 +78,12 @@ test("shared Split and Writer title editing supports buffered typing, deletes, p
   assert.equal(hook.read().peer.title, "Hello W");
 
   const paste = new window.Event("paste", { bubbles: true, cancelable: true });
-  Object.defineProperty(paste, "clipboardData", { value: { types: ["text/plain"], getData: type => type === "text/plain" ? "orld" : "" } });
+  Object.defineProperty(paste, "clipboardData", {
+    value: {
+      types: ["text/plain", "text/html"],
+      getData: type => type === "text/plain" ? "orld" : type === "text/html" ? "<b>orld</b>" : ""
+    }
+  });
   input.dispatchEvent(paste);
   assert.equal(paste.defaultPrevented, true);
   await tick();
@@ -176,6 +181,69 @@ test("two copies editing the title at once converge and undo/redo independently"
   assert.deepEqual(f.notices(), []);
 });
 
+test("focused shared Split and Writer title caret and selection follow unheld peer edits", async t => {
+  const f = await enter(t, { title: "Pilot" });
+  const splitInput = docTitle();
+  splitInput.focus();
+  splitInput.setSelectionRange(5, 5);
+  assert.equal(peer.titleType(0, "S1: ").kind, "written");
+  await tick();
+  assert.equal(splitInput.value, "S1: Pilot");
+  assert.equal(splitInput.selectionStart, 9);
+  assert.equal(splitInput.selectionEnd, 9);
+  assert.equal(beforeInput(splitInput, "insertText", "?"), true);
+  await wait();
+  assert.equal(hook.read().app.title, "S1: Pilot?");
+  assert.equal(hook.read().peer.title, "S1: Pilot?");
+
+  assert.equal(peer.titleDelete(0, 4).kind, "written");
+  assert.equal(peer.titleDelete(5, 6).kind, "written");
+  await tick();
+  assert.equal(splitInput.value, "Pilot");
+  splitInput.setSelectionRange(2, 5);
+  assert.equal(peer.titleType(0, "S1: ").kind, "written");
+  await tick();
+  assert.equal(splitInput.value, "S1: Pilot");
+  assert.equal(splitInput.selectionStart, 6);
+  assert.equal(splitInput.selectionEnd, 9);
+  assert.equal(beforeInput(splitInput, "insertText", "X"), true);
+  await wait();
+  assert.equal(hook.read().app.title, "S1: PiX");
+  assert.equal(hook.read().peer.title, "S1: PiX");
+
+  writerControls().openWriter();
+  const wt = writerTitle();
+  wt.focus();
+  assert.equal(peer.titleReplace(0, 7, "Pilot").kind, "written");
+  await tick();
+  assert.equal(wt.value, "Pilot");
+  wt.setSelectionRange(5, 5);
+  assert.equal(peer.titleType(0, "S1: ").kind, "written");
+  await tick();
+  assert.equal(wt.value, "S1: Pilot");
+  assert.equal(wt.selectionStart, 9);
+  assert.equal(wt.selectionEnd, 9);
+  assert.equal(beforeInput(wt, "insertText", "?"), true);
+  await wait();
+  assert.equal(hook.read().app.title, "S1: Pilot?");
+  assert.equal(hook.read().peer.title, "S1: Pilot?");
+
+  assert.equal(peer.titleDelete(0, 4).kind, "written");
+  assert.equal(peer.titleDelete(5, 6).kind, "written");
+  await tick();
+  wt.setSelectionRange(2, 5);
+  assert.equal(peer.titleType(0, "S1: ").kind, "written");
+  await tick();
+  assert.equal(wt.value, "S1: Pilot");
+  assert.equal(wt.selectionStart, 6);
+  assert.equal(wt.selectionEnd, 9);
+  assert.equal(beforeInput(wt, "insertText", "X"), true);
+  await wait();
+  assert.equal(hook.read().app.title, "S1: PiX");
+  assert.equal(hook.read().peer.title, "S1: PiX");
+  assert.deepEqual(f.notices(), []);
+});
+
 test("shared Split add bar adds after the last visible beat beside peer edits, joins, and removals", async t => {
   const f = await enter(t);
   assert.equal(peer.type("r2", 4, " updated").kind, "written");
@@ -255,6 +323,44 @@ test("empty shared Split + Add your first row creates the first beat on both cop
   assert.equal(peer.step("redo").kind, "written");
   await tick();
   assert.equal(hook.read().app.rows.length, 1);
+  assert.deepEqual(hook.read().peer, hook.read().app);
+  assert.deepEqual(f.notices(), []);
+});
+
+test("shared Split add bar converges with held peer removal of r2 and all beats, and peer undo converges", async t => {
+  const f = await enter(t);
+  peer.hold();
+  assert.equal(peer.removeBeat("r2").kind, "written");
+  addBarBtn().click();
+  await tick();
+  assert.equal(hook.read().app.rows.length, 3);
+  assert.equal(hook.read().peer.rows.length, 1);
+
+  peer.deliver();
+  await tick();
+  assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["Alpha", ""]);
+  assert.deepEqual(hook.read().peer, hook.read().app);
+
+  assert.equal(peer.undoPeer().kind, "written");
+  await tick();
+  assert.deepEqual(hook.read().app.rows.map(row => row.audioText), ["Alpha", "Beta", ""]);
+  assert.deepEqual(hook.read().peer, hook.read().app);
+
+  peer.hold();
+  const addedId = hook.read().app.rows[2].id;
+  assert.equal(peer.removeBeat(addedId).kind, "written");
+  assert.equal(peer.removeBeat("r2").kind, "written");
+  assert.equal(peer.removeBeat("r1").kind, "written");
+  addBarBtn().click();
+  await tick();
+  peer.deliver();
+  await tick();
+  assert.deepEqual(hook.read().app.rows.map(row => row.audioText), [""]);
+  assert.deepEqual(hook.read().peer, hook.read().app);
+
+  assert.equal(peer.undoPeer().kind, "written");
+  await tick();
+  assert.equal(hook.read().app.rows.length, 2);
   assert.deepEqual(hook.read().peer, hook.read().app);
   assert.deepEqual(f.notices(), []);
 });

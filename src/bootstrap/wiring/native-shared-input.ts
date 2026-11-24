@@ -49,7 +49,7 @@ const HISTORY = /^history(Undo|Redo)$/;
 const FORMAT_MARKS = new Map<string, NativePlainMark>([
   ["bold", "b"], ["italic", "i"], ["underline", "u"], ["strikeThrough", "s"], ["highlight", "hl"], ["direction", "dir"]
 ]);
-const EVENTS = ["beforeinput", "input", "compositionstart", "compositionupdate", "compositionend", "paste", "cut", "drop", "keydown", "click", "pointerdown", "focusout"] as const;
+const EVENTS = ["beforeinput", "input", "compositionstart", "compositionupdate", "compositionend", "paste", "cut", "drop", "keydown", "click", "pointerdown", "focusin", "focusout"] as const;
 const UNSUPPORTED = "native-input-unavailable";
 const STALE = "native-selection-stale";
 const PENDING = "native-input-pending";
@@ -276,6 +276,20 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     readonly dispose: () => void;
   } | null = null;
   const movePaint = new Map<Element, TrackedPaint>();
+  let titleTrack: { readonly input: HTMLInputElement; readonly paint: ReturnType<NativeInputPorts["native"]["trackTitlePaint"]> } | null = null;
+  function clearTitleTrack(): void {
+    titleTrack?.paint.dispose();
+    titleTrack = null;
+  }
+  function syncTitleTrack(input: Element | null = document.activeElement): void {
+    if (!(input instanceof HTMLInputElement) || input.id !== "doc-title" && input.id !== "writer-title") {
+      clearTitleTrack();
+      return;
+    }
+    if (draft?.cell === input || !paintIsCurrent()) return;
+    clearTitleTrack();
+    titleTrack = { input, paint: native.trackTitlePaint() };
+  }
   const stopSize = native.subscribe(event => {
     if (event.kind === "size" && event.state !== "full") fullRefused = false;
   });
@@ -284,13 +298,21 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
     const title = documentReader.current()?.title ?? "";
     for (const id of ["doc-title", "writer-title"]) {
       const input = document.getElementById(id);
-      if (!(input instanceof HTMLInputElement) || draft?.cell === input || input.value === title) continue;
+      if (!(input instanceof HTMLInputElement) || draft?.cell === input) continue;
       const focused = document.activeElement === input;
-      const start = input.selectionStart, end = input.selectionEnd, direction = input.selectionDirection ?? undefined;
-      input.value = title;
-      if (focused && !placement && start !== null && end !== null) {
-        input.setSelectionRange(Math.min(start, title.length), Math.min(end, title.length), direction);
+      if (input.value !== title) {
+        const start = input.selectionStart, end = input.selectionEnd, direction = input.selectionDirection ?? undefined;
+        const tracked = focused && titleTrack?.input === input ? titleTrack.paint : null;
+        const startPoint = tracked && start !== null ? tracked.point(start, 0) : null;
+        const endPoint = tracked && end !== null ? (end === start ? startPoint : tracked.point(end, 0)) : null;
+        const nextStart = startPoint ? native.titleOffset({ from: startPoint }, 0) : null;
+        const nextEnd = endPoint ? (endPoint === startPoint ? nextStart : native.titleOffset({ from: endPoint }, 0)) : null;
+        input.value = title;
+        if (focused && !placement && start !== null && end !== null) {
+          input.setSelectionRange(nextStart ?? Math.min(start, title.length), nextEnd ?? Math.min(end, title.length), direction);
+        }
       }
+      if (focused) syncTitleTrack(input);
     }
     emptyWriter?.paint();
     const placed = placement;
@@ -1518,7 +1540,12 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       }
       if (event.type === "compositionstart" || input) refusedJoinComposition = null;
     }
+    if (event.type === "focusin") {
+      if (titleInput) syncTitleTrack(titleInput);
+      return;
+    }
     if (event.type === "focusout") {
+      if (titleInput && titleTrack?.input === titleInput) clearTitleTrack();
       if (imeTarget === cell) imeTarget = null;
       const next = (event as FocusEvent).relatedTarget;
       if (cell && next instanceof Element && next.closest(ROW_MENU_BUTTON)) {
@@ -1649,7 +1676,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
         if (event.type === "paste") {
           const data = (event as ClipboardEvent).clipboardData;
           const text = data?.getData("text/plain") ?? "";
-          if (text && !/[\r\n]/.test(text) && cleanText(text) === text && data?.types.every(type => type === "text/plain")) {
+          if (text && !/[\r\n]/.test(text) && cleanText(text) === text) {
             transferTitle(titleInput, text);
             return;
           }
@@ -1761,6 +1788,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       if (!fresh) return;
       const anchor = selection.anchor.target.cell === "title" ? selection.anchor.offset : selection.head.offset;
       titleTextSurface.place(fresh, "", anchor, selection.head.offset, false);
+      syncTitleTrack(fresh);
       return;
     }
     if (selection.head.target.cell === "visual") {
@@ -1937,6 +1965,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
   let stopUnload: (() => void) | undefined;
   const dispose = (): void => {
     clearTimeout(timer);
+    clearTitleTrack();
     draft?.compositionCaret?.dispose();
     draft?.paint?.dispose();
     draft = null;
