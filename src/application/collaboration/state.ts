@@ -1,4 +1,9 @@
 import type { OfflineClash, OfflineClashEntry, OfflineSavedBeat } from "./offline-clashes.ts";
+import { canonicalSourceJson } from "../../core/document/load-ids.ts";
+
+function savedContent({ narration, visual, fields, joined }: OfflineSavedBeat): string {
+  return canonicalSourceJson({ narration, visual, fields, joined });
+}
 
 export type CollaborationPermanentRefusal =
   | "access-removed"
@@ -226,7 +231,9 @@ export function createCollaborationState(): CollaborationState {
       if (!current.active || !clashes.length) return;
       const entries = new Map(current.offlineClashes.map(entry => [entry.id, entry]));
       for (const { id, mine, near } of clashes) {
-        entries.set(id, Object.freeze({ id, mine, ...(near === undefined ? {} : { near }), restored: false }));
+        const previous = entries.get(id);
+        const restored = !!(previous?.restored && previous.mine && mine && savedContent(previous.mine) === savedContent(mine));
+        entries.set(id, Object.freeze({ id, mine, ...(near === undefined ? {} : { near }), restored }));
       }
       update({ ...current, offlineClashes: Object.freeze([...entries.values()]) });
     },

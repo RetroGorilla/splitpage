@@ -20,7 +20,7 @@ export function createOfflineReview(window: Window, ports: OfflineReviewPorts): 
   const summary = doc.getElementById("collab-offline-summary");
   const review = doc.getElementById("collab-offline-review");
   const dismiss = doc.getElementById("collab-offline-dismiss");
-  const dialog = doc.querySelector<HTMLDialogElement>("#offline-review");
+  const dialog = doc.getElementById("offline-review");
   const close = doc.getElementById("offline-review-close");
   const list = doc.getElementById("offline-review-list");
   const feedback = doc.getElementById("offline-review-feedback");
@@ -75,7 +75,7 @@ export function createOfflineReview(window: Window, ports: OfflineReviewPorts): 
   }
 
   function paintLive(): void {
-    if (!dialog?.open) return;
+    if (!dialog || dialog.hidden) return;
     const numbers = ports.document.numbering();
     for (const { entry, heading, live, jump } of cards) {
       const beat = readLive(entry);
@@ -87,14 +87,17 @@ export function createOfflineReview(window: Window, ports: OfflineReviewPorts): 
   }
 
   function closeReview(): void {
-    if (dialog?.open) dialog.close();
+    if (dialog && !dialog.hidden) {
+      dialog.hidden = true;
+      if (!banner?.hidden) review?.focus({ preventScroll: true });
+    }
     list?.replaceChildren();
     cards = [];
     if (feedback) feedback.textContent = "";
   }
 
   function paintCards(): void {
-    if (!dialog?.open || !list || !feedback) return;
+    if (!dialog || dialog.hidden || !list || !feedback) return;
     const focused = list.contains(doc.activeElement);
     list.replaceChildren();
     cards = entries.map(entry => {
@@ -138,20 +141,28 @@ export function createOfflineReview(window: Window, ports: OfflineReviewPorts): 
   function paintNotice(): void {
     if (!banner || !summary) return;
     banner.hidden = !entries.length;
-    summary.textContent = entries.length === 1 ? "1 beat to review" : entries.length ? entries.length + " beats to review" : "";
+    const remaining = entries.filter(entry => !entry.restored).length;
+    summary.textContent = remaining === 1 ? "1 beat to review" : remaining ? remaining + " beats to review"
+      : entries.length ? "All changes reviewed" : "";
     if (entries.length) paintCards();
     else closeReview();
   }
 
   life.listen(review, "click", () => {
-    if (!entries.length || dialog.open) return;
-    dialog.showModal();
+    if (!entries.length || !dialog.hidden) return;
+    dialog.hidden = false;
     paintCards();
+    close.focus({ preventScroll: true });
   });
   life.listen(dismiss, "click", ports.collaboration.dismissOfflineClashes);
   life.listen(close, "click", closeReview);
-  life.listen(dialog, "keydown", event => { event.stopPropagation(); });
-  life.listen(dialog, "cancel", event => { event.preventDefault(); closeReview(); });
+  life.listen(dialog, "click", event => { if (event.target === dialog) closeReview(); });
+  life.listen(window, "keydown", event => {
+    if (dialog.hidden || event.key !== "Escape") return;
+    event.preventDefault();
+    event.stopImmediatePropagation();
+    closeReview();
+  }, true);
   life.release(ports.collaboration.onChange(snapshot => {
     if (entries === snapshot.offlineClashes) return;
     entries = snapshot.offlineClashes;

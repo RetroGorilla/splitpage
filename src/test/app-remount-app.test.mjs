@@ -125,7 +125,7 @@ const RESOURCE_ROWS = {
   ],
   offlineReview: [
     "#collab-offline-review click/B", "#collab-offline-dismiss click/B", "#offline-review-close click/B",
-    "#offline-review keydown/B", "#offline-review cancel/B"
+    "#offline-review click/B", "window keydown/C"
   ],
   S13: ["#production-list click/C", "#production-list contextmenu/B", "#production-list pointercancel/B", "#production-list pointerdown/B", "#production-list pointermove/B", "#production-list pointerup/B"],
   S26: ["#production-panel change/B", "#production-panel click/B", "#production-panel focusout/B", "#production-panel input/B", "#production-panel keydown/B"],

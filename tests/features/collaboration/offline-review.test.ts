@@ -15,9 +15,8 @@ test("a refused put-back can be retried and restoring cannot be repeated by a st
       id: "beat", row: "beat", narration: [{ text: "Saved", marks: {} }], visual: [],
       fields: {}, joined: null, placement: { scene: null, left: null, right: null, sceneOrder: ["beat"] }
     };
-    const dialog = document.querySelector<HTMLDialogElement>("#offline-review");
+    const dialog = document.getElementById("offline-review");
     assert.ok(dialog);
-    Object.assign(dialog, { showModal() { dialog.open = true; }, close() { dialog.open = false; } });
     let attempts = 0;
     const view = createOfflineReview(window, {
       collaboration: owner,
@@ -44,8 +43,18 @@ test("a refused put-back can be retried and restoring cannot be repeated by a st
       restore.click();
       assert.equal(attempts, 2);
       assert.equal(owner.snapshot().offlineClashes[0]?.restored, true);
+      const summary = document.getElementById("collab-offline-summary");
+      assert.equal(summary?.textContent, "All changes reviewed");
+      owner.setOfflineClashes([{ id: saved.id, mine: structuredClone(saved) }]);
+      assert.equal(owner.snapshot().offlineClashes[0]?.restored, true);
+      assert.equal(dialog.querySelector<HTMLButtonElement>(".offline-review-restore")?.disabled, true);
+      assert.equal(summary?.textContent, "All changes reviewed");
+      owner.setOfflineClashes([{ id: saved.id, mine: { ...saved, narration: [{ text: "Later edit", marks: {} }] } }]);
+      assert.equal(owner.snapshot().offlineClashes[0]?.restored, false);
+      assert.equal(dialog.querySelector<HTMLButtonElement>(".offline-review-restore")?.disabled, false);
+      assert.equal(summary?.textContent, "1 beat to review");
       owner.dismissOfflineClashes();
-      assert.equal(dialog.open, false);
+      assert.equal(dialog.hidden, true);
       assert.equal(document.getElementById("collab-offline-banner")?.hidden, true);
     } finally { view.dispose(); }
   });

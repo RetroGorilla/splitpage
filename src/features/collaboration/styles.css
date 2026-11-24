@@ -1,9 +1,3 @@
-  #offline-review {
-    width: calc(100% - 2 * var(--space-16));
-    margin: auto;
-    color: var(--text);
-  }
-  #offline-review::backdrop { background: var(--backdrop); }
   #offline-review-feedback:empty { display: none; }
   .offline-review-beat { margin: 0; font: inherit; }
   .offline-review-cell { margin-bottom: var(--space-8); min-height: 1.5em; }

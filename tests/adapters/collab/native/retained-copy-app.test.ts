@@ -21,6 +21,8 @@ import { collaborationSnapshot } from "../../../../src/bootstrap/wiring/collabor
 import { actions } from "../../../../src/bootstrap/wiring/ports/actions.ts";
 import { sharedUndoRoute } from "../../../../src/bootstrap/wiring/undo.ts";
 import { openDocument } from "../../../../src/bootstrap/wiring/transition-owners.ts";
+import { screen } from "../../../../src/bootstrap/wiring/ports/screen.ts";
+import { cycleRowStatus } from "../../../../src/bootstrap/wiring/beat-status.ts";
 import { NAME, serverHarness } from "./server-harness.ts";
 import { StateFirstProvider } from "../../../../src/adapters/collab/native/state-first-provider.ts";
 import { printDialog } from "../../../../src/bootstrap/wiring/ports/printing.ts";
@@ -841,6 +843,57 @@ test("retained-shared-script delivers offline notice clashes before releasing th
   assert.deepEqual(await hook().leave(), ok);
 });
 
+test("ordinary online edits leave no offline notice after the retained relay reconnects", { timeout: 20_000 }, async t => {
+  const kit = serverHarness(t);
+  kit.seed();
+  const port = await kit.launch().port();
+  const peer = kit.copy(port);
+  await kit.until(() => peer.relay.status().firstSyncDone || undefined);
+  const row = peer.session.document().rows[0];
+  assert.ok(row);
+  let connection: StateFirstProvider["configuration"]["websocketProvider"] | undefined;
+  const attach = StateFirstProvider.prototype.attach;
+  t.mock.method(StateFirstProvider.prototype, "attach", function (this: StateFirstProvider) {
+    connection = this.configuration.websocketProvider;
+    return attach.call(this);
+  });
+  const notices: string[][] = [];
+  try {
+    assert.deepEqual(await hook().enterRetained({
+      deployment: "online-review", script: NAME, relayUrl: "ws://127.0.0.1:" + port,
+      invitation: { token: kit.invitation().token },
+      onOfflineNotice: clashes => { notices.push(clashes.map(clash => clash.id)); }
+    }), ok);
+    const until = async (ready: () => boolean) => {
+      while (!ready()) await delay(10, undefined, { signal: t.signal });
+    };
+    const settled = () => {
+      const { connected, firstSyncDone, pendingChangeCount } = collaborationSnapshot().relay;
+      return connected && firstSyncDone && pendingChangeCount === 0;
+    };
+    await until(() => settled() && notices.length > 0);
+    cycleRowStatus(row.id);
+    await kit.until(() => peer.session.document().rows[0]?.status === "ready" || undefined);
+    await until(settled);
+    assert.equal(peer.session.commands.setField({ kind: "beat", id: row.id, field: "status" }, "shot").kind, "written");
+    await until(() => currentDocument()?.rows[0]?.status === "shot" && settled());
+    const socket = connection?.webSocket;
+    assert.ok(socket);
+    const before = notices.length;
+    socket.close();
+    await until(() => !collaborationSnapshot().relay.connected);
+    await until(() => settled() && notices.length > before);
+    assert.deepEqual(notices.slice(before), [[]]);
+    assert.deepEqual(collaborationSnapshot().offlineClashes, []);
+    assert.equal(document.getElementById("collab-offline-banner")?.hidden, true);
+  } finally {
+    if (collaborationSnapshot().active) {
+      while (collaborationSnapshot().localPending) await delay(10, undefined, { signal: t.signal });
+      assert.deepEqual(await hook().leave(), ok);
+    }
+  }
+});
+
 for (const peerAction of ["edit", "remove"] as const) {
   test(`return after an offline restart reviews a peer ${peerAction} and restores the beat in one undo step`, { timeout: 20_000 }, async t => {
     const kit = serverHarness(t);
@@ -875,13 +928,9 @@ for (const peerAction of ["edit", "remove"] as const) {
     assert.equal(changed.kind, "written");
     await kit.until(() => peer.relay.status().pendingChangeCount === 0 || undefined);
 
-    const dialog = document.querySelector<HTMLDialogElement>("#offline-review");
+    const dialog = document.getElementById("offline-review");
     const banner = document.getElementById("collab-offline-banner");
     assert.ok(dialog && banner);
-    Object.assign(dialog, {
-      showModal() { dialog.open = true; },
-      close() { dialog.open = false; }
-    });
     const click = (selector: string) => {
       const button = document.querySelector<HTMLButtonElement>(selector);
       assert.ok(button);
@@ -910,7 +959,8 @@ for (const peerAction of ["edit", "remove"] as const) {
     assert.equal(document.getElementById("collab-offline-review")?.textContent, "Review changes");
     assert.equal(document.getElementById("collab-offline-dismiss")?.textContent, "Dismiss");
     click("#collab-offline-review");
-    assert.equal(dialog.open, true);
+    assert.equal(dialog.hidden, false);
+    assert.equal(screen().dialog, true);
     const [mine, live] = dialog.querySelectorAll(".merge-side");
     assert.match(mine?.textContent ?? "", /offline word.*Ready/);
     if (peerAction === "edit") {
@@ -921,7 +971,8 @@ for (const peerAction of ["edit", "remove"] as const) {
       Object.assign(target, { scrollIntoView() { scrolled = true; } });
       const invoke = t.mock.method(actions, "invoke");
       click("#offline-review .jump-link");
-      assert.equal(dialog.open, false);
+      assert.equal(dialog.hidden, true);
+      assert.equal(screen().dialog, false);
       assert.deepEqual(invoke.mock.calls[0]?.arguments, ["reveal-row", "button", row.id]);
       assert.equal(scrolled, true);
       click("#collab-offline-review");
@@ -946,7 +997,10 @@ for (const peerAction of ["edit", "remove"] as const) {
     assert.notEqual(fresh[0]?.id, row.id);
     assert.equal(fresh[0]?.audioText, "offline word");
     assert.equal(fresh[0]?.status, "ready");
-    if (peerAction === "remove") assert.match(after[0]?.audioText ?? "", /offline /);
+    if (peerAction === "remove") {
+      assert.equal(after[0]?.audioText, before[0]?.audioText);
+      assert.ok([after[0], fresh[0]].every(beat => beat?.audioText?.includes("offline ")));
+    }
     const project = (rows: typeof after) => rows.map(({ id, audioText }) => ({ id, audioText }));
     assert.deepEqual(project(peer.session.document().rows), project(after));
     assert.equal(sharedUndoRoute()?.actions.undo().ok, true);
@@ -956,6 +1010,7 @@ for (const peerAction of ["edit", "remove"] as const) {
 
     if (peerAction === "edit") {
       click("#offline-review-close");
+      assert.equal(screen().dialog, false);
       click("#collab-offline-dismiss");
       assert.equal(banner.hidden, true);
       assert.deepEqual(collaborationSnapshot().offlineClashes, []);
@@ -965,7 +1020,8 @@ for (const peerAction of ["edit", "remove"] as const) {
       const file = new File([JSON.stringify({ schema: 2, title: "Replacement", rows })], "replacement.splitpage");
       await openDocument({ kind: "file", file, handle: null });
       assert.equal(currentDocument()?.title, "Replacement");
-      assert.equal(dialog.open, false);
+      assert.equal(dialog.hidden, true);
+      assert.equal(screen().dialog, false);
       assert.equal(banner.hidden, true);
       assert.deepEqual(collaborationSnapshot().offlineClashes, []);
     }
