@@ -32,7 +32,6 @@ export interface CollaborationSnapshot {
   readonly pictures: CollaborationPictureCounts;
   readonly refusal: CollaborationPermanentRefusal | null;
   readonly mergeTooLarge: string | null;
-  readonly temporaryRefusal: string | null;
 }
 
 export interface CollaborationReads {
@@ -49,7 +48,6 @@ export interface CollaborationState extends CollaborationReads {
   readonly setPictures: (pictures: CollaborationPictureCounts) => void;
   readonly setRefusal: (reason: CollaborationPermanentRefusal) => void;
   readonly setMergeTooLarge: (message: string) => void;
-  readonly setTemporaryRefusal: (reason: string | null) => void;
 }
 
 export const PERMANENT_COLLABORATION_REFUSALS: readonly CollaborationPermanentRefusal[] = Object.freeze([
@@ -70,8 +68,7 @@ export const IDLE_COLLABORATION_SNAPSHOT: CollaborationSnapshot = Object.freeze(
   relay: Object.freeze({ connected: false, firstSyncDone: false, pendingChangeCount: 0 }),
   pictures: Object.freeze({ checking: 0, uploading: 0, downloading: 0 }),
   refusal: null,
-  mergeTooLarge: null,
-  temporaryRefusal: null
+  mergeTooLarge: null
 });
 
 export function isPermanentCollaborationRefusal(reason: string): reason is CollaborationPermanentRefusal {
@@ -116,8 +113,7 @@ function sameSnapshot(a: CollaborationSnapshot, b: CollaborationSnapshot): boole
     && sameRelay(a.relay, b.relay)
     && samePictures(a.pictures, b.pictures)
     && a.refusal === b.refusal
-    && a.mergeTooLarge === b.mergeTooLarge
-    && a.temporaryRefusal === b.temporaryRefusal;
+    && a.mergeTooLarge === b.mergeTooLarge;
 }
 
 function freezeRelay(relay: CollaborationRelayState): CollaborationRelayState {
@@ -173,8 +169,7 @@ export function createCollaborationState(): CollaborationState {
         relay: freezeRelay(initial?.relay ?? IDLE_COLLABORATION_SNAPSHOT.relay),
         pictures: freezePictures(initial?.pictures ?? IDLE_COLLABORATION_SNAPSHOT.pictures),
         refusal: initial?.refusal ?? null,
-        mergeTooLarge: initial?.mergeTooLarge ?? null,
-        temporaryRefusal: initial?.temporaryRefusal ?? null
+        mergeTooLarge: initial?.mergeTooLarge ?? null
       });
     },
     leave() {
@@ -189,12 +184,10 @@ export function createCollaborationState(): CollaborationState {
       update({ ...current, localWriteError: freezeError(error) });
     },
     setRelay(relay) {
-      if (!current.active) return;
-      const nextRelay = freezeRelay(relay);
+      if (!current.active || current.refusal || current.mergeTooLarge) return;
       update({
         ...current,
-        relay: nextRelay,
-        temporaryRefusal: nextRelay.connected ? null : current.temporaryRefusal
+        relay: freezeRelay(relay)
       });
     },
     setPictures(pictures) {
@@ -206,6 +199,7 @@ export function createCollaborationState(): CollaborationState {
       update({
         ...current,
         refusal: reason,
+        pictures: IDLE_COLLABORATION_SNAPSHOT.pictures,
         relay: freezeRelay({ connected: false, firstSyncDone: false, pendingChangeCount: current.relay.pendingChangeCount })
       });
     },
@@ -214,12 +208,9 @@ export function createCollaborationState(): CollaborationState {
       update({
         ...current,
         mergeTooLarge: message || MERGE_TOO_LARGE_MESSAGE,
+        pictures: IDLE_COLLABORATION_SNAPSHOT.pictures,
         relay: freezeRelay({ connected: false, firstSyncDone: false, pendingChangeCount: current.relay.pendingChangeCount })
       });
-    },
-    setTemporaryRefusal(reason) {
-      if (!current.active) return;
-      update({ ...current, temporaryRefusal: reason });
     }
   };
   return Object.freeze(state);

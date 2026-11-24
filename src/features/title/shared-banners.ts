@@ -29,6 +29,7 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
 
   let writerHost: HTMLElement | null = null;
   let lastActive = false;
+  let lastWriterOpen = false;
   let lastError: CollaborationLocalWriteError | null = null;
   let lastRefusal: CollaborationPermanentRefusal | null = null;
   let lastMergeTooLarge: string | null = null;
@@ -68,7 +69,7 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
   }
 
   function hideBanner(banner: HTMLElement | null): void {
-    if (banner) banner.hidden = true;
+    if (banner && !banner.hidden) banner.hidden = true;
   }
 
   function showSaveError(error: CollaborationLocalWriteError, reveal: boolean): void {
@@ -94,46 +95,53 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
     if (!life.active()) return;
     const snapshot = ports.collaboration.snapshot();
     if (!snapshot.active) {
-      if (lastActive) {
-        hideBanner(saveErrorBanner);
-        hideBanner(accessBanner);
-        hideBanner(sizeBanner);
-        setText("save-error-text", "");
-        setText("save-error-code", "");
-        setText("collab-access-text", "");
-        setText("collab-size-text", "");
-        restoreToRoot();
-        lastError = null;
-        lastRefusal = null;
-        lastMergeTooLarge = null;
-      }
+      if (!lastActive) return;
+      hideBanner(saveErrorBanner);
+      hideBanner(accessBanner);
+      hideBanner(sizeBanner);
+      setText("save-error-text", "");
+      setText("save-error-code", "");
+      setText("collab-access-text", "");
+      setText("collab-size-text", "");
+      restoreToRoot();
+      lastError = null;
+      lastRefusal = null;
+      lastMergeTooLarge = null;
+      lastWriterOpen = false;
       lastActive = false;
       return;
     }
+
+    const writer = byId("writer");
+    const writerOpen = !!writer && !writer.hidden;
+    const errorChanged = snapshot.localWriteError !== lastError;
+    const sizeChanged = snapshot.mergeTooLarge !== lastMergeTooLarge;
+    const refusalChanged = snapshot.refusal !== lastRefusal;
+    if (lastActive && !errorChanged && !sizeChanged && !refusalChanged && writerOpen === lastWriterOpen) return;
+
+    if (!lastActive || errorChanged) {
+      if (snapshot.localWriteError) showSaveError(snapshot.localWriteError, errorChanged);
+      else hideBanner(saveErrorBanner);
+      lastError = snapshot.localWriteError;
+    }
+
+    if (!lastActive || sizeChanged) {
+      if (snapshot.mergeTooLarge) showMergeTooLarge(snapshot.mergeTooLarge, sizeChanged);
+      else hideBanner(sizeBanner);
+      lastMergeTooLarge = snapshot.mergeTooLarge;
+    }
+
+    if (!lastActive || refusalChanged) {
+      if (snapshot.refusal) showAccessRemoved(snapshot.refusal, refusalChanged);
+      else hideBanner(accessBanner);
+      lastRefusal = snapshot.refusal;
+    }
+
+    if (!lastActive || errorChanged || sizeChanged || refusalChanged || writerOpen !== lastWriterOpen) {
+      placeBanners(true);
+      lastWriterOpen = writerOpen;
+    }
     lastActive = true;
-
-    if (snapshot.localWriteError) {
-      showSaveError(snapshot.localWriteError, snapshot.localWriteError !== lastError);
-    } else if (lastError !== null) {
-      hideBanner(saveErrorBanner);
-    }
-    lastError = snapshot.localWriteError;
-
-    if (snapshot.mergeTooLarge) {
-      showMergeTooLarge(snapshot.mergeTooLarge, snapshot.mergeTooLarge !== lastMergeTooLarge);
-    } else {
-      hideBanner(sizeBanner);
-    }
-    lastMergeTooLarge = snapshot.mergeTooLarge;
-
-    if (snapshot.refusal) {
-      showAccessRemoved(snapshot.refusal, snapshot.refusal !== lastRefusal);
-    } else {
-      hideBanner(accessBanner);
-    }
-    lastRefusal = snapshot.refusal;
-
-    placeBanners(true);
   }
 
   function openRecovery(): void {

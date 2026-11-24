@@ -136,7 +136,7 @@ export interface FileMenuDropdownPorts {
   readonly prepareDocument: (raw: unknown) => ValidatedDocument;
   readonly syncIdentity: () => void;
   readonly longDemo: { readonly state: { readonly title: string; readonly rows: readonly unknown[] } };
-  readonly collaboration?: Pick<CollaborationReads, "snapshot">;
+  readonly collaboration: Pick<CollaborationReads, "snapshot">;
 }
 
 export interface FileMenuActionPorts {

@@ -5,7 +5,10 @@ import { setTimeout as delay } from "node:timers/promises";
 import { IDBObjectStore } from "fake-indexeddb";
 import { bootApp, closeApp } from "../../../../src/test/_app-boot.mjs";
 import { createMemoryBackend, intern, persist, setBackend } from "../../../../src/adapters/storage/02c-blobs.ts";
+import { openNativeSession } from "../../../../src/adapters/collab/native/session.ts";
+import { StateFirstProvider } from "../../../../src/adapters/collab/native/state-first-provider.ts";
 import { MERGE_TOO_LARGE_MESSAGE } from "../../../../src/application/collaboration/state.ts";
+import { sharedSaveStatus } from "../../../../src/application/save/status.ts";
 import { addGalleryPicture } from "../../../../src/core/document/gallery.ts";
 import { collaborationState } from "../../../../src/bootstrap/wiring/collaboration-owner.ts";
 import { toggleFileMenu } from "../../../../src/bootstrap/wiring/file-menu-controls.ts";
@@ -209,8 +212,16 @@ test("access removed stops syncing, shows banner inside Writer, keeps copy expor
   writerControls()?.openWriter();
   assert.equal(el("writer").hidden, false);
 
+  const seenLabels: string[] = [];
+  const stopSeen = collaborationState().onChange(snap => {
+    if (snap.active) seenLabels.push(sharedSaveStatus(snap).label);
+  });
+  t.after(stopSeen);
+
   run.send("revoke:" + kit.invitation().id);
   await waitUntil(() => el("btn-save").textContent === "Access removed · local work kept", t.signal);
+  assert.equal(seenLabels.every(label => !label.startsWith("Offline") && !label.startsWith("Saved")), true, JSON.stringify(seenLabels));
+  assert.deepEqual(collaborationState().snapshot().pictures, { checking: 0, uploading: 0, downloading: 0 });
   assert.equal(el("btn-save").getAttribute("data-state"), "warn");
   assert.equal(el("btn-save").getAttribute("data-actionable"), "true");
   assert.equal(el("writer-collab-status").querySelector(".writer-collab-label")?.textContent, "Access removed · local work kept");
@@ -233,38 +244,185 @@ test("access removed stops syncing, shows banner inside Writer, keeps copy expor
   writerControls()?.closeWriter();
 });
 
-test("merge over 15 MB limit stays Too large to sync and never shows as offline or saved", { timeout: 15_000 }, async t => {
-  const source = seedSession({ A: "Oversized merge script" });
-  const state = source.encodeState();
-  source.close();
-  const opened = capture();
+test("merge over 15 MB limit via relay onStateless never shows offline or saved, clears picture counts, and opens banner", { timeout: 20_000 }, async t => {
+  const kit = serverHarness(t);
+  kit.seed();
+  const run = kit.launch();
+  const port = await run.port();
+  const token = kit.invitation().token;
+  let triggerStateless: (() => void) | undefined;
+  const origAttach = StateFirstProvider.prototype.attach;
+  t.mock.method(StateFirstProvider.prototype, "attach", function (this: StateFirstProvider) {
+    const config = this.configuration;
+    triggerStateless = () => { void config.onStateless?.({ payload: "merge-too-large" }); };
+    return origAttach.call(this);
+  });
+  const realFetch = globalThis.fetch;
+  const putStarted = eventResult<undefined>(), putFinish = eventResult<Response>();
+  t.mock.method(globalThis, "fetch", (input: string | URL | Request, init?: RequestInit) => {
+    if (init?.method === "PUT") {
+      putStarted.resolve(undefined);
+      return putFinish.promise;
+    }
+    return realFetch(input, init);
+  });
+
+  let connected = false;
   const result = await hook().enterRetained({
-    deployment: "merge-limit",
-    script: "merge-limit",
-    invitation: { token: randomBytes(32).toString("base64url"), state },
-    connect: opened.connect
+    deployment: "merge-limit-relay",
+    script: NAME,
+    relayUrl: "ws://127.0.0.1:" + port,
+    invitation: { token },
+    onRelayConnected: ready => { connected = ready; }
   });
   assert.deepEqual(result, { ok: true });
-  t.after(async () => { if (sharedSession()) await hook().leave(); });
-  assert.equal((await opened.replica().flush()).kind, "stored");
+  t.after(async () => {
+    putFinish.resolve(new Response(null, { status: 201 }));
+    if (sharedSession()) await hook().leave();
+  });
 
-  collaborationState().setRelay({ connected: true, firstSyncDone: true, pendingChangeCount: 0 });
-  assert.equal(el("btn-save").textContent, "Saved on this device");
+  await waitUntil(() => connected && el("btn-save").textContent === "Saved on this device", t.signal);
+  const picture = intern(png);
+  assert.ok(picture);
+  assert.deepEqual(await persist([picture.sha256]), []);
+  const { nativeEditorRecords } = await import("../../../../src/bootstrap/wiring/shared-session.ts");
+  const row = currentDocument()?.rows[0];
+  assert.ok(row);
+  nativeEditorRecords()?.gallery(row.id, "Picture added", r => { addGalleryPicture(r, picture, "pixel.png"); return true; });
+  await putStarted.promise;
+  await waitUntil(() => collaborationState().snapshot().pictures.uploading === 1, t.signal);
 
-  collaborationState().setMergeTooLarge(MERGE_TOO_LARGE_MESSAGE);
-  assert.equal(el("btn-save").textContent, "Too large to sync · local work kept");
+  const seenLabels: string[] = [];
+  const stopSeen = collaborationState().onChange(snap => {
+    if (snap.active) seenLabels.push(sharedSaveStatus(snap).label);
+  });
+  t.after(stopSeen);
+
+  assert.ok(triggerStateless);
+  triggerStateless();
+  await waitUntil(() => el("btn-save").textContent === "Too large to sync · local work kept", t.signal);
+
+  assert.equal(seenLabels.every(label => !label.startsWith("Offline") && !label.startsWith("Saved")), true, JSON.stringify(seenLabels));
+  assert.deepEqual(collaborationState().snapshot().pictures, { checking: 0, uploading: 0, downloading: 0 });
   assert.equal(el("btn-save").getAttribute("data-state"), "warn");
   assert.equal(el("btn-save").getAttribute("data-actionable"), "true");
   assert.equal(el("collab-size-banner").hidden, false);
   assert.equal(el("collab-size-text").textContent, MERGE_TOO_LARGE_MESSAGE);
 
-  collaborationState().setRelay({ connected: false, firstSyncDone: false, pendingChangeCount: 0 });
-  assert.equal(el("btn-save").textContent, "Too large to sync · local work kept");
-
-  collaborationState().setRelay({ connected: true, firstSyncDone: true, pendingChangeCount: 0 });
-  assert.equal(el("btn-save").textContent, "Too large to sync · local work kept");
-
   el("collab-size-leave").click();
   await waitUntil(() => !sharedSession(), t.signal);
   assert.equal(el("collab-size-banner").hidden, true);
+});
+
+test("picture persist failure shows Could not save on this device, opens banner, and clears on Try again", { timeout: 20_000 }, async t => {
+  const kit = serverHarness(t);
+  kit.seed();
+  const run = kit.launch();
+  const port = await run.port();
+  const token = kit.invitation().token;
+  let failBlobPersist = true;
+  const mem = createMemoryBackend();
+  setBackend({
+    ...mem,
+    persistent: true,
+    put: (sha, bytes, mime, replaceDamaged) =>
+      failBlobPersist ? Promise.reject(new DOMException("Disk full", "QuotaExceededError")) : mem.put(sha, bytes, mime, replaceDamaged)
+  });
+  const realFetch = globalThis.fetch;
+  const putFinish = eventResult<Response>();
+  t.mock.method(globalThis, "fetch", (input: string | URL | Request, init?: RequestInit) => {
+    if (init?.method === "PUT") return putFinish.promise;
+    return realFetch(input, init);
+  });
+
+  t.after(() => { setBackend({ ...createMemoryBackend(), persistent: true }); });
+
+  let connected = false;
+  const result = await hook().enterRetained({
+    deployment: "pic-persist-fail",
+    script: NAME,
+    relayUrl: "ws://127.0.0.1:" + port,
+    invitation: { token },
+    onRelayConnected: ready => { connected = ready; }
+  });
+  assert.deepEqual(result, { ok: true });
+  t.after(async () => {
+    putFinish.resolve(new Response(null, { status: 201 }));
+    if (sharedSession()) await hook().leave();
+  });
+
+  await waitUntil(() => connected && el("btn-save").textContent === "Saved on this device", t.signal);
+  const picture = intern(png);
+  assert.ok(picture);
+  const { nativeEditorRecords } = await import("../../../../src/bootstrap/wiring/shared-session.ts");
+  const row = currentDocument()?.rows[0];
+  assert.ok(row);
+  nativeEditorRecords()?.gallery(row.id, "Picture added", r => { addGalleryPicture(r, picture, "pixel.png"); return true; });
+
+  await waitUntil(() => el("btn-save").textContent === "Could not save on this device", t.signal);
+  assert.equal(el("save-error-banner").hidden, false);
+
+  failBlobPersist = false;
+  putFinish.resolve(new Response(null, { status: 201 }));
+  el("save-error-retry").click();
+  await waitUntil(() => el("save-error-banner").hidden && el("btn-save").textContent === "Saved on this device", t.signal);
+  assert.deepEqual(await hook().leave(), { ok: true });
+});
+
+test("session-replaced rebinds picture session so subsequent pictures keep uploading", { timeout: 20_000 }, async t => {
+  const firstSession = seedSession({ A: "Before replace" });
+  const secondSession = openNativeSession({ kind: "state", state: firstSession.encodeState() }, { actor: "tester", sanitize: v => String(v ?? "") });
+  t.after(() => { firstSession.close(); secondSession.close(); });
+
+  const putStarted = eventResult<undefined>(), putFinish = eventResult<Response>();
+  const uploadedUrls: string[] = [];
+  const realFetch = globalThis.fetch;
+  t.mock.method(globalThis, "fetch", (input: string | URL | Request, init?: RequestInit) => {
+    if (init?.method === "PUT") {
+      uploadedUrls.push(String(input));
+      putStarted.resolve(undefined);
+      return putFinish.promise;
+    }
+    return realFetch(input, init);
+  });
+
+  collaborationState().enter({ relay: { connected: true, firstSyncDone: true, pendingChangeCount: 0 } });
+  const { createRetainedPictureBinding } = await import("../../../../src/bootstrap/wiring/retained-shared-script.ts");
+  let active = true;
+  const binding = createRetainedPictureBinding({
+    pictureOrigin: "http://127.0.0.1:19999",
+    script: NAME,
+    token: "fixture-token",
+    sessionCurrent: () => active,
+    onLocalError: err => { collaborationState().setLocalWriteError(err); }
+  });
+  t.after(() => {
+    active = false;
+    putFinish.resolve(new Response(null, { status: 201 }));
+    binding.detach();
+    collaborationState().leave();
+  });
+
+  binding.bindCopy({ session: firstSession });
+  binding.activate();
+  assert.equal(el("btn-save").textContent, "Saved on this device");
+
+  firstSession.close();
+  binding.onRelayEvent({ kind: "session-replaced", session: secondSession, undoHistory: "fresh" });
+  binding.onRelayEvent({ kind: "status", status: { connected: true, firstSyncDone: true, pendingChangeCount: 0 } });
+
+  const picture = intern(png);
+  assert.ok(picture);
+  assert.deepEqual(await persist([picture.sha256]), []);
+  const row = secondSession.document().rows[0];
+  assert.ok(row);
+  assert.equal(secondSession.commands.setField({ kind: "gallery", id: row.id }, { imageRef: picture }).kind, "written");
+
+  await putStarted.promise;
+  await waitUntil(() => el("btn-save").textContent === "Saved on this device · uploading pictures", t.signal);
+  assert.equal(uploadedUrls.length, 1);
+
+  putFinish.resolve(new Response(null, { status: 201 }));
+  await waitUntil(() => el("btn-save").textContent === "Saved on this device", t.signal);
+  assert.deepEqual(collaborationState().snapshot().pictures, { checking: 0, uploading: 0, downloading: 0 });
 });

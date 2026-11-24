@@ -210,3 +210,26 @@ test("save failure, access removed, and merge-too-large banners open, dismiss, r
     h.cleanup();
   }
 });
+
+test("entering shared mode hides any stale standalone save-error banner and derived view deduplicates unchanged repaints", () => {
+  const h = setup();
+  try {
+    const saveErrorBanner = h.el("save-error-banner");
+    const btn = h.document.getElementById("btn-save") as HTMLButtonElement;
+    saveErrorBanner.hidden = false;
+    h.el("save-error-text").textContent = "Stale standalone failure";
+
+    h.collab.enter({ relay: { connected: true, firstSyncDone: true, pendingChangeCount: 1 } });
+    assert.equal(saveErrorBanner.hidden, true);
+    assert.equal(btn.textContent, "Saved on this device · syncing");
+
+    let mutations = 0;
+    const origSetAttribute = btn.setAttribute.bind(btn);
+    btn.setAttribute = (...args: [string, string]) => { mutations++; origSetAttribute(...args); };
+    h.collab.setRelay({ connected: true, firstSyncDone: true, pendingChangeCount: 2 });
+    h.collab.setRelay({ connected: true, firstSyncDone: true, pendingChangeCount: 3 });
+    assert.equal(mutations, 0);
+  } finally {
+    h.cleanup();
+  }
+});

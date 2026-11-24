@@ -42,6 +42,6 @@ export function saveStatusListeners(): SaveStatusListeners {
     save: (change) => { saveStatus.owner()?.listeners().save(change); },
     location: (change) => { saveStatus.owner()?.listeners().location(change); },
     preference: (change) => { saveStatus.owner()?.listeners().preference(change); },
-    collaboration: () => { saveStatus.owner()?.listeners().collaboration?.(); }
+    collaboration: () => { saveStatus.owner()?.listeners().collaboration(); }
   };
 }

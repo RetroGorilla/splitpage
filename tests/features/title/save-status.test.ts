@@ -8,7 +8,7 @@ import type { Home } from "../../../src/application/location/document-location.t
 import type { PreferenceName } from "../../../src/application/preferences/preferences.ts";
 import type { AutoSaveTarget } from "../../../src/application/save/status.ts";
 import { SAVING_LABEL } from "../../../src/application/save/status.ts";
-import { fakeNotices, fakeSaveState } from "../fakes.ts";
+import { fakeCollaboration, fakeNotices, fakeSaveState } from "../fakes.ts";
 
 const PAGE = '<button id="btn-save"></button><span id="save-status" hidden></span>';
 
@@ -45,7 +45,8 @@ function mounted(given: Given = {}) {
     },
     notices,
     drafts: { noteChange: () => { log.push("noteDraftChange"); } },
-    identity: { sync: () => { log.push("syncIdentity"); } }
+    identity: { sync: () => { log.push("syncIdentity"); } },
+    collaboration: fakeCollaboration()
   };
   const mount: SaveStatusMount = mountSaveStatus(ports);
   return { mount, log, save, state, shown };

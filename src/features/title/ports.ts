@@ -29,7 +29,7 @@ export interface SaveStatusPorts {
   readonly notices: Pick<NoticePort, "show">;
   readonly drafts: Pick<DraftsMount, "noteChange">;
   readonly identity: DocumentIdentitySync;
-  readonly collaboration?: Pick<CollaborationReads, "snapshot">;
+  readonly collaboration: Pick<CollaborationReads, "snapshot">;
 }
 
 export interface SaveStatusListeners {
@@ -37,7 +37,7 @@ export interface SaveStatusListeners {
   readonly save: (change: SaveChange) => void;
   readonly location: (change: LocationChange) => void;
   readonly preference: (change: PreferenceChange) => void;
-  readonly collaboration?: () => void;
+  readonly collaboration: () => void;
 }
 
 export interface SharedBannersPorts {

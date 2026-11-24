@@ -80,6 +80,8 @@ let savedAt = 0;
 let lastViewText = "";
 let flowProblem = "";
 let justNowTimer: ReturnType<typeof setTimeout> | null = null;
+let wasShared = false;
+let lastSharedViewKey = "";
 
 function paintWriterCollabStatus(shared: SharedSaveStatusView | null) {
   const wrBtn = document.getElementById("writer-collab-status") as HTMLButtonElement | null;
@@ -104,6 +106,10 @@ function paintWriterCollabStatus(shared: SharedSaveStatusView | null) {
 }
 
 function paintSharedSaveStatus(shared: SharedSaveStatusView, dirty: boolean) {
+  const viewKey = `${shared.label}\0${shared.state}\0${shared.actionable}\0${shared.title}\0${dirty}`;
+  if (wasShared && viewKey === lastSharedViewKey) return;
+  wasShared = true;
+  lastSharedViewKey = viewKey;
   if (justNowTimer) {
     clearTimeout(justNowTimer);
     justNowTimer = null;
@@ -134,12 +140,16 @@ function paintSharedSaveStatus(shared: SharedSaveStatusView, dirty: boolean) {
 }
 
 function updateSaveStatus() {
-  const collab = ports?.collaboration?.snapshot();
-  if (collab?.active) {
+  const collab = (ports as SaveStatusPorts).collaboration.snapshot();
+  if (collab.active) {
     paintSharedSaveStatus(sharedSaveStatus(collab), collab.localPending || collab.localWriteError !== null);
     return;
   }
-  paintWriterCollabStatus(null);
+  if (wasShared) {
+    wasShared = false;
+    lastSharedViewKey = "";
+    paintWriterCollabStatus(null);
+  }
   const input = saveStatusInput();
   const line = saveStatus(input).line;
   const view = line ? Object.assign({}, line) : null;
@@ -159,7 +169,7 @@ function updateSaveStatus() {
   });
   const btn = document.getElementById("btn-save") as HTMLButtonElement | null;
   if (btn) {
-    btn.removeAttribute("data-shared");
+    if (btn.hasAttribute("data-shared")) btn.removeAttribute("data-shared");
     if (!input.busy && !input.dirty) flowProblem = "";
     if (input.halted) flowProblem = input.halted;
     const flow = flowSaveStatus({ ...input, halted: input.halted || flowProblem });
@@ -214,6 +224,8 @@ export function mountSaveStatus(nextPorts: SaveStatusPorts) {
       savedAt = 0;
       lastViewText = "";
       flowProblem = "";
+      wasShared = false;
+      lastSharedViewKey = "";
       ports = null;
     }
   };

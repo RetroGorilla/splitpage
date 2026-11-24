@@ -82,8 +82,8 @@ function savedWord(at?: number | null) {
 function fileCardView(): { name: string | null | undefined; bits: { text: string | null | undefined; unsaved?: boolean; title?: string }[] } {
   const current = (ports as FileMenuDropdownPorts).document.current();
   if (!current) return { name: "Loading…", bits: [] };
-  const collab = (ports as FileMenuDropdownPorts).collaboration?.snapshot();
-  if (collab?.active) {
+  const collab = (ports as FileMenuDropdownPorts).collaboration.snapshot();
+  if (collab.active) {
     const shared = sharedSaveStatus(collab);
     return {
       name: current.title || "Untitled Script",
@@ -116,10 +116,11 @@ function refreshFileCard() {
   const view = fileCardView();
   nameEl.textContent = view.name as string;
   nameEl.title = view.name as string;
-  metaEl.innerHTML = view.bits.map(function (b) {
+  const nextHtml = view.bits.map(function (b) {
     return '<span' + (b.unsaved ? ' class="is-unsaved"' : '') +
       (b.title ? ' title="' + escapeHtml(b.title) + '"' : '') + '>' + escapeHtml(b.text) + '</span>';
   }).join(" · ");
+  if (metaEl.innerHTML !== nextHtml) metaEl.innerHTML = nextHtml;
 }
 
 function recentsSupported() {
@@ -127,7 +128,7 @@ function recentsSupported() {
 }
 
 function refreshFileMenu() {
-  const isShared = !!(ports as FileMenuDropdownPorts).collaboration?.snapshot().active;
+  const isShared = (ports as FileMenuDropdownPorts).collaboration.snapshot().active;
   const autosave = el("menu-autosave");
   if (autosave) autosave.hidden = isShared;
   const createBundle = document.querySelector<HTMLElement>('#file-menu [data-file-action="create-bundle"]');

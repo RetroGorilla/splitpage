@@ -1,5 +1,6 @@
 import { onSessionChange } from "./session-owner.ts";
 import { onCollaborationChange } from "./collaboration-owner.ts";
+import { sharedSaveStatus } from "../../application/save/status.ts";
 import { documentLocation } from "./location-owner.ts";
 import { onPreferenceChange, viewFlags } from "./preferences-owner.ts";
 import { onSaveChange } from "./save-owners.ts";
@@ -26,12 +27,20 @@ export function mountDocumentChromeFeature(): void {
     );
   }
   const status = saveStatusListeners();
+  let lastCollabChromeKey = "";
   stops.push(
     onSaveChange(status.save),
     documentLocation().onChange(status.location),
     onPreferenceChange(status.preference),
-    onCollaborationChange(() => {
-      status.collaboration?.();
+    onCollaborationChange((snapshot) => {
+      const view = snapshot.active ? sharedSaveStatus(snapshot) : null;
+      const dirty = snapshot.localPending || snapshot.localWriteError !== null;
+      const nextKey = snapshot.active
+        ? `1\0${view?.label}\0${view?.state}\0${view?.actionable}\0${view?.banner}\0${snapshot.localWriteError?.message ?? ""}\0${snapshot.localWriteError?.code ?? ""}\0${snapshot.refusal ?? ""}\0${snapshot.mergeTooLarge ?? ""}\0${dirty}`
+        : "0";
+      if (nextKey === lastCollabChromeKey) return;
+      lastCollabChromeKey = nextKey;
+      status.collaboration();
       refreshOpenFileMenu();
       syncSharedBanners();
     })

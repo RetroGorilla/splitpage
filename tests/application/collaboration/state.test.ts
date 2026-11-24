@@ -32,10 +32,6 @@ test("collaboration state starts idle, ignores writes while inactive, and resets
   assert.equal(owner.snapshot().relay.connected, true);
   owner.setLocalPending(true);
   owner.setLocalPending(true);
-  owner.setTemporaryRefusal("rate-limited");
-  assert.equal(owner.snapshot().temporaryRefusal, "rate-limited");
-  owner.setRelay({ connected: true, firstSyncDone: true, pendingChangeCount: 0 });
-  assert.equal(owner.snapshot().temporaryRefusal, null);
   owner.leave();
   assert.equal(owner.snapshot(), IDLE_COLLABORATION_SNAPSHOT);
   stop();
