@@ -1029,9 +1029,11 @@ The relay reclaims retired or interrupted chunks in separate yielding transactio
 capture for six hours, then the newest per UTC hour through seven days, per UTC day through 30 days, and per
 Monday-start UTC week through 90 days. The newest version always survives age-based thinning. Each script has a
 64 MiB budget for published compressed payloads. Oldest retained snapshots leave first. An oversized incoming
-snapshot leaves the existing history intact.
+snapshot leaves the existing history intact. Abandoning a creation or deleting a script retires its history in the
+same transaction and schedules prompt chunk reclamation.
 
-Capture and reclamation pause during backup or shutdown. Capture failures retry at the capture interval. The private
+Capture and reclamation pause during backup or shutdown. Write failures retry at the capture interval. The running
+relay remembers the hash of an oversized snapshot and skips compression until the state changes. The private
 `GET /api/status` reports `versionBytes` and a process-local `lastVersionFailure` with a timestamp and fixed reason.
 `SPLITPAGE_VERSION_INTERVAL_MS`, `SPLITPAGE_VERSION_THIN_INTERVAL_MS` and `SPLITPAGE_VERSION_BUDGET_BYTES` set the
 operational limits. Backup verifies the two version tables, and restore preserves their history and revokes all invitations.
@@ -1039,19 +1041,26 @@ operational limits. Backup verifies the two version tables, and restore preserve
 Owner and guest invitations authorize `GET /api/scripts/:id/versions` and
 `GET /api/scripts/:id/versions/:versionId` for active scripts and clear the script's untouched flag. The list returns
 newest-first `id`, `createdAt` in Unix milliseconds, compressed `bytes`, and `names` (empty in Part 11a).
-The version endpoint returns exact Yjs bytes with `Cache-Control: no-store`. Both routes honor the relay origin allowlist.
+The version endpoint returns exact Yjs bytes with `Cache-Control: no-store`. It limits decompression to 15,000,000
+bytes and allows four simultaneous snapshot reads. Both routes honor the relay origin allowlist. A saturated read
+or a request during shutdown receives `503` with `Retry-After`.
 
 Full-budget thinning measurement on Windows with Node 24.22.1 and SQLite 3.53.4. A 4,194,955-byte live Yjs script
 received edits over loopback with store debounce disabled. The sweep reduced published history from 67,108,864 to
-4,209,664 bytes. The measurement observed 119 retired chunks when it entered the reclamation loop and 3,807.676 ms
+4,209,664 bytes. The measurement observed 119 retired chunks when it entered the reclamation loop and 3,506.066 ms
 through their removal and final live-state verification. Store timings cover Yjs encoding and the SQLite commit. Edit-to-commit
 timings also include WebSocket delivery and return of the commit signal over IPC.
 
 | Phase | Samples | Store p50 / p95 / max (ms) | Edit to commit p50 / p95 / max (ms) |
 | --- | ---: | --- | --- |
-| Before sweep | 15 | 21.829 / 91.715 / 91.715 | 23.219 / 93.460 / 93.460 |
-| Edit spanning the publication change | 1 | 21.930 | 27.471 |
-| During chunk reclamation | 133 | 25.034 / 27.803 / 30.245 | 28.271 / 31.916 / 35.132 |
+| Before sweep | 15 | 19.302 / 26.816 / 26.816 | 20.517 / 29.739 / 29.739 |
+| Edit spanning the publication change | 1 | 22.373 | 29.041 |
+| During chunk reclamation | 132 | 23.148 / 25.171 / 30.086 | 26.297 / 29.376 / 33.752 |
+| During near-limit capture and parallel reads | 12 | 69.649 / 82.137 / 82.137 | 72.802 / 89.082 / 89.082 |
+
+The near-limit run used a 14,400,651-byte Yjs script, a 180 ms capture interval, and three loopback snapshot
+readers. They completed 21 reads during the run. The 12 sampled stores began while a snapshot was being staged
+and at least two version responses were in flight. They spanned four captures among 36 live commits.
 
 Reproduce with `node --test tests/adapters/collab/native/server-version-measurement.ts`.
 

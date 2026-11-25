@@ -1,5 +1,8 @@
 import assert from "node:assert/strict";
 import { createHash, randomBytes, randomUUID } from "node:crypto";
+import { once } from "node:events";
+import { createServer, get } from "node:http";
+import type { IncomingMessage } from "node:http";
 import { join } from "node:path";
 import { backup, DatabaseSync } from "node:sqlite";
 import test from "node:test";
@@ -8,8 +11,10 @@ import { zstdCompressSync } from "node:zlib";
 import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import { backupRelay, restoreRelay, verifyCopy } from "../../../../collab-server/backup.ts";
 import { relayConfig } from "../../../../collab-server/config.ts";
+import { RETRY_AFTER_SECONDS } from "../../../../collab-server/limits.ts";
 import type { RelayStatusSnapshot } from "../../../../collab-server/status.ts";
 import { DB_NAME, VERSION_CHUNK_BYTES } from "../../../../collab-server/storage.ts";
+import { versionRequests } from "../../../../collab-server/version-http.ts";
 import { versionStorage } from "../../../../collab-server/version-storage.ts";
 import { appendText, NAME, ORIGIN, serverHarness, storedState, storedText } from "./server-harness.ts";
 
@@ -57,6 +62,89 @@ function expandedState(state: Uint8Array, bytes: number, key = "payload"): Uint8
     doc.destroy();
   }
 }
+
+for (const disposition of ["abandon", "delete"] as const) {
+  test(`${disposition} retires the published creation snapshot and reclaims its chunks`, async t => {
+    const kit = serverHarness(t);
+    const state = kit.seed();
+    const run = kit.launch();
+    const creationId = randomUUID();
+    const { scriptId } = await run.createScriptWithCredentials(creationId, state);
+    await until(async () => (await status(run)).versionBytes > 0 || undefined);
+    using db = new DatabaseSync(join(kit.directory, DB_NAME), { readOnly: true });
+    const chunks = db.prepare("SELECT count(*) AS count FROM version_chunks");
+    assert.ok(Number(chunks.get()?.count) > 0);
+    const route = disposition === "abandon" ? `creations/${creationId}` : `scripts/${scriptId}`;
+    assert.equal((await run.owner(route, { method: "DELETE" })).status, 204);
+    assert.equal((await status(run)).versionBytes, 0);
+    const metadata = db.prepare("SELECT count(*) AS count FROM versions WHERE script = ?");
+    await until(async () => metadata.get(scriptId)?.count === 0 || undefined);
+    assert.equal(chunks.get()?.count, 0);
+  });
+}
+
+test("snapshot reads cap output and hold a slot until delivery or disconnect, and shutdown reports temporary refusal", async t => {
+  const documentBytes = 15_000_000;
+  const version = (state: Buffer) => ({
+    compressed: zstdCompressSync(state), hash: createHash("sha256").update(state).digest()
+  });
+  const small = version(Buffer.of(1, 2));
+  const full = version(Buffer.alloc(documentBytes));
+  const oversized = version(Buffer.alloc(documentBytes + 1));
+  let stopping = false;
+  let authentications = 0;
+  const handle = versionRequests({
+    list: () => [],
+    read: (_script, id) => id === "full" ? full : id === "oversized" ? oversized : small
+  }, {
+    authenticate: () => {
+      authentications += 1;
+      return { id: "fixture", role: "guest" };
+    }
+  }, new Set([ORIGIN]), { documentBytes, readLimit: 1, stopping: () => stopping });
+  const server = createServer((req, res) => {
+    if (req.url?.endsWith("/full")) {
+      t.mock.method(res, "end", () => {
+        res.flushHeaders();
+        return res;
+      });
+    }
+    void handle(req, res);
+  });
+  server.listen(0, "127.0.0.1");
+  t.after(() => {
+    server.closeAllConnections();
+    return new Promise<void>(resolve => server.close(() => resolve()));
+  });
+  await once(server, "listening");
+  const address = server.address();
+  assert.ok(address && typeof address !== "string");
+  const url = `http://127.0.0.1:${address.port}/api/${HISTORY}`;
+  assert.equal((await fetch(url + "/oversized")).status, 500);
+  const fullResponse = await new Promise<IncomingMessage>((resolve, reject) =>
+    get(url + "/full", resolve).once("error", reject));
+  assert.equal(fullResponse.statusCode, 200);
+  assert.equal(fullResponse.headers["content-length"], String(documentBytes));
+  const saturated = await fetch(url + "/small");
+  assert.equal(saturated.status, 503);
+  assert.equal(saturated.headers.get("Retry-After"), RETRY_AFTER_SECONDS);
+  assert.equal((await fetch(url)).status, 200);
+  fullResponse.destroy();
+  const recovered = await until(async () => {
+    const response = await fetch(url + "/small");
+    if (response.status === 200) return response;
+  });
+  assert.deepEqual(new Uint8Array(await recovered.arrayBuffer()), Uint8Array.of(1, 2));
+  const before = authentications;
+  stopping = true;
+  for (const path of [url, url + "/small"]) {
+    const refused = await fetch(path, { headers: { Origin: ORIGIN } });
+    assert.equal(refused.status, 503);
+    assert.equal(refused.headers.get("Retry-After"), RETRY_AFTER_SECONDS);
+    assert.equal(refused.headers.get("Access-Control-Allow-Origin"), ORIGIN);
+  }
+  assert.equal(authentications, before);
+});
 
 test("the first edit captures immediately and a final edit captures after the interval without more traffic", async t => {
   const kit = serverHarness(t);
@@ -231,6 +319,11 @@ test("a partial history write stays hidden, leaves live state intact after a cra
   assert.equal((await status(restarted, secret)).versionBytes, first.bytes + latest.bytes);
   assert.equal(db.prepare("SELECT count(*) AS count FROM version_chunks WHERE version_id = ?").get(latest.id)?.count, 2);
   assert.equal(db.prepare("SELECT max(length(payload)) AS bytes FROM version_chunks").get()?.bytes, VERSION_CHUNK_BYTES);
+  const unpublished = db.prepare("SELECT count(*) AS count FROM versions WHERE status <> 'published'");
+  await until(async () => unpublished.get()?.count === 0 || undefined);
+  assert.equal(db.prepare("SELECT count(*) AS count FROM version_chunks").get()?.count, 3);
+  assert.equal(db.prepare(`SELECT count(*) AS count FROM version_chunks
+    LEFT JOIN versions ON id = version_id WHERE status IS NOT 'published'`).get()?.count, 0);
 });
 
 test("shutdown commits the final live edit and leaves its capture for restart", async t => {
@@ -268,6 +361,7 @@ test("the scheduled sweep keeps the newest in each UTC bucket and the latest eve
   const day = 24 * hour;
   const now = cutoff.getTime();
   const week = Math.floor((now - 45 * day + 3 * day) / (7 * day)) * 7 * day - 3 * day;
+  assert.equal(new Date(week).getUTCDay(), 1);
   const dayBucket = Math.floor((now - 14 * day) / day) * day;
   const oldScript = "only-expired-versions";
   kit.provision(NAME);
@@ -340,6 +434,45 @@ test("publishing evicts oldest versions to fit a per-script budget and an oversi
   assert.deepEqual(await history(run, token, path), [third, second]);
   assert.equal((await status(run)).versionBytes, third.bytes + second.bytes);
   assert.ok(storedState(kit.directory, created.scriptId).length > budget);
+  await delay(350);
+  assert.deepEqual((await status(run)).lastVersionFailure, failure);
+  appendText(oversize.session, " three", 12);
+  const changedFailure = await until(async () => {
+    const next = (await status(run)).lastVersionFailure;
+    if (next && next.at !== failure.at) return next;
+  });
+  assert.equal(changedFailure.reason, "snapshot-over-budget");
+  assert.deepEqual(await history(run, token, path), [third, second]);
+});
+
+test("retention includes the exact 6-hour, 7-day, 30-day and 90-day boundaries", t => {
+  const kit = serverHarness(t);
+  const state = kit.seed();
+  const hour = 3_600_000;
+  const day = 24 * hour;
+  const now = Date.UTC(2026, 10, 26, 12, 30);
+  const compressed = zstdCompressSync(state);
+  const hash = createHash("sha256").update(state).digest();
+  const cases = [
+    { script: "six-hours", cutoff: 6 * hour, older: -2, newer: 1, keep: ["latest", "newer", "edge", "outside"] },
+    { script: "seven-days", cutoff: 7 * day, older: -hour, newer: 1, keep: ["latest", "newer", "outside"] },
+    { script: "thirty-days", cutoff: 30 * day, older: -day, newer: 1, keep: ["latest", "newer", "outside"] },
+    { script: "ninety-days", cutoff: 90 * day, older: -2, newer: 7 * day, keep: ["latest", "newer", "edge"] }
+  ];
+  for (const { script } of cases) kit.provision(script);
+  using db = new DatabaseSync(join(kit.directory, DB_NAME));
+  const storage = versionStorage(db);
+  for (const { script, cutoff, older, newer, keep } of cases) {
+    const at = now - cutoff;
+    for (const [name, time] of [["latest", now], ["newer", at + newer], ["edge", at], ["outside", at - 1], ["older", at + older]] as const) {
+      const id = `${script}/${name}`;
+      storage.stage(id, script, 1, time, compressed.length, hash);
+      storage.append(id, 0, compressed);
+      db.prepare("UPDATE versions SET status = 'published' WHERE id = ?").run(id);
+    }
+    storage.thin(script, now, 64 * 1024 * 1024);
+    assert.deepEqual(storage.list(script).map(({ id }) => id.slice(script.length + 1)), keep);
+  }
 });
 
 test("backup pauses capture, verifies both version tables, and restore preserves versions with invitations revoked", async t => {

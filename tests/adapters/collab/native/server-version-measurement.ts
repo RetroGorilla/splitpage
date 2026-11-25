@@ -1,5 +1,5 @@
 import assert from "node:assert/strict";
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import test from "node:test";
@@ -14,6 +14,15 @@ const MIB = 1024 * 1024;
 const VERSION_BYTES = 4 * MIB;
 const NEWEST_BYTES = VERSION_BYTES + 15 * 1024;
 const SWEEP_MS = 2800;
+const CAPTURE_INTERVAL_MS = 180;
+type MeasureKit = ReturnType<typeof serverHarness>;
+type MeasuredRun = ReturnType<MeasureKit["launch"]>;
+type MeasuredWriter = ReturnType<MeasureKit["copy"]>;
+const STORE_MEASUREMENT = {
+  SPLITPAGE_TEST_MEASURE_STORE: "1",
+  SPLITPAGE_STORE_DEBOUNCE_MS: "0",
+  SPLITPAGE_STORE_MAX_DEBOUNCE_MS: "0"
+};
 
 function snapshot(seed: Uint8Array, opaque: Uint8Array): Uint8Array {
   const doc = new Doc();
@@ -45,6 +54,16 @@ function summarize(values: number[]) {
   return { count: sorted.length, p50: sample(0.5), p95: sample(0.95), max: sample(1) };
 }
 
+async function measureEdit(kit: MeasureKit, run: MeasuredRun, writer: MeasuredWriter, offset: number) {
+  const startIndex = run.messages.length;
+  const sentAt = performance.now();
+  appendText(writer.session, "a", offset);
+  const measurement = await kit.until(() => run.messages.slice(startIndex).find((message): message is string =>
+    typeof message === "string" && message.startsWith("measured-store:")));
+  const [, store, reads, capture] = measurement.split(":");
+  return { store: Number(store), edit: performance.now() - sentAt, reads: Number(reads), capture };
+}
+
 test("measure live commits during full-budget history thinning", { timeout: 30_000 }, async t => {
   const kit = serverHarness(t);
   kit.provision(NAME);
@@ -68,9 +87,7 @@ test("measure live commits during full-budget history thinning", { timeout: 30_0
     WHERE status = 'retired'`);
   const retiredChunks = () => Number(retired.get()?.chunks);
   const run = kit.launch({
-    SPLITPAGE_TEST_MEASURE_STORE: "1",
-    SPLITPAGE_STORE_DEBOUNCE_MS: "0",
-    SPLITPAGE_STORE_MAX_DEBOUNCE_MS: "0",
+    ...STORE_MEASUREMENT,
     SPLITPAGE_VERSION_THIN_INTERVAL_MS: String(SWEEP_MS)
   });
   const port = await run.port();
@@ -78,14 +95,7 @@ test("measure live commits during full-budget history thinning", { timeout: 30_0
   const writer = kit.copy(port);
   await kit.until(() => writer.relay.status().firstSyncDone && writer.text() === "word" || undefined);
   let offset = 4;
-  async function edit() {
-    const startIndex = run.messages.length;
-    const sentAt = performance.now();
-    appendText(writer.session, "a", offset++);
-    const store = await kit.until(() => run.messages.slice(startIndex).find((message): message is string =>
-      typeof message === "string" && message.startsWith("measured-store:")));
-    return { store: Number(store.split(":")[1]), edit: performance.now() - sentAt };
-  }
+  const edit = () => measureEdit(kit, run, writer, offset++);
   const baseline = [];
   for (let i = 0; i < 15; i++) {
     assert.equal(versions.total(), 64 * MIB);
@@ -117,6 +127,82 @@ test("measure live commits during full-budget history thinning", { timeout: 30_0
     overlapStoreMs: summarize(overlap.map(({ store }) => store)),
     baselineEditToCommitMs: summarize(baseline.map(({ edit }) => edit)),
     overlapEditToCommitMs: summarize(overlap.map(({ edit }) => edit))
+  }) + "\n");
+  writer.close();
+  await run.stop("clean");
+});
+
+test("measure live commits during near-limit capture and parallel reads", { timeout: 40_000 }, async t => {
+  const kit = serverHarness(t);
+  const seed = kit.seed();
+  const live = snapshot(seed, new Uint8Array(randomBytes(14_400_000)));
+  const run = kit.launch({ ...STORE_MEASUREMENT, SPLITPAGE_VERSION_INTERVAL_MS: String(CAPTURE_INTERVAL_MS) });
+  const port = await run.port();
+  const { scriptId, guest } = await run.createScriptWithCredentials(randomUUID(), live);
+  assert.ok(guest);
+  const { token } = guest;
+  const writer = kit.copy(port, { kind: "empty" }, scriptId, token);
+  await kit.until(() => writer.relay.status().firstSyncDone && writer.text() === "word" || undefined);
+  using db = new DatabaseSync(join(kit.directory, DB_NAME), { readOnly: true, timeout: 5000 });
+  const newest = db.prepare(`SELECT id FROM versions WHERE script = ? AND status = 'published'
+    ORDER BY created_at DESC, id DESC LIMIT 1`);
+  const deadline = Date.now() + 8000;
+  let initial = newest.get(scriptId)?.id;
+  while (typeof initial !== "string" && Date.now() < deadline) {
+    await delay(8);
+    initial = newest.get(scriptId)?.id;
+  }
+  assert.equal(typeof initial, "string");
+
+  let responses = 0;
+  let reading = true;
+  async function readVersions() {
+    while (reading) {
+      const id = newest.get(scriptId)?.id;
+      assert.equal(typeof id, "string");
+      const response = await fetch(`http://127.0.0.1:${port}/api/scripts/${scriptId}/versions/${id}`, {
+        signal: AbortSignal.timeout(5000),
+        headers: { Authorization: `Bearer ${token}` }
+      });
+      assert.equal(response.status, 200);
+      const bytes = await response.arrayBuffer();
+      assert.ok(bytes.byteLength >= live.byteLength && bytes.byteLength <= 15_000_000);
+      responses += 1;
+    }
+  }
+  const readers = Promise.all([readVersions(), readVersions(), readVersions()]);
+  const overlap: Awaited<ReturnType<typeof measureEdit>>[] = [];
+  const overlappingCaptures = new Set<string>();
+  let stagedStores = 0;
+  let parallelStores = 0;
+  let attempted = 0;
+  try {
+    await Promise.race([readers, (async () => {
+      for (; reading && attempted < 150 && overlap.length < 12; attempted++) {
+        const timing = await measureEdit(kit, run, writer, attempted + 4);
+        if (timing.capture) stagedStores += 1;
+        if (timing.reads >= 2) parallelStores += 1;
+        if (timing.capture && timing.reads >= 2) {
+          overlap.push(timing);
+          overlappingCaptures.add(timing.capture);
+        }
+        await delay(12);
+      }
+    })()]);
+  } finally {
+    reading = false;
+    await readers;
+  }
+  assert.ok(overlap.length > 0, `No overlapping store among ${stagedStores} during staging and ${parallelStores} during parallel reads.`);
+  const publishedBy = Date.now() + 5000;
+  while (newest.get(scriptId)?.id === initial && Date.now() < publishedBy) await delay(10);
+  assert.notEqual(newest.get(scriptId)?.id, initial);
+  assert.equal(storedText(kit.directory, scriptId), "word" + "a".repeat(attempted));
+  process.stdout.write(JSON.stringify({
+    liveBytes: live.byteLength, captureIntervalMs: CAPTURE_INTERVAL_MS, readers: 3, responses, attempted,
+    overlappingCaptures: overlappingCaptures.size,
+    storeMs: summarize(overlap.map(({ store }) => store)),
+    editToCommitMs: summarize(overlap.map(({ edit }) => edit))
   }) + "\n");
   writer.close();
   await run.stop("clean");

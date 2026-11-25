@@ -22,6 +22,8 @@ export function versionHistory(
 ) {
   const backupLock = new DatabaseSync(join(directory, BACKUP_LOCK_NAME), { timeout: 0 });
   const pending = new Map<string, { due: number }>();
+  const oversized = new Map<string, Buffer>();
+  let capturing: { script: string; cancelled: boolean } | undefined;
   let failure: VersionFailureRecord | null = null;
   let timer: NodeJS.Timeout | undefined;
   let notice: NodeJS.Immediate | undefined;
@@ -64,7 +66,8 @@ export function versionHistory(
     timer = setTimeout(() => { void tick(); }, Math.max(0, at - Date.now())).unref();
   }
 
-  async function capture(script: string): Promise<{ next: number; done: boolean }> {
+  async function capture(job: { script: string; cancelled: boolean }): Promise<{ next: number; done: boolean }> {
+    const { script } = job;
     if (!withBackupIdle(() => {})) return { next: 0, done: false };
     const latest = versions.latest(script);
     const due = latest ? latest.createdAt + interval : 0;
@@ -73,11 +76,15 @@ export function versionHistory(
     if (!current) return { next: 0, done: true };
     const hash = createHash("sha256").update(current.state).digest();
     if (latest && hash.equals(latest.hash)) return { next: 0, done: true };
+    const previousOversized = oversized.get(script);
+    if (previousOversized && hash.equals(previousOversized)) return { next: 0, done: true };
+    oversized.delete(script);
     const compressed = await compress(current.state);
-    if (stopped) return { next: 0, done: true };
+    if (stopped || job.cancelled) return { next: 0, done: true };
     if (compressed.length > budget) {
+      oversized.set(script, hash);
       report("snapshot-over-budget");
-      return { next: Date.now() + interval, done: false };
+      return { next: Date.now() + interval, done: true };
     }
     const id = randomUUID();
     if (!withBackupIdle(() => versions.stage(id, script, current.generation, Date.now(), compressed.length, hash))) {
@@ -86,10 +93,12 @@ export function versionHistory(
     reclaimAt = 0;
     for (let offset = 0; offset < compressed.length; offset += VERSION_CHUNK_BYTES) {
       await yieldTurn();
+      if (job.cancelled) return { next: 0, done: true };
       if (!withBackupIdle(() => versions.append(id, offset / VERSION_CHUNK_BYTES,
         compressed.subarray(offset, offset + VERSION_CHUNK_BYTES)))) return { next: 0, done: false };
     }
     await yieldTurn();
+    if (job.cancelled) return { next: 0, done: true };
     const publishedAt = Date.now();
     if (!withBackupIdle(() => versions.publish(id, script, publishedAt, budget))) return { next: 0, done: false };
     return { next: publishedAt + interval, done: true };
@@ -102,15 +111,21 @@ export function versionHistory(
       const entry = [...pending].find(([, item]) => item.due <= Date.now());
       if (entry) {
         const [script, queued] = entry;
+        const job = { script, cancelled: false };
+        capturing = job;
         let result;
         try {
-          result = await capture(script);
+          result = await capture(job);
         } catch {
           if (!stopped) report("version-store-failed");
           result = { next: Date.now() + interval, done: false };
+        } finally {
+          capturing = undefined;
         }
-        if (result.done && pending.get(script) === queued) pending.delete(script);
-        else if (!stopped) pending.set(script, { due: result.next });
+        if (!job.cancelled && !stopped) {
+          if (result.done && pending.get(script) === queued) pending.delete(script);
+          else pending.set(script, { due: result.next });
+        }
       }
       if (stopped) return;
       if (sweepAt <= Date.now()) {
@@ -151,9 +166,17 @@ export function versionHistory(
     clearTimeout(timer);
     clearImmediate(notice);
     pending.clear();
+    oversized.clear();
   }
 
   return {
+    reclaimSoon(script: string): void {
+      pending.delete(script);
+      oversized.delete(script);
+      if (capturing?.script === script) capturing.cancelled = true;
+      reclaimAt = 0;
+      schedule();
+    },
     changed(script: string): void {
       if (stopped) return;
       pending.set(script, { due: pending.get(script)?.due ?? 0 });

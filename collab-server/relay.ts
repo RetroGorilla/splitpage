@@ -33,6 +33,7 @@ import { versionStorage } from "./version-storage.ts";
 import { versionHistory } from "./versions.ts";
 
 const DOCUMENT_BYTES = 15_000_000;
+const VERSION_READ_LIMIT = 4;
 const MAX_PAYLOAD = 16_000_000;
 const STOP_SIGNALS = ["SIGINT", "SIGQUIT", "SIGTERM"] as const;
 
@@ -76,9 +77,14 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
     throw error;
   }
   let shutdown: NodeJS.Timeout | undefined;
+  let stopping = false;
   let lastStorageFailure: StorageFailureRecord | null = null;
-  function beginShutdown(): void {
+  function stopHistory(): void {
+    stopping = true;
     history.stop();
+  }
+  function beginShutdown(): void {
+    stopHistory();
     shutdown ??= setTimeout(() => failShutdown("Relay shutdown timed out. Some edits may not have been stored."), 15_000);
   }
   function closeStorage(): void {
@@ -146,8 +152,18 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
 
   function deleteScript(name: string): boolean {
     if (!access.deleteScript(name)) return false;
+    history.reclaimSoon(name);
     closeRemovedAccess();
     return true;
+  }
+
+  function abandonCreation(id: string) {
+    const result = access.abandon(id);
+    if (result === "deleted") {
+      const creation = access.findCreation(id);
+      if (creation) history.reclaimSoon(creation.script);
+    }
+    return result;
   }
 
   const manage = ownerRequests(managementSecret, DOCUMENT_BYTES, {
@@ -157,7 +173,7 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       if (created.owner) history.changed(created.scriptId);
       return created;
     },
-    abandonCreation: access.abandon,
+    abandonCreation,
     listScripts: access.listScripts,
     issue: access.issue,
     list: access.list,
@@ -175,7 +191,9 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
     versionBytes: versions.total,
     lastVersionFailure: history.lastFailure
   });
-  const versionRequest = versionRequests(versions, access, origins);
+  const versionRequest = versionRequests(versions, access, origins, {
+    documentBytes: DOCUMENT_BYTES, readLimit: VERSION_READ_LIMIT, stopping: () => stopping
+  });
 
   const limitsExtension: Extension<Admission> = {
     priority: 200,
@@ -216,8 +234,8 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
     extensions: [limitsExtension, ...extensions, ...(env.SPLITPAGE_APP_DIR ? [appShell(env.SPLITPAGE_APP_DIR, deployment)] : []), storage],
     async onRequest({ request, response }) {
       // why: the stock server treats a falsy rejection as an HTTP response handled by the hook
-      if (status(request, response) || await versionRequest(request, response) ||
-          await manage(request, response) || await pictures.handle(request, response)) throw null;
+      if (status(request, response) || await manage(request, response) ||
+          await pictures.handle(request, response) || await versionRequest(request, response)) throw null;
     },
     async onAuthenticate({ token, instance, documentName, connectionConfig, requestParameters }) {
       if (requestParameters.getAll("wire").join(",") !== "1" || requestParameters.getAll("schema").join(",") !== "1") {
@@ -284,7 +302,7 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       active.release();
     },
     async onDestroy() {
-      history.stop();
+      stopHistory();
       await pictures.close();
       closeStorage();
     }
@@ -303,13 +321,13 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
     const destroy = relay.destroy.bind(relay);
     return Object.assign(relay, {
       destroy() {
-        history.stop();
+        stopHistory();
         return destroy();
       },
       registerScript: access.register,
       issueInvitation: access.issue,
       resetGuests,
-      abandonCreation: access.abandon,
+      abandonCreation,
       revokeInvitation,
       deleteScript
     });
