@@ -2,6 +2,8 @@ import { cleanAuthorName } from "../../core/document/people.ts";
 import { PERSON_COLORS, PERSON_COLOR_NAMES } from "../../core/document/person-colors.ts";
 import { JOIN_SCRIPT_COMMAND } from "./actions.ts";
 import { mountCollaborationDialog } from "./dialog.ts";
+import { LINK_PASSWORD_MAX, validLinkPassword } from "../../../shared/link-password.ts";
+import { passwordFailure } from "./password-dialog.ts";
 import type { JoinDialogPorts, JoinPreview, JoinRequest } from "./ports.ts";
 
 const RETRY_LINK_CHECK = new Set(["relay-unreachable", "script-too-large-for-connection", "opening-pending"]);
@@ -29,6 +31,9 @@ export function mountJoinDialog(ports: JoinDialogPorts, request?: Extract<JoinRe
       <label id="join-script-link-label" class="modal-hint" hidden>Invitation link
         <input id="join-script-link" type="text" autocomplete="off" spellcheck="false">
       </label>
+      <label id="join-script-password-label" class="modal-hint" hidden>Link password
+        <input id="join-script-password" type="password" maxlength="${LINK_PASSWORD_MAX}" autocomplete="current-password">
+      </label>
       <div id="join-script-summary" hidden><h3></h3><p class="modal-hint"></p></div>
       <div id="join-script-identity" hidden>
         <label class="modal-hint">Your name <input type="text" id="join-script-name" autocomplete="off"></label>
@@ -51,6 +56,8 @@ export function mountJoinDialog(ports: JoinDialogPorts, request?: Extract<JoinRe
   const name = part("#join-script-name") as HTMLInputElement;
   const identity = part("#join-script-identity"), summary = part("#join-script-summary");
   const link = part("#join-script-link") as HTMLInputElement, linkLabel = part("#join-script-link-label");
+  const password = part("#join-script-password") as HTMLInputElement, passwordLabel = part("#join-script-password-label");
+  let invitation = request as JoinRequest | undefined;
   let preview: JoinPreview | undefined;
   let busy = false;
 
@@ -58,23 +65,40 @@ export function mountJoinDialog(ports: JoinDialogPorts, request?: Extract<JoinRe
     busy = value;
     submit.disabled = value;
     link.disabled = value;
+    password.disabled = value;
   };
   const fail = (reason: string) => {
     status.textContent = MESSAGES[reason] ?? "Could not join the shared script. Try again.";
     ports.settled();
   };
 
-  async function check(invite: JoinRequest) {
+  function askForPassword(reason: string): void {
+    passwordLabel.hidden = false;
+    submit.hidden = false;
+    submit.textContent = "Check password";
+    status.textContent = reason === "password-changed" ? "" : passwordFailure(reason);
+    password.focus();
+  }
+
+  async function check(invite: JoinRequest, value?: string) {
+    invitation = invite;
     setBusy(true);
     link.value = "";
+    password.value = "";
     linkLabel.hidden = true;
     status.textContent = "Loading script…";
     cancel.focus();
-    const result = await ports.check(invite, signal);
+    const result = await ports.check(invite, signal, value);
     if (signal.aborted) return;
     if (result.kind === "focused") { dispose(); return; }
     setBusy(false);
     if (result.kind === "failed") {
+      if (result.reason === "password-changed" || result.reason === "wrong-password" || result.reason === "password-rate-limited"
+        || (value !== undefined && result.reason === "relay-unreachable")) {
+        askForPassword(result.reason);
+        return;
+      }
+      passwordLabel.hidden = true;
       fail(result.reason);
       if (request) {
         const retryable = RETRY_LINK_CHECK.has(result.reason);
@@ -82,12 +106,15 @@ export function mountJoinDialog(ports: JoinDialogPorts, request?: Extract<JoinRe
         if (retryable) submit.textContent = "Try again";
         (retryable ? submit : cancel).focus();
       } else {
+        invitation = undefined;
+        submit.textContent = "Check link";
         linkLabel.hidden = false;
         link.focus();
       }
       return;
     }
     preview = result;
+    passwordLabel.hidden = true;
     status.textContent = "";
     summary.hidden = false;
     part("#join-script-summary h3").textContent = result.title;
@@ -128,16 +155,28 @@ export function mountJoinDialog(ports: JoinDialogPorts, request?: Extract<JoinRe
       return;
     }
     setBusy(false);
+    if (reason === "password-changed") {
+      preview = undefined;
+      summary.hidden = identity.hidden = true;
+      askForPassword(reason);
+      return;
+    }
     fail(reason);
     submit.focus();
   }
 
   cancel.onclick = () => { dispose(); ports.settled(); };
+  signal.addEventListener("abort", () => { password.value = ""; }, { once: true });
   form.onsubmit = event => {
     event.preventDefault();
     if (busy) return;
     if (preview) void join(preview);
-    else void check(request ?? { kind: "paste", link: link.value });
+    else if (!passwordLabel.hidden && invitation) {
+      if (!validLinkPassword(password.value)) {
+        status.textContent = "Enter a link password.";
+        password.focus();
+      } else void check(invitation, password.value);
+    } else void check(invitation ?? { kind: "paste", link: link.value });
   };
   if (request) {
     submit.hidden = true;

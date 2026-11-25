@@ -15,16 +15,16 @@ export interface OfflineReviewPorts {
 
 export interface ShareDialogPorts {
   readonly address: () => Promise<string | null>;
-  readonly share: (address: string, signal: AbortSignal, switching: () => void) => Promise<ShareAttemptResult>;
+  readonly share: (address: string, signal: AbortSignal, switching: () => void, password?: string) => Promise<ShareAttemptResult>;
   readonly copy: (text: string) => Promise<void>;
   readonly settings: () => void;
 }
 
 export interface SharedPopoverPorts {
   readonly collaboration: CollaborationReads;
-  readonly membership: () => { readonly role: "guest" | "owner"; readonly link: string | null } | null;
+  readonly membership: () => { readonly role: "guest" | "owner"; readonly link: string | null; readonly passwordRequired?: boolean } | null;
   readonly canManage: () => Promise<boolean>;
-  readonly manage: (operation: "promote" | "reset" | "stop" | "check-link") => Promise<void>;
+  readonly manage: (operation: "promote" | "reset" | "stop" | "check-link" | "set-password" | "remove-password", password?: string) => Promise<void>;
   readonly saveCopy: () => void;
   readonly copy: (link: string) => Promise<void>;
   readonly leave: () => Promise<void>;
@@ -52,7 +52,9 @@ export interface JoinPreview {
 export interface JoinDialogPorts {
   readonly identity: Pick<Preferences, "myColor" | "setCommentAuthor" | "setMyColor">;
   readonly editor: () => string;
-  readonly check: (request: JoinRequest, signal: AbortSignal) => Promise<JoinPreview | { readonly kind: "failed"; readonly reason: string } | { readonly kind: "focused" }>;
+  readonly check: (request: JoinRequest, signal: AbortSignal, password?: string) => Promise<
+    JoinPreview | { readonly kind: "failed"; readonly reason: string } | { readonly kind: "focused" }
+  >;
   readonly settled: () => void;
 }
 

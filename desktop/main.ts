@@ -41,6 +41,7 @@ import type * as IpcTabstrip from "./ipc-tabstrip.ts";
 import type * as IpcTestMode from "./ipc-test-mode.ts";
 import type * as IpcPrint from "./ipc-print.ts";
 import type { readNativeMembership as ReadNativeMembership } from "../shared/native-membership.ts";
+import type * as LinkPassword from "../shared/link-password.ts";
 import type { createNativeReplicaIpc as CreateNativeReplicaIpc } from "./native-replica-ipc.ts";
 import type * as PrintPdf from "./print-pdf.ts";
 import type * as HistoryPolicy from "../shared/history-policy.ts";
@@ -1874,7 +1875,8 @@ const relaySetup = COLLAB_UI ? (() => {
   const setupWindow = createRelaySetupWindow(BrowserWindow, root, RELAY_SETUP_ORIGIN);
   const userData = app.getPath("userData");
   // why: desktop staging and the dev build enable collaboration with the same flag that grants loopback WebSocket access
-  const owner = createRelayOwner(userData, safeStorage, fetch, COLLAB_UI);
+  const passwordPolicy: typeof LinkPassword = require(path.join(SHARED_ROOT, "link-password.ts"));
+  const owner = createRelayOwner(userData, safeStorage, passwordPolicy, fetch, COLLAB_UI);
   const shares = createShareCreations(userData, owner, createNativeReplicaFiles(userData).remove);
   function tabWindow(event: DesktopIpcEvent) {
     const tab = tabOf(event);
@@ -1921,18 +1923,18 @@ const relaySetup = COLLAB_UI ? (() => {
       else delete tab.shared;
       return false;
     },
-    manageSharing: (event: DesktopIpcEvent, operation: string, name: string, lease: string, address: string) => {
+    manageSharing: (event: DesktopIpcEvent, operation: string, name: string, lease: string, address: string, password?: string) => {
       const tab = tabWindow(event) && tabOf(event);
       const shared = tab && sharedReferenceFor(tab);
       if (!shared || name !== sharedScriptKey(shared) || address !== shared.address) {
         return { kind: "failed" as const, reason: "closed" as const };
       }
       return nativeReplicaForDevice(event.sender, ["membership", name, lease],
-        record => owner.manageSharing(operation, name, address, record));
+        record => owner.manageSharing(operation, name, address, record, password));
     },
-    createShare: (event: DesktopIpcEvent, id: string, hash: string, bytes: Uint8Array, address: string) => {
+    createShare: (event: DesktopIpcEvent, id: string, hash: string, bytes: Uint8Array, address: string, password?: string) => {
       const tab = tabWindow(event) && tabOf(event);
-      return tab ? shares.create(tab.id, id, hash, bytes, address) : { kind: "failed" as const };
+      return tab ? shares.create(tab.id, id, hash, bytes, address, password) : { kind: "failed" as const };
     },
     abandonShare: (event: DesktopIpcEvent, id: string) => {
       const tab = tabWindow(event) && tabOf(event);

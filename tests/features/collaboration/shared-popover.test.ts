@@ -15,8 +15,8 @@ function deferred<T>() {
 function setup(t: TestContext, overrides: Partial<SharedPopoverPorts> = {}) {
   const h = viewHarness();
   const realm = globalThis as unknown as Record<string, unknown>;
-  const saved = { window: realm.window, document: realm.document };
-  Object.assign(realm, { window: h.window, document: h.document });
+  const saved = { window: realm.window, document: realm.document, HTMLElement: realm.HTMLElement };
+  Object.assign(realm, { window: h.window, document: h.document, HTMLElement: h.window.HTMLElement });
   const open = new WeakSet<Element>();
   const matches = h.window.HTMLElement.prototype.matches;
   Object.defineProperty(h.window.HTMLElement.prototype, "matches", {
@@ -26,7 +26,7 @@ function setup(t: TestContext, overrides: Partial<SharedPopoverPorts> = {}) {
   });
   h.window.HTMLElement.prototype.showPopover = function () { open.add(this); };
   h.window.HTMLElement.prototype.hidePopover = function () { open.delete(this); };
-  const { collaboration, ports } = fakeSharedPopover(overrides);
+  const { collaboration, ports, management } = fakeSharedPopover(overrides);
   const popover = mountSharedPopover(ports);
   t.after(() => { popover.dispose(); Object.assign(realm, saved); h.window.close(); });
   const button = (action: string): HTMLButtonElement => {
@@ -36,7 +36,7 @@ function setup(t: TestContext, overrides: Partial<SharedPopoverPorts> = {}) {
   };
   const connect = () => collaboration.setRelay({ connected: true, firstSyncDone: true, pendingChangeCount: 0 });
   collaboration.enter();
-  return { ...h, popover, button, connect, collaboration };
+  return { ...h, popover, button, connect, collaboration, management };
 }
 
 test("a guest sees no owner controls, and removal hides owner controls and describes the retained work", t => {
@@ -44,7 +44,7 @@ test("a guest sees no owner controls, and removal hides owner controls and descr
   const h = setup(t, { membership: () => ({ role, link: null }) });
   h.connect();
   h.popover.open();
-  const ownerControls = ["copy", "reset", "stop"];
+  const ownerControls = ["copy", "reset", "password", "stop"];
   assert.ok(ownerControls.every(action => h.button(action).hidden));
   assert.equal(h.button("save").textContent, "Save a copy…");
   role = "owner";
@@ -76,17 +76,54 @@ test("double-click while reset is in flight runs one request", async t => {
   const pending = deferred<undefined>();
   const h = setup(t, {
     membership: () => ({ role: "owner", link: null }),
-    manage(operation) { requests.push(operation); return pending.promise; }
+    async manage(operation) {
+      requests.push(operation);
+      if (operation === "reset") await pending.promise;
+    }
   });
   h.connect();
   h.popover.open();
+  await new Promise<void>(resolve => setImmediate(resolve));
   h.button("reset").click();
   assert.equal(h.button("reset").disabled, true);
   h.fire(h.button("reset"), "click");
-  assert.deepEqual(requests, ["reset"]);
+  assert.deepEqual(requests, ["check-link", "reset"]);
   pending.resolve(undefined);
   await new Promise<void>(resolve => setImmediate(resolve));
   assert.equal(h.button("reset").disabled, false);
+});
+
+test("the password controls let a connected owner require or remove the password", async t => {
+  let required = false;
+  const h = setup(t, { membership: () => ({ role: "owner", link: null, passwordRequired: required }) });
+  h.connect();
+  h.popover.open();
+  await new Promise<void>(resolve => setImmediate(resolve));
+  const button = h.button("password");
+  assert.equal(button.textContent, "Require a password");
+  button.click();
+  const dialog = h.el("link-password-modal");
+  const input = dialog.querySelector<HTMLInputElement>("input[type=password]");
+  const form = dialog.querySelector<HTMLFormElement>("form");
+  assert.ok(input && form);
+  form.requestSubmit();
+  assert.deepEqual(h.management, [["check-link"]]);
+  input.value = "A link password";
+  form.requestSubmit();
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.deepEqual(h.management.at(-1), ["set-password", "A link password"]);
+  assert.equal(input.value, "");
+  required = true;
+  h.popover.open();
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.equal(button.textContent, "Change password…");
+  button.click();
+  const remove = h.el("link-password-modal").querySelector<HTMLButtonElement>("[data-remove-password]");
+  assert.ok(remove);
+  assert.equal(remove.hidden, false);
+  remove.click();
+  await new Promise<void>(resolve => setImmediate(resolve));
+  assert.deepEqual(h.management.at(-1), ["remove-password"]);
 });
 
 test("promotion availability starts hidden on every open and ignores an earlier check", async t => {

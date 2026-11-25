@@ -2955,6 +2955,8 @@ async function caseShareScript(target, fixturesDir) {
     stdio: ["ignore", "ignore", "ignore", "ipc"]
   });
   let app, setup, second, guest, restarted;
+  const password = "Desktop share " + crypto.randomUUID();
+  const rotatedPassword = "Desktop restart " + crypto.randomUUID();
   const copyPath = path.join(fixturesDir, "shared-export.splitpage");
   const stoppedPath = path.join(fixturesDir, "stopped-sharing.splitpage");
   function relayMessage(matches) {
@@ -3166,7 +3168,7 @@ async function caseShareScript(target, fixturesDir) {
     await Promise.all([join(second, link), join(guest, link)]);
     await openPopover(guest.cdp);
     record(tag + ": a guest has no owner controls or promotion without setup", await evalPage(guest.cdp,
-      `['copy','reset','stop','promote'].every(name => document.querySelector('[data-sharing="' + name + '"]').hidden)`));
+      `['copy','reset','password','stop','promote'].every(name => document.querySelector('[data-sharing="' + name + '"]').hidden)`));
     await openPopover(cdp);
     await clickControl(cdp, "leave");
     const leaveHint = "#leave-script-modal .modal-hint";
@@ -3192,8 +3194,48 @@ async function caseShareScript(target, fixturesDir) {
     await openPopover(cdp);
     await clickControl(cdp, "promote");
     await poll(cdp, `!${control("reset")}.hidden && ${connected}`);
+    await clickControl(second.cdp, "password");
+    await poll(second.cdp, "document.querySelector('#link-password-title')?.textContent === 'Require a password'");
+    await evalPage(second.cdp, `document.querySelector('#link-password-modal input').value = ${JSON.stringify(password)};
+      document.querySelector('#link-password-modal form').requestSubmit()`);
+    await poll(second.cdp, "!document.querySelector('#link-password-modal')");
+    const reenter = "#collab-access-reenter-password";
+    await poll(guest.cdp, `!document.querySelector('#collab-access-banner').hidden && !document.querySelector('${reenter}').hidden`);
+    await evalPage(guest.cdp, `document.querySelector('${reenter}').click()`);
+    await poll(guest.cdp, "document.querySelector('#link-password-modal input:not(:disabled)')");
+    await evalPage(guest.cdp, `document.querySelector('#link-password-modal input').value = ${JSON.stringify(password)};
+      document.querySelector('#link-password-modal form').requestSubmit()`);
+    await poll(guest.cdp, connected);
+    record(tag + ": requiring a password on an existing link lets the guest reconnect without receiving a new link",
+      await evalPage(guest.cdp, "document.querySelector('#collab-access-banner').hidden"));
+    const savedGuestTab = await tabIdOfTarget(guest.cdp);
+    const guestProfile = guest.userDataDir;
+    await fireEval(guest.cdp, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
+    if (!await waitForExit(guest.proc, 8000)) throw new Error("The guest could not quit before password rotation.");
+    await teardown(guest, tag + " before guest reopen", { expectExitCode: 0 });
+    await openPopover(second.cdp);
+    await clickControl(second.cdp, "password");
+    await poll(second.cdp, "document.querySelector('#link-password-title')?.textContent === 'Change password'");
+    await evalPage(second.cdp, `document.querySelector('#link-password-modal input').value = ${JSON.stringify(rotatedPassword)};
+      document.querySelector('#link-password-modal form').requestSubmit()`);
+    await poll(second.cdp, "!document.querySelector('#link-password-modal')");
+    guest = await launchApp(target, { label: "guest-password-reopen", userDataDir: guestProfile });
+    if (await tabIdOfTarget(guest.cdp) !== savedGuestTab) {
+      guest.cdp.close();
+      guest.cdp = await connectTab(guest, savedGuestTab);
+    }
+    await poll(guest.cdp, `!document.querySelector('#collab-access-banner').hidden && !document.querySelector('${reenter}').hidden`);
+    await evalPage(guest.cdp, `document.querySelector('${reenter}').click()`);
+    await poll(guest.cdp, "document.querySelector('#link-password-modal input:not(:disabled)')");
+    await evalPage(guest.cdp, `document.querySelector('#link-password-modal input').value = ${JSON.stringify(rotatedPassword)};
+      document.querySelector('#link-password-modal form').requestSubmit()`);
+    await poll(guest.cdp, connected);
+    record(tag + ": the reopened guest tab re-enters with its stored link", await tabIdOfTarget(guest.cdp) === savedGuestTab);
+    await openPopover(second.cdp);
+    await poll(second.cdp, `${control("password")}.textContent === 'Change password…'`);
     await clickControl(second.cdp, "reset");
     await poll(guest.cdp, "!document.getElementById('collab-access-banner').hidden");
+    record(tag + ": the reset banner asks for a new link", await evalPage(guest.cdp, `document.querySelector('${reenter}').hidden`));
     await poll(second.cdp, `!${control("copy")}.disabled`);
     await evalPage(second.cdp, "Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { async writeText(value) { window.lastSharedCopy = value; } } })");
     await clickControl(second.cdp, "copy");
@@ -3230,9 +3272,17 @@ async function caseShareScript(target, fixturesDir) {
     await evalPage(second.cdp, "document.querySelector('#btn-file').click()");
     await evalPage(second.cdp, "document.querySelector('[data-file-action=share-script]').click()");
     await poll(second.cdp, "document.querySelector('[data-share=start]:not([hidden])')");
+    await evalPage(second.cdp, `document.querySelector('#share-script-protected').click();
+      document.querySelector('#share-script-password').value = ${JSON.stringify(password)}`);
     await evalPage(second.cdp, "document.querySelector('[data-share=start]').click()");
     await poll(second.cdp, "document.querySelector('[data-share=copy]:not([hidden])')", 40000);
     const crashLink = new URL(await evalPage(second.cdp, "document.querySelector('#share-script-link input').value"));
+    const protectedLink = await fetch(address + "/api/scripts/" + crashLink.searchParams.get("join") + "/link", {
+      method: "HEAD", headers: { Authorization: "Bearer " + crashLink.hash.slice(1) }
+    });
+    record(tag + ": a new shared link is protected as soon as the Share screen displays it",
+      protectedLink.status === 428 && !crashLink.href.includes(password) &&
+      await evalPage(second.cdp, "document.querySelector('#share-script-password').value === ''"));
     const crashName = "desktop-smoke/" + crashLink.searchParams.get("join");
     const crashReplica = path.join(second.userDataDir, "native-replicas", crypto.createHash("sha256").update(crashName).digest("hex"));
     if (!fs.existsSync(path.join(crashReplica, "membership"))) throw new Error("The replica has no retained membership before stopping.");
@@ -3275,6 +3325,8 @@ async function caseShareScript(target, fixturesDir) {
       if (!client) continue;
       await teardown(client, tag, { expectExitCode: 0 });
       record(tag + ": logs never contain the management secret", !client.getStdout().includes(secret) && !client.getStderr().includes(secret));
+      record(tag + ": logs never contain the link passwords",
+        [password, rotatedPassword].every(value => !client.getStdout().includes(value) && !client.getStderr().includes(value)));
       rmrf(client.userDataDir);
     }
     if (relay.connected) relay.send("stop", () => {});

@@ -1,4 +1,5 @@
 import { InvitationSnapshotError, readInvitationSnapshot } from "../../adapters/collab/native/invitation-snapshot.ts";
+import { exchangeLinkPassword } from "../../adapters/collab/native/password-exchange.ts";
 import { openNativeSession } from "../../adapters/collab/native/session.ts";
 import { startupReady } from "../../application/startup-signal.ts";
 import { mountJoinDialog } from "../../features/collaboration/join.ts";
@@ -42,7 +43,7 @@ function openJoinScreen(request: Extract<JoinRequest, { kind: "browser" }> | und
   const ports: JoinDialogPorts = {
     identity: chromePreferences,
     editor: getEditorName,
-    async check(link, lifetime) {
+    async check(link, lifetime, password) {
       const invitation = readLink(link);
       if (!invitation) return { kind: "failed", reason: "bad-link" };
       const { origin, script, token } = invitation;
@@ -67,7 +68,10 @@ function openJoinScreen(request: Extract<JoinRequest, { kind: "browser" }> | und
         const endpoint = new URL("/", origin);
         endpoint.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:";
         const relayUrl = endpoint.href;
-        const state = await readInvitationSnapshot(relayUrl, script, token, signal);
+        const exchange = password === undefined ? null : await exchangeLinkPassword(origin, script, token, password, signal);
+        if (exchange?.kind === "failed") return exchange;
+        const credential = exchange?.token ?? token;
+        const state = await readInvitationSnapshot(relayUrl, script, credential, signal);
         const preview = openNativeSession({ kind: "stored-script", state }, { actor: getEditorName(), sanitize: sanitizeHtml });
         try {
           if (!preview.isStoredScript()) return { kind: "failed", reason: "invalid-script" };
@@ -82,7 +86,8 @@ function openJoinScreen(request: Extract<JoinRequest, { kind: "browser" }> | und
               const publish = holdDesktopDocumentPublication();
               try {
                 const outcome = await sharedEntry()?.enter({
-                  deployment, script, relayUrl, invitation: { token, state }, onRelayConnected: connected, onPictureProgress: progress
+                  deployment, script, relayUrl, invitation: { token: credential, ...(credential !== token && { guestLinkToken: token }), state },
+                  onRelayConnected: connected, onPictureProgress: progress
                 }, joining);
                 if (!outcome?.ok) return outcome?.reason ?? "opening-pending";
                 newTabControls()?.closeNewTabPage();

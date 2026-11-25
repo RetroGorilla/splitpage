@@ -11,9 +11,11 @@ import { browserScriptsOnThisDevice, wireBrowserSharedOpen } from "./ports/share
 
 async function reopenSharedScript(entry: SharedScriptCatalogueEntry, lifetime?: AbortSignal): Promise<void> {
   const result = await sharedEntry()?.enter(entry, lifetime);
-  if (lifetime?.aborted) return;
+  // why: committing a reopen replaces the document and aborts its captured opening signal
   if (result?.ok) newTabControls()?.closeNewTabPage();
-  else if (result?.reason !== "locked") notices.show("Could not reopen this shared script. Check that its local copy is still on this device.", "warn");
+  else if (!lifetime?.aborted && result?.reason !== "locked") {
+    notices.show("Could not reopen this shared script. Check that its local copy is still on this device.", "warn");
+  }
 }
 
 export function startSharedReopen(hasInvitation: boolean): () => void {

@@ -33,7 +33,7 @@ export async function readInvitationSnapshot(url: string, script: string, token:
           onAuthenticated() { authenticated = true; },
           onAuthenticationFailed({ reason }) { reject(new InvitationSnapshotError(reason)); },
           onClose({ event }) {
-            if (event.reason === "access-removed") reject(new InvitationSnapshotError(event.reason));
+            if (event.reason === "access-removed" || event.reason === "password-changed") reject(new InvitationSnapshotError(event.reason));
             else resolve("dropped");
           }
         }, () => resolve("loaded"), () => {}, () => true);

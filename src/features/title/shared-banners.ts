@@ -4,6 +4,8 @@ import { sharedSaveStatus } from "../../application/save/status.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 import type { SharedBannersMount, SharedBannersPorts } from "./ports.ts";
 
+declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
+
 interface AnchoredBanner {
   readonly element: HTMLElement;
   readonly home: Text;
@@ -18,6 +20,17 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
   const accessBanner = byId("collab-access-banner");
   const sizeBanner = byId("collab-size-banner");
   const writerStatus = byId("writer-collab-status");
+  let passwordButton: HTMLButtonElement | undefined;
+  if (typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI && ports.reenterPassword && accessBanner) {
+    passwordButton = document.createElement("button");
+    passwordButton.type = "button";
+    passwordButton.className = "btn";
+    passwordButton.id = "collab-access-reenter-password";
+    passwordButton.textContent = "Re-enter password";
+    passwordButton.hidden = true;
+    byId("collab-access-export")?.before(passwordButton);
+    life.listen(passwordButton, "click", ports.reenterPassword);
+  }
 
   const anchored: AnchoredBanner[] = [];
   for (const element of [saveErrorBanner, accessBanner, sizeBanner, byId("collab-offline-banner")]) {
@@ -81,7 +94,9 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
 
   function showAccessRemoved(refusal: CollaborationPermanentRefusal, reveal: boolean): void {
     if (!accessBanner) return;
-    setText("collab-access-text", accessRemovedMessage(refusal));
+    setText("collab-access-text", typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI && refusal === "password-changed"
+      ? "The link password changed. Re-enter it to sync your work." : accessRemovedMessage(refusal));
+    if (passwordButton) passwordButton.hidden = refusal !== "password-changed";
     if (reveal) accessBanner.hidden = false;
   }
 
@@ -179,6 +194,7 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
   if (sizeDismiss) life.listen(sizeDismiss, "click", () => { hideBanner(sizeBanner); });
 
   life.release(() => {
+    passwordButton?.remove();
     hideBanner(accessBanner);
     hideBanner(sizeBanner);
     if (lastActive) hideBanner(saveErrorBanner);
