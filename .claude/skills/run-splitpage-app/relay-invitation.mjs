@@ -110,7 +110,7 @@ for (const variant of ["accepted", "refused", "deleted", "pictures", "replacemen
   : variant === "pictures"
   ? "a relay invitation hydrates initial pictures and keeps active transfers independent of entry"
   : variant === "accepted"
-  ? "a browser joins a seeded relay invitation and reopens its retained copy"
+  ? "a browser joins a seeded relay invitation, opens shared history and reopens its retained copy"
   : variant === "restart" ? "a dropped snapshot connection restarts exactly once and the browser joins"
   : variant === "unsupported-version" ? "the Join screen explains a real relay version refusal"
   : variant === "retry" ? "Try again checks the same invitation after the relay recovers and joins after another script opens"
@@ -258,6 +258,15 @@ for (const variant of ["accepted", "refused", "deleted", "pictures", "replacemen
       "wait " + seeded, "wait window.__sharedTest.invitationConnected()",
       "expect localStorage.getItem('splitpage-comment-author')==='Guest Editor'",
       "expect localStorage.getItem('splitpage-person-color')==='#F9B64F'",
+      "click #btn-file", "click [data-file-action=history]",
+      "wait document.querySelector('[data-shared-version]')",
+      "expect document.querySelector('#history-older').hidden",
+      "click [data-shared-version]",
+      "wait document.querySelector('[aria-label=\"Read-only version\"] article')?.textContent.includes('word')",
+      "expect document.querySelector('[data-shared-history=save]').textContent==='Save a copy…'",
+      "expect document.querySelector('[data-shared-history=put-back]').textContent==='Put this beat back'",
+      "click [data-shared-history=back]", "wait document.querySelector('[data-shared-version]')",
+      "click #history-close",
       "eval window.joinPeer=window.open('','join-peer');true",
       "wait window.joinPeer?.document.querySelector('#join-script-summary')?.hidden===false",
       "eval {const peer=window.joinPeer.document;peer.querySelector('#join-script-name').value='Other Editor';peer.querySelector('#join-script-modal [type=submit]').click();}true",

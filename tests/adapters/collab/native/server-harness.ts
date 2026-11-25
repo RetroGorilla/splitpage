@@ -16,6 +16,7 @@ import { openNativeRelay } from "../../../../src/adapters/collab/native/relay.ts
 import type { NativeRelayEvent } from "../../../../src/adapters/collab/native/relay.ts";
 import { openNativeSession } from "../../../../src/adapters/collab/native/session.ts";
 import type { NativeSessionSource } from "../../../../src/adapters/collab/native/session.ts";
+import type { PresencePeer } from "../../../../src/application/collaboration/presence.ts";
 import { seedRelaySession } from "./relay-harness.ts";
 import { PASSWORD_SHARE_TYPE } from "../../../../shared/link-password.ts";
 
@@ -234,14 +235,17 @@ export function serverHarness(t: TestContext, timeout = 25_000) {
     redact(token);
     const session = openNativeSession(source, OPTIONS);
     const events: NativeRelayEvent[] = [];
+    let peers: readonly PresencePeer[] = [];
     session.subscribe(() => changed.emit("change"));
     const relay = openNativeRelay(session, {
       url: `ws://127.0.0.1:${port}`, name, token, sessionOptions: OPTIONS,
-      onEvent(event) { events.push(event); changed.emit("change"); }
+      onEvent(event) { events.push(event); changed.emit("change"); },
+      onPresence(next) { peers = next; changed.emit("change"); }
     });
     copies.push(relay);
     return {
       session, events, relay,
+      peers: () => peers,
       text: () => session.document().rows[0]?.audioText,
       pending: () => relay.status().pendingChangeCount,
       close: relay.close

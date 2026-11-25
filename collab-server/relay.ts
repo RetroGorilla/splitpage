@@ -31,6 +31,7 @@ import { claimWriter, openWriter } from "./storage.ts";
 import { versionRequests } from "./version-http.ts";
 import { versionStorage } from "./version-storage.ts";
 import { versionHistory } from "./versions.ts";
+import { PRESENCE_FIELD, presenceName } from "../shared/collaboration-presence.ts";
 
 const DOCUMENT_BYTES = 15_000_000;
 const VERSION_READ_LIMIT = 4;
@@ -102,9 +103,8 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
   }
   const load = db.prepare("SELECT state FROM documents WHERE name = ?");
   const size = db.prepare("SELECT length(state) AS bytes FROM documents WHERE name = ?");
-  const write = db.prepare(`INSERT INTO documents (name, state, version_generation) VALUES (?, ?, 1)
-    ON CONFLICT(name) DO UPDATE SET state = excluded.state, version_generation = documents.version_generation + 1`);
   type Admission = { invitationId: string; quotaId: string; role: InvitationRole; reservationId?: string };
+  const editingNames = new WeakMap<Document, Set<string>>();
   const storage = new Database({
     async fetch({ documentName }) {
       try {
@@ -114,14 +114,15 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
         throw error;
       }
     },
-    async store({ documentName, state }) {
+    async store({ document, documentName, state }) {
       try {
-        write.run(documentName, state);
+        versions.storeDocument(documentName, state, editingNames.get(document));
       } catch (error) {
         lastStorageFailure = { at: new Date().toISOString(), reason: "document-store-failed" };
         if (shutdown) failShutdown("Relay shutdown failed. The last edits were not stored.");
         throw error;
       }
+      editingNames.delete(document);
       history.changed(documentName);
     }
   });
@@ -281,6 +282,18 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
     },
     async onDisconnect({ context }) {
       if (context?.reservationId) limits.releaseInvitation(context.reservationId);
+    },
+    async onChange({ document, connection }) {
+      if (!connection) return;
+      for (const client of document.getClients(connection)) {
+        if (typeof client !== "number") continue;
+        const profile: unknown = document.awareness.getStates().get(client)?.[PRESENCE_FIELD];
+        const name = profile && typeof profile === "object" && "name" in profile ? presenceName(profile.name) : "";
+        if (!name) continue;
+        let names = editingNames.get(document);
+        if (!names) editingNames.set(document, names = new Set());
+        names.add(name);
+      }
     },
     async beforeHandleMessage({ context, socketId }) {
       requireAccess(context);

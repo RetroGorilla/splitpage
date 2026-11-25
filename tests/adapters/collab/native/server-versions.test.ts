@@ -13,10 +13,11 @@ import { backupRelay, restoreRelay, verifyCopy } from "../../../../collab-server
 import { relayConfig } from "../../../../collab-server/config.ts";
 import { RETRY_AFTER_SECONDS } from "../../../../collab-server/limits.ts";
 import type { RelayStatusSnapshot } from "../../../../collab-server/status.ts";
-import { DB_NAME, VERSION_CHUNK_BYTES } from "../../../../collab-server/storage.ts";
+import { DB_NAME, openWriter, VERSION_CHUNK_BYTES } from "../../../../collab-server/storage.ts";
 import { versionRequests } from "../../../../collab-server/version-http.ts";
 import { versionStorage } from "../../../../collab-server/version-storage.ts";
 import { appendText, NAME, ORIGIN, serverHarness, storedState, storedText } from "./server-harness.ts";
+import { hashedPersonColor } from "../../../../src/core/document/person-colors.ts";
 
 type RelayRun = ReturnType<ReturnType<typeof serverHarness>["launch"]>;
 type HistoryEntry = ReturnType<ReturnType<typeof versionStorage>["list"]>[number];
@@ -184,6 +185,65 @@ test("the first edit captures immediately and a final edit captures after the in
   assert.deepEqual(await history(run, token), entries);
 });
 
+test("version names are sorted and unique, count only editors, and survive a quick disconnect", async t => {
+  const kit = serverHarness(t);
+  kit.seed();
+  const run = kit.launch({ SPLITPAGE_VERSION_INTERVAL_MS: "2200" });
+  const port = await run.port();
+  const token = kit.invitation().token;
+  const unnamed = kit.copy(port), zed = kit.copy(port), ada = kit.copy(port), lurker = kit.copy(port);
+  await kit.until(() => [unnamed, zed, ada, lurker].every(copy => copy.text() === "word") || undefined);
+  appendText(unnamed.session, " start", 4);
+  const initial = await until(async () => (await history(run, token))[0]);
+  assert.deepEqual(initial.names, []);
+
+  for (const [copy, name] of [[zed, "Zed"], [ada, "Ada"], [lurker, "Lurker"]] as const) {
+    copy.relay.publishPresence({ name, color: hashedPersonColor(name), view: "split", beat: null, side: null });
+  }
+  await kit.until(() => unnamed.peers().length === 3 || undefined);
+  appendText(zed.session, " one", 10);
+  await kit.until(() => ada.text() === "word start one" || undefined);
+  zed.close();
+  await kit.until(() => unnamed.peers().every(peer => peer.name !== "Zed") || undefined);
+  appendText(ada.session, " two", 14);
+  appendText(ada.session, " three", 18);
+  const edited = await until(async () => {
+    const [latest] = await history(run, token);
+    if (latest?.id !== initial.id) return latest;
+  });
+  assert.deepEqual(edited.names, ["Ada", "Zed"]);
+  await kit.until(() => unnamed.text() === "word start one two three" || undefined);
+  appendText(unnamed.session, " again", 24);
+  const next = await until(async () => {
+    const [latest] = await history(run, token);
+    if (latest?.id !== edited.id) return latest;
+  });
+  assert.deepEqual(next.names, []);
+});
+
+test("a version only consumes editor names through its stored generation, including after a schema upgrade", t => {
+  const kit = serverHarness(t);
+  const bytes = kit.seed();
+  kit.provision(NAME);
+  {
+    using v7 = new DatabaseSync(join(kit.directory, DB_NAME));
+    v7.exec("DROP TABLE version_editors; PRAGMA user_version = 7");
+  }
+  using db = openWriter(kit.directory);
+  const store = versionStorage(db);
+  store.storeDocument(NAME, bytes, new Set(["Ada", "Zed"]));
+  const compressed = zstdCompressSync(bytes), hash = createHash("sha256").update(bytes).digest();
+  const id = randomUUID(), now = Date.now();
+  const current = store.current(NAME);
+  assert.ok(current);
+  store.stage(id, NAME, current.generation, now, compressed.length, hash, store.editorNames(NAME));
+  store.append(id, 0, compressed);
+  store.storeDocument(NAME, expandedState(bytes, 20), new Set(["Ada", "Bea"]));
+  store.publish(id, NAME, now, compressed.length * 2);
+  assert.deepEqual(store.list(NAME)[0]?.names, ["Ada", "Zed"]);
+  assert.deepEqual(store.editorNames(NAME), ["Ada", "Bea"]);
+});
+
 test("version reads use invitation roles, clear untouched, and scope CORS to version routes", async t => {
   const kit = serverHarness(t);
   const state = kit.seed();
@@ -326,13 +386,16 @@ test("a partial history write stays hidden, leaves live state intact after a cra
     LEFT JOIN versions ON id = version_id WHERE status IS NOT 'published'`).get()?.count, 0);
 });
 
-test("shutdown commits the final live edit and leaves its capture for restart", async t => {
+test("shutdown commits the final live edit and leaves its capture and editor names for restart", async t => {
   const kit = serverHarness(t);
   kit.seed();
   const run = kit.launch();
   const { token } = kit.invitation();
-  const copy = kit.copy(await run.port());
-  await kit.until(() => copy.text() === "word" || undefined);
+  const port = await run.port();
+  const copy = kit.copy(port), observer = kit.copy(port);
+  await kit.until(() => copy.text() === "word" && observer.text() === "word" || undefined);
+  copy.relay.publishPresence({ name: "Final Editor", color: hashedPersonColor("Final Editor"), view: "split", beat: null, side: null });
+  await kit.until(() => observer.peers().some(peer => peer.name === "Final Editor") || undefined);
   run.send("hold");
   await kit.until(() => run.messages.includes("armed") || undefined);
   appendText(copy.session, " final", 4);
@@ -347,6 +410,7 @@ test("shutdown commits the final live edit and leaves its capture for restart", 
   assert.equal(storedText(kit.directory), "word final");
   const restarted = kit.launch();
   const version = await until(async () => (await history(restarted, token))[0]);
+  assert.deepEqual(version.names, ["Final Editor"]);
   assert.deepEqual(await snapshot(restarted, `${HISTORY}/${version.id}`, token), storedState(kit.directory));
 });
 
@@ -480,10 +544,14 @@ test("backup pauses capture, verifies both version tables, and restore preserves
   kit.seed();
   const run = kit.launch({ SPLITPAGE_VERSION_INTERVAL_MS: "100" });
   const { token } = kit.invitation();
-  const copy = kit.copy(await run.port());
-  await kit.until(() => copy.text() === "word" || undefined);
+  const port = await run.port();
+  const copy = kit.copy(port), observer = kit.copy(port);
+  await kit.until(() => copy.text() === "word" && observer.text() === "word" || undefined);
+  copy.relay.publishPresence({ name: "Editor", color: hashedPersonColor("Editor"), view: "split", beat: null, side: null });
+  await kit.until(() => observer.peers().some(peer => peer.name === "Editor") || undefined);
   appendText(copy.session, " one", 4);
   const original = await until(async () => (await history(run, token))[0]);
+  assert.deepEqual(original.names, ["Editor"]);
   const saved = storedState(kit.directory);
   const env = { SPLITPAGE_DATA_DIR: kit.directory };
   const archive = await backupRelay(env, async (source, pending) => {
@@ -503,7 +571,8 @@ test("backup pauses capture, verifies both version tables, and restore preserves
   verifyCopy(source, changed);
   changed.exec("UPDATE versions SET names = '[\"other\"]'");
   assert.throws(() => verifyCopy(source, changed), /versions differ/);
-  changed.exec("UPDATE versions SET names = '[]'; DELETE FROM version_chunks");
+  changed.prepare("UPDATE versions SET names = ?").run(JSON.stringify(original.names));
+  changed.exec("DELETE FROM version_chunks");
   assert.throws(() => verifyCopy(source, changed), /missing version chunks/);
   assert.throws(() => verifyCopy(changed, changed), /incomplete published version/);
 

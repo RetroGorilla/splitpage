@@ -24,6 +24,14 @@ function transaction(db: DatabaseSync, write: () => void): void {
 }
 
 export function versionStorage(db: DatabaseSync) {
+  const writeDocument = db.prepare(`INSERT INTO documents (name, state, version_generation) VALUES (?, ?, 1)
+    ON CONFLICT(name) DO UPDATE SET state = excluded.state, version_generation = documents.version_generation + 1`);
+  const markEditor = db.prepare(`INSERT INTO version_editors (script, name, generation)
+    SELECT name, ?, version_generation FROM documents WHERE name = ?
+    ON CONFLICT(script, name) DO UPDATE SET generation = excluded.generation`);
+  const readEditors = db.prepare("SELECT name FROM version_editors WHERE script = ?");
+  const clearEditors = db.prepare(`DELETE FROM version_editors WHERE script = ?
+    AND generation <= (SELECT generation FROM versions WHERE id = ?)`);
   const pending = db.prepare(`SELECT name FROM documents JOIN scripts USING (name)
     WHERE status = 'active' AND version_generation > coalesce(
       (SELECT generation FROM versions WHERE script = name AND versions.status = 'published'
@@ -31,8 +39,8 @@ export function versionStorage(db: DatabaseSync) {
   const current = db.prepare(`SELECT state, version_generation FROM documents JOIN scripts USING (name)
     WHERE name = ? AND version_generation > 0 AND status = 'active'`);
   const active = db.prepare("SELECT 1 FROM scripts WHERE name = ? AND status = 'active'");
-  const stage = db.prepare(`INSERT INTO versions (id, script, generation, created_at, bytes, content_hash, status)
-    VALUES (?, ?, ?, ?, ?, ?, 'staged')`);
+  const stage = db.prepare(`INSERT INTO versions (id, script, generation, created_at, bytes, content_hash, names, status)
+    VALUES (?, ?, ?, ?, ?, ?, ?, 'staged')`);
   const append = db.prepare("INSERT INTO version_chunks (version_id, part, payload) VALUES (?, ?, ?)");
   const publish = db.prepare("UPDATE versions SET created_at = ?, status = 'published' WHERE id = ?");
   const retire = db.prepare("UPDATE versions SET status = 'retired' WHERE id = ?");
@@ -67,6 +75,14 @@ export function versionStorage(db: DatabaseSync) {
   }
 
   return {
+    storeDocument(script: string, state: Uint8Array, names: ReadonlySet<string> | undefined): void {
+      if (!names?.size) { writeDocument.run(script, state); return; }
+      transaction(db, () => {
+        writeDocument.run(script, state);
+        for (const name of names) markEditor.run(name, script);
+      });
+    },
+    editorNames: (script: string) => readEditors.all(script).map(row => String(row.name)).sort(),
     pending: () => pending.all().map(row => String(row.name)),
     current(script: string) {
       const row = current.get(script);
@@ -78,13 +94,14 @@ export function versionStorage(db: DatabaseSync) {
       if (!row) return;
       return { createdAt: Number(row.created_at), hash: row.content_hash as Uint8Array };
     },
-    stage: (id: string, script: string, generation: number, now: number, bytes: number, hash: Buffer) =>
-      stage.run(id, script, generation, now, bytes, hash),
+    stage: (id: string, script: string, generation: number, now: number, bytes: number, hash: Buffer, names: readonly string[] = []) =>
+      stage.run(id, script, generation, now, bytes, hash, JSON.stringify(names)),
     append: (id: string, part: number, bytes: Buffer) => append.run(id, part, bytes),
     publish(id: string, script: string, now: number, budget: number): void {
       if (!active.get(script)) return;
       transaction(db, () => {
         publish.run(now, id);
+        clearEditors.run(script, id);
         retain(script, now, budget);
       });
     },

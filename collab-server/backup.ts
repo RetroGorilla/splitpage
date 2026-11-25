@@ -132,6 +132,12 @@ export function verifyCopy(source: DatabaseSync, copy: DatabaseSync): void {
     ? "SELECT id, script, label, token_hash, revoked, role, creation_id FROM invitations ORDER BY id"
     : "SELECT id, script, label, token_hash, revoked FROM invitations ORDER BY id");
   if (version >= 6) verifyRows(source, copy, "link passwords", "SELECT script, salt, key FROM link_passwords ORDER BY script");
+  if (version >= 8) {
+    verifyRows(source, copy, "pending version editors", "SELECT script, name, generation FROM version_editors ORDER BY script, name");
+    if (copy.prepare("PRAGMA foreign_key_check(version_editors)").get()) {
+      throw new RelayError("Relay backup contains an orphaned version editor.");
+    }
+  }
   if (version >= 5) {
     verifyRows(source, copy, "versions",
       "SELECT id, script, generation, created_at, bytes, content_hash, names, status FROM versions ORDER BY id");

@@ -8,6 +8,7 @@ for (const enabled of [false, true]) test("shared hook build gate: release has n
     export { mountSharedSessionFeature, stopSharedSessionFeature } from "./src/bootstrap/wiring/shared-startup.ts";
     export { registerCollaborationActions } from "./src/bootstrap/wiring/collaboration.ts";
     export { mountNewTabFeature } from "./src/bootstrap/wiring/newtab.ts";
+    export { mountHistoryPanelFeature } from "./src/bootstrap/wiring/history-panel.ts";
   `,
     resolveDir: fileURLToPath(new URL("../../", import.meta.url)), sourcefile: "shared-hook-build-entry.ts", loader: "ts" },
     bundle: true, write: false, charset: "utf8", format: "esm", platform: "browser", minify: true, treeShaking: true,
@@ -19,7 +20,8 @@ for (const enabled of [false, true]) test("shared hook build gate: release has n
     "Could not reopen the local shared script.", "share-script", "share-script-modal", "Uploading script", "shared-pill", "shared-popover", "sharing-and-people", "leave-shared-script",
     "join-script-modal", "Join a shared script…", "leave-script-modal",
     "Shared scripts on this device", "note-shared", "focus-shared", "open-shared",
-    "file-copy-banner", "file-copy-status", "file-copy-write", "file-copy-stop", "file-copy-choice"]) {
+    "file-copy-banner", "file-copy-status", "file-copy-write", "file-copy-stop", "file-copy-choice",
+    "data-shared-version", "data-shared-history", "Versions kept by the relay for this shared script.", "/versions"]) {
     assert.equal(code.includes(text), enabled, text);
   }
   for (const text of ["ownershipScans", "appliedUpdates", "lateJoiner", "joinerType", "joinerUndo",

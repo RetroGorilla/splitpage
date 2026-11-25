@@ -19,8 +19,8 @@ import { retainedSharedScriptActive, retainedSharingControls } from "./retained-
 import { screen } from "./ports/screen.ts";
 import { getEditorName, preferences } from "./preferences-owner.ts";
 import { changes } from "./ports/preferences.ts";
-import { PERSON_NAME_MAX, hashedPersonColor } from "../../core/document/person-colors.ts";
-import { cappedName } from "../../core/document/text-policy.ts";
+import { hashedPersonColor } from "../../core/document/person-colors.ts";
+import { presenceName } from "../../../shared/collaboration-presence.ts";
 import { mountPresenceView } from "../../features/collaboration/presence.ts";
 import { sharedPresence } from "./ports/presence.ts";
 import { cssAttr } from "../../features/common/dom.ts";
@@ -166,7 +166,7 @@ function registerCollaboration(registry: Pick<ActionRegistry, "invoke" | "regist
   const stopPresence = mountPresenceView({
     collaboration, presence,
     identity() {
-      const name = cappedName(getEditorName(), PERSON_NAME_MAX);
+      const name = presenceName(getEditorName());
       return { name, color: preferences().myColor() || hashedPersonColor(name) };
     },
     onIdentityChange: listener => changes.onChange(({ name }) => {

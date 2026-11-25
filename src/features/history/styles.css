@@ -150,3 +150,18 @@
     text-align: left;
   }
   .history-usage { margin: 0; padding: 0 var(--space-20); font-size: 12.5px; line-height: 18px; color: var(--text-faint); }
+  .shared-history-versions, .shared-history-preview { padding: 0 var(--space-20); }
+  .shared-history-version {
+    width: 100%; height: auto; min-height: 44px; justify-content: space-between;
+    gap: var(--space-8); text-align: left; white-space: normal; overflow-wrap: anywhere;
+    margin-bottom: var(--space-8);
+  }
+  .shared-history-actions { display: flex; flex-wrap: wrap; gap: var(--space-8); }
+  .shared-history-preview h3 { margin-bottom: var(--space-4); }
+  .shared-history-beats article {
+    display: grid; gap: var(--space-8); padding: var(--space-12) 0;
+    border-bottom: 1px solid var(--border);
+    overflow-wrap: anywhere;
+  }
+  .shared-history-beats article > button { justify-self: start; }
+  .shared-history-beats img { display: block; max-width: 100%; max-height: 12rem; object-fit: contain; }
