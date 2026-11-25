@@ -25,6 +25,7 @@ import type { SharedEditorBackend, SharedSwitchOutcome, SharedSwitchPorts } from
 import type { NativeMembershipRecord } from "../../../shared/native-replica.d.ts";
 import { keepLandedFile, openSharedFileCopy } from "./shared-file-copy.ts";
 import type { FileCopyWritten } from "../../application/collaboration/file-copy.ts";
+import { activateSharedHistory, createSharedHistory } from "./shared-history.ts";
 
 declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
 
@@ -457,6 +458,12 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
       };
       const manage = replica.membership?.manage;
       const recoveryLifetime = new AbortController();
+      const history = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI && entry.relayUrl && pictureOrigin
+        ? createSharedHistory(pictureOrigin, entry.script, recoveryLifetime.signal, () => membership?.token ?? "",
+          () => sessionCurrent() && !recoveryLifetime.signal.aborted && collaborationState().snapshot().relay.connected,
+          beat => backend.offlineReview?.putBack(beat) ?? false)
+        : null;
+      let stopHistory: (() => void) | undefined;
       const controls = () => {
         const link = pictureOrigin && membership?.guestLinkToken ? new URL("/", pictureOrigin) : null;
         if (link) {
@@ -611,6 +618,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
           backend.start();
           if (entry.created) freshRevision = editorSession?.readAt((_document, revision) => revision);
           if (entry.relayUrl) sharingControls = controls;
+          if (history) stopHistory = activateSharedHistory(history);
           stopUnload = guardUnload(window, pending);
           leaveWithFile = leave;
           setSharedRetryLocalWrite(async () => {
@@ -651,6 +659,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
           if (!active) discardPreparedCopy(replica);
           sessionDisposed = true;
           if (sharingControls === controls) sharingControls = null;
+          stopHistory?.();
           if (leaveWithFile === leave) leaveWithFile = undefined;
           attempt(() => fileCopy?.dispose());
           if (localCopy === replica) localCopy = null;

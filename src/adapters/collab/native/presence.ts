@@ -1,8 +1,8 @@
 import type { HocuspocusProvider } from "@hocuspocus/provider";
 import type { PresencePeer, PresenceProfile } from "../../../application/collaboration/presence.ts";
-import { paletteColor, PERSON_NAME_MAX } from "../../../core/document/person-colors.ts";
+import { paletteColor } from "../../../core/document/person-colors.ts";
+import { PRESENCE_FIELD, presenceName } from "../../../../shared/collaboration-presence.ts";
 
-const FIELD = "splitpagePresence";
 const SEND_INTERVAL_MS = 200;
 
 function sameProfile(a: PresenceProfile, b: PresenceProfile | undefined): boolean {
@@ -11,9 +11,10 @@ function sameProfile(a: PresenceProfile, b: PresenceProfile | undefined): boolea
 
 function parse(value: unknown): PresenceProfile | null {
   if (!value || typeof value !== "object") return null;
-  const { name, color, view, beat, side } = value as Record<string, unknown>;
+  const { name: rawName, color, view, beat, side } = value as Record<string, unknown>;
+  const name = presenceName(rawName);
   const safeColor = paletteColor(color);
-  if (typeof name !== "string" || !name.trim() || name.length > PERSON_NAME_MAX || !safeColor) return null;
+  if (!name || name !== rawName || !safeColor) return null;
   if (view !== "split" && view !== "writer" && view !== "present") return null;
   if (!(beat === null && side === null) &&
       !(typeof beat === "string" && beat.length > 0 && beat.length <= 256 &&
@@ -32,7 +33,7 @@ export function bindNativePresence(provider: HocuspocusProvider, receive: (peers
     const peers: PresencePeer[] = [];
     for (const [clientId, state] of awareness?.getStates() ?? []) {
       if (clientId === awareness?.clientID) continue;
-      const profile = parse(state[FIELD]);
+      const profile = parse(state[PRESENCE_FIELD]);
       if (profile) peers.push({ clientId, ...profile });
     }
     peers.sort((a, b) => a.clientId - b.clientId);
@@ -53,7 +54,7 @@ export function bindNativePresence(provider: HocuspocusProvider, receive: (peers
       timer = undefined;
       if (!pending || sameProfile(pending, last)) return;
       last = pending;
-      provider.setAwarenessField(FIELD, pending);
+      provider.setAwarenessField(PRESENCE_FIELD, pending);
     }, SEND_INTERVAL_MS);
   };
 }

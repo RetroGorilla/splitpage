@@ -642,3 +642,4 @@ export function fakeSharedScriptCatalogue(initial: readonly SharedScriptCatalogu
     note: async entry => { entries.set(sharedScriptKey(entry), entry); }
   };
 }
+export const noSharedHistory = null;

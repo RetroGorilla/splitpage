@@ -153,7 +153,7 @@ interface Reading {
   readonly landing: NativeReadBeat | null;
 }
 
-function placementOf(reader: NativeScriptReader) {
+export function nativeBeatPlacements(reader: NativeScriptReader) {
   const placements = new Map<string, NativeBeatPlacement>(), headings = new Map<string, string>();
   let scene: string | null = null, previous: string | null = null;
   let sceneOrder: string[] = [];
@@ -182,7 +182,7 @@ export function openNativePendingEdits(reader: NativeScriptReader, saved?: Nativ
   const restored = deepFrozen(structuredClone(saved));
   let through = restored?.through ?? 0, checkpoint = restored?.checkpoint;
   let journalRevision = 0;
-  let { placements, headings } = placementOf(reader);
+  let { placements, headings } = nativeBeatPlacements(reader);
   const beats = new Map<string, NativeReadBeat>();
   const entries = new Map<string, PendingBeat>(), held = new Map<string, Reading>();
   for (const id of placements.keys()) updateBeat(id);
@@ -244,7 +244,7 @@ export function openNativePendingEdits(reader: NativeScriptReader, saved?: Nativ
     let edited = false;
     if (changes.layout) {
       const oldHeadings = headings;
-      ({ placements, headings } = placementOf(reader));
+      ({ placements, headings } = nativeBeatPlacements(reader));
       if (command) for (const [id, above] of oldHeadings) {
         if (headings.has(id)) continue;
         const entry = note("h:" + id, id, null);

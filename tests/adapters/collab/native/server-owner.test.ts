@@ -624,7 +624,7 @@ function seedLegacyDatabase(directory: string, version: 1 | 2 | 3 | 4, options: 
   assert.equal(verifyDatabase(db), version);
 }
 
-test("storage v4 upgrades all populated tables to v7 atomically", async t => {
+test("storage v4 upgrades all populated tables to v8 atomically", async t => {
   const kit = serverHarness(t);
   const state = kit.seed();
   const dir = join(kit.directory, "atomic-v4");
@@ -653,12 +653,13 @@ test("storage v4 upgrades all populated tables to v7 atomically", async t => {
   before.exec("DROP TABLE version_chunks");
   const run = kit.launch({ SPLITPAGE_DATA_DIR: dir }, new URL("./server-process.ts", import.meta.url));
   await run.port();
-  assert.equal(verifyDatabase(before), 7);
+  assert.equal(verifyDatabase(before), 8);
   assert.deepEqual(orderedRows(), expected);
   assert.equal(before.prepare("SELECT kind FROM invitations WHERE id = 'guest-link'").get()?.kind, "link");
   assert.deepEqual(storedState(dir, "created"), state);
   assert.deepEqual(storedState(dir, "original"), state);
   assert.equal(before.prepare("SELECT count(*) AS count FROM versions").get()?.count, 0);
+  assert.equal(before.prepare("SELECT count(*) AS count FROM version_editors").get()?.count, 0);
 });
 
 for (const version of [1, 2, 3] as const) {
@@ -723,7 +724,7 @@ for (const version of [1, 2, 3] as const) {
     }
     assert.deepEqual(storedState(legacyDir, restored.scriptId), tempSession);
     const currentBackup = await backupRelay(env);
-    for (const [file, expectedVersion] of [[previousBackup, version], [currentBackup, 7]] as const) {
+    for (const [file, expectedVersion] of [[previousBackup, version], [currentBackup, 8]] as const) {
       using copy = new DatabaseSync(join(legacyDir, "backups", file, DB_NAME), { readOnly: true });
       assert.equal(verifyDatabase(copy), expectedVersion);
       if (expectedVersion >= 2) {
@@ -731,7 +732,7 @@ for (const version of [1, 2, 3] as const) {
       }
     }
     using live = new DatabaseSync(join(legacyDir, DB_NAME), { readOnly: true });
-    assert.equal(verifyDatabase(live), 7);
+    assert.equal(verifyDatabase(live), 8);
     assert.equal(live.prepare("SELECT count(*) AS count FROM script_pictures").get()?.count, version === 3 ? 1 : 0);
   });
 }

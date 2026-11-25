@@ -6,6 +6,9 @@ import { escapeHtml, safeId as safeIdFrom } from "../../core/document/text-polic
 import { driveFormatSize } from "../../../shared/text.ts";
 import { formatClock } from "../../../shared/clock.ts";
 import { formatTimestamp } from "../common/comment-time.ts";
+import { createSharedHistoryPanel } from "./shared-panel.ts";
+
+declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
 
 export function startHistoryPanel(ports: HistoryPanelPorts) {
   let active = true;
@@ -17,6 +20,9 @@ export function startHistoryPanel(ports: HistoryPanelPorts) {
   const personColors = ports.personColors;
   const getEditorName = ports.preferences.editorName;
   const showToast = ports.effects.show;
+  const shared = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI && ports.shared
+    ? createSharedHistoryPanel(ports.shared, when => historySavedText(when), showToast, renderHistory)
+    : null;
   const safeId = function (id: unknown, prefix: string) { return safeIdFrom(id, prefix, ports.ids); };
 const RESTORE_ARM_MS = 4000;
 const RESTORE_LABEL = "Restore this version";
@@ -144,6 +150,11 @@ function historySavedHtml(d: Date | null) {
   if (!d) return "Date unknown";
   const day = historyDay(d);
   return (day.word ? escapeHtml(day.word) : historyFig(day.date)) + " at " + historyFig(historyClock(d));
+}
+
+function historySavedText(when: Date) {
+  const day = historyDay(when);
+  return (day.word || day.date) + " at " + historyClock(when);
 }
 
 function historyBeatsHtml(n: number) {
@@ -290,15 +301,21 @@ function historyUsageHtml(backend: string | null, usage: unknown) {
   return html;
 }
 
-async function renderHistory() {
+async function renderHistory(): Promise<void> {
   const listEl = document.getElementById("history-list");
   const panel = document.getElementById("history-panel");
   if (!listEl || !panel || panel.hidden || !currentDocument()) return;
+  const token = ++historyRenderToken;
+  if (shared && ports.shared?.active()) {
+    historyShownDocId = null;
+    historyOpenKey = null;
+    return shared.render();
+  }
+  shared?.reset();
   if (!historyToggleBound) {
     historyToggleBound = true;
     listEl.addEventListener("toggle", onHistoryRowToggle, true);
   }
-  const token = ++historyRenderToken;
   const docId = normalizeDocId((currentDocument() as NonNullable<ReturnType<typeof currentDocument>>).docId);
   if (historyShownDocId !== docId) {
     historyShownDocId = docId;
@@ -375,11 +392,14 @@ function toastLastEditor(loaded: Parameters<HistoryPanelControl["toastLastEditor
   }
   return {
     openHistoryPanel: guarded(openHistoryPanel), renderHistory: guarded(renderHistory),
+    closeHistoryPanel: guarded(() => { shared?.reset(); sidePanels().close("history-panel"); }),
+    handleSharedClick: guarded((event: MouseEvent) => shared?.click(event) ?? false),
     restoreSnapshotFromCard: guarded(restoreSnapshotFromCard), toastLastEditor: guarded(toastLastEditor), restored: guarded(restored),
     dispose: function () {
       if (!active) return;
       active = false;
       ++historyRenderToken;
+      shared?.dispose();
       clearTimeout(restoreArmTimer as ReturnType<typeof setTimeout> | undefined);
       const list = document.getElementById("history-list");
       if (list && historyToggleBound) list.removeEventListener("toggle", onHistoryRowToggle, true);

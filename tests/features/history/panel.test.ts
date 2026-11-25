@@ -7,7 +7,7 @@ import type { SnapshotRestoreRequest, SnapshotRestoreResult } from "../../../src
 import type { HistoryOwner } from "../../../src/application/recovery/history-ports.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import { fakeDocument, fakeNotices } from "../fakes.ts";
+import { fakeDocument, fakeNotices, noSharedHistory } from "../fakes.ts";
 
 type Listing = Awaited<ReturnType<HistoryOwner["listDocHistory"]>>;
 
@@ -34,7 +34,7 @@ function setup() {
       close: () => { (document.getElementById("history-panel") as HTMLElement).hidden = true; }
     },
     effects: notices.notices, preferences: { clock: () => "24", editorName: () => "Ann" },
-    personColors: { personColor: () => "#123456" }, ids: migration.ids
+    personColors: { personColor: () => "#123456" }, ids: migration.ids, shared: noSharedHistory
   };
   const owner: HistoryPanelControl = startHistoryPanel(ports);
   return { owner, reader, notices, requests, listing, answer: (value: SnapshotRestoreResult) => { answer = value; }, share: () => { shared = true; }, load: (value: typeof load) => { load = value; } };

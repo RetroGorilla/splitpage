@@ -9,7 +9,7 @@ import type { versionStorage } from "./version-storage.ts";
 
 export interface VersionFailureRecord {
   readonly at: string;
-  readonly reason: "snapshot-over-budget" | "version-store-failed" | "version-thin-failed";
+  readonly reason: "snapshot-over-budget" | "version-store-failed" | "version-thin-failed" | "version-editors-store-failed";
 }
 
 const compress = promisify(zstdCompress);
@@ -79,6 +79,7 @@ export function versionHistory(
     const previousOversized = oversized.get(script);
     if (previousOversized && hash.equals(previousOversized)) return { next: 0, done: true };
     oversized.delete(script);
+    const names = versions.editorNames(script);
     const compressed = await compress(current.state);
     if (stopped || job.cancelled) return { next: 0, done: true };
     if (compressed.length > budget) {
@@ -87,7 +88,7 @@ export function versionHistory(
       return { next: Date.now() + interval, done: true };
     }
     const id = randomUUID();
-    if (!withBackupIdle(() => versions.stage(id, script, current.generation, Date.now(), compressed.length, hash))) {
+    if (!withBackupIdle(() => versions.stage(id, script, current.generation, Date.now(), compressed.length, hash, names))) {
       return { next: 0, done: false };
     }
     reclaimAt = 0;
@@ -177,8 +178,9 @@ export function versionHistory(
       reclaimAt = 0;
       schedule();
     },
-    changed(script: string): void {
+    changed(script: string, editorsStored = true): void {
       if (stopped) return;
+      if (!editorsStored) report("version-editors-store-failed");
       pending.set(script, { due: pending.get(script)?.due ?? 0 });
       notice ??= setImmediate(() => {
         notice = undefined;

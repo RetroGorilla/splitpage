@@ -38,7 +38,7 @@ import { importMode, prompterState } from "./ports/preferences.ts";
 import { captureOperation, documentOpenings, openDocument, stillOwns } from "./transition-owners.ts";
 import { importHome } from "./location-owner.ts";
 import { promptForName, promptForWpm } from "./title-chrome.ts";
-import { restoreSnapshotFromCard } from "./history-panel.ts";
+import { historyPanelControls, restoreSnapshotFromCard } from "./history-panel.ts";
 import { openGalleryOverlay } from "../../features/gallery/overlay.ts";
 import { thumbnailsOnBeatClick } from "./gallery.ts";
 import { importControls } from "./imports.ts";
@@ -198,8 +198,8 @@ export function mountHistoryFeature(): ReturnType<typeof mountHistory> {
   return replaceViewMount("mountHistory", function () {
     const ports: HistoryPorts = {
       promptForWpm: promptForWpm,
-      closeHistoryPanel: () => { sidePanels().close("history-panel"); },
-      onRootClick: onRootClick
+      closeHistoryPanel: () => { historyPanelControls().closeHistoryPanel(); },
+      onRootClick: event => { if (!historyPanelControls().handleSharedClick(event)) onRootClick(event); }
     };
     return mountHistory({ window: window, ports: ports });
   });

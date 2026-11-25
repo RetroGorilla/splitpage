@@ -211,7 +211,7 @@ test("v5 data upgrades in place and password records survive verified backup and
     using v5 = new DatabaseSync(database);
     v5.exec(`DROP INDEX script_device_credentials; ALTER TABLE invitations DROP COLUMN parent_link;
       ALTER TABLE invitations DROP COLUMN revocation_reason; ALTER TABLE invitations DROP COLUMN kind;
-      DROP TABLE link_passwords; PRAGMA user_version = 5`);
+      DROP TABLE link_passwords; DROP TABLE version_editors; PRAGMA user_version = 5`);
     assert.equal(verifyDatabase(v5), 5);
   }
   const run = kit.launch();
@@ -221,7 +221,7 @@ test("v5 data upgrades in place and password records survive verified backup and
   assert.equal((await run.owner(path + "/password-exchange", passwordRequest(null), guest.token)).status, 428);
   using source = new DatabaseSync(database, { readOnly: true });
   const keys = "SELECT script, salt, key FROM link_passwords";
-  assert.equal(verifyDatabase(source), 7);
+  assert.equal(verifyDatabase(source), 8);
   const record = source.prepare(keys).get();
   assert.ok(record?.salt instanceof Uint8Array && record.key instanceof Uint8Array);
   assert.equal(record.salt.byteLength, 32);
@@ -251,7 +251,8 @@ test("v6 password credentials retain their access and inherit the link quota on 
   const path = join(kit.directory, DB_NAME);
   {
     using v6 = new DatabaseSync(path);
-    v6.exec("DROP INDEX script_device_credentials; ALTER TABLE invitations DROP COLUMN parent_link; PRAGMA user_version = 6");
+    v6.exec(`DROP INDEX script_device_credentials; ALTER TABLE invitations DROP COLUMN parent_link;
+      DROP TABLE version_editors; PRAGMA user_version = 6`);
     const oldDevice = v6.prepare(`INSERT INTO invitations (id, script, label, token_hash, revoked, role, kind, revocation_reason)
       VALUES (?, ?, 'Old guest device', ?, 1, 'guest', 'device', 'access-removed')`);
     for (let count = 0; count < MAX_DEVICE_CREDENTIALS_PER_SCRIPT + 3; count++) {
@@ -263,7 +264,7 @@ test("v6 password credentials retain their access and inherit the link quota on 
   const upgraded = kit.launch({ SPLITPAGE_MAX_CONNECTIONS_PER_GUEST_INVITATION: "1" });
   const port = await upgraded.port();
   using storage = new DatabaseSync(path, { readOnly: true });
-  assert.equal(verifyDatabase(storage), 7);
+  assert.equal(verifyDatabase(storage), 8);
   assert.equal(storage.prepare("SELECT parent_link FROM invitations WHERE kind = 'device' AND revoked = 0").get()?.parent_link, guest.id);
   assert.equal(storage.prepare("SELECT count(*) AS count FROM invitations WHERE kind = 'device'").get()?.count,
     MAX_DEVICE_CREDENTIALS_PER_SCRIPT);

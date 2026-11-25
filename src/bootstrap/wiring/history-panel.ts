@@ -12,6 +12,10 @@ import { historyPreferences } from "./ports/preferences.ts";
 import { ids } from "./ports/identity.ts";
 import { screen } from "./ports/screen.ts";
 import { entryCapabilities } from "./ports/capabilities.ts";
+import { collaboration } from "./ports/collaboration.ts";
+import { retainedSharedHistory } from "./shared-history.ts";
+
+declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
 
 const panel = owned<HistoryPanelControl>();
 export function historyPanelControls(): HistoryPanelControl {
@@ -27,7 +31,10 @@ export function mountHistoryPanelFeature(merge: Pick<SessionMergeOwner, "restore
       document: documentReader,
       merge: { restoreMergeSnapshot: (...args) => merge.restoreMergeSnapshot(...args) },
       panels, effects: notices, personColors, ids,
-      preferences: historyPreferences
+      preferences: historyPreferences,
+      shared: typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI
+        ? { active: () => collaboration.snapshot().active, current: retainedSharedHistory, onChange: collaboration.onChange }
+        : null
     };
     return startHistoryPanel(ports);
   });

@@ -13,8 +13,9 @@ import { formatNativeText } from "./format-commands.ts";
 import { createNativeHeading, removeNativeHeading, renameNativeHeading, restoreNativeHeading } from "./heading-commands.ts";
 import { createFirstNativeBeat, insertNativeBeatAdjacent, putBackNativeBeat } from "./insert-commands.ts";
 import { compareNativeOfflineNotice } from "./offline-notice.ts";
-import { openNativePendingEdits } from "./pending-edits.ts";
+import { nativeBeatPlacements, openNativePendingEdits } from "./pending-edits.ts";
 import type { NativePendingEditsData } from "./pending-edits.ts";
+import type { OfflineSavedBeat } from "../../../application/collaboration/offline-clashes.ts";
 import { moveNativeBlocks } from "./move-commands.ts";
 import { clearNativeField, setNativeField } from "./record-commands.ts";
 import { changeNativeRegistry } from "./registry-commands.ts";
@@ -426,6 +427,17 @@ export function openNativeSession(source: NativeSessionSource, options: NativeSe
     resolveTextSelection: (range: NativeTextRange) => { const anchor = snapshotNativeUndoAnchor(script, range); return anchor && resolveNativeUndoSelection(script, anchor); },
     narrationCaret: (row: string, offset: number, right?: boolean) => script.reader.narrationCaret(row, offset, right),
     readBeat: (beat: string) => script.reader.noticeBeat(beat),
+    historyOutline() {
+      const reader = script.reader;
+      const { placements } = nativeBeatPlacements(reader);
+      return reader.outline().flatMap<{ heading: string } | { beat: OfflineSavedBeat }>(entry => {
+        if (entry.kind === "heading") return [{ heading: entry.name }];
+        return (reader.row(entry.id)?.members ?? []).flatMap(id => {
+          const beat = reader.noticeBeat(id), placement = placements.get(id);
+          return beat && placement ? [{ beat: { ...beat, placement } }] : [];
+        });
+      });
+    },
     readRow: (row: string) => script.reader.row(row),
     narrationHtml: (row: string) => script.reader.row(row)?.audioText,
     hasBeatMarker: (beat: string) => script.reader.hasBeatMarker(beat),
