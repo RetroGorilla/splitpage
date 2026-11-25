@@ -71,12 +71,12 @@ export function fakePresenceCarets(overrides: Partial<PresenceCaretsPorts> = {})
   const collaboration = createCollaborationState();
   const presence = createPresenceState();
   const { receive } = presence.bind(() => {});
-  const resolved: { readonly peer: number; readonly cell: Element }[] = [];
+  const resolved: { readonly peer: number; readonly cell: Element; readonly local: number | null }[] = [];
   const ports: PresenceCaretsPorts = {
     collaboration,
     presence,
-    resolve: (peer, cell) => {
-      resolved.push({ peer: peer.clientId, cell });
+    resolve: (peer, cell, local) => {
+      resolved.push({ peer: peer.clientId, cell, local });
       return null;
     },
     ...overrides

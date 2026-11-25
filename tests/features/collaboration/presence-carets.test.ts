@@ -33,15 +33,19 @@ function harness(t: TestContext) {
     const text = this.startContainer.nodeType === 3 && this.startContainer === this.endContainer;
     const left = 100 + (text ? this.startOffset : 0) * 10;
     const width = text ? (this.endOffset - this.startOffset) * 10 : 0;
-    const top = this.startContainer.parentElement?.closest("#writer-doc") ? 300 : 50;
+    const top = this.startContainer.parentElement?.closest("#writer-doc, .wr-flow-visual-box") ? 300 : 50;
     const rect = { left, top, width, height: 20, right: left + width, bottom: top + 20, x: left, y: top };
     return [{ ...rect, toJSON: () => rect }] as unknown as DOMRectList;
   };
   const scroller = document.getElementById("writer-scroll") as HTMLElement;
   scroller.getBoundingClientRect = () => ({ left: 0, top: 200, width: 900, height: 400, right: 900, bottom: 600, x: 0, y: 200 }) as DOMRect;
-  Object.assign(globalThis, { window, document });
+  const escape = (value: string) => [...value].map(ch => {
+    const code = ch.charCodeAt(0);
+    return code < 32 || code === 127 ? "\\" + code.toString(16) + " " : ch === '"' || ch === "\\" ? "\\" + ch : ch;
+  }).join("");
+  Object.assign(globalThis, { window, document, CSS: { escape } });
   t.after(() => {
-    for (const key of ["window", "document"] as const) {
+    for (const key of ["window", "document", "CSS"] as const) {
       const descriptor = original[key];
       if (descriptor) Object.defineProperty(globalThis, key, descriptor);
       else Reflect.deleteProperty(globalThis, key);
@@ -51,8 +55,11 @@ function harness(t: TestContext) {
   h.el("rows").innerHTML = '<div class="row" data-id="r1"><div class="cell-editable" data-id="r1" data-field="audioText" contenteditable="true">Hello world</div>' +
     '<div class="cell-editable" data-id="r1" data-field="visualText" contenteditable="true">Wide</div></div>';
   h.el("writer-doc").innerHTML = '<div class="wr-beat" data-id="r1" data-field="audioText">Hello world</div>';
+  h.el("writer").insertAdjacentHTML("beforeend",
+    '<div class="wr-flow-visual-box" hidden><div class="wr-flow-visual-text" data-id="r1" data-field="visualText" contenteditable="true">Wide</div></div>');
   let ends: CellEnds | null = { anchor: 3, head: 3 };
-  const fake = fakePresenceCarets({ resolve: () => ends });
+  const seen: { readonly peer: number; readonly local: number | null }[] = [];
+  const fake = fakePresenceCarets({ resolve: (who, _cell, local) => { seen.push({ peer: who.clientId, local }); return ends; } });
   const flush = () => { const pending = frames.splice(0); pending.forEach(frame => frame(0)); return pending.length; };
   const online = () => {
     fake.collaboration.enter();
@@ -63,7 +70,7 @@ function harness(t: TestContext) {
     const mark = layer()?.querySelector<HTMLElement>(".presence-caret");
     return mark && [mark.style.left, mark.style.top, mark.style.height];
   };
-  return { ...h, ...fake, frames, observed, flush, online, layer, caretAt, setEnds: (next: CellEnds | null) => { ends = next; } };
+  return { ...h, ...fake, seen, frames, observed, flush, online, layer, caretAt, setEnds: (next: CellEnds | null) => { ends = next; } };
 }
 
 test("in a standalone script the caret overlay adds no listener, no frame and no layer", t => {
@@ -92,7 +99,7 @@ test("a peer's caret and selection are drawn in a layer outside the cells, follo
   assert.equal(h.layer()?.getAttribute("aria-hidden"), "true");
   assert.equal(h.document.querySelector("#rows .presence-caret, #writer-doc .presence-caret, .cell-editable .presence-selection"), null);
   assert.equal(cell.innerHTML, html);
-  assert.deepEqual(h.observed.map(root => root.id), ["rows", "writer-doc"]);
+  assert.deepEqual(h.observed.map(root => root.id || root.className), ["rows", "writer-doc", "wr-flow-visual-text"]);
 
   h.receive([peer({ caret: { ...caret } })]);
   h.flush();
@@ -145,6 +152,56 @@ test("the overlay follows the shown view: Writer cells, the Writer clip and noth
   assert.equal(h.layer()?.children.length, 0);
   h.collaboration.leave();
   assert.equal(h.layer(), null);
+  dispose();
+});
+
+test("a peer with a beat id no selector can hold shows nothing and leaves another peer's caret drawing and clearing", t => {
+  const h = harness(t);
+  const dispose = mountPresenceCarets(h.ports);
+  h.online();
+  const broken = peer({ clientId: 1, beat: 'r1"]\n' });
+  h.receive([broken, peer({ clientId: 2 })]);
+  h.flush();
+  const marks = [...h.layer()?.querySelectorAll<HTMLElement>(".presence-caret") ?? []];
+  assert.deepEqual(marks.map(mark => mark.dataset.client), ["2"]);
+  assert.deepEqual(h.seen.map(entry => entry.peer), [2]);
+  h.receive([broken]);
+  h.flush();
+  assert.equal(h.layer()?.children.length, 0);
+  h.receive([broken, peer({ clientId: 2 })]);
+  h.flush();
+  assert.equal(h.layer()?.querySelector<HTMLElement>(".presence-caret")?.dataset.client, "2");
+  h.receive([]);
+  h.flush();
+  assert.equal(h.layer()?.children.length, 0);
+  dispose();
+});
+
+test("a peer's caret in the Writer visual box follows local typing there, measured around my own caret", async t => {
+  const h = harness(t);
+  const dispose = mountPresenceCarets(h.ports);
+  h.online();
+  h.el("writer").hidden = false;
+  h.receive([peer({ view: "writer", side: "visualText" })]);
+  h.flush();
+  assert.equal(h.caretAt(), null);
+  const box = h.document.querySelector<HTMLElement>(".wr-flow-visual-box") as HTMLElement;
+  const text = box.querySelector<HTMLElement>(".wr-flow-visual-text") as HTMLElement;
+  box.hidden = false;
+  await Promise.resolve();
+  assert.equal(h.frames.length, 1, "the visual box opening redraws");
+  h.flush();
+  assert.deepEqual(h.caretAt(), ["130px", "300px", "20px"]);
+  assert.equal(h.seen.at(-1)?.local, null, "no local caret in the visual box yet");
+  text.focus();
+  (text.firstChild as Text).data = "WiXde";
+  h.document.getSelection()?.collapse(text.firstChild, 3);
+  await Promise.resolve();
+  assert.equal(h.frames.length, 1, "typing in the visual box redraws");
+  h.setEnds({ anchor: 4, head: 4 });
+  h.flush();
+  assert.deepEqual(h.caretAt(), ["140px", "300px", "20px"]);
+  assert.equal(h.seen.at(-1)?.local, 3, "my caret in the visual box is the seam for mapping buffered text");
   dispose();
 });
 

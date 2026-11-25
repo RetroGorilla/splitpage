@@ -43,6 +43,8 @@ wait P.__writerFlowTest.on()
 eval (()=>{P.document.querySelector('#writer-doc').focus();return pmove(wbeat(P,'r2'),2,5)})()
 wait near(wbeat(window,'r2'),5) && spans().length===1 && Math.abs(parseFloat(spans()[0].style.left)-glyph(wbeat(window,'r2'),2).left)<2
 expect !inside() && getComputedStyle(document.querySelector('.presence-carets')).zIndex==='146'
+eval P.getSelection().setBaseAndExtent(...pt(wbeat(P,'r1'),2),...pt(wbeat(P,'r2'),4));true
+wait near(wbeat(window,'r2'),4) && spans().length===1 && Math.abs(parseFloat(spans()[0].style.left)-glyph(wbeat(window,'r2'),0).left)<2
 eval document.querySelector('#writer-doc').focus();__writerFlowTest.place({anchor:{kind:'beat',rowId:'r2',offset:0},head:{kind:'beat',rowId:'r2',offset:0}});true
 ime set ab
 eval pmove(wbeat(P,'r2'),wbeat(P,'r2').textContent.length,wbeat(P,'r2').textContent.length)

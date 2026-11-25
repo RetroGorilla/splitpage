@@ -86,7 +86,7 @@ test("the presence view samples while synced and keeps a marker on a replaced fi
   assert.equal(replacement.dataset.presenceDots, undefined);
 });
 
-test("the presence view sends the focused cell's selection as a caret, collapsing one that leaves a Writer beat", t => {
+test("the presence view sends the focused cell's selection as a caret, clamping one that leaves a Writer beat to that beat", t => {
   const h = viewHarness();
   const original = Object.getOwnPropertyDescriptors(globalThis);
   Object.assign(globalThis, { window: h.window, document: h.document, CSS: { escape: cssAttr } });
@@ -125,7 +125,11 @@ test("the presence view sends the focused cell's selection as a caret, collapsin
   h.document.getSelection()?.setBaseAndExtent(first?.firstChild as Node, 1, second?.firstChild as Node, 4);
   h.document.dispatchEvent(new h.window.Event("selectionchange"));
   t.mock.timers.tick(100);
-  assert.deepEqual(asked.at(-1), ["r3", "audioText", "r3", { anchor: 4, head: 4 }]);
+  assert.deepEqual(asked.at(-1), ["r3", "audioText", "r3", { anchor: 0, head: 4 }], "an anchor in an earlier beat clamps to this beat's start");
   assert.equal(published.at(-1)?.view, "writer");
+  h.document.getSelection()?.setBaseAndExtent(second?.firstChild as Node, 2, first?.firstChild as Node, 3);
+  h.document.dispatchEvent(new h.window.Event("selectionchange"));
+  t.mock.timers.tick(100);
+  assert.deepEqual(asked.at(-1), ["r2", "audioText", "r2", { anchor: 5, head: 3 }], "an anchor in a later beat clamps to this beat's end");
   dispose();
 });

@@ -183,7 +183,7 @@ function registerCollaboration(registry: Pick<ActionRegistry, "invoke" | "regist
   });
   const stopCarets = mountPresenceCarets({
     collaboration, presence,
-    resolve: (peer, cell) => nativePresenceCarets()?.resolve(peer, cell) ?? null
+    resolve: (peer, cell, local) => nativePresenceCarets()?.resolve(peer, cell, local) ?? null
   });
   const popover = mountSharedPopover({
     collaboration,

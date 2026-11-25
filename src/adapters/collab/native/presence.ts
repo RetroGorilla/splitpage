@@ -49,6 +49,14 @@ function caretOf(value: unknown): PresenceCaret | null | undefined {
   return anchor && head ? { anchor, head } : undefined;
 }
 
+function printable(text: string): boolean {
+  for (let i = 0; i < text.length; i++) {
+    const code = text.charCodeAt(i);
+    if (code < 32 || code === 127) return false;
+  }
+  return true;
+}
+
 function parse(value: unknown): PresenceProfile | null {
   const fields = record(value);
   if (!fields) return null;
@@ -58,7 +66,7 @@ function parse(value: unknown): PresenceProfile | null {
   if (!name || name !== rawName || !safeColor) return null;
   if (view !== "split" && view !== "writer" && view !== "present") return null;
   if (!(beat === null && side === null) &&
-      !(typeof beat === "string" && beat.length > 0 && beat.length <= 256 &&
+      !(typeof beat === "string" && beat.length > 0 && beat.length <= 256 && printable(beat) &&
         (side === "audioText" || side === "visualText"))) return null;
   const caret = caretOf(fields.caret);
   if (caret === undefined || (caret && beat === null)) return null;

@@ -19,7 +19,7 @@ export function createNativePresenceCarets(native: PresenceNative) {
       if (!beat || !side || native.isClosingOrClosed()) return null;
       const keys = sharedKeys(native, beat, side);
       if (!keys) return null;
-      const { anchor, head } = mapEndsThroughCell(painted, domKeys(cell), keys);
+      const { anchor, head } = mapEndsThroughCell(painted, domKeys(cell), keys, { before: painted.head });
       if (anchor === head) {
         const at = native.presencePoint(beat, side, head, 0);
         return at && { anchor: at, head: at };
@@ -29,14 +29,15 @@ export function createNativePresenceCarets(native: PresenceNative) {
       if (!start || !end) return null;
       return anchor < head ? { anchor: start, head: end } : { anchor: end, head: start };
     },
-    resolve(peer: PresencePeer, cell: Element): CellEnds | null {
+    resolve(peer: PresencePeer, cell: Element, local: number | null): CellEnds | null {
       const { caret, side } = peer;
       const row = cell.getAttribute("data-id");
       if (!caret || !side || !row || native.isClosingOrClosed()) return null;
       const anchor = native.presenceOffset(row, side, caret.anchor);
       const head = native.presenceOffset(row, side, caret.head);
       const keys = anchor === null || head === null ? null : sharedKeys(native, row, side);
-      return keys && anchor !== null && head !== null ? mapEndsThroughCell({ anchor, head }, keys, domKeys(cell)) : null;
+      if (!keys || anchor === null || head === null) return null;
+      return mapEndsThroughCell({ anchor, head }, keys, domKeys(cell), local === null ? undefined : { after: local });
     }
   });
 }

@@ -191,3 +191,14 @@ test("ends map from the shared text onto the painted text, each end on its own",
   assert.deepEqual(ends(40, 40, "abc def", "ab"), { anchor: 2, head: 2 }, "a caret past a shortened text clamps to its end");
   assert.deepEqual(ends(1, 1, GRIN + "x", GRIN + "x"), { anchor: 2, head: 2 }, "an end never splits a surrogate pair");
 });
+
+test("a local caret places a buffered edit of repeated characters where it was typed", () => {
+  const at = (point: number, before: string, after: string, seam?: { before?: number; after?: number }) =>
+    mapEndsThroughCell({ anchor: point, head: point }, keys(before), keys(after), seam).head;
+  assert.equal(at(0, "AB", "AAB"), 0, "without a seam the longest common prefix wins");
+  assert.equal(at(0, "AB", "AAB", { after: 1 }), 1, "an A typed at the start pushes a peer caret before the shared A");
+  assert.equal(at(1, "AAB", "AB", { before: 1 }), 0, "a local caret after a buffered A is sent before the shared A");
+  assert.equal(at(1, "AB", "AAB", { after: 2 }), 2, "typing A after the shared A leaves a caret between A and B after it");
+  assert.equal(at(4, "abc PEERdef", "abc def", { after: 0 }), 4, "a seam away from the change still maps held peer text");
+  assert.equal(at(3, "abc", "abc", { after: 9 }), 3, "a seam past the text is ignored");
+});

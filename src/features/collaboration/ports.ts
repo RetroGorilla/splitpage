@@ -24,7 +24,7 @@ export interface PresenceViewPorts {
 export interface PresenceCaretsPorts {
   readonly collaboration: CollaborationReads;
   readonly presence: PresenceReads;
-  readonly resolve: (peer: PresencePeer, cell: Element) => CellEnds | null;
+  readonly resolve: (peer: PresencePeer, cell: Element, local: number | null) => CellEnds | null;
 }
 
 export interface OfflineReviewPorts {

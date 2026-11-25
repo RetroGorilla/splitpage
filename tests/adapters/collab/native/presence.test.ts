@@ -71,12 +71,15 @@ test("a caret travels as two relative positions, and a moved caret alone is sent
   assert.deepEqual(peerUpdates.at(-1), [{ ...here, caret: null, clientId: remote.clientID }]);
 });
 
-test("a peer's caret is checked strictly and a malformed one hides that peer", t => {
+test("a peer's caret and beat are checked strictly and a malformed one hides that peer", t => {
   const { doc, remote, peerUpdates, send } = presenceHarness(t);
   const here = { name: "Ada", color: "#80BDFB", view: "split", beat: "r1", side: "visualText", caret } satisfies PresenceProfile;
   const point = caret.anchor;
   const malformed: unknown[] = [
     { ...here, beat: null, side: null },
+    { ...here, beat: "r1\n" },
+    { ...here, beat: "r" + String.fromCharCode(0) + "1" },
+    { ...here, beat: "r1" + String.fromCharCode(127) },
     { ...here, caret: "anchor" },
     { ...here, caret: [] },
     { ...here, caret: { anchor: point } },

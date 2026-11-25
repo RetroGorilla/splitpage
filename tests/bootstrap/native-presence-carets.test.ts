@@ -46,14 +46,14 @@ test("a caret sent from painted text that is ahead of the shared text lands wher
   const send = createNativePresenceCarets(mine), show = createNativePresenceCarets(peer);
   const caret = send.caret(narration, painted("Hello there world"), { anchor: 12, head: 12 });
   assert.ok(caret);
-  assert.deepEqual(show.resolve(peerAt(caret), painted("Hello world")), { anchor: 6, head: 6 });
+  assert.deepEqual(show.resolve(peerAt(caret), painted("Hello world"), null), { anchor: 6, head: 6 });
   const selection = send.caret(narration, painted("Hello world"), { anchor: 8, head: 2 });
   assert.ok(selection);
   assert.deepEqual([selection.anchor.assoc, selection.head.assoc], [-1, 0]);
-  assert.deepEqual(show.resolve(peerAt(selection), painted("Hello world")), { anchor: 8, head: 2 });
+  assert.deepEqual(show.resolve(peerAt(selection), painted("Hello world"), null), { anchor: 8, head: 2 });
   const shot = send.caret(visual, painted("Wide shot"), { anchor: 4, head: 9 });
   assert.ok(shot);
-  assert.deepEqual(show.resolve(peerAt(shot, "visualText"), painted("Wide shot")), { anchor: 4, head: 9 });
+  assert.deepEqual(show.resolve(peerAt(shot, "visualText"), painted("Wide shot"), null), { anchor: 4, head: 9 });
 });
 
 test("a peer's caret is drawn against the painted text while local typing or the peer's own text is held back", t => {
@@ -64,12 +64,26 @@ test("a peer's caret is drawn against the painted text while local typing or the
   const caret = createNativePresenceCarets(peer).caret(narration, painted("Hello brave world"), { anchor: 14, head: 14 });
   assert.ok(caret);
   const show = createNativePresenceCarets(mine);
-  assert.deepEqual(show.resolve(peerAt(caret), painted("Hello brave world")), { anchor: 14, head: 14 });
-  assert.deepEqual(show.resolve(peerAt(caret), painted("Hello world")), { anchor: 8, head: 8 }, "the peer's text is not painted yet");
-  assert.deepEqual(show.resolve(peerAt(caret), painted("Hi! Hello brave world")), { anchor: 18, head: 18 }, "local typing is buffered");
-  assert.deepEqual(show.resolve(peerAt(caret), painted("")), { anchor: 0, head: 0 }, "an emptied painted cell clamps");
-  assert.equal(show.resolve(peerAt(caret), painted("Hello world", "B")), null, "another row's cell shows nothing");
-  assert.equal(show.resolve(peerAt(null), painted("Hello world")), null);
+  assert.deepEqual(show.resolve(peerAt(caret), painted("Hello brave world"), null), { anchor: 14, head: 14 });
+  assert.deepEqual(show.resolve(peerAt(caret), painted("Hello world"), null), { anchor: 8, head: 8 }, "the peer's text is not painted yet");
+  assert.deepEqual(show.resolve(peerAt(caret), painted("Hi! Hello brave world"), null), { anchor: 18, head: 18 }, "local typing is buffered");
+  assert.deepEqual(show.resolve(peerAt(caret), painted(""), null), { anchor: 0, head: 0 }, "an emptied painted cell clamps");
+  assert.equal(show.resolve(peerAt(caret), painted("Hello world", "B"), null), null, "another row's cell shows nothing");
+  assert.equal(show.resolve(peerAt(null), painted("Hello world"), null), null);
+});
+
+test("buffered typing that repeats the next character is placed at the local caret both ways", t => {
+  const { mine, peer } = copies();
+  t.after(() => { mine.close(); peer.close(); });
+  const start = createNativePresenceCarets(peer).caret(narration, painted("Hello world"), { anchor: 0, head: 0 });
+  assert.ok(start);
+  const show = createNativePresenceCarets(mine);
+  assert.deepEqual(show.resolve(peerAt(start), painted("HHello world"), 1), { anchor: 1, head: 1 }, "my unsent H sits before the peer");
+  assert.deepEqual(show.resolve(peerAt(start), painted("HHello world"), null), { anchor: 0, head: 0 });
+  const sent = createNativePresenceCarets(mine).caret(narration, painted("HHello world"), { anchor: 1, head: 1 });
+  assert.ok(sent);
+  assert.deepEqual(createNativePresenceCarets(peer).resolve(peerAt(sent), painted("Hello world"), null), { anchor: 0, head: 0 },
+    "a caret after my unsent H is sent before the shared H");
 });
 
 test("nothing is sent or shown for a closed session, a cell without a beat, or an unknown row", t => {
@@ -82,5 +96,5 @@ test("nothing is sent or shown for a closed session, a cell without a beat, or a
   assert.ok(caret);
   mine.close();
   assert.equal(carets.caret(narration, painted("Hello world"), { anchor: 1, head: 1 }), null);
-  assert.equal(carets.resolve(peerAt(caret), painted("Hello world")), null);
+  assert.equal(carets.resolve(peerAt(caret), painted("Hello world"), null), null);
 });

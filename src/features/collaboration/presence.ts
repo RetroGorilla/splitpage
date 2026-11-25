@@ -1,9 +1,10 @@
 import type { PresenceCaret, PresenceLocation, PresencePeer } from "../../application/collaboration/presence.ts";
 import type { CellEnds } from "../../core/text/selection.ts";
-import { domToPos } from "../common/cell-dom.ts";
+import { domKeys, domToPos } from "../common/cell-dom.ts";
 import type { PresenceViewPorts } from "./ports.ts";
 
 const EDITABLE = "#rows .cell-editable, #writer-doc, .wr-flow-visual-text";
+const PRECEDING = 2;
 
 interface Located {
   readonly location: PresenceLocation;
@@ -40,8 +41,12 @@ export function selectionEnds(document: Document, cell: Element): CellEnds | nul
   const head = domToPos(cell, focus, selection.focusOffset);
   if (head === null) return null;
   const anchorNode = selection.anchorNode;
-  const anchor = anchorNode && cell.contains(anchorNode) ? domToPos(cell, anchorNode, selection.anchorOffset) : null;
-  return { anchor: anchor ?? head, head };
+  if (!anchorNode) return { anchor: head, head };
+  if (!cell.contains(anchorNode)) {
+    const before = (cell.compareDocumentPosition(anchorNode) & PRECEDING) !== 0;
+    return { anchor: before ? 0 : domKeys(cell).length, head };
+  }
+  return { anchor: domToPos(cell, anchorNode, selection.anchorOffset) ?? head, head };
 }
 
 function localCaret(document: Document, ports: Pick<PresenceViewPorts, "caret">, { location, cell }: Located): PresenceCaret | null {

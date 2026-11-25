@@ -1,8 +1,8 @@
 import type { PresencePeer } from "../../application/collaboration/presence.ts";
 import type { CellEnds } from "../../core/text/selection.ts";
 import { posToDom } from "../common/cell-dom.ts";
-import { cssAttr } from "../common/dom.ts";
 import type { PresenceCaretsPorts } from "./ports.ts";
+import { selectionEnds } from "./presence.ts";
 
 type ShownView = "split" | "writer";
 
@@ -21,7 +21,8 @@ export interface PeerCaretMark {
   readonly selection: readonly Box[];
 }
 
-const PAINTED = "#rows, #writer-doc";
+const PAINTED = "#rows, #writer";
+const MEASURED = "#rows, #writer-doc, #writer .wr-flow-visual-text";
 const VIEWS = ["writer", "prompter"];
 
 export function shownView(document: Document): ShownView | null {
@@ -31,7 +32,7 @@ export function shownView(document: Document): ShownView | null {
 
 export function peerCell(document: Document, view: ShownView, peer: PresencePeer): HTMLElement | null {
   if (!peer.beat || !peer.side || peer.view === "present") return null;
-  const id = '[data-id="' + cssAttr(peer.beat) + '"]';
+  const id = '[data-id="' + CSS.escape(peer.beat) + '"]';
   const selector = view === "split" ? '#rows .cell-editable[data-field="' + peer.side + '"]' + id
     : peer.side === "audioText" ? "#writer-doc .wr-beat" + id : '.wr-flow-visual-text[data-field="visualText"]' + id;
   const cell = document.querySelector<HTMLElement>(selector);
@@ -109,7 +110,7 @@ export function peerMarks(document: Document, view: ShownView, peers: readonly P
   for (const peer of peers) {
     if (!peer.caret) continue;
     const cell = peerCell(document, view, peer);
-    const ends = cell && resolve(peer, cell);
+    const ends = cell && resolve(peer, cell, selectionEnds(document, cell)?.head ?? null);
     if (!cell || !ends) continue;
     const caret = caretBox(document, cell, ends.head);
     if (!caret) continue;
@@ -201,9 +202,9 @@ export function mountPresenceCarets(ports: PresenceCaretsPorts): () => void {
     painted = new window.MutationObserver(schedule);
     resized = new window.ResizeObserver(schedule);
     for (const root of document.querySelectorAll(PAINTED)) {
-      painted.observe(root, { childList: true, characterData: true, subtree: true });
-      resized.observe(root);
+      painted.observe(root, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
     }
+    for (const root of document.querySelectorAll(MEASURED)) resized.observe(root);
   }
 
   function track(): void {
