@@ -33,6 +33,7 @@ import { holdDesktopDocumentPublication } from "./desktop-owners.ts";
 import { autoSavePolicy, saveBusy, scheduleAutoSave } from "./save-owners.ts";
 import { mountFileCopyBanner } from "../../features/collaboration/file-copy-banner.ts";
 import { sharedFileCopy } from "./shared-file-copy.ts";
+import { announceCollaboration, mountCollaborationAnnouncements } from "../../features/collaboration/announcements.ts";
 
 declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
 
@@ -62,6 +63,7 @@ function openLeave() {
     async leave() {
       if (!stillOwns(context)) return false;
       const result = await sharedEntry()?.leave();
+      if (result?.ok) announceCollaboration(document, "Left the shared script.");
       return result?.ok ? true : result?.reason === "file-copy-cancelled" ? "cancelled" : false;
     }
   });
@@ -87,6 +89,7 @@ export const requestPasswordRecovery = typeof SPLITPAGE_COLLAB_UI !== "undefined
   ? openPasswordRecovery : undefined;
 
 function registerCollaboration(registry: Pick<ActionRegistry, "invoke" | "register">): () => void {
+  const unmountAnnouncements = mountCollaborationAnnouncements(document, { collaboration });
   const unmountFileCopy = mountFileCopyBanner(sharedFileCopy);
   let attempt: ReturnType<typeof createShareAttempt> | undefined;
   let dispose: (() => void) | undefined;
@@ -208,6 +211,7 @@ function registerCollaboration(registry: Pick<ActionRegistry, "invoke" | "regist
   const unregisterLeave = registry.register(leaveScriptAction({ screen, visible: sharedSession, open: () => { if (!openLeave()) void sharedEntry()?.leave(); } }));
   return () => {
     unregisterLeave();
+    unmountAnnouncements();
     unmountFileCopy();
     unregisterSharing();
     popover.dispose();

@@ -7,6 +7,10 @@ import type { DocumentReader } from "../../application/session/document-reader.t
 import type { ScreenState } from "../../application/screen.ts";
 import type { PresenceProfile, PresenceReads } from "../../application/collaboration/presence.ts";
 
+export interface CollaborationAnnouncementsPorts {
+  readonly collaboration: CollaborationReads;
+}
+
 export interface PresenceViewPorts {
   readonly collaboration: CollaborationReads;
   readonly presence: PresenceReads;

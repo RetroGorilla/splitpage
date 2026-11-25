@@ -25,9 +25,9 @@ function setup(t: TestContext, overrides: Partial<SharedPopoverPorts> = {}) {
       return selector === ":popover-open" ? open.has(this) : matches.call(this, selector);
     }
   });
-  h.window.HTMLElement.prototype.showPopover = function () { open.add(this); };
-  h.window.HTMLElement.prototype.hidePopover = function () { open.delete(this); };
-  const { collaboration, ports, management } = fakeSharedPopover(overrides);
+  h.window.HTMLElement.prototype.showPopover = function () { open.add(this); this.style.display = "block"; };
+  h.window.HTMLElement.prototype.hidePopover = function () { open.delete(this); this.style.display = ""; };
+  const { collaboration, ports, management, receivePeers } = fakeSharedPopover(overrides);
   const popover = mountSharedPopover(ports);
   t.after(() => { popover.dispose(); Object.assign(realm, saved); h.window.close(); });
   const button = (action: string): HTMLButtonElement => {
@@ -37,7 +37,7 @@ function setup(t: TestContext, overrides: Partial<SharedPopoverPorts> = {}) {
   };
   const connect = () => collaboration.setRelay({ connected: true, firstSyncDone: true, pendingChangeCount: 0 });
   collaboration.enter();
-  return { ...h, popover, button, connect, collaboration, management };
+  return { ...h, popover, button, connect, collaboration, management, receivePeers };
 }
 
 test("a guest sees no owner controls, and removal hides owner controls and describes the retained work", t => {
@@ -183,4 +183,41 @@ test("the pill caps initials and the people list jumps to the latest beat", t =>
   assert.equal(h.document.querySelector("#shared-pill .person-avatar"), initial);
   button.click();
   assert.deepEqual(jumps, [["b", "audioText"]]);
+});
+
+test("the Shared popover wraps Tab only on phones, keeps focus when a peer leaves and returns it on Escape", t => {
+  const h = setup(t);
+  h.connect();
+  h.receivePeers([{ clientId: 1, name: "Guest", color: "#80BDFB", view: "split", beat: "a", side: "audioText" }]);
+  const trigger = h.el("shared-pill");
+  trigger.focus();
+  h.popover.open();
+  const close = h.button("close");
+  const panel = h.el("shared-popover");
+  const root = h.el("root");
+  assert.equal(h.document.activeElement, close);
+  assert.equal(trigger.getAttribute("aria-expanded"), "true");
+  const key = (key: string, shiftKey = false) => h.document.activeElement?.dispatchEvent(
+    new h.window.KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true }));
+  assert.equal(panel.hasAttribute("aria-modal"), false);
+  assert.equal(key("Tab", true), true);
+  h.button("leave").focus();
+  assert.equal(key("Tab"), true);
+  close.focus();
+  Object.defineProperty(h.window, "innerWidth", { value: 760 });
+  h.fire(h.window, "resize");
+  assert.equal(panel.getAttribute("aria-modal"), "true");
+  assert.equal(root.hasAttribute("inert"), true);
+  assert.equal(key("Tab", true), false);
+  assert.equal(h.document.activeElement, h.button("leave"));
+  assert.equal(key("Tab"), false);
+  assert.equal(h.document.activeElement, close);
+  h.document.querySelector<HTMLButtonElement>("[data-here-now] button")?.focus();
+  h.receivePeers([]);
+  assert.equal(h.document.activeElement, close);
+  key("Escape");
+  assert.equal(h.document.activeElement, trigger);
+  assert.equal(trigger.getAttribute("aria-expanded"), "false");
+  assert.equal(panel.hasAttribute("aria-modal"), false);
+  assert.equal(root.hasAttribute("inert"), false);
 });

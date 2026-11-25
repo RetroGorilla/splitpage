@@ -6,7 +6,7 @@ import {
 import { dirname, join } from "node:path";
 import { fileURLToPath } from "node:url";
 import { spawnSync } from "node:child_process";
-import { leakedHooks } from "./release-hooks.mjs";
+import { helpMarkdown, leakedHooks } from "./release-hooks.mjs";
 
 const ROOT = dirname(dirname(fileURLToPath(import.meta.url)));
 const VERSION = readFileSync(join(ROOT, "VERSION"), "utf8").trim();
@@ -49,7 +49,8 @@ for (const [rel] of FILES) {
   }
   const to = join(STAGE, rel);
   mkdirSync(dirname(to), { recursive: true });
-  cpSync(from, to);
+  if (rel === "docs/help.md") writeFileSync(to, helpMarkdown(readFileSync(from, "utf8"), false));
+  else cpSync(from, to);
 }
 
 const leaked = leakedHooks(readFileSync(join(STAGE, "index.html"), "utf8"));

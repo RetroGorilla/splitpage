@@ -165,3 +165,12 @@
   }
   .shared-history-beats article > button { justify-self: start; }
   .shared-history-beats img { display: block; max-width: 100%; max-height: 12rem; object-fit: contain; }
+  .shared-history-preview { overflow-wrap: anywhere; }
+
+  @media (max-width: 760px) {
+    #history-panel[data-shared] .history-scroll { min-width: 0; overscroll-behavior: contain; }
+    #history-panel[data-shared] .modal-close { min-width: 44px; min-height: 44px; }
+    .shared-history-preview .btn-outline { min-height: 44px; height: auto; white-space: normal; }
+    .shared-history-beats article { grid-template-columns: minmax(0, 1fr); }
+    .shared-history-beats :is(video, iframe) { max-width: 100%; }
+  }

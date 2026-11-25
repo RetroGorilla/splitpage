@@ -3,7 +3,7 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build, buildSw } from "../build.mjs";
 import { writeDesktopBuild } from "../tools/build-preload.mjs";
-import { leakedCollaboration, leakedHooks } from "../tools/release-hooks.mjs";
+import { helpMarkdown, leakedCollaboration, leakedHooks } from "../tools/release-hooks.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..");
@@ -61,7 +61,9 @@ const files = [
 for (const [from, filename] of files) {
   const src = resolve(REPO_ROOT, from);
   const dst = resolve(STAGE_DIR, filename);
-  const data = await fs.readFile(src);
+  const data = from === "docs/help.md"
+    ? Buffer.from(helpMarkdown(await fs.readFile(src, "utf8"), TEST_BUILD))
+    : await fs.readFile(src);
   await fs.writeFile(dst, data);
   console.log(`  ${filename} (${data.length} bytes)`);
 }

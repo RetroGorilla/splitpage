@@ -4,6 +4,7 @@ import { rowStatus } from "../../core/production/looks.ts";
 import { formatDuration } from "../../core/production/timing.ts";
 import { toHtml } from "../../core/text/html.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
+import { handleDialogKey, restoreDialogFocus } from "../common/dialog-focus.ts";
 import type { OfflineReviewPorts } from "./ports.ts";
 
 interface ReviewCard {
@@ -24,7 +25,8 @@ export function createOfflineReview(window: Window, ports: OfflineReviewPorts): 
   const close = doc.getElementById("offline-review-close");
   const list = doc.getElementById("offline-review-list");
   const feedback = doc.getElementById("offline-review-feedback");
-  if (!banner || !summary || !review || !dismiss || !dialog || !close || !list || !feedback) return life;
+  const panel = dialog?.querySelector<HTMLElement>('[role="dialog"]');
+  if (!banner || !summary || !review || !dismiss || !dialog || !close || !list || !feedback || !panel) return life;
 
   let entries = ports.collaboration.snapshot().offlineClashes;
   let cards: readonly ReviewCard[] = [];
@@ -83,13 +85,15 @@ export function createOfflineReview(window: Window, ports: OfflineReviewPorts): 
       heading.textContent = number ? "Beat " + number : "Removed beat";
       paintReading(live, beat, entry.mine ? "Removed while you were offline" : "Beat removed");
       jump.hidden = !beat;
+      if (jump.hidden && doc.activeElement === jump) close?.focus({ preventScroll: true });
     }
   }
 
   function closeReview(): void {
     if (dialog && !dialog.hidden) {
       dialog.hidden = true;
-      if (!banner?.hidden) review?.focus({ preventScroll: true });
+      review?.setAttribute("aria-expanded", "false");
+      restoreDialogFocus(doc, review);
     }
     list?.replaceChildren();
     cards = [];
@@ -124,6 +128,7 @@ export function createOfflineReview(window: Window, ports: OfflineReviewPorts): 
         putBack.onclick = () => {
           feedback.textContent = "";
           if (ports.putBack(entry)) {
+            if (doc.activeElement === putBack) close?.focus({ preventScroll: true });
             putBack.disabled = true;
             feedback.textContent = "Beat put back.";
           }
@@ -151,6 +156,7 @@ export function createOfflineReview(window: Window, ports: OfflineReviewPorts): 
   life.listen(review, "click", () => {
     if (!entries.length || !dialog.hidden) return;
     dialog.hidden = false;
+    review.setAttribute("aria-expanded", "true");
     paintCards();
     close.focus({ preventScroll: true });
   });
@@ -158,10 +164,9 @@ export function createOfflineReview(window: Window, ports: OfflineReviewPorts): 
   life.listen(close, "click", closeReview);
   life.listen(dialog, "click", event => { if (event.target === dialog) closeReview(); });
   life.listen(window, "keydown", event => {
-    if (dialog.hidden || event.key !== "Escape") return;
-    event.preventDefault();
-    event.stopImmediatePropagation();
-    closeReview();
+    if (dialog.hidden) return;
+    if (event.key === "Escape") event.stopImmediatePropagation();
+    handleDialogKey(event, panel, closeReview);
   }, true);
   life.release(ports.collaboration.onChange(snapshot => {
     if (entries === snapshot.offlineClashes) return;

@@ -68,9 +68,11 @@ export function fakePresenceView(overrides: Partial<PresenceViewPorts> = {}) {
 
 export function fakeSharedPopover(overrides: Partial<SharedPopoverPorts> = {}) {
   const collaboration = createCollaborationState();
+  const presence = createPresenceState();
+  const { receive: receivePeers } = presence.bind(() => {});
   const management: Parameters<SharedPopoverPorts["manage"]>[] = [];
   const ports: SharedPopoverPorts = {
-    presence: { peers: () => [], onChange: () => () => {} },
+    presence,
     revealBeat: () => {},
     collaboration,
     membership: () => null,
@@ -83,7 +85,7 @@ export function fakeSharedPopover(overrides: Partial<SharedPopoverPorts> = {}) {
     confirm: () => true,
     ...overrides
   };
-  return { collaboration, ports, management };
+  return { collaboration, ports, management, receivePeers };
 }
 
 export function fakeSharedCommands(): SharedCommandGuard {

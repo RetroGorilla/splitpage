@@ -66,6 +66,9 @@ test("a release stage following a test stage removes the setup code, assets, ori
     { from: ".stage/desktop-build", to: "splitpage/desktop-build" }
   ]);
   stageBuild("--test");
+  const enabledHelp = read(join(app, "help.md"));
+  assert.match(enabledHelp, /^## Collaboration$/m);
+  assert.match(enabledHelp, /collaboration\/relay-setup\.md/);
   const enabledHtml = read(join(app, "index.html"));
   const enabledPreload = read(join(variant, "preload.js"));
   assert.equal(read(join(code, "collaboration.json")).trim(), '{"collabUi":true}');
@@ -97,6 +100,10 @@ test("a release stage following a test stage removes the setup code, assets, ori
   assert.deepEqual(readdirSync(join(variant, "relay-setup")).sort(), ["index.html", "preload.js", "setup.css"]);
   assert.deepEqual(readdirSync(code).sort(), ["collaboration.json", "relay-owner.ts", "relay-setup-window.ts"]);
   stageBuild();
+  const releaseHelp = read(join(app, "help.md"));
+  assert.doesNotMatch(releaseHelp, /^## Collaboration$/m);
+  assert.doesNotMatch(releaseHelp, /collaboration\/relay-setup\.md/);
+  assert.match(releaseHelp, /^## Installing and updating$/m);
   const release = read(join(app, "index.html"));
   const preload = read(join(desktop, "preload.js"));
   assert.ok(release === build(false));

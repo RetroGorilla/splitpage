@@ -2,3 +2,45 @@
   .offline-review-beat { margin: 0; font: inherit; }
   .offline-review-cell { margin-bottom: var(--space-8); min-height: 1.5em; }
   .offline-review-restore { margin-top: var(--space-8); }
+  .shared-trigger > .tally-dot { display: inline-block; flex: none; width: 7px; height: 7px; border-radius: 50%; }
+  .sharing-details {
+    --sharing-top: 8px;
+    --sharing-left: 8px;
+    position: fixed;
+    inset: var(--sharing-top) auto auto var(--sharing-left);
+    margin: 0;
+    width: min(19rem, calc(100vw - 16px));
+    max-height: calc(100dvh - 16px);
+    overscroll-behavior: contain;
+    overflow-wrap: anywhere;
+  }
+  .sharing-details [data-sharing] { white-space: normal; }
+  .sharing-details[aria-modal="true"]::backdrop { background: var(--backdrop); }
+  .collaboration-dialog :is(form, fieldset, label, input) { min-width: 0; }
+  .collaboration-dialog .modal-panel { overflow-wrap: anywhere; }
+
+  @media (max-width: 760px) {
+    .topbar-row:has(.shared-trigger) .topbar-left { min-width: 0; }
+    .toolbar > .shared-trigger {
+      flex: none; height: 44px; padding-inline: var(--space-8);
+      gap: var(--space-4); font-size: 12px;
+    }
+    .shared-trigger .shared-avatars { display: none; }
+    .modal-panel.sharing-details {
+      inset: auto 0 0;
+      width: 100%; max-height: min(86dvh, calc(100dvh - 8px));
+      border-radius: 14px 14px 0 0;
+      padding-bottom: calc(var(--space-14) + env(safe-area-inset-bottom));
+    }
+    .sharing-details .btn, .collaboration-dialog .btn { min-height: 44px; }
+    .collaboration-dialog .modal-panel, #offline-review .modal-panel {
+      max-height: calc(100dvh - 20px);
+      overscroll-behavior: contain;
+    }
+    .collaboration-dialog .modal-footer-actions { flex-wrap: wrap; }
+    .collaboration-dialog .swatch-row { flex-wrap: wrap; }
+    #offline-review .merge-sides { grid-template-columns: minmax(0, 1fr); }
+    #offline-review .offline-review-cell :is(img, video, iframe) { max-width: 100%; }
+    #offline-review :is(.modal-close, .jump-link, .offline-review-restore) { min-height: 44px; }
+    #offline-review .modal-close { min-width: 44px; }
+  }

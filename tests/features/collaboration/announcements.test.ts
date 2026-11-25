@@ -1,0 +1,37 @@
+import assert from "node:assert/strict";
+import { test } from "node:test";
+import { createCollaborationState } from "../../../src/application/collaboration/state.ts";
+import { announceCollaboration, mountCollaborationAnnouncements } from "../../../src/features/collaboration/announcements.ts";
+import { viewHarness } from "../view-harness.ts";
+
+test("collaboration reports join, leave and connection changes in a persistent polite live region", t => {
+  const { document, window } = viewHarness();
+  t.after(() => window.close());
+  const owner = createCollaborationState();
+  const dispose = mountCollaborationAnnouncements(document, { collaboration: owner });
+  t.after(dispose);
+  const status = document.getElementById("collaboration-announcements");
+  assert.ok(status);
+  assert.equal(status.getAttribute("role"), "status");
+  assert.equal(status.getAttribute("aria-live"), "polite");
+  owner.enter();
+  owner.setRelay({ connected: true, firstSyncDone: true, pendingChangeCount: 0 });
+  announceCollaboration(document, "Joined the shared script.");
+  assert.equal(status.textContent, "Joined the shared script.");
+  owner.setRelay({ connected: false, firstSyncDone: false, pendingChangeCount: 1 });
+  assert.match(status.textContent ?? "", /^Offline\./);
+  owner.setRelay({ connected: true, firstSyncDone: false, pendingChangeCount: 1 });
+  assert.match(status.textContent ?? "", /^Offline\./);
+  owner.setRelay({ connected: true, firstSyncDone: true, pendingChangeCount: 0 });
+  assert.equal(status.textContent, "Reconnected to the shared script.");
+  owner.setRefusal("access-removed");
+  assert.match(status.textContent ?? "", /^Access removed\./);
+  owner.setLocalPending(true);
+  assert.match(status.textContent ?? "", /^Access removed\./);
+  owner.leave();
+  announceCollaboration(document, "Left the shared script.");
+  assert.equal(status.textContent, "Left the shared script.");
+  assert.equal(document.getElementById(status.id), status);
+  dispose();
+  assert.equal(document.getElementById(status.id), null);
+});
