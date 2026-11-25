@@ -93,17 +93,18 @@ function restoreSnapshotFromCard(btn: Element | null): ReturnType<HistoryPanelCo
   });
 }
 
-  function openHistoryPanel() {
-    const trigger = document.activeElement;
-    sidePanels().open("history-panel");
-    if (ports.shared?.active()) shared?.focusOnOpen(trigger, closeHistoryPanel);
-    renderHistory();
-  }
+function openHistoryPanel() {
+  const trigger = document.activeElement;
+  sidePanels().open("history-panel");
+  if (ports.shared?.active()) shared?.focusOnOpen(trigger, closeHistoryPanel);
+  renderHistory();
+}
 
-  function closeHistoryPanel() {
-    sidePanels().close("history-panel");
-    shared?.close();
-  }
+function closeHistoryPanel() {
+  sidePanels().close("history-panel");
+  shared?.close();
+}
+
 let historyRenderToken = 0;
 let historyShownDocId: string | null = null;
 

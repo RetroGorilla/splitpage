@@ -81,11 +81,28 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
   let promotionAvailable = false;
   let opening = 0;
   let trigger: Element | null = null;
+  const blocked = new Set<Element>();
   let passwordDialog: ReturnType<typeof mountPasswordDialog> | undefined;
+
+  function setModal(modal: boolean): void {
+    if (modal) {
+      panel.setAttribute("aria-modal", "true");
+      for (const sibling of document.body.children) {
+        if (sibling === panel || sibling.hasAttribute("inert")) continue;
+        sibling.setAttribute("inert", "");
+        blocked.add(sibling);
+      }
+    } else {
+      panel.removeAttribute("aria-modal");
+      for (const sibling of blocked) sibling.removeAttribute("inert");
+      blocked.clear();
+    }
+  }
 
   function close(): void {
     if (!panel.matches(":popover-open")) return;
     panel.hidePopover();
+    setModal(false);
     pill.setAttribute("aria-expanded", "false");
     restoreDialogFocus(document, trigger);
     trigger = null;
@@ -208,6 +225,7 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
   }
 
   function position(): void {
+    setModal(window.innerWidth <= 760);
     const anchor = pill.getBoundingClientRect();
     panel.style.setProperty("--sharing-left", Math.max(8, Math.min(anchor.right - panel.offsetWidth, window.innerWidth - panel.offsetWidth - 8)) + "px");
     panel.style.setProperty("--sharing-top", Math.min(anchor.bottom + 8, Math.max(8, window.innerHeight - panel.offsetHeight - 8)) + "px");
@@ -237,7 +255,9 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
   }
 
   panel.addEventListener("beforetoggle", event => {
-    pill.setAttribute("aria-expanded", String((event as ToggleEvent).newState === "open"));
+    const open = (event as ToggleEvent).newState === "open";
+    pill.setAttribute("aria-expanded", String(open));
+    if (!open) setModal(false);
   });
   panel.addEventListener("keydown", event => handleDialogKey(event, panel, close));
   const resize = () => { if (panel.matches(":popover-open")) position(); };

@@ -1157,7 +1157,7 @@ included (they're your files).
   script…** in the desktop app. Check the script name, enter the password if
   asked, then choose **Join script**. Your name and colour identify you to other
   editors.
-- Use **Shared** or **File ▸ Sharing and people…** to see the connection and
+- Use **Shared** or **File ▸ Sharing & people…** to see the connection and
   who is **Here now**. Select someone who is working on a beat to jump to it.
   The owner can copy or reset the guest link, and add, change or remove its
   password. After a reset, guests need the new link. If the password changes,
@@ -1175,9 +1175,9 @@ included (they're your files).
 
 ### Keep a copy or leave
 
-- Use **Save a copy…** in **Shared** to save a separate project. On desktop,
-  when Splitpage offers to keep a file copy while sharing or joining, that file
-  follows the shared script until you stop keeping it.
+- Use **Save a copy…** in **Shared** to save a separate project. On the
+  desktop that shared it from a saved file, that file is kept up to date
+  until you stop keeping a copy.
 - **Shared ▸ Leave** removes this device’s shared copy and its access. You
   can save a separate project first. Other people can keep working.
 - **Shared ▸ Stop sharing** is for the owner and requires a connection.

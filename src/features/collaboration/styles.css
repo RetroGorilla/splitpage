@@ -15,6 +15,7 @@
     overflow-wrap: anywhere;
   }
   .sharing-details [data-sharing] { white-space: normal; }
+  .sharing-details[aria-modal="true"]::backdrop { background: var(--backdrop); }
   .collaboration-dialog :is(form, fieldset, label, input) { min-width: 0; }
   .collaboration-dialog .modal-panel { overflow-wrap: anywhere; }
 

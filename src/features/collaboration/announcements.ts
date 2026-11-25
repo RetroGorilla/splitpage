@@ -1,4 +1,5 @@
-import type { CollaborationReads, CollaborationSnapshot } from "../../application/collaboration/state.ts";
+import type { CollaborationSnapshot } from "../../application/collaboration/state.ts";
+import type { CollaborationAnnouncementsPorts } from "./ports.ts";
 
 export function announceCollaboration(document: Document, message: string): void {
   const region = document.getElementById("collaboration-announcements");
@@ -9,7 +10,7 @@ function connection(snapshot: CollaborationSnapshot) {
   return snapshot.relay.connected && snapshot.relay.firstSyncDone;
 }
 
-export function mountCollaborationAnnouncements(document: Document, collaboration: CollaborationReads): () => void {
+export function mountCollaborationAnnouncements(document: Document, { collaboration }: CollaborationAnnouncementsPorts): () => void {
   const region = document.createElement("div");
   region.id = "collaboration-announcements";
   region.className = "busy-bar-label";

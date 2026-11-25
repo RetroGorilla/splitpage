@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { appCss } from "./tools/css-inputs.mjs";
 import { isMain } from "./tools/main-module.mjs";
-import { leakedCollaboration, leakedHooks } from "./tools/release-hooks.mjs";
+import { helpMarkdown, leakedCollaboration, leakedHooks } from "./tools/release-hooks.mjs";
 import { writeDesktopBuild } from "./tools/build-preload.mjs";
 
 let esbuild;
@@ -239,11 +239,7 @@ function mdToHtml(markdown) {
 }
 
 function helpHtml(collabUi) {
-  const markdown = readFileSync(join(ROOT, "docs", "help.md"), "utf8");
-  if (!collabUi) {
-    return mdToHtml(markdown.split(/(?=^## )/m).filter(section => !section.startsWith("## Collaboration\n")
-      && !section.startsWith("## Collaboration\r\n")).join(""));
-  }
+  const markdown = helpMarkdown(readFileSync(join(ROOT, "docs", "help.md"), "utf8"), collabUi);
   return mdToHtml(markdown.replace("](collaboration/relay-setup.md)",
     "](https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/relay-setup.md)"));
 }

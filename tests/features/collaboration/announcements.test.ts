@@ -8,7 +8,7 @@ test("collaboration reports join, leave and connection changes in a persistent p
   const { document, window } = viewHarness();
   t.after(() => window.close());
   const owner = createCollaborationState();
-  const dispose = mountCollaborationAnnouncements(document, owner);
+  const dispose = mountCollaborationAnnouncements(document, { collaboration: owner });
   t.after(dispose);
   const status = document.getElementById("collaboration-announcements");
   assert.ok(status);

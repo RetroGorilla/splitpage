@@ -84,14 +84,16 @@ test("shared history restores focus to the chosen version and to the panel trigg
   trigger.focus();
   panel.focusOnOpen(trigger, () => { shell.hidden = true; panel.close(); });
   assert.equal(shell.getAttribute("role"), "dialog");
+  assert.equal(shell.hasAttribute("aria-modal"), false);
   assert.equal(document.activeElement?.id, "history-close");
   const view = document.defaultView;
   assert.ok(view);
   const key = (key: string, shiftKey = false) => document.activeElement?.dispatchEvent(
     new view.KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true }));
   await panel.render();
-  key("Tab", true);
-  assert.equal(document.activeElement?.getAttribute("data-shared-version"), otherVersion.id);
+  assert.equal(key("Tab", true), true);
+  list.querySelector<HTMLElement>('[data-shared-version="new"]')?.focus();
+  assert.equal(key("Tab"), true);
   click('[data-shared-version="new"]');
   await settle();
   assert.equal(document.activeElement?.textContent, preview.title);

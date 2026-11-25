@@ -13,7 +13,7 @@ export function handleDialogKey(event: KeyboardEvent, panel: HTMLElement, close:
     close();
     return;
   }
-  if (event.key !== "Tab") return;
+  if (event.key !== "Tab" || panel.getAttribute("aria-modal") !== "true") return;
   const active = panel.ownerDocument.activeElement;
   const enabled = Array.from(panel.querySelectorAll<HTMLElement>(
     "button, input, select, textarea, a[href], summary, [tabindex]"

@@ -185,7 +185,7 @@ test("the pill caps initials and the people list jumps to the latest beat", t =>
   assert.deepEqual(jumps, [["b", "audioText"]]);
 });
 
-test("the Shared popover wraps Tab, keeps focus when a peer leaves and returns it on Escape", t => {
+test("the Shared popover wraps Tab only on phones, keeps focus when a peer leaves and returns it on Escape", t => {
   const h = setup(t);
   h.connect();
   h.receivePeers([{ clientId: 1, name: "Guest", color: "#80BDFB", view: "split", beat: "a", side: "audioText" }]);
@@ -193,13 +193,24 @@ test("the Shared popover wraps Tab, keeps focus when a peer leaves and returns i
   trigger.focus();
   h.popover.open();
   const close = h.button("close");
+  const panel = h.el("shared-popover");
+  const root = h.el("root");
   assert.equal(h.document.activeElement, close);
   assert.equal(trigger.getAttribute("aria-expanded"), "true");
   const key = (key: string, shiftKey = false) => h.document.activeElement?.dispatchEvent(
     new h.window.KeyboardEvent("keydown", { key, shiftKey, bubbles: true, cancelable: true }));
-  key("Tab", true);
+  assert.equal(panel.hasAttribute("aria-modal"), false);
+  assert.equal(key("Tab", true), true);
+  h.button("leave").focus();
+  assert.equal(key("Tab"), true);
+  close.focus();
+  Object.defineProperty(h.window, "innerWidth", { value: 760 });
+  h.fire(h.window, "resize");
+  assert.equal(panel.getAttribute("aria-modal"), "true");
+  assert.equal(root.hasAttribute("inert"), true);
+  assert.equal(key("Tab", true), false);
   assert.equal(h.document.activeElement, h.button("leave"));
-  key("Tab");
+  assert.equal(key("Tab"), false);
   assert.equal(h.document.activeElement, close);
   h.document.querySelector<HTMLButtonElement>("[data-here-now] button")?.focus();
   h.receivePeers([]);
@@ -207,4 +218,6 @@ test("the Shared popover wraps Tab, keeps focus when a peer leaves and returns i
   key("Escape");
   assert.equal(h.document.activeElement, trigger);
   assert.equal(trigger.getAttribute("aria-expanded"), "false");
+  assert.equal(panel.hasAttribute("aria-modal"), false);
+  assert.equal(root.hasAttribute("inert"), false);
 });

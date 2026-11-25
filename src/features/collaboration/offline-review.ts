@@ -165,6 +165,7 @@ export function createOfflineReview(window: Window, ports: OfflineReviewPorts): 
   life.listen(dialog, "click", event => { if (event.target === dialog) closeReview(); });
   life.listen(window, "keydown", event => {
     if (dialog.hidden) return;
+    if (event.key === "Escape") event.stopImmediatePropagation();
     handleDialogKey(event, panel, closeReview);
   }, true);
   life.release(ports.collaboration.onChange(snapshot => {

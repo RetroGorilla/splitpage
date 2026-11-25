@@ -89,7 +89,7 @@ export const requestPasswordRecovery = typeof SPLITPAGE_COLLAB_UI !== "undefined
   ? openPasswordRecovery : undefined;
 
 function registerCollaboration(registry: Pick<ActionRegistry, "invoke" | "register">): () => void {
-  const unmountAnnouncements = mountCollaborationAnnouncements(document, collaboration);
+  const unmountAnnouncements = mountCollaborationAnnouncements(document, { collaboration });
   const unmountFileCopy = mountFileCopyBanner(sharedFileCopy);
   let attempt: ReturnType<typeof createShareAttempt> | undefined;
   let dispose: (() => void) | undefined;

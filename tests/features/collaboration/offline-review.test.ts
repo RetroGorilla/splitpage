@@ -47,7 +47,12 @@ test("a refused put-back can be retried and restoring cannot be repeated by a st
       assert.equal(document.activeElement, restore);
       key("Tab");
       assert.equal(document.activeElement, close);
+      let escaped = false;
+      const otherEscape = () => { escaped = true; };
+      window.addEventListener("keydown", otherEscape, { capture: true, once: true });
       key("Escape");
+      window.removeEventListener("keydown", otherEscape, true);
+      assert.equal(escaped, false);
       assert.equal(dialog.hidden, true);
       assert.equal(document.activeElement, trigger);
       assert.equal(trigger?.getAttribute("aria-expanded"), "false");
