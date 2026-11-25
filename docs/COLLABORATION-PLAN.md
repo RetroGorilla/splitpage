@@ -34,10 +34,23 @@ Each superseded place below also carries a one-line pointer under its heading.
 
 Decision 19 in short: on 2026-11-20 the owner reviewed the server-stop results and kept stock snapshot storage for the first version. The update journal and durability receipts are deferred. The first version makes no "saved to server" claim.
 
+## Update 2026-11-25: Stage 4 and 5 are built
+
+The Stage 4 and 5 plan of 2026-11-23 (sharing, joining, version history and presence) is built, and release builds now include collaboration. Its [build status](collaboration/native-adapter-design.md#stage-4-and-5-sharing-joining-version-history-and-presence) lists each part. Where that plan departs from this one, it wins:
+
+| This plan | What the first version does instead |
+| --- | --- |
+| Individually named invitations, one per person (sections 1, 2 and 9) | One guest link per script and a separate owner credential. **Reset link** replaces per-person revocation |
+| "A shared instance must not remain attached to an automatic file writer" (section 3) | The desktop that shared a saved file keeps it current with a [one-way copy](collaboration/native-adapter-design.md#the-desktop-file-copy-stage-4-part-8). The file is never read back |
+| History snapshots stay as checkpoints only (section 3) | The relay keeps [version history](collaboration/native-adapter-design.md#relay-version-history-stage-4-part-11a) |
+| Presence is names and connection state; carets optional (section 1) | Names, positions on the Rundown strip, a jump to a person's beat and a Writer sign are in. Remote carets stay optional and are not built |
+| Automatic reclamation is outside the first version (section 6) | Old versions are thinned on a schedule. Script content and pictures are still never removed automatically |
+
 ## 1 Purpose and decisions
 
 > Superseded in this table on 2026-11-19: *Server storage* (decision 19) and *Narration schema* (decision 1). See the update above.
 > Superseded in this table by Stage 4 decision 2: *Access* — one guest link per script and a separate owner credential replace individually named invitations.
+> Superseded in this table by Stage 4 decision 8: *Presence* — positions, a jump to a person's beat and a Writer sign are in; remote carets stay optional. See the update above.
 
 Build collaboration for a trusted group of two to six people. A participant can open a shared script when nobody else is online, edit with others, keep working through a connection outage, and export an independent file. Existing standalone editing and the `.splitpage` format remain supported.
 
@@ -115,6 +128,7 @@ Accounts, verified identity, comment-only permissions, shared video uploads, aut
 ## 3 Repository integration
 
 > Stage 4 Part 11a supersedes checkpoint-only history for shared scripts. The relay keeps [version history](collaboration/native-adapter-design.md#relay-version-history-stage-4-part-11a).
+> Stage 4 decision 10 supersedes "a shared instance must not remain attached to an automatic file writer" for the desktop that shared a saved file: a [one-way copy](collaboration/native-adapter-design.md#the-desktop-file-copy-stage-4-part-8) keeps that file current.
 
 Follow [AGENTS.md](../AGENTS.md), [dependencies](architecture/dependencies.md), [feature ports](architecture/feature-ports.md), [saving](architecture/saving.md), [session](architecture/session.md), [invariants](architecture/invariants.md), and the [review policy](architecture/review.md). Reconcile historical architecture descriptions with current code before acting on them.
 

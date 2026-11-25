@@ -456,6 +456,35 @@ Additional tail observations: long Split open tag name p95 moved from 3.7 to 8.2
 
 Typing p50 moved slightly down on both fixtures (3.0 to 2.8 ms short; 3.5 to 3.1 ms long) while typing p95 moved up by about 1.5–1.7 ms. Long bulk-delete Undo (29.8 to 33.1 ms, base 28.6–30.8 vs head 31–38 ms), long hide shot scenes (14.7 to 16.1 ms) and the two open-tag-name p95 figures moved up across three rounds without crossing any p50 limit, firing a long task, or changing layout read counts. Three rounds on one workstation do not establish a cause for those shifts; they are recorded as observed rather than attributed or dismissed. Shared-session editing and image-heavy cases were not measured in this run.
 
+## Collaboration Stage 4 and 5, 624bf5a25 to ac0d3bc4b
+
+Recorded 2026-11-25 on Windows with Edge 158 and Node 24.22.1, with smoke.lock and perf.lock held, by two runs:
+
+- Standalone: `node tools/perf-ab.mjs 624bf5a25 ac0d3bc4b --only short,long --rounds 3`. `624bf5a25` is the Stage 4 and 5 plan's baseline; `ac0d3bc4b` is Stage 4 Parts 1 to 14 plus the release-build change of Part 16.
+- Shared: `node tools/perf-ab.mjs 1366646e2 ac0d3bc4b --only shared,shared-long --rounds 3`. The shared fixtures run through the two-client presence harness, which needs the Shared pill and presence, so the base is the Part 9 merge `1366646e2`. On `624bf5a25` the harness's connection checks time out.
+
+### Input latency, median of 3 rounds (ms)
+
+| Case | Base p50 | Head p50 | Base p95 | Head p95 | Limit (p50) |
+| --- | ---: | ---: | ---: | ---: | ---: |
+| short typing | 2.4 | 2.4 | 15.9 | 13.9 | 8 |
+| long typing | 2.6 | 2.6 | 14.0 | 15.1 | 8 |
+| short new scene | 19.0 | 17.9 | 32.5 | 28.2 | 65 |
+| long new scene | 28.0 | 27.6 | 30.7 | 31.2 | 65 |
+| short undo the delete | 10.9 | 10.8 | 10.9 | 10.8 | 45 |
+| long undo the delete | 27.8 | 26.6 | 27.8 | 26.6 | 70 |
+| long hide shot scenes | 13.3 | 13.4 | 16.8 | 17.7 | 65 |
+| shared Split typing | 1.6 | 1.7 | 15.2 | 14.7 | — |
+| shared Writer typing | 1.8 | 1.7 | 15.6 | 16.2 | — |
+| shared long moving peer Split typing | 6.1 | 6.3 | 15.9 | 15.7 | — |
+| shared long moving peer Writer typing | 11.3 | 11.3 | 18.9 | 25.5 | — |
+
+The undo rows have one key, so p95 equals p50. The other standalone cases moved between -47.8% and +10% at p50. Every open-tag case fell (for example long split open tag spaces, 6.9 to 3.6 ms), with base runs spread widely (3.4 to 8.2 ms there). The exports stayed between 0.5 and 5.3 ms. The shared rows use the moving-peer fixture's 300 beats for "long".
+
+### Reading it
+
+No standalone case is slower than its spread, and every standalone p50 is well inside its limit. Stage 4 and 5 leave standalone typing flat at 2.4 and 2.6 ms. Shared Split and Writer typing with two editors are flat at 1.6 to 1.8 ms. With 300 beats and a peer moving between beats, Split typing stays at about 6 ms and Writer typing at 11.3 ms p50 in both base and head, so the parts after presence added nothing there. That Writer figure is above the 8 ms standalone typing limit; no shared limit has been set. Its p95 rose from 18.9 to 25.5 ms with one base run at 31.3 ms, so three rounds do not separate a change from noise. Both runs are traceable to the commands above.
+
 ## Comparing two commits
 
 Run `node tools/perf-ab.mjs <base> [head] --only short,long --rounds 3` with dependencies installed. Head defaults to the committed `HEAD`; uncommitted changes are excluded. `--only` accepts the recorder's fixtures (`short,long,images`, all by default). Each round runs base then head, one browser at a time. The wrapper creates two detached worktrees under the system temporary directory, links this checkout's installed `node_modules`, builds each with `node build.mjs --test` (or a plain build when the old build script lacks `--test`, reported in the output), and copies the selected head's tools and browser driver helpers into the base tree before measuring. Both builds therefore use the head's recorder and helpers. A standalone `node tools/perf-record.mjs` also builds the test variant before measuring, with the same fallback for older build scripts. Use compatible installed dependencies for the two commits; no install or network access is performed.
