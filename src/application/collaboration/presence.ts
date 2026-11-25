@@ -21,7 +21,7 @@ export interface PresenceReads {
 export function createPresenceState() {
   let peers: readonly PresencePeer[] = [];
   let profile: PresenceProfile | undefined;
-  let publish: ((profile: PresenceProfile) => void) | undefined;
+  let binding: { send: (profile: PresenceProfile) => void } | undefined;
   const listeners = new Set<() => void>();
 
   function receive(next: readonly PresencePeer[]): void {
@@ -40,20 +40,21 @@ export function createPresenceState() {
     },
     setLocal(next: PresenceProfile) {
       profile = next;
-      publish?.(next);
+      binding?.send(next);
     },
     bind(send: (profile: PresenceProfile) => void) {
-      publish = send;
+      const current = { send };
+      binding = current;
       receive([]);
-      if (profile) send(profile);
+      if (binding === current && profile) send(profile);
       return {
         receive(next: readonly PresencePeer[]) {
-          if (publish === send) receive(next);
+          if (binding === current) receive(next);
         },
         dispose() {
-          if (publish !== send) return;
+          if (binding !== current) return;
           profile = undefined;
-          publish = undefined;
+          binding = undefined;
           receive([]);
         }
       };

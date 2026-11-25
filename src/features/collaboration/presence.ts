@@ -8,19 +8,19 @@ function cellLocation(view: PresenceLocation["view"], cell: HTMLElement | null):
   return { view, beat: null, side: null };
 }
 
-function location(): PresenceLocation {
+export function location(document: Document): PresenceLocation {
   const active = document.activeElement;
   if (document.querySelector("#prompter:not([hidden])")) return cellLocation("present", null);
   if (document.querySelector("#writer:not([hidden])")) {
     if (active?.matches(".wr-flow-visual-text")) return cellLocation("writer", active as HTMLElement);
     const node = active?.id === "writer-doc" ? document.getSelection()?.focusNode : null;
-    const element = node instanceof Element ? node : node?.parentElement;
+    const element = node?.nodeType === 1 ? node as Element : node?.parentElement;
     return cellLocation("writer", element?.closest<HTMLElement>("#writer-doc .wr-beat") ?? null);
   }
   return cellLocation("split", active?.closest<HTMLElement>("#rows .cell-editable") ?? null);
 }
 
-function markRules(peers: readonly PresencePeer[]): string {
+export function markRules(peers: readonly PresencePeer[], escapeId: (id: string) => string): string {
   const beats = new Map<string, PresencePeer[]>();
   for (const peer of peers) {
     if (!peer.beat) continue;
@@ -38,7 +38,7 @@ function markRules(peers: readonly PresencePeer[]): string {
   }
 
   for (const [id, people] of beats) {
-    const idValue = CSS.escape(id);
+    const idValue = escapeId(id);
     const row = '#rows .row[data-id="' + idValue + '"]';
     dots('.rd-block[data-row="' + idValue + '"]', people);
     dots(row + " .audio-cell .field-wrap", people.filter(peer => peer.side === "audioText"));
@@ -63,7 +63,7 @@ export function mountPresenceView(ports: PresenceViewPorts): () => void {
   function sample(): void {
     timer ??= setTimeout(() => {
       timer = undefined;
-      ports.setLocal({ ...ports.identity(), ...location() });
+      ports.setLocal({ ...ports.identity(), ...location(document) });
     }, 100);
   }
 
@@ -97,7 +97,7 @@ export function mountPresenceView(ports: PresenceViewPorts): () => void {
   }
 
   function paint(): void {
-    const css = showing ? markRules(ports.presence.peers()) : "";
+    const css = showing ? markRules(ports.presence.peers(), CSS.escape) : "";
     if (markers.textContent === css) return;
     markers.textContent = css;
     if (css && !markers.isConnected) document.head.append(markers);

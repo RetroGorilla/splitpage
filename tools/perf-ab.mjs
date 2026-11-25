@@ -27,12 +27,12 @@ export function parseArgs(argv) {
     else refs.push(arg);
   }
   if (refs.length < 1 || refs.length > 2) {
-    throw new Error("usage: node tools/perf-ab.mjs <base> [head=HEAD] [--only short,long,images,shared] [--rounds 3]");
+    throw new Error("usage: node tools/perf-ab.mjs <base> [head=HEAD] [--only short,long,images,shared,shared-long] [--rounds 3]");
   }
   const allowed = ["short", "long", "images"];
   only ??= allowed.join(",");
   const fixtures = only.split(",");
-  allowed.push("shared");
+  allowed.push("shared", "shared-long");
   if (fixtures.some((f) => !allowed.includes(f)) || new Set(fixtures).size !== fixtures.length) throw new Error(`--only needs distinct fixtures from ${allowed.join(",")}`);
   return { base: refs[0], head: refs[1] ?? "HEAD", rounds: rounds ?? 3, only };
 }
@@ -141,20 +141,23 @@ export async function main(argv, repo = REPO) {
       console.error(`perf-ab: ${side} building with node ${build.join(" ")}${build.length === 1 ? " (legacy build; --test unavailable)" : ""}`);
       await run(process.execPath, build, dirs[side]);
     }
-    for (const path of ["tools", ".claude/skills/run-splitpage-app"]) {
+    const fixtures = args.only.split(",");
+    const helpers = ["tools", ".claude/skills/run-splitpage-app"];
+    if (fixtures.includes("shared-long")) helpers.push("tests/adapters/collab/native/presence-perf-peer.mjs");
+    for (const path of helpers) {
       cpSync(join(dirs.head, path), join(dirs.base, path), { recursive: true });
     }
     const runs = { base: [], head: [] };
-    const fixtures = args.only.split(",");
-    const standalone = fixtures.filter(fixture => fixture !== "shared").join(",");
+    const standalone = fixtures.filter(fixture => !fixture.startsWith("shared")).join(",");
     for (let round = 1; round <= args.rounds; round++) {
       for (const side of ["base", "head"]) {
         console.error(`perf-ab: round ${round}/${args.rounds} ${side}`);
         const rows = standalone ? measurements(await run(process.execPath,
           ["tools/perf-record.mjs", "--built", "--only", standalone], dirs[side])) : [];
-        if (fixtures.includes("shared")) {
-          const shared = parsePerf(await run(process.execPath, ["tools/run-presence-browser.mjs", "--perf"], dirs[side]));
-          if (shared.length !== 2 || shared.some(row => row.keys < 40)) throw new Error("missing shared typing samples");
+        for (const fixture of fixtures.filter(name => name.startsWith("shared"))) {
+          const flag = fixture === "shared-long" ? "--perf-long" : "--perf";
+          const shared = parsePerf(await run(process.execPath, ["tools/run-presence-browser.mjs", flag], dirs[side]));
+          if (shared.length !== 2 || shared.some(row => row.keys < 40)) throw new Error("missing " + fixture + " typing samples");
           rows.push(...shared.map(row => ({ ...row, rects: row.rangeRects })));
         }
         runs[side].push(rows);

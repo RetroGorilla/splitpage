@@ -20,7 +20,9 @@ import type { Command, CommandOutcome, DocumentView, SessionListener } from "../
 import type { UndoControl } from "../../src/application/editing/undo-control.ts";
 import type { NoticeKind, NoticePort } from "../../src/application/effects/ports.ts";
 import type { DocumentEdits } from "../../src/application/session/document-edits.ts";
-import type { SharedPopoverPorts } from "../../src/features/collaboration/ports.ts";
+import type { PresenceViewPorts, SharedPopoverPorts } from "../../src/features/collaboration/ports.ts";
+import { createPresenceState } from "../../src/application/collaboration/presence.ts";
+import type { PresenceProfile } from "../../src/application/collaboration/presence.ts";
 import { createCollaborationState, IDLE_COLLABORATION_SNAPSHOT } from "../../src/application/collaboration/state.ts";
 import type { SharedScriptCatalogueStorage } from "../../src/application/collaboration/shared-script-catalogue.ts";
 import type { SharedScriptCatalogueEntry } from "../../shared/shared-script.ts";
@@ -30,6 +32,21 @@ import type { SharedCommandGuard } from "../../src/application/session/document-
 
 export function fakeCollaboration(): Pick<CollaborationReads, "snapshot"> {
   return { snapshot: () => IDLE_COLLABORATION_SNAPSHOT };
+}
+
+export function fakePresenceView(overrides: Partial<PresenceViewPorts> = {}) {
+  const collaboration = createCollaborationState();
+  const presence = createPresenceState();
+  const published: PresenceProfile[] = [];
+  const ports: PresenceViewPorts = {
+    collaboration,
+    presence,
+    identity: () => ({ name: "Ada", color: "#80BDFB" }),
+    onIdentityChange: () => () => {},
+    setLocal: profile => { published.push(profile); },
+    ...overrides
+  };
+  return { collaboration, presence, published, ports };
 }
 
 export function fakeSharedPopover(overrides: Partial<SharedPopoverPorts> = {}) {

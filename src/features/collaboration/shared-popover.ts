@@ -27,7 +27,8 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
   Object.assign(dot.style, { flex: "none", width: "7px", height: "7px", borderRadius: "50%" });
   const avatars = document.createElement("span");
   avatars.setAttribute("aria-hidden", "true");
-  Object.assign(avatars.style, { display: "inline-flex", alignItems: "center", gap: "3px" });
+  avatars.className = "shared-avatars";
+  avatars.hidden = true;
   pill.append(avatars);
 
   const panel = document.createElement("section");

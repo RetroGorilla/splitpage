@@ -97,10 +97,17 @@ test("double-click while reset is in flight runs one request", async t => {
 test("the password controls let a connected owner require or remove the password", async t => {
   let required = false;
   const h = setup(t, { membership: () => ({ role: "owner", link: null, passwordRequired: required }) });
+  const button = h.button("password");
+  const here = h.el("shared-here-title").parentElement;
+  assert.equal(here?.hidden, true);
+  assert.equal(button.hidden, false);
+  assert.equal(button.disabled, true);
   h.connect();
   h.popover.open();
   await new Promise<void>(resolve => setImmediate(resolve));
-  const button = h.button("password");
+  assert.equal(here?.hidden, false);
+  assert.equal(here?.nextElementSibling, button.parentElement);
+  assert.equal(button.disabled, false);
   assert.equal(button.textContent, "Require a password");
   button.click();
   const dialog = h.el("link-password-modal");

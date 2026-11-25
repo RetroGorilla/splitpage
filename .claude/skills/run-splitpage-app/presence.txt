@@ -18,6 +18,20 @@ eval P.document.querySelector('#wr-close').click();true
 wait !P.__writerFlowTest.on()
 eval document.querySelector('#wr-close').click();true
 wait !window.__writerFlowTest.on()
+eval Q(P,'r2','visualText').focus();true
+wait dot(rd('r2')) && !dot(rd('r1'))
+eval window.writerNarrationBeat=()=>{const w=P.document.querySelector('#writer-doc');w.focus();const b=w.querySelector('.wr-beat[data-id="r1"]');P.getSelection().collapse(b.firstChild,0);return true};P.document.querySelector('#btn-write').click();true
+wait P.__writerFlowTest.on()
+eval writerNarrationBeat()
+wait dot(rd('r1')) && dot(side('r1','audio')) && !dot(rd('r2'))
+eval P.document.querySelector('#wr-close').click();P.document.querySelector('#btn-present').click();true
+wait !P.document.getElementById('prompter').hidden
+wait !dot(rd('r1')) && !dot(rd('r2'))
+click #shared-pill
+expect document.querySelector('[data-here-now] button')?.disabled === true
+click [data-sharing="close"]
+eval P.document.querySelector('#pp-close').click();true
+wait P.document.getElementById('prompter').hidden
 eval P.document.querySelector('#btn-file').click();P.document.querySelector('#menu-settings').click();true
 wait P.document.querySelector('#settings-name')?.checkVisibility()
 eval window.nameInput=P.document.querySelector('#settings-name');nameInput.value='Renamed Peer';nameInput.dispatchEvent(new P.Event('change',{bubbles:true}));window.swatch=P.document.querySelector('[name="settings-person-color"][value="#EF958E"]');swatch.click();true

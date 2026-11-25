@@ -23,6 +23,8 @@ import { PERSON_NAME_MAX, hashedPersonColor } from "../../core/document/person-c
 import { cappedName } from "../../core/document/text-policy.ts";
 import { mountPresenceView } from "../../features/collaboration/presence.ts";
 import { sharedPresence } from "./ports/presence.ts";
+import { cssAttr } from "../../features/common/dom.ts";
+import { writerControls } from "./writer.ts";
 import { holdSessionCommands, liveSession, sessionEntryRefusal, sharedSession } from "./session-owner.ts";
 import { enterCreatedSharedScript, sharedEntry } from "./shared-entry.ts";
 import { captureOperation, stillOwns } from "./transition-owners.ts";
@@ -170,13 +172,12 @@ function registerCollaboration(registry: Pick<ActionRegistry, "invoke" | "regist
     presence,
     revealBeat(id, side) {
       registry.invoke("reveal-row", "button", id);
-      const beat = CSS.escape(id);
-      const writer = document.querySelector('#writer:not([hidden]) .wr-beat[data-id="' + beat + '"]');
+      const writer = writerControls()?.writerFlowControl();
       if (writer) {
-        writer.scrollIntoView({ block: "center" });
+        writer.caret(id, 0);
         return;
       }
-      const row = document.querySelector('#rows .row[data-id="' + beat + '"]');
+      const row = document.querySelector('#rows .row[data-id="' + cssAttr(id) + '"]');
       row?.scrollIntoView({ block: "center" });
       row?.querySelector<HTMLElement>('.cell-editable[data-field="' + side + '"]')?.focus({ preventScroll: true });
     },
