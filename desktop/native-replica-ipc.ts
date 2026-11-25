@@ -37,6 +37,7 @@ interface Lease {
   readonly replica: Promise<Replica>;
   done: Promise<unknown>;
   forgotten?: boolean;
+  managing?: boolean;
   close?: Promise<void>;
   detach?: () => void;
 }
@@ -69,8 +70,8 @@ function failure(error: unknown): NativeReplicaReply {
 }
 
 interface CredentialCipher {
-  readonly encrypt: (token: string) => Buffer | Promise<Buffer>;
-  readonly decrypt: (bytes: Buffer) => string | Promise<string>;
+  readonly encrypt: (token: string) => Buffer;
+  readonly decrypt: (bytes: Buffer) => string;
 }
 
 function createNativeReplicaIpc(userData: string, readNativeMembership: typeof ReadNativeMembership,
@@ -113,6 +114,35 @@ function createNativeReplicaIpc(userData: string, readNativeMembership: typeof R
     }
   }
 
+  function enqueue<T>(lease: Lease, work: (replica: Replica) => Promise<T>): Promise<T> {
+    const operation = lease.done.then(() => lease.replica).then(work);
+    lease.done = operation.catch(() => {});
+    return operation;
+  }
+
+  async function manageMembership(lease: Lease,
+    manage: (record: NativeMembershipRecord) => Promise<NativeMembershipRecord>): Promise<NativeReplicaReply> {
+    if (!cipher) return CLOSED;
+    if (lease.managing) return LOCKED;
+    lease.managing = true;
+    try {
+      const before = await enqueue(lease, replica => lease.forgotten ? Promise.resolve(null) : replica.readMembership());
+      if (!before || lease.close) return CLOSED;
+      const record = decodeMembership(cipher.decrypt(before));
+      if (!record) return CLOSED;
+      const updated = await manage(record);
+      if (lease.close) return CLOSED;
+      return await enqueue(lease, async replica => {
+        if (lease.forgotten || lease.close) return CLOSED;
+        const current = await replica.readMembership();
+        if (lease.close || !current?.equals(before)) return CLOSED;
+        if (updated !== record) await replica.writeMembership(cipher.encrypt(MEMBERSHIP_PREFIX + JSON.stringify(updated)));
+        return { kind: "membership", record: updated };
+      });
+    } catch (error) { return failure(error); }
+    finally { lease.managing = false; }
+  }
+
   async function handle(owner: Renderer, request: unknown,
     manage?: (record: NativeMembershipRecord) => Promise<NativeMembershipRecord>): Promise<NativeReplicaReply> {
     if (!isRequest(request, readNativeMembership)) throw new TypeError("Invalid native replica request");
@@ -143,8 +173,8 @@ function createNativeReplicaIpc(userData: string, readNativeMembership: typeof R
     const lease = leases.get(name);
     if (!lease || lease.close || lease.owner !== owner || lease.id !== id) return CLOSED;
     if (op === "close") { await release(name, lease); return STORED; }
-    const operation = lease.done.then(async (): Promise<NativeReplicaReply> => {
-      const replica = await lease.replica;
+    if (op === "membership" && manage) return manageMembership(lease, manage);
+    return enqueue(lease, async (replica): Promise<NativeReplicaReply> => {
       if (request[0] === "read") return { kind: "read", entries: replica.read(request[3]) };
       if (lease.forgotten) return CLOSED;
       if (request[0] === "read-journal") return { kind: "journal", bytes: replica.readJournal() };
@@ -160,16 +190,11 @@ function createNativeReplicaIpc(userData: string, readNativeMembership: typeof R
       if (request[0] === "membership") {
         const bytes = await replica.readMembership();
         if (bytes && !cipher) return { kind: "failed", reason: "io" };
-        const record = bytes && cipher ? decodeMembership(await cipher.decrypt(bytes)) : null;
-        if (!manage) return { kind: "membership", record };
-        if (!cipher || !record) return CLOSED;
-        const updated = await manage(record);
-        if (updated !== record) await replica.writeMembership(await cipher.encrypt(MEMBERSHIP_PREFIX + JSON.stringify(updated)));
-        return { kind: "membership", record: updated };
+        return { kind: "membership", record: bytes && cipher ? decodeMembership(cipher.decrypt(bytes)) : null };
       }
       if (request[0] === "join") {
         if (!cipher) return { kind: "failed", reason: "io" };
-        await replica.writeMembership(await cipher.encrypt(MEMBERSHIP_PREFIX + JSON.stringify(readNativeMembership(request[3]))));
+        await replica.writeMembership(cipher.encrypt(MEMBERSHIP_PREFIX + JSON.stringify(readNativeMembership(request[3]))));
         return STORED;
       }
       if (request[0] !== "write") return CLOSED;
@@ -177,8 +202,6 @@ function createNativeReplicaIpc(userData: string, readNativeMembership: typeof R
       await replica.write({ generation, checkpoint, bytes, ...(journal && { journal }) });
       return STORED;
     }).catch(failure);
-    lease.done = operation;
-    return operation;
   }
 
   return handle;

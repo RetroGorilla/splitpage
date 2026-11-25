@@ -28,7 +28,7 @@ import type * as DesktopState from "./desktop-state.ts";
 import type * as UpdateRelease from "./update-release.ts";
 import type * as IpcSetup from "./ipc-setup.ts";
 import type { DesktopChannelModule } from "./ipc-channels.ts";
-import type { createRelayOwner as CreateRelayOwner, createShareCreations as CreateShareCreations, windowsReplicaCipher as WindowsReplicaCipher } from "./relay-owner.ts";
+import type { createRelayOwner as CreateRelayOwner, createShareCreations as CreateShareCreations } from "./relay-owner.ts";
 import type { createNativeReplicaFiles as CreateNativeReplicaFiles } from "./native-replica-files.ts";
 import type { createRelaySetupWindow as CreateRelaySetupWindow } from "./relay-setup-window.ts";
 import type * as IpcFiles from "./ipc-files.ts";
@@ -1857,9 +1857,8 @@ const relaySetup = COLLAB_UI ? (() => {
   const root = path.join(DESKTOP_BUILD, "relay-setup");
   const { RELAY_SETUP_ORIGIN }: DesktopChannelModule = require("./ipc-channels.ts");
   const { createRelaySetupWindow }: { createRelaySetupWindow: typeof CreateRelaySetupWindow } = require("./relay-setup-window.ts");
-  const { createRelayOwner, createShareCreations, windowsReplicaCipher }: {
-    createRelayOwner: typeof CreateRelayOwner; createShareCreations: typeof CreateShareCreations;
-    windowsReplicaCipher: typeof WindowsReplicaCipher
+  const { createRelayOwner, createShareCreations }: {
+    createRelayOwner: typeof CreateRelayOwner; createShareCreations: typeof CreateShareCreations
   } = require("./relay-owner.ts");
   const { createNativeReplicaFiles }: { createNativeReplicaFiles: typeof CreateNativeReplicaFiles } = require("./native-replica-files.ts");
   const setupWindow = createRelaySetupWindow(BrowserWindow, root, RELAY_SETUP_ORIGIN);
@@ -1874,7 +1873,6 @@ const relaySetup = COLLAB_UI ? (() => {
     return win && !win.isDestroyed() ? win : null;
   }
   return {
-    replicaCipher: windowsReplicaCipher(bytes => safeStorage.decryptString(bytes)),
     serve: setupWindow.serve,
     trusts: setupWindow.trusts,
     status: (event: DesktopIpcEvent) => tabWindow(event) ? owner.status() : { address: null },
@@ -1895,8 +1893,12 @@ const relaySetup = COLLAB_UI ? (() => {
       if (!tab) return false;
       if (!args.length) return tab.shared ?? null;
       const reference = normalizeSharedReference(args[0]);
-      if (args.length !== 1 || (!reference && args[0] !== null)) return false;
       const previous = tab.shared;
+      if (args.length === 2 && args[0] === null) {
+        const expected = normalizeSharedReference(args[1]);
+        if (!expected || previous?.deployment !== expected.deployment || previous.script !== expected.script
+          || previous.address !== expected.address) return false;
+      } else if (args.length !== 1 || (!reference && args[0] !== null)) return false;
       if (reference) tab.shared = reference;
       else delete tab.shared;
       if (await persistShellState()) return true;
@@ -1945,8 +1947,8 @@ function dialogParentFor(event: DesktopIpcEvent) {
 }
 
 function launchIntentFor(tab: DesktopMainTab) {
-  if (COLLAB_UI && tab.shared) return { type: "blank" as const };
   if (draftsHasDraft(tab.id)) return { type: "restore-draft" };
+  if (COLLAB_UI && tab.shared) return { type: "blank" as const };
   if (tab.source.kind === "file" && tab.pendingPayload) return { type: "open-file" };
   return { type: "blank" };
 }
@@ -1973,7 +1975,7 @@ function nativeReplicaForDevice(sender: Electron.WebContents, request: unknown,
   if (!Array.isArray(request) || typeof request[1] !== "string" || !request[1].includes("/")) {
     throw new TypeError("Native replica requests require deployment and script identities.");
   }
-  handleReplica ??= createNativeReplicaIpc(app.getPath("userData"), readNativeMembership, undefined, relaySetup?.replicaCipher ?? {
+  handleReplica ??= createNativeReplicaIpc(app.getPath("userData"), readNativeMembership, undefined, {
     encrypt(token) {
       if (!safeStorage.isEncryptionAvailable() || safeStorage.getSelectedStorageBackend?.() === "basic_text") {
         throw new Error("The operating system key store is unavailable.");

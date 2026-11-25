@@ -311,7 +311,7 @@ export interface DesktopIpcContract {
   "splitpage:relay-owner-clear": DesktopChannelCall<[], boolean>;
   "splitpage:relay-owner-share-create": DesktopChannelCall<Parameters<ShareScriptControls["create"]>, ShareScriptCreation>;
   "splitpage:relay-owner-share-abandon": DesktopChannelCall<[creationId: string], boolean>;
-  "splitpage:relay-owner-resume": DesktopChannelCall<[reference: [] | [DesktopSharedScriptReference | null]], DesktopSharedScriptReference | null | boolean>;
+  "splitpage:relay-owner-resume": DesktopChannelCall<[reference: [] | [DesktopSharedScriptReference | null] | [null, DesktopSharedScriptReference]], DesktopSharedScriptReference | null | boolean>;
   "splitpage:relay-owner-sharing": DesktopChannelCall<[operation: string, name: string, lease: string, address: string], NativeReplicaReply>;
   "splitpage:relay-owner-share-complete": DesktopChannelCall<[creationId: string], boolean>;
   "splitpage:relay-setup-save": DesktopChannelCall<[address: string, secret: string], RelaySetupSave>;

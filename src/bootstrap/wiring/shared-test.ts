@@ -27,6 +27,7 @@ import { readInvitationSnapshot } from "../../adapters/collab/native/invitation-
 import { captureDocumentOpeningLifetime } from "./transition-owners.ts";
 import { waitDuringLifetime } from "../startup/page-lifetime.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
+import { startDesktopSharedResume } from "./desktop-shared-resume.ts";
 
 declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
@@ -87,7 +88,7 @@ function sharedTestBytes(state: string | Uint8Array | ArrayBuffer): Uint8Array {
   return state instanceof ArrayBuffer ? new Uint8Array(state.slice(0)) : Uint8Array.from(state);
 }
 
-function startSharedTestHook(): () => void {
+function startSharedSession() {
   let detached: Detached | null = null;
   let nativePeer: ReturnType<typeof createNativeTestPeer> | null = null;
   let switching = false, composing = false, live = true, detachRefused: string | null = null;
@@ -213,87 +214,71 @@ function startSharedTestHook(): () => void {
     splitpageInvitation = null;
     void joinInvitation(invitation);
   }
-  async function resumeDesktop(): Promise<void> {
-    const read = desktopPort()?.sharedReference;
-    const ready = startupReady();
-    if (!read || !ready) return;
-    const reference = await read([]);
-    if (!reference || typeof reference !== "object") return;
-    const lifetime = invitationLifetime.signal;
-    await waitDuringLifetime(ready, lifetime);
-    await waitDuringLifetime(captureDocumentOpeningLifetime().settled, lifetime);
-    lifetime.throwIfAborted();
-    const endpoint = new URL(reference.address);
-    endpoint.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:";
-    const { deployment, script } = reference;
-    const outcome = await enter(undefined, { deployment, script, relayUrl: endpoint.href, signal: lifetime });
-    if (!outcome.ok && !lifetime.aborted) {
-      report(new Error("Could not resume the retained script: " + outcome.reason));
-      notices.show("Could not reopen the local shared script.", "warn", true);
-    }
+  if (typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) {
+    withdraw = exposeSharedTestControls();
   }
-  if (typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI) {
-    void resumeDesktop().catch(error => { if (!invitationLifetime.signal.aborted) report(error); });
-  }
-
-  const hook = {
-    enter: () => enter(),
-    enterFrom: (state: string | Uint8Array | ArrayBuffer) => enter(sharedTestBytes(state)),
-    snapshot: () => nativePeer?.snapshot(),
-    leave,
-    enterRetained: (retained: RetainedSharedScript, cancellation?: AbortSignal) => {
-      if (!live || desktopPort()) return enter(undefined, retained);
-      const opening = captureDocumentOpeningLifetime();
-      return enter(undefined, retained, AbortSignal.any([
-        invitationLifetime.signal, opening.signal, ...(cancellation ? [cancellation] : [])
-      ]));
-    },
-    invitationConnected: () => invitationConnected,
-    invitationSettled: () => invitationSettled,
-    nativePeer: {
-      type: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["type"]>) => nativePeer?.type(...args),
-      field: (...args: Parameters<NonNullable<typeof nativePeer>["field"]>) => nativePeer?.field(...args),
-      join: (lower: string, upper: string) => nativePeer?.join(lower, upper),
-      unjoin: (lower: string) => nativePeer?.unjoin(lower),
-      split: (beat: string, offset: number) => nativePeer?.split(beat, offset),
-      createFirstBeat: (narration?: string) => nativePeer?.createFirstBeat(narration),
-      removeBeat: (id: string) => nativePeer?.removeBeat(id),
-      replaceAll: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["replaceAll"]>) => nativePeer?.replaceAll(...args),
-      undoPeer: () => nativePeer?.undoPeer(),
-      redoPeer: () => nativePeer?.redoPeer(),
-      titleType: (offset: number, text: string) => nativePeer?.titleType(offset, text),
-      titleDelete: (from: number, to: number) => nativePeer?.titleDelete(from, to),
-      titleReplace: (from: number, to: number, text: string) => nativePeer?.titleReplace(from, to, text),
-      seedReader: () => nativePeer?.seedReader(),
-      readLateReader: () => nativePeer?.readLateReader() ?? null,
-      typeReader: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["typeReader"]>) =>
-        nativePeer?.typeReader(...args) ?? null,
-      undoReader: () => nativePeer?.undoReader() ?? null,
-      queuedReaderUpdates: () => nativePeer?.queuedReaderUpdates() ?? [],
-      deliverReaderUpdates: () => nativePeer?.deliverReaderUpdates() ?? [],
-      deliverToReader: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["deliverToReader"]>) =>
-        nativePeer?.deliverToReader(...args) ?? false,
-      freshSnapshot: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["freshSnapshot"]>) =>
-        nativePeer?.freshSnapshot(...args) ?? null,
-      moveBeat: (...args: Parameters<NonNullable<typeof nativePeer>["moveBeat"]>) => nativePeer?.moveBeat(...args),
-      removeComment: (id: string) => nativePeer?.removeComment(id),
-      registry: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["registry"]>) => nativePeer?.registry(...args),
-      format: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["format"]>) => nativePeer?.format(...args),
-      hold: (mode?: "updates") => nativePeer?.hold(mode),
-      queuedUpdates: () => nativePeer?.queuedUpdates(),
-      drain: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["drain"]>) => nativePeer?.drain(...args),
-      release: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["release"]>) => nativePeer?.release(...args),
-      deliver: () => nativePeer?.deliver(),
-      reviewOfflineChanges: () => {
-        if (nativePeer) collaborationState().setOfflineClashes(nativePeer.offlineNotice());
+  function exposeSharedTestControls(): () => void {
+    let remove = (): void => {};
+    const hook = {
+      enter: () => enter(),
+      enterFrom: (state: string | Uint8Array | ArrayBuffer) => enter(sharedTestBytes(state)),
+      snapshot: () => nativePeer?.snapshot(),
+      leave,
+      enterRetained: (retained: RetainedSharedScript, cancellation?: AbortSignal) => {
+        if (!live || desktopPort()) return enter(undefined, retained);
+        const opening = captureDocumentOpeningLifetime();
+        return enter(undefined, retained, AbortSignal.any([
+          invitationLifetime.signal, opening.signal, ...(cancellation ? [cancellation] : [])
+        ]));
       },
-      step: (direction: "undo" | "redo") => nativePeer?.step(direction),
-      delete: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["delete"]>) => nativePeer?.delete(...args)
-    },
-    read: () => ({ app: documentReader.read(doc => doc ? JSON.parse(JSON.stringify(doc)) as unknown : null), peer: nativePeer?.read() ?? null })
-  };
-  exposeTestHook("__sharedTest", () => hook, release => { withdraw = release; });
-  return () => {
+      invitationConnected: () => invitationConnected,
+      invitationSettled: () => invitationSettled,
+      nativePeer: {
+        type: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["type"]>) => nativePeer?.type(...args),
+        field: (...args: Parameters<NonNullable<typeof nativePeer>["field"]>) => nativePeer?.field(...args),
+        join: (lower: string, upper: string) => nativePeer?.join(lower, upper),
+        unjoin: (lower: string) => nativePeer?.unjoin(lower),
+        split: (beat: string, offset: number) => nativePeer?.split(beat, offset),
+        createFirstBeat: (narration?: string) => nativePeer?.createFirstBeat(narration),
+        removeBeat: (id: string) => nativePeer?.removeBeat(id),
+        replaceAll: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["replaceAll"]>) => nativePeer?.replaceAll(...args),
+        undoPeer: () => nativePeer?.undoPeer(),
+        redoPeer: () => nativePeer?.redoPeer(),
+        titleType: (offset: number, text: string) => nativePeer?.titleType(offset, text),
+        titleDelete: (from: number, to: number) => nativePeer?.titleDelete(from, to),
+        titleReplace: (from: number, to: number, text: string) => nativePeer?.titleReplace(from, to, text),
+        seedReader: () => nativePeer?.seedReader(),
+        readLateReader: () => nativePeer?.readLateReader() ?? null,
+        typeReader: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["typeReader"]>) =>
+          nativePeer?.typeReader(...args) ?? null,
+        undoReader: () => nativePeer?.undoReader() ?? null,
+        queuedReaderUpdates: () => nativePeer?.queuedReaderUpdates() ?? [],
+        deliverReaderUpdates: () => nativePeer?.deliverReaderUpdates() ?? [],
+        deliverToReader: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["deliverToReader"]>) =>
+          nativePeer?.deliverToReader(...args) ?? false,
+        freshSnapshot: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["freshSnapshot"]>) =>
+          nativePeer?.freshSnapshot(...args) ?? null,
+        moveBeat: (...args: Parameters<NonNullable<typeof nativePeer>["moveBeat"]>) => nativePeer?.moveBeat(...args),
+        removeComment: (id: string) => nativePeer?.removeComment(id),
+        registry: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["registry"]>) => nativePeer?.registry(...args),
+        format: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["format"]>) => nativePeer?.format(...args),
+        hold: (mode?: "updates") => nativePeer?.hold(mode),
+        queuedUpdates: () => nativePeer?.queuedUpdates(),
+        drain: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["drain"]>) => nativePeer?.drain(...args),
+        release: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["release"]>) => nativePeer?.release(...args),
+        deliver: () => nativePeer?.deliver(),
+        reviewOfflineChanges: () => {
+          if (nativePeer) collaborationState().setOfflineClashes(nativePeer.offlineNotice());
+        },
+        step: (direction: "undo" | "redo") => nativePeer?.step(direction),
+        delete: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["delete"]>) => nativePeer?.delete(...args)
+      },
+      read: () => ({ app: documentReader.read(doc => doc ? JSON.parse(JSON.stringify(doc)) as unknown : null), peer: nativePeer?.read() ?? null })
+    };
+    exposeTestHook("__sharedTest", () => hook, release => { remove = release; });
+    return remove;
+  }
+  const dispose = () => {
     live = false;
     enterCreated = null;
     invitationLifetime.abort();
@@ -303,15 +288,19 @@ function startSharedTestHook(): () => void {
       withdraw();
     }
   };
+  return { resume: (entry: RetainedSharedScript) => enter(undefined, entry), dispose };
 }
 
-const startForTest = typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS ||
-  (typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI) ? startSharedTestHook : null;
+const start = typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS ||
+  (typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI) ? startSharedSession : null;
 let stopHook: (() => void) | null = null;
 
 export function mountSharedSessionFeature(): void {
   stopSharedSessionFeature();
-  stopHook = startForTest?.() ?? null;
+  const session = start?.();
+  if (!session) return;
+  const stopResume = startDesktopSharedResume(session.resume);
+  stopHook = () => { stopResume(); session.dispose(); };
 }
 
 export function stopSharedSessionFeature(): void {

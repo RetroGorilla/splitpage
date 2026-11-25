@@ -210,7 +210,10 @@ export function createCollaborationState(): CollaborationState {
       if (!current.active) return;
       update({ ...current, pictures: freezePictures(pictures) });
     },
-    clearRefusal() { if (current.refusal) update({ ...current, refusal: null }); },
+    clearRefusal() {
+      if (!current.active) return;
+      if (current.refusal) update({ ...current, refusal: null });
+    },
     setRefusal(reason) {
       if (!current.active) return;
       update({

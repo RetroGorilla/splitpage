@@ -52,8 +52,8 @@ function setup() {
     collaboration: collab,
     collaborationItem: {
       group: "Collaborate",
-      standalone: { id: "share-script", label: "Share this script?", available: () => true },
-      shared: [{ id: "sharing-and-people", label: "Sharing & people?" }, { id: "leave-shared-script", label: "Leave shared script" }]
+      standalone: { id: "share-script", label: "Share this script…", available: () => true },
+      shared: [{ id: "sharing-and-people", label: "Sharing & people…" }, { id: "leave-shared-script", label: "Leave shared script" }]
     }
   };
   const menu = startFileMenu(ports);

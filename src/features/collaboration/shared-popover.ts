@@ -27,7 +27,7 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
       <p class="modal-hint" id="shared-copy-hint" hidden>Use Reset link to create a copyable link on this computer.</p>
       <button type="button" class="mi" data-sharing="reset">Reset link</button>
       <button type="button" class="mi" data-sharing="promote" hidden>Manage sharing on this computer</button>
-      <button type="button" class="mi" data-sharing="save">Save a copy?</button>
+      <button type="button" class="mi" data-sharing="save">Save a copy…</button>
       <button type="button" class="mi" data-sharing="leave">Leave</button>
       <button type="button" class="mi" data-sharing="stop" aria-describedby="shared-stop-hint">Stop sharing</button>
       <p class="modal-hint" id="shared-stop-hint" hidden>Connect to the relay to stop sharing.</p>
@@ -68,9 +68,9 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
       document.body.append(panel);
     }
     const online = snapshot.relay.connected && snapshot.relay.firstSyncDone;
-    const summary = snapshot.refusal ? "Access removed ? local work kept" : online ? "Connected" : "Offline";
+    const summary = snapshot.refusal ? "Access removed · local work kept" : online ? "Connected" : "Offline";
     dot.style.backgroundColor = online ? "var(--ok)" : "currentColor";
-    pill.setAttribute("aria-label", "Shared ? " + summary);
+    pill.setAttribute("aria-label", "Shared · " + summary);
     connection.textContent = summary;
     const membership = ports.membership();
     const owner = membership?.role === "owner" && !snapshot.refusal;
@@ -104,8 +104,8 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
     status.textContent = "";
     panel.showPopover();
     const anchor = pill.getBoundingClientRect();
-    panel.style.left = Math.max(8, Math.min(anchor.right - panel.offsetWidth, innerWidth - panel.offsetWidth - 8)) + "px";
-    panel.style.top = Math.min(anchor.bottom + 8, Math.max(8, innerHeight - panel.offsetHeight - 8)) + "px";
+    panel.style.left = Math.max(8, Math.min(anchor.right - panel.offsetWidth, window.innerWidth - panel.offsetWidth - 8)) + "px";
+    panel.style.top = Math.min(anchor.bottom + 8, Math.max(8, window.innerHeight - panel.offsetHeight - 8)) + "px";
     sync();
     if (ports.membership()?.role === "owner" && ports.membership()?.link && ports.collaboration.snapshot().relay.connected) {
       void run(() => ports.manage("check-link"), "Could not check the guest link.");

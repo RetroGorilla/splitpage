@@ -68,6 +68,7 @@ test("test hooks and invitation handling are selected independently", () => {
   assert.ok(leakedCollaboration(collaborationOnly).includes("splitpageInvitation"));
   assert.ok(leakedCollaboration(collaborationOnly).includes("settings-collaboration"));
   assert.ok(leakedCollaboration(collaborationOnly).includes("share-script-modal"));
+  assert.match(collaborationOnly, /Could not reopen the local shared script/);
   assert.match(collaborationOnly, /connect-src 'self' https: http: wss:;/);
   assert.ok(!leakedHooks(collaborationOnly).includes("__sharedTest"));
 });

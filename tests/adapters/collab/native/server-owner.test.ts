@@ -755,6 +755,45 @@ test("storage upgrade from version 3 rolls back atomically on failure", async t 
   assert.equal(verifyDatabase(unchanged), 3);
 });
 
+test("HEAD checks a guest link, marks first use synchronously, and keeps invitation tokens out of the logs",
+  { timeout: 30_000 }, async t => {
+    const kit = serverHarness(t);
+    const secret = randomBytes(32).toString("base64url");
+    const deployment = "guest-link-fixture";
+    const run = kit.launch({ SPLITPAGE_MANAGEMENT_SECRET: secret, SPLITPAGE_DEPLOYMENT_ID: deployment });
+    const created = await run.createScriptWithCredentials(randomUUID(), kit.seed(), secret);
+    assert.ok(created.owner && created.guest);
+    const { scriptId, owner, guest } = created;
+    const script = `scripts/${scriptId}`;
+    const status = async () => {
+      const response = await run.owner("scripts", {}, secret);
+      assert.equal(response.status, 200);
+      const scripts = await response.json() as { id: string; untouched: boolean }[];
+      return scripts.find(item => item.id === scriptId)?.untouched;
+    };
+    const check = (token: string) => run.owner(script + "/link", { method: "HEAD" }, token);
+    assert.equal(await status(), true);
+
+    const accepted = await check(guest.token);
+    assert.equal(accepted.status, 204);
+    assert.equal(accepted.headers.get("Splitpage-Deployment"), deployment);
+    assert.equal(accepted.headers.get("Cache-Control"), "no-store");
+    assert.equal(await status(), false);
+
+    const reset = await run.owner(script + "/reset", { method: "POST" }, owner.token);
+    assert.equal(reset.status, 200);
+    const replacement = await reset.json() as { token: string };
+    assert.equal((await check(guest.token)).status, 403);
+    assert.equal((await check(replacement.token)).status, 204);
+    assert.equal((await run.owner(script, { method: "DELETE" }, owner.token)).status, 204);
+    assert.equal((await check(replacement.token)).status, 403);
+    await run.stop("clean");
+    const logs = run.output() + run.errors();
+    for (const token of [secret, guest.token, owner.token, replacement.token]) {
+      assert.equal(logs.includes(token), false, "relay logs do not contain credentials");
+    }
+  });
+
 test("guest refusal, reset link preserving two owners, old/new guest tokens, owner delete and no CORS on owner endpoints",
   { timeout: 30_000 }, async t => {
     const kit = serverHarness(t);

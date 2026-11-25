@@ -414,8 +414,9 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
               release();
               managing = false;
             }
-            if (stopSharing && sessionCurrent() && !(await leaveRetainedSharedScript()).ok) {
-              throw new Error("Could not leave the shared script.");
+            if (stopSharing && sessionCurrent()) {
+              const left = await leaveRetainedSharedScript().catch(() => null);
+              if (!left?.ok) notices.show("Sharing ended. This computer could not finish cleaning up the local shared copy.", "warn", true);
             }
           }
         } satisfies RetainedSharingControls;

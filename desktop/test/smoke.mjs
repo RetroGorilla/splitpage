@@ -2956,6 +2956,7 @@ async function caseShareScript(target, fixturesDir) {
   });
   let app, setup, second, guest, restarted;
   const copyPath = path.join(fixturesDir, "shared-export.splitpage");
+  const stoppedPath = path.join(fixturesDir, "stopped-sharing.splitpage");
   function relayMessage(matches) {
     return new Promise((resolve, reject) => {
       const timer = setTimeout(() => {
@@ -3114,7 +3115,7 @@ async function caseShareScript(target, fixturesDir) {
     await pollNode(() => fs.existsSync(copyPath));
     record(tag + ": Save a copy writes a script with the shared content", fs.readFileSync(copyPath, "utf8").includes("Original narration"));
 
-    second = await launchApp(target, { label: "share-second", fixtures: [fixture] });
+    second = await launchApp(target, { label: "share-second", fixtures: [fixture], dialogs: [stoppedPath] });
     guest = await launchApp(target, { label: "share-guest", fixtures: [fixture] });
     await Promise.all([contains(second, "Original narration"), contains(guest, "Original narration")]);
     await Promise.all([join(second, link), join(guest, link)]);
@@ -3173,6 +3174,11 @@ async function caseShareScript(target, fixturesDir) {
     record(tag + ": Stop sharing confirms the effect and keeps an unsaved local script while the other owner loses access",
       stopText.includes("everyone") && stopText.includes("stay on this device")
         && await poll(second.cdp, "document.getElementById('btn-save').dataset.dirty === 'true'"));
+    await evalPage(second.cdp, "window.__desktopTest.runMenuCommand('save')", { awaitPromise: false });
+    await pollNode(() => fs.existsSync(stoppedPath));
+    await poll(second.cdp, "document.getElementById('btn-save').dataset.dirty === 'false'");
+    const tabId = await evalPage(second.cdp, "window.splitpageDesktop.tabId");
+    await pollNode(() => !readDraftDirs(second.userDataDir)[tabId]?.current);
     await evalPage(second.cdp, "document.querySelector('#btn-file').click()");
     await evalPage(second.cdp, "document.querySelector('[data-file-action=share-script]').click()");
     await poll(second.cdp, "document.querySelector('[data-share=start]:not([hidden])')");
@@ -3185,6 +3191,11 @@ async function caseShareScript(target, fixturesDir) {
     await evalPage(second.cdp, "document.querySelector('[data-share=close]').click()");
     await poll(second.cdp, connected);
     await openPopover(second.cdp);
+    const localState = path.join(second.userDataDir, "Local State");
+    await pollNode(() => {
+      const prefs = JSON.parse(fs.readFileSync(localState, "utf8"));
+      return typeof prefs.os_crypt?.encrypted_key === "string" && prefs.os_crypt.encrypted_key.length > 0;
+    }, 30000);
     const armed = relayMessage(message => message === "delete-reply-armed");
     relay.send("hold-delete-reply");
     await armed;

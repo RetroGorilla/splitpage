@@ -3,11 +3,9 @@
 import type { NativeMembershipRecord } from "../shared/native-replica.d.ts";
 import type * as NodeFs from "node:fs";
 import type * as NodePath from "node:path";
-import type * as NodeChildProcess from "node:child_process";
 import type * as NodeCrypto from "node:crypto";
 import type { RelayConnectionCheck, RelaySetupSave, ShareScriptCreation } from "../shared/desktop-contract.d.ts";
 
-const { execFile }: typeof NodeChildProcess = require("node:child_process");
 const fs: typeof NodeFs = require("node:fs");
 const { join }: typeof NodePath = require("node:path");
 const { createHash, randomUUID }: typeof NodeCrypto = require("node:crypto");
@@ -56,40 +54,6 @@ function relayOrigin(address: string, testBuild: boolean): string | null {
 
 function validSecret(secret: string): boolean {
   return /^[\x20-\x7e]{1,4096}$/.test(secret) && secret.trim() === secret;
-}
-
-function windowsReplicaCipher(decryptLegacy: (bytes: Buffer) => string) {
-  if (process.platform !== "win32") return undefined;
-  const prefix = Buffer.from("DPAPI\0");
-  const system = process.env.SystemRoot || process.env.windir;
-  const powershell = system && join(system, "System32", "WindowsPowerShell", "v1.0", "powershell.exe");
-
-  // why: a fresh Electron profile can lose its pending key-store preferences if it stops before Chromium writes them
-  function protect(operation: "Protect" | "Unprotect", bytes: Buffer): Promise<Buffer> {
-    if (!powershell) return Promise.reject(new Error("The Windows credential store is unavailable."));
-    const command = "$ErrorActionPreference='Stop'; Add-Type -AssemblyName System.Security; " +
-      "$bytes=[Convert]::FromBase64String([Console]::In.ReadToEnd()); " +
-      `$result=[Security.Cryptography.ProtectedData]::${operation}($bytes,$null,'CurrentUser'); ` +
-      "[Console]::Out.Write([Convert]::ToBase64String($result))";
-    return new Promise((resolve, reject) => {
-      const child = execFile(powershell, ["-NoProfile", "-NonInteractive", "-Command", command],
-        { windowsHide: true, timeout: 10_000, maxBuffer: 64_000 }, (error, stdout) => {
-          const encoded = stdout.trim();
-          if (error || !/^[A-Za-z0-9+/]+={0,2}$/.test(encoded)) reject(new Error("Could not use the Windows credential store."));
-          else resolve(Buffer.from(encoded, "base64"));
-        });
-      child.stdin?.on("error", () => {});
-      child.stdin?.end(bytes.toString("base64"));
-    });
-  }
-
-  return {
-    async encrypt(value: string) { return Buffer.concat([prefix, await protect("Protect", Buffer.from(value, "utf8"))]); },
-    async decrypt(bytes: Buffer) {
-      if (!bytes.subarray(0, prefix.length).equals(prefix)) return decryptLegacy(bytes);
-      return (await protect("Unprotect", bytes.subarray(prefix.length))).toString("utf8");
-    }
-  };
 }
 
 function createRelayOwner(userData: string, keyStore: {
@@ -386,5 +350,5 @@ function createShareCreations(userData: string, owner: ReturnType<typeof createR
   return { create, abandon, complete, recover, retryAbandons };
 }
 
-export type { createRelayOwner, createShareCreations, windowsReplicaCipher };
-module.exports = { createRelayOwner, createShareCreations, windowsReplicaCipher };
+export type { createRelayOwner, createShareCreations };
+module.exports = { createRelayOwner, createShareCreations };

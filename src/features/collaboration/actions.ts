@@ -2,7 +2,7 @@ import type { ActionDefinition } from "../../application/actions.ts";
 import { availableUnless, OPENS_A_DIALOG } from "../../application/screen.ts";
 import type { ShareActionPorts } from "./ports.ts";
 
-export const SHARING_COMMAND = { id: "sharing-and-people", label: "Sharing & people?" } as const;
+export const SHARING_COMMAND = { id: "sharing-and-people", label: "Sharing & people…" } as const;
 export const LEAVE_SHARED_COMMAND = { id: "leave-shared-script", label: "Leave shared script" } as const;
 
 export const SHARE_SCRIPT_COMMAND = { id: "share-script", label: "Share this script…" } as const;
