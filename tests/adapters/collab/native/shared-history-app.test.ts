@@ -180,7 +180,7 @@ test("shared history reads relay versions, saves a separate file, and restores a
 
   const relay = collaborationState().snapshot().relay;
   collaborationState().setRelay({ ...relay, connected: false });
-  await wait(() => /You’re offline/.test(list.textContent ?? ""));
+  await wait(() => /You are offline\./.test(list.textContent ?? ""));
   assert.equal(list.querySelectorAll("[data-shared-version]").length, 0);
   click("#history-close");
   assert.deepEqual(await hook.leave(), { ok: true });

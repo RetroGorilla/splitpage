@@ -4,7 +4,7 @@ import { escapeHtml, storedImageMarkup } from "../../core/document/text-policy.t
 import { normalizeImageRef } from "../../../shared/blob-policy.ts";
 import { toHtml } from "../../core/text/html.ts";
 
-const OFFLINE = "You’re offline. Connect to see shared versions.";
+const OFFLINE = "You are offline. Connect to see shared versions.";
 
 export function createSharedHistoryPanel(ports: SharedHistoryPanelPort, formatTime: (time: Date) => string,
   notice: NoticePort["show"], renderHistory: () => Promise<void>) {
@@ -45,8 +45,12 @@ export function createSharedHistoryPanel(ports: SharedHistoryPanelPort, formatTi
     return request.signal;
   }
 
+  function isCurrentRequest(signal: AbortSignal): boolean {
+    return !signal.aborted && visible() && ports.active() && ports.current() === source;
+  }
+
   function current(signal: AbortSignal): boolean {
-    return !signal.aborted && visible() && ports.current() === source && !!source?.online();
+    return isCurrentRequest(signal) && !!source?.online();
   }
 
   async function render() {
@@ -75,7 +79,7 @@ export function createSharedHistoryPanel(ports: SharedHistoryPanelPort, formatTi
           '</time><span>' + escapeHtml(who) + '</span></button></li>';
       }).join("") + '</ol>';
     } catch {
-      if (!signal.aborted && visible()) message(source?.online() ? "Could not load versions. Check your connection and reopen Version history." : OFFLINE);
+      if (isCurrentRequest(signal)) message(source?.online() ? "Could not load versions. Check your connection and reopen Version history." : OFFLINE);
     }
   }
 
@@ -107,7 +111,7 @@ export function createSharedHistoryPanel(ports: SharedHistoryPanelPort, formatTi
       list.querySelector<HTMLElement>("h3")?.focus();
       void opened.loadPictures(signal).catch(() => {});
     } catch {
-      if (!signal.aborted && visible()) {
+      if (isCurrentRequest(signal)) {
         const list = listElement();
         if (list) {
           message(from.online() ? "Could not open this version. Check your connection and try again." : OFFLINE);

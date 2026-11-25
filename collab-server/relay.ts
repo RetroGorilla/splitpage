@@ -115,15 +115,16 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       }
     },
     async store({ document, documentName, state }) {
+      let editorsStored: boolean;
       try {
-        versions.storeDocument(documentName, state, editingNames.get(document));
+        editorsStored = versions.storeDocument(documentName, state, editingNames.get(document));
       } catch (error) {
         lastStorageFailure = { at: new Date().toISOString(), reason: "document-store-failed" };
         if (shutdown) failShutdown("Relay shutdown failed. The last edits were not stored.");
         throw error;
       }
       editingNames.delete(document);
-      history.changed(documentName);
+      history.changed(documentName, editorsStored);
     }
   });
   function requireAccess(context: Admission): void {

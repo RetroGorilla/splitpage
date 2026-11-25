@@ -244,6 +244,42 @@ test("a version only consumes editor names through its stored generation, includ
   assert.deepEqual(store.editorNames(NAME), ["Ada", "Bea"]);
 });
 
+test("a failed editor names write preserves the live save and drops the failed names", async t => {
+  const kit = serverHarness(t);
+  kit.seed();
+  const run = kit.launch({ SPLITPAGE_VERSION_INTERVAL_MS: "100" });
+  const port = await run.port();
+  const { token } = kit.invitation();
+  const ada = kit.copy(port), bea = kit.copy(port);
+  await kit.until(() => ada.text() === "word" && bea.text() === "word" || undefined);
+  for (const [copy, name] of [[ada, "Ada"], [bea, "Bea"]] as const) {
+    copy.relay.publishPresence({ name, color: hashedPersonColor(name), view: "split", beat: null, side: null });
+  }
+  await kit.until(() => bea.peers().some(peer => peer.name === "Ada") &&
+    ada.peers().some(peer => peer.name === "Bea") || undefined);
+  using db = new DatabaseSync(join(kit.directory, DB_NAME), { timeout: 5000 });
+  db.exec(`CREATE TRIGGER reject_version_editor BEFORE INSERT ON version_editors
+    BEGIN SELECT RAISE(ROLLBACK, 'test attribution write failure'); END`);
+  appendText(ada.session, " saved", 4);
+  const first = await until(async () => (await history(run, token))[0]);
+  assert.equal(storedText(kit.directory), "word saved");
+  assert.deepEqual(await snapshot(run, `${HISTORY}/${first.id}`, token), storedState(kit.directory));
+  assert.deepEqual(first.names, []);
+  const reported = await status(run);
+  assert.equal(reported.lastVersionFailure?.reason, "version-editors-store-failed");
+  assert.equal(reported.lastStorageFailure, null);
+
+  db.exec("DROP TRIGGER reject_version_editor");
+  await kit.until(() => bea.text() === "word saved" || undefined);
+  appendText(bea.session, " again", 10);
+  const second = await until(async () => {
+    const [latest] = await history(run, token);
+    if (latest?.id !== first.id) return latest;
+  });
+  assert.equal(storedText(kit.directory), "word saved again");
+  assert.deepEqual(second.names, ["Bea"]);
+});
+
 test("version reads use invitation roles, clear untouched, and scope CORS to version routes", async t => {
   const kit = serverHarness(t);
   const state = kit.seed();

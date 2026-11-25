@@ -3,7 +3,6 @@ import { closeSync, mkdirSync, openSync } from "node:fs";
 import { join } from "node:path";
 import { DatabaseSync } from "node:sqlite";
 import { RelayError } from "./config.ts";
-import { PRESENCE_NAME_MAX } from "../shared/collaboration-presence.ts";
 
 export const DB_NAME = "relay.sqlite";
 export const BACKUP_LOCK_NAME = "relay-backup-lock.sqlite";
@@ -47,7 +46,7 @@ const PARENT_LINK = "parent_link TEXT REFERENCES invitations(id)";
 const V7_INVITATIONS_SCHEMA = V6_INVITATIONS_SCHEMA.replace(") STRICT", `, ${PARENT_LINK}) STRICT`);
 const DEVICE_INDEX = "CREATE INDEX script_device_credentials ON invitations(script) WHERE kind = 'device'";
 const V7_SCHEMAS = { ...V6_SCHEMAS, invitations: V7_INVITATIONS_SCHEMA };
-const VERSION_EDITORS_SCHEMA = `CREATE TABLE version_editors (script TEXT NOT NULL REFERENCES documents(name) ON DELETE CASCADE, name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND ${PRESENCE_NAME_MAX}), generation INTEGER NOT NULL CHECK (generation > 0), PRIMARY KEY (script, name)) STRICT`;
+const VERSION_EDITORS_SCHEMA = "CREATE TABLE version_editors (script TEXT NOT NULL REFERENCES documents(name) ON DELETE CASCADE, name TEXT NOT NULL CHECK (length(name) BETWEEN 1 AND 80), generation INTEGER NOT NULL CHECK (generation > 0), PRIMARY KEY (script, name)) STRICT";
 const CURRENT_SCHEMAS = { ...V7_SCHEMAS, version_editors: VERSION_EDITORS_SCHEMA };
 
 function schemasFor(version: number): Record<string, string> | undefined {

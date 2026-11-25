@@ -75,12 +75,18 @@ export function versionStorage(db: DatabaseSync) {
   }
 
   return {
-    storeDocument(script: string, state: Uint8Array, names: ReadonlySet<string> | undefined): void {
-      if (!names?.size) { writeDocument.run(script, state); return; }
-      transaction(db, () => {
-        writeDocument.run(script, state);
-        for (const name of names) markEditor.run(name, script);
-      });
+    storeDocument(script: string, state: Uint8Array, names: ReadonlySet<string> | undefined): boolean {
+      // why: an attribution failure must leave the live edit durable, even if SQLite rolls back the names transaction
+      writeDocument.run(script, state);
+      if (!names?.size) return true;
+      try {
+        transaction(db, () => {
+          for (const name of names) markEditor.run(name, script);
+        });
+        return true;
+      } catch {
+        return false;
+      }
     },
     editorNames: (script: string) => readEditors.all(script).map(row => String(row.name)).sort(),
     pending: () => pending.all().map(row => String(row.name)),

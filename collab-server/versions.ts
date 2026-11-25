@@ -9,7 +9,7 @@ import type { versionStorage } from "./version-storage.ts";
 
 export interface VersionFailureRecord {
   readonly at: string;
-  readonly reason: "snapshot-over-budget" | "version-store-failed" | "version-thin-failed";
+  readonly reason: "snapshot-over-budget" | "version-store-failed" | "version-thin-failed" | "version-editors-store-failed";
 }
 
 const compress = promisify(zstdCompress);
@@ -178,8 +178,9 @@ export function versionHistory(
       reclaimAt = 0;
       schedule();
     },
-    changed(script: string): void {
+    changed(script: string, editorsStored = true): void {
       if (stopped) return;
+      if (!editorsStored) report("version-editors-store-failed");
       pending.set(script, { due: pending.get(script)?.due ?? 0 });
       notice ??= setImmediate(() => {
         notice = undefined;
