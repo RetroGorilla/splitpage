@@ -1,3 +1,5 @@
+import { performance } from "node:perf_hooks";
+import { clearInterval, setInterval } from "node:timers";
 import { HocuspocusProvider } from "@hocuspocus/provider";
 import { readNativeOnce } from "../../../../src/adapters/collab/native/reader.ts";
 import { declareNativeRoots } from "../../../../src/adapters/collab/native/roots.ts";
