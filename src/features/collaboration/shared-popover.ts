@@ -124,7 +124,11 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
   pill.onclick = () => { if (panel.matches(":popover-open")) close(); else ports.open(); };
   button("close").onclick = close;
   button("save").onclick = () => { close(); ports.saveCopy(); };
-  button("leave").onclick = () => { void run(ports.leave, "Could not leave the shared script."); };
+  button("leave").onclick = () => {
+    if (busy) return;
+    close();
+    void run(ports.leave, "Could not leave the shared script.");
+  };
   button("copy").onclick = () => {
     void run(async () => {
       if (ports.collaboration.snapshot().relay.connected) await ports.manage("check-link");

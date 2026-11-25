@@ -5,6 +5,7 @@ import { startupReady } from "../../application/startup-signal.ts";
 import { waitDuringLifetime } from "../startup/page-lifetime.ts";
 import { captureDocumentOpeningLifetime } from "./transition-owners.ts";
 import { notices } from "./ports/effects.ts";
+import { RETAINED_SHARED_COPY_UNAVAILABLE } from "./retained-shared-script.ts";
 import type { RetainedSharedScript } from "./retained-shared-script.ts";
 import type { SharedSwitchOutcome } from "./shared-session.ts";
 
@@ -18,7 +19,9 @@ export async function resumeDesktopReference(
   const saved = await reference([]);
   if (!saved || typeof saved !== "object" || signal.aborted) return null;
   const outcome = await open(saved);
-  if (!outcome.ok && !signal.aborted) await reference([null, saved]).catch(() => false);
+  if (!outcome.ok && outcome.reason === RETAINED_SHARED_COPY_UNAVAILABLE && !signal.aborted) {
+    await reference([null, saved]).catch(() => false);
+  }
   return outcome;
 }
 
@@ -32,7 +35,10 @@ function startResume(enter: (entry: RetainedSharedScript) => Promise<SharedSwitc
     await waitDuringLifetime(ready, signal);
     await waitDuringLifetime(captureDocumentOpeningLifetime().settled, signal);
     signal.throwIfAborted();
-    const endpoint = new URL(address);
+    let endpoint: URL;
+    try { endpoint = new URL(address); }
+    catch { return { ok: false, reason: RETAINED_SHARED_COPY_UNAVAILABLE }; }
+    if (endpoint.protocol !== "https:" && endpoint.protocol !== "http:") return { ok: false, reason: RETAINED_SHARED_COPY_UNAVAILABLE };
     endpoint.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:";
     return enter({ deployment, script, relayUrl: endpoint.href, signal });
   }, signal).then(outcome => {

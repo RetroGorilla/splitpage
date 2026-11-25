@@ -11,16 +11,27 @@ export function loadSharedExportPictures(hashes: readonly string[]) {
   return loadPictures?.(hashes);
 }
 
-export function bindSharedPictures(copy: Copy, origin: string, script: string, token: string, cancel?: AbortSignal) {
+export function bindSharedPictures(copy: Copy, origin: string, script: string, token: string, cancel?: AbortSignal, stallMs = 30_000) {
   const session = copy.session;
   let required: readonly string[] = [];
   let changed: (() => void) | undefined;
   let scheduled: ReturnType<typeof setTimeout> | undefined;
   let stopped = false;
+  let watchdog: ReturnType<typeof setTimeout> | undefined;
+  let stalled = false;
+  const progress = () => {
+    if (watchdog === undefined) return;
+    clearTimeout(watchdog);
+    watchdog = setTimeout(stall, stallMs);
+  };
+  function stall() {
+    stalled = true;
+    stop();
+  }
   const pictures = startSharedPictures(sharedPictureHttp(origin, script, token), blobStore, () => {
     if (typeof document !== "undefined") repaintSharedPictures();
     changed?.();
-  });
+  }, progress);
 
   function scan() {
     clearTimeout(scheduled);
@@ -40,6 +51,8 @@ export function bindSharedPictures(copy: Copy, origin: string, script: string, t
     if (stopped) return;
     stopped = true;
     clearTimeout(scheduled);
+    clearTimeout(watchdog);
+    watchdog = undefined;
     unsubscribe();
     hidePending?.();
     pictures.stop();
@@ -65,23 +78,31 @@ export function bindSharedPictures(copy: Copy, origin: string, script: string, t
       hidePending ??= showSharedPicturePending(() => true);
       loadPictures = pictures.prepareExport;
     },
+    stalled: () => stalled,
     async hydrate() {
-      while (!stopped && !pictures.refused()) {
-        scan();
-        if (pictures.rejected(required) || pictures.storageFailed(required)) return false;
-        if (!pictures.ready(required)) {
-          await new Promise<void>(resolve => { changed = resolve; });
-          changed = undefined;
-          continue;
-        }
-        const revision = session.revision();
-        if (copy.flush) {
-          if ((await copy.flush()).kind !== "stored") return false;
-        }
-        if (stopped || pictures.refused()) return false;
-        if (revision === session.revision()) return true;
-      }
-      return false;
+      if (stopped) return false;
+      watchdog = setTimeout(stall, stallMs);
+      try { return await hydrate(); }
+      finally { clearTimeout(watchdog); watchdog = undefined; }
     }
   };
+
+  async function hydrate() {
+    while (!stopped && !pictures.refused()) {
+      scan();
+      if (pictures.rejected(required) || pictures.storageFailed(required)) return false;
+      if (!pictures.ready(required)) {
+        await new Promise<void>(resolve => { changed = resolve; });
+        changed = undefined;
+        continue;
+      }
+      const revision = session.revision();
+      if (copy.flush) {
+        if ((await copy.flush()).kind !== "stored") return false;
+      }
+      if (stopped || pictures.refused()) return false;
+      if (revision === session.revision()) return true;
+    }
+    return false;
+  }
 }

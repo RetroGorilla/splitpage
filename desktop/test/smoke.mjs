@@ -3042,6 +3042,9 @@ async function caseShareScript(target, fixturesDir) {
     const available = await evalPage(cdp, "!!document.querySelector('#file-menu [data-file-action=share-script]:not([hidden])')");
     record(tag + ": standalone desktop has the Collaborate group and share action", available === true);
     if (!available) return;
+    record(tag + ": File menu can open the Join screen", await evalPage(cdp,
+      "document.querySelector('[data-file-action=join-script]').click(); !!document.querySelector('#join-script-link:not(:disabled)')"));
+    await evalPage(cdp, "document.querySelector('#join-script-modal [data-dialog-cancel]').click(); document.querySelector('#btn-file').click()");
     await evalPage(cdp, "document.querySelector('[data-file-action=share-script]').click()");
     await poll(cdp, "document.querySelector('#share-script-status')?.textContent === 'Sharing needs a relay.'");
     await evalPage(cdp, "document.querySelector('[data-share=settings]').click()");
@@ -3063,6 +3066,8 @@ async function caseShareScript(target, fixturesDir) {
     await poll(cdp, "document.getElementById('settings-modal').hidden");
     await evalPage(cdp, "document.querySelector('#btn-file').click(); document.querySelector('#menu-command').click()");
     await poll(cdp, "document.querySelector('#cmdk [data-cmd=share-script]')?.textContent.includes('Share this script')");
+    record(tag + ": command menu offers Join a shared script", await evalPage(cdp,
+      "document.querySelector('#cmdk [data-cmd=join-script]')?.textContent.includes('Join a shared script')"));
     await evalPage(cdp, "document.querySelector('#cmdk [data-cmd=share-script]').click()");
     await poll(cdp, "document.querySelector('[data-share=start]:not([hidden])')");
     await evalPage(cdp, "document.querySelector('[data-share=start]').click()");
@@ -3116,14 +3121,49 @@ async function caseShareScript(target, fixturesDir) {
     record(tag + ": Save a copy writes a script with the shared content", fs.readFileSync(copyPath, "utf8").includes("Original narration"));
 
     second = await launchApp(target, { label: "share-second", fixtures: [fixture], dialogs: [stoppedPath] });
-    guest = await launchApp(target, { label: "share-guest", fixtures: [fixture] });
-    await Promise.all([contains(second, "Original narration"), contains(guest, "Original narration")]);
+    const saved = path.join(fixturesDir, "guest-copy.splitpage");
+    guest = await launchApp(target, { label: "join-script", dialogs: [saved, "confirm"] });
+    const guestPage = guest.cdp;
+    await waitForRows(guestPage);
+    await evalPage(guestPage, "window.__onboarding.autoShowDecided()");
+    await evalPage(guestPage, "document.querySelector('#onboarding-modal:not([hidden]) [data-onboard-action=skip]')?.click()");
+    const entry = "#newtab-page [data-newtab-action=join-script]";
+    await poll(guestPage, "!document.querySelector('#newtab-page').hidden && !!document.querySelector(" + JSON.stringify(entry) + ")");
+    record(tag + ": New Tab opens the link input beside Open a file", await evalPage(guestPage,
+      "document.querySelector(" + JSON.stringify(entry) + ").click(); !!document.querySelector('#join-script-link:not(:disabled)')"));
+    try {
+      await evalPage(guestPage, "document.querySelector('#join-script-link').value=" + JSON.stringify(link.href) +
+        "; document.querySelector('#join-script-modal [type=submit]').click()");
+    } catch { record(tag + ": desktop submitted the link", false); return; }
+    await poll(guestPage, "document.querySelector('#join-script-summary h3')?.textContent === 'Sharing fixture'");
+    await evalPage(guestPage, "document.querySelector('#join-script-name').value='Guest Editor'; document.querySelector('#join-script-modal [type=submit]').click()");
+    try {
+      await poll(guestPage, "!document.querySelector('#join-script-modal') && window.__sharedTest.read().app?.title === 'Sharing fixture'");
+    } catch (error) {
+      const status = await evalPage(guestPage, "({ status: document.querySelector('#join-script-status')?.textContent, " +
+        "title: window.__sharedTest.read().app?.title, overlays: [...document.querySelectorAll('.modal-backdrop:not([hidden])')].map(node => node.id), " +
+        "name: localStorage.getItem('splitpage-comment-author'), newTab: !document.querySelector('#newtab-page').hidden })");
+      throw new Error("Desktop Join screen: " + JSON.stringify(status), { cause: error });
+    }
+    const guestReplica = path.join(guest.userDataDir, "native-replicas", crypto.createHash("sha256").update(name).digest("hex"));
+    record(tag + ": desktop joins the relay and saves encrypted membership",
+      fs.existsSync(path.join(guestReplica, "membership")) && !fs.readFileSync(path.join(guestReplica, "membership")).includes(link.hash.slice(1)));
+    await evalPage(guestPage, "document.querySelector('#btn-file').click(); document.querySelector('[data-file-action=leave-shared-script]').click()");
+    await poll(guestPage, "!!document.querySelector('#leave-script-modal [data-save-copy]')");
+    await evalPage(guestPage, "document.querySelector('#leave-script-modal [data-save-copy]').click()");
+    await poll(guestPage, "!document.querySelector('#leave-script-modal')");
+    record(tag + ": Save a copy first writes the project and Leave erases the retained replica and membership",
+      !fs.existsSync(guestReplica) && JSON.parse(fs.readFileSync(saved, "utf8")).title === "Sharing fixture");
+    await contains(second, "Original narration");
     await Promise.all([join(second, link), join(guest, link)]);
     await openPopover(guest.cdp);
     record(tag + ": a guest has no owner controls or promotion without setup", await evalPage(guest.cdp,
       `['copy','reset','stop','promote'].every(name => document.querySelector('[data-sharing="' + name + '"]').hidden)`));
     await openPopover(cdp);
-    const leaveText = await confirm(cdp, "leave", true);
+    await clickControl(cdp, "leave");
+    const leaveHint = "#leave-script-modal .modal-hint";
+    const leaveText = await poll(cdp, `document.querySelector(${JSON.stringify(leaveHint)})?.textContent`);
+    await evalPage(cdp, "document.querySelector('#leave-script-modal [data-leave-script]').click()");
     await poll(cdp, "!document.getElementById('shared-pill')");
     await pollNode(() => !fs.existsSync(replica));
     record(tag + ": owner Leave confirms the script stays shared and removes local credentials",

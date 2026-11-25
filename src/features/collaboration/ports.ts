@@ -1,3 +1,4 @@
+import type { Preferences } from "../../application/preferences/preferences.ts";
 import type { CollaborationReads, CollaborationState } from "../../application/collaboration/state.ts";
 import type { OfflineBeatReading, OfflineClashEntry } from "../../application/collaboration/offline-clashes.ts";
 import type { ShareAttemptResult } from "../../application/collaboration/share.ts";
@@ -35,4 +36,28 @@ export interface ShareActionPorts {
   readonly screen: () => ScreenState;
   readonly visible: () => boolean;
   readonly open: () => void;
+}
+
+export type JoinRequest = { readonly kind: "paste"; readonly link: string } |
+  { readonly kind: "browser"; readonly invitation: { readonly script: string; readonly token: string } | false };
+
+export interface JoinPreview {
+  readonly kind: "ready";
+  readonly title: string;
+  readonly beats: number;
+  readonly pictures: number;
+  readonly join: (signal: AbortSignal, progress: (remaining: number) => void) => Promise<string | null>;
+}
+
+export interface JoinDialogPorts {
+  readonly identity: Pick<Preferences, "myColor" | "setCommentAuthor" | "setMyColor">;
+  readonly editor: () => string;
+  readonly check: (request: JoinRequest, signal: AbortSignal) => Promise<JoinPreview | { readonly kind: "failed"; readonly reason: string }>;
+  readonly settled: () => void;
+}
+
+export interface LeaveDialogPorts {
+  readonly owner?: boolean;
+  readonly saveCopy: () => Promise<boolean>;
+  readonly leave: () => Promise<boolean>;
 }

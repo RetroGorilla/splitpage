@@ -231,7 +231,7 @@
     },
     {
       "label": "a refused entry flush answers the detach check instead of draft-not-kept",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "src/bootstrap/wiring/shared-entry.ts",
       "find": "  if (flushed.ok) return draftDetachRefusal();\n",
       "replace": "  if (flushed || true) return draftDetachRefusal();\n",
       "tests": [
@@ -240,7 +240,7 @@
     },
     {
       "label": "leaving keeps the landed copy clean, so the next flush discards the stored draft",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "src/bootstrap/wiring/shared-entry.ts",
       "find": "[() => { noteSaveChange(); }, () => { noteDraftChange(); }]",
       "replace": "[() => { noteDraftChange(); }]",
       "tests": [
@@ -249,7 +249,7 @@
     },
     {
       "label": "leaving does not resume the draft writer",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "src/bootstrap/wiring/shared-entry.ts",
       "find": "...(kept ? [() => { draftSource.resumeWriting(); }] : []), ",
       "replace": "",
       "tests": [
@@ -276,16 +276,16 @@
     },
     {
       "label": "stopping the app does not leave the shared session",
-      "file": "src/bootstrap/wiring/shared-test.ts",
-      "find": "    try { forceLeaveSharedSession(); } finally {",
-      "replace": "    try { void forceLeaveSharedSession; } finally {",
+      "file": "src/bootstrap/wiring/shared-entry.ts",
+      "find": "    try { forceLeaveSharedSession(); }",
+      "replace": "    try { void forceLeaveSharedSession; }",
       "tests": [
         "src/test/shared-native-handoff-app.test.mjs"
       ]
     },
     {
       "label": "a final draft detach refusal answers enter-failed with no notice",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "src/bootstrap/wiring/shared-entry.ts",
       "find": "      if (detachRefused) {",
       "replace": "      if (detachRefused && false) {",
       "tests": [
@@ -303,7 +303,7 @@
     },
     {
       "label": "route: the public leave answers ok without leaving",
-      "file": "src/bootstrap/wiring/shared-test.ts",
+      "file": "src/bootstrap/wiring/shared-entry.ts",
       "find": "    try { return leaveRunningSharedSession(); } finally { switching = false; }",
       "replace": "    try { return { ok: true }; } finally { switching = false; }",
       "tests": [

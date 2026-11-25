@@ -65,7 +65,7 @@ import { mountPreferenceWatchFeature, stopPreferenceWatchFeature } from "./wirin
 import { mountDocumentChromeFeature, stopDocumentChromeFeature } from "./wiring/document-chrome.ts";
 import { mountPanelListenersFeature, stopPanelListenersFeature } from "./wiring/panels.ts";
 import { mountSidePanelsFeature, stopSidePanelsFeature } from "./wiring/side-panels.ts";
-import { mountSharedSessionFeature, stopSharedSessionFeature } from "./wiring/shared-test.ts";
+import { mountSharedSessionFeature, stopSharedSessionFeature } from "./wiring/shared-startup.ts";
 import { setWriterDocumentObservers } from "./wiring/writer.ts";
 
 let running: (() => void) | null = null;

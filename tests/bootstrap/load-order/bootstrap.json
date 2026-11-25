@@ -2,6 +2,9 @@
   "loadOnly": [
     "src/bootstrap/wiring/views.ts",
     "src/bootstrap/wiring/shared-test.ts",
+    "src/bootstrap/wiring/shared-startup.ts",
+    "src/bootstrap/wiring/shared-entry.ts",
+    "src/bootstrap/wiring/collaboration-join.ts",
     "src/bootstrap/wiring/overlay.ts",
     "src/bootstrap/wiring/startup.ts",
     "src/application/screen.ts",
@@ -29,5 +32,5 @@
     "src/bootstrap/wiring/ports/collaboration.ts",
     "src/bootstrap/wiring/collaboration-owner.ts"
   ],
-  "expectedLoads": 28
+  "expectedLoads": 31
 }

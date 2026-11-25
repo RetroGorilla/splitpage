@@ -14,7 +14,7 @@ import type { ShareAttemptPorts } from "../../../../src/application/collaboratio
 import { createMemoryBackend, intern, persist, setBackend } from "../../../../src/adapters/storage/02c-blobs.ts";
 import { createOperations } from "../../../../src/application/session/operation.ts";
 import { sharedSession } from "../../../../src/bootstrap/wiring/session-owner.ts";
-import { enterCreatedSharedScript } from "../../../../src/bootstrap/wiring/shared-test.ts";
+import { enterCreatedSharedScript } from "../../../../src/bootstrap/wiring/shared-entry.ts";
 import type { SharedSwitchOutcome } from "../../../../src/bootstrap/wiring/shared-session.ts";
 import { enterSharedDocument } from "../../../../src/core/migrate.ts";
 import { bootApp, closeApp } from "../../../../src/test/_app-boot.mjs";

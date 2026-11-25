@@ -19,6 +19,8 @@ let hold: Promise<void> | undefined;
 let holdDocumentLoad = false;
 let failNextLoad = false;
 let holdDeleteReply = false;
+let plainLoad = false;
+let streamedPicture: { sha: string; bytes: Buffer } | undefined;
 let releaseLoad: (() => void) | undefined;
 let heldSyncType: number | undefined;
 let heldTraffic: Promise<void> | undefined;
@@ -45,9 +47,16 @@ process.on("message", message => {
     holdDeleteReply = true;
     process.send?.("delete-reply-armed");
   }
-  if (message === "hold-load") {
+  if (message === "hold-load" || message === "hold-invitation-load") {
+    plainLoad = message === "hold-invitation-load";
     holdDocumentLoad = true;
     process.send?.("load-armed");
+  }
+  if (message === "release-invitation-load") releaseLoad?.();
+  if (typeof message === "object" && message !== null && "streamPicture" in message) {
+    const { sha, base64 } = (message as { streamPicture: { sha: string; base64: string } }).streamPicture;
+    streamedPicture = { sha, bytes: Buffer.from(base64, "base64") };
+    process.send?.("picture-stream-ready");
   }
   if (message === "fail-next-load") {
     failNextLoad = true;
@@ -97,13 +106,31 @@ try {
           return response;
         };
       }
+      const picture = streamedPicture;
+      if (picture && request.method === "GET" && request.url?.endsWith("/pictures/" + picture.sha)) {
+        streamedPicture = undefined;
+        response.writeHead(200, { "Content-Type": "image/gif", "Content-Length": picture.bytes.length });
+        response.flushHeaders();
+        let offset = 0;
+        const timer = setInterval(() => {
+          const chunk = picture.bytes.subarray(offset, offset + 15);
+          offset += chunk.length;
+          if (offset === picture.bytes.length) {
+            clearInterval(timer);
+            response.end(chunk);
+          } else response.write(chunk);
+        }, 6_000);
+        response.once("close", () => clearInterval(timer));
+        process.send?.("picture-stream-started");
+        throw null;
+      }
       if (!measureStore || request.method !== "GET" || !request.url?.includes("/versions/")) return;
       versionReads += 1;
       response.once("close", () => { versionReads -= 1; });
     },
     async onAuthenticate() {
       if (process.env.SPLITPAGE_TEST_REPORT_AUTH) process.send?.("authentication-attempted");
-      if (releaseLoad) setImmediate(releaseLoad);
+      if (releaseLoad && !plainLoad) setImmediate(releaseLoad);
     },
     async beforeHandleMessage({ context }) {
       const invitationId = (context as { invitationId?: string } | undefined)?.invitationId;
@@ -121,7 +148,7 @@ try {
       }
       if (!holdDocumentLoad) return;
       holdDocumentLoad = false;
-      document.getMap("fixture").set("data", new Uint8Array(15_000_000));
+      if (!plainLoad) document.getMap("fixture").set("data", new Uint8Array(15_000_000));
       await new Promise<void>(resolve => {
         releaseLoad = resolve;
         process.send?.("loading");

@@ -31,6 +31,9 @@ test("a release stage following a test stage removes the setup code, assets, ori
   assert.ok(leakedCollaboration(enabledPreload).includes("splitpage:relay-owner-"));
   assert.ok(leakedCollaboration(enabledHtml).includes("share-script"));
   assert.ok(leakedCollaboration(enabledHtml).includes("share-script-modal"));
+  for (const marker of ['url.searchParams.has("join")', "splitpageInvitation", "join-script-modal", "Join a shared script…", "leave-script-modal", "Leave shared script"]) {
+    assert.ok(leakedCollaboration(enabledHtml).includes(marker), marker);
+  }
   assert.ok(leakedCollaboration(enabledPreload).includes("splitpage:relay-owner-share-create"));
   assert.ok(leakedCollaboration(enabledPreload).includes("splitpage:relay-owner-sharing"));
   assert.match(enabledPreload, /splitpage:relay-owner-resume/);
@@ -69,6 +72,7 @@ test("test hooks and invitation handling are selected independently", () => {
   assert.ok(leakedCollaboration(collaborationOnly).includes("settings-collaboration"));
   assert.ok(leakedCollaboration(collaborationOnly).includes("share-script-modal"));
   assert.match(collaborationOnly, /Could not reopen the local shared script/);
+  assert.ok(leakedCollaboration(collaborationOnly).includes("join-script-modal"));
   assert.match(collaborationOnly, /connect-src 'self' https: http: wss:;/);
   assert.ok(!leakedHooks(collaborationOnly).includes("__sharedTest"));
 });

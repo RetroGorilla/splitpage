@@ -367,10 +367,20 @@ export function startNewTab(given: NewTabPorts): NewTabMount {
   ports = given;
   const mounted = {};
   activeMount = mounted;
+  let joinButton: HTMLButtonElement | undefined;
   (function wireNewTabPage() {
     const el = newTabPageEl();
     if (!el) return;
     renderStarterCards();
+    if (given.joinItem) {
+      const open = el.querySelector('[data-newtab-action="open"]');
+      joinButton = document.createElement("button");
+      joinButton.type = "button";
+      joinButton.className = "btn-outline newtab-bar-btn";
+      joinButton.dataset.newtabAction = given.joinItem.id;
+      joinButton.textContent = given.joinItem.label;
+      open?.before(joinButton);
+    }
     listeners.push(addListener(el, "click", function (e) {
       const target = (e.target as Element).closest("[data-newtab-action]");
       if (!target) return;
@@ -380,6 +390,7 @@ export function startNewTab(given: NewTabPorts): NewTabMount {
       else if (action === "starter") startStarterScript(target.getAttribute("data-starter"));
       else if (action === "long-demo") startStarterScript("long-demo");
       else if (action === "open") newTabOpenFile();
+      else if (action && action === given.joinItem?.id) ports.actions.invoke(action, "button");
       else if (action === "paste") openPasteAsNewDocument();
       else if (action === "gdoc") ports.actions.invoke("show-gdoc-import", "button");
       else if (action === "dismiss") closeNewTabPage();
@@ -426,6 +437,7 @@ export function startNewTab(given: NewTabPorts): NewTabMount {
       disposed = true;
       while (listeners.length) (listeners.pop() as () => void)();
       closeNewTabPage();
+      joinButton?.remove();
       if ((window as NewTabWindow).__newTab === probe) delete (window as NewTabWindow).__newTab;
       activeMount = null;
       (ports as unknown) = null;

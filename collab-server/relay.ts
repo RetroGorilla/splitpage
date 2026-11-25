@@ -8,7 +8,7 @@ import { messageYjsSyncStep2, messageYjsUpdate } from "y-protocols/sync";
 import { applyUpdate, Doc, encodeStateAsUpdate, snapshot, snapshotContainsUpdate } from "yjs";
 import { scriptAccess } from "./access.ts";
 import type { InvitationRole } from "./access.ts";
-import { appShell } from "./app-shell.ts";
+import { appShell, deploymentRequest } from "./app-shell.ts";
 import { RelayError, relayConfig } from "./config.ts";
 import {
   createRelayLimits,
@@ -235,7 +235,7 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
     extensions: [limitsExtension, ...extensions, ...(env.SPLITPAGE_APP_DIR ? [appShell(env.SPLITPAGE_APP_DIR, deployment)] : []), storage],
     async onRequest({ request, response }) {
       // why: the stock server treats a falsy rejection as an HTTP response handled by the hook
-      if (status(request, response) || await manage(request, response) ||
+      if (deploymentRequest(request, response, deployment, origins) || status(request, response) || await manage(request, response) ||
           await pictures.handle(request, response) || await versionRequest(request, response)) throw null;
     },
     async onAuthenticate({ token, instance, documentName, connectionConfig, requestParameters }) {

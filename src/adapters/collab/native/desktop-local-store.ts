@@ -1,4 +1,4 @@
-import type { NativeReplicaInvoke, NativeReplicaReply } from "../../../../shared/native-replica.d.ts";
+import type { NativeMembershipRecord, NativeReplicaInvoke, NativeReplicaReply } from "../../../../shared/native-replica.d.ts";
 import { attachNativeLocalStore, nativeLocalStoreFailure } from "./local-store.ts";
 import type { NativeLocalStore } from "./local-store.ts";
 
@@ -11,7 +11,13 @@ export function createDesktopNativeLocalStore(invoke: NativeReplicaInvoke,
         if (opened.kind === "failed") return opened;
         if (opened.kind !== "opened") throw new Error("Missing native replica lease");
         const { lease } = opened;
+        let staged: Promise<void> | undefined;
+        const join = async (record: NativeMembershipRecord | string | null) => {
+          const reply = await invoke(["join", name, lease, record]);
+          if (reply.kind !== "stored") throw new Error("Could not save shared membership.");
+        };
         const release = async () => {
+          await staged;
           const reply = await invoke(["close", name, lease]);
           if (reply.kind !== "stored") throw new DOMException("Native replica lease was closed", "InvalidStateError");
         };
@@ -51,6 +57,7 @@ export function createDesktopNativeLocalStore(invoke: NativeReplicaInvoke,
               throw new Error("Native replica journal write failed");
             },
             async forget() {
+              await staged;
               const reply = await invoke(["forget", name, lease]);
               if (reply.kind !== "stored") throw new Error("Could not remove the local copy.");
             },
@@ -62,9 +69,23 @@ export function createDesktopNativeLocalStore(invoke: NativeReplicaInvoke,
                 return reply.record;
               } }),
               async token() { return (await membership())?.token ?? null; },
-              async join(token) {
-                const reply = await invoke(["join", name, lease, token]);
-                if (reply.kind !== "stored") throw new Error("Could not save shared membership.");
+              join,
+              async stageInvitation(token, previous, signal) {
+                signal.throwIfAborted();
+                let commit = () => {};
+                staged = new Promise<void>(resolve => { commit = resolve; });
+                const rollback = async () => {
+                  try { await join(previous); }
+                  finally { commit(); }
+                };
+                try {
+                  await join(token);
+                  signal.throwIfAborted();
+                } catch (error) {
+                  await rollback();
+                  throw error;
+                }
+                return { commit, rollback };
               }
             },
             release,

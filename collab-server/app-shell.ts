@@ -1,5 +1,6 @@
 import { readFile } from "node:fs/promises";
 import { join } from "node:path";
+import type { IncomingMessage, ServerResponse } from "node:http";
 import type { Extension } from "@hocuspocus/server";
 
 const files = new Map<string, readonly [string, string]>([
@@ -35,4 +36,17 @@ export function appShell(directory: string, deployment?: string): Extension {
       return Promise.reject();
     }
   };
+}
+
+export function deploymentRequest(request: IncomingMessage, response: ServerResponse, deployment: string | undefined, origins: ReadonlySet<string>): boolean {
+  if (request.url !== "/api/deployment" || request.method !== "HEAD") return false;
+  const origin = request.headers.origin;
+  const allowed = origin && origins.has(origin);
+  response.writeHead(deployment ? 200 : 404, {
+    "Cache-Control": "no-store",
+    Vary: "Origin",
+    ...(allowed && { "Access-Control-Allow-Origin": origin, "Access-Control-Expose-Headers": "Splitpage-Deployment" }),
+    ...(deployment && { "Splitpage-Deployment": deployment })
+  }).end();
+  return true;
 }

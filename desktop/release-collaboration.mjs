@@ -5,8 +5,10 @@ import { leakedCollaboration } from "../tools/release-hooks.mjs";
 export function releaseCollaborationProblems({ appRoot, desktopBuild, settings, preload, appFiles }) {
   const problems = [];
   const index = join(appRoot, "index.html");
-  if (!existsSync(index) || leakedCollaboration(readFileSync(index, "utf8")).length) {
-    problems.push("index.html is missing or contains collaboration entry points");
+  if (!existsSync(index)) problems.push("index.html is missing");
+  else {
+    const markers = leakedCollaboration(readFileSync(index, "utf8"));
+    if (markers.length) problems.push("index.html contains collaboration entry points: " + markers.join(", "));
   }
   if (settings?.trim() !== '{"collabUi":false}') {
     problems.push("the packaged collaboration setting is missing or enabled");

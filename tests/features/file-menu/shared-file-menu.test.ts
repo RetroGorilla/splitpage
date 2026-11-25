@@ -50,11 +50,12 @@ function setup() {
     syncIdentity: () => {},
     longDemo: { state: { title: "Demo", rows: [] } },
     collaboration: collab,
-    collaborationItem: {
-      group: "Collaborate",
-      standalone: { id: "share-script", label: "Share this script…", available: () => true },
-      shared: [{ id: "sharing-and-people", label: "Sharing & people…" }, { id: "leave-shared-script", label: "Leave shared script" }]
-    }
+    collaborationItems: [
+      { id: "share-script", label: "Share this script…", group: "Collaborate", available: () => !collab.snapshot().active },
+      { id: "join-script", label: "Join a shared script…", group: "Collaborate", available: () => !collab.snapshot().active },
+      { id: "sharing-and-people", label: "Sharing & people…", group: "Collaborate", available: () => collab.snapshot().active },
+      { id: "leave-shared-script", label: "Leave shared script", group: "Collaborate", available: () => collab.snapshot().active }
+    ]
   };
   const menu = startFileMenu(ports);
   return {
@@ -81,6 +82,7 @@ test("File menu shows the shared card status and hides Autosave and Create bundl
     h.menu.toggleFileMenu(true);
     assert.equal(exists("share-script"), true);
     assert.equal(exists("sharing-and-people"), false);
+    assert.equal(exists("join-script"), true);
     assert.equal(autosave.hidden, false);
     assert.equal(createBundle.hidden, false);
     assert.equal(h.el("fm-card-name").textContent, "Not saved yet");
@@ -88,6 +90,7 @@ test("File menu shows the shared card status and hides Autosave and Create bundl
     h.collab.enter({ relay: { connected: true, firstSyncDone: true, pendingChangeCount: 0 } });
     h.menu.refreshOpenFileMenu();
     assert.equal(exists("share-script"), false);
+    assert.equal(exists("join-script"), false);
     assert.equal(exists("sharing-and-people"), true);
     assert.equal(exists("leave-shared-script"), true);
     assert.equal(autosave.hidden, true);

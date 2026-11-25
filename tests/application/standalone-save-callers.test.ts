@@ -55,8 +55,7 @@ const AUTOSAVE = {
     "application/editing/scene-boundary.ts": 1,
     "application/save/autosave.ts": 2,
     "application/session/effects.ts": 2,
-    "application/shot-hiding.ts": 1,
-    "bootstrap/wiring/retained-shared-script.ts": 1
+    "application/shot-hiding.ts": 1
   },
   "application/save/autosave.ts#createAutoSavePolicy": { "bootstrap/wiring/save-owners.ts": 1 },
   "application/save/autosave.ts#AutoSavePolicy.schedule": { "bootstrap/wiring/save-owners.ts": 1 },
