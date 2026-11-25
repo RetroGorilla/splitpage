@@ -16,6 +16,7 @@ import { routeSharedUndo, undoOwner } from "./undo.ts";
 import { documentReader } from "./ports/document.ts";
 import type { NativeEditorRecords } from "./native-shared-records.ts";
 import type { FindNativeAccess } from "../../features/find/ports.ts";
+import type { createNativePresenceCarets } from "./native-presence-carets.ts";
 
 interface NativeWriterPaintBinding {
   readonly headingCandidate: (beat: string) => boolean;
@@ -90,6 +91,7 @@ export interface SharedEditorBackend {
   readonly hasWriterPreview?: (beat: string) => boolean;
   readonly bindWriterPaint?: (root: HTMLElement) => NativeWriterPaintBinding | undefined;
   readonly structure?: (intent: DocumentStructureIntent) => CommandOutcome;
+  readonly presenceCarets?: ReturnType<typeof createNativePresenceCarets>;
 }
 
 type OpenBackend = (hydration: ValidatedDocument, failedClose: () => boolean, attempt: (step: () => void) => boolean) => SharedEditorBackend;
@@ -106,6 +108,10 @@ export function nativeEditorFind() {
 
 export function nativeOfflineReview() {
   return running?.backend.offlineReview ?? null;
+}
+
+export function nativePresenceCarets() {
+  return running?.backend.presenceCarets ?? null;
 }
 
 export function nativeEditorActive(): boolean {

@@ -158,7 +158,7 @@ test("promotion availability starts hidden on every open and ignores an earlier 
 });
 
 test("the pill caps initials and the people list jumps to the latest beat", t => {
-  const first = { name: "Ada Gray", color: "#80BDFB", view: "split", beat: "a", side: "audioText" } as const;
+  const first = { name: "Ada Gray", color: "#80BDFB", view: "split", beat: "a", side: "audioText", caret: null } as const;
   const peers: PresencePeer[] = [1, 2, 3, 4].map(clientId => ({ clientId, ...first }));
   let notify = () => {};
   const jumps: [string, string][] = [];
@@ -188,7 +188,7 @@ test("the pill caps initials and the people list jumps to the latest beat", t =>
 test("the Shared popover wraps Tab only on phones, keeps focus when a peer leaves and returns it on Escape", t => {
   const h = setup(t);
   h.connect();
-  h.receivePeers([{ clientId: 1, name: "Guest", color: "#80BDFB", view: "split", beat: "a", side: "audioText" }]);
+  h.receivePeers([{ clientId: 1, name: "Guest", color: "#80BDFB", view: "split", beat: "a", side: "audioText", caret: null }]);
   const trigger = h.el("shared-pill");
   trigger.focus();
   h.popover.open();

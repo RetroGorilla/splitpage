@@ -20,7 +20,7 @@ import type { Command, CommandOutcome, DocumentView, SessionListener } from "../
 import type { UndoControl } from "../../src/application/editing/undo-control.ts";
 import type { NoticeKind, NoticePort } from "../../src/application/effects/ports.ts";
 import type { DocumentEdits } from "../../src/application/session/document-edits.ts";
-import type { PresenceViewPorts, SharedPopoverPorts } from "../../src/features/collaboration/ports.ts";
+import type { PresenceCaretsPorts, PresenceViewPorts, SharedPopoverPorts } from "../../src/features/collaboration/ports.ts";
 import type { FileCopyReads } from "../../src/application/collaboration/file-copy.ts";
 import { createPresenceState } from "../../src/application/collaboration/presence.ts";
 import type { PresenceProfile } from "../../src/application/collaboration/presence.ts";
@@ -61,9 +61,27 @@ export function fakePresenceView(overrides: Partial<PresenceViewPorts> = {}) {
     identity: () => ({ name: "Ada", color: "#80BDFB" }),
     onIdentityChange: () => () => {},
     setLocal: profile => { published.push(profile); },
+    caret: () => null,
     ...overrides
   };
   return { collaboration, presence, published, ports };
+}
+
+export function fakePresenceCarets(overrides: Partial<PresenceCaretsPorts> = {}) {
+  const collaboration = createCollaborationState();
+  const presence = createPresenceState();
+  const { receive } = presence.bind(() => {});
+  const resolved: { readonly peer: number; readonly cell: Element; readonly local: number | null }[] = [];
+  const ports: PresenceCaretsPorts = {
+    collaboration,
+    presence,
+    resolve: (peer, cell, local) => {
+      resolved.push({ peer: peer.clientId, cell, local });
+      return null;
+    },
+    ...overrides
+  };
+  return { collaboration, presence, receive, resolved, ports };
 }
 
 export function fakeSharedPopover(overrides: Partial<SharedPopoverPorts> = {}) {

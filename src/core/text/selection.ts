@@ -243,6 +243,39 @@ export function mapThroughCell(sel: CellPoints, before: readonly string[], after
   return { anchor: at, head: at, affinity: affinity };
 }
 
+export interface CellEnds {
+  readonly anchor: number;
+  readonly head: number;
+}
+
+export interface EditSeam {
+  readonly before?: number;
+  readonly after?: number;
+}
+
+function keptUnitsAtSeam(before: readonly string[], after: readonly string[], seam: EditSeam): Int32Array {
+  const most = Math.min(before.length - (seam.before ?? 0), after.length - (seam.after ?? 0));
+  let tail = 0;
+  while (tail < most && before[before.length - 1 - tail] === after[after.length - 1 - tail]) tail++;
+  const kept = new Int32Array(before.length);
+  kept.set(keptUnits(before.slice(0, before.length - tail), after.slice(0, after.length - tail)));
+  for (let i = 0; i < tail; i++) kept[before.length - tail + i] = after.length - tail + i;
+  return kept;
+}
+
+export function mapEndsThroughCell(ends: CellEnds, before: readonly string[], after: readonly string[], seam?: EditSeam): CellEnds {
+  const anchor = clampUnits(before, ends.anchor), head = clampUnits(before, ends.head);
+  if (before.length === after.length && sameKeys(before, after, 0, 0, before.length)) return { anchor, head };
+  const kept = seam ? keptUnitsAtSeam(before, after, seam) : keptUnits(before, after);
+  if (anchor === head) {
+    const at = clampUnits(after, mapPoint(kept, after.length, head, "forward"));
+    return { anchor: at, head: at };
+  }
+  const from = clampUnits(after, mapPoint(kept, after.length, Math.min(anchor, head), "forward"));
+  const to = Math.max(from, clampUnits(after, mapPoint(kept, after.length, Math.max(anchor, head), "backward")));
+  return anchor < head ? { anchor: from, head: to } : { anchor: to, head: from };
+}
+
 function sameKeys(a: readonly string[], b: readonly string[], aFrom: number, bFrom: number, length: number): boolean {
   for (let i = 0; i < length; i++) if (a[aFrom + i] !== b[bFrom + i]) return false;
   return true;

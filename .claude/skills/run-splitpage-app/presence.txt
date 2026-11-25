@@ -5,6 +5,62 @@ eval window.dot=(sel)=>getComputedStyle(document.querySelector(sel),'::after').c
 wait dot(rd('r1')) && dot(side('r1','audio')) && !dot(side('r1','visual'))
 eval Q(P,'r2','visualText').focus();true
 wait !dot(rd('r1')) && dot(rd('r2')) && dot(side('r2','visual')) && !dot(side('r2','audio'))
+eval window.mark=()=>document.querySelector('body > .presence-carets .presence-caret');window.spans=()=>[...document.querySelectorAll('body > .presence-carets .presence-selection')];window.inside=()=>!!document.querySelector('#rows .presence-caret, #rows .presence-selection, #writer-doc .presence-caret, #writer-doc .presence-selection, .cell-editable .presence-caret, .wr-flow-visual-text .presence-caret');true
+eval window.glyph=(cell,offset)=>{const w=document.createTreeWalker(cell,NodeFilter.SHOW_TEXT);let n,o=offset;while((n=w.nextNode())){if(o<=n.data.length){const r=document.createRange();r.setStart(n,o);r.collapse(true);return r.getClientRects()[0]}o-=n.data.length}return null};window.near=(cell,offset)=>{const m=mark(),g=glyph(cell,offset);return !!m&&!!g&&Math.abs(parseFloat(m.style.left)-g.left)<2&&Math.abs(parseFloat(m.style.top)-g.top)<2};true
+eval window.pt=(cell,offset)=>{const w=cell.ownerDocument.createTreeWalker(cell,NodeFilter.SHOW_TEXT);let n,last=null,o=offset;while((n=w.nextNode())){if(o<=n.data.length)return [n,o];o-=n.data.length;last=n}return last?[last,last.data.length]:[cell,0]};window.pmove=(el,a,h)=>{P.getSelection().setBaseAndExtent(...pt(el,a),...pt(el,h));return true};window.pplace=(el,a,h)=>{el.focus();return pmove(el,a,h)};window.plain=el=>el.textContent.split(String.fromCharCode(8203)).join('');window.wbeat=(win,id)=>win.document.querySelector('#writer-doc .wr-beat[data-id="'+id+'"]');true
+eval pplace(Q(P,'r1','audioText'),3,3)
+wait near(Q(window,'r1','audioText'),3) && spans().length===0
+expect !inside() && document.querySelector('.presence-carets').parentElement===document.body && document.querySelector('.presence-carets').getAttribute('aria-hidden')==='true'
+expect mark().querySelector('.presence-caret-flag').textContent==='Peer Editor' && mark().style.getPropertyValue('--presence-caret-color')===document.querySelector('#shared-pill .person-avatar').style.getPropertyValue('--presence')
+eval pplace(Q(P,'r1','audioText'),1,6)
+wait near(Q(window,'r1','audioText'),6) && spans().length===1 && Math.abs(parseFloat(spans()[0].style.left)-glyph(Q(window,'r1','audioText'),1).left)<2 && Math.abs(parseFloat(spans()[0].style.width)-(glyph(Q(window,'r1','audioText'),6).left-glyph(Q(window,'r1','audioText'),1).left))<2
+expect !inside()
+eval pplace(Q(P,'r1','audioText'),4,4)
+wait near(Q(window,'r1','audioText'),4)
+caret #rows .audio-cell .cell-editable[data-id=r1] start
+press AB
+wait near(Q(window,'r1','audioText'),6) && Q(window,'r1','audioText').textContent.startsWith('AB')
+expect document.activeElement===Q(window,'r1','audioText') && !inside()
+wait Q(P,'r1','audioText').textContent.startsWith('AB')
+caret #rows .audio-cell .cell-editable[data-id=r1] start
+ime set xy
+eval pmove(Q(P,'r1','audioText'),Q(P,'r1','audioText').textContent.length,Q(P,'r1','audioText').textContent.length)
+wait near(Q(window,'r1','audioText'),Q(window,'r1','audioText').textContent.length) && Q(window,'r1','audioText').textContent.startsWith('xyAB')
+expect document.activeElement===Q(window,'r1','audioText') && !inside()
+eval pmove(Q(P,'r1','audioText'),2,2)
+wait near(Q(window,'r1','audioText'),4)
+ime commit xy
+wait Q(P,'r1','audioText').textContent.startsWith('xyAB') && Q(window,'r1','audioText').textContent===Q(P,'r1','audioText').textContent
+wait near(Q(window,'r1','audioText'),4)
+eval P.document.querySelector('#btn-present').click();true
+wait !P.document.getElementById('prompter').hidden && !mark()
+eval P.document.querySelector('#pp-close').click();true
+wait P.document.getElementById('prompter').hidden
+click #btn-write
+wait window.__writerFlowTest.on()
+eval P.document.querySelector('#btn-write').click();true
+wait P.__writerFlowTest.on()
+eval (()=>{P.document.querySelector('#writer-doc').focus();return pmove(wbeat(P,'r2'),2,5)})()
+wait near(wbeat(window,'r2'),5) && spans().length===1 && Math.abs(parseFloat(spans()[0].style.left)-glyph(wbeat(window,'r2'),2).left)<2
+expect !inside() && getComputedStyle(document.querySelector('.presence-carets')).zIndex==='146'
+eval P.getSelection().setBaseAndExtent(...pt(wbeat(P,'r1'),2),...pt(wbeat(P,'r2'),4));true
+wait near(wbeat(window,'r2'),4) && spans().length===1 && Math.abs(parseFloat(spans()[0].style.left)-glyph(wbeat(window,'r2'),0).left)<2
+eval document.querySelector('#writer-doc').focus();__writerFlowTest.place({anchor:{kind:'beat',rowId:'r2',offset:0},head:{kind:'beat',rowId:'r2',offset:0}});true
+ime set ab
+eval pmove(wbeat(P,'r2'),wbeat(P,'r2').textContent.length,wbeat(P,'r2').textContent.length)
+wait near(wbeat(window,'r2'),wbeat(window,'r2').textContent.length) && spans().length===0 && plain(wbeat(window,'r2')).startsWith('abSecond')
+expect document.activeElement===document.querySelector('#writer-doc') && !inside()
+ime commit ab
+wait plain(wbeat(P,'r2')).startsWith('abSecond') && plain(wbeat(P,'r2'))===plain(wbeat(window,'r2'))
+eval document.querySelector('#wr-close').click();true
+wait !window.__writerFlowTest.on() && near(Q(window,'r2','audioText'),Q(window,'r2','audioText').textContent.length)
+expect !inside() && getComputedStyle(document.querySelector('.presence-carets')).zIndex==='119'
+eval document.querySelector('#btn-present').click();true
+wait !document.getElementById('prompter').hidden && !mark()
+eval document.querySelector('#pp-close').click();true
+wait document.getElementById('prompter').hidden && near(Q(window,'r2','audioText'),Q(window,'r2','audioText').textContent.length)
+eval P.document.querySelector('#wr-close').click();true
+wait !P.__writerFlowTest.on()
 eval P.document.querySelector('#btn-write').click();true
 wait P.__writerFlowTest.on()
 eval P.__writerFlowTest.openVisual('r2');true
@@ -44,6 +100,7 @@ click [data-here-now] button
 expect document.activeElement === Q(window,'r2','visualText') && !document.querySelector('#shared-popover').matches(':popover-open')
 eval P.__sharedTest.leave().then(result=>result.ok)
 wait !document.querySelector('#shared-pill .person-avatar') && !dot(rd('r2'))
+wait !mark()
 expect !P.document.querySelector('#shared-pill')
 eval __sharedTest.leave().then(result=>result.ok)
 expect !document.querySelector('#shared-pill') && !dot(rd('r2'))

@@ -39,14 +39,14 @@ const setup = [
   "open",
   "wait window.__sharedTest && document.querySelector('#rows .row')",
   "expect !document.querySelector('#shared-pill')",
-  "eval window.frame=document.createElement('iframe');frame.src='/?presence-peer=1';frame.style.cssText='position:fixed;right:0;bottom:0;width:640px;height:480px;z-index:100';document.body.append(frame);true",
-  "wait frame.contentWindow.__sharedTest && frame.contentDocument.querySelector('#rows .row')",
+  "eval window.frame=window.open('/?presence-peer=1','presence-peer','width=640,height=480');!!frame",
+  "wait frame.__sharedTest && frame.document.querySelector('#rows .row')",
   "eval localStorage.setItem('splitpage-comment-author','First Editor');window.enter=(win,deployment)=>win.__sharedTest.enterRetained({deployment,script:'presence',relayUrl:" +
     JSON.stringify(relayUrl) +
     ",invitation:{token:'presence-test',state:Uint8Array.from(atob(" + JSON.stringify(seed) + "),ch=>ch.charCodeAt(0))}}).then(result=>{if(!result.ok)throw Error(result.reason);return true});enter(window,'local')",
   "wait document.querySelector('[data-connection]')?.textContent === 'Connected'",
-  ...long ? ["eval frame.remove();true"] : [
-    "eval window.P=frame.contentWindow;localStorage.setItem('splitpage-comment-author','Peer Editor');enter(P,'peer')",
+  ...long ? ["eval frame.close();true"] : [
+    "eval window.P=frame;localStorage.setItem('splitpage-comment-author','Peer Editor');enter(P,'peer')",
     "wait P.document.querySelector('[data-connection]')?.textContent === 'Connected'"
   ],
   "eval window.Q=(win,id,field)=>win.document.querySelector('#rows .cell-editable[data-id=\"'+id+'\"][data-field=\"'+field+'\"]');true",
@@ -58,7 +58,9 @@ function benchmark() {
   const lines = [
     ...(long ? [
       "expect document.querySelectorAll('#rows .row').length === 300",
-      "wait !document.querySelector('[data-here-now]') || document.querySelector('#shared-pill .person-avatar[title=\"Moving Editor\"]')"
+      "wait !document.querySelector('[data-here-now]') || document.querySelector('#shared-pill .person-avatar[title=\"Moving Editor\"]')",
+      "sleep 1000",
+      "eval 'peer caret drawn: '+!!document.querySelector('body > .presence-carets .presence-caret')"
     ] : []),
     "eval " + PROBE.replace(/\n\s*/g, " "),
     ...long ? [] : ["eval Q(P,'r2','visualText').focus();true"],
@@ -94,9 +96,9 @@ try {
     driver, "--script", suite, "--port", String(base), "--cdp-port", String(base + 1000), "--shot-dir", work
   ], { cwd: REPO, windowsHide: true, maxBuffer: 8 * 1024 * 1024 });
   if (mover) {
-    const { moves, movesNearEdits } = mover.counts();
-    if (movesNearEdits < 8) {
-      throw new Error(`The long typing run had only ${movesNearEdits} peer moves near edits, from ${moves} moves in total.`);
+    const { moves, movesNearEdits, carets } = mover.counts();
+    if (movesNearEdits < 8 || carets < moves / 2) {
+      throw new Error(`The long typing run had ${movesNearEdits} peer moves near edits and ${carets} carets, from ${moves} moves.`);
     }
     if (!mover.received(typed)) throw new Error("The moving peer did not receive both typing cases.");
   }

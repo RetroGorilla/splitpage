@@ -24,6 +24,8 @@ import { hashedPersonColor } from "../../core/document/person-colors.ts";
 import { presenceName } from "../../../shared/collaboration-presence.ts";
 import { mountPresenceView } from "../../features/collaboration/presence.ts";
 import { sharedPresence } from "./ports/presence.ts";
+import { mountPresenceCarets } from "../../features/collaboration/presence-carets.ts";
+import { nativePresenceCarets } from "./shared-session.ts";
 import { cssAttr } from "../../features/common/dom.ts";
 import { writerControls } from "./writer.ts";
 import { holdSessionCommands, liveSession, sessionEntryRefusal, sharedSession } from "./session-owner.ts";
@@ -176,7 +178,12 @@ function registerCollaboration(registry: Pick<ActionRegistry, "invoke" | "regist
     onIdentityChange: listener => changes.onChange(({ name }) => {
       if (name === "commentAuthor" || name === "personColor") listener();
     }),
-    setLocal: presence.setLocal
+    setLocal: presence.setLocal,
+    caret: (location, cell, ends) => nativePresenceCarets()?.caret(location, cell, ends) ?? null
+  });
+  const stopCarets = mountPresenceCarets({
+    collaboration, presence,
+    resolve: (peer, cell, local) => nativePresenceCarets()?.resolve(peer, cell, local) ?? null
   });
   const popover = mountSharedPopover({
     collaboration,
@@ -217,6 +224,7 @@ function registerCollaboration(registry: Pick<ActionRegistry, "invoke" | "regist
     unregisterSharing();
     popover.dispose();
     stopPresence();
+    stopCarets();
     unregisterJoin();
     unregister();
     leaveDialog?.dispose();

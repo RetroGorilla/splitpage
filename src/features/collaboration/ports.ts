@@ -5,7 +5,8 @@ import type { OfflineBeatReading, OfflineClashEntry } from "../../application/co
 import type { ShareAttemptResult } from "../../application/collaboration/share.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { ScreenState } from "../../application/screen.ts";
-import type { PresenceProfile, PresenceReads } from "../../application/collaboration/presence.ts";
+import type { PresenceCaret, PresenceLocation, PresencePeer, PresenceProfile, PresenceReads } from "../../application/collaboration/presence.ts";
+import type { CellEnds } from "../../core/text/selection.ts";
 
 export interface CollaborationAnnouncementsPorts {
   readonly collaboration: CollaborationReads;
@@ -17,6 +18,13 @@ export interface PresenceViewPorts {
   readonly identity: () => Pick<PresenceProfile, "name" | "color">;
   readonly onIdentityChange: (listener: () => void) => () => void;
   readonly setLocal: (profile: PresenceProfile) => void;
+  readonly caret: (location: PresenceLocation, cell: Element, ends: CellEnds) => PresenceCaret | null;
+}
+
+export interface PresenceCaretsPorts {
+  readonly collaboration: CollaborationReads;
+  readonly presence: PresenceReads;
+  readonly resolve: (peer: PresencePeer, cell: Element, local: number | null) => CellEnds | null;
 }
 
 export interface OfflineReviewPorts {
