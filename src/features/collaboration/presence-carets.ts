@@ -167,6 +167,7 @@ export function mountPresenceCarets(ports: PresenceCaretsPorts): () => void {
   let views: MutationObserver | undefined;
   let painted: MutationObserver | undefined;
   let resized: ResizeObserver | undefined;
+  let sized = new WeakSet<Element>();
   let frame: number | undefined;
   let drawn = "";
   let showing = false;
@@ -176,8 +177,18 @@ export function mountPresenceCarets(ports: PresenceCaretsPorts): () => void {
     layer?.replaceChildren();
   }
 
+  function watchSizes(): void {
+    if (!resized) return;
+    for (const root of document.querySelectorAll(MEASURED)) {
+      if (sized.has(root)) continue;
+      sized.add(root);
+      resized.observe(root);
+    }
+  }
+
   function draw(): void {
     frame = undefined;
+    watchSizes();
     const view = shownView(document);
     const peers = ports.presence.peers();
     if (!view || !peers.some(peer => peer.caret)) { clear(); return; }
@@ -215,7 +226,8 @@ export function mountPresenceCarets(ports: PresenceCaretsPorts): () => void {
     for (const root of document.querySelectorAll(PAINTED)) {
       painted.observe(root, { childList: true, characterData: true, subtree: true, attributes: true, attributeFilter: ["hidden"] });
     }
-    for (const root of document.querySelectorAll(MEASURED)) resized.observe(root);
+    sized = new WeakSet();
+    watchSizes();
   }
 
   function track(): void {

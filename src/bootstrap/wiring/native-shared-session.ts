@@ -138,7 +138,7 @@ export function bindNativeEditor(ports: SharedSwitchPorts, native: ReturnType<ty
     hasWriterPreview: beat => input?.hasWriterPreview(beat) ?? false,
     bindWriterPaint: root => input?.bindWriterPaint(root),
     structure: createNativeEditorStructure({ native, session: () => commandSession, input: () => input, publish, report: ports.report }),
-    presenceCarets: createNativePresenceCarets(native),
+    presenceCarets: createNativePresenceCarets(native, (beat, side) => input?.bufferedIn(beat, side) ?? false),
     undo: admission => nativeUndoRoute({ native, admission, input: () => input, publish: () => { publish(); } }),
     bind: session => {
       commandSession = session;

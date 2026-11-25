@@ -12,14 +12,15 @@ function sharedKeys(native: PresenceNative, row: string, side: Side): readonly s
   return read ? editorKeys(side === "audioText" ? read.narration : read.visual) : null;
 }
 
-export function createNativePresenceCarets(native: PresenceNative) {
+export function createNativePresenceCarets(native: PresenceNative, bufferedIn: (beat: string, side: Side) => boolean) {
   return Object.freeze({
     caret(location: PresenceLocation, cell: Element, painted: CellEnds): PresenceCaret | null {
       const { beat, side } = location;
       if (!beat || !side || native.isClosingOrClosed()) return null;
       const keys = sharedKeys(native, beat, side);
       if (!keys) return null;
-      const { anchor, head } = mapEndsThroughCell(painted, domKeys(cell), keys, { before: painted.head });
+      const seam = bufferedIn(beat, side) ? { before: painted.head } : undefined;
+      const { anchor, head } = mapEndsThroughCell(painted, domKeys(cell), keys, seam);
       if (anchor === head) {
         const at = native.presencePoint(beat, side, head, 0);
         return at && { anchor: at, head: at };
@@ -37,7 +38,8 @@ export function createNativePresenceCarets(native: PresenceNative) {
       const head = native.presenceOffset(row, side, caret.head);
       const keys = anchor === null || head === null ? null : sharedKeys(native, row, side);
       if (!keys || anchor === null || head === null) return null;
-      return mapEndsThroughCell({ anchor, head }, keys, domKeys(cell), local === null ? undefined : { after: local });
+      const seam = local !== null && bufferedIn(row, side) ? { after: local } : undefined;
+      return mapEndsThroughCell({ anchor, head }, keys, domKeys(cell), seam);
     }
   });
 }

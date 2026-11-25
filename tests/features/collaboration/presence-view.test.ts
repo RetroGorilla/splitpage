@@ -131,5 +131,13 @@ test("the presence view sends the focused cell's selection as a caret, clamping 
   h.document.dispatchEvent(new h.window.Event("selectionchange"));
   t.mock.timers.tick(100);
   assert.deepEqual(asked.at(-1), ["r2", "audioText", "r2", { anchor: 5, head: 3 }], "an anchor in a later beat clamps to this beat's end");
+  h.document.getSelection()?.setBaseAndExtent(writer, 2, first?.firstChild as Node, 1);
+  h.document.dispatchEvent(new h.window.Event("selectionchange"));
+  t.mock.timers.tick(100);
+  assert.deepEqual(asked.at(-1), ["r2", "audioText", "r2", { anchor: 5, head: 1 }], "an anchor on the Writer after this beat clamps to its end");
+  h.document.getSelection()?.setBaseAndExtent(writer, 0, second?.firstChild as Node, 2);
+  h.document.dispatchEvent(new h.window.Event("selectionchange"));
+  t.mock.timers.tick(100);
+  assert.deepEqual(asked.at(-1), ["r3", "audioText", "r3", { anchor: 0, head: 2 }], "an anchor on the Writer before this beat clamps to its start");
   dispose();
 });

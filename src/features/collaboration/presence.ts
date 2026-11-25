@@ -4,8 +4,6 @@ import { domKeys, domToPos } from "../common/cell-dom.ts";
 import type { PresenceViewPorts } from "./ports.ts";
 
 const EDITABLE = "#rows .cell-editable, #writer-doc, .wr-flow-visual-text";
-const PRECEDING = 2;
-
 interface Located {
   readonly location: PresenceLocation;
   readonly cell: HTMLElement | null;
@@ -43,7 +41,9 @@ export function selectionEnds(document: Document, cell: Element): CellEnds | nul
   const anchorNode = selection.anchorNode;
   if (!anchorNode) return { anchor: head, head };
   if (!cell.contains(anchorNode)) {
-    const before = (cell.compareDocumentPosition(anchorNode) & PRECEDING) !== 0;
+    const start = document.createRange();
+    start.setStart(cell, 0);
+    const before = start.comparePoint(anchorNode, selection.anchorOffset) < 0;
     return { anchor: before ? 0 : domKeys(cell).length, head };
   }
   return { anchor: domToPos(cell, anchorNode, selection.anchorOffset) ?? head, head };

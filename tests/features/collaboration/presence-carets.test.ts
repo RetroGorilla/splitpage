@@ -21,10 +21,12 @@ function harness(t: TestContext) {
   const { window, document } = h;
   const frames: FrameRequestCallback[] = [];
   const observed: Element[] = [];
+  const resizes: (() => void)[] = [];
   const original = Object.getOwnPropertyDescriptors(globalThis);
   window.requestAnimationFrame = callback => frames.push(callback);
   window.cancelAnimationFrame = id => { frames.splice(id - 1, 1, () => {}); };
   window.ResizeObserver = class {
+    constructor(callback: () => void) { resizes.push(callback); }
     observe(target: Element) { observed.push(target); }
     disconnect() { observed.length = 0; }
     unobserve() {}
@@ -70,7 +72,7 @@ function harness(t: TestContext) {
     const mark = layer()?.querySelector<HTMLElement>(".presence-caret");
     return mark && [mark.style.left, mark.style.top, mark.style.height];
   };
-  return { ...h, ...fake, seen, frames, observed, flush, online, layer, caretAt, setEnds: (next: CellEnds | null) => { ends = next; } };
+  return { ...h, ...fake, seen, frames, observed, resizes, flush, online, layer, caretAt, setEnds: (next: CellEnds | null) => { ends = next; } };
 }
 
 test("in a standalone script the caret overlay adds no listener, no frame and no layer", t => {
@@ -205,6 +207,33 @@ test("a peer's caret in the Writer visual box follows local typing there, measur
   h.flush();
   assert.deepEqual(h.caretAt(), ["140px", "300px", "20px"]);
   assert.equal(h.seen.at(-1)?.local, 3, "my caret in the visual box is the seam for mapping buffered text");
+  dispose();
+});
+
+test("a Writer visual box made after tracking starts in Split is watched for size once the Writer shows it", async t => {
+  const h = harness(t);
+  h.document.querySelector(".wr-flow-visual-box")?.remove();
+  const dispose = mountPresenceCarets(h.ports);
+  h.online();
+  h.receive([peer({ view: "writer", side: "visualText" })]);
+  h.flush();
+  assert.deepEqual(h.observed.map(root => root.id), ["rows", "writer-doc"]);
+  h.el("writer").insertAdjacentHTML("beforeend",
+    '<div class="wr-flow-visual-box" hidden><div class="wr-flow-visual-text" data-id="r1" data-field="visualText" contenteditable="true">Wide</div></div>');
+  await Promise.resolve();
+  assert.equal(h.frames.length, 0, "a box made inside the hidden Writer does not redraw the Split view");
+  h.el("writer").hidden = false;
+  (h.document.querySelector(".wr-flow-visual-box") as HTMLElement).hidden = false;
+  await Promise.resolve();
+  h.flush();
+  h.flush();
+  const text = h.document.querySelector(".wr-flow-visual-text");
+  assert.equal(h.observed.filter(root => root === text).length, 1, "the new visual text is watched for size, once");
+  assert.deepEqual(h.caretAt(), ["130px", "300px", "20px"]);
+  h.resizes.at(-1)?.();
+  assert.equal(h.frames.length, 1, "the visual text resizing redraws");
+  h.flush();
+  assert.equal(h.observed.filter(root => root === text).length, 1);
   dispose();
 });
 

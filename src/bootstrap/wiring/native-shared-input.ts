@@ -2005,6 +2005,7 @@ export function mountNativeSharedInput({ native, session, editAttribution, now =
       else native.endTypingGroup();
     },
     buffered: () => draft !== null || (emptyWriter?.composing() ?? false),
+    bufferedIn: (beat: string, field: "audioText" | "visualText") => draft?.beat === beat && draft.field === field,
     abandonComposition: () => {
       emptyWriter?.abandon();
       if (draft?.composing && !stopped) endComposition(draft, "");
