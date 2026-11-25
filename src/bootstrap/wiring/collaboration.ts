@@ -6,6 +6,7 @@ import { mintDocId } from "../../adapters/identity/ids.ts";
 import { joinScriptAction, leaveScriptAction, shareScriptAction, sharingDetailsAction, SHARING_COMMAND, JOIN_SCRIPT_COMMAND, LEAVE_SCRIPT_COMMAND, SHARE_SCRIPT_COMMAND } from "../../features/collaboration/actions.ts";
 import { mountLeaveDialog } from "../../features/collaboration/leave.ts";
 import { mountSharedPopover } from "../../features/collaboration/shared-popover.ts";
+import { mountPasswordDialog } from "../../features/collaboration/password-dialog.ts";
 import { collaboration } from "./ports/collaboration.ts";
 import { mountShareDialog } from "../../features/collaboration/mount.ts";
 import { scriptCellOf } from "../richtext.ts";
@@ -62,6 +63,22 @@ function openLeave() {
 
 export const requestRetainedLeave = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI ? openLeave : () => false;
 
+let recoveryDialog: ReturnType<typeof mountPasswordDialog> | undefined;
+
+function openPasswordRecovery(): void {
+  if (recoveryDialog && !recoveryDialog.signal.aborted) return;
+  const controls = retainedSharingControls();
+  if (!controls) return;
+  recoveryDialog = mountPasswordDialog({
+    title: "Re-enter password", submit: "Reconnect",
+    check: signal => controls.reenter(null, signal),
+    save: controls.reenter
+  });
+}
+
+export const requestPasswordRecovery = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI
+  ? openPasswordRecovery : undefined;
+
 function registerCollaboration(registry: Pick<ActionRegistry, "invoke" | "register">): () => void {
   const unmountFileCopy = mountFileCopyBanner(sharedFileCopy);
   let attempt: ReturnType<typeof createShareAttempt> | undefined;
@@ -109,7 +126,8 @@ function registerCollaboration(registry: Pick<ActionRegistry, "invoke" | "regist
               deployment: created.deployment,
               script: created.scriptId,
               relayUrl: endpoint.href,
-              created: { state, membership: { token: created.owner, role: "owner", guestLinkToken: created.guest }, complete }
+              created: { state, membership: { token: created.owner, role: "owner", guestLinkToken: created.guest,
+                ...(created.passwordRequired && { linkPasswordRequired: true }) }, complete }
             }, { owns, release });
           } finally { publish(); }
         }
@@ -141,10 +159,10 @@ function registerCollaboration(registry: Pick<ActionRegistry, "invoke" | "regist
     collaboration,
     membership: retainedSharingControls,
     canManage: () => retainedSharingControls()?.canManage() ?? Promise.resolve(false),
-    async manage(operation) {
+    async manage(operation, password) {
       const controls = retainedSharingControls();
       if (!controls) throw new Error("The shared script is unavailable.");
-      await controls.manage(operation);
+      await controls.manage(operation, password);
     },
     saveCopy: () => { registry.invoke("save-as", "button"); },
     copy: text => navigator.clipboard.writeText(text),
@@ -166,6 +184,8 @@ function registerCollaboration(registry: Pick<ActionRegistry, "invoke" | "regist
     unregister();
     leaveDialog?.dispose();
     leaveDialog = undefined;
+    recoveryDialog?.dispose();
+    recoveryDialog = undefined;
     dispose?.();
   };
 }

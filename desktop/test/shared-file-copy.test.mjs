@@ -96,3 +96,19 @@ test("failed writes and cancelled or reserved destinations leave the association
   assert.equal(h.reopen().reserved(replacement), false);
   assert.deepEqual(await readFile(replacement), body);
 });
+
+test("an erased replica cannot keep its source reserved after a desktop state write fails", async t => {
+  const h = await setup(t);
+  let allowStateWrites = false;
+  const service = createSharedFileCopies({
+    read: h.store.read,
+    write: mutate => allowStateWrites ? h.store.write(mutate) : Promise.resolve(false)
+  }, h.files, () => false);
+  assert.ok(service.reserved(h.absPath));
+  assert.equal(await service.releaseOrphan(key), false);
+  assert.equal(service.reserved(h.absPath), false);
+  assert.equal(h.store.read().sharedFileCopies?.length, 1);
+  allowStateWrites = true;
+  assert.equal(await service.releaseOrphan(key), true);
+  assert.equal(h.reopen().reserved(h.absPath), false);
+});

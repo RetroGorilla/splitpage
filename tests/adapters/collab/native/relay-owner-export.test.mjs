@@ -9,6 +9,7 @@ import { captureExportDocument } from "../../../../src/bootstrap/wiring/export-c
 import { standaloneHtmlFor } from "../../../../src/adapters/page/standalone-html.ts";
 import { buildSplitpageFile, buildSplitpageCopy, buildMarkdownProject } from "../../../../src/adapters/formats/project-file.ts";
 import { bootApp, closeApp } from "../../../../src/test/_app-boot.mjs";
+import * as passwordPolicy from "../../../../shared/link-password.ts";
 
 const require = createRequire(import.meta.url);
 const { createRelayOwner } = require("../../../../desktop/relay-owner.ts");
@@ -37,7 +38,7 @@ test("saving a management secret leaves the app-data bundle and script exports u
     isEncryptionAvailable: () => true,
     encryptString(text) { clearRecord = text; return randomBytes(64); },
     decryptString: () => clearRecord
-  }, () => { throw new Error(secret); });
+  }, passwordPolicy, () => { throw new Error(secret); });
   assert.equal(owner.save(address, secret), "saved");
   const status = owner.status();
   const failure = await owner.testConnection();

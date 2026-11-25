@@ -26,11 +26,14 @@ function createSharedFileCopies(store: Store, files: Registry, occupied: (key: s
   const busyScripts = new Map<string, Promise<void>>();
   const conflicts = new Map<string, string | null>();
   const handles = new Map<string, { absPath: string; id: string }>();
+  const orphans = new Set<string>();
   const changed = { kind: "file-copy-problem", problem: "changed" } as const;
   const unavailable = { kind: "file-copy-problem", problem: "unavailable" } as const;
   const none = { kind: "file-copy", file: null } as const;
-  const lookup = (name: string) => store.read().sharedFileCopies?.find(record => scriptKey(record) === name);
-  const forPath = (absPath: string) => store.read().sharedFileCopies?.find(record => pathKey(record.absPath) === pathKey(absPath));
+  const lookup = (name: string) => orphans.has(name) ? undefined
+    : store.read().sharedFileCopies?.find(record => scriptKey(record) === name);
+  const forPath = (absPath: string) => store.read().sharedFileCopies?.find(record =>
+    !orphans.has(scriptKey(record)) && pathKey(record.absPath) === pathKey(absPath));
   const reserved = (absPath: string) => busyPaths.has(pathKey(absPath)) || !!forPath(absPath);
 
   async function fingerprint(absPath: string): Promise<string | null> {
@@ -57,15 +60,22 @@ function createSharedFileCopies(store: Store, files: Registry, occupied: (key: s
 
   async function forget(name: string): Promise<boolean> {
     if (busyScripts.has(name)) return false;
-    if (!lookup(name)) return true;
+    if (!store.read().sharedFileCopies?.some(record => scriptKey(record) === name)) return true;
     const result = await store.write(state => {
       state.sharedFileCopies = state.sharedFileCopies?.filter(record => scriptKey(record) !== name) ?? [];
     });
     if (result) {
       conflicts.delete(name);
       handles.delete(name);
+      orphans.delete(name);
     }
     return result;
+  }
+
+  async function releaseOrphan(name: string): Promise<boolean> {
+    await busyScripts.get(name);
+    if (lookup(name)) orphans.add(name);
+    return forget(name);
   }
 
   async function write(name: string, data: Uint8Array, missing: number, mode: "check" | "overwrite" | "new" | "export", docId: string,
@@ -131,7 +141,7 @@ function createSharedFileCopies(store: Store, files: Registry, occupied: (key: s
     }
   }
 
-  return { lookup, forPath, reserved, matches, status, forget, write };
+  return { lookup, forPath, reserved, matches, status, forget, releaseOrphan, write };
 }
 
 export type { createSharedFileCopies };

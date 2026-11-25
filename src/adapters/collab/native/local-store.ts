@@ -61,9 +61,9 @@ export interface NativeLocalStore {
 export interface NativeReplicaMembership {
   readonly record: () => Promise<NativeMembershipRecord | null>;
   readonly token: () => Promise<string | null>;
-  readonly manage?: (operation: string, address: string) => Promise<NativeMembershipRecord>;
+  readonly manage?: (operation: string, address: string, password?: string) => Promise<NativeMembershipRecord>;
   readonly join: (record: string | NativeMembershipRecord) => Promise<void>;
-  readonly stageInvitation?: (token: string, previous: NativeMembershipRecord | null, signal: AbortSignal) => Promise<NativeInvitationStage>;
+  readonly stageInvitation?: (record: NativeMembershipRecord, previous: NativeMembershipRecord | null, signal: AbortSignal) => Promise<NativeInvitationStage>;
 }
 
 export interface NativeInvitationStage {

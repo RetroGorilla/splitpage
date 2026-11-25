@@ -6,7 +6,7 @@ import type { FileCopyMode } from "../../src/application/collaboration/file-copy
 
 const file = { name: "Pilot.splitpage", docId: "d" + "a".repeat(32), missing: 0 };
 
-function setup() {
+function setup(freshRevision?: number) {
   let now = 0;
   let pending: { run: () => void; at: number } | undefined;
   let missing = 0, captures = 0, forgot = 0;
@@ -31,7 +31,7 @@ function setup() {
     },
     async forget() { forgot++; return true; },
     publish(file, next) { info = file; problem = next; }
-  });
+  }, freshRevision);
   return {
     owner, writes, modes,
     setMissing(value: number) { missing = value; },
@@ -84,8 +84,27 @@ test("a close flush bypasses the interval, and late picture bytes rewrite the sa
   assert.equal(h.facts().info?.missing, 0);
   assert.deepEqual(h.writes, [2000, 2300]);
   h.owner.picturesChanged();
+  assert.equal(h.due(), undefined);
+  h.setMissing(1);
+  h.owner.changed(2);
   await h.advance(32_300);
-  assert.deepEqual(h.writes, [2000, 2300, 32_300]);
+  h.setMissing(0);
+  h.owner.picturesChanged();
+  await h.advance(62_300);
+  assert.deepEqual(h.writes, [2000, 2300, 32_300, 62_300]);
+});
+
+test("fresh sharing leaves the file alone until a publication changes its revision", async () => {
+  const h = setup(1);
+  h.owner.changed(1);
+  h.owner.picturesChanged();
+  await h.advance(4000);
+  assert.equal(h.owner.pending(), false);
+  assert.deepEqual(h.writes, []);
+  h.owner.changed(2);
+  assert.equal(h.owner.pending(), true);
+  await h.advance(6000);
+  assert.deepEqual(h.writes, [6000]);
 });
 
 test("missing pictures block complete writes, and disk changes halt background writes until a choice", async () => {

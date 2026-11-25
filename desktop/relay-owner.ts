@@ -5,6 +5,7 @@ import type * as NodeFs from "node:fs";
 import type * as NodePath from "node:path";
 import type * as NodeCrypto from "node:crypto";
 import type { RelayConnectionCheck, RelaySetupSave, ShareScriptCreation } from "../shared/desktop-contract.d.ts";
+import type * as LinkPassword from "../shared/link-password.ts";
 
 const fs: typeof NodeFs = require("node:fs");
 const { join }: typeof NodePath = require("node:path");
@@ -24,12 +25,15 @@ function sha256(value: string | Uint8Array): string {
 
 function decodeCreation(data: unknown, address: string, deployment: string | null): ShareScriptCreation {
   if (!data || typeof data !== "object" || !deployment || !ID.test(deployment)) return { kind: "failed" };
-  const { scriptId, owner, guest } = data as { scriptId?: string; owner?: { token?: string }; guest?: { token?: string } };
+  const { scriptId, owner, guest, passwordRequired } = data as {
+    scriptId?: string; owner?: { token?: string }; guest?: { token?: string }; passwordRequired?: unknown
+  };
   if (typeof scriptId !== "string" || !ID.test(scriptId)) return { kind: "failed" };
   if (owner === undefined && guest === undefined) return { kind: "already-used" };
   if (typeof owner?.token !== "string" || !TOKEN.test(owner.token) ||
       typeof guest?.token !== "string" || !TOKEN.test(guest.token)) return { kind: "failed" };
-  return { kind: "created", address, deployment, scriptId, owner: owner.token, guest: guest.token };
+  return { kind: "created", address, deployment, scriptId, owner: owner.token, guest: guest.token,
+    ...(passwordRequired === true && { passwordRequired }) };
 }
 
 async function invitationToken(response: Response): Promise<string> {
@@ -61,7 +65,7 @@ function createRelayOwner(userData: string, keyStore: {
   decryptString: (data: Buffer) => string;
   isEncryptionAvailable: () => boolean;
   getSelectedStorageBackend?: () => string;
-}, request: typeof fetch = fetch, testBuild = false) {
+}, passwordPolicy: typeof LinkPassword, request: typeof fetch = fetch, testBuild = false) {
   const file = join(userData, "relay-owner.enc");
   const pending = file + ".new";
 
@@ -139,13 +143,14 @@ function createRelayOwner(userData: string, keyStore: {
     return response.ok ? "connected" : "unreachable";
   }
 
-  async function manageSharing(operation: string, name: string, address: string, membership: NativeMembershipRecord) {
+  async function manageSharing(operation: string, name: string, address: string, membership: NativeMembershipRecord, password?: string) {
     const origin = relayOrigin(address, testBuild);
     const [deployment, script] = name.split("/");
     if (!origin || !script || !ID.test(script)) throw new Error("Invalid shared script relay.");
     const path = `/api/scripts/${script}`;
-    const send = (method: string, suffix: string, token: string) => request(new URL(path + suffix, origin), {
-      method, headers: { Authorization: "Bearer " + token }, credentials: "omit", redirect: "error",
+    const send = (method: string, suffix: string, token: string, body?: string) => request(new URL(path + suffix, origin), {
+      method, headers: { Authorization: "Bearer " + token, ...(body && { "Content-Type": "application/json" }) },
+      body: body ?? null, credentials: "omit", redirect: "error",
       signal: AbortSignal.timeout(5000)
     });
     if (operation === "promote" && membership.role === "guest") {
@@ -162,6 +167,13 @@ function createRelayOwner(userData: string, keyStore: {
       return { ...membership, role: "owner" as const, token: await invitationToken(result.response) };
     }
     if (membership.role !== "owner") throw new Error("Owner membership required.");
+    if (operation === "set-password" || operation === "remove-password") {
+      if (operation === "set-password" && !passwordPolicy.validLinkPassword(password)) throw new Error("Invalid link password.");
+      const value = operation === "set-password" ? password : null;
+      const response = await send("PUT", "/password", membership.token, JSON.stringify({ password: value }));
+      if (response.status !== 204) throw new Error("Could not change link password.");
+      return { ...membership, linkPasswordRequired: value !== null };
+    }
     if (operation === "reset") {
       const response = await send("POST", "/reset", membership.token);
       if (!response.ok) throw new Error("Could not reset guest invitation.");
@@ -172,18 +184,24 @@ function createRelayOwner(userData: string, keyStore: {
       return membership;
     }
     if (operation === "check-link") {
-      if (!membership.guestLinkToken) return membership;
-      const response = await send("HEAD", "/link", membership.guestLinkToken);
-      if (response.headers.get("Splitpage-Deployment") === deployment && response.status === 403) {
-        return { role: membership.role, token: membership.token };
+      if (membership.guestLinkToken) {
+        const response = await send("HEAD", "/link", membership.guestLinkToken);
+        if (response.headers.get("Splitpage-Deployment") !== deployment) throw new Error("Could not check guest invitation.");
+        if (response.status === 428) return { ...membership, linkPasswordRequired: true };
+        if (response.ok) return membership.linkPasswordRequired ? { ...membership, linkPasswordRequired: false } : membership;
+        if (response.status !== 403) throw new Error("Could not check guest invitation.");
       }
-      if (!response.ok) throw new Error("Could not check guest invitation.");
-      return membership;
+      const response = await send("GET", "/password", membership.token);
+      if (response.status === 404) return { role: membership.role, token: membership.token };
+      if (!response.ok) throw new Error("Could not check link password.");
+      const status = await response.json() as { required?: unknown } | null;
+      if (typeof status?.required !== "boolean") throw new Error("Invalid link password status.");
+      return { role: membership.role, token: membership.token, linkPasswordRequired: status.required };
     }
     throw new Error("Invalid sharing operation.");
   }
 
-  return { manageSharing, save, clear, status: () => ({ address: read()?.address ?? null }), testConnection, ownerRequest };
+  return { manageSharing, save, clear, status: () => ({ address: read()?.address ?? null }), testConnection, ownerRequest, passwordPolicy };
 }
 
 function isRecord(value: unknown): value is Record<string, unknown> {
@@ -256,12 +274,14 @@ function createShareCreations(userData: string, owner: ReturnType<typeof createR
     return true;
   }
 
-  async function create(tab: string, creationId: string, contentHash: string, bytes: Uint8Array, expectedAddress: string): Promise<ShareScriptCreation> {
+  async function create(tab: string, creationId: string, contentHash: string, bytes: Uint8Array, expectedAddress: string,
+    password?: string): Promise<ShareScriptCreation> {
     return ordered(async (): Promise<ShareScriptCreation> => {
       if (!ID.test(creationId) || !HASH.test(contentHash) || !(bytes instanceof Uint8Array) ||
           !(bytes.buffer instanceof ArrayBuffer) || !bytes.byteLength) return { kind: "failed" };
       if (bytes.byteLength > MAX_SNAPSHOT_BYTES || bytes.buffer.byteLength > MAX_SNAPSHOT_BYTES) return { kind: "too-large" };
       if (sha256(bytes) !== contentHash) return { kind: "failed" };
+      if (password !== undefined && !owner.passwordPolicy.validLinkPassword(password)) return { kind: "failed" };
       const address = owner.status().address;
       if (!address || address !== expectedAddress) return { kind: "not-configured" };
       const relay = sha256(address);
@@ -276,9 +296,17 @@ function createShareCreations(userData: string, owner: ReturnType<typeof createR
         writeJournal(journal);
         tabs.set(creationId, tab);
       }
+      let body = Buffer.from(bytes);
+      if (password !== undefined) {
+        const encoded = Buffer.from(password, "utf8");
+        const length = Buffer.alloc(2);
+        length.writeUInt16BE(encoded.length);
+        body = Buffer.concat([length, encoded, body]);
+      }
       const result = await owner.ownerRequest("/api/scripts", {
-        method: "POST", address, body: Buffer.from(bytes), timeout: 30_000,
-        headers: { "Content-Type": "application/octet-stream", "Idempotency-Key": creationId, "Splitpage-Content-SHA256": contentHash }
+        method: "POST", address, body, timeout: 30_000,
+        headers: { "Content-Type": password === undefined ? "application/octet-stream" : owner.passwordPolicy.PASSWORD_SHARE_TYPE,
+          "Idempotency-Key": creationId, "Splitpage-Content-SHA256": contentHash }
       });
       if (result.kind !== "response") return { kind: result.kind };
       const { response } = result;
@@ -290,6 +318,13 @@ function createShareCreations(userData: string, owner: ReturnType<typeof createR
       try { created = decodeCreation(await response.json(), address, response.headers.get("Splitpage-Deployment")); }
       catch { return { kind: "unreachable" }; }
       if (created.kind === "created") {
+        if (!!created.passwordRequired !== (password !== undefined)) {
+          if (entry.replica) await eraseReplica(entry.replica);
+          queueAbandon(journal, entry);
+          tabs.delete(creationId);
+          await sendAbandon(journal, entry.relay, creationId);
+          return { kind: "password-mismatch" };
+        }
         entry.replica = created.deployment + "/" + created.scriptId;
         writeJournal(journal);
       }

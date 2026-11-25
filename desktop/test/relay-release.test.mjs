@@ -88,6 +88,11 @@ test("a release stage following a test stage removes the setup code, assets, ori
   for (const marker of ["file-copy-banner", "file-copy-status", "file-copy-write", "file-copy-stop", "file-copy-choice", "Incomplete copy ("]) {
     assert.ok(leakedCollaboration(enabledHtml).includes(marker), marker);
   }
+  for (const marker of ["Link password", "Require a password", "Change password", "Remove password", "Re-enter password",
+    "link-password-modal", "collab-access-reenter-password", "/password-exchange", "The link password changed."]) {
+    assert.ok(leakedCollaboration(enabledHtml).includes(marker), marker);
+  }
+  assert.ok(existsSync(join(app, "shared", "link-password.ts")));
   assert.match(enabledHtml, /connect-src 'self' https: http: wss: ws:\/\/127\.0\.0\.1:\*;/);
   assert.deepEqual(readdirSync(join(variant, "relay-setup")).sort(), ["index.html", "preload.js", "setup.css"]);
   assert.deepEqual(readdirSync(code).sort(), ["collaboration.json", "relay-owner.ts", "relay-setup-window.ts"]);

@@ -30,7 +30,7 @@ import { mountOfflineReviewFeature } from "./offline-review.ts";
 import type { SharedBannersMount } from "../../features/title/ports.ts";
 import { collaboration } from "./ports/collaboration.ts";
 import { retrySharedLocalWrite } from "./collaboration-owner.ts";
-import { requestRetainedLeave } from "./collaboration.ts";
+import { requestPasswordRecovery, requestRetainedLeave } from "./collaboration.ts";
 import { leaveActiveSharedSession } from "./retained-shared-script.ts";
 import { mountCellReach } from "../../features/editing/cell-reach.ts";
 import { mountPhoneBar } from "../../features/notices/phone-bar.ts";
@@ -102,6 +102,7 @@ export function mountSharedBannersFeature(): Disposable {
   return replaceViewMount("mountSharedBanners", function () {
     const mounted = createSharedBanners(window, {
       collaboration,
+      reenterPassword: requestPasswordRecovery,
       exportCopy: () => { void localFileMenuControls().exportAs("splitpage"); },
       leave: () => {
         if (requestRetainedLeave()) return;

@@ -4,6 +4,8 @@ import { sharedSaveStatus } from "../../application/save/status.ts";
 import { createViewLifetime } from "../common/view-lifetime.ts";
 import type { SharedBannersMount, SharedBannersPorts } from "./ports.ts";
 
+declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
+
 interface AnchoredBanner {
   readonly element: HTMLElement;
   readonly home: Text;
@@ -18,14 +20,27 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
   const accessBanner = byId("collab-access-banner");
   const sizeBanner = byId("collab-size-banner");
   const writerStatus = byId("writer-collab-status");
+  let passwordButton: HTMLButtonElement | undefined;
+  if (typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI && ports.reenterPassword && accessBanner) {
+    passwordButton = document.createElement("button");
+    passwordButton.type = "button";
+    passwordButton.className = "btn";
+    passwordButton.id = "collab-access-reenter-password";
+    passwordButton.textContent = "Re-enter password";
+    passwordButton.hidden = true;
+    byId("collab-access-export")?.before(passwordButton);
+    life.listen(passwordButton, "click", ports.reenterPassword);
+  }
 
   const anchored: AnchoredBanner[] = [];
-  for (const element of [saveErrorBanner, accessBanner, sizeBanner, byId("collab-offline-banner")]) {
-    if (!element?.parentNode) continue;
+  function anchor(element: HTMLElement | null): boolean {
+    if (!element?.parentNode || anchored.some(banner => banner.element === element)) return false;
     const home = document.createTextNode("");
     element.before(home);
     anchored.push({ element, home });
+    return true;
   }
+  for (const element of [saveErrorBanner, accessBanner, sizeBanner, byId("collab-offline-banner")]) anchor(element);
 
   let writerHost: HTMLElement | null = null;
   let lastActive = false;
@@ -41,7 +56,7 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
 
   function restoreToRoot(): void {
     for (const { element, home } of anchored) {
-      if (home.isConnected && element.previousSibling !== home) home.after(element);
+      if (element.isConnected && home.isConnected && element.previousSibling !== home) home.after(element);
     }
     writerHost?.remove();
     writerHost = null;
@@ -81,7 +96,9 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
 
   function showAccessRemoved(refusal: CollaborationPermanentRefusal, reveal: boolean): void {
     if (!accessBanner) return;
-    setText("collab-access-text", accessRemovedMessage(refusal));
+    setText("collab-access-text", typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI && refusal === "password-changed"
+      ? "The link password changed. Re-enter it to sync your work." : accessRemovedMessage(refusal));
+    if (passwordButton) passwordButton.hidden = refusal !== "password-changed";
     if (reveal) accessBanner.hidden = false;
   }
 
@@ -117,7 +134,8 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
     const errorChanged = snapshot.localWriteError !== lastError;
     const sizeChanged = snapshot.mergeTooLarge !== lastMergeTooLarge;
     const refusalChanged = snapshot.refusal !== lastRefusal;
-    if (lastActive && !errorChanged && !sizeChanged && !refusalChanged && writerOpen === lastWriterOpen) return;
+    const fileCopyAdded = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI && anchor(byId("file-copy-banner"));
+    if (lastActive && !errorChanged && !sizeChanged && !refusalChanged && !fileCopyAdded && writerOpen === lastWriterOpen) return;
 
     if (!lastActive || errorChanged) {
       if (snapshot.localWriteError) showSaveError(snapshot.localWriteError, errorChanged);
@@ -137,7 +155,7 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
       lastRefusal = snapshot.refusal;
     }
 
-    if (!lastActive || errorChanged || sizeChanged || refusalChanged || writerOpen !== lastWriterOpen) {
+    if (!lastActive || errorChanged || sizeChanged || refusalChanged || fileCopyAdded || writerOpen !== lastWriterOpen) {
       placeBanners(true);
       lastWriterOpen = writerOpen;
     }
@@ -179,6 +197,7 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
   if (sizeDismiss) life.listen(sizeDismiss, "click", () => { hideBanner(sizeBanner); });
 
   life.release(() => {
+    passwordButton?.remove();
     hideBanner(accessBanner);
     hideBanner(sizeBanner);
     if (lastActive) hideBanner(saveErrorBanner);

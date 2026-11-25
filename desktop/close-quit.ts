@@ -88,14 +88,16 @@ function createCloseQuit({
       tabs, askAboutUnsaved, keepDraftsOfGoneFiles, report: reportCloseCheckFailure,
       unsavedTabsOf: (ids, gone) => unsavedTabsOf(ids, gone, failedSharedFlushes),
       async goneFileTabsOf(ids: Parameters<typeof goneFileTabsOf>[0]) {
-        const shared = ids.map(id => tabs.get(id)).filter(tab => tab?.source?.kind === "shared" && tab.sharedAttached);
-        for (const tab of shared) {
-          if (!tab) continue;
-          const keepsFile = hasSharedFileCopy?.(tab);
+        const shared = ids.map(id => tabs.get(id)).filter((tab): tab is DesktopMainTab => tab?.source?.kind === "shared" && !!tab.sharedAttached);
+        const copies = new Set(shared.filter(tab => hasSharedFileCopy?.(tab)));
+        await Promise.all(shared.filter(tab => !copies.has(tab)).map(async tab => {
+          const result = await requestDraftFlush(tab, DRAFT_FLUSH_BUDGET_MS) as { ok?: boolean };
+          if (!result.ok) failedSharedFlushes.add(tab);
+        }));
+        for (const tab of copies) {
           let mode: "check" | "new" = "check";
           while (stillWanted()) {
-            const result = await requestDraftFlush(tab, keepsFile ? 30_000 : DRAFT_FLUSH_BUDGET_MS,
-              false, keepsFile ? mode : undefined) as {
+            const result = await requestDraftFlush(tab, 30_000, false, mode) as {
                 ok?: boolean; fileCopyProblem?: "changed" | "unavailable" | "missing";
               };
             if (!result.ok) { failedSharedFlushes.add(tab); break; }

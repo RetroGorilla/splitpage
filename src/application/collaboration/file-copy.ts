@@ -18,19 +18,20 @@ interface FileCopyPorts {
   readonly publish: (file: SharedFileInfo | null, problem: FileCopyProblem | null) => void;
 }
 
-export function createFileCopy(initial: SharedFileInfo, ports: FileCopyPorts) {
+export function createFileCopy(initial: SharedFileInfo, ports: FileCopyPorts, freshRevision?: number) {
   let file: SharedFileInfo | null = initial;
   let problem: FileCopyProblem | null = null;
-  let revision = -1;
+  let revision = freshRevision ?? -1;
   let pictures = 0;
-  let writtenRevision = -1;
-  let writtenPictures = -1;
+  let writtenRevision = freshRevision ?? -1;
+  let writtenPictures = freshRevision === undefined ? -1 : 0;
   let lastAttempt = -Infinity;
   let lastEdit = ports.now();
   let disposed = false;
   let suspended = 0;
   let stopTimer: (() => void) | undefined;
   let queue = Promise.resolve<unknown>(undefined);
+  const pending = () => revision !== writtenRevision || pictures !== writtenPictures;
 
   function publish(next: FileCopyProblem | null) {
     problem = next;
@@ -44,7 +45,7 @@ export function createFileCopy(initial: SharedFileInfo, ports: FileCopyPorts) {
 
   function schedule() {
     cancelTimer();
-    if (disposed || suspended || !file || problem || (revision === writtenRevision && pictures === writtenPictures)) return;
+    if (disposed || suspended || !file || problem || !pending()) return;
     const due = Math.max(lastEdit + 2000, lastAttempt + 30_000);
     stopTimer = ports.startTimer(() => { void flush(false); }, Math.max(0, due - ports.now()));
   }
@@ -123,11 +124,13 @@ export function createFileCopy(initial: SharedFileInfo, ports: FileCopyPorts) {
       schedule();
     },
     picturesChanged() {
+      if (!pending() && !file?.missing) return;
       pictures++;
       lastEdit = ports.now();
       schedule();
     },
     flush,
+    pending,
     beforeDeparture,
     stop() {
       cancelTimer();

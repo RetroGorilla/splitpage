@@ -22,6 +22,7 @@ import { seedRelaySession } from "./relay-harness.ts";
 import { appendText, contentHash, serverHarness, storedText } from "./server-harness.ts";
 import { desktopTestCipher, replicasAt } from "./desktop-local-store-fixture.ts";
 import { seedReplica, STORE_OPTIONS } from "./local-store-fixture.ts";
+import * as passwordPolicy from "../../../../shared/link-password.ts";
 
 const require = createRequire(import.meta.url);
 const { createRelayOwner, createShareCreations }: {
@@ -44,13 +45,13 @@ async function fixture(t: TestContext, enter?: ShareAttemptPorts["enter"]) {
   const directory = await mkdtemp(join(tmpdir(), "splitpage-share-creation-"));
   t.after(() => rm(directory, { recursive: true, force: true }));
   const keystore = desktopTestCipher(randomBytes(32));
-  let offline = false, loseReply = false;
+  let offline = false, loseReply = false, mismatchPassword = false;
   let responseGate: { received: ReturnType<typeof deferred>; release: ReturnType<typeof deferred> } | undefined;
   const creates: { id: string; hash: string; scriptId: string; owner: string | undefined; guest: string | undefined }[] = [];
   const abandons: { id: string; status: number }[] = [];
   const owner = createRelayOwner(directory, {
     isEncryptionAvailable: () => true, decryptString: keystore.decrypt, encryptString: keystore.encrypt
-  }, async (url, init) => {
+  }, passwordPolicy, async (url, init) => {
     if (offline) throw new Error("Offline");
     const headers = new Headers(init?.headers);
     assert.equal(headers.get("Authorization") === "Bearer " + secret, true);
@@ -69,6 +70,11 @@ async function fixture(t: TestContext, enter?: ShareAttemptPorts["enter"]) {
       if (loseReply) {
         await response.body?.cancel();
         throw new Error("Reply lost");
+      }
+      if (mismatchPassword) {
+        const creation = await response.json() as Record<string, unknown>;
+        Reflect.deleteProperty(creation, "passwordRequired");
+        return Response.json(creation, { headers: response.headers });
       }
     } else if (init?.method === "DELETE") {
       const id = new URL(String(url)).pathname.split("/").at(-1);
@@ -123,10 +129,11 @@ async function fixture(t: TestContext, enter?: ShareAttemptPorts["enter"]) {
   return {
     address, port, relay, creates, abandons, source, main, replicaStore, journal, start, directory,
     scripts: async () => (await run.owner("scripts", {}, secret)).json() as Promise<{ id: string; status: string }[]>,
-    share: (signal = new AbortController().signal) => workflow.share(address, signal, () => {}),
+    share: (signal = new AbortController().signal, password?: string) => workflow.share(address, signal, () => {}, password),
     entered: () => entered,
     hold: () => held,
     loseReply(value: boolean) { loseReply = value; },
+    mismatchPassword(value: boolean) { mismatchPassword = value; },
     offline(value: boolean) { offline = value; },
     refuseEntry(value: boolean) { refuseEntry = value; },
     edit() { appendText(source, "Revised ", 0); generation++; },
@@ -242,6 +249,23 @@ test("lost share reply with unchanged content reuses the id and snapshot and kee
     const membership = await copy.membership?.record();
     assert.equal(membership?.role === "owner" && membership.token === second.owner && membership.guestLinkToken === second.guest, true);
   } finally { copy.session.close(); await copy.closed; }
+});
+
+test("a share with the wrong password acknowledgement is abandoned and a retry uses a fresh creation id", async t => {
+  const f = await fixture(t);
+  const password = "Share acknowledgement";
+  f.mismatchPassword(true);
+  assert.deepEqual(await f.share(undefined, password), { kind: "password-mismatch" });
+  const first = f.creates[0];
+  assert.ok(first);
+  assert.deepEqual(f.abandons, [{ id: first.id, status: 204 }]);
+  assert.equal((await f.scripts()).find(script => script.id === first.scriptId)?.status, "deleted");
+  assert.deepEqual(await f.journal(), { pending: [], abandon: {} });
+  assert.equal(f.entered(), 0);
+  f.mismatchPassword(false);
+  assert.equal((await f.share(undefined, password)).kind, "shared");
+  assert.notEqual(f.creates[1]?.id, first.id);
+  assert.equal(f.entered(), 1);
 });
 
 test("an unchanged script can also retry after a refused local handoff", async t => {

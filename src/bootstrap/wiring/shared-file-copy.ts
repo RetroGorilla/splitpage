@@ -6,7 +6,6 @@ import { createFileCopy } from "../../application/collaboration/file-copy.ts";
 import type { FileCopyProblem, FileCopyWritten } from "../../application/collaboration/file-copy.ts";
 import type { SharedDocumentSession } from "../../application/session/shared-session.ts";
 import { buildMarkdownProject, buildSplitpageFile, fileImagesMissing } from "../../adapters/formats/project-file.ts";
-import { buildPublishHtml } from "../../adapters/page/page-shell.ts";
 import { makeDesktopHandle } from "../../adapters/desktop/desktop-handle.ts";
 import { mintDocId } from "../../adapters/identity/ids.ts";
 import { captureExportDocument } from "./export-capture.ts";
@@ -35,7 +34,7 @@ export const sharedFileCopy = {
   }
 };
 
-export function openSharedFileCopy(invoke: NativeReplicaInvoke, key: string, session: SharedDocumentSession) {
+export function openSharedFileCopy(invoke: NativeReplicaInvoke, key: string, session: SharedDocumentSession, freshRevision?: number) {
   let closed = false;
   let owner: typeof active;
   let checked = false;
@@ -56,10 +55,8 @@ export function openSharedFileCopy(invoke: NativeReplicaInvoke, key: string, ses
         const captured = session.readAt(() => captureExportDocument({ docId }));
         await pictures.ensureBytes(fileImagesMissing(captured));
         const missing = fileImagesMissing(captured).length;
-        const format = newFile ? "splitpage" : fileKindFromName(file.name);
-        const project = () => buildSplitpageFile(captured);
-        const body = format === "md" ? buildMarkdownProject(captured)
-          : format === "html" ? buildPublishHtml(project()) : project();
+        const body = !newFile && fileKindFromName(file.name) === "md"
+          ? buildMarkdownProject(captured) : buildSplitpageFile(captured);
         return { bytes: new TextEncoder().encode(body), missing, docId };
       },
       async write(bytes, missing, mode, docId) {
@@ -72,7 +69,7 @@ export function openSharedFileCopy(invoke: NativeReplicaInvoke, key: string, ses
         return result.kind === "file-copy" && !result.file;
       },
       publish
-    });
+    }, freshRevision);
     active = owner;
     owner.changed(readRevision());
   }).catch(() => {});
@@ -82,6 +79,7 @@ export function openSharedFileCopy(invoke: NativeReplicaInvoke, key: string, ses
     async flushOnClose(mode: "check" | "new" = "check") {
       await ready;
       if (!checked) return "unavailable";
+      if (mode === "check" && !owner?.pending()) return null;
       const revision = readRevision();
       const result = await owner?.flush(true, mode === "new" ? "export" : "check");
       return typeof result === "string" ? result : owner?.info() && revision !== readRevision() ? "unavailable" : null;

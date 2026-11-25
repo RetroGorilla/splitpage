@@ -14,7 +14,7 @@ export async function focusDesktopSharedScript(invoke: NativeReplicaInvoke, depl
 }
 
 export function createDesktopNativeLocalStore(invoke: NativeReplicaInvoke,
-  manage?: (operation: string, name: string, lease: string, address: string) => Promise<NativeReplicaReply>): NativeLocalStore {
+  manage?: (operation: string, name: string, lease: string, address: string, password?: string) => Promise<NativeReplicaReply>): NativeLocalStore {
   return {
     async open(name, options) {
       try {
@@ -74,8 +74,8 @@ export function createDesktopNativeLocalStore(invoke: NativeReplicaInvoke,
             },
             membership: {
               record: membership,
-              ...(manage && { async manage(operation: string, address: string) {
-                const reply = await manage(operation, name, lease, address);
+              ...(manage && { async manage(operation: string, address: string, password?: string) {
+                const reply = await manage(operation, name, lease, address, password);
                 if (reply.kind !== "membership" || !reply.record) throw new Error("Could not update sharing.");
                 return reply.record;
               } }),

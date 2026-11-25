@@ -6,9 +6,11 @@ import { createRequire } from "node:module";
 import { tmpdir } from "node:os";
 import { join } from "node:path";
 import { test } from "node:test";
+import * as passwordPolicy from "../../shared/link-password.ts";
 
 const require = createRequire(import.meta.url);
-const { createRelayOwner, createShareCreations } = require("../relay-owner.ts");
+const { createRelayOwner: createOwner, createShareCreations } = require("../relay-owner.ts");
+const createRelayOwner = (dir, keyStore, request, testBuild) => createOwner(dir, keyStore, passwordPolicy, request, testBuild);
 
 function store(t) {
   const dir = mkdtempSync(join(tmpdir(), "splitpage-relay-owner-"));
@@ -80,6 +82,8 @@ test("sharing management checks the guest and relay before minting an owner, and
       res.writeHead(201).end(JSON.stringify({ token: ownerToken }));
     } else if (req.method === "DELETE") {
       res.writeHead(204).end();
+    } else if (req.method === "GET" && req.url.endsWith("/password")) {
+      res.writeHead(200).end(JSON.stringify({ required: true }));
     } else {
       res.writeHead(200).end(JSON.stringify({ token: nextGuest }));
     }
@@ -98,14 +102,15 @@ test("sharing management checks the guest and relay before minting an owner, and
   assert.deepEqual(await manage("reset", owner), { ...owner, guestLinkToken: nextGuest });
   assert.equal(await manage("stop", owner), owner);
   revoked = true;
-  assert.deepEqual(await manage("check-link", owner), { role: "owner", token: ownerToken });
+  assert.deepEqual(await manage("check-link", owner), { role: "owner", token: ownerToken, linkPasswordRequired: true });
   assert.deepEqual(checks, [
     ["HEAD", "/api/scripts/script/link", "guest"],
     ["HEAD", "/api/scripts/script/link", "guest"],
     ["POST", "/api/scripts/script/invitations", "management"],
     ["POST", "/api/scripts/script/reset", "owner"],
     ["DELETE", "/api/scripts/script", "owner"],
-    ["HEAD", "/api/scripts/script/link", "guest"]
+    ["HEAD", "/api/scripts/script/link", "guest"],
+    ["GET", "/api/scripts/script/password", "owner"]
   ]);
 });
 

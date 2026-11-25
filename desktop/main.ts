@@ -45,6 +45,7 @@ import type * as IpcTabstrip from "./ipc-tabstrip.ts";
 import type * as IpcTestMode from "./ipc-test-mode.ts";
 import type * as IpcPrint from "./ipc-print.ts";
 import type { readNativeMembership as ReadNativeMembership } from "../shared/native-membership.ts";
+import type * as LinkPassword from "../shared/link-password.ts";
 import type { createNativeReplicaIpc as CreateNativeReplicaIpc } from "./native-replica-ipc.ts";
 import type * as PrintPdf from "./print-pdf.ts";
 import type * as HistoryPolicy from "../shared/history-policy.ts";
@@ -1505,7 +1506,11 @@ type OpenPathOptions = { fromWindowId?: string | null; fromTabId?: string };
 async function routeFileCopy(record: SharedFileRecord, options?: OpenPathOptions): Promise<OpenPathResult> {
   if (!fileCopies) return null;
   const w = windowRecordFor(options?.fromWindowId);
-  if (!w || !retainedSharedScript(record)) return null;
+  if (!w) return null;
+  if (!retainedSharedScript(record)) {
+    await fileCopies.releaseOrphan(sharedScriptKey(record));
+    return routeOpenPath(record.absPath, options);
+  }
   const existing = sharedTab(sharedScriptKey(record));
   const unchanged = await fileCopies.matches(record);
   if (fileCopies.forPath(record.absPath)?.docId !== record.docId) return routeOpenPath(record.absPath, options);
@@ -1924,7 +1929,8 @@ const relaySetup = COLLAB_UI ? (() => {
   const setupWindow = createRelaySetupWindow(BrowserWindow, root, RELAY_SETUP_ORIGIN);
   const userData = app.getPath("userData");
   // why: desktop staging and the dev build enable collaboration with the same flag that grants loopback WebSocket access
-  const owner = createRelayOwner(userData, safeStorage, fetch, COLLAB_UI);
+  const passwordPolicy: typeof LinkPassword = require(path.join(SHARED_ROOT, "link-password.ts"));
+  const owner = createRelayOwner(userData, safeStorage, passwordPolicy, fetch, COLLAB_UI);
   const shares = createShareCreations(userData, owner, createNativeReplicaFiles(userData).remove);
   function tabWindow(event: DesktopIpcEvent) {
     const tab = tabOf(event);
@@ -1954,12 +1960,13 @@ const relaySetup = COLLAB_UI ? (() => {
       if (!args.length) return sharedReferenceFor(tab);
       const reference = normalizeSharedReference(args[0]);
       const previous = tab.shared;
-      if (args.length === 2 && args[0] === null) {
+      if ((args.length === 2 || (args.length === 3 && args[2] === "unavailable")) && args[0] === null) {
         const expected = normalizeSharedReference(args[1]);
         const current = sharedReferenceFor(tab);
         if (!expected || !current || sharedScriptKey(expected) !== sharedScriptKey(current) ||
           expected.address !== current.address || tab.sharedAttached) return false;
         if (tab.source.kind === "shared") {
+          if (args[2] === "unavailable") await fileCopies?.releaseOrphan(sharedScriptKey(tab.source));
           detachSharedTab(tab);
           return true;
         }
@@ -1971,23 +1978,23 @@ const relaySetup = COLLAB_UI ? (() => {
       else delete tab.shared;
       return false;
     },
-    manageSharing: (event: DesktopIpcEvent, operation: string, name: string, lease: string, address: string) => {
+    manageSharing: (event: DesktopIpcEvent, operation: string, name: string, lease: string, address: string, password?: string) => {
       const tab = tabWindow(event) && tabOf(event);
       const shared = tab && sharedReferenceFor(tab);
       if (!shared || name !== sharedScriptKey(shared) || address !== shared.address) {
         return { kind: "failed" as const, reason: "closed" as const };
       }
       return nativeReplicaForDevice(event.sender, ["membership", name, lease],
-        record => owner.manageSharing(operation, name, address, record));
+        record => owner.manageSharing(operation, name, address, record, password));
     },
-    createShare: async (event: DesktopIpcEvent, id: string, hash: string, bytes: Uint8Array, address: string) => {
+    createShare: async (event: DesktopIpcEvent, id: string, hash: string, bytes: Uint8Array, address: string, password?: string) => {
       const tab = tabWindow(event) && tabOf(event);
       if (!tab) return { kind: "failed" as const };
       const { source, fileId, docId } = tab;
       const fingerprint = fileId ? fileIds.fingerprint(fileId) : undefined;
-      const created = await shares.create(tab.id, id, hash, bytes, address);
+      const created = await shares.create(tab.id, id, hash, bytes, address, password);
       if (created.kind === "created" && source.kind === "file" && typeof source.absPath === "string" &&
-          /\.(splitpage|md|html?)$/i.test(source.absPath) && docId && DOC_ID_RE.test(docId) && fingerprint) {
+          /\.(splitpage|md)$/i.test(source.absPath) && docId && DOC_ID_RE.test(docId) && fingerprint) {
         shareSources.set(event.sender, { id, complete: false, record: {
           absPath: source.absPath, docId, fingerprint, missing: 0, deployment: created.deployment, script: created.scriptId
         } });
@@ -2114,24 +2121,26 @@ function nativeReplicaForDevice(sender: Electron.WebContents, request: unknown,
   }
   const tab = tabs.get(webContentsIdToTabId.get(sender.id));
   const [operation, key, bytes, missing, mode, copyDocId]: unknown[] = request;
-  if (fileCopies && typeof key === "string" && tab?.sharedAttached && tab.source.kind === "shared" && sharedScriptKey(tab.source) === key) {
+  if (fileCopies && typeof key === "string" && tab?.source.kind === "shared" && sharedScriptKey(tab.source) === key) {
     if (operation === "file-copy-status" && request.length === 2) return fileCopies.status(key);
-    if (operation === "file-copy-stop" && request.length === 2) return fileCopies.forget(key).then<NativeReplicaReply>(ok => ok
+    if (tab.sharedAttached && operation === "file-copy-stop" && request.length === 2) return fileCopies.forget(key).then<NativeReplicaReply>(ok => ok
       ? { kind: "file-copy", file: null } : { kind: "file-copy-problem", problem: "unavailable" });
     if (operation === "file-copy-choice" && request.length === 4 &&
         (bytes === "changed" || bytes === "unavailable" || bytes === "missing") && (missing === "leave" || missing === "stop")) {
       const reason = missing === "leave" ? "leave the shared script" : "stop sharing";
       return askFileCopyChoice(tab, bytes, reason).then<NativeReplicaReply>(choice => ({ kind: "file-copy-choice", choice }));
     }
-    if (operation === "file-copy-write" && request.length === 6 && bytes instanceof Uint8Array && bytes.byteLength > 0 &&
+    if (tab.sharedAttached && operation === "file-copy-write" && request.length === 6 && bytes instanceof Uint8Array && bytes.byteLength > 0 &&
         bytes.buffer instanceof ArrayBuffer && typeof missing === "number" && Number.isSafeInteger(missing) && missing >= 0 &&
         typeof copyDocId === "string" && DOC_ID_RE.test(copyDocId) &&
         (mode === "check" || mode === "overwrite" || mode === "new" || mode === "export")) {
       return fileCopies.write(key, bytes, missing, mode, copyDocId, async () => {
         const answer = consumeTestDialogAnswer();
         if (answer !== undefined) return typeof answer === "string" && /\.splitpage$/i.test(answer) ? answer : null;
+        const source = fileCopies.lookup(key);
+        const defaultPath = source ? path.join(path.dirname(source.absPath), path.parse(source.absPath).name + " copy.splitpage") : undefined;
         const result = await dialog.showSaveDialog(windowsById.get(tab.windowId)?.win, {
-          defaultPath: tab.title + ".splitpage", filters: [{ name: "Splitpage", extensions: ["splitpage"] }],
+          defaultPath, filters: [{ name: "Splitpage", extensions: ["splitpage"] }],
           properties: ["showOverwriteConfirmation"]
         });
         return !result.canceled && result.filePath && /\.splitpage$/i.test(result.filePath) ? result.filePath : null;
@@ -2171,7 +2180,7 @@ function nativeReplicaForDevice(sender: Electron.WebContents, request: unknown,
       return wrote;
     },
     async forgot(name) {
-      if (fileCopies && !await fileCopies.forget(name)) throw new Error("Could not remove the file copy record.");
+      if (fileCopies && !await fileCopies.releaseOrphan(name)) throw new Error("Could not remove the file copy record.");
       const written = await desktopState.write(current => {
         if (!current.sharedScripts?.some(entry => sharedScriptKey(entry) === name)) return current;
         current.sharedScripts = current.sharedScripts.filter(entry => sharedScriptKey(entry) !== name);

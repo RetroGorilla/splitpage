@@ -1,6 +1,6 @@
 import type { LocalFileData, LocalFileHandle } from "../../application/files/local-file-access.ts";
 import type { DesktopDocumentStateOwner } from "../../application/desktop/document-state.ts";
-import type { DesktopHandOff, DesktopOpenedFile, DesktopShell } from "../../application/desktop/shell.ts";
+import type { DesktopDraftFlushRequest, DesktopHandOff, DesktopOpenedFile, DesktopShell } from "../../application/desktop/shell.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
 import type { SaveState } from "../../application/save/save-state.ts";
@@ -49,4 +49,3 @@ export interface DesktopActionPorts {
   readonly running: () => boolean;
   readonly canOpenPrompterInBrowser: DesktopPorts["canOpenPrompterInBrowser"];
 }
-import type { DesktopDraftFlushRequest } from "../../application/desktop/shell.ts";

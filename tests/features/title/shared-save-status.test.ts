@@ -5,7 +5,8 @@ import type { Home } from "../../../src/application/location/document-location.t
 import type { PreferenceName } from "../../../src/application/preferences/preferences.ts";
 import { mountSaveStatus } from "../../../src/features/title/save-status.ts";
 import { createSharedBanners } from "../../../src/features/title/shared-banners.ts";
-import { fakeNotices, fakeSaveState } from "../fakes.ts";
+import { mountFileCopyBanner } from "../../../src/features/collaboration/file-copy-banner.ts";
+import { fakeFileCopy, fakeNotices, fakeSaveState } from "../fakes.ts";
 import { viewHarness } from "../view-harness.ts";
 
 const FORBIDDEN_SERVER_CLAIM = /saved\s+(to|on)\s+(the\s+)?(server|relay)/i;
@@ -61,6 +62,36 @@ function setup() {
     }
   };
 }
+
+test("a file copy banner mounted after the title stays actionable in Writer", async t => {
+  Reflect.set(globalThis, "SPLITPAGE_COLLAB_UI", true);
+  const h = setup();
+  const copy = fakeFileCopy();
+  const overwrite = t.mock.fn(async () => {});
+  const dispose = mountFileCopyBanner({
+    ...copy.reads, overwrite, retry: async () => {}, saveAs: async () => {}, stop: async () => {}
+  });
+  try {
+    h.collab.enter();
+    const writer = h.el("writer");
+    writer.hidden = false;
+    h.banners.sync();
+    copy.set({ file: { name: "Pilot.splitpage", docId: "d" + "a".repeat(32), missing: 0 }, problem: "changed" });
+    const banner = h.el("file-copy-banner");
+    assert.equal(banner.hidden, false);
+    assert.equal(banner.closest("#writer-banners")?.parentElement, writer);
+    banner.querySelector<HTMLButtonElement>("button:not([hidden])")?.click();
+    await Promise.resolve();
+    assert.equal(overwrite.mock.callCount(), 1);
+    writer.hidden = true;
+    h.banners.sync();
+    assert.equal(h.el("root").contains(banner), true);
+  } finally {
+    dispose();
+    h.cleanup();
+    Reflect.deleteProperty(globalThis, "SPLITPAGE_COLLAB_UI");
+  }
+});
 
 test("shared save status mirrors every state on #btn-save, #save-status, and #writer-collab-status", () => {
   const h = setup();

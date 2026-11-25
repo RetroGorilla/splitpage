@@ -153,7 +153,7 @@ function normalizeDesktopStateV2(raw: unknown, pathKey: (path: string) => string
       const identity = shared.identity(value);
       if (!identity) return [];
       const { absPath, docId, fingerprint, missing } = value as Partial<SharedFileRecord>;
-      if (typeof absPath !== "string" || !path.isAbsolute(absPath) || typeof docId !== "string" ||
+      if (typeof absPath !== "string" || !path.isAbsolute(absPath) || !/\.(splitpage|md)$/i.test(absPath) || typeof docId !== "string" ||
           !/^d[a-f0-9]{32}$/.test(docId) || typeof fingerprint !== "string" || !/^[a-f0-9]{64}$/.test(fingerprint) ||
           typeof missing !== "number" || !Number.isSafeInteger(missing) || missing < 0) return [];
       const key = pathKey(absPath), script = identity.deployment + "/" + identity.script;

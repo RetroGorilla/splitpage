@@ -44,6 +44,7 @@ export interface SharedBannersPorts {
   readonly collaboration: Pick<CollaborationReads, "snapshot">;
   readonly exportCopy: () => void;
   readonly leave: () => void;
+  readonly reenterPassword?: (() => void) | undefined;
 }
 
 export interface SharedBannersMount {

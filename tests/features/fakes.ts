@@ -51,11 +51,12 @@ export function fakeFileCopy() {
 
 export function fakeSharedPopover(overrides: Partial<SharedPopoverPorts> = {}) {
   const collaboration = createCollaborationState();
+  const management: Parameters<SharedPopoverPorts["manage"]>[] = [];
   const ports: SharedPopoverPorts = {
     collaboration,
     membership: () => null,
     canManage: async () => false,
-    manage: async () => {},
+    manage: async (...args) => { management.push(args); },
     saveCopy: () => {},
     copy: async () => {},
     leave: async () => {},
@@ -63,7 +64,7 @@ export function fakeSharedPopover(overrides: Partial<SharedPopoverPorts> = {}) {
     confirm: () => true,
     ...overrides
   };
-  return { collaboration, ports };
+  return { collaboration, ports, management };
 }
 
 export function fakeSharedCommands(): SharedCommandGuard {

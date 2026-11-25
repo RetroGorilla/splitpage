@@ -84,6 +84,21 @@ test("Leave only disconnects after Save a copy first succeeds", async t => {
   assert.equal(document.querySelector("#leave-script-modal"), null);
 });
 
+test("cancelling the file-copy choice leaves the Leave dialog open without an error", async t => {
+  const leave = t.mock.fn(async () => "cancelled" as const);
+  const dialog = mountLeaveDialog({ leave, saveCopy: async () => true });
+  t.after(dialog.dispose);
+  const button = document.querySelector<HTMLButtonElement>("[data-leave-script]");
+  assert.ok(button);
+  button.click();
+  await Promise.resolve();
+  assert.equal(leave.mock.callCount(), 1);
+  assert.equal(dialog.signal.aborted, false);
+  assert.equal(button.disabled, false);
+  assert.equal(document.activeElement, button);
+  assert.equal(document.querySelector("#leave-script-modal [role=status]")?.textContent, "");
+});
+
 test("Try again checks the original browser invitation and joins after recovery", async t => {
   const request = { kind: "browser", invitation: { script: "script", token: "a".repeat(43) } } as const;
   let reachable = false;

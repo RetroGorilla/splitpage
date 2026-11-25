@@ -6,6 +6,7 @@ import { openNativeSession } from "../../adapters/collab/native/session.ts";
 import { openNativeRelay } from "../../adapters/collab/native/relay.ts";
 import type { NativeRelayEvent } from "../../adapters/collab/native/relay.ts";
 import { InvitationSnapshotError, readInvitationSnapshot } from "../../adapters/collab/native/invitation-snapshot.ts";
+import { exchangeLinkPassword } from "../../adapters/collab/native/password-exchange.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { isPermanentCollaborationRefusal, localWriteErrorMessage } from "../../application/collaboration/state.ts";
 import type { CollaborationLocalWriteError } from "../../application/collaboration/state.ts";
@@ -32,6 +33,7 @@ const desktopSharing = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_C
     return { manage: desktop?.manageSharing, status: desktop?.relayOwner?.status };
   }
   : () => undefined;
+const exchangePassword = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI ? exchangeLinkPassword : null;
 
 type RetainedReplica = Extract<NativeLocalStoreOpen, { kind: "opened" }>;
 let localCopy: RetainedReplica | null = null;
@@ -42,7 +44,9 @@ interface RetainedSharingControls {
   readonly role: NativeMembershipRecord["role"];
   readonly link: string | null;
   readonly canManage: () => Promise<boolean>;
-  readonly manage: (operation: "promote" | "reset" | "stop" | "check-link") => Promise<void>;
+  readonly passwordRequired: boolean;
+  readonly manage: (operation: "promote" | "reset" | "stop" | "check-link" | "set-password" | "remove-password", password?: string) => Promise<void>;
+  readonly reenter: (password: string | null, signal: AbortSignal) => Promise<string | null>;
 }
 
 export function retainedSharingControls() {
@@ -61,7 +65,7 @@ function trackClosing(name: string, replica: RetainedReplica): void {
 export interface RetainedSharedScript {
   readonly deployment: string;
   readonly script: string;
-  readonly invitation?: { readonly token: string; readonly state?: Uint8Array };
+  readonly invitation?: { readonly token: string; readonly guestLinkToken?: string; readonly state?: Uint8Array };
   readonly created?: {
     readonly membership: NativeMembershipRecord;
     readonly state: Uint8Array;
@@ -278,6 +282,8 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
         await membership.join(entry.created.membership);
         current = entry.created.membership;
       } else if (entry.invitation) {
+        const { token, guestLinkToken } = entry.invitation;
+        const invited: NativeMembershipRecord = { role: "guest", token, ...(guestLinkToken && { guestLinkToken }) };
         if (entry.relayUrl) {
           state ??= await readInvitationSnapshot(entry.relayUrl, entry.script, entry.invitation.token, signal);
           const preview = openNativeSession({ kind: "stored-script", state }, { actor: ports.editor(), sanitize: sanitizeHtml });
@@ -303,15 +309,15 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
         }
         if (signal && membership.stageInvitation) {
           if (replica.restored && !replica.session.isStoredScript()) return SHARED_ENTER_FAILED;
-          staged = await membership.stageInvitation(entry.invitation.token, record, signal);
+          staged = await membership.stageInvitation(invited, record, signal);
         } else if (cancellation) {
           return SHARED_ENTER_FAILED;
         } else {
           if (!replica.restored && (!state || !applyNativePeerUpdate(replica.session, state))) return SHARED_ENTER_FAILED;
           if (!replica.session.isStoredScript()) return SHARED_ENTER_FAILED;
-          await membership.join(entry.invitation.token);
+          await membership.join(guestLinkToken ? invited : token);
         }
-        current = { role: "guest", token: entry.invitation.token };
+        current = invited;
       }
       if (!current || ((!signal || !entry.invitation) && !replica.session.isStoredScript())) return SHARED_ENTER_FAILED;
     } catch (error) { return error instanceof InvitationSnapshotError ? error.reason : SHARED_ENTER_FAILED; }
@@ -334,6 +340,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
   }
   let connectCreated: (() => void) | undefined;
   let startFileCopy: (() => void) | undefined;
+  let catalogueReady: Promise<void> | undefined;
   try {
     const outcome = await enterSharedSession({ ...ports, prepare: () => (preparation = prepare()) }, (_, failedClose) => {
       const { replica } = prepared;
@@ -407,17 +414,25 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
       const { backend } = bindNativeEditor(ports, replica.session, failedClose);
       let managing = false;
       let editorSession: Parameters<SharedEditorBackend["bind"]>[0] | undefined;
+      let freshRevision: number | undefined;
       if (typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI && desktop?.shareScript) {
         startFileCopy = () => {
-          if (editorSession && sessionCurrent()) fileCopy = openSharedFileCopy(desktop.nativeReplica, name, editorSession);
+          if (!fileCopy && editorSession && sessionCurrent()) {
+            fileCopy = openSharedFileCopy(desktop.nativeReplica, name, editorSession, freshRevision);
+          }
         };
       }
+      const ensureFileCopy = async () => {
+        await catalogueReady;
+        startFileCopy?.();
+        return fileCopy;
+      };
       const checkFileBeforeDeparture = async (reason: "leave" | "stop") => {
-        if (!fileCopy) return null;
-        return fileCopy.beforeDeparture(reason);
+        const copy = await ensureFileCopy();
+        return copy ? copy.beforeDeparture(reason) : startFileCopy ? false as const : null;
       };
       const leave = async () => {
-        if (!fileCopy) return finishRetainedLeave(replica);
+        if (!startFileCopy) return finishRetainedLeave(replica);
         if (sessionEntryRefusal()) return { ok: false, reason: "shared-switching" } as const;
         const refused = backend.settle(true);
         if (refused) return { ok: false, reason: refused } as const;
@@ -433,6 +448,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
         } finally { ingress?.(); }
       };
       const manage = replica.membership?.manage;
+      const recoveryLifetime = new AbortController();
       const controls = () => {
         const link = pictureOrigin && membership?.guestLinkToken ? new URL("/", pictureOrigin) : null;
         if (link) {
@@ -441,14 +457,48 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
         }
         return {
           role: membership?.role ?? "guest",
-          link: link?.href ?? null,
+          link: membership?.role === "owner" ? link?.href ?? null : null,
+          passwordRequired: membership?.linkPasswordRequired ?? false,
           async canManage() {
             if (!manage || !pictureOrigin || membership?.role !== "guest") return false;
             const settings = await sharing?.status?.();
             return sessionCurrent() && !!settings?.address
               && new URL(settings.address).origin === pictureOrigin;
           },
-          async manage(operation: "promote" | "reset" | "stop" | "check-link") {
+          async reenter(password: string | null, signal: AbortSignal) {
+            const previous = membership;
+            const stage = replica.membership?.stageInvitation;
+            const relay = liveRelay;
+            const owner = collaborationState();
+            if (!exchangePassword || !sessionCurrent() || !relay || !stage || !pictureOrigin || previous?.role !== "guest"
+              || managing || owner.snapshot().refusal !== "password-changed") return "access-removed";
+            managing = true;
+            const lifetime = AbortSignal.any([signal, recoveryLifetime.signal]);
+            const guestLinkToken = previous.guestLinkToken ?? previous.token;
+            try {
+              const result = await exchangePassword(pictureOrigin, entry.script, guestLinkToken, password, lifetime);
+              lifetime.throwIfAborted();
+              if (result.kind === "failed") {
+                if (result.reason === "access-removed") owner.setRefusal(result.reason);
+                return result.reason;
+              }
+              const next = { role: "guest" as const, token: result.token, guestLinkToken };
+              const stagedCredential = await stage(next, previous, lifetime);
+              if (lifetime.aborted || !sessionCurrent()) {
+                await stagedCredential.rollback();
+                return "cancelled";
+              }
+              stagedCredential.commit();
+              membership = next;
+              owner.clearRefusal();
+              pictureBinding?.replaceToken(relay.session(), next.token);
+              relay.reconnectWithToken(next.token);
+              return null;
+            } catch {
+              return lifetime.aborted ? "cancelled" : "password-save-failed";
+            } finally { managing = false; }
+          },
+          async manage(operation: "promote" | "reset" | "stop" | "check-link" | "set-password" | "remove-password", password?: string) {
             if (!sessionCurrent() || !manage || !pictureOrigin || !liveRelay || managing || sessionEntryRefusal()) {
               throw new Error("The shared script is busy.");
             }
@@ -458,7 +508,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
             managing = true;
             const unhold = stopSharing ? editorSession?.hold("sharing-controls") : undefined;
             const release = holdSessionCommands("sharing-controls", stopSharing ? "all" : "entries");
-            const ingress = stopSharing && fileCopy ? backend.stopIngress?.() : undefined;
+            const ingress = stopSharing && startFileCopy ? backend.stopIngress?.() : undefined;
             let written: FileCopyWritten | null | false = null;
             let finishStop = false;
             try {
@@ -469,7 +519,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
               if (stopSharing && ((await replica.flush()).kind !== "stored" || replica.hasUnstoredChanges())) {
                 throw new Error("The shared copy could not be saved.");
               }
-              membership = await manage(operation, pictureOrigin);
+              membership = await manage(operation, pictureOrigin, password);
               if (!sessionCurrent()) return;
               if (stopSharing && written) {
                 written = await checkFileBeforeDeparture("stop").catch(() => false as const);
@@ -537,6 +587,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
         notifyDesktop();
       };
       const stopActive = () => {
+        recoveryLifetime.abort();
         stop();
         pictureBinding?.detach();
       };
@@ -550,6 +601,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
         start() {
           pictureBinding?.activate();
           backend.start();
+          if (entry.created) freshRevision = editorSession?.readAt((_document, revision) => revision);
           if (entry.relayUrl) sharingControls = controls;
           stopUnload = guardUnload(window, pending);
           leaveWithFile = leave;
@@ -575,7 +627,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
             try {
               const refusal = backend.settle(false);
               const saved = !replica.hasUnstoredChanges() || (await replica.flush()).kind === "stored";
-              const fileCopyProblem = !refusal && saved && mode ? await fileCopy?.flushOnClose(mode) : null;
+              const fileCopyProblem = !refusal && saved && mode ? await (await ensureFileCopy())?.flushOnClose(mode) : null;
               return { ok: !refusal && saved && !replica.hasUnstoredChanges(), ...(fileCopyProblem && { fileCopyProblem }) };
             } catch { return { ok: false }; }
           });
@@ -617,7 +669,10 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
         const details = { deployment, script, relayUrl: new URL(entry.relayUrl).href, title: prepared.replica.session.document().title };
         try {
           if (desktop) {
-            await noteDesktopSharedScript(desktop.nativeReplica, { ...details, at: Date.now() });
+            catalogueReady = noteDesktopSharedScript(desktop.nativeReplica, { ...details, at: Date.now() }).catch(() => {
+              notices.show("Could not remember this shared script for reopening.", "warn");
+            });
+            await catalogueReady;
             startFileCopy?.();
           }
           else await browserSharedCatalogue().note(details);
