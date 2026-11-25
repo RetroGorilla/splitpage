@@ -20,7 +20,8 @@ import type { Command, CommandOutcome, DocumentView, SessionListener } from "../
 import type { UndoControl } from "../../src/application/editing/undo-control.ts";
 import type { NoticeKind, NoticePort } from "../../src/application/effects/ports.ts";
 import type { DocumentEdits } from "../../src/application/session/document-edits.ts";
-import { IDLE_COLLABORATION_SNAPSHOT } from "../../src/application/collaboration/state.ts";
+import type { SharedPopoverPorts } from "../../src/features/collaboration/ports.ts";
+import { createCollaborationState, IDLE_COLLABORATION_SNAPSHOT } from "../../src/application/collaboration/state.ts";
 import type { SharedScriptCatalogueStorage } from "../../src/application/collaboration/shared-script-catalogue.ts";
 import type { SharedScriptCatalogueEntry } from "../../shared/shared-script.ts";
 import { sharedScriptKey } from "../../shared/shared-script.ts";
@@ -29,6 +30,23 @@ import type { SharedCommandGuard } from "../../src/application/session/document-
 
 export function fakeCollaboration(): Pick<CollaborationReads, "snapshot"> {
   return { snapshot: () => IDLE_COLLABORATION_SNAPSHOT };
+}
+
+export function fakeSharedPopover(overrides: Partial<SharedPopoverPorts> = {}) {
+  const collaboration = createCollaborationState();
+  const ports: SharedPopoverPorts = {
+    collaboration,
+    membership: () => null,
+    canManage: async () => false,
+    manage: async () => {},
+    saveCopy: () => {},
+    copy: async () => {},
+    leave: async () => {},
+    open: () => {},
+    confirm: () => true,
+    ...overrides
+  };
+  return { collaboration, ports };
 }
 
 export function fakeSharedCommands(): SharedCommandGuard {

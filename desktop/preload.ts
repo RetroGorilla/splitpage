@@ -421,6 +421,8 @@ if (location.origin === "splitpage://app") {
         testConnection: () => invoke("splitpage:relay-owner-test"),
         clear: () => invoke("splitpage:relay-owner-clear")
       } satisfies NonNullable<DesktopPort["relayOwner"]>,
+      sharedReference: (...args: DesktopIpcArgs<"splitpage:relay-owner-resume">) => invoke("splitpage:relay-owner-resume", ...args),
+      manageSharing: (...args: DesktopIpcArgs<"splitpage:relay-owner-sharing">) => invoke("splitpage:relay-owner-sharing", ...args),
       shareScript: {
         create: (...args) => invoke("splitpage:relay-owner-share-create", ...args),
         abandon: id => invoke("splitpage:relay-owner-share-abandon", id),

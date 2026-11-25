@@ -45,7 +45,7 @@ export interface DesktopMainCommon {
   shellStateForWindow: (id: string) => DesktopIpcResult<"splitpage:tabstrip-get-state">;
   createTab: (windowId: string, options: {
     source: DesktopMainTab["source"]; launchIntent: DesktopWireLaunch;
-    tabId?: string | undefined; pendingPayload?: DesktopMainTab["pendingPayload"]; index?: unknown;
+    tabId?: string | undefined; pendingPayload?: DesktopMainTab["pendingPayload"]; index?: unknown; shared?: NonNullable<DesktopMainTab["shared"]>;
   }) => DesktopMainTab | null;
   activateTab: (id: string | undefined) => void;
   requestCloseTab: ReturnType<typeof createCloseQuit>["requestCloseTab"];
@@ -187,4 +187,5 @@ export interface DesktopSessionRestoreDependencies extends Pick<DesktopMainCommo
   argvFilesToOpen: string[];
   restoreNotice: Pick<ReturnType<typeof createRestoreNotice>, "set">;
   persistShellState: DesktopDocumentIpcDependencies["persistShellState"];
+  restoreShared: boolean;
 }

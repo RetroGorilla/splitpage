@@ -3,6 +3,7 @@
 
 import type { DesktopMainTab, DesktopMainWindow, DesktopLookupMap } from "./main-types.d.ts";
 import type { DesktopFileService } from "./file-service.ts";
+import type { sharedScriptKey as SharedScriptKey } from "../shared/shared-script.ts";
 import type { TAB_OR_WINDOW_ID_RE as DesktopStateIdPattern, mintTabOrWindowId as MintDesktopStateId } from "./desktop-state.ts";
 
 const { TAB_OR_WINDOW_ID_RE, mintTabOrWindowId }: {
@@ -10,7 +11,8 @@ const { TAB_OR_WINDOW_ID_RE, mintTabOrWindowId }: {
   mintTabOrWindowId: typeof MintDesktopStateId;
 } = require("./desktop-state.ts");
 
-function createTabRegistry({ pathKey, sourceChanged }: Pick<DesktopFileService, "pathKey"> & {
+function createTabRegistry({ pathKey, sharedScriptKey, sourceChanged }: Pick<DesktopFileService, "pathKey"> & {
+  sharedScriptKey: typeof SharedScriptKey;
   sourceChanged?: (tab: Pick<DesktopMainTab, "id" | "source">) => void;
 }) {
   const tabs: DesktopLookupMap<string, DesktopMainTab> = new Map();
@@ -51,7 +53,7 @@ function createTabRegistry({ pathKey, sourceChanged }: Pick<DesktopFileService, 
 
   function indexTabSource(tab: Pick<DesktopMainTab, "id" | "source">) {
     if (tab.source.kind === "file") claimRoutingKey(pathToTabId, pathKey(tab.source.absPath), tab.id);
-    if (tab.source.kind === "shared") claimRoutingKey(sharedToTabId, `${tab.source.deployment}/${tab.source.script}`, tab.id);
+    if (tab.source.kind === "shared") claimRoutingKey(sharedToTabId, sharedScriptKey(tab.source), tab.id);
     if (sourceChanged) sourceChanged(tab);
   }
 

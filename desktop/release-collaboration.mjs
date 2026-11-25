@@ -18,6 +18,6 @@ export function releaseCollaborationProblems({ appRoot, desktopBuild, settings, 
       appFiles.some(name => /(?:^|[\\/])relay-(?:setup|owner)/.test(name))) {
     problems.push("collaboration assets were packaged");
   }
-  if (!preload || leakedCollaboration(preload).length) problems.push("the app preload is missing or exposes collaboration IPC");
+  if (!preload || leakedCollaboration(preload).length || /\b(?:manageSharing|sharedReference)\b/.test(preload)) problems.push("the app preload is missing or exposes collaboration IPC");
   return problems;
 }

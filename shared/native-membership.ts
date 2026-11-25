@@ -6,6 +6,6 @@ export function readNativeMembership(value: unknown): NativeMembershipRecord | n
   const { token, role, guestLinkToken } = value as Partial<NativeMembershipRecord>;
   if (typeof token !== "string" || !token || (role !== "owner" && role !== "guest")) return null;
   if (guestLinkToken === undefined) return { token, role };
-  return role === "owner" && typeof guestLinkToken === "string" && guestLinkToken
+  return typeof guestLinkToken === "string" && guestLinkToken
     ? { token, role, guestLinkToken } : null;
 }

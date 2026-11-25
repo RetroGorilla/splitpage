@@ -2,7 +2,17 @@ import type { ActionDefinition } from "../../application/actions.ts";
 import { availableUnless, OPENS_A_DIALOG } from "../../application/screen.ts";
 import type { ShareActionPorts } from "./ports.ts";
 
+export const SHARING_COMMAND = { id: "sharing-and-people", label: "Sharing & people…" } as const;
+
 export const SHARE_SCRIPT_COMMAND = { id: "share-script", label: "Share this script…" } as const;
+
+export function sharingDetailsAction(ports: ShareActionPorts): ActionDefinition {
+  return {
+    ...SHARING_COMMAND, group: "Share", icon: "i-link",
+    availability: () => ports.visible() ? availableUnless(["loading", ...OPENS_A_DIALOG], ports.screen()) : { enabled: false, visible: false },
+    run: ports.open
+  };
+}
 
 export function shareScriptAction(ports: ShareActionPorts): ActionDefinition {
   return {

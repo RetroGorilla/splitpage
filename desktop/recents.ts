@@ -5,7 +5,7 @@ import type { createFileRegistry, pathKey as filePathKey } from "./file-service.
 import type {
   createDesktopStateStore, LAST_KNOWN_TITLE_MAX as DesktopTitleLimit, RECENTS_MAX as DesktopRecentsLimit
 } from "./desktop-state.ts";
-import type { SharedScriptCatalogueEntry } from "../shared/shared-script.ts";
+import type { SharedScriptCatalogueEntry, sharedScriptKey as SharedScriptKey } from "../shared/shared-script.ts";
 import type { DesktopWireRecent } from "../shared/desktop-contract.d.ts";
 
 const path: typeof NodePath = require("node:path");
@@ -16,11 +16,11 @@ const { LAST_KNOWN_TITLE_MAX, RECENTS_MAX }: {
 type DesktopRecentsStateStore = Pick<ReturnType<typeof createDesktopStateStore>, "read" | "write">;
 type DesktopRecentRecord = ReturnType<DesktopRecentsStateStore["read"]>["recents"][number];
 
-function createRecents({ store, pathKey, fileIds, shared = false }: {
+function createRecents({ store, pathKey, fileIds, shared }: {
   store: DesktopRecentsStateStore;
   pathKey: typeof filePathKey;
   fileIds: ReturnType<typeof createFileRegistry>;
-  shared?: boolean;
+  shared?: false | typeof SharedScriptKey;
 }) {
   let recentDocuments: DesktopRecentRecord[] = [];
   const recentFileIdByPath = new Map<string, string>();
@@ -81,18 +81,18 @@ function createRecents({ store, pathKey, fileIds, shared = false }: {
     return true;
   }
 
-  function sharedRecentId(entry: SharedScriptCatalogueEntry) {
-    return `shared:${entry.deployment}/${entry.script}`;
+  function sharedRecentId(key: typeof SharedScriptKey, entry: SharedScriptCatalogueEntry) {
+    return `shared:${key(entry)}`;
   }
 
   function findSharedRecent(id: string) {
-    return shared ? store.read().sharedScripts?.find(entry => entry.recent !== false && sharedRecentId(entry) === id) : undefined;
+    return shared ? store.read().sharedScripts?.find(entry => entry.recent !== false && sharedRecentId(shared, entry) === id) : undefined;
   }
 
   function hideSharedRecents(id?: string) {
     if (!shared) return;
     return store.write(current => {
-      const entries = current.sharedScripts?.filter(entry => entry.recent !== false && (!id || sharedRecentId(entry) === id));
+      const entries = current.sharedScripts?.filter(entry => entry.recent !== false && (!id || sharedRecentId(shared, entry) === id));
       if (!entries?.length) return false;
       for (const entry of entries) entry.recent = false;
       return current;
@@ -109,7 +109,7 @@ function createRecents({ store, pathKey, fileIds, shared = false }: {
     if (!shared) return files;
     const scripts = (store.read().sharedScripts ?? []).filter(entry => entry.recent !== false).map(entry => ({
       shared: true as const,
-      fileId: sharedRecentId(entry),
+      fileId: sharedRecentId(shared, entry),
       name: entry.title || "Untitled Script",
       title: entry.title,
       at: entry.at

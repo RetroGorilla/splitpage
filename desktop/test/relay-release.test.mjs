@@ -19,6 +19,12 @@ const read = file => readFileSync(file, "utf8");
 const stageBuild = (...args) => execFileSync(process.execPath, [join(desktop, "stage.mjs"), ...args], { encoding: "utf8" });
 const { createSessionRestore } = createRequire(import.meta.url)("../session-restore.ts");
 
+test("main gates Recent and both desktop restore paths on the collaboration setting", () => {
+  const main = read(join(desktop, "main.ts"));
+  assert.match(main, /createRecents\(\{[^}]*shared: COLLAB_UI && sharedScriptKey\s*\}\)/);
+  assert.match(main, /createSessionRestore\(\{[^}]*restoreShared: COLLAB_UI,\s*canRestoreShared: source => COLLAB_UI && !!retainedSharedScript\(source\)/);
+});
+
 test("restore uses a retained shared identity when enabled and opens a blank tab in release", () => {
   const id = "a".repeat(32);
   const source = { kind: "shared", deployment: "relay", script: "script" };
@@ -74,6 +80,11 @@ test("a release stage following a test stage removes the setup code, assets, ori
   }
   assert.ok(leakedCollaboration(enabledPreload).includes("splitpage:relay-owner-share-create"));
   assert.ok(leakedCollaboration(enabledPreload).includes("open-shared"));
+  assert.ok(leakedCollaboration(enabledPreload).includes("splitpage:relay-owner-sharing"));
+  assert.match(enabledPreload, /splitpage:relay-owner-resume/);
+  for (const marker of ["shared-pill", "shared-popover", "sharing-and-people", "leave-shared-script"]) {
+    assert.ok(leakedCollaboration(enabledHtml).includes(marker), marker);
+  }
   assert.match(enabledHtml, /connect-src 'self' https: http: wss: ws:\/\/127\.0\.0\.1:\*;/);
   assert.deepEqual(readdirSync(join(variant, "relay-setup")).sort(), ["index.html", "preload.js", "setup.css"]);
   assert.deepEqual(readdirSync(code).sort(), ["collaboration.json", "relay-owner.ts", "relay-setup-window.ts"]);
@@ -105,6 +116,7 @@ test("test hooks and invitation handling are selected independently", () => {
   assert.ok(leakedCollaboration(collaborationOnly).includes("splitpageInvitation"));
   assert.ok(leakedCollaboration(collaborationOnly).includes("settings-collaboration"));
   assert.ok(leakedCollaboration(collaborationOnly).includes("share-script-modal"));
+  assert.match(collaborationOnly, /Could not reopen the local shared script/);
   assert.ok(leakedCollaboration(collaborationOnly).includes("join-script-modal"));
   assert.ok(leakedCollaboration(collaborationOnly).includes("Shared scripts on this device"));
   assert.match(collaborationOnly, /connect-src 'self' https: http: wss:;/);

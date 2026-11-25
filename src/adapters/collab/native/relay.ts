@@ -53,12 +53,16 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
   relayUrl.searchParams.set("wire", "1");
   relayUrl.searchParams.set("schema", "1");
   let stopSettled: (() => void) | undefined;
+  let stopSession: (() => void) | undefined;
+  let credentialGeneration = 0;
   let releaseGate: () => void = () => {};
   let provider = attach(current);
 
   function emit(event: NativeRelayEvent): void {
     // why: provider callbacks can run inside Yjs transactions
+    const generation = credentialGeneration;
     queueMicrotask(() => {
+      if (generation !== credentialGeneration) return;
       try { onEvent(event); } catch {
         // why: a caller's notification failure must not interrupt the relay lifecycle
       }
@@ -107,7 +111,8 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
         }
       }
     });
-    target.subscribe(sessionChanged);
+    stopSession?.();
+    stopSession = target.subscribe(sessionChanged);
     // why: stock synced also fires on an upload acknowledgement before the download can have arrived
     const firstReply = () => updateStatus({ firstSyncDone: true });
     // why: the browser sees only complete frames, and the stock server sends this vector before its state reply
@@ -264,8 +269,18 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
     current = session;
     updateStatus(initialStatus);
     if (!publicationStopped) provider = attach(current);
-    else current.subscribe(sessionChanged);
+    else stopSession = current.subscribe(sessionChanged);
     emit({ kind: "session-replaced", session: current, undoHistory: "fresh" });
+  }
+
+  function reconnectWithToken(next: string): void {
+    if (closing || current.isClosingOrClosed()) throw new Error("The shared session is closing.");
+    if (!publicationStopped) provider.destroy();
+    credentialGeneration++;
+    token = next;
+    publicationStopped = false;
+    updateStatus(initialStatus);
+    provider = attach(current);
   }
 
   function close(): void {
@@ -273,5 +288,5 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
     current.close();
   }
 
-  return Object.freeze({ session: () => current, status: () => status, releaseOfflineGate: () => releaseGate(), close });
+  return Object.freeze({ session: () => current, status: () => status, releaseOfflineGate: () => releaseGate(), reconnectWithToken, close });
 }

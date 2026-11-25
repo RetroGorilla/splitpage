@@ -6,7 +6,9 @@ export function mountLeaveDialog(ports: LeaveDialogPorts) {
   const dialog = mountCollaborationDialog("leave-script-modal", `
     <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="leave-script-title">
       <div class="modal-header"><h2 id="leave-script-title">${LEAVE_SCRIPT_COMMAND.label}</h2></div>
-      <p class="modal-hint">Leaving disconnects this device and removes its shared copy. You can save a separate project first.</p>
+      <p class="modal-hint">${ports.owner
+        ? "The script will stay shared. This computer will give up its owner controls and remove its local shared copy. You can save a separate project first."
+        : "Leaving disconnects this device and removes its shared copy. You can save a separate project first."}</p>
       <p class="modal-hint" role="status"></p>
       <div class="modal-footer">
         <button type="button" class="btn" data-dialog-cancel>Cancel</button>

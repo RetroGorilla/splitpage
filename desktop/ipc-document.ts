@@ -37,7 +37,7 @@ function createDocumentIpc({
       const absPath = hasFileId && typeof s.fileId === "string" ? fileIds.pathOf(s.fileId) || null : null;
       if (hasFileId) {
         tab.fileId = absPath ? s.fileId : null;
-        if (tab.source.kind !== "shared") {
+        if (!tab.sharedAttached && (tab.source.kind !== "shared" || absPath)) {
           unindexTabSource(tab);
           tab.source = absPath ? { kind: "file", absPath } : { kind: "blank" };
           indexTabSource(tab);

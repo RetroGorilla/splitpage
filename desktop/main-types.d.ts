@@ -1,5 +1,5 @@
 import type * as Electron from "electron";
-import type { DesktopWireLaunch } from "../shared/desktop-contract.d.ts";
+import type { DesktopSharedScriptReference, DesktopWireLaunch } from "../shared/desktop-contract.d.ts";
 import type { SharedScriptIdentity } from "../shared/shared-script.ts";
 
 export interface DesktopLookupMap<K, V> extends Map<K, V> {
@@ -16,6 +16,7 @@ export interface DesktopMainTab {
   pristine: boolean;
   docId: string | null;
   fileId: string | null | undefined;
+  shared?: DesktopSharedScriptReference;
   source: { kind: "file"; absPath: unknown } | { kind: "blank" } | ({ kind: "shared" } & SharedScriptIdentity);
   sharedAttached?: boolean;
   ready: boolean;

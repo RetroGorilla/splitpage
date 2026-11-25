@@ -449,7 +449,7 @@ test("the mounted app reopens the retained script offline after restarting and L
       assert.equal((await idbResult(database.transaction(store).objectStore(store).get(scope(entry.script)))) === undefined, true);
     }
   } finally { database.close(); }
-  assert.equal((await hook().enterRetained(entry)).ok, false);
+  assert.deepEqual(await hook().enterRetained(entry), { ok: false, reason: "retained-shared-copy-unavailable" });
 });
 
 test("Leave keeps the writer and its copy when disconnect throws, then retries that disconnect before erasing", async t => {

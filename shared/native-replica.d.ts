@@ -1,3 +1,5 @@
+import type { SharedScriptCatalogueEntry } from "./shared-script.ts";
+
 export interface NativeMembershipRecord {
   readonly token: string;
   readonly role: "owner" | "guest";
@@ -31,4 +33,3 @@ export type NativeReplicaReply =
   | { readonly kind: "stored" };
 
 export type NativeReplicaInvoke = (request: NativeReplicaRequest) => Promise<NativeReplicaReply>;
-import type { SharedScriptCatalogueEntry } from "./shared-script.ts";

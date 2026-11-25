@@ -60,6 +60,55 @@ test("the main process stores one encrypted pair, reopens it and clears it", asy
   assert.deepEqual(readdirSync(dir), []);
 });
 
+test("sharing management checks the guest and relay before minting an owner, and uses only owner credentials for reset and stop", async t => {
+  const { dir, keyStore, secret } = store(t);
+  const guestToken = randomBytes(32).toString("base64url");
+  const ownerToken = randomBytes(32).toString("base64url");
+  const nextGuest = randomBytes(32).toString("base64url");
+  const checks = [];
+  let deployedAs = "deployment";
+  let revoked = false;
+  const address = await serve(t, async (req, res) => {
+    const token = req.headers.authorization?.slice("Bearer ".length);
+    checks.push([req.method, req.url, token === secret ? "management" : token === ownerToken ? "owner" : "guest"]);
+    if (req.method === "HEAD") {
+      res.writeHead(token === guestToken && revoked ? 403 : 204, { "Splitpage-Deployment": deployedAs }).end();
+    } else if (req.url.endsWith("/invitations")) {
+      let body = "";
+      for await (const chunk of req) body += chunk;
+      assert.equal(JSON.parse(body).role, "owner");
+      res.writeHead(201).end(JSON.stringify({ token: ownerToken }));
+    } else if (req.method === "DELETE") {
+      res.writeHead(204).end();
+    } else {
+      res.writeHead(200).end(JSON.stringify({ token: nextGuest }));
+    }
+  });
+  const settings = createRelayOwner(dir, keyStore, fetch, true);
+  const manage = (operation, record) => settings.manageSharing(operation, "deployment/script", address, record);
+  const guest = { role: "guest", token: guestToken };
+  await assert.rejects(manage("promote", guest), /No management credential/);
+  assert.equal(settings.save(address, secret), "saved");
+  deployedAs = "different";
+  await assert.rejects(manage("promote", guest), /no longer active/);
+  deployedAs = "deployment";
+  const owner = await manage("promote", { ...guest, guestLinkToken: guestToken });
+  assert.deepEqual(owner, { role: "owner", token: ownerToken, guestLinkToken: guestToken });
+  settings.clear();
+  assert.deepEqual(await manage("reset", owner), { ...owner, guestLinkToken: nextGuest });
+  assert.equal(await manage("stop", owner), owner);
+  revoked = true;
+  assert.deepEqual(await manage("check-link", owner), { role: "owner", token: ownerToken });
+  assert.deepEqual(checks, [
+    ["HEAD", "/api/scripts/script/link", "guest"],
+    ["HEAD", "/api/scripts/script/link", "guest"],
+    ["POST", "/api/scripts/script/invitations", "management"],
+    ["POST", "/api/scripts/script/reset", "owner"],
+    ["DELETE", "/api/scripts/script", "owner"],
+    ["HEAD", "/api/scripts/script/link", "guest"]
+  ]);
+});
+
 test("invalid addresses, invalid secrets and unavailable storage leave the previous relay intact", async t => {
   const { dir, keyStore, secret } = store(t);
   const address = "https://relay.example";

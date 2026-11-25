@@ -1,4 +1,5 @@
 import assert from "node:assert/strict";
+import { sharedScriptKey } from "../../shared/shared-script.ts";
 import path from "node:path";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
@@ -27,7 +28,7 @@ function harness(saved, sharedScripts, shared) {
     }
   };
   const fileIds = createFileRegistry();
-  const recents = createRecents({ store, pathKey, fileIds, shared });
+  const recents = createRecents({ store, pathKey, fileIds, shared: shared && sharedScriptKey });
   return { recents, writes, fileIds, state: () => state };
 }
 

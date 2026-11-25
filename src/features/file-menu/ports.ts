@@ -149,6 +149,7 @@ export interface FileMenuActionPorts {
   readonly desktop: () => boolean;
   readonly saves: Pick<SaveState, "busy">;
   readonly save: (options?: { saveAs?: boolean }) => Promise<void>;
+  readonly sharedCopy?: (() => (() => Promise<void>) | undefined) | undefined;
   readonly openFile: () => Promise<unknown>;
   readonly openImport: () => void;
 }
