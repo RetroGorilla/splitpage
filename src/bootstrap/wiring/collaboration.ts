@@ -14,7 +14,8 @@ import { migrateRows } from "../document-ports.ts";
 import { documentReader } from "./ports/document.ts";
 import { fileDelivery } from "./ports/files.ts";
 import { localFileMenuControls } from "./local-files.ts";
-import { openDesktopJoin, invitationOriginAllowed } from "./collaboration-join.ts";
+import { openDesktopJoin } from "./collaboration-join.ts";
+import { relayOriginAllowed } from "./relay-address.ts";
 import { retainedSharedScriptActive, retainedSharingControls } from "./retained-shared-script.ts";
 import { screen } from "./ports/screen.ts";
 import { getEditorName, preferences } from "./preferences-owner.ts";
@@ -144,9 +145,9 @@ function registerCollaboration(registry: Pick<ActionRegistry, "invoke" | "regist
       });
       dispose?.();
       dispose = mountShareDialog({
-        address: () => owner.status().then(({ address }) => address && invitationOriginAllowed(address) ? address : null),
+        address: () => owner.status().then(({ address }) => address && relayOriginAllowed(address) ? address : null),
         share: async (...args) => {
-          if (!invitationOriginAllowed(args[0])) return { kind: "not-configured" };
+          if (!relayOriginAllowed(args[0])) return { kind: "not-configured" };
           const autosave = autoSavePolicy();
           const pending = autosave.pending();
           const reason = "Sharing script…";

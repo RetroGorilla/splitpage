@@ -155,13 +155,15 @@ setting on for release builds. Part 15, remote carets and selections, is optiona
 - **Part 16:** release builds (`node build.mjs`, desktop staging, the portable package and the relay image) include
   the collaboration UI, its help section and `wss:` in the connection policy. Test hooks, `__sharedTest`, the test
   build's `ws://127.0.0.1:*` policy and the loopback HTTP relay stay in test builds only. The desktop build setting
-  records `testRelay` separately, and only that flag lets the relay owner accept `http://127.0.0.1:<port>`. The
+  records `testRelay` separately, and only that flag lets the relay owner accept `http://127.0.0.1:<port>`. In the
+  app, `relay-address.ts` holds the same rule for joining, sharing, restored tabs and reopened shared scripts, so a
+  release build refuses a saved loopback reference before it sends any request. The
   [performance record](../architecture/performance-record.md#collaboration-stage-4-and-5-624bf5a25-to-ac0d3bc4b)
   holds the final standalone and shared comparison.
 
 ### Stage 3 deployment evidence
 
-On 2026-11-23, the owner?s relay switched to the image built from `f5918ba78` on a fresh direct-pool volume.
+On 2026-11-23, the owner's relay switched to the image built from `f5918ba78` on a fresh direct-pool volume.
 The legacy relay stopped cleanly and its data directory was kept aside. The new relay passed startup checks,
 served the release shell over HTTPS and refused unauthenticated management requests.
 

@@ -1,5 +1,5 @@
 import { appJs } from "../build.mjs";
-import { HISTORY_TEST_NAMES, STILL_IN_RELEASE, historyTestNames, hookNames, leakedHooks } from "./release-hooks.mjs";
+import { HISTORY_TEST_NAMES, STILL_IN_RELEASE, historyTestNames, hookNames, leakedHooks, timingMarkNames } from "./release-hooks.mjs";
 
 const APPROVED = Object.freeze([]);
 
@@ -101,6 +101,9 @@ eq("the formats global is a hook name too", hookNames("window.__splitpageFormats
 eq("a hook outside the list is leaked", leakedHooks("window.__newThingTest=1;window.__blobsTest=1"), ["__blobsTest", "__newThingTest"]);
 eq("every history fault and distinctive control name is rejected", leakedHooks(HISTORY_TEST_NAMES.join(" ")), [...HISTORY_TEST_NAMES].sort());
 eq("a longer word is not a history control", historyTestNames("inspection resetForTester failNextTime"), []);
+eq("a timing mark of any seam is leaked", leakedHooks('performance.mark("measure:input-command:start");performance.mark("measure:new-seam:end")'),
+  ["measure:input-command:start", "measure:new-seam:end"]);
+eq("a timing mark name is found once each", timingMarkNames("measure:render:end measure:render:end measure:"), ["measure:render:end"]);
 eq("the list is sorted with no repeats", [...new Set(STILL_IN_RELEASE)].sort(), [...STILL_IN_RELEASE]);
 eq("the list adds no hook and brings none back: every name is in the approved snapshot", STILL_IN_RELEASE.filter((name) => !APPROVED.includes(name)), []);
 eq("a converted hook leaves the approved snapshot too, so it cannot come back later", APPROVED.filter((name) => !STILL_IN_RELEASE.includes(name)), []);
@@ -117,6 +120,7 @@ eq("the shared session hook, its peer and their notices are left out", [...SHARE
 eq("the shared entry and its notices ship with collaboration", SHARED_ENTRY_NOTICES.filter((marker) => !release.includes(marker)), []);
 eq("no timing mark is left in it", [...TIMING_MARKS, ...RETIRED_ADAPTER_TIMING_MARKS, "marksOn"].filter((mark) => release.includes(mark)), []);
 check("no timing mark name of any kind is left in it", !release.includes("measure:"), null);
+eq("the shared leak check finds nothing in it", leakedHooks(release), []);
 
 console.log("\nthe test build (node build.mjs --test):\n");
 
@@ -131,6 +135,7 @@ eq("it keeps every history fault and distinctive control name", historyTestNames
 eq("it keeps the native shared session hook, its peer and their notices", [...SHARED_HOOK_ONLY, ...SHARED_ENTRY_NOTICES].filter((marker) => !testBuild.includes(marker)), []);
 eq("it leaves out the legacy fixture and its peer", ["__legacySharedTest", ...RETIRED_SHARED_HOOK_ONLY].filter((marker) => testBuild.includes(marker)), []);
 eq("it keeps the remaining timing marks", [...TIMING_MARKS, "marksOn"].filter((mark) => !testBuild.includes(mark)), []);
+eq("the shared leak check reports its timing marks", TIMING_MARKS.filter((mark) => !leakedHooks(testBuild).includes(mark)), []);
 eq("it leaves out the retired Writer timing marks", RETIRED_TIMING_MARKS.filter((mark) => testBuild.includes(mark)), []);
 eq("it leaves out the retired adapter timing marks", RETIRED_ADAPTER_TIMING_MARKS.filter((mark) => testBuild.includes(mark)), []);
 

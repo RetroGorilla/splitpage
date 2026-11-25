@@ -22,8 +22,14 @@ export function hookNames(text) {
   return [...new Set(text.match(HOOK_NAME) ?? [])].sort();
 }
 
+const TIMING_MARK = /measure:[A-Za-z0-9_-]+:(?:start|end)\b/g;
+
+export function timingMarkNames(text) {
+  return [...new Set(text.match(TIMING_MARK) ?? [])].sort();
+}
+
 export function leakedHooks(text) {
-  return [...hookNames(text).filter((name) => !STILL_IN_RELEASE.includes(name)), ...historyTestNames(text)].sort();
+  return [...hookNames(text).filter((name) => !STILL_IN_RELEASE.includes(name)), ...historyTestNames(text), ...timingMarkNames(text)].sort();
 }
 
 const COLLABORATION_MARKERS = [
