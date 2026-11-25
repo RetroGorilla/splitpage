@@ -5,7 +5,7 @@ import { backup, DatabaseSync } from "node:sqlite";
 import type { SQLOutputValue } from "node:sqlite";
 import { isSha256Hex } from "../shared/blob-policy.ts";
 import { dataDirectory, RelayError, retentionCount } from "./config.ts";
-import { DB_NAME, verifyDatabase } from "./storage.ts";
+import { BACKUP_LOCK_NAME, DB_NAME, verifyDatabase } from "./storage.ts";
 
 const BACKUP_NAME = /^relay-\d{4}-\d\d-\d\dT\d\d-\d\d-\d\d\.\d{3}Z-[a-f0-9-]{36}\.(sqlite|backup)$/;
 const LAST_BACKUP_FILE = "last-backup.json";
@@ -117,7 +117,9 @@ export function verifyCopy(source: DatabaseSync, copy: DatabaseSync): void {
   } else if (version >= 2) {
     verifyRows(source, copy, "creations", "SELECT id, script FROM creations ORDER BY id");
   }
-  verifyRows(source, copy, "documents", "SELECT name, state FROM documents ORDER BY name");
+  verifyRows(source, copy, "documents", version >= 5
+    ? "SELECT name, state, version_generation FROM documents ORDER BY name"
+    : "SELECT name, state FROM documents ORDER BY name");
   verifyRows(source, copy, "scripts", version >= 4
     ? "SELECT name, status, untouched FROM scripts ORDER BY name"
     : "SELECT name, status FROM scripts ORDER BY name");
@@ -125,6 +127,19 @@ export function verifyCopy(source: DatabaseSync, copy: DatabaseSync): void {
   verifyRows(source, copy, "invitations", version >= 4
     ? "SELECT id, script, label, token_hash, revoked, role, creation_id FROM invitations ORDER BY id"
     : "SELECT id, script, label, token_hash, revoked FROM invitations ORDER BY id");
+  if (version >= 5) {
+    verifyRows(source, copy, "versions",
+      "SELECT id, script, generation, created_at, bytes, content_hash, names, status FROM versions ORDER BY id");
+    verifyRows(source, copy, "version chunks", "SELECT version_id, part, payload FROM version_chunks ORDER BY version_id, part");
+    if (copy.prepare(`SELECT 1 FROM versions v LEFT JOIN version_chunks c ON c.version_id = v.id
+      WHERE v.status = 'published' GROUP BY v.id
+      HAVING coalesce(sum(length(c.payload)), 0) <> v.bytes OR min(c.part) <> 0 OR max(c.part) <> count(c.part) - 1
+      LIMIT 1`).get()) throw new RelayError("Relay backup contains an incomplete published version.");
+    if (copy.prepare("PRAGMA foreign_key_check(versions)").get() ||
+        copy.prepare("PRAGMA foreign_key_check(version_chunks)").get()) {
+      throw new RelayError("Relay backup contains an orphaned version or chunk.");
+    }
+  }
 }
 
 function valuesMatch(left: SQLOutputValue, right: SQLOutputValue | undefined): boolean {
@@ -155,7 +170,7 @@ export async function backupRelay(
   const keep = retentionCount(env);
   const destination = join(directory, "backups");
   using source = new DatabaseSync(join(directory, DB_NAME), { readOnly: true, timeout: 5000 });
-  using ownership = new DatabaseSync(join(directory, "relay-backup-lock.sqlite"));
+  using ownership = new DatabaseSync(join(directory, BACKUP_LOCK_NAME), { timeout: 1000 });
   claimBackup(ownership);
   source.exec("BEGIN");
   const version = verifyDatabase(source);

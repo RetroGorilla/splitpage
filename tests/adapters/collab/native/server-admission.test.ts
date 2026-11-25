@@ -86,7 +86,7 @@ test("script and invitation refusals are observable without disclosing private d
   doc.getMap("fixture").set("private", privateText);
   {
     using db = openWriter(kit.directory);
-    db.prepare("INSERT INTO documents VALUES (?, ?)").run(NAME, encodeStateAsUpdate(doc));
+    db.prepare("INSERT INTO documents (name, state) VALUES (?, ?)").run(NAME, encodeStateAsUpdate(doc));
     db.exec("INSERT INTO scripts (name, status) VALUES ('pending-script', 'pending'), ('deleted-script', 'deleted')");
   }
   doc.destroy();
@@ -254,7 +254,7 @@ for (const state of ["stored", "live"] as const) {
     assert.equal(fullState.byteLength, 15_000_000);
     if (state === "stored") {
       using db = openWriter(kit.directory);
-      db.prepare("INSERT INTO documents VALUES (?, ?)").run(NAME, fullState);
+      db.prepare("INSERT INTO documents (name, state) VALUES (?, ?)").run(NAME, fullState);
     }
     const run = kit.launch({ SPLITPAGE_STORE_DEBOUNCE_MS: "60000", SPLITPAGE_STORE_MAX_DEBOUNCE_MS: "60000" });
     const url = `ws://127.0.0.1:${await run.port()}`;

@@ -1,5 +1,10 @@
 import { reportFailure, restrictLibraryLogs } from "../../../../collab-server/logging.ts";
 import { startRelay } from "../../../../collab-server/relay.ts";
+import { join } from "node:path";
+import { DatabaseSync } from "node:sqlite";
+import type { StatementSync } from "node:sqlite";
+import { dataDirectory } from "../../../../collab-server/config.ts";
+import { DB_NAME } from "../../../../collab-server/storage.ts";
 
 interface DecoderRefusalRule {
   readonly stage: "beforeHandleMessage" | "beforeSync";
@@ -18,6 +23,13 @@ let heldSyncType: number | undefined;
 let heldTraffic: Promise<void> | undefined;
 let releaseTraffic: (() => void) | undefined;
 let decoderRefusal: DecoderRefusalRule | undefined;
+const measureStore = process.env.SPLITPAGE_TEST_MEASURE_STORE === "1";
+let storeStartedAt = 0;
+let versionReads = 0;
+let readsAtStoreStart = 0;
+let stageAtStoreStart: string | undefined;
+let measurementDb: DatabaseSync | undefined;
+let stagedVersion: StatementSync | undefined;
 process.on("message", message => {
   if (message === "hold") {
     hold = new Promise<void>(resolve => { release = resolve; });
@@ -72,6 +84,11 @@ restrictLibraryLogs();
 try {
   const relay = await startRelay(process.env, "127.0.0.1", [{
     priority: 101,
+    async onRequest({ request, response }) {
+      if (!measureStore || request.method !== "GET" || !request.url?.includes("/versions/")) return;
+      versionReads += 1;
+      response.once("close", () => { versionReads -= 1; });
+    },
     async onAuthenticate() {
       if (process.env.SPLITPAGE_TEST_REPORT_AUTH) process.send?.("authentication-attempted");
       if (releaseLoad) setImmediate(releaseLoad);
@@ -110,15 +127,29 @@ try {
       await heldTraffic;
     },
     async onStoreDocument({ documentName }) {
+      if (measureStore) {
+        readsAtStoreStart = versionReads;
+        const stage = stagedVersion?.get(documentName)?.id;
+        stageAtStoreStart = typeof stage === "string" ? stage : undefined;
+        storeStartedAt = performance.now();
+      }
       process.send?.("store-started");
       process.send?.(`store-started:${documentName}`);
       await hold;
     },
     async afterStoreDocument({ documentName }) {
+      if (measureStore) process.send?.(`measured-store:${performance.now() - storeStartedAt}:${readsAtStoreStart}:${stageAtStoreStart ?? ""}`);
       process.send?.("stored");
       process.send?.(`stored:${documentName}`);
+    },
+    async onDestroy() {
+      measurementDb?.close();
     }
   }]);
+  if (measureStore) {
+    measurementDb = new DatabaseSync(join(dataDirectory(process.env), DB_NAME), { readOnly: true, timeout: 5000 });
+    stagedVersion = measurementDb.prepare("SELECT id FROM versions WHERE script = ? AND status = 'staged'");
+  }
   // why: push after startRelay so this test hook runs after relay.ts acquires its per-document write lock
   relay.hocuspocus.configuration.extensions.push({
     async beforeSync({ context, type, payload }) {
