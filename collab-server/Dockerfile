@@ -15,6 +15,7 @@ COPY collab-server/package.json collab-server/package-lock.json ./
 RUN npm ci --omit=dev --ignore-scripts && install -d -o node -g node /data
 COPY collab-server/*.ts ./
 COPY shared/blob-policy.ts ../shared/blob-policy.ts
+COPY shared/link-password.ts ../shared/link-password.ts
 COPY --from=app /build/index.html /build/sw.js /build/manifest.webmanifest /build/icon.svg /build/icon-maskable.svg /app/
 ENV SPLITPAGE_DATA_DIR=/data SPLITPAGE_PORT=8080 SPLITPAGE_APP_DIR=/app
 USER node

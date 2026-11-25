@@ -2,6 +2,7 @@ export interface NativeMembershipRecord {
   readonly token: string;
   readonly role: "owner" | "guest";
   readonly guestLinkToken?: string;
+  readonly linkPasswordRequired?: boolean;
 }
 
 export type NativeReplicaRequest =

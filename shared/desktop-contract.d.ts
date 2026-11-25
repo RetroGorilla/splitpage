@@ -289,7 +289,7 @@ export interface RelayOwnerControls {
 
 export type ShareScriptCreation =
   | { readonly kind: "created"; readonly address: string; readonly deployment: string; readonly scriptId: string;
-    readonly owner: string; readonly guest: string }
+    readonly owner: string; readonly guest: string; readonly passwordRequired?: true }
   | { readonly kind: "not-configured" | "unreachable" | "failed" | "already-used" | "too-large" };
 
 export interface DesktopSharedScriptReference {
@@ -299,7 +299,7 @@ export interface DesktopSharedScriptReference {
 }
 
 export interface ShareScriptControls {
-  readonly create: (creationId: string, hash: string, snapshot: Uint8Array, address: string) => Promise<ShareScriptCreation>;
+  readonly create: (creationId: string, hash: string, snapshot: Uint8Array, address: string, password?: string) => Promise<ShareScriptCreation>;
   readonly abandon: (creationId: string) => Promise<boolean>;
   readonly complete: (creationId: string) => Promise<boolean>;
 }
@@ -312,7 +312,7 @@ export interface DesktopIpcContract {
   "splitpage:relay-owner-share-create": DesktopChannelCall<Parameters<ShareScriptControls["create"]>, ShareScriptCreation>;
   "splitpage:relay-owner-share-abandon": DesktopChannelCall<[creationId: string], boolean>;
   "splitpage:relay-owner-resume": DesktopChannelCall<[reference: [] | [DesktopSharedScriptReference | null] | [null, DesktopSharedScriptReference]], DesktopSharedScriptReference | null | boolean>;
-  "splitpage:relay-owner-sharing": DesktopChannelCall<[operation: string, name: string, lease: string, address: string], NativeReplicaReply>;
+  "splitpage:relay-owner-sharing": DesktopChannelCall<[operation: string, name: string, lease: string, address: string, password?: string], NativeReplicaReply>;
   "splitpage:relay-owner-share-complete": DesktopChannelCall<[creationId: string], boolean>;
   "splitpage:relay-setup-save": DesktopChannelCall<[address: string, secret: string], RelaySetupSave>;
   "splitpage:ipc-table-sync": DesktopChannelCall<[], readonly DesktopChannelRow[] | null>;

@@ -2,17 +2,19 @@ import { createHash } from "node:crypto";
 import type { IncomingMessage, ServerResponse } from "node:http";
 import { applyUpdate, Doc, encodeStateAsUpdate } from "yjs";
 import { isSha256Hex } from "../shared/blob-policy.ts";
+import { LINK_PASSWORD_MAX, PASSWORD_SHARE_TYPE, validLinkPassword } from "../shared/link-password.ts";
 import type { AbandonResult, InvitationRole, IssuedInvitation, scriptAccess } from "./access.ts";
 import { RelayError } from "./config.ts";
 import { managementAuthorizer } from "./management-auth.ts";
 
 type Commands = Pick<
   ReturnType<typeof scriptAccess>,
-  "findCreation" | "create" | "listScripts" | "issue" | "list" | "authorizeOwner"
+  "findCreation" | "create" | "listScripts" | "issue" | "list" | "authorizeOwner" | "activeLink" | "hasPassword" | "readPassword" | "exchange"
 > & {
   abandonCreation: (id: string) => AbandonResult;
   authenticate: (name: string, token: string) => unknown;
   resetGuests: (name: string) => IssuedInvitation | undefined;
+  changePassword: (name: string, token: string | null, password: string | null) => Promise<boolean>;
   revokeInvitation: (id: string) => boolean;
   deleteScript: (name: string) => boolean;
 };
@@ -74,11 +76,58 @@ function bearerToken(request: IncomingMessage): string | null {
   return /^Bearer ([A-Za-z0-9_-]{1,512})$/.exec(request.headers.authorization ?? "")?.[1] ?? null;
 }
 
-export function ownerRequests(secret: string | undefined, limit: number, commands: Commands, deployment?: string) {
+async function readPasswordBody(request: IncomingMessage): Promise<string | null> {
+  const raw = await body(request, 2048);
+  let payload: { password?: unknown } | null;
+  try { payload = JSON.parse(raw.toString("utf8")) as typeof payload; }
+  catch { throw new RequestError(400); }
+  const value = payload?.password;
+  if (value !== null && !validLinkPassword(value)) throw new RequestError(400);
+  return value;
+}
+
+async function creationBody(request: IncomingMessage, limit: number): Promise<{ bytes: Buffer; password?: string }> {
+  const protectedShare = request.headers["content-type"] === PASSWORD_SHARE_TYPE;
+  const maxPasswordBytes = LINK_PASSWORD_MAX * 3;
+  const bodyLimit = protectedShare ? limit + maxPasswordBytes + 2 : limit;
+  if (Number(request.headers["content-length"]) > bodyLimit) throw new RequestError(413);
+  const raw = await body(request, bodyLimit);
+  if (!protectedShare) return { bytes: raw };
+  if (raw.length < 2) throw new RequestError(400);
+  const length = raw.readUInt16BE();
+  if (length > maxPasswordBytes || length + 2 >= raw.length) throw new RequestError(400);
+  const password = raw.toString("utf8", 2, length + 2);
+  if (!validLinkPassword(password)) throw new RequestError(400);
+  const bytes = raw.subarray(length + 2);
+  if (bytes.length > limit) throw new RequestError(413);
+  return { bytes, password };
+}
+
+export function ownerRequests(secret: string | undefined, limit: number, commands: Commands, deployment?: string,
+  origins: ReadonlySet<string> = new Set()) {
   const authorize = managementAuthorizer(secret);
+  const attempts = new Map<string, { remaining: number; until: number }>();
+  let exchangesInFlight = 0;
+  let nextSweep = 0;
+  const attemptPeriod = 60_000;
+  function takeAttempt(name: string): boolean {
+    const now = Date.now();
+    if (now >= nextSweep) {
+      for (const [script, record] of attempts) if (record.until <= now) attempts.delete(script);
+      nextSweep = now + attemptPeriod;
+    }
+    let record = attempts.get(name);
+    if (!record || record.until <= now) {
+      record = { remaining: 5, until: now + attemptPeriod };
+      attempts.set(name, record);
+    }
+    if (!record.remaining) return false;
+    record.remaining -= 1;
+    return true;
+  }
   return async (request: IncomingMessage, response: ServerResponse): Promise<boolean> => {
     const path = request.url?.split("?")[0] ?? "";
-    const script = /^\/api\/scripts\/([a-zA-Z0-9_-]{1,128})(?:\/(invitations|reset|link))?$/.exec(path);
+    const script = /^\/api\/scripts\/([a-zA-Z0-9_-]{1,128})(?:\/(invitations|reset|link|password|password-exchange))?$/.exec(path);
     const invitation = /^\/api\/invitations\/([a-zA-Z0-9_-]{1,128})$/.exec(path);
     const creation = /^\/api\/creations\/([a-zA-Z0-9_-]{1,128})$/.exec(path);
     if (path !== "/api/scripts" && !script && !invitation && !creation) return false;
@@ -89,14 +138,69 @@ export function ownerRequests(secret: string | undefined, limit: number, command
     }
     try {
       const method = request.method;
+      const name = script?.[1];
+      if (name && script[2] === "password-exchange") {
+        const origin = request.headers.origin;
+        response.setHeader("Vary", "Origin");
+        if (origin !== undefined && !origins.has(origin)) throw new RequestError(403);
+        if (origin) response.setHeader("Access-Control-Allow-Origin", origin);
+        if (method === "OPTIONS") {
+          if (!origin || request.headers["access-control-request-method"] !== "POST") throw new RequestError(403);
+          response.setHeader("Access-Control-Allow-Methods", "POST");
+          response.setHeader("Access-Control-Allow-Headers", "Authorization, Content-Type");
+          reply(204);
+          return true;
+        }
+        if (method !== "POST") throw new RequestError(405);
+        const token = bearerToken(request);
+        if (!token || !commands.activeLink(name, token)) throw new RequestError(403);
+        const value = await readPasswordBody(request);
+        if (!request.complete || response.destroyed) return true;
+        if (!commands.activeLink(name, token)) throw new RequestError(403);
+        const stored = commands.readPassword(name);
+        if (!stored) reply(200, { token });
+        else if (value === null) reply(428);
+        else if (exchangesInFlight >= 8 || !takeAttempt(name)) {
+          response.setHeader("Retry-After", "60");
+          reply(429);
+        } else {
+          exchangesInFlight += 1;
+          try {
+            const device = await commands.exchange(name, token, value, stored);
+            if (!commands.activeLink(name, token)) throw new RequestError(403);
+            if (device) reply(200, { token: device });
+            else reply(401);
+          } finally { exchangesInFlight -= 1; }
+        }
+        return true;
+      }
       if (script?.[1] && script[2] === "link" && method === "HEAD") {
         if (deployment !== undefined) response.setHeader("Splitpage-Deployment", deployment);
-        try { commands.authenticate(script[1], bearerToken(request) ?? ""); }
+        const token = bearerToken(request) ?? "";
+        if (commands.hasPassword(script[1]) && commands.activeLink(script[1], token)) throw new RequestError(428);
+        try { commands.authenticate(script[1], token); }
         catch { throw new RequestError(403); }
         reply(204);
         return true;
       }
       const isManager = authorize(request);
+      if (name && script[2] === "password" && (method === "GET" || method === "PUT")) {
+        const token = isManager ? null : bearerToken(request);
+        if (!isManager) {
+          if (!token) throw new RequestError(401);
+          const check = commands.authorizeOwner(name, token, false);
+          if (check !== "allowed") throw new RequestError(check === "unknown" ? 401 : check === "inactive" ? 409 : 403);
+        }
+        if (method === "GET") reply(200, { required: commands.hasPassword(name) });
+        else {
+          const value = await readPasswordBody(request);
+          if (!request.complete || response.destroyed) return true;
+          const changed = await commands.changePassword(name, token, value);
+          if (changed) attempts.delete(name);
+          reply(changed ? 204 : 409);
+        }
+        return true;
+      }
       if (script?.[1] && script[2] === "reset" && method === "POST") {
         if (!isManager) {
           const token = bearerToken(request);
@@ -140,13 +244,12 @@ export function ownerRequests(secret: string | undefined, limit: number, command
         if (existing !== undefined && (existing.contentHash === null || Buffer.compare(existing.contentHash, expectedHash) !== 0)) {
           throw new RequestError(409);
         }
-        if (Number(request.headers["content-length"]) > limit) throw new RequestError(413);
-        const bytes = await body(request, limit);
+        const { bytes, password } = await creationBody(request, limit);
         if (!request.complete || response.destroyed) return true;
         const actualHash = createHash("sha256").update(bytes).digest();
         if (Buffer.compare(actualHash, expectedHash) !== 0) throw new RequestError(422);
         if (existing === undefined) checkState(bytes, limit);
-        const created = commands.create(id, bytes, actualHash);
+        const created = await commands.create(id, bytes, actualHash, password);
         if (deployment !== undefined) response.setHeader("Splitpage-Deployment", deployment);
         reply(200, created);
         return true;

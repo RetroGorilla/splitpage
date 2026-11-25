@@ -22,6 +22,7 @@ import { seedRelaySession } from "./relay-harness.ts";
 import { appendText, contentHash, serverHarness, storedText } from "./server-harness.ts";
 import { desktopTestCipher, replicasAt } from "./desktop-local-store-fixture.ts";
 import { seedReplica, STORE_OPTIONS } from "./local-store-fixture.ts";
+import * as passwordPolicy from "../../../../shared/link-password.ts";
 
 const require = createRequire(import.meta.url);
 const { createRelayOwner, createShareCreations }: {
@@ -50,7 +51,7 @@ async function fixture(t: TestContext, enter?: ShareAttemptPorts["enter"]) {
   const abandons: { id: string; status: number }[] = [];
   const owner = createRelayOwner(directory, {
     isEncryptionAvailable: () => true, decryptString: keystore.decrypt, encryptString: keystore.encrypt
-  }, async (url, init) => {
+  }, passwordPolicy, async (url, init) => {
     if (offline) throw new Error("Offline");
     const headers = new Headers(init?.headers);
     assert.equal(headers.get("Authorization") === "Bearer " + secret, true);

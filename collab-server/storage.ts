@@ -7,7 +7,7 @@ import { RelayError } from "./config.ts";
 export const DB_NAME = "relay.sqlite";
 export const BACKUP_LOCK_NAME = "relay-backup-lock.sqlite";
 const APPLICATION_ID = 0x53504c54;
-const STORAGE_VERSION = 5;
+const STORAGE_VERSION = 6;
 const DOCUMENTS_SCHEMA = "CREATE TABLE documents (name TEXT PRIMARY KEY NOT NULL, state BLOB NOT NULL) STRICT";
 const VERSION_GENERATION = "version_generation INTEGER NOT NULL DEFAULT 0 CHECK (version_generation >= 0)";
 const V5_DOCUMENTS_SCHEMA = `CREATE TABLE documents (name TEXT PRIMARY KEY NOT NULL, state BLOB NOT NULL, ${VERSION_GENERATION}) STRICT`;
@@ -35,13 +35,19 @@ const VERSION_CHUNKS_SCHEMA = `CREATE TABLE version_chunks (version_id TEXT NOT 
 const CREATE_VERSIONS = VERSIONS_SCHEMA + "; " + VERSION_CHUNKS_SCHEMA +
   "; CREATE INDEX published_versions ON versions(script, created_at DESC, id DESC) WHERE status = 'published'" +
   "; CREATE INDEX unpublished_versions ON versions(id) WHERE status <> 'published'";
-const CURRENT_SCHEMAS = { ...V4_SCHEMAS, documents: V5_DOCUMENTS_SCHEMA, versions: VERSIONS_SCHEMA, version_chunks: VERSION_CHUNKS_SCHEMA };
+const V5_SCHEMAS = { ...V4_SCHEMAS, documents: V5_DOCUMENTS_SCHEMA, versions: VERSIONS_SCHEMA, version_chunks: VERSION_CHUNKS_SCHEMA };
+const PASSWORD_SCHEMA = "CREATE TABLE link_passwords (script TEXT PRIMARY KEY NOT NULL REFERENCES scripts(name), salt BLOB NOT NULL CHECK (length(salt) = 32), key BLOB NOT NULL CHECK (length(key) = 32)) STRICT";
+const INVITATION_KIND = "kind TEXT NOT NULL DEFAULT 'invitation' CHECK (kind IN ('invitation', 'link', 'device'))";
+const REVOCATION_REASON = "revocation_reason TEXT CHECK (revocation_reason IN ('password-changed', 'access-removed'))";
+const V6_INVITATIONS_SCHEMA = V4_INVITATIONS_SCHEMA.replace(") STRICT", `, ${INVITATION_KIND}, ${REVOCATION_REASON}) STRICT`);
+const CURRENT_SCHEMAS = { ...V5_SCHEMAS, invitations: V6_INVITATIONS_SCHEMA, link_passwords: PASSWORD_SCHEMA };
 
 function schemasFor(version: number): Record<string, string> | undefined {
   if (version === 1) return V1_SCHEMAS;
   if (version === 2) return V2_SCHEMAS;
   if (version === 3) return V3_SCHEMAS;
   if (version === 4) return V4_SCHEMAS;
+  if (version === 5) return V5_SCHEMAS;
   if (version === STORAGE_VERSION) return CURRENT_SCHEMAS;
   return undefined;
 }
@@ -120,7 +126,7 @@ export function openWriter(directory: string): DatabaseSync {
     db.exec("PRAGMA journal_mode=WAL; PRAGMA synchronous=FULL");
     verifyDurability(db);
     if (created) {
-      db.exec(`BEGIN; PRAGMA application_id=${APPLICATION_ID}; ${V5_DOCUMENTS_SCHEMA}; ${V4_SCRIPTS_SCHEMA}; ${V4_CREATIONS_SCHEMA}; ${V4_INVITATIONS_SCHEMA}; ${CREATE_PICTURES}; ${CREATE_VERSIONS}; PRAGMA user_version=${STORAGE_VERSION}; COMMIT`);
+      db.exec(`BEGIN; PRAGMA application_id=${APPLICATION_ID}; ${V5_DOCUMENTS_SCHEMA}; ${V4_SCRIPTS_SCHEMA}; ${V4_CREATIONS_SCHEMA}; ${V6_INVITATIONS_SCHEMA}; ${CREATE_PICTURES}; ${CREATE_VERSIONS}; ${PASSWORD_SCHEMA}; PRAGMA user_version=${STORAGE_VERSION}; COMMIT`);
     } else if (version < STORAGE_VERSION) {
       db.exec("BEGIN IMMEDIATE");
       try {
@@ -135,7 +141,11 @@ export function openWriter(directory: string): DatabaseSync {
           db.exec("ALTER TABLE invitations ADD COLUMN role TEXT NOT NULL DEFAULT 'guest' CHECK (role IN ('owner', 'guest'))");
           db.exec("ALTER TABLE invitations ADD COLUMN creation_id TEXT REFERENCES creations(id)");
         }
-        db.exec(`ALTER TABLE documents ADD COLUMN ${VERSION_GENERATION}; ${CREATE_VERSIONS}; PRAGMA user_version=${STORAGE_VERSION}; COMMIT`);
+        if (version < 5) db.exec(`ALTER TABLE documents ADD COLUMN ${VERSION_GENERATION}; ${CREATE_VERSIONS}`);
+        db.exec(`ALTER TABLE invitations ADD COLUMN ${INVITATION_KIND};
+          ALTER TABLE invitations ADD COLUMN ${REVOCATION_REASON};
+          UPDATE invitations SET kind = 'link' WHERE role = 'guest' AND label = 'Guest';
+          ${PASSWORD_SCHEMA}; PRAGMA user_version=${STORAGE_VERSION}; COMMIT`);
       } catch (error) {
         db.exec("ROLLBACK");
         throw error;

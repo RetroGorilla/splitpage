@@ -1,6 +1,7 @@
 import type { ShareDialogPorts } from "./ports.ts";
 import type { ShareAttemptResult } from "../../application/collaboration/share.ts";
 import { SHARE_SCRIPT_COMMAND } from "./actions.ts";
+import { LINK_PASSWORD_MAX, validLinkPassword } from "../../../shared/link-password.ts";
 
 const MESSAGES: Record<Exclude<ShareAttemptResult["kind"], "shared" | "not-configured" | "cancelled">, string> = {
   "document-changed": "The script changed during upload. Open Share again to share the current script.",
@@ -18,7 +19,15 @@ export function mountShareDialog(ports: ShareDialogPorts) {
   backdrop.innerHTML = `
     <section class="modal-panel" role="dialog" aria-modal="true" aria-labelledby="share-script-title" tabindex="-1">
       <div class="modal-header"><h2 id="share-script-title">${SHARE_SCRIPT_COMMAND.label}</h2></div>
-      <p class="modal-hint">Sharing uploads a copy to your relay. Anyone with the link can edit the shared script. Your original file stays as it is.</p>
+      <p class="modal-hint">Sharing uploads a copy to your relay. Your original file stays as it is.</p>
+      <fieldset id="share-script-access" hidden>
+        <legend>Who can edit</legend>
+        <label><input type="radio" name="share-access" checked> Anyone with the link</label>
+        <label><input id="share-script-protected" type="radio" name="share-access"> Anyone with the link and password</label>
+        <label id="share-script-password-label" class="modal-hint" hidden>Link password
+          <input id="share-script-password" type="password" maxlength="${LINK_PASSWORD_MAX}" autocomplete="new-password">
+        </label>
+      </fieldset>
       <p class="modal-hint" role="status" id="share-script-status"></p>
       <p class="modal-hint" id="share-script-setup" hidden>Enter a supported relay address in <button type="button" class="btn" data-share="settings">Settings → Collaboration</button>
         or follow the <a href="https://github.com/RetroGorilla/splitpage/blob/main/docs/collaboration/native-adapter-design.md#stage-3-bounded-container-limits-and-status-endpoint" target="_blank" rel="noopener noreferrer">relay setup guide</a>.</p>
@@ -40,13 +49,18 @@ export function mountShareDialog(ports: ShareDialogPorts) {
   const start = button("start"), close = button("close"), copy = button("copy");
   const panel = part("[role=dialog]"), status = part("[role=status]");
   const setup = part("#share-script-setup"), link = part("#share-script-link");
-  const input = part("input") as HTMLInputElement;
+  const input = part("#share-script-link input") as HTMLInputElement;
+  const access = part("#share-script-access") as HTMLFieldSetElement;
+  const protectedLink = part("#share-script-protected") as HTMLInputElement;
+  const password = part("#share-script-password") as HTMLInputElement;
+  const passwordLabel = part("#share-script-password-label");
   let address: string | null = null;
   let active: AbortController | undefined;
   let switching = false;
 
   function dispose(): void {
     active?.abort();
+    password.value = "";
     window.removeEventListener("pagehide", dispose);
     backdrop.remove();
     if (focus instanceof HTMLElement && focus.isConnected) focus.focus();
@@ -55,6 +69,7 @@ export function mountShareDialog(ports: ShareDialogPorts) {
   function unset(): void {
     status.textContent = "Sharing needs a relay.";
     setup.hidden = false;
+    access.hidden = true;
     start.hidden = true;
   }
 
@@ -69,9 +84,16 @@ export function mountShareDialog(ports: ShareDialogPorts) {
 
   async function share(): Promise<void> {
     if (!address || active) return;
+    const value = protectedLink.checked ? password.value : undefined;
+    if (value !== undefined && !validLinkPassword(value)) {
+      status.textContent = "Enter a link password.";
+      password.focus();
+      return;
+    }
     active = new AbortController();
     const { signal } = active;
     start.hidden = true;
+    access.disabled = true;
     close.textContent = "Cancel";
     close.focus();
     status.textContent = "Uploading script…";
@@ -82,15 +104,18 @@ export function mountShareDialog(ports: ShareDialogPorts) {
         close.disabled = true;
         panel.focus();
         status.textContent = "Opening shared script…";
-      });
+      }, value);
     } catch { result = { kind: "failed" }; }
     active = undefined;
     if (!backdrop.isConnected) return;
     switching = false;
+    access.disabled = false;
     close.disabled = false;
     close.textContent = "Close";
     if (result.kind === "cancelled" || signal.aborted) { dispose(); return; }
     if (result.kind === "shared") {
+      password.value = "";
+      access.hidden = true;
       status.textContent = "Script shared. Pictures upload in the background.";
       input.value = result.link;
       link.hidden = false;
@@ -108,6 +133,11 @@ export function mountShareDialog(ports: ShareDialogPorts) {
   }
 
   close.onclick = cancelOrClose;
+  access.onchange = () => {
+    passwordLabel.hidden = !protectedLink.checked;
+    if (protectedLink.checked) password.focus();
+    else password.value = "";
+  };
   start.onclick = () => { void share(); };
   copy.onclick = () => {
     void ports.copy(input.value).then(() => { status.textContent = "Link copied."; }, () => {
@@ -120,7 +150,7 @@ export function mountShareDialog(ports: ShareDialogPorts) {
   backdrop.onkeydown = event => {
     if (event.key === "Escape") { event.preventDefault(); event.stopPropagation(); cancelOrClose(); }
     if (event.key !== "Tab") return;
-    const controls = [...backdrop.querySelectorAll<HTMLElement>("button:not(:disabled), a, input")]
+    const controls = [...backdrop.querySelectorAll<HTMLElement>("button:not(:disabled), a, input:not(:disabled)")]
       .filter(control => !control.closest("[hidden]"));
     const first = controls[0], last = controls.at(-1);
     if (!first || !last) { event.preventDefault(); return; }
@@ -139,6 +169,7 @@ export function mountShareDialog(ports: ShareDialogPorts) {
     address = value;
     if (!address) { unset(); return; }
     status.textContent = "";
+    access.hidden = false;
     start.hidden = false;
   }, () => { status.textContent = MESSAGES.failed; });
   return dispose;

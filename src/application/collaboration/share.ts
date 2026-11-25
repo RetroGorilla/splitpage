@@ -1,6 +1,7 @@
 import type { ShareScriptControls, ShareScriptCreation } from "../../../shared/desktop-contract.d.ts";
 import type { DocumentView } from "../session/document-session.ts";
 import type { OperationContext, Operations } from "../session/operation.ts";
+import { utf8Bytes } from "../../core/document/ids.ts";
 
 type Created = Extract<ShareScriptCreation, { kind: "created" }>;
 export type ShareAttemptResult =
@@ -21,7 +22,7 @@ export interface ShareAttemptPorts {
     complete: () => Promise<boolean>) => Promise<boolean>;
 }
 
-type Attempt = { source: string; id: string; hash: string; bytes: Uint8Array; address: string };
+type Attempt = { source: string; id: string; hash: string; bytes: Uint8Array; address: string; passwordCheck: string | undefined };
 
 export function createShareAttempt(ports: ShareAttemptPorts) {
   let previous: Attempt | undefined;
@@ -33,7 +34,8 @@ export function createShareAttempt(ports: ShareAttemptPorts) {
     return true;
   }
 
-  async function share(address: string, signal: { readonly aborted: boolean }, switching: () => void): Promise<ShareAttemptResult> {
+  async function share(address: string, signal: { readonly aborted: boolean }, switching: () => void,
+    password?: string): Promise<ShareAttemptResult> {
     if (running) return { kind: "failed" };
     running = true;
     let release: (() => void) | undefined;
@@ -46,19 +48,24 @@ export function createShareAttempt(ports: ShareAttemptPorts) {
       if (!doc || !owns()) return invalid();
       const source = JSON.stringify(doc);
       let attempt = previous;
+      const checkPassword = (id: string) => password === undefined ? undefined : ports.hash(utf8Bytes(id + password));
+      const passwordCheck = attempt && await checkPassword(attempt.id);
       // why: a fresh Yjs conversion introduces a new client id even when the standalone script is unchanged
-      if (!attempt || attempt.source !== source || attempt.address !== address) {
+      if (!attempt || attempt.source !== source || attempt.address !== address || attempt.passwordCheck !== passwordCheck) {
         const bytes = ports.snapshot(doc);
         if (bytes.byteLength > 15_000_000) return { kind: "too-large" };
         const hash = await ports.hash(bytes);
         if (!owns()) return invalid();
         if (attempt && !await discard(attempt)) return { kind: "failed" };
-        attempt = { source, id: ports.newId(), bytes, hash, address };
+        const id = ports.newId();
+        attempt = { source, id, bytes, hash, address, passwordCheck: await checkPassword(id) };
       }
       if (!owns()) return invalid();
       previous = attempt;
       const { id, bytes, hash } = attempt;
-      const created = await ports.relay.create(id, hash, bytes, address);
+      const created = password === undefined
+        ? await ports.relay.create(id, hash, bytes, address)
+        : await ports.relay.create(id, hash, bytes, address, password);
       if (!owns()) {
         await discard(attempt);
         return invalid();

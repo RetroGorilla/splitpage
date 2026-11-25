@@ -126,14 +126,16 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
     }
   });
   function requireAccess(context: Admission): void {
-    if (!access.isValid(context.invitationId)) throw { code: 4403, reason: "access-removed" };
+    const reason = access.refusal(context.invitationId);
+    if (reason) throw { code: 4403, reason };
   }
 
   function closeRemovedAccess(): void {
     for (const document of relay.hocuspocus.documents.values()) {
       for (const connection of document.getConnections()) {
         const context = connection.context as Admission;
-        if (!access.isValid(context.invitationId)) connection.close({ code: 4403, reason: "access-removed" });
+        const reason = access.refusal(context.invitationId);
+        if (reason) connection.close({ code: 4403, reason });
       }
     }
   }
@@ -168,8 +170,8 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
 
   const manage = ownerRequests(managementSecret, DOCUMENT_BYTES, {
     findCreation: access.findCreation,
-    create(creationId, bytes, hash) {
-      const created = access.create(creationId, bytes, hash);
+    async create(creationId, bytes, hash, password) {
+      const created = await access.create(creationId, bytes, hash, password);
       if (created.owner) history.changed(created.scriptId);
       return created;
     },
@@ -179,10 +181,19 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
     list: access.list,
     authorizeOwner: access.authorizeOwner,
     authenticate: access.authenticate,
+    activeLink: access.activeLink,
+    hasPassword: access.hasPassword,
+    readPassword: access.readPassword,
+    exchange: access.exchange,
+    async changePassword(name, token, password) {
+      const changed = await access.changePassword(name, token, password);
+      if (changed) closeRemovedAccess();
+      return changed;
+    },
     resetGuests,
     revokeInvitation,
     deleteScript
-  }, deployment);
+  }, deployment, origins);
   const status = statusRequests(managementSecret, db, directory, {
     totalConnections: () => limits.totalSockets(),
     authenticatedConnections: () => relay.hocuspocus.getConnectionsCount(),
@@ -261,9 +272,8 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
       connection.onClose(() => {
         limits.releaseInvitation(reservationId);
       });
-      if (!access.isValid(context.invitationId)) {
-        connection.close({ code: 4403, reason: "access-removed" });
-      }
+      const reason = access.refusal(context.invitationId);
+      if (reason) connection.close({ code: 4403, reason });
     },
     async onDisconnect({ context }) {
       if (context?.reservationId) limits.releaseInvitation(context.reservationId);
