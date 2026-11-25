@@ -173,7 +173,7 @@ function connectionFor(
     return member?.result === true ? readNativeMembership(value) : null;
   }
   return {
-    forget: () => erase(database, name),
+    async forget() { await staged; await erase(database, name); },
     membership: {
       record: readMembership,
       async token() { return (await readMembership())?.token ?? null; },

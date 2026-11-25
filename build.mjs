@@ -45,7 +45,8 @@ export function appJs(testHooks, collabUi = testHooks) {
 const scrubInvitationFragment = `let splitpageInvitation = null;
 {
   const url = new URL(location.href);
-  if (url.searchParams.has("join") && url.hash) {
+  if (url.searchParams.has("join") && url.href.includes("#")) {
+    splitpageInvitation = false;
     const [script, extra] = url.searchParams.getAll("join");
     const token = url.hash.slice(1);
     url.hash = "";

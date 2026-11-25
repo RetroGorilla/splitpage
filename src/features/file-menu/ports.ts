@@ -137,7 +137,7 @@ export interface FileMenuDropdownPorts {
   readonly syncIdentity: () => void;
   readonly longDemo: { readonly state: { readonly title: string; readonly rows: readonly unknown[] } };
   readonly collaboration: Pick<CollaborationReads, "snapshot">;
-  readonly collaborationItem?: { readonly id: string; readonly label: string; readonly group: string; readonly available: () => boolean } | undefined;
+  readonly collaborationItems?: readonly { readonly id: string; readonly label: string; readonly group: string; readonly available: () => boolean }[];
 }
 
 export interface FileMenuActionPorts {

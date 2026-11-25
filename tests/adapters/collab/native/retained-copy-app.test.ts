@@ -416,7 +416,7 @@ test("a picture held only in memory cannot complete a retained join", { timeout:
   const result = await hook().enterRetained({
     ...entry, pictureOrigin: window.location.origin, invitation: { state, token: randomBytes(32).toString("base64url") }
   });
-  assert.deepEqual(result, { ok: false, reason: "enter-failed" });
+  assert.deepEqual(result, { ok: false, reason: "pictures-unavailable" });
   const copy = await createBrowserNativeLocalStore().open(scope(entry.script), STORE_OPTIONS);
   assert.equal(copy.kind, "opened");
   try { assert.equal(await copy.membership?.token(), null); }
@@ -1027,3 +1027,93 @@ for (const peerAction of ["edit", "remove"] as const) {
     }
   });
 }
+
+for (const progressing of [true, false]) {
+  test("retained picture loading " + (progressing ? "keeps going while bytes arrive" : "fails after inactivity"),
+    { timeout: 10_000 }, async t => {
+      const source = seedSession({ A: "Picture preview" });
+      const bytes = Uint8Array.from(Buffer.from("89504e470d0a1a0a0000000d4948445200000020" + (progressing ? "0000000f" : "00000010"), "hex"));
+      const picture = imageRecordOf(bytes);
+      const row = source.document().rows[0];
+      assert.ok(picture && row);
+      assert.equal(source.commands.setField({ kind: "gallery", id: row.id }, { imageRef: picture }).kind, "written");
+      const state = source.encodeState();
+      source.close();
+      const stallMs = 180;
+      let transferred = 0;
+      let aborted = false;
+      t.mock.method(globalThis, "fetch", (_url: URL, init?: RequestInit) => {
+        const stream = new ReadableStream<Uint8Array>({
+          start(controller) {
+            const timer = setInterval(() => {
+              controller.enqueue(bytes.slice(transferred, transferred + 4));
+              transferred += 4;
+              if (!progressing || transferred === bytes.length) clearInterval(timer);
+              if (transferred === bytes.length) controller.close();
+            }, 55);
+            init?.signal?.addEventListener("abort", () => {
+              aborted = true;
+              clearInterval(timer);
+              if (transferred < bytes.length) controller.error(new DOMException("Cancelled", "AbortError"));
+            }, { once: true });
+          }
+        });
+        return Promise.resolve(new Response(stream));
+      });
+      const entry = identity(progressing ? "picture-stream" : "picture-stall");
+      const start = performance.now();
+      const outcome = await hook().enterRetained({
+        ...entry, pictureOrigin: window.location.origin, pictureStallMs: stallMs,
+        invitation: { state, token: randomBytes(32).toString("base64url") }
+      });
+      if (progressing) {
+        assert.deepEqual(outcome, ok);
+        assert.equal(transferred, bytes.length);
+        assert.ok(performance.now() - start > stallMs);
+        assert.deepEqual(await hook().leave(), ok);
+      } else {
+        assert.deepEqual(outcome, { ok: false, reason: "pictures-stalled" });
+        assert.equal(transferred, 4);
+        assert.equal(aborted, true);
+        assert.deepEqual(await storedEntries(window.indexedDB, scope(entry.script)), []);
+      }
+    });
+}
+
+test("a new link replaces the credential and sends unsent work to another copy", { timeout: 10_000 }, async t => {
+  const kit = serverHarness(t);
+  const state = kit.seed();
+  const run = kit.launch();
+  const port = await run.port();
+  const entry = { deployment: "rejoin", script: NAME };
+  const offline = capture();
+  const previous = kit.invitation();
+  assert.deepEqual(await hook().enterRetained({ ...entry, invitation: { state, token: previous.token }, connect: offline.connect }), ok);
+  typeAt(offline.replica().session, 0, "Unsent ", "R");
+  assert.equal((await offline.replica().flush()).kind, "stored");
+  await rewireRunningApp({});
+  await finishStartup();
+  await offline.replica().closed;
+  run.send("revoke:" + previous.id);
+  await kit.until(() => run.messages.includes("revoked") || undefined);
+  const issued = await run.owner("scripts/" + NAME + "/invitations", {
+    method: "POST", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({ role: "guest", label: "Replacement fixture" })
+  });
+  assert.equal(issued.status, 201);
+  const replacement = await issued.json() as { token: string };
+  const witness = kit.copy(port, undefined, NAME, replacement.token);
+  await kit.until(() => witness.text() === "word" || undefined);
+
+  assert.deepEqual(await hook().enterRetained({
+    ...entry, invitation: { token: replacement.token }, relayUrl: "ws://127.0.0.1:" + port, signal: t.signal
+  }), ok);
+  await kit.until(() => witness.text() === "Unsent word" || undefined);
+  assert.equal(await currentText(), "Unsent word");
+  const database = await idbResult(window.indexedDB.open(DB_NAME));
+  try {
+    const saved: unknown = await idbResult(database.transaction("invitations").objectStore("invitations").get(entry.deployment + "/" + NAME));
+    assert.deepEqual(saved, { token: replacement.token, role: "guest" });
+  } finally { database.close(); }
+  assert.deepEqual(await hook().leave(), ok);
+});

@@ -27,13 +27,13 @@ export function contentHash(bytes: Uint8Array): string {
   return createHash("sha256").update(bytes).digest("hex");
 }
 
-export function serverHarness(t: TestContext) {
+export function serverHarness(t: TestContext, timeout = 25_000) {
   const directory = mkdtempSync(join(tmpdir(), "splitpage-relay-"));
   const managementSecret = randomBytes(32).toString("base64url");
   const sensitiveValues = new Set<string>([managementSecret]);
   const invitations = new Map<string, { id: string; token: string }>();
   const changed = new EventEmitter();
-  const signal = AbortSignal.any([t.signal, AbortSignal.timeout(25_000)]);
+  const signal = AbortSignal.any([t.signal, AbortSignal.timeout(timeout)]);
   const stopProcesses: (() => Promise<unknown>)[] = [];
   const copies: ReturnType<typeof openNativeRelay>[] = [];
   const WebSocketBefore = globalThis.WebSocket;
@@ -124,7 +124,7 @@ export function serverHarness(t: TestContext) {
     });
     const run = {
       messages, exit, output: () => output, errors: () => errors,
-      send: (message: string | { holdSyncType: number } | {
+      send: (message: string | { holdSyncType: number } | { streamPicture: { sha: string; base64: string } } | {
         refuseDecode: {
           stage: "beforeHandleMessage" | "beforeSync";
           invitationId: string;

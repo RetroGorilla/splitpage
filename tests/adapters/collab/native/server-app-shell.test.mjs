@@ -8,7 +8,7 @@ import { URL } from "node:url";
 import { JSDOM, VirtualConsole } from "jsdom";
 import { build } from "../../../../build.mjs";
 import { readInvitationSnapshot } from "../../../../src/adapters/collab/native/invitation-snapshot.ts";
-import { serverHarness } from "./server-harness.ts";
+import { ORIGIN, serverHarness } from "./server-harness.ts";
 
 test("the relay serves the shell and the gated app replaces the invite history entry", async t => {
   const kit = serverHarness(t);
@@ -38,6 +38,16 @@ test("the relay serves the shell and the gated app replaces the invite history e
   assert.equal(head.headers.get("content-length"), String(Buffer.byteLength(shell)));
   assert.equal(head.headers.get("splitpage-deployment"), deployment);
   assert.equal(await head.text(), "");
+  const desktopHead = await globalThis.fetch(origin + "/api/deployment", { method: "HEAD", headers: { Origin: ORIGIN } });
+  assert.equal(desktopHead.headers.get("splitpage-deployment"), deployment);
+  assert.equal(desktopHead.headers.get("access-control-allow-origin"), ORIGIN);
+  assert.equal(desktopHead.headers.get("access-control-expose-headers"), "Splitpage-Deployment");
+  const unlisted = await globalThis.fetch(origin + "/api/deployment", { method: "HEAD", headers: { Origin: "https://unknown.invalid" } });
+  assert.equal(unlisted.headers.get("access-control-allow-origin"), null);
+  assert.equal(unlisted.headers.get("access-control-expose-headers"), null);
+  const getDeployment = await globalThis.fetch(origin + "/api/deployment", { headers: { Origin: ORIGIN } });
+  assert.equal(getDeployment.headers.get("splitpage-deployment"), null);
+  assert.equal(await getDeployment.text(), "Welcome to Hocuspocus!");
   for (const file of ["sw.js", "manifest.webmanifest", "icon.svg", "icon-maskable.svg"]) {
     assert.equal((await globalThis.fetch(origin + "/" + file)).status, 200);
   }
@@ -69,4 +79,11 @@ test("the relay serves the shell and the gated app replaces the invite history e
   });
   const logs = [run.output(), run.errors(), ...browserLogs].join("\n");
   assert.ok(!logs.includes(token) && !logs.includes(wrongToken));
+});
+
+test("deployment discovery returns 404 when the relay has no deployment ID", async t => {
+  const run = serverHarness(t).launch({ SPLITPAGE_DEPLOYMENT_ID: undefined });
+  const response = await globalThis.fetch("http://127.0.0.1:" + await run.port() + "/api/deployment", { method: "HEAD" });
+  assert.equal(response.status, 404);
+  assert.equal(response.headers.get("splitpage-deployment"), null);
 });

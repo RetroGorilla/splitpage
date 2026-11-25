@@ -7,7 +7,7 @@ export interface NativeMembershipRecord {
 export type NativeReplicaRequest =
   | ["open" | "delete", name: string]
   | ["membership" | "forget" | "read-journal", name: string, lease: string]
-  | ["join", name: string, lease: string, record: string | NativeMembershipRecord]
+  | ["join", name: string, lease: string, record: string | NativeMembershipRecord | null]
   | ["close", name: string, lease: string]
   | ["read", name: string, lease: string, through: number | null]
   | ["write", name: string, lease: string, generation: number, checkpoint: boolean, bytes: Uint8Array]
