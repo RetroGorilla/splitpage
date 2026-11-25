@@ -18,6 +18,7 @@ let release: (() => void) | undefined;
 let hold: Promise<void> | undefined;
 let holdDocumentLoad = false;
 let failNextLoad = false;
+let holdDeleteReply = false;
 let plainLoad = false;
 let streamedPicture: { sha: string; bytes: Buffer } | undefined;
 let releaseLoad: (() => void) | undefined;
@@ -42,6 +43,10 @@ process.on("message", message => {
     hold = undefined;
   }
   if (message === "stop") process.emit("SIGTERM");
+  if (message === "hold-delete-reply") {
+    holdDeleteReply = true;
+    process.send?.("delete-reply-armed");
+  }
   if (message === "hold-load" || message === "hold-invitation-load") {
     plainLoad = message === "hold-invitation-load";
     holdDocumentLoad = true;
@@ -94,6 +99,13 @@ try {
   const relay = await startRelay(process.env, "127.0.0.1", [{
     priority: 101,
     async onRequest({ request, response }) {
+      if (holdDeleteReply && request.method === "DELETE" && /^\/api\/scripts\/[^/]+$/.test(request.url ?? "")) {
+        holdDeleteReply = false;
+        response.end = () => {
+          process.send?.({ kind: "held-delete-reply", status: response.statusCode });
+          return response;
+        };
+      }
       const picture = streamedPicture;
       if (picture && request.method === "GET" && request.url?.endsWith("/pictures/" + picture.sha)) {
         streamedPicture = undefined;
@@ -191,6 +203,12 @@ try {
     }
   });
   process.on("message", message => {
+    if (message === "close-sockets") {
+      for (const document of relay.hocuspocus.documents.values()) {
+        for (const connection of document.getConnections()) connection.webSocket.close(1012, "Test restart");
+      }
+      process.send?.("sockets-closed");
+    }
     if (typeof message === "string" && message.startsWith("revoke:")) {
       relay.revokeInvitation(message.slice("revoke:".length));
       process.send?.("revoked");

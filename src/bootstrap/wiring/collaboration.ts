@@ -3,8 +3,10 @@ import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { createShareAttempt } from "../../application/collaboration/share.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
 import { mintDocId } from "../../adapters/identity/ids.ts";
-import { joinScriptAction, leaveScriptAction, shareScriptAction, JOIN_SCRIPT_COMMAND, LEAVE_SCRIPT_COMMAND, SHARE_SCRIPT_COMMAND } from "../../features/collaboration/actions.ts";
+import { joinScriptAction, leaveScriptAction, shareScriptAction, sharingDetailsAction, SHARING_COMMAND, JOIN_SCRIPT_COMMAND, LEAVE_SCRIPT_COMMAND, SHARE_SCRIPT_COMMAND } from "../../features/collaboration/actions.ts";
 import { mountLeaveDialog } from "../../features/collaboration/leave.ts";
+import { mountSharedPopover } from "../../features/collaboration/shared-popover.ts";
+import { collaboration } from "./ports/collaboration.ts";
 import { mountShareDialog } from "../../features/collaboration/mount.ts";
 import { scriptCellOf } from "../richtext.ts";
 import { migrateRows } from "../document-ports.ts";
@@ -12,7 +14,7 @@ import { documentReader } from "./ports/document.ts";
 import { fileDelivery } from "./ports/files.ts";
 import { localFileMenuControls } from "./local-files.ts";
 import { openDesktopJoin, invitationOriginAllowed } from "./collaboration-join.ts";
-import { retainedSharedScriptActive } from "./retained-shared-script.ts";
+import { retainedSharedScriptActive, retainedSharingControls } from "./retained-shared-script.ts";
 import { screen } from "./ports/screen.ts";
 import { getEditorName } from "./preferences-owner.ts";
 import { holdSessionCommands, liveSession, sessionEntryRefusal, sharedSession } from "./session-owner.ts";
@@ -29,7 +31,8 @@ const canJoin = () => !!desktopPort() && !sharedSession();
 export const collaborationMenuItems = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI ? () => [
   { ...SHARE_SCRIPT_COMMAND, group: "Collaborate", available: () => !!desktopPort()?.shareScript && !sharedSession() },
   { ...JOIN_SCRIPT_COMMAND, group: "Collaborate", available: canJoin },
-  { ...LEAVE_SCRIPT_COMMAND, group: "Collaborate", available: retainedSharedScriptActive }
+  { ...SHARING_COMMAND, group: "Collaborate", available: sharedSession },
+  { ...LEAVE_SCRIPT_COMMAND, group: "Collaborate", available: sharedSession }
 ] : () => [];
 
 let leaveDialog: ReturnType<typeof mountLeaveDialog> | undefined;
@@ -39,6 +42,7 @@ function openLeave() {
   if (leaveDialog && !leaveDialog.signal.aborted) return true;
   const context = captureOperation();
   leaveDialog = mountLeaveDialog({
+    owner: retainedSharingControls()?.role === "owner",
     async saveCopy() {
       if (!stillOwns(context)) return false;
       const files = localFileMenuControls();
@@ -126,10 +130,30 @@ function registerCollaboration(registry: Pick<ActionRegistry, "invoke" | "regist
       });
     }
   }));
+  const popover = mountSharedPopover({
+    collaboration,
+    membership: retainedSharingControls,
+    canManage: () => retainedSharingControls()?.canManage() ?? Promise.resolve(false),
+    async manage(operation) {
+      const controls = retainedSharingControls();
+      if (!controls) throw new Error("The shared script is unavailable.");
+      await controls.manage(operation);
+    },
+    saveCopy: () => { registry.invoke("save-as", "button"); },
+    copy: text => navigator.clipboard.writeText(text),
+    async leave() {
+      if (!openLeave() && !((await sharedEntry()?.leave())?.ok ?? false)) throw new Error("Could not leave the shared script.");
+    },
+    open: () => { registry.invoke(SHARING_COMMAND.id, "button"); },
+    confirm: message => window.confirm(message)
+  });
+  const unregisterSharing = registry.register(sharingDetailsAction({ screen, visible: sharedSession, open: popover.open }));
   const unregisterJoin = registry.register(joinScriptAction({ screen, visible: canJoin, open: openDesktopJoin }));
-  const unregisterLeave = registry.register(leaveScriptAction({ screen, visible: retainedSharedScriptActive, open: openLeave }));
+  const unregisterLeave = registry.register(leaveScriptAction({ screen, visible: sharedSession, open: () => { if (!openLeave()) void sharedEntry()?.leave(); } }));
   return () => {
     unregisterLeave();
+    unregisterSharing();
+    popover.dispose();
     unregisterJoin();
     unregister();
     leaveDialog?.dispose();

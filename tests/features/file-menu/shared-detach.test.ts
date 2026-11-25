@@ -20,6 +20,7 @@ for (const id of ["save", "save-as", "autosave"]) {
         if (key === "capability") return SHARED;
         if (key === "notices") return notices.notices;
         calls.push(String(key));
+        if (key === "sharedCopy") return undefined;
         throw new Error("unexpected standalone action port");
       }
     });
@@ -29,10 +30,43 @@ for (const id of ["save", "save-as", "autosave"]) {
     const reason = id === "autosave" ? "File autosave is not available in a shared session." : "Save destinations are not available in a shared session.";
     assert.deepEqual(action.availability?.("menu"), id === "autosave" ? { enabled: false, reason, checked: false } : { enabled: false, reason });
     await action.run("native-menu");
-    assert.deepEqual(calls, []);
+    assert.deepEqual(calls, id === "save-as" ? ["sharedCopy", "sharedCopy"] : []);
     assert.deepEqual(notices.shown.map(({ message, kind }) => [message, kind]), [[reason, "warn"]]);
   });
 }
+
+test("shared Save a copy uses the shared export and leaves standalone saving alone", async () => {
+  const calls: string[] = [];
+  const screen = { loading: false, dialog: false, tour: false, launcher: false, prompter: false, writer: false, shotlist: false };
+  const ports: FileMenuActionPorts = {
+    capability: SHARED,
+    notices: fakeNotices().notices,
+    createBundle: async () => {},
+    canCreateBundle: () => false,
+    screen: () => screen,
+    desktop: () => true,
+    saves: { busy: () => false },
+    save: async () => { calls.push("standalone save"); },
+    sharedCopy: () => async () => { calls.push("shared export"); },
+    openFile: async () => {},
+    openImport: () => {}
+  };
+  const owner = {
+    fileMenuOpen: () => true,
+    toggleFileMenu: (open?: boolean) => { if (open === false) calls.push("close menu"); },
+    toggleSubmenu: () => {},
+    refreshFileMenu: () => {},
+    refreshOpenFileMenu: () => {},
+    onFileMenuRefresh: () => () => {},
+    startNewScript: () => false,
+    openLongDemo: () => false
+  };
+  const action = fileMenuActions(() => owner, ports).find(definition => definition.id === "save-as");
+  assert.ok(action);
+  assert.deepEqual(action.availability?.("menu"), { enabled: true });
+  await action.run("menu");
+  assert.deepEqual(calls, ["close menu", "shared export"]);
+});
 
 for (const id of ["file-conflict-overwrite", "file-conflict-copy"]) {
   test("shared " + id + " refuses before reading or closing conflict context, capture, building or delivery", t => {

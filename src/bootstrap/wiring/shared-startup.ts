@@ -1,6 +1,7 @@
 import { stopNativeCaretWait } from "./native-switch-caret.ts";
 import { stopCollaborationOwner } from "./collaboration-owner.ts";
-import { mountSharedEntry } from "./shared-entry.ts";
+import { startDesktopSharedResume } from "./desktop-shared-resume.ts";
+import { mountSharedEntry, sharedEntry } from "./shared-entry.ts";
 import { startSharedTestHook } from "./shared-test.ts";
 import { startInvitationEntry } from "./collaboration-join.ts";
 
@@ -14,8 +15,11 @@ function mount(): void {
   stopSharedSessionFeature();
   const test = startSharedTestHook?.(() => invitations?.status() ?? { connected: false, settled: false });
   const stop = mountSharedEntry(() => test?.left());
+  const stopResume = startDesktopSharedResume(async (entry) =>
+    (await sharedEntry()?.enter(entry, entry.signal)) ?? { ok: false, reason: "app-stopped" });
   const invitations = startInvitations?.();
   stopEntry = () => {
+    stopResume();
     invitations?.dispose();
     try { stop(); } finally { test?.dispose(); }
   };

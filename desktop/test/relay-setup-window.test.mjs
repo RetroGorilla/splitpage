@@ -89,6 +89,7 @@ test("the setup window may submit credentials solely from its live top frame", a
       save: (address, value) => { saved = address === "https://relay.example" && value === secret; return "saved"; },
       status: () => ({ address: "https://relay.example" }), open: async () => true,
       test: async () => "connected", clear: () => true,
+      sharedReference: () => null, manageSharing: () => ({ kind: "failed", reason: "closed" }),
       createShare: () => ({ kind: "failed" }), abandonShare: () => false, completeShare: () => false
     }
   });

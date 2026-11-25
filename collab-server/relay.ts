@@ -178,6 +178,7 @@ export async function startRelay(env: NodeJS.ProcessEnv, address = "0.0.0.0", ex
     issue: access.issue,
     list: access.list,
     authorizeOwner: access.authorizeOwner,
+    authenticate: access.authenticate,
     resetGuests,
     revokeInvitation,
     deleteScript

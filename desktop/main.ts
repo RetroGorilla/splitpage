@@ -94,8 +94,8 @@ const { createBlobStore }: { createBlobStore: typeof BlobStore.createBlobStore }
 const { createHistoryFsBackend, MAX_BODY_BYTES: HISTORY_MAX_BODY_BYTES }: { createHistoryFsBackend: typeof HistoryFsBackend.createHistoryFsBackend; MAX_BODY_BYTES: typeof HistoryFsBackend.MAX_BODY_BYTES } = require("./history-fs-backend.ts");
 const {
   DESKTOP_STATE_VERSION,
-  normalizeBounds, normalizeTabSource, createDesktopStateStore
-}: { DESKTOP_STATE_VERSION: typeof DesktopState.DESKTOP_STATE_VERSION; normalizeBounds: typeof DesktopState.normalizeBounds; normalizeTabSource: typeof DesktopState.normalizeTabSource; createDesktopStateStore: typeof DesktopState.createDesktopStateStore } = require("./desktop-state.ts");
+  normalizeBounds, normalizeTabSource, normalizeSharedReference, createDesktopStateStore
+}: { DESKTOP_STATE_VERSION: typeof DesktopState.DESKTOP_STATE_VERSION; normalizeBounds: typeof DesktopState.normalizeBounds; normalizeTabSource: typeof DesktopState.normalizeTabSource; normalizeSharedReference: typeof DesktopState.normalizeSharedReference; createDesktopStateStore: typeof DesktopState.createDesktopStateStore } = require("./desktop-state.ts");
 const {
   DEFAULT_UPDATE_API, hasReleaseAssets, compareVersions, isAllowedDownloadHost, isAllowedDownloadHop, isAllowedReleaseUrl, pickUpdateAsset, findChecksumsAsset, checksumFor
 }: { DEFAULT_UPDATE_API: typeof UpdateRelease.DEFAULT_UPDATE_API; hasReleaseAssets: typeof UpdateRelease.hasReleaseAssets; compareVersions: typeof UpdateRelease.compareVersions; isAllowedDownloadHost: typeof UpdateRelease.isAllowedDownloadHost; isAllowedDownloadHop: typeof UpdateRelease.isAllowedDownloadHop; isAllowedReleaseUrl: typeof UpdateRelease.isAllowedReleaseUrl; pickUpdateAsset: typeof UpdateRelease.pickUpdateAsset; findChecksumsAsset: typeof UpdateRelease.findChecksumsAsset; checksumFor: typeof UpdateRelease.checksumFor } = require("./update-release.ts");
@@ -451,7 +451,7 @@ const recents = createRecents({ store: desktopState, pathKey, fileIds });
 const { hadPriorSession, isRestoringSession, restoreSessionAtLaunch, registerActivate } = createSessionRestore({
   app, BrowserWindow, desktopState, draftStore: () => draftStore, draftsList, tabs, windowsById, pathToTabId,
   claimRoutingKey, createTabWindow, createTab, activateTab, liveWindows, firstWindowRecord, payloadForSource,
-  routeLaunchFile, argvFilesToOpen, restoreNotice, persistShellState
+  routeLaunchFile, argvFilesToOpen, restoreNotice, persistShellState, restoreShared: COLLAB_UI
 });
 
 function noteRecentDocumentAndPersist(absPath: unknown, title: string) {
@@ -470,8 +470,9 @@ function shellStateAsV2() {
     for (const tabId of w.tabIds) {
       const tab = tabs.get(tabId);
       if (!tab) continue;
-      if (tab.source.kind === "blank" && !draftsHasDraft(tabId)) continue;
-      rows.push({ tabId, source: normalizeTabSource(tab.source), lastKnownTitle: tab.title || "" });
+      const shared = COLLAB_UI ? tab.shared : undefined;
+      if (tab.source.kind === "blank" && !shared && !draftsHasDraft(tabId)) continue;
+      rows.push({ tabId, source: normalizeTabSource(tab.source), lastKnownTitle: tab.title || "", ...(shared && { shared }) });
     }
     if (!rows.length) {
       const active = tabs.get(w.activeTabId);
@@ -1191,7 +1192,7 @@ function forgetTab(tabId: string | undefined) {
   restoreNotice.retarget(tabId, w);
 }
 
-function createTab(windowId: string, opts?: Partial<Pick<DesktopMainTab, "source" | "launchIntent" | "pendingPayload">> & { tabId?: string | undefined; index?: unknown }): DesktopMainTab | null {
+function createTab(windowId: string, opts?: Partial<Pick<DesktopMainTab, "source" | "launchIntent" | "pendingPayload" | "shared">> & { tabId?: string | undefined; index?: unknown }): DesktopMainTab | null {
   const w = windowsById.get(windowId);
   if (!w || w.win.isDestroyed()) return null;
   const o = opts || {};
@@ -1214,6 +1215,7 @@ function createTab(windowId: string, opts?: Partial<Pick<DesktopMainTab, "source
     windowId,
     view,
     webContentsId: view.webContents.id,
+    ...(COLLAB_UI && o.shared && { shared: o.shared }),
     source: normalizeTabSource(o.source),
     fileId: null,
     title: "",
@@ -1886,6 +1888,33 @@ const relaySetup = COLLAB_UI ? (() => {
       if (result === "saved") void shares.retryAbandons();
       return result;
     },
+    async sharedReference(event: DesktopIpcEvent, args: DesktopIpcArgs<"splitpage:relay-owner-resume">[0]) {
+      const tab = tabWindow(event) && tabOf(event);
+      if (!tab) return false;
+      if (!args.length) return tab.shared ?? null;
+      const reference = normalizeSharedReference(args[0]);
+      const previous = tab.shared;
+      if (args.length === 2 && args[0] === null) {
+        const expected = normalizeSharedReference(args[1]);
+        if (!expected || previous?.deployment !== expected.deployment || previous.script !== expected.script
+          || previous.address !== expected.address) return false;
+      } else if (args.length !== 1 || (!reference && args[0] !== null)) return false;
+      if (reference) tab.shared = reference;
+      else delete tab.shared;
+      if (await persistShellState()) return true;
+      if (previous) tab.shared = previous;
+      else delete tab.shared;
+      return false;
+    },
+    manageSharing: (event: DesktopIpcEvent, operation: string, name: string, lease: string, address: string) => {
+      const tab = tabWindow(event) && tabOf(event);
+      const shared = tab && tab.shared;
+      if (!shared || name !== shared.deployment + "/" + shared.script || address !== shared.address) {
+        return { kind: "failed" as const, reason: "closed" as const };
+      }
+      return nativeReplicaForDevice(event.sender, ["membership", name, lease],
+        record => owner.manageSharing(operation, name, address, record));
+    },
     createShare: (event: DesktopIpcEvent, id: string, hash: string, bytes: Uint8Array, address: string) => {
       const tab = tabWindow(event) && tabOf(event);
       return tab ? shares.create(tab.id, id, hash, bytes, address) : { kind: "failed" as const };
@@ -1919,6 +1948,7 @@ function dialogParentFor(event: DesktopIpcEvent) {
 
 function launchIntentFor(tab: DesktopMainTab) {
   if (draftsHasDraft(tab.id)) return { type: "restore-draft" };
+  if (COLLAB_UI && tab.shared) return { type: "blank" as const };
   if (tab.source.kind === "file" && tab.pendingPayload) return { type: "open-file" };
   return { type: "blank" };
 }
@@ -1940,7 +1970,8 @@ const { registerShellIpc } = createShellIpc({
 
 const { createNativeReplicaIpc }: { createNativeReplicaIpc: typeof CreateNativeReplicaIpc } = require("./native-replica-ipc.ts");
 let handleReplica: ReturnType<typeof createNativeReplicaIpc> | undefined;
-function nativeReplicaForDevice(sender: Electron.WebContents, request: unknown) {
+function nativeReplicaForDevice(sender: Electron.WebContents, request: unknown,
+  manage?: Parameters<ReturnType<typeof createNativeReplicaIpc>>[2]) {
   if (!Array.isArray(request) || typeof request[1] !== "string" || !request[1].includes("/")) {
     throw new TypeError("Native replica requests require deployment and script identities.");
   }
@@ -1953,7 +1984,7 @@ function nativeReplicaForDevice(sender: Electron.WebContents, request: unknown) 
     },
     decrypt: bytes => safeStorage.decryptString(bytes)
   });
-  return handleReplica(sender, request);
+  return handleReplica(sender, request, manage);
 }
 
 const { registerDocumentIpc } = createDocumentIpc({

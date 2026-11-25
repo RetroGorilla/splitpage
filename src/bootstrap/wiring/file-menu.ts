@@ -24,10 +24,16 @@ import { fileMenu } from "./file-menu-controls.ts";
 import { migrateRows } from "../document-ports.ts";
 import { documentIdentity } from "./ports/document-identity-controls.ts";
 import { importControls } from "./imports.ts";
-import { localFilesOwner } from "./local-files.ts";
+import { localFileMenuControls, localFilesOwner } from "./local-files.ts";
 import { LONG_DEMO } from "../../starters/index.ts";
 import { documentEntry } from "./ports/document-entry.ts";
 import { collaborationMenuItems } from "./collaboration.ts";
+
+declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
+
+const sharedCopy = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI
+  ? () => collaboration.snapshot().active ? () => localFileMenuControls().exportAs("splitpage") : undefined
+  : undefined;
 
 export function mountFileMenuDropdownFeature(): FileMenuDropdownMount {
   return fileMenu.replace(() => {
@@ -71,6 +77,7 @@ export function fileMenuActions(): ActionDefinition[] {
     desktop: presence.running,
     saves,
     save: (options) => saveDoc(options),
+    sharedCopy,
     openFile: () => localFilesOwner().openLocalFile(),
     openImport: () => { importControls()?.openImportModal(); }
   });

@@ -1,8 +1,9 @@
 import assert from "node:assert/strict";
+import { randomBytes } from "node:crypto";
 import { readdir } from "node:fs/promises";
 import { test } from "node:test";
 import { setImmediate } from "node:timers/promises";
-import { desktopFixture } from "./desktop-local-store-fixture.ts";
+import { desktopFixture, desktopTestCipher, replicasAt } from "./desktop-local-store-fixture.ts";
 import { eventResult } from "./indexeddb-fixture.ts";
 import { STORED } from "./local-store-fixture.ts";
 
@@ -80,6 +81,42 @@ test("leases belong to the claiming window and expire when a replacement opens",
   assert.deepEqual(await first.invoke(["read-journal", id, lease]), closed);
   assert.deepEqual(await first.invoke(["close", id, replacement.lease]), STORED);
 });
+
+test("replica writes finish during a pending relay operation, and a stale result cannot replace membership",
+  { timeout: 5000 }, async t => {
+    const { directory } = await desktopFixture(t);
+    const main = replicasAt(directory, undefined, desktopTestCipher(randomBytes(32)));
+    const page = main.window();
+    const name = "sharing";
+    const opened = await page.invoke(["open", name]);
+    assert.equal(opened.kind, "opened");
+    const { lease } = opened;
+
+    const guest = { role: "guest", token: "guest-fixture" } as const;
+    const owner = { role: "owner", token: "owner-fixture" } as const;
+    const request = ["membership", name, lease] as const;
+    assert.deepEqual(await page.invoke(["join", name, lease, guest]), STORED);
+
+    const entered = eventResult<undefined>(), release = eventResult<undefined>();
+    const changing = main.handle(page.sender, [...request], async record => {
+      assert.deepEqual(record, guest);
+      entered.resolve(undefined);
+      await release.promise;
+      return owner;
+    });
+    await entered.promise;
+    try {
+      assert.deepEqual(await page.invoke(["write", name, lease, 1, false, bytes]), STORED);
+      assert.deepEqual(await main.handle(page.sender, [...request], async () => owner), locked);
+      assert.deepEqual(await page.invoke(["join", name, lease, owner]), STORED);
+    } finally { release.resolve(undefined); }
+    assert.deepEqual(await changing, closed);
+    assert.deepEqual(await page.invoke([...request]), { kind: "membership", record: owner });
+    const rotated = { ...owner, guestLinkToken: "new-guest-fixture" };
+    assert.deepEqual(await main.handle(page.sender, [...request], async () => rotated), { kind: "membership", record: rotated });
+    assert.deepEqual(await page.invoke([...request]), { kind: "membership", record: rotated });
+    assert.deepEqual(await page.invoke(["close", name, lease]), STORED);
+  });
 
 for (const event of ["destroyed", "render-process-gone"] as const) {
   test(`desktop keeps a lost renderer's lease until its active disk operation settles (${event})`, { timeout: 5000 }, async t => {

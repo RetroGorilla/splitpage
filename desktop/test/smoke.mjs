@@ -2954,15 +2954,90 @@ async function caseShareScript(target, fixturesDir) {
     },
     stdio: ["ignore", "ignore", "ignore", "ipc"]
   });
-  let app, setup, guest;
+  let app, setup, second, guest, restarted;
+  const copyPath = path.join(fixturesDir, "shared-export.splitpage");
+  const stoppedPath = path.join(fixturesDir, "stopped-sharing.splitpage");
+  function relayMessage(matches) {
+    return new Promise((resolve, reject) => {
+      const timer = setTimeout(() => {
+        relay.off("message", read);
+        reject(new Error("The relay did not report the expected event."));
+      }, 10000);
+      function read(message) {
+        if (!matches(message)) return;
+        clearTimeout(timer);
+        relay.off("message", read);
+        resolve(message);
+      }
+      relay.on("message", read);
+    });
+  }
+  async function configure(app, address) {
+    const { cdp } = app;
+    await evalPage(cdp, "void window.splitpageDesktop.relayOwner.open()");
+    setup = await connectTarget(await pollNode(async () => {
+      const { body } = await fetchJson("http://127.0.0.1:" + app.port + "/json");
+      return body.find(item => item.url === "splitpage://relay-setup/index.html" && item.webSocketDebuggerUrl);
+    }));
+    await poll(setup, "document.readyState === 'complete' && document.querySelector('#relay-secret')?.type === 'password'");
+    try {
+      await evalPage(setup, `document.querySelector('#relay-address').value = ${JSON.stringify(address)};
+        document.querySelector('#relay-secret').value = ${JSON.stringify(secret)};
+        document.querySelector('form').requestSubmit(); true`);
+    } catch { }
+    await poll(cdp, `window.splitpageDesktop.relayOwner.status().then(result => result.address === ${JSON.stringify(address)})`);
+    setup.close();
+    setup = undefined;
+  }
+  const control = name => `document.querySelector('#shared-popover [data-sharing="${name}"]')`;
+  const popoverOpen = "document.querySelector('#shared-popover')?.matches(':popover-open')";
+  const connected = "document.querySelector('#shared-popover [data-connection]')?.textContent === 'Connected'";
+  async function openPopover(cdp) {
+    if (!await evalPage(cdp, popoverOpen)) await evalPage(cdp, "document.getElementById('shared-pill').click()");
+    await poll(cdp, popoverOpen);
+  }
+  async function clickControl(cdp, name) {
+    await poll(cdp, `${control(name)} && !${control(name)}.hidden && !${control(name)}.disabled`);
+    await evalPage(cdp, `${control(name)}.click()`);
+  }
+  async function join(app, link) {
+    const script = link.searchParams.get("join");
+    const endpoint = link.origin.replace(/^http/, "ws");
+    const entry = { deployment: "desktop-smoke", script, invitation: { token: link.hash.slice(1) }, relayUrl: endpoint };
+    const result = await evalPage(app.cdp, `window.__sharedTest.enterRetained(${JSON.stringify(entry)})`);
+    if (!result?.ok) throw new Error("Could not join the smoke-test shared script: " + JSON.stringify(result));
+    await poll(app.cdp, connected);
+  }
+  async function edit(app, text) {
+    await evalPage(app.cdp, `(() => {
+      const field = document.querySelector('#rows .audio-cell .cell-editable');
+      field.focus();
+      const selection = getSelection();
+      selection.selectAllChildren(field);
+      selection.collapseToEnd();
+    })()`);
+    await app.cdp.send("Input.insertText", { text: " " + text });
+    await evalPage(app.cdp, "document.activeElement.blur()");
+    await contains(app, text);
+  }
+  function contains(app, text) {
+    return poll(app.cdp, `window.__sharedTest.read().app?.rows[0]?.audioText.includes(${JSON.stringify(text)})`);
+  }
+  async function confirm(cdp, name, accepts) {
+    await evalPage(cdp, `window.confirm = message => { window.sharingConfirmation = message; return ${accepts}; };`);
+    await clickControl(cdp, name);
+    return evalPage(cdp, "window.sharingConfirmation");
+  }
   try {
     const [port] = await once(relay, "message", { signal: AbortSignal.timeout(10_000) });
     if (typeof port !== "number") throw new Error("The test relay did not report its port.");
     const address = "http://127.0.0.1:" + port;
-    app = await launchApp(target, { label: "share-script", fixtures: [fixture] });
+    app = await launchApp(target, { label: "share-script", fixtures: [fixture], dialogs: [copyPath, "confirm"] });
     const { cdp } = app;
     await waitForRows(cdp);
     await poll(cdp, "window.__splitpageFormats.state().title === 'Sharing fixture'");
+    const standaloneToolbar = await evalPage(cdp, "Array.from(document.querySelector('.topbar .toolbar').children, node => node.id)");
+    record(tag + ": the standalone toolbar has no collaboration controls", !standaloneToolbar.includes("shared-pill"));
     await evalPage(cdp, "document.querySelector('#btn-file').click()");
     const available = await evalPage(cdp, "!!document.querySelector('#file-menu [data-file-action=share-script]:not([hidden])')");
     record(tag + ": standalone desktop has the Collaborate group and share action", available === true);
@@ -3003,7 +3078,7 @@ async function caseShareScript(target, fixturesDir) {
     record(tag + ": Copy link sends the displayed guest URL to the clipboard",
       await evalPage(cdp, `(async function () {
         let written = "";
-        Object.defineProperty(navigator, "clipboard", { value: { async writeText(value) { written = value; } } });
+        Object.defineProperty(navigator, "clipboard", { configurable: true, value: { async writeText(value) { written = value; } } });
         document.querySelector('[data-share=copy]').click();
         await Promise.resolve();
         return written === document.querySelector('#share-script-link input').value &&
@@ -3026,7 +3101,26 @@ async function caseShareScript(target, fixturesDir) {
     await evalPage(cdp, "document.querySelector('[data-share=close]').click(); document.querySelector('#btn-file').click()");
     record(tag + ": the File menu hides sharing once the tab is shared",
       await evalPage(cdp, "document.querySelector('[data-file-action=share-script]') === null"));
+    record(tag + ": the Shared pill is the only toolbar addition",
+      JSON.stringify((await evalPage(cdp, "Array.from(document.querySelector('.topbar .toolbar').children, node => node.id)"))
+        .filter(id => id !== "shared-pill")) === JSON.stringify(standaloneToolbar));
+    record(tag + ": the shared File menu offers the requested actions and hides standalone saving controls", await evalPage(cdp,
+      `(() => {
+        const item = id => document.querySelector('#file-menu [data-file-action="' + id + '"]');
+        return ['save-as','export','find','history','sharing-and-people','leave-shared-script'].every(id => item(id) && !item(id).hidden)
+          && item('autosave').hidden && item('create-bundle').hidden;
+      })()`));
+    await evalPage(cdp, "document.querySelector('[data-file-action=sharing-and-people]').click()");
+    await poll(cdp, popoverOpen);
+    await evalPage(cdp, "Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { async writeText(value) { window.lastSharedCopy = value; } } })");
+    await clickControl(cdp, "copy");
+    await poll(cdp, `window.lastSharedCopy === ${JSON.stringify(link.href)}`);
+    record(tag + ": the owner popover copies the current guest link", true);
+    await clickControl(cdp, "save");
+    await pollNode(() => fs.existsSync(copyPath));
+    record(tag + ": Save a copy writes a script with the shared content", fs.readFileSync(copyPath, "utf8").includes("Original narration"));
 
+    second = await launchApp(target, { label: "share-second", fixtures: [fixture], dialogs: [stoppedPath] });
     const saved = path.join(fixturesDir, "guest-copy.splitpage");
     guest = await launchApp(target, { label: "join-script", dialogs: [saved, "confirm"] });
     const guestPage = guest.cdp;
@@ -3060,16 +3154,120 @@ async function caseShareScript(target, fixturesDir) {
     await poll(guestPage, "!document.querySelector('#leave-script-modal')");
     record(tag + ": Save a copy first writes the project and Leave erases the retained replica and membership",
       !fs.existsSync(guestReplica) && JSON.parse(fs.readFileSync(saved, "utf8")).title === "Sharing fixture");
+    await contains(second, "Original narration");
+    await Promise.all([join(second, link), join(guest, link)]);
+    await openPopover(guest.cdp);
+    record(tag + ": a guest has no owner controls or promotion without setup", await evalPage(guest.cdp,
+      `['copy','reset','stop','promote'].every(name => document.querySelector('[data-sharing="' + name + '"]').hidden)`));
+    await openPopover(cdp);
+    await clickControl(cdp, "leave");
+    const leaveHint = "#leave-script-modal .modal-hint";
+    const leaveText = await poll(cdp, `document.querySelector(${JSON.stringify(leaveHint)})?.textContent`);
+    await evalPage(cdp, "document.querySelector('#leave-script-modal [data-leave-script]').click()");
+    await poll(cdp, "!document.getElementById('shared-pill')");
+    await pollNode(() => !fs.existsSync(replica));
+    record(tag + ": owner Leave confirms the script stays shared and removes local credentials",
+      leaveText.includes("stay shared") && leaveText.includes("give up its owner controls"));
+    await edit(second, "Continued guest editing");
+    await contains(guest, "Continued guest editing");
+    record(tag + ": the remaining guests can still edit and sync after the owner leaves", true);
+
+    await join(app, link);
+    await configure(second, address);
+    await openPopover(second.cdp);
+    await evalPage(second.cdp, "window.beforePromotion = document.querySelector('#rows .audio-cell .cell-editable')");
+    await clickControl(second.cdp, "promote");
+    await poll(second.cdp, `!${control("reset")}.hidden && ${connected}`);
+    record(tag + ": promotion keeps the shared editor and leaves Copy link disabled with a reset hint", await evalPage(second.cdp,
+      `window.beforePromotion === document.querySelector('#rows .audio-cell .cell-editable')
+        && ${control("copy")}.disabled && !document.getElementById('shared-copy-hint').hidden`));
+    await openPopover(cdp);
+    await clickControl(cdp, "promote");
+    await poll(cdp, `!${control("reset")}.hidden && ${connected}`);
+    await clickControl(second.cdp, "reset");
+    await poll(guest.cdp, "!document.getElementById('collab-access-banner').hidden");
+    await poll(second.cdp, `!${control("copy")}.disabled`);
+    await evalPage(second.cdp, "Object.defineProperty(navigator, 'clipboard', { configurable: true, value: { async writeText(value) { window.lastSharedCopy = value; } } })");
+    await clickControl(second.cdp, "copy");
+    const secondLink = new URL(await poll(second.cdp, "window.lastSharedCopy"));
+    record(tag + ": reset restores Copy link and disconnects guests", secondLink.hash !== link.hash);
+    await edit(app, "First owner after reset");
+    await contains(second, "First owner after reset");
+    await edit(second, "Second owner after reset");
+    await contains(app, "Second owner after reset");
+    record(tag + ": both owners still edit and sync after reset", true);
+
+    await second.cdp.send("Network.enable");
+    await second.cdp.send("Network.emulateNetworkConditions", { offline: true, latency: 0, downloadThroughput: 0, uploadThroughput: 0 });
+    const socketsClosed = relayMessage(message => message === "sockets-closed");
+    relay.send("close-sockets");
+    await socketsClosed;
+    await poll(second.cdp, `${control("stop")}.disabled && !document.getElementById('shared-stop-hint').hidden`);
+    record(tag + ": offline Stop sharing is unavailable and explains why", await evalPage(second.cdp,
+      "document.getElementById('shared-stop-hint').textContent.includes('Connect to the relay')"));
+    await second.cdp.send("Network.emulateNetworkConditions", { offline: false, latency: 0, downloadThroughput: -1, uploadThroughput: -1 });
+    await poll(second.cdp, connected);
+    const stopText = await confirm(second.cdp, "stop", true);
+    await poll(second.cdp, "!document.getElementById('shared-pill')");
+    await contains(second, "Second owner after reset");
+    await poll(cdp, "!document.getElementById('collab-access-banner').hidden");
+    record(tag + ": Stop sharing confirms the effect and keeps an unsaved local script while the other owner loses access",
+      stopText.includes("everyone") && stopText.includes("stay on this device")
+        && await poll(second.cdp, "document.getElementById('btn-save').dataset.dirty === 'true'"));
+    await evalPage(second.cdp, "window.__desktopTest.runMenuCommand('save')", { awaitPromise: false });
+    await pollNode(() => fs.existsSync(stoppedPath));
+    await poll(second.cdp, "document.getElementById('btn-save').dataset.dirty === 'false'");
+    const tabId = await evalPage(second.cdp, "window.splitpageDesktop.tabId");
+    await pollNode(() => !readDraftDirs(second.userDataDir)[tabId]?.current);
+    await evalPage(second.cdp, "document.querySelector('#btn-file').click()");
+    await evalPage(second.cdp, "document.querySelector('[data-file-action=share-script]').click()");
+    await poll(second.cdp, "document.querySelector('[data-share=start]:not([hidden])')");
+    await evalPage(second.cdp, "document.querySelector('[data-share=start]').click()");
+    await poll(second.cdp, "document.querySelector('[data-share=copy]:not([hidden])')", 40000);
+    const crashLink = new URL(await evalPage(second.cdp, "document.querySelector('#share-script-link input').value"));
+    const crashName = "desktop-smoke/" + crashLink.searchParams.get("join");
+    const crashReplica = path.join(second.userDataDir, "native-replicas", crypto.createHash("sha256").update(crashName).digest("hex"));
+    if (!fs.existsSync(path.join(crashReplica, "membership"))) throw new Error("The replica has no retained membership before stopping.");
+    await evalPage(second.cdp, "document.querySelector('[data-share=close]').click()");
+    await poll(second.cdp, connected);
+    await openPopover(second.cdp);
+    const localState = path.join(second.userDataDir, "Local State");
+    await pollNode(() => {
+      const prefs = JSON.parse(fs.readFileSync(localState, "utf8"));
+      return typeof prefs.os_crypt?.encrypted_key === "string" && prefs.os_crypt.encrypted_key.length > 0;
+    }, 30000);
+    const armed = relayMessage(message => message === "delete-reply-armed");
+    relay.send("hold-delete-reply");
+    await armed;
+    const deleted = relayMessage(message => message?.kind === "held-delete-reply" && message.status === 204);
+    await confirm(second.cdp, "stop", true);
+    await deleted;
+    const keptProfile = second.userDataDir;
+    second.cdp.close();
+    killPid(second.proc.pid);
+    if (!await waitForExit(second.proc, 10000)) throw new Error("Could not stop the desktop with its retained copy.");
+    if (!fs.existsSync(path.join(crashReplica, "membership"))) throw new Error("The interrupted stop removed the retained membership.");
+    restarted = await launchApp(target, { label: "share-restart", userDataDir: keptProfile, dialogs: ["confirm"] });
+    try {
+      await poll(restarted.cdp, "!document.getElementById('collab-access-banner').hidden");
+    } catch {
+      const diagnostic = await evalPage(restarted.cdp, `(async () => ({
+        referenceFound: !!await window.splitpageDesktop.sharedReference([]),
+        pill: document.getElementById('shared-pill')?.getAttribute('aria-label'),
+        notices: document.getElementById('toast-host')?.textContent
+      }))()`);
+      const errors = restarted.getStderr().split(/\r?\n/).filter(line => line.includes("Could not resume"));
+      throw new Error("The retained copy did not reopen: " + JSON.stringify({ ...diagnostic, errors }));
+    }
+    await contains(restarted, "Second owner after reset");
+    record(tag + ": restart after relay deletion reopens the retained work with Access removed", true);
   } finally {
     setup?.close();
-    if (guest) {
-      await teardown(guest, tag + " guest", { expectExitCode: 0 });
-      rmrf(guest.userDataDir);
-    }
-    if (app) {
-      await teardown(app, tag, { expectExitCode: 0 });
-      record(tag + ": logs never contain the management secret", !app.getStdout().includes(secret) && !app.getStderr().includes(secret));
-      rmrf(app.userDataDir);
+    for (const client of [guest, app, restarted ?? second]) {
+      if (!client) continue;
+      await teardown(client, tag, { expectExitCode: 0 });
+      record(tag + ": logs never contain the management secret", !client.getStdout().includes(secret) && !client.getStderr().includes(secret));
+      rmrf(client.userDataDir);
     }
     if (relay.connected) relay.send("stop", () => {});
     if (!await waitForExit(relay, 5000)) {

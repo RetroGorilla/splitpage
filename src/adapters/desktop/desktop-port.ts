@@ -29,6 +29,8 @@ export type DesktopBundleProgress = Pick<DesktopIpcArgs<"splitpage:bundle-progre
 export interface DesktopPort extends HistoryDesktopPort {
   readonly relayOwner?: RelayOwnerControls;
   readonly shareScript?: ShareScriptControls;
+  readonly sharedReference?: DesktopCall<"splitpage:relay-owner-resume">;
+  readonly manageSharing?: DesktopCall<"splitpage:relay-owner-sharing">;
   readonly nativeReplica: NativeReplicaInvoke;
   readonly isDesktop: true;
   readonly platform: string;

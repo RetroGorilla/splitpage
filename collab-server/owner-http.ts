@@ -11,6 +11,7 @@ type Commands = Pick<
   "findCreation" | "create" | "listScripts" | "issue" | "list" | "authorizeOwner"
 > & {
   abandonCreation: (id: string) => AbandonResult;
+  authenticate: (name: string, token: string) => unknown;
   resetGuests: (name: string) => IssuedInvitation | undefined;
   revokeInvitation: (id: string) => boolean;
   deleteScript: (name: string) => boolean;
@@ -77,7 +78,7 @@ export function ownerRequests(secret: string | undefined, limit: number, command
   const authorize = managementAuthorizer(secret);
   return async (request: IncomingMessage, response: ServerResponse): Promise<boolean> => {
     const path = request.url?.split("?")[0] ?? "";
-    const script = /^\/api\/scripts\/([a-zA-Z0-9_-]{1,128})(?:\/(invitations|reset))?$/.exec(path);
+    const script = /^\/api\/scripts\/([a-zA-Z0-9_-]{1,128})(?:\/(invitations|reset|link))?$/.exec(path);
     const invitation = /^\/api\/invitations\/([a-zA-Z0-9_-]{1,128})$/.exec(path);
     const creation = /^\/api\/creations\/([a-zA-Z0-9_-]{1,128})$/.exec(path);
     if (path !== "/api/scripts" && !script && !invitation && !creation) return false;
@@ -88,6 +89,13 @@ export function ownerRequests(secret: string | undefined, limit: number, command
     }
     try {
       const method = request.method;
+      if (script?.[1] && script[2] === "link" && method === "HEAD") {
+        if (deployment !== undefined) response.setHeader("Splitpage-Deployment", deployment);
+        try { commands.authenticate(script[1], bearerToken(request) ?? ""); }
+        catch { throw new RequestError(403); }
+        reply(204);
+        return true;
+      }
       const isManager = authorize(request);
       if (script?.[1] && script[2] === "reset" && method === "POST") {
         if (!isManager) {

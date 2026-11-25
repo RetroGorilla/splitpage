@@ -15,7 +15,8 @@ for (const enabled of [false, true]) test("shared hook build gate: release has n
   for (const text of ["__sharedTest", "nativePeer", "draft-not-kept", "The shared session did not start",
     "The draft writer did not detach", "app-stopped", "enterFrom", "enterRetained",
     "splitpage-native-replica-log", "shared-copy-erase-failed", "invitationConnected", "invitationSettled", "Splitpage-Deployment",
-    "share-script", "share-script-modal", "Uploading script", "join-script-modal", "Join a shared script…", "leave-script-modal"]) {
+    "Could not reopen the local shared script.", "share-script", "share-script-modal", "Uploading script", "shared-pill", "shared-popover", "sharing-and-people", "leave-shared-script",
+    "join-script-modal", "Join a shared script…", "leave-script-modal"]) {
     assert.equal(code.includes(text), enabled, text);
   }
   for (const text of ["ownershipScans", "appliedUpdates", "lateJoiner", "joinerType", "joinerUndo",
