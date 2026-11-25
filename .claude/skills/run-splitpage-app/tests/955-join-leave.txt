@@ -1,0 +1,12 @@
+open /
+eval location.assign('/?join=join-check#incomplete');true
+wait document.querySelector('#join-script-status')?.textContent.startsWith('This invitation link is invalid.')
+expect location.hash===''&&history.state===null
+expect document.querySelector('#join-script-modal')?.classList.contains('modal-backdrop')
+key Escape
+wait !document.querySelector('#join-script-modal')
+eval location.assign('http://127.0.0.1:'+location.port+'/?join=unreachable-check#'+crypto.randomUUID()+'1234567');true
+wait document.querySelector('#join-script-status')?.textContent.startsWith('Could not reach the relay.')
+expect location.hash===''&&!window.__sharedTest.invitationConnected()
+click #join-script-modal [data-dialog-cancel]
+wait !document.querySelector('#join-script-modal')

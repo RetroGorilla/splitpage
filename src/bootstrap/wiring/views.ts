@@ -30,6 +30,7 @@ import { mountOfflineReviewFeature } from "./offline-review.ts";
 import type { SharedBannersMount } from "../../features/title/ports.ts";
 import { collaboration } from "./ports/collaboration.ts";
 import { retrySharedLocalWrite } from "./collaboration-owner.ts";
+import { requestRetainedLeave } from "./collaboration.ts";
 import { leaveActiveSharedSession } from "./retained-shared-script.ts";
 import { mountCellReach } from "../../features/editing/cell-reach.ts";
 import { mountPhoneBar } from "../../features/notices/phone-bar.ts";
@@ -103,6 +104,7 @@ export function mountSharedBannersFeature(): Disposable {
       collaboration,
       exportCopy: () => { void localFileMenuControls().exportAs("splitpage"); },
       leave: () => {
+        if (requestRetainedLeave()) return;
         void leaveActiveSharedSession().then(outcome => {
           if (!outcome.ok && outcome.reason !== "not-shared") {
             showToast("Could not leave the shared script right now.", "warn");

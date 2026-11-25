@@ -56,6 +56,7 @@ export interface NewTabPorts {
   readonly prepareDocument: (raw: unknown) => ValidatedDocument;
   readonly syncIdentity: () => void;
   readonly importText: (options: { readonly intoNewDocument: ImportIntoNewDocument }) => void;
+  readonly joinItem?: { readonly id: string; readonly label: string } | undefined;
   readonly openFile: () => Promise<unknown>;
   readonly desktopDownload: { readonly url: () => string; readonly offered: () => boolean };
   readonly starters: readonly StarterChoice[];

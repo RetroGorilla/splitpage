@@ -328,7 +328,7 @@ test("a native press whose admission fails throws that error before flushing or 
 
 test("the release hook bundle omits the native editor entry and test peer", async () => {
   const result = await build({
-    entryPoints: ["src/bootstrap/wiring/shared-test.ts"], absWorkingDir: fileURLToPath(new URL("../../", import.meta.url)),
+    entryPoints: ["src/bootstrap/wiring/shared-startup.ts"], absWorkingDir: fileURLToPath(new URL("../../", import.meta.url)),
     bundle: true, write: false, format: "esm", platform: "browser", minify: true,
     define: { SPLITPAGE_TEST_HOOKS: "false", SPLITPAGE_COLLAB_UI: "false" }, logLevel: "silent"
   });

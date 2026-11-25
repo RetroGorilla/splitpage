@@ -3,7 +3,7 @@ import { imageRecordOf } from "../../../core/document/media.ts";
 
 const MAX_BYTES = 16 * 1024 * 1024;
 
-async function readPicture(response: Response): Promise<Uint8Array | null> {
+async function readPicture(response: Response, progress?: () => void): Promise<Uint8Array | null> {
   if (Number(response.headers.get("content-length")) > MAX_BYTES || !response.body) {
     await response.body?.cancel();
     return null;
@@ -21,6 +21,7 @@ async function readPicture(response: Response): Promise<Uint8Array | null> {
         return null;
       }
       chunks.push(value);
+      if (value.byteLength) progress?.();
     }
   } finally {
     reader.releaseLock();
@@ -40,7 +41,7 @@ function refusal(status: number): "access" | "rejected" | "retry" {
   return "retry";
 }
 
-export function sharedPictureHttp(origin: string, script: string, token: string, request = fetch) {
+export function sharedPictureHttp(origin: string, script: string, token: string, request = fetch, inactivityMs = 30_000) {
   const base = new URL(origin);
   if (!["https:", "http:"].includes(base.protocol) || base.username || base.password) {
     throw new Error("Invalid picture service origin");
@@ -57,7 +58,7 @@ export function sharedPictureHttp(origin: string, script: string, token: string,
       cache: "no-store",
       credentials: "omit",
       redirect: "error",
-      signal: AbortSignal.any([signal, AbortSignal.timeout(65_000)])
+      signal: upload ? AbortSignal.any([signal, AbortSignal.timeout(65_000)]) : signal
     });
   }
   return {
@@ -67,14 +68,23 @@ export function sharedPictureHttp(origin: string, script: string, token: string,
       await response.body?.cancel();
       return response.status === 201 || response.status === 204 ? "stored" : refusal(response.status);
     },
-    async download(sha: string, signal: AbortSignal) {
-      const response = await picture(sha, signal);
-      if (response.status !== 200) {
-        await response.body?.cancel();
-        return refusal(response.status);
-      }
-      const bytes = await readPicture(response);
-      return bytes && imageRecordOf(bytes)?.sha256 === sha ? bytes : "retry";
+    async download(sha: string, signal: AbortSignal, progress?: () => void) {
+      signal.throwIfAborted();
+      const stall = new AbortController();
+      let timer = setTimeout(() => stall.abort(), inactivityMs);
+      try {
+        const response = await picture(sha, AbortSignal.any([signal, stall.signal]));
+        if (response.status !== 200) {
+          await response.body?.cancel();
+          return refusal(response.status);
+        }
+        const bytes = await readPicture(response, () => {
+          clearTimeout(timer);
+          timer = setTimeout(() => stall.abort(), inactivityMs);
+          progress?.();
+        });
+        return bytes && imageRecordOf(bytes)?.sha256 === sha ? bytes : "retry";
+      } finally { clearTimeout(timer); }
     }
   };
 }

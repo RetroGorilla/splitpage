@@ -3,33 +3,56 @@ import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { createShareAttempt } from "../../application/collaboration/share.ts";
 import type { ActionRegistry } from "../../application/actions.ts";
 import { mintDocId } from "../../adapters/identity/ids.ts";
-import { shareScriptAction, SHARE_SCRIPT_COMMAND } from "../../features/collaboration/actions.ts";
+import { joinScriptAction, leaveScriptAction, shareScriptAction, JOIN_SCRIPT_COMMAND, LEAVE_SCRIPT_COMMAND, SHARE_SCRIPT_COMMAND } from "../../features/collaboration/actions.ts";
+import { mountLeaveDialog } from "../../features/collaboration/leave.ts";
 import { mountShareDialog } from "../../features/collaboration/mount.ts";
 import { scriptCellOf } from "../richtext.ts";
 import { migrateRows } from "../document-ports.ts";
 import { documentReader } from "./ports/document.ts";
+import { fileDelivery } from "./ports/files.ts";
+import { localFileMenuControls } from "./local-files.ts";
+import { openDesktopJoin, invitationOriginAllowed } from "./collaboration-join.ts";
+import { retainedSharedScriptActive } from "./retained-shared-script.ts";
 import { screen } from "./ports/screen.ts";
 import { getEditorName } from "./preferences-owner.ts";
 import { holdSessionCommands, liveSession, sessionEntryRefusal, sharedSession } from "./session-owner.ts";
-import { enterCreatedSharedScript } from "./shared-test.ts";
+import { enterCreatedSharedScript, sharedEntry } from "./shared-entry.ts";
 import { captureOperation, stillOwns } from "./transition-owners.ts";
 import { undoOwner } from "./undo.ts";
 import { holdDesktopDocumentPublication } from "./desktop-owners.ts";
 import { autoSavePolicy, saveBusy, scheduleAutoSave } from "./save-owners.ts";
 
 declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
-declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
-function canShareWith(address: string): boolean {
-  return address.startsWith("https://") || (typeof SPLITPAGE_TEST_HOOKS !== "undefined" && SPLITPAGE_TEST_HOOKS
-    && /^http:\/\/127\.0\.0\.1:[0-9]+$/.test(address));
+const canJoin = () => !!desktopPort() && !sharedSession();
+
+export const collaborationMenuItems = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI ? () => [
+  { ...SHARE_SCRIPT_COMMAND, group: "Collaborate", available: () => !!desktopPort()?.shareScript && !sharedSession() },
+  { ...JOIN_SCRIPT_COMMAND, group: "Collaborate", available: canJoin },
+  { ...LEAVE_SCRIPT_COMMAND, group: "Collaborate", available: retainedSharedScriptActive }
+] : () => [];
+
+let leaveDialog: (() => void) | undefined;
+
+function openLeave() {
+  if (!retainedSharedScriptActive()) return false;
+  leaveDialog?.();
+  const context = captureOperation();
+  leaveDialog = mountLeaveDialog({
+    async saveCopy() {
+      if (!stillOwns(context)) return false;
+      const files = localFileMenuControls();
+      const file = await files.buildFileData("splitpage", files.exportBaseName());
+      return fileDelivery.deliver(file.filename, file.data, { savedMsg: "Saved a separate copy" });
+    },
+    async leave() { return stillOwns(context) && ((await sharedEntry()?.leave())?.ok ?? false); }
+  });
+  return true;
 }
 
-export const collaborationMenuItem = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI
-  ? () => ({ ...SHARE_SCRIPT_COMMAND, group: "Collaborate", available: () => !!desktopPort()?.shareScript })
-  : () => undefined;
+export const requestRetainedLeave = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI ? openLeave : () => false;
 
-function registerShare(registry: Pick<ActionRegistry, "invoke" | "register">): () => void {
+function registerCollaboration(registry: Pick<ActionRegistry, "invoke" | "register">): () => void {
   let attempt: ReturnType<typeof createShareAttempt> | undefined;
   let dispose: (() => void) | undefined;
   const unregister = registry.register(shareScriptAction({
@@ -82,9 +105,9 @@ function registerShare(registry: Pick<ActionRegistry, "invoke" | "register">): (
       });
       dispose?.();
       dispose = mountShareDialog({
-        address: () => owner.status().then(({ address }) => address && canShareWith(address) ? address : null),
+        address: () => owner.status().then(({ address }) => address && invitationOriginAllowed(address) ? address : null),
         share: async (...args) => {
-          if (!canShareWith(args[0])) return { kind: "not-configured" };
+          if (!invitationOriginAllowed(args[0])) return { kind: "not-configured" };
           const autosave = autoSavePolicy();
           const pending = autosave.pending();
           const reason = "Sharing script…";
@@ -103,7 +126,16 @@ function registerShare(registry: Pick<ActionRegistry, "invoke" | "register">): (
       });
     }
   }));
-  return () => { unregister(); dispose?.(); };
+  const unregisterJoin = registry.register(joinScriptAction({ screen, visible: canJoin, open: openDesktopJoin }));
+  const unregisterLeave = registry.register(leaveScriptAction({ screen, visible: retainedSharedScriptActive, open: openLeave }));
+  return () => {
+    unregisterLeave();
+    unregisterJoin();
+    unregister();
+    leaveDialog?.();
+    leaveDialog = undefined;
+    dispose?.();
+  };
 }
 
-export const registerCollaborationActions = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI ? registerShare : () => () => {};
+export const registerCollaborationActions = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI ? registerCollaboration : () => () => {};

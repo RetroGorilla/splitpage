@@ -5,7 +5,7 @@ import { applyNativePeerUpdate } from "../../adapters/collab/native/peer-update.
 import { openNativeSession } from "../../adapters/collab/native/session.ts";
 import { openNativeRelay } from "../../adapters/collab/native/relay.ts";
 import type { NativeRelayEvent } from "../../adapters/collab/native/relay.ts";
-import { readInvitationSnapshot } from "../../adapters/collab/native/invitation-snapshot.ts";
+import { InvitationSnapshotError, readInvitationSnapshot } from "../../adapters/collab/native/invitation-snapshot.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { isPermanentCollaborationRefusal, localWriteErrorMessage } from "../../application/collaboration/state.ts";
 import type { CollaborationLocalWriteError } from "../../application/collaboration/state.ts";
@@ -22,7 +22,6 @@ import type { SharedEditorBackend, SharedSwitchOutcome, SharedSwitchPorts } from
 import type { NativeMembershipRecord } from "../../../shared/native-replica.d.ts";
 
 type RetainedReplica = Extract<NativeLocalStoreOpen, { kind: "opened" }>;
-const JOIN_TIMEOUT_MS = 15_000;
 let localCopy: RetainedReplica | null = null;
 const closingCopies = new Map<string, RetainedReplica["closed"]>();
 let activeSessionToken = 0;
@@ -46,6 +45,8 @@ export interface RetainedSharedScript {
   readonly relayUrl?: string;
   readonly pictureOrigin?: string;
   readonly signal?: AbortSignal;
+  readonly onPictureProgress?: (pending: number) => void;
+  readonly pictureStallMs?: number;
   readonly onRelayConnected?: (connected: boolean) => void;
   readonly onOfflineNotice?: (clashes: ReturnType<ReturnType<typeof openNativeSession>["offlineNotice"]>) => void;
   readonly connect?: (replica: RetainedReplica, token: string) => () => void;
@@ -161,6 +162,8 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
   let staged: NativeInvitationStage | undefined;
   let preparation: Promise<string | null> | undefined;
   let active = false;
+  let discardNewCopy = false;
+  let discarded: Promise<boolean> | undefined;
   const sessionToken = ++activeSessionToken;
   let sessionDisposed = false;
   const sessionCurrent = () => !sessionDisposed && sessionToken === activeSessionToken;
@@ -177,10 +180,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
       pictureOrigin = endpoint.origin;
     } catch { return { ok: false, reason: SHARED_ENTER_FAILED }; }
   }
-  const deadline = new AbortController();
-  const timed = !entry.created && !!(entry.relayUrl || entry.pictureOrigin);
-  const timer = timed ? ports.timers.start(() => deadline.abort(), JOIN_TIMEOUT_MS) : undefined;
-  const signals = [cancellation, entry.signal, timed ? deadline.signal : undefined].filter(s => s !== undefined);
+  const signals = [cancellation, entry.signal].filter(s => s !== undefined);
   const signal = signals.length ? AbortSignal.any(signals) : undefined;
   function stop() {
     try { stopConnection?.(); }
@@ -189,9 +189,20 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
     pictures?.stop();
   }
   async function hydrate(copy: Parameters<typeof bindSharedPictures>[0], token: string) {
-    if (!pictureOrigin || !signal) return true;
-    pictures = bindSharedPictures(copy, pictureOrigin, entry.script, token, signal);
-    return waitDuringLifetime(pictures.hydrate(), signal);
+    if (!pictureOrigin) return null;
+    const binding = bindSharedPictures(copy, pictureOrigin, entry.script, token, signal, entry.pictureStallMs);
+    pictures = binding;
+    const progress = () => {
+      const { checking, downloading, uploading } = binding.counts();
+      entry.onPictureProgress?.(checking + downloading + uploading);
+    };
+    const unsubscribe = binding.subscribeCounts(progress);
+    try {
+      progress();
+      const work = binding.hydrate();
+      if (await (signal ? waitDuringLifetime(work, signal) : work)) return null;
+      return binding.stalled() ? "pictures-stalled" : "pictures-unavailable";
+    } finally { unsubscribe(); }
   }
   async function prepare(): Promise<string | null> {
     const refusal = await ports.prepare?.();
@@ -214,6 +225,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
       const record = await (signal ? waitDuringLifetime(saved, signal) : saved);
       token = record?.token ?? null;
       signal?.throwIfAborted();
+      discardNewCopy = !replica.restored && record === null && !!(entry.created || entry.invitation);
       if (entry.created) {
         if (replica.restored || !applyNativePeerUpdate(replica.session, entry.created.state) || !replica.session.isStoredScript()) {
           return SHARED_ENTER_FAILED;
@@ -227,7 +239,9 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
           const preview = openNativeSession({ kind: "stored-script", state }, { actor: ports.editor(), sanitize: sanitizeHtml });
           try {
             if (replica.restored && !applyNativePeerUpdate(preview, replica.session.encodeState())) return SHARED_ENTER_FAILED;
-            if (!preview.isStoredScript() || !await hydrate({ session: preview }, entry.invitation.token)) return SHARED_ENTER_FAILED;
+            if (!preview.isStoredScript()) return SHARED_ENTER_FAILED;
+            const pictureProblem = await hydrate({ session: preview }, entry.invitation.token);
+            if (pictureProblem) return pictureProblem;
           } finally { pictures?.stop(); pictures = undefined; preview.close(); }
           signal?.throwIfAborted();
           if (!replica.restored && !applyNativePeerUpdate(replica.session, state)) return SHARED_ENTER_FAILED;
@@ -240,7 +254,8 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
           if (!replica.restored && (!state || !applyNativePeerUpdate(replica.session, state))) return SHARED_ENTER_FAILED;
           if (!replica.session.isStoredScript()) return SHARED_ENTER_FAILED;
           stopConnection = entry.connect?.(replica, entry.invitation.token);
-          if (!await hydrate(replica, entry.invitation.token)) return SHARED_ENTER_FAILED;
+          const pictureProblem = await hydrate(replica, entry.invitation.token);
+          if (pictureProblem) return pictureProblem;
         }
         if (signal && membership.stageInvitation) {
           if (replica.restored && !replica.session.isStoredScript()) return SHARED_ENTER_FAILED;
@@ -255,18 +270,22 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
         token = entry.invitation.token;
       }
       if (!token || ((!signal || !entry.invitation) && !replica.session.isStoredScript())) return SHARED_ENTER_FAILED;
-    } catch { return SHARED_ENTER_FAILED; }
+    } catch (error) { return error instanceof InvitationSnapshotError ? error.reason : SHARED_ENTER_FAILED; }
     prepared.token = token;
     return null;
+  }
+  function discardPreparedCopy(replica: RetainedReplica) {
+    if (discardNewCopy) discarded ??= replica.discardOnClose?.();
   }
   async function closePrepared() {
     const replica = prepared.replica;
     if (!replica) return;
     trackClosing(name, replica);
+    discardPreparedCopy(replica);
     try { await staged?.rollback(); }
     finally {
       try { stop(); } finally { replica.session.close(); await replica.closed; }
-      if (entry.created && !replica.restored) await store.delete(name);
+      if (discarded && !await discarded) ports.report(new Error("Could not erase the refused shared copy."));
     }
   }
   let connectCreated: (() => void) | undefined;
@@ -416,6 +435,7 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
           syncLocalPending();
         },
         dispose(attempt) {
+          if (!active) discardPreparedCopy(replica);
           sessionDisposed = true;
           if (localCopy === replica) localCopy = null;
           trackClosing(name, replica);
@@ -443,7 +463,6 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
   } catch {
     return { ok: false, reason: SHARED_ENTER_FAILED };
   } finally {
-    if (timed) ports.timers.stop(timer);
     if (!active) {
       if (signal?.aborted && preparation) {
         if (prepared.replica) trackClosing(name, prepared.replica);

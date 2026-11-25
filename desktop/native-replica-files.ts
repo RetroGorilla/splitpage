@@ -235,6 +235,10 @@ function createNativeReplicaFiles(userData: string, disk: NativeReplicaFileSyste
     const membership = join(dir, "membership");
     return {
       readMembership: () => read(membership),
+      async clearMembership(): Promise<void> {
+        await disk.rm(membership, { force: true });
+        if (initialized) await disk.syncDirectory(dir);
+      },
       async writeMembership(bytes: Uint8Array): Promise<void> {
         await initialize();
         await replace(membership, bytes);

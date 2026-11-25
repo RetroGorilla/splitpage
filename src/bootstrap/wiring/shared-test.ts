@@ -1,232 +1,59 @@
 import { exposeTestHook } from "../../features/common/test-hooks.ts";
-import { mintDocId } from "../../adapters/identity/ids.ts";
-import { startupReady } from "../../application/startup-signal.ts";
-import { migrateRows } from "../document-ports.ts";
-import { currentCapabilities, sharedSession } from "./session-owner.ts";
-import { SHARED_ALREADY, SHARED_NOT_RUNNING, SHARED_SWITCHING, enterSharedSession, forceLeaveSharedSession, leaveRunningSharedSession } from "./shared-session.ts";
-import type { SharedSwitchOutcome, SharedSwitchPorts } from "./shared-session.ts";
-import type { Home } from "../../application/location/document-location.ts";
-import { sharedCommandRefusalNotice } from "./ports/shared-command-notices.ts";
-import { notices } from "./ports/effects.ts";
 import { documentReader } from "./ports/document.ts";
-import { openingStatus } from "./ports/transitions.ts";
-import { getEditorName } from "./preferences-owner.ts";
-import { undoOwner } from "./undo.ts";
-import { writerControls } from "./writer.ts";
-import { draftResume, flushDraftNow, noteDraftChange } from "./recovery-owners.ts";
-import { draftSource } from "./drafts.ts";
-import { confirmSavedNow, noteSaveChange, unsavedChanges } from "./save-owners.ts";
-import { currentHome, documentLocation, setHome } from "./location-owner.ts";
 import { openNativeEditor } from "./native-shared-session.ts";
 import { createNativeTestPeer } from "./shared-native-test-peer.ts";
-import { stopNativeCaretWait } from "./native-switch-caret.ts";
-import { collaborationState, stopCollaborationOwner } from "./collaboration-owner.ts";
-import { enterRetainedSharedScript, leaveRetainedSharedScript, retainedSharedScriptActive } from "./retained-shared-script.ts";
+import { collaborationState } from "./collaboration-owner.ts";
 import type { RetainedSharedScript } from "./retained-shared-script.ts";
-import { readInvitationSnapshot } from "../../adapters/collab/native/invitation-snapshot.ts";
 import { captureDocumentOpeningLifetime } from "./transition-owners.ts";
-import { waitDuringLifetime } from "../startup/page-lifetime.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
+import { sharedEntry } from "./shared-entry.ts";
 
 declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
-declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
-declare let splitpageInvitation: { readonly script: string; readonly token: string } | null;
-
-const DRAFT_NOT_KEPT = "draft-not-kept";
-const DRAFT_NOT_KEPT_NOTICE = "The shared session did not start: your recovery copy could not be saved.";
-const APP_STOPPED = "app-stopped";
-type CreatedEntry = { readonly owns: () => boolean; readonly release: () => void };
-let enterCreated: ((entry: RetainedSharedScript, handoff: CreatedEntry) => Promise<SharedSwitchOutcome>) | null = null;
-
-export async function enterCreatedSharedScript(entry: RetainedSharedScript, handoff: CreatedEntry): Promise<boolean> {
-  if (!enterCreated) return false;
-  return (await enterCreated(entry, handoff)).ok;
-}
-
-function sharedEntryRefusal(ready: boolean, composing: boolean): string | null {
-  return (!ready ? "startup-pending" : null)
-    ?? (composing ? "buffer-composition" : null)
-    ?? (draftResume().restorePending() ? "draft-restore-pending" : null);
-}
-
-function draftDetachRefusal(): string | null {
-  const reason = draftSource.detachRefusal();
-  if (!reason) return null;
-  notices.show(DRAFT_NOT_KEPT_NOTICE, "warn");
-  return `draft-${reason}`;
-}
-
-async function keepDraftBeforeEntry(refusal: () => string | null): Promise<string | null> {
-  const flushed = await flushDraftNow();
-  const refused = refusal();
-  if (refused) return refused;
-  if (flushed.ok) return draftDetachRefusal();
-  notices.show(DRAFT_NOT_KEPT_NOTICE, "warn");
-  return DRAFT_NOT_KEPT;
-}
-
-interface Detached {
-  readonly home: Home;
-  readonly writtenOut: boolean;
-  readonly unsaved: boolean;
-}
-
-function runEvery(steps: readonly (() => void)[]): void {
-  const errors: unknown[] = [];
-  for (const step of steps) { try { step(); } catch (error) { errors.push(error); } }
-  if (errors.length) throw errors[0];
-}
-
-function reattachDraft(kept: Detached): void {
-  runEvery([() => { documentLocation().restoreHome(kept.home); }, () => { documentLocation().markWrittenOut(kept.writtenOut); },
-    () => { if (kept.unsaved && !unsavedChanges()) noteSaveChange(); }, () => { draftSource.resumeWriting(); }]);
-}
 
 function sharedTestBytes(state: string | Uint8Array | ArrayBuffer): Uint8Array {
   if (typeof state === "string") return Uint8Array.from(atob(state), character => character.charCodeAt(0));
   return state instanceof ArrayBuffer ? new Uint8Array(state.slice(0)) : Uint8Array.from(state);
 }
 
-function startSharedTestHook(): () => void {
-  let detached: Detached | null = null;
+
+function mountHook(invitationStatus: () => { readonly connected: boolean; readonly settled: boolean }) {
   let nativePeer: ReturnType<typeof createNativeTestPeer> | null = null;
-  let switching = false, composing = false, live = true, detachRefused: string | null = null;
   let withdraw = (): void => {};
-  const report = (error: unknown): void => { console.error(error); };
-  const composition = (event: Event): void => { composing = event.type === "compositionstart"; };
-  document.addEventListener("compositionstart", composition, true);
-  document.addEventListener("compositionend", composition, true);
-  const left = (landed: boolean): void => {
-    const ending = nativePeer, kept = detached;
-    nativePeer = null; detached = null;
-    // why: the landed copy has a new docId and was never saved, so it is unsaved (rules 75 and 76)
-    const marks = landed && kept ? [() => { noteSaveChange(); }, () => { noteDraftChange(); }] : [];
-    runEvery([() => { ending?.dispose(); }, ...(kept ? [() => { draftSource.resumeWriting(); }] : []), ...marks]);
+  const lifetime = new AbortController();
+  const stopped = { ok: false, reason: "app-stopped" } as const;
+  const entry = () => lifetime.signal.aborted ? undefined : sharedEntry();
+  const left = () => {
+    nativePeer?.dispose();
+    nativePeer = null;
   };
-  const enter = async (stored?: Uint8Array, retained?: RetainedSharedScript, signal?: AbortSignal,
-    handoff?: CreatedEntry): Promise<SharedSwitchOutcome> => {
-    if (!live) return { ok: false, reason: APP_STOPPED };
-    if (switching) return { ok: false, reason: SHARED_SWITCHING };
-    if (sharedSession()) return { ok: false, reason: SHARED_ALREADY };
-    switching = true;
-    detachRefused = null;
-    try {
-      let ready = false;
-      startupReady()?.then(() => { ready = true; }, report);
-      await Promise.resolve();
-      const standalone = currentCapabilities();
-      const common = { edit: standalone.edit, comment: standalone.edit };
-      const refusal = (): string | null => (!live ? APP_STOPPED : null)
-        ?? (signal?.aborted ? "opening-pending" : null) ?? sharedEntryRefusal(ready, composing);
-      const entering: SharedSwitchPorts = {
-        refusal, commandRefused: sharedCommandRefusalNotice(notices),
-        ...(handoff && { ownsEntry: handoff.owns }),
-        settle: () => {
-          if (writerControls()?.writerFlowControl()?.settle?.() === false) throw new Error("The Writer could not settle");
-          undoOwner().flush();
-        },
-        prepare: () => keepDraftBeforeEntry(refusal),
-        detach: () => {
-          const draft = draftSource.detachSource();
-          if (!draft.ok) { detachRefused = draft.reason; throw new Error(`The draft writer did not detach: ${draft.reason}`); }
-          detached = { home: currentHome(), writtenOut: documentLocation().writtenOut(), unsaved: unsavedChanges() };
-          setHome("none"); documentLocation().markWrittenOut(false); confirmSavedNow();
-        },
-        reattach: () => {
-          const kept = detached;
-          detached = null;
-          if (kept) reattachDraft(kept);
-        },
-        left,
-        common, standalone, migrate: migrateRows, docId: mintDocId, editor: getEditorName,
-        report,
-        timers: { now: () => Date.now(), start: (run, ms) => setTimeout(run, ms), stop: timer => { clearTimeout(timer as ReturnType<typeof setTimeout>); } },
-        now: () => Date.now(),
-        opening: openingStatus
-      };
-      const opened: { session?: ReturnType<typeof openNativeEditor>["native"] } = {};
-      handoff?.release();
-      const result = retained ? await enterRetainedSharedScript(entering, retained, signal) : await enterSharedSession(entering, (doc, failedClose) => {
-        const { backend, native } = openNativeEditor(entering, doc, failedClose, stored);
-        opened.session = native;
-        return backend;
-      });
-      if (result.ok && sharedSession()) {
-        if (opened.session) nativePeer = createNativeTestPeer(opened.session);
-        return result;
-      }
-      if (result.ok) return { ok: false, reason: APP_STOPPED };
-      if (detachRefused) {
-        const reason = detachRefused;
-        detachRefused = null;
-        notices.show(DRAFT_NOT_KEPT_NOTICE, "warn");
-        return { ok: false, reason: `draft-${reason}` };
-      }
-      return result;
-    } finally { switching = false; }
-  };
-  if (typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI) {
-    enterCreated = (entry, handoff) => enter(undefined, entry, undefined, handoff);
+
+  async function enter(stored?: Uint8Array) {
+    let session: ReturnType<typeof openNativeEditor>["native"] | undefined;
+    const result = await entry()?.enter(undefined, undefined, undefined, entryPorts => (doc, failedClose) => {
+      const { backend, native } = openNativeEditor(entryPorts, doc, failedClose, stored);
+      session = native;
+      return backend;
+    });
+    if (result?.ok && session) nativePeer = createNativeTestPeer(session);
+    return result ?? stopped;
   }
-  const leave = (): SharedSwitchOutcome | Promise<SharedSwitchOutcome> => {
-    if (!live) return { ok: false, reason: APP_STOPPED };
-    if (switching) return { ok: false, reason: SHARED_SWITCHING };
-    if (!sharedSession()) return { ok: false, reason: SHARED_NOT_RUNNING };
-    switching = true;
-    if (retainedSharedScriptActive()) return leaveRetainedSharedScript().finally(() => { switching = false; });
-    try { return leaveRunningSharedSession(); } finally { switching = false; }
-  };
-  const invitationLifetime = new AbortController();
-  let invitationConnected = false;
-  let invitationSettled = false;
-  async function joinInvitation({ script, token }: NonNullable<typeof splitpageInvitation>): Promise<void> {
-    const lifetime = AbortSignal.any([invitationLifetime.signal, AbortSignal.timeout(15_000)]);
-    try {
-      if (location.protocol !== "https:" && location.protocol !== "http:") return;
-      const ready = startupReady();
-      if (!ready) return;
-      await waitDuringLifetime(ready, lifetime);
-      const opening = captureDocumentOpeningLifetime();
-      const signal = AbortSignal.any([lifetime, opening.signal]);
-      await waitDuringLifetime(opening.settled, signal);
-      const response = await fetch("/index.html", { method: "HEAD", cache: "no-store", redirect: "error", signal });
-      const deployment = response.headers.get("Splitpage-Deployment");
-      if (!response.ok || !deployment || !/^[A-Za-z0-9_-]{1,64}$/.test(deployment)) return;
-      const endpoint = new URL("/", location.origin);
-      endpoint.protocol = location.protocol === "https:" ? "wss:" : "ws:";
-      const state = await readInvitationSnapshot(endpoint.href, script, token, signal);
-      if (signal.aborted) return;
-      const outcome = await enter(undefined, {
-        deployment, script, invitation: { token, state }, relayUrl: endpoint.href,
-        onRelayConnected: connected => { invitationConnected = connected; }
-      }, signal);
-      if (!outcome.ok) report(new Error("Could not enter the shared invitation."));
-    } catch {
-      if (!invitationLifetime.signal.aborted) report(new Error("Could not open the shared invitation."));
-    } finally {
-      invitationSettled = true;
-    }
-  }
-  if (typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI &&
-      typeof splitpageInvitation !== "undefined" && splitpageInvitation) {
-    const invitation = splitpageInvitation;
-    splitpageInvitation = null;
-    void joinInvitation(invitation);
-  }
+
   const hook = {
     enter: () => enter(),
     enterFrom: (state: string | Uint8Array | ArrayBuffer) => enter(sharedTestBytes(state)),
     snapshot: () => nativePeer?.snapshot(),
-    leave,
+    leave: () => entry()?.leave() ?? stopped,
     enterRetained: (retained: RetainedSharedScript, cancellation?: AbortSignal) => {
-      if (!live || desktopPort()) return enter(undefined, retained);
+      const session = entry();
+      if (!session) return Promise.resolve(stopped);
+      if (desktopPort()) return session.enter(retained);
       const opening = captureDocumentOpeningLifetime();
-      return enter(undefined, retained, AbortSignal.any([
-        invitationLifetime.signal, opening.signal, ...(cancellation ? [cancellation] : [])
+      return session.enter(retained, AbortSignal.any([
+        lifetime.signal, opening.signal, ...(cancellation ? [cancellation] : [])
       ]));
     },
-    invitationConnected: () => invitationConnected,
-    invitationSettled: () => invitationSettled,
+    invitationConnected: () => invitationStatus().connected,
+    invitationSettled: () => invitationStatus().settled,
     nativePeer: {
       type: (...args: Parameters<ReturnType<typeof createNativeTestPeer>["type"]>) => nativePeer?.type(...args),
       field: (...args: Parameters<NonNullable<typeof nativePeer>["field"]>) => nativePeer?.field(...args),
@@ -270,31 +97,14 @@ function startSharedTestHook(): () => void {
     read: () => ({ app: documentReader.read(doc => doc ? JSON.parse(JSON.stringify(doc)) as unknown : null), peer: nativePeer?.read() ?? null })
   };
   exposeTestHook("__sharedTest", () => hook, release => { withdraw = release; });
-  return () => {
-    live = false;
-    enterCreated = null;
-    invitationLifetime.abort();
-    try { forceLeaveSharedSession(); } finally {
-      document.removeEventListener("compositionstart", composition, true);
-      document.removeEventListener("compositionend", composition, true);
+  return {
+    left,
+    dispose() {
+      lifetime.abort();
+      left();
       withdraw();
     }
   };
 }
 
-const startForTest = typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS ||
-  (typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI) ? startSharedTestHook : null;
-let stopHook: (() => void) | null = null;
-
-export function mountSharedSessionFeature(): void {
-  stopSharedSessionFeature();
-  stopHook = startForTest?.() ?? null;
-}
-
-export function stopSharedSessionFeature(): void {
-  const stop = stopHook;
-  stopHook = null;
-  stopNativeCaretWait();
-  stop?.();
-  stopCollaborationOwner();
-}
+export const startSharedTestHook = typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS ? mountHook : undefined;

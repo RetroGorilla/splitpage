@@ -55,7 +55,7 @@ function isRequest(value: unknown, readNativeMembership: typeof ReadNativeMember
   if (typeof name !== "string" || !SCRIPT_ID.test(name)) return false;
   if (op === "open" || op === "delete") return value.length === 2;
   if (typeof lease !== "string" || !LEASE_ID.test(lease)) return false;
-  if (op === "join") return value.length === 4 && readNativeMembership(through) !== null;
+  if (op === "join") return value.length === 4 && (through === null || readNativeMembership(through) !== null);
   if (op === "membership" || op === "forget" || op === "close" || op === "read-journal") return value.length === 3;
   if (op === "write-journal") return value.length === 4 && isPayload(through);
   if (op === "read") return value.length === 4 && (through === null || generation(through, 0));
@@ -162,6 +162,7 @@ function createNativeReplicaIpc(userData: string, readNativeMembership: typeof R
         return { kind: "membership", record: bytes && cipher ? decodeMembership(cipher.decrypt(bytes)) : null };
       }
       if (request[0] === "join") {
+        if (request[3] === null) { await replica.clearMembership(); return STORED; }
         if (!cipher) return { kind: "failed", reason: "io" };
         await replica.writeMembership(cipher.encrypt(MEMBERSHIP_PREFIX + JSON.stringify(readNativeMembership(request[3]))));
         return STORED;

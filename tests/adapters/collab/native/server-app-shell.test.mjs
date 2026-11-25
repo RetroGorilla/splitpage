@@ -8,7 +8,7 @@ import { URL } from "node:url";
 import { JSDOM, VirtualConsole } from "jsdom";
 import { build } from "../../../../build.mjs";
 import { readInvitationSnapshot } from "../../../../src/adapters/collab/native/invitation-snapshot.ts";
-import { serverHarness } from "./server-harness.ts";
+import { ORIGIN, serverHarness } from "./server-harness.ts";
 
 test("the relay serves the shell and the gated app replaces the invite history entry", async t => {
   const kit = serverHarness(t);
@@ -38,6 +38,10 @@ test("the relay serves the shell and the gated app replaces the invite history e
   assert.equal(head.headers.get("content-length"), String(Buffer.byteLength(shell)));
   assert.equal(head.headers.get("splitpage-deployment"), deployment);
   assert.equal(await head.text(), "");
+  const desktopHead = await globalThis.fetch(origin + "/api/deployment", { method: "HEAD", headers: { Origin: ORIGIN } });
+  assert.equal(desktopHead.headers.get("splitpage-deployment"), deployment);
+  assert.equal(desktopHead.headers.get("access-control-allow-origin"), ORIGIN);
+  assert.equal(desktopHead.headers.get("access-control-expose-headers"), "Splitpage-Deployment");
   for (const file of ["sw.js", "manifest.webmanifest", "icon.svg", "icon-maskable.svg"]) {
     assert.equal((await globalThis.fetch(origin + "/" + file)).status, 200);
   }

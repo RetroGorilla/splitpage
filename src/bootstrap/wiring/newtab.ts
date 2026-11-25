@@ -25,6 +25,13 @@ import { STARTERS, starterById } from "../../starters/index.ts";
 import { screen } from "./ports/screen.ts";
 import { documentEntry } from "./ports/document-entry.ts";
 
+import { JOIN_SCRIPT_COMMAND } from "../../features/collaboration/actions.ts";
+
+declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
+
+const joinItem = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI
+  ? () => presence.running() ? JOIN_SCRIPT_COMMAND : undefined : () => undefined;
+
 const newTab = owned<NewTabMount>();
 
 export function mountNewTabFeature(): NewTabMount {
@@ -54,6 +61,7 @@ export function mountNewTabFeature(): NewTabMount {
       prepareDocument: (raw) => migrateRows(raw),
       syncIdentity: () => { documentIdentity.syncDocIdentity(); },
       importText: (options) => { importControls()?.openImportModal(options); },
+      joinItem: joinItem(),
       openFile: () => localFilesOwner().openLocalFile(),
       desktopDownload: { url: () => updateControls()?.desktopAppUrl() ?? "", offered: () => updateControls()?.desktopAppOffered() ?? false },
       starters: STARTERS,

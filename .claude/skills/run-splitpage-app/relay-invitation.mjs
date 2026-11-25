@@ -9,6 +9,7 @@ import { connect, createServer } from "node:net";
 import { join } from "node:path";
 import process from "node:process";
 import { test } from "node:test";
+import { setTimeout as delayFor } from "node:timers/promises";
 import { fileURLToPath, URL } from "node:url";
 import { promisify } from "node:util";
 import { build } from "../../../build.mjs";
@@ -49,9 +50,11 @@ async function membershipAbsent(scope) {
   });
   const db = await read(idb.open(name));
   try {
-    const transaction = db.transaction(["memberships", "invitations"], "readonly");
+    const transaction = db.transaction(["memberships", "invitations", "replicas", "journals"], "readonly");
     const records = await Promise.all(["memberships", "invitations"].map(store => read(transaction.objectStore(store).count(scope))));
-    return records.every(count => count === 0);
+    const replicas = await read(transaction.objectStore("replicas").count(IDBKeyRange.bound([scope, 0], [scope, Number.MAX_SAFE_INTEGER])));
+    const journal = await read(transaction.objectStore("journals").count(scope));
+    return records.every(count => count === 0) && replicas === 0 && journal === 0;
   } finally {
     db.close();
   }
@@ -95,21 +98,21 @@ async function tlsIngress(t, port, relayPort) {
   await once(proxy, "listening");
 }
 
-for (const variant of ["accepted", "refused", "pictures", "replacement"]) test(variant === "replacement"
+for (const variant of ["accepted", "refused", "deleted", "pictures", "replacement"]) test(variant === "replacement"
   ? "replacing an invited script stops its pending picture download"
   : variant === "pictures"
   ? "a relay invitation hydrates initial pictures and keeps active transfers independent of entry"
   : variant === "accepted"
   ? "a browser joins a seeded relay invitation and reopens its retained copy"
-  : "a browser scrubs a rejected invitation without retaining membership", { timeout: 65_000 }, async t => {
-  const accepted = variant !== "refused";
+  : "a browser scrubs a " + variant + " invitation without retaining membership", { timeout: 65_000 }, async t => {
+  const accepted = variant !== "refused" && variant !== "deleted";
   const pictures = variant === "pictures" || variant === "replacement" ? [1, 2, 3, 4].map(suffix => {
     const bytes = Buffer.concat([Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", "base64"), Buffer.from([suffix])]);
     const ref = imageRecordOf(bytes);
     assert.ok(ref);
     return { ref, bytes };
   }) : [];
-  const kit = serverHarness(t);
+  const kit = serverHarness(t, 60_000);
   const port = await freePort();
   const tls = Boolean(process.env.SPLITPAGE_TEST_TLS_KEY);
   const relayPort = tls ? await freePort() : port;
@@ -143,7 +146,15 @@ for (const variant of ["accepted", "refused", "pictures", "replacement"]) test(v
   });
   assert.equal(invitation.status, 201);
   const { id, token } = await invitation.json();
-  if (!accepted) assert.equal((await run.owner("invitations/" + id, { method: "DELETE" })).status, 204);
+  if (variant === "refused") assert.equal((await run.owner("invitations/" + id, { method: "DELETE" })).status, 204);
+  if (variant === "deleted") {
+    run.send("delete:" + script);
+    await kit.until(() => run.messages.includes("deleted") || undefined);
+  }
+  if (variant === "accepted") {
+    run.send("hold-invitation-load");
+    await kit.until(() => run.messages.includes("load-armed") || undefined);
+  }
   if (tls) await tlsIngress(t, port, relayPort);
   const target = origin + "/?join=" + script;
   await writeFile(join(fixture, "invite.html"), `<!doctype html><title>Invitation fixture</title><a id="invite" href="${target}#${token}">Open invitation</a>`);
@@ -157,9 +168,16 @@ for (const variant of ["accepted", "refused", "pictures", "replacement"]) test(v
   const rendered = index => `document.querySelector('#rows .visual-media img[data-blob="${pictures[index].ref.sha256}"]')?.naturalWidth===1`;
   const replace = `window.__splitpageFormats.openFile(new File([JSON.stringify({schema:2,title:"Separate script",paragraphsDecided:true,rows:[{id:"separate",audioText:"Separate narration"}]})],"separate.splitpage"))`;
   const reenter = ["open /invite.html", "click #invite", "wait " + exactUrl];
+  const summary = "wait !document.querySelector('#join-script-summary')?.hidden && !!document.querySelector('#join-script-summary h3')?.textContent";
+  const name = "eval {const name=document.querySelector('#join-script-name');name.value='Guest Editor';document.querySelector('input[name=join-colour][aria-label=Amber]').checked=true;}true";
+  const confirmJoin = "click #join-script-modal [type=submit]";
+  const cancel = "click #join-script-modal [data-dialog-cancel]";
+  const leave = ["click #btn-file", "click [data-file-action=leave-shared-script]",
+    "expect document.querySelector('[data-save-copy]')?.textContent.includes('Save a copy first')",
+    "click #leave-script-modal [data-leave-script]"];
   const delay = ms => `eval new Promise(resolve=>setTimeout(()=>resolve(true),${ms}))`;
   const pictureSteps = variant === "replacement" ? [
-    ...reenter,
+    ...reenter, summary, name, confirmJoin,
     "wait " + pending(0),
     'eval "publish-initial"',
     "wait window.__sharedTest.invitationConnected()", "wait " + rendered(0),
@@ -170,15 +188,17 @@ for (const variant of ["accepted", "refused", "pictures", "replacement"]) test(v
     delay(1_750),
     "expect window.getCount===" + resources(3) + ".length"
   ] : variant === "pictures" ? [
-    "open /invite.html", "click #invite", "wait " + exactUrl,
+    ...reenter, summary, name, confirmJoin,
     "wait " + pending(0),
     "expect !window.__sharedTest.invitationSettled()&&!(" + seeded + ")",
-    "eval " + replace,
-    "wait window.__sharedTest.invitationSettled()",
+    cancel,
+    "wait window.__sharedTest.invitationSettled() && !document.querySelector('#join-script-modal')",
     "expect " + browserExpression(membershipAbsent, deployment + "/" + script),
-    ...reenter,
-    "wait " + pending(0),
-    'eval "publish-initial"',
+    'eval "stream-initial-picture"',
+    ...reenter, summary, confirmJoin,
+    "wait document.querySelector('#join-script-status').textContent.startsWith('Downloading pictures')",
+    delay(16_000),
+    "expect document.querySelector('#join-script-status').textContent.startsWith('Downloading pictures')",
     "wait " + seeded, "wait window.__sharedTest.invitationConnected()", "wait " + rendered(0),
     'eval "verify-single-provider"',
     delay(15_250),
@@ -189,7 +209,7 @@ for (const variant of ["accepted", "refused", "pictures", "replacement"]) test(v
     "wait " + rendered(1),
     'eval "show-leave-reference"',
     "wait " + pending(2),
-    "eval window.__sharedTest.leave()",
+    ...leave,
     "wait !window.__sharedTest.invitationConnected()",
     "expect " + browserExpression(membershipAbsent, deployment + "/" + script),
     "eval window.getCount=" + resources(2) + ".length;true",
@@ -198,11 +218,28 @@ for (const variant of ["accepted", "refused", "pictures", "replacement"]) test(v
   ] : null;
   await writeFile(suite, (pictureSteps ?? [
     "open /invite.html",
+    ...(accepted ? ["eval window.open(document.querySelector('#invite').href,'join-peer');true"] : []),
     "click #invite",
     "wait " + exactUrl,
     "expect history.state===null&&history.length===3",
-    "wait window.__sharedTest?.invitationSettled()",
-    ...(accepted ? ["wait " + seeded, "wait window.__sharedTest.invitationConnected()"] : [
+    ...(accepted ? [
+      "wait document.querySelector('#join-script-status')?.textContent.startsWith('Loading script')",
+      'eval "delay-initial-snapshot"', delay(16_100), summary,
+      "expect document.querySelector('#join-script-summary p').textContent==='1 beat · 0 pictures'",
+      "expect !document.querySelector('#join-script-identity').hidden",
+      name, confirmJoin, "wait window.__sharedTest?.invitationSettled()",
+      "wait " + seeded, "wait window.__sharedTest.invitationConnected()",
+      "expect localStorage.getItem('splitpage-comment-author')==='Guest Editor'",
+      "expect localStorage.getItem('splitpage-person-color')==='#F9B64F'",
+      "eval window.joinPeer=window.open('','join-peer');true",
+      "wait window.joinPeer?.document.querySelector('#join-script-summary')?.hidden===false",
+      "eval {const peer=window.joinPeer.document;peer.querySelector('#join-script-name').value='Other Editor';peer.querySelector('#join-script-modal [type=submit]').click();}true",
+      "wait window.joinPeer.document.querySelector('#join-script-status')?.textContent==='This shared script is already open in another tab.'",
+      "eval window.joinPeer.close();true"
+    ] : [
+      "wait window.__sharedTest?.invitationSettled()",
+      "expect document.querySelector('#join-script-status').textContent.includes(" +
+        JSON.stringify(variant === "deleted" ? "was deleted" : "reset or revoked") + ")",
       "expect !(" + seeded + ")&&!window.__sharedTest.invitationConnected()",
       "expect " + browserExpression(membershipAbsent, deployment + "/" + script)
     ]),
@@ -214,8 +251,12 @@ for (const variant of ["accepted", "refused", "pictures", "replacement"]) test(v
     ...(accepted ? [
       "eval location.reload();true",
       "wait " + exactUrl + "&&!!window.__sharedTest&&!(" + seeded + ")",
+      "wait !!document.querySelector('#join-script-modal')", cancel,
       "wait " + browserExpression(retainedEntryOpened, entry),
-      "expect " + seeded
+      "expect " + seeded,
+      ...leave,
+      "wait !document.querySelector('#leave-script-modal')",
+      "expect " + browserExpression(membershipAbsent, deployment + "/" + script)
     ] : ["expect " + browserExpression(membershipAbsent, deployment + "/" + script)])
   ]).join("\n"));
   let peer;
@@ -233,6 +274,15 @@ for (const variant of ["accepted", "refused", "pictures", "replacement"]) test(v
     assert.equal(response.status, 201);
   };
   const actions = new Map([
+    ["delay-initial-snapshot", async () => {
+      await kit.until(() => run.messages.includes("loading") || undefined);
+      await delayFor(16_000, undefined, { signal: t.signal });
+      run.send("release-invitation-load");
+    }],
+    ["stream-initial-picture", async () => {
+      run.send({ streamPicture: { sha: pictures[0].ref.sha256, base64: pictures[0].bytes.toString("base64") } });
+      await kit.until(() => run.messages.includes("picture-stream-ready") || undefined);
+    }],
     ["publish-initial", () => publish(0)], ["show-late-reference", () => writeRef(1)],
     ["publish-late", () => publish(1)], ["show-leave-reference", () => writeRef(2)],
     ["show-replacement-reference", () => writeRef(3)],
@@ -241,7 +291,7 @@ for (const variant of ["accepted", "refused", "pictures", "replacement"]) test(v
       assert.equal(status.connections.authenticated, 1);
     }]
   ]);
-  for (const marker of actions.keys()) if (!pictureSteps?.includes(`eval "${marker}"`)) actions.delete(marker);
+  for (const marker of actions.keys()) if (!(pictureSteps ?? (accepted ? ['eval "delay-initial-snapshot"'] : [])).includes(`eval "${marker}"`)) actions.delete(marker);
   let result;
   let actionFailure;
   try {
@@ -250,7 +300,6 @@ for (const variant of ["accepted", "refused", "pictures", "replacement"]) test(v
     let updates = Promise.resolve();
     let seen = "";
     running.child.stdout.on("data", chunk => {
-      if (!pictures.length) return;
       seen += chunk;
       for (const [marker, action] of actions) {
         if (!seen.split(/\r?\n/).includes(marker)) continue;
@@ -261,7 +310,7 @@ for (const variant of ["accepted", "refused", "pictures", "replacement"]) test(v
     });
     result = await running;
     await updates;
-    if (pictures.length) assert.equal(actions.size, 0);
+    assert.equal(actions.size, 0);
   } catch (error) {
     result = error;
   }
@@ -274,7 +323,7 @@ for (const variant of ["accepted", "refused", "pictures", "replacement"]) test(v
   }
   if (actionFailure) throw actionFailure;
   assert.ok(!result.code && !result.killed, logs);
+  if (variant === "pictures") assert.ok(run.messages.includes("picture-stream-started"));
   assert.match(result.stdout, /RESULT: \d+\/\d+ checks passed/);
-  assert.ok(run.messages.filter(message => message === "authentication-attempted").length >= (accepted ? 2 : 1));
-  if (!accepted) assert.match(result.stdout, /Could not open the shared invitation/);
+  assert.ok(run.messages.filter(message => message === "authentication-attempted").length >= (accepted ? 2 : variant === "deleted" ? 0 : 1));
 });
