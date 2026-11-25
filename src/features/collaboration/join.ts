@@ -4,6 +4,8 @@ import { JOIN_SCRIPT_COMMAND } from "./actions.ts";
 import { mountCollaborationDialog } from "./dialog.ts";
 import type { JoinDialogPorts, JoinPreview, JoinRequest } from "./ports.ts";
 
+const RETRY_LINK_CHECK = new Set(["relay-unreachable", "script-too-large-for-connection", "opening-pending"]);
+
 const MESSAGES: Readonly<Record<string, string>> = {
   "bad-link": "This invitation link is invalid. Check the whole link or ask for a new one.",
   "invitation-revoked": "This invitation link has been reset or revoked. Ask the owner for a new link.",
@@ -16,6 +18,7 @@ const MESSAGES: Readonly<Record<string, string>> = {
   "script-too-large-for-connection": "This script is too large to load over this connection.",
   "pictures-stalled": "The picture download stopped. Check your connection and try again.",
   "pictures-unavailable": "Could not download the pictures. Check your connection and available storage.",
+  "opening-pending": "The script changed while opening the invitation. Try again.",
   locked: "This shared script is already open in another tab."
 };
 
@@ -72,9 +75,15 @@ export function mountJoinDialog(ports: JoinDialogPorts, request?: Extract<JoinRe
     setBusy(false);
     if (result.kind === "failed") {
       fail(result.reason);
-      submit.hidden = !!request;
-      linkLabel.hidden = !!request;
-      (request ? cancel : link).focus();
+      if (request) {
+        const retryable = RETRY_LINK_CHECK.has(result.reason);
+        submit.hidden = !retryable;
+        if (retryable) submit.textContent = "Try again";
+        (retryable ? submit : cancel).focus();
+      } else {
+        linkLabel.hidden = false;
+        link.focus();
+      }
       return;
     }
     preview = result;
@@ -127,7 +136,7 @@ export function mountJoinDialog(ports: JoinDialogPorts, request?: Extract<JoinRe
     event.preventDefault();
     if (busy) return;
     if (preview) void join(preview);
-    else void check({ kind: "paste", link: link.value });
+    else void check(request ?? { kind: "paste", link: link.value });
   };
   if (request) {
     submit.hidden = true;
@@ -137,5 +146,5 @@ export function mountJoinDialog(ports: JoinDialogPorts, request?: Extract<JoinRe
     linkLabel.hidden = false;
     link.focus();
   }
-  return dispose;
+  return { signal, dispose };
 }

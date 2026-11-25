@@ -45,12 +45,12 @@ export function appJs(testHooks, collabUi = testHooks) {
 const scrubInvitationFragment = `let splitpageInvitation = null;
 {
   const url = new URL(location.href);
-  if (url.searchParams.has("join")) {
+  if (url.searchParams.has("join") && url.href.includes("#")) {
     splitpageInvitation = false;
     const [script, extra] = url.searchParams.getAll("join");
     const token = url.hash.slice(1);
     url.hash = "";
-    if (token) history.replaceState(history.state, "", url.href);
+    history.replaceState(history.state, "", url.href);
     if (extra === undefined && /^[A-Za-z0-9_-]{1,64}$/.test(script) && /^[A-Za-z0-9_-]{43}$/.test(token)) {
       splitpageInvitation = { script, token };
     }

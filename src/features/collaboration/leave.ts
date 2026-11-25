@@ -47,5 +47,5 @@ export function mountLeaveDialog(ports: LeaveDialogPorts) {
   save.onclick = () => { void finish(true); };
   leave.onclick = () => { void finish(false); };
   cancel.focus();
-  return dialog.dispose;
+  return { signal: dialog.signal, dispose: dialog.dispose };
 }

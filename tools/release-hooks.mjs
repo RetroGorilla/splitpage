@@ -25,6 +25,7 @@ const COLLABORATION_MARKERS = [
   "settings-collaboration", "Set up relay…", "splitpageInvitation", "splitpage://relay-setup",
   "relayOwner", "splitpage:relay-owner-", "splitpage:relay-setup-",
   'url.searchParams.has("join")', "join-script", "join-script-modal", "Join a shared script…",
+  "leave-script-modal", "Leave shared script",
   "share-script", "Share this script…", "share-script-modal", "splitpage:relay-owner-share-create"
 ];
 

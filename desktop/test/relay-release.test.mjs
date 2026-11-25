@@ -31,7 +31,7 @@ test("a release stage following a test stage removes the setup code, assets, ori
   assert.ok(leakedCollaboration(enabledPreload).includes("splitpage:relay-owner-"));
   assert.ok(leakedCollaboration(enabledHtml).includes("share-script"));
   assert.ok(leakedCollaboration(enabledHtml).includes("share-script-modal"));
-  for (const marker of ['url.searchParams.has("join")', "splitpageInvitation", "join-script-modal", "Join a shared script…"]) {
+  for (const marker of ['url.searchParams.has("join")', "splitpageInvitation", "join-script-modal", "Join a shared script…", "leave-script-modal", "Leave shared script"]) {
     assert.ok(leakedCollaboration(enabledHtml).includes(marker), marker);
   }
   assert.ok(leakedCollaboration(enabledPreload).includes("splitpage:relay-owner-share-create"));

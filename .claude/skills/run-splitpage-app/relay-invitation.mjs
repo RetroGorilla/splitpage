@@ -3,7 +3,7 @@ import { execFile } from "node:child_process";
 import { randomUUID } from "node:crypto";
 import { once } from "node:events";
 import { copyFile, mkdir, readFile, writeFile } from "node:fs/promises";
-import { request } from "node:http";
+import { createServer as createHttpServer, request } from "node:http";
 import { createServer as createHttpsServer } from "node:https";
 import { connect, createServer } from "node:net";
 import { join } from "node:path";
@@ -64,9 +64,13 @@ function browserExpression(fn, argument) {
   return `(${fn.toString().replaceAll(/\s*\r?\n\s*/g, " ")})(${JSON.stringify(argument)})`;
 }
 
-async function tlsIngress(t, port, relayPort) {
-  const [key, cert] = await Promise.all([readFile(process.env.SPLITPAGE_TEST_TLS_KEY), readFile(process.env.SPLITPAGE_TEST_TLS_CERT)]);
-  const proxy = createHttpsServer({ key, cert }, (incoming, outgoing) => {
+async function relayIngress(t, port, relayPort, { tls, incompatible, unreachable }) {
+  let reachable = !unreachable;
+  const forward = (incoming, outgoing) => {
+    if (!reachable && incoming.method === "HEAD" && incoming.url === "/index.html") {
+      outgoing.writeHead(503).end();
+      return;
+    }
     const upstream = request({ host: "127.0.0.1", port: relayPort, path: incoming.url, method: incoming.method,
       headers: incoming.headers }, response => {
       outgoing.writeHead(response.statusCode, response.headers);
@@ -74,9 +78,14 @@ async function tlsIngress(t, port, relayPort) {
     });
     upstream.on("error", () => { outgoing.writeHead(502); outgoing.end(); });
     incoming.pipe(upstream);
-  });
+  };
+  const proxy = tls ? createHttpsServer({
+    key: await readFile(process.env.SPLITPAGE_TEST_TLS_KEY), cert: await readFile(process.env.SPLITPAGE_TEST_TLS_CERT)
+  }, forward) : createHttpServer(forward);
   const upgrades = new Set();
+  let attempts = 0;
   proxy.on("upgrade", (incoming, client, head) => {
+    attempts++;
     const upstream = connect(relayPort, "127.0.0.1");
     upgrades.add(client);
     client.on("close", () => { upgrades.delete(client); upstream.destroy(); });
@@ -85,7 +94,8 @@ async function tlsIngress(t, port, relayPort) {
     upstream.on("close", () => client.destroy());
     const headers = [];
     for (let i = 0; i < incoming.rawHeaders.length; i += 2) headers.push(incoming.rawHeaders[i] + ": " + incoming.rawHeaders[i + 1]);
-    upstream.write([incoming.method + " " + incoming.url + " HTTP/1.1", ...headers, "", ""].join("\r\n"));
+    const path = incompatible ? incoming.url.replace(/([?&])wire=1(?=&|$)/, "$1wire=2") : incoming.url;
+    upstream.write([incoming.method + " " + path + " HTTP/1.1", ...headers, "", ""].join("\r\n"));
     upstream.write(head);
     upstream.pipe(client).pipe(upstream);
   });
@@ -96,16 +106,28 @@ async function tlsIngress(t, port, relayPort) {
   });
   proxy.listen(port, "127.0.0.1");
   await once(proxy, "listening");
+  return {
+    attempts: () => attempts,
+    restore() { reachable = true; },
+    cutFirst() {
+      const first = upgrades.values().next().value;
+      assert.ok(first);
+      first.destroy();
+    }
+  };
 }
 
-for (const variant of ["accepted", "refused", "deleted", "pictures", "replacement"]) test(variant === "replacement"
+for (const variant of ["accepted", "refused", "deleted", "pictures", "replacement", "restart", "unsupported-version", "retry"]) test(variant === "replacement"
   ? "replacing an invited script stops its pending picture download"
   : variant === "pictures"
   ? "a relay invitation hydrates initial pictures and keeps active transfers independent of entry"
   : variant === "accepted"
   ? "a browser joins a seeded relay invitation and reopens its retained copy"
+  : variant === "restart" ? "a dropped snapshot connection restarts exactly once and the browser joins"
+  : variant === "unsupported-version" ? "the Join screen explains a real relay version refusal"
+  : variant === "retry" ? "Try again checks the same invitation after the relay recovers and joins after another script opens"
   : "a browser scrubs a " + variant + " invitation without retaining membership", { timeout: 65_000 }, async t => {
-  const accepted = variant !== "refused" && variant !== "deleted";
+  const accepted = !["refused", "deleted", "unsupported-version"].includes(variant);
   const pictures = variant === "pictures" || variant === "replacement" ? [1, 2, 3, 4].map(suffix => {
     const bytes = Buffer.concat([Buffer.from("R0lGODlhAQABAIAAAAAAAP///yH5BAEAAAAALAAAAAABAAEAAAIBRAA7", "base64"), Buffer.from([suffix])]);
     const ref = imageRecordOf(bytes);
@@ -115,7 +137,8 @@ for (const variant of ["accepted", "refused", "deleted", "pictures", "replacemen
   const kit = serverHarness(t, 60_000);
   const port = await freePort();
   const tls = Boolean(process.env.SPLITPAGE_TEST_TLS_KEY);
-  const relayPort = tls ? await freePort() : port;
+  const useProxy = tls || ["restart", "unsupported-version", "retry"].includes(variant);
+  const relayPort = useProxy ? await freePort() : port;
   const origin = (tls ? "https" : "http") + "://127.0.0.1:" + port;
   const deployment = randomUUID();
   const shell = join(kit.directory, "shell");
@@ -151,11 +174,13 @@ for (const variant of ["accepted", "refused", "deleted", "pictures", "replacemen
     run.send("delete:" + script);
     await kit.until(() => run.messages.includes("deleted") || undefined);
   }
-  if (variant === "accepted") {
+  if (variant === "accepted" || variant === "restart") {
     run.send("hold-invitation-load");
     await kit.until(() => run.messages.includes("load-armed") || undefined);
   }
-  if (tls) await tlsIngress(t, port, relayPort);
+  const ingress = useProxy ? await relayIngress(t, port, relayPort, {
+    tls, incompatible: variant === "unsupported-version", unreachable: variant === "retry"
+  }) : null;
   const target = origin + "/?join=" + script;
   await writeFile(join(fixture, "invite.html"), `<!doctype html><title>Invitation fixture</title><a id="invite" href="${target}#${token}">Open invitation</a>`);
   const exactUrl = `location.href===${JSON.stringify(target)}`;
@@ -216,7 +241,22 @@ for (const variant of ["accepted", "refused", "deleted", "pictures", "replacemen
     delay(1_750),
     "expect window.getCount===" + resources(2) + ".length"
   ] : null;
-  await writeFile(suite, (pictureSteps ?? [
+  const joinSteps = ["wait " + seeded, "wait window.__sharedTest.invitationConnected()",
+    "expect !document.querySelector('#join-script-modal')"];
+  const restartSteps = [
+    ...reenter, "wait document.querySelector('#join-script-status')?.textContent.startsWith('Loading script')",
+    'eval "restart-initial-snapshot"', summary, name, confirmJoin, ...joinSteps
+  ];
+  const retrySteps = [
+    ...reenter, "wait document.querySelector('#join-script-status')?.textContent.startsWith('Could not reach the relay.')",
+    "expect document.querySelector('#join-script-modal [type=submit]').textContent==='Try again'",
+    'eval "restore-relay"', confirmJoin, summary,
+    "eval " + replace, "wait window.__splitpageFormats.state().title==='Separate script'",
+    name, confirmJoin, ...joinSteps
+  ];
+  const refusal = variant === "deleted" ? "was deleted" : variant === "unsupported-version"
+    ? "needs a newer version of Splitpage" : "reset or revoked";
+  const steps = pictureSteps ?? (variant === "restart" ? restartSteps : variant === "retry" ? retrySteps : [
     "open /invite.html",
     ...(accepted ? ["eval window.open(document.querySelector('#invite').href,'join-peer');true"] : []),
     "click #invite",
@@ -239,7 +279,7 @@ for (const variant of ["accepted", "refused", "deleted", "pictures", "replacemen
     ] : [
       "wait window.__sharedTest?.invitationSettled()",
       "expect document.querySelector('#join-script-status').textContent.includes(" +
-        JSON.stringify(variant === "deleted" ? "was deleted" : "reset or revoked") + ")",
+        JSON.stringify(refusal) + ")",
       "expect !(" + seeded + ")&&!window.__sharedTest.invitationConnected()",
       "expect " + browserExpression(membershipAbsent, deployment + "/" + script)
     ]),
@@ -250,15 +290,16 @@ for (const variant of ["accepted", "refused", "deleted", "pictures", "replacemen
     "expect history.state===null",
     ...(accepted ? [
       "eval location.reload();true",
-      "wait " + exactUrl + "&&!!window.__sharedTest&&!(" + seeded + ")",
-      "wait !!document.querySelector('#join-script-modal')", cancel,
+      "wait " + exactUrl + "&&performance.getEntriesByType('navigation')[0]?.type==='reload'&&!!window.__sharedTest&&!(" + seeded + ")",
+      "expect !document.querySelector('#join-script-modal')",
       "wait " + browserExpression(retainedEntryOpened, entry),
       "expect " + seeded,
       ...leave,
       "wait !document.querySelector('#leave-script-modal')",
       "expect " + browserExpression(membershipAbsent, deployment + "/" + script)
     ] : ["expect " + browserExpression(membershipAbsent, deployment + "/" + script)])
-  ]).join("\n"));
+  ]);
+  await writeFile(suite, steps.join("\n"));
   let peer;
   const writeRef = async index => {
     peer ??= kit.copy(relayPort, undefined, script, token);
@@ -279,6 +320,14 @@ for (const variant of ["accepted", "refused", "deleted", "pictures", "replacemen
       await delayFor(16_000, undefined, { signal: t.signal });
       run.send("release-invitation-load");
     }],
+    ["restart-initial-snapshot", async () => {
+      await kit.until(() => run.messages.includes("loading") || undefined);
+      assert.equal(ingress?.attempts(), 1);
+      ingress.cutFirst();
+      await kit.until(() => run.messages.filter(message => message === "authentication-attempted").length === 2 || undefined);
+      run.send("release-invitation-load");
+    }],
+    ["restore-relay", () => ingress.restore()],
     ["stream-initial-picture", async () => {
       run.send({ streamPicture: { sha: pictures[0].ref.sha256, base64: pictures[0].bytes.toString("base64") } });
       await kit.until(() => run.messages.includes("picture-stream-ready") || undefined);
@@ -291,7 +340,7 @@ for (const variant of ["accepted", "refused", "deleted", "pictures", "replacemen
       assert.equal(status.connections.authenticated, 1);
     }]
   ]);
-  for (const marker of actions.keys()) if (!(pictureSteps ?? (accepted ? ['eval "delay-initial-snapshot"'] : [])).includes(`eval "${marker}"`)) actions.delete(marker);
+  for (const marker of actions.keys()) if (!steps.includes(`eval "${marker}"`)) actions.delete(marker);
   let result;
   let actionFailure;
   try {
@@ -323,6 +372,7 @@ for (const variant of ["accepted", "refused", "deleted", "pictures", "replacemen
   }
   if (actionFailure) throw actionFailure;
   assert.ok(!result.code && !result.killed, logs);
+  if (variant === "restart") assert.equal(ingress?.attempts(), 3);
   if (variant === "pictures") assert.ok(run.messages.includes("picture-stream-started"));
   assert.match(result.stdout, /RESULT: \d+\/\d+ checks passed/);
   assert.ok(run.messages.filter(message => message === "authentication-attempted").length >= (accepted ? 2 : variant === "deleted" ? 0 : 1));

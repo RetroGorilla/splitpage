@@ -32,11 +32,11 @@ export const collaborationMenuItems = typeof SPLITPAGE_COLLAB_UI !== "undefined"
   { ...LEAVE_SCRIPT_COMMAND, group: "Collaborate", available: retainedSharedScriptActive }
 ] : () => [];
 
-let leaveDialog: (() => void) | undefined;
+let leaveDialog: ReturnType<typeof mountLeaveDialog> | undefined;
 
 function openLeave() {
   if (!retainedSharedScriptActive()) return false;
-  leaveDialog?.();
+  if (leaveDialog && !leaveDialog.signal.aborted) return true;
   const context = captureOperation();
   leaveDialog = mountLeaveDialog({
     async saveCopy() {
@@ -132,7 +132,7 @@ function registerCollaboration(registry: Pick<ActionRegistry, "invoke" | "regist
     unregisterLeave();
     unregisterJoin();
     unregister();
-    leaveDialog?.();
+    leaveDialog?.dispose();
     leaveDialog = undefined;
     dispose?.();
   };

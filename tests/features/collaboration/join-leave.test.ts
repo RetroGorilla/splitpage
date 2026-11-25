@@ -24,7 +24,7 @@ test("the Join screen shows the preview, saves identity and cancels the active d
       }
     }),
     settled: () => {}
-  }, { kind: "browser", invitation: false }));
+  }, { kind: "browser", invitation: false }).dispose);
   await Promise.resolve();
   assert.equal(document.querySelector("#join-script-summary h3")?.textContent, "Shared scene");
   assert.equal(document.querySelector("#join-script-summary p")?.textContent, "4 beats · 2 pictures");
@@ -57,17 +57,18 @@ for (const [reason, message] of [
       identity: { myColor: () => "", setCommentAuthor() {}, setMyColor() {} },
       check: async () => ({ kind: "failed", reason }),
       settled: () => {}
-    }, { kind: "browser", invitation: false }));
+    }, { kind: "browser", invitation: false }).dispose);
     await Promise.resolve();
     assert.ok(document.querySelector("#join-script-status")?.textContent?.startsWith(message));
-    assert.equal(document.querySelector<HTMLButtonElement>("#join-script-modal [type=submit]")?.hidden, true);
+    const retryable = reason === "relay-unreachable" || reason === "script-too-large-for-connection";
+    assert.equal(document.querySelector<HTMLButtonElement>("#join-script-modal [type=submit]")?.hidden, !retryable);
   });
 }
 
 test("Leave only disconnects after Save a copy first succeeds", async t => {
   const leave = t.mock.fn(async () => true);
   let saved = false;
-  t.after(mountLeaveDialog({ leave, saveCopy: async () => saved }));
+  t.after(mountLeaveDialog({ leave, saveCopy: async () => saved }).dispose);
   const button = document.querySelector<HTMLButtonElement>("[data-save-copy]");
   assert.ok(button);
   assert.equal(button.textContent, "Save a copy first…");
@@ -81,4 +82,34 @@ test("Leave only disconnects after Save a copy first succeeds", async t => {
   await Promise.resolve();
   assert.equal(leave.mock.callCount(), 1);
   assert.equal(document.querySelector("#leave-script-modal"), null);
+});
+
+test("Try again checks the original browser invitation and joins after recovery", async t => {
+  const request = { kind: "browser", invitation: { script: "script", token: "a".repeat(43) } } as const;
+  let reachable = false;
+  const join = t.mock.fn(async () => null);
+  t.after(mountJoinDialog({
+    editor: () => "Guest Editor",
+    identity: { myColor: () => "", setCommentAuthor() {}, setMyColor() {} },
+    async check(invite) {
+      assert.equal(invite, request);
+      return reachable ? { kind: "ready", title: "Shared scene", beats: 1, pictures: 0, join }
+        : { kind: "failed", reason: "relay-unreachable" };
+    },
+    settled() {}
+  }, request).dispose);
+  await Promise.resolve();
+  const submit = document.querySelector<HTMLButtonElement>("#join-script-modal [type=submit]");
+  assert.ok(submit);
+  assert.equal(submit.textContent, "Try again");
+  assert.equal(submit.hidden, false);
+  reachable = true;
+  submit.click();
+  await Promise.resolve();
+  assert.equal(submit.textContent, "Join script");
+  assert.equal(document.querySelector("#join-script-summary h3")?.textContent, "Shared scene");
+  submit.click();
+  await Promise.resolve();
+  assert.equal(join.mock.callCount(), 1);
+  assert.equal(document.querySelector("#join-script-modal"), null);
 });

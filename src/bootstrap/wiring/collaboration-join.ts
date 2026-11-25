@@ -36,7 +36,7 @@ function readLink(request: JoinRequest): { script: string; token: string; origin
 }
 
 function openJoinScreen(request: Extract<JoinRequest, { kind: "browser" }> | undefined, connected: (value: boolean) => void,
-  settled: () => void): () => void {
+  settled: () => void) {
   const ports: JoinDialogPorts = {
     identity: chromePreferences,
     editor: getEditorName,
@@ -44,11 +44,13 @@ function openJoinScreen(request: Extract<JoinRequest, { kind: "browser" }> | und
       const invitation = readLink(link);
       if (!invitation) return { kind: "failed", reason: "bad-link" };
       const { origin, script, token } = invitation;
+      let openingSignal: AbortSignal | undefined;
       try {
         const ready = startupReady();
         if (!ready) return { kind: "failed", reason: "opening-pending" };
         await waitDuringLifetime(ready, lifetime);
         const opening = captureDocumentOpeningLifetime();
+        openingSignal = opening.signal;
         const signal = AbortSignal.any([lifetime, opening.signal]);
         await waitDuringLifetime(opening.settled, signal);
         const deploymentPath = link.kind === "paste" ? "/api/deployment" : "/index.html";
@@ -69,11 +71,15 @@ function openJoinScreen(request: Extract<JoinRequest, { kind: "browser" }> | und
           return {
             kind: "ready", title, beats: rows.length, pictures: preview.pictureReferences().required.length,
             async join(cancel, progress) {
+              const opening = captureDocumentOpeningLifetime();
+              const joining = AbortSignal.any([opening.signal, cancel]);
+              try { await waitDuringLifetime(opening.settled, joining); }
+              catch { return "opening-pending"; }
               const publish = holdDesktopDocumentPublication();
               try {
                 const outcome = await sharedEntry()?.enter({
                   deployment, script, relayUrl, invitation: { token, state }, onRelayConnected: connected, onPictureProgress: progress
-                }, AbortSignal.any([opening.signal, cancel]));
+                }, joining);
                 if (!outcome?.ok) return outcome?.reason ?? "opening-pending";
                 newTabControls()?.closeNewTabPage();
                 return null;
@@ -83,6 +89,7 @@ function openJoinScreen(request: Extract<JoinRequest, { kind: "browser" }> | und
         } finally { preview.close(); }
       } catch (error) {
         if (lifetime.aborted) return { kind: "failed", reason: "cancelled" };
+        if (openingSignal?.aborted) return { kind: "failed", reason: "opening-pending" };
         if (error instanceof InvitationSnapshotError) return { kind: "failed", reason: error.reason };
         return { kind: "failed", reason: "relay-unreachable" };
       }
@@ -92,10 +99,10 @@ function openJoinScreen(request: Extract<JoinRequest, { kind: "browser" }> | und
   return mountJoinDialog(ports, request);
 }
 
-let desktopDialog: (() => void) | undefined;
+let desktopDialog: ReturnType<typeof openJoinScreen> | undefined;
 
 export function openDesktopJoin(): void {
-  desktopDialog?.();
+  if (desktopDialog && !desktopDialog.signal.aborted) return;
   desktopDialog = openJoinScreen(undefined, () => {}, () => {});
 }
 
@@ -108,8 +115,8 @@ export function startInvitationEntry() {
   return {
     status: () => ({ connected, settled }),
     dispose() {
-      browserDialog?.();
-      desktopDialog?.();
+      browserDialog?.dispose();
+      desktopDialog?.dispose();
       desktopDialog = undefined;
     }
   };
