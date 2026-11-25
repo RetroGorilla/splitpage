@@ -91,7 +91,8 @@ management-secret rotation coverage ([#1763](https://github.com/RetroGorilla/spl
 - **Part 5 ([#1758](https://github.com/RetroGorilla/splitpage/pull/1758)):** relay-served release browser shell
   (`SPLITPAGE_APP_DIR=/app`, `Splitpage-Deployment` header) and test-build-gated (`node build.mjs --test`)
   `/?join=<id>#<token>` fragment scrubbing before logging. Release builds (`node build.mjs`, including the shell
-  bundled in `collab-server/Dockerfile`) omit `?join=` handling, fragment scrubbing and `__sharedTest` until Stage 4.
+  bundled in `collab-server/Dockerfile`) omitted `?join=` handling and fragment scrubbing until Stage 4 Part 16 and
+  never include `__sharedTest`.
 - **Part 6 ([#1759](https://github.com/RetroGorilla/splitpage/pull/1759)):** bounded runtime limits (total connections,
   per-invitation connections, per-socket message rate, in-flight uploads, WebSocket and HTTP bounds), distinct temporary
   vs permanent refusals, private `GET /api/status` and the read-only container verified in CI `relay-container-smoke`
@@ -108,9 +109,61 @@ management-secret rotation coverage ([#1763](https://github.com/RetroGorilla/spl
   `tests/adapters/collab/native/server-admission.test.ts` (valid provider traffic with synthetic throws; actual
   invalid-frame runtime outcome/state remains unverified, as noted in the evidence table).
 
+### Stage 4 and 5: sharing, joining, version history and presence
+
+The Stage 4 and 5 plan of 2026-11-23 is on `main` through `f6b609cb9`. Part 16 turns the collaboration build
+setting on for release builds. Part 15, remote carets and selections, is optional and not built.
+
+- **Part 1 (`5b490a29e`):** relay storage v4. Invitations have an `owner` or `guest` role and record the creation
+  that issued them. A creation carries a content hash and stays untouched until its first authentication. A retry
+  with the same hash replaces only that creation's credentials, and only while the script is untouched. Abandon
+  deletes only an untouched script. Reset link revokes guests only. Guests have their own connection limit, and the
+  command-line tool gains roles, reset and a script list.
+- **Part 2 (`fb9e74e1b`):** collaboration state owners, the shared save status wording on `#btn-save`, the File
+  menu card and the Writer top bar, and a banner layer that stays visible over Writer.
+- **Part 3 (`ddcdc36a3`):** the desktop relay setup window at `splitpage://relay-setup` (`connect-src 'none'`, one
+  channel to main), the management secret kept by main in the operating system's key store, and the build setting
+  that gates every collaboration entry point.
+- **Part 4 (`8f8cd72e0`):** **Share this script…**, the stored membership record with role and guest link token
+  (single-token records read as guest), and `wss:` in the connection policy.
+- **Part 5 (`5101997ea`):** the **Shared** pill and popover, **Copy link**, **Reset link**, **Stop sharing**,
+  **Leave**, the shared File menu, and owner controls for a second owner desktop.
+- **Part 6 (`e021af8b4`):** the Join screen, fragment removal before any log, the name and colour prompt, and
+  progress-based waits: 30 seconds and one restart for loading the script, and pictures that fail only when they
+  stop arriving.
+- **Part 7 (`fb19f18d4`):** the desktop `shared` tab source, restore after restart including offline, shared
+  scripts in Recent with a `Shared` badge, and reopening in the browser app.
+- **Part 8 (`b59df5a91`):** [the desktop file copy](#the-desktop-file-copy-stage-4-part-8).
+- **Part 9 (`1366646e2`):** presence: initials in the pill, **Here now**, jump to a person's beat, Rundown markers,
+  the dot beside a beat and the Writer sign on a visual being edited.
+- **Part 10 (`6e8786bf6`):** the shared **+ Add beat** bar, the editable shared title, and the first-beat input in
+  an empty shared Writer.
+- **Part 11a (`a5146d906`):** [relay version history](#relay-version-history-stage-4-part-11a), storage v5.
+- **Part 11b (`bb1d7082b`):** the History panel lists relay versions and opens one read-only, with **Save a copy…**
+  and **Put this beat back**. A version names the people who edited since the previous version (option C), not the
+  people present when it was stored. The relay records the presence name of each connection that sends a change.
+  Storage v8 keeps those pending names in `version_editors`, so a relay restart does not lose them. A failed name
+  write never holds up the live save; `/api/status` reports it as `version-editors-store-failed`. Names are what
+  people typed and are not verified.
+- **Parts 12a (`6da0ce294`) and 12b (`c312eaf69`):** the pending-edit journal stored with the local copy, the
+  offline clash banner and the **What changed while offline** screen with **Put it back**.
+- **Part 13 (`b26c644cb`):** the link password. Storage v6 holds a salted `scrypt` key per guest link, a password
+  is exchanged for a device credential, and a password change refuses with `password-changed`. Storage v7 ties
+  each device credential to its guest link.
+- **Part 14 (`f6b609cb9`):** phone layouts, keyboard use and announcements, the Collaboration section of the help,
+  and the [relay setup guide](relay-setup.md).
+- **Part 16:** release builds (`node build.mjs`, desktop staging, the portable package and the relay image) include
+  the collaboration UI, its help section and `wss:` in the connection policy. Test hooks, `__sharedTest`, the test
+  build's `ws://127.0.0.1:*` policy and the loopback HTTP relay stay in test builds only. The desktop build setting
+  records `testRelay` separately, and only that flag lets the relay owner accept `http://127.0.0.1:<port>`. In the
+  app, `relay-address.ts` holds the same rule for joining, sharing, restored tabs and reopened shared scripts, so a
+  release build refuses a saved loopback reference before it sends any request. The
+  [performance record](../architecture/performance-record.md#collaboration-stage-4-and-5-624bf5a25-to-ac0d3bc4b)
+  holds the final standalone and shared comparison.
+
 ### Stage 3 deployment evidence
 
-On 2026-11-23, the owner?s relay switched to the image built from `f5918ba78` on a fresh direct-pool volume.
+On 2026-11-23, the owner's relay switched to the image built from `f5918ba78` on a fresh direct-pool volume.
 The legacy relay stopped cleanly and its data directory was kept aside. The new relay passed startup checks,
 served the release shell over HTTPS and refused unauthenticated management requests.
 
@@ -130,8 +183,9 @@ The [Stage 3 evidence status](../COLLABORATION-PLAN.md#stage-3-evidence-status-m
 remaining wire-level validation gap. CI covers recovery from synthetic hook exceptions with valid provider
 traffic. The runtime outcome of an invalid authenticated WebSocket frame remains unverified.
 
-The standard shared test hook `__sharedTest` opens only the native session. There is still no release entry for shared
-mode; release builds (`node build.mjs`) omit `__sharedTest`, `?join=` handling and fragment scrubbing.
+The standard shared test hook `__sharedTest` opens only the native session and exists only in test builds. Since
+Stage 4 Part 16, release builds (`node build.mjs`) enter shared mode through sharing, joining and reopening, with
+`?join=` handling and fragment scrubbing, and accept only HTTPS relays.
 
 All legacy shared-adapter code (112 source files outside `src/adapters/collab/native/`), its 183 dedicated test files,
 the legacy app fixture (`tests/collab/legacy-app/`) and generated `_legacy-shared-tests.html` page, 29 legacy
@@ -163,6 +217,9 @@ waits for a new caret. App stop and entry rollback release any active wait.
 | --- | --- | --- |
 | Empty Writer | An empty shared script in Writer shows a first-beat input (`.empty-script-input`) for typing and IME composition, placing the narration caret after the first committed text. On app stop, an unfinished composition in that field is discarded and the empty script lands as an unsaved standalone copy. | [Native hook app tests](../../src/test/shared-native-hook-mapped-app.test.mjs), [native app stop test](../../src/test/shared-native-routes-lifecycle-app.test.mjs) |
 | Script title | Shared title edits write the title text without changing `titleOrigin` (local file-naming metadata). | [Shared editor fixes app tests](../../src/test/shared-native-editor-fixes-app.test.mjs) |
+| Saving | `#btn-save` reports the copy on this device and the relay's progress, such as `Saved on this device · syncing` or `Offline · saved on this device`. It never claims the relay stored the change. Autosave and **Create bundle…** are hidden. | [Shared save status tests](../../tests/features/title/shared-save-status.test.ts) |
+| The original file | On the desktop that shared a saved file, the shared script writes itself into that file one way, after edits settle and on close. The file is never read back. Leave and Stop sharing first need a checked write or a choice. Other devices keep no file copy. | [File copy departure tests](../../tests/adapters/collab/native/file-copy-departure-app.test.ts), [the desktop file copy](#the-desktop-file-copy-stage-4-part-8) |
+| Version history | The History panel lists versions kept by the relay, not this device's snapshots, and needs a connection. A version opens read-only. **Save a copy…** makes a standalone file with a new `docId`, and **Put this beat back** adds a fresh beat as one undo step. Restoring a whole version for everyone is not available. A version names the people who edited since the previous version, by the names they typed. The source file's own versions appear only when it is opened as an ordinary document. | [Shared history app tests](../../tests/adapters/collab/native/shared-history-app.test.ts) |
 | Joined row removal | A joined row keeps its member beats. The row's Remove acts on its visible head. | [#1682](https://github.com/RetroGorilla/splitpage/pull/1682) |
 | Split Remove with an unseen peer change | The first click arms Remove while buffered typing and the held peer change can remain out of the projection. Confirmation settles the typing and then removes the intended beat. If a peer join hid that beat, confirmation clears the arm and warns once. | [Native caller tests](../../src/test/shared-native-callers-mapped-app.test.mjs) |
 | Moving past a heading | Scene headings have their own positions in the ranked outline. Moving a beat across a heading can change which beat follows that heading. | [#1682](https://github.com/RetroGorilla/splitpage/pull/1682) |
@@ -394,8 +451,8 @@ the `Authorization: Bearer` header via stdin or an operator-only `0600` config f
 never in command arguments, shell history or logs; keep returned tokens and join URLs out of terminal
 transcripts and logs.
 
-Because the container serves the gated release browser shell (which omits `?join=`, fragment scrubbing and
-`__sharedTest` until Stage 4) and the test-build invitation bootstrap reads `HEAD /index.html`
+Because the container serves the release browser shell (which since Stage 4 Part 16 joins only over HTTPS and has
+no `__sharedTest`) and the test-build invitation bootstrap reads `HEAD /index.html`
 (`Splitpage-Deployment`) and opens its WebSocket against `location.origin`, verify the restored relay using
 the **operator-only same-origin verification proxy** below pointed at `VERIFY_TARGET_ORIGIN=http://127.0.0.1:8081`
 and `VERIFY_UPSTREAM_ORIGIN=https://127.0.0.1:8443`. Verify all four outcomes:
@@ -654,8 +711,9 @@ docker run -d --name splitpage-relay-stage3 \
 ```
 
 - **Operator-only verification proxy for deployed smoke and isolated restore drills.** The public relay container
-  serves the release build (`node build.mjs`), which intentionally omits `?join=`, fragment scrubbing and
-  `__sharedTest` until Stage 4. Never expose a test build through the public release endpoint. Because the test-build
+  serves the release build (`node build.mjs`). Since Stage 4 Part 16 it handles `?join=` links over HTTPS, so a
+  deployed second-device join can use the public link directly, but it has no `__sharedTest` and refuses a loopback
+  HTTP relay. Never expose a test build through the public release endpoint. Because the test-build
   invitation bootstrap reads `HEAD /index.html` (`Splitpage-Deployment`) and connects its WebSocket and `/api/`
   picture traffic to `location.origin`, verify both a deployed second-device join and an isolated restore drill
   through one reproducible operator-only loopback HTTPS proxy bound strictly to `127.0.0.1`:

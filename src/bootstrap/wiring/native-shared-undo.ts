@@ -28,10 +28,6 @@ declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 
 const NOTHING: SharedUndoOutcome = Object.freeze({ ok: false, empty: true });
 
-function marking(): boolean {
-  return (typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn;
-}
-
 export function nativeUndoRoute({ native, admission, input, publish }: NativeUndoRoutePorts): SharedUndoRoute {
   function press(direction: UndoDirection): NativePress {
     const refused = admission.admit();
@@ -54,11 +50,11 @@ export function nativeUndoRoute({ native, admission, input, publish }: NativeUnd
       else native.endTypingGroup();
     },
     replay: (direction: UndoDirection) => {
-      if (marking()) performance.mark("measure:input-command:start");
+      if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-command:start");
       try {
         const { selection } = press(direction);
         if (selection) input()?.show(selection);
-      } finally { if (marking()) performance.mark("measure:input-command:end"); }
+      } finally { if ((typeof SPLITPAGE_TEST_HOOKS === "undefined" || SPLITPAGE_TEST_HOOKS) && timingMarks.marksOn) performance.mark("measure:input-command:end"); }
     }
   });
 }

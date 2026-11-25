@@ -6,12 +6,35 @@ appear in the app under **Help**. The format follows
 
 ## Unreleased
 
+### Added
+- Write a script together. In the desktop app, **File ▸ Share this script…**
+  uploads a copy to a relay and gives you one link for everyone you invite.
+  Sharing needs a relay that you run; set it up once in **Settings ▸
+  Collaboration**, with the relay setup guide. Your original file stays where it
+  was, and the desktop that shared it keeps that file up to date.
+- Join a shared script by opening its link in a browser, or with **File ▸ Join
+  a shared script…** in the desktop app. A link can require a password. You
+  choose the name and colour others see.
+- **Shared** beside Write and Present shows the connection and who is here
+  now, and where each person is on the Rundown strip. Select someone to jump to
+  their beat. The owner can copy or reset the link, add or change its password,
+  or stop sharing for everyone. Anyone can save a copy or leave.
+- Keep writing when the relay can't be reached. Your changes stay on this
+  device and sync when you reconnect. If edits overlapped, **Review changes**
+  shows them, and **Put it back** restores your beat.
+- **Version history** for a shared script lists the versions the relay keeps
+  and who edited each one. Open a version to read it, save it as a separate
+  script, or put one beat back.
+- Shared scripts come back after a restart and appear in Recent with a
+  `Shared` badge.
+
 ### Fixed
 - Click buttons through the empty space beside and between notifications.
 - Keep every tag picker choice clickable while editing a tag, with Done available when the picker closes.
 
 ### For maintainers
-- Replaced the old shared-document adapter, its editor wiring, dedicated test suites and CI job with the standard-Yjs native layer under `src/adapters/collab/native/` (no release entry for shared mode yet).
+- Replaced the old shared-document adapter, its editor wiring, dedicated test suites and CI job with the standard-Yjs native layer under `src/adapters/collab/native/`.
+- Release builds now include collaboration. Test hooks and the loopback test relay stay in test builds only. The relay image now uses storage version 8, and its build stage copies the desktop preload inputs that `build.mjs` needs.
 
 ## 0.4.3 — 2026-11-09
 

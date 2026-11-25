@@ -38,11 +38,11 @@ Keep authentication headers and request bodies out of logs. If the tunnel
 runs in Docker, use a private container network to reach the relay instead
 of publishing its port.
 
-In a collaboration-enabled desktop build, open **Settings ▸ Collaboration ▸
-Set up relay…**. Enter the public HTTPS address and management secret, then
-choose **Test connection**. The default Docker image serves the release
-browser shell. Until collaboration ships, test browser invitations with a
-matching collaboration-enabled shell on a private test endpoint.
+In the desktop app, open **Settings ▸ Collaboration ▸ Set up relay…**. Enter
+the public HTTPS address and management secret, then choose **Test
+connection**. The default Docker image serves the release browser shell, so
+invitation links open in a browser at the relay's public HTTPS address. The
+relay address must use HTTPS.
 
 ## Settings
 

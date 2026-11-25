@@ -117,7 +117,7 @@ for (const arch of ARCHS) {
     check(leaked !== null && leaked.length === 0, `${arch}: the packaged app is a release build, with no test hook outside the release list`,
       leaked === null ? "resources/splitpage/index.html missing" : leaked.join(", "));
     const collaboration = collaborationProblems(join(unpacked, "resources"));
-    check(collaboration.length === 0, `${arch}: the packaged release excludes collaboration setup`, collaboration.join("; "));
+    check(collaboration.length === 0, `${arch}: the packaged release ships collaboration without the test relay`, collaboration.join("; "));
   }
 
   const setup = join(DIST, `SplitpageDesktopSetup-${VERSION}-${arch}.exe`);

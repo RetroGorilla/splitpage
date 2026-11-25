@@ -4,7 +4,7 @@ import { fileURLToPath } from "node:url";
 import { dirname, join } from "node:path";
 import { appCss } from "./tools/css-inputs.mjs";
 import { isMain } from "./tools/main-module.mjs";
-import { helpMarkdown, leakedCollaboration, leakedHooks } from "./tools/release-hooks.mjs";
+import { helpMarkdown, leakedHooks, missingCollaboration, testRelayAllowances } from "./tools/release-hooks.mjs";
 import { writeDesktopBuild } from "./tools/build-preload.mjs";
 
 let esbuild;
@@ -20,7 +20,7 @@ const src = (name) => readFileSync(join(ROOT, "src", name), "utf8");
 
 const chomp = (text) => (text.endsWith("\n") ? text.slice(0, -1) : text);
 
-export function appJs(testHooks, collabUi = testHooks) {
+export function appJs(testHooks, collabUi = true) {
   const result = esbuild.buildSync({
     entryPoints: [join(ROOT, "src", "bootstrap", "main.ts")],
     bundle: true,
@@ -309,7 +309,7 @@ function stripHtmlComments(shell) {
     .replace(/<!--[\s\S]*?-->/g, "");
 }
 
-export function build(testHooks = TEST_BUILD, collabUi = testHooks) {
+export function build(testHooks = TEST_BUILD, collabUi = true) {
   let html = stripHtmlComments(src("page.html"));
   const help = helpHtml(collabUi);
   for (const [marker, load] of [...PARTS, ["{{HELP_TOC}}", () => help.toc], ["{{HELP_HTML}}", () => help.html],
@@ -332,9 +332,13 @@ function main() {
     console.error("the release build exposes test hooks: " + leaked.join(", ") + " (see tools/release-hooks.mjs)");
     process.exit(1);
   }
-  const collaborationLeaks = TEST_BUILD ? [] : leakedCollaboration(built);
-  if (collaborationLeaks.length) {
-    throw new Error("The release build exposes collaboration: " + collaborationLeaks.join(", "));
+  const collaborationMissing = missingCollaboration(built);
+  if (collaborationMissing.length) {
+    throw new Error("The build is missing collaboration: " + collaborationMissing.join(", "));
+  }
+  const testRelay = TEST_BUILD ? [] : testRelayAllowances(built);
+  if (testRelay.length) {
+    throw new Error("The release build allows the test relay: " + testRelay.join(", "));
   }
 
   if (process.argv.includes("--check")) {
@@ -365,7 +369,7 @@ function main() {
 
   rmSync(join(ROOT, "_legacy-shared-tests.html"), { force: true });
   writeFileSync(out, built);
-  writeDesktopBuild(join(ROOT, "desktop", ".build"), TEST_BUILD);
+  writeDesktopBuild(join(ROOT, "desktop", ".build"), true, TEST_BUILD);
   console.log("wrote index.html (" + VARIANT + ", " + Buffer.byteLength(built) + " bytes)");
   writeFileSync(swOut, swBuilt);
   console.log("wrote sw.js (cache " + swCacheName(swBuilt) + ")");

@@ -8,11 +8,13 @@ import { fileURLToPath } from "node:url";
 const ROOT = fileURLToPath(new URL("../../", import.meta.url));
 const TIMING_MARKS = ["document-entry", "render", "cell-refresh", "input-command"].flatMap(seam => [`measure:${seam}:start`, `measure:${seam}:end`]);
 const MARK_LINE = /if \(\(typeof SPLITPAGE_TEST_HOOKS === "undefined" \|\| SPLITPAGE_TEST_HOOKS\) && timingMarks\.marksOn\) performance\.mark\("measure:[a-z-]+:(?:start|end)"\);/g;
-const MARKED = ["src/bootstrap/wiring/session-owner.ts", "src/bootstrap/wiring/undo.ts", "src/bootstrap/wiring/editor.ts"];
+const MARKED = ["src/bootstrap/wiring/session-owner.ts", "src/bootstrap/wiring/undo.ts", "src/bootstrap/wiring/editor.ts",
+  "src/bootstrap/wiring/native-shared-undo.ts"];
 
 const ENTRY = [
   'export { adoptShared, onSessionChange, runCommand } from "./src/bootstrap/wiring/session-owner.ts";',
   'export { stepSharedUndo } from "./src/bootstrap/wiring/undo.ts";',
+  'export { nativeUndoRoute } from "./src/bootstrap/wiring/native-shared-undo.ts";',
   'export { mountRowsEditingFeature } from "./src/bootstrap/wiring/editor.ts";'
 ].join("\n");
 

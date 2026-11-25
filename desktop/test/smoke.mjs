@@ -2500,7 +2500,7 @@ async function caseRecentDocuments(target, fixturesDir) {
   const winIdB = newHexId(), tabIdB = newHexId();
   const many = [];
   for (let i = 0; i < 25; i++) {
-    many.push({ absPath: path.join(fixturesDir, "many-" + i + ".splitpage"), title: "Many " + i, at: 1000 + i });
+    many.push({ absPath: path.join(fixturesDir, "many-" + i + ".splitpage"), title: "Many " + i, at: 2000 - i });
   }
   many.splice(3, 0, { absPath: many[0].absPath, title: "Duplicate", at: 9999 });
   many.push({ absPath: "not-absolute.splitpage", title: "Relative", at: 9999 });
@@ -2875,12 +2875,18 @@ async function caseNativeReplicaKeyStore(target) {
   }
 }
 
+function collaborationBuild(target) {
+  if (target.kind !== "dev") return { collabUi: true, testRelay: target.variant === "test" };
+  const marker = path.join(DESKTOP_DIR, ".build", "collaboration.json");
+  const setting = fs.existsSync(marker) ? JSON.parse(fs.readFileSync(marker, "utf8")) : {};
+  return { collabUi: setting.collabUi === true, testRelay: setting.collabUi === true && setting.testRelay === true };
+}
+
 async function caseRelayOwnerSetup(target) {
   const tag = target.name + " relay owner setup";
   const secret = crypto.randomBytes(32).toString("base64url");
   const userDataDir = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-relay-"));
-  const marker = path.join(DESKTOP_DIR, ".build", "collaboration.json");
-  const enabled = target.kind === "dev" ? fs.existsSync(marker) && JSON.parse(fs.readFileSync(marker, "utf8")).collabUi : target.variant === "test";
+  const { collabUi: enabled, testRelay } = collaborationBuild(target);
   let authenticated = 0;
   const relay = http.createServer((request, response) => {
     const allowed = request.method === "GET" && request.url === "/api/status" && request.headers.authorization === "Bearer " + secret;
@@ -2916,6 +2922,12 @@ async function caseRelayOwnerSetup(target) {
       record(tag + ": submitted the setup form", false);
       return;
     }
+    if (!testRelay) {
+      await poll(setup, "document.querySelector('#feedback').textContent === 'Enter an HTTPS relay address.'");
+      record(tag + ": a release build refuses the loopback test relay",
+        !fs.existsSync(path.join(userDataDir, "relay-owner.enc")) && authenticated === 0);
+      return;
+    }
     await poll(app.cdp, "document.querySelector('#settings-collaboration-address')?.textContent.includes(" + JSON.stringify(address) + ")");
     const encrypted = fs.readFileSync(path.join(userDataDir, "relay-owner.enc"));
     record(tag + ": the OS key store encrypted the saved settings", !encrypted.includes(secret) && !encrypted.includes(address));
@@ -2938,11 +2950,7 @@ async function caseRelayOwnerSetup(target) {
 
 async function caseShareScript(target, fixturesDir) {
   const tag = target.name + " sharing a script";
-  const marker = path.join(DESKTOP_DIR, ".build", "collaboration.json");
-  const enabled = target.kind === "dev"
-    ? fs.existsSync(marker) && JSON.parse(fs.readFileSync(marker, "utf8")).collabUi
-    : target.variant === "test";
-  if (!enabled) return;
+  if (!collaborationBuild(target).testRelay) return;
   const fixture = writeFixture(fixturesDir, "share-original.splitpage", "Sharing fixture", [["Original visual", "Original narration"]]);
   const original = fs.readFileSync(fixture);
   const data = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-share-relay-"));
@@ -3408,11 +3416,7 @@ async function caseShareScript(target, fixturesDir) {
 
 async function caseSharedTabRestore(target, fixturesDir) {
   const tag = target.name + " sharing a script: tab restore";
-  const marker = path.join(DESKTOP_DIR, ".build", "collaboration.json");
-  const enabled = target.kind === "dev"
-    ? fs.existsSync(marker) && JSON.parse(fs.readFileSync(marker, "utf8")).collabUi
-    : target.variant === "test";
-  if (!enabled) return;
+  if (!collaborationBuild(target).testRelay) return;
   const fixture = writeFixture(fixturesDir, "share-original.splitpage", "Sharing fixture", [["Original visual", "Original narration"]]);
   const data = fs.mkdtempSync(path.join(os.tmpdir(), "splitpage-smoke-share-relay-"));
   const secret = crypto.randomBytes(32).toString("base64url");

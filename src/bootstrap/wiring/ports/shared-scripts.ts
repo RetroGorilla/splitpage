@@ -4,6 +4,8 @@ import { createSharedScriptCatalogue } from "../../../application/collaboration/
 import { sharedScriptKey } from "../../../../shared/shared-script.ts";
 import type { SharedScriptCatalogueEntry } from "../../../../shared/shared-script.ts";
 
+declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
+
 export function browserSharedCatalogue() {
   return createSharedScriptCatalogue(createBrowserSharedCatalogue(), Date.now);
 }
@@ -11,7 +13,9 @@ export function browserSharedCatalogue() {
 export async function browserScriptsOnThisDevice(): Promise<SharedScriptCatalogueEntry[]> {
   if (desktopPort()) return [];
   const relay = new URL(location.origin);
-  if (relay.protocol !== "https:" && !(relay.protocol === "http:" && relay.hostname === "127.0.0.1")) return [];
+  const testRelay = typeof SPLITPAGE_TEST_HOOKS !== "undefined" && SPLITPAGE_TEST_HOOKS
+    && relay.protocol === "http:" && relay.hostname === "127.0.0.1";
+  if (relay.protocol !== "https:" && !testRelay) return [];
   relay.protocol = relay.protocol === "https:" ? "wss:" : "ws:";
   return (await browserSharedCatalogue().list()).filter(entry => entry.relayUrl === relay.href);
 }

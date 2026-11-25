@@ -3,7 +3,7 @@ import { resolve, dirname } from "node:path";
 import { fileURLToPath } from "node:url";
 import { build, buildSw } from "../build.mjs";
 import { writeDesktopBuild } from "../tools/build-preload.mjs";
-import { helpMarkdown, leakedCollaboration, leakedHooks } from "../tools/release-hooks.mjs";
+import { leakedHooks, missingCollaboration, testRelayAllowances } from "../tools/release-hooks.mjs";
 
 const __dirname = dirname(fileURLToPath(import.meta.url));
 const REPO_ROOT = resolve(__dirname, "..");
@@ -41,12 +41,10 @@ await fs.rm(DESKTOP_BUILD_DIR, { recursive: true, force: true });
 await fs.rm(DESKTOP_CODE_DIR, { recursive: true, force: true });
 await fs.mkdir(STAGE_DIR, { recursive: true });
 await fs.mkdir(DESKTOP_CODE_DIR, { recursive: true });
-if (TEST_BUILD) {
-  for (const file of ["relay-owner.ts", "relay-setup-window.ts"]) {
-    await fs.copyFile(resolve(__dirname, file), resolve(DESKTOP_CODE_DIR, file));
-  }
+for (const file of ["relay-owner.ts", "relay-setup-window.ts"]) {
+  await fs.copyFile(resolve(__dirname, file), resolve(DESKTOP_CODE_DIR, file));
 }
-writeDesktopBuild(DESKTOP_BUILD_DIR, TEST_BUILD, DESKTOP_CODE_DIR);
+writeDesktopBuild(DESKTOP_BUILD_DIR, true, TEST_BUILD, DESKTOP_CODE_DIR);
 await fs.writeFile(resolve(STAGE_DIR, "index.html"), html);
 await fs.writeFile(resolve(STAGE_DIR, "sw.js"), buildSw());
 
@@ -61,9 +59,7 @@ const files = [
 for (const [from, filename] of files) {
   const src = resolve(REPO_ROOT, from);
   const dst = resolve(STAGE_DIR, filename);
-  const data = from === "docs/help.md"
-    ? Buffer.from(helpMarkdown(await fs.readFile(src, "utf8"), TEST_BUILD))
-    : await fs.readFile(src);
+  const data = await fs.readFile(src);
   await fs.writeFile(dst, data);
   console.log(`  ${filename} (${data.length} bytes)`);
 }
@@ -75,7 +71,8 @@ if (TEST_BUILD) {
 } else if (leaked.length) {
   throw new Error(`The staged index.html exposes test hooks (${leaked.join(", ")}); stage a release build (node build.mjs, no --test).`);
 }
-if (!TEST_BUILD && leakedCollaboration(html).length) throw new Error("The staged release exposes collaboration.");
+if (missingCollaboration(html).length) throw new Error("The staged build is missing collaboration.");
+if (!TEST_BUILD && testRelayAllowances(html).length) throw new Error("The staged release allows the test relay.");
 
 const tabstripDir = resolve(STAGE_DIR, "tabstrip");
 await fs.mkdir(tabstripDir, { recursive: true });

@@ -5,6 +5,7 @@ import { startupReady } from "../../application/startup-signal.ts";
 import { waitDuringLifetime } from "../startup/page-lifetime.ts";
 import { captureDocumentOpeningLifetime } from "./transition-owners.ts";
 import { notices } from "./ports/effects.ts";
+import { relaySocketUrl } from "./relay-address.ts";
 import { RETAINED_SHARED_COPY_UNAVAILABLE } from "./retained-shared-script.ts";
 import type { RetainedSharedScript } from "./retained-shared-script.ts";
 import type { SharedSwitchOutcome } from "./shared-session.ts";
@@ -32,6 +33,16 @@ export async function resumeDesktopReference(
   }
 }
 
+export async function enterSavedReference(
+  { deployment, script, address }: DesktopSharedScriptReference,
+  enter: (entry: RetainedSharedScript) => Promise<SharedSwitchOutcome>,
+  settled: () => Promise<AbortSignal>
+): Promise<SharedSwitchOutcome> {
+  const relayUrl = relaySocketUrl(address);
+  if (!relayUrl) return { ok: false, reason: RETAINED_SHARED_COPY_UNAVAILABLE };
+  return enter({ deployment, script, relayUrl, signal: await settled() });
+}
+
 function startResume(enter: (entry: RetainedSharedScript) => Promise<SharedSwitchOutcome>): () => void {
   const desktop = desktopPort();
   const reference = desktop?.sharedReference;
@@ -39,19 +50,16 @@ function startResume(enter: (entry: RetainedSharedScript) => Promise<SharedSwitc
   if (!reference || !ready) return () => {};
   const lifetime = new AbortController();
   const { signal } = lifetime;
-  void resumeDesktopReference(reference, async ({ deployment, script, address }) => {
+  const settled = async () => {
     await waitDuringLifetime(ready, signal);
     const opening = captureDocumentOpeningLifetime();
     const entrySignal = AbortSignal.any([signal, opening.signal]);
     await waitDuringLifetime(opening.settled, entrySignal);
     entrySignal.throwIfAborted();
-    let endpoint: URL;
-    try { endpoint = new URL(address); }
-    catch { return { ok: false, reason: RETAINED_SHARED_COPY_UNAVAILABLE }; }
-    if (endpoint.protocol !== "https:" && endpoint.protocol !== "http:") return { ok: false, reason: RETAINED_SHARED_COPY_UNAVAILABLE };
-    endpoint.protocol = endpoint.protocol === "https:" ? "wss:" : "ws:";
-    return enter({ deployment, script, relayUrl: endpoint.href, signal: entrySignal });
-  }, signal, desktop.launchIntent.type === "open-shared").then(outcome => {
+    return entrySignal;
+  };
+  void resumeDesktopReference(reference, saved => enterSavedReference(saved, enter, settled),
+    signal, desktop.launchIntent.type === "open-shared").then(outcome => {
     if (outcome?.ok === false && !signal.aborted) notices.show("Could not reopen the local shared script.", "warn", true);
   }, error => { if (!signal.aborted) console.error(error); });
   return () => { lifetime.abort(); };

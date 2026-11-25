@@ -70,7 +70,8 @@ test("the relay serves the shell and the gated app replaces the invite history e
   assert.ok(page.window.location.href === origin + path);
   assert.equal(page.window.history.length, 1);
   assert.equal(page.window.history.state, null);
-  assert.equal(build(false).includes('url.searchParams.has("join")'), false);
+  assert.equal(build(false).includes('url.searchParams.has("join")'), true);
+  assert.equal(build(false, false).includes('url.searchParams.has("join")'), false);
   const relay = origin.replace(/^http/, "ws");
   assert.deepEqual(await readInvitationSnapshot(relay, scriptId, token, t.signal), state);
   const wrongToken = randomBytes(32).toString("base64url");

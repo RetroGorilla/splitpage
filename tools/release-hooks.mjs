@@ -22,8 +22,14 @@ export function hookNames(text) {
   return [...new Set(text.match(HOOK_NAME) ?? [])].sort();
 }
 
+const TIMING_MARK = /measure:[A-Za-z0-9_-]+:(?:start|end)\b/g;
+
+export function timingMarkNames(text) {
+  return [...new Set(text.match(TIMING_MARK) ?? [])].sort();
+}
+
 export function leakedHooks(text) {
-  return [...hookNames(text).filter((name) => !STILL_IN_RELEASE.includes(name)), ...historyTestNames(text)].sort();
+  return [...hookNames(text).filter((name) => !STILL_IN_RELEASE.includes(name)), ...historyTestNames(text), ...timingMarkNames(text)].sort();
 }
 
 const COLLABORATION_MARKERS = [
@@ -45,4 +51,20 @@ const COLLABORATION_MARKERS = [
 
 export function leakedCollaboration(text) {
   return COLLABORATION_MARKERS.filter(marker => text.includes(marker));
+}
+
+const RELEASE_COLLABORATION = [
+  "settings-collaboration", "Set up relay…", "splitpageInvitation", 'url.searchParams.has("join")',
+  "share-script-modal", "join-script-modal", "shared-pill", "shared-popover", "file-copy-banner",
+  "link-password-modal", "data-shared-history", "collaboration-announcements", 'id="help-collaboration"'
+];
+
+export function missingCollaboration(text) {
+  return RELEASE_COLLABORATION.filter(marker => !text.includes(marker));
+}
+
+const TEST_RELAY_MARKERS = ["ws://127.0.0.1:*", "127\\.0\\.0\\.1:[0-9]+", 'hostname==="127.0.0.1"'];
+
+export function testRelayAllowances(text) {
+  return TEST_RELAY_MARKERS.filter(marker => text.includes(marker));
 }

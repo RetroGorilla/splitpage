@@ -26,6 +26,7 @@ import type { NativeMembershipRecord } from "../../../shared/native-replica.d.ts
 import { keepLandedFile, openSharedFileCopy } from "./shared-file-copy.ts";
 import type { FileCopyWritten } from "../../application/collaboration/file-copy.ts";
 import { activateSharedHistory, createSharedHistory } from "./shared-history.ts";
+import { relayHttpOrigin } from "./relay-address.ts";
 
 declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
 
@@ -221,12 +222,9 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
   const preparePicturesOnCopy = !!entry.pictureOrigin && !entry.relayUrl;
   let pictureOrigin = entry.pictureOrigin;
   if (entry.relayUrl) {
-    try {
-      const endpoint = new URL(entry.relayUrl);
-      if (endpoint.protocol !== "ws:" && endpoint.protocol !== "wss:") return { ok: false, reason: SHARED_ENTER_FAILED };
-      endpoint.protocol = endpoint.protocol === "wss:" ? "https:" : "http:";
-      pictureOrigin = endpoint.origin;
-    } catch { return { ok: false, reason: SHARED_ENTER_FAILED }; }
+    const origin = relayHttpOrigin(entry.relayUrl);
+    if (!origin) return { ok: false, reason: SHARED_ENTER_FAILED };
+    pictureOrigin = origin;
   }
   const signals = [cancellation, entry.signal].filter(s => s !== undefined);
   const signal = signals.length ? AbortSignal.any(signals) : undefined;

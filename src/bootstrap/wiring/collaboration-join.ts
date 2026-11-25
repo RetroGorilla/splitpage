@@ -15,22 +15,17 @@ import { captureDocumentOpeningLifetime } from "./transition-owners.ts";
 import { holdDesktopDocumentPublication } from "./desktop-owners.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import { focusDesktopSharedScript } from "../../adapters/collab/native/desktop-local-store.ts";
+import { relayUrlAllowed } from "./relay-address.ts";
 
-declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 declare let splitpageInvitation: { readonly script: string; readonly token: string } | false | null;
 
 const SCRIPT_ID = /^[A-Za-z0-9_-]{1,64}(?![\s\S])/;
 const INVITATION = /^[A-Za-z0-9_-]{43}(?![\s\S])/;
 
-export function invitationOriginAllowed(address: string): boolean {
-  return address.startsWith("https://") || (typeof SPLITPAGE_TEST_HOOKS !== "undefined" && SPLITPAGE_TEST_HOOKS
-    && /^http:\/\/127\.0\.0\.1:[0-9]+$/.test(address));
-}
-
 function readLink(request: JoinRequest): { script: string; token: string; origin: string } | null {
   try {
     const url = new URL(request.kind === "paste" ? request.link.trim() : location.origin);
-    if (url.username || url.password || !invitationOriginAllowed(url.origin)) return null;
+    if (!relayUrlAllowed(url)) return null;
     if (request.kind === "browser") return request.invitation ? { ...request.invitation, origin: url.origin } : null;
     const [script, extra] = url.searchParams.getAll("join");
     const token = url.hash.slice(1);
