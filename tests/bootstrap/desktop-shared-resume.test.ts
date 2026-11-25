@@ -32,3 +32,14 @@ for (const [result, cleared] of [
     assert.deepEqual(calls, cleared ? [[], [null, saved]] : [[]]);
   });
 }
+
+test("a failed catalogue-based restore releases its tab reference even when the copy is temporarily unavailable", async () => {
+  const calls: unknown[][] = [];
+  const reference: NonNullable<DesktopPort["sharedReference"]> = async request => {
+    calls.push(request);
+    return request.length ? true : saved;
+  };
+  const outcome = await resumeDesktopReference(reference, async () => ({ ok: false, reason: "io" }), new AbortController().signal, true);
+  assert.deepEqual(outcome, { ok: false, reason: "io" });
+  assert.deepEqual(calls, [[], [null, saved]]);
+});

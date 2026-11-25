@@ -72,6 +72,7 @@ export function mountJoinDialog(ports: JoinDialogPorts, request?: Extract<JoinRe
     cancel.focus();
     const result = await ports.check(invite, signal);
     if (signal.aborted) return;
+    if (result.kind === "focused") { dispose(); return; }
     setBusy(false);
     if (result.kind === "failed") {
       fail(result.reason);

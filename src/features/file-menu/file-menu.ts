@@ -274,10 +274,12 @@ async function refreshRecents(focusFirst?: boolean) {
     sub.innerHTML = entries.slice(0, 10).map(function (r) {
       const title = r.title || r.name;
       const when = formatRecentWhen(r.at);
-      return '<button type="button" role="menuitem" class="mi" data-recent-id="' + escapeHtml(r.fileId) + '" title="' + escapeHtml(r.name) + '">' +
+      return '<button type="button" role="menuitem" class="mi" data-recent-id="' + escapeHtml(r.fileId) + '" title="' + escapeHtml(r.name) + '"' +
+        (r.shared ? ' data-shared' : '') + '>' +
         '<svg class="mi-icon" aria-hidden="true"><use href="#i-file"/></svg>' +
         '<span class="mi-text"><span class="mi-label">' + escapeHtml(title) + '</span>' +
-        '<span class="mi-why">' + escapeHtml(r.name) + (when ? " · " + escapeHtml(when) : "") + '</span></span></button>';
+        '<span class="mi-why">' + (r.shared ? '<span class="recent-shared-badge">Shared</span>' : escapeHtml(r.name)) +
+          (when ? " · " + escapeHtml(when) : "") + '</span></span></button>';
     }).join("");
   }
   if (focusFirst) {
@@ -286,17 +288,17 @@ async function refreshRecents(focusFirst?: boolean) {
   }
 }
 
-function openRecentFile(fileId: string | null): Promise<void> {
+function openRecentFile(fileId: string | null, shared: boolean): Promise<void> {
   if (!fileId || !recentsSupported() || (ports as FileMenuDropdownPorts).entry.before()) return Promise.resolve();
-  return (ports as FileMenuDropdownPorts).openingActivity.track(() => readRecentFile(fileId));
+  return (ports as FileMenuDropdownPorts).openingActivity.track(() => readRecentFile(fileId, shared));
 }
 
-async function readRecentFile(fileId: string) {
+async function readRecentFile(fileId: string, shared: boolean) {
   const mounted = activeMount;
   let handle;
   let file;
   try {
-    const r = await (ports as FileMenuDropdownPorts).recents.routeOpen({ kind: "file", fileId: fileId });
+    const r = await (ports as FileMenuDropdownPorts).recents.routeOpen({ kind: shared ? "shared" : "file", fileId });
     if (activeMount !== mounted) return;
     if (!r || r.where !== "this-tab") return;
     const entry = await (ports as FileMenuDropdownPorts).recents.read(fileId);
@@ -305,7 +307,8 @@ async function readRecentFile(fileId: string) {
     file = await handle.getFile();
   } catch (e) {
     if (activeMount !== mounted) return;
-    (ports as FileMenuDropdownPorts).notices.show("That file isn't there any more — it may have been moved or deleted.", "warn");
+    (ports as FileMenuDropdownPorts).notices.show(shared ? "Could not reopen this shared script. Check that its local copy is still on this device." :
+      "That file isn't there any more — it may have been moved or deleted.", "warn");
     return;
   }
   if (activeMount !== mounted) return;
@@ -417,7 +420,7 @@ function wireMenu(holdTestHook: Parameters<typeof exposeTestHook>[2]) {
       if (!item) return;
       e.stopPropagation();
       toggleFileMenu(false);
-      openRecentFile(item.getAttribute("data-recent-id"));
+      openRecentFile(item.getAttribute("data-recent-id"), item.hasAttribute("data-shared"));
     });
   }
   listen(window, "resize", function () { if (fileMenuOpen()) positionMenu(); });

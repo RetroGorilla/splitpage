@@ -28,18 +28,6 @@ async function freePort() {
   return port;
 }
 
-function retainedEntryOpened(entry) {
-  const browser = globalThis;
-  browser.retainedAttempt ??= browser.__sharedTest.enterRetained(entry).then(result => {
-    if (!result.ok && ["opening-pending", "startup-pending"].includes(result.reason)) {
-      delete browser.retainedAttempt;
-    } else {
-      browser.retainedOpened = result.ok;
-    }
-  });
-  return browser.retainedOpened === true;
-}
-
 async function membershipAbsent(scope) {
   const idb = globalThis.indexedDB;
   const name = "splitpage-native-replica-log";
@@ -50,8 +38,8 @@ async function membershipAbsent(scope) {
   });
   const db = await read(idb.open(name));
   try {
-    const transaction = db.transaction(["memberships", "invitations", "replicas", "journals"], "readonly");
-    const records = await Promise.all(["memberships", "invitations"].map(store => read(transaction.objectStore(store).count(scope))));
+    const transaction = db.transaction(["memberships", "invitations", "replicas", "journals", "shared-script-catalogue"], "readonly");
+    const records = await Promise.all(["memberships", "invitations", "shared-script-catalogue"].map(store => read(transaction.objectStore(store).count(scope))));
     const replicas = await read(transaction.objectStore("replicas").count(IDBKeyRange.bound([scope, 0], [scope, Number.MAX_SAFE_INTEGER])));
     const journal = await read(transaction.objectStore("journals").count(scope));
     return records.every(count => count === 0) && replicas === 0 && journal === 0;
@@ -185,7 +173,6 @@ for (const variant of ["accepted", "refused", "deleted", "pictures", "replacemen
   await writeFile(join(fixture, "invite.html"), `<!doctype html><title>Invitation fixture</title><a id="invite" href="${target}#${token}">Open invitation</a>`);
   const exactUrl = `location.href===${JSON.stringify(target)}`;
   const seeded = 'window.__sharedTest?.read().app?.rows[0]?.audioText==="word"';
-  const entry = { deployment, script };
   const suite = join(kit.directory, "join.txt");
   const pictureUrl = index => origin + "/api/scripts/" + script + "/pictures/" + pictures[index].ref.sha256;
   const resources = index => `performance.getEntriesByName(${JSON.stringify(pictureUrl(index))})`;
@@ -290,10 +277,14 @@ for (const variant of ["accepted", "refused", "deleted", "pictures", "replacemen
     "expect history.state===null",
     ...(accepted ? [
       "eval location.reload();true",
-      "wait " + exactUrl + "&&performance.getEntriesByType('navigation')[0]?.type==='reload'&&!!window.__sharedTest&&!(" + seeded + ")",
+      "wait " + exactUrl + "&&performance.getEntriesByType('navigation')[0]?.type==='reload'&&(" + seeded + ")",
       "expect !document.querySelector('#join-script-modal')",
-      "wait " + browserExpression(retainedEntryOpened, entry),
-      "expect " + seeded,
+      "eval window.__newTab.open();true",
+      "wait document.querySelector('#newtab-recents-label')?.textContent==='Shared scripts on this device'",
+      "expect document.querySelector('#newtab-recents-list')?.textContent.includes('Your browser can clear local copies.')",
+      "expect document.querySelector('#newtab-recents-list')?.textContent.includes('you need to be able to load this app')",
+      "expect !!document.querySelector('#newtab-recents-list button[data-shared]')",
+      "eval window.__newTab.isOpen() && document.querySelector('[data-newtab-action=dismiss]').click();true",
       ...leave,
       "wait !document.querySelector('#leave-script-modal')",
       "expect " + browserExpression(membershipAbsent, deployment + "/" + script)

@@ -1,11 +1,24 @@
 "use strict";
 
 import type { DesktopIpcEvent, DesktopTabStripIpcDependencies, DesktopRegisterIpcGroup } from "./ipc-boundaries.d.ts";
+import type { DesktopMainTab } from "./main-types.d.ts";
 
 function createTabStripIpc({
   tabStripWindowOf, shellStateForWindow, tabs, createTab, activateTab, requestCloseTab, reorderTab,
-  moveTabToWindow, tearOffToNewWindow
+  moveTabToWindow, tearOffToNewWindow, recents, focusShared
 }: DesktopTabStripIpcDependencies) {
+  function routeSharedRecent(tab: DesktopMainTab, fileId: string) {
+    const entry = recents.findSharedRecent(fileId);
+    if (!entry) return null;
+    if (focusShared(entry)) return { where: "other-tab" } as const;
+    const { deployment, script } = entry;
+    const opened = createTab(tab.windowId, {
+      source: { kind: "shared", deployment, script },
+      launchIntent: { type: "open-shared" }
+    });
+    return opened ? { where: "new-tab" } as const : null;
+  }
+
   function registerTabStripIpc({ ipcHandle, ipcOn, ipcOnSync }: Parameters<DesktopRegisterIpcGroup>[0]) {
     ipcOnSync("splitpage:tabstrip-window-id-sync", (event) => {
       const w = tabStripWindowOf(event);
@@ -51,7 +64,7 @@ function createTabStripIpc({
     });
   }
 
-  return { registerTabStripIpc };
+  return { registerTabStripIpc, routeSharedRecent };
 }
 
 export type { createTabStripIpc };

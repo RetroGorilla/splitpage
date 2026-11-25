@@ -176,11 +176,13 @@ function createFileIpc({
 
     ipcHandle("splitpage:recents-remove", async (event, fileId) => {
       if (recents.removeByFileId(fileId)) await recents.persist();
+      else await recents.hideSharedRecents(fileId);
       return recents.forRenderer();
     });
 
     ipcHandle("splitpage:recents-clear", async () => {
       if (recents.clear()) await recents.persist();
+      await recents.hideSharedRecents();
       return recents.forRenderer();
     });
 

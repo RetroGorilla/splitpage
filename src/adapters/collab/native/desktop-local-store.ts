@@ -1,6 +1,17 @@
 import type { NativeMembershipRecord, NativeReplicaInvoke, NativeReplicaReply } from "../../../../shared/native-replica.d.ts";
 import { attachNativeLocalStore, nativeLocalStoreFailure } from "./local-store.ts";
 import type { NativeLocalStore } from "./local-store.ts";
+import { sharedScriptKey } from "../../../../shared/shared-script.ts";
+import type { SharedScriptCatalogueEntry } from "../../../../shared/shared-script.ts";
+
+export async function noteDesktopSharedScript(invoke: NativeReplicaInvoke, entry: SharedScriptCatalogueEntry): Promise<void> {
+  const result = await invoke(["note-shared", sharedScriptKey(entry), entry]);
+  if (result.kind !== "stored") throw new Error("Could not remember the shared script.");
+}
+
+export async function focusDesktopSharedScript(invoke: NativeReplicaInvoke, deployment: string, script: string): Promise<boolean> {
+  return (await invoke(["focus-shared", sharedScriptKey({ deployment, script })])).kind === "stored";
+}
 
 export function createDesktopNativeLocalStore(invoke: NativeReplicaInvoke,
   manage?: (operation: string, name: string, lease: string, address: string) => Promise<NativeReplicaReply>): NativeLocalStore {
