@@ -5,10 +5,16 @@ export function relayOriginAllowed(origin: string): boolean {
     && /^http:\/\/127\.0\.0\.1:[0-9]+$/.test(origin));
 }
 
+export function relayUrlAllowed(url: URL): boolean {
+  if (url.username || url.password || (url.protocol !== "https:" && url.protocol !== "http:")) return false;
+  // why: URL parsing drops a default :80, which the relay owner stores explicitly for a loopback test relay
+  return relayOriginAllowed(url.port || url.protocol === "https:" ? url.origin : url.origin + ":80");
+}
+
 export function relaySocketUrl(address: string): string | null {
   try {
     const endpoint = new URL(address);
-    if (endpoint.username || endpoint.password || !relayOriginAllowed(endpoint.origin)) return null;
+    if (!relayUrlAllowed(endpoint)) return null;
     const socket = new URL("/", endpoint.origin);
     socket.protocol = socket.protocol === "https:" ? "wss:" : "ws:";
     return socket.href;
@@ -18,8 +24,8 @@ export function relaySocketUrl(address: string): string | null {
 export function relayHttpOrigin(relayUrl: string): string | null {
   try {
     const endpoint = new URL(relayUrl);
-    if (endpoint.username || endpoint.password || (endpoint.protocol !== "wss:" && endpoint.protocol !== "ws:")) return null;
+    if (endpoint.protocol !== "wss:" && endpoint.protocol !== "ws:") return null;
     endpoint.protocol = endpoint.protocol === "wss:" ? "https:" : "http:";
-    return relayOriginAllowed(endpoint.origin) ? endpoint.origin : null;
+    return relayUrlAllowed(endpoint) ? endpoint.origin : null;
   } catch { return null; }
 }
