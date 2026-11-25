@@ -1,6 +1,6 @@
 import type { LocalFileData, LocalFileHandle } from "../../application/files/local-file-access.ts";
 import type { DesktopDocumentStateOwner } from "../../application/desktop/document-state.ts";
-import type { DesktopHandOff, DesktopOpenedFile, DesktopShell } from "../../application/desktop/shell.ts";
+import type { DesktopDraftFlushRequest, DesktopHandOff, DesktopOpenedFile, DesktopShell } from "../../application/desktop/shell.ts";
 import type { NoticePort } from "../../application/effects/ports.ts";
 import type { DocumentPlace } from "../../application/location/document-place.ts";
 import type { SaveState } from "../../application/save/save-state.ts";
@@ -38,7 +38,7 @@ export interface DesktopPorts {
   readonly documents: { readonly open: (opening: DesktopOpening) => Promise<unknown> };
   readonly saves: Pick<SaveState, "unsaved"> & { readonly save: () => Promise<unknown> };
   readonly startup: StartupSignal;
-  readonly flushDraft: (request: { readonly keep: boolean }) => unknown;
+  readonly flushDraft: (request: DesktopDraftFlushRequest) => unknown;
   readonly reassignDocId: (toId: string, message: unknown) => boolean;
   readonly documentState: Pick<DesktopDocumentStateOwner, "notify" | "settled" | "awaitHanded">;
   readonly menuCommands: { readonly run: (command: string) => boolean };

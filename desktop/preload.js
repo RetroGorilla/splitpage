@@ -38,8 +38,8 @@ if (location.origin === "splitpage://app") {
     bundleCarryCallback && payload && bundleCarryCallback(payload);
   }), receive("splitpage:reassign-doc-id", (_event, payload) => {
     reassignDocIdCallback && reassignDocIdCallback(payload);
-  }), receive("splitpage:draft-flush", (_event, reqId, keep) => {
-    const reply = (result) => {
+  }), receive("splitpage:draft-flush", (_event, ...args) => {
+    const [reqId, keep] = args, reply = (result) => {
       try {
         send("splitpage:draft-flushed", reqId, result);
       } catch {
@@ -49,7 +49,9 @@ if (location.origin === "splitpage://app") {
       reply({ ok: !1, code: "NO_TAB" });
       return;
     }
-    Promise.resolve().then(() => draftFlushCallback({ keep: keep === !0 })).then(
+    Promise.resolve().then(() => draftFlushCallback({
+      keep: keep === !0
+    })).then(
       (result) => reply(result && typeof result == "object" ? result : { ok: !0 }),
       () => reply({ ok: !1 })
     );

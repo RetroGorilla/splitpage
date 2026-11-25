@@ -28,6 +28,7 @@ import { localFileMenuControls, localFilesOwner } from "./local-files.ts";
 import { LONG_DEMO } from "../../starters/index.ts";
 import { documentEntry } from "./ports/document-entry.ts";
 import { collaborationMenuItems } from "./collaboration.ts";
+import { sharedFileCopy } from "./shared-file-copy.ts";
 
 declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
 
@@ -59,6 +60,7 @@ export function mountFileMenuDropdownFeature(): FileMenuDropdownMount {
       syncIdentity: () => { documentIdentity.syncDocIdentity(); },
       longDemo: LONG_DEMO,
       collaboration,
+      ...(typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI && { sharedFileCopy }),
       collaborationItems: collaborationMenuItems()
     };
     return mountFileMenuDropdown(ports);

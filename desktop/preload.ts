@@ -99,13 +99,16 @@ if (location.origin === "splitpage://app") {
   receive("splitpage:reassign-doc-id", (_event, payload) => {
     if (reassignDocIdCallback) reassignDocIdCallback(payload);
   });
-  receive("splitpage:draft-flush", (_event, reqId, keep) => {
+  receive("splitpage:draft-flush", (_event, ...args) => {
+    const [reqId, keep] = args;
     const reply = (result: DesktopIpcArgs<"splitpage:draft-flushed">[1]) => {
       try { send("splitpage:draft-flushed", reqId, result); } catch (_) { }
     };
     if (typeof draftFlushCallback !== "function") { reply({ ok: false, code: "NO_TAB" }); return; }
     Promise.resolve()
-      .then(() => (draftFlushCallback as NonNullable<typeof draftFlushCallback>)({ keep: keep === true }))
+      .then(() => (draftFlushCallback as NonNullable<typeof draftFlushCallback>)({
+        keep: keep === true, ...(SPLITPAGE_COLLAB_UI && args[2] && { fileCopyMode: args[2] })
+      }))
       .then(
         (result) => reply(result && typeof result === "object" ? result : { ok: true }),
         () => reply({ ok: false })

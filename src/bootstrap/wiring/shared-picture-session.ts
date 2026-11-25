@@ -11,7 +11,8 @@ export function loadSharedExportPictures(hashes: readonly string[]) {
   return loadPictures?.(hashes);
 }
 
-export function bindSharedPictures(copy: Copy, origin: string, script: string, token: string, cancel?: AbortSignal, stallMs = 30_000) {
+export function bindSharedPictures(copy: Copy, origin: string, script: string, token: string, cancel?: AbortSignal, stallMs = 30_000,
+  available?: () => void) {
   const session = copy.session;
   let required: readonly string[] = [];
   let changed: (() => void) | undefined;
@@ -31,7 +32,7 @@ export function bindSharedPictures(copy: Copy, origin: string, script: string, t
   const pictures = startSharedPictures(sharedPictureHttp(origin, script, token), blobStore, () => {
     if (typeof document !== "undefined") repaintSharedPictures();
     changed?.();
-  }, progress);
+  }, progress, available);
 
   function scan() {
     clearTimeout(scheduled);

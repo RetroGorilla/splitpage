@@ -274,7 +274,7 @@ export type DesktopChannelRow = {
     { direction: "sendSync"; refusal: DesktopIpcResult<C> });
 }[keyof DesktopIpcContract];
 
-export type DesktopRouteWhere = "this-tab" | "other-tab" | "new-tab";
+export type DesktopRouteWhere = "this-tab" | "other-tab" | "new-tab" | "cancelled" | "already-open";
 export type DesktopWireHistoryCopy = { ok: true; copied: number; code?: undefined } |
   { ok: false; copied: number; code: string };
 
@@ -314,7 +314,7 @@ export interface DesktopIpcContract {
   "splitpage:relay-owner-clear": DesktopChannelCall<[], boolean>;
   "splitpage:relay-owner-share-create": DesktopChannelCall<Parameters<ShareScriptControls["create"]>, ShareScriptCreation>;
   "splitpage:relay-owner-share-abandon": DesktopChannelCall<[creationId: string], boolean>;
-  "splitpage:relay-owner-resume": DesktopChannelCall<[reference: [] | [DesktopSharedScriptReference | null] | [null, DesktopSharedScriptReference]], DesktopSharedScriptReference | null | boolean>;
+  "splitpage:relay-owner-resume": DesktopChannelCall<[reference: [] | [DesktopSharedScriptReference | null] | [null, DesktopSharedScriptReference, "unavailable"?]], DesktopSharedScriptReference | null | boolean>;
   "splitpage:relay-owner-sharing": DesktopChannelCall<[operation: string, name: string, lease: string, address: string, password?: string], NativeReplicaReply>;
   "splitpage:relay-owner-share-complete": DesktopChannelCall<[creationId: string], boolean>;
   "splitpage:relay-setup-save": DesktopChannelCall<[address: string, secret: string], RelaySetupSave>;
@@ -380,7 +380,7 @@ export interface DesktopIpcContract {
   "splitpage:menu-command": DesktopChannelCall<[string], void>;
   "splitpage:restore-notice": DesktopChannelCall<[{ skipped: { name: string; reason: string }[] }], void>;
   "splitpage:reassign-doc-id": DesktopChannelCall<[{ toId: string; fromId: string; otherTitle: string }], void>;
-  "splitpage:draft-flush": DesktopChannelCall<[number, boolean?], void>;
+  "splitpage:draft-flush": DesktopChannelCall<[number, boolean?, ("check" | "new")?], void>;
   "splitpage:voice-event": DesktopChannelCall<[DesktopWireVoiceEvent], void>;
   "splitpage:tabstrip-window-id-sync": DesktopChannelCall<[], string | null>;
   "splitpage:tabstrip-get-state": DesktopChannelCall<[], DesktopWireShellState | null>;

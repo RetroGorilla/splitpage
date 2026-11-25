@@ -3,6 +3,7 @@ import fs from "node:fs";
 import os from "node:os";
 import path from "node:path";
 import { createRequire } from "node:module";
+import { EventEmitter } from "node:events";
 import { fileURLToPath } from "node:url";
 
 const require = createRequire(import.meta.url);
@@ -43,6 +44,82 @@ test("cancelling a close after a failed shared flush leaves the next successful 
   assert.equal(prompts, 1);
   assert.deepEqual(destroyed, [tab.id]);
 });
+
+test("quit flushes shared tabs without a file copy in parallel", async () => {
+  const ids = ["first", "second", "with-file"];
+  const tabs = new Map(ids.map(id => [id, { id, windowId: "window", source: { kind: "shared" }, sharedAttached: true }]));
+  const window = { tabIds: ids, win: { isDestroyed: () => false } };
+  const app = new EventEmitter();
+  const first = Promise.withResolvers();
+  const second = Promise.withResolvers();
+  const calls = [];
+  let exited = false;
+  app.quit = () => {
+    let prevented = false;
+    app.emit("before-quit", { preventDefault() { prevented = true; } });
+    exited = !prevented;
+  };
+  createCloseQuit({
+    app, tabs, windowsById: new Map([["window", window]]), liveWindows: () => [window],
+    tabHasFile: () => false, tabIsUnsaved: () => false, bundleCopies: () => undefined,
+    hasSharedFileCopy: tab => tab.id === "with-file",
+    async requestDraftFlush(tab, _budget, _keep, mode) {
+      calls.push([tab.id, mode]);
+      if (tab.id === "first") await first.promise;
+      if (tab.id === "second") await second.promise;
+      return { ok: true };
+    }
+  }).registerQuitHandlers();
+  app.quit();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(calls, [["first", undefined], ["second", undefined]]);
+  first.resolve();
+  second.resolve();
+  await new Promise(resolve => setImmediate(resolve));
+  assert.deepEqual(calls.at(-1), ["with-file", "check"]);
+  assert.equal(exited, true);
+});
+
+for (const problem of ["changed", "unavailable", "missing"]) {
+  for (const choice of ["retry", "new", "continue", "cancel"]) {
+    test(`quit waits for the ${choice} choice when a file copy is ${problem}`, async () => {
+      const tab = { id: "shared", windowId: "window", source: { kind: "shared" }, sharedAttached: true, dirty: false };
+      const window = { tabIds: [tab.id], win: { isDestroyed: () => false } };
+      const tabs = new Map([[tab.id, tab]]);
+      const app = new EventEmitter();
+      const attempts = [];
+      let asked = 0, exited = false;
+      app.quit = () => {
+        let prevented = false;
+        app.emit("before-quit", { preventDefault() { prevented = true; } });
+        exited = !prevented;
+      };
+      const closes = createCloseQuit({
+        app, tabs, windowsById: new Map([[tab.windowId, window]]), liveWindows: () => [window],
+        tabHasFile: () => false, tabIsUnsaved: () => false, bundleCopies: () => undefined,
+        hasSharedFileCopy: () => true,
+        async requestDraftFlush(_tab, _budget, _keep, mode) {
+          attempts.push(mode);
+          return attempts.length === 1 ? { ok: true, fileCopyProblem: problem } : { ok: true };
+        },
+        async chooseSharedFileCopy(forTab, failed, verb) {
+          assert.deepEqual([forTab, failed, verb, exited], [tab, problem, "Quit", false]);
+          asked++;
+          return choice;
+        },
+        draftsDiscardForUserDecision() { assert.fail("Quit discards shared work"); },
+        draftsDiscardClean() { assert.fail("Quit discards the shared replica"); }
+      });
+      closes.registerQuitHandlers();
+      app.quit();
+      await new Promise(resolve => setImmediate(resolve));
+      assert.equal(asked, 1);
+      assert.equal(exited, choice !== "cancel");
+      assert.deepEqual(attempts, choice === "retry" ? ["check", "check"] : choice === "new" ? ["check", "new"] : ["check"]);
+      assert.equal(tabs.get(tab.id), tab);
+    });
+  }
+}
 
 test("a file still in place is not gone", async () => {
   assert.equal(await checkFileGone(stat, file, 2000), false);

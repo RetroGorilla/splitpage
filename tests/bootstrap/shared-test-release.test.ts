@@ -18,7 +18,8 @@ for (const enabled of [false, true]) test("shared hook build gate: release has n
     "splitpage-native-replica-log", "shared-copy-erase-failed", "invitationConnected", "invitationSettled", "Splitpage-Deployment",
     "Could not reopen the local shared script.", "share-script", "share-script-modal", "Uploading script", "shared-pill", "shared-popover", "sharing-and-people", "leave-shared-script",
     "join-script-modal", "Join a shared script…", "leave-script-modal",
-    "Shared scripts on this device", "note-shared", "focus-shared", "open-shared"]) {
+    "Shared scripts on this device", "note-shared", "focus-shared", "open-shared",
+    "file-copy-banner", "file-copy-status", "file-copy-write", "file-copy-stop", "file-copy-choice"]) {
     assert.equal(code.includes(text), enabled, text);
   }
   for (const text of ["ownershipScans", "appliedUpdates", "lateJoiner", "joinerType", "joinerUndo",

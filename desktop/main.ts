@@ -12,6 +12,10 @@ import type * as NodeCrypto from "node:crypto";
 import type * as NodeChildProcess from "node:child_process";
 import type * as Drafts from "./drafts.ts";
 import type * as FileService from "./file-service.ts";
+import type { createSharedFileCopies as CreateSharedFileCopies } from "./shared-file-copy.ts";
+import type { SharedFileRecord } from "../shared/shared-file-copy.d.ts";
+import type { SharedFileResult } from "../shared/shared-file-copy.d.ts";
+import type { NativeReplicaReply } from "../shared/native-replica.d.ts";
 import type * as DocClaims from "./doc-claims.ts";
 import type * as Recents from "./recents.ts";
 import type * as SharedScripts from "../shared/shared-script.ts";
@@ -284,7 +288,9 @@ const {
   requestDraftFlush, draftFlushBudgetMs: DRAFT_FLUSH_BUDGET_MS, draftStore: () => draftStore, draftsList,
   draftsDiscardForUserDecision, draftsDiscardClean, consumeTestDialogAnswer, activateTab, focusWindow,
   destroyTabView, startInstallerNow, prompterShare: voice.prompterShare, voiceHelper: voice.voiceHelper,
-  bundleCopies: () => bundleJobs
+  bundleCopies: () => bundleJobs,
+  hasSharedFileCopy: tab => !!fileCopies && tab.source.kind === "shared" && !!fileCopies.lookup(sharedScriptKey(tab.source)),
+  chooseSharedFileCopy: (tab, problem, verb) => askFileCopyChoice(tab, problem, verb.toLowerCase())
 });
 
 function homeKeyForClaim(tab: DesktopMainTab) {
@@ -422,7 +428,8 @@ function draftBodyTooLarge(str: string) {
   return Buffer.byteLength(str, "utf8") > MAX_BODY_BYTES;
 }
 
-function requestDraftFlush(tab: DesktopMainTab | null | undefined, budgetMs: number, keep?: boolean): Promise<object> {
+function requestDraftFlush(tab: DesktopMainTab | null | undefined, budgetMs: number, keep?: boolean,
+  fileCopyMode?: "check" | "new"): Promise<object> {
   return new Promise((resolve) => {
     if (!tab || !tab.view || tab.view.webContents.isDestroyed()) { resolve({ ok: false, code: "NO_TAB" }); return; }
     const reqId = ++draftFlushReqId;
@@ -434,7 +441,7 @@ function requestDraftFlush(tab: DesktopMainTab | null | undefined, budgetMs: num
       resolve(result);
     });
     try {
-      tab.view.webContents.send("splitpage:draft-flush", reqId, keep === true);
+      tab.view.webContents.send("splitpage:draft-flush", reqId, keep === true, fileCopyMode);
     } catch {
       pendingDraftFlushes.delete(reqId);
       clearTimeout(timer);
@@ -453,6 +460,11 @@ const desktopState = createDesktopStateStore({
 });
 
 const recents = createRecents({ store: desktopState, pathKey, fileIds, shared: COLLAB_UI && sharedScriptKey });
+const fileCopies = COLLAB_UI ? (() => {
+  const { createSharedFileCopies }: { createSharedFileCopies: typeof CreateSharedFileCopies } = require("./shared-file-copy.ts");
+  return createSharedFileCopies(desktopState, fileIds, key => pathToTabId.has(key));
+})() : undefined;
+const shareSources = new WeakMap<Electron.WebContents, { id: string; record: SharedFileRecord; complete: boolean }>();
 
 const { hadPriorSession, isRestoringSession, restoreSessionAtLaunch, registerActivate } = createSessionRestore({
   app, BrowserWindow, desktopState, draftStore: () => draftStore, draftsList, tabs, windowsById, pathToTabId,
@@ -1206,6 +1218,7 @@ function createTab(windowId: string, opts?: Partial<Pick<DesktopMainTab, "source
   const o = opts || {};
   const source = normalizeTabSource(o.source, COLLAB_UI ? readSharedScriptIdentity : undefined);
   if (source.kind === "shared" && focusSharedTab(sharedScriptKey(source))) return null;
+  if (source.kind === "file" && typeof source.absPath === "string" && fileCopies?.reserved(source.absPath)) return null;
   const tabId = mintUniqueTabId(o.tabId);
 
   const view = new WebContentsView({
@@ -1480,14 +1493,53 @@ function deliverOpenFile(tab: DesktopMainTab, absPath: unknown) {
   const id = fileIds.register(absPath);
   readFileEntry(id, absPath).then((entry) => {
     if (tab.view.webContents.isDestroyed()) return;
+    if (fileCopies) fileIds.rememberBytes(id, entry.bytes);
     tab.fileId = id;
     tab.view.webContents.send("splitpage:open-file", entry);
     noteRecentDocumentAndPersist(absPath, tab.title || "");
   }).catch(() => { });
 }
 
-function routeOpenPath(absPath: unknown, opts?: { fromWindowId?: string | null; fromTabId?: string }): (NonNullable<DesktopIpcResult<"splitpage:route-open">> & { tabId: string }) | null {
+type OpenPathResult = (NonNullable<DesktopIpcResult<"splitpage:route-open">> & { tabId: string }) | null;
+type OpenPathOptions = { fromWindowId?: string | null; fromTabId?: string };
+
+async function routeFileCopy(record: SharedFileRecord, options?: OpenPathOptions): Promise<OpenPathResult> {
+  if (!fileCopies) return null;
+  const w = windowRecordFor(options?.fromWindowId);
+  if (!w) return null;
+  if (!retainedSharedScript(record)) {
+    await fileCopies.releaseOrphan(sharedScriptKey(record));
+    return routeOpenPath(record.absPath, options);
+  }
+  const existing = sharedTab(sharedScriptKey(record));
+  const unchanged = await fileCopies.matches(record);
+  if (fileCopies.forPath(record.absPath)?.docId !== record.docId) return routeOpenPath(record.absPath, options);
+  if (!unchanged) {
+    const answer = consumeTestDialogAnswer() ?? await dialog.showMessageBox(w.win, {
+      type: "warning", title: "Splitpage", message: "The file copy changed outside Splitpage.",
+      detail: "Open the shared script to keep working from your local shared copy.",
+      buttons: ["Open shared script", "Cancel"], defaultId: 1, cancelId: 1, noLink: true
+    }).then(result => result.response === 0 ? "confirm" : "cancel");
+    if (answer !== "confirm") return { where: "cancelled", tabId: options?.fromTabId ?? w.activeTabId ?? "" };
+  }
+  if (fileCopies.forPath(record.absPath)?.docId !== record.docId) return { where: "cancelled", tabId: options?.fromTabId ?? w.activeTabId ?? "" };
+  const opened = sharedTab(sharedScriptKey(record)) ?? existing;
+  if (opened && tabs.has(opened.id)) {
+    activateTab(opened.id);
+    focusWindow(opened.windowId);
+    return { where: opened.id === options?.fromTabId ? "already-open" : "other-tab", tabId: opened.id };
+  }
+  const { deployment, script } = record;
+  const created = createTab(w.id, { source: { kind: "shared", deployment, script }, launchIntent: { type: "open-shared" } });
+  if (created) focusWindow(w.id);
+  return created ? { where: "new-tab", tabId: created.id } : null;
+}
+
+function routeOpenPath(absPath: unknown, opts?: OpenPathOptions): OpenPathResult | Promise<OpenPathResult> {
   const o = opts || {};
+  const copy = typeof absPath === "string" ? fileCopies?.forPath(absPath) : undefined;
+  if (copy) return routeFileCopy(copy, opts);
+  if (typeof absPath === "string" && fileCopies?.reserved(absPath)) return null;
   let resolved;
   try {
     if (!fs.statSync(absPath).isFile()) return null;
@@ -1630,6 +1682,8 @@ function flushPendingPayload(tab: DesktopMainTab, opts?: { force: boolean }) {
 }
 
 function routeLaunchFile(absPath: string) {
+  const copy = fileCopies?.forPath(absPath);
+  if (copy) { void routeFileCopy(copy); return; }
   let resolved;
   try {
     if (!fs.statSync(absPath).isFile()) return;
@@ -1906,12 +1960,13 @@ const relaySetup = COLLAB_UI ? (() => {
       if (!args.length) return sharedReferenceFor(tab);
       const reference = normalizeSharedReference(args[0]);
       const previous = tab.shared;
-      if (args.length === 2 && args[0] === null) {
+      if ((args.length === 2 || (args.length === 3 && args[2] === "unavailable")) && args[0] === null) {
         const expected = normalizeSharedReference(args[1]);
         const current = sharedReferenceFor(tab);
         if (!expected || !current || sharedScriptKey(expected) !== sharedScriptKey(current) ||
           expected.address !== current.address || tab.sharedAttached) return false;
         if (tab.source.kind === "shared") {
+          if (args[2] === "unavailable") await fileCopies?.releaseOrphan(sharedScriptKey(tab.source));
           detachSharedTab(tab);
           return true;
         }
@@ -1932,17 +1987,30 @@ const relaySetup = COLLAB_UI ? (() => {
       return nativeReplicaForDevice(event.sender, ["membership", name, lease],
         record => owner.manageSharing(operation, name, address, record, password));
     },
-    createShare: (event: DesktopIpcEvent, id: string, hash: string, bytes: Uint8Array, address: string, password?: string) => {
+    createShare: async (event: DesktopIpcEvent, id: string, hash: string, bytes: Uint8Array, address: string, password?: string) => {
       const tab = tabWindow(event) && tabOf(event);
-      return tab ? shares.create(tab.id, id, hash, bytes, address, password) : { kind: "failed" as const };
+      if (!tab) return { kind: "failed" as const };
+      const { source, fileId, docId } = tab;
+      const fingerprint = fileId ? fileIds.fingerprint(fileId) : undefined;
+      const created = await shares.create(tab.id, id, hash, bytes, address, password);
+      if (created.kind === "created" && source.kind === "file" && typeof source.absPath === "string" &&
+          /\.(splitpage|md)$/i.test(source.absPath) && docId && DOC_ID_RE.test(docId) && fingerprint) {
+        shareSources.set(event.sender, { id, complete: false, record: {
+          absPath: source.absPath, docId, fingerprint, missing: 0, deployment: created.deployment, script: created.scriptId
+        } });
+      }
+      return created;
     },
     abandonShare: (event: DesktopIpcEvent, id: string) => {
       const tab = tabWindow(event) && tabOf(event);
       return tab ? shares.abandon(tab.id, id) : false;
     },
-    completeShare: (event: DesktopIpcEvent, id: string) => {
+    completeShare: async (event: DesktopIpcEvent, id: string) => {
       const tab = tabWindow(event) && tabOf(event);
-      return tab ? shares.complete(tab.id, id) : false;
+      if (!tab || !await shares.complete(tab.id, id)) return false;
+      const source = shareSources.get(event.sender);
+      if (source?.id === id) source.complete = true;
+      return true;
     },
     async recoverShares() {
       await shares.recover();
@@ -1961,6 +2029,26 @@ function dialogParentFor(event: DesktopIpcEvent) {
     if (w && !w.win.isDestroyed()) return w.win;
   }
   return BrowserWindow.fromWebContents(event.sender) || undefined;
+}
+
+async function askFileCopyChoice(tab: DesktopMainTab, problem: "changed" | "unavailable" | "missing",
+  verb: string): Promise<Extract<SharedFileResult, { kind: "file-copy-choice" }>["choice"]> {
+  const answer = consumeTestDialogAnswer();
+  if (answer === "retry" || answer === "new" || answer === "continue" || answer === "cancel") return answer;
+  const reasons = {
+    changed: "The file copy changed outside Splitpage.",
+    unavailable: "Could not update the file copy.",
+    missing: "Some pictures are missing from this device."
+  };
+  const options: Electron.MessageBoxOptions = {
+    type: "warning", title: "Splitpage", message: reasons[problem],
+    detail: "Bring the file copy up to date before you " + verb + ", or go on without updating the file.",
+    buttons: ["Try again", "Save as a new copy…", "Go on without updating the file", "Cancel"],
+    defaultId: 0, cancelId: 3, noLink: true
+  };
+  const parent = windowsById.get(tab.windowId)?.win;
+  const { response } = await (parent ? dialog.showMessageBox(parent, options) : dialog.showMessageBox(options));
+  return (["retry", "new", "continue", "cancel"] as const)[response] ?? "cancel";
 }
 
 function launchIntentFor(tab: DesktopMainTab) {
@@ -2010,7 +2098,8 @@ function focusSharedTab(name: string, except?: DesktopMainTab, leaseOwner?: numb
 
 const { registerFileIpc } = createFileIpc({
   dialog, documentsPath: () => app.getPath("documents"), fileIds, pathToTabId, tabs, recents, tabOf, dialogParentFor,
-  consumeTestDialogAnswer, testDialogsSeen: () => testDialogsSeen, bundleJobs, testMode: TEST_MODE
+  consumeTestDialogAnswer, testDialogsSeen: () => testDialogsSeen, bundleJobs, testMode: TEST_MODE,
+  ...(fileCopies && { reservedCopyPath: fileCopies.reserved })
 });
 
 const { registerShellIpc } = createShellIpc({
@@ -2026,9 +2115,37 @@ const { registerShellIpc } = createShellIpc({
 const { createNativeReplicaIpc }: { createNativeReplicaIpc: typeof CreateNativeReplicaIpc } = require("./native-replica-ipc.ts");
 let handleReplica: ReturnType<typeof createNativeReplicaIpc> | undefined;
 function nativeReplicaForDevice(sender: Electron.WebContents, request: unknown,
-  manage?: Parameters<ReturnType<typeof createNativeReplicaIpc>>[2]) {
+  manage?: Parameters<ReturnType<typeof createNativeReplicaIpc>>[2]): Promise<NativeReplicaReply> {
   if (!Array.isArray(request) || typeof request[1] !== "string" || !request[1].includes("/")) {
     throw new TypeError("Native replica requests require deployment and script identities.");
+  }
+  const tab = tabs.get(webContentsIdToTabId.get(sender.id));
+  const [operation, key, bytes, missing, mode, copyDocId]: unknown[] = request;
+  if (fileCopies && typeof key === "string" && tab?.source.kind === "shared" && sharedScriptKey(tab.source) === key) {
+    if (operation === "file-copy-status" && request.length === 2) return fileCopies.status(key);
+    if (tab.sharedAttached && operation === "file-copy-stop" && request.length === 2) return fileCopies.forget(key).then<NativeReplicaReply>(ok => ok
+      ? { kind: "file-copy", file: null } : { kind: "file-copy-problem", problem: "unavailable" });
+    if (operation === "file-copy-choice" && request.length === 4 &&
+        (bytes === "changed" || bytes === "unavailable" || bytes === "missing") && (missing === "leave" || missing === "stop")) {
+      const reason = missing === "leave" ? "leave the shared script" : "stop sharing";
+      return askFileCopyChoice(tab, bytes, reason).then<NativeReplicaReply>(choice => ({ kind: "file-copy-choice", choice }));
+    }
+    if (tab.sharedAttached && operation === "file-copy-write" && request.length === 6 && bytes instanceof Uint8Array && bytes.byteLength > 0 &&
+        bytes.buffer instanceof ArrayBuffer && typeof missing === "number" && Number.isSafeInteger(missing) && missing >= 0 &&
+        typeof copyDocId === "string" && DOC_ID_RE.test(copyDocId) &&
+        (mode === "check" || mode === "overwrite" || mode === "new" || mode === "export")) {
+      return fileCopies.write(key, bytes, missing, mode, copyDocId, async () => {
+        const answer = consumeTestDialogAnswer();
+        if (answer !== undefined) return typeof answer === "string" && /\.splitpage$/i.test(answer) ? answer : null;
+        const source = fileCopies.lookup(key);
+        const defaultPath = source ? path.join(path.dirname(source.absPath), path.parse(source.absPath).name + " copy.splitpage") : undefined;
+        const result = await dialog.showSaveDialog(windowsById.get(tab.windowId)?.win, {
+          defaultPath, filters: [{ name: "Splitpage", extensions: ["splitpage"] }],
+          properties: ["showOverwriteConfirmation"]
+        });
+        return !result.canceled && result.filePath && /\.splitpage$/i.test(result.filePath) ? result.filePath : null;
+      });
+    }
   }
   handleReplica ??= createNativeReplicaIpc(app.getPath("userData"), readNativeMembership, undefined, {
     encrypt(token) {
@@ -2039,26 +2156,31 @@ function nativeReplicaForDevice(sender: Electron.WebContents, request: unknown,
     },
     decrypt: bytes => safeStorage.decryptString(bytes)
   });
-  const tab = tabs.get(webContentsIdToTabId.get(sender.id));
   return handleReplica(sender, request, manage, COLLAB_UI && tab ? {
     focus: (name, leaseOwner) => focusSharedTab(name, tab, leaseOwner),
     async note(name, raw) {
       const entry = readSharedScriptCatalogueEntry(raw);
       if (!entry || sharedScriptKey(entry) !== name || focusSharedTab(name, tab)) return false;
       const { deployment, script } = entry;
+      const source = shareSources.get(sender);
+      const record = source?.complete && sharedScriptKey(source.record) === name ? source.record : undefined;
       unindexTabSource(tab);
       tab.source = { kind: "shared", deployment, script };
       delete tab.shared;
       tab.sharedAttached = true;
       tab.fileId = null;
       indexTabSource(tab);
-      return desktopState.write(current => ({
+      const wrote = await desktopState.write(current => ({
         ...current,
         ...(!sessionWritesAreFrozen() && shellStateAsV2()),
-        sharedScripts: [entry, ...(current.sharedScripts ?? []).filter(item => sharedScriptKey(item) !== name)]
+        sharedScripts: [entry, ...(current.sharedScripts ?? []).filter(item => sharedScriptKey(item) !== name)],
+        ...(record && { sharedFileCopies: [record, ...(current.sharedFileCopies ?? []).filter(item => sharedScriptKey(item) !== name)] })
       }));
+      if (wrote && record) shareSources.delete(sender);
+      return wrote;
     },
     async forgot(name) {
+      if (fileCopies && !await fileCopies.releaseOrphan(name)) throw new Error("Could not remove the file copy record.");
       const written = await desktopState.write(current => {
         if (!current.sharedScripts?.some(entry => sharedScriptKey(entry) === name)) return current;
         current.sharedScripts = current.sharedScripts.filter(entry => sharedScriptKey(entry) !== name);
@@ -2082,7 +2204,12 @@ const { registerDocumentIpc } = createDocumentIpc({
   tabOf, fileIds, unindexTabSource, indexTabSource, recents, windowsById, applyWindowTitle,
   pushShellState, persistShellState, docClaims, testMode: TEST_MODE, flushPendingPayload, restoreNotice,
   routeOpenPath, draftStore: () => draftStore, draftFiniteNumber, draftBodyTooLarge, buildDraftHeader,
-  draftsPreviousSession: () => draftsPreviousSession, pendingDraftFlushes, nativeReplicaForDevice, routeSharedRecent
+  draftsPreviousSession: () => draftsPreviousSession, pendingDraftFlushes, nativeReplicaForDevice, routeSharedRecent,
+  ...(fileCopies && { canAttachFile(tab: DesktopMainTab, absPath: string) {
+    if (!fileCopies.reserved(absPath)) return true;
+    const copy = fileCopies.forPath(absPath);
+    return !!copy && tab.source.kind === "shared" && sharedScriptKey(copy) === sharedScriptKey(tab.source);
+  } })
 });
 
 const { registerHistoryBlobIpc } = createHistoryBlobIpc({

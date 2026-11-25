@@ -19,7 +19,7 @@ function createDocumentIpc({
   tabOf, fileIds, unindexTabSource, indexTabSource, recents, windowsById, applyWindowTitle,
   pushShellState, persistShellState, docClaims, testMode: TEST_MODE, flushPendingPayload, restoreNotice,
   routeOpenPath, draftStore, draftFiniteNumber, draftBodyTooLarge, buildDraftHeader, draftsPreviousSession,
-  pendingDraftFlushes, nativeReplicaForDevice, routeSharedRecent
+  pendingDraftFlushes, nativeReplicaForDevice, routeSharedRecent, canAttachFile
 }: DesktopDocumentIpcDependencies) {
   function registerDocumentIpc({ ipcHandle, ipcOn }: Parameters<DesktopRegisterIpcGroup>[0]) {
     ipcHandle("splitpage:native-replica", (event, request) => nativeReplicaForDevice(event.sender, request));
@@ -34,7 +34,8 @@ function createDocumentIpc({
       if ("docId" in s) tab.docId = typeof s.docId === "string" ? s.docId : null;
 
       const hasFileId = "fileId" in s;
-      const absPath = hasFileId && typeof s.fileId === "string" ? fileIds.pathOf(s.fileId) || null : null;
+      const candidate = hasFileId && typeof s.fileId === "string" ? fileIds.pathOf(s.fileId) : null;
+      const absPath = typeof candidate === "string" && (!canAttachFile || canAttachFile(tab, candidate)) ? candidate : null;
       if (hasFileId) {
         tab.fileId = absPath ? s.fileId : null;
         if (!tab.sharedAttached && (tab.source.kind !== "shared" || absPath)) {
@@ -76,7 +77,7 @@ function createDocumentIpc({
       if (p.kind === "file") {
         const absPath = fileIds.pathOf(p.fileId);
         if (!absPath) throw new Error("ENOENT: unknown file id");
-        const result = routeOpenPath(absPath, { fromWindowId: tab.windowId, fromTabId: tab.id });
+        const result = await routeOpenPath(absPath, { fromWindowId: tab.windowId, fromTabId: tab.id });
         if (!result) throw new Error("ENOENT: file is not readable");
         return { where: result.where };
       }
@@ -129,6 +130,7 @@ function createDocumentIpc({
           } else {
             const id = fileIds.register(filePath);
             taken.file = await readFileEntry(id, filePath);
+            if (canAttachFile) fileIds.rememberBytes(id, taken.file.bytes);
             unindexTabSource(tab);
             tab.fileId = id;
             tab.source = { kind: "file", absPath: filePath };

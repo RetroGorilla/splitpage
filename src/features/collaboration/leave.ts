@@ -35,8 +35,9 @@ export function mountLeaveDialog(ports: LeaveDialogPorts) {
         }
       }
       status.textContent = "Leaving shared script…";
-      if (await ports.leave()) dialog.dispose();
-      else status.textContent = "Could not remove the shared copy. Try again.";
+      const outcome = await ports.leave();
+      if (outcome === true) dialog.dispose();
+      else status.textContent = outcome === "cancelled" ? "" : "Could not remove the shared copy. Try again.";
     } catch {
       status.textContent = "Could not complete the request. Try again.";
     } finally {

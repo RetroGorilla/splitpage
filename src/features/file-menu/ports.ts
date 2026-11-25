@@ -1,4 +1,5 @@
 import type { CollaborationReads } from "../../application/collaboration/state.ts";
+import type { FileCopyReads } from "../../application/collaboration/file-copy.ts";
 import type { MenuItemPort, NoticePort } from "../../application/effects/ports.ts";
 import type { ExportCardDecl, ExportChoice, ExportRegistry, FileNameOptions } from "../../application/export/registry.ts";
 import type { RecentFileData, RecentFiles } from "../../application/files/recent-files.ts";
@@ -137,6 +138,7 @@ export interface FileMenuDropdownPorts {
   readonly syncIdentity: () => void;
   readonly longDemo: { readonly state: { readonly title: string; readonly rows: readonly unknown[] } };
   readonly collaboration: Pick<CollaborationReads, "snapshot">;
+  readonly sharedFileCopy?: FileCopyReads;
   readonly collaborationItems?: readonly { readonly id: string; readonly label: string; readonly group: string; readonly available: () => boolean }[];
 }
 

@@ -17,7 +17,7 @@ const ZIP_NAME = /\.zip$/i;
 
 function createFileIpc({
   dialog, documentsPath, fileIds, pathToTabId, tabs, recents, tabOf, dialogParentFor,
-  consumeTestDialogAnswer, testDialogsSeen, bundleJobs, testMode: TEST_MODE
+  consumeTestDialogAnswer, testDialogsSeen, bundleJobs, reservedCopyPath, testMode: TEST_MODE
 }: DesktopFileIpcDependencies) {
   const pendingScriptSaves = new Set<string>();
 
@@ -47,6 +47,12 @@ function createFileIpc({
     try { return (await fsp.lstat(p)).isFile(); } catch { return false; }
   }
 
+  async function read(id: string, absPath: unknown) {
+    const entry = await readFileEntry(id, absPath);
+    if (reservedCopyPath && !fileIds.fingerprint(id)) fileIds.rememberBytes(id, entry.bytes);
+    return entry;
+  }
+
   function registerFileIpc({ ipcHandle }: Parameters<DesktopRegisterIpcGroup>[0]) {
     ipcHandle("splitpage:open-file-dialog", async (event) => {
       const defaultPath = await openDefaultPath();
@@ -68,7 +74,7 @@ function createFileIpc({
       }
       if (!chosen) return null;
       const id = fileIds.register(chosen);
-      return await readFileEntry(id, chosen);
+      return await read(id, chosen);
     });
 
     ipcHandle("splitpage:save-file-dialog", async (event, options) => {
@@ -92,7 +98,7 @@ function createFileIpc({
       const holderId = pathToTabId.get(pathKey(path.resolve(chosen)));
       const holder = holderId ? tabs.get(holderId) : null;
       const me = tabOf(event);
-      if (holder && (!me || holder.id !== me.id)) {
+      if ((typeof chosen === "string" && reservedCopyPath?.(chosen)) || (holder && (!me || holder.id !== me.id))) {
         try {
           dialog.showMessageBoxSync(dialogParentFor(event), {
             type: "warning",
@@ -118,7 +124,7 @@ function createFileIpc({
     ipcHandle("splitpage:read-file", async (event, id) => {
       const absPath = fileIds.pathOf(id);
       if (!absPath) throw new Error("ENOENT: unknown file id");
-      return await readFileEntry(id, absPath);
+      return await read(id, absPath);
     });
 
     ipcHandle("splitpage:write-file", async (event, id, data) => {
@@ -129,12 +135,17 @@ function createFileIpc({
       if (prepared.refused) return { size: 0, bundleRefused: prepared.refused };
       let written;
       try {
-        written = await writeFileEntry(absPath, buffer);
+        const checkPath = typeof absPath === "string" && reservedCopyPath ? () => {
+          if (reservedCopyPath(absPath)) throw new Error("This file is kept by a shared script.");
+        } : undefined;
+        checkPath?.();
+        written = await writeFileEntry(absPath, buffer, undefined, checkPath);
       } catch (e) {
         prepared.landed(false);
         throw e;
       }
       prepared.landed(true);
+      if (reservedCopyPath) fileIds.rememberBytes(id, buffer);
       if (pendingScriptSaves.delete(id)) await recents.noteSaved(absPath);
       return written;
     });

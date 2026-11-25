@@ -1,6 +1,6 @@
 import { createDesktopDocumentState } from "../../application/desktop/document-state.ts";
 import type { DesktopDocumentListeners, DesktopDocumentState, DesktopDocumentStateOwner, DesktopDocumentStatePorts } from "../../application/desktop/document-state.ts";
-import type { DesktopHandOff, PrompterElsewhere } from "../../application/desktop/shell.ts";
+import type { DesktopDraftFlushRequest, DesktopHandOff, PrompterElsewhere } from "../../application/desktop/shell.ts";
 import { presence } from "./ports/desktop-presence.ts";
 import { desktopPort } from "../../adapters/desktop/desktop-port.ts";
 import type { HistoryOwner } from "../../application/recovery/history-ports.ts";
@@ -13,7 +13,7 @@ import type { DraftFlush } from "../../application/recovery/drafts-ports.ts";
 let started: DesktopDocumentStateOwner | null = null;
 let handOff: DesktopHandOff | null = null;
 let sharedUnsaved: (() => boolean) | null = null;
-let sharedFlush: (() => Promise<DraftFlush>) | null = null;
+let sharedFlush: ((mode?: DesktopDraftFlushRequest["fileCopyMode"]) => Promise<DraftFlush>) | null = null;
 let pausePublication: object | null = null;
 
 export function holdDesktopDocumentPublication(): () => void {
@@ -26,7 +26,7 @@ export function holdDesktopDocumentPublication(): () => void {
   };
 }
 
-export function trackSharedDesktopUnsaved(read: () => boolean, flush: () => Promise<DraftFlush>): () => void {
+export function trackSharedDesktopUnsaved(read: () => boolean, flush: NonNullable<typeof sharedFlush>): () => void {
   sharedUnsaved = read;
   sharedFlush = flush;
   return () => {
@@ -36,7 +36,9 @@ export function trackSharedDesktopUnsaved(read: () => boolean, flush: () => Prom
   };
 }
 
-export function flushSharedDesktopCopy(): Promise<DraftFlush> | undefined { return sharedFlush?.(); }
+export function flushSharedDesktopCopy(mode?: DesktopDraftFlushRequest["fileCopyMode"]): Promise<DraftFlush> | undefined {
+  return sharedFlush?.(mode);
+}
 
 export function legacyDesktopDocumentPorts(history: Pick<HistoryOwner, "isPristineSeedDocument">): DesktopDocumentStatePorts {
   return Object.freeze({

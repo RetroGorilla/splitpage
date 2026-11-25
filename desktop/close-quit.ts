@@ -30,7 +30,7 @@ function createCloseQuit({
   app, dialog, testMode: TEST_MODE, tabs, windowsById, liveWindows, tabHasFile, tabIsUnsaved, draftsHasDraft,
   requestDraftFlush, draftFlushBudgetMs: DRAFT_FLUSH_BUDGET_MS, draftStore, draftsList,
   draftsDiscardForUserDecision, draftsDiscardClean, consumeTestDialogAnswer, activateTab, focusWindow,
-  destroyTabView, startInstallerNow, prompterShare, voiceHelper, bundleCopies
+  destroyTabView, startInstallerNow, prompterShare, voiceHelper, bundleCopies, hasSharedFileCopy, chooseSharedFileCopy
 }: DesktopCloseQuitDependencies) {
   let quitConfirmed = false;
   let holdingForCopies = false;
@@ -83,19 +83,35 @@ function createCloseQuit({
 
   function askBeforeClosing(tabIdsNow: Parameters<typeof runCloseCheck>[1], verb: string, parentOf: Parameters<typeof runCloseCheck>[3], stillWanted: () => boolean) {
     const failedSharedFlushes = new Set<DesktopMainTab>();
+    let fileCopyCancelled = false;
     const io: CloseKeep.CloseCheckIo = {
       tabs, askAboutUnsaved, keepDraftsOfGoneFiles, report: reportCloseCheckFailure,
       unsavedTabsOf: (ids, gone) => unsavedTabsOf(ids, gone, failedSharedFlushes),
       async goneFileTabsOf(ids: Parameters<typeof goneFileTabsOf>[0]) {
-        const shared = ids.map(id => tabs.get(id)).filter(tab => tab?.source?.kind === "shared" && tab.sharedAttached);
-        await Promise.all(shared.map(async tab => {
-          const result = await requestDraftFlush(tab, DRAFT_FLUSH_BUDGET_MS);
-          if (tab && !(result as { ok?: boolean }).ok) failedSharedFlushes.add(tab);
+        const shared = ids.map(id => tabs.get(id)).filter((tab): tab is DesktopMainTab => tab?.source?.kind === "shared" && !!tab.sharedAttached);
+        const copies = new Set(shared.filter(tab => hasSharedFileCopy?.(tab)));
+        await Promise.all(shared.filter(tab => !copies.has(tab)).map(async tab => {
+          const result = await requestDraftFlush(tab, DRAFT_FLUSH_BUDGET_MS) as { ok?: boolean };
+          if (!result.ok) failedSharedFlushes.add(tab);
         }));
+        for (const tab of copies) {
+          let mode: "check" | "new" = "check";
+          while (stillWanted()) {
+            const result = await requestDraftFlush(tab, 30_000, false, mode) as {
+                ok?: boolean; fileCopyProblem?: "changed" | "unavailable" | "missing";
+              };
+            if (!result.ok) { failedSharedFlushes.add(tab); break; }
+            if (!result.fileCopyProblem || !chooseSharedFileCopy) break;
+            const choice = await chooseSharedFileCopy(tab, result.fileCopyProblem, verb);
+            if (choice === "continue") break;
+            if (choice === "cancel") { fileCopyCancelled = true; return []; }
+            mode = choice === "new" ? "new" : "check";
+          }
+        }
         return goneFileTabsOf(ids);
       }
     };
-    return runCloseCheck(io, tabIdsNow, verb, parentOf, stillWanted);
+    return runCloseCheck(io, tabIdsNow, verb, parentOf, () => !fileCopyCancelled && stillWanted());
   }
 
   function unsavedTabsOf(tabIds: (string | undefined)[], gone: DesktopMainTab[], failedSharedFlushes?: ReadonlySet<DesktopMainTab>) {

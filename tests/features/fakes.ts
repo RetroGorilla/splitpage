@@ -21,6 +21,7 @@ import type { UndoControl } from "../../src/application/editing/undo-control.ts"
 import type { NoticeKind, NoticePort } from "../../src/application/effects/ports.ts";
 import type { DocumentEdits } from "../../src/application/session/document-edits.ts";
 import type { SharedPopoverPorts } from "../../src/features/collaboration/ports.ts";
+import type { FileCopyReads } from "../../src/application/collaboration/file-copy.ts";
 import { createCollaborationState, IDLE_COLLABORATION_SNAPSHOT } from "../../src/application/collaboration/state.ts";
 import type { SharedScriptCatalogueStorage } from "../../src/application/collaboration/shared-script-catalogue.ts";
 import type { SharedScriptCatalogueEntry } from "../../shared/shared-script.ts";
@@ -30,6 +31,22 @@ import type { SharedCommandGuard } from "../../src/application/session/document-
 
 export function fakeCollaboration(): Pick<CollaborationReads, "snapshot"> {
   return { snapshot: () => IDLE_COLLABORATION_SNAPSHOT };
+}
+
+export function fakeFileCopy() {
+  let snapshot: ReturnType<FileCopyReads["read"]> = { file: null, problem: null };
+  const listeners = new Set<() => void>();
+  const reads: FileCopyReads = {
+    read: () => snapshot,
+    subscribe(listener) { listeners.add(listener); return () => { listeners.delete(listener); }; }
+  };
+  return {
+    reads,
+    set(next: typeof snapshot) {
+      snapshot = next;
+      for (const listener of listeners) listener();
+    }
+  };
 }
 
 export function fakeSharedPopover(overrides: Partial<SharedPopoverPorts> = {}) {

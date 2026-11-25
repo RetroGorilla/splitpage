@@ -6,7 +6,7 @@ import type { FileMenuDropdownPorts } from "../../../src/features/file-menu/port
 import type { RecentFileData } from "../../../src/application/files/recent-files.ts";
 import { migrateRows } from "../../../src/core/migrate.ts";
 import { fakeMigration } from "../../core/migrate-ports.ts";
-import { fakeNotices } from "../fakes.ts";
+import { fakeFileCopy, fakeNotices } from "../fakes.ts";
 import { viewHarness } from "../view-harness.ts";
 
 function setup() {
@@ -18,6 +18,7 @@ function setup() {
   realm.document = h.document;
 
   const collab = createCollaborationState();
+  const copy = fakeFileCopy();
   const doc = migrateRows({ title: "Pilot Episode", docId: "d" + "a".repeat(32), rows: [{ id: "r1" }] }, fakeMigration().ports);
   const state = {
     document: doc,
@@ -50,6 +51,7 @@ function setup() {
     syncIdentity: () => {},
     longDemo: { state: { title: "Demo", rows: [] } },
     collaboration: collab,
+    sharedFileCopy: copy.reads,
     collaborationItems: [
       { id: "share-script", label: "Share this script…", group: "Collaborate", available: () => !collab.snapshot().active },
       { id: "join-script", label: "Join a shared script…", group: "Collaborate", available: () => !collab.snapshot().active },
@@ -61,6 +63,7 @@ function setup() {
   return {
     ...h,
     collab,
+    copy,
     menu,
     cleanup() {
       menu.dispose();
@@ -122,4 +125,17 @@ test("File menu shows the shared card status and hides Autosave and Create bundl
   } finally {
     h.cleanup();
   }
+});
+
+test("the open File menu names a copy and refreshes when pictures become available", () => {
+  const h = setup();
+  try {
+    h.collab.enter();
+    h.menu.toggleFileMenu(true);
+    const file = { name: "Pilot.splitpage", docId: "d" + "a".repeat(32), missing: 1 };
+    h.copy.set({ file, problem: null });
+    assert.match(h.el("fm-card-meta").textContent, /Shared script · Pilot\.splitpage · Incomplete copy \(1 picture missing\)$/);
+    h.copy.set({ file: { ...file, missing: 0 }, problem: null });
+    assert.match(h.el("fm-card-meta").textContent, /Shared script · Pilot\.splitpage$/);
+  } finally { h.cleanup(); }
 });

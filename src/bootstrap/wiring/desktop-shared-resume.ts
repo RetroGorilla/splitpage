@@ -26,7 +26,8 @@ export async function resumeDesktopReference(
   } finally {
     const unavailable = outcome?.ok === false && outcome.reason === RETAINED_SHARED_COPY_UNAVAILABLE;
     if (!signal.aborted && (unavailable || (clearFailedRestore && outcome?.ok !== true))) {
-      await reference([null, saved]).catch(() => false);
+      const failedCopy = unavailable || outcome?.ok === false && (outcome.reason === "io" || outcome.reason === "enter-failed");
+      await reference(failedCopy ? [null, saved, "unavailable"] : [null, saved]).catch(() => false);
     }
   }
 }

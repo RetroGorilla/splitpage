@@ -12,13 +12,18 @@ export interface DesktopReassign {
 
 export type DesktopAnswer = DesktopIpcResult<"splitpage:prompter-open-in-browser">;
 
+export interface DesktopDraftFlushRequest {
+  readonly keep: boolean;
+  readonly fileCopyMode?: "check" | "new";
+}
+
 export interface DesktopShell {
   readonly launchIntent?: { readonly type: string };
   readonly onOpenFile: (cb: (entry: DesktopOpenedFile) => void) => void;
   readonly onRestoreNotice: (cb: (notice: DesktopRestoreNotice) => void) => void;
   readonly onReassignDocId?: (cb: (msg: DesktopReassign | null) => void) => void;
   readonly onMenuCommand: (cb: (command: string) => void) => void;
-  readonly onDraftFlush?: (cb: (request: { readonly keep: boolean }) => unknown) => void;
+  readonly onDraftFlush?: (cb: (request: DesktopDraftFlushRequest) => unknown) => void;
   readonly openPrompterInBrowser: () => Promise<DesktopAnswer>;
   readonly openPrompterInChromium: () => Promise<DesktopIpcResult<"splitpage:prompter-open-in-chromium">>;
 }

@@ -54,6 +54,7 @@ export interface DesktopMainCommon {
 }
 
 export interface DesktopFileIpcDependencies extends Pick<DesktopMainCommon, "tabOf" | "tabs" | "fileIds" | "recents" | "testMode"> {
+  reservedCopyPath?: (absPath: string) => boolean;
   documentsPath: () => string;
   dialog: {
     showOpenDialog: (parent: BrowserWindow | undefined, options: Parameters<Dialog["showOpenDialog"]>[0]) => ReturnType<Dialog["showOpenDialog"]>;
@@ -70,6 +71,7 @@ export interface DesktopFileIpcDependencies extends Pick<DesktopMainCommon, "tab
 }
 
 export interface DesktopDocumentIpcDependencies extends Pick<DesktopMainCommon, "tabOf" | "fileIds" | "recents" | "windowsById" | "testMode" | "draftStore" | "draftsPreviousSession"> {
+  canAttachFile?: (tab: DesktopMainTab, absPath: string) => boolean;
   routeSharedRecent: (tab: DesktopMainTab, fileId: string) => { where: "other-tab" | "new-tab" } | null;
   nativeReplicaForDevice: (sender: WebContents, request: unknown) => Promise<NativeReplicaReply>;
   unindexTabSource: (tab: DesktopMainTab) => void;
@@ -80,7 +82,7 @@ export interface DesktopDocumentIpcDependencies extends Pick<DesktopMainCommon, 
   docClaims: ReturnType<typeof createDocClaims>;
   flushPendingPayload: (tab: DesktopMainTab, options?: { force: boolean }) => void;
   restoreNotice: Pick<ReturnType<typeof createRestoreNotice>, "isFor" | "deliver">;
-  routeOpenPath: (path: unknown, options: { fromWindowId: string; fromTabId: string }) => DesktopIpcResult<"splitpage:route-open"> | null;
+  routeOpenPath: (path: unknown, options: { fromWindowId: string; fromTabId: string }) => DesktopIpcResult<"splitpage:route-open"> | null | Promise<DesktopIpcResult<"splitpage:route-open"> | null>;
   draftFiniteNumber: (value: unknown) => number | null;
   draftBodyTooLarge: (text: string) => boolean;
   buildDraftHeader: (tab: DesktopMainTab, payload: Record<string, unknown>) => Parameters<ReturnType<typeof createDraftStore>["write"]>[1];
@@ -160,7 +162,10 @@ export interface DesktopCloseQuitDependencies extends Pick<DesktopMainCommon, "t
   tabHasFile: (tab: DesktopMainTab | null | undefined) => boolean;
   tabIsUnsaved: (tab: DesktopMainTab | null | undefined) => boolean;
   draftsHasDraft: (id: string) => boolean;
-  requestDraftFlush: (tab: DesktopMainTab | null | undefined, budgetMs: number, keep?: boolean) => Promise<object>;
+  requestDraftFlush: (tab: DesktopMainTab | null | undefined, budgetMs: number, keep?: boolean, mode?: "check" | "new") => Promise<object>;
+  hasSharedFileCopy?: (tab: DesktopMainTab) => boolean;
+  chooseSharedFileCopy?: (tab: DesktopMainTab, problem: "changed" | "unavailable" | "missing", verb: string) =>
+    Promise<"retry" | "new" | "continue" | "cancel">;
   draftFlushBudgetMs: number;
   draftsList: ReturnType<typeof createDraftStore>["list"];
   draftsDiscardForUserDecision: (ids: (string | undefined)[], reason: string) => void;

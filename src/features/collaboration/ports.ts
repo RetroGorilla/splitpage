@@ -1,5 +1,6 @@
 import type { Preferences } from "../../application/preferences/preferences.ts";
 import type { CollaborationReads, CollaborationState } from "../../application/collaboration/state.ts";
+import type { FileCopyReads } from "../../application/collaboration/file-copy.ts";
 import type { OfflineBeatReading, OfflineClashEntry } from "../../application/collaboration/offline-clashes.ts";
 import type { ShareAttemptResult } from "../../application/collaboration/share.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
@@ -61,5 +62,12 @@ export interface JoinDialogPorts {
 export interface LeaveDialogPorts {
   readonly owner?: boolean;
   readonly saveCopy: () => Promise<boolean>;
-  readonly leave: () => Promise<boolean>;
+  readonly leave: () => Promise<boolean | "cancelled">;
+}
+
+export interface FileCopyBannerPorts extends FileCopyReads {
+  readonly retry: () => Promise<void>;
+  readonly overwrite: () => Promise<void>;
+  readonly saveAs: () => Promise<void>;
+  readonly stop: () => Promise<void>;
 }

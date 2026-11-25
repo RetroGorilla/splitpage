@@ -8,6 +8,46 @@ standard behaviour is the default. Every figure names its result file ([appendix
 counts from generated test histories, built to hit bad cases, so not rates in real use. Accounts, invitations,
 pictures and screen design are out of scope.
 
+## The desktop file copy (Stage 4 Part 8)
+
+Decision 10 adds a one-way copy for a script shared from a saved desktop
+`.splitpage` or Markdown file.
+INV-51 still governs autosave. A shared session keeps both `autosave` and
+`saveDestinations` off. The file-copy owner watches shared revisions and
+picture availability, then captures and formats the current script after idle.
+The ordinary file keeps its original document ID. A fresh share leaves the
+source bytes alone until an edit.
+
+The desktop reserves the path and stores its SHA-256 fingerprint in desktop
+state. It checks the file before writing, uses the existing atomic writer and
+checks the bytes after writing. Opening a reserved path routes to the retained
+replica. An external change requires a choice. Before Leave or Stop sharing,
+the owner requires a complete, checked write or an explicit decision to proceed
+without updating it. Close and quit keep the replica and path association.
+
+For Open #2, use a 2-second idle delay and at least 30 seconds between
+background writes. Close, quit and explicit actions bypass the interval.
+To reproduce the measurement, run this command from the repository root.
+
+```sh
+node --disable-warning=MODULE_TYPELESS_PACKAGE_JSON tools/measure-file-copy.mjs
+```
+
+On Windows with Node 24.22.1, the benchmark formats a 900-beat script from the
+long demo (933,319 bytes, no picture bytes) and times 25 writes after three
+warmups. The first run took 171 ms median and 218 ms p95 in total. A later run
+with separate timers recorded the following wall-clock times.
+
+| Step | Median | p95 |
+| --- | ---: | ---: |
+| App capture and project formatting, including normalisation | 150.0 ms | 184.5 ms |
+| Desktop write, including SHA-256 checks, sync, rename and readback | 9.0 ms | 9.7 ms |
+| Total per sample | 158.5 ms | 193.3 ms |
+
+The app test harness runs in Node. These times cover capture, formatting
+and checked disk I/O. Electron IPC, desktop state persistence and picture
+loading are outside the benchmark.
+
 ## Build status
 
 Slice 7's open acceptance cases are listed in [appendix O](#o-acceptance-cases-from-the-outside-review). The Slice 8

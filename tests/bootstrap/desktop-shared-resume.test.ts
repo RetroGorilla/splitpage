@@ -29,7 +29,7 @@ for (const [result, cleared] of [
       return result === "opened" ? { ok: true } : { ok: false, reason: result === "cancelled" ? RETAINED_SHARED_COPY_UNAVAILABLE : result };
     }, lifetime.signal);
     assert.equal(outcome?.ok, result === "opened");
-    assert.deepEqual(calls, cleared ? [[], [null, saved]] : [[]]);
+    assert.deepEqual(calls, cleared ? [[], [null, saved, "unavailable"]] : [[]]);
   });
 }
 
@@ -41,5 +41,5 @@ test("a failed catalogue-based restore releases its tab reference even when the 
   };
   const outcome = await resumeDesktopReference(reference, async () => ({ ok: false, reason: "io" }), new AbortController().signal, true);
   assert.deepEqual(outcome, { ok: false, reason: "io" });
-  assert.deepEqual(calls, [[], [null, saved]]);
+  assert.deepEqual(calls, [[], [null, saved, "unavailable"]]);
 });

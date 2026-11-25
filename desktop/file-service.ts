@@ -33,6 +33,7 @@ function pathKey(absPath: unknown, platform: string = process.platform) {
 
 function createFileRegistry() {
   const paths = new Map<string, unknown>();
+  const fingerprints = new Map<string, string>();
   return {
     register(absPath: unknown) {
       const id = crypto.randomBytes(16).toString("hex");
@@ -41,8 +42,18 @@ function createFileRegistry() {
     },
     pathOf(id: string) {
       return paths.get(id);
+    },
+    rememberBytes(id: string, bytes: Uint8Array) {
+      fingerprints.set(id, fileFingerprint(bytes));
+    },
+    fingerprint(id: string) {
+      return fingerprints.get(id);
     }
   };
+}
+
+function fileFingerprint(bytes: Uint8Array): string {
+  return crypto.createHash("sha256").update(bytes).digest("hex");
 }
 
 async function readFileEntry(id: string, absPath: unknown) {
@@ -64,7 +75,8 @@ function toBuffer(data: unknown) {
   throw new Error("writeFile: unsupported data type");
 }
 
-async function atomicWrite(absPath: unknown, buffer: Buffer, io: Pick<typeof fsp, "open" | "rename" | "unlink"> = fsp) {
+async function atomicWrite(absPath: unknown, buffer: Buffer, io: Pick<typeof fsp, "open" | "rename" | "unlink"> = fsp,
+  beforeRename?: () => void | Promise<void>) {
   const dir = path.dirname(absPath);
   const tmp = path.join(dir, `.${path.basename(absPath)}.tmp-${crypto.randomBytes(6).toString("hex")}`);
   const fh = await io.open(tmp, "wx");
@@ -75,6 +87,7 @@ async function atomicWrite(absPath: unknown, buffer: Buffer, io: Pick<typeof fsp
     } finally {
       await fh.close();
     }
+    if (beforeRename) await beforeRename();
     await io.rename(tmp, absPath);
   } catch (err) {
     await io.unlink(tmp).catch(() => {});
@@ -82,8 +95,9 @@ async function atomicWrite(absPath: unknown, buffer: Buffer, io: Pick<typeof fsp
   }
 }
 
-async function writeFileEntry(absPath: unknown, buffer: Buffer, io: Pick<typeof fsp, "open" | "rename" | "unlink" | "stat"> = fsp) {
-  await atomicWrite(absPath, buffer, io);
+async function writeFileEntry(absPath: unknown, buffer: Buffer, io: Pick<typeof fsp, "open" | "rename" | "unlink" | "stat"> = fsp,
+  beforeRename?: () => void | Promise<void>) {
+  await atomicWrite(absPath, buffer, io, beforeRename);
   try {
     const stat = await io.stat(absPath);
     return { lastModified: Math.floor(stat.mtimeMs), size: stat.size };
@@ -93,12 +107,13 @@ async function writeFileEntry(absPath: unknown, buffer: Buffer, io: Pick<typeof 
   }
 }
 
-export type { filesToOpenFrom, pathKey, createFileRegistry, readFileEntry, toBuffer, atomicWrite, writeFileEntry };
+export type { filesToOpenFrom, pathKey, createFileRegistry, fileFingerprint, readFileEntry, toBuffer, atomicWrite, writeFileEntry };
 
 export type DesktopFileService = {
   filesToOpenFrom: typeof filesToOpenFrom;
   pathKey: typeof pathKey;
   createFileRegistry: typeof createFileRegistry;
+  fileFingerprint: typeof fileFingerprint;
   readFileEntry: typeof readFileEntry;
   toBuffer: typeof toBuffer;
   atomicWrite: typeof atomicWrite;
@@ -109,6 +124,7 @@ module.exports = {
   filesToOpenFrom,
   pathKey,
   createFileRegistry,
+  fileFingerprint,
   readFileEntry,
   toBuffer,
   atomicWrite,

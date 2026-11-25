@@ -6,7 +6,8 @@ type PictureHttp = ReturnType<typeof sharedPictureHttp>;
 type PictureTransferKind = "checking" | "uploading" | "downloading";
 type PendingPicture = { attempts: number; due: number; cancel: AbortController; kind: PictureTransferKind };
 
-export function startSharedPictures(http: PictureHttp, store: Pick<BlobStore, "has" | "bytesFor" | "ensureBytes" | "intern" | "isDurable" | "persist" | "recordFor">, changed: () => void, progress?: () => void) {
+export function startSharedPictures(http: PictureHttp, store: Pick<BlobStore, "has" | "bytesFor" | "ensureBytes" | "intern" | "isDurable" | "persist" | "recordFor">,
+  changed: () => void, progress?: () => void, pictureAvailable?: () => void) {
   const lifetime = new AbortController();
   const { signal } = lifetime;
   const access = new AbortController();
@@ -118,7 +119,9 @@ export function startSharedPictures(http: PictureHttp, store: Pick<BlobStore, "h
       return;
     }
     if (!(bytes instanceof Uint8Array)) return;
+    const hadBytes = store.has(sha);
     store.intern(bytes);
+    if (!hadBytes && store.has(sha)) pictureAvailable?.();
     setItemKind(sha, "checking");
     await storePicture(sha, requestSignal);
     if (requestSignal.aborted) return;
@@ -137,6 +140,7 @@ export function startSharedPictures(http: PictureHttp, store: Pick<BlobStore, "h
     if (!store.has(sha)) {
       await store.ensureBytes([sha]);
       if (requestSignal.aborted) return;
+      if (store.has(sha)) pictureAvailable?.();
     }
     if (!store.has(sha) || !store.recordFor(sha)) {
       await download(sha, requestSignal);

@@ -33,12 +33,14 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
   }
 
   const anchored: AnchoredBanner[] = [];
-  for (const element of [saveErrorBanner, accessBanner, sizeBanner, byId("collab-offline-banner")]) {
-    if (!element?.parentNode) continue;
+  function anchor(element: HTMLElement | null): boolean {
+    if (!element?.parentNode || anchored.some(banner => banner.element === element)) return false;
     const home = document.createTextNode("");
     element.before(home);
     anchored.push({ element, home });
+    return true;
   }
+  for (const element of [saveErrorBanner, accessBanner, sizeBanner, byId("collab-offline-banner")]) anchor(element);
 
   let writerHost: HTMLElement | null = null;
   let lastActive = false;
@@ -54,7 +56,7 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
 
   function restoreToRoot(): void {
     for (const { element, home } of anchored) {
-      if (home.isConnected && element.previousSibling !== home) home.after(element);
+      if (element.isConnected && home.isConnected && element.previousSibling !== home) home.after(element);
     }
     writerHost?.remove();
     writerHost = null;
@@ -132,7 +134,8 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
     const errorChanged = snapshot.localWriteError !== lastError;
     const sizeChanged = snapshot.mergeTooLarge !== lastMergeTooLarge;
     const refusalChanged = snapshot.refusal !== lastRefusal;
-    if (lastActive && !errorChanged && !sizeChanged && !refusalChanged && writerOpen === lastWriterOpen) return;
+    const fileCopyAdded = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI && anchor(byId("file-copy-banner"));
+    if (lastActive && !errorChanged && !sizeChanged && !refusalChanged && !fileCopyAdded && writerOpen === lastWriterOpen) return;
 
     if (!lastActive || errorChanged) {
       if (snapshot.localWriteError) showSaveError(snapshot.localWriteError, errorChanged);
@@ -152,7 +155,7 @@ export function createSharedBanners(window: Window, ports: SharedBannersPorts): 
       lastRefusal = snapshot.refusal;
     }
 
-    if (!lastActive || errorChanged || sizeChanged || refusalChanged || writerOpen !== lastWriterOpen) {
+    if (!lastActive || errorChanged || sizeChanged || refusalChanged || fileCopyAdded || writerOpen !== lastWriterOpen) {
       placeBanners(true);
       lastWriterOpen = writerOpen;
     }
