@@ -2954,12 +2954,14 @@ async function caseShareScript(target, fixturesDir) {
     },
     stdio: ["ignore", "ignore", "ignore", "ipc"]
   });
-  let app, setup, guest;
+  let app, setup, guest, standalone;
+  let ownerProfile;
   try {
     const [port] = await once(relay, "message", { signal: AbortSignal.timeout(10_000) });
     if (typeof port !== "number") throw new Error("The test relay did not report its port.");
     const address = "http://127.0.0.1:" + port;
     app = await launchApp(target, { label: "share-script", fixtures: [fixture] });
+    ownerProfile = app.userDataDir;
     const { cdp } = app;
     await waitForRows(cdp);
     await poll(cdp, "window.__splitpageFormats.state().title === 'Sharing fixture'");
@@ -3054,13 +3056,85 @@ async function caseShareScript(target, fixturesDir) {
     const guestReplica = path.join(guest.userDataDir, "native-replicas", crypto.createHash("sha256").update(name).digest("hex"));
     record(tag + ": desktop joins the relay and saves encrypted membership",
       fs.existsSync(path.join(guestReplica, "membership")) && !fs.readFileSync(path.join(guestReplica, "membership")).includes(link.hash.slice(1)));
+    record(tag + ": app-data export excludes the credential, shared catalogue and local copy", await evalPage(guestPage,
+      `window.__appDataTest.build().then(bundle => {
+        const exported = JSON.stringify(bundle);
+        return !exported.includes(${JSON.stringify(link.hash.slice(1))}) && !exported.includes(${JSON.stringify(name)}) &&
+          !exported.includes("Original narration");
+      })`));
     await evalPage(guestPage, "document.querySelector('#btn-file').click(); document.querySelector('[data-file-action=leave-shared-script]').click()");
     await poll(guestPage, "!!document.querySelector('#leave-script-modal [data-save-copy]')");
     await evalPage(guestPage, "document.querySelector('#leave-script-modal [data-save-copy]').click()");
     await poll(guestPage, "!document.querySelector('#leave-script-modal')");
     record(tag + ": Save a copy first writes the project and Leave erases the retained replica and membership",
       !fs.existsSync(guestReplica) && JSON.parse(fs.readFileSync(saved, "utf8")).title === "Sharing fixture");
+    record(tag + ": Leave removes the script from Recent", await evalPage(guestPage,
+      "window.splitpageDesktop.listRecents().then(entries => entries.every(entry => !entry.shared))"));
+
+    const sharedTabId = await tabIdOfTarget(cdp);
+    const standaloneId = await shell(cdp, "createTab", {});
+    standalone = await connectTab(app, standaloneId);
+    await waitForRows(standalone);
+    await evalPage(standalone, "window.__onboarding.autoShowDecided()");
+    await evalPage(standalone, "document.querySelector('#onboarding-modal:not([hidden]) [data-onboard-action=skip]')?.click(); document.querySelector('[data-newtab-action=dismiss]')?.click()");
+    await evalPage(standalone, "document.querySelector('#btn-file').click(); document.querySelector('[data-submenu=recent]').click()");
+    await poll(standalone, "document.querySelector('#menu-sub-recent button[data-shared] .recent-shared-badge')?.textContent === 'Shared'");
+    record(tag + ": Open recent shows the Shared badge", true);
+    await evalPage(standalone, "document.querySelector('#btn-file').click()");
+    await evalPage(standalone, "document.querySelector('#onboarding-modal:not([hidden]) [data-onboard-action=skip]')?.click(); window.__newTab.open()");
+    await poll(standalone, "document.querySelector('#newtab-recents-list button[data-shared]')?.textContent.includes('Shared')");
+    await evalPage(standalone, "document.querySelector('#newtab-recents-list button[data-shared]').click()");
+    await pollNode(async () => {
+      const state = await shell(cdp, "listTargets", {});
+      const win = state.windows.find(window => window.tabs.some(tab => tab.tabId === sharedTabId));
+      return win?.activeTabId === sharedTabId && win.tabs.length === 2;
+    });
+    record(tag + ": New Tab Recent uses the Shared badge and focuses the existing tab", true);
+    standalone.close();
+    standalone = undefined;
+    await fireEval(cdp, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
+    if (!await waitForExit(app.proc, 8000)) throw new Error("Quit did not finish: shared " + sharedTabId + ", standalone " + standaloneId + app.getStderr());
+    await teardown(app, tag + " before online restore", { expectExitCode: 0 });
+    app = await launchApp(target, { label: "shared-online-restart", userDataDir: ownerProfile });
+    if (await tabIdOfTarget(app.cdp) !== sharedTabId) {
+      app.cdp.close();
+      app.cdp = await connectTab(app, sharedTabId);
+    }
+    try {
+      await poll(app.cdp, "window.__sharedTest?.read().app?.title === 'Sharing fixture'", 7000);
+    } catch (error) {
+      const renderer = await evalPage(app.cdp, "({ intent: window.splitpageDesktop.launchIntent.type, " +
+        "title: window.__splitpageFormats?.state().title, notices: document.querySelector('#toast')?.textContent })");
+      throw new Error("Shared restore did not open: " + JSON.stringify(renderer) + "\n" + app.getStderr(), { cause: error });
+    }
+    record(tag + ": online restart restores the same shared tab", await tabIdOfTarget(app.cdp) === sharedTabId);
+
+    relay.send("stop", () => {});
+    if (!await waitForExit(relay, 5000)) throw new Error("The test relay did not stop.");
+    const changed = "Edited with the relay offline";
+    await evalPage(app.cdp, `(() => {
+      const cell = document.querySelector('#rows .row .audio-cell .cell-editable');
+      cell.focus();
+      const range = document.createRange();
+      range.selectNodeContents(cell);
+      const selection = window.getSelection();
+      selection.removeAllRanges();
+      selection.addRange(range);
+      return true;
+    })()`);
+    await app.cdp.send("Input.insertText", { text: changed });
+    await fireEval(app.cdp, "window.splitpageDesktop.__testRequestQuit()", { awaitPromise: false });
+    if (!await waitForExit(app.proc, 8000)) throw new Error("Offline quit did not finish: " + app.getStderr());
+    await teardown(app, tag + " before offline restore", { expectExitCode: 0 });
+    app = await launchApp(target, { label: "shared-offline-restart", userDataDir: ownerProfile });
+    if (await tabIdOfTarget(app.cdp) !== sharedTabId) {
+      app.cdp.close();
+      app.cdp = await connectTab(app, sharedTabId);
+    }
+    await poll(app.cdp, `window.__sharedTest?.read().app?.rows[0]?.audioText.includes(${JSON.stringify(changed)})`);
+    record(tag + ": offline restart restores the tab and the edit made before quitting", await tabIdOfTarget(app.cdp) === sharedTabId);
   } finally {
+    standalone?.close();
     setup?.close();
     if (guest) {
       await teardown(guest, tag + " guest", { expectExitCode: 0 });
@@ -3069,8 +3143,8 @@ async function caseShareScript(target, fixturesDir) {
     if (app) {
       await teardown(app, tag, { expectExitCode: 0 });
       record(tag + ": logs never contain the management secret", !app.getStdout().includes(secret) && !app.getStderr().includes(secret));
-      rmrf(app.userDataDir);
     }
+    if (ownerProfile) rmrf(ownerProfile);
     if (relay.connected) relay.send("stop", () => {});
     if (!await waitForExit(relay, 5000)) {
       relay.kill();

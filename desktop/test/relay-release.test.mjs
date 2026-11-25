@@ -5,6 +5,7 @@ import { join } from "node:path";
 import { test } from "node:test";
 import { fileURLToPath } from "node:url";
 import { parse } from "yaml";
+import { createRequire } from "node:module";
 import { build } from "../../build.mjs";
 import { leakedCollaboration, leakedHooks } from "../../tools/release-hooks.mjs";
 import { releaseCollaborationProblems } from "../release-collaboration.mjs";
@@ -16,6 +17,41 @@ const variant = join(stage, "desktop-build");
 const code = join(stage, "desktop-code");
 const read = file => readFileSync(file, "utf8");
 const stageBuild = (...args) => execFileSync(process.execPath, [join(desktop, "stage.mjs"), ...args], { encoding: "utf8" });
+const { createSessionRestore } = createRequire(import.meta.url)("../session-restore.ts");
+
+test("restore uses a retained shared identity when enabled and opens a blank tab in release", () => {
+  const id = "a".repeat(32);
+  const source = { kind: "shared", deployment: "relay", script: "script" };
+  const window = { id: "window", tabIds: [] };
+  const state = { windows: [{ windowId: window.id, activeTabId: id, tabs: [{ tabId: id, source }] }] };
+  for (const enabled of [true, false]) {
+    window.tabIds = [];
+    const tabs = new Map();
+    const windowsById = new Map();
+    const restore = createSessionRestore({
+      desktopState: { read: () => state },
+      draftsList: () => [],
+      tabs, windowsById,
+      createTabWindow() { windowsById.set(window.id, window); return window; },
+      createTab(_windowId, spec) {
+        const key = spec.tabId ?? "blank";
+        window.tabIds.push(key);
+        const tab = { id: key, ...spec };
+        tabs.set(key, tab);
+        return tab;
+      },
+      activateTab: () => {},
+      liveWindows: () => [window],
+      argvFilesToOpen: [],
+      persistShellState: () => {},
+      canRestoreShared: () => enabled
+    });
+    restore.restoreSessionAtLaunch();
+    assert.equal(tabs.size, 1);
+    assert.deepEqual(tabs.get(enabled ? id : "blank").source, enabled ? source : { kind: "blank" });
+    assert.equal(tabs.get(enabled ? id : "blank").launchIntent.type, enabled ? "open-shared" : "blank");
+  }
+});
 
 test("a release stage following a test stage removes the setup code, assets, origin and preload", () => {
   const config = parse(read(join(desktop, "electron-builder.yml")));
@@ -31,10 +67,13 @@ test("a release stage following a test stage removes the setup code, assets, ori
   assert.ok(leakedCollaboration(enabledPreload).includes("splitpage:relay-owner-"));
   assert.ok(leakedCollaboration(enabledHtml).includes("share-script"));
   assert.ok(leakedCollaboration(enabledHtml).includes("share-script-modal"));
+  assert.ok(leakedCollaboration(enabledHtml).includes("Shared scripts on this device"));
+  assert.ok(leakedCollaboration(enabledHtml).includes("note-shared"));
   for (const marker of ['url.searchParams.has("join")', "splitpageInvitation", "join-script-modal", "Join a shared script…", "leave-script-modal", "Leave shared script"]) {
     assert.ok(leakedCollaboration(enabledHtml).includes(marker), marker);
   }
   assert.ok(leakedCollaboration(enabledPreload).includes("splitpage:relay-owner-share-create"));
+  assert.ok(leakedCollaboration(enabledPreload).includes("open-shared"));
   assert.match(enabledHtml, /connect-src 'self' https: http: wss: ws:\/\/127\.0\.0\.1:\*;/);
   assert.deepEqual(readdirSync(join(variant, "relay-setup")).sort(), ["index.html", "preload.js", "setup.css"]);
   assert.deepEqual(readdirSync(code).sort(), ["collaboration.json", "relay-owner.ts", "relay-setup-window.ts"]);
@@ -67,6 +106,7 @@ test("test hooks and invitation handling are selected independently", () => {
   assert.ok(leakedCollaboration(collaborationOnly).includes("settings-collaboration"));
   assert.ok(leakedCollaboration(collaborationOnly).includes("share-script-modal"));
   assert.ok(leakedCollaboration(collaborationOnly).includes("join-script-modal"));
+  assert.ok(leakedCollaboration(collaborationOnly).includes("Shared scripts on this device"));
   assert.match(collaborationOnly, /connect-src 'self' https: http: wss:;/);
   assert.ok(!leakedHooks(collaborationOnly).includes("__sharedTest"));
 });

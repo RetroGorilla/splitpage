@@ -14,6 +14,8 @@ import type * as Drafts from "./drafts.ts";
 import type * as FileService from "./file-service.ts";
 import type * as DocClaims from "./doc-claims.ts";
 import type * as Recents from "./recents.ts";
+import type * as SharedScripts from "../shared/shared-script.ts";
+import type { SharedScriptIdentity } from "../shared/shared-script.ts";
 import type * as WindowAppearance from "./window-appearance.ts";
 import type * as TabRegistry from "./tab-registry.ts";
 import type * as RestoreNotice from "./restore-notice.ts";
@@ -188,6 +190,8 @@ const COLLAB_UI = (() => {
   }
 })();
 const SHARED_ROOT = path.join(APP_ROOT, "shared");
+const { readSharedScriptCatalogueEntry, readSharedScriptIdentity, sharedScriptKey }: typeof SharedScripts =
+  require(path.join(SHARED_ROOT, "shared-script.ts"));
 const { readNativeMembership }: { readNativeMembership: typeof ReadNativeMembership } = require(path.join(SHARED_ROOT, "native-membership.ts"));
 const historyPolicy: typeof HistoryPolicy = require(path.join(SHARED_ROOT, "history-policy.ts"));
 const { HISTORY_OLDER_KEY, HISTORY_SNAP_ID_RE } = historyPolicy;
@@ -246,7 +250,7 @@ const TABSTRIP_ALLOWLIST: typeof STATIC_ALLOWLIST = {
 };
 
 const {
-  tabs, windowsById, webContentsIdToTabId, pathToTabId,
+  tabs, windowsById, webContentsIdToTabId, pathToTabId, sharedTab,
   mintUniqueTabId, mintUniqueWindowId, firstWindowRecord, claimRoutingKey, indexTabSource, unindexTabSource
 } = createTabRegistry({
   pathKey,
@@ -363,7 +367,7 @@ function initDraftStore() {
 }
 
 function tabIsUnsaved(tab: DesktopMainTab | null | undefined): boolean {
-  return !!(tab && !tab.crashedNotReloaded && (tab.dirty || draftsIsHeld(tab.id)));
+  return !!(tab && !tab.crashedNotReloaded && (tab.dirty || (tab.source.kind !== "shared" && draftsIsHeld(tab.id))));
 }
 
 function tabHasFile(tab: DesktopMainTab | null | undefined): boolean {
@@ -441,17 +445,19 @@ function requestDraftFlush(tab: DesktopMainTab | null | undefined, budgetMs: num
 const desktopState = createDesktopStateStore({
   filePath: () => path.join(app.getPath("userData"), "desktop-state.json"),
   pathKey,
+  shared: { identity: readSharedScriptIdentity, entry: readSharedScriptCatalogueEntry },
   onWriteError: (err) => {
     if (TEST_MODE) process.stderr.write(`[splitpage] desktop-state write failed: ${err && (err as Error).stack || err}\n`);
   }
 });
 
-const recents = createRecents({ store: desktopState, pathKey, fileIds });
+const recents = createRecents({ store: desktopState, pathKey, fileIds, shared: COLLAB_UI });
 
 const { hadPriorSession, isRestoringSession, restoreSessionAtLaunch, registerActivate } = createSessionRestore({
   app, BrowserWindow, desktopState, draftStore: () => draftStore, draftsList, tabs, windowsById, pathToTabId,
   claimRoutingKey, createTabWindow, createTab, activateTab, liveWindows, firstWindowRecord, payloadForSource,
-  routeLaunchFile, argvFilesToOpen, restoreNotice, persistShellState
+  routeLaunchFile, argvFilesToOpen, restoreNotice, persistShellState,
+  canRestoreShared: source => !!retainedSharedScript(source)
 });
 
 function noteRecentDocumentAndPersist(absPath: unknown, title: string) {
@@ -471,7 +477,7 @@ function shellStateAsV2() {
       const tab = tabs.get(tabId);
       if (!tab) continue;
       if (tab.source.kind === "blank" && !draftsHasDraft(tabId)) continue;
-      rows.push({ tabId, source: normalizeTabSource(tab.source), lastKnownTitle: tab.title || "" });
+      rows.push({ tabId, source: normalizeTabSource(tab.source, readSharedScriptIdentity), lastKnownTitle: tab.title || "" });
     }
     if (!rows.length) {
       const active = tabs.get(w.activeTabId);
@@ -1195,6 +1201,8 @@ function createTab(windowId: string, opts?: Partial<Pick<DesktopMainTab, "source
   const w = windowsById.get(windowId);
   if (!w || w.win.isDestroyed()) return null;
   const o = opts || {};
+  const source = normalizeTabSource(o.source, COLLAB_UI ? readSharedScriptIdentity : undefined);
+  if (source.kind === "shared" && focusSharedTab(sharedScriptKey(source))) return null;
   const tabId = mintUniqueTabId(o.tabId);
 
   const view = new WebContentsView({
@@ -1214,7 +1222,7 @@ function createTab(windowId: string, opts?: Partial<Pick<DesktopMainTab, "source
     windowId,
     view,
     webContentsId: view.webContents.id,
-    source: normalizeTabSource(o.source),
+    source,
     fileId: null,
     title: "",
     dirty: false,
@@ -1492,7 +1500,7 @@ function routeOpenPath(absPath: unknown, opts?: { fromWindowId?: string | null; 
   const w = windowRecordFor(o.fromWindowId);
   if (!w) return null;
   const target = tabs.get(o.fromTabId) || tabs.get(w.activeTabId);
-  if (target && target.pristine && target.ready) {
+  if (target && target.source.kind !== "shared" && target.pristine && target.ready) {
     target.source = { kind: "file", absPath: resolved };
     indexTabSource(target);
     deliverOpenFile(target, resolved);
@@ -1918,9 +1926,27 @@ function dialogParentFor(event: DesktopIpcEvent) {
 }
 
 function launchIntentFor(tab: DesktopMainTab) {
+  if (tab.source.kind === "shared") {
+    const shared = retainedSharedScript(tab.source);
+    if (shared) return { type: "open-shared", shared };
+  }
   if (draftsHasDraft(tab.id)) return { type: "restore-draft" };
   if (tab.source.kind === "file" && tab.pendingPayload) return { type: "open-file" };
   return { type: "blank" };
+}
+
+function retainedSharedScript(identity: SharedScriptIdentity) {
+  if (!COLLAB_UI) return undefined;
+  const key = sharedScriptKey(identity);
+  return desktopState.read().sharedScripts?.find(entry => sharedScriptKey(entry) === key);
+}
+
+function focusSharedTab(name: string, except?: DesktopMainTab, leaseOwner?: number): boolean {
+  const tab = sharedTab(name) ?? (leaseOwner === undefined ? undefined : tabs.get(webContentsIdToTabId.get(leaseOwner)));
+  if (!tab || tab === except) return false;
+  activateTab(tab.id);
+  focusWindow(tab.windowId);
+  return true;
 }
 
 const { registerFileIpc } = createFileIpc({
@@ -1953,24 +1979,60 @@ function nativeReplicaForDevice(sender: Electron.WebContents, request: unknown) 
     },
     decrypt: bytes => safeStorage.decryptString(bytes)
   });
-  return handleReplica(sender, request);
+  const tab = tabs.get(webContentsIdToTabId.get(sender.id));
+  return handleReplica(sender, request, COLLAB_UI && tab ? {
+    focus: (name, leaseOwner) => focusSharedTab(name, tab, leaseOwner),
+    async note(name, raw) {
+      const entry = readSharedScriptCatalogueEntry(raw);
+      if (!entry || sharedScriptKey(entry) !== name || focusSharedTab(name, tab)) return false;
+      const { deployment, script } = entry;
+      unindexTabSource(tab);
+      tab.source = { kind: "shared", deployment, script };
+      tab.sharedAttached = true;
+      tab.fileId = null;
+      indexTabSource(tab);
+      return desktopState.write(current => ({
+        ...current,
+        ...(!sessionWritesAreFrozen() && shellStateAsV2()),
+        sharedScripts: [entry, ...(current.sharedScripts ?? []).filter(item => sharedScriptKey(item) !== name)]
+      }));
+    },
+    async forgot(name) {
+      const written = await desktopState.write(current => {
+        if (!current.sharedScripts?.some(entry => sharedScriptKey(entry) === name)) return current;
+        current.sharedScripts = current.sharedScripts.filter(entry => sharedScriptKey(entry) !== name);
+        return current;
+      });
+      if (!written) throw new Error("Could not remove the shared script from Recent.");
+    },
+    detached(name) {
+      if (!tab.sharedAttached || tab.source.kind !== "shared" || sharedScriptKey(tab.source) !== name) return;
+      unindexTabSource(tab);
+      const absPath = tab.fileId ? fileIds.pathOf(tab.fileId) : null;
+      tab.source = absPath ? { kind: "file", absPath } : { kind: "blank" };
+      tab.sharedAttached = false;
+      indexTabSource(tab);
+      if (absPath) recents.note(absPath, tab.title);
+      void persistShellState();
+    }
+  } : undefined);
 }
+
+const { registerTabStripIpc, routeSharedRecent } = createTabStripIpc({
+  tabStripWindowOf, shellStateForWindow, tabs, createTab, activateTab, requestCloseTab, reorderTab,
+  moveTabToWindow, tearOffToNewWindow, recents, focusShared: entry => focusSharedTab(sharedScriptKey(entry))
+});
 
 const { registerDocumentIpc } = createDocumentIpc({
   tabOf, fileIds, unindexTabSource, indexTabSource, recents, windowsById, applyWindowTitle,
   pushShellState, persistShellState, docClaims, testMode: TEST_MODE, flushPendingPayload, restoreNotice,
   routeOpenPath, draftStore: () => draftStore, draftFiniteNumber, draftBodyTooLarge, buildDraftHeader,
-  draftsPreviousSession: () => draftsPreviousSession, pendingDraftFlushes, nativeReplicaForDevice
+  draftsPreviousSession: () => draftsPreviousSession, pendingDraftFlushes, nativeReplicaForDevice, routeSharedRecent
 });
 
 const { registerHistoryBlobIpc } = createHistoryBlobIpc({
   historyStore: () => historyStore, historyHolds, historyProtectList, historyWireMeta,
   blobStore: () => blobStore, historyPolicy, DOC_ID_RE
-});
-
-const { registerTabStripIpc } = createTabStripIpc({
-  tabStripWindowOf, shellStateForWindow, tabs, createTab, activateTab, requestCloseTab, reorderTab,
-  moveTabToWindow, tearOffToNewWindow
 });
 
 const { registerTestModeIpc } = createTestModeIpc({

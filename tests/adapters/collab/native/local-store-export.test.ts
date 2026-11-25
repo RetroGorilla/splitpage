@@ -1,7 +1,7 @@
 import { createHash, randomBytes } from "node:crypto";
 import assert from "node:assert/strict";
 import { test } from "node:test";
-import { createBrowserNativeLocalStore } from "../../../../src/adapters/collab/native/browser-local-store.ts";
+import { createBrowserNativeLocalStore, createBrowserSharedCatalogue } from "../../../../src/adapters/collab/native/browser-local-store.ts";
 import { bootApp, closeApp } from "../../../../src/test/_app-boot.mjs";
 import { stored, STORE_OPTIONS, seedReplica, storedBytes, typeAt } from "./local-store-fixture.ts";
 
@@ -13,7 +13,7 @@ async function exportAppData() {
   return result;
 }
 
-test("existing app-data export leaves native replicas outside its bundle", { timeout: 30000 }, async t => {
+test("existing app-data export leaves native replicas and the shared catalogue outside its bundle", { timeout: 30000 }, async t => {
   const factory = window.indexedDB;
   const connections = new Set<IDBDatabase>();
   const open = factory.open.bind(factory);
@@ -41,6 +41,11 @@ test("existing app-data export leaves native replicas outside its bundle", { tim
     typeAt(replica.session, 0, "Journaled ", "A");
     assert.deepEqual(await replica.flush(), stored(2));
     assert.equal(replica.session.pendingEdits?.data().entries.length, 1);
+    const catalogue = createBrowserSharedCatalogue(factory);
+    const entry = { deployment: "deployment", script: "retained-replica", title: "Private catalogue title", relayUrl: "wss://relay.example/", at: 42 };
+    await catalogue.note({ ...entry, ...{ token: invitation, replica: replica.session.encodeState() } });
+    assert.deepEqual(await catalogue.list(), [entry]);
+    await assert.rejects(catalogue.note({ ...entry, relayUrl: entry.relayUrl + "#credential" }), TypeError);
     const bundle = await exportAppData();
     const digest = createHash("sha256").update(invitation).digest();
     for (const value of [bundle, replica.session.document(), replica.session.ydoc.toJSON()]) {

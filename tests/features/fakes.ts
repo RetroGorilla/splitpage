@@ -21,6 +21,9 @@ import type { UndoControl } from "../../src/application/editing/undo-control.ts"
 import type { NoticeKind, NoticePort } from "../../src/application/effects/ports.ts";
 import type { DocumentEdits } from "../../src/application/session/document-edits.ts";
 import { IDLE_COLLABORATION_SNAPSHOT } from "../../src/application/collaboration/state.ts";
+import type { SharedScriptCatalogueStorage } from "../../src/application/collaboration/shared-script-catalogue.ts";
+import type { SharedScriptCatalogueEntry } from "../../shared/shared-script.ts";
+import { sharedScriptKey } from "../../shared/shared-script.ts";
 import type { CollaborationReads } from "../../src/application/collaboration/state.ts";
 import type { SharedCommandGuard } from "../../src/application/session/document-edits.ts";
 
@@ -576,4 +579,11 @@ export function fakeOnboardingPorts() {
     onFileMenuChoice: (listener) => { choices.add(listener); return () => { choices.delete(listener); }; }
   };
   return { ports, state, actions, panels, recorded, choices };
+}
+export function fakeSharedScriptCatalogue(initial: readonly SharedScriptCatalogueEntry[] = []): SharedScriptCatalogueStorage {
+  const entries = new Map(initial.map(entry => [sharedScriptKey(entry), entry]));
+  return {
+    list: async () => Array.from(entries.values()),
+    note: async entry => { entries.set(sharedScriptKey(entry), entry); }
+  };
 }

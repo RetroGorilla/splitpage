@@ -69,6 +69,22 @@ test("a file tab is indexed by its path key, and a blank tab is not", () => {
   assert.deepEqual([...r.pathToTabId], [["/docs/one.splitpage", ID_A]]);
 });
 
+test("a shared identity routes to its live tab and is scoped by deployment", () => {
+  const r = createTabRegistry({ pathKey });
+  const a = { id: ID_A, source: { kind: "shared", deployment: "one", script: "production" } };
+  const b = { id: ID_B, source: { ...a.source, deployment: "two" } };
+  r.tabs.set(a.id, a);
+  r.tabs.set(b.id, b);
+  r.indexTabSource(a);
+  r.indexTabSource({ ...b, source: a.source });
+  r.indexTabSource(b);
+  assert.equal(r.sharedTab("one/production"), a);
+  assert.equal(r.sharedTab("two/production"), b);
+  assert.equal(r.pathToTabId.size, 0);
+  r.unindexTabSource(a);
+  assert.equal(r.sharedTab("one/production"), undefined);
+});
+
 test("every source a tab takes, file or blank, is reported once as it is indexed", () => {
   const seen = [];
   const r = createTabRegistry({ pathKey, sourceChanged: (tab) => seen.push([tab.id, tab.source.kind === "file" ? tab.source.absPath : null]) });

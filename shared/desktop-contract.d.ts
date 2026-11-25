@@ -1,4 +1,5 @@
 import type { NativeReplicaReply, NativeReplicaRequest } from "./native-replica.d.ts";
+import type { SharedScriptCatalogueEntry } from "./shared-script.ts";
 
 export interface DesktopWireFile {
   id: string;
@@ -15,6 +16,7 @@ export interface DesktopWireStamp {
 }
 
 export interface DesktopWireRecent {
+  shared?: true;
   fileId: string;
   name: string;
   title: string;
@@ -23,6 +25,7 @@ export interface DesktopWireRecent {
 
 export interface DesktopWireLaunch {
   type: string;
+  shared?: SharedScriptCatalogueEntry;
 }
 
 export interface DesktopWireBoot {
@@ -349,7 +352,7 @@ export interface DesktopIpcContract {
   "splitpage:voice-stop": DesktopChannelCall<[session?: number], { ok: true }>;
   "splitpage:set-document-state": DesktopChannelCall<[{ title?: string; dirty?: boolean; pristine?: boolean; docId?: string | null; fileId?: string | null }], void>;
   "splitpage:renderer-ready": DesktopChannelCall<[], void>;
-  "splitpage:route-open": DesktopChannelCall<[{ kind: "file"; fileId: string }], { where: DesktopRouteWhere }>;
+  "splitpage:route-open": DesktopChannelCall<[{ kind: "file" | "shared"; fileId: string }], { where: DesktopRouteWhere }>;
   "splitpage:draft-write": DesktopChannelCall<[unknown], DesktopWireDraftWrite>;
   "splitpage:draft-discard": DesktopChannelCall<[unknown], DesktopWireDraftDiscard>;
   "splitpage:draft-take": DesktopChannelCall<[], DesktopWireTakenDraft | null>;

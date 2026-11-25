@@ -41,6 +41,8 @@ export const CONFIGURATION = Object.freeze({
   "src/bootstrap/wiring/onboarding.ts": { functions: ["mountOnboardingFeature"] },
   "src/bootstrap/wiring/drafts.ts": { functions: ["mountDraftsFeature"] },
   "src/bootstrap/wiring/shared-startup.ts": { functions: ["mountSharedSessionFeature"] },
+  "src/bootstrap/wiring/shared-reopen.ts": { functions: ["startSharedReopen"] },
+  "src/bootstrap/wiring/ports/shared-scripts.ts": { functions: ["wireBrowserSharedOpen"] },
   "src/bootstrap/wiring/shared-entry.ts": { functions: ["mountSharedEntry"] },
   "src/bootstrap/wiring/collaboration-join.ts": { functions: ["startInvitationEntry"] },
   "src/bootstrap/wiring/desktop.ts": { functions: ["mountDesktopFeature", "startDesktopShell"] },

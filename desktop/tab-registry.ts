@@ -17,6 +17,11 @@ function createTabRegistry({ pathKey, sourceChanged }: Pick<DesktopFileService, 
   const windowsById: DesktopLookupMap<string, DesktopMainWindow> = new Map();
   const webContentsIdToTabId = new Map<number, string>();
   const pathToTabId = new Map<string, string>();
+  const sharedToTabId = new Map<string, string>();
+
+  function sharedTab(key: string) {
+    return tabs.get(sharedToTabId.get(key));
+  }
 
   function mintUniqueTabId(preferred?: unknown) {
     if (typeof preferred === "string" && TAB_OR_WINDOW_ID_RE.test(preferred) && !tabs.has(preferred)) return preferred;
@@ -46,11 +51,13 @@ function createTabRegistry({ pathKey, sourceChanged }: Pick<DesktopFileService, 
 
   function indexTabSource(tab: Pick<DesktopMainTab, "id" | "source">) {
     if (tab.source.kind === "file") claimRoutingKey(pathToTabId, pathKey(tab.source.absPath), tab.id);
+    if (tab.source.kind === "shared") claimRoutingKey(sharedToTabId, `${tab.source.deployment}/${tab.source.script}`, tab.id);
     if (sourceChanged) sourceChanged(tab);
   }
 
   function unindexTabSource(tab: Pick<DesktopMainTab, "id">) {
     for (const [key, id] of pathToTabId) if (id === tab.id) pathToTabId.delete(key);
+    for (const [key, id] of sharedToTabId) if (id === tab.id) sharedToTabId.delete(key);
   }
 
   return {
@@ -58,6 +65,7 @@ function createTabRegistry({ pathKey, sourceChanged }: Pick<DesktopFileService, 
     windowsById,
     webContentsIdToTabId,
     pathToTabId,
+    sharedTab,
     mintUniqueTabId,
     mintUniqueWindowId,
     firstWindowRecord,

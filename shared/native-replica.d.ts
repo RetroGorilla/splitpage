@@ -5,7 +5,8 @@ export interface NativeMembershipRecord {
 }
 
 export type NativeReplicaRequest =
-  | ["open" | "delete", name: string]
+  | ["open" | "delete" | "focus-shared", name: string]
+  | ["note-shared", name: string, entry: SharedScriptCatalogueEntry]
   | ["membership" | "forget" | "read-journal", name: string, lease: string]
   | ["join", name: string, lease: string, record: string | NativeMembershipRecord | null]
   | ["close", name: string, lease: string]
@@ -30,3 +31,4 @@ export type NativeReplicaReply =
   | { readonly kind: "stored" };
 
 export type NativeReplicaInvoke = (request: NativeReplicaRequest) => Promise<NativeReplicaReply>;
+import type { SharedScriptCatalogueEntry } from "./shared-script.ts";

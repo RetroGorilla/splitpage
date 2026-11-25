@@ -25,6 +25,7 @@ import type { createRestoreNotice } from "./restore-notice.ts";
 import type { createThemeChoice } from "./window-appearance.ts";
 import type { createCloseQuit } from "./close-quit.ts";
 import type { createTabRegistry } from "./tab-registry.ts";
+import type { SharedScriptIdentity } from "../shared/shared-script.ts";
 import type { createDesktopStateStore } from "./desktop-state.ts";
 
 export type DesktopIpcEvent = IpcMainEvent | IpcMainInvokeEvent;
@@ -69,6 +70,7 @@ export interface DesktopFileIpcDependencies extends Pick<DesktopMainCommon, "tab
 }
 
 export interface DesktopDocumentIpcDependencies extends Pick<DesktopMainCommon, "tabOf" | "fileIds" | "recents" | "windowsById" | "testMode" | "draftStore" | "draftsPreviousSession"> {
+  routeSharedRecent: (tab: DesktopMainTab, fileId: string) => { where: "other-tab" | "new-tab" } | null;
   nativeReplicaForDevice: (sender: WebContents, request: unknown) => Promise<NativeReplicaReply>;
   unindexTabSource: (tab: DesktopMainTab) => void;
   indexTabSource: (tab: DesktopMainTab) => void;
@@ -126,7 +128,8 @@ export interface DesktopHistoryBlobIpcDependencies {
   DOC_ID_RE: RegExp;
 }
 
-export interface DesktopTabStripIpcDependencies extends Pick<DesktopMainCommon, "tabs" | "shellStateForWindow" | "createTab" | "activateTab" | "requestCloseTab" | "reorderTab" | "moveTabToWindow"> {
+export interface DesktopTabStripIpcDependencies extends Pick<DesktopMainCommon, "tabs" | "shellStateForWindow" | "createTab" | "activateTab" | "requestCloseTab" | "reorderTab" | "moveTabToWindow" | "recents"> {
+  focusShared: (identity: SharedScriptIdentity) => boolean;
   tabStripWindowOf: (event: DesktopIpcEvent) => DesktopMainWindow | null;
   tearOffToNewWindow: (tabId: string, x: number, y: number) => void;
 }
@@ -172,6 +175,7 @@ export interface DesktopCloseQuitDependencies extends Pick<DesktopMainCommon, "t
 }
 
 export interface DesktopSessionRestoreDependencies extends Pick<DesktopMainCommon, "tabs" | "windowsById" | "draftStore" | "createTab" | "activateTab">, Pick<ReturnType<typeof createTabRegistry>, "pathToTabId" | "claimRoutingKey" | "firstWindowRecord"> {
+  canRestoreShared?: (source: Extract<DesktopMainTab["source"], { kind: "shared" }>) => boolean;
   app: Pick<App, "on">;
   BrowserWindow: Pick<typeof BrowserWindow, "getAllWindows">;
   desktopState: Pick<ReturnType<typeof createDesktopStateStore>, "read">;

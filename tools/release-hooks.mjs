@@ -26,7 +26,8 @@ const COLLABORATION_MARKERS = [
   "relayOwner", "splitpage:relay-owner-", "splitpage:relay-setup-",
   'url.searchParams.has("join")', "join-script", "join-script-modal", "Join a shared script…",
   "leave-script-modal", "Leave shared script",
-  "share-script", "Share this script…", "share-script-modal", "splitpage:relay-owner-share-create"
+  "share-script", "Share this script…", "share-script-modal", "splitpage:relay-owner-share-create",
+  "Shared scripts on this device", "note-shared", "focus-shared", "open-shared"
 ];
 
 export function leakedCollaboration(text) {

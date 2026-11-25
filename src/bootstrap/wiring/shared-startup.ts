@@ -3,11 +3,13 @@ import { stopCollaborationOwner } from "./collaboration-owner.ts";
 import { mountSharedEntry } from "./shared-entry.ts";
 import { startSharedTestHook } from "./shared-test.ts";
 import { startInvitationEntry } from "./collaboration-join.ts";
+import { startSharedReopen } from "./shared-reopen.ts";
 
 declare const SPLITPAGE_TEST_HOOKS: boolean | undefined;
 declare const SPLITPAGE_COLLAB_UI: boolean | undefined;
 
 const startInvitations = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI ? startInvitationEntry : undefined;
+const startReopen = typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI ? startSharedReopen : undefined;
 let stopEntry: (() => void) | undefined;
 
 function mount(): void {
@@ -15,7 +17,9 @@ function mount(): void {
   const test = startSharedTestHook?.(() => invitations?.status() ?? { connected: false, settled: false });
   const stop = mountSharedEntry(() => test?.left());
   const invitations = startInvitations?.();
+  const stopReopen = startReopen?.(invitations?.hasInvitation ?? false);
   stopEntry = () => {
+    stopReopen?.();
     invitations?.dispose();
     try { stop(); } finally { test?.dispose(); }
   };

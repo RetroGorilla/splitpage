@@ -8,10 +8,12 @@ import { draftResume, recoveryStarted } from "./recovery-owners.ts";
 import { unsavedChanges } from "./save-owners.ts";
 import { documentReader } from "./ports/document.ts";
 import { currentHome } from "./location-owner.ts";
+import type { DraftFlush } from "../../application/recovery/drafts-ports.ts";
 
 let started: DesktopDocumentStateOwner | null = null;
 let handOff: DesktopHandOff | null = null;
 let sharedUnsaved: (() => boolean) | null = null;
+let sharedFlush: (() => Promise<DraftFlush>) | null = null;
 let pausePublication: object | null = null;
 
 export function holdDesktopDocumentPublication(): () => void {
@@ -24,10 +26,17 @@ export function holdDesktopDocumentPublication(): () => void {
   };
 }
 
-export function trackSharedDesktopUnsaved(read: () => boolean): () => void {
+export function trackSharedDesktopUnsaved(read: () => boolean, flush: () => Promise<DraftFlush>): () => void {
   sharedUnsaved = read;
-  return () => { if (sharedUnsaved === read) sharedUnsaved = null; };
+  sharedFlush = flush;
+  return () => {
+    if (sharedUnsaved !== read) return;
+    sharedUnsaved = null;
+    sharedFlush = null;
+  };
 }
+
+export function flushSharedDesktopCopy(): Promise<DraftFlush> | undefined { return sharedFlush?.(); }
 
 export function legacyDesktopDocumentPorts(history: Pick<HistoryOwner, "isPristineSeedDocument">): DesktopDocumentStatePorts {
   return Object.freeze({
@@ -35,7 +44,7 @@ export function legacyDesktopDocumentPorts(history: Pick<HistoryOwner, "isPristi
       running: presence.running,
       document: function () { return documentReader.current(); },
       restoring: function () { return recoveryStarted() && draftResume().restorePending(); },
-      unsaved: function () { return unsavedChanges() || (sharedUnsaved?.() ?? false); },
+      unsaved: function () { return sharedUnsaved?.() ?? unsavedChanges(); },
       pristine: function () { return history.isPristineSeedDocument(); },
       fileId: function (): string | null {
         const home = currentHome();

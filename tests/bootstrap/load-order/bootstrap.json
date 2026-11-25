@@ -3,6 +3,7 @@
     "src/bootstrap/wiring/views.ts",
     "src/bootstrap/wiring/shared-test.ts",
     "src/bootstrap/wiring/shared-startup.ts",
+    "src/bootstrap/wiring/shared-reopen.ts",
     "src/bootstrap/wiring/shared-entry.ts",
     "src/bootstrap/wiring/collaboration-join.ts",
     "src/bootstrap/wiring/overlay.ts",
@@ -30,7 +31,8 @@
     "src/bootstrap/wiring/ports/person-colors.ts",
     "src/bootstrap/wiring/ports/rows.ts",
     "src/bootstrap/wiring/ports/collaboration.ts",
+    "src/bootstrap/wiring/ports/shared-scripts.ts",
     "src/bootstrap/wiring/collaboration-owner.ts"
   ],
-  "expectedLoads": 31
+  "expectedLoads": 33
 }

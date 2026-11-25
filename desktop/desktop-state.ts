@@ -5,6 +5,7 @@ import type * as NodeFs from "node:fs";
 import type * as NodeCrypto from "node:crypto";
 import type { Rectangle } from "electron";
 import type { writeFileDurableSync as WriteDesktopStateFile } from "./drafts.ts";
+import type { SharedScriptCatalogueEntry, SharedScriptIdentity, readSharedScriptCatalogueEntry, readSharedScriptIdentity } from "../shared/shared-script.ts";
 
 const path: typeof NodePath = require("node:path");
 const fs: typeof NodeFs = require("node:fs");
@@ -25,10 +26,14 @@ function normalizeBounds(b: unknown): Rectangle | null {
   return ok ? { x: (b as Rectangle).x, y: (b as Rectangle).y, width: (b as Rectangle).width, height: (b as Rectangle).height } : null;
 }
 
-function normalizeTabSource(src: unknown): DesktopStoredTab["source"] {
+function normalizeTabSource(src: unknown, readShared?: typeof readSharedScriptIdentity): DesktopStoredTab["source"] {
   if (src && typeof src === "object") {
     if ((src as Record<string, unknown>).kind === "file" && typeof (src as Record<string, unknown>).absPath === "string" && (src as Record<string, unknown>).absPath && path.isAbsolute((src as { absPath: string }).absPath)) {
       return { kind: "file", absPath: (src as { absPath: string }).absPath };
+    }
+    if ((src as DesktopStateRaw).kind === "shared") {
+      const shared = readShared?.(src);
+      if (shared) return { kind: "shared", ...shared };
     }
   }
   return { kind: "blank" };
@@ -87,7 +92,7 @@ function normalizeRecentsList(raw: unknown, pathKey: (path: string) => string): 
   return out;
 }
 
-function normalizeDesktopStateV2(raw: unknown, pathKey: (path: string) => string): DesktopStoredState {
+function normalizeDesktopStateV2(raw: unknown, pathKey: (path: string) => string, shared?: DesktopSharedStateReaders): DesktopStoredState {
   const seen = new Set();
   const uniqueId = (id: unknown) => {
     const v = typeof id === "string" && TAB_OR_WINDOW_ID_RE.test(id) && !seen.has(id) ? id : mintTabOrWindowId();
@@ -102,7 +107,7 @@ function normalizeDesktopStateV2(raw: unknown, pathKey: (path: string) => string
       if (!t || typeof t !== "object") continue;
       tabs.push({
         tabId: uniqueId(t.tabId),
-        source: normalizeTabSource(t.source),
+        source: normalizeTabSource(t.source, shared?.identity),
         lastKnownTitle: typeof t.lastKnownTitle === "string" ? t.lastKnownTitle.slice(0, LAST_KNOWN_TITLE_MAX) : ""
       });
     }
@@ -116,7 +121,14 @@ function normalizeDesktopStateV2(raw: unknown, pathKey: (path: string) => string
     });
   }
   const recents = normalizeRecentsList(raw && (raw as DesktopStateRaw).recents, pathKey);
-  const state = { version: DESKTOP_STATE_VERSION, windows: windows.length ? windows : freshDesktopState().windows, recents };
+  const state: DesktopStoredState = { version: DESKTOP_STATE_VERSION, windows: windows.length ? windows : freshDesktopState().windows, recents };
+  const rawScripts = (raw as DesktopStateRaw | null)?.sharedScripts;
+  if (shared && Array.isArray(rawScripts)) {
+    state.sharedScripts = rawScripts.flatMap((rawEntry: unknown) => {
+      const entry = shared.entry(rawEntry);
+      return entry ? [{ ...entry, ...((rawEntry as DesktopStateRaw).recent === false && { recent: false as const }) }] : [];
+    });
+  }
   const lastSavedFolder = raw && (raw as DesktopStateRaw).lastSavedFolder;
   if (typeof lastSavedFolder === "string" && path.isAbsolute(lastSavedFolder)) {
     return { ...state, lastSavedFolder };
@@ -124,10 +136,11 @@ function normalizeDesktopStateV2(raw: unknown, pathKey: (path: string) => string
   return state;
 }
 
-function createDesktopStateStore({ filePath, pathKey, onWriteError }: {
+function createDesktopStateStore({ filePath, pathKey, onWriteError, shared }: {
   filePath: () => string;
   pathKey: (path: string) => string;
   onWriteError?: (error: unknown) => void;
+  shared?: DesktopSharedStateReaders;
 }) {
   let synthesized: { text: string | null; state: DesktopStoredState } | null = null;
   const queue: { mutator: DesktopStateMutator; resolve: (written: boolean) => void }[] = [];
@@ -155,7 +168,7 @@ function createDesktopStateStore({ filePath, pathKey, onWriteError }: {
     try { parsed = text === null ? undefined : JSON.parse(text); } catch { parsed = undefined; }
 
     const isObject = !!parsed && typeof parsed === "object" && !Array.isArray(parsed);
-    const state = isObject && (parsed as DesktopStateRaw).version === DESKTOP_STATE_VERSION ? normalizeDesktopStateV2(parsed, pathKey)
+    const state = isObject && (parsed as DesktopStateRaw).version === DESKTOP_STATE_VERSION ? normalizeDesktopStateV2(parsed, pathKey, shared)
       : isObject && !("version" in (parsed as DesktopStateRaw)) ? migrateDesktopStateV1(parsed as DesktopStateRaw)
       : freshDesktopState();
     synthesized = { text, state: structuredClone(state) };
@@ -179,7 +192,7 @@ function createDesktopStateStore({ filePath, pathKey, onWriteError }: {
           const current = read();
           const result = job.mutator(current);
           if (result !== false) {
-            const next = normalizeDesktopStateV2(result && typeof result === "object" ? result : current, pathKey);
+            const next = normalizeDesktopStateV2(result && typeof result === "object" ? result : current, pathKey, shared);
             const file = filePath();
             const text = JSON.stringify(next, null, 2);
             fs.mkdirSync(path.dirname(file), { recursive: true });
@@ -202,9 +215,13 @@ function createDesktopStateStore({ filePath, pathKey, onWriteError }: {
 
 
 type DesktopStateRaw = Record<string, unknown>;
+interface DesktopSharedStateReaders {
+  readonly identity: typeof readSharedScriptIdentity;
+  readonly entry: typeof readSharedScriptCatalogueEntry;
+}
 export interface DesktopStoredTab {
   tabId: string;
-  source: { kind: "blank" } | { kind: "file"; absPath: string };
+  source: { kind: "blank" } | { kind: "file"; absPath: string } | ({ kind: "shared" } & SharedScriptIdentity);
   lastKnownTitle: string;
 }
 export interface DesktopStoredWindow {
@@ -219,6 +236,7 @@ export interface DesktopStoredState {
   lastSavedFolder?: string;
   windows: DesktopStoredWindow[];
   recents: { absPath: string; title: string; at: number }[];
+  sharedScripts?: (SharedScriptCatalogueEntry & { recent?: false })[];
 }
 type DesktopStateMutator = (state: DesktopStoredState) => unknown;
 export type {

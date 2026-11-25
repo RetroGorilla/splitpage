@@ -25,6 +25,7 @@ type RendererEndListener = {
   (event: "render-process-gone", listener: (event: Event, details: RenderProcessGoneDetails) => void): unknown;
 };
 interface Renderer {
+  readonly id?: number;
   readonly once: RendererEndListener;
   readonly removeListener: RendererEndListener;
   readonly isDestroyed: () => boolean;
@@ -113,7 +114,26 @@ function createNativeReplicaIpc(userData: string, readNativeMembership: typeof R
     }
   }
 
-  async function handle(owner: Renderer, request: unknown): Promise<NativeReplicaReply> {
+  async function handle(owner: Renderer, request: unknown, catalogue?: {
+    readonly note: (name: string, entry: unknown) => Promise<boolean>;
+    readonly forgot: (name: string) => Promise<void>;
+    readonly detached: (name: string) => void;
+    readonly focus: (name: string, leaseOwner?: number) => boolean;
+  }): Promise<NativeReplicaReply> {
+    if (catalogue && Array.isArray(request) && typeof request[1] === "string" && SCRIPT_ID.test(request[1])) {
+      const name = request[1];
+      if (request[0] === "focus-shared" && request.length === 2) {
+        return catalogue.focus(name, leases.get(name)?.owner.id) ? STORED : CLOSED;
+      }
+      if (request[0] === "note-shared" && request.length === 3) {
+        const lease = leases.get(name);
+        if (lease?.owner !== owner || lease.close || lease.forgotten) return CLOSED;
+        const operation: Promise<NativeReplicaReply> = lease.done.then(async () =>
+          await catalogue.note(name, request[2]) ? STORED : failure(null)).catch(failure);
+        lease.done = operation;
+        return operation;
+      }
+    }
     if (!isRequest(request, readNativeMembership)) throw new TypeError("Invalid native replica request");
     if (request[0] === "write") {
       if (request[5].buffer.byteLength > filesModule.MAX_REPLICA_UPDATE_BYTES) {
@@ -130,18 +150,21 @@ function createNativeReplicaIpc(userData: string, readNativeMembership: typeof R
       if (request[3].buffer.byteLength > filesModule.MAX_REPLICA_JOURNAL_BYTES) throw new TypeError("Invalid native replica request");
     }
     const [op, name, id] = request;
-    if (op === "open") return open(name, owner);
+    if (op === "open") {
+      if (catalogue?.focus(name, leases.get(name)?.owner.id)) return LOCKED;
+      return open(name, owner);
+    }
     if (op === "delete") {
       if (leases.has(name)) return LOCKED;
       if (owner.isDestroyed()) return CLOSED;
       leases.set(name, null);
-      try { await files.remove(name); return STORED; }
+      try { await files.remove(name); await catalogue?.forgot(name); return STORED; }
       catch (error) { return failure(error); }
       finally { leases.delete(name); }
     }
     const lease = leases.get(name);
     if (!lease || lease.close || lease.owner !== owner || lease.id !== id) return CLOSED;
-    if (op === "close") { await release(name, lease); return STORED; }
+    if (op === "close") { await release(name, lease); catalogue?.detached(name); return STORED; }
     const operation = lease.done.then(async (): Promise<NativeReplicaReply> => {
       const replica = await lease.replica;
       if (request[0] === "read") return { kind: "read", entries: replica.read(request[3]) };
@@ -154,6 +177,7 @@ function createNativeReplicaIpc(userData: string, readNativeMembership: typeof R
       if (request[0] === "forget") {
         await files.remove(name);
         lease.forgotten = true;
+        await catalogue?.forgot(name);
         return STORED;
       }
       if (request[0] === "membership") {

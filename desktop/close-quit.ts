@@ -82,7 +82,17 @@ function createCloseQuit({
   }
 
   function askBeforeClosing(tabIdsNow: Parameters<typeof runCloseCheck>[1], verb: string, parentOf: Parameters<typeof runCloseCheck>[3], stillWanted: () => boolean) {
-    const io = { tabs, goneFileTabsOf, unsavedTabsOf, askAboutUnsaved, keepDraftsOfGoneFiles, report: reportCloseCheckFailure };
+    const io = {
+      tabs, unsavedTabsOf, askAboutUnsaved, keepDraftsOfGoneFiles, report: reportCloseCheckFailure,
+      async goneFileTabsOf(ids: Parameters<typeof goneFileTabsOf>[0]) {
+        const shared = ids.map(id => tabs.get(id)).filter(tab => tab?.source?.kind === "shared" && tab.sharedAttached);
+        await Promise.all(shared.map(async tab => {
+          const result = await requestDraftFlush(tab, DRAFT_FLUSH_BUDGET_MS);
+          if (tab && !(result as { ok?: boolean }).ok) tab.dirty = true;
+        }));
+        return goneFileTabsOf(ids);
+      }
+    };
     return runCloseCheck(io, tabIdsNow, verb, parentOf, stillWanted);
   }
 
@@ -170,7 +180,7 @@ function createCloseQuit({
     for (const id of tabIds) {
       const tab = tabs.get(id);
       if (!tab) continue;
-      if (tab.crashedNotReloaded || tab.keepDraftOnClose) continue;
+      if (tab.crashedNotReloaded || tab.keepDraftOnClose || tab.source?.kind === "shared") continue;
       if (tabIsUnsaved(tab)) unsaved.push(id); else clean.push(id);
     }
     if (discardUnsaved && unsaved.length) draftsDiscardForUserDecision(unsaved, reason);
@@ -199,7 +209,7 @@ function createCloseQuit({
         closeConfirmedWindows.add(win);
       };
 
-      if (!tabIds.some((id) => tabHasFile(tabs.get(id)))) {
+      if (!tabIds.some(needsCloseCheck)) {
         if (askAboutUnsaved(unsavedTabsOf(tabIds, []), "Close window", win) !== "discard") { copiesForced = false; event.preventDefault(); return; }
         confirmClose(tabIds);
         return;
@@ -256,7 +266,7 @@ function createCloseQuit({
       settleDraftsForClose([tabId], true, "leave-without-saving");
       destroyTabView(tabId);
     };
-    if (!tabHasFile(tab)) {
+    if (!needsCloseCheck(tabId)) {
       if (askAboutUnsaved(unsavedTabsOf([tabId], []), "Close tab", parent()) === "discard") close();
       return;
     }
@@ -314,7 +324,7 @@ function createCloseQuit({
         sessionWritesFrozen = true;
       };
 
-      if (!tabIds.some((id) => tabHasFile(tabs.get(id))) && !unsavedTabsOf(tabIds, []).length) {
+      if (!tabIds.some(needsCloseCheck) && !unsavedTabsOf(tabIds, []).length) {
         confirmQuit(tabIds);
         return;
       }
@@ -351,6 +361,11 @@ function createCloseQuit({
       if (copies && copies.busy()) void copies.abortAll();
       if (draftStore()) { try { (draftStore() as NonNullable<ReturnType<typeof draftStore>>).markCleanExit(); } catch { } }
     });
+  }
+
+  function needsCloseCheck(id: string | undefined) {
+    const tab = tabs.get(id);
+    return tab?.source?.kind === "shared" || tabHasFile(tab);
   }
 
   return {
