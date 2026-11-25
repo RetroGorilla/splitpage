@@ -174,10 +174,13 @@ test("the pill caps initials and the people list jumps to the latest beat", t =>
   assert.match(h.el("shared-pill").textContent ?? "", /\+1$/);
   h.popover.open();
   const button = h.document.querySelector<HTMLButtonElement>("[data-here-now] button");
+  const initial = h.document.querySelector("#shared-pill .person-avatar");
   assert.ok(button);
+  assert.ok(initial);
   peers[0] = { clientId: 1, ...first, beat: "b" };
   notify();
   assert.equal(h.document.querySelector("[data-here-now] button"), button);
+  assert.equal(h.document.querySelector("#shared-pill .person-avatar"), initial);
   button.click();
   assert.deepEqual(jumps, [["b", "audioText"]]);
 });

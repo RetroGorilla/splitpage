@@ -87,16 +87,31 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
     if (panel.matches(":popover-open")) panel.hidePopover();
   }
 
+  function syncPillLabel(): void {
+    const count = lastPeers?.length ?? 0;
+    const label = "Shared · " + connection.textContent + (count ? " · " + count + " here now" : "");
+    if (pill.getAttribute("aria-label") !== label) pill.setAttribute("aria-label", label);
+  }
+
   function syncPeople(online: boolean): void {
     const peers = online ? ports.presence.peers() : undefined;
     if (lastPeers === peers) return;
+    const previous = lastPeers ?? [];
     lastPeers = peers;
-    hereSection.hidden = !online;
+    const hidden = !online;
+    if (hereSection.hidden !== hidden) hereSection.hidden = hidden;
     const current = peers ?? [];
-    avatars.replaceChildren(...current.slice(0, 3).map(avatar));
-    if (current.length > 3) avatars.append("+" + (current.length - 3));
-    avatars.hidden = current.length === 0;
-    empty.hidden = current.length > 0;
+    const shown = current.slice(0, 3);
+    if (previous.length !== current.length || shown.some((person, i) => {
+      const old = previous[i];
+      return old?.clientId !== person.clientId || old.name !== person.name || old.color !== person.color;
+    })) {
+      avatars.replaceChildren(...shown.map(avatar));
+      if (current.length > 3) avatars.append("+" + (current.length - 3));
+      avatars.hidden = current.length === 0;
+      empty.hidden = current.length > 0;
+      syncPillLabel();
+    }
     for (const [id, entry] of people) {
       if (current.some(person => person.clientId === id)) continue;
       entry.button.remove();
@@ -122,7 +137,8 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
         entry.button.replaceChildren(avatar(person), person.name);
       }
       entry.person = person;
-      entry.button.disabled = !person.beat;
+      const disabled = !person.beat;
+      if (entry.button.disabled !== disabled) entry.button.disabled = disabled;
     }
   }
 
@@ -144,12 +160,11 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
       document.body.append(panel);
     }
     const online = snapshot.relay.connected && snapshot.relay.firstSyncDone;
-    syncPeople(online && !snapshot.refusal && !snapshot.mergeTooLarge);
     const summary = snapshot.refusal ? "Access removed · local work kept" : online ? "Connected" : "Offline";
     dot.style.backgroundColor = online ? "var(--ok)" : "currentColor";
-    const count = lastPeers?.length ?? 0;
-    pill.setAttribute("aria-label", "Shared · " + summary + (count ? " · " + count + " here now" : ""));
     connection.textContent = summary;
+    syncPeople(online && !snapshot.refusal && !snapshot.mergeTooLarge);
+    syncPillLabel();
     const membership = ports.membership();
     const owner = membership?.role === "owner" && !snapshot.refusal;
     if (!owner) passwordDialog?.dispose();
@@ -246,7 +261,10 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
     void run(() => ports.manage("stop"), "Could not stop sharing. Check the relay connection and try again.");
   };
   const unsubscribe = ports.collaboration.onChange(sync);
-  const unsubscribePeople = ports.presence.onChange(sync);
+  const unsubscribePeople = ports.presence.onChange(() => {
+    const { active, relay, refusal, mergeTooLarge } = ports.collaboration.snapshot();
+    syncPeople(active && relay.connected && relay.firstSyncDone && !refusal && !mergeTooLarge);
+  });
   sync();
   return {
     open,
