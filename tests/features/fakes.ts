@@ -32,6 +32,8 @@ export function fakeCollaboration(): Pick<CollaborationReads, "snapshot"> {
 export function fakeSharedPopover(overrides: Partial<SharedPopoverPorts> = {}) {
   const collaboration = createCollaborationState();
   const ports: SharedPopoverPorts = {
+    presence: { peers: () => [], onChange: () => () => {} },
+    revealBeat: () => {},
     collaboration,
     membership: () => null,
     canManage: async () => false,

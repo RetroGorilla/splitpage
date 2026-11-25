@@ -1,4 +1,17 @@
 import type { SharedPopoverPorts } from "./ports.ts";
+import type { PresencePeer } from "../../application/collaboration/presence.ts";
+
+function avatar(person: PresencePeer): HTMLElement {
+  const element = document.createElement("span");
+  element.className = "person-avatar";
+  element.style.setProperty("--size", "18px");
+  element.style.setProperty("--presence", person.color);
+  element.setAttribute("aria-hidden", "true");
+  element.title = person.name;
+  element.textContent = person.name.trim().split(/\s+/u).slice(0, 2)
+    .map(word => Array.from(word)[0]).join("").toUpperCase();
+  return element;
+}
 
 export function mountSharedPopover(ports: SharedPopoverPorts) {
   const pill = document.createElement("button");
@@ -11,6 +24,10 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
   pill.innerHTML = '<span class="tally-dot" aria-hidden="true"></span> Shared';
   const dot = pill.firstElementChild as HTMLElement;
   Object.assign(dot.style, { flex: "none", width: "7px", height: "7px", borderRadius: "50%" });
+  const avatars = document.createElement("span");
+  avatars.setAttribute("aria-hidden", "true");
+  Object.assign(avatars.style, { display: "inline-flex", alignItems: "center", gap: "3px" });
+  pill.append(avatars);
 
   const panel = document.createElement("section");
   panel.id = "shared-popover";
@@ -22,6 +39,10 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
   panel.innerHTML = `
     <div class="modal-header"><h2 id="shared-popover-title">Shared</h2><button type="button" class="btn" data-sharing="close" autofocus>Close</button></div>
     <p class="modal-hint" data-connection></p>
+    <section aria-labelledby="shared-here-title">
+      <h3 id="shared-here-title">Here now</h3>
+      <div data-here-now></div>
+    </section>
     <div class="menu-group">
       <button type="button" class="mi" data-sharing="copy" aria-describedby="shared-copy-hint">Copy link</button>
       <p class="modal-hint" id="shared-copy-hint" hidden>Use Reset link to create a copyable link on this computer.</p>
@@ -43,6 +64,16 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
   const status = part("[role=status]");
   const copyHint = part("#shared-copy-hint");
   const stopHint = part("#shared-stop-hint");
+  const here = part("[data-here-now]");
+  const hereSection = part('section[aria-labelledby="shared-here-title"]');
+  hereSection.hidden = true;
+  Object.assign(here.style, { maxHeight: "11rem", overflow: "auto" });
+  const empty = document.createElement("p");
+  empty.className = "modal-hint";
+  empty.textContent = "No other people are here.";
+  here.append(empty);
+  const people = new Map<number, { button: HTMLButtonElement; person: PresencePeer }>();
+  let lastPeers: readonly PresencePeer[] | undefined;
   let disposed = false;
   let busy = false;
   let promotionAvailable = false;
@@ -52,10 +83,50 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
     if (panel.matches(":popover-open")) panel.hidePopover();
   }
 
+  function syncPeople(online: boolean): void {
+    const peers = online ? ports.presence.peers() : undefined;
+    if (lastPeers === peers) return;
+    lastPeers = peers;
+    hereSection.hidden = !online;
+    const current = peers ?? [];
+    avatars.replaceChildren(...current.slice(0, 3).map(avatar));
+    if (current.length > 3) avatars.append("+" + (current.length - 3));
+    avatars.hidden = current.length === 0;
+    empty.hidden = current.length > 0;
+    for (const [id, entry] of people) {
+      if (current.some(person => person.clientId === id)) continue;
+      entry.button.remove();
+      people.delete(id);
+    }
+    for (const person of current) {
+      let entry = people.get(person.clientId);
+      if (!entry) {
+        const button = document.createElement("button");
+        button.type = "button";
+        button.className = "mi";
+        button.onclick = () => {
+          const target = people.get(person.clientId)?.person;
+          if (!target?.beat || !target.side) return;
+          close();
+          ports.revealBeat(target.beat, target.side);
+        };
+        entry = { button, person };
+        people.set(person.clientId, entry);
+        here.append(button);
+      }
+      if (entry.person.name !== person.name || entry.person.color !== person.color || !entry.button.firstChild) {
+        entry.button.replaceChildren(avatar(person), person.name);
+      }
+      entry.person = person;
+      entry.button.disabled = !person.beat;
+    }
+  }
+
   function sync(): void {
     if (disposed) return;
     const snapshot = ports.collaboration.snapshot();
     if (!snapshot.active) {
+      syncPeople(false);
       opening++;
       close();
       panel.remove();
@@ -68,9 +139,11 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
       document.body.append(panel);
     }
     const online = snapshot.relay.connected && snapshot.relay.firstSyncDone;
+    syncPeople(online && !snapshot.refusal && !snapshot.mergeTooLarge);
     const summary = snapshot.refusal ? "Access removed · local work kept" : online ? "Connected" : "Offline";
     dot.style.backgroundColor = online ? "var(--ok)" : "currentColor";
-    pill.setAttribute("aria-label", "Shared · " + summary);
+    const count = lastPeers?.length ?? 0;
+    pill.setAttribute("aria-label", "Shared · " + summary + (count ? " · " + count + " here now" : ""));
     connection.textContent = summary;
     const membership = ports.membership();
     const owner = membership?.role === "owner" && !snapshot.refusal;
@@ -152,6 +225,7 @@ export function mountSharedPopover(ports: SharedPopoverPorts) {
     void run(() => ports.manage("stop"), "Could not stop sharing. Check the relay connection and try again.");
   };
   const unsubscribe = ports.collaboration.onChange(sync);
+  const unsubscribePeople = ports.presence.onChange(sync);
   sync();
-  return { open, dispose() { disposed = true; unsubscribe(); close(); panel.remove(); pill.remove(); } };
+  return { open, dispose() { disposed = true; unsubscribe(); unsubscribePeople(); close(); panel.remove(); pill.remove(); } };
 }

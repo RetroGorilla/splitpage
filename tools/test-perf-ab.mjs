@@ -11,6 +11,7 @@ import { REPO } from "./source-scan.mjs";
 test("arguments reject ambiguous or invalid comparisons", () => {
   assert.deepEqual(parseArgs(["base"]), { base: "base", head: "HEAD", rounds: 3, only: "short,long,images" });
   assert.deepEqual(parseArgs(["base", "head", "--only", "short", "--rounds", "2"]), { base: "base", head: "head", rounds: 2, only: "short" });
+  assert.equal(parseArgs(["base", "head", "--only", "short,shared"]).only, "short,shared");
   for (const args of [[], ["a", "b", "c"], ["a", "--rounds", "0"], ["a", "--rounds", "1.5"], ["a", "--only"], ["a", "--only", "short,short"], ["a", "--only", "huge"], ["a", "--bogus"]]) {
     assert.throws(() => parseArgs(args));
   }

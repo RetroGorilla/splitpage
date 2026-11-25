@@ -1,0 +1,35 @@
+wait document.querySelector('#shared-pill .person-avatar')?.textContent === 'PE'
+expect P.document.querySelector('#shared-pill .person-avatar') !== null
+eval Q(P,'r1','audioText').focus();true
+eval window.dot=(sel)=>getComputedStyle(document.querySelector(sel),'::after').content === '""';window.rd=id=>'.rd-block[data-row="'+id+'"]';window.side=(id,name)=>'#rows .row[data-id="'+id+'"] .'+name+'-cell .field-wrap';true
+wait dot(rd('r1')) && dot(side('r1','audio')) && !dot(side('r1','visual'))
+eval Q(P,'r2','visualText').focus();true
+wait !dot(rd('r1')) && dot(rd('r2')) && dot(side('r2','visual')) && !dot(side('r2','audio'))
+eval P.document.querySelector('#btn-write').click();true
+wait P.__writerFlowTest.on()
+eval P.__writerFlowTest.openVisual('r2');true
+wait P.document.activeElement?.classList.contains('wr-flow-visual-text')
+click #btn-write
+wait window.__writerFlowTest.on()
+wait getComputedStyle(document.querySelector('.wr-beat[data-id="r2"]'),'::before').content.includes('Visual in use')
+eval P.document.querySelector('.wr-flow-visual-close').click();window.writer=P.document.querySelector('#writer-doc');writer.focus();window.beat=writer.querySelector('.wr-beat[data-id="r1"]');P.getSelection().setBaseAndExtent(beat.firstChild,0,beat.firstChild,0);true
+wait !getComputedStyle(document.querySelector('.wr-beat[data-id="r2"]'),'::before').content.includes('Visual in use')
+eval P.document.querySelector('#wr-close').click();true
+wait !P.__writerFlowTest.on()
+eval document.querySelector('#wr-close').click();true
+wait !window.__writerFlowTest.on()
+eval P.document.querySelector('#btn-file').click();P.document.querySelector('#menu-settings').click();true
+wait P.document.querySelector('#settings-name')?.checkVisibility()
+eval window.nameInput=P.document.querySelector('#settings-name');nameInput.value='Renamed Peer';nameInput.dispatchEvent(new P.Event('change',{bubbles:true}));window.swatch=P.document.querySelector('[name="settings-person-color"][value="#EF958E"]');swatch.click();true
+wait document.querySelector('#shared-pill .person-avatar')?.textContent === 'RP' && document.querySelector('#shared-pill .person-avatar')?.style.getPropertyValue('--presence') === '#EF958E'
+eval P.document.querySelector('[data-settings-action="close"]').click();Q(P,'r2','visualText').focus();true
+wait dot(side('r2','visual'))
+click #shared-pill
+wait document.querySelector('[data-here-now] button')?.textContent.includes('Renamed Peer')
+click [data-here-now] button
+expect document.activeElement === Q(window,'r2','visualText') && !document.querySelector('#shared-popover').matches(':popover-open')
+eval P.__sharedTest.leave().then(result=>result.ok)
+wait !document.querySelector('#shared-pill .person-avatar') && !dot(rd('r2'))
+expect !P.document.querySelector('#shared-pill')
+eval __sharedTest.leave().then(result=>result.ok)
+expect !document.querySelector('#shared-pill') && !dot(rd('r2'))

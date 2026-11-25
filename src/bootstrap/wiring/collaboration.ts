@@ -16,7 +16,12 @@ import { localFileMenuControls } from "./local-files.ts";
 import { openDesktopJoin, invitationOriginAllowed } from "./collaboration-join.ts";
 import { retainedSharedScriptActive, retainedSharingControls } from "./retained-shared-script.ts";
 import { screen } from "./ports/screen.ts";
-import { getEditorName } from "./preferences-owner.ts";
+import { getEditorName, preferences } from "./preferences-owner.ts";
+import { changes } from "./ports/preferences.ts";
+import { PERSON_NAME_MAX, hashedPersonColor } from "../../core/document/person-colors.ts";
+import { cappedName } from "../../core/document/text-policy.ts";
+import { mountPresenceView } from "../../features/collaboration/presence.ts";
+import { sharedPresence } from "./ports/presence.ts";
 import { holdSessionCommands, liveSession, sessionEntryRefusal, sharedSession } from "./session-owner.ts";
 import { enterCreatedSharedScript, sharedEntry } from "./shared-entry.ts";
 import { captureOperation, stillOwns } from "./transition-owners.ts";
@@ -130,8 +135,33 @@ function registerCollaboration(registry: Pick<ActionRegistry, "invoke" | "regist
       });
     }
   }));
+  const presence = sharedPresence();
+  const stopPresence = mountPresenceView({
+    collaboration, presence,
+    identity() {
+      const name = cappedName(getEditorName(), PERSON_NAME_MAX);
+      return { name, color: preferences().myColor() || hashedPersonColor(name) };
+    },
+    onIdentityChange: listener => changes.onChange(({ name }) => {
+      if (name === "commentAuthor" || name === "personColor") listener();
+    }),
+    setLocal: presence.setLocal
+  });
   const popover = mountSharedPopover({
     collaboration,
+    presence,
+    revealBeat(id, side) {
+      registry.invoke("reveal-row", "button", id);
+      const beat = CSS.escape(id);
+      const writer = document.querySelector('#writer:not([hidden]) .wr-beat[data-id="' + beat + '"]');
+      if (writer) {
+        writer.scrollIntoView({ block: "center" });
+        return;
+      }
+      const row = document.querySelector('#rows .row[data-id="' + beat + '"]');
+      row?.scrollIntoView({ block: "center" });
+      row?.querySelector<HTMLElement>('.cell-editable[data-field="' + side + '"]')?.focus({ preventScroll: true });
+    },
     membership: retainedSharingControls,
     canManage: () => retainedSharingControls()?.canManage() ?? Promise.resolve(false),
     async manage(operation) {
@@ -154,6 +184,7 @@ function registerCollaboration(registry: Pick<ActionRegistry, "invoke" | "regist
     unregisterLeave();
     unregisterSharing();
     popover.dispose();
+    stopPresence();
     unregisterJoin();
     unregister();
     leaveDialog?.dispose();

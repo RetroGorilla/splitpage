@@ -3,6 +3,7 @@ import { test } from "node:test";
 import type { TestContext } from "node:test";
 import { mountSharedPopover } from "../../../src/features/collaboration/shared-popover.ts";
 import type { SharedPopoverPorts } from "../../../src/features/collaboration/ports.ts";
+import type { PresencePeer } from "../../../src/application/collaboration/presence.ts";
 import { fakeSharedPopover } from "../fakes.ts";
 import { viewHarness } from "../view-harness.ts";
 
@@ -110,4 +111,29 @@ test("promotion availability starts hidden on every open and ignores an earlier 
   await Promise.resolve();
   assert.equal(checks.length, 3);
   assert.equal(h.button("promote").hidden, true);
+});
+
+test("the pill caps initials and the people list jumps to the latest beat", t => {
+  const first = { name: "Ada Gray", color: "#80BDFB", view: "split", beat: "a", side: "audioText" } as const;
+  const peers: PresencePeer[] = [1, 2, 3, 4].map(clientId => ({ clientId, ...first }));
+  let notify = () => {};
+  const jumps: [string, string][] = [];
+  const h = setup(t, {
+    presence: {
+      peers: () => peers.slice(),
+      onChange(listener) { notify = listener; return () => {}; }
+    },
+    revealBeat(id, side) { jumps.push([id, side]); }
+  });
+  h.connect();
+  assert.equal(h.document.querySelectorAll("#shared-pill .person-avatar").length, 3);
+  assert.match(h.el("shared-pill").textContent ?? "", /\+1$/);
+  h.popover.open();
+  const button = h.document.querySelector<HTMLButtonElement>("[data-here-now] button");
+  assert.ok(button);
+  peers[0] = { clientId: 1, ...first, beat: "b" };
+  notify();
+  assert.equal(h.document.querySelector("[data-here-now] button"), button);
+  button.click();
+  assert.deepEqual(jumps, [["b", "audioText"]]);
 });

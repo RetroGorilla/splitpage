@@ -3,7 +3,7 @@ import { freemem } from "node:os";
 import { join } from "node:path";
 import { REPO } from "./source-scan.mjs";
 import { isMain } from "./main-module.mjs";
-import { buildArgs } from "./perf-record.mjs";
+import { buildArgs, parsePerf } from "./perf-record.mjs";
 import { median } from "./perf-stats.mjs";
 import { withRefTrees } from "./ref-trees.mjs";
 
@@ -27,11 +27,12 @@ export function parseArgs(argv) {
     else refs.push(arg);
   }
   if (refs.length < 1 || refs.length > 2) {
-    throw new Error("usage: node tools/perf-ab.mjs <base> [head=HEAD] [--only short,long,images] [--rounds 3]");
+    throw new Error("usage: node tools/perf-ab.mjs <base> [head=HEAD] [--only short,long,images,shared] [--rounds 3]");
   }
   const allowed = ["short", "long", "images"];
   only ??= allowed.join(",");
   const fixtures = only.split(",");
+  allowed.push("shared");
   if (fixtures.some((f) => !allowed.includes(f)) || new Set(fixtures).size !== fixtures.length) throw new Error(`--only needs distinct fixtures from ${allowed.join(",")}`);
   return { base: refs[0], head: refs[1] ?? "HEAD", rounds: rounds ?? 3, only };
 }
@@ -144,10 +145,19 @@ export async function main(argv, repo = REPO) {
       cpSync(join(dirs.head, path), join(dirs.base, path), { recursive: true });
     }
     const runs = { base: [], head: [] };
+    const fixtures = args.only.split(",");
+    const standalone = fixtures.filter(fixture => fixture !== "shared").join(",");
     for (let round = 1; round <= args.rounds; round++) {
       for (const side of ["base", "head"]) {
         console.error(`perf-ab: round ${round}/${args.rounds} ${side}`);
-        runs[side].push(measurements(await run(process.execPath, ["tools/perf-record.mjs", "--built", "--only", args.only], dirs[side])));
+        const rows = standalone ? measurements(await run(process.execPath,
+          ["tools/perf-record.mjs", "--built", "--only", standalone], dirs[side])) : [];
+        if (fixtures.includes("shared")) {
+          const shared = parsePerf(await run(process.execPath, ["tools/run-presence-browser.mjs", "--perf"], dirs[side]));
+          if (shared.length !== 2 || shared.some(row => row.keys < 40)) throw new Error("missing shared typing samples");
+          rows.push(...shared.map(row => ({ ...row, rects: row.rangeRects })));
+        }
+        runs[side].push(rows);
       }
     }
     console.log(report(shas.base, shas.head, runs));
