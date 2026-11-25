@@ -23,6 +23,10 @@ Linux/macOS, `run-tests.ps1` on Windows, `node desktop/test/smoke.mjs` for
 Electron. How to drive the browser suites is in
 [the run-splitpage-app skill](../../.claude/skills/run-splitpage-app/SKILL.md).
 
+The local relay browser suites also use the test build. Run
+`node --test .claude/skills/run-splitpage-app/relay-invitation.mjs` for invitation handling
+and `node tools/run-presence-browser.mjs` for two-client presence.
+
 ## Bootstrap load-only coverage
 
 `tests/bootstrap/legacy-shim.test.ts` checks the allowed shim imports and the rule that migrated code cannot import the shim. `configuration-spies.test.ts` checks the spy list and its positive canary. `module-load.test.ts` imports the declared targets one at a time in fresh processes and reports the result by area; it retains one queue with at most eight child processes.

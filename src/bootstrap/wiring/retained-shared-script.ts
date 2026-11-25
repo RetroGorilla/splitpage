@@ -4,6 +4,7 @@ import type { NativeInvitationStage, NativeLocalStoreOpen, NativeLocalStoreRecei
 import { applyNativePeerUpdate } from "../../adapters/collab/native/peer-update.ts";
 import { openNativeSession } from "../../adapters/collab/native/session.ts";
 import { openNativeRelay } from "../../adapters/collab/native/relay.ts";
+import { sharedPresence } from "./ports/presence.ts";
 import type { NativeRelayEvent } from "../../adapters/collab/native/relay.ts";
 import { InvitationSnapshotError, readInvitationSnapshot } from "../../adapters/collab/native/invitation-snapshot.ts";
 import { exchangeLinkPassword } from "../../adapters/collab/native/password-exchange.ts";
@@ -373,9 +374,13 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
       const connect = () => {
         if (entry.relayUrl && pictureBinding) {
           pictureBinding.bindCopy(replica);
+          let presence: ReturnType<ReturnType<typeof sharedPresence>["bind"]> | undefined;
           const relay = openNativeRelay(replica.session, {
             url: entry.relayUrl, name: entry.script, token, reopen: replica.reopen,
             sessionOptions: { actor: ports.editor(), sanitize: sanitizeHtml, noticeJournal: true },
+            ...(typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI && {
+              onPresence: peers => { if (sessionCurrent()) presence?.receive(peers); }
+            }),
             onEvent(event) {
               if (event.kind === "synced") {
                 if (sessionCurrent()) {
@@ -394,7 +399,10 @@ export async function enterRetainedSharedScript(ports: SharedSwitchPorts, entry:
             }
           });
           liveRelay = relay;
-          stopConnection = () => { relay.close(); entry.onRelayConnected?.(false); };
+          if (typeof SPLITPAGE_COLLAB_UI !== "undefined" && SPLITPAGE_COLLAB_UI) {
+            presence = sharedPresence().bind(relay.publishPresence);
+          }
+          stopConnection = () => { presence?.dispose(); relay.close(); entry.onRelayConnected?.(false); };
         } else {
           if (pictures && pictureBinding) {
             pictureBinding.attach(pictures);

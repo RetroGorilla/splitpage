@@ -5,6 +5,15 @@ import type { OfflineBeatReading, OfflineClashEntry } from "../../application/co
 import type { ShareAttemptResult } from "../../application/collaboration/share.ts";
 import type { DocumentReader } from "../../application/session/document-reader.ts";
 import type { ScreenState } from "../../application/screen.ts";
+import type { PresenceProfile, PresenceReads } from "../../application/collaboration/presence.ts";
+
+export interface PresenceViewPorts {
+  readonly collaboration: CollaborationReads;
+  readonly presence: PresenceReads;
+  readonly identity: () => Pick<PresenceProfile, "name" | "color">;
+  readonly onIdentityChange: (listener: () => void) => () => void;
+  readonly setLocal: (profile: PresenceProfile) => void;
+}
 
 export interface OfflineReviewPorts {
   readonly collaboration: Pick<CollaborationState, "snapshot" | "onChange" | "dismissOfflineClashes">;
@@ -23,6 +32,8 @@ export interface ShareDialogPorts {
 
 export interface SharedPopoverPorts {
   readonly collaboration: CollaborationReads;
+  readonly presence: PresenceReads;
+  readonly revealBeat: (id: string, side: "audioText" | "visualText") => void;
   readonly membership: () => { readonly role: "guest" | "owner"; readonly link: string | null; readonly passwordRequired?: boolean } | null;
   readonly canManage: () => Promise<boolean>;
   readonly manage: (operation: "promote" | "reset" | "stop" | "check-link" | "set-password" | "remove-password", password?: string) => Promise<void>;

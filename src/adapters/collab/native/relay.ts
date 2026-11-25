@@ -4,6 +4,8 @@ import { nativeStoreOpener } from "./local-store.ts";
 import { openNativeSession } from "./session.ts";
 import type { NativeSessionChange, NativeSessionOptions } from "./session.ts";
 import { StateFirstProvider } from "./state-first-provider.ts";
+import { bindNativePresence } from "./presence.ts";
+import type { PresencePeer, PresenceProfile } from "../../../application/collaboration/presence.ts";
 
 type Session = ReturnType<typeof openNativeSession>;
 
@@ -31,6 +33,7 @@ export interface NativeRelayOptions {
   readonly onEvent: (event: NativeRelayEvent) => void;
   readonly reopen?: (failed: Session) => Promise<Session>;
   readonly now?: () => number;
+  readonly onPresence?: (peers: readonly PresencePeer[]) => void;
 }
 
 const FIRST_LOAD_RESTARTS = 1;
@@ -41,7 +44,7 @@ const TEMPORARY_REFUSALS = new Set([
   "rate-limited"
 ]);
 
-export function openNativeRelay(session: Session, { url, name, token, sessionOptions, onEvent, reopen, now = () => performance.now() }: NativeRelayOptions) {
+export function openNativeRelay(session: Session, { url, name, token, sessionOptions, onEvent, reopen, onPresence, now = () => performance.now() }: NativeRelayOptions) {
   if (session.isClosingOrClosed()) throw new Error("Cannot open a relay for a closing or closed session.");
   const storeOpener = nativeStoreOpener(session);
   if (storeOpener && reopen !== storeOpener) throw new Error("A store-backed relay requires its store's reopen function.");
@@ -56,6 +59,8 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
   let stopSession: (() => void) | undefined;
   let credentialGeneration = 0;
   let releaseGate: () => void = () => {};
+  let presenceProfile: PresenceProfile | undefined;
+  let sendPresence: ((profile: PresenceProfile) => void) | undefined;
   let provider = attach(current);
 
   function emit(event: NativeRelayEvent): void {
@@ -226,6 +231,14 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
         updateStatus({ pendingChangeCount: number });
       }
     }, firstReply, stateRequest, target.checkPeerDelivery, confirmations);
+    if (onPresence) {
+      const send = bindNativePresence(attached, onPresence);
+      sendPresence = send;
+      if (presenceProfile) send(presenceProfile);
+      attached.on("destroy", () => {
+        if (sendPresence === send) sendPresence = undefined;
+      });
+    }
     return attached;
   }
 
@@ -288,5 +301,10 @@ export function openNativeRelay(session: Session, { url, name, token, sessionOpt
     current.close();
   }
 
-  return Object.freeze({ session: () => current, status: () => status, releaseOfflineGate: () => releaseGate(), reconnectWithToken, close });
+  function publishPresence(profile: PresenceProfile): void {
+    presenceProfile = profile;
+    sendPresence?.(profile);
+  }
+
+  return Object.freeze({ session: () => current, status: () => status, releaseOfflineGate: () => releaseGate(), reconnectWithToken, publishPresence, close });
 }

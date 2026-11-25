@@ -2333,3 +2333,21 @@ body:has(> .writer:not([hidden])) .tagging-help { z-index: 147; }
 }
 .typed-unsaved-dismiss { justify-self: end; }
 [data-unsaved] { outline: 1px solid var(--accent); outline-offset: 2px; }
+.shared-avatars:not([hidden]) { display: inline-flex; align-items: center; gap: 3px; }
+.rd-block[data-presence-dots]::after, #rows .field-wrap[data-presence-dots]::after {
+  content: "";
+  position: absolute;
+  inset: 1px 3px auto auto;
+  width: 6px;
+  height: 6px;
+  border-radius: 50%;
+  background: var(--presence-mark-color);
+  box-shadow: var(--presence-mark-shadows, none);
+  pointer-events: none;
+  z-index: 1;
+}
+#writer-doc.is-flow .wr-beat[data-presence-visual]::before {
+  content: attr(data-num) " · " attr(data-presence-visual);
+  color: var(--text);
+  border-bottom: 2px solid var(--presence-mark-color);
+}
